@@ -1,0 +1,39 @@
+name: M0 verification
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: m0-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  foundation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Build, PostgreSQL integration, contracts and reproducibility
+        shell: bash
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          sh scripts/ci.sh 2>&1 | tee reports/ci.log
+      - name: Record tested source
+        if: always()
+        run: |
+          mkdir -p reports
+          git rev-parse HEAD > reports/tested-commit.txt
+          git status --porcelain > reports/worktree-status.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: m0-verification-${{ github.run_id }}
+          path: reports/
+          retention-days: 7
+          if-no-files-found: error
