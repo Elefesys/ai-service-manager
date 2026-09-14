@@ -1,0 +1,58 @@
+name: M0 initial lock and verification
+on:
+  push:
+    branches: [c0/m0-foundation]
+    paths:
+      - .github/workflows/m0-bootstrap.yml
+      - scripts/bootstrap.sh
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: m0-bootstrap
+  cancel-in-progress: false
+jobs:
+  bootstrap:
+    if: github.repository == 'Elefesys/ai-service-manager' && github.ref == 'refs/heads/c0/m0-foundation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Resolve initial locks and format initial sources
+        run: sh scripts/bootstrap.sh
+      - name: Commit generated foundation files without overwriting concurrent work
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add uv.lock frontend/package-lock.json infra/images.lock.env contracts/openapi.json backend tests scripts migrations
+          if ! git diff --cached --quiet; then
+            git commit -m 'build(m0): lock dependencies and image digests; normalize initial sources'
+            header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+            git -c "http.https://github.com/.extraheader=$header" push origin HEAD:refs/heads/c0/m0-foundation
+          fi
+      - name: Verify the generated commit against real PostgreSQL and Docker
+        shell: bash
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          sh scripts/ci.sh 2>&1 | tee reports/ci.log
+      - name: Record exact source and commit for review
+        if: always()
+        run: |
+          mkdir -p reports
+          git rev-parse HEAD > reports/tested-commit.txt
+          git status --porcelain > reports/worktree-status.txt
+          git archive --format=tar.gz HEAD > reports/source.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: m0-bootstrap-${{ github.run_id }}
+          path: reports/
+          retention-days: 7
+          if-no-files-found: error
