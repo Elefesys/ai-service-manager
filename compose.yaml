@@ -1,0 +1,100 @@
+name: ai-service-manager
+x-backend: &backend
+  context: .
+  dockerfile: infra/Dockerfile.backend
+  args:
+    PYTHON_IMAGE: ${PYTHON_IMAGE:?Missing images.lock.env}
+    UV_IMAGE: ${UV_IMAGE:?Missing images.lock.env}
+x-runtime: &runtime
+  ASM_ENVIRONMENT: LOCAL
+  ASM_DATABASE_URL: postgresql+psycopg://asm_runtime:${PG_RUNTIME_PASSWORD:?Run init_local.py}@postgres:5432/asm_local
+services:
+  postgres:
+    image: ${DB_IMAGE:?Missing images.lock.env}
+    environment:
+      POSTGRES_USER: asm_admin
+      POSTGRES_PASSWORD: ${PG_ADMIN_PASSWORD:?Run init_local.py}
+      POSTGRES_DB: asm_local
+      ASM_MIGRATION_PASSWORD: ${PG_MIGRATION_PASSWORD:?Run init_local.py}
+      ASM_RUNTIME_PASSWORD: ${PG_RUNTIME_PASSWORD:?Run init_local.py}
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./infra/postgres/bootstrap.sh:/docker-entrypoint-initdb.d/10-bootstrap.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U asm_admin -d asm_local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  migrate:
+    image: asm-backend:local
+    build: {<<: *backend, target: runtime}
+    environment:
+      ASM_MIGRATION_DATABASE_URL: postgresql+psycopg://asm_migrator:${PG_MIGRATION_PASSWORD:?Run init_local.py}@postgres:5432/asm_local
+    command: [alembic, upgrade, head]
+    depends_on:
+      postgres: {condition: service_healthy}
+  api:
+    image: asm-backend:local
+    build: {<<: *backend, target: runtime}
+    environment: *runtime
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=4)"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+  worker:
+    image: asm-backend:local
+    build: {<<: *backend, target: runtime}
+    environment: *runtime
+    command: [python, -m, asm.foundation, worker]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  scheduler:
+    image: asm-backend:local
+    build: {<<: *backend, target: runtime}
+    environment: *runtime
+    command: [python, -m, asm.foundation, scheduler]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  frontend:
+    image: asm-frontend:local
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.frontend
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:?Missing images.lock.env}
+        WEB_IMAGE: ${WEB_IMAGE:?Missing images.lock.env}
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      api: {condition: service_healthy}
+  postgres-test:
+    profiles: [test]
+    image: ${DB_IMAGE:?Missing images.lock.env}
+    environment:
+      POSTGRES_USER: asm_admin
+      POSTGRES_PASSWORD: ${PG_ADMIN_PASSWORD:?Run init_local.py}
+      POSTGRES_DB: asm_test
+      ASM_MIGRATION_PASSWORD: ${PG_MIGRATION_PASSWORD:?Run init_local.py}
+      ASM_RUNTIME_PASSWORD: ${PG_RUNTIME_PASSWORD:?Run init_local.py}
+    tmpfs: [/var/lib/postgresql]
+    volumes:
+      - ./infra/postgres/bootstrap.sh:/docker-entrypoint-initdb.d/10-bootstrap.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U asm_admin -d asm_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  checks:
+    profiles: [test]
+    build: {<<: *backend, target: development}
+    environment:
+      ASM_ENVIRONMENT: TEST
+      ASM_DATABASE_URL: postgresql+psycopg://asm_runtime:${PG_RUNTIME_PASSWORD:?Run init_local.py}@postgres-test:5432/asm_test
+      ASM_MIGRATION_DATABASE_URL: postgresql+psycopg://asm_migrator:${PG_MIGRATION_PASSWORD:?Run init_local.py}@postgres-test:5432/asm_test
+    depends_on:
+      postgres-test: {condition: service_healthy}
+volumes:
+  pgdata:
