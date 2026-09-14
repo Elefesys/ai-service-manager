@@ -50,26 +50,46 @@ class Database(Protocol):
 class RuntimeDatabase:
     def __init__(self, settings: Settings, pool_size: int = 5) -> None:
         self.engine = create_async_engine(
-            settings.database_url.get_secret_value(), pool_size=pool_size,
-            max_overflow=0, pool_timeout=3, pool_pre_ping=True,
-            connect_args={"connect_timeout": 3}, hide_parameters=True,
+            settings.database_url.get_secret_value(),
+            pool_size=pool_size,
+            max_overflow=0,
+            pool_timeout=3,
+            pool_pre_ping=True,
+            connect_args={"connect_timeout": 3},
+            hide_parameters=True,
         )
 
     async def check(self) -> None:
         with tracer.start_as_current_span("database.readiness"):
             async with asyncio.timeout(3), self.engine.connect() as connection:
-                role = (await connection.execute(text("""
+                role = (
+                    (
+                        await connection.execute(
+                            text("""
                     SELECT rolname, rolsuper, rolbypassrls,
                         has_schema_privilege(current_user, 'app', 'CREATE') AS app_ddl,
                         has_schema_privilege(current_user, 'platform', 'CREATE') AS platform_ddl
                     FROM pg_roles WHERE rolname = current_user
-                """))).mappings().one()
+                """)
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
                 if role["rolname"] != "asm_runtime" or any(
                     role[key] for key in ("rolsuper", "rolbypassrls", "app_ddl", "platform_ddl")
                 ):
                     raise RuntimeError("Unsafe runtime database role")
-                version = (await connection.execute(text("SELECT version_num FROM platform.alembic_version"))).scalar_one()
-                extension = (await connection.execute(text("SELECT extversion FROM pg_extension WHERE extname = 'vector'"))).scalar_one()
+                version = (
+                    await connection.execute(
+                        text("SELECT version_num FROM platform.alembic_version")
+                    )
+                ).scalar_one()
+                extension = (
+                    await connection.execute(
+                        text("SELECT extversion FROM pg_extension WHERE extname = 'vector'")
+                    )
+                ).scalar_one()
                 server = (await connection.execute(text("SHOW server_version_num"))).scalar_one()
                 if version != SCHEMA_REVISION or extension != "0.8.6" or int(server) // 10000 != 18:
                     raise RuntimeError("Database capability/schema mismatch")
@@ -114,7 +134,9 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
         try:
             await db.check()
         except (SQLAlchemyError, TimeoutError, RuntimeError):
-            return JSONResponse(status_code=503, content={"status": "unavailable", "component": "database"})
+            return JSONResponse(
+                status_code=503, content={"status": "unavailable", "component": "database"}
+            )
         return Health(status="ok", component="database")
 
     @app.get("/api/v1/system", response_model=SystemInfo)
@@ -132,7 +154,12 @@ async def serve(role: Literal["worker", "scheduler"]) -> None:
     db = RuntimeDatabase(Settings())
     try:
         await db.check()
-        print(json.dumps({"component": role, "event": "started", "mode": "shell", "jobs_enabled": False}), flush=True)
+        print(
+            json.dumps(
+                {"component": role, "event": "started", "mode": "shell", "jobs_enabled": False}
+            ),
+            flush=True,
+        )
         # M2.1 adds durable claiming/leases; M0 does not simulate a queue.
         await stop.wait()
     finally:

@@ -6,12 +6,11 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
+from asm.foundation import RuntimeDatabase, Settings
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
-
-from asm.foundation import RuntimeDatabase, Settings
 
 pytestmark = pytest.mark.integration
 A = "018f0000-0000-7000-8000-00000000000a"
@@ -39,12 +38,27 @@ async def database():
 async def probe(database):
     runtime, migrator = database
     async with migrator.begin() as connection:
-        await connection.execute(text("CREATE TABLE app._m0_probe (id integer PRIMARY KEY, workspace_id uuid NOT NULL, label text NOT NULL)"))
-        await connection.execute(text("INSERT INTO app._m0_probe VALUES (1, CAST(:a AS uuid), 'A'), (2, CAST(:b AS uuid), 'B')"), {"a": A, "b": B})
+        await connection.execute(
+            text(
+                "CREATE TABLE app._m0_probe (id integer PRIMARY KEY, workspace_id uuid NOT NULL, label text NOT NULL)"
+            )
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO app._m0_probe VALUES (1, CAST(:a AS uuid), 'A'), (2, CAST(:b AS uuid), 'B')"
+            ),
+            {"a": A, "b": B},
+        )
         await connection.execute(text("ALTER TABLE app._m0_probe ENABLE ROW LEVEL SECURITY"))
         await connection.execute(text("ALTER TABLE app._m0_probe FORCE ROW LEVEL SECURITY"))
-        await connection.execute(text("CREATE POLICY isolated ON app._m0_probe USING (workspace_id = NULLIF(current_setting('asm.workspace_id', true), '')::uuid) WITH CHECK (workspace_id = NULLIF(current_setting('asm.workspace_id', true), '')::uuid)"))
-        await connection.execute(text("GRANT SELECT, INSERT, UPDATE, DELETE ON app._m0_probe TO asm_runtime"))
+        await connection.execute(
+            text(
+                "CREATE POLICY isolated ON app._m0_probe USING (workspace_id = NULLIF(current_setting('asm.workspace_id', true), '')::uuid) WITH CHECK (workspace_id = NULLIF(current_setting('asm.workspace_id', true), '')::uuid)"
+            )
+        )
+        await connection.execute(
+            text("GRANT SELECT, INSERT, UPDATE, DELETE ON app._m0_probe TO asm_runtime")
+        )
     try:
         yield runtime.engine
     finally:
@@ -53,20 +67,44 @@ async def probe(database):
 
 
 async def context(connection, workspace):
-    await connection.execute(text("SELECT set_config('asm.workspace_id', :workspace, true)"), {"workspace": workspace})
+    await connection.execute(
+        text("SELECT set_config('asm.workspace_id', :workspace, true)"), {"workspace": workspace}
+    )
 
 
 async def test_real_postgres_capabilities_and_roles(database):
     runtime, migrator = database
     async with runtime.engine.begin() as connection:
         assert (await connection.execute(text("SELECT current_user"))).scalar_one() == "asm_runtime"
-        assert UUID(str((await connection.execute(text("SELECT uuidv7()"))).scalar_one())).version == 7
-        distance = (await connection.execute(text("SELECT '[1,0,0]'::extensions.vector <-> '[0,1,0]'::extensions.vector"))).scalar_one()
-        assert distance == pytest.approx(2 ** 0.5)
-        assert not (await connection.execute(text("SELECT has_database_privilege(current_user, current_database(), 'TEMP')"))).scalar_one()
+        assert (
+            UUID(str((await connection.execute(text("SELECT uuidv7()"))).scalar_one())).version == 7
+        )
+        distance = (
+            await connection.execute(
+                text("SELECT '[1,0,0]'::extensions.vector <-> '[0,1,0]'::extensions.vector")
+            )
+        ).scalar_one()
+        assert distance == pytest.approx(2**0.5)
+        assert not (
+            await connection.execute(
+                text("SELECT has_database_privilege(current_user, current_database(), 'TEMP')")
+            )
+        ).scalar_one()
     async with migrator.begin() as connection:
-        assert (await connection.execute(text("SELECT current_user"))).scalar_one() == "asm_migrator"
-        tables = (await connection.execute(text("SELECT tablename FROM pg_tables WHERE schemaname IN ('app','platform') ORDER BY tablename"))).scalars().all()
+        assert (
+            await connection.execute(text("SELECT current_user"))
+        ).scalar_one() == "asm_migrator"
+        tables = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT tablename FROM pg_tables WHERE schemaname IN ('app','platform') ORDER BY tablename"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         assert tables == ["alembic_version"], "M0 must not pre-create business tables"
 
 
@@ -74,19 +112,28 @@ async def test_rls_no_context_and_cross_workspace_reads(probe):
     async with probe.begin() as connection:
         assert (await connection.execute(text("SELECT * FROM app._m0_probe"))).all() == []
         await context(connection, A)
-        assert (await connection.execute(text("SELECT label FROM app._m0_probe"))).scalars().all() == ["A"]
-        result = await connection.execute(text("UPDATE app._m0_probe SET label='forbidden' WHERE id=2"))
+        assert (
+            await connection.execute(text("SELECT label FROM app._m0_probe"))
+        ).scalars().all() == ["A"]
+        result = await connection.execute(
+            text("UPDATE app._m0_probe SET label='forbidden' WHERE id=2")
+        )
         assert result.rowcount == 0
     async with probe.begin() as connection:
         await context(connection, B)
-        assert (await connection.execute(text("SELECT label FROM app._m0_probe"))).scalars().all() == ["B"]
+        assert (
+            await connection.execute(text("SELECT label FROM app._m0_probe"))
+        ).scalars().all() == ["B"]
 
 
 async def test_rls_rejects_cross_workspace_insert(probe):
     with pytest.raises(DBAPIError) as caught:
         async with probe.begin() as connection:
             await context(connection, A)
-            await connection.execute(text("INSERT INTO app._m0_probe VALUES (3, CAST(:workspace AS uuid), 'forbidden')"), {"workspace": B})
+            await connection.execute(
+                text("INSERT INTO app._m0_probe VALUES (3, CAST(:workspace AS uuid), 'forbidden')"),
+                {"workspace": B},
+            )
     assert caught.value.orig.sqlstate == "42501"
 
 
@@ -99,10 +146,16 @@ async def test_transaction_rollback_and_pool_context_cleanup(probe):
             raise RuntimeError("rollback-probe")
     async with probe.begin() as connection:
         assert (await connection.execute(text("SELECT pg_backend_pid()"))).scalar_one() == pid
-        assert (await connection.execute(text("SELECT NULLIF(current_setting('asm.workspace_id',true),'') IS NULL"))).scalar_one()
+        assert (
+            await connection.execute(
+                text("SELECT NULLIF(current_setting('asm.workspace_id',true),'') IS NULL")
+            )
+        ).scalar_one()
         assert (await connection.execute(text("SELECT * FROM app._m0_probe"))).all() == []
         await context(connection, A)
-        assert (await connection.execute(text("SELECT label FROM app._m0_probe"))).scalar_one() == "A"
+        assert (
+            await connection.execute(text("SELECT label FROM app._m0_probe"))
+        ).scalar_one() == "A"
     async with probe.begin() as connection:
         assert (await connection.execute(text("SELECT * FROM app._m0_probe"))).all() == []
 
@@ -118,7 +171,14 @@ async def test_runtime_cannot_create_tables_or_assume_migration_role(database):
 
 @pytest.mark.parametrize("role", ["worker", "scheduler"])
 async def test_process_graceful_shutdown_with_real_database(database, role):
-    process = await asyncio.create_subprocess_exec(sys.executable, "-m", "asm.foundation", role, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "asm.foundation",
+        role,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
     try:
         line = await asyncio.wait_for(process.stdout.readline(), 10)
         event = json.loads(line)

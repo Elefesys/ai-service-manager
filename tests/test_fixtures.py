@@ -70,5 +70,12 @@ def test_money_and_publish_marker_are_strict():
 
 def test_edge_case_descriptions_exist_without_claiming_domain_execution():
     raw = json.loads((Path(__file__).parent / "fixtures" / "edge-cases.v1.json").read_text())
-    assert {row["id"] for row in raw} == {"RANGE_PERCENT_NO_BASE", "MISSING_DURATION", "PRICE_REVISION_CHANGED", "CROSS_WORKSPACE", "SAME_WORKSPACE_OTHER_CLIENT", "TIMEZONE_CHANGE"}
+    assert {row["id"] for row in raw} == {
+        "RANGE_PERCENT_NO_BASE",
+        "MISSING_DURATION",
+        "PRICE_REVISION_CHANGED",
+        "CROSS_WORKSPACE",
+        "SAME_WORKSPACE_OTHER_CLIENT",
+        "TIMEZONE_CHANGE",
+    }
     assert all(row["status"] == "SPECIFIED_NOT_EXECUTED" for row in raw)

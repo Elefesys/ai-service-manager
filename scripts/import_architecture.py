@@ -1,4 +1,5 @@
 """Import exact approved sources; fail before writing on any mismatch."""
+
 import argparse
 import hashlib
 import json
@@ -17,7 +18,9 @@ for name, expected in manifest.items():
         raise SystemExit(f"Missing or mismatched canonical source: {name}")
     target = destination / name
     if target.exists() and hashlib.sha256(target.read_bytes()).hexdigest() != expected:
-        raise SystemExit(f"Existing source differs; resolve the architectural version explicitly: {name}")
+        raise SystemExit(
+            f"Existing source differs; resolve the architectural version explicitly: {name}"
+        )
 for name in manifest:
     source, target = args.source / name, destination / name
     if source.resolve() != target.resolve():

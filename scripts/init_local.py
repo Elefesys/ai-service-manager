@@ -1,4 +1,5 @@
 """Create LOCAL-only random credentials. Does not print or replace existing secrets."""
+
 import os
 import secrets
 from pathlib import Path

@@ -1,4 +1,5 @@
 """M0 infrastructure privileges only; no business tables."""
+
 from alembic import op
 
 revision = "0001"
@@ -10,7 +11,9 @@ depends_on = None
 def upgrade() -> None:
     op.execute("GRANT USAGE ON SCHEMA app, platform TO asm_runtime")
     op.execute("GRANT SELECT ON platform.alembic_version TO asm_runtime")
-    op.execute("ALTER DEFAULT PRIVILEGES FOR ROLE asm_migrator IN SCHEMA app, platform REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC")
+    op.execute(
+        "ALTER DEFAULT PRIVILEGES FOR ROLE asm_migrator IN SCHEMA app, platform REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC"
+    )
 
 
 def downgrade() -> None:

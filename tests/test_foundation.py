@@ -1,8 +1,7 @@
 import pytest
+from asm.foundation import Health, Settings, create_app
 from fastapi.testclient import TestClient
 from pydantic import SecretStr, ValidationError
-
-from asm.foundation import Health, Settings, create_app
 
 
 class StubDatabase:
@@ -19,7 +18,10 @@ class StubDatabase:
 
 
 def settings():
-    return Settings(environment="TEST", database_url=SecretStr("postgresql+psycopg://asm_runtime:test@localhost/asm_test"))
+    return Settings(
+        environment="TEST",
+        database_url=SecretStr("postgresql+psycopg://asm_runtime:test@localhost/asm_test"),
+    )
 
 
 def test_health_lifecycle_and_metadata():
@@ -43,7 +45,9 @@ def test_readiness_fails_closed_and_liveness_is_independent():
         assert client.get("/health/live").status_code == 200
 
 
-@pytest.mark.parametrize("url", ["sqlite:///test.db", "postgresql+psycopg://asm_admin:x@localhost/asm_test", "not-a-url"])
+@pytest.mark.parametrize(
+    "url", ["sqlite:///test.db", "postgresql+psycopg://asm_admin:x@localhost/asm_test", "not-a-url"]
+)
 def test_rejects_wrong_database_identity_or_driver(url):
     with pytest.raises(ValidationError):
         Settings(environment="TEST", database_url=SecretStr(url))
