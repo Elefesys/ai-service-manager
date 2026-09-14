@@ -1,0 +1,8 @@
+[
+  {"id":"RANGE_PERCENT_NO_BASE","milestone":"M6/M8","expectation":"A range is not an exact agreed percentage basis.","status":"SPECIFIED_NOT_EXECUTED"},
+  {"id":"MISSING_DURATION","milestone":"M6/M7","expectation":"Missing approved duration stops booking.","status":"SPECIFIED_NOT_EXECUTED"},
+  {"id":"PRICE_REVISION_CHANGED","milestone":"M6","expectation":"A changed price needs a fresh immutable offer and acceptance.","status":"SPECIFIED_NOT_EXECUTED"},
+  {"id":"CROSS_WORKSPACE","milestone":"M1","expectation":"Workspace A cannot access Workspace B.","status":"SPECIFIED_NOT_EXECUTED"},
+  {"id":"SAME_WORKSPACE_OTHER_CLIENT","milestone":"M2/M4","expectation":"Workspace scope alone does not authorize another Client object.","status":"SPECIFIED_NOT_EXECUTED"},
+  {"id":"TIMEZONE_CHANGE","milestone":"M7","expectation":"IANA local time changes must not rewrite absolute reservations.","status":"SPECIFIED_NOT_EXECUTED"}
+]
