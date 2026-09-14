@@ -1,0 +1,39 @@
+[
+  {
+    "fixture": "A", "synthetic": true, "production_publishable": false,
+    "workspace_id": "018f0000-0000-7000-8000-00000000000a",
+    "business_id": "018f0000-0000-7000-8100-000000000001",
+    "client_ids": ["018f0000-0000-7000-8200-000000000011", "018f0000-0000-7000-8200-000000000012"],
+    "timezone": "Europe/Moscow", "pricing_mode": "FIXED", "duration_mode": "FIXED",
+    "payment_mode": "FIXED_DEPOSIT", "currency": "RUB", "amount_minor": 100000,
+    "deposit_minor": 20000, "deposit_basis_points": null, "duration_minutes": 60, "rule_case": null
+  },
+  {
+    "fixture": "B", "synthetic": true, "production_publishable": false,
+    "workspace_id": "018f0000-0000-7000-8000-00000000000b",
+    "business_id": "018f0000-0000-7000-8100-000000000002",
+    "client_ids": ["018f0000-0000-7000-8200-000000000021", "018f0000-0000-7000-8200-000000000022"],
+    "timezone": "Asia/Yekaterinburg", "pricing_mode": "CONFIGURED_FORMULA", "duration_mode": "CONFIGURED_RULE",
+    "payment_mode": "PERCENT_DEPOSIT", "currency": "RUB", "amount_minor": null,
+    "deposit_minor": null, "deposit_basis_points": 2500, "duration_minutes": null,
+    "rule_case": "SYNTHETIC_BOUNDED_RULE_CASE_01"
+  },
+  {
+    "fixture": "C", "synthetic": true, "production_publishable": false,
+    "workspace_id": "018f0000-0000-7000-8000-00000000000c",
+    "business_id": "018f0000-0000-7000-8100-000000000003",
+    "client_ids": ["018f0000-0000-7000-8200-000000000031", "018f0000-0000-7000-8200-000000000032"],
+    "timezone": "Asia/Novosibirsk", "pricing_mode": "OWNER_QUOTE", "duration_mode": "OWNER_DEFINED",
+    "payment_mode": "NONE", "currency": "RUB", "amount_minor": null,
+    "deposit_minor": null, "deposit_basis_points": null, "duration_minutes": null, "rule_case": null
+  },
+  {
+    "fixture": "D", "synthetic": true, "production_publishable": false,
+    "workspace_id": "018f0000-0000-7000-8000-00000000000d",
+    "business_id": "018f0000-0000-7000-8100-000000000004",
+    "client_ids": ["018f0000-0000-7000-8200-000000000041", "018f0000-0000-7000-8200-000000000042"],
+    "timezone": "Europe/Kaliningrad", "pricing_mode": "FIXED", "duration_mode": "OWNER_DEFINED",
+    "payment_mode": "FULL_PREPAYMENT", "currency": "RUB", "amount_minor": 180000,
+    "deposit_minor": null, "deposit_basis_points": null, "duration_minutes": null, "rule_case": null
+  }
+]
