@@ -1,0 +1,117 @@
+{
+  "00_PROJECT_OVERVIEW.md": {
+    "source_sha256": "35df3dfe88aba9dbda906f89b5ba2eb22c6aa59a5b972e6385c426ac38b703b5",
+    "edits": [
+      [81, 81, "   ├─ Notifications\n"],
+      [141, 142, "- Новая профессия может работать без готового Industry Pack через generic onboarding/configuration.\n"],
+      [147, 148, "- Pipeline: source collection → normalization → candidate extraction → conflicts/missing data → adaptive questions → validation → simulation → owner approval → publish.\n"],
+      [179, 180, "- Human takeover подавляет client-facing follow-ups.\n"],
+      [235, 236, "- Metrics/Logs/Traces отделены от AuditEvent/SecurityEvent/UsageEvent.\n"]
+    ]
+  },
+  "01_ARCHITECTURE_SPEC.md": {
+    "source_sha256": "f70f4e332d4cb198e80e6e214a29723a459d45e29140aa7a2eb32f81e8ea4245",
+    "edits": [
+      [1761, 1762, "Onboarding — отдельная подсистема, не статическая форма.\n"],
+      [3085, 3086, "- no production data on developer machines;\n"],
+      [3111, 3111, "- customer-managed encryption;\n"],
+      [3112, 3113, ""],
+      [3680, 3681, "Workload classes: CRITICAL / INTERACTIVE / NORMAL / BULK.\n"],
+      [3947, 3948, "**MVP:** unit/property tests; real PG/RLS/migration/provider/concurrency/idempotency/recovery; critical E2E; EvalCase/Suite format; first vertical tool/pricing/scheduling/payment/RAG/injection suites; cost/latency tracking; hard gates; test Workspace; rollback.  \n"]
+    ]
+  },
+  "02_ARCHITECTURE_DECISIONS.md": {
+    "source_sha256": "e2b4cce8cd9edadcbfc52e980336d7822e3f711f6f65dd6ccefb0b14736b823e",
+    "edits": [
+      [298, 299, "**Decision:** onboarding включает import, extraction, conflicts/missing data, adaptive questions, owner review, validation, build и publish.\n"],
+      [1011, 1012, "Infrastructure is not introduced because a raw Workspace/user count crossed an arbitrary number.\n"]
+    ]
+  },
+  "03_GLOSSARY.md": {
+    "source_sha256": "59a341cc2707ceba90d25b48fea847b0bf9163d5a3b84b6e7621048789237d37",
+    "edits": [
+      [17, 18, "Legacy spelling of `AIRun`; use AIRun canonically. One logical task can include multiple provider calls and tool continuations.\n"],
+      [47, 48, "Подключение конкретного внешнего канала к Business.\n"],
+      [206, 207, "Запрос к Visual Design Service: purpose, instructions, source assets, constraints.\n"],
+      [276, 277, "Запись о tool request/execution path внутри AIRun. Не равна AuditEvent.\n"],
+      [294, 295, "Отдельный AI workflow для анализа бизнеса и подготовки configuration candidates/draft. Не является ConversationAgent и не публикует production конфигурацию самостоятельно.\n"],
+      [315, 316, "Компонент, который выдаёт Agent минимальный allowed tool set по WorkflowStep, Service capabilities, permissions и policy.\n"],
+      [318, 319, "Общий шаблон семейства бизнес-процессов, например Slot-Based, Event-Based, Custom Production или Recurring Session.\n"],
+      [324, 325, "Immutable опубликованная версия WorkflowDefinition, используемая конкретным ServiceRevision/WorkflowInstance.\n"],
+      [334, 335, "Versioned правило того, когда или при каком domain event/state timeout должна возникнуть автоматическая операция.\n"],
+      [426, 427, "Persistent reservation части hard quota до запуска дорогой side-effect operation; consuming/release предотвращают concurrency overspend.\n"],
+      [447, 448, "Описание raw usage metric (tokens, provider cost, images, storage и т. п.).\n"],
+      [450, 451, "Правило преобразования raw UsageEvents в commercial/billable product unit.\n"],
+      [487, 488, "Internal economic guard that can warn/throttle/block optional expensive workloads independently from quota/rate limiting.\n"],
+      [490, 491, "Versioned AI-evaluation scenario with structured state/context, allowed/forbidden outcomes and evaluator metadata.\n"],
+      [564, 565, "Post-pilot completeness level supporting broader complexity beyond first MVP requirements.\n"],
+      [567, 568, "Short bounded proof-of-capability used to validate a risky external/DB/AI assumption and produce a decision/test; not itself production implementation.\n"],
+      [579, 580, "Monitored period after production rollout during which critical health signals are actively checked before considering the release stable.\n"],
+      [591, 592, "Controlled, scoped, validated and preferably idempotent/dry-run-capable production data repair operation, used instead of ad-hoc SQL mutation where possible.\n"]
+    ]
+  },
+  "04_OPEN_QUESTIONS.md": {
+    "source_sha256": "89bd70ac37baa006ae8b8e72ab4c67c4ba70d18eb1c390dd12f149c725560eb5",
+    "edits": [
+      [175, 176, "**Resolution:** responsive web `Business Console`, exception-first Action Center/Inbox/Calendar/Approvals; native mobile apps are not MVP prerequisite.\n"],
+      [183, 184, "**Resolution:** per-data-class RetentionPolicy + PrivacyRequest/Delete workflow covering canonical/derived/files/backups. Exact retention durations depend on production market/legal/business needs.\n"]
+    ]
+  },
+  "05_CHANGELOG.md": {
+    "source_sha256": "34a62fa33eb804fa6b0bb97103d0bce9e56097e49c7d566c8ab5803e51716a8c",
+    "edits": [
+      [77, 79, "- Immutable container digest/source/CI provenance and `ReleaseManifest` locked.\n- Application / AI Configuration / Business Configuration releases separated.\n"],
+      [81, 83, "- Application/AI/config rollback paths separated from DB/data recovery.\n- Narrow subsystem kill switches and Workspace AI pause required.\n- No routine SSH/config drift/ad-hoc SQL; emergency break-glass/repair semantics defined.\n- Secret rotation/compromise procedures locked.\n"],
+      [86, 88, "- SEV-1/2/3 and incident lifecycle/priorities defined.\n- Required Pilot runbook catalog (DB, queue, AI, Telegram, payments, storage, deployment, migration, DR, security, cost, DLQ, takeover, scheduling) locked.\n- First-Business cutover made progressive: manual channel → AI → scheduling → payments → automations.\n"],
+      [116, 117, "- Production Pilot is the first implementation objective; Commercial MVP follows pilot learning.\n"],
+      [138, 141, "- Stage 25 is not designed in this baseline.\n"],
+      [154, 155, "**Status:** Canonical baseline after accepting Stage 23 MVP Scope + Acceptance Criteria. Stage 24 Development Roadmap remains intentionally undesigned.\n"],
+      [158, 159, "- Primary autonomous service fixed as New Tattoo Request.\n"],
+      [177, 178, "- Added new canonical `06_MVP_SPEC.md`.\n"],
+      [179, 179, "- `01_ARCHITECTURE_SPEC.md` now contains locked Stage 23 architecture-level scope.\n"],
+      [181, 182, "- Stage 24 is not designed in this baseline.\n"],
+      [203, 204, "### Stage 20 — Observability / AI Cost / Analytics\n"],
+      [208, 209, "- Product analytics defined around domain/workflow outcomes.\n"],
+      [214, 215, "- Noisy-neighbor controls formalized.\n"],
+      [216, 217, "- Workspace defined as future Cell/shard placement unit.\n"],
+      [220, 221, "### Stage 22 — Testing + AI Evals\n"],
+      [228, 229, "- Continuous learning explicitly does not mean live production self-modification.\n"],
+      [255, 256, "- Observed usage/provider cost separated from commercial billable meters.\n"],
+      [262, 263, "- Exception-first Action Center, Inbox, Calendar, Approvals/Escalations.\n"],
+      [279, 279, "- Support access and emergency break-glass security semantics formalized.\n"],
+      [282, 283, "- At-least-once + idempotent processing adopted instead of distributed exactly-once assumptions.\n"],
+      [324, 326, "- Structured pricing strategies and price authority.\n- Quote only from validated calculation/owner decision.\n"],
+      [328, 332, "- Dynamic Availability Engine instead of persisted free-slot inventory.\n- SchedulingPolicyRevision, Availability rules/overrides/blocks.\n- AvailabilityOffer and ResourceAllocation.\n- DB-level double-booking protection.\n- Atomic Hold→Appointment conversion.\n- Multi-session/recurring/event/onsite extension model.\n"],
+      [333, 338, "### Stage 13 — Client Payments\n- PaymentTermsRevision.\n- PaymentRequest / PaymentSession / PaymentTransaction separation.\n- PaymentProviderConnection/Adapter.\n- Hosted checkout/tokenization; raw card data not stored.\n- Direct Client→Business merchant money flow.\n- Refund as separate movement.\n- Provider-authoritative webhooks/idempotency/reconciliation.\n- Late-payment safe handling.\n"],
+      [340, 344, "- AutomationDefinition/Revision + persistent AutomationInstance.\n- Domain event / scheduled / state-timeout triggers.\n- Relevance guard before execution/send.\n- NotificationIntent separated from DeliveryAttempt.\n- NotificationPolicyRevision, quiet hours/frequency caps.\n- Template/hybrid transactional content.\n- Human takeover suppresses stale follow-ups.\n"],
+      [363, 364, "**Status:** Canonical baseline after accepting stages 8–10.\n"],
+      [371, 372, "- Autonomy modes: `AUTO / REQUIRE_CONFIRMATION / ESCALATE / DISABLED`.\n"],
+      [375, 376, "- `AIToolCall/ToolTrace` separated from business `AuditEvent`.\n"],
+      [393, 395, "- Quick Start, Assisted Import and Concierge onboarding modes.\n- `ImportBatch` / normalization boundary.\n"],
+      [397, 400, "- Readiness gates per Service instead of a single completion percentage.\n- `ConfigurationDraft`, deterministic validation and simulation/historical replay.\n- `BusinessConfigurationRelease` as atomic immutable publish manifest.\n"],
+      [427, 433, "- `AIRun` separate from `AIProviderCall`.\n- Initial model-profile mapping: Terra default conversation, Luna cheap/background, Sol rare complex reasoning.\n- Structured Outputs as machine-readable contract principle.\n- Versioned prompts and output schemas.\n- Profile-specific context budgets through ContextBuilder.\n- Explicit separation of provider conversation state from canonical application memory.\n- Interactive vs background AI workload classes.\n- Versioned `EmbeddingProfile` and embedding projections separated from canonical KnowledgeChunk/Portfolio representations.\n- AI cost/usage metering requirements per Workspace/task/profile.\n"],
+      [497, 498, "- structured state выше LLM memory;\n"]
+    ]
+  },
+  "06_MVP_SPEC.md": {
+    "source_sha256": "d4ce530a86ef8b5940a7881ceb802b9c7585384692e9761833a2ed8ef2915bc3",
+    "edits": [
+      [147, 147, "- style/subject/reference extraction;\n"],
+      [331, 332, "- Approvals;\n- Escalations;\n"]
+    ]
+  },
+  "07_DEVELOPMENT_ROADMAP.md": {
+    "source_sha256": "37bfd14f9c1a5682b8521853f6e096f3220ed0201cf41b44e22b823302595797",
+    "edits": [
+      [180, 181, "Pin application/container, DB schema/migration, TattooIndustryPack, Prompt revisions, ModelProfiles, Tool/schema versions, KnowledgeBuild, BusinessConfigurationRelease and EvalSuiteRevision.\n"],
+      [196, 197, "| Security | auth/RLS/files/secrets/support |\n"],
+      [275, 276, "**M16:** make deployment/support/onboarding/privacy/unit economics/usage/billing repeatable for multiple paying Businesses without code forks.\n"]
+    ]
+  },
+  "09_IMPLEMENTATION_PLAN.md": {
+    "source_sha256": "4c398e029823b7ae7f170452247683014b539198297d97cc016e112ecd64d8d9",
+    "edits": [
+      [282, 283, "Проверяем профиль на representative/synthetic сценариях, владелец утверждает конфигурацию. Подключение по runbook: manual Telegram → shadow/query AI → безопасные ответы → расписание → реальные платежи только при готовом fiscal gate → automations. Непроверенные возможности остаются выключены для этого бизнеса. При выявлении универсального пробела оформляем общую доработку, а не скрытый tenant-specific exception.\n"]
+    ]
+  }
+}
