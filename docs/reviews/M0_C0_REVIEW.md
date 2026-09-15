@@ -8,9 +8,11 @@ Reviewer: C0, acting on the user's explicit request to complete import, checks, 
 
 The original eleven attachments were verified against the pre-existing `SOURCE_MANIFEST.json`. During text transfer, mismatches in several staged files were detected, including changed wording and omitted lines. They were not accepted as architectural revisions. A deterministic restoration used staged-input SHA-256 checks plus line edits calculated from the local original bytes. Every final document was validated before writing. The combined baseline was assembled from its original header and the ten exact original files, then validated against its own original SHA-256.
 
-Import run: `34968001558`; imported commit: `395b76a2d1538e10d9bdbd32c740a07736d6d9c8`.
+Import run: `34968001558`; imported commit: `395b760175871a3d6cde10b8e01e1f9364e3bd57`.
 Artifact: `m0-source-import-34968001558`, ID `10395434061`, SHA-256 `fd89f2dc453e0848341b55e93565779393e772ec682a607836af267407726751`.
 C0 downloaded its source archive and independently compared all eleven resulting files byte-for-byte to the mounted original attachments: PASS. The original manifest hashes were not changed. Temporary split sources, restoration data and assembly script were removed before handoff. Historical pre-implementation and OPEN wording is preserved; implementation status is tracked separately.
+
+Correction at acceptance: the full import SHA was mistyped in the first version of this review. It is corrected above to the value in the import artifact's `imported-commit.txt`; source documents, manifest hashes and Git history are unchanged.
 
 ## Findings and remediation
 
@@ -49,6 +51,16 @@ Independent C8 review remains available as a separate quality workstream and sho
 The reviewed M0 scope may be integrated only after the current PR head passes canonical-source validation, complete software/build/PostgreSQL checks and the clean-worktree gate. C0 must pin expected_head_sha when merging; any concurrent code change requires renewed review. After merge, confirm main CI and then record actual accepted SHA/evidence in `docs/TASK_REGISTER.md` and the C2 handoff.
 
 M1.1 implementation is not performed by this PR. It starts on `c2/m1-1-tenant-foundation` from the exact accepted base assigned by C0. M1.2/M1.3 wait for the integrated M1.1 contract.
+
+## Integration outcome confirmed on 2026-09-15
+
+PR #1 is closed and merged (2026-09-15T12:43:21Z). Its actual merge commit is `1d7bb4fa0567bdd263d7910492ecf217696642de`, integrating reviewed head `8639812ce71f5cce8f2b2ed051ff01fea67d5157`. C0 read the main ref and PR metadata directly; no duplicate merge was performed.
+
+The matching push/main run `34970531911` completed successfully. Job `104385439116` passed canonical-source validation, full verification and the clean-source gate. Artifact `10396772645` has ZIP SHA-256 `e1702634f918fb92c1a361ee5ac49a762ed58dc6b125ee85c75dd35efd2f1755`; its tested-commit is the same merge SHA and worktree-status is empty. The source archive's eleven original documents were rechecked byte-for-byte and by the original SHA-256 against project attachments: PASS.
+
+Measured result: 20 unit/fixture/import tests + 7 real PostgreSQL integration tests + 3 frontend tests = 30 passed, plus static checks, migrations, Docker/local smoke, OpenAPI and wheel/static-asset reproducibility checks. Earlier 25-test counts describe earlier commits, not this final result.
+
+C0 accepts M0 as engineering foundation. The single task register records VERIFIED. Documentation-only reconciliation of the register, stack integration status and handoff does not add M1 functionality or revise canonical architecture. The final C2 start message pins a verified main commit including these acceptance documents; independent C8/production/Architecture Freeze claims remain excluded.
 
 ## Technical references consulted for review
 
