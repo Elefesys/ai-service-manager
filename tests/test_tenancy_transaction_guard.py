@@ -116,7 +116,8 @@ async def test_autocommit_rejected_before_body_and_publication_then_same_pool_re
                 await assert_empty_checkout(connection, pid)
         # Explicit test-side reconfiguration, never an implicit production fallback.
         # Reuse the very same pool and physical connection after the rejected UOWs.
-        normal = target.execution_options(isolation_level="READ COMMITTED")
+        # Derive from the root engine, not the AUTOCOMMIT OptionEngine and its hooks.
+        normal = engine.execution_options(isolation_level="READ COMMITTED")
         assert normal.pool is target.pool
         async with TenantDatabase(normal).transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
             driver = (await unit._connection.get_raw_connection()).driver_connection
