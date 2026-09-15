@@ -9,8 +9,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 from test_tenancy_postgres import (
-    A,
-    B,
     BA,
     BA2,
     BB,
@@ -21,7 +19,13 @@ from test_tenancy_postgres import (
     PROVIDER,
     UA,
     UB,
+    A,
+    B,
+)
+from test_tenancy_postgres import (
     db as db,
+)
+from test_tenancy_postgres import (
     seeded as seeded,
 )
 
