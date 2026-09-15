@@ -1,8 +1,8 @@
 # IMPL-001 — M0 implementation stack
 
 Date: 2026-09-15
-Decision status: LOCKED for this implementation branch under the user's explicit C0/M0 delegation.
-Integration status: not yet accepted into main. Architecture Freeze v1.0 remains pending.
+Decision status: LOCKED under the user's explicit C0/M0 delegation; no stack choice is revised by acceptance.
+Integration status: accepted in main with M0, PR #1 merge commit 1d7bb4fa0567bdd263d7910492ecf217696642de; push/main CI 34970531911 SUCCESS. See docs/TASK_REGISTER.md for acceptance evidence. Architecture Freeze v1.0 remains pending.
 Basis: uploaded baseline v0.28 and 09_IMPLEMENTATION_PLAN.md; initial main c74db484b483fccaef7b4124b418a91979cb4be6 contained only README.md.
 
 ## Decision
@@ -26,7 +26,7 @@ Django and a TypeScript-only backend are viable alternatives, not architecture v
 
 No existing ADR is superseded. Applicable: ADR-002–006, 008–011, 033, 047–048, 107–109, 116, 125–127, 132, 135–146, 159–161, 191–212, 216. OPEN-067 is answered by this implementation decision; the original source snapshot must not be silently edited. Exact resolved patches/digests and measured results are recorded separately. Production PostgreSQL SKU/extension availability, actual provider accounts, security hardening, backup/restore and business configuration remain OPEN at their assigned milestones.
 
-The original canonical documents are attached to the project but were not present in the initial Git tree. Their exact checksum-verified import, not a rewritten summary, is tracked separately. This file does not replace Architecture Spec or ADR-001–274.
+The original canonical documents were absent from the initial Git tree and are now imported byte-for-byte in docs/architecture. Source integrity is checked against the original SOURCE_MANIFEST.json; historical architecture status text is preserved. This file does not replace Architecture Spec or ADR-001–274.
 
 ## Verification references (checked 2026-09-15)
 
@@ -40,4 +40,4 @@ The original canonical documents are attached to the project but were not presen
 - https://docs.npmjs.com/cli/v11/commands/npm-ci
 - https://vite.dev/guide/
 
-Documentation compatibility is not execution evidence. M0 is accepted only after its checks actually run.
+Documentation compatibility is not execution evidence. M0 acceptance is backed by the actual main CI and artifact recorded in the task register; it does not certify production readiness.
