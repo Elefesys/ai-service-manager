@@ -1,70 +1,77 @@
-# Первые задания после принятия M0
+# M1 — принятый tenant foundation и следующие задания
 
-**M0 принят C0.** PR #1 интегрирован в `main` commit `1d7bb4fa0567bdd263d7910492ecf217696642de`; push/main CI `34970531911` — SUCCESS. Evidence и ограничения: `docs/TASK_REGISTER.md`. M1.1 готова к выдаче, но ещё не реализована; M1.2/M1.3 ждут интегрированного контракта M1.1.
+Ответственный за интеграцию: C0. Единственный task register: `docs/TASK_REGISTER.md`. Канон: `docs/architecture/01_ARCHITECTURE_SPEC.md`, действующие ADR, MVP/Roadmap и `09_IMPLEMENTATION_PLAN.md`; стек: IMPL-001; правила: AGENTS.md.
 
-Канонические исходники v0.28 находятся в `docs/architecture/`; стек — `docs/decisions/IMPL-001-stack.md`; правила — `AGENTS.md`; единственный реестр — `docs/TASK_REGISTER.md`.
+## M1.1 — принято
 
-Полный стартовый SHA C0 указывает в сопровождающем готовом сообщении для C2 после проверки итогового main с документами приёмки. Это проверенный documentation-only descendant принятого implementation commit; не выбирать moving main вместо переданного SHA и не предполагать общую файловую систему чатов. Старый `c74db484b483fccaef7b4124b418a91979cb4be6` содержит только README и не является M1 base. Независимый C8 review не выдаётся за выполненный; production/Architecture Freeze gates остаются открытыми.
+PR #3, reviewed head `fa98e714d78485f8d07108294263c89d90a6e7f0`, actual merge `b480d864a246cb0573b40fa5211f66625a71de91`. Push/main CI `35015308300` SUCCESS, 89 tests. C8-M1.1-01 закрыто после targeted PASS; отсутствие нового DB run в повторном C8 review не скрывается. Отдельный main run выполнен при интеграции C0. Полная приёмка/evidence: task register и `docs/reviews/M1_1_C0_ACCEPTANCE.md`.
 
-## M1.1 — Tenant schema, roles, WorkspaceContext/RLS
+Шесть таблиц, typed context, scoped platform lookup, tenant-safe keys/FK, RLS и migration `0002 -> 0001`. Контракт: `docs/tasks/M1_1_CONTRACT.md`, `contracts/tenancy.v1.json`. AUTOCOMMIT отвергается до публикации; same-connection Workspace/XID/fence/INTRANS проверяются до yield. Все 8 C8 regressions и 6 дополнительных guard cases сохранены. AuthenticatedAccount не является аутентификацией по UUID. Ранее записанное в контракте pending C8 acceptance закрывается более поздним решением C0 в реестре; сам reviewed contract не переписывается ради этого.
 
-Ведущий: C2 — PostgreSQL и надёжность данных. Координация контрактов/миграций: C0; auth consumer: C1; независимые последующие проверки: C8.
-Зависимость: принятый M0. Новая ветка от переданного SHA: `c2/m1-1-tenant-foundation`.
-
-### Основание
-
-`01_ARCHITECTURE_SPEC.md` §§1.1, 2, 3, 17.3–17.4, 18.5, 18.14, 22.2, 24.5, 24.19; ADR-002–006, 008, 010–011, 116–117, 125–126, 132, 160–161, 194–195, 206, 216, 266. Дополнительно `06_MVP_SPEC.md`, `07_DEVELOPMENT_ROADMAP.md` §§4–5/19 и `09_IMPLEMENTATION_PLAN.md` §§5–6/9. Оригинальные статусы и отложенные горизонты не переписывать.
-
-### Ограниченный результат
-
-Минимальные platform UserAccount/Workspace/WorkspaceMembership и app Business/BusinessMember/Location, требуемые tenant foundation M1. UserAccount здесь — identity/schema foundation, не реализация login/password/session. BusinessMember может существовать без UserAccount. Workspace и Business различаются; отдельный tenant_id, schema-per-tenant и database-per-tenant запрещены.
-
-Зафиксировать реализуемый schema/context contract для C1 до зависимой работы: ключи/FK, минимальные statuses/permissions, trusted actor/context shape, разрешённый путь platform lookup, transaction ownership и error semantics. Обычные поля принятого контракта — implementation detail; новый domain decision или конфликт с LOCKED ADR вынести C0, не считать молча принятым.
-
-Серверный WorkspaceContext содержит workspace_id, actor, permissions и correlation/request ID. Установка PostgreSQL context только transaction-local в короткой транзакции. Не вводить endpoint, который доверяет произвольному client/model workspace_id или выдаёт Owner permissions. RLS не заменяет application authorization; login/session/membership-management остаются M1.2.
-
-Для tenant tables: workspace_id NOT NULL, RLS USING + WITH CHECK, tenant-safe composite FK/unique constraints. Platform lookup должен быть минимальным и не превращаться в универсальный обход доступа. Сохранить отдельные bootstrap/migration/runtime identities; runtime без SUPERUSER/BYPASSRLS/ownership/DDL/SET ROLE в migration identity. Никаких production данных/секретов.
-
-### Разрешённая область файлов
-
-- Новый модуль `backend/src/asm/tenancy/` и связанные tenant tests, например `tests/test_tenancy*.py`.
-- Новая миграция `migrations/versions/0002_tenant_foundation.py`: C0 резервирует revision `0002`, down_revision `0001`, единственный следующий migration head. Не менять уже применённую `0001_foundation.py`.
-- `infra/postgres/bootstrap.sh` — только необходимые изменения ролей/прав с явным описанием и тестами; не ослаблять ограничения runtime.
-- `contracts/tenancy.v1.json` и `docs/tasks/M1_1_CONTRACT.md` для фактически реализованного контракта, без будущего универсального DSL.
-- `backend/src/asm/foundation.py` — только wiring нового DB/context модуля и проверяемое обновление ожидаемой schema revision/readiness.
-- `tests/test_postgres.py` — адаптировать M0-only assertion о единственной alembic_version к минимальному M1.1 набору таблиц; не удалить проверки прав/изоляции/pgvector/migration behavior.
-- Fixtures можно расширять только synthetic tenant identity/relations. Не менять их price/duration/payment semantics и не создавать пока client/message/payment tables.
-
-Frontend, AI/channel/payment adapters, lockfiles/toolchain и общие CI entrypoints вне обычного scope этой задачи. Необходимое расширение явно согласовать с C0. Task register централизованно обновляет C0 по handoff результата; не создавать второй независимый реестр.
-
-### Проверки приёмки
-
-Настоящий PostgreSQL 18 + pgvector под реальной runtime-ролью. Workspace A не читает/изменяет B; без context и с некорректным context доступ fail-closed. Покрыть INSERT/UPDATE/DELETE, попытку перенести строку в другой Workspace, forged IDs и cross-workspace FK. Дополнительно подтвердить положительный доступ A→A/B→B.
-
-Проверить отсутствие tenant-context leakage после COMMIT/ROLLBACK и повторного использования того же соединения; конкурентные async contexts; несовпадающие Workspace/Business relations. SQL connections должны подтверждаться не только mock-объектами. Runtime не может отключить защиту через ownership/DDL/привилегированную роль.
-
-Проверить свежую БД, upgrade из принятого M0, повторный upgrade, согласованный downgrade/re-upgrade в disposable TEST, полный M0 regression, strict typing/lint и contract drift. Изменение schema revision не должно оставлять readiness навсегда 503. Same-Workspace Client authorization остаётся обязательством следующих клиентских capabilities; отсутствие Client tables здесь не даёт права объявить этот будущий gate пройденным.
-
-### Не входит
-
-Login UI/session/CSRF/password storage (M1.2), Audit/Plan/Subscription/Entitlements implementation (M1.3), durable Inbox/Outbox/Jobs и Client/Conversation/File (M2), services/quotes/orders/scheduling/payment schemas следующих milestones. Не строить всю будущую БД заранее.
-
-### Возврат C0
-
-PR в main без самостоятельного merge, полный head SHA и base SHA; список файлов/миграций и контрактных изменений; команды, CI run и фактические результаты; ограничения/OPEN вопросы; явный REVIEW, не INTEGRATED. После C0 приёмки зависимые задачи получают новый общий SHA.
+Полный M1 ещё не завершён. Auth/login M1.2, entitlements/Audit M1.3, Architecture Freeze и production readiness не закрываются M1.1. Канонические ADR не пересматриваются.
 
 ## M1.2 — Auth/session/membership/application authorization и login UI
 
-Ведущие: C1 + C5. Зависимость: интегрированный schema/context contract M1.1. Отдельная задача и ветка от нового C0 base, не параллельное изменение миграций M1.1.
+Ведущие по плану C1 + C5. Исполнение последовательно: C1 backend и consumer contract → C0/C8 review и интеграция → C5 login UI по принятому API. Это две части одной M1.2, не новые milestones. Backend-only не закрывает всю M1.2. Сейчас выдаётся только C1; C5 и M1.3 автоматически не запускаются.
 
-Результат: поддерживаемая библиотека auth/session, серверные sessions, expiry/rotation/revocation/logout, membership/permission enforcement; login UI и разделение Workspace/Ops contexts. Защита CSRF, HttpOnly/SameSite и Secure cookies при TLS; не хранить долгоживущие bearer credentials в localStorage. Не вводить собственную криптографию. Platform Ops MFA обязателен до production.
+### Snapshot
 
-Приёмка: вход владельца synthetic Workspace, logout/revocation/expiry, отрицательные auth/permission tests, запрет forged Workspace/Business доступа, отсутствие secret/session leakage; UI работает через application API. Нет Telegram/AI/customer payments.
+Точный полный base C0 указывает в сопровождающем стартовом сообщении после проверки итогового main с документами приёмки. Это может быть documentation-only descendant принятого implementation merge; moving main или старый M0 не заменяют его. Ветка C1: `c1/m1-2-auth`. Будущая C5: `c5/m1-2-login` от отдельно выданного API SHA. Existing branches не перезаписывать; общий checkout не предполагать.
 
-## M1.3 — Local Plan/Subscription/Entitlements и Audit
+### Источники
 
-Ведущий: C1; C2 координирует последующую миграцию. Зависимость: M1.1; защищённый UI использует M1.2.
+Spec §§1.1, 2, 16.1/16.7/16.9, 17.3/17.4/17.12/17.13, 18.5, 22.2; ADR-002–006, 107, 109, 116–117, 119–120, 125–126, 160–161, 194–195, 206, 216; Roadmap §5; Implementation Plan §§5–6/9. Читать принятый M1.1 contract и guard tests. Same-Workspace Client authorization — future capability gate, не доказанный наличием login.
 
-Минимальные локальные WorkspaceBillingAccount, SaaSPlanRevision/PlanEntitlements, Subscription (TRIALING или ACTIVE+COMPED), WorkspaceServiceMode и EntitlementService. Entitlement не является security permission. Бизнес-код проверяет capability, не имя плана. Runtime не вызывает paid billing provider (это M15) и не создаёт client payments (M8).
+### Контракт до DDL/API
 
-Audit фиксирует фактическое важное действие/actor/correlation без секретов и избыточных данных. AuditEvent не подменяет Outbox/технические логи. Приёмка: изоляция Workspace, нормальная работа TRIALING/COMPED без скрытого обхода, allow/deny entitlements, неизменность истории и воспроизводимые миграции/тесты. Публичные owner operations должны быть авторизованы.
+Запиши `docs/tasks/M1_2_AUTH_CONTRACT.md` и ограниченный machine-readable contract: login identifier/нормализация, поддерживаемые password/session libraries, storage/lookup/grants, session lifecycle/rotation/revocation, cookie/CSRF protocol, errors, transaction boundary и API для C5. Обычные реализационные решения выбери и обоснуй в `docs/decisions/IMPL-002-auth.md`; конфликт с LOCKED вынеси C0. Не выдавай новые поля/TTL за ранее принятые факты. Production TTL/abuse thresholds — конфигурация, TEST значения явно маркируются.
+
+### Backend scope C1
+
+Рабочий вход synthetic владельца по проверяемым credentials, серверная сессия PostgreSQL и непрозрачный случайный cookie token. Signed client-side session payload, JWT/localStorage и память процесса не заменяют canonical server session. Используй поддерживаемый password hashing (Argon2id — рекомендуемый кандидат), CSPRNG и готовые crypto primitives. В DB хранить безопасный verifier session token, не повторно используемую bearer-копию. Plaintext passwords, cookies, hashes и tokens не входят в Git/логи/CI artifacts.
+
+Current-session, серверный logout/revocation, expiry, fixation-resistant rotation; старый token после logout/revocation не работает. AuthenticatedAccount создаёт только проверенный auth adapter, не десериализация UUID/actor/role/permissions из запроса. Workspace selector — лишь кандидат, далее активные account/workspace/membership и M1.1 UOW. Role downgrade, membership revoke и account disable должны влиять на следующие защищённые операции без cached Owner fallback. Опиши и проверь гонку revocation с уже допущенной короткой операцией; не обещай отменить уже committed действие.
+
+Минимальный защищённый read Business через M1.1 нужен для API+DB проверки. Не добавляй остальные business mutations ради демонстрации. Не обходи task-owned UOW/AUTOCOMMIT guard и не удерживай длинную DB-транзакцию при дорогом password hash или внешнем HTTP. При проверке credentials вне транзакции перепроверь auth state/version перед созданием session/допуском операции.
+
+Pre-context lookup/auth writes — только узкие контрактные пути. Не выдавай runtime общие CRUD на existing platform identity tables, migration credentials, BYPASSRLS/ownership/DDL или generic SECURITY DEFINER SQL. Конкретные функции/grants перечисли для review C2/C0. Нужен воспроизводимый LOCAL/TEST provisioning synthetic login без публичной регистрации, hardcoded рабочего пароля, CLI secret arguments или печати secrets. Setup вправе использовать отдельную provisioning identity; API/worker — runtime only.
+
+Browser contract: HttpOnly, explicit SameSite, Secure при TLS; local HTTP exception только LOCAL/TEST. CSRF для изменяющих запросов, включая login/logout, не один SameSite. Явные trusted origins/CORS, отсутствие доверия arbitrary forwarded host; запрет state-changing GET. Ограничить входной размер, дорогие login attempts и account enumeration; минимальный исполнимый throttling с честной границей restart/replica, без Redis dependency. Errors/telemetry без passwords/cookies/hash/token/DB URL.
+
+Business session не даёт Platform Ops rights. Статическая Ops shell допустима, привилегированные данные/команды без отдельного authorization plane/MFA — нет. Health/technical shell не раскрывают tenant data. SupportAccessGrant и production Ops здесь не реализуются.
+
+### Scope файлов и очередь миграций
+
+C0 резервирует `migrations/versions/0003_auth_sessions.py`, revision `0003`, down_revision `0002`. 0001/0002 не менять. Только необходимые credentials/sessions/защитное состояние, без будущих domain tables. C2/C0 сохраняют владение общей очередью; DDL/grants явно перечислить.
+
+Разрешены `backend/src/asm/auth/`, `tests/test_auth*.py`, auth contract/IMPL-002 выше, `contracts/auth.v1.json` и generated OpenAPI; `foundation.py` только settings/router/wiring/readiness. Для 0003 разрешена точечная schema-revision/metadata адаптация tenancy types/contract/snapshot и tests: без изменения guard/RLS/permissions semantics и без удаления отрицательных assertions. Все 89 прежних cases сохраняют смысл; новые увеличивают число.
+
+Минимальные `pyproject.toml`/`uv.lock` изменения разрешены только для выбранной auth library, без массового upgrade. Допустим `scripts/provision_local_auth.py`; startup/Compose env wiring — только необходимое с явным diff. Общие CI scripts — лишь подключение новых checks и обоснованная адаптация smoke к законным 401/403 без снятия защиты. Frontend, bootstrap/роли/image digests вне scope без C0. Реестр обновляет только C0.
+
+### Backend acceptance
+
+Real PostgreSQL + runtime identity: правильные/неправильные credentials, unknown/disabled account, session persistence между двумя app instances, forged/expired/revoked tokens, logout/rotation/fixation. API+DB: anonymous/expired/revoked отказ, чужие Workspace/Business IDs, revoke/role downgrade и отсутствие повышения прав через BusinessMember.role. CSRF отсутствует/неверен/из другой session, login/logout CSRF, hostile origin, cookie flags, rate/size limits, redacted errors/logs и platform-grant restrictions. Конкурентные session/rotation/revocation paths проверяются по явно принятому контракту, а не случайному timing.
+
+Выполнить `python3 scripts/import_architecture.py docs/architecture` и полный `sh scripts/ci.sh`: все прежние 89 tests + новые, fresh/M1.1 upgrade/replay/disposable reversal/re-upgrade, readiness, contract drift, build/reproducibility/smoke/clean-source. Mock не заменяет session persistence/RLS/locks. Destructive downgrade — только disposable TEST, не production rollback.
+
+### Handoff
+
+C1 возвращает PR без merge, полный base/head и pre-DDL contract commit, DDL/grants/dependency diff, точные команды/результаты, CI/tested SHA/tree и ограничения. Для C5: endpoints, schemas/errors, cookie credentials mode, CSRF bootstrap/rotation, logout/expiry UX и synthetic provisioning. C0/C8 проверяют backend, C0 затем выдаёт C5 API SHA. C5 реализует login/logout/session-expired UI и общий API+UI journey. Только после этого M1.2 может быть VERIFIED; M1.3 не запускать самостоятельно.
+
+### Не входит
+
+M1.3 Audit/Plan/Subscription/Entitlements; Telegram/AI/Client/Conversation/File/Inbox/Outbox/Jobs; цены/расписание/платежи. Email/SMS/OAuth/SSO/password-reset provider, публичная регистрация, invite/team-management UI и production activation не требуются для этого среза. Login не равен готовой commercial identity platform. Реальные данные мастера/API accounts/расходы не нужны.
+
+### Дополнительные рекомендации, не замена канона
+
+C0 сверил первичные источники. Конкретная library/patch выбирается C1 до кода; FastAPI пример используется для password hashing, не как разрешение заменить серверные sessions JWT.
+- https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+- https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+- https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+- https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/
+
+## M1.3 — local entitlements и Audit
+
+Ведущий C1, DDL C2/C0, UI C5, проверки C8. Зависимость M1.1 удовлетворена её приёмкой; защищённая UI/API демонстрация зависит от M1.2. В текущей последовательной очереди задача ещё не выдана; миграции не резервировать параллельно с auth.
+
+Scope сохраняется: WorkspaceBillingAccount, immutable SaaSPlanRevision/PlanEntitlements, Subscription TRIALING либо ACTIVE+COMPED, WorkspaceServiceMode и EntitlementService без `if plan == ...`, hidden bypass или paid provider. Entitlements не заменяют security permissions. Audit с реальным actor/correlation и атомарностью одной domain mutation; Audit != Outbox != technical log. Реальные тарифы/billing secrets/client payments вне задачи. Полный scope и base C0 выдаёт отдельно.
