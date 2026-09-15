@@ -17,8 +17,8 @@ from sqlalchemy.exc import ArgumentError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from asm import __version__
+from asm.tenancy import SCHEMA_REVISION, TenantDatabase
 
-SCHEMA_REVISION = "0001"
 tracer = trace.get_tracer("ai-service-manager.foundation")
 
 
@@ -58,6 +58,7 @@ class RuntimeDatabase:
             connect_args={"connect_timeout": 3},
             hide_parameters=True,
         )
+        self.tenancy = TenantDatabase(self.engine)
 
     async def check(self) -> None:
         with tracer.start_as_current_span("database.readiness"):
