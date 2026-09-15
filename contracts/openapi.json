@@ -1,0 +1,134 @@
+{
+  "components": {
+    "schemas": {
+      "Health": {
+        "additionalProperties": false,
+        "properties": {
+          "component": {
+            "enum": [
+              "api",
+              "database"
+            ],
+            "title": "Component",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "component"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "SystemInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "application": {
+            "const": "ai-service-manager",
+            "default": "ai-service-manager",
+            "title": "Application",
+            "type": "string"
+          },
+          "business_features_enabled": {
+            "const": false,
+            "default": false,
+            "title": "Business Features Enabled",
+            "type": "boolean"
+          },
+          "milestone": {
+            "const": "M0",
+            "default": "M0",
+            "title": "Milestone",
+            "type": "string"
+          },
+          "version": {
+            "default": "0.0.1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "title": "SystemInfo",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "AI Service Manager",
+    "version": "0.0.1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/system": {
+      "get": {
+        "operationId": "system_api_v1_system_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "System"
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "live_health_live_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Live"
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "ready_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Ready"
+      }
+    }
+  }
+}

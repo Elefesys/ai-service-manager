@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-service-manager"
+version = "0.0.1"
+description = "AI Service Manager M0 engineering foundation"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "fastapi>=0.128,<1", "pydantic>=2.13,<3", "pydantic-settings>=2.14,<3",
+  "sqlalchemy[asyncio]>=2.0.50,<2.1", "psycopg[binary]>=3.3,<4",
+  "alembic>=1.18,<2", "uvicorn>=0.40,<1", "opentelemetry-api>=1.42,<2",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=9,<10", "pytest-asyncio>=1.3,<2", "httpx>=0.28,<1",
+  "ruff>=0.14,<1", "mypy>=1.19,<2", "build>=1.3,<2", "hatchling==1.27.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/src/asm"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["backend/src", "."]
+asyncio_mode = "auto"
+addopts = "--strict-markers"
+markers = ["integration: requires the isolated real PostgreSQL asm_test database"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["backend/src"]
+
+[tool.pydantic-mypy]
+init_typed = true
+warn_required_dynamic_aliases = true
