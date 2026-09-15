@@ -1,8 +1,10 @@
 # Первые задания после принятия M0
 
-Задачи M1 остаются TODO до передачи C0 точного принятого base commit. Канонические исходники v0.28 находятся в `docs/architecture/`; стек — `docs/decisions/IMPL-001-stack.md`; правила — `AGENTS.md`; единственный реестр — `docs/TASK_REGISTER.md`.
+**M0 принят C0.** PR #1 интегрирован в `main` commit `1d7bb4fa0567bdd263d7910492ecf217696642de`; push/main CI `34970531911` — SUCCESS. Evidence и ограничения: `docs/TASK_REGISTER.md`. M1.1 готова к выдаче, но ещё не реализована; M1.2/M1.3 ждут интегрированного контракта M1.1.
 
-C0 выдаёт полный SHA принятого M0 после интеграции и успешного main CI. Старый `c74db484b483fccaef7b4124b418a91979cb4be6` содержит только README и не является M1 base. Не выбирать moving main вместо переданного SHA и не предполагать общую файловую систему чатов.
+Канонические исходники v0.28 находятся в `docs/architecture/`; стек — `docs/decisions/IMPL-001-stack.md`; правила — `AGENTS.md`; единственный реестр — `docs/TASK_REGISTER.md`.
+
+Полный стартовый SHA C0 указывает в сопровождающем готовом сообщении для C2 после проверки итогового main с документами приёмки. Это проверенный documentation-only descendant принятого implementation commit; не выбирать moving main вместо переданного SHA и не предполагать общую файловую систему чатов. Старый `c74db484b483fccaef7b4124b418a91979cb4be6` содержит только README и не является M1 base. Независимый C8 review не выдаётся за выполненный; production/Architecture Freeze gates остаются открытыми.
 
 ## M1.1 — Tenant schema, roles, WorkspaceContext/RLS
 
