@@ -1,0 +1,1992 @@
+# AI Service Manager — Architecture Specification
+
+**Baseline:** v0.28  
+**Дата:** 2026-09-09
+**Статус:** stages 0–27 accepted; v0.28 audit pass 1 + user-approved revisions; pre-implementation, Architecture Freeze v1.0 pending
+
+Этот документ — каноническое описание актуальной архитектуры. История и причины решений находятся в `02_ARCHITECTURE_DECISIONS.md`.
+
+---
+
+# 0. Product Boundaries — LOCKED
+
+## 0.1. Назначение
+
+Платформа автоматизирует функции менеджера/администратора сервисного бизнеса:
+
+- принимает обращения;
+- понимает намерение клиента;
+- ведёт консультацию;
+- собирает параметры услуги;
+- анализирует изображения/файлы;
+- сверяется с правилами, знаниями и портфолио;
+- помогает визуализировать заказ;
+- инициирует оценку и pricing через специализированные компоненты;
+- согласовывает доступное время;
+- инициирует оплату/предоплату;
+- создаёт/изменяет записи;
+- отправляет уведомления;
+- эскалирует нестандартные ситуации владельцу.
+
+## 0.2. Запрещённые архитектурные допущения
+
+Система не должна:
+
+- считать LLM источником бизнес-фактов;
+- позволять LLM произвольный SQL/доступ к БД;
+- позволять LLM выбирать `workspace_id`;
+- обещать цену/время/условия без authoritative source;
+- использовать один «магический prompt» вместо бизнес-архитектуры;
+- выдавать AI-generated изображение за реальную работу мастера;
+- строить фундамент на userbot/неофициальном обходе channel restrictions;
+- делать fine-tuned model per workspace обязательным подходом.
+
+## 0.3. Универсальность
+
+Core универсален. Различия профессий задаются Intake Schema, Business Rules, Workflow Definition, отраслевыми атрибутами, доступными tools, Knowledge/Portfolio и escalation policy.
+
+**LOCKED:** сущности универсальны, но последовательность их использования определяется workflow конкретной услуги.
+
+---
+
+# 1. Domain Model — LOCKED
+
+## 1.1. Platform и business scope
+
+### UserAccount
+Учётная запись пользователя SaaS.
+
+### Workspace
+Tenant/security boundary.
+
+### WorkspaceMembership
+Связь `UserAccount ↔ Workspace`, включающая роль/permissions.
+
+### Business
+Конкретный бизнес внутри Workspace.
+
+**LOCKED:** `Workspace != Business`.
+
+В MVP допустимо:
+```text
+1 Workspace = 1 Business
+```
+
+### BusinessMember
+Человек, участвующий в бизнесе: OWNER, ADMIN, PROVIDER и т. п. Может существовать без UserAccount.
+
+### Location
+Место оказания услуги.
+
+### Resource
+Ограниченный ресурс: мастер, кабинет, оборудование и т. п.
+
+## 1.2. Service model
+
+### Service
+Стабильная сущность каталога услуг.
+
+### ServiceRevision
+Immutable-версия конфигурации Service.
+
+### Intake Schema
+Схема данных, необходимых для конкретной услуги.
+
+Отраслевые параметры не превращаются в глобальный набор колонок. Они задаются schema-driven configuration/JSONB.
+
+## 1.3. Client и communication
+
+### Client
+Клиент конкретного Workspace/Business.
+
+**LOCKED:** Client не глобален между Workspace.
+
+### ClientIdentity
+Идентификатор клиента в канале/контакте: Telegram, VK, MAX, phone, email и т. п.
+
+### ChannelConnection
+Подключение внешнего канала к Business.
+
+### Conversation
+Диалог Client ↔ Business. Может содержать несколько ServiceRequest/Order.
+
+### Message
+Одно входящее/исходящее сообщение.
+
+Sender types:
+- CLIENT;
+- AI;
+- BUSINESS_MEMBER;
+- SYSTEM.
+
+### FileObject
+Canonical metadata физического файла. Binary хранится в Object Storage.
+
+## 1.4. Consultation / Sales
+
+### ServiceRequest
+Структурированное описание того, что хочет клиент.
+
+### ServiceAssessment
+Оценка выполнимости/сложности/продолжительности/объёма.
+
+### Quote
+Коммерческое предложение. После отправки клиенту не переписывается; новые условия создают новый Quote.
+
+### QuoteLine
+Компонент Quote.
+
+### ServiceOrder
+Согласованный заказ.
+
+### ServiceSession
+Логическая часть выполнения ServiceOrder. Может существовать без назначенной даты.
+
+## 1.5. Scheduling
+
+### ReservationHold
+Временное удержание слота.
+
+### Appointment
+Конкретный подтверждённый временной интервал.
+
+**LOCKED:** ReservationHold != Appointment.
+
+## 1.6. Payments
+
+### PaymentRequest
+Бизнесовое требование оплатить.
+
+### PaymentTransaction
+Provider payment operation with stable identity and lifecycle; a technical HTTP retry is not another money movement. Success must be provider-authoritative; Refund is separate.
+
+**LOCKED:** PaymentRequest != PaymentTransaction.
+
+## 1.7. Operations
+
+### Escalation
+Запрос участия человека. Не обязательно означает полный takeover.
+
+### NotificationIntent
+Canonical business notification need; Notification is a legacy generic label. Delivery attempts are separate (§14.5).
+
+### AuditEvent
+История важного действия и actor.
+
+## 1.8. Независимые state machines
+
+Нет одного глобального status всего процесса. Собственные lifecycle имеют ServiceRequest, Assessment, Quote, Order, Session, Hold, Appointment, PaymentRequest, PaymentTransaction, Conversation processing, KnowledgeBuild и ChannelConnection.
+
+---
+
+# 2. Multi-tenancy — LOCKED
+
+## 2.1. Tenant boundary
+
+`Workspace` — единственная tenant boundary. Используется `workspace_id`. Отдельный `tenant_id` не создаётся.
+
+`business_id` отвечает за business context и не заменяет `workspace_id`.
+
+## 2.2. Shared PostgreSQL
+
+MVP:
+```text
+1 PostgreSQL
+platform schema
+shared app schema
+many workspaces
+```
+
+Не используем database-per-tenant и schema-per-tenant.
+
+## 2.3. Workspace-scoped data
+
+Практически все business tables имеют `workspace_id NOT NULL`: clients, services, conversations, messages, portfolio, requests, quotes, orders, appointments, payments, knowledge, audit, notifications и т. д.
+
+## 2.4. Global platform data
+
+Как минимум:
+- user_accounts;
+- workspaces;
+- workspace_memberships;
+- channel_routes;
+- позднее plans/subscriptions/platform usage.
+
+## 2.5. WorkspaceContext
+
+Любая business operation выполняется внутри server-side контекста:
+
+```text
+workspace_id
+actor
+permissions
+request/correlation id
+```
+
+Workspace не берётся из свободного текста Client или LLM.
+
+## 2.6. Channel routing
+
+```text
+external route key
+→ ChannelRoute
+→ workspace_id
+→ WorkspaceContext
+```
+
+ChannelRoute маршрутизирует, но не хранит клиентскую историю.
+
+## 2.7. Defense in depth
+
+Tenant isolation состоит из:
+1. API authorization;
+2. WorkspaceMembership/permissions;
+3. WorkspaceContext;
+4. tenant-aware repositories;
+5. PostgreSQL RLS;
+6. tenant-safe FK/constraints;
+7. Object Storage isolation;
+8. cache namespace isolation;
+9. RAG/vector scope isolation;
+10. AI tool isolation.
+
+## 2.8. PostgreSQL RLS
+
+Runtime DB role:
+- не superuser;
+- без `BYPASSRLS`;
+- не владелец tenant tables.
+
+Current workspace устанавливается transaction-locally, чтобы connection pool не переносил tenant context между запросами.
+
+## 2.9. Tenant-safe relationships
+
+Для критических связей предпочтительны ограничения вида:
+
+```text
+(workspace_id, client_id)
+→ clients(workspace_id, id)
+```
+
+## 2.10. AI isolation
+
+AI tools не принимают произвольный `workspace_id`.
+
+Плохо:
+```text
+search_portfolio(workspace_id, query)
+```
+
+Правильно:
+```text
+search_portfolio(query)
+```
+
+Workspace наследуется из WorkspaceContext.
+
+## 2.11. Other storage
+
+### Object Storage
+```text
+workspaces/{workspace_id}/...
+```
+Bucket private.
+
+### Redis
+Tenant-aware keys:
+```text
+ws:{workspace_id}:...
+```
+Redis не является source of truth.
+
+### Jobs
+Tenant job восстанавливает WorkspaceContext до работы с данными.
+
+### RAG
+Любой retrieval ограничен workspace scope.
+
+## 2.11.1. Same-Workspace Client authorization — LOCKED
+
+RLS workspace scope is necessary but insufficient for Client-facing tools. Every object ID is additionally authorized against trusted Business/Client/Conversation/Request/Order relations and the specific action. A Client cannot view/change another Client's Appointment/payment/file inside the same Workspace. Query tools distinguish shared approved Business Knowledge/Portfolio from private Client history. Add same-Workspace/different-Client tests for queries, commands, files, signed actions and notifications, including forged IDs. Internal AI principal never inherits blanket Owner access.
+
+## 2.12. Permissions
+
+Начальные роли: OWNER, ADMIN, PROVIDER.
+
+Authorization строится через permissions/capabilities.
+
+AI — отдельный service principal, не OWNER.
+
+---
+
+# 3. Data Architecture — LOCKED
+
+## 3.1. Роли хранилищ
+
+### PostgreSQL
+Source of truth для business state, clients, conversations, services, requests, assessments, quotes, orders, appointments, payment state, knowledge, audit, inbox/outbox.
+
+### Object Storage
+Source of truth для binary assets.
+
+### pgvector
+Начальный vector layer внутри PostgreSQL. Embeddings восстановимы.
+
+### Redis
+Cache, rate limits, locks, short-lived state/queue support. Не содержит единственную копию критического состояния.
+
+## 3.2. PostgreSQL schemas
+
+```text
+platform.*
+app.*
+```
+
+`platform.*` — SaaS/global data.  
+`app.*` — tenant business data с workspace_id.
+
+Это не schema-per-tenant.
+
+## 3.3. IDs
+
+Основные IDs — UUID. Предпочтительно UUIDv7 при PostgreSQL 18.
+
+UUID не является authorization mechanism.
+
+## 3.4. Time
+
+Абсолютные timestamps — `timestamptz`. Timezone бизнеса/локации хранится отдельно.
+
+## 3.5. Money
+
+Не использовать float.
+
+Предпочтительно:
+```text
+amount_minor BIGINT
+currency CHAR(3)
+```
+
+Оценка диапазона:
+```text
+estimated_min_minor
+estimated_max_minor
+currency
+```
+
+## 3.6. Duration
+
+Для business duration — `duration_minutes`.  
+Для Appointment — `start_at`, `end_at`.
+
+## 3.7. Status
+
+Предпочтительно `TEXT + CHECK` в БД и строгий enum/type в приложении.
+
+## 3.8. JSONB
+
+Принцип:
+```text
+Normalized Core + Flexible Edge
+```
+
+Колонки — для keys, money, statuses, timestamps, relationships, часто используемых критических полей.
+
+JSONB — для отраслевого intake, portfolio attributes, provider metadata, snapshots, гибких схем.
+
+## 3.9. Revisions / immutability
+
+- ServiceRevision и RuleRevision сохраняют исторический смысл конфигурации.
+- Отправленный Quote не переписывается.
+- Существенно изменённый Assessment создаёт новую версию/новую запись.
+- Исторические коммерческие решения должны быть воспроизводимыми.
+
+## 3.10. Files
+
+PostgreSQL хранит:
+```text
+id
+workspace_id
+storage_key
+mime_type
+size_bytes
+sha256
+processing_status
+created_at
+```
+
+Binary — Object Storage.
+
+## 3.11. Media analysis
+
+Vision/AI-analysis — отдельный результат, не свойство оригинального файла. Один FileObject можно анализировать повторно разными моделями/версиями.
+
+## 3.12. Optimistic concurrency
+
+Критические mutable entities имеют `version`. Update проверяет известную версию и не перезаписывает параллельное изменение молча.
+
+## 3.13. Transactions
+
+Связанные изменения business state атомарны в PostgreSQL transaction. External API calls не удерживают SQL transaction.
+
+## 3.14. Inbox / Outbox
+
+- `InboxEvent` — дедупликация/надёжная обработка внешних событий.
+- `OutboxEvent` — надёжное инициирование внешних/async действий после commit.
+- `AuditEvent != OutboxEvent`.
+- Event Sourcing не используется.
+
+## 3.15. Delete policy
+
+Универсальный soft-delete во всех таблицах не используется.
+
+- конфигурационные объекты → archive;
+- финансовая/аудит-история → сохраняется;
+- privacy deletion → отдельная процедура удаления/обезличивания.
+
+## 3.16. Логические семейства таблиц
+
+Platform:
+- user_accounts
+- workspaces
+- workspace_memberships
+- channel_routes
+
+Business:
+- businesses
+- business_members
+- locations
+- resources
+
+Services:
+- services
+- service_revisions
+- business_rules
+- rule_revisions
+
+Channels:
+- channel_connections
+
+Clients/Communication:
+- clients
+- client_identities
+- conversations
+- messages
+- files
+- message_files
+- conversation_turns / turn_messages (предпочтительно; SQL позже)
+
+Portfolio/Media:
+- portfolio_items
+- portfolio_files
+- media_analyses
+- generated_assets / generated_asset_sources (логические сущности; SQL позже)
+
+Sales:
+- service_requests
+- service_assessments
+- quotes
+- quote_lines
+
+Delivery:
+- service_orders
+- service_sessions
+- reservation_holds
+- appointments
+
+Payments:
+- payment_requests
+- payment_transactions
+
+Knowledge:
+- knowledge_sources
+- knowledge_items
+- knowledge_chunks
+- historical_cases
+- communication_profiles
+- approved_conversation_examples
+- knowledge_candidates
+- knowledge_builds
+
+Operations:
+- escalations
+- notifications
+- audit_events
+- inbox_events
+- outbox_events
+
+---
+
+# 4. Channels / Telegram — LOCKED
+
+## 4.1. Channel abstraction
+
+```text
+Telegram / VK / MAX / Web
+→ Channel Adapter
+→ Normalized Event
+→ Conversation Engine
+```
+
+Концептуальный adapter умеет receive/send text/send media/edit/delete/mark read/download/get capabilities. Не каждый transport обязан поддерживать всё.
+
+## 4.2. Telegram modes
+
+### Primary MVP
+**Profile Automation / connected business bot.**
+
+Клиент пишет обычному аккаунту мастера; подключённый bot получает разрешённые сообщения и отвечает от имени аккаунта в рамках Telegram capabilities.
+
+На дату baseline официальная документация подтверждает:
+- Premium не требуется для подключения connected business bot;
+- `can_reply` действует в подходящих приватных чатах с входящим сообщением за последние 24 часа;
+- сейчас к пользовательскому аккаунту подключается один business bot.
+
+Это mutable external assumptions.
+
+### Alternative
+Standalone / managed Telegram Bot — fallback/дополнительный route, не обязательный в первом MVP.
+
+## 4.3. ChannelCapabilities
+
+Как минимум:
+```text
+receive_messages
+reply
+proactive_messages
+send_media
+edit
+delete
+mark_read
+reply_window
+buttons/actions
+```
+
+## 4.4. ChannelConnection
+
+Концептуально:
+```text
+id
+workspace_id
+business_id
+provider
+mode
+status
+external_account_id
+external_account_name
+capabilities
+rights
+connected_at
+last_sync_at
+disconnected_at
+credential_reference
+```
+
+## 4.5. ChannelRoute
+
+Platform table:
+```text
+provider
+route_type
+route_key
+workspace_id
+channel_connection_id
+```
+
+## 4.6. Telegram inbound pipeline
+
+```text
+Webhook
+→ verify
+→ InboxEvent
+→ deduplicate
+→ ChannelRoute
+→ WorkspaceContext
+→ normalize
+→ persist Client/Conversation/Message
+→ download attachments
+→ Conversation Engine
+```
+
+Длительный AI call не выполняется до надёжного сохранения входящего события.
+
+## 4.7. External identity
+
+```text
+workspace_id + provider + external_user_id
+→ ClientIdentity
+```
+
+Cross-workspace Client identities не объединяются автоматически.
+
+## 4.8. Provider events
+
+Нормализуются как минимум:
+- message received;
+- edited;
+- deleted;
+- reply;
+- media group;
+- structured user action;
+- connection lifecycle.
+
+## 4.9. Files
+
+Provider file ID не является canonical object:
+
+```text
+Provider file → download → Object Storage → FileObject
+```
+
+## 4.10. Human takeover
+
+Native Telegram pause может использоваться как UX, но channel-independent ConversationControl остаётся внутренним механизмом.
+
+## 4.11. Conversation vs Notification
+
+Conversation Channel и Notification Route разделены. Если один transport не может отправить proactive notification, Notification Engine позже выбирает другой route или фиксирует недоставимость.
+
+## 4.12. Official APIs only
+
+Не строить product foundation на userbot/эмуляции пользовательской Telegram-сессии ради обхода ограничений.
+
+---
+
+# 5. Conversation Engine — LOCKED
+
+## 5.1. Responsibility
+
+Conversation Engine — backend orchestration layer, который:
+- принимает normalized events;
+- формирует semantic turns;
+- разрешает context;
+- связывает turn с business objects;
+- обновляет structured state;
+- определяет, нужен AI, deterministic action или tool;
+- координирует response;
+- проверяет актуальность перед отправкой.
+
+Conversation Engine не является LLM.
+
+## 5.2. Message vs ConversationTurn
+
+Несколько быстрых Messages могут стать одним Turn. Turn aggregation учитывает media group, тип сообщения, debounce и conversation state.
+
+Structured UserAction может обрабатываться сразу.
+
+## 5.3. ConversationState
+
+Компактное состояние:
+```text
+active_request_id
+active order references
+current topic
+control_mode
+processing_state
+awaiting_response_to
+last offered options
+pending actions
+version
+last activity
+```
+
+## 5.4. Multiple requests
+
+Один Conversation может иметь несколько ServiceRequest. ContextResolver/RequestRouter решает, к какому объекту относится новый Turn. При существенной неоднозначности задаётся clarification.
+
+## 5.5. Structured extraction
+
+AI извлекает candidate facts:
+```text
+field
+value
+confidence
+evidence/source
+```
+
+Перед записью — schema validation.
+
+Explicit client fact и AI-inferred value различаются.
+
+## 5.6. Conflicts
+
+Явное новое значение может заменить старое с provenance/audit. Неявный конфликт приводит к clarification.
+
+## 5.7. Missing fields
+
+Intake Schema определяет заполненные, missing, conflicting и inferred-but-unconfirmed поля. AI задаёт вопросы естественно, не превращая чат в жёсткую форму.
+
+## 5.8. Context Builder
+
+Приоритет:
+1. Hard Rules/Policies.
+2. Structured current state.
+3. Latest explicit turns.
+4. Verified Knowledge.
+5. Portfolio/visual context.
+6. Conversation Summary.
+7. Approved historical examples.
+
+Structured state выше summary.
+
+## 5.9. Summary
+
+Conversation Summary — производный context helper, не source of truth.
+
+## 5.10. Staleness / relevance
+
+Conversation имеет `version`. AI/async run фиксирует input version. Перед user-visible action проверяются:
+- current version;
+- control mode;
+- channel capability;
+- актуальность результата.
+
+Устаревший response не отправляется.
+
+## 5.11. Processing model
+
+```text
+serialization per conversation
++
+parallelism across conversations
+```
+
+Serialization/CAS principle resolved in §18.5; concrete transaction/fencing mechanics are validated at M3, not an unresolved agent architecture question.
+
+## 5.12. Human takeover
+
+MVP:
+- AI;
+- HUMAN.
+
+В HUMAN автоматическая отправка AI запрещена; pending AI outputs становятся stale/cancelled.
+
+## 5.12.1. Control and in-flight effects — LOCKED
+
+ConversationControl has a monotonic control generation. New AIRuns, AI mutations and AI sends capture it and recheck current control/permissions/preconditions immediately before execution. HUMAN denies new AI commands and AI conversational sends. Deterministic inbound/payment reconciliation, expiry and manual owner operations continue.
+
+Owner takeover and command admission share a serialized/CAS boundary so a queued AI action cannot execute after losing authority. Leases are not sufficient; stale workers must fail generation/fencing checks. A side effect committed before takeover is retained and displayed, never blindly replayed or rolled back.
+
+External send already accepted/in flight cannot be recalled by a DB toggle. Persist dispatch state; suppress unsent output; report any unresolved in-flight outcome. No claim of atomic exactly-once across DB and Telegram. Exact transport reconciliation capabilities are validated at M2–M3.
+
+Client-facing follow-ups are suppressed in HUMAN. Deterministic transactional notices have an explicit category policy; conservative Pilot default routes them to owner review during HUMAN, while preserving canonical payment/booking processing. Exact business exceptions are OPEN-083.
+
+## 5.13. Escalation
+
+Escalation может запросить решение владельца без полного takeover и затем вернуть управление AI.
+
+## 5.14. Processing states
+
+Допускаются:
+- WAITING_FOR_CLIENT;
+- WAITING_FOR_HUMAN;
+- WAITING_FOR_PAYMENT;
+- WAITING_FOR_EXTERNAL_SERVICE;
+- READY_TO_RESPOND.
+
+Это не заменяет business entity state machines.
+
+## 5.15. Response model
+
+ConversationResponse может содержать:
+- text;
+- media;
+- actions/buttons;
+- references.
+
+Точные structured actions по возможности обрабатываются без LLM.
+
+## 5.16. Visual intent
+
+Поддерживаем логические intent:
+- NONE;
+- SHOW_PORTFOLIO;
+- GENERATE_FROM_DESCRIPTION;
+- COMBINE_REFERENCES;
+- ADAPT_REFERENCE;
+- CREATE_VARIATIONS.
+
+## 5.17. Visual Design Service
+
+Conversation Engine решает, **когда и зачем** нужна визуальная операция. Отдельный Visual/Image service создаёт GeneratedAsset.
+
+Portfolio-first:
+```text
+find real relevant portfolio
+→ if insufficient
+offer/generate AI concept
+```
+
+## 5.18. GeneratedAsset
+
+GeneratedAsset:
+- отдельно от PortfolioItem/client original;
+- имеет purpose;
+- имеет provenance/source assets;
+- может иметь revision lineage;
+- не считается реальной выполненной работой;
+- не является автоматически техническим чертежом/финальным production artifact.
+
+## 5.19. Delayed results
+
+Любой delayed result (LLM, image, payment, calendar, notification) перед user-visible action проверяет relevance.
+
+## 5.20. Boundaries
+
+Conversation Engine не реализует Pricing, Scheduling, Payments, RAG internals, Image Generation и Industry Rules самостоятельно.
+
+---
+
+# 6. Knowledge / RAG — LOCKED
+
+## 6.1. Authority hierarchy
+
+Приоритет источников примерно:
+1. Business Rules.
+2. Structured Service/Business Configuration.
+3. Pricing/Scheduling/Policy source of truth.
+4. Current structured Request/Order state.
+5. Master-confirmed/curated Knowledge.
+6. Portfolio.
+7. Approved historical patterns/cases.
+8. Raw historical conversations.
+
+## 6.2. Hard Facts vs Knowledge
+
+Hard facts хранятся структурированно: цены, график, депозит, ограничения, eligibility, booking rules.
+
+RAG — для FAQ, объяснений, подготовки, aftercare/guidance, описаний, возражений, опыта.
+
+## 6.3. Ingestion pipeline
+
+```text
+Raw Sources
+→ Parse/Normalize
+→ Classify
+→ Extract Facts/Patterns
+→ Deduplicate
+→ Detect Conflicts
+→ Knowledge Candidates
+→ Owner Questions/Review
+→ Approved Knowledge
+→ Chunk
+→ Embed/Index
+→ Published KnowledgeBuild
+```
+
+## 6.4. Historical conversations
+
+Используются для:
+- candidate rules;
+- FAQ;
+- communication style;
+- representative examples;
+- HistoricalCases;
+- continuous learning.
+
+Критические правила автоматически не публикуются.
+
+## 6.5. Authority
+
+Примерные уровни:
+- MASTER_CONFIRMED;
+- OFFICIAL_BUSINESS_DOCUMENT;
+- STRUCTURED_BUSINESS_DATA;
+- CURATED;
+- HISTORICAL;
+- AI_INFERRED.
+
+Retrieval учитывает authority, recency и service relevance.
+
+## 6.6. Knowledge objects
+
+- KnowledgeSource — сырой источник.
+- KnowledgeItem — нормализованное знание.
+- KnowledgeChunk — search unit.
+- HistoricalCase — структурированный прошлый кейс.
+- CommunicationProfile — профиль стиля.
+- ApprovedConversationExample — representative example.
+- KnowledgeCandidate — предложение до подтверждения.
+- KnowledgeBuild — валидированный опубликованный набор знаний.
+
+## 6.7. Effective dates / revisions
+
+Knowledge/Rules могут иметь status, revision, effective_from/effective_until.
+
+## 6.8. KnowledgeBuild
+
+Новый build проходит:
+```text
+DRAFT → VALIDATING → READY → PUBLISHED
+```
+
+Если build невалиден, previous published build остаётся активным.
+
+## 6.9. Chunking
+
+Semantic sections предпочтительнее тупого fixed-size split. Chunk должен быть максимально самодостаточным.
+
+Metadata:
+```text
+workspace_id
+knowledge_item_id
+category
+service_id
+authority
+language
+effective dates
+content_hash
+```
+
+## 6.10. Embeddings
+
+Начальная архитектура: PostgreSQL + pgvector.
+
+Embedding — search index, не canonical knowledge.
+
+Embedding provider/model is selected by `ModelProfile + DataResidencyPolicy + ProviderExecutionClass`.
+
+For RU production, embedding candidates must be eligible for the actual task/data policy, including when reached through RU_AGGREGATOR. No provider/model is a universal embedding default; direct text-embedding-3-small is an evaluation candidate, not automatic RU approval. Query and stored projection must use a compatible EmbeddingProfile across branch changes.
+
+## 6.11. Hybrid retrieval
+
+```text
+Structured Filters
++
+Semantic Search
++
+Keyword/Full-text
+→ Merge
+→ Rerank
+→ Authority/Recency/Service relevance
+→ Deduplicate
+→ Context Pack
+```
+
+Начать можно с exact vector search. Approximate indexes — по измеренной необходимости.
+
+## 6.12. Retrieval scopes
+
+Не использовать `search_everything()`.
+
+Scopes:
+- BUSINESS_KNOWLEDGE;
+- CLIENT_HISTORY;
+- PORTFOLIO;
+- HISTORICAL_CASES;
+- позже PLATFORM_INDUSTRY_KNOWLEDGE.
+
+## 6.13. Communication style
+
+Используются:
+```text
+CommunicationProfile
++ ApprovedConversationExamples
++ current conversation
+```
+
+Fine-tuning — только если измеренное качество окажется недостаточным.
+
+## 6.14. Portfolio intelligence
+
+PortfolioItem остаётся canonical entity.
+
+MVP visual search:
+```text
+Portfolio image
+→ Vision Analysis
+→ structured attributes + normalized text description
+→ text embedding
+```
+
+Client reference проходит аналогичный pipeline. Поиск объединяет structured filters, semantic representation и metadata.
+
+Dedicated multimodal visual embedding может быть добавлен позже.
+
+## 6.15. Portfolio evidence
+
+AI/Assessment должны уметь ссылаться на реальные PortfolioItem, использованные как evidence.
+
+Похожая работа не означает автоматически, что бизнес принимает такой заказ сейчас — это проверяется Rules/Service Configuration.
+
+## 6.16. Platform Industry Knowledge
+
+Допускаются platform-curated knowledge packs, но они отделены от Workspace Knowledge и имеют отдельную provenance/authority.
+
+## 6.17. Continuous learning
+
+Новые разговоры анализируются для suggestions/candidates. Money, scheduling, eligibility и legal/health-sensitive rules требуют owner confirmation.
+
+---
+
+# 7. AI Architecture — LOCKED
+
+## 7.1. AI layer boundary
+
+Business code не зависит напрямую от конкретного provider model ID.
+
+Архитектура:
+
+```text
+Application Core
+    ↓
+AI Orchestrator
+    ├── ContextBuilder
+    ├── ModelRouter
+    ├── PromptRegistry
+    └── SafetyGateway
+    ↓
+ModelGateway
+    ↓
+Provider Adapter(s)
+```
+
+Provider selection is **region-qualified and policy-qualified**. No provider brand is a universal first-provider contract.
+
+`ModelRouter` resolves `AIProviderBranch + AIRoutingRevision + ModelProfile` to an eligible adapter/model using DataResidencyPolicy, ProviderExecutionClass, task/risk/modality and approved Eval status. Branch selection never changes Workspace/HomeDataRegion.
+
+For RU production, direct OpenAI/Gemini access through VPN/proxy is not an accepted production dependency. Contracted enterprise gateways/aggregators and RU-local hosted models may be used only under explicit data/provider eligibility policy.
+
+---
+
+## 7.2. Model profiles
+
+Application обращается к логическим профилям, например:
+
+- `CONVERSATION_DEFAULT`;
+- `CONVERSATION_COMPLEX`;
+- `FAST_EXTRACTION`;
+- `SUMMARY_FAST`;
+- `VISION_DEFAULT`;
+- `VISION_BULK`;
+- `ONBOARDING_EXTRACT`;
+- `ONBOARDING_SYNTHESIS`;
+- `DEEP_ANALYSIS`;
+- `IMAGE_GENERATION`;
+- `TEXT_EMBEDDING`;
+- `VOICE_TRANSCRIPTION`;
+- `MODERATION`.
+
+ModelRouter преимущественно deterministic и использует task type, risk, modality и workload class.
+
+---
+
+## 7.3. Initial model mapping
+
+**LOCKED — v0.28 / ADR-259–261.** Two branches share the same logical ModelProfiles, canonical PostgreSQL context, tools and schemas:
+
+| Branch | Preferred integration | Use |
+|---|---|---|
+| `RU_AGGREGATOR` | PolzaAI first evaluation/integration candidate; GPTunnel comparison or approved replacement | First RU Tattoo Pilot |
+| `DIRECT_PROVIDER` | Official model-developer APIs; initial direct adapter candidate OpenAI | Eligible deployment/account/data routes; same task-specific principle |
+
+An aggregator is not automatically RU_LOCAL_HOSTED. `AIProviderBranch` describes access mode; `ProviderExecutionClass` describes actual processing trust/location. Neither price nor catalog presence proves data/upstream eligibility. Previous Cloud.ru-first/local-default preference is superseded; local-hosted gateways remain optional evaluated alternatives, not mandatory third branch.
+
+Candidate mappings are **EVAL_ONLY**, not production approval. API model IDs must be obtained from the chosen provider catalog rather than inferred from display names. Initial shortlist and external sources are in §7.22. Select the least expensive candidate that passes task-specific safety/domain/quality and latency gates; compare total successful-task cost including retries, Vision, tools, cached input and failure rate. Missing facts trigger clarification/Owner, not stronger-model guessing.
+
+Image generation/transcription profiles preserve future extensibility; their existence does not enable these features in the Pilot. Vision/image understanding is Pilot scope.
+
+---
+
+## 7.4. Reasoning effort
+
+Model tier и reasoning effort — разные параметры.
+
+`max` reasoning не используется как default для customer turns.
+
+Reasoning увеличивается только при доказанной необходимости; missing authoritative data не компенсируется более сильной моделью.
+
+---
+
+## 7.5. Provider APIs and provider state
+
+Each `ModelProviderAdapter` uses the provider/gateway API appropriate for the approved regional bundle. OpenAI-compatible API shape may be used where supplied by a gateway, but it is an adapter concern, not a domain dependency.
+
+Provider-managed conversation state, previous response IDs и persisted reasoning не являются canonical memory.
+
+Source of truth остаётся:
+
+```text
+PostgreSQL
++ ConversationState
++ ContextBuilder
+```
+
+Provider state допускается только как future optimization после eval/privacy review.
+
+---
+
+## 7.6. Structured Outputs
+
+Любой AI output, который читает application code, должен по возможности быть versioned structured output по schema.
+
+Используется `SchemaRegistry`, например:
+
+```text
+ServiceRequestExtraction:v3
+PortfolioAnalysis:v2
+ConversationSummary:v4
+OnboardingCandidate:v1
+```
+
+Нельзя определять business action парсингом свободного prose.
+
+---
+
+## 7.7. Prompt architecture
+
+Prompt собирается слоями:
+
+```text
+Platform Policy
+Task Policy
+Workflow Context
+Business Communication Profile
+Trusted Structured State
+Authoritative Rules
+Retrieved Knowledge / Evidence
+Portfolio Evidence
+Recent Turns
+Current Client Turn
+```
+
+External user/document content всегда остаётся untrusted data и не превращается в system/developer instruction.
+
+Владелец бизнеса не получает произвольное поле «system prompt» как основной механизм настройки.
+
+Platform prompts и schemas версионируются; business configuration хранится отдельно.
+
+---
+
+## 7.8. ContextBuilder
+
+Большое context window не является разрешением отправлять всю историю.
+
+ContextBuilder выбирает и ограничивает:
+
+- structured state;
+- relevant rules;
+- RAG evidence;
+- portfolio evidence;
+- conversation summary;
+- recent turns;
+- current turn.
+
+Budgets profile-specific и token-budget based, а не фиксированное число сообщений.
+
+---
+
+## 7.9. Model-call minimization
+
+Не существует mandatory цепочки classifier → extractor → conversation model для каждого Turn.
+
+Default interactive flow стремится к одному основному reasoning pass, если он может одновременно понять Turn, сформировать structured decision и запросить нужные tools.
+
+Отдельные дешёвые calls используются для background/bulk задач, summarization и ingestion только когда это оправдано.
+
+---
+
+## 7.10. Vision
+
+Анализ изображений использует multimodal text/vision models того же model layer.
+
+Различаются interactive и background profiles.
+
+MediaAnalysis кешируется/сохраняется по FileObject + model/schema version, чтобы не анализировать один и тот же файл без необходимости повторно.
+
+Оригинал изображения всё равно может повторно передаваться модели, когда текущий вопрос требует spatial/detail understanding.
+
+---
+
+## 7.11. Visual generation
+
+Image generation/editing выполняется отдельным Visual Design Service.
+
+Conversation model создаёт structured VisualRequest; image model не принимает business decisions и не управляет workflow.
+
+---
+
+## 7.12. Embeddings as versioned projections
+
+Canonical KnowledgeChunk не должен быть намертво связан с одной embedding model.
+
+Предпочтительная модель:
+
+```text
+KnowledgeChunk
+    ├── Embedding projection v1
+    └── Embedding projection v2
+```
+
+Используется `EmbeddingProfile` с provider/model/dimensions/metric/version/status.
+
+Это позволяет blue-green reindexing и безопасную смену embedding model.
+
+То же правило применимо к portfolio search representations.
+
+---
+
+## 7.13. Voice transcription
+
+Voice message проходит:
+
+```text
+FileObject
+→ TranscriptionService
+→ transcript
+→ normal Conversation pipeline
+```
+
+Realtime voice agent не входит в текущий MVP architecture.
+
+---
+
+## 7.14. Safety gateway
+
+AI layer имеет SafetyGateway hook.
+
+Moderation result сам по себе не является business decision; итоговое действие определяется platform/industry/business policy.
+
+Security boundaries defined in §17; exact first-Business risk rules remain approved configuration inputs.
+
+---
+
+## 7.15. Provider built-in tools
+
+Customer-facing AI по умолчанию не получает свободный web search, computer use, arbitrary code или provider-hosted business tools.
+
+Business actions предоставляются нашей application/tool layer.
+
+Hosted provider tools могут использоваться только как явно разрешённая capability для конкретной задачи.
+
+---
+
+## 7.16. AIRun and AIProviderCall
+
+`AIRun` — логическая AI-задача.
+
+Один AIRun может включать несколько provider calls при tool loop.
+
+`AIProviderCall` хранит provider/model/profile/reasoning/usage/latency/error metadata.
+
+Не требуется хранить полный chain-of-thought.
+
+Для объяснимости сохраняются:
+
+- structured decision;
+- evidence/source refs;
+- rule refs;
+- tool calls/results;
+- final response;
+- model/config/schema versions;
+- usage/cost metadata.
+
+---
+
+## 7.17. Model upgrades and fallback
+
+Различаются:
+
+### Technical fallback
+
+Timeout / rate limit / provider failure → retry/backoff/technical fallback.
+
+### Quality escalation
+
+Ambiguity / invalid structured result / insufficient evidence → stronger profile, clarification или Human Escalation.
+
+Нельзя строить бесконечную лестницу retries/models.
+
+Новые models проходят eval → offline/shadow comparison → canary → rollout.
+
+---
+
+## 7.18. Cost metering
+
+С первого production call измеряются как минимум:
+
+```text
+workspace
+AI task/profile
+provider/model
+input tokens
+cached input
+output tokens
+reported reasoning usage
+latency
+cost
+```
+
+Model/provider pricing должна быть исторически воспроизводимой.
+
+---
+
+## 7.19. Interactive vs background workloads
+
+AI profiles различают latency class:
+
+- INTERACTIVE — Client ждёт ответ;
+- BACKGROUND — onboarding, portfolio ingestion, reindexing, summarization.
+
+Background workloads могут использовать более дешёвые profiles и batching/queue processing.
+
+---
+
+## 7.20. Streaming
+
+User-visible token streaming не является обязательным для MVP.
+
+Для business-critical ответов предпочтительно сначала получить/проверить tool results, а затем отправить завершённый ответ. Channel может показывать typing/progress indicator.
+
+---
+
+
+## 7.21. Branch switching contract — LOCKED
+
+`AIRoutingRevision` is an immutable profile→adapter/model/parameters/capabilities/fallback manifest within `AIProviderBranch`. It belongs to Platform AI Configuration Release, separate from BusinessConfigurationRelease.
+
+Authorized Platform Ops selects the branch and routing revision per deployment/Workspace binding (pilot UI may be narrow). No domain-code change, new Workspace, price-policy change or provider-side conversation migration is required. Owner-facing raw model selection is not required.
+
+Before activation validate credentials, model/capability availability, schema/tool compatibility, context budget, data eligibility, cost limits and relevant Evals. Publish atomically and audit actor/reason/old/new revision. Each AIRun pins its revision; switch affects new runs. Unsafe in-flight runs are cancelled/staled and resumed from canonical state with prior business effects preserved. Never splice a model continuation into another provider's proprietary state.
+
+Automatic cross-branch fallback is off by default. An explicit evaluated allowlist may enable it only for eligible task/data routes. Gateway-internal fallback must also be constrained/verified; an unobservable incompatible upstream path is ineligible for that task. If no eligible fallback exists, queue/escalate instead of random substitution.
+
+Embedding changes require compatible query/index projection or blue-green rebuild before activation; branch switch alone must not mix vectors from different profiles. Canonical context stays in PostgreSQL. AIRun records branch, routing revision, gateway, known upstream/model, schema, latency and cost provenance.
+
+## 7.22. Initial model shortlist — EVAL_ONLY / 2026-09-09
+
+These are implementation starting candidates, not a measured price-quality winner. No authenticated latency tests or paid task benchmark have been run in this documentation pass.
+
+| Task profile | RU_AGGREGATOR candidate | DIRECT_PROVIDER candidate |
+|---|---|---|
+| FAST_EXTRACTION / SUMMARY_FAST | Polza Qwen3.8 Flash | OpenAI gpt-5.6-luna |
+| CONVERSATION_DEFAULT | Polza Gemini 3.8 Flash | OpenAI gpt-5.6-terra |
+| CONVERSATION_COMPLEX / DEEP_ANALYSIS | Polza GLM 5.3 for comparison; select after tool/domain tests | OpenAI gpt-5.6-sol, bounded escalation |
+| VISION_DEFAULT | Polza Gemini 3.8 Flash, verify actual image/tool/schema route | OpenAI gpt-5.6-terra |
+| VISION_BULK | Cheapest validated vision route; compare same Gemini candidate | Compare gpt-5.6-luna to Terra on Tattoo image labels |
+| TEXT_EMBEDDING | OPEN-074: verify catalog, Russian retrieval quality, dimensions and processing eligibility | text-embedding-3-small benchmark candidate, subject to same eligibility |
+| IMAGE_GENERATION — post-Pilot | Seedream 5.0 Lite initial cost-oriented candidate; GPT Image alternative if needed | GPT-Image-2.5 Flare initial candidate; exact ID/cost to verify at activation |
+
+PolzaAI is preferred by the user; GPTunnel remains a comparison candidate. The claim that Polza is substantially cheaper is a user preference/hypothesis, not a completed comparative benchmark. Capture current exact model IDs/prices/currency/tax/billing units at the implementation spike. Do not copy direct-provider tariffs into aggregator cost accounting. A candidate with poor Russian/tool behavior is rejected regardless of catalog price. Preview/experimental models are not default production routes.
+
+External evidence (mutable; reverify before integration):
+- [Polza API overview](https://polza.ai/docs): unified API access; adapter compatibility does not certify every model/tool route.
+- [Polza model catalog](https://polza.ai/models): Qwen3.8 Flash, Gemini 3.8 Flash and GLM 5.3 listed when checked; prices are route-dependent catalog indications.
+- [Polza documentation index](https://polza.ai/docs/llms.txt): model listing, tool/structured-output, provider selection, embeddings and image APIs are documented topics.
+- [GPTunnel API](https://docs.gptunnel.ru/): API documentation available; comparable current pricing/latency not established in this pass.
+- [OpenAI model catalog](https://developers.openai.com/api/docs/models): Luna for economical workloads, Terra balanced, Sol higher capability; text/image support and specialized image models listed. Candidate placement above is an engineering recommendation, not benchmark evidence.
+
+---
+
+# 8. AI Agent / Tools / Autonomy — LOCKED
+
+## 8.1. Agent topology
+
+Основной customer-facing flow использует один `ConversationAgent`.
+
+Pricing, Scheduling, Payments, Knowledge, Portfolio и Visual Design являются application services/tools, а не отдельными customer-facing agents.
+
+Отдельные AI workflows допускаются только для действительно другого lifecycle, прежде всего:
+- `OnboardingAgent`;
+- Learning/Continuous Improvement workflow.
+
+Не использовать multi-agent swarm как default customer architecture.
+
+## 8.2. AgentRuntime
+
+Agent состоит из:
+- Model/Profile;
+- Context;
+- Allowed Tool Set;
+- Policies;
+- bounded execution loop;
+- state/relevance checks;
+- budgets;
+- audit/tool traces.
+
+Модель сама по себе не является Agent.
+
+## 8.3. Tool architecture
+
+AI не получает:
+- `execute_sql`;
+- generic HTTP request;
+- arbitrary code execution;
+- arbitrary database mutation;
+- permission/policy modification.
+
+Business tools узкие, typed и versioned.
+
+Концептуальные группы:
+- QUERY;
+- DERIVED_ACTION;
+- COMMAND;
+- PRIVILEGED_COMMAND.
+
+Tool вызывает Application Service, а не Repository/SQL напрямую.
+
+## 8.4. ToolRegistry / ToolSetResolver
+
+`ToolRegistry` знает каталог capabilities платформы.
+
+`ToolSetResolver` выдаёт Agent только минимальный набор tools, релевантный:
+- текущему WorkflowStep;
+- Service capabilities;
+- actor permissions;
+- Channel capabilities;
+- ActionPolicy;
+- current state.
+
+Наличие tool в model context не является authorization.
+
+## 8.5. ToolExecutionContext
+
+Server-side context содержит:
+```text
+workspace_id
+business_id
+actor = AI_AGENT
+conversation/client/request/order refs
+permissions
+ai_run_id
+correlation/request id
+```
+
+`workspace_id` не является model-supplied tool argument.
+
+## 8.6. PolicyEngine / ActionPolicy
+
+Каждое значимое действие имеет autonomy mode:
+
+- `AUTO`
+- `REQUIRE_CONFIRMATION`
+- `ESCALATE`
+- `DISABLED`
+
+Policy hierarchy:
+```text
+Platform Hard Policy
+    ↓
+Industry Minimum Policy
+    ↓
+Workspace Policy
+    ↓
+Service Policy
+    ↓
+Dynamic Context Rules
+```
+
+Нижний уровень не может ослабить hard platform/industry safety floor.
+
+Client confirmation внутри workflow не равна Owner Approval.
+
+## 8.7. Owner Approval
+
+Для privileged action создаётся `ApprovalRequest` с frozen action payload и state version.
+
+После Owner/Admin approval система:
+1. повторно валидирует permissions/state/preconditions/idempotency;
+2. исполняет ровно одобренное действие;
+3. не просит LLM заново сформировать side effect.
+
+AI не может одобрить собственный ApprovalRequest.
+
+## 8.8. Evidence instead of confidence authorization
+
+Self-reported model confidence не является достаточным основанием для критического business action.
+
+Используются evidence classes, например:
+- AUTHORITATIVE_STRUCTURED;
+- TOOL_VERIFIED;
+- CLIENT_EXPLICIT;
+- AI_INFERRED;
+- HISTORICAL_SOFT.
+
+ActionPolicy определяет необходимые evidence/preconditions.
+
+## 8.9. Tool errors
+
+Tool results/errors machine-readable.
+
+Минимальные error classes:
+- VALIDATION_FAILED;
+- NOT_FOUND;
+- CONFLICT;
+- STALE_STATE;
+- NOT_ALLOWED;
+- APPROVAL_REQUIRED;
+- TEMPORARY_FAILURE;
+- EXTERNAL_PROVIDER_FAILURE.
+
+Technical retry выполняет runtime, а не свободный model loop.
+
+## 8.10. Bounded agent loop
+
+Agent имеет `AgentBudget`:
+- max steps;
+- max tool calls;
+- max state mutations;
+- deadline;
+- optional cost budget.
+
+Stop outcomes:
+- SEND_RESPONSE;
+- WAIT_FOR_CLIENT;
+- WAIT_FOR_HUMAN / APPROVAL;
+- ESCALATED;
+- NO_RESPONSE;
+- FAILED;
+- BUDGET_EXCEEDED.
+
+Independent read-only tools могут выполняться параллельно. State-changing commands по умолчанию выполняются последовательно.
+
+## 8.11. Deterministic events bypass Agent when possible
+
+Exact system events не проходят через LLM ради решения, которое уже известно коду.
+
+Примеры:
+- payment webhook;
+- ReservationHold expiration;
+- structured button action;
+- deterministic workflow transition.
+
+LLM подключается для semantic interpretation или natural-language response.
+
+## 8.12. Tool traces
+
+Логически существует `AIToolCall/ToolTrace`, отделённый от `AuditEvent`.
+
+ToolTrace фиксирует, что AI запросил и какой policy/execution result получил.
+
+AuditEvent фиксирует фактически произошедшее business mutation/action.
+
+## 8.13. Control plane separation
+
+Customer ConversationAgent преимущественно работает в Data Plane.
+
+Он не может:
+- менять собственные permissions;
+- менять autonomy policy;
+- менять PromptRegistry;
+- публиковать Business Rules;
+- управлять Workspace membership;
+- выполнять platform-admin операции.
+
+---
+
+# 9. Industry Modules + Workflow Definitions — LOCKED
+
+## 9.1. Configuration model
+
+Профессия не создаёт отдельную application architecture.
+
+Используется:
+```text
+Universal Core
+    ↓
+Workflow Archetype / Capabilities
+    ↓
+Industry Pack
+    ↓
+Business Overrides
+    ↓
+Service Overrides
+    ↓
+Compile + Validate
+    ↓
+ServiceRevision + WorkflowRevision
+```
+
+## 9.2. Workflow families
+
+Основные архитектурные workflow families:
+
+1. `SLOT_BASED_SERVICE`
+   - manicure, barber, brows, grooming и подобные стандартные appointment services.
+
+2. `CUSTOM_CONSULTATIVE_SERVICE`
+   - tattoo, permanent makeup, custom beauty/design-heavy services.
+
+3. `EVENT_BASED_SERVICE`
+   - photographer, videographer, DJ, event professionals.
+
+4. `ONSITE_SERVICE`
+   - cleaning, plumbing, electrical repair, field service.
+
+5. `CUSTOM_PRODUCTION`
+   - furniture, custom manufacturing, tailoring, custom decor.
+
+6. `RECURRING_SESSION_SERVICE`
+   - tutors, trainers, recurring coaching/lessons.
+
+7. `PROJECT_DELIVERY_SERVICE`
+   - designers, developers, editors, digital project freelancers.
+
+Это archetypes, а не mutually-exclusive profession labels.
+
+## 9.3. Capability composition
+
+Service может комбинировать capabilities, например:
+```text
+APPOINTMENT_BASED
+ASSESSMENT_REQUIRED
+VISUAL_INTAKE
+VISUAL_GENERATION
+QUOTE_REQUIRED
+DEPOSIT_REQUIRED
+MULTI_SESSION
+RECURRING
+ONSITE
+TRAVEL
+EVENT_DATE
+PRODUCTION
+DELIVERY
+INSTALLATION
+REVISION_CYCLES
+FILE_DELIVERY
+```
+
+Profession/industry code помогает defaults/terminology/knowledge, но не определяет workflow единолично.
+
+## 9.4. IndustryPack
+
+Versioned platform template содержит концептуально:
+- service templates;
+- intake schema templates;
+- workflow templates;
+- capability defaults;
+- business rule templates;
+- pricing/scheduling defaults;
+- portfolio analysis schema;
+- terminology;
+- knowledge categories/references;
+- autonomy defaults;
+- escalation defaults;
+- onboarding question templates.
+
+Pack не содержит конкретные цены/правила конкретного бизнеса.
+
+## 9.5. Pack upgrades
+
+Обновление IndustryPack не меняет production business автоматически.
+
+Upgrade:
+```text
+new pack available
+    ↓
+diff / validation
+    ↓
+business review where required
+    ↓
+new revisions
+    ↓
+publish
+```
+
+## 9.6. Workflow model
+
+Добавляются логические сущности:
+- `WorkflowDefinition`;
+- `WorkflowRevision`;
+- `WorkflowInstance`;
+- `WorkflowStepInstance`.
+
+`ServiceRevision` связывается с immutable `WorkflowRevision`.
+
+Workflow представляет directed graph с:
+- steps;
+- dependencies;
+- guards;
+- optional branches;
+- wait states;
+- completion conditions;
+- allowed tools/actions;
+- autonomy overrides.
+
+Не требуется enterprise BPMN engine для MVP.
+
+## 9.7. Workflow state is orchestration, not truth
+
+Workflow не дублирует domain data.
+
+Например:
+- payment truth → PaymentRequest/PaymentTransaction;
+- calendar truth → ReservationHold/Appointment;
+- quote truth → Quote;
+- request facts → ServiceRequest.
+
+Workflow только определяет, какие prerequisites выполнены и что разрешено делать дальше.
+
+## 9.8. Deterministic completion
+
+WorkflowStep завершается по проверяемому domain condition, а не потому что LLM «решила, что этап завершён».
+
+AI может помогать выполнить semantic step, но завершение подтверждает код/state.
+
+## 9.9. Tool availability from workflow
+
+`ToolSetResolver` учитывает текущий WorkflowStep.
+
+Например Intake step не выдаёт Agent refund/booking tools без необходимости.
+
+## 9.10. Generic businesses without Pack
+
+IndustryPack — ускоритель, а не обязательное условие.
+
+Неизвестная профессия может быть настроена через generic onboarding, capabilities и workflow configuration без нового backend module.
+
+## 9.11. UI terminology
+
+Backend vocabulary остаётся единым.
+
+Industry Pack может менять UI labels:
+- ServiceOrder → «Заказ» / «Проект» / другое;
+- ServiceSession → «Сеанс» / «Занятие».
+
+## 9.12. Expansion risk
+
+Workflow Complexity и Risk/Regulatory Complexity оцениваются отдельно.
+
+High-risk verticals (medicine, legal, financial advice) не являются ранним expansion priority.
+
+Construction/large renovation рассматривается как advanced project vertical.
+
+---
+
+# 10. Business Onboarding & Configuration — LOCKED
+
+## 10.1. Purpose
+
+Onboarding должен с минимальным количеством вопросов получить достаточную, непротиворечивую и подтверждённую конфигурацию бизнеса для безопасной работы AI.
+
+Onboarding — отдельная подсистема, не статическая форма настроек.
+
+## 10.2. Onboarding modes
+
+Поддерживаются:
+- Quick Start;
+- Assisted Import;
+- Full / Concierge Onboarding.
+
+Первые production clients рекомендуется проводить concierge/manual или semi-assisted способом.
+
+## 10.3. OnboardingAgent
+
+`OnboardingAgent` работает с Owner/Admin и draft/candidate objects.
+
+Он не отправляет сообщения клиентам и не публикует production configuration самостоятельно.
+
+## 10.4. Pipeline
+
+```text
+Create Business
+    ↓
+Basic Discovery
+    ↓
+Source Collection
+    ↓
+Import / Normalization
+    ↓
+AI Analysis
+    ↓
+Service Discovery
+    ↓
+Capability / Workflow Inference
+    ↓
+Rules / Knowledge Extraction
+    ↓
+Portfolio / Communication Analysis
+    ↓
+Conflict Detection
+    ↓
+Missing Data Detection
+    ↓
+Adaptive Questions
+    ↓
+Owner Answers
+    ↓
+Configuration Draft
+    ↓
+Deterministic Validation
+    ↓
+Simulation / Preview
+    ↓
+Owner Approval
+    ↓
+Publish
+    ↓
+Calibration
+```
+
+## 10.5. Import boundary
+
+Provider/file-specific formats обрабатываются Importers.
+
+OnboardingAgent работает с normalized sources.
+
+Логически добавляется `ImportBatch`.
+
+Raw source сохраняется до extraction согласно будущей retention/privacy policy.
+
+## 10.6. Service-level discovery
+
+Business industry classification помогает выбрать defaults, но Workflow/capabilities определяются преимущественно для каждой Service.
+
+AI создаёт Service/Rule/Workflow candidates, а не бесконтрольно production objects.
+
+## 10.7. Candidate provenance
+
+Значимые candidates содержат:
+- source/evidence;
+- authority;
+- extraction/model metadata where useful;
+- conflict/missing status.
+
+Критические values требуют достаточного authority/owner confirmation.
+
+## 10.8. Conflict detection
+
+Минимальные классы:
+- VALUE_CONFLICT;
+- TEMPORAL_CONFLICT;
+- SEMANTIC_CONFLICT;
+- CONFIGURATION_CONFLICT.
+
+AI может группировать evidence и формировать вопрос, но authoritative resolution критического конфликта принадлежит Owner/structured source.
+
+## 10.9. Adaptive questionnaire
+
+Вопросы формируются после анализа уже доступных данных.
+
+`OnboardingQuestion` имеет:
+- target;
+- type;
+- priority;
+- dependency;
+- reason/evidence.
+
+Question priorities:
+- BLOCKING;
+- IMPORTANT;
+- OPTIONAL;
+- ENRICHMENT.
+
+Question dependency graph предотвращает бессмысленные дочерние вопросы.
+
+## 10.10. Readiness gates
+
+Не использовать общий completion percentage как единственный launch criterion.
+
+Readiness определяется gates, например:
+- SERVICES_READY;
+- PRICING_READY;
+- SCHEDULING_READY;
+- POLICIES_READY;
+- KNOWLEDGE_READY;
+- CHANNEL_READY;
+- AUTONOMY_READY.
+
+Readiness может различаться между Services одного Business.
+
+## 10.11. Portfolio onboarding
+
+Imported images должны различать provenance:
+- MY_WORK;
+- CLIENT_REFERENCE;
+- INSPIRATION;
+- OTHER.
+
+Только подтверждённые реальные работы становятся PortfolioItem evidence бизнеса.
+
+## 10.12. Communication profile review
+
+Style inference предпочтительно подтверждать через realistic AI response previews, а не через технические числовые параметры.
+
+## 10.13. Autonomy onboarding
+
+Владельцу предлагаются понятные autonomy presets.
+
+Platform hard policies не override'ятся onboarding.
+
+## 10.14. ConfigurationDraft
+
+Onboarding работает с `ConfigurationDraft`, который не является production state.
+
+После publish draft остаётся historical onboarding artifact.
+
+## 10.15. Validation
+
+Публикация блокируется при deterministic ERROR.
+
+Validation может также возвращать WARNING/INFO.
+
+AI может объяснить issue, но наличие/отсутствие mandatory configuration проверяет application code.
+
+## 10.16. Simulation / Preview
+
+До production configuration проходит:
+- historical replay, если доступны старые conversations;
+- synthetic scenarios;
+- minimal service smoke suite;
+- Owner preview.
+
+Проверяется correctness facts/actions/escalations/tone, а не буквальное совпадение текста.
+
+## 10.17. BusinessConfigurationRelease
+
+Добавляется immutable `BusinessConfigurationRelease` — manifest совместно опубликованных revisions/builds, например:
+- ServiceRevisions;
+- WorkflowRevisions;
+- Rule revisions/set;
+- KnowledgeBuild;
+- CommunicationProfile revision;
+- AutonomyPolicy revision.
+
+Публикация Release должна быть атомарной.
+
+Release обеспечивает reproducibility и rollback для новых операций, но не переписывает уже pinned ServiceRequest/Order revisions.
+
+## 10.18. Onboarding lifecycle
+
+Логическая `OnboardingSession` имеет состояния:
+```text
+DRAFT
+COLLECTING_SOURCES
+ANALYZING
+NEEDS_OWNER_INPUT
+BUILDING_CONFIG
+VALIDATING
+READY_FOR_REVIEW
+APPROVED
+PUBLISHED
+```
+
+Side states:
+- PAUSED;
+- FAILED;
+- ABANDONED.
+
+Onboarding может быть incremental и использоваться после запуска для добавления Service/изменения конфигурации.
+
+## 10.19. Calibration
+
+Первый production launch не обязан сразу включать максимальную autonomy.
+
+Во время calibration собираются:
+- human interventions;
+- corrections;
+- escalations;
+- tool errors;
+- missing knowledge;
+- wrong answers.
+
+Autonomy расширяется после evidence/evals.
+
+## 10.20. Multi-provider scope
+
+Onboarding различает Business-level и provider/resource-level configuration.
+
+Данные одного мастера не должны автоматически становиться capability всей команды.
+
+
+
