@@ -1,92 +1,83 @@
 # AI Service Manager — единый task register
 
-Ответственный: C0. Дата приёмки инженерного M0: 2026-09-15.
-Архитектура: v0.28; реализационный стек: `docs/decisions/IMPL-001-stack.md`.
+Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Принятие M0
+## Текущее решение C0
 
-**M0 — VERIFIED.** PR #1 фактически слит в `main` 2026-09-15T12:43:21Z.
-Принятый implementation/merge commit: `1d7bb4fa0567bdd263d7910492ecf217696642de`.
-Исходный main: `c74db484b483fccaef7b4124b418a91979cb4be6` (только README).
-Интегрированный PR head: `8639812ce71f5cce8f2b2ed051ff01fea67d5157`.
-PR: https://github.com/Elefesys/ai-service-manager/pull/1
+**M0 — VERIFIED. M1.1 — VERIFIED. C8-M1.1-01 — CLOSED.** PR #3 интегрирован; отдельный push/main CI actual merge commit прошёл. Полный M1 ещё не принят: M1.2 и M1.3 не реализованы.
 
-Приёмка основана на C0 second-pass review (`docs/reviews/M0_C0_REVIEW.md`), точном импорте исходников и успешном **push/main** CI принятого merge commit, а не только на виртуальном PR merge-ref. C0 повторно прочитал PR/main через GitHub и проверил скачанный CI artifact: tested-commit совпал, worktree-status пуст, все одиннадцать документов совпали с исходными вложениями побайтово и по SHA-256.
+Принятый implementation merge M1.1: `b480d864a246cb0573b40fa5211f66625a71de91`.
+Проверенный C2 head: `fa98e714d78485f8d07108294263c89d90a6e7f0`.
+Исходный base задачи/M0: `7eaa9aa63b3f27215f6eb970fb9eb857fd291f62`.
+Implementation tree: `66b87d3797bff856df449c878347766e147c5c01` (74 файла).
 
-Эта запись фиксирует уже проверенную инженерную реализацию. Последующее согласование документов приёмки не меняет код, миграции, архитектурные оригиналы или lockfiles. Полный стартовый SHA для M1.1 C0 передаёт в готовом стартовом сообщении после проверки итогового main, включающего эту запись. Это может быть documentation-only descendant указанного implementation commit; исполнитель не подменяет полученный SHA движущейся веткой main.
+Следующий выданный scope: **M1.2, backend-часть C1 и контракт для C5**. Затем C5 login UI по отдельно принятому API SHA. Это части одной M1.2; backend-only не закрывает всю задачу. M1.3 по зависимостям допускается после M1.1, но в текущей последовательной очереди ещё не выдана и не запускается автоматически. Канонические зависимости не пересматриваются.
 
-Review выполнен C0. Роли C1–C8 в таблице обозначают ответственность, не работу отдельно запущенных агентов. Независимый C8 review не выполнялся и не заявляется. Приёмка M0 не означает Architecture Freeze v1.0, завершение M1 tenant-security или production readiness.
+Финальный стартовый SHA C1 указывается C0 в сопровождающем сообщении после проверки итогового main с этими документами приёмки. Он может быть documentation-only descendant implementation merge выше. Moving main, PR test-merge и старый M0 не заменяют выданный SHA. Ссылка на evidence итоговой документационной интеграции сохраняется также в её PR без бесконечного изменения commit ради записи собственного SHA.
 
-Состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED; BLOCKED требует конкретной причины. Это не архитектурные LOCKED/OPEN/DEFERRED/REVISED.
+## Задачи
 
-| ID | Цель | Зависимости | Ведущий | Статус | Проверка / результат | Следующий шаг |
+| ID | Цель | Зависимости | Ведущий | Статус | Evidence / результат | Следующий шаг |
 |---|---|---|---|---|---|---|
-| M0.ACCESS | Repository, main и запись | — | C0 | VERIFIED | PR #1 merged; main и commit подтверждены GitHub | Использовать назначенный полный SHA |
-| M0.BASELINE | Spec/ADR/baseline/plan | ACCESS | C0 | VERIFIED | v0.28, канонические оригиналы и IMPL-001 сверены | Не менять принятые ADR молча |
-| M0.SOURCE | Точный импорт оригиналов в Git | BASELINE | C0 | VERIFIED | 11/11 документов, исходные SHA-256 и побайтовое сравнение PASS | Оригиналы в docs/architecture; manifest не переписан |
-| M0.STACK | Выбор и фиксация стека | BASELINE | C0/C1/C2/C6 | VERIFIED | IMPL-001 интегрирован; manifests/locks/digests и CI PASS | Сохранять стек; изменения только с review |
-| M0.BACKEND | API/Worker/Scheduler shell | STACK | C1/C0 | VERIFIED | Lint, strict mypy, health/schema/env и shutdown PASS | Tenant foundation в отдельном модуле M1.1 |
-| M0.FRONTEND | Business Console/Ops shells | STACK | C5/C0 | VERIFIED | TypeScript, 3 Vitest tests, build/rebuild PASS | Login/authorization в M1.2 |
-| M0.DB | PG18/vector/roles/migrations | STACK | C2/C0 | VERIFIED | Real PG, runtime restrictions, migration cycles PASS | Следующая revision 0002 после 0001; будущей БД нет |
-| M0.LOCAL | Docker/local и smoke | BACKEND/FRONTEND/DB/LOCK | C6/C0 | VERIFIED | Чистый GitHub Linux/amd64 Docker runner: stack/HTTP/proxy PASS | Запуск на ПК пользователя отдельно не выполнялся |
-| M0.TEST | Существенные real PG tests | DB | C8/C0 | VERIFIED | 7 real PostgreSQL tests PASS, не SQLite/mock | Расширить реальную tenant suite в M1.1 |
-| M0.LOCK | Locks/digests/reproducibility | STACK | C6/C0 | VERIFIED | uv.lock, package-lock.json, 5 image digests; wheel/assets byte comparisons PASS | Не запускать bootstrap при обычном checkout |
-| M0.CI | Полный проверочный pipeline | LOCAL/LOCK | C6/C8/C0 | VERIFIED | Main run 34970531911 SUCCESS; точный SHA, source/drift gates PASS | CI каждой интеграции; contents: read |
-| M0.FIXTURES | Synthetic A–D | STACK | C0/C8 | VERIFIED | UUID/money/modes/environment checks PASS | Только synthetic, не production defaults |
-| M0.HANDOFF | Правила, реестр, M1.1–M1.3 | BASELINE/STACK | C0 | VERIFIED | AGENTS, M1_HANDOFF, ограниченный scope и зарезервированная 0002 | C0 выдаёт M1.1 с точным проверенным SHA |
-| M0.ACCEPT | Интеграционная приёмка M0 | Все обязательные M0 результаты | C0 | VERIFIED | PR #1 merged + C0 review + green main CI + source integrity | Разрешён запуск M1.1; не production |
-| M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2 | REVIEW | PR #3; C8 CHANGES_REQUESTED: C8-M1.1-01 (P2), AUTOCOMMIT/context mismatch | Исправление C2 в той же ветке, все 8 C8 tests, полный CI и повторная проверка; merge запрещён до приёмки C0 |
-| M1.2 | Auth/session/membership/login UI | Интегрированный контракт M1.1 | C1+C5 | TODO | Критерии в M1_HANDOFF.md | Не начинать зависимую реализацию до приёмки M1.1 |
-| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 | C1 | TODO | Критерии в M1_HANDOFF.md; защищённый UI использует M1.2 | Без paid provider и клиентских платежей |
+| M0.ACCESS | Repository и доступ | — | C0 | VERIFIED | PR #1/#2 merged, доступ подтверждён | Проверять refs перед каждой задачей |
+| M0.BASELINE | Spec/ADR/baseline/plan | ACCESS | C0 | VERIFIED | 11 канонических оригиналов и IMPL-001 | Не менять канон молча |
+| M0.SOURCE | Точный импорт | BASELINE | C0 | VERIFIED | 11/11 SHA-256 и byte comparison | CI проверяет SOURCE_MANIFEST |
+| M0.STACK | Зафиксированный стек | BASELINE | C0 | VERIFIED | IMPL-001, locks/digests и CI | Только обоснованные reviewed изменения |
+| M0.BACKEND | API/Worker/Scheduler shell | STACK | C0 | VERIFIED | Types/health/env/shutdown tests | Auth — M1.2 |
+| M0.FRONTEND | Console/Ops shells | STACK | C0 | VERIFIED | 3 frontend tests/build/reproducibility | Login UI — C5 в M1.2 |
+| M0.DB | PostgreSQL/vector/roles/migrations | STACK | C0 | VERIFIED | Real PostgreSQL и migration cycles | 0002 уже реализована в M1.1 |
+| M0.LOCAL | Docker/local smoke | BACKEND/FRONTEND/DB/LOCK | C0 | VERIFIED | GitHub Linux/amd64 runner | Пользовательский ПК не проверен |
+| M0.TEST | Существенные PostgreSQL tests | DB | C0 | VERIFIED | 7 первоначальных DB cases сохранены | Tenant/auth regression развивается |
+| M0.LOCK | Locks/digests/build repeatability | STACK | C0 | VERIFIED | uv/npm locks, image digests, wheel/assets | Bootstrap при обычном checkout не нужен |
+| M0.CI | Общий pipeline | LOCAL/LOCK | C0 | VERIFIED | Main runs 34970531911 и 34972872410 | Read-only CI, source/drift gates |
+| M0.FIXTURES | Synthetic A–D | STACK | C0 | VERIFIED | UUID/money/modes/environment guards | Не production defaults |
+| M0.HANDOFF | Правила, реестр и очередь | BASELINE/STACK | C0 | VERIFIED | AGENTS и M1_HANDOFF | Передача по точному SHA |
+| M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
+| M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
+| M1.2 | Auth/session/membership/login UI | Интегрированный M1.1 | C1+C5 | TODO | Backend scope/критерии в M1_HANDOFF.md; код ещё не написан | C1 backend → C0/C8 review → C5 UI → общая приёмка |
+| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1; защищённый UI использует M1.2 | C1 | TODO | Ещё не выдана | После текущего auth-среза, без paid provider |
 
-## Фактическое evidence принятого implementation commit
+Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 
-Main CI: https://github.com/Elefesys/ai-service-manager/actions/runs/34970531911
-Event: `push`; branch: `main`; conclusion: `success`; attempt: 1.
-Head и tested-commit: `1d7bb4fa0567bdd263d7910492ecf217696642de`.
-Job: `104385439116` (`foundation`); все обязательные шаги SUCCESS.
-Artifact: `m0-verification-34970531911`, ID `10396772645`.
-SHA-256 ZIP: `e1702634f918fb92c1a361ee5ac49a762ed58dc6b125ee85c75dd35efd2f1755`.
-Состав: architecture.log, ci.log, tested-commit.txt, пустой worktree-status.txt, source.tar.gz.
+## Evidence приёмки M1.1
 
-- 20 backend unit/fixture/import tests PASS; 7 real PostgreSQL integration tests PASS; 3 frontend tests PASS. Итого 30 тестов, без суммирования повторных CI запусков.
-- Ruff lint/format, strict mypy и TypeScript PASS.
-- PostgreSQL runtime-role restrictions, RLS allow/deny/no-context/cross-Workspace, rollback/reused-pool context, pgvector/UUIDv7 и worker/scheduler SIGTERM PASS.
-- Alembic fresh/repeated upgrade, disposable TEST downgrade/re-upgrade PASS.
-- OpenAPI drift, два одинаковых backend wheel и два одинаковых набора frontend assets PASS.
-- Docker build, LOCAL readiness, direct API/reverse proxy/Ops HTML smoke PASS.
-- Canonical-source verification и clean tracked/untracked worktree gate PASS; source/locks не изменены проверками.
+PR: https://github.com/Elefesys/ai-service-manager/pull/3
+Actual merge/head CI: `b480d864a246cb0573b40fa5211f66625a71de91`.
+Main run: https://github.com/Elefesys/ai-service-manager/actions/runs/35015308300
+Event `push`, branch `main`, job `104537130545` (`foundation`), все шаги SUCCESS.
+Artifact `10415043854`, name `m0-verification-35015308300`.
+ZIP SHA-256: `b0b23c7b795f7084201a804a9285ad7634106627c9f5366c284d0b2f77287cc0`.
 
-## История импорта и предыдущих проверок
+C0 скачал artifact и подтвердил SHA-256, tested-commit actual merge, пустой worktree-status, Git tree всех 74 файлов с modes и 11/11 архитектурных оригиналов против исходных вложений. Дерево совпало с C8-reviewed head. Новый main CI — отдельный выполненный run интеграции, не прежний виртуальный PR merge.
 
-Import run `34968001558` создал commit `395b760175871a3d6cde10b8e01e1f9364e3bd57` с одиннадцатью оригиналами. Artifact ID `10395434061`, SHA-256 `fd89f2dc453e0848341b55e93565779393e772ec682a607836af267407726751`. Его source archive и source принятого main повторно сверены с оригиналами. Опечатка полного import SHA в первоначальном C0 review исправлена документально; эталонные файлы/manifest и Git history не изменены.
+Результат: **24 non-integration + 62 real PostgreSQL + 3 frontend = 89 passed**. 62 = 48 прежних DB cases + 8 неизменённых C8 + 6 guard cases. Полный lint/format/mypy/types, fresh/M0 upgrade/replay/disposable downgrade/re-upgrade, readiness 0002, OpenAPI, wheel/static assets reproducibility, Docker/HTTP/proxy smoke и clean-source gates прошли. Повторные прогоны не суммируются в число tests.
 
-Ранее успешные PR runs `34889375796` и `34889853771` проверяли предыдущие snapshots с 25 тестами; они не подменяют main evidence выше. Первый bootstrap `34889055896` сформировал locks в `76fd251d2b323986306731505ce59773886e5ca7`, но остановился на mypy/BaseSettings. Исправление `c89b839c56d14c184650423a18ec35d1fc22de41` включило Pydantic mypy plugin без отключения strict checks. Промежуточные source-import CI failures отражали отсутствующие/несовпадающие ещё переносимые документы; итоговые оригиналы прошли проверку без изменения эталонных хэшей. Неуспешные попытки не переписываются как успешные.
+Документ приёмки: `docs/reviews/M1_1_C0_ACCEPTANCE.md`. Ограниченный контракт C1: `docs/tasks/M1_1_CONTRACT.md`, `contracts/tenancy.v1.json`. Новые docs не меняют код/DDL/guards и не создают M1.2 реализацию.
 
-## Открытые ограничения после M0
+## История C8-M1.1-01 — закрыта, не текущий блокер
 
-Architecture Freeze v1.0 pending. App разрешает только LOCAL/TEST. Полная tenant schema/authorization — M1; durable Inbox/Outbox/Jobs — M2.1. Нет live AI/Telegram/payment/fiscalization, Object Storage, production backup/restore, полного vulnerability/container/dependency audit и production telemetry exporter. Эти gates не закрыты инженерным M0.
+Первоначальный C8 review: CHANGES_REQUESTED на `84d94b2187787c654928ac11b7e4d411970b2b0c`; P2 AUTOCOMMIT публиковал Python context без общей физической транзакции. Это не доказанная cross-tenant утечка. Собственный C8 PostgreSQL run `34987895881`, job `104444620955`: 55 integration passed, 1 failed; исходные 48 DB cases и 7 новых C8 прошли. Artifact `10403814298`, SHA-256 `2b4afb189a0724a8346e4941d006613e8020c808145ba3b6569a46ca0ce0afd7`. Последующие pipeline gates после failure не считались выполненными.
 
-Независимый C8 review не выполнялся; отдельная проверка substantive tenant/auth capabilities требуется по мере их реализации. C0 review не заменяет production security/release gates. Запуск на пользовательском компьютере не выполнен; полный запуск подтверждён GitHub Linux/amd64 runner.
+C0 coordination `0474594532aaada1368b4cdd11834bdd6e53b74d` записал ограниченное исправление в этот реестр. C2 fix `61c5f81c7ea9905a71c3d93ea13fe284d0e2545b` добавил actual-driver AUTOCOMMIT rejection до публикации, same-connection Workspace/XID/fence/INTRANS check, все 8 C8 cases и 6 новых tests. Первый correction run `34993878294` выявил ошибку настройки одного нового recovery test; `fa98e714d78485f8d07108294263c89d90a6e7f0` исправил только источник normal engine, не assertions или production guard.
 
-Неблокирующие deprecation/toolchain warnings остаются задачей сопровождения C6. Reproducibility ограничена locked inputs и wheel/static asset bytes; bit-identical OCI metadata между builders/CPU не заявляется. Реальные данные мастера, API keys и расходы не нужны для начала M1.1.
+Полный green C2 run `34994578775`, job `104467480316`, artifact `10406734324`, SHA-256 `c89dbba840903f8e8e935c0d367a1af0077a9fa76112c40078ebc371356910ef`: 89 tests и все gates. Его tested PR merge `05326998fc070aad35cc64307d678e10fc13d86d` не был main integration.
 
-## M1.1 — C0 disposition of independent C8 review / 2026-09-15
+Отчёт C8 targeted re-review от 16 сентября 2026: **PASS**, устранено на fa98e714…, новых блокеров нет. SHA-256 исходного пользовательского файла отчёта: `4fcdd7ff1a44d0979cfea7d7967409a96737962ba3fbbbaa73c34a50268dbd57`. C8 независимо проверил код, тесты и existing CI/tree, но **не запускал новый PostgreSQL run в re-review**. C0 принял закрытие (PR review `5214994803`), сверил текущие refs/код/evidence, затем выполнил expected-head integration и проверил отдельный main run выше. Прежние CHANGES_REQUESTED и запрет merge относились к неисправленному snapshot, теперь заменены этим решением. Ошибки в истории не переименованы в успешные прогоны.
 
-Status: **REVIEW**; review outcome: **CHANGES_REQUESTED**. Это результат review, не новый статус задач и не отмена M0 VERIFIED. M1.1 не INTEGRATED/VERIFIED. M1.2/M1.3 не запускаются.
+C8 test-only PR #4 закрыт без merge; отдельная ветка не является текущим кодом. Исходный файл 8 tests перенесён без изменения, SHA-256 `114f67314af6997aa11064cc786bea0da196f87abf6698b2ae38c281857d0737`. Повторный cherry-pick не нужен. Ни одна принятая миграция/архитектурная версия не переписана.
 
-C0 сверил отчёт C8 с PR #3/#4 и скачанным новым CI artifact. Проверенный C2 head: `84d94b2187787c654928ac11b7e4d411970b2b0c`; исходный base/main: `7eaa9aa63b3f27215f6eb970fb9eb857fd291f62`. PR #3 открыт и не слит. C8 test-only head: `4fe5f115ffbac696e58620aa6ce006642fe6e787`; PR #4 закрыт без merge, ветка `c8/m1-1-review` сохранена. Этот раздел добавлен C0 только в task register на ветке PR #3: он не исправляет код и не является интеграцией в main. C2 продолжает от resulting head этого coordination commit, сохраняя исходный base задачи.
+## История M0
 
-**C8-M1.1-01, P2:** публичный TenantDatabase принимает PostgreSQL engine в DBAPI AUTOCOMMIT и выдаёт Python WorkspaceContext без общей реальной DB-транзакции. `connection.begin()` и `in_transaction()` недостаточны. Диагностический SELECT после выдачи unit вернул workspace/xid/context_xid = NULL. Нарушен существующий M1_1_CONTRACT.md §§Context and transaction ownership / Errors and consumer API; текущие locations: database.py:60–68, 200–216, 231–249. Это НЕ подтверждённая cross-tenant утечка/обход RLS; штатный RuntimeDatabase не включает AUTOCOMMIT. Архитектурный пересмотр и новая миграция не требуются.
+Исходный README-only main: `c74db484b483fccaef7b4124b418a91979cb4be6`. PR #1 merge `1d7bb4fa0567bdd263d7910492ecf217696642de`, head `8639812ce71f5cce8f2b2ed051ff01fea67d5157`. Main run `34970531911`, job `104385439116`, artifact `10396772645`, ZIP SHA-256 `e1702634f918fb92c1a361ee5ac49a762ed58dc6b125ee85c75dd35efd2f1755`: 20 unit/fixture/import + 7 DB + 3 frontend = 30 passed, все gates. Приёмка C0, не независимый C8 review. PR #2 documentation-only merge `7eaa9aa63b3f27215f6eb970fb9eb857fd291f62`, main run `34972872410` SUCCESS; это исходный base M1.1.
 
-Evidence C8: run `34987895881`, job `104444620955`, FAILURE; artifact `10403814298`, SHA-256 `2b4afb189a0724a8346e4941d006613e8020c808145ba3b6569a46ca0ce0afd7`; tested virtual merge `9cce66cd64caa6d8e0d45b87c454331ccbe5030c`. C0 проверил ZIP SHA, tested-commit, пустой worktree-status, лог assertion и сохранность всех 72 исходных файлов C2. Добавлен только tests/test_c8_tenancy_review.py. Все 11 архитектурных оригиналов и их эталоны совпали. Новый PostgreSQL run самим C0 не выполнялся.
+11 оригиналов импортированы в `395b760175871a3d6cde10b8e01e1f9364e3bd57`, import run `34968001558`, artifact `10395434061`, SHA-256 `fd89f2dc453e0848341b55e93565779393e772ec682a607836af267407726751`. Оригиналы/manifest сохраняются; опечатка import SHA исправлялась только в review-документе. Bootstrap `34889055896` сформировал locks в `76fd251d2b323986306731505ce59773886e5ca7`, затем mypy/BaseSettings fix `c89b839c56d14c184650423a18ec35d1fc22de41` без отключения strict typing. Ранние runs `34889375796`/`34889853771` с 25 tests относятся к старым snapshots; промежуточные source failures остаются историей. Подробные предыдущие версии этого же реестра сохранены в Git, не в другом активном реестре.
 
-C8 CI: 24 non-integration PASS; 55 integration PASS и 1 FAIL (AUTOCOMMIT); frontend 3 PASS. Из 8 новых C8 cases 7 PASS, 1 FAIL; все исходные 48 PostgreSQL tests прошли. Последующие верхнеуровневые downgrade/re-upgrade, OpenAPI, backend wheel, HTTP smoke и отдельный clean-source gate в этом запуске не выполнены после FAIL. Старый green C2 run `34978858961` остаётся свидетельством 75 исходных tests, но не закрывает новый finding. Первичная ошибка C8 Ruff I001 в run `34987294887` исправлена test-only commit и не является дефектом C2.
+## Открытые ограничения и следующая migration
 
-**Ограниченное задание C2:** отклонять фактический AUTOCOMMIT на выданном соединении до публикации unit/context стабильным CONTEXT_INVALID либо TRANSACTION_STATE; не менять режим незаметно. В нормальном режиме до yield подтвердить совпадение Workspace и непустого XID/fence. Не полагаться только на engine options, begin/in_transaction или get_isolation_level. Сохранить pool/task/cancellation cleanup, реальные rollback и membership locks. Не менять DDL, роли/grants/RLS, зависимости или канон.
+App пока LOCAL/TEST. M1.1 — tenant foundation, не полноценный auth. AuthenticatedAccount создаётся только будущим verified auth adapter; UUID не аутентификация. Same-Workspace/different-Client authorization не пройдена: Client tables ещё нет. Runtime credentials/arbitrary Python/SQL compromise не покрываются одной RLS; application authorization обязательна.
 
-Разрешённый scope доработки: backend/src/asm/tenancy/database.py; tests/test_c8_tenancy_review.py (все 8 C8 cases без ослабления); tests/test_tenancy*.py для targeted проверки отказа до входа в body и очистки; уточнение docs/tasks/M1_1_CONTRACT.md без ослабления обещанной гарантии. types.py/contract.py/tenancy.v1.json — только при доказанной необходимости, с явным diff; существующих error codes достаточно. Общие CI entrypoints, 0001/0002, bootstrap, frontend, lockfiles, fixtures semantics не меняются. Реестр остаётся собственностью C0.
+Следующая очередь: C0 резервирует `0003_auth_sessions.py`, revision `0003`, down_revision `0002`, только для M1.2 C1 backend. Поля, auth/session library, точные API/TTL/CSRF protocol C1 фиксирует до DDL в implementation contract/IMPL-002, не выдавая их за уже принятый domain ADR. 0001/0002 неизменны. C2/C0 проверяют права/миграции; никаких параллельных schema heads.
 
-Test-only перенос: взять tests/test_c8_tenancy_review.py из `4fe5f115ffbac696e58620aa6ce006642fe6e787` либо объединённый patch SHA-256 `9548078f85486abf603e2068b376536df413dca5539341d71e61a5772aa7d4ea`. C0 восстановил этот же patch из CI bytes и проверил git apply --check/совпадение результата. При cherry-pick нужны оба C8 commits: `080f1a4d67aaf6d456278eafadd7400e9f96524d`, затем `4fe5f115ffbac696e58620aa6ce006642fe6e787`; второй отдельно — лишь сортировка импортов. PR #4 не сливать.
+M1.3 local entitlements/Audit, M2 Inbox/Outbox/Jobs и остальные capabilities не реализованы. Нет live provider calls, Object Storage, production backup/restore, полной vulnerability/security certification, MFA или production telemetry. Architecture Freeze v1.0 pending. M1.1 verification не означает весь M1/Pilot готов.
 
-Acceptance для нового head: сохранить все 75 исходных tests и 8 C8 cases (ожидаемо 83 без дополнительных cases), без skip/xfail/удаления assertion; выполнить полный scripts/ci.sh, включая ранее не достигнутые gates. При отказе AUTOCOMMIT тело UOW не должно исполняться, ambient context не публикуется; нормальный путь сохраняет Workspace/XID, COMMIT/ROLLBACK, pool reuse и concurrency. Вернуть C0 новый полный head, точный CI checkout/tree/run/evidence, diff и ограничения. Затем targeted re-review C8; интеграцию и main CI выполняет только C0.
+Запуск на ПК пользователя не выполнялся; новые full runs выполнены GitHub Linux/amd64 Docker runner. Reproducibility подтверждает locked inputs и wheel/assets bytes, не идентичность OCI metadata между CPU/builders. Старые deprecation/Docker warnings остаются сопровождением C6, не скрытыми блокерами. Реальные данные мастера, секреты провайдеров и расходы для следующего auth-среза не требуются.
