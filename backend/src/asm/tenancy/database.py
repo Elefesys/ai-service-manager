@@ -7,6 +7,8 @@ from contextvars import ContextVar
 from typing import Any
 from uuid import UUID
 
+from psycopg import AsyncConnection as PsycopgAsyncConnection
+from psycopg.pq import TransactionStatus
 from sqlalchemy import CursorResult, RowMapping, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -214,6 +216,12 @@ class TenantDatabase:
         require_uuid(correlation_id)
         try:
             async with self._engine.connect() as connection, connection.begin():
+                # SQLAlchemy begin/in_transaction track a logical transaction even
+                # in AUTOCOMMIT. Inspect this checkout's actual psycopg connection;
+                # do not close the borrowed proxy or silently change its mode.
+                driver = (await connection.get_raw_connection()).driver_connection
+                if not isinstance(driver, PsycopgAsyncConnection) or driver.autocommit:
+                    raise TenancyError(ErrorCode.CONTEXT_INVALID)
                 identity = (await connection.execute(text("SELECT current_user"))).scalar_one()
                 if identity != "asm_runtime":
                     raise TenancyError(ErrorCode.ACCESS_DENIED)
@@ -242,6 +250,30 @@ class TenantDatabase:
                         "correlation": str(correlation_id),
                     },
                 )
+                binding = (
+                    (
+                        await connection.execute(
+                            text("""
+                                SELECT app.current_workspace_id() AS workspace_id,
+                                       pg_current_xact_id_if_assigned()::text AS xid,
+                                       NULLIF(current_setting('asm.context_xid', true), '')
+                                           AS context_xid
+                            """)
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+                # Verify after the setter in a separate statement on the SAME
+                # connection, before constructing/publishing the unit or yielding.
+                if (
+                    driver.autocommit
+                    or driver.info.transaction_status != TransactionStatus.INTRANS
+                    or binding["workspace_id"] != context.workspace_id
+                    or not binding["xid"]
+                    or binding["xid"] != binding["context_xid"]
+                ):
+                    raise TenancyError(ErrorCode.TRANSACTION_STATE)
                 unit = TenantUnitOfWork(connection, context)
                 token = _active.set(unit)
                 try:

@@ -80,6 +80,21 @@ child-task reuse, expired units and contexts without a transaction are rejected.
 Each concurrent operation owns a separate connection/transaction. No raw
 connection/commit/rollback API is exposed by the unit of work.
 
+AUTOCOMMIT is rejected with CONTEXT_INVALID before any membership lookup, context
+setter, unit publication or caller body. The executable guard inspects the actual
+psycopg AsyncConnection.autocommit of each checked-out connection through
+SQLAlchemy get_raw_connection().driver_connection, not just engine options,
+begin()/in_transaction() or get_isolation_level(). This includes constructor,
+execution_options and DBAPI connection settings. It never changes that mode.
+
+After the transaction-local setter, a separate SELECT on the same connection
+must confirm app.current_workspace_id() equals the Python Workspace, the current
+XID is nonempty and equals asm.context_xid. The driver must still be non-autocommit
+and INTRANS. Any mismatch raises TRANSACTION_STATE before the unit is published
+or yielded. The enclosing transaction/connection managers roll back and release
+on failure; no hidden COMMIT, independent connection or session-level setter is
+introduced. These guards supplement, rather than weaken, the lifecycle guarantees.
+
 Only transaction-local set_config(..., true) is used for asm.workspace_id,
 asm.actor_id, asm.actor_kind, asm.correlation_id and asm.context_xid. The last is
 an additional transaction-ID fence, not a tenant identifier. RLS resolves NULL
@@ -148,7 +163,7 @@ context, role restrictions, transaction reuse/concurrency, CAS and readiness.
 Existing M0 protections remain regression obligations.
 
 Same-Workspace/different-Client authorization, all later cross-layer tenant gates,
-independent C8 review, Architecture Freeze and production readiness remain pending.
+independent C8 acceptance, Architecture Freeze and production readiness remain pending.
 There are no Client tables here and that future gate has NOT passed. No new domain
 OPEN decision is claimed resolved; the above field/permission/lifecycle choices
 are bounded implementation details for C0 review.
