@@ -1,0 +1,53 @@
+name: M0 canonical source import
+on:
+  push:
+    branches: [c0/m0-foundation]
+    paths: [.github/workflows/m0-source-import.yml]
+permissions:
+  contents: write
+concurrency:
+  group: m0-canonical-source-import
+  cancel-in-progress: false
+jobs:
+  import:
+    if: github.repository == 'Elefesys/ai-service-manager' && github.ref == 'refs/heads/c0/m0-foundation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Assemble and verify all 11 approved original documents
+        shell: bash
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          python3 docs/architecture/_import/assemble.py 2>&1 | tee reports/assembly.log
+          python3 scripts/import_architecture.py docs/architecture 2>&1 | tee reports/architecture.log
+          test ! -e docs/architecture/_import
+      - name: Publish exact-source commit without replacing concurrent changes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/architecture
+          git commit -m 'docs(m0): import byte-identical canonical architecture v0.28'
+          header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=$header" push origin HEAD:refs/heads/c0/m0-foundation
+      - name: Record imported source
+        if: always()
+        run: |
+          mkdir -p reports
+          git rev-parse HEAD > reports/imported-commit.txt
+          git status --porcelain > reports/worktree-status.txt
+          git archive --format=tar.gz HEAD > reports/source.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: m0-source-import-${{ github.run_id }}
+          path: reports/
+          retention-days: 7
+          if-no-files-found: error
