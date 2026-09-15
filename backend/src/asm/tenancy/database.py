@@ -1,0 +1,289 @@
+"""Short, task-owned transactions and explicit tenant-aware foundation queries."""
+
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
+from typing import Any
+from uuid import UUID
+
+from psycopg import AsyncConnection as PsycopgAsyncConnection
+from psycopg.pq import TransactionStatus
+from sqlalchemy import CursorResult, RowMapping, text
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+
+from asm.tenancy.types import (
+    AuthenticatedAccount,
+    ErrorCode,
+    MembershipRole,
+    Permission,
+    TenancyError,
+    WorkspaceContext,
+    permissions_for,
+    require_uuid,
+)
+
+_active: ContextVar["TenantUnitOfWork | None"] = ContextVar("asm_tenant_unit", default=None)
+_SQL_ERRORS = {
+    "23503": ErrorCode.INVALID_RELATION,
+    "23514": ErrorCode.INVALID_STATE,
+    "23502": ErrorCode.INVALID_STATE,
+    "23505": ErrorCode.CONFLICT,
+    "42501": ErrorCode.ACCESS_DENIED,
+    "40001": ErrorCode.RETRY_TRANSACTION,
+    "40P01": ErrorCode.RETRY_TRANSACTION,
+    "55P03": ErrorCode.RETRY_TRANSACTION,
+}
+
+
+def _redacted_error(error: DBAPIError) -> TenancyError | None:
+    code = _SQL_ERRORS.get(getattr(error.orig, "sqlstate", ""))
+    return TenancyError(code) if code is not None else None
+
+
+def current_workspace_context() -> WorkspaceContext:
+    unit = _active.get()
+    if unit is None:
+        raise TenancyError(ErrorCode.CONTEXT_REQUIRED)
+    return unit.context
+
+
+class TenantUnitOfWork:
+    """Use only inside TenantDatabase.transaction; do not share across Tasks."""
+
+    def __init__(self, connection: AsyncConnection, context: WorkspaceContext) -> None:
+        self._connection = connection
+        self._context = context
+        self._task = asyncio.current_task()
+        self._closed = False
+        self._failed = False
+
+    def _assert_active(self) -> None:
+        if (
+            self._closed
+            or self._failed
+            or self._task is not asyncio.current_task()
+            or _active.get() is not self
+            or not self._connection.in_transaction()
+        ):
+            raise TenancyError(ErrorCode.TRANSACTION_STATE)
+
+    @property
+    def context(self) -> WorkspaceContext:
+        self._assert_active()
+        return self._context
+
+    def require(self, permission: Permission) -> None:
+        if permission not in self.context.permissions:
+            raise TenancyError(ErrorCode.ACCESS_DENIED)
+
+    async def _execute(self, sql: str, params: dict[str, object]) -> CursorResult[Any]:
+        self._assert_active()
+        try:
+            return await self._connection.execute(text(sql), params)
+        except DBAPIError as error:
+            self._failed = True
+            redacted = _redacted_error(error)
+            if redacted is not None:
+                raise redacted from None
+            raise
+        except BaseException:
+            self._failed = True
+            raise
+
+    async def list_businesses(self) -> tuple[RowMapping, ...]:
+        self.require(Permission.READ)
+        result = await self._execute(
+            "SELECT * FROM app.businesses WHERE workspace_id = :workspace ORDER BY id",
+            {"workspace": self.context.workspace_id},
+        )
+        return tuple(result.mappings().all())
+
+    async def get_business(self, business_id: UUID) -> RowMapping:
+        self.require(Permission.READ)
+        require_uuid(business_id)
+        row = (
+            (
+                await self._execute(
+                    "SELECT * FROM app.businesses WHERE workspace_id = :workspace AND id = :id",
+                    {"workspace": self.context.workspace_id, "id": business_id},
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise TenancyError(ErrorCode.NOT_FOUND)
+        return row
+
+    async def get_business_member(self, business_id: UUID, member_id: UUID) -> RowMapping:
+        self.require(Permission.READ)
+        require_uuid(business_id)
+        require_uuid(member_id)
+        row = (
+            (
+                await self._execute(
+                    "SELECT * FROM app.business_members WHERE workspace_id = :workspace "
+                    "AND business_id = :business AND id = :id",
+                    {
+                        "workspace": self.context.workspace_id,
+                        "business": business_id,
+                        "id": member_id,
+                    },
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise TenancyError(ErrorCode.NOT_FOUND)
+        return row
+
+    async def get_location(self, business_id: UUID, location_id: UUID) -> RowMapping:
+        self.require(Permission.READ)
+        require_uuid(business_id)
+        require_uuid(location_id)
+        row = (
+            (
+                await self._execute(
+                    "SELECT * FROM app.locations WHERE workspace_id = :workspace "
+                    "AND business_id = :business AND id = :id",
+                    {
+                        "workspace": self.context.workspace_id,
+                        "business": business_id,
+                        "id": location_id,
+                    },
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise TenancyError(ErrorCode.NOT_FOUND)
+        return row
+
+    async def rename_business(
+        self, business_id: UUID, name: str, expected_version: int
+    ) -> RowMapping:
+        self.require(Permission.WRITE)
+        require_uuid(business_id)
+        if (
+            not isinstance(name, str)
+            or not 1 <= len(name) <= 200
+            or name != name.strip()
+            or type(expected_version) is not int
+            or expected_version < 1
+        ):
+            raise TenancyError(ErrorCode.INVALID_STATE)
+        row = (
+            (
+                await self._execute(
+                    "UPDATE app.businesses SET name = :name, version = version + 1 "
+                    "WHERE workspace_id = :workspace AND id = :id AND version = :version RETURNING *",
+                    {
+                        "workspace": self.context.workspace_id,
+                        "id": business_id,
+                        "name": name,
+                        "version": expected_version,
+                    },
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            await self.get_business(business_id)
+            raise TenancyError(ErrorCode.STALE_STATE)
+        return row
+
+
+class TenantDatabase:
+    def __init__(self, engine: AsyncEngine) -> None:
+        if engine.url.drivername != "postgresql+psycopg" or engine.url.username != "asm_runtime":
+            raise TenancyError(ErrorCode.CONTEXT_INVALID)
+        self._engine = engine
+
+    @asynccontextmanager
+    async def transaction(
+        self, actor: AuthenticatedAccount, workspace_id: UUID, correlation_id: UUID
+    ) -> AsyncIterator[TenantUnitOfWork]:
+        if _active.get() is not None:
+            raise TenancyError(ErrorCode.TRANSACTION_STATE)
+        if type(actor) is not AuthenticatedAccount:
+            raise TenancyError(ErrorCode.CONTEXT_INVALID)
+        require_uuid(workspace_id)
+        require_uuid(correlation_id)
+        try:
+            async with self._engine.connect() as connection, connection.begin():
+                # SQLAlchemy begin/in_transaction track a logical transaction even
+                # in AUTOCOMMIT. Inspect this checkout's actual psycopg connection;
+                # do not close the borrowed proxy or silently change its mode.
+                driver = (await connection.get_raw_connection()).driver_connection
+                if not isinstance(driver, PsycopgAsyncConnection) or driver.autocommit:
+                    raise TenancyError(ErrorCode.CONTEXT_INVALID)
+                identity = (await connection.execute(text("SELECT current_user"))).scalar_one()
+                if identity != "asm_runtime":
+                    raise TenancyError(ErrorCode.ACCESS_DENIED)
+                role = (
+                    await connection.execute(
+                        text("SELECT platform.resolve_workspace_membership(:actor, :workspace)"),
+                        {"actor": actor.user_account_id, "workspace": workspace_id},
+                    )
+                ).scalar_one()
+                if role is None:
+                    raise TenancyError(ErrorCode.ACCESS_DENIED)
+                context = WorkspaceContext(
+                    workspace_id, actor, permissions_for(MembershipRole(role)), correlation_id
+                )
+                await connection.execute(
+                    text("""
+                        SELECT set_config('asm.workspace_id', :workspace, true),
+                               set_config('asm.actor_id', :actor, true),
+                               set_config('asm.actor_kind', 'user_account', true),
+                               set_config('asm.correlation_id', :correlation, true),
+                               set_config('asm.context_xid', pg_current_xact_id()::text, true)
+                    """),
+                    {
+                        "workspace": str(workspace_id),
+                        "actor": str(actor.user_account_id),
+                        "correlation": str(correlation_id),
+                    },
+                )
+                binding = (
+                    (
+                        await connection.execute(
+                            text("""
+                                SELECT app.current_workspace_id() AS workspace_id,
+                                       pg_current_xact_id_if_assigned()::text AS xid,
+                                       NULLIF(current_setting('asm.context_xid', true), '')
+                                           AS context_xid
+                            """)
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+                # Verify after the setter in a separate statement on the SAME
+                # connection, before constructing/publishing the unit or yielding.
+                if (
+                    driver.autocommit
+                    or driver.info.transaction_status != TransactionStatus.INTRANS
+                    or binding["workspace_id"] != context.workspace_id
+                    or not binding["xid"]
+                    or binding["xid"] != binding["context_xid"]
+                ):
+                    raise TenancyError(ErrorCode.TRANSACTION_STATE)
+                unit = TenantUnitOfWork(connection, context)
+                token = _active.set(unit)
+                try:
+                    yield unit
+                    unit._assert_active()
+                finally:
+                    unit._closed = True
+                    _active.reset(token)
+        except DBAPIError as error:
+            redacted = _redacted_error(error)
+            if redacted is not None:
+                raise redacted from None
+            raise

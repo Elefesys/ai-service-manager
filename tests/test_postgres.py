@@ -105,7 +105,15 @@ async def test_real_postgres_capabilities_and_roles(database):
             .scalars()
             .all()
         )
-        assert tables == ["alembic_version"], "M0 must not pre-create business tables"
+        assert tables == [
+            "alembic_version",
+            "business_members",
+            "businesses",
+            "locations",
+            "user_accounts",
+            "workspace_memberships",
+            "workspaces",
+        ], "Only the accepted M0 plus minimal M1.1 table set is allowed"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

@@ -35,7 +35,7 @@ Review выполнен C0. Роли C1–C8 в таблице обознача�
 | M0.FIXTURES | Synthetic A–D | STACK | C0/C8 | VERIFIED | UUID/money/modes/environment checks PASS | Только synthetic, не production defaults |
 | M0.HANDOFF | Правила, реестр, M1.1–M1.3 | BASELINE/STACK | C0 | VERIFIED | AGENTS, M1_HANDOFF, ограниченный scope и зарезервированная 0002 | C0 выдаёт M1.1 с точным проверенным SHA |
 | M0.ACCEPT | Интеграционная приёмка M0 | Все обязательные M0 результаты | C0 | VERIFIED | PR #1 merged + C0 review + green main CI + source integrity | Разрешён запуск M1.1; не production |
-| M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2 | TODO | Готова к выдаче; docs/tasks/M1_HANDOFF.md | Ветка c2/m1-1-tenant-foundation от SHA стартового сообщения C0 |
+| M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2 | REVIEW | PR #3; C8 CHANGES_REQUESTED: C8-M1.1-01 (P2), AUTOCOMMIT/context mismatch | Исправление C2 в той же ветке, все 8 C8 tests, полный CI и повторная проверка; merge запрещён до приёмки C0 |
 | M1.2 | Auth/session/membership/login UI | Интегрированный контракт M1.1 | C1+C5 | TODO | Критерии в M1_HANDOFF.md | Не начинать зависимую реализацию до приёмки M1.1 |
 | M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 | C1 | TODO | Критерии в M1_HANDOFF.md; защищённый UI использует M1.2 | Без paid provider и клиентских платежей |
 
@@ -70,3 +70,23 @@ Architecture Freeze v1.0 pending. App разрешает только LOCAL/TEST
 Независимый C8 review не выполнялся; отдельная проверка substantive tenant/auth capabilities требуется по мере их реализации. C0 review не заменяет production security/release gates. Запуск на пользовательском компьютере не выполнен; полный запуск подтверждён GitHub Linux/amd64 runner.
 
 Неблокирующие deprecation/toolchain warnings остаются задачей сопровождения C6. Reproducibility ограничена locked inputs и wheel/static asset bytes; bit-identical OCI metadata между builders/CPU не заявляется. Реальные данные мастера, API keys и расходы не нужны для начала M1.1.
+
+## M1.1 — C0 disposition of independent C8 review / 2026-09-15
+
+Status: **REVIEW**; review outcome: **CHANGES_REQUESTED**. Это результат review, не новый статус задач и не отмена M0 VERIFIED. M1.1 не INTEGRATED/VERIFIED. M1.2/M1.3 не запускаются.
+
+C0 сверил отчёт C8 с PR #3/#4 и скачанным новым CI artifact. Проверенный C2 head: `84d94b2187787c654928ac11b7e4d411970b2b0c`; исходный base/main: `7eaa9aa63b3f27215f6eb970fb9eb857fd291f62`. PR #3 открыт и не слит. C8 test-only head: `4fe5f115ffbac696e58620aa6ce006642fe6e787`; PR #4 закрыт без merge, ветка `c8/m1-1-review` сохранена. Этот раздел добавлен C0 только в task register на ветке PR #3: он не исправляет код и не является интеграцией в main. C2 продолжает от resulting head этого coordination commit, сохраняя исходный base задачи.
+
+**C8-M1.1-01, P2:** публичный TenantDatabase принимает PostgreSQL engine в DBAPI AUTOCOMMIT и выдаёт Python WorkspaceContext без общей реальной DB-транзакции. `connection.begin()` и `in_transaction()` недостаточны. Диагностический SELECT после выдачи unit вернул workspace/xid/context_xid = NULL. Нарушен существующий M1_1_CONTRACT.md §§Context and transaction ownership / Errors and consumer API; текущие locations: database.py:60–68, 200–216, 231–249. Это НЕ подтверждённая cross-tenant утечка/обход RLS; штатный RuntimeDatabase не включает AUTOCOMMIT. Архитектурный пересмотр и новая миграция не требуются.
+
+Evidence C8: run `34987895881`, job `104444620955`, FAILURE; artifact `10403814298`, SHA-256 `2b4afb189a0724a8346e4941d006613e8020c808145ba3b6569a46ca0ce0afd7`; tested virtual merge `9cce66cd64caa6d8e0d45b87c454331ccbe5030c`. C0 проверил ZIP SHA, tested-commit, пустой worktree-status, лог assertion и сохранность всех 72 исходных файлов C2. Добавлен только tests/test_c8_tenancy_review.py. Все 11 архитектурных оригиналов и их эталоны совпали. Новый PostgreSQL run самим C0 не выполнялся.
+
+C8 CI: 24 non-integration PASS; 55 integration PASS и 1 FAIL (AUTOCOMMIT); frontend 3 PASS. Из 8 новых C8 cases 7 PASS, 1 FAIL; все исходные 48 PostgreSQL tests прошли. Последующие верхнеуровневые downgrade/re-upgrade, OpenAPI, backend wheel, HTTP smoke и отдельный clean-source gate в этом запуске не выполнены после FAIL. Старый green C2 run `34978858961` остаётся свидетельством 75 исходных tests, но не закрывает новый finding. Первичная ошибка C8 Ruff I001 в run `34987294887` исправлена test-only commit и не является дефектом C2.
+
+**Ограниченное задание C2:** отклонять фактический AUTOCOMMIT на выданном соединении до публикации unit/context стабильным CONTEXT_INVALID либо TRANSACTION_STATE; не менять режим незаметно. В нормальном режиме до yield подтвердить совпадение Workspace и непустого XID/fence. Не полагаться только на engine options, begin/in_transaction или get_isolation_level. Сохранить pool/task/cancellation cleanup, реальные rollback и membership locks. Не менять DDL, роли/grants/RLS, зависимости или канон.
+
+Разрешённый scope доработки: backend/src/asm/tenancy/database.py; tests/test_c8_tenancy_review.py (все 8 C8 cases без ослабления); tests/test_tenancy*.py для targeted проверки отказа до входа в body и очистки; уточнение docs/tasks/M1_1_CONTRACT.md без ослабления обещанной гарантии. types.py/contract.py/tenancy.v1.json — только при доказанной необходимости, с явным diff; существующих error codes достаточно. Общие CI entrypoints, 0001/0002, bootstrap, frontend, lockfiles, fixtures semantics не меняются. Реестр остаётся собственностью C0.
+
+Test-only перенос: взять tests/test_c8_tenancy_review.py из `4fe5f115ffbac696e58620aa6ce006642fe6e787` либо объединённый patch SHA-256 `9548078f85486abf603e2068b376536df413dca5539341d71e61a5772aa7d4ea`. C0 восстановил этот же patch из CI bytes и проверил git apply --check/совпадение результата. При cherry-pick нужны оба C8 commits: `080f1a4d67aaf6d456278eafadd7400e9f96524d`, затем `4fe5f115ffbac696e58620aa6ce006642fe6e787`; второй отдельно — лишь сортировка импортов. PR #4 не сливать.
+
+Acceptance для нового head: сохранить все 75 исходных tests и 8 C8 cases (ожидаемо 83 без дополнительных cases), без skip/xfail/удаления assertion; выполнить полный scripts/ci.sh, включая ранее не достигнутые gates. При отказе AUTOCOMMIT тело UOW не должно исполняться, ambient context не публикуется; нормальный путь сохраняет Workspace/XID, COMMIT/ROLLBACK, pool reuse и concurrency. Вернуть C0 новый полный head, точный CI checkout/tree/run/evidence, diff и ограничения. Затем targeted re-review C8; интеграцию и main CI выполняет только C0.
