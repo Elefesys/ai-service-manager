@@ -18,18 +18,29 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - name: Verify canonical architecture sources
+        shell: bash
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          python3 scripts/import_architecture.py docs/architecture 2>&1 | tee reports/architecture.log
       - name: Build, PostgreSQL integration, contracts and reproducibility
         shell: bash
         run: |
           mkdir -p reports
           set -o pipefail
           sh scripts/ci.sh 2>&1 | tee reports/ci.log
+      - name: Require unchanged tracked and untracked source
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain --untracked-files=all)"
       - name: Record tested source
         if: always()
         run: |
           mkdir -p reports
           git rev-parse HEAD > reports/tested-commit.txt
-          git status --porcelain > reports/worktree-status.txt
+          git status --porcelain --untracked-files=all > reports/worktree-status.txt
+          git archive --format=tar.gz HEAD > reports/source.tar.gz
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
