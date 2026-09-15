@@ -173,7 +173,7 @@ No Pilot requirement. Define priority/expiry/offer behavior only if measured can
 
 ## OPEN-031 — Master UI surface
 **Status:** RESOLVED  
-**Resolution:** responsive web `Business Console`, exception-first Action Center/Inbox/Calendar/Approvals; native apps are not MVP prerequisite.
+**Resolution:** responsive web `Business Console`, exception-first Action Center/Inbox/Calendar/Approvals; native mobile apps are not MVP prerequisite.
 
 ## OPEN-032 — Platform support access
 **Status:** RESOLVED  
@@ -181,7 +181,7 @@ No Pilot requirement. Define priority/expiry/offer behavior only if measured can
 
 ## OPEN-033 — Data retention
 **Status:** RESOLVED IN PRINCIPLE  
-**Resolution:** per-data-class RetentionPolicy + PrivacyRequest/Delete flow covering canonical/derived/files/backups. Exact retention durations depend on production market/legal/business needs.
+**Resolution:** per-data-class RetentionPolicy + PrivacyRequest/Delete workflow covering canonical/derived/files/backups. Exact retention durations depend on production market/legal/business needs.
 
 ## OPEN-034 — AI provider processing consent
 **Status:** RESOLVED IN PRINCIPLE  

@@ -75,17 +75,20 @@
 
 ### Stage 25 — Production Deployment / Runbooks
 - Production deployment defined as reproducible/controlled rather than manual server operation.
-- Immutable container artifacts + source/CI provenance and `ReleaseManifest` locked.
-- Application / AI Configuration / Business Configuration release axes separated.
+- Immutable container digest/source/CI provenance and `ReleaseManifest` locked.
+- Application / AI Configuration / Business Configuration releases separated.
 - Separate privileged migration identity and Expand→Migrate→Contract deployment model reinforced.
 - Safe readiness/smoke/drain/observation workflow defined.
-- Application rollback separated from DB/data restore.
-- Narrow operational kill switches and Workspace AI pause required.
+- Application/AI/config rollback paths separated from DB/data recovery.
+- Narrow subsystem kill switches and Workspace AI pause required.
+- No routine SSH/config drift/ad-hoc SQL; emergency break-glass/repair semantics defined.
+- Secret rotation/compromise procedures locked.
 - Managed backup/PITR plus actual tested restore made Pilot gate.
 - Restore-to-new-instance + RLS/invariant/privacy/provider reconciliation defined.
 - Numerical RPO/RTO/SLO required before Pilot but deferred to Stage 26 concrete provider/business.
-- SEV-1/2/3 incident handling and version-controlled runbooks.
-- First-Business cutover made progressive: manual channel → AI → scheduling → payment → automation.
+- SEV-1/2/3 and incident lifecycle/priorities defined.
+- Required Pilot runbook catalog (DB, queue, AI, Telegram, payments, storage, deployment, migration, DR, security, cost, DLQ, takeover, scheduling) locked.
+- First-Business cutover made progressive: manual channel → AI → scheduling → payments → automations.
 - Continuous integration + controlled production deployment selected for first AI/payment Pilot.
 - Significant incidents feed tests/evals/constraints/alerts/runbook improvements.
 
@@ -114,7 +117,7 @@
 ### Stage 24 — Development Roadmap
 - Dependency-based roadmap selected instead of calendar-first estimates.
 - Vertical-slice implementation selected instead of building all layers before integration.
-- Production Pilot is the first implementation objective; Commercial MVP follows pilot evidence.
+- Production Pilot is the first implementation objective; Commercial MVP follows pilot learning.
 - Initial monorepo/modular-monolith implementation shape locked.
 - M0–M12 Pilot sequence fixed from engineering foundation through pinned Pilot RC.
 - First tangible coding target fixed as secure Telegram inbound/manual Owner reply, not prompt engineering.
@@ -136,9 +139,7 @@
 - Glossary extended with Vertical Slice, Pilot RC, Feature Freeze and implementation-completeness terms.
 - Open Questions now separate roadmap decisions from implementation-stack/calendar/ticket details.
 - `06_MVP_SPEC.md` remains source of truth for WHAT the MVP contains; `07_DEVELOPMENT_ROADMAP.md` is source of truth for implementation order.
-- Stage 25 deployment/runbooks;
-- exact first Business/jurisdiction;
-- final pilot-calibrated non-critical EvalSuite thresholds.
+- Stage 25 is not designed in this baseline.
 
 ### Still deferred
 - exact programming languages/frameworks/tooling;
@@ -152,11 +153,11 @@
 
 ## v0.23 — 2026-09-08
 
-**Status:** Canonical baseline after accepting Stage 23 MVP Scope + Acceptance Criteria. Development sequencing is Stage 24.
+**Status:** Canonical baseline after accepting Stage 23 MVP Scope + Acceptance Criteria. Stage 24 Development Roadmap remains intentionally undesigned.
 
 ### Stage 23 — MVP Scope
 - First production vertical fixed as Tattoo.
-- Primary autonomous flow fixed as New Tattoo Request.
+- Primary autonomous service fixed as New Tattoo Request.
 - Initial tenant shape narrowed to one Business/Owner/Location/provider Resource/Telegram connection.
 - Text + image, Vision, Portfolio and Knowledge/RAG included.
 - AI image generation, extra channels, voice/video and advanced scheduling excluded.
@@ -175,11 +176,12 @@
 
 ### Documentation
 - Baseline advanced v0.22 → v0.23.
-- Added canonical `06_MVP_SPEC.md`.
+- Added new canonical `06_MVP_SPEC.md`.
 - `00_PROJECT_OVERVIEW.md` roadmap advanced through Stage 23.
+- `01_ARCHITECTURE_SPEC.md` now contains locked Stage 23 architecture-level scope.
 - ADR log extended through ADR-190.
 - Open Questions updated: Tattoo/MVP boundary resolved; actual first Business/provider/jurisdiction/precise eval thresholds remain appropriately deferred.
-- Stage 24 development sequence intentionally not designed in this baseline.
+- Stage 24 is not designed in this baseline.
 
 ### Still deferred
 - Development sequencing/epics/dependencies (Stage 24).
@@ -201,24 +203,24 @@
 - PostgreSQL Jobs selected for MVP; Redis/Kafka/Kubernetes not required.
 - LOCAL/STAGING/PRODUCTION isolation, immutable CI deployment and one production region locked.
 
-### Stage 20 — Observability / Cost
+### Stage 20 — Observability / AI Cost / Analytics
 - Metrics/Logs/Traces separated from Audit/Security/Usage.
 - OpenTelemetry-compatible instrumentation.
 - Correlation/causation, queue lag and user-journey latency made first-class.
 - AI cost attribution/reconciliation architecture and CostGuard added.
-- Product analytics defined around domain outcomes.
+- Product analytics defined around domain/workflow outcomes.
 - SLI/SLO and actionable alert philosophy added.
 
 ### Stage 21 — Scaling
 - Scaling made metric-driven.
 - Optimize/vertical/horizontal/workload-pool ladder precedes specialized infra/cells.
-- Noisy-neighbor protection formalized.
+- Noisy-neighbor controls formalized.
 - PostgreSQL Jobs/pgvector/PostgreSQL FTS remain defaults until measured triggers.
-- Workspace defined as future cell/shard placement unit.
+- Workspace defined as future Cell/shard placement unit.
 - Microservice extraction requires concrete trigger.
 - Backpressure/chunked bulk processing formalized.
 
-### Stage 22 — Testing / Evals
+### Stage 22 — Testing + AI Evals
 - Software testing and AI Evals split into separate quality systems.
 - Real PostgreSQL/RLS/concurrency/idempotency/recovery testing locked.
 - EvalSuite/EvalCase/EvalRun/ProductionBaseline concepts introduced.
@@ -226,7 +228,7 @@
 - RAG/injection/human-takeover/staleness/tool evals formalized.
 - Production failures become sanitized regression cases where possible.
 - Model/prompt/tool/schema/KnowledgeBuild changes require versioned release gates.
-- Continuous learning explicitly does not mean live self-modification.
+- Continuous learning explicitly does not mean live production self-modification.
 
 ### Documentation
 - Baseline advanced from v0.18 to v0.22.
@@ -253,14 +255,14 @@
 - Provider-hosted/tokenized owner payment methods; no PAN/CVC storage.
 - Billing state separated from WorkspaceServiceMode for grace/limited/suspended behavior.
 - Immutable UsageEvent ledger and rebuildable UsageAggregate.
-- Observed usage/provider cost separated from billable meters.
+- Observed usage/provider cost separated from commercial billable meters.
 - QuotaService + QuotaReservation for expensive hard-quota operations.
 - SaaS billing provider removed from critical path of Client runtime.
 
 ### Stage 16 — Business Console / Platform Operations
 - `Master UI` renamed canonically to `Business Console`.
 - Separate Business Console and Platform Operations security surfaces.
-- Exception-first Action Center/Inbox/Calendar/Approvals/Escalations.
+- Exception-first Action Center, Inbox, Calendar, Approvals/Escalations.
 - Decision Summary/evidence instead of chain-of-thought exposure.
 - Same domain services for UI/AI/support; no direct DB mutation/bypass.
 - SupportAccessGrant introduced as TTL/scope/reason/audited support boundary.
@@ -277,10 +279,11 @@
 - RetentionPolicy, PrivacyRequest, PrivacyNoticeRevision, SecurityEvent concepts.
 - Privacy deletion covers derived data including embeddings.
 - Raw prompt/PII logging minimized; debug capture explicit/TTL/audited.
+- Support access and emergency break-glass security semantics formalized.
 - Incident response/vendor-subprocessor obligations added as production prerequisites.
 
 ### Stage 18 — Reliability / Idempotency / Recovery
-- At-least-once + idempotency selected instead of distributed exactly-once assumption.
+- At-least-once + idempotent processing adopted instead of distributed exactly-once assumptions.
 - Durable Inbox-before-acknowledge and transactional Outbox formalized.
 - IdempotencyRecord/request fingerprint for critical side effects.
 - Short DB transactions; no external HTTP inside long domain transaction.
@@ -322,26 +325,35 @@
 - PricingEngine as authoritative price source.
 - PricingPlan/PricingRevision.
 - PriceCalculation separated from Quote.
-- Structured pricing strategies, evidence and immutable calculation snapshots.
-- Quote only from authoritative calculation/owner decision.
+- Structured pricing strategies and price authority.
+- Quote only from validated calculation/owner decision.
 
 ### Stage 12 — Scheduling
-- Dynamic Availability Engine, no persisted free-slot rows.
-- SchedulingPolicyRevision/ServiceResourceRequirement.
-- AvailabilityOffer, ResourceAllocation, Hold/Appointment conversion.
-- DB-level double-booking protection and atomic rescheduling.
+- Dynamic Availability Engine instead of persisted free-slot inventory.
+- SchedulingPolicyRevision, Availability rules/overrides/blocks.
+- AvailabilityOffer and ResourceAllocation.
+- DB-level double-booking protection.
+- Atomic Hold→Appointment conversion.
+- Multi-session/recurring/event/onsite extension model.
 
-### Stage 13 — Client → Business Payments
-- PaymentRequest/PaymentSession/PaymentTransaction/Refund separated.
-- Hosted/provider-tokenized checkout; platform not wallet/escrow.
-- Provider-authoritative evidence; idempotency and reconciliation.
-- Late money retained, booking separately revalidated.
+### Stage 13 — Client Payments
+- PaymentTermsRevision.
+- PaymentRequest / PaymentSession / PaymentTransaction separation.
+- PaymentProviderConnection/Adapter.
+- Hosted checkout/tokenization; raw card data not stored.
+- Direct Client→Business merchant money flow.
+- Refund as separate movement.
+- Provider-authoritative webhooks/idempotency/reconciliation.
+- Late-payment safe handling.
 
 ### Stage 14 — Automations / Notifications
-- Automation Engine separated from Notification layer.
-- Persistent automation + relevance + idempotency + late policy.
-- NotificationIntent/DeliveryAttempt and routing/category policies.
-- Transactional content template-first/hybrid.
+- AutomationDefinition/Revision + persistent AutomationInstance.
+- Domain event / scheduled / state-timeout triggers.
+- Relevance guard before execution/send.
+- NotificationIntent separated from DeliveryAttempt.
+- NotificationPolicyRevision, quiet hours/frequency caps.
+- Template/hybrid transactional content.
+- Human takeover suppresses stale follow-ups.
 
 ### Revised
 - PaymentTransaction no longer uses REFUNDED as its own state; Refund is separate.
@@ -361,7 +373,7 @@
 
 ## v0.10 — 2026-09-02
 
-**Status:** Stage 8–10 architecture accepted.
+**Status:** Canonical baseline after accepting stages 8–10.
 
 ### Added — Stage 8 Agent / Tools / Autonomy
 
@@ -369,11 +381,11 @@
 - `AgentRuntime`, `ToolRegistry`, `ToolSetResolver`, `ToolGateway`, `PolicyEngine`.
 - `ToolExecutionContext` with server-inherited Workspace/Business/permissions.
 - Narrow, typed, versioned tools instead of arbitrary SQL/HTTP/code capabilities.
-- Autonomy modes: `AUTO`, `REQUIRE_CONFIRMATION`, `ESCALATE`, `DISABLED`.
+- Autonomy modes: `AUTO / REQUIRE_CONFIRMATION / ESCALATE / DISABLED`.
 - `ApprovalRequest` with frozen action + revalidation before execution.
 - Evidence-based action requirements instead of AI self-confidence as authorization.
 - Bounded agent loop, explicit stop outcomes and tool budgets.
-- `AIToolCall/ToolTrace` separated from `AuditEvent`.
+- `AIToolCall/ToolTrace` separated from business `AuditEvent`.
 - Deterministic system events bypass LLM whenever semantics are already known.
 
 ### Added — Stage 9 Industry Modules / Workflow
@@ -391,13 +403,13 @@
 ### Added — Stage 10 Business Onboarding
 
 - `OnboardingAgent` and `OnboardingSession`.
-- Quick Start, Assisted Import and Concierge modes.
-- `ImportBatch` / normalized sources boundary.
+- Quick Start, Assisted Import and Concierge onboarding modes.
+- `ImportBatch` / normalization boundary.
 - Service discovery, capability/workflow inference, rule/knowledge candidates.
 - Conflict detection and adaptive dependency-aware questionnaire.
-- Readiness gates per Service instead of completion percentage.
-- `ConfigurationDraft`, deterministic validation, simulation and Owner approval.
-- Atomic immutable `BusinessConfigurationRelease`.
+- Readiness gates per Service instead of a single completion percentage.
+- `ConfigurationDraft`, deterministic validation and simulation/historical replay.
+- `BusinessConfigurationRelease` as atomic immutable publish manifest.
 - Calibration period and progressive autonomy after production launch.
 
 ### Revised
@@ -425,12 +437,15 @@
 ### Added
 
 - `ModelGateway`, `ModelProfile`, `ModelRouter`, `PromptRegistry`, `SchemaRegistry`, `SafetyGateway`.
-- `AIRun` separate from `AIProviderCall`; provider usage/cost attribution.
-- Task profiles with initial GPT-5.6 Luna/Terra/Sol mapping.
-- Schema registry and versioned Structured Outputs.
-- Prompt/config revisions and bounded ContextBuilder.
-- EmbeddingProfile/versioned projections for Knowledge/Portfolio.
-- AIDataPolicy/provider boundary concepts.
+- `AIRun` separate from `AIProviderCall`.
+- Initial model-profile mapping: Terra default conversation, Luna cheap/background, Sol rare complex reasoning.
+- Structured Outputs as machine-readable contract principle.
+- Versioned prompts and output schemas.
+- Profile-specific context budgets through ContextBuilder.
+- Explicit separation of provider conversation state from canonical application memory.
+- Interactive vs background AI workload classes.
+- Versioned `EmbeddingProfile` and embedding projections separated from canonical KnowledgeChunk/Portfolio representations.
+- AI cost/usage metering requirements per Workspace/task/profile.
 
 ### Confirmed
 
@@ -495,7 +510,7 @@
 - Channel Adapter abstraction;
 - Telegram Profile Automation как основной initial transport;
 - Human Takeover;
-- structured state выше LLM memory/summary;
+- structured state выше LLM memory;
 - RAG вместо fine-tuning per workspace по умолчанию;
 - raw chats как extraction material, а не business truth;
 - knowledge authority/provenance;

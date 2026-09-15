@@ -296,7 +296,7 @@
 ## ADR-040 — Business Onboarding — отдельная подсистема
 **Status:** Accepted after audit
 
-**Decision:** onboarding включает import, extraction, conflicts, adaptive questions, validation, build и publish; это не статическая форма настроек.
+**Decision:** onboarding включает import, extraction, conflicts/missing data, adaptive questions, owner review, validation, build и publish.
 
 ---
 
@@ -1009,7 +1009,7 @@ Bookings, quotes, payments, correct escalation/rejection and workflow milestones
 ## ADR-151 — Scaling is metric-driven
 **Status:** Accepted
 
-Infrastructure is not introduced because a raw Workspace/user count crossed an arbitrary threshold.
+Infrastructure is not introduced because a raw Workspace/user count crossed an arbitrary number.
 
 ## ADR-152 — Optimize/vertical/horizontal precede sharding
 **Status:** Accepted

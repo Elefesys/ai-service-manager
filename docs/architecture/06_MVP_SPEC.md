@@ -145,6 +145,7 @@ Every important extracted/inferred field preserves provenance where practical.
 ### Included
 - inbound image persistence;
 - structured Vision analysis;
+- style/subject/reference extraction;
 - portfolio item ingestion/review;
 - portfolio retrieval/matching;
 - `MY_WORK` lineage.
@@ -329,7 +330,8 @@ No-deposit booking never fabricates a paid transaction. First master's fixed dep
 - Conversation detail;
 - AI/Human control state;
 - Takeover / Resume;
-- Approvals / Escalations;
+- Approvals;
+- Escalations;
 - Calendar;
 - Appointment details;
 - Clients;

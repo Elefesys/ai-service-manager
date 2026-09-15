@@ -79,6 +79,7 @@ Business Tools / Services
    ├─ Pricing
    ├─ Scheduling
    ├─ Payments
+   ├─ Notifications
    └─ Industry Workflows
         ↓
 Business Logic
@@ -139,13 +140,13 @@ PostgreSQL
 - Основные workflow families: Slot-Based, Custom Consultative, Event-Based, Onsite, Custom Production, Recurring Session, Project Delivery.
 - `WorkflowDefinition / WorkflowRevision / WorkflowInstance / WorkflowStepInstance` оркестрируют процесс, но не заменяют domain state.
 - Industry Pack является versioned template и не меняет существующий production business автоматически.
-- Новая профессия может работать без готового Industry Pack через generic onboarding/capabilities/workflow configuration.
+- Новая профессия может работать без готового Industry Pack через generic onboarding/configuration.
 
 ### Business Onboarding
 
 - Onboarding — отдельная AI-assisted подсистема с `OnboardingAgent`.
 - Поддерживаются Quick Start, Assisted Import и Full/Concierge режимы.
-- Pipeline: source collection → normalization → candidate extraction → conflicts/missing data → adaptive questions → owner answers → validation → simulation → owner approval → publish.
+- Pipeline: source collection → normalization → candidate extraction → conflicts/missing data → adaptive questions → validation → simulation → owner approval → publish.
 - AI работает с candidates/draft и не публикует критические production settings самостоятельно.
 - Добавляется `BusinessConfigurationRelease` — immutable manifest совместно опубликованных revisions/builds.
 - Readiness определяется blocking gates по Service, а не общим процентом заполнения.
@@ -177,7 +178,7 @@ PostgreSQL
 - Automation Engine определяет when/why, Notification layer — whom/how.
 - Persistent automation + relevance check перед action/send.
 - NotificationIntent отделён от delivery attempts.
-- Human takeover подавляет stale follow-ups.
+- Human takeover подавляет client-facing follow-ups.
 
 
 ## 6.1.2. Дополнения этапов 15–18
@@ -233,7 +234,7 @@ PostgreSQL
 - LOCAL/STAGING/PRODUCTION разделены; immutable CI/container deployment; один production region.
 
 ### Observability / AI Cost / Analytics
-- Metrics/Logs/Traces отделены от Audit/Security/Usage.
+- Metrics/Logs/Traces отделены от AuditEvent/SecurityEvent/UsageEvent.
 - Instrumentation OpenTelemetry-compatible; vendor не фиксируется.
 - Correlation/causation связывают webhook→job→AIRun→tool→outbox/provider.
 - AI cost attribution считается по Workspace/feature/model/task и сверяется с provider costs.

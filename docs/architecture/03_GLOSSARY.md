@@ -15,7 +15,7 @@ AI-компонент, который понимает ситуацию, выб�
 
 ## AI Run
 
-Legacy spelling of `AIRun`; use `AIRun` canonically. One logical task can include multiple provider calls and tool continuations.
+Legacy spelling of `AIRun`; use AIRun canonically. One logical task can include multiple provider calls and tool continuations.
 
 ## Appointment
 Конкретный подтверждённый временной интервал для выполнения ServiceSession. Не то же самое, что ReservationHold.
@@ -45,7 +45,7 @@ Provider-specific компонент, переводящий Telegram/VK/MAX/Web
 Описание доступных действий конкретного ChannelConnection: reply, media, edit, delete, proactive messaging, reply window и т. п.
 
 ## ChannelConnection
-Подключённый transport/account/token route для конкретного Business.
+Подключение конкретного внешнего канала к Business.
 
 ## ChannelRoute
 Platform-level mapping внешнего route key к Workspace и ChannelConnection. Используется до создания WorkspaceContext.
@@ -204,7 +204,7 @@ Authoritative место, откуда система получает окон�
 Отдельный сервис генерации/редактирования визуальных концептов. Conversation Engine решает необходимость VisualRequest, сервис создаёт GeneratedAsset.
 
 ## VisualRequest
-Запрос на visual operation с purpose/inputs/constraints, без business-state authority.
+Запрос к Visual Design Service: purpose, instructions, source assets, constraints.
 
 ## Workflow Definition
 Конфигурация последовательности/условий business process конкретной услуги/industry module. Не существует одного обязательного workflow для всех профессий.
@@ -274,7 +274,7 @@ AI-layer boundary для moderation/safety signals до применения pla
 Application orchestration layer, который связывает ContextBuilder, ModelGateway, ToolSetResolver, PolicyEngine, bounded loop и ToolGateway.
 
 ## AIToolCall / ToolTrace
-Запись о tool request/execution path AI; не равна AuditEvent.
+Запись о tool request/execution path внутри AIRun. Не равна AuditEvent.
 
 ## ApprovalRequest
 Frozen privileged action, ожидающий подтверждения уполномоченного BusinessMember. После approval действие повторно валидируется перед исполнением.
@@ -292,7 +292,7 @@ Immutable manifest совместно опубликованных Service/Workf
 Versioned platform template отрасли: service/intake/workflow defaults, terminology, portfolio schema, onboarding/autonomy/escalation templates. Не содержит конкретные цены и правила бизнеса.
 
 ## OnboardingAgent
-Отдельный AI workflow для анализа бизнеса и подготовки configuration candidates/draft. Не является ConversationAgent и не публикует production configuration самостоятельно.
+Отдельный AI workflow для анализа бизнеса и подготовки configuration candidates/draft. Не является ConversationAgent и не публикует production конфигурацию самостоятельно.
 
 ## OnboardingQuestion
 Dependency-aware вопрос владельцу, связанный с конкретным missing/conflicting/confirmation field и priority.
@@ -313,16 +313,16 @@ Boundary между model tool request и application service: schema validation
 Реестр versioned business tools/capabilities платформы.
 
 ## ToolSetResolver
-Компонент, который выдаёт Agent минимальный allowed tool set по WorkflowStep, Service capabilities, actor permissions и policy.
+Компонент, который выдаёт Agent минимальный allowed tool set по WorkflowStep, Service capabilities, permissions и policy.
 
 ## Workflow Archetype
-Общий шаблон семейства бизнес-процессов, например Slot-Based, Custom Consultative, Event-Based, Onsite, Custom Production, Recurring Session и Project Delivery.
+Общий шаблон семейства бизнес-процессов, например Slot-Based, Event-Based, Custom Production или Recurring Session.
 
 ## WorkflowInstance
 Runtime instance конкретной WorkflowRevision для ServiceRequest/Order process.
 
 ## WorkflowRevision
-Immutable опубликованная версия WorkflowDefinition, используемая конкретной ServiceRevision/WorkflowInstance.
+Immutable опубликованная версия WorkflowDefinition, используемая конкретным ServiceRevision/WorkflowInstance.
 
 ## WorkflowStepInstance
 Runtime состояние отдельного шага WorkflowInstance. Не заменяет domain entity/state.
@@ -332,7 +332,7 @@ Runtime состояние отдельного шага WorkflowInstance. Не 
 
 
 ## AutomationDefinition / AutomationRevision
-Versioned правило того, когда или при каком domain event/state timeout должна возникать автоматическая операция.
+Versioned правило того, когда или при каком domain event/state timeout должна возникнуть автоматическая операция.
 
 ## AutomationInstance
 Persistent runtime instance automation с due time/status/relevance.
@@ -424,7 +424,7 @@ Immutable/versioned privacy notice, который может referenced consent
 Запрос на privacy lifecycle action, например EXPORT/DELETE/RECTIFY/RESTRICT, применимый согласно рынку/политике.
 
 ## QuotaReservation
-Persistent reservation части hard quota до запуска дорогой side-effect operation; consuming/release предотвращает concurrency overspend.
+Persistent reservation части hard quota до запуска дорогой side-effect operation; consuming/release предотвращают concurrency overspend.
 
 ## RetentionPolicy
 Политика lifecycle/retention по типу/классу данных, включая canonical data, raw imports, files, debug data и backups.
@@ -445,10 +445,10 @@ Immutable/idempotent normalized usage accounting entry, связанный с Wo
 Derived/rebuildable aggregation UsageEvents для UI/analytics/billing calculations.
 
 ## UsageMetricDefinition
-Описание raw metric (tokens, provider cost, images, storage и т. п.).
+Описание raw usage metric (tokens, provider cost, images, storage и т. п.).
 
 ## MeterDefinition
-Правило преобразования raw usage в commercial/billable product unit.
+Правило преобразования raw UsageEvents в commercial/billable product unit.
 
 ## WorkspaceBillingAccount
 SaaS billing identity/settings конкретного Workspace.
@@ -485,10 +485,10 @@ Derived business/product analytical fact from authoritative domain outcomes/even
 Future self-contained Workspace data-plane unit used for large-scale tenant placement/blast-radius isolation.
 
 ## CostGuard
-Internal economic guard that can warn/throttle/block optional expensive work but cannot lower safety-critical quality.
+Internal economic guard that can warn/throttle/block optional expensive workloads independently from quota/rate limiting.
 
 ## EvalCase
-Versioned AI-evaluation scenario with structured state/context, allowed/forbidden outcomes, expected tool behavior and risk labels.
+Versioned AI-evaluation scenario with structured state/context, allowed/forbidden outcomes and evaluator metadata.
 
 ## EvalCaseResult
 Result of one EvalCase for a specific candidate/run, including outcome, tool trace, violations, cost and latency.
@@ -562,10 +562,10 @@ Implementation completeness level meaning the capability meets Stage-23 pilot sc
 Implementation completeness level where only interfaces/entity shape/basic scaffolding exist; not production-usable.
 
 ## EXPANSION_READY
-Implementation completeness level supporting broader post-MVP complexity beyond first pilot.
+Post-pilot completeness level supporting broader complexity beyond first MVP requirements.
 
 ## Technical Spike
-Short bounded proof-of-capability used to validate a risky external/DB/AI assumption and produce a decision/test/constraint; not itself production implementation.
+Short bounded proof-of-capability used to validate a risky external/DB/AI assumption and produce a decision/test; not itself production implementation.
 
 ## Vertical Slice
 End-to-end implementation increment spanning the persistence/domain/API/UI/integration/test behavior needed for one usable capability.
@@ -577,7 +577,7 @@ Immutable deployed application/container version, distinct from AI configuration
 Exceptional time-bound/audited engineering access to production data for emergency diagnosis/repair; not normal operations.
 
 ## Deployment Observation Window
-Monitored period after rollout during which critical health signals are actively checked before considering release stable.
+Monitored period after production rollout during which critical health signals are actively checked before considering the release stable.
 
 ## Kill Switch
 Narrow operational control that pauses a specific subsystem/capability (e.g. AI auto-send or new payment sessions) without unnecessarily disabling unrelated essential functions.
@@ -589,7 +589,7 @@ Versioned platform mapping of model/prompt/tool/policy behavior that can be prom
 Deployment artifact describing exact application/container/schema/AI/platform/eval versions and source/CI provenance of a production release.
 
 ## Repair Command
-Controlled, scoped, validated and preferably idempotent/dry-run-capable production data repair operation, used instead of ad-hoc SQL mutation.
+Controlled, scoped, validated and preferably idempotent/dry-run-capable production data repair operation, used instead of ad-hoc SQL mutation where possible.
 
 ## SEV-1 / SEV-2 / SEV-3
 Initial operational incident severity classes for critical impact, major degradation and limited/localized impact respectively.

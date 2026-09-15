@@ -178,7 +178,7 @@ Run RLS/auth/files/webhook/support/secrets hardening; duplicate/race/retry/failu
 
 ## 17. Pilot Release Candidate
 
-Pin application/container, DB schema/migration, TattooIndustryPack, PromptRevision, ModelProfiles, Tool/schema versions, KnowledgeBuild, BusinessConfigurationRelease and EvalSuiteRevision.
+Pin application/container, DB schema/migration, TattooIndustryPack, Prompt revisions, ModelProfiles, Tool/schema versions, KnowledgeBuild, BusinessConfigurationRelease and EvalSuiteRevision.
 
 Pilot deploys this known bundle, not a moving branch.
 
@@ -194,7 +194,7 @@ Throughout M0–M12:
 | Platform Ops | support/diagnostics |
 | Observability | metrics/logs/traces/cost |
 | AI Evals | regression from first AI milestone |
-| Security | auth/RLS/files/secrets |
+| Security | auth/RLS/files/secrets/support |
 | CI/Infrastructure | build/deployability |
 
 ## 19. Schema rollout by capability
@@ -273,7 +273,7 @@ Production Pilot
 
 **M15:** wider paid Workspace billing: hosted checkout, Subscription, PaymentMethodReference, Invoice/webhook, Grace/Limited.
 
-**M16:** make deployment/support/onboarding/privacy/fiscal/economics/usage/billing repeatable for multiple paying Businesses without code forks.
+**M16:** make deployment/support/onboarding/privacy/unit economics/usage/billing repeatable for multiple paying Businesses without code forks.
 
 Stage-27 expansion starts only after Commercial MVP readiness, not merely because Pilot code exists.
 
