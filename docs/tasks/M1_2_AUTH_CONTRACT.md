@@ -119,7 +119,8 @@ exception is the Compose upstream authority `api:8000`; bare `api`, another port
 or browser Origin `http://api:8000` is not thereby trusted. Duplicate, absent,
 empty, malformed, non-decimal or out-of-range Host ports fail closed. Bracketed
 IPv6 is parsed as an authority, not split on `:`. Forwarded/X-Forwarded headers
-do not alter the authority, scheme, origin or allowlist.
+do not alter the authority, scheme, origin or allowlist. URL query/fragment
+delimiters and any other parser-discarded suffix make the entire Host invalid.
 
 All mutations require exact trusted Origin, JSON content type and, except the
 bootstrap protocol itself, X-CSRF-Token bound to the database-valid cookie.

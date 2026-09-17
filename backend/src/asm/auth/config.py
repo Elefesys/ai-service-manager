@@ -16,6 +16,7 @@ def normalize_authority(value: str, default_port: int | None) -> tuple[str, int]
         return None
     if (
         hostname is None
+        or value.lower() != parsed.netloc.lower()
         or parsed.username is not None
         or parsed.password is not None
         or parsed.path

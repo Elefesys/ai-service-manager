@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from asm.auth.config import AuthSettings
+from asm.auth.config import AuthSettings, normalize_authority
 from asm.auth.crypto import RateLimiter
 from asm.auth.http import AuthBoundary
 
@@ -173,3 +173,25 @@ async def test_origin_and_forwarded_headers_never_rescue_wrong_authority():
             ],
         )
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "authority,default_port",
+    [
+        (b"localhost:8000?", 80),
+        (b"localhost:8000#", 80),
+        (b"api:8000?", 80),
+        (b"api:8000#", 80),
+        (b"localhost:8000?#", 80),
+        (b"localhost?", 80),
+        (b"localhost#", 80),
+        (b"[::1]:8000?", 80),
+    ],
+)
+@pytest.mark.parametrize("path", ["/api/v1/auth/session", "/api/v1/workspaces/known/businesses"])
+async def test_url_delimiters_are_never_discarded_from_raw_host(authority, default_port, path):
+    value = authority.decode("ascii")
+    assert normalize_authority(value, default_port) is None
+    settings = AuthSettings(auth_origins=("http://localhost:8000", "http://[::1]:8000"))
+    assert_rejected(await request(settings, [authority], path=path))

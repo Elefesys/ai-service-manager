@@ -371,6 +371,11 @@ async def test_bootstrap_protocol_cookie_flags_cors_and_fixed_proxy_host(auth):
     assert wrong_port.status_code == 403
     assert wrong_port.json() == {"error": {"code": "ORIGIN_DENIED"}}
     assert "set-cookie" not in wrong_port.headers
+    for malformed_host in ("localhost:8000?", "localhost:8000#"):
+        malformed = await auth.client.get("/api/v1/auth/session", headers={"Host": malformed_host})
+        assert malformed.status_code == 403
+        assert malformed.json() == {"error": {"code": "ORIGIN_DENIED"}}
+        assert "set-cookie" not in malformed.headers
     assert (
         await auth.client.get("/api/v1/auth/session", headers={"Host": "attacker@localhost"})
     ).status_code == 403
