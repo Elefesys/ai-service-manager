@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 ruff check backend tests scripts migrations
-ruff format --check backend tests scripts migrations
+ruff format --check --diff backend tests scripts migrations
 mypy backend/src
 pytest -q -m 'not integration'
 alembic upgrade head

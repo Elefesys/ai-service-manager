@@ -10,21 +10,25 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from opentelemetry import trace
 from pydantic import BaseModel, ConfigDict, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from asm import __version__
+from asm.auth.config import AuthSettings
+from asm.auth.http import install_auth
+from asm.auth.service import AuthService
+from asm.auth.store import AuthStore
 from asm.tenancy import SCHEMA_REVISION, TenantDatabase
 
 tracer = trace.get_tracer("ai-service-manager.foundation")
 
 
-class Settings(BaseSettings):
+class Settings(AuthSettings):
     model_config = SettingsConfigDict(env_prefix="ASM_", extra="ignore", hide_input_in_errors=True)
-    # The unauthenticated M0 shell is not deployable outside LOCAL/TEST.
+    # This synthetic authentication slice is not deployable outside LOCAL/TEST.
     environment: Literal["LOCAL", "TEST"]
     database_url: SecretStr
 
@@ -117,11 +121,15 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     config = settings if settings is not None else Settings()
     db = database if database is not None else RuntimeDatabase(config)
 
+    auth_store = AuthStore(config.database_url.get_secret_value())
+    auth = AuthService(auth_store, db.tenancy if isinstance(db, RuntimeDatabase) else None, config)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
             yield
         finally:
+            await auth_store.close()
             await db.close()
 
     app = FastAPI(title="AI Service Manager", version=__version__, lifespan=lifespan)
@@ -144,6 +152,8 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     async def system() -> SystemInfo:
         return SystemInfo()
 
+    app.state.auth_service = auth
+    install_auth(app, auth, config)
     return app
 
 

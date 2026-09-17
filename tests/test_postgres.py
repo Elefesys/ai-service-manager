@@ -107,13 +107,15 @@ async def test_real_postgres_capabilities_and_roles(database):
         )
         assert tables == [
             "alembic_version",
+            "auth_credentials",
+            "auth_sessions",
             "business_members",
             "businesses",
             "locations",
             "user_accounts",
             "workspace_memberships",
             "workspaces",
-        ], "Only the accepted M0 plus minimal M1.1 table set is allowed"
+        ], "Only the M0/M1.1 tables plus the two M1.2 auth tables are allowed"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):
