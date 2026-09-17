@@ -3,7 +3,6 @@
 import asyncio
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, FastAPI, Request, Response
@@ -14,7 +13,7 @@ from starlette.datastructures import Headers
 from starlette.middleware.cors import CORSMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from asm.auth.config import AuthSettings
+from asm.auth.config import AuthSettings, normalize_authority
 from asm.auth.crypto import RateLimiter, check_csrf, normalize_login, token_verifier
 from asm.auth.models import (
     AuthCode,
@@ -123,23 +122,11 @@ class AuthBoundary:
             headers = Headers(scope=scope)
             if sum(len(k) + len(v) for k, v in scope["headers"]) > HEADER_LIMIT:
                 raise AuthError(AuthCode.BODY_TOO_LARGE, 413)
-            try:
-                hosts = headers.getlist("host")
-                authority = urlsplit("//" + hosts[0]) if len(hosts) == 1 else None
-                host = authority.hostname if authority else None
-                if authority and (
-                    authority.username is not None
-                    or authority.password is not None
-                    or authority.path
-                    or authority.query
-                    or authority.fragment
-                ):
-                    host = None
-                if authority:
-                    _ = authority.port
-            except ValueError:
-                host = None
-            if host not in self.settings.auth_hosts:
+            hosts = headers.getlist("host")
+            scheme = scope.get("scheme")
+            default_port = 443 if scheme == "https" else 80 if scheme == "http" else None
+            authority = normalize_authority(hosts[0], default_port) if len(hosts) == 1 else None
+            if authority not in self.settings.auth_authorities:
                 raise AuthError(AuthCode.ORIGIN_DENIED, 403)
             origins = headers.getlist("origin")
             if origins and (len(origins) != 1 or origins[0] not in self.settings.auth_origins):

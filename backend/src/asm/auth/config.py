@@ -4,6 +4,40 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def normalize_authority(value: str, default_port: int | None) -> tuple[str, int] | None:
+    """Parse one RFC-style authority without accepting parser repairs or empty ports."""
+    if not value or not value.isascii() or any(character.isspace() for character in value):
+        return None
+    try:
+        parsed = urlsplit("//" + value)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    normalized_host = hostname.lower()
+    rendered_host = f"[{normalized_host}]" if ":" in normalized_host else normalized_host
+    lowered = parsed.netloc.lower()
+    if lowered == rendered_host:
+        effective_port = default_port
+    elif port is not None and lowered == f"{rendered_host}:{port}":
+        effective_port = port
+    else:
+        # Reject empty, non-decimal, out-of-range and non-canonical ports explicitly.
+        return None
+    if effective_port is None:
+        return None
+    return normalized_host, effective_port
+
+
 class AuthSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="ASM_", extra="ignore", hide_input_in_errors=True)
     # Implementation defaults for LOCAL/TEST only, not production security policy.
@@ -44,6 +78,8 @@ class AuthSettings(BaseSettings):
                 raise ValueError("Invalid trusted origin")
             # Parsing the port must also succeed; do not accept malformed authority.
             _ = parsed.port
+            if normalize_authority(parsed.netloc, 443 if parsed.scheme == "https" else 80) is None:
+                raise ValueError("Invalid trusted origin authority")
             if parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
                 raise ValueError("HTTP auth is restricted to LOCAL/TEST loopback origins")
             schemes.add(parsed.scheme)
@@ -60,9 +96,13 @@ class AuthSettings(BaseSettings):
         return "__Host-asm_session" if self.auth_secure else "asm_session_local"
 
     @property
-    def auth_hosts(self) -> frozenset[str]:
+    def auth_authorities(self) -> frozenset[tuple[str, int]]:
         # The accepted Compose nginx proxy sends its fixed upstream Host api:8000.
         # This does not extend browser trusted origins or trust forwarded headers.
-        return frozenset(
-            {"api", *(urlsplit(origin).hostname or "" for origin in self.auth_origins)}
-        )
+        authorities = {("api", 8000)}
+        for origin in self.auth_origins:
+            parsed = urlsplit(origin)
+            authority = normalize_authority(parsed.netloc, 443 if parsed.scheme == "https" else 80)
+            if authority is not None:
+                authorities.add(authority)
+        return frozenset(authorities)

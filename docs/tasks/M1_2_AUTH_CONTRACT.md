@@ -110,6 +110,17 @@ TLS origins use `__Host-asm_session`, Secure, HttpOnly, SameSite=Lax, Path=/,
 no Domain. Local HTTP uses `asm_session_local`, same flags except Secure.
 C5 should use the existing same-origin frontend proxy and credentials:'include'.
 
+Protected routes also require an exact normalized Host authority: lowercase
+hostname plus effective port. An origin with an explicit port permits only that
+port. Without one, HTTP means 80 and HTTPS means 443, so an absent Host port and
+the matching explicit default are equivalent; the ASGI request scheme supplies
+only that default and never adds an unconfigured port. The sole non-browser
+exception is the Compose upstream authority `api:8000`; bare `api`, another port,
+or browser Origin `http://api:8000` is not thereby trusted. Duplicate, absent,
+empty, malformed, non-decimal or out-of-range Host ports fail closed. Bracketed
+IPv6 is parsed as an authority, not split on `:`. Forwarded/X-Forwarded headers
+do not alter the authority, scheme, origin or allowlist.
+
 All mutations require exact trusted Origin, JSON content type and, except the
 bootstrap protocol itself, X-CSRF-Token bound to the database-valid cookie.
 Bootstrap requires `X-CSRF-Bootstrap: 1` plus exact Origin and JSON; this is a
@@ -146,6 +157,18 @@ bearer tokens in JS/localStorage. Keep CSRF only in current page state; bootstra
 before login, replace it after login/rotation, discard after successful logout.
 CSRF failure does not automatically retry a mutation. No C5 start before C0
 accepts and supplies an exact API SHA; this document alone is not that acceptance.
+
+Database commit is not atomic with HTTP response or Set-Cookie delivery. A
+transport error after login or rotation therefore does not prove rollback and
+must not trigger a blind mutation retry. C5 first reloads current session: a
+valid response supplies the current identity, memberships and CSRF; 401 clears
+displayed identity/data, then C5 bootstraps and, when necessary, offers a new
+login. Preserve an explicit logout intention across an uncertain response or a
+401 from an old token after concurrent rotation. Recover current state and finish
+logout with its current CSRF protocol; do not claim success from a network error
+or blindly replay the stale mutation. The protocol does not promise exactly-once
+Set-Cookie delivery, roll back committed state, extend DB-authoritative expiry,
+or weaken single-use rotation/revocation and post-commit cookie issuance.
 
 ## Abuse, provisioning and tests
 
