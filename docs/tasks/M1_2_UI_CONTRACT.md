@@ -10,7 +10,7 @@ Business Console имеет взаимоисключающие состояни�
 
 ## DTO и transport
 
-Минимальный typed client проверяет на consumer boundary exact JSON shapes из `contracts/openapi.json`; неизвестный/невалидный payload считается unavailable, а не доверенным состоянием. Все URL относительные `/api/v1/...`, каждый запрос использует `credentials: 'include'`. Cookie остаётся HttpOnly. Password, cookie, bearer и CSRF не пишутся в URL, DOM-диагностику, логи или Web Storage. CSRF хранится только в памяти текущей страницы и целиком заменяется успешным session/login/rotate ответом.
+Минимальный typed client проверяет на consumer boundary exact JSON shapes из `contracts/openapi.json`: bootstrap содержит только `csrf_token` и `expires_at`, тогда как session/login/rotate дополнительно требуют `user_account_id` и `memberships`; UUIDv4 и UUIDv7 принимаются без изменения значения. Неизвестный/невалидный payload считается unavailable, а не доверенным состоянием. Все URL относительные `/api/v1/...`, каждый запрос использует `credentials: 'include'` и `cache: 'no-store'`. Cookie остаётся HttpOnly. Password, cookie, bearer и CSRF не пишутся в URL, DOM-диагностику, логи или Web Storage. CSRF хранится только в памяти текущей страницы и целиком заменяется успешным session/login/rotate ответом.
 
 Протокол: `POST /auth/bootstrap` с `{}` и `X-CSRF-Bootstrap: 1`; затем один `POST /auth/login` с `{login,password}` и текущим `X-CSRF-Token`; `GET /auth/session`; `POST /auth/rotate`/`POST /auth/logout` с `{}` и текущим CSRF. Login — 3–72 символа на форме; password не trim/normalize и очищается после завершения попытки. Submit блокируется in-flight.
 
