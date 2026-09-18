@@ -10,6 +10,13 @@ __pycache__/
 node_modules/
 dist/
 coverage/
+frontend/test-results/
+frontend/playwright-report/
+frontend/.auth/
 reports/
 *.egg-info/
 .DS_Store
+
+# Generated C5 UI evidence is transferred outside source commits.
+/frontend/e2e/screenshots/login-desktop.png
+/frontend/e2e/screenshots/login-narrow.png

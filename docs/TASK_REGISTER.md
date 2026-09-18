@@ -4,18 +4,30 @@
 
 ## Текущее решение C0
 
-**M0 — VERIFIED. M1.1 — VERIFIED. C8-M1.1-01 — CLOSED.** PR #3 интегрирован; отдельный push/main CI actual merge commit прошёл. Полный M1 ещё не принят: backend M1.2 проверен и ожидает интеграции; UI M1.2 и M1.3 не реализованы.
+**M0 — VERIFIED. M1.1 — VERIFIED. Backend-срез M1.2 — INTEGRATED / VERIFIED.** Actual main `aa7e792555c19d798eafa0cae17d29b73ca12376` и его push/main CI подтверждены C0. Полная M1.2 — IN_PROGRESS: C5 UI выдан, ещё не выполнен. M1.3 не выдана; полный M1 не принят.
 
 Принятый implementation merge M1.1: `b480d864a246cb0573b40fa5211f66625a71de91`.
 Проверенный C2 head: `fa98e714d78485f8d07108294263c89d90a6e7f0`.
 Исходный base задачи/M0: `7eaa9aa63b3f27215f6eb970fb9eb857fd291f62`.
 Implementation tree: `66b87d3797bff856df449c878347766e147c5c01` (74 файла).
 
-Следующий выданный scope: **M1.2, backend-часть C1 и контракт для C5**. Затем C5 login UI по отдельно принятому API SHA. Это части одной M1.2; backend-only не закрывает всю задачу. M1.3 по зависимостям допускается после M1.1, но в текущей последовательной очереди ещё не выдана и не запускается автоматически. Канонические зависимости не пересматриваются.
+Следующий выданный scope: **M1.2, UI-часть C5 и browser journey** от `aa7e792555c19d798eafa0cae17d29b73ca12376`. Backend принят; повторно его реализовывать не нужно. Backend-only не закрывает всю M1.2. M1.3 по зависимостям допускается после M1.1, но ещё не выдана. Канонические зависимости не пересматриваются.
 
 Финальный стартовый SHA C1 указывается C0 в сопровождающем сообщении после проверки итогового main с этими документами приёмки. Он может быть documentation-only descendant implementation merge выше. Moving main, PR test-merge и старый M0 не заменяют выданный SHA. Ссылка на evidence итоговой документационной интеграции сохраняется также в её PR без бесконечного изменения commit ради записи собственного SHA.
 
-### M1.2 — актуальное решение C0 перед интеграцией / 2026-09-18
+### M1.2 — C0: backend принят, выдан UI C5 / 2026-09-18
+
+**Backend-срез M1.2 — INTEGRATED / VERIFIED** на `aa7e792555c19d798eafa0cae17d29b73ca12376`, tree `77ddd22af30ef07afa89f61e96e1066ba4be8692`. PR #7 фактически слит, push/main run `35321610083`, job `105525139486` — SUCCESS; 91 non-integration + 105 real PostgreSQL + 3 frontend = 199 passed. C0 проверил ZIP SHA-256 `548b8824dfda4c0c80e0ea4819a460ef9a2042c20e58d192101069ffed6341bb`, tested actual merge, 94-file tree/modes, clean worktree, 11 оригиналов и точную документационную дельту. Receipt: `docs/reviews/M1_2_BACKEND_C0_ACCEPTANCE.md`.
+
+C0 явно выдаёт **C5: login/logout/session-expired/recovery UI и реальный browser journey** от указанного полного API SHA. Общая **M1.2 — IN_PROGRESS**: переход от REVIEW завершённого backend к исполнению оставшейся UI-части, не отмена backend-приёмки и не новый milestone. Целевая ветка нового UI PR — main; предпочтительное имя c5/m1-2-login, допустима автоматически созданная Codex ветка с зафиксированным фактическим ref. PR #7/#6 не открывать заново. M1.3 — TODO/не выдана, production не включать.
+
+C8-M1.2-01/C0-M1.2-04 и C0-M1.2-01/02/03 CLOSED для принятого snapshot. C8-M1.2-02 учтено контрактом; UI обязан восстановить фактическую сессию после неоднозначного HTTP-ответа без ложного logout success/слепого replay. C8 в re-review не скачивал private artifact и не запускал PostgreSQL; C0 отдельно проверил предоставленное evidence и новый actual main run.
+
+Детальный C5 scope фиксируется выданным заданием C0 и docs/tasks/M1_2_UI_CONTRACT.md: responsive Business Console, защищённое чтение Business, typed API consumer, CSRF только в памяти страницы, отказ от прямой БД/подмены permissions, отдельная непубличная по данным Ops shell. Frontend tests + Playwright/Chromium browser gate через реальный API/PG; узкие тестовые CI/Compose/fixture изменения разрешены, runtime backend/DDL/security contract неизменны. Закреплённые frontend runtime dependencies не обновлять массово. Локальный Docker на компьютере пользователя не требуется.
+
+Этот раздел и точные сопровождающие документы сформулированы C0; C5 разово разрешён механический перенос первым отдельным documentation commit своего нового PR, затем UI-реализация. Отдельный предварительный docs PR/merge перед началом C5 не требуется. Реестр не объявляет UI/всю M1.2 VERIFIED заранее. Последующие статусы — решение C0 по фактическому evidence.
+
+### M1.2 — история решения C0 перед интеграцией / 2026-09-18
 
 Backend review: **PASS; разрешено оформление и интеграция** проверенного head `194ea3cfa3f0aa9b8f271590a26ca3857ade3e54`, tree `799f271cbfc1c8815136828da35f9a32ef58b16e` (93 файла до этого документационного изменения). Единственный implementation PR — **#7**, `codex/-m1.2-r2` → `main`; исходный принятый base — `5c7188915fa219d9d6906569e2341632e4969651`. PR #6 — история контрактов и переноса, не вторая реализация и не отдельный кандидат на merge.
 
@@ -52,7 +64,7 @@ C0 подготовил только четыре документационны
 | M0.HANDOFF | Правила, реестр и очередь | BASELINE/STACK | C0 | VERIFIED | AGENTS и M1_HANDOFF | Передача по точному SHA |
 | M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
 | M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
-| M1.2 | Auth/session/membership/login UI | Интегрированный M1.1 | C1+C5 | REVIEW | Backend head 194ea3cfa3f0aa9b8f271590a26ca3857ade3e54: C8 PASS; CI 35248449942 SUCCESS, 199 tests; находки CLOSED | Документы → docs-head CI → merge PR #7 → actual main CI → C5 по принятому API SHA; вся M1.2 ещё не VERIFIED |
+| M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5 | IN_PROGRESS | Backend VERIFIED: PR #7 merged, main `aa7e792555c19d798eafa0cae17d29b73ca12376`, CI 35321610083 / 199 tests; UI ещё не выполнен | C5 login/logout/expiry/recovery + real browser journey → C0/C8 review → общая приёмка |
 | M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1; защищённый UI использует M1.2 | C1 | TODO | Ещё не выдана | После текущего auth-среза, без paid provider |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.

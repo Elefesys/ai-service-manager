@@ -12,9 +12,21 @@ PR #3, reviewed head `fa98e714d78485f8d07108294263c89d90a6e7f0`, actual merge `b
 
 ## M1.2 — Auth/session/membership/application authorization и login UI
 
-Ведущие по плану C1 + C5. Исполнение последовательно: C1 backend и consumer contract → C0/C8 review и интеграция → C5 login UI по принятому API. Это две части одной M1.2, не новые milestones. Backend-only не закрывает всю M1.2. Код C1 проверен; сейчас выполняется только оформление и интеграция backend. C5 и M1.3 автоматически не запускаются.
+Ведущие по плану C1 + C5. Исполнение последовательно: C1 backend и consumer contract → C0/C8 review и интеграция → C5 login UI по принятому API. Это две части одной M1.2, не новые milestones. Backend-only не закрывает всю M1.2. Backend принят C0 после actual main CI; теперь явно выдана UI-часть C5. M1.3 не запускается.
 
-### Текущее разрешение после C8 PASS / C0 2026-09-18
+### C5 — выдано от принятого backend / C0 2026-09-18
+
+Принятый API base: `aa7e792555c19d798eafa0cae17d29b73ca12376`, tree `77ddd22af30ef07afa89f61e96e1066ba4be8692`. PR #7 MERGED; отдельный push/main run `35321610083` SUCCESS, 199 tests. Post-merge приёмка: `docs/reviews/M1_2_BACKEND_C0_ACCEPTANCE.md`, текущее решение в едином реестре. Ниже pre-merge сведения сохранены как история и больше не являются запретом C5.
+
+Выдан scope той же M1.2: responsive login/logout/session-expired/recovery Business Console, выбор только доступных Workspace, защищённое отображение Business и browser journey через неизменённый Application API. Ops surface остаётся без privileged/tenant content. Сначала минимальный UI/API/error/recovery contract в docs/tasks/M1_2_UI_CONTRACT.md, затем реализация. Настоящие synthetic данные получаются через backend, не из фиктивных frontend auth flags. CSRF — только page memory; cookie — только HttpOnly/browser; client IDs/roles не являются разрешением.
+
+Разрешены frontend source/tests/config и минимальные devDependencies с lock; docs/tasks/M1_2_UI_CONTRACT.md, docs/tasks/M1_2_UI_RUNBOOK.md, README. Для реального browser gate C0 разрешает test-only frontend/e2e + Playwright config, scripts/test_browser.sh, scripts/provision_browser_test.py, compose.browser.yaml и один дополнительный browser job в .github/workflows/ci.yml, не ослабляющий существующий foundation job. Secrets/state/screenshots/trace hygiene обязательны; backend runtime/DDL/auth contract, существующие 196 backend tests, locks backend и image digests не меняются. Frontend три прежних проверки сохраняют смысл. Нужен браузер через same-origin proxy и real PostgreSQL, а не только ASGITransport/jsdom; browser secrets не коммитятся/не выгружаются. Допустима минимальная .gitignore/.dockerignore адаптация для локальных тестовых выходов.
+
+Стартовая ветка выбирается из принятого main SHA; c5/m1-2-login — желательное имя, автоматическая Codex ветка допустима. Один новый UI PR в main, не продолжение закрытого #7, без merge/auto-merge. C5 не переписывает эталонные канонические документы, не внедряет новые backend endpoints и не резервирует migration 0004. Необходимые изменения за границей задания — новый вопрос C0, не молчаливое расширение.
+
+C8-M1.2-02: ambiguous response требует current-session/bootstrap recovery с сохранением намерения logout, без слепого mutation replay и ложного success. Клиент не продлевает expiry и не заменяет серверную membership-проверку. Нужны component tests и Playwright/Chromium E2E (desktop + narrow viewport), обычный full pipeline и отдельный browser gate на одном опубликованном snapshot. Production/identity MFA/Client capabilities/M1.3 остаются вне задачи.
+
+### История разрешения перед интеграцией / C0 2026-09-18
 
 Рабочая реализация находится в PR **#7**, ветка **codex/-m1.2-r2**, head `194ea3cfa3f0aa9b8f271590a26ca3857ade3e54`, tree `799f271cbfc1c8815136828da35f9a32ef58b16e`. Старый PR #6 и c1/m1-2-auth не используются для продолжения реализации. C0 принял targeted C8 PASS, закрытие C8-M1.2-01/C0-M1.2-04 и контрактную обработку C8-M1.2-02. Полный CI `35248449942` подтвердил 199 tests и все gates. Границы evidence — в task register и `docs/reviews/M1_2_BACKEND_C0_PREMERGE.md`.
 
