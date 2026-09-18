@@ -1,0 +1,33 @@
+name: ai-service-manager-browser
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: asm_test
+    volumes: !override
+      - type: tmpfs
+        target: /var/lib/postgresql
+      - type: bind
+        source: ./infra/postgres/bootstrap.sh
+        target: /docker-entrypoint-initdb.d/10-bootstrap.sh
+        read_only: true
+  migrate:
+    environment:
+      ASM_MIGRATION_DATABASE_URL: postgresql+psycopg://asm_migrator:${PG_MIGRATION_PASSWORD:?Run init_local.py}@postgres:5432/asm_test
+  api:
+    environment:
+      ASM_ENVIRONMENT: TEST
+      ASM_DATABASE_URL: postgresql+psycopg://asm_runtime:${PG_RUNTIME_PASSWORD:?Run init_local.py}@postgres:5432/asm_test
+  browser-provision:
+    profiles: [browser]
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.backend
+      target: development
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?Missing images.lock.env}
+        UV_IMAGE: ${UV_IMAGE:?Missing images.lock.env}
+    environment:
+      ASM_ENVIRONMENT: TEST
+      ASM_MIGRATION_DATABASE_URL: postgresql+psycopg://asm_migrator:${PG_MIGRATION_PASSWORD:?Run init_local.py}@postgres:5432/asm_test
+    depends_on:
+      migrate: {condition: service_completed_successfully}

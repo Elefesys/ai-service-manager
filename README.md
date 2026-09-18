@@ -6,7 +6,7 @@ All eleven canonical architecture documents are in `docs/architecture/`, byte-id
 
 ## Scope
 
-API/Worker/Scheduler shells, Business Console/Platform Ops shells, PostgreSQL 18 + pgvector 0.8.6, separate database identities, infrastructure-only migration, locked builds, real PostgreSQL tests, synthetic fixtures A–D and CI. There are no production customer data, business tables, auth implementation, real AI/payment integrations or durable job queue yet. Durable Inbox/Outbox/Jobs belongs to M2.1. The RLS capability probe is not the M1 tenant-security implementation.
+API/Worker/Scheduler, LOCAL/TEST server auth and Business read, Business Console login/session recovery, the separate Platform Ops shell, PostgreSQL 18 + pgvector 0.8.6, separate database identities, locked builds and real PostgreSQL tests. There are no production customer data, public signup/reset/MFA, Business mutations, real AI/payment integrations or durable job queue yet. Durable Inbox/Outbox/Jobs belongs to M2.1.
 
 ## LOCAL start
 
@@ -21,7 +21,7 @@ docker compose --env-file infra/images.lock.env --env-file .env up -d --build
 ```
 
 Console: `http://127.0.0.1:8080/`; Ops shell: `/ops/`; API docs: `http://127.0.0.1:8000/docs`.
-The Ops shell contains no privileged data and is not an authorization boundary. Auth and permissions begin at M1. `ASM_ENVIRONMENT` permits only LOCAL/TEST; this is not a production deployment configuration.
+The Ops shell contains no privileged data and is not an authorization boundary. A Business login grants no operator access. `ASM_ENVIRONMENT` permits only LOCAL/TEST; this is not a production deployment configuration. Synthetic login provisioning and the real-browser gate are documented in [`docs/tasks/M1_2_UI_RUNBOOK.md`](docs/tasks/M1_2_UI_RUNBOOK.md).
 
 `init_local.py` creates random local credentials, never prints them and refuses to overwrite an existing `.env`. Do not commit `.env` or change its credentials while retaining an already-initialized PostgreSQL volume without a deliberate rotation procedure. PostgreSQL is not exposed on a host port. API and frontend bind to loopback.
 
@@ -37,6 +37,7 @@ Do not add `--volumes` unless intentional destruction of disposable local data i
 ```sh
 python3 scripts/import_architecture.py docs/architecture
 sh scripts/ci.sh
+sh scripts/test_browser.sh
 ```
 
 `ci.sh` builds locked images, uses a separate ephemeral `asm_test` database, runs Python/TypeScript/real-PostgreSQL tests, migration cycles, contract drift checks, wheel/static-asset byte comparisons and local-stack HTTP smoke. It stops this Compose project on completion; do not run concurrently with an interactive stack that must stay running.

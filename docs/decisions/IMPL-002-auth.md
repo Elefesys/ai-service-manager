@@ -2,7 +2,7 @@
 
 Date proposed: 2026-09-16. Author C1.
 Decision: accepted explicitly by C0 on 2026-09-18 for the reviewed LOCAL/TEST backend implementation.
-Integration: pending actual merge and push/main verification; not completion of all M1.2.
+Integration: backend INTEGRATED / VERIFIED by C0 on actual main `aa7e792555c19d798eafa0cae17d29b73ca12376`, push/main CI `35321610083` SUCCESS; see `docs/reviews/M1_2_BACKEND_C0_ACCEPTANCE.md`. UI PR #8 is separately approved for pre-merge processing, not yet integrated; full M1.2 remains REVIEW.
 Base `5c7188915fa219d9d6906569e2341632e4969651`; no canonical ADR superseded.
 Not LOCKED architecture, production enablement or completion of M1.2.
 
@@ -79,4 +79,4 @@ before DDL/API does not replace implementation/testing or authorize C5 to start.
 
 C0 accepts this bounded implementation choice for reviewed head `194ea3cfa3f0aa9b8f271590a26ca3857ade3e54`, tree `799f271cbfc1c8815136828da35f9a32ef58b16e`, after the user-supplied targeted C8 PASS and full CI `35248449942`. Earlier proposal status is superseded at the implementation level, not by rewriting canonical architecture or inventing a production approval. The reviewed auth contract includes exact Host authority checks, rejection of discarded delimiters and post-commit response-loss recovery for C5.
 
-C8 did not download the private CI archive or execute a fresh PostgreSQL run during re-review; C0 verified the existing archive/run. Full limits, finding disposition and the uncompleted integration gate are recorded in `docs/reviews/M1_2_BACKEND_C0_PREMERGE.md`. TTLs, local origins and process-local abuse limits are LOCAL/TEST implementation settings; production tuning and MFA remain outside this acceptance. No canonical LOCKED/DEFERRED/OPEN decision is silently changed.
+C8 did not download the private CI archive or execute a fresh PostgreSQL run during re-review; C0 verified the existing archive/run. The historical pre-merge limits, finding disposition and then-uncompleted integration gate are recorded in `docs/reviews/M1_2_BACKEND_C0_PREMERGE.md`; actual backend integration was subsequently accepted in `docs/reviews/M1_2_BACKEND_C0_ACCEPTANCE.md`. UI integration is governed by `docs/reviews/M1_2_UI_C0_PREMERGE.md`. TTLs, local origins and process-local abuse limits are LOCAL/TEST implementation settings; production tuning and MFA remain outside this acceptance. No canonical LOCKED/DEFERRED/OPEN decision is silently changed.
