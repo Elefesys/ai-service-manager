@@ -38,6 +38,16 @@ function Console() {
     businessControllers.current.clear();
     setSession(null); setWorkspace(''); setBusinesses(null); setSelected(null);
   }, []);
+  const invalidateAuth = useCallback((notice: string) => {
+    authSequence.current++;
+    authControllers.current.forEach((controller) => controller.abort());
+    authControllers.current.clear();
+    logoutIntent.current = false;
+    clearProtected();
+    setBusy(false);
+    setPhase('anonymous');
+    setError(notice);
+  }, [clearProtected]);
   const accept = useCallback((next: Session, owner: number, controller: AbortController) => {
     if (!ownsAuth(owner, controller)) return false;
     clearProtected(); setSession(next); setWorkspace(next.memberships[0]?.workspace_id ?? ''); setPhase('authenticated'); setError('');
@@ -75,13 +85,13 @@ function Console() {
     void api.businesses(workspace, c.signal).then((items) => { if (owner === businessGeneration.current && session.user_account_id === principal) setBusinesses(items); }).catch((e) => {
       if (c.signal.aborted || owner !== businessGeneration.current) return;
       setBusinesses([]); setSelected(null);
-      if (e instanceof ApiError && e.status === 401) { authSequence.current++; clearProtected(); setPhase('anonymous'); setError('Сессия завершена. Войдите снова.'); }
+      if (e instanceof ApiError && e.status === 401 && e.code === 'SESSION_REQUIRED') invalidateAuth('Сессия завершена. Войдите снова.');
       else if (e instanceof ApiError && e.status === 403) setError('Нет доступа к выбранному Workspace.');
       else if (e instanceof ApiError && e.status === 404) setError('Workspace не найден или недоступен.');
       else setError(message(e));
     }).finally(() => businessControllers.current.delete(c));
     return () => c.abort();
-  }, [workspace, session?.user_account_id, clearProtected]);
+  }, [workspace, session?.user_account_id, invalidateAuth]);
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy) return; setBusy(true); setError('');

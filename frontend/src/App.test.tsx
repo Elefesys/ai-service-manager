@@ -108,12 +108,86 @@ describe('Business Console auth', () => {
     expect(await screen.findByText('Состояние сессии неизвестно')).toBeVisible();
     expect(screen.queryByText(/Выход выполнен/)).not.toBeInTheDocument();
   });
+  it('hands busy ownership to anonymous login after an owned Business SESSION_REQUIRED', async () => {
+    const business = deferred<Response>(); const rotation = deferred<Response>();
+    let businessCalls = 0; let rotationSignal: AbortSignal | undefined;
+    const fetch = vi.fn((url: URL | RequestInfo, init?: RequestInit) => {
+      const path = String(url);
+      if (path.endsWith('/auth/session')) return Promise.resolve(ok(session('old')));
+      if (path.includes('/businesses')) { businessCalls++; return businessCalls === 1 ? business.promise : Promise.resolve(ok({ businesses: [] })); }
+      if (path.endsWith('/auth/rotate')) { rotationSignal = init?.signal as AbortSignal; return rotation.promise; }
+      if (path.endsWith('/auth/bootstrap')) return Promise.resolve(ok(bootstrap('login-challenge')));
+      if (path.endsWith('/auth/login')) return Promise.resolve(ok({ ...session('login-csrf'), user_account_id: '77777777-7777-4777-8777-777777777777' }));
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetch); const user = userEvent.setup(); render(<App />);
+    await screen.findByText(/Пользователь/); await user.click(screen.getByRole('button', { name: 'Обновить защиту сессии' }));
+    await waitFor(() => expect(rotationSignal).toBeDefined());
+    business.resolve(fail(401, 'SESSION_REQUIRED'));
+    const submit = await screen.findByRole('button', { name: 'Войти' });
+    expect(submit).toBeEnabled(); expect(rotationSignal?.aborted).toBe(true); expect(screen.queryByText('ACTIVE SESSION')).not.toBeInTheDocument();
+    rotation.resolve(ok(session('late-rotation')));
+    await act(async () => { await rotation.promise; });
+    expect(submit).toBeEnabled(); expect(screen.queryByText('Входим…')).not.toBeInTheDocument(); expect(businessCalls).toBe(1);
+    await user.type(screen.getByLabelText('Логин'), 'owner.test'); await user.type(screen.getByLabelText('Пароль'), 'correct-password'); await user.click(submit);
+    expect(await screen.findByText(/77777777/)).toBeVisible(); expect(businessCalls).toBe(2);
+  });
+  it('keeps the anonymous handoff after a late rotation rejection', async () => {
+    const business = deferred<Response>(); const rotation = deferred<Response>(); let sessionReads = 0;
+    const fetch = vi.fn((url: URL | RequestInfo) => {
+      const path = String(url);
+      if (path.endsWith('/auth/session')) { sessionReads++; return Promise.resolve(ok(session())); }
+      if (path.includes('/businesses')) return business.promise;
+      if (path.endsWith('/auth/rotate')) return rotation.promise;
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetch); const user = userEvent.setup(); render(<App />); await screen.findByText(/Пользователь/);
+    await user.click(screen.getByRole('button', { name: 'Обновить защиту сессии' })); business.resolve(fail(401, 'SESSION_REQUIRED'));
+    expect(await screen.findByRole('button', { name: 'Войти' })).toBeEnabled();
+    rotation.reject(new TypeError('late rotation transport failure'));
+    await act(async () => { await rotation.promise.catch(() => undefined); });
+    expect(screen.getByText('Сессия завершена. Войдите снова.')).toBeVisible(); expect(sessionReads).toBe(1); expect(screen.getByRole('button', { name: 'Войти' })).toBeEnabled();
+  });
+  it('does not let a stale rotation finally unlock the next login', async () => {
+    const business = deferred<Response>(); const rotation = deferred<Response>(); const login = deferred<Response>(); let loginCalls = 0;
+    const fetch = vi.fn((url: URL | RequestInfo) => {
+      const path = String(url);
+      if (path.endsWith('/auth/session')) return Promise.resolve(ok(session()));
+      if (path.includes('/businesses')) return business.promise;
+      if (path.endsWith('/auth/rotate')) return rotation.promise;
+      if (path.endsWith('/auth/bootstrap')) return Promise.resolve(ok(bootstrap()));
+      if (path.endsWith('/auth/login')) { loginCalls++; return login.promise; }
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetch); const user = userEvent.setup(); render(<App />); await screen.findByText(/Пользователь/);
+    await user.click(screen.getByRole('button', { name: 'Обновить защиту сессии' })); business.resolve(fail(401, 'SESSION_REQUIRED'));
+    await screen.findByRole('button', { name: 'Войти' }); await user.type(screen.getByLabelText('Логин'), 'owner.test'); await user.type(screen.getByLabelText('Пароль'), 'correct-password');
+    await user.dblClick(screen.getByRole('button', { name: 'Войти' })); await waitFor(() => expect(loginCalls).toBe(1));
+    rotation.resolve(ok(session('stale'))); await act(async () => { await rotation.promise; });
+    expect(screen.getByRole('button', { name: 'Входим…' })).toBeDisabled(); expect(loginCalls).toBe(1);
+    login.resolve(ok({ ...session('fresh'), user_account_id: '88888888-8888-4888-8888-888888888888' })); expect(await screen.findByText(/88888888/)).toBeVisible();
+  });
+  it('ignores an old Business 401 after accepting a rotated session', async () => {
+    const oldBusiness = deferred<Response>(); let businessCalls = 0;
+    const fetch = vi.fn((url: URL | RequestInfo) => {
+      const path = String(url);
+      if (path.endsWith('/auth/session')) return Promise.resolve(ok(session('old')));
+      if (path.includes('/businesses')) { businessCalls++; return businessCalls === 1 ? oldBusiness.promise : Promise.resolve(ok({ businesses: [] })); }
+      if (path.endsWith('/auth/rotate')) return Promise.resolve(ok({ ...session('fresh'), user_account_id: '99999999-9999-4999-8999-999999999999' }));
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetch); const user = userEvent.setup(); render(<App />); await screen.findByText(/Пользователь/);
+    await user.click(screen.getByRole('button', { name: 'Обновить защиту сессии' })); expect(await screen.findByText(/99999999/)).toBeVisible();
+    oldBusiness.resolve(fail(401, 'SESSION_REQUIRED')); await act(async () => { await oldBusiness.promise; });
+    expect(screen.getByText(/99999999/)).toBeVisible(); expect(screen.queryByRole('heading', { name: 'Вход в консоль' })).not.toBeInTheDocument(); expect(businessCalls).toBe(2);
+  });
   it('keeps the latest session when an older success and error settle late, then mutates with latest CSRF', async () => {
     const oldRead = deferred<Response>(); const newerRead = deferred<Response>();
     const fetch = vi.fn().mockResolvedValueOnce(ok(session('initial'))).mockResolvedValueOnce(ok({ businesses: [] })).mockImplementationOnce(() => oldRead.promise).mockImplementationOnce(() => newerRead.promise).mockResolvedValueOnce(ok({ businesses: [] })).mockResolvedValueOnce(ok(session('latest'))).mockResolvedValueOnce(ok({ businesses: [] }));
     vi.stubGlobal('fetch', fetch);
     render(<App />); await screen.findByText(/Пользователь/);
-    fireEvent.focus(window); fireEvent.focus(window);
+    fireEvent.focus(window); await waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/session'))).toHaveLength(2));
+    fireEvent.focus(window); await waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/session'))).toHaveLength(3));
     newerRead.resolve(ok({ ...session('latest'), user_account_id: '77777777-7777-4777-8777-777777777777' }));
     expect(await screen.findByText(/77777777/)).toBeVisible();
     oldRead.resolve(ok({ ...session('stale'), user_account_id: uid }));
@@ -129,14 +203,20 @@ describe('Business Console auth', () => {
     const fetch = vi.fn().mockResolvedValueOnce(ok(session())).mockResolvedValueOnce(ok({ businesses: [] })).mockImplementationOnce(() => staleError.promise).mockImplementationOnce(() => newerRead.promise).mockResolvedValueOnce(ok({ businesses: [] }));
     vi.stubGlobal('fetch', fetch);
     const user = userEvent.setup(); const view = render(<App />); await screen.findByText(/Пользователь/);
-    fireEvent.focus(window); fireEvent.focus(window); newerRead.resolve(ok({ ...session('newest'), user_account_id: '88888888-8888-4888-8888-888888888888' })); await screen.findByText(/88888888/);
+    fireEvent.focus(window); await waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/session'))).toHaveLength(2));
+    fireEvent.focus(window); await waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/session'))).toHaveLength(3));
+    newerRead.resolve(ok({ ...session('newest'), user_account_id: '88888888-8888-4888-8888-888888888888' })); await screen.findByText(/88888888/);
     staleError.reject(new TypeError('stale failure'));
     await waitFor(() => expect(screen.queryByText('Состояние сессии неизвестно')).not.toBeInTheDocument());
     const late = deferred<Response>(); fetch.mockImplementationOnce(() => late.promise).mockResolvedValueOnce(ok(null, 204));
     const logoutButton = screen.getByRole('button', { name: 'Выйти' });
     act(() => { window.dispatchEvent(new Event('focus')); logoutButton.click(); });
     await screen.findByText(/Выход выполнен/);
-    late.resolve(ok(session('too-late'))); expect(screen.queryByText(/too-late/)).not.toBeInTheDocument();
+    const businessCalls = fetch.mock.calls.filter(([url]) => String(url).includes('/businesses')).length;
+    late.resolve(ok({ ...session('too-late'), user_account_id: '99999999-9999-4999-8999-999999999999' }));
+    await act(async () => { await late.promise; });
+    expect(screen.queryByText(/99999999/)).not.toBeInTheDocument(); expect(screen.queryByText('ACTIVE SESSION')).not.toBeInTheDocument();
+    expect(fetch.mock.calls.filter(([url]) => String(url).includes('/businesses'))).toHaveLength(businessCalls);
     view.unmount();
   });
   it('ignores a session success after unmount even when the double ignores AbortSignal', async () => {
