@@ -2,6 +2,14 @@
 
 Ответственный за интеграцию: C0. Единственный task register: `docs/TASK_REGISTER.md`. Канон: `docs/architecture/01_ARCHITECTURE_SPEC.md`, действующие ADR, MVP/Roadmap и `09_IMPLEMENTATION_PLAN.md`; стек: IMPL-001; правила: AGENTS.md.
 
+## Текущий handoff C0 — M1.2 принята, M1.3 pre-DDL / 2026-09-18
+
+Полная M1.2 INTEGRATED / VERIFIED на actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`, tree `0df4c1b9a2e6922f742ebe459e46dd93d2c2959f`, PR #8 MERGED. Новый push/main run `35368244266`: foundation + browser + clean-source SUCCESS, 246 tests. Полная приёмка и границы evidence: `docs/reviews/M1_2_C0_ACCEPTANCE.md`; статусы — только `docs/TASK_REGISTER.md`.
+
+Следующий исполнитель C1 начинает новую M1.3 от этого SHA, не продолжает слитые C5/C8 задачи. В текущем первом этапе разрешены точный механический post-merge перенос документов C0 и **один pre-DDL contract** `docs/tasks/M1_3_CONTRACT.md`. В нём нужны concrete minimal schema, RLS/grants/permission matrix, EntitlementService и service-mode truth table, Audit transaction boundary, API/UI proposal и тест-план. Все незафиксированные решения явно PROPOSED/OPEN, не принятый канон.
+
+До C0/C2 review нельзя писать/применять новые migrations, менять runtime, frontend, JSON contracts/locks/CI/Compose или самостоятельно назначать revision. Backend+UI M1.2 не переоткрываются; C5/M2/production не запускаются. Исторические pre-merge и implementation сообщения ниже сохраняются как история, а не текущий запрет выданного contract scope.
+
 ## M1.1 — принято
 
 PR #3, reviewed head `fa98e714d78485f8d07108294263c89d90a6e7f0`, actual merge `b480d864a246cb0573b40fa5211f66625a71de91`. Push/main CI `35015308300` SUCCESS, 89 tests. C8-M1.1-01 закрыто после targeted PASS; отсутствие нового DB run в повторном C8 review не скрывается. Отдельный main run выполнен при интеграции C0. Полная приёмка/evidence: task register и `docs/reviews/M1_1_C0_ACCEPTANCE.md`.
@@ -12,9 +20,9 @@ PR #3, reviewed head `fa98e714d78485f8d07108294263c89d90a6e7f0`, actual merge `b
 
 ## M1.2 — Auth/session/membership/application authorization и login UI
 
-Ведущие по плану C1 + C5. Исполнение последовательно: C1 backend и consumer contract → C0/C8 review и интеграция → C5 login UI по принятому API. Это две части одной M1.2, не новые milestones. Backend-only не закрывает всю M1.2. Backend принят C0 после actual main CI; UI-реализация и цепочка review исправлений завершены, выдано оформление перед интеграцией PR #8. M1.3 не запускается.
+Ведущие по плану C1 + C5. Исполнение последовательно: C1 backend и consumer contract → C0/C8 review и интеграция → C5 login UI по принятому API. Это две части одной M1.2, не новые milestones. Backend-only не закрывает всю M1.2. Backend и UI приняты C0 после отдельных actual main CI; полная M1.2 VERIFIED. Текущее задание M1.3 ограничено pre-DDL контрактом выше. История до интеграции сохраняется ниже.
 
-### Текущий handoff — C0: UI pre-merge, 2026-09-18
+### История handoff — C0: UI pre-merge, 2026-09-18
 
 C0 принял targeted C8 PASS на `7821aae54834de7107244090f76a1c7f327af897`, tree `0bcbf5bf0dd9ca937a56af5ef723697cbcfd8ef4`. UI-01/02/04/05 CLOSED по цепочке решений C0; ранее принятый backend не переоткрывается. **Полная M1.2 — REVIEW**, а не уже INTEGRATED/VERIFIED. Текущее действие — точная документальная синхронизация и условная интеграция существующего PR #8 (`codex/-ui-business-console` → `main`). Новую UI/backend реализацию не начинать. Исторические задания C5/C1 ниже сохраняются как критерии и история, не повторная выдача работы.
 
@@ -106,6 +114,8 @@ C0 сверил первичные источники. Конкретная libr
 
 ## M1.3 — local entitlements и Audit
 
-Ведущий C1, DDL C2/C0, UI C5, проверки C8. Зависимость M1.1 удовлетворена её приёмкой; защищённая UI/API демонстрация зависит от M1.2. В текущей последовательной очереди задача ещё не выдана; миграции не резервировать параллельно с auth.
+Ведущий C1, DDL C2/C0, последующий UI C5, проверки C8. Зависимость M1.1 удовлетворена; M1.2 принята. **Выдан только этап pre-DDL contract** от `28c289ce6f77e33676cfa416585cc0e20c0be4e3`. Миграционный номер и executable scope выдаёт C0 после review; параллельных DDL writers нет.
 
-Scope сохраняется: WorkspaceBillingAccount, immutable SaaSPlanRevision/PlanEntitlements, Subscription TRIALING либо ACTIVE+COMPED, WorkspaceServiceMode и EntitlementService без `if plan == ...`, hidden bypass или paid provider. Entitlements не заменяют security permissions. Audit с реальным actor/correlation и атомарностью одной domain mutation; Audit != Outbox != technical log. Реальные тарифы/billing secrets/client payments вне задачи. Полный scope и base C0 выдаёт отдельно.
+Scope сохраняется: WorkspaceBillingAccount, immutable SaaSPlanRevision/PlanEntitlements, Subscription TRIALING либо ACTIVE+COMPED, WorkspaceServiceMode и EntitlementService без `if plan == ...`, hidden bypass или paid provider. Entitlements не заменяют security permissions. Audit с реальным actor/correlation и атомарностью одной domain mutation; Audit != Outbox != technical log. Реальные тарифы/billing secrets/client payments вне задачи.
+
+Первый результат — `docs/tasks/M1_3_CONTRACT.md`: точное предложение table/schema/keys/grants/RLS и permission matrix; границы immutable/local state; policy time/interval decisions; предложение безопасной демонстрационной операции и её атомарного Audit; тест-план для real PostgreSQL и негативных границ, без реализации будущих domain tables. Отсутствующие решения отметить OPEN с вариантами и рекомендацией. Это contract proposal, не подтверждённая реализация, DDL approval или PASS M1.3. Новый Draft PR в main, без merge/auto-merge.
