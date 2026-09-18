@@ -4,7 +4,7 @@
 
 ## Текущее решение C0
 
-**M0 — VERIFIED. M1.1 — VERIFIED. C8-M1.1-01 — CLOSED.** PR #3 интегрирован; отдельный push/main CI actual merge commit прошёл. Полный M1 ещё не принят: M1.2 и M1.3 не реализованы.
+**M0 — VERIFIED. M1.1 — VERIFIED. C8-M1.1-01 — CLOSED.** PR #3 интегрирован; отдельный push/main CI actual merge commit прошёл. Полный M1 ещё не принят: backend M1.2 проверен и ожидает интеграции; UI M1.2 и M1.3 не реализованы.
 
 Принятый implementation merge M1.1: `b480d864a246cb0573b40fa5211f66625a71de91`.
 Проверенный C2 head: `fa98e714d78485f8d07108294263c89d90a6e7f0`.
@@ -14,6 +14,24 @@ Implementation tree: `66b87d3797bff856df449c878347766e147c5c01` (74 файла).
 Следующий выданный scope: **M1.2, backend-часть C1 и контракт для C5**. Затем C5 login UI по отдельно принятому API SHA. Это части одной M1.2; backend-only не закрывает всю задачу. M1.3 по зависимостям допускается после M1.1, но в текущей последовательной очереди ещё не выдана и не запускается автоматически. Канонические зависимости не пересматриваются.
 
 Финальный стартовый SHA C1 указывается C0 в сопровождающем сообщении после проверки итогового main с этими документами приёмки. Он может быть documentation-only descendant implementation merge выше. Moving main, PR test-merge и старый M0 не заменяют выданный SHA. Ссылка на evidence итоговой документационной интеграции сохраняется также в её PR без бесконечного изменения commit ради записи собственного SHA.
+
+### M1.2 — актуальное решение C0 перед интеграцией / 2026-09-18
+
+Backend review: **PASS; разрешено оформление и интеграция** проверенного head `194ea3cfa3f0aa9b8f271590a26ca3857ade3e54`, tree `799f271cbfc1c8815136828da35f9a32ef58b16e` (93 файла до этого документационного изменения). Единственный implementation PR — **#7**, `codex/-m1.2-r2` → `main`; исходный принятый base — `5c7188915fa219d9d6906569e2341632e4969651`. PR #6 — история контрактов и переноса, не вторая реализация и не отдельный кандидат на merge.
+
+Статус задачи **M1.2 — REVIEW**, не INTEGRATED/VERIFIED. Backend ещё ожидает фактического merge и проверки push/main; C5 пока не выдан. Это части одной M1.2, не новые milestones. M0/M1.1 остаются VERIFIED; M1.3 — TODO, не выдана.
+
+C0 принимает переданное пользователем заключение targeted C8 PASS для точного head/tree выше: новых блокеров нет. **C8-M1.2-01 и C0-M1.2-04 — CLOSED на этом snapshot. C8-M1.2-02 — учтено контрактом, неблокирующее; recovery UX остаётся требованием к C5.** C0-M1.2-01/02/03 также закрыты по опубликованным исправлениям и привязанному CI. Закрытие находок не означает уже выполненную интеграцию или завершение UI.
+
+CI `35248449942`, job `105294503581`, event `pull_request`: SUCCESS; **91 non-integration + 105 real PostgreSQL + 3 frontend = 199 passed**. Tested checkout `c99d9cc7e781fd9acf20ae7276761336e38b99d1` — виртуальный test-merge, не actual main merge. Его tree совпал с implementation tree. Artifact `10508471245`, ZIP SHA-256 `b80c4c000e1aefe47ea6f2303b49d58d9f6cdb5c2355c3beea046903f4121c22`. C0 проверил архив, tested SHA, пустой worktree, tree/modes и 11 неизменённых оригиналов; новый локальный PostgreSQL run C0 не заявляется.
+
+C8 самостоятельно проверял код и локальные targeted/non-integration suites, но не скачивал private artifact и не запускал новый PostgreSQL в re-review. DB/ZIP evidence передано C0. Это не второй независимый DB run и не формальное GitHub APPROVED от другого аккаунта. Отдельный C2 review не заявляется; C0 проверил DDL/grants, C8 — их security scope.
+
+C0 подготовил только четыре документационных изменения: этот реестр, M1_HANDOFF, статус IMPL-002 и `docs/reviews/M1_2_BACKEND_C0_PREMERGE.md`. Исполнитель Codex вправе перенести только точный подготовленный текст. Код, тесты, migrations 0001/0002/0003, contracts JSON, lockfiles, workflows и архитектурные оригиналы не меняются. Повторный C8 review не требуется для этой точной документальной дельты; новый полный CI её опубликованного head обязателен.
+
+После проверки точной docs-only дельты и зелёного CI текущего опубликованного head C0 разрешает **обычный merge commit PR #7**, без squash/rebase/force-push/обхода защит. Разрешение не распространяется на неожиданные изменения кода или новый base main. Далее C0 проверяет actual merge SHA, дерево и отдельный push/main CI. Только затем выдаётся C5 точный принятый API SHA. Нельзя выдавать за него текущий PR head или виртуальный test-merge.
+
+Предыдущие разделы M1.2 ниже — история решения на прежних snapshots. Их BLOCKED/CHANGES_REQUESTED и требования доработки заменены данным решением для указанного head; история не удалена. Подробное решение и границы: `docs/reviews/M1_2_BACKEND_C0_PREMERGE.md`.
 
 ## Задачи
 
@@ -34,7 +52,7 @@ Implementation tree: `66b87d3797bff856df449c878347766e147c5c01` (74 файла).
 | M0.HANDOFF | Правила, реестр и очередь | BASELINE/STACK | C0 | VERIFIED | AGENTS и M1_HANDOFF | Передача по точному SHA |
 | M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
 | M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
-| M1.2 | Auth/session/membership/login UI | Интегрированный M1.1 | C1+C5 | REVIEW | Backend PR #7, head 7012bf586166d35ad82919087c0f68a6f3eb92ee: CI 35234140772 SUCCESS, 168 tests; C8 CHANGES_REQUESTED: C8-M1.2-01 (P2) | C1 exact Host/authority fix → новый полный CI → targeted C8 → приёмка backend C0 → C5 UI; M1.3 не запускать |
+| M1.2 | Auth/session/membership/login UI | Интегрированный M1.1 | C1+C5 | REVIEW | Backend head 194ea3cfa3f0aa9b8f271590a26ca3857ade3e54: C8 PASS; CI 35248449942 SUCCESS, 199 tests; находки CLOSED | Документы → docs-head CI → merge PR #7 → actual main CI → C5 по принятому API SHA; вся M1.2 ещё не VERIFIED |
 | M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1; защищённый UI использует M1.2 | C1 | TODO | Ещё не выдана | После текущего auth-среза, без paid provider |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
@@ -74,9 +92,9 @@ C8 test-only PR #4 закрыт без merge; отдельная ветка не
 
 ## Открытые ограничения и следующая migration
 
-App пока LOCAL/TEST. M1.1 — tenant foundation, не полноценный auth. AuthenticatedAccount создаётся только будущим verified auth adapter; UUID не аутентификация. Same-Workspace/different-Client authorization не пройдена: Client tables ещё нет. Runtime credentials/arbitrary Python/SQL compromise не покрываются одной RLS; application authorization обязательна.
+App пока LOCAL/TEST. M1.1 — tenant foundation; проверенный backend M1.2 добавляет auth adapter и ожидает интеграции. AuthenticatedAccount создаётся только после проверки server session; UUID не аутентификация. Same-Workspace/different-Client authorization не пройдена: Client tables ещё нет. Runtime credentials/arbitrary Python/SQL compromise не покрываются одной RLS; application authorization обязательна.
 
-Следующая очередь: C0 резервирует `0003_auth_sessions.py`, revision `0003`, down_revision `0002`, только для M1.2 C1 backend. Поля, auth/session library, точные API/TTL/CSRF protocol C1 фиксирует до DDL в implementation contract/IMPL-002, не выдавая их за уже принятый domain ADR. 0001/0002 неизменны. C2/C0 проверяют права/миграции; никаких параллельных schema heads.
+Миграция `0003_auth_sessions.py`, revision `0003`, down_revision `0002`, реализована в проверенном backend M1.2 и ожидает интеграции. IMPL-002 принят C0 для ограниченной LOCAL/TEST реализации, не как новый domain ADR или production policy. 0001/0002/0003 не изменяются при оформлении. Следующая migration пока не резервируется: C5 работает с уже принятым API, не создаёт DDL.
 
 M1.3 local entitlements/Audit, M2 Inbox/Outbox/Jobs и остальные capabilities не реализованы. Нет live provider calls, Object Storage, production backup/restore, полной vulnerability/security certification, MFA или production telemetry. Architecture Freeze v1.0 pending. M1.1 verification не означает весь M1/Pilot готов.
 

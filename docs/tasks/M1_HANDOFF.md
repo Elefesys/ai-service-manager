@@ -12,11 +12,23 @@ PR #3, reviewed head `fa98e714d78485f8d07108294263c89d90a6e7f0`, actual merge `b
 
 ## M1.2 — Auth/session/membership/application authorization и login UI
 
-Ведущие по плану C1 + C5. Исполнение последовательно: C1 backend и consumer contract → C0/C8 review и интеграция → C5 login UI по принятому API. Это две части одной M1.2, не новые milestones. Backend-only не закрывает всю M1.2. Сейчас выдаётся только C1; C5 и M1.3 автоматически не запускаются.
+Ведущие по плану C1 + C5. Исполнение последовательно: C1 backend и consumer contract → C0/C8 review и интеграция → C5 login UI по принятому API. Это две части одной M1.2, не новые milestones. Backend-only не закрывает всю M1.2. Код C1 проверен; сейчас выполняется только оформление и интеграция backend. C5 и M1.3 автоматически не запускаются.
+
+### Текущее разрешение после C8 PASS / C0 2026-09-18
+
+Рабочая реализация находится в PR **#7**, ветка **codex/-m1.2-r2**, head `194ea3cfa3f0aa9b8f271590a26ca3857ade3e54`, tree `799f271cbfc1c8815136828da35f9a32ef58b16e`. Старый PR #6 и c1/m1-2-auth не используются для продолжения реализации. C0 принял targeted C8 PASS, закрытие C8-M1.2-01/C0-M1.2-04 и контрактную обработку C8-M1.2-02. Полный CI `35248449942` подтвердил 199 tests и все gates. Границы evidence — в task register и `docs/reviews/M1_2_BACKEND_C0_PREMERGE.md`.
+
+Backend одобрен для интеграции, но ещё не интегрирован в main на момент этой записи. C5 не запускается до отдельной проверки actual merge и push/main CI и передачи точного принятого API SHA от C0. PR test-merge `c99d9cc7e781fd9acf20ae7276761336e38b99d1` не является этим SHA. Полная M1.2 остаётся REVIEW, не VERIFIED.
+
+Следующий C5 scope после явной выдачи: login/logout/session-expired UI, состояние загрузки и ошибок, минимальное защищённое чтение Business и общий browser journey через существующий API. Источники API: `contracts/openapi.json`, `contracts/auth.v1.json`, `docs/tasks/M1_2_AUTH_CONTRACT.md`. Cookies остаются HttpOnly; CSRF хранится только в текущем состоянии страницы; membership DTO не заменяет серверную авторизацию.
+
+C8-M1.2-02 остаётся обязательством UI: потеря HTTP-ответа не означает rollback. Не обещать exactly-once доставку Set-Cookie, не повторять login/rotate/logout вслепую и не показывать ложный успешный logout. Восстановление current-session/bootstrap и очистка displayed identity на 401 выполняются по уже описанному auth contract. DDL, backend security semantics, Platform Ops grants/MFA, реальные провайдеры и M1.3 не входят в следующий UI-срез.
+
+Разделы реализации C1 ниже сохраняют выданные критерии и историю, а не поручают заново писать готовый backend. Новых API/TTL или архитектурных решений в этой записи нет.
 
 ### Snapshot
 
-Точный полный base C0 указывает в сопровождающем стартовом сообщении после проверки итогового main с документами приёмки. Это может быть documentation-only descendant принятого implementation merge; moving main или старый M0 не заменяют его. Ветка C1: `c1/m1-2-auth`. Будущая C5: `c5/m1-2-login` от отдельно выданного API SHA. Existing branches не перезаписывать; общий checkout не предполагать.
+Точный полный base C0 указывает в сопровождающем стартовом сообщении после проверки итогового main с документами приёмки. Это может быть documentation-only descendant принятого implementation merge; moving main или старый M0 не заменяют его. Исходная ветка C1: `c1/m1-2-auth`; актуальная реализация продолжена через Codex в `codex/-m1.2-r2` / PR #7. Будущая C5: `c5/m1-2-login` от отдельно выданного API SHA. Existing branches не перезаписывать; общий checkout не предполагать.
 
 ### Источники
 
