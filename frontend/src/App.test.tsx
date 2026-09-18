@@ -182,42 +182,83 @@ describe('Business Console auth', () => {
     expect(screen.getByText(/99999999/)).toBeVisible(); expect(screen.queryByRole('heading', { name: 'Вход в консоль' })).not.toBeInTheDocument(); expect(businessCalls).toBe(2);
   });
   it('keeps the latest session when an older success and error settle late, then mutates with latest CSRF', async () => {
+    const initial = deferred<Response>(); const initialBusiness = deferred<Response>();
     const oldRead = deferred<Response>(); const newerRead = deferred<Response>();
-    const fetch = vi.fn().mockResolvedValueOnce(ok(session('initial'))).mockResolvedValueOnce(ok({ businesses: [] })).mockImplementationOnce(() => oldRead.promise).mockImplementationOnce(() => newerRead.promise).mockResolvedValueOnce(ok({ businesses: [] })).mockResolvedValueOnce(ok(session('latest'))).mockResolvedValueOnce(ok({ businesses: [] }));
-    vi.stubGlobal('fetch', fetch);
-    render(<App />); await screen.findByText(/Пользователь/);
-    fireEvent.focus(window); await waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/session'))).toHaveLength(2));
-    fireEvent.focus(window); await waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/session'))).toHaveLength(3));
-    newerRead.resolve(ok({ ...session('latest'), user_account_id: '77777777-7777-4777-8777-777777777777' }));
-    expect(await screen.findByText(/77777777/)).toBeVisible();
-    oldRead.resolve(ok({ ...session('stale'), user_account_id: uid }));
-    await waitFor(() => expect(screen.getByText(/77777777/)).toBeVisible());
-    expect(screen.queryByText(uid)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Обновить защиту сессии' }));
-    await screen.findByText(/Защита сессии обновлена/);
-    const rotate = fetch.mock.calls.find(([url]) => String(url).endsWith('/auth/rotate'));
-    expect(rotate?.[1]).toMatchObject({ headers: expect.objectContaining({ 'X-CSRF-Token': 'latest' }) });
+    let sessionReads = 0; let businessReads = 0;
+    const fetch = vi.fn((url: URL | RequestInfo, _init?: RequestInit) => {
+      const path = String(url);
+      if (path.endsWith('/auth/session')) { sessionReads++; return [initial.promise, oldRead.promise, newerRead.promise][sessionReads - 1]; }
+      if (path.includes('/businesses')) { businessReads++; return businessReads === 1 ? initialBusiness.promise : Promise.resolve(ok({ businesses: [] })); }
+      if (path.endsWith('/auth/rotate')) return Promise.resolve(ok(session('latest')));
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    const visibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    const listener = vi.spyOn(window, 'addEventListener');
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    try {
+      vi.stubGlobal('fetch', fetch); render(<App />);
+      expect(sessionReads).toBe(1);
+      await act(async () => { initial.resolve(ok(session('initial'))); await initial.promise; });
+      await screen.findByText(/Пользователь/); await waitFor(() => expect(businessReads).toBe(1));
+      await act(async () => { initialBusiness.resolve(ok({ businesses: [] })); await initialBusiness.promise; });
+      expect(listener.mock.calls.filter(([type]) => type === 'focus')).toHaveLength(2);
+
+      fireEvent.focus(window); await waitFor(() => expect(sessionReads).toBe(2));
+      fireEvent.focus(window); await waitFor(() => expect(sessionReads).toBe(3));
+      await act(async () => { newerRead.resolve(ok({ ...session('latest'), user_account_id: '77777777-7777-4777-8777-777777777777' })); await newerRead.promise; });
+      expect(await screen.findByText(/77777777/)).toBeVisible();
+      await act(async () => { oldRead.resolve(ok({ ...session('stale'), user_account_id: uid })); await oldRead.promise; });
+      expect(screen.getByText(/77777777/)).toBeVisible(); expect(screen.queryByText(uid)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Обновить защиту сессии' })); await screen.findByText(/Защита сессии обновлена/);
+      const rotate = fetch.mock.calls.find(([url]) => String(url).endsWith('/auth/rotate'));
+      expect(rotate?.[1]).toMatchObject({ headers: expect.objectContaining({ 'X-CSRF-Token': 'latest' }) });
+    } finally {
+      listener.mockRestore();
+      if (visibility) Object.defineProperty(document, 'visibilityState', visibility); else delete (document as { visibilityState?: string }).visibilityState;
+    }
   });
   it('ignores stale session errors and late success after sign-out or unmount', async () => {
-    const staleError = deferred<Response>(); const newerRead = deferred<Response>();
-    const fetch = vi.fn().mockResolvedValueOnce(ok(session())).mockResolvedValueOnce(ok({ businesses: [] })).mockImplementationOnce(() => staleError.promise).mockImplementationOnce(() => newerRead.promise).mockResolvedValueOnce(ok({ businesses: [] }));
-    vi.stubGlobal('fetch', fetch);
-    const user = userEvent.setup(); const view = render(<App />); await screen.findByText(/Пользователь/);
-    fireEvent.focus(window); await waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/session'))).toHaveLength(2));
-    fireEvent.focus(window); await waitFor(() => expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/session'))).toHaveLength(3));
-    newerRead.resolve(ok({ ...session('newest'), user_account_id: '88888888-8888-4888-8888-888888888888' })); await screen.findByText(/88888888/);
-    staleError.reject(new TypeError('stale failure'));
-    await waitFor(() => expect(screen.queryByText('Состояние сессии неизвестно')).not.toBeInTheDocument());
-    const late = deferred<Response>(); fetch.mockImplementationOnce(() => late.promise).mockResolvedValueOnce(ok(null, 204));
-    const logoutButton = screen.getByRole('button', { name: 'Выйти' });
-    act(() => { window.dispatchEvent(new Event('focus')); logoutButton.click(); });
-    await screen.findByText(/Выход выполнен/);
-    const businessCalls = fetch.mock.calls.filter(([url]) => String(url).includes('/businesses')).length;
-    late.resolve(ok({ ...session('too-late'), user_account_id: '99999999-9999-4999-8999-999999999999' }));
-    await act(async () => { await late.promise; });
-    expect(screen.queryByText(/99999999/)).not.toBeInTheDocument(); expect(screen.queryByText('ACTIVE SESSION')).not.toBeInTheDocument();
-    expect(fetch.mock.calls.filter(([url]) => String(url).includes('/businesses'))).toHaveLength(businessCalls);
-    view.unmount();
+    const initial = deferred<Response>(); const initialBusiness = deferred<Response>();
+    const staleError = deferred<Response>(); const newerRead = deferred<Response>(); const preLogout = deferred<Response>();
+    let sessionReads = 0; let businessReads = 0;
+    const fetch = vi.fn((url: URL | RequestInfo) => {
+      const path = String(url);
+      if (path.endsWith('/auth/session')) { sessionReads++; return [initial.promise, staleError.promise, newerRead.promise, preLogout.promise][sessionReads - 1]; }
+      if (path.includes('/businesses')) { businessReads++; return businessReads === 1 ? initialBusiness.promise : Promise.resolve(ok({ businesses: [] })); }
+      if (path.endsWith('/auth/logout')) return Promise.resolve(ok(null, 204));
+      throw new Error(`unexpected test path: ${path}`);
+    });
+    const visibility = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+    const listener = vi.spyOn(window, 'addEventListener');
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    let view: ReturnType<typeof render> | undefined;
+    try {
+      vi.stubGlobal('fetch', fetch); const user = userEvent.setup(); view = render(<App />);
+      expect(sessionReads).toBe(1);
+      await act(async () => { initial.resolve(ok(session())); await initial.promise; });
+      await screen.findByText(/Пользователь/); await waitFor(() => expect(businessReads).toBe(1));
+      await act(async () => { initialBusiness.resolve(ok({ businesses: [] })); await initialBusiness.promise; });
+      expect(listener.mock.calls.filter(([type]) => type === 'focus')).toHaveLength(2);
+
+      fireEvent.focus(window); await waitFor(() => expect(sessionReads).toBe(2));
+      fireEvent.focus(window); await waitFor(() => expect(sessionReads).toBe(3));
+      await act(async () => { newerRead.resolve(ok({ ...session('newest'), user_account_id: '88888888-8888-4888-8888-888888888888' })); await newerRead.promise; });
+      expect(await screen.findByText(/88888888/)).toBeVisible();
+      const staleFailure = new TypeError('stale failure');
+      await act(async () => { staleError.reject(staleFailure); await expect(staleError.promise).rejects.toBe(staleFailure); });
+      expect(screen.queryByText('Состояние сессии неизвестно')).not.toBeInTheDocument();
+
+      const logoutButton = screen.getByRole('button', { name: 'Выйти' });
+      act(() => { fireEvent.focus(window); expect(sessionReads).toBe(4); logoutButton.click(); });
+      await screen.findByText(/Выход выполнен/);
+      const readsAtLogout = businessReads;
+      await act(async () => { preLogout.resolve(ok({ ...session('too-late'), user_account_id: '99999999-9999-4999-8999-999999999999' })); await preLogout.promise; });
+      expect(screen.queryByText(/99999999/)).not.toBeInTheDocument(); expect(screen.queryByText('ACTIVE SESSION')).not.toBeInTheDocument(); expect(businessReads).toBe(readsAtLogout);
+      view.unmount(); view = undefined;
+    } finally {
+      view?.unmount(); listener.mockRestore();
+      if (visibility) Object.defineProperty(document, 'visibilityState', visibility); else delete (document as { visibilityState?: string }).visibilityState;
+    }
   });
   it('ignores a session success after unmount even when the double ignores AbortSignal', async () => {
     const late = deferred<Response>();
