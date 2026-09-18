@@ -26,4 +26,24 @@ docker compose --env-file "$tmp/.env" -f compose.yaml -f compose.browser.yaml --
 python3 scripts/check_browser_compose.py "$compose_model"
 docker compose --env-file "$tmp/.env" -f compose.yaml -f compose.browser.yaml --profile browser up -d --build postgres migrate api frontend
 docker compose --env-file "$tmp/.env" -f compose.yaml -f compose.browser.yaml --profile browser run --rm -T --user "$(id -u):$(id -g)" -v "$password_file:/run/browser-password:ro" browser-provision python scripts/provision_browser_test.py --password-file /run/browser-password > "$tmp/fixture.json"
+python3 - <<'PY'
+import json
+import time
+import urllib.request
+
+for attempt in range(30):
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8080/health/ready", timeout=2) as response:
+            body = json.load(response)
+        if response.status == 200 and body == {"status": "ok", "component": "database"}:
+            break
+    except Exception:
+        pass
+    if attempt == 29:
+        raise SystemExit("Browser stack readiness failed")
+    time.sleep(1)
+else:
+    raise SystemExit("Browser stack readiness failed")
+print("BROWSER_STACK_READINESS: PASS")
+PY
 ASM_BROWSER_LOGIN=browser.owner ASM_BROWSER_PASSWORD_FILE="$password_file" npm --prefix frontend run test:e2e
