@@ -12,9 +12,19 @@ PR #3, reviewed head `fa98e714d78485f8d07108294263c89d90a6e7f0`, actual merge `b
 
 ## M1.2 — Auth/session/membership/application authorization и login UI
 
-Ведущие по плану C1 + C5. Исполнение последовательно: C1 backend и consumer contract → C0/C8 review и интеграция → C5 login UI по принятому API. Это две части одной M1.2, не новые milestones. Backend-only не закрывает всю M1.2. Backend принят C0 после actual main CI; теперь явно выдана UI-часть C5. M1.3 не запускается.
+Ведущие по плану C1 + C5. Исполнение последовательно: C1 backend и consumer contract → C0/C8 review и интеграция → C5 login UI по принятому API. Это две части одной M1.2, не новые milestones. Backend-only не закрывает всю M1.2. Backend принят C0 после actual main CI; UI-реализация и цепочка review исправлений завершены, выдано оформление перед интеграцией PR #8. M1.3 не запускается.
 
-### C5 — выдано от принятого backend / C0 2026-09-18
+### Текущий handoff — C0: UI pre-merge, 2026-09-18
+
+C0 принял targeted C8 PASS на `7821aae54834de7107244090f76a1c7f327af897`, tree `0bcbf5bf0dd9ca937a56af5ef723697cbcfd8ef4`. UI-01/02/04/05 CLOSED по цепочке решений C0; ранее принятый backend не переоткрывается. **Полная M1.2 — REVIEW**, а не уже INTEGRATED/VERIFIED. Текущее действие — точная документальная синхронизация и условная интеграция существующего PR #8 (`codex/-ui-business-console` → `main`). Новую UI/backend реализацию не начинать. Исторические задания C5/C1 ниже сохраняются как критерии и история, не повторная выдача работы.
+
+Actual main/base остаётся `aa7e792555c19d798eafa0cae17d29b73ca12376`. UI candidate run `35358909227` SUCCESS: 105 Python + 105 PostgreSQL + 30 frontend + 6 browser = 246 cases, clean-source в обоих jobs. Это PR test-merge `fcab2583010bb6cece456d8daaba239217bc78ef`, не actual integration. C8 лично выполнил 3 targeted + 1 full frontend на Node 24.8.0/npm 11.6.0, но не запускал новый PostgreSQL/Playwright. Точные evidence/границы и dispositions: `docs/reviews/M1_2_UI_C0_PREMERGE.md` и единственный `docs/TASK_REGISTER.md`.
+
+Разрешены только четыре точных docs postimages: TASK_REGISTER, этот M1_HANDOFF, integration metadata IMPL-002 и новый UI pre-merge receipt. Старый неисполненный UI-04 register transfer отдельно не применять. Код, тесты, контракты, зависимости, миграции и CI не меняются. После их scope-check, нового SUCCESS foundation/browser на опубликованном docs head и неизменного base main C0 разрешает пользователю обычный merge commit PR #8; Codex сам не сливает и не включает auto-merge. Не обходить branch protections; unexpected tree/base требует C0. Дополнительный C8 для точной docs-only delta не нужен.
+
+После слияния нужен отдельный actual main run обоих jobs. Только после проверки actual merge SHA/tree и main CI C0 объявляет полную M1.2 INTEGRATED/VERIFIED и выдаёт дальнейший base. M1.3 — TODO / не выдана; migration 0004 не резервировать; изменения в future capabilities/production не включать. Ни caller Workspace ID, ни UI membership state не заменяют backend authorization. Authenticated cross-Workspace browser и cookie-loss fault-B не заявляются как покрытые; accepted fault-A/RTL границы сохранены.
+
+### История: C5 — выдано от принятого backend / C0 2026-09-18
 
 Принятый API base: `aa7e792555c19d798eafa0cae17d29b73ca12376`, tree `77ddd22af30ef07afa89f61e96e1066ba4be8692`. PR #7 MERGED; отдельный push/main run `35321610083` SUCCESS, 199 tests. Post-merge приёмка: `docs/reviews/M1_2_BACKEND_C0_ACCEPTANCE.md`, текущее решение в едином реестре. Ниже pre-merge сведения сохранены как история и больше не являются запретом C5.
 

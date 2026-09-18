@@ -4,16 +4,32 @@
 
 ## Текущее решение C0
 
-**M0 — VERIFIED. M1.1 — VERIFIED. Backend-срез M1.2 — INTEGRATED / VERIFIED.** Actual main `aa7e792555c19d798eafa0cae17d29b73ca12376` и его push/main CI подтверждены C0. Полная M1.2 — IN_PROGRESS: UI возвращён C5 на ограниченную доработку по C8 CHANGES_REQUESTED (C8-M1.2-UI-01/02, два P1); прежний успешный UI CI сохранён как evidence, но UI не принят. M1.3 не выдана; полный M1 не принят.
+**M0 — VERIFIED. M1.1 — VERIFIED. Backend-срез M1.2 — INTEGRATED / VERIFIED.** Actual main `aa7e792555c19d798eafa0cae17d29b73ca12376` и его push/main CI подтверждены C0. Полная M1.2 — REVIEW: UI-кандидат `7821aae54834de7107244090f76a1c7f327af897` прошёл C8 review исправлений и CI 35358909227 (246 tests). UI-01/02/04/05 CLOSED; UI ещё не INTEGRATED/VERIFIED. Разрешена условная интеграция PR #8 после точной docs-only синхронизации и нового зелёного CI обоих jobs. M1.3 не выдана; полный M1/production не приняты.
 
 Принятый implementation merge M1.1: `b480d864a246cb0573b40fa5211f66625a71de91`.
 Проверенный C2 head: `fa98e714d78485f8d07108294263c89d90a6e7f0`.
 Исходный base задачи/M0: `7eaa9aa63b3f27215f6eb970fb9eb857fd291f62`.
 Implementation tree: `66b87d3797bff856df449c878347766e147c5c01` (74 файла).
 
-Следующий выданный scope: **M1.2, UI-часть C5 и browser journey** от `aa7e792555c19d798eafa0cae17d29b73ca12376`. Backend принят; повторно его реализовывать не нужно. Backend-only не закрывает всю M1.2. M1.3 по зависимостям допускается после M1.1, но ещё не выдана. Канонические зависимости не пересматриваются.
+Следующий разрешённый scope: **оформление и условная интеграция UI-кандидата M1.2 / PR #8** по receipt C0, без новых функций. Backend уже принят; UI review исправлений завершено. Общая приёмка M1.2 требует actual merge/main CI. M1.3 по зависимостям допускается после M1.1, но ещё не выдана; канонические зависимости не пересматриваются.
 
 Финальный стартовый SHA C1 указывается C0 в сопровождающем сообщении после проверки итогового main с этими документами приёмки. Он может быть documentation-only descendant implementation merge выше. Moving main, PR test-merge и старый M0 не заменяют выданный SHA. Ссылка на evidence итоговой документационной интеграции сохраняется также в её PR без бесконечного изменения commit ради записи собственного SHA.
+
+### M1.2 — C0: UI-review завершено, pre-merge integration / 2026-09-18
+
+C0 принимает переданный пользователем полный targeted C8 PASS по UI-05 для published head `7821aae54834de7107244090f76a1c7f327af897`, tree `0bcbf5bf0dd9ca937a56af5ef723697cbcfd8ef4`. PR #8 `codex/-ui-business-console` → `main` остаётся OPEN / DRAFT / NOT MERGED. Backend base `aa7e792555c19d798eafa0cae17d29b73ca12376` сохраняет INTEGRATED / VERIFIED; общая **M1.2 — REVIEW**, не INTEGRATED/VERIFIED. Полный receipt: `docs/reviews/M1_2_UI_C0_PREMERGE.md`.
+
+Последовательность dispositions C0: **C8-M1.2-UI-01/02 CLOSED** на `b74da6662c23a5a1affb7157016eb8a36a338007` по targeted C8; **C8-M1.2-UI-04 CLOSED** на `c1e1e480f7ef61447c6b802fe142399a8a328fcf` после четырёх успешных адресных C8 regressions; **C8-M1.2-UI-05 CLOSED** на текущем `7821aae…` после независимой проверки барьеров readiness/start/completion. Новых блокеров C8 не сообщил. Прежние C0 dispositions по Bootstrap DTO/UUIDv7/fault-A/safe diagnostics сохранены; одинаковые цифровые номера C0 и C8 не объединяются в одну находку.
+
+Последний C8 лично проверил exact object/tree/ancestry, one-file test-only delta, Node 24.8.0/npm 11.6.0 и subprocess path; locked install/typecheck, 3 targeted processes (каждый 2 passed / 21 filtered), 1 full frontend process (30 passed), build и clean source/index. Новый DB/Playwright прогон C8 не выполнял. Серия C5 10+3 — received report; raw logs не проверены C0. Исторический C8 29 passed / 1 failed на `c1e1e…` не стирается; конечная зелёная серия не гарантирует отсутствие всех будущих flakes. White-box listener barrier принят для ограниченного test-only review.
+
+CI `35358909227`, attempt 1, pull_request — SUCCESS: foundation `105645004565`, browser `105645004072`, clean-source в обоих jobs. 105 Python non-integration + 105 PostgreSQL + 30 frontend + 6 Playwright = **246 cases** без повторного подсчёта frontend при browser build. Checkout `fcab2583010bb6cece456d8daaba239217bc78ef` — virtual test-merge с тем же tree, не интеграция в main. Artifact `10553656868`, ZIP SHA-256 `93ef3671f2e5e86242857f8b5c998910c1a759a53c0ec7ceefd06204603b1de0`; C0 проверил архив, 108-file tree/modes, tested SHA, clean worktree и 11 оригиналов. При оформлении повторно прочитаны refs/run/jobs и сохранённые source bytes; новых локальных Vitest/DB/Playwright прогонов C0 не заявляет.
+
+C8-M1.2-UI-03 (P3) остаётся принятым ограничением evidence, не доказательством authenticated A→B browser isolation. Fault A означает delivered replacement cookie + lost body, не loss of Set-Cookie. Новые auth/busy гонки проверяются RTL, не расширением шести browser journeys. Production/реальные данные/Architecture Freeze/M1.3 не включаются.
+
+Ранее неисполненный UI-04 transfer оставил этот реестр на точном preimage `c3b8cd680e160e2722d2c81bee7e5c5a3f71e6c549a61d132ad258804feb326a`; расхождение исполнения не диагностировано до конкретной причины. Новый единый pre-merge пакет заменяет только прежнее НЕВЫПОЛНЕННОЕ поручение на перенос, сохраняя решения C0. Отдельно старый transfer не запускать. Исторические OPEN/CHANGES_REQUESTED ниже описывают прежние snapshots и не отменяют этот текущий disposition.
+
+Разрешён только точный механический перенос четырёх документов: реестр, M1_HANDOFF, интеграционные metadata IMPL-002 и UI C0 pre-merge receipt. Реализация, тесты, migrations, contracts, locks, CI/Compose и canonical originals неизменны. После scope-check, SUCCESS обоих jobs последнего опубликованного docs head и неизменного base main C0 разрешает пользователю **Create a merge commit PR #8**, без squash/rebase/force-push/auto-merge/обхода protections. При неожиданной delta/base — остановка и C0. Затем обязателен отдельный actual main CI с foundation/browser; только после его проверки C0 фиксирует полную M1.2 INTEGRATED/VERIFIED. Дополнительный C8 review этой точной docs-only delta не нужен; M1.3 остаётся TODO / не выдана.
 
 ### M1.2 — C0: независимое UI-review C8, ограниченная доработка / 2026-09-18
 
@@ -78,7 +94,7 @@ C0 подготовил только четыре документационны
 | M0.HANDOFF | Правила, реестр и очередь | BASELINE/STACK | C0 | VERIFIED | AGENTS и M1_HANDOFF | Передача по точному SHA |
 | M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
 | M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
-| M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5 | IN_PROGRESS | Backend VERIFIED: PR #7/main `aa7e792555c19d798eafa0cae17d29b73ca12376`; UI PR #8 CI 35341271140 SUCCESS / 235 tests, C8 CHANGES_REQUESTED: UI-01/02 P1 OPEN | C5 auth-state fix + deterministic regressions → оба CI jobs → targeted C8 → C0 интеграция/приёмка |
+| M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5; C0/C8 review | REVIEW | Backend VERIFIED: PR #7/main `aa7e792555c19d798eafa0cae17d29b73ca12376`; UI `7821aae54834de7107244090f76a1c7f327af897`, CI 35358909227 SUCCESS / 246 tests; UI-01/02/04/05 CLOSED, targeted C8 PASS | Точная docs-only синхронизация → оба CI jobs на docs head → разрешённый merge PR #8 → actual main CI → C0 VERIFIED |
 | M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1; защищённый UI использует M1.2 | C1 | TODO | Ещё не выдана | После текущего auth-среза, без paid provider |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
@@ -118,9 +134,9 @@ C8 test-only PR #4 закрыт без merge; отдельная ветка не
 
 ## Открытые ограничения и следующая migration
 
-App пока LOCAL/TEST. M1.1 — tenant foundation; проверенный backend M1.2 добавляет auth adapter и ожидает интеграции. AuthenticatedAccount создаётся только после проверки server session; UUID не аутентификация. Same-Workspace/different-Client authorization не пройдена: Client tables ещё нет. Runtime credentials/arbitrary Python/SQL compromise не покрываются одной RLS; application authorization обязательна.
+App пока LOCAL/TEST. M1.1 — tenant foundation; backend M1.2 с auth adapter уже принят в main `aa7e792555c19d798eafa0cae17d29b73ca12376`; UI PR #8 ожидает интеграции и отдельного main CI. AuthenticatedAccount создаётся только после проверки server session; UUID не аутентификация. Same-Workspace/different-Client authorization не пройдена: Client tables ещё нет. Runtime credentials/arbitrary Python/SQL compromise не покрываются одной RLS; application authorization обязательна.
 
-Миграция `0003_auth_sessions.py`, revision `0003`, down_revision `0002`, реализована в проверенном backend M1.2 и ожидает интеграции. IMPL-002 принят C0 для ограниченной LOCAL/TEST реализации, не как новый domain ADR или production policy. 0001/0002/0003 не изменяются при оформлении. Следующая migration пока не резервируется: C5 работает с уже принятым API, не создаёт DDL.
+Миграция `0003_auth_sessions.py`, revision `0003`, down_revision `0002`, уже интегрирована и проверена с backend M1.2 на `aa7e792555c19d798eafa0cae17d29b73ca12376`. IMPL-002 принят C0 для ограниченной LOCAL/TEST реализации, не как новый domain ADR или production policy. 0001/0002/0003 не изменяются при оформлении. Следующая migration пока не резервируется: C5 работает с уже принятым API, не создаёт DDL.
 
 M1.3 local entitlements/Audit, M2 Inbox/Outbox/Jobs и остальные capabilities не реализованы. Нет live provider calls, Object Storage, production backup/restore, полной vulnerability/security certification, MFA или production telemetry. Architecture Freeze v1.0 pending. M1.1 verification не означает весь M1/Pilot готов.
 
