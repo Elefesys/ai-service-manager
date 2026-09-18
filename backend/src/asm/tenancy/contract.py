@@ -18,7 +18,7 @@ from asm.tenancy.types import (
 def contract_snapshot() -> dict[str, object]:
     result: dict[str, object] = {
         "name": "tenancy.v1",
-        "down_revision": "0001",
+        "down_revision": "0002",
         "columns": {
             "platform.user_accounts": ["id", "status", "version", "created_at"],
             "platform.workspaces": ["id", "status", "version", "created_at"],

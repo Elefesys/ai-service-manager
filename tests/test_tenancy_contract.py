@@ -20,8 +20,8 @@ from asm.tenancy.types import permissions_for
 def test_tenancy_contract_snapshot():
     expected = json.loads(Path("contracts/tenancy.v1.json").read_text())
     assert contract_snapshot() == expected
-    assert expected["schema_revision"] == "0002"
-    assert expected["down_revision"] == "0001"
+    assert expected["schema_revision"] == "0003"
+    assert expected["down_revision"] == "0002"
     assert len(expected["columns"]) == 6
 
 

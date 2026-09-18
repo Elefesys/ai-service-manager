@@ -555,6 +555,14 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
         assert {row["proname"] for row in functions} == {
             "current_workspace_id",
             "resolve_workspace_membership",
+            "auth_lock_session",
+            "auth_password_lookup",
+            "auth_bootstrap",
+            "auth_session",
+            "auth_memberships",
+            "auth_login",
+            "auth_rotate",
+            "auth_logout",
         }
         assert all(
             row["prosecdef"] and row["rolname"] == "asm_migrator" and not row["public_execute"]

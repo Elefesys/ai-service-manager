@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Literal
 from uuid import UUID
 
-SCHEMA_REVISION = "0002"
+SCHEMA_REVISION = "0003"
 CONTEXT_SETTINGS = (
     "asm.workspace_id",
     "asm.actor_id",

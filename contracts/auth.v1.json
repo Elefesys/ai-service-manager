@@ -1,0 +1,18 @@
+{
+  "name": "auth.v1",
+  "schema_revision": "0003",
+  "down_revision": "0002",
+  "environments": ["LOCAL", "TEST"],
+  "identifier": {"normalization": "strip ASCII whitespace; lowercase; ASCII regex", "pattern": "[a-z0-9][a-z0-9._-]{2,63}"},
+  "password": {"library": "argon2-cffi==25.1.0", "algorithm": "argon2id", "memory_kib": 65536, "time_cost": 3, "parallelism": 4, "salt_bytes": 16, "hash_bytes": 32},
+  "session": {"storage": "PostgreSQL", "token_bytes": 32, "verifier": "SHA-256", "absolute_ttl_default_seconds": 28800, "prelogin_ttl_default_seconds": 600, "rotation_extends_expiry": false, "csrf": "HMAC-SHA256(token ASCII, asm.csrf.v1)"},
+  "cookie": {"tls_name": "__Host-asm_session", "local_http_name": "asm_session_local", "httponly": true, "samesite": "lax", "path": "/", "domain": null},
+  "limits": {"body_bytes": 4096, "header_bytes": 16384, "throttle_scope": "bounded per-process; reset on restart; multiplied by replicas"},
+  "tables": ["platform.auth_credentials", "platform.auth_sessions"],
+  "runtime_execute": ["platform.auth_password_lookup(text)", "platform.auth_bootstrap(text,integer)", "platform.auth_session(text)", "platform.auth_memberships(text)", "platform.auth_login(text,uuid,bigint,bigint,text,integer)", "platform.auth_rotate(text,text)", "platform.auth_logout(text)"],
+  "internal_function": "platform.auth_lock_session(text,boolean)",
+  "endpoints": ["POST /api/v1/auth/bootstrap", "POST /api/v1/auth/login", "GET /api/v1/auth/session", "POST /api/v1/auth/rotate", "POST /api/v1/auth/logout", "GET /api/v1/workspaces/{workspace_id}/businesses", "GET /api/v1/workspaces/{workspace_id}/businesses/{business_id}"],
+  "error_codes": ["INVALID_CREDENTIALS", "SESSION_REQUIRED", "ORIGIN_DENIED", "CSRF_REJECTED", "ACCESS_DENIED", "NOT_FOUND", "BODY_TOO_LARGE", "UNSUPPORTED_MEDIA_TYPE", "INVALID_REQUEST", "RATE_LIMITED", "UNAVAILABLE", "INTERNAL_ERROR"],
+  "production_enabled": false,
+  "platform_ops_authorized": false
+}
