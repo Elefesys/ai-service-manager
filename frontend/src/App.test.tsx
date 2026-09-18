@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -11,6 +11,7 @@ const bootstrap = (csrf = 'bootstrap') => ({ csrf_token: csrf, expires_at: '2030
 const session = (csrf = 'csrf-new') => ({ user_account_id: uid, expires_at: '2030-01-01T00:00:00Z', csrf_token: csrf, memberships: [{ workspace_id: wid, role: 'OWNER', permissions: ['tenancy:read'] }] });
 const ok = (body: unknown, status = 200, headers?: HeadersInit) => new Response(status === 204 ? null : JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } });
 const fail = (status: number, code: string, headers?: HeadersInit) => ok({ error: { code } }, status, headers);
+const deferred = <T,>() => { let resolve!: (value: T) => void; let reject!: (reason: unknown) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
 describe('Business Console auth', () => {
   it('shows loading then anonymous without treating 401 as a crash', async () => {
@@ -53,6 +54,97 @@ describe('Business Console auth', () => {
   it('surfaces Retry-After on 429 without an automatic retry', async () => {
     const fetch = vi.fn().mockResolvedValue(fail(429, 'RATE_LIMITED', { 'Retry-After': '30' })); vi.stubGlobal('fetch', fetch);
     render(<App />); expect(await screen.findByText(/30/)).toBeVisible(); expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it('preserves logout intent across two ambiguities and uses the latest recheck CSRF once', async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(ok(session('initial')))
+      .mockResolvedValueOnce(ok({ businesses: [{ workspace_id: wid, id: bid, name: 'Protected business', status: 'ACTIVE', version: 1, created_at: '2030-01-01T00:00:00Z' }] }))
+      .mockRejectedValueOnce(new TypeError('logout response lost'))
+      .mockResolvedValueOnce(ok(session('recovered-two')))
+      .mockRejectedValueOnce(new TypeError('second logout response lost'))
+      .mockResolvedValueOnce(ok(session('recovered-three')))
+      .mockResolvedValueOnce(ok(null, 204));
+    vi.stubGlobal('fetch', fetch);
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByText('Protected business');
+
+    await user.click(screen.getByRole('button', { name: 'Выйти' }));
+    expect(await screen.findByText('Состояние сессии неизвестно')).toBeVisible();
+    expect(screen.queryByText('ACTIVE SESSION')).not.toBeInTheDocument();
+    expect(screen.queryByText('Protected business')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Проверить снова' }));
+
+    expect(await screen.findByText(/Выход выполнен/)).toBeVisible();
+    const logoutCalls = fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/logout'));
+    expect(logoutCalls).toHaveLength(3);
+    expect(logoutCalls.map(([, init]) => (init as RequestInit).headers)).toEqual([
+      expect.objectContaining({ 'X-CSRF-Token': 'initial' }),
+      expect.objectContaining({ 'X-CSRF-Token': 'recovered-two' }),
+      expect.objectContaining({ 'X-CSRF-Token': 'recovered-three' }),
+    ]);
+  });
+  it('ends pending logout on an owned SESSION_REQUIRED recheck', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(ok(session())).mockResolvedValueOnce(ok({ businesses: [] })).mockRejectedValueOnce(new TypeError('lost')).mockResolvedValueOnce(fail(401, 'SESSION_REQUIRED'));
+    vi.stubGlobal('fetch', fetch);
+    const user = userEvent.setup(); render(<App />); await screen.findByText(/Пользователь/);
+    await user.click(screen.getByRole('button', { name: 'Выйти' }));
+    expect(await screen.findByText(/Выход подтверждён текущей проверкой/)).toBeVisible();
+    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/logout'))).toHaveLength(1);
+  });
+  it('does not start a fourth logout after a third ambiguous attempt', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(ok(session('one'))).mockResolvedValueOnce(ok({ businesses: [] })).mockRejectedValueOnce(new TypeError('lost-1')).mockResolvedValueOnce(ok(session('two'))).mockRejectedValueOnce(new TypeError('lost-2')).mockResolvedValueOnce(ok(session('three'))).mockRejectedValueOnce(new TypeError('lost-3'));
+    vi.stubGlobal('fetch', fetch);
+    const user = userEvent.setup(); render(<App />); await screen.findByText(/Пользователь/);
+    await user.click(screen.getByRole('button', { name: 'Выйти' })); await screen.findByText('Состояние сессии неизвестно');
+    await user.click(screen.getByRole('button', { name: 'Проверить снова' })); await screen.findByText('Состояние сессии неизвестно');
+    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/logout'))).toHaveLength(3);
+  });
+  it('keeps pending logout uncertain when recovery is offline', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(ok(session())).mockResolvedValueOnce(ok({ businesses: [] })).mockRejectedValueOnce(new TypeError('lost')).mockRejectedValueOnce(new TypeError('offline'));
+    vi.stubGlobal('fetch', fetch);
+    const user = userEvent.setup(); render(<App />); await screen.findByText(/Пользователь/);
+    await user.click(screen.getByRole('button', { name: 'Выйти' }));
+    expect(await screen.findByText('Состояние сессии неизвестно')).toBeVisible();
+    expect(screen.queryByText(/Выход выполнен/)).not.toBeInTheDocument();
+  });
+  it('keeps the latest session when an older success and error settle late, then mutates with latest CSRF', async () => {
+    const oldRead = deferred<Response>(); const newerRead = deferred<Response>();
+    const fetch = vi.fn().mockResolvedValueOnce(ok(session('initial'))).mockResolvedValueOnce(ok({ businesses: [] })).mockImplementationOnce(() => oldRead.promise).mockImplementationOnce(() => newerRead.promise).mockResolvedValueOnce(ok({ businesses: [] })).mockResolvedValueOnce(ok(session('latest'))).mockResolvedValueOnce(ok({ businesses: [] }));
+    vi.stubGlobal('fetch', fetch);
+    render(<App />); await screen.findByText(/Пользователь/);
+    fireEvent.focus(window); fireEvent.focus(window);
+    newerRead.resolve(ok({ ...session('latest'), user_account_id: '77777777-7777-4777-8777-777777777777' }));
+    expect(await screen.findByText(/77777777/)).toBeVisible();
+    oldRead.resolve(ok({ ...session('stale'), user_account_id: uid }));
+    await waitFor(() => expect(screen.getByText(/77777777/)).toBeVisible());
+    expect(screen.queryByText(uid)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Обновить защиту сессии' }));
+    await screen.findByText(/Защита сессии обновлена/);
+    const rotate = fetch.mock.calls.find(([url]) => String(url).endsWith('/auth/rotate'));
+    expect(rotate?.[1]).toMatchObject({ headers: expect.objectContaining({ 'X-CSRF-Token': 'latest' }) });
+  });
+  it('ignores stale session errors and late success after sign-out or unmount', async () => {
+    const staleError = deferred<Response>(); const newerRead = deferred<Response>();
+    const fetch = vi.fn().mockResolvedValueOnce(ok(session())).mockResolvedValueOnce(ok({ businesses: [] })).mockImplementationOnce(() => staleError.promise).mockImplementationOnce(() => newerRead.promise).mockResolvedValueOnce(ok({ businesses: [] }));
+    vi.stubGlobal('fetch', fetch);
+    const user = userEvent.setup(); const view = render(<App />); await screen.findByText(/Пользователь/);
+    fireEvent.focus(window); fireEvent.focus(window); newerRead.resolve(ok({ ...session('newest'), user_account_id: '88888888-8888-4888-8888-888888888888' })); await screen.findByText(/88888888/);
+    staleError.reject(new TypeError('stale failure'));
+    await waitFor(() => expect(screen.queryByText('Состояние сессии неизвестно')).not.toBeInTheDocument());
+    const late = deferred<Response>(); fetch.mockImplementationOnce(() => late.promise).mockResolvedValueOnce(ok(null, 204));
+    const logoutButton = screen.getByRole('button', { name: 'Выйти' });
+    act(() => { window.dispatchEvent(new Event('focus')); logoutButton.click(); });
+    await screen.findByText(/Выход выполнен/);
+    late.resolve(ok(session('too-late'))); expect(screen.queryByText(/too-late/)).not.toBeInTheDocument();
+    view.unmount();
+  });
+  it('ignores a session success after unmount even when the double ignores AbortSignal', async () => {
+    const late = deferred<Response>();
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => late.promise));
+    const view = render(<App />); view.unmount(); late.resolve(ok(session('unmounted')));
+    await late.promise;
+    expect(document.body).not.toHaveTextContent('unmounted');
   });
 });
 
