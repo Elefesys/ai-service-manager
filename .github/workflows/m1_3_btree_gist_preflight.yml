@@ -1,0 +1,283 @@
+name: M1.3 btree_gist prerequisite preflight
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    if: github.head_ref == 'c2/m1-3-btree-gist-preflight'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      EXPECTED_BASE: ce585d67168489083e9b94e4be4f5669b16a8552
+      EXPECTED_TREE: ace73cdf8163428eb74872c35ce9e920d5e9066c
+      EXPECTED_DB_IMAGE: pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Guard exact base and one-file probe scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ github.event.pull_request.base.sha }}" = "$EXPECTED_BASE"
+          git cat-file -e "$EXPECTED_BASE^{commit}"
+          test "$(git rev-parse "$EXPECTED_BASE^{tree}")" = "$EXPECTED_TREE"
+          mapfile -t changed < <(git diff --name-only "$EXPECTED_BASE"...HEAD)
+          printf '%s\n' "${changed[@]}"
+          test "${#changed[@]}" -eq 1
+          test "${changed[0]}" = ".github/workflows/m1_3_btree_gist_preflight.yml"
+
+      - name: Prepare disposable LOCAL/TEST environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/init_local.py
+          set -a
+          . ./.env
+          set +a
+          echo "::add-mask::$PG_ADMIN_PASSWORD"
+          echo "::add-mask::$PG_MIGRATION_PASSWORD"
+          echo "::add-mask::$PG_RUNTIME_PASSWORD"
+          mkdir -p "$RUNNER_TEMP/m13-preflight"
+          {
+            echo "base=$EXPECTED_BASE"
+            echo "base_tree=$EXPECTED_TREE"
+            echo "merge_head=$(git rev-parse HEAD)"
+            echo "db_image=$EXPECTED_DB_IMAGE"
+          } > "$RUNNER_TEMP/m13-preflight/repository.txt"
+
+      - name: Pull and prove exact pinned DB image
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          . ./.env
+          . ./infra/images.lock.env
+          set +a
+          test "$DB_IMAGE" = "$EXPECTED_DB_IMAGE"
+          docker pull "$DB_IMAGE"
+          docker image inspect "$DB_IMAGE" \
+            --format 'ID={{.Id}} RepoDigests={{json .RepoDigests}}' \
+            | tee "$RUNNER_TEMP/m13-preflight/image.txt"
+          docker image inspect "$DB_IMAGE" --format '{{json .RepoDigests}}' \
+            | grep -F 'pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a'
+
+      - name: Start exact PostgreSQL and migrate through 0003
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          . ./.env
+          . ./infra/images.lock.env
+          set +a
+          compose() { docker compose --env-file infra/images.lock.env --env-file .env --profile test "$@"; }
+          cleanup() { compose down --remove-orphans -v; rm -f .env; }
+          trap cleanup EXIT
+          compose up -d --wait postgres-test
+          compose build checks
+          compose run --rm checks alembic upgrade head
+          compose run --rm checks alembic current | tee "$RUNNER_TEMP/m13-preflight/alembic-current.txt"
+          grep -Eq '0003|head' "$RUNNER_TEMP/m13-preflight/alembic-current.txt"
+
+          PSQL="compose exec -T -e PGPASSWORD=$PG_ADMIN_PASSWORD postgres-test psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -U asm_admin -d asm_test"
+
+          $PSQL <<'SQL' | tee "$RUNNER_TEMP/m13-preflight/postgres-identity.txt"
+          SELECT version();
+          SHOW server_version;
+          SHOW server_version_num;
+          SELECT e.extname, e.extversion, n.nspname AS namespace
+          FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace
+          WHERE e.extname='vector';
+          SQL
+
+          $PSQL <<'SQL' | tee "$RUNNER_TEMP/m13-preflight/btree-gist-available.txt"
+          SELECT name, default_version, installed_version, comment
+          FROM pg_available_extensions
+          WHERE name='btree_gist';
+          SELECT name, version, installed, superuser, trusted, relocatable, schema, requires
+          FROM pg_available_extension_versions
+          WHERE name='btree_gist'
+          ORDER BY version;
+          SQL
+
+          $PSQL <<'SQL' | tee "$RUNNER_TEMP/m13-preflight/roles-before.txt"
+          SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls
+          FROM pg_roles
+          WHERE rolname IN ('asm_admin','asm_migrator','asm_runtime')
+          ORDER BY rolname;
+          SELECT
+            has_database_privilege('asm_migrator', current_database(), 'CREATE') AS migrator_db_create,
+            has_schema_privilege('asm_migrator','extensions','USAGE') AS migrator_ext_usage,
+            has_schema_privilege('asm_migrator','extensions','CREATE') AS migrator_ext_create,
+            has_schema_privilege('asm_runtime','extensions','USAGE') AS runtime_ext_usage,
+            has_schema_privilege('asm_runtime','extensions','CREATE') AS runtime_ext_create;
+          SELECT n.nspname, r.rolname AS owner
+          FROM pg_namespace n JOIN pg_roles r ON r.oid=n.nspowner
+          WHERE n.nspname IN ('platform','app','extensions')
+          ORDER BY n.nspname;
+          SQL
+
+          # First admin preflight: install if absent, then verify exact discovered default version + namespace.
+          $PSQL <<'SQL' | tee "$RUNNER_TEMP/m13-preflight/preflight-first.txt"
+          SELECT default_version AS btree_gist_default
+          FROM pg_available_extensions WHERE name='btree_gist' \gset
+          CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA extensions;
+          SELECT e.extname, e.extversion, n.nspname AS namespace,
+                 :'btree_gist_default' AS expected_default_version
+          FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace
+          WHERE e.extname='btree_gist';
+          SELECT
+            (SELECT extversion FROM pg_extension WHERE extname='btree_gist') = :'btree_gist_default' AS version_matches_default,
+            (SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace
+              WHERE e.extname='btree_gist') = 'extensions' AS namespace_is_extensions;
+          SQL
+          grep -Eq '\| t[[:space:]]*$|t[[:space:]]*\|' "$RUNNER_TEMP/m13-preflight/preflight-first.txt"
+
+          # Repeat exact admin preflight and prove no change/failure.
+          $PSQL <<'SQL' | tee "$RUNNER_TEMP/m13-preflight/preflight-repeat.txt"
+          SELECT extversion AS before_version, extnamespace AS before_namespace
+          FROM pg_extension WHERE extname='btree_gist' \gset
+          CREATE EXTENSION IF NOT EXISTS btree_gist WITH SCHEMA extensions;
+          SELECT extversion = :'before_version' AS version_unchanged,
+                 extnamespace = :'before_namespace'::oid AS namespace_unchanged
+          FROM pg_extension WHERE extname='btree_gist';
+          SQL
+
+          $PSQL <<'SQL' | tee "$RUNNER_TEMP/m13-preflight/uuid-gist-opclass.txt"
+          SELECT
+            opc.oid AS opclass_oid,
+            n.nspname AS opclass_schema,
+            opc.opcname,
+            am.amname,
+            opc.opcdefault,
+            opc.opcintype::regtype AS input_type,
+            opf.opfname AS family_name
+          FROM pg_opclass opc
+          JOIN pg_am am ON am.oid=opc.opcmethod
+          JOIN pg_namespace n ON n.oid=opc.opcnamespace
+          JOIN pg_opfamily opf ON opf.oid=opc.opcfamily
+          WHERE am.amname='gist' AND opc.opcintype='uuid'::regtype
+          ORDER BY opc.opcdefault DESC, n.nspname, opc.opcname;
+
+          SELECT
+            n.nspname AS opclass_schema,
+            opc.opcname,
+            opf.opfname AS family_name,
+            ao.amopstrategy,
+            opr.oprname,
+            opr.oprleft::regtype AS left_type,
+            opr.oprright::regtype AS right_type
+          FROM pg_opclass opc
+          JOIN pg_am am ON am.oid=opc.opcmethod
+          JOIN pg_namespace n ON n.oid=opc.opcnamespace
+          JOIN pg_opfamily opf ON opf.oid=opc.opcfamily
+          JOIN pg_amop ao ON ao.amopfamily=opc.opcfamily
+          JOIN pg_operator opr ON opr.oid=ao.amopopr
+          WHERE am.amname='gist'
+            AND opc.opcintype='uuid'::regtype
+            AND opr.oprname='='
+            AND opr.oprleft='uuid'::regtype
+            AND opr.oprright='uuid'::regtype
+          ORDER BY opc.opcdefault DESC, ao.amopstrategy;
+          SQL
+
+          $PSQL <<'SQL' | tee "$RUNNER_TEMP/m13-preflight/exclusion-test.txt"
+          SET ROLE asm_migrator;
+          DROP TABLE IF EXISTS app._m13_btree_gist_probe;
+          CREATE TABLE app._m13_btree_gist_probe (
+            workspace_id uuid NOT NULL,
+            effective_from timestamptz NOT NULL,
+            effective_until timestamptz NOT NULL,
+            CHECK (isfinite(effective_from)),
+            CHECK (isfinite(effective_until)),
+            CHECK (effective_from < effective_until),
+            EXCLUDE USING gist (
+              workspace_id WITH =,
+              tstzrange(effective_from,effective_until,'[)') WITH &&
+            )
+          );
+
+          INSERT INTO app._m13_btree_gist_probe VALUES
+            ('01990000-0000-7000-8000-000000000001','2026-09-01T00:00:00Z','2026-09-02T00:00:00Z'),
+            ('01990000-0000-7000-8000-000000000001','2026-09-02T00:00:00Z','2026-09-03T00:00:00Z'),
+            ('01990000-0000-7000-8000-000000000002','2026-09-01T12:00:00Z','2026-09-02T12:00:00Z');
+
+          DO $$
+          BEGIN
+            BEGIN
+              INSERT INTO app._m13_btree_gist_probe VALUES
+                ('01990000-0000-7000-8000-000000000001',
+                 '2026-09-01T12:00:00Z','2026-09-02T12:00:00Z');
+              RAISE EXCEPTION 'EXPECTED_EXCLUSION_VIOLATION_NOT_RAISED';
+            EXCEPTION
+              WHEN exclusion_violation THEN
+                RAISE NOTICE 'EXPECTED_SAME_WORKSPACE_OVERLAP_REJECTED';
+            END;
+          END $$;
+
+          SELECT count(*) AS accepted_rows FROM app._m13_btree_gist_probe;
+          DROP TABLE app._m13_btree_gist_probe;
+          RESET ROLE;
+          SQL
+          grep -F 'accepted_rows' "$RUNNER_TEMP/m13-preflight/exclusion-test.txt"
+
+          $PSQL <<'SQL' | tee "$RUNNER_TEMP/m13-preflight/roles-after.txt"
+          SELECT
+            has_database_privilege('asm_migrator', current_database(), 'CREATE') AS migrator_db_create,
+            has_schema_privilege('asm_migrator','extensions','USAGE') AS migrator_ext_usage,
+            has_schema_privilege('asm_migrator','extensions','CREATE') AS migrator_ext_create;
+          SQL
+
+          # Intentional prerequisite mismatch must fail before sentinel domain DDL.
+          if $PSQL <<'SQL' >"$RUNNER_TEMP/m13-preflight/fail-before-ddl.txt" 2>&1
+          BEGIN;
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_extension
+              WHERE extname='btree_gist' AND extversion='__impossible_m13_version__'
+            ) THEN
+              RAISE EXCEPTION 'M1_3_PREREQUISITE_MISMATCH';
+            END IF;
+          END $$;
+          CREATE TABLE app._m13_should_not_exist(id integer);
+          COMMIT;
+          SQL
+          then
+            echo "expected prerequisite mismatch to fail" >&2
+            exit 1
+          fi
+
+          $PSQL <<'SQL' | tee "$RUNNER_TEMP/m13-preflight/fail-before-ddl-verify.txt"
+          SELECT to_regclass('app._m13_should_not_exist') IS NULL AS sentinel_absent;
+          SQL
+
+          compose down --remove-orphans -v
+          trap - EXIT
+          rm -f .env
+
+      - name: Final repository cleanliness
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --porcelain=v1 --untracked-files=all | tee "$RUNNER_TEMP/m13-preflight/git-status.txt"
+          test ! -s "$RUNNER_TEMP/m13-preflight/git-status.txt"
+          git diff --exit-code
+          git diff --cached --exit-code
+          git rev-parse HEAD > "$RUNNER_TEMP/m13-preflight/tested-commit.txt"
+          git rev-parse HEAD^{tree} > "$RUNNER_TEMP/m13-preflight/tested-tree.txt"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: m1-3-btree-gist-preflight-${{ github.run_id }}
+          path: ${{ runner.temp }}/m13-preflight/
+          retention-days: 7
+          if-no-files-found: error
