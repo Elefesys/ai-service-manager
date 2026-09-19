@@ -1,13 +1,15 @@
-# M1.3 R3 — pre-DDL contract: local Entitlements и Audit
+# M1.3 R4 — pre-DDL contract: local Entitlements и Audit
 
 Дата редакции: 2026-09-19. Владелец предложения: C1. Исходный принятый base:
 `28c289ce6f77e33676cfa416585cc0e20c0be4e3`, tree
 `0df4c1b9a2e6922f742ebe459e46dd93d2c2959f`. Reviewed R2:
 `cded2b2417df2d7a98e83c0b41acbe0c0c7c34b3`, tree
-`07057b6f37da8d44603f18b0ef4d4327176ba97f`. Статус:
-**CONTRACT R3 PROPOSED / AWAITING C0-C2 REVIEW**.
+`07057b6f37da8d44603f18b0ef4d4327176ba97f`. Reviewed R3:
+`dbde2bda183e3d2dcb58c9828d3a88f21fb4d940`, tree
+`26ff0a611a9add704d1a60941fa7e89b252bda5a`. Статус:
+**CONTRACT R4 PROPOSED / AWAITING C0-C2 REVIEW**.
 
-Это docs-only предложение, адресующее девять OPEN findings targeted review R2.
+Это docs-only предложение, адресующее три OPEN findings targeted review R3.
 Оно сохраняет C0 D-01…D-13 и LOCKED ADR, но не является принятым DDL,
 implementation/evidence или разрешением назначить successor `0003`. `0001`–`0003`,
 runtime, frontend, generated contracts и package manifests не изменяются.
@@ -379,10 +381,17 @@ tenant use two connections; **all** receipt/account/Audit mutations use the one
 tenant transaction. Any rejection before mutation has zero new side effects.
 
 Lock order is outer shared session-admission lock → tenant membership read →
-workspace receipt unique-key/row → billing account row; initializer uses workspace
-parent/advisory serialization → catalog revision parent → account → subscription →
-mode → Audit. Seal uses revision parent only. C2 must validate deadlock compatibility
-before DDL. Revocation linearizes at the accepted M1.2 admission boundary: a
+workspace receipt unique-key/row → billing account row. Every supported LOCAL/TEST
+catalog create/validate/seal transaction first executes
+`SELECT pg_advisory_xact_lock(1295070019, 1);`, then locks an existing catalog
+revision parent `FOR UPDATE`. The initializer then locks
+`platform.workspaces WHERE id=:trusted_workspace_id FOR UPDATE` as its sole
+Workspace serialization primitive, followed by account → subscription → mode →
+Audit. Thus its exact order is global catalog advisory lock → catalog plan/revision
+parent → Workspace parent → account → subscription → service mode → provisioning
+Audit. The technical namespace `1295070019` is ASCII `M13C` in big-endian int32;
+key `1` denotes only synthetic `code='test'`, revision 1, and has no production or
+business meaning. C2 must validate deadlock compatibility before DDL. Revocation linearizes at the accepted M1.2 admission boundary: a
 revocation waiting behind the shared lock cannot overtake an admitted command;
 there is no claim of cancellation after admission.
 
@@ -511,32 +520,81 @@ Valid active example (abbreviated only by choosing one decision, not omitted
 schema fields):
 
 ```json
-{"workspace_id":"01990000-0000-7000-8000-000000000001","evaluated_at":"2026-09-19T12:00:00.000000Z","account":{"billing_account_id":"01990000-0000-7000-8000-000000000002","contact_display_name":"Example name","version":"7"},"subscription":{"subscription_id":"01990000-0000-7000-8000-000000000003","status":"ACTIVE","funding_mode":"COMPED","effective_from":"2026-09-01T00:00:00.000000Z","effective_until":"2026-10-01T00:00:00.000000Z","version":"1","plan":{"plan_id":"01990000-0000-7000-8000-000000000004","code":"test","revision_id":"01990000-0000-7000-8000-000000000005","revision":1}},"mode":"NORMAL","mode_active":true,"availability":"ACTIVE","decisions":[{"key":"test.m1_3.expensive_positive","type":"LIMIT","reason":null,"limit":"3"}]}
-```
+Future browser/API implementation must add `PATCH` to the existing CORS
+`allow_methods` and `Idempotency-Key` to the existing `allow_headers`, preserving
+all current methods and `Content-Type`, `X-CSRF-Token`, `X-CSRF-Bootstrap`. Exact
+configured `allow_origins`, `allow_credentials=true`, Host/Origin/CSRF/JSON controls
+remain unchanged and no wildcard is allowed. Positive preflight/browser proof must
+cover configured Origin + `PATCH` +
+`content-type,x-csrf-token,idempotency-key`; negative proof must reject a foreign
+Origin and every disallowed method/header. CORS never replaces authorization or
+CSRF. R4 documents this additive obligation; it does not edit middleware.
 
-Inactive success uses `"subscription":null,"availability":"INACTIVE"` and all
-decisions DISABLED/SUBSCRIPTION_INACTIVE; account/mode remain present. Structural
-failure returns no pretend snapshot.
+The exact error schema for new M1.3 routes is a discriminated union, not a common
+object with nullable/optional `state_reason`:
 
-### 7.2 PATCH billing account
+1. **CommonError** is exactly `{"error":{"code":"<CODE>"}}`, with no
+   `state_reason`. It covers every applicable boundary/auth/common/domain code:
+   `SESSION_REQUIRED`, `ORIGIN_DENIED`, `CSRF_REJECTED`, `ACCESS_DENIED`,
+   `NOT_FOUND`, `STALE_STATE`, `IDEMPOTENCY_KEY_CONFLICT`, `BODY_TOO_LARGE`,
+   `UNSUPPORTED_MEDIA_TYPE`, `INVALID_REQUEST`, `RATE_LIMITED`, `UNAVAILABLE`, and
+   `INTERNAL_ERROR`.
+2. **BillingStateError** is exactly
+   `{"error":{"code":"BILLING_STATE_UNAVAILABLE","state_reason":"<STATE_REASON>"}}`.
+   It is used only by structural billing-domain GET failure, and `STATE_REASON` is
+   bounded to `BILLING_STATE_MISSING|BILLING_STATE_INVALID|REVISION_INVALID|DATABASE_UNAVAILABLE`.
 
-Exact body only:
-`{"expected_version":"7","contact_display_name":"Example name"}`. Exactly one
-`Idempotency-Key` plus existing M1.2 Origin/CSRF is required; `If-Match` is forbidden.
-Success schema is exactly `{workspace_id,billing_account_id,receipt_id,
-result_version,outcome,completed_at}`, where IDs are uuid, result version positive
-decimal, outcome `UPDATED|NOOP`, timestamp canonical. UPDATED and NOOP examples:
+For HTTP 503 either code-only `UNAVAILABLE` (shared boundary/unhandled
+infrastructure path) or `BILLING_STATE_UNAVAILABLE` with required reason
+(structural billing GET) is valid according to its discriminator. Future
+OpenAPI/typed contracts must encode this exact union. Existing M1.2 response bytes,
+AuthBoundary and routes remain unchanged. BillingStateError example:
+| 503 | `UNAVAILABLE` | all, shared boundary/unhandled infrastructure path |
+Every supported LOCAL/TEST catalog create/validate/seal path starts its short
+transaction with `SELECT pg_advisory_xact_lock(1295070019, 1);`. Under that global
+lock it resolves or creates the exact plan/revision; an existing revision parent is
+locked `FOR UPDATE`, and DRAFT → entitlements → SEALED plus exact manifest/digest
+validation remain under the same lock. All supported entitlement/seal writers for
+this synthetic catalog follow global lock → revision parent. An unhandled UNIQUE
+violation is not normal reuse/success control flow, and an aborted transaction is
+never continued.
 
-```json
-{"workspace_id":"01990000-0000-7000-8000-000000000001","billing_account_id":"01990000-0000-7000-8000-000000000002","receipt_id":"01990000-0000-7000-8000-000000000006","result_version":"8","outcome":"UPDATED","completed_at":"2026-09-19T12:01:00.000000Z"}
-```
-```json
-{"workspace_id":"01990000-0000-7000-8000-000000000001","billing_account_id":"01990000-0000-7000-8000-000000000002","receipt_id":"01990000-0000-7000-8000-000000000007","result_version":"7","outcome":"NOOP","completed_at":"2026-09-19T12:02:00.000000Z"}
-```
+The initializer next locks `platform.workspaces` by trusted Workspace id `FOR
+UPDATE` as the sole Workspace serialization primitive. Under one short transaction
+it creates or reuses only a compatible SEALED TEST catalog then creates account,
+subscription, NORMAL mode and exactly one provisioning Audit. Complete means exact stable keys,
 
-Replay returns the original exact metadata; current contact is only GET.
+Two different fresh Workspaces with identical catalog inputs serialize on the
+global lock, both eventually return INITIALIZED, and create the catalog once.
+Concurrent same-Workspace/same-input calls return INITIALIZED then NOOP;
+same-Workspace/different-input calls serialize and the second returns a bounded
+conflict. Incompatible catalog and partial/drift states likewise conflict without
+overwrite/repair. There is no unlocked check-then-insert. Partial/Audit failure
+rolls back the entire new state; NOOP and conflict change nothing; existing state
+is never cleared. SQL row counts/errors do not log PII. The advisory lock is held
+only by the short LOCAL/TEST provisioning transaction; the runtime contact command
+never acquires it. Explicit non-NORMAL migrator fixtures remain separate.
+| R2 finding | normative R4 sections | disposition / acceptance example |
+|---|---|---|
+| `C0-M1.3-R2-01` | §7 | CLOSED at contract level: exactly three `/api/v1` routes; PATCH, no alias/PUT |
+| `C2-M1.3-R2-02` | §4 | CLOSED at contract level: unauthorized replay has no receipt observation/write |
+| `C2-M1.3-R2-03` | §2–3 | CLOSED at contract level: eight complete matrices |
+| `C2-M1.3-R2-04` | §3–4 | CLOSED at contract level: Workspace A cannot read/write B |
+| `C2-M1.3-R2-05` | §2.8, §4 | CLOSED at contract level: no supported committed IN_PROGRESS |
+| `C2-M1.3-R2-06` | §5 | CLOSED at contract level: exact vectors and pre-hash rejection |
+| `C2-M1.3-R2-07` | §2.7 | CLOSED at contract level: exact discriminator/payload pairs |
+| `C2-M1.3-R2-08` | §6–7 | REMAINING cause concretized by `C2-M1.3-R3-01`/`02` |
+| `C2-M1.3-R2-09` | §4, §8 | REMAINING cause concretized by `C2-M1.3-R3-03` |
 
-### 7.3 Audit item and page
+| current R3 finding | normative R4 sections | acceptance example |
+| `C2-M1.3-R3-01` | §7.4 | exact CommonError/BillingStateError union; no common nullable `state_reason`; both 503 discriminators |
+| `C2-M1.3-R3-02` | §7.2 | positive configured-Origin PATCH preflight and negative Origin/method/header browser proof |
+| `C2-M1.3-R3-03` | §4, §8 | two fresh Workspaces create one catalog; global → revision → Workspace order |
+
+The seven findings `C0-M1.3-R2-01` and `C2-M1.3-R2-02`…`07` are CLOSED at
+pre-DDL contract level by C0. The three current blockers `C2-M1.3-R3-01`,
+`C2-M1.3-R3-02`, and `C2-M1.3-R3-03` are **ADDRESSED IN R4 / PENDING C0-C2
+REVIEW**, not CLOSED. R2-08/R2-09 remain historical REMAINING causes only.
 
 Query permits only optional `limit` integer 1..100 (default 25) and one `cursor`.
 Item fields exactly: `audit_event_id:uuid`, `occurred_at:timestamp`, `event_type:
