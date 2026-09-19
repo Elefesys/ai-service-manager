@@ -147,6 +147,41 @@ TENANT_TABLES = {
     "platform.billing_contact_command_receipts",
 }
 
+# Canonical §2 column order/type/nullability. ``!`` means NOT NULL.
+PHYSICAL_COLUMNS = {
+    "platform.saas_plans": "plan_id:uuid! code:text! display_name:text! status:text! created_at:timestamp_with_time_zone!",
+    "platform.saas_plan_revisions": "plan_revision_id:uuid! plan_id:uuid! revision:integer! publication_state:text! published_at:timestamp_with_time_zone created_at:timestamp_with_time_zone!",
+    "platform.plan_entitlements": "plan_revision_id:uuid! capability_key:text! value_kind:text! enabled:boolean limit_value:bigint criticality:text! created_at:timestamp_with_time_zone!",
+    "platform.workspace_billing_accounts": "workspace_id:uuid! billing_account_id:uuid! contact_display_name:text! version:bigint! created_at:timestamp_with_time_zone! updated_at:timestamp_with_time_zone!",
+    "platform.workspace_subscriptions": "workspace_id:uuid! subscription_id:uuid! plan_revision_id:uuid! required_publication_state:text! status:text! funding_mode:text! effective_from:timestamp_with_time_zone! effective_until:timestamp_with_time_zone! version:bigint! created_at:timestamp_with_time_zone! updated_at:timestamp_with_time_zone!",
+    "platform.workspace_service_modes": "workspace_id:uuid! service_mode_id:uuid! mode:text! reason_code:text! effective_from:timestamp_with_time_zone! effective_until:timestamp_with_time_zone version:bigint! created_at:timestamp_with_time_zone! updated_at:timestamp_with_time_zone!",
+    "app.audit_events": "workspace_id:uuid! audit_event_id:uuid! occurred_at:timestamp_with_time_zone! actor_kind:text! actor_user_account_id:uuid correlation_id:uuid! event_type:text! object_type:text! object_id:uuid! object_version:bigint! payload:jsonb!",
+    "platform.billing_contact_command_receipts": "workspace_id:uuid! receipt_id:uuid! billing_account_id:uuid! operation:text! idempotency_key:text! request_fingerprint:bytea! expected_version:bigint! status:text! result_version:bigint result_outcome:text created_at:timestamp_with_time_zone! completed_at:timestamp_with_time_zone",
+}
+
+EXPECTED_DEFAULTS = {
+    "plan_id": "uuidv7()",
+    "plan_revision_id": "uuidv7()",
+    "billing_account_id": "uuidv7()",
+    "subscription_id": "uuidv7()",
+    "service_mode_id": "uuidv7()",
+    "audit_event_id": "uuidv7()",
+    "receipt_id": "uuidv7()",
+    "version": "1",
+    "created_at": "CURRENT_TIMESTAMP",
+    "updated_at": "CURRENT_TIMESTAMP",
+    "occurred_at": "CURRENT_TIMESTAMP",
+}
+ENTITY_DEFAULTS = {
+    "platform.saas_plans.plan_id",
+    "platform.saas_plan_revisions.plan_revision_id",
+    "platform.workspace_billing_accounts.billing_account_id",
+    "platform.workspace_subscriptions.subscription_id",
+    "platform.workspace_service_modes.service_mode_id",
+    "app.audit_events.audit_event_id",
+    "platform.billing_contact_command_receipts.receipt_id",
+}
+
 
 async def test_exact_physical_schema_constraints_keys_and_grants(migrator):
     """Criteria 8-11, 15, 18-21, 26: bounded physical and privilege surface."""
@@ -166,6 +201,37 @@ async def test_exact_physical_schema_constraints_keys_and_grants(migrator):
             ).scalars()
         )
         assert tables == M1_3_TABLES
+        for table, expected in PHYSICAL_COLUMNS.items():
+            schema, name = table.split(".")
+            columns = (
+                await connection.execute(
+                    text(
+                        "SELECT a.attname,replace(format_type(a.atttypid,a.atttypmod),' ','_'),"
+                        "a.attnotnull,pg_get_expr(d.adbin,d.adrelid) FROM pg_attribute a "
+                        "JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace "
+                        "LEFT JOIN pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum "
+                        "WHERE n.nspname=:schema AND c.relname=:table AND a.attnum>0 "
+                        "AND NOT a.attisdropped ORDER BY a.attnum"
+                    ),
+                    {"schema": schema, "table": name},
+                )
+            ).all()
+            assert (
+                " ".join(
+                    f"{col}:{kind}{'!' if required else ''}" for col, kind, required, _ in columns
+                )
+                == expected
+            )
+            for column, _, _, default in columns:
+                qualified = f"{table}.{column}"
+                if qualified in ENTITY_DEFAULTS:
+                    assert default == "uuidv7()"
+                elif column == "version":
+                    assert default == "1"
+                elif column in {"created_at", "updated_at", "occurred_at"}:
+                    assert default == "CURRENT_TIMESTAMP"
+                else:
+                    assert default is None
         tenant_flags = {
             row[0]: (row[1], row[2])
             for row in (
@@ -382,6 +448,34 @@ async def test_entitlement_insert_and_seal_serialize_on_catalog_and_parent_locks
                 ),
                 {"r": revision},
             )
+    async with migrator.begin() as connection:
+        await connection.execute(
+            text("ALTER TABLE platform.plan_entitlements DISABLE TRIGGER plan_entitlements_guard")
+        )
+        await connection.execute(
+            text("DELETE FROM platform.plan_entitlements WHERE plan_revision_id=:r"),
+            {"r": revision},
+        )
+        await connection.execute(
+            text("DROP TRIGGER saas_plan_revisions_guard ON platform.saas_plan_revisions")
+        )
+        await connection.execute(
+            text("DELETE FROM platform.saas_plan_revisions WHERE plan_revision_id=:r"),
+            {"r": revision},
+        )
+        await connection.execute(
+            text("DELETE FROM platform.saas_plans WHERE plan_id=:p"), {"p": plan}
+        )
+        await connection.execute(
+            text(
+                "CREATE TRIGGER saas_plan_revisions_guard BEFORE UPDATE OR DELETE ON "
+                "platform.saas_plan_revisions FOR EACH ROW EXECUTE FUNCTION "
+                "platform.guard_plan_revision()"
+            )
+        )
+        await connection.execute(
+            text("ALTER TABLE platform.plan_entitlements ENABLE TRIGGER plan_entitlements_guard")
+        )
 
 
 @pytest.mark.parametrize(
@@ -408,7 +502,11 @@ async def test_finite_intervals_and_tenant_safe_composite_fk_negatives(migrator,
             )
         revision = (
             await connection.execute(
-                text("SELECT plan_revision_id FROM platform.saas_plan_revisions WHERE revision=1")
+                text(
+                    "SELECT r.plan_revision_id FROM platform.saas_plan_revisions r "
+                    "JOIN platform.saas_plans p ON p.plan_id=r.plan_id "
+                    "WHERE p.code='test' AND r.revision=1"
+                )
             )
         ).scalar_one()
         with pytest.raises(DBAPIError) as interval:
