@@ -288,6 +288,102 @@ async def test_sealed_manifest_immutability_and_draft_subscription_rejection(mig
         await transaction.rollback()
 
 
+async def test_entitlement_insert_and_seal_serialize_on_catalog_and_parent_locks(migrator):
+    """Criterion 24: a real concurrent writer commits before the waiting seal."""
+    async with migrator.begin() as connection:
+        plan = (
+            await connection.execute(
+                text(
+                    "INSERT INTO platform.saas_plans(code,display_name,status) "
+                    "VALUES(:code,'Concurrency fixture','ACTIVE') RETURNING plan_id"
+                ),
+                {"code": "concurrency-" + uuid4().hex[:12]},
+            )
+        ).scalar_one()
+        revision = (
+            await connection.execute(
+                text(
+                    "INSERT INTO platform.saas_plan_revisions"
+                    "(plan_id,revision,publication_state) VALUES(:plan,1,'DRAFT') "
+                    "RETURNING plan_revision_id"
+                ),
+                {"plan": plan},
+            )
+        ).scalar_one()
+        await connection.execute(
+            text(
+                "INSERT INTO platform.plan_entitlements"
+                "(plan_revision_id,capability_key,value_kind,enabled,limit_value,criticality) "
+                "VALUES (:r,'test.m1_3.essential_true','BOOLEAN',true,NULL,'ESSENTIAL'),"
+                "(:r,'test.m1_3.standard_false','BOOLEAN',false,NULL,'STANDARD'),"
+                "(:r,'test.m1_3.expensive_positive','INTEGER',NULL,3,'EXPENSIVE_OPTIONAL'),"
+                "(:r,'test.m1_3.expensive_zero','INTEGER',NULL,0,'EXPENSIVE_OPTIONAL')"
+            ),
+            {"r": revision},
+        )
+
+    writer = await migrator.connect()
+    writer_tx = await writer.begin()
+    await writer.execute(
+        text(
+            "INSERT INTO platform.plan_entitlements"
+            "(plan_revision_id,capability_key,value_kind,enabled,criticality) "
+            "VALUES(:r,'test.m1_3.standard_true','BOOLEAN',true,'STANDARD')"
+        ),
+        {"r": revision},
+    )
+
+    async def seal():
+        async with migrator.begin() as connection:
+            await connection.execute(text("SELECT pg_advisory_xact_lock(1295070019,1)"))
+            await connection.execute(
+                text(
+                    "SELECT 1 FROM platform.saas_plan_revisions "
+                    "WHERE plan_revision_id=:r FOR UPDATE"
+                ),
+                {"r": revision},
+            )
+            count, digest = (
+                await connection.execute(
+                    text(
+                        "SELECT count(*),encode(pg_catalog.sha256(convert_to(string_agg("
+                        "capability_key||chr(9)||value_kind||chr(9)||CASE WHEN "
+                        "value_kind='BOOLEAN' THEN enabled::text ELSE limit_value::text END||"
+                        "chr(9)||criticality||chr(10),'' ORDER BY convert_to(capability_key,'UTF8')),"
+                        "'UTF8')),'hex') FROM platform.plan_entitlements "
+                        "WHERE plan_revision_id=:r"
+                    ),
+                    {"r": revision},
+                )
+            ).one()
+            assert count == 5
+            assert digest == "2aed3e0812691c4546997692e664660c7e328783422ae824c8279bd2cef963cc"
+            await connection.execute(
+                text(
+                    "UPDATE platform.saas_plan_revisions SET publication_state='SEALED',"
+                    "published_at=clock_timestamp() WHERE plan_revision_id=:r"
+                ),
+                {"r": revision},
+            )
+
+    sealing = asyncio.create_task(seal())
+    await asyncio.sleep(0.2)
+    assert not sealing.done(), "seal must wait for writer's advisory/parent locks"
+    await writer_tx.commit()
+    await writer.close()
+    await asyncio.wait_for(sealing, 5)
+    with pytest.raises(DBAPIError):
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO platform.plan_entitlements"
+                    "(plan_revision_id,capability_key,value_kind,enabled,criticality) "
+                    "VALUES(:r,'test.late','BOOLEAN',true,'ESSENTIAL')"
+                ),
+                {"r": revision},
+            )
+
+
 @pytest.mark.parametrize(
     ("start", "end"),
     [("-infinity", "2027-01-01T00:00:00Z"), ("2027-01-01T00:00:00Z", "infinity")],
