@@ -114,8 +114,44 @@ C0 сверил первичные источники. Конкретная libr
 
 ## M1.3 — local entitlements и Audit
 
-Ведущий C1, DDL C2/C0, последующий UI C5, проверки C8. Зависимость M1.1 удовлетворена; M1.2 принята. **Выдан только этап pre-DDL contract** от `28c289ce6f77e33676cfa416585cc0e20c0be4e3`. Миграционный номер и executable scope выдаёт C0 после review; параллельных DDL writers нет.
+Ведущий доменного/backend slice C1; DDL/миграции C2 под C0; последующий UI C5; независимые проверки C8. M1.1 и M1.2 приняты.
 
-Scope сохраняется: WorkspaceBillingAccount, immutable SaaSPlanRevision/PlanEntitlements, Subscription TRIALING либо ACTIVE+COMPED, WorkspaceServiceMode и EntitlementService без `if plan == ...`, hidden bypass или paid provider. Entitlements не заменяют security permissions. Audit с реальным actor/correlation и атомарностью одной domain mutation; Audit != Outbox != technical log. Реальные тарифы/billing secrets/client payments вне задачи.
+### Pre-DDL contract — ACCEPTED
 
-Первый результат — `docs/tasks/M1_3_CONTRACT.md`: точное предложение table/schema/keys/grants/RLS и permission matrix; границы immutable/local state; policy time/interval decisions; предложение безопасной демонстрационной операции и её атомарного Audit; тест-план для real PostgreSQL и негативных границ, без реализации будущих domain tables. Отсутствующие решения отметить OPEN с вариантами и рекомендацией. Это contract proposal, не подтверждённая реализация, DDL approval или PASS M1.3. Новый Draft PR в main, без merge/auto-merge.
+C0 принимает exact canonical R4:
+- head `4d371069bd094757c410f50cd7bbe9725249dd7b`;
+- tree `b1be94654bb4539f42b8e93f44c61609ccc0dc91`;
+- `docs/tasks/M1_3_CONTRACT.md` Git blob `d1e80cb9242a4c0a88e2762bb17d46fa4d9f3320`;
+- SHA-256 `0d33a26aa13fb3eda34b0a5c07a4a11dc263b1ee37ce9e3fda126f53e0c0282a`.
+
+Финальный targeted C2 re-review — PASS. Три текущих R3 findings закрыты на contract level; mapped historical R2-08/R2-09 больше не являются самостоятельными blockers. Receipt: `docs/reviews/M1_3_CONTRACT_C0_ACCEPTANCE.md`.
+
+Run `35458868525` — SUCCESS, 246 distinct regression cases на virtual merge `caea72d02492142b21da69fe35e57a0857894f59`, tree `ec924223d89f076de01880f0c621017eba5167fa`, оба clean-source PASS. Это подтверждает exact docs snapshot + regression baseline, не будущую M1.3 реализацию.
+
+### Integration gate
+
+PR #9 всё ещё интегрирует **контракт**, не implementation. После exact acceptance-sync и нового зелёного PR CI разрешён normal merge commit PR #9. После merge нужен отдельный actual main run; лишь проверенный actual main SHA становится base следующих задач.
+
+M1.3 как milestone остаётся `IN_PROGRESS`. Не объявлять его REVIEW/INTEGRATED/VERIFIED из-за принятия контракта.
+
+### Первый implementation gate — C2 DB prerequisite
+
+Migration revision пока **не резервируется**. До domain DDL C2 выполняет read-only preflight на exact pinned DB image:
+`pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a`.
+
+Нужно доказать на exact image/current bootstrap:
+1. PostgreSQL/image identity и доступность `btree_gist`;
+2. exact `btree_gist` version;
+3. UUID GiST operator class для exclusion `workspace_id WITH =`;
+4. возможность установки extension в schema `extensions` администратором/bootstrap identity;
+5. idempotent preflight для existing databases уже на `0003`;
+6. отсутствие необходимости выдавать `CREATE` на database/schema роли `asm_migrator`;
+7. fail-before-any-domain-DDL при отсутствии prerequisite.
+
+Если любой пункт не доказан — STOP и C0, без migration allocation/DDL fallback. Только после PASS C0 резервирует successor `0004`, down_revision `0003`, и выдаёт C2 отдельный DB implementation scope.
+
+После интеграции DB slice C1 получает backend EntitlementService/API/CORS slice по принятому R4; C5 получает owner-view UI только после принятого API SHA. Не запускать параллельных DDL writers.
+
+### Сохраняемый scope
+
+WorkspaceBillingAccount; immutable SaaSPlanRevision/PlanEntitlements; Subscription TRIALING либо ACTIVE+COMPED; WorkspaceServiceMode; local EntitlementService; audited billing-contact demonstration command и owner billing/audit reads. Entitlements не заменяют security permissions. Audit != Outbox != technical log. Реальные цены, paid provider lifecycle, invoices/webhooks, client payments, production retention/privacy и broader usage/quota scope не добавляются молча.
