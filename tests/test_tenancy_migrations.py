@@ -90,6 +90,11 @@ async def test_fresh_m0_idempotent_downgrade_reupgrade_and_readiness():
                     text("SELECT extversion FROM pg_extension WHERE extname='vector'")
                 )
             ).scalar_one() == "0.8.6"
+            assert (
+                await connection.execute(
+                    text("SELECT extversion FROM pg_extension WHERE extname='btree_gist'")
+                )
+            ).scalar_one() == "1.8"
     finally:
         # A failed assertion must not leave later M0 regression tests on an old head.
         await migrate("upgrade", "head")
