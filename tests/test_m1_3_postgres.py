@@ -182,6 +182,174 @@ ENTITY_DEFAULTS = {
     "platform.billing_contact_command_receipts.receipt_id",
 }
 
+# Canonical §2 named key/relationship constraints. Tuple is
+# (kind, local columns, referenced relation or None, referenced columns).
+KEY_CONSTRAINTS = {
+    "platform.saas_plans": {
+        "saas_plans_pkey": ("p", ("plan_id",), None, ()),
+        "saas_plans_code_key": ("u", ("code",), None, ()),
+    },
+    "platform.saas_plan_revisions": {
+        "saas_plan_revisions_pkey": ("p", ("plan_revision_id",), None, ()),
+        "saas_plan_revisions_plan_revision_key": ("u", ("plan_id", "revision"), None, ()),
+        "saas_plan_revisions_id_state_key": (
+            "u",
+            ("plan_revision_id", "publication_state"),
+            None,
+            (),
+        ),
+        "saas_plan_revisions_plan_fkey": ("f", ("plan_id",), "platform.saas_plans", ("plan_id",)),
+    },
+    "platform.plan_entitlements": {
+        "plan_entitlements_pkey": ("p", ("plan_revision_id", "capability_key"), None, ()),
+        "plan_entitlements_revision_fkey": (
+            "f",
+            ("plan_revision_id",),
+            "platform.saas_plan_revisions",
+            ("plan_revision_id",),
+        ),
+    },
+    "platform.workspace_billing_accounts": {
+        "workspace_billing_accounts_pkey": ("p", ("workspace_id",), None, ()),
+        "workspace_billing_accounts_workspace_id_key": (
+            "u",
+            ("workspace_id", "billing_account_id"),
+            None,
+            (),
+        ),
+        "workspace_billing_accounts_workspace_fkey": (
+            "f",
+            ("workspace_id",),
+            "platform.workspaces",
+            ("id",),
+        ),
+    },
+    "platform.workspace_subscriptions": {
+        "workspace_subscriptions_pkey": ("p", ("workspace_id", "subscription_id"), None, ()),
+        "workspace_subscriptions_workspace_fkey": (
+            "f",
+            ("workspace_id",),
+            "platform.workspaces",
+            ("id",),
+        ),
+        "workspace_subscriptions_revision_state_fkey": (
+            "f",
+            ("plan_revision_id", "required_publication_state"),
+            "platform.saas_plan_revisions",
+            ("plan_revision_id", "publication_state"),
+        ),
+    },
+    "platform.workspace_service_modes": {
+        "workspace_service_modes_pkey": ("p", ("workspace_id",), None, ()),
+        "workspace_service_modes_workspace_id_key": (
+            "u",
+            ("workspace_id", "service_mode_id"),
+            None,
+            (),
+        ),
+        "workspace_service_modes_workspace_fkey": (
+            "f",
+            ("workspace_id",),
+            "platform.workspaces",
+            ("id",),
+        ),
+    },
+    "app.audit_events": {
+        "audit_events_pkey": ("p", ("workspace_id", "audit_event_id"), None, ()),
+        "audit_events_workspace_fkey": ("f", ("workspace_id",), "platform.workspaces", ("id",)),
+        "audit_events_actor_fkey": (
+            "f",
+            ("workspace_id", "actor_user_account_id"),
+            "platform.workspace_memberships",
+            ("workspace_id", "user_account_id"),
+        ),
+        "audit_events_object_fkey": (
+            "f",
+            ("workspace_id", "object_id"),
+            "platform.workspace_billing_accounts",
+            ("workspace_id", "billing_account_id"),
+        ),
+    },
+    "platform.billing_contact_command_receipts": {
+        "billing_contact_command_receipts_pkey": ("p", ("workspace_id", "receipt_id"), None, ()),
+        "billing_contact_command_receipts_key": (
+            "u",
+            ("workspace_id", "operation", "idempotency_key"),
+            None,
+            (),
+        ),
+        "billing_contact_command_receipts_workspace_fkey": (
+            "f",
+            ("workspace_id",),
+            "platform.workspaces",
+            ("id",),
+        ),
+        "billing_contact_command_receipts_account_fkey": (
+            "f",
+            ("workspace_id", "billing_account_id"),
+            "platform.workspace_billing_accounts",
+            ("workspace_id", "billing_account_id"),
+        ),
+    },
+}
+CHECK_NAMES = {
+    "platform.saas_plans": {
+        "saas_plans_code_check",
+        "saas_plans_display_name_check",
+        "saas_plans_status_check",
+        "saas_plans_created_at_finite_check",
+    },
+    "platform.saas_plan_revisions": {
+        "revision_positive_check",
+        "publication_check",
+        "created_at_finite_check",
+    },
+    "platform.plan_entitlements": {
+        "capability_key_check",
+        "value_check",
+        "criticality_check",
+        "created_at_finite_check",
+    },
+    "platform.workspace_billing_accounts": {
+        "version_positive_check",
+        "created_at_finite_check",
+        "updated_at_finite_check",
+        "timestamp_order_check",
+        "contact_check",
+    },
+    "platform.workspace_subscriptions": {
+        "required_state_check",
+        "status_funding_check",
+        "interval_check",
+        "version_positive_check",
+        "created_at_finite_check",
+        "updated_at_finite_check",
+        "timestamp_order_check",
+    },
+    "platform.workspace_service_modes": {
+        "mode_reason_check",
+        "interval_check",
+        "version_positive_check",
+        "created_at_finite_check",
+        "updated_at_finite_check",
+        "timestamp_order_check",
+    },
+    "app.audit_events": {
+        "audit_events_occurred_at_finite_check",
+        "audit_events_object_version_positive_check",
+        "audit_events_discriminator_payload_check",
+        "audit_events_payload_size_check",
+    },
+    "platform.billing_contact_command_receipts": {
+        "operation_check",
+        "key_check",
+        "fingerprint_check",
+        "expected_version_positive_check",
+        "created_at_finite_check",
+        "status_result_check",
+    },
+}
+
 
 async def test_exact_physical_schema_constraints_keys_and_grants(migrator):
     """Criteria 8-11, 15, 18-21, 26: bounded physical and privilege surface."""
@@ -232,6 +400,50 @@ async def test_exact_physical_schema_constraints_keys_and_grants(migrator):
                     assert default == "CURRENT_TIMESTAMP"
                 else:
                     assert default is None
+            constraints = (
+                await connection.execute(
+                    text(
+                        "SELECT con.conname,con.contype,"
+                        "ARRAY(SELECT a.attname FROM unnest(con.conkey) WITH ORDINALITY k(attnum,n) "
+                        "JOIN pg_attribute a ON a.attrelid=con.conrelid AND a.attnum=k.attnum ORDER BY k.n),"
+                        "CASE WHEN con.confrelid=0 THEN NULL ELSE (SELECT rn.nspname||'.'||rc.relname FROM pg_class rc JOIN pg_namespace rn ON rn.oid=rc.relnamespace WHERE rc.oid=con.confrelid) END,"
+                        "ARRAY(SELECT a.attname FROM unnest(con.confkey) WITH ORDINALITY k(attnum,n) "
+                        "JOIN pg_attribute a ON a.attrelid=con.confrelid AND a.attnum=k.attnum ORDER BY k.n),"
+                        "con.confdeltype,con.confupdtype,con.condeferrable,con.condeferred,"
+                        "pg_get_constraintdef(con.oid,false) FROM pg_constraint con "
+                        "WHERE con.conrelid=CAST(:relation AS regclass) ORDER BY con.conname"
+                    ),
+                    {"relation": table},
+                )
+            ).all()
+            expected_names = set(KEY_CONSTRAINTS[table]) | CHECK_NAMES[table]
+            if table == "platform.workspace_subscriptions":
+                expected_names.add("workspace_subscriptions_no_overlap_excl")
+            assert {row[0] for row in constraints} == expected_names
+            by_name = {row[0]: row for row in constraints}
+            for constraint, signature in KEY_CONSTRAINTS[table].items():
+                kind, local, referenced, remote = signature
+                row = by_name[constraint]
+                assert row[1] == kind and tuple(row[2]) == local
+                assert row[3] == referenced and tuple(row[4]) == remote
+                assert not row[7] and not row[8]
+                if kind == "f":
+                    assert row[5:7] == ("r", "a")
+                    assert row[9].startswith("FOREIGN KEY")
+                elif kind == "p":
+                    assert row[9] == f"PRIMARY KEY ({', '.join(local)})"
+                else:
+                    assert row[9] == f"UNIQUE ({', '.join(local)})"
+            for constraint in CHECK_NAMES[table]:
+                row = by_name[constraint]
+                assert row[1] == "c" and row[9].startswith("CHECK (")
+            if table == "platform.workspace_subscriptions":
+                exclusion = by_name["workspace_subscriptions_no_overlap_excl"]
+                assert exclusion[1] == "x" and not exclusion[7] and not exclusion[8]
+                assert exclusion[9] == (
+                    "EXCLUDE USING gist (workspace_id WITH =, "
+                    "tstzrange(effective_from, effective_until, '[)'::text) WITH &&)"
+                )
         tenant_flags = {
             row[0]: (row[1], row[2])
             for row in (
