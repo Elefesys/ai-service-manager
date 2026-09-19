@@ -2,6 +2,14 @@
 
 Ответственный за интеграцию: C0. Единственный task register: `docs/TASK_REGISTER.md`. Канон: `docs/architecture/01_ARCHITECTURE_SPEC.md`, действующие ADR, MVP/Roadmap и `09_IMPLEMENTATION_PLAN.md`; стек: IMPL-001; правила: AGENTS.md.
 
+## Текущий handoff C0 — M1.2 принята, M1.3 pre-DDL / 2026-09-18
+
+Полная M1.2 INTEGRATED / VERIFIED на actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`, tree `0df4c1b9a2e6922f742ebe459e46dd93d2c2959f`, PR #8 MERGED. Новый push/main run `35368244266`: foundation + browser + clean-source SUCCESS, 246 tests. Полная приёмка и границы evidence: `docs/reviews/M1_2_C0_ACCEPTANCE.md`; статусы — только `docs/TASK_REGISTER.md`.
+
+Следующий исполнитель C1 начинает новую M1.3 от этого SHA, не продолжает слитые C5/C8 задачи. В текущем первом этапе разрешены точный механический post-merge перенос документов C0 и **один pre-DDL contract** `docs/tasks/M1_3_CONTRACT.md`. В нём нужны concrete minimal schema, RLS/grants/permission matrix, EntitlementService и service-mode truth table, Audit transaction boundary, API/UI proposal и тест-план. Все незафиксированные решения явно PROPOSED/OPEN, не принятый канон.
+
+До C0/C2 review нельзя писать/применять новые migrations, менять runtime, frontend, JSON contracts/locks/CI/Compose или самостоятельно назначать revision. Backend+UI M1.2 не переоткрываются; C5/M2/production не запускаются. Исторические pre-merge и implementation сообщения ниже сохраняются как история, а не текущий запрет выданного contract scope.
+
 ## M1.1 — принято
 
 PR #3, reviewed head `fa98e714d78485f8d07108294263c89d90a6e7f0`, actual merge `b480d864a246cb0573b40fa5211f66625a71de91`. Push/main CI `35015308300` SUCCESS, 89 tests. C8-M1.1-01 закрыто после targeted PASS; отсутствие нового DB run в повторном C8 review не скрывается. Отдельный main run выполнен при интеграции C0. Полная приёмка/evidence: task register и `docs/reviews/M1_1_C0_ACCEPTANCE.md`.
@@ -12,9 +20,9 @@ PR #3, reviewed head `fa98e714d78485f8d07108294263c89d90a6e7f0`, actual merge `b
 
 ## M1.2 — Auth/session/membership/application authorization и login UI
 
-Ведущие по плану C1 + C5. Исполнение последовательно: C1 backend и consumer contract → C0/C8 review и интеграция → C5 login UI по принятому API. Это две части одной M1.2, не новые milestones. Backend-only не закрывает всю M1.2. Backend принят C0 после actual main CI; UI-реализация и цепочка review исправлений завершены, выдано оформление перед интеграцией PR #8. M1.3 не запускается.
+Ведущие по плану C1 + C5. Исполнение последовательно: C1 backend и consumer contract → C0/C8 review и интеграция → C5 login UI по принятому API. Это две части одной M1.2, не новые milestones. Backend-only не закрывает всю M1.2. Backend и UI приняты C0 после отдельных actual main CI; полная M1.2 VERIFIED. Текущее задание M1.3 ограничено pre-DDL контрактом выше. История до интеграции сохраняется ниже.
 
-### Текущий handoff — C0: UI pre-merge, 2026-09-18
+### История handoff — C0: UI pre-merge, 2026-09-18
 
 C0 принял targeted C8 PASS на `7821aae54834de7107244090f76a1c7f327af897`, tree `0bcbf5bf0dd9ca937a56af5ef723697cbcfd8ef4`. UI-01/02/04/05 CLOSED по цепочке решений C0; ранее принятый backend не переоткрывается. **Полная M1.2 — REVIEW**, а не уже INTEGRATED/VERIFIED. Текущее действие — точная документальная синхронизация и условная интеграция существующего PR #8 (`codex/-ui-business-console` → `main`). Новую UI/backend реализацию не начинать. Исторические задания C5/C1 ниже сохраняются как критерии и история, не повторная выдача работы.
 
@@ -106,6 +114,44 @@ C0 сверил первичные источники. Конкретная libr
 
 ## M1.3 — local entitlements и Audit
 
-Ведущий C1, DDL C2/C0, UI C5, проверки C8. Зависимость M1.1 удовлетворена её приёмкой; защищённая UI/API демонстрация зависит от M1.2. В текущей последовательной очереди задача ещё не выдана; миграции не резервировать параллельно с auth.
+Ведущий доменного/backend slice C1; DDL/миграции C2 под C0; последующий UI C5; независимые проверки C8. M1.1 и M1.2 приняты.
 
-Scope сохраняется: WorkspaceBillingAccount, immutable SaaSPlanRevision/PlanEntitlements, Subscription TRIALING либо ACTIVE+COMPED, WorkspaceServiceMode и EntitlementService без `if plan == ...`, hidden bypass или paid provider. Entitlements не заменяют security permissions. Audit с реальным actor/correlation и атомарностью одной domain mutation; Audit != Outbox != technical log. Реальные тарифы/billing secrets/client payments вне задачи. Полный scope и base C0 выдаёт отдельно.
+### Pre-DDL contract — ACCEPTED
+
+C0 принимает exact canonical R4:
+- head `4d371069bd094757c410f50cd7bbe9725249dd7b`;
+- tree `b1be94654bb4539f42b8e93f44c61609ccc0dc91`;
+- `docs/tasks/M1_3_CONTRACT.md` Git blob `d1e80cb9242a4c0a88e2762bb17d46fa4d9f3320`;
+- SHA-256 `0d33a26aa13fb3eda34b0a5c07a4a11dc263b1ee37ce9e3fda126f53e0c0282a`.
+
+Финальный targeted C2 re-review — PASS. Три текущих R3 findings закрыты на contract level; mapped historical R2-08/R2-09 больше не являются самостоятельными blockers. Receipt: `docs/reviews/M1_3_CONTRACT_C0_ACCEPTANCE.md`.
+
+Run `35458868525` — SUCCESS, 246 distinct regression cases на virtual merge `caea72d02492142b21da69fe35e57a0857894f59`, tree `ec924223d89f076de01880f0c621017eba5167fa`, оба clean-source PASS. Это подтверждает exact docs snapshot + regression baseline, не будущую M1.3 реализацию.
+
+### Integration gate
+
+PR #9 всё ещё интегрирует **контракт**, не implementation. После exact acceptance-sync и нового зелёного PR CI разрешён normal merge commit PR #9. После merge нужен отдельный actual main run; лишь проверенный actual main SHA становится base следующих задач.
+
+M1.3 как milestone остаётся `IN_PROGRESS`. Не объявлять его REVIEW/INTEGRATED/VERIFIED из-за принятия контракта.
+
+### Первый implementation gate — C2 DB prerequisite
+
+Migration revision пока **не резервируется**. До domain DDL C2 выполняет read-only preflight на exact pinned DB image:
+`pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a`.
+
+Нужно доказать на exact image/current bootstrap:
+1. PostgreSQL/image identity и доступность `btree_gist`;
+2. exact `btree_gist` version;
+3. UUID GiST operator class для exclusion `workspace_id WITH =`;
+4. возможность установки extension в schema `extensions` администратором/bootstrap identity;
+5. idempotent preflight для existing databases уже на `0003`;
+6. отсутствие необходимости выдавать `CREATE` на database/schema роли `asm_migrator`;
+7. fail-before-any-domain-DDL при отсутствии prerequisite.
+
+Если любой пункт не доказан — STOP и C0, без migration allocation/DDL fallback. Только после PASS C0 резервирует successor `0004`, down_revision `0003`, и выдаёт C2 отдельный DB implementation scope.
+
+После интеграции DB slice C1 получает backend EntitlementService/API/CORS slice по принятому R4; C5 получает owner-view UI только после принятого API SHA. Не запускать параллельных DDL writers.
+
+### Сохраняемый scope
+
+WorkspaceBillingAccount; immutable SaaSPlanRevision/PlanEntitlements; Subscription TRIALING либо ACTIVE+COMPED; WorkspaceServiceMode; local EntitlementService; audited billing-contact demonstration command и owner billing/audit reads. Entitlements не заменяют security permissions. Audit != Outbox != technical log. Реальные цены, paid provider lifecycle, invoices/webhooks, client payments, production retention/privacy и broader usage/quota scope не добавляются молча.
