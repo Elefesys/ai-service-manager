@@ -542,7 +542,8 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                 await connection.execute(
                     text("""
             SELECT p.proname, p.prosecdef, p.proconfig, r.rolname,
-                   EXISTS(SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS public_execute
+                   EXISTS(SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS public_execute,
+                   has_function_privilege('asm_runtime', p.oid, 'EXECUTE') AS runtime_execute
             FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
             JOIN pg_roles r ON r.oid=p.proowner
             WHERE n.nspname IN ('app','platform')
@@ -552,7 +553,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             .mappings()
             .all()
         )
-        assert {row["proname"] for row in functions} == {
+        legacy_functions = {
             "current_workspace_id",
             "resolve_workspace_membership",
             "auth_lock_session",
@@ -564,10 +565,25 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "auth_rotate",
             "auth_logout",
         }
+        m1_3_profiles = {
+            "guard_plan_revision": (False, False),
+            "guard_entitlement": (False, False),
+            "initialize_local_billing": (True, False),
+            "update_billing_contact": (True, True),
+        }
+        assert {row["proname"] for row in functions} == legacy_functions | set(m1_3_profiles)
+        legacy_rows = [row for row in functions if row["proname"] in legacy_functions]
         assert all(
             row["prosecdef"] and row["rolname"] == "asm_migrator" and not row["public_execute"]
-            for row in functions
+            for row in legacy_rows
         )
+        for row in (row for row in functions if row["proname"] in m1_3_profiles):
+            security_definer, runtime_execute = m1_3_profiles[row["proname"]]
+            assert row["prosecdef"] is security_definer
+            assert row["runtime_execute"] is runtime_execute
+            assert row["rolname"] == "asm_migrator"
+            assert not row["public_execute"]
+            assert row["proconfig"] == ["search_path=pg_catalog, pg_temp"]
         assert all(row["proconfig"] == ["search_path=pg_catalog, pg_temp"] for row in functions)
 
 
