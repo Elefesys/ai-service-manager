@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   preflight:
-    if: github.head_ref == 'c2/m1-3-btree-gist-preflight'
+    if: github.head_ref == 'codex/-workflow-btree_gist'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
