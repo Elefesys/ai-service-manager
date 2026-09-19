@@ -447,6 +447,33 @@ Hex is the entire normalized canonical JSON byte sequence.
 | `composed` | `"é"` | `7b22636f6e746163745f646973706c61795f6e616d65223a22c3a9222c2265787065637465645f76657273696f6e223a2237222c226f7065726174696f6e223a225550444154455f42494c4c494e475f434f4e54414354222c22776f726b73706163655f6964223a2230313939303030302d303030302d373030302d383030302d303030303030303030303031227d` | `69ebd81a850211d04df9055a77ff95468dc1ff88acb568514c11f62d416f0c87` |
 | `decomposed` | `"é"` | `7b22636f6e746163745f646973706c61795f6e616d65223a2265cc81222c2265787065637465645f76657273696f6e223a2237222c226f7065726174696f6e223a225550444154455f42494c4c494e475f434f4e54414354222c22776f726b73706163655f6964223a2230313939303030302d303030302d373030302d383030302d303030303030303030303031227d` | `07c64318f29cbe6803800928ebf5d4b27436c63f850f1b190eb8418c79d79030` |
 
+`trim` input is `"  Example name  "` and normalizes to the ASCII bytes. Expected
+digests respectively are `813d7124…`, `813d7124…`, `cc4623b8…`, `a90b071b…`,
+`ffa9252a…`, `fc36542d…`, `69ebd81a…`, `07c64318…`; the table contains full
+values. Composed/decomposed differ. JSON inputs `"A\nB"`, `"A\tB"`, `"A\u0000B"`,
+`"A\u007fB"`, lone surrogate `"A\ud800B"`, version `"0"`, `"01"`, overflow,
+and missing/empty/duplicate/malformed key are `INVALID_REQUEST` before fingerprint
+or receipt and have no valid hash.
+
+## 6. Coherent billing read and decisions
+
+One fixed SQL statement uses one `CURRENT_TIMESTAMP` to read RLS-filtered account,
+subscription history/current half-open interval, singleton mode, pinned SEALED
+revision/catalog and entitlements. Multiple READ COMMITTED SELECTs are not called
+coherent. Archived plan does not invalidate its pinned SEALED revision.
+
+Precedence: structural failure → subscription inactive → mode inactive → missing
+capability → mode restriction → typed value. Structural reason precedence is
+`BILLING_STATE_MISSING`, `BILLING_STATE_INVALID`, `REVISION_INVALID`, then
+`DATABASE_UNAVAILABLE`, except an unreadable DB where facts were not observed
+returns only `DATABASE_UNAVAILABLE` and never invents MISSING.
+
+| condition | result |
+|---|---|
+| missing account/mode/all subscription history | structural 503 / `BILLING_STATE_MISSING` |
+| duplicate/contradictory effective state | 503 / `BILLING_STATE_INVALID` |
+| missing/unsealed/invalid referenced revision | 503 / `REVISION_INVALID` |
+| DB unreadable | 503 / `DATABASE_UNAVAILABLE` |
 | valid history, no current subscription | 200, INACTIVE, subscription null; decisions DISABLED/`SUBSCRIPTION_INACTIVE` |
 | inactive finite mode | 200, mode_active false; DISABLED/`SERVICE_MODE_INACTIVE` |
 | missing requested known key | DISABLED/`NOT_ENTITLED` |
@@ -473,6 +500,17 @@ seven M1.2 routes/DTO/TTL/cookie/CSRF/AuthResponse are unchanged.
 
 No aliases, PUT, `/api/workspaces`, fourth endpoint or entitlement/`tenancy:write`
 permission.
+
+Future browser/API implementation must add `PATCH` to the existing CORS
+`allow_methods` and `Idempotency-Key` to the existing `allow_headers`, while
+preserving every current method/header including `Content-Type`, `X-CSRF-Token`
+and `X-CSRF-Bootstrap`. Exact configured `allow_origins`,
+`allow_credentials=true`, Host/Origin/CSRF/JSON controls and the no-wildcard
+boundary remain unchanged. Positive preflight/browser proof must cover configured
+Origin + `PATCH` + `content-type,x-csrf-token,idempotency-key`; negative proof must
+reject a foreign Origin and every disallowed method/header. CORS never replaces
+authorization or CSRF. R4 documents this additive future implementation obligation;
+it does not edit middleware.
 
 ### 7.1 GET billing
 
@@ -501,8 +539,32 @@ Valid active example (abbreviated only by choosing one decision, not omitted
 schema fields):
 
 ```json
+{"workspace_id":"01990000-0000-7000-8000-000000000001","evaluated_at":"2026-09-19T12:00:00.000000Z","account":{"billing_account_id":"01990000-0000-7000-8000-000000000002","contact_display_name":"Example name","version":"7"},"subscription":{"subscription_id":"01990000-0000-7000-8000-000000000003","status":"ACTIVE","funding_mode":"COMPED","effective_from":"2026-09-01T00:00:00.000000Z","effective_until":"2026-10-01T00:00:00.000000Z","version":"1","plan":{"plan_id":"01990000-0000-7000-8000-000000000004","code":"test","revision_id":"01990000-0000-7000-8000-000000000005","revision":1}},"mode":"NORMAL","mode_active":true,"availability":"ACTIVE","decisions":[{"key":"test.m1_3.expensive_positive","type":"LIMIT","reason":null,"limit":"3"}]}
+```
 
+Inactive success uses `"subscription":null,"availability":"INACTIVE"` and all
+decisions DISABLED/SUBSCRIPTION_INACTIVE; account/mode remain present. Structural
+failure returns no pretend snapshot.
 
+### 7.2 PATCH billing account
+
+Exact body only:
+`{"expected_version":"7","contact_display_name":"Example name"}`. Exactly one
+`Idempotency-Key` plus existing M1.2 Origin/CSRF is required; `If-Match` is forbidden.
+Success schema is exactly `{workspace_id,billing_account_id,receipt_id,
+result_version,outcome,completed_at}`, where IDs are uuid, result version positive
+decimal, outcome `UPDATED|NOOP`, timestamp canonical. UPDATED and NOOP examples:
+
+```json
+{"workspace_id":"01990000-0000-7000-8000-000000000001","billing_account_id":"01990000-0000-7000-8000-000000000002","receipt_id":"01990000-0000-7000-8000-000000000006","result_version":"8","outcome":"UPDATED","completed_at":"2026-09-19T12:01:00.000000Z"}
+```
+```json
+{"workspace_id":"01990000-0000-7000-8000-000000000001","billing_account_id":"01990000-0000-7000-8000-000000000002","receipt_id":"01990000-0000-7000-8000-000000000007","result_version":"7","outcome":"NOOP","completed_at":"2026-09-19T12:02:00.000000Z"}
+```
+
+Replay returns the original exact metadata; current contact is only GET.
+
+### 7.3 Audit item and page
 
 Query permits only optional `limit` integer 1..100 (default 25) and one `cursor`.
 Item fields exactly: `audit_event_id:uuid`, `occurred_at:timestamp`, `event_type:
@@ -531,12 +593,49 @@ offers no frozen-history guarantee.
 
 ### 7.4 Errors
 
+New M1.3 routes use an exact discriminated union; `state_reason` is not a
+nullable/optional field on a common error object.
+
+**CommonError** is exactly:
+
+```json
+{"error":{"code":"<CODE>"}}
+```
+
+It has no `state_reason`. It is used by every applicable shared boundary/auth/common
+or non-structural domain failure, including the existing applicable codes
+`SESSION_REQUIRED`, `ORIGIN_DENIED`, `CSRF_REJECTED`, `ACCESS_DENIED`,
+`BODY_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`, `INVALID_REQUEST`, `RATE_LIMITED`,
+`UNAVAILABLE`, `INTERNAL_ERROR`, and the M1.3 domain codes `NOT_FOUND`,
+`STALE_STATE`, `IDEMPOTENCY_KEY_CONFLICT`.
+
+**BillingStateError** is exactly:
 
 ```json
 {"error":{"code":"BILLING_STATE_UNAVAILABLE","state_reason":"DATABASE_UNAVAILABLE"}}
 ```
 
+It is used only by structural billing-domain GET failure.
+`state_reason` is required there and bounded to
+`BILLING_STATE_MISSING|BILLING_STATE_INVALID|REVISION_INVALID|DATABASE_UNAVAILABLE`.
+
+Future OpenAPI/typed contracts must encode `CommonError | BillingStateError`
+as an exact union, not add nullable `state_reason` to M1.2. Existing M1.2
+AuthBoundary/routes/response bytes remain unchanged. HTTP 503 therefore has two
+distinct discriminator variants: code-only `UNAVAILABLE` from the shared
+boundary/unhandled infrastructure path, or
+`BILLING_STATE_UNAVAILABLE` plus required reason from structural billing GET.
+
+| status | exact error variant | routes/meaning |
 |---|---|---|
+| 401 | `CommonError` / existing auth code | all, unauthenticated |
+| 403 | `CommonError` / existing forbidden code | revoked/wrong permission/foreign workspace |
+| 404 | `CommonError` / `NOT_FOUND` | PATCH authorized own workspace lacks account |
+| 409 | `CommonError` / `STALE_STATE` | PATCH current version differs, checked before no-op |
+| 409 | `CommonError` / `IDEMPOTENCY_KEY_CONFLICT` | PATCH same scoped key, different fingerprint |
+| 422 | `CommonError` / `INVALID_REQUEST` | strict body/header/query/cursor validation |
+| 503 | `CommonError` / `UNAVAILABLE` | shared boundary/unhandled infrastructure path |
+| 503 | `BillingStateError` / `BILLING_STATE_UNAVAILABLE` | GET structural billing failure |
 
 Unauthorized/revoked/foreign caller never observes receipt existence. DB inputs,
 SQL/stack traces/raw diagnostics never appear. HTTP limits/Origin/CSRF remain at
@@ -559,8 +658,42 @@ revision `1`, synthetic name `Example name`, `ACTIVE/COMPED`, explicit
 `2026-09-01T00:00:00.000000Z` and `2026-10-01T00:00:00.000000Z`, mode `NORMAL`.
 No secrets/credentials in args/output; no LLM or today+N/default price/duration.
 
-mode/subscription, add Audit, or touch contact receipts. Partial state, differing
+Every supported synthetic catalog create/validate/seal path starts the short
+provisioning transaction with exactly
+`SELECT pg_advisory_xact_lock(1295070019, 1);`. While holding it, the implementation
+resolves or creates the unique TEST `(code='test', revision=1)` plan/revision,
+locks an existing revision parent `FOR UPDATE`, validates the exact five-row
+manifest/digest and, when fresh, performs DRAFT → entitlements → SEALED. Supported
+entitlement/seal writers use the same global-lock-before-revision-parent order.
+An unhandled UNIQUE violation is not normal reuse/success control flow and an
+aborted transaction is never continued.
 
+After catalog resolution, the initializer locks exactly the trusted
+`platform.workspaces` row `FOR UPDATE` as the sole Workspace serialization
+primitive. The complete initializer order is global catalog advisory lock →
+catalog plan/revision parent → Workspace parent → account → subscription →
+service mode → provisioning Audit.
+
+Fresh initialization creates account, subscription, NORMAL mode and exactly one
+provisioning Audit. Complete means exact stable keys, FKs, sealed manifest/digest,
+requested interval/status/funding/mode and provisioning event. Complete matching
+repeat is NOOP: it does not change UUID/version/timestamps/contact,
+mode/subscription, add Audit, or touch contact receipts. Partial state, differing
+normalized input/catalog/manifest, incompatible catalog, or drift after later
+contact/mode/subscription change is a bounded conflict without overwrite/repair.
+A read-only reason code may say `PARTIAL_STATE`, `INPUT_MISMATCH`,
+`CATALOG_MISMATCH`, or `STATE_DRIFT`, never values. Repeat does not replay contact
+response or undo later changes.
+
+Two different fresh Workspaces with identical catalog inputs serialize on the
+global catalog lock, both eventually return `INITIALIZED`, and create the catalog
+once. Concurrent same-Workspace/same-input calls serialize on the Workspace row:
+first `INITIALIZED`, second `NOOP`. Same-Workspace/different-input serializes and
+the second conflicts. There is no unlocked check-then-insert. Partial/Audit failure
+rolls back the entire new state; NOOP and conflict change nothing; existing state
+is never cleared. SQL row counts/errors do not log PII. The advisory lock is held
+only by the short LOCAL/TEST provisioning transaction; the runtime contact command
+never acquires it. Explicit non-NORMAL migrator fixtures remain separate.
 
 LOCAL/TEST prerequisites, not yet proven: pinned image exact `btree_gist` version,
 installation namespace `extensions`, and UUID GiST opclass availability; existing
@@ -576,13 +709,10 @@ do not block this docs correction or a later local stage after its prerequisites
 D-01…D-13 and prior `OPEN-01…07`/`G-01…07` links in
 `docs/reviews/M1_3_C0_C2_DISPOSITION.md` remain authoritative and are not replaced.
 
+| R2 finding | normative R4 sections | disposition / acceptance example |
 |---|---|---|
-
-Self-review scenarios required before C0/C2 decision: success/error/replay/no-op/
-PostgreSQL/browser evidence.
-
-## 10. Decision state and remaining OPEN
-
+| `C0-M1.3-R2-01` | §7 | CLOSED at contract level: exactly three `/api/v1` routes; PATCH, no alias/PUT |
+| `C2-M1.3-R2-02` | §4 | CLOSED at contract level: unauthorized replay has no receipt observation/write |
 | `C2-M1.3-R2-03` | §2–3 | CLOSED at contract level: eight complete matrices |
 | `C2-M1.3-R2-04` | §3–4 | CLOSED at contract level: Workspace A cannot read/write B |
 | `C2-M1.3-R2-05` | §2.8, §4 | CLOSED at contract level: no supported committed IN_PROGRESS |
@@ -601,6 +731,8 @@ The seven findings `C0-M1.3-R2-01` and `C2-M1.3-R2-02`…`07` are CLOSED at
 pre-DDL contract level by C0. The three current blockers `C2-M1.3-R3-01`,
 `C2-M1.3-R3-02`, and `C2-M1.3-R3-03` are **ADDRESSED IN R4 / PENDING C0-C2
 REVIEW**, not CLOSED. `C2-M1.3-R2-08`/`09` remain historical REMAINING causes only.
+
+Self-review scenarios required before C0/C2 decision: success/error/replay/no-op/
 rollback end-to-end from HTTP to proposed SQL; both 503 error variants; configured
 Origin PATCH preflight and negative Origin/method/header cases; two Workspaces with
 the same synthetic catalog inputs initialized concurrently; same-Workspace
@@ -608,6 +740,10 @@ same/different input; sealed/partial revision; missing/inactive/unreadable state
 decimal zero/overflow; all Unicode vectors; initializer fresh/repeat/late-drift.
 Future DB negatives include invalid context/XID fence/actor and must fail closed
 with zero cross-tenant writes. These are acceptance plans, not current
+PostgreSQL/browser evidence.
+
+## 10. Decision state and remaining OPEN
+
 Status remains **CONTRACT R4 PROPOSED / AWAITING C0-C2 REVIEW**.
 
 Seven prior findings are CLOSED at pre-DDL contract level as listed in §9.
@@ -619,139 +755,3 @@ in §8 remain future-only OPEN. C2 must perform targeted review of the exact
 published R4 before C0 can close the three current blockers or separately authorize
 implementation. No migration, DB schema, runtime suite or browser proof is asserted
 by this document.
-| `C2-M1.3-R3-02` | §7.2 | positive configured-Origin PATCH preflight and negative Origin/method/header browser proof |
-| `C2-M1.3-R3-03` | §4, §8 | two fresh Workspaces create one catalog; global → revision → Workspace order |
-
-The seven findings `C0-M1.3-R2-01` and `C2-M1.3-R2-02`…`07` are CLOSED at
-pre-DDL contract level by C0. The three current blockers `C2-M1.3-R3-01`,
-`C2-M1.3-R3-02`, and `C2-M1.3-R3-03` are **ADDRESSED IN R4 / PENDING C0-C2
-REVIEW**, not CLOSED. R2-08/R2-09 remain historical REMAINING causes only.
-
-Query permits only optional `limit` integer 1..100 (default 25) and one `cursor`.
-Item fields exactly: `audit_event_id:uuid`, `occurred_at:timestamp`, `event_type:
-WORKSPACE_BILLING_PROVISIONED|BILLING_ACCOUNT_CONTACT_UPDATED`, `actor_kind:
-LOCAL_PROVISIONER|USER_ACCOUNT`, `actor_user_account_id:uuid|null`,
-`correlation_id:uuid`, `object_type:WORKSPACE_BILLING_ACCOUNT`, `object_id:uuid`,
-`object_version:positive-decimal-string`, `payload` equal to `{}` for provisioning
-or `{"changed_fields":["contact_display_name"]}` for contact. Actor null pairs
-exactly with LOCAL_PROVISIONER. No contact/key/fingerprint is exposed.
-
-Page is exactly `{items:[AuditItem] (max limit),next_cursor:string<=1024|null}`.
-Empty/end pages use null. Fetch `limit+1`; cursor anchor is the last returned item
-only when another row exists. Order `(occurred_at DESC,audit_event_id DESC)` and
-predicate tuple `<`. Valid example:
-
-```json
-{"items":[{"audit_event_id":"01990000-0000-7000-8000-000000000008","occurred_at":"2026-09-19T12:01:00.000000Z","event_type":"BILLING_ACCOUNT_CONTACT_UPDATED","actor_kind":"USER_ACCOUNT","actor_user_account_id":"01990000-0000-7000-8000-000000000009","correlation_id":"01990000-0000-7000-8000-000000000010","object_type":"WORKSPACE_BILLING_ACCOUNT","object_id":"01990000-0000-7000-8000-000000000002","object_version":"8","payload":{"changed_fields":["contact_display_name"]}}],"next_cursor":null}
-```
-
-Cursor is unpadded base64url of strict compact UTF-8 JSON, encoded <=1024 ASCII:
-`{"v":1,"endpoint":"AUDIT_EVENTS","workspace_id":"<uuid>","direction":"DESC",
-"occurred_at":"<canonical timestamp>","id":"<audit uuid>"}`. Duplicate/extra/
-missing/wrong fields, invalid encoding or foreign/nonexistent tenant anchor are safe
-422. Anchor lookup is tenant-scoped. Cursor is not credential/tamper-proof and
-offers no frozen-history guarantee.
-
-### 7.4 Errors
-
-The M1.2 outer basis remains `{"error":{"code":"..."}}`. New strict envelope is
-`{"error":{"code":ErrorCode,"state_reason":StateReason|null}}`, with no extra
-fields; only BILLING_STATE_UNAVAILABLE has non-null state_reason in
-`BILLING_STATE_MISSING|BILLING_STATE_INVALID|REVISION_INVALID|DATABASE_UNAVAILABLE`.
-Example:
-
-```json
-{"error":{"code":"BILLING_STATE_UNAVAILABLE","state_reason":"DATABASE_UNAVAILABLE"}}
-```
-
-| status | code | routes/meaning |
-|---|---|---|
-| 401 | existing auth code | all, unauthenticated |
-| 403 | existing forbidden code | revoked/wrong permission/foreign workspace |
-| 404 | `NOT_FOUND` | PATCH authorized own workspace lacks account |
-| 409 | `STALE_STATE` | PATCH current version differs, checked before no-op |
-| 409 | `IDEMPOTENCY_KEY_CONFLICT` | PATCH same scoped key, different fingerprint |
-| 422 | `INVALID_REQUEST` | strict body/header/query/cursor validation |
-| 503 | `BILLING_STATE_UNAVAILABLE` | GET structural reason above |
-
-Unauthorized/revoked/foreign caller never observes receipt existence. DB inputs,
-SQL/stack traces/raw diagnostics never appear. HTTP limits/Origin/CSRF remain at
-the accepted boundary.
-
-## 8. LOCAL/TEST initializer and prerequisites
-
-Concrete non-HTTP signature:
-
-```text
-initialize_local_billing(workspace_id uuid, catalog_code text,
-  catalog_revision integer, contact_display_name text,
-  subscription_status text, funding_mode text,
-  effective_from timestamptz, effective_until timestamptz,
-  service_mode text) -> INITIALIZED | NOOP | CONFLICT_<bounded_reason>
-```
-
-Stable identity is existing Workspace UUID. Exact TEST inputs are: code `test`,
-revision `1`, synthetic name `Example name`, `ACTIVE/COMPED`, explicit
-`2026-09-01T00:00:00.000000Z` and `2026-10-01T00:00:00.000000Z`, mode `NORMAL`.
-No secrets/credentials in args/output; no LLM or today+N/default price/duration.
-Catalog is resolved by unique `(code,revision)` and exact five-row sealed manifest.
-
-Fresh, under one workspace serialization lock and one short transaction, creates
-or reuses only a compatible SEALED TEST catalog then creates account, subscription,
-NORMAL mode and exactly one provisioning Audit. Complete means exact stable keys,
-FKs, manifest/digest, requested interval/status/funding/mode and provisioning event.
-Complete matching repeat is NOOP: it does not change UUID/version/timestamps/contact,
-mode/subscription, add Audit, or touch contact receipts. Partial state, differing
-normalized input/catalog/manifest, or drift after later contact/mode/subscription
-change is a bounded conflict without overwrite/repair. A read-only reason code may
-say `PARTIAL_STATE`, `INPUT_MISMATCH`, `CATALOG_MISMATCH`, or `STATE_DRIFT`, never
-values. Repeat does not replay contact response or undo later changes.
-
-Fresh/fresh same input serializes: first initializes, second observes complete and
-NOOP. Different input serializes and second conflicts. There is no unlocked
-check-then-insert. Partial/Audit failure rolls back the entire new state; NOOP and
-conflict change nothing; existing state is never cleared. SQL row counts/errors do
-not log PII. Explicit non-NORMAL migrator fixtures remain separate.
-
-LOCAL/TEST prerequisites, not yet proven: pinned image exact `btree_gist` version,
-installation namespace `extensions`, and UUID GiST opclass availability; existing
-0003 receives idempotent admin preflight. Admin installs/verifies before domain
-DDL; migration fails before any domain DDL. This requires separate review/revision
-assignment. No extension is installed now, no version claimed, no weaker fallback,
-and `asm_migrator` gets no CREATE. Production managed SKU, retention/privacy,
-prices/durations/provider/backup/activation remain future production-only OPEN and
-do not block this docs correction or a later local stage after its prerequisites.
-
-## 9. Traceability and acceptance
-
-D-01…D-13 and prior `OPEN-01…07`/`G-01…07` links in
-`docs/reviews/M1_3_C0_C2_DISPOSITION.md` remain authoritative and are not replaced.
-
-| R2 finding | normative R3 sections | acceptance example |
-|---|---|---|
-| `C0-M1.3-R2-01` | §7 | exactly three `/api/v1` routes; PATCH, no alias/PUT |
-| `C2-M1.3-R2-02` | §4 | unauthorized same-key replay has no receipt observation/write |
-| `C2-M1.3-R2-03` | §2–3 | eight complete matrices; named metadata and no random FK defaults |
-| `C2-M1.3-R2-04` | §3–4 | Workspace A key/account IDs cannot read/write B |
-| `C2-M1.3-R2-05` | §2.8, §4 | no committed supported IN_PROGRESS; rollback leaves no receipt |
-| `C2-M1.3-R2-06` | §5 | all eight hex/digest vectors; controls/surrogate reject pre-hash |
-| `C2-M1.3-R2-07` | §2.7 | only exact two discriminator/payload pairs accepted |
-| `C2-M1.3-R2-08` | §6–7 | active/inactive/503, PATCH replay, Audit end page strict DTOs |
-| `C2-M1.3-R2-09` | §8 | fresh/fresh serialization; matching NOOP; partial/drift conflict |
-
-Self-review scenarios required before C0/C2 decision: success/error/replay/no-op/
-rollback end-to-end from HTTP to proposed SQL; two Workspaces with same key and
-foreign IDs; sealed/partial revision; missing/inactive/unreadable state; decimal
-zero/overflow; all Unicode vectors; initializer fresh/repeat/different-input/
-late-drift. Future DB negatives include invalid context/XID fence/actor and must
-fail closed with zero cross-tenant writes. These are acceptance plans, not current
-PostgreSQL/browser evidence.
-
-## 10. Decision state and remaining OPEN
-
-All nine findings are **ADDRESSED IN R3 / PENDING C0-C2 REVIEW**, not CLOSED.
-D-01…D-13 remain unchanged. Locally unverifiable prerequisites are limited to the
-pinned LOCAL/TEST extension/version/namespace/opclass and admin preflight; production
-items listed in §8 remain future-only OPEN. C2 must review physical/RLS/lock design,
-then C0 decides findings and may separately issue implementation. No migration,
-DB schema, runtime suite or browser proof is asserted by this document.
