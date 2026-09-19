@@ -51,6 +51,7 @@ async def domain_tables(connection):
 
 
 async def test_existing_0003_admin_prerequisite_repeat_downgrade_and_reupgrade():
+    sql = prerequisite_sql()
     admin_url = os.environ["ASM_ADMIN_DATABASE_URL"]
     assert make_url(admin_url).database == "asm_test"
     admin = create_async_engine(admin_url, hide_parameters=True)
@@ -58,8 +59,8 @@ async def test_existing_0003_admin_prerequisite_repeat_downgrade_and_reupgrade()
         await migrate("downgrade", "0003")
         async with admin.begin() as connection:
             await connection.execute(text("DROP EXTENSION btree_gist"))
-            await connection.exec_driver_sql(prerequisite_sql())
-            await connection.exec_driver_sql(prerequisite_sql())
+            await connection.exec_driver_sql(sql)
+            await connection.exec_driver_sql(sql)
         await migrate("upgrade", "0004")
         async with admin.connect() as connection:
             assert await domain_tables(connection) == set(TABLES)
@@ -81,6 +82,7 @@ async def test_existing_0003_admin_prerequisite_repeat_downgrade_and_reupgrade()
 
 @pytest.mark.parametrize("damage", ["missing", "namespace", "version", "opclass"])
 async def test_prerequisite_damage_fails_before_domain_ddl(damage):
+    sql = prerequisite_sql()
     admin = create_async_engine(os.environ["ASM_ADMIN_DATABASE_URL"], hide_parameters=True)
     try:
         await migrate("downgrade", "0003")
@@ -107,6 +109,6 @@ async def test_prerequisite_damage_fails_before_domain_ddl(damage):
     finally:
         async with admin.begin() as connection:
             await connection.execute(text("DROP EXTENSION IF EXISTS btree_gist CASCADE"))
-            await connection.exec_driver_sql(prerequisite_sql())
+            await connection.exec_driver_sql(sql)
         await migrate("upgrade", "head")
         await admin.dispose()
