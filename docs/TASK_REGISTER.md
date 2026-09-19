@@ -4,16 +4,32 @@
 
 ## Текущее решение C0
 
-**M0 — VERIFIED. M1.1 — VERIFIED. Полная M1.2 — INTEGRATED / VERIFIED.** Actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`, tree `0df4c1b9a2e6922f742ebe459e46dd93d2c2959f`; PR #8 MERGED, push/main CI 35368244266 SUCCESS: foundation + browser + оба clean-source gates, 246 cases. Backend и UI приняты; UI-01/02/04/05 CLOSED в границах reviewed snapshots. **M1.3 — IN_PROGRESS: C1 выдан только pre-DDL contract/план проверок.** Runtime/DDL M1.3 ещё не разрешены до C0/C2 review контракта. Полный M1/M2/production не приняты.
+**M0 — VERIFIED. M1.1 — VERIFIED. Полная M1.2 — INTEGRATED / VERIFIED.** Actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`, tree `0df4c1b9a2e6922f742ebe459e46dd93d2c2959f`; PR #8 MERGED, push/main CI 35368244266 SUCCESS: foundation + browser + оба clean-source gates, 246 cases. Backend и UI приняты; UI-01/02/04/05 CLOSED в границах reviewed snapshots. **M1.3 — IN_PROGRESS: C2 verdict CHANGES_REQUESTED; C1 выдана только редакция R2 pre-DDL контракта по решениям C0.** Runtime/DDL M1.3 ещё не разрешены до C0/C2 review контракта. Полный M1/M2/production не приняты.
 
 Принятый implementation merge M1.1: `b480d864a246cb0573b40fa5211f66625a71de91`.
 Проверенный C2 head: `fa98e714d78485f8d07108294263c89d90a6e7f0`.
 Исходный base задачи/M0: `7eaa9aa63b3f27215f6eb970fb9eb857fd291f62`.
 Implementation tree: `66b87d3797bff856df449c878347766e147c5c01` (74 файла).
 
-Следующий разрешённый scope: **M1.3 — C1, pre-DDL contract местных Plan/Subscription/Entitlements и Audit**, от exact accepted base `28c289ce6f77e33676cfa416585cc0e20c0be4e3`. Зависимость M1.1 удовлетворена; M1.2 также принята для защищённого API/UI пути. Сначала контракт и review C0/C2, затем отдельная выдача implementation scope и revision. Канонические зависимости не пересматриваются. Billing provider, client payments и future Jobs не входят в текущий этап.
+Следующий разрешённый scope: **M1.3 — C1, единая contract-correction R2 местных Plan/Subscription/Entitlements и Audit**, продолжение PR #9 от reviewed proposal `f4fb513de79c2a9b93c746db17b3395d5233dfdf`. Исходный accepted task base остаётся `28c289ce6f77e33676cfa416585cc0e20c0be4e3`. Зависимости M1.1/M1.2 удовлетворены; DDL/runtime ещё не выданы. Решения для R2: `docs/reviews/M1_3_C0_C2_DISPOSITION.md`; после исправления необходимы C0/C2 review и отдельная выдача implementation/revision. Канон и предыдущие ADR не отменены; billing provider, client payments и future Jobs не входят в этап.
 
 Выданный C0 исходный base M1.3: `28c289ce6f77e33676cfa416585cc0e20c0be4e3`, actual accepted main. Moving main, PR test-merge и локальный SHA исполнителя не заменяют его. Последующий механический docs commit сохраняет этот base и фиксируется отдельно; не создавать бесконечную цепочку коммитов ради записи собственного SHA.
+
+### M1.3 — C0: C2 CHANGES_REQUESTED; единая редакция R2 / 2026-09-19
+
+C2 проверил published proposal `f4fb513de79c2a9b93c746db17b3395d5233dfdf`, tree `529e8bcb5de4be04fb0a56f4737327052b22d131`, contract SHA-256 `cab7c014eb0c264377f2a160825cdb984195ee4fcf165965bc3deb7838558c2b`. История и ровно четыре исходных docs paths подтверждены. **CHANGES_REQUESTED** относится к proposal, не к M1.3 runtime: его ещё нет. G-01…G-07 и OPEN-01…07 требуют согласованной R2 и повторного C0/C2 review; автоматически закрытыми не считаются.
+
+Решения C0 D-01…D-13 для R2 изложены в `docs/reviews/M1_3_C0_C2_DISPOSITION.md`. Выбран exact восьмитабличный inventory (SaaS billing в platform, Audit в app; Workspace isolation независимо от schema), sealed entitlement set, декларативный non-overlap с отдельно подготовленным btree_gist, immutable narrow command receipt, один typed contact-command/Audit write path, один источник criticality/DB snapshot и один body expected_version. Контакт ограничен display name. Это направления редакции и будущие proof obligations, не уже LOCKED архитектурный ADR/разрешение DDL. Runtime, grants, migration successor и generated contracts не выданы. Production retention и доступность production infrastructure остаются OPEN.
+
+C1 разово разрешён точный механический перенос этого решения в реестр и C0 receipt, затем изменение только `docs/tasks/M1_3_CONTRACT.md`. Не переисполнять старые transfers M1.2, не менять acceptance M1.2, не cherry-pick-ить maintenance patch в контракт. Статус R2: PROPOSED / AWAITING C0-C2 REVIEW. C2 исходный report и C0 решения различаются; отклонения от рекомендаций явно описаны в receipt. Старый seven-table proposal сохраняется в Git history, но не остаётся конкурирующим нормативным вариантом в R2.
+
+### M1.2 maintenance — C0-M1.2-E2E-01 / 2026-09-19
+
+Исторический docs-only run PR #9 `35373643918`: foundation SUCCESS (240), browser 5 PASS/1 FAIL на desktop keyboard, browser clean-source SKIPPED. Этот результат не стирается и не становится зелёным от чужого PR.
+
+C0 принял исправление **на snapshot** PR #10 `f05abe2f64bfe81f2db57b450440133306410a60`, tree `721b205f2cdc8ba8405ef47d001f2e4e82e286f9`: только 6 вставленных строк `frontend/e2e/auth.spec.ts`, остальные 108 файлов/modes сохранены. Run `35421203125`, attempt 1: foundation `105839129341` и browser `105839129444` SUCCESS, оба clean-source PASS; 105 Python + 105 PostgreSQL + 30 frontend + 6 Playwright = 246 cases. ZIP SHA-256 `63b701bd1eae3fc11fef7b354b644c30ab1d59f8c78057570f78abc9d8f6a385`. CI checkout `489160ca5e7ae43ae292139eef4df7c5ef621192` — virtual merge, не actual main. C0 проверил архив/tree/originals, не выполнял новый локальный Playwright/PostgreSQL run.
+
+**Maintenance — REVIEW: исправление принято C0, интеграция ещё не подтверждена.** Разрешён обычный пользовательский merge exact PR #10 при прежнем base `28c289ce…`, зелёных gates и соблюдении protections; отдельный C8 для шестистрочного test-only изменения не требуется. Actual merge/main SHA и post-merge CI не назначаются заранее и здесь не утверждаются. После интеграции нужен собственный actual main run. PR #9 остаётся Draft/NOT MERGED; новый CI его актуального head/base проверяется отдельно. Приёмка M1.2 на `28c289ce…` сохраняется; не обещается отсутствие любых flakes. Два reported moderate npm audit findings не исследованы до конкретных advisory и не являются основанием менять зависимости в текущей test/docs задаче.
 
 ### M1.2 — C0: actual main принят; M1.3 pre-DDL выдан / 2026-09-18
 
@@ -107,7 +123,7 @@ C0 подготовил только четыре документационны
 | M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
 | M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
 | M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5; C0/C8 review | VERIFIED | PR #8 MERGED; actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`; push/main 35368244266 SUCCESS, 246 tests; UI-01/02/04/05 CLOSED | Полная приёмка: docs/reviews/M1_2_C0_ACCEPTANCE.md; не production |
-| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1; защищённый UI использует принятую M1.2 | C1; C0/C2 contract review | IN_PROGRESS | Выдан pre-DDL contract от `28c289ce6f77e33676cfa416585cc0e20c0be4e3`; реализации/DDL ещё нет | C1 контракт → C0/C2 review → отдельное разрешение implementation; без paid provider |
+| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1; защищённый UI использует принятую M1.2 | C1; C0/C2 contract review | IN_PROGRESS | C2 CHANGES_REQUESTED по `f4fb513…`; C0 выдал contract-correction R2, не DDL/runtime | R2 → C0/C2 review → отдельная выдача implementation; решения D-01…D-13 в C0 receipt |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 
@@ -193,3 +209,12 @@ Backend остаётся **REVIEW / CHANGES_REQUESTED**, не INTEGRATED/VERIFIE
 Портовая часть C8-M1.2-01 исправлена; C8-M1.2-02 дополнена в контракте C5 (recovery после неоднозначного HTTP response без обещания rollback/exactly-once). Однако C0 нашёл **C0-M1.2-04, P2 — неполная fail-closed проверка malformed Host**: normalize_authority принимает `localhost:8000?`/`localhost:8000#` и `api:8000?`/`api:8000#`. Пустые query/fragment маскируют присутствие URL-разделителя; вся исходная строка не сверяется с authority. Изолированный вызов неизменённых boundary definitions пропустил их в marker app (204/inner_calls=1), правильные negative ports отказали (403/inner_calls=0). Это не демонстрация обхода authentication/CSRF/RLS, утечки или эксплуатации всей HTTP server/proxy связки. Нового locked pytest/PostgreSQL запуска C0 не делал; probe выполнен на Python 3.13.5/local dependencies и отдельно оговорённом AST-only boundary, не full app.
 
 Следующий шаг C1: подтвердить regression штатными импортами на exact head, запретить discarded query/fragment delimiters и прочие остатки вне authority до нормализации, сохранить 183 прежних cases и добавить отрицательные raw-header regressions, затем новый полный CI на том же PR. Точечный scope — config.py, auth tests, при необходимости точное уточнение auth contract; DDL/dependencies/tenancy/session semantics неизменны. После исправления — targeted C8, затем решение C0 об интеграции. C5/M1.3/production не запускать, PR #6 не продолжать как вторую реализацию. Эта запись — решение C0, механический перенос разрешён; права самостоятельно закрывать находки/принимать M1.2 исполнителю не передаются.
+
+
+## C0 — PR #10 post-merge и восстановление передачи R2 (2026-09-19)
+
+C0 проверил фактический merge PR #10: `049b212f135f09c025d2f81badc810fa7c2c9d13`, tree `721b205f2cdc8ba8405ef47d001f2e4e82e286f9`, push/main run `35422383973`, attempt 1, SUCCESS. Foundation job `105842308563`: 105 Python + 105 PostgreSQL + 30 frontend; browser job `105842308489`: 6 passed. Оба clean-source gates PASS. ZIP artifact `10578235228`, SHA-256 `69b5d0ceb07d709a2121c38c1a3c09c022b5c8a9ce7a012571514194501e8307`; 109 файлов/modes точно совпали с ранее принятым maintenance tree. Это проверенное C0 GitHub CI evidence, не новый локальный application run.
+
+`C0-M1.2-E2E-01` — CLOSED / INTEGRATED / VERIFIED в границах этого исправления. M1.2 сохраняет приёмку; исторический исходный base M1.3 остаётся `28c289ce6f77e33676cfa416585cc0e20c0be4e3`. Новый main не является разрешением DDL или доказательством M1.3.
+
+R2 C1 ещё не получена. Сообщение Codex «не удалось создать продолжение» не доказывает контекстный лимит, исчерпание quota или safety block. C0 заменяет способ передачи: новая cloud-задача с PR #9 как контекстом; один временный текстовый файл `docs/tasks/C1_M1_3_R2_RESUME.txt` допускается только для переноса полного поручения и удаляется из итогового tracked tree. Архитектурные решения D-01…D-13 не меняются; итоговая дельта от reviewed `f4fb513…` — только реестр, C0 disposition и контракт R2. Без merge/rebase/force-push, нового конкурирующего PR или изменения кода. Runtime M1.3 остаётся NOT AUTHORIZED; контракт R2 ждёт C0/C2 review.
