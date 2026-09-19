@@ -114,44 +114,71 @@ C0 сверил первичные источники. Конкретная libr
 
 ## M1.3 — local entitlements и Audit
 
-Ведущий доменного/backend slice C1; DDL/миграции C2 под C0; последующий UI C5; независимые проверки C8. M1.1 и M1.2 приняты.
+Ведущий доменного/backend slice C1; DDL/миграции C2 под C0; последующий UI C5; независимые проверки C8. M1.1 и M1.2 VERIFIED. M1.3 milestone остаётся `IN_PROGRESS`.
 
-### Pre-DDL contract — ACCEPTED
+### Pre-DDL contract — INTEGRATED / VERIFIED
 
-C0 принимает exact canonical R4:
-- head `4d371069bd094757c410f50cd7bbe9725249dd7b`;
-- tree `b1be94654bb4539f42b8e93f44c61609ccc0dc91`;
-- `docs/tasks/M1_3_CONTRACT.md` Git blob `d1e80cb9242a4c0a88e2762bb17d46fa4d9f3320`;
-- SHA-256 `0d33a26aa13fb3eda34b0a5c07a4a11dc263b1ee37ce9e3fda126f53e0c0282a`.
+Canonical R4 принят C0/C2 и интегрирован:
+- actual main base до DB coordination: `ce585d67168489083e9b94e4be4f5669b16a8552`;
+- tree `ace73cdf8163428eb74872c35ce9e920d5e9066c`;
+- contract Git blob `d1e80cb9242a4c0a88e2762bb17d46fa4d9f3320`;
+- contract SHA-256 `0d33a26aa13fb3eda34b0a5c07a4a11dc263b1ee37ce9e3fda126f53e0c0282a`;
+- PR #9 MERGED;
+- post-merge run `35460116356` SUCCESS.
 
-Финальный targeted C2 re-review — PASS. Три текущих R3 findings закрыты на contract level; mapped historical R2-08/R2-09 больше не являются самостоятельными blockers. Receipt: `docs/reviews/M1_3_CONTRACT_C0_ACCEPTANCE.md`.
+Это приёмка контракта, не M1.3 implementation.
 
-Run `35458868525` — SUCCESS, 246 distinct regression cases на virtual merge `caea72d02492142b21da69fe35e57a0857894f59`, tree `ec924223d89f076de01880f0c621017eba5167fa`, оба clean-source PASS. Это подтверждает exact docs snapshot + regression baseline, не будущую M1.3 реализацию.
+### C2 DB prerequisite — PASS
 
-### Integration gate
-
-PR #9 всё ещё интегрирует **контракт**, не implementation. После exact acceptance-sync и нового зелёного PR CI разрешён normal merge commit PR #9. После merge нужен отдельный actual main run; лишь проверенный actual main SHA становится base следующих задач.
-
-M1.3 как milestone остаётся `IN_PROGRESS`. Не объявлять его REVIEW/INTEGRATED/VERIFIED из-за принятия контракта.
-
-### Первый implementation gate — C2 DB prerequisite
-
-Migration revision пока **не резервируется**. До domain DDL C2 выполняет read-only preflight на exact pinned DB image:
+Exact pinned image:
 `pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a`.
 
-Нужно доказать на exact image/current bootstrap:
-1. PostgreSQL/image identity и доступность `btree_gist`;
-2. exact `btree_gist` version;
-3. UUID GiST operator class для exclusion `workspace_id WITH =`;
-4. возможность установки extension в schema `extensions` администратором/bootstrap identity;
-5. idempotent preflight для existing databases уже на `0003`;
-6. отсутствие необходимости выдавать `CREATE` на database/schema роли `asm_migrator`;
-7. fail-before-any-domain-DDL при отсутствии prerequisite.
+GitHub-hosted probe PR #11 был одноразовым test-only evidence и закрыт без merge. Final head `fca70041c86a859fd1aa8fcb06c95d2a0a830681`; tested virtual merge `e1e327162297a556a99d8873a741f775a13aacf2`, tree `44dc6a2c85cc95045c8001812c78c47941f7998d`.
 
-Если любой пункт не доказан — STOP и C0, без migration allocation/DDL fallback. Только после PASS C0 резервирует successor `0004`, down_revision `0003`, и выдаёт C2 отдельный DB implementation scope.
+Special run `35463399932` SUCCESS доказал на exact image:
+- PostgreSQL 18.6 / vector 0.8.6;
+- `btree_gist` 1.8, namespace `extensions`, trusted/relocatable;
+- default `extensions.gist_uuid_ops` для uuid equality;
+- exact GiST exclusion behavior;
+- отсутствие необходимости расширять privileges `asm_migrator`;
+- idempotent repeated preflight;
+- fail-before-domain-DDL.
 
-После интеграции DB slice C1 получает backend EntitlementService/API/CORS slice по принятому R4; C5 получает owner-view UI только после принятого API SHA. Не запускать параллельных DDL writers.
+Receipt: `docs/reviews/M1_3_BTREE_GIST_C0_ACCEPTANCE.md`.
 
-### Сохраняемый scope
+### Migration reservation
 
-WorkspaceBillingAccount; immutable SaaSPlanRevision/PlanEntitlements; Subscription TRIALING либо ACTIVE+COMPED; WorkspaceServiceMode; local EntitlementService; audited billing-contact demonstration command и owner billing/audit reads. Entitlements не заменяют security permissions. Audit != Outbox != technical log. Реальные цены, paid provider lifecycle, invoices/webhooks, client payments, production retention/privacy и broader usage/quota scope не добавляются молча.
+C0 резервирует исключительно для C2 M1.3 DB slice:
+- file: `migrations/versions/0004_billing_entitlements_audit.py`;
+- revision: `0004`;
+- down_revision: `0003`.
+
+0001/0002/0003 не менять. Параллельных DDL writers нет. Reservation не означает, что migration уже реализирована или принята.
+
+### C2 DB implementation scope
+
+Источник истины — exact `docs/tasks/M1_3_CONTRACT.md`; D-01…D-13 и принятые R4 semantics менять нельзя без нового C0 decision.
+
+Разрешён DB-only slice:
+- admin/bootstrap prerequisite `btree_gist` для fresh LOCAL/TEST и explicit existing-0003 preflight/fail-closed path;
+- exact 8 tables R4;
+- keys/checks/composite tenant-safe FKs;
+- finite half-open subscription intervals и declarative GiST exclusion;
+- ENABLE + FORCE RLS для пяти Workspace-owned tables;
+- XID-fenced tenant context и migrator policy по принятому contract;
+- SEALED revision/entitlement immutability and lock order;
+- grants/catalog read surface;
+- exact SECURITY DEFINER `platform.update_billing_contact(...)` DB command;
+- LOCAL/TEST synthetic catalog/provisioning DB primitives;
+- real PostgreSQL tests для isolation, constraints, grants, concurrency, replay/idempotency DB semantics и migration replay.
+
+Backend HTTP routes, application EntitlementService orchestration, CORS, OpenAPI generation и frontend **не входят** в C2 DB slice.
+
+### Evidence / acceptance boundary
+
+C2 обязан вернуть exact base/head/tree, migration/grant diff, real PostgreSQL commands/results, fresh + existing-0003 + replay path, disposable downgrade/re-upgrade where safe, concurrency evidence and limitations. Все существующие tests сохраняют смысл и новый полный CI должен быть green. C0/C8 проводят отдельный review до merge.
+
+Не drop `btree_gist` на downgrade. Не выдавать `CREATE` на database/schema `extensions` роли `asm_migrator`. Не делать runtime owner/SUPERUSER/BYPASSRLS. Не расширять scope до billing provider/client payments/Jobs/production retention.
+
+После DB integration C0 отдельно выдаёт C1 backend/API/CORS slice; C5 только после принятого API SHA.
+

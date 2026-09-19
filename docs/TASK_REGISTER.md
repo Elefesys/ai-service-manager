@@ -2,17 +2,32 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущее решение C0 — M1.3 pre-DDL contract ACCEPTED / 2026-09-20
+## Текущее решение C0 — M1.3 DB prerequisite PASS; migration 0004 RESERVED / 2026-09-20
 
-M0/M1.1 и полная M1.2 сохраняют приёмку. Current main `3e57f1dcf4567a72b8a4bddbdb512139b700e2e3` имеет tree `721b205f2cdc8ba8405ef47d001f2e4e82e286f9`, идентичный ранее принятому main `049b212f135f09c025d2f81badc810fa7c2c9d13`; два временных transport add/delete commit изменили только историю, не file tree. Revert/force-push не требуется.
+M0/M1.1 и полная M1.2 сохраняют VERIFIED. M1.3 pre-DDL contract интегрирован в actual main `ce585d67168489083e9b94e4be4f5669b16a8552`, tree `ace73cdf8163428eb74872c35ce9e920d5e9066c`; PR #9 MERGED, push/main run `35460116356` SUCCESS. Canonical `docs/tasks/M1_3_CONTRACT.md` SHA-256 остаётся `0d33a26aa13fb3eda34b0a5c07a4a11dc263b1ee37ce9e3fda126f53e0c0282a`. M1.3 milestone остаётся **IN_PROGRESS**.
 
-**M1.3 остаётся IN_PROGRESS, но его pre-DDL contract принят C0.** Exact accepted contract head `4d371069bd094757c410f50cd7bbe9725249dd7b`, tree `b1be94654bb4539f42b8e93f44c61609ccc0dc91`; `docs/tasks/M1_3_CONTRACT.md` Git blob `d1e80cb9242a4c0a88e2762bb17d46fa4d9f3320`, SHA-256 `0d33a26aa13fb3eda34b0a5c07a4a11dc263b1ee37ce9e3fda126f53e0c0282a`. Финальный targeted C2 re-review — PASS. `C2-M1.3-R3-01/02/03` CLOSED на уровне pre-DDL contract; исторические `C2-M1.3-R2-08/09` содержательно разрешены через mapped R3 findings. Семь ранее закрытых R2 findings не переоткрываются.
+C2 prerequisite в исходном Codex sandbox вернул fail-closed CHANGES_REQUESTED только из-за container restriction `unshare: operation not permitted`; несовместимость PostgreSQL/`btree_gist` не была установлена. C0 разрешил одноразовый test-only GitHub-hosted probe в Draft PR #11 без права merge. Первоначальный workflow был SKIPPED из-за branch-name guard; C0 исправил только guard в probe branch.
 
-Exact canonical head прошёл PR-context run `35458868525` SUCCESS: 105 Python non-integration + 105 real PostgreSQL + 30 frontend + 6 Playwright = 246 distinct regression cases; foundation/browser clean-source PASS. CI virtual merge `caea72d02492142b21da69fe35e57a0857894f59`, tree `ec924223d89f076de01880f0c621017eba5167fa`. Artifact `10589571468`, SHA-256 `e71e0b8535ef5292333053a5e26e79d82e684da9dd0d89a63293f9b4fe2a9541`; C0 проверил tested commit, empty worktree, reconstructed tree и exact contract bytes. Это regression evidence, НЕ M1.3 DDL/runtime proof.
+**DB prerequisite — PASS.** Exact test-only PR #11 base: main `ce585d67168489083e9b94e4be4f5669b16a8552`; final probe head `fca70041c86a859fd1aa8fcb06c95d2a0a830681`; GitHub PR virtual merge/tested commit `e1e327162297a556a99d8873a741f775a13aacf2`, tree `44dc6a2c85cc95045c8001812c78c47941f7998d`. Permanent PR delta — только `.github/workflows/m1_3_btree_gist_preflight.yml`. PR #11 CLOSED / NOT MERGED; probe workflow не входит в main.
 
-Acceptance receipt: `docs/reviews/M1_3_CONTRACT_C0_ACCEPTANCE.md`. Настоящий acceptance-sync docs-only: canonical R4 не меняется. После нового зелёного PR CI на этом exact sync C0 разрешает обычный merge commit PR #9. После фактического merge обязателен отдельный push/main CI; только его проверенный actual main SHA становится implementation base.
+Special preflight run `35463399932` SUCCESS. Artifact `10589963101`, SHA-256 `180ff8829976ff3d457ea186c4142d32a434ab71bb38afe2b6bfc1027e42ff87`. C0 проверил artifact и live evidence:
+- exact RepoDigest `pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a`;
+- PostgreSQL `18.6`, `server_version_num=180006`; vector `0.8.6` в schema `extensions`;
+- `btree_gist` default/installed `1.8`, trusted=true, relocatable=true, installed namespace `extensions`;
+- default UUID GiST opclass `extensions.gist_uuid_ops`, family `gist_uuid_ops`, equality strategy 3 / `uuid = uuid`;
+- exact exclusion probe: adjacent half-open intervals same Workspace accepted; overlap another Workspace accepted; overlap same Workspace rejected;
+- `asm_migrator`: no SUPERUSER/BYPASSRLS/CREATEDB/CREATEROLE, no DB CREATE, `USAGE extensions=true`, `CREATE extensions=false`; no privilege broadening needed;
+- repeated admin preflight leaves version/namespace unchanged;
+- intentional prerequisite mismatch aborts before sentinel domain DDL; sentinel absent;
+- final probe worktree clean.
 
-**Migration successor ещё не выделен.** Перед domain DDL C2 обязан выполнить отдельный read-only preflight на pinned `pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a`: `btree_gist` availability/version, UUID GiST opclass, schema `extensions` installability, existing-0003 admin preflight, отсутствие CREATE-grant для `asm_migrator` и fail-before-domain-DDL. Только после PASS C0 может зарезервировать `0004` / down_revision `0003` и выдать DB implementation. Backend/API/UI implementation идёт отдельными последующими slices; параллельного DDL writer нет.
+Обычный regression run на том же PR snapshot `35463399929` SUCCESS; artifact `10591045912`, SHA-256 `beddda7af582007be61160443921a6cfcf5de5b606d877ce032dd328ead1b17f`; tested commit `e1e327162297a556a99d8873a741f775a13aacf2`, empty worktree, reconstructed tree `44dc6a2c85cc95045c8001812c78c47941f7998d`.
+
+**C0 резервирует migration successor:** file `migrations/versions/0004_billing_entitlements_audit.py`, revision `0004`, down_revision `0003`. Reservation принадлежит M1.3 DB slice C2; параллельных DDL writers нет. 0001/0002/0003 не изменять. Reservation не означает implementation PASS/REVIEW/INTEGRATED.
+
+Первый разрешённый implementation slice после интеграции этой coordination записи — C2 DB-only по exact accepted R4: admin/bootstrap prerequisite для `btree_gist`, migration 0004, exact eight-table schema/RLS/grants/functions/constraints и real PostgreSQL acceptance. Backend/API/CORS/frontend остаются отдельными последующими slices C1/C5 и сейчас не выдаются.
+
+Receipt: `docs/reviews/M1_3_BTREE_GIST_C0_ACCEPTANCE.md`.
 
 ## Предыдущее решение C0 — R2 (история)
 
