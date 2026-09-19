@@ -1304,6 +1304,111 @@ async def test_billing_contact_authorization_cas_replay_audit_and_fingerprint(mi
         await runtime.dispose()
 
 
+@pytest.mark.parametrize("different_fingerprint", [False, True])
+async def test_concurrent_new_idempotency_key_serializes_before_account_lock(
+    migrator, different_fingerprint
+):
+    """C8-M1.3-DB-01: a UNIQUE claim waits, then replays or conflicts boundedly."""
+    runtime = create_async_engine(os.environ["ASM_DATABASE_URL"], hide_parameters=True)
+    workspace, owner = uuid4(), uuid4()
+    async with migrator.begin() as connection:
+        await connection.execute(
+            text("INSERT INTO platform.user_accounts(id) VALUES(:id)"), {"id": owner}
+        )
+        await connection.execute(
+            text("INSERT INTO platform.workspaces(id) VALUES(:id)"), {"id": workspace}
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO platform.workspace_memberships"
+                "(workspace_id,user_account_id,role) VALUES(:ws,:owner,'OWNER')"
+            ),
+            {"ws": workspace, "owner": owner},
+        )
+        await connection.execute(
+            text(
+                "SELECT platform.initialize_local_billing(:ws,'test',1,'Before race',"
+                "'ACTIVE','COMPED','2026-09-01T00:00:00Z',"
+                "'2026-10-01T00:00:00Z','NORMAL')"
+            ),
+            {"ws": workspace},
+        )
+
+    blocker = await migrator.connect()
+    blocker_tx = await blocker.begin()
+    await blocker.execute(
+        text("SELECT 1 FROM platform.workspace_billing_accounts WHERE workspace_id=:ws FOR UPDATE"),
+        {"ws": workspace},
+    )
+
+    async def command(name):
+        async with runtime.begin() as connection:
+            await _set_context(connection, workspace, owner, uuid4())
+            return (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT * FROM platform.update_billing_contact(1,:name,'concurrent-key')"
+                        ),
+                        {"name": name},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+
+    async def waiting_commands(expected):
+        for _ in range(50):
+            async with migrator.connect() as connection:
+                count = (
+                    await connection.execute(
+                        text(
+                            "SELECT count(*) FROM pg_stat_activity WHERE "
+                            "query LIKE '%platform.update_billing_contact%' AND "
+                            "wait_event_type='Lock'"
+                        )
+                    )
+                ).scalar_one()
+            if count >= expected:
+                return
+            await asyncio.sleep(0.02)
+        pytest.fail(f"expected {expected} lock-waiting billing commands")
+
+    winner = asyncio.create_task(command("Winner value"))
+    await waiting_commands(1)
+    assert not winner.done(), "claimant must be blocked only after claiming, on account FOR UPDATE"
+    contender = asyncio.create_task(
+        command("Different value" if different_fingerprint else "Winner value")
+    )
+    await waiting_commands(2)
+    assert not contender.done(), "same-key contender must wait for the uncommitted UNIQUE claim"
+    await blocker_tx.commit()
+    await blocker.close()
+    winning_result = await asyncio.wait_for(winner, 5)
+    if different_fingerprint:
+        with pytest.raises(DBAPIError) as conflict:
+            await asyncio.wait_for(contender, 5)
+        assert conflict.value.orig.sqlstate == "23505"
+    else:
+        replay = await asyncio.wait_for(contender, 5)
+        assert dict(replay) == dict(winning_result)
+    async with migrator.connect() as connection:
+        receipt_count, audit_count, version, value = (
+            await connection.execute(
+                text(
+                    "SELECT (SELECT count(*) FROM platform.billing_contact_command_receipts "
+                    "WHERE workspace_id=:ws AND idempotency_key='concurrent-key'),"
+                    "(SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws AND "
+                    "event_type='BILLING_ACCOUNT_CONTACT_UPDATED'),version,contact_display_name "
+                    "FROM platform.workspace_billing_accounts WHERE workspace_id=:ws"
+                ),
+                {"ws": workspace},
+            )
+        ).one()
+        assert (receipt_count, audit_count, version, value) == (1, 1, 2, "Winner value")
+    await runtime.dispose()
+
+
 @pytest.mark.parametrize(
     ("mode", "reason", "allowed"),
     [

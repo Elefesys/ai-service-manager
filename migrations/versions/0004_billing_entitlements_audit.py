@@ -209,9 +209,13 @@ def _create_contact_command() -> None:
       IF expected_version IS NULL OR expected_version<=0 OR idempotency_key IS NULL OR idempotency_key !~ '^[A-Za-z0-9._:-]{1,128}$' OR normalized IS NULL OR char_length(normalized) NOT BETWEEN 1 AND 200 OR octet_length(normalized)>800 OR normalized ~ '[\x00-\x1F\x7F]' THEN RAISE EXCEPTION 'invalid request' USING ERRCODE='22023'; END IF;
       fp:=pg_catalog.sha256(convert_to('{"contact_display_name":"'||replace(replace(normalized,'\','\\'),'"','\"')||'","expected_version":"'||expected_version::text||'","operation":"UPDATE_BILLING_CONTACT","workspace_id":"'||ws::text||'"}','UTF8'));
       SELECT * INTO acc FROM platform.workspace_billing_accounts a WHERE a.workspace_id=ws; IF NOT FOUND THEN RAISE EXCEPTION 'billing account not found' USING ERRCODE='P0002'; END IF;
-      SELECT * INTO rec FROM platform.billing_contact_command_receipts r WHERE r.workspace_id=ws AND r.operation='UPDATE_BILLING_CONTACT' AND r.idempotency_key=update_billing_contact.idempotency_key FOR UPDATE;
-      IF FOUND THEN IF rec.request_fingerprint<>fp THEN RAISE EXCEPTION 'idempotency key conflict' USING ERRCODE='23505'; END IF; RETURN QUERY SELECT rec.workspace_id,rec.billing_account_id,rec.receipt_id,rec.result_version,rec.result_outcome,rec.completed_at; RETURN; END IF;
-      INSERT INTO platform.billing_contact_command_receipts(workspace_id,billing_account_id,operation,idempotency_key,request_fingerprint,expected_version,status) VALUES(ws,acc.billing_account_id,'UPDATE_BILLING_CONTACT',idempotency_key,fp,expected_version,'IN_PROGRESS') RETURNING * INTO rec;
+      INSERT INTO platform.billing_contact_command_receipts(workspace_id,billing_account_id,operation,idempotency_key,request_fingerprint,expected_version,status) VALUES(ws,acc.billing_account_id,'UPDATE_BILLING_CONTACT',idempotency_key,fp,expected_version,'IN_PROGRESS') ON CONFLICT ON CONSTRAINT billing_contact_command_receipts_key DO NOTHING RETURNING * INTO rec;
+      IF NOT FOUND THEN
+        SELECT * INTO rec FROM platform.billing_contact_command_receipts r WHERE r.workspace_id=ws AND r.operation='UPDATE_BILLING_CONTACT' AND r.idempotency_key=update_billing_contact.idempotency_key FOR UPDATE;
+        IF NOT FOUND THEN RAISE EXCEPTION 'receipt serialization failed' USING ERRCODE='40001'; END IF;
+        IF rec.request_fingerprint<>fp THEN RAISE EXCEPTION 'idempotency key conflict' USING ERRCODE='23505'; END IF;
+        RETURN QUERY SELECT rec.workspace_id,rec.billing_account_id,rec.receipt_id,rec.result_version,rec.result_outcome,rec.completed_at; RETURN;
+      END IF;
       SELECT * INTO acc FROM platform.workspace_billing_accounts a WHERE a.workspace_id=ws FOR UPDATE;
       IF acc.version<>expected_version THEN RAISE EXCEPTION 'stale state' USING ERRCODE='40001'; END IF;
       done:=clock_timestamp();
