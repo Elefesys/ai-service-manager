@@ -84,8 +84,8 @@ async def provision(environment, database_url, login, password):
                 raise ProvisioningError("Unexpected provisioning identity")
             if (
                 await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
-            ).scalar_one() != "0003":
-                raise ProvisioningError("Upgrade the isolated database to 0003 first")
+            ).scalar_one() != "0004":
+                raise ProvisioningError("Upgrade the isolated database to 0004 first")
             # UNIQUE(login) also protects concurrent setup: a collision rolls back all rows.
             await connection.execute(
                 text("INSERT INTO platform.user_accounts(id) VALUES (:id)"), {"id": account}

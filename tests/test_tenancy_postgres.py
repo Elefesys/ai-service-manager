@@ -478,7 +478,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             .mappings()
             .all()
         )
-        assert {row["tablename"] for row in tables} == set(TABLES)
+        assert {row["tablename"] for row in tables} == set(TABLES) | {"audit_events"}
         assert all(row["tableowner"] == "asm_migrator" and row["rowsecurity"] for row in tables)
         for table in TABLES:
             assert (
