@@ -505,7 +505,11 @@ async def test_m1_3_runtime_cross_workspace_and_xid_fail_closed(migrator):
                 if context_sql:
                     await connection.execute(
                         text(context_sql),
-                        {"ws": workspaces[0], "actor": actors[0], "correlation": uuid4()},
+                        {
+                            "ws": str(workspaces[0]),
+                            "actor": str(actors[0]),
+                            "correlation": str(uuid4()),
+                        },
                     )
                 for table in tables:
                     assert (
