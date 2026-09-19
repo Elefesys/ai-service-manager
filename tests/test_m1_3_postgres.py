@@ -531,16 +531,24 @@ async def test_billing_contact_authorization_cas_replay_audit_and_fingerprint(mi
                 .one()
             )
             assert dict(replay) == dict(updated)
-        async with runtime.begin() as connection:
-            await _set_context(connection, workspace, owner, uuid4())
+        async with migrator.connect() as connection:
             before = (
                 await connection.execute(
                     text(
-                        "SELECT (SELECT count(*) FROM app.audit_events),"
-                        "(SELECT count(*) FROM platform.billing_contact_command_receipts)"
-                    )
+                        "SELECT (SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws "
+                        "AND event_type='BILLING_ACCOUNT_CONTACT_UPDATED'),"
+                        "(SELECT count(*) FROM platform.billing_contact_command_receipts "
+                        "WHERE workspace_id=:ws),"
+                        "(SELECT version FROM platform.workspace_billing_accounts "
+                        "WHERE workspace_id=:ws),"
+                        "(SELECT contact_display_name FROM platform.workspace_billing_accounts "
+                        "WHERE workspace_id=:ws)"
+                    ),
+                    {"ws": workspace},
                 )
             ).one()
+        async with runtime.begin() as connection:
+            await _set_context(connection, workspace, owner, uuid4())
             with pytest.raises(DBAPIError) as stale:
                 await connection.execute(
                     text("SELECT * FROM platform.update_billing_contact(7,'Example name','stale')")
@@ -550,9 +558,16 @@ async def test_billing_contact_authorization_cas_replay_audit_and_fingerprint(mi
             after = (
                 await connection.execute(
                     text(
-                        "SELECT (SELECT count(*) FROM app.audit_events),"
-                        "(SELECT count(*) FROM platform.billing_contact_command_receipts)"
-                    )
+                        "SELECT (SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws "
+                        "AND event_type='BILLING_ACCOUNT_CONTACT_UPDATED'),"
+                        "(SELECT count(*) FROM platform.billing_contact_command_receipts "
+                        "WHERE workspace_id=:ws),"
+                        "(SELECT version FROM platform.workspace_billing_accounts "
+                        "WHERE workspace_id=:ws),"
+                        "(SELECT contact_display_name FROM platform.workspace_billing_accounts "
+                        "WHERE workspace_id=:ws)"
+                    ),
+                    {"ws": workspace},
                 )
             ).one()
             assert after == before
