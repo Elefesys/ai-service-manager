@@ -288,6 +288,69 @@ async def test_sealed_manifest_immutability_and_draft_subscription_rejection(mig
         await transaction.rollback()
 
 
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [("-infinity", "2027-01-01T00:00:00Z"), ("2027-01-01T00:00:00Z", "infinity")],
+)
+async def test_finite_intervals_and_tenant_safe_composite_fk_negatives(migrator, start, end):
+    """Criteria 10-11: non-finite endpoints and cross-workspace composite FKs fail."""
+    first, second = uuid4(), uuid4()
+    async with migrator.connect() as connection:
+        transaction = await connection.begin()
+        await connection.execute(
+            text("INSERT INTO platform.workspaces(id) VALUES(:a),(:b)"),
+            {"a": first, "b": second},
+        )
+        for workspace in (first, second):
+            await connection.execute(
+                text(
+                    "SELECT platform.initialize_local_billing(:ws,'test',1,'Example name',"
+                    "'ACTIVE','COMPED','2026-09-01T00:00:00Z',"
+                    "'2026-10-01T00:00:00Z','NORMAL')"
+                ),
+                {"ws": workspace},
+            )
+        revision = (
+            await connection.execute(
+                text("SELECT plan_revision_id FROM platform.saas_plan_revisions WHERE revision=1")
+            )
+        ).scalar_one()
+        with pytest.raises(DBAPIError) as interval:
+            async with connection.begin_nested():
+                await connection.execute(
+                    text(
+                        "INSERT INTO platform.workspace_subscriptions(workspace_id,"
+                        "plan_revision_id,required_publication_state,status,funding_mode,"
+                        "effective_from,effective_until) VALUES(:ws,:revision,'SEALED',"
+                        "'ACTIVE','COMPED',:start,:end)"
+                    ),
+                    {"ws": first, "revision": revision, "start": start, "end": end},
+                )
+        assert interval.value.orig.sqlstate == "23514"
+        foreign_account = (
+            await connection.execute(
+                text(
+                    "SELECT billing_account_id FROM platform.workspace_billing_accounts "
+                    "WHERE workspace_id=:ws"
+                ),
+                {"ws": second},
+            )
+        ).scalar_one()
+        with pytest.raises(DBAPIError) as tenant_fk:
+            async with connection.begin_nested():
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.audit_events(workspace_id,actor_kind,correlation_id,"
+                        "event_type,object_type,object_id,object_version,payload) VALUES"
+                        "(:ws,'LOCAL_PROVISIONER',:correlation,'WORKSPACE_BILLING_PROVISIONED',"
+                        "'WORKSPACE_BILLING_ACCOUNT',:object,1,'{}')"
+                    ),
+                    {"ws": first, "correlation": uuid4(), "object": foreign_account},
+                )
+        assert tenant_fk.value.orig.sqlstate == "23503"
+        await transaction.rollback()
+
+
 async def test_initializer_conflicts_and_concurrent_serialization(migrator):
     """Criteria 27-30: global/workspace serialization and bounded drift conflicts."""
     workspaces = (uuid4(), uuid4())
@@ -322,6 +385,59 @@ async def test_initializer_conflicts_and_concurrent_serialization(migrator):
             {"id": same},
         )
     assert await initialize(same) == "CONFLICT_STATE_DRIFT"
+    partial, incompatible = uuid4(), uuid4()
+    async with migrator.begin() as connection:
+        await connection.execute(
+            text("INSERT INTO platform.workspaces(id) VALUES(:partial),(:incompatible)"),
+            {"partial": partial, "incompatible": incompatible},
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO platform.workspace_billing_accounts"
+                "(workspace_id,contact_display_name) VALUES(:ws,'Do not repair')"
+            ),
+            {"ws": partial},
+        )
+    assert await initialize(partial) == "CONFLICT_PARTIAL_STATE"
+    async with migrator.connect() as connection:
+        assert (
+            await connection.execute(
+                text(
+                    "SELECT contact_display_name FROM platform.workspace_billing_accounts "
+                    "WHERE workspace_id=:ws"
+                ),
+                {"ws": partial},
+            )
+        ).scalar_one() == "Do not repair"
+        assert (
+            await connection.execute(
+                text(
+                    "SELECT count(*) FROM platform.workspace_subscriptions WHERE workspace_id=:ws"
+                ),
+                {"ws": partial},
+            )
+        ).scalar_one() == 0
+    async with migrator.begin() as connection:
+        incompatible_result = (
+            await connection.execute(
+                text(
+                    "SELECT platform.initialize_local_billing(:ws,'test',1,'Example name',"
+                    "'TRIALING','TRIAL','2026-09-01T00:00:00Z',"
+                    "'2026-10-01T00:00:00Z','NORMAL')"
+                ),
+                {"ws": incompatible},
+            )
+        ).scalar_one()
+        assert incompatible_result == "CONFLICT_INPUT_MISMATCH"
+        assert (
+            await connection.execute(
+                text(
+                    "SELECT count(*) FROM platform.workspace_billing_accounts "
+                    "WHERE workspace_id=:ws"
+                ),
+                {"ws": incompatible},
+            )
+        ).scalar_one() == 0
 
 
 def _canonical_fingerprint(workspace, version, name):
@@ -415,6 +531,74 @@ async def test_billing_contact_authorization_cas_replay_audit_and_fingerprint(mi
                 .one()
             )
             assert dict(replay) == dict(updated)
+        async with runtime.begin() as connection:
+            await _set_context(connection, workspace, owner, uuid4())
+            before = (
+                await connection.execute(
+                    text(
+                        "SELECT (SELECT count(*) FROM app.audit_events),"
+                        "(SELECT count(*) FROM platform.billing_contact_command_receipts)"
+                    )
+                )
+            ).one()
+            with pytest.raises(DBAPIError) as stale:
+                await connection.execute(
+                    text("SELECT * FROM platform.update_billing_contact(7,'Example name','stale')")
+                )
+        assert stale.value.orig.sqlstate == "40001"
+        async with migrator.connect() as connection:
+            after = (
+                await connection.execute(
+                    text(
+                        "SELECT (SELECT count(*) FROM app.audit_events),"
+                        "(SELECT count(*) FROM platform.billing_contact_command_receipts)"
+                    )
+                )
+            ).one()
+            assert after == before
+        async with runtime.begin() as connection:
+            await _set_context(connection, workspace, owner, uuid4())
+            noop = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT * FROM platform.update_billing_contact(8,"
+                            "'  Example name  ','noop')"
+                        )
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            assert noop["result_outcome"] == "NOOP" and noop["result_version"] == 8
+        async with migrator.connect() as connection:
+            noop_receipt = (
+                await connection.execute(
+                    text(
+                        "SELECT status,result_outcome,result_version FROM "
+                        "platform.billing_contact_command_receipts WHERE workspace_id=:ws "
+                        "AND idempotency_key='noop'"
+                    ),
+                    {"ws": workspace},
+                )
+            ).one()
+            assert noop_receipt == ("SUCCEEDED", "NOOP", 8)
+            assert (
+                await connection.execute(
+                    text(
+                        "SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws "
+                        "AND event_type='BILLING_ACCOUNT_CONTACT_UPDATED'"
+                    ),
+                    {"ws": workspace},
+                )
+            ).scalar_one() == 1
+        async with runtime.begin() as connection:
+            await _set_context(connection, workspace, owner, uuid4())
+            with pytest.raises(DBAPIError) as conflict:
+                await connection.execute(
+                    text("SELECT * FROM platform.update_billing_contact(8,'Different','key-1')")
+                )
+        assert conflict.value.orig.sqlstate == "23505"
         async with migrator.connect() as connection:
             receipt = (
                 await connection.execute(
@@ -435,13 +619,39 @@ async def test_billing_contact_authorization_cas_replay_audit_and_fingerprint(mi
             ).scalar_one()
             assert audit == '{"changed_fields": ["contact_display_name"]}'
             assert "Example name" not in audit
-        for bad in ("", "A\nB", "A\tB", "A" * 201):
+            receipt_text = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT row_to_json(r)::text FROM "
+                            "platform.billing_contact_command_receipts r WHERE workspace_id=:ws"
+                        ),
+                        {"ws": workspace},
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert all("Example name" not in value for value in receipt_text)
+        for bad in ("", "A\nB", "A\tB", "A\x7fB", "A" * 201, "é" * 201):
             async with runtime.begin() as connection:
                 await _set_context(connection, workspace, owner, uuid4())
                 with pytest.raises(DBAPIError) as invalid:
                     await connection.execute(
                         text("SELECT * FROM platform.update_billing_contact(8,:name,:key)"),
                         {"name": bad, "key": "invalid-" + uuid4().hex},
+                    )
+            assert invalid.value.orig.sqlstate == "22023"
+        for version, key in ((0, "zero"), (-1, "negative"), (8, "bad key!")):
+            async with runtime.begin() as connection:
+                await _set_context(connection, workspace, owner, uuid4())
+                with pytest.raises(DBAPIError) as invalid:
+                    await connection.execute(
+                        text(
+                            "SELECT * FROM platform.update_billing_contact(:version,"
+                            "'Example name',:key)"
+                        ),
+                        {"version": version, "key": key},
                     )
             assert invalid.value.orig.sqlstate == "22023"
     finally:
