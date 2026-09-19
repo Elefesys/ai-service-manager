@@ -109,6 +109,12 @@ test('lost rotation body with delivered cookie is recovered without replay', asy
 
 test('@narrow keyboard navigation, storage and Ops isolation', async ({ page }) => {
   await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Вход в консоль' })).toBeVisible();
+  await expect(page.getByLabel('Логин')).toBeVisible();
+  await expect(page.getByLabel('Пароль')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Войти' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Business Console' })).toBeVisible();
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Business Console' })).toBeFocused();
   await signIn(page);
