@@ -2,7 +2,17 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущее решение C0
+## Текущее решение C0 — M1.3 R3 / 2026-09-19
+
+M0/M1.1 и полная M1.2 сохраняют приёмку. Maintenance C0-M1.2-E2E-01 — CLOSED / INTEGRATED / VERIFIED на actual main `049b212f135f09c025d2f81badc810fa7c2c9d13`, tree `721b205f2cdc8ba8405ef47d001f2e4e82e286f9`, post-merge run `35422383973`. Исходный accepted base M1.3 остаётся `28c289ce6f77e33676cfa416585cc0e20c0be4e3`.
+
+M1.3 — IN_PROGRESS; C2 targeted re-review R2: CHANGES_REQUESTED на published head `cded2b2417df2d7a98e83c0b41acbe0c0c7c34b3`, tree `07057b6f37da8d44603f18b0ef4d4327176ba97f`. C0 принимает девять blockers: C0-M1.3-R2-01 (P2); C2-M1.3-R2-02/03/04/08 (P1); C2-M1.3-R2-05/06/07/09 (P2). Все OPEN до проверки исправленной редакции; ADDRESSED в отчёте исполнителя не означает CLOSED.
+
+Разрешена только единая docs-only редакция R3 в существующем Draft PR #9, ветка `codex/-m1.3-ddl`. Решения D-01…D-13 сохраняются; дополнение C0: `docs/reviews/M1_3_R3_C0_DISPOSITION.md`. C1 разово разрешён точный механический перенос этого блока, новой строки M1.3 и указанного receipt, затем исправление контракта. Без DDL/runtime/frontend/generated contracts, назначения migration successor, изменения LOCKED ADR, merge/auto-merge или production. После публикации — проверка новой дельты C0 и targeted C2 re-review.
+
+Run `35441555963` — ранее проверенное C0 regression evidence: 246 cases на virtual merge `a6255bbc4aa2623c1398f8179990f9481f5c3bab`, tree `fd68c8963421ebb66f56e0f8397532ecb0b0e8a3`, НЕ tree-identical clean R2 и НЕ evidence будущей R3/реализации M1.3. Новый application/DB/browser run C0 сейчас не выполнял.
+
+## Предыдущее решение C0 — R2 (история)
 
 **M0 — VERIFIED. M1.1 — VERIFIED. Полная M1.2 — INTEGRATED / VERIFIED.** Actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`, tree `0df4c1b9a2e6922f742ebe459e46dd93d2c2959f`; PR #8 MERGED, push/main CI 35368244266 SUCCESS: foundation + browser + оба clean-source gates, 246 cases. Backend и UI приняты; UI-01/02/04/05 CLOSED в границах reviewed snapshots. **M1.3 — IN_PROGRESS: C2 verdict CHANGES_REQUESTED; C1 выдана только редакция R2 pre-DDL контракта по решениям C0.** Runtime/DDL M1.3 ещё не разрешены до C0/C2 review контракта. Полный M1/M2/production не приняты.
 
@@ -123,7 +133,7 @@ C0 подготовил только четыре документационны
 | M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
 | M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
 | M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5; C0/C8 review | VERIFIED | PR #8 MERGED; actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`; push/main 35368244266 SUCCESS, 246 tests; UI-01/02/04/05 CLOSED | Полная приёмка: docs/reviews/M1_2_C0_ACCEPTANCE.md; не production |
-| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1; защищённый UI использует принятую M1.2 | C1; C0/C2 contract review | IN_PROGRESS | C2 CHANGES_REQUESTED по `f4fb513…`; C0 выдал contract-correction R2, не DDL/runtime | R2 → C0/C2 review → отдельная выдача implementation; решения D-01…D-13 в C0 receipt |
+| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 и принятая M1.2 | C1; C0/C2 contract review | IN_PROGRESS | C2 R2 CHANGES_REQUESTED по `cded2b2…`; 9 contract blockers OPEN; C0 выдал docs-only R3 | R3 → C0/C2 review → отдельная выдача implementation; D-01…D-13 и R3 C0 disposition |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 
