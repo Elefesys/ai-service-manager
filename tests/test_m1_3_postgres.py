@@ -417,6 +417,7 @@ async def test_initializer_conflicts_and_concurrent_serialization(migrator):
                 {"ws": partial},
             )
         ).scalar_one() == 0
+
     async with migrator.begin() as connection:
         incompatible_result = (
             await connection.execute(
@@ -440,6 +441,85 @@ async def test_initializer_conflicts_and_concurrent_serialization(migrator):
         ).scalar_one() == 0
 
 
+async def test_m1_3_runtime_cross_workspace_and_xid_fail_closed(migrator):
+    """Criteria 16-17: new readable tenant tables obey Workspace/XID context."""
+    runtime = create_async_engine(os.environ["ASM_DATABASE_URL"], hide_parameters=True)
+    workspaces, actors = (uuid4(), uuid4()), (uuid4(), uuid4())
+    tables = (
+        "platform.workspace_billing_accounts",
+        "platform.workspace_subscriptions",
+        "platform.workspace_service_modes",
+        "app.audit_events",
+    )
+    async with migrator.begin() as connection:
+        await connection.execute(
+            text("INSERT INTO platform.user_accounts(id) VALUES(:a),(:b)"),
+            {"a": actors[0], "b": actors[1]},
+        )
+        await connection.execute(
+            text("INSERT INTO platform.workspaces(id) VALUES(:a),(:b)"),
+            {"a": workspaces[0], "b": workspaces[1]},
+        )
+        for workspace, actor in zip(workspaces, actors, strict=True):
+            await connection.execute(
+                text(
+                    "INSERT INTO platform.workspace_memberships"
+                    "(workspace_id,user_account_id,role) VALUES(:ws,:actor,'OWNER')"
+                ),
+                {"ws": workspace, "actor": actor},
+            )
+            await connection.execute(
+                text(
+                    "SELECT platform.initialize_local_billing(:ws,'test',1,'Example name',"
+                    "'ACTIVE','COMPED','2026-09-01T00:00:00Z',"
+                    "'2026-10-01T00:00:00Z','NORMAL')"
+                ),
+                {"ws": workspace},
+            )
+    try:
+        for workspace, actor, foreign in zip(workspaces, actors, reversed(workspaces), strict=True):
+            async with runtime.begin() as connection:
+                await _set_context(connection, workspace, actor, uuid4())
+                for table in tables:
+                    rows = (
+                        (
+                            await connection.execute(
+                                text(f"SELECT workspace_id FROM {table}")  # noqa: S608
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    assert rows and set(rows) == {workspace} and foreign not in rows
+        for context_sql in (
+            None,
+            "SELECT set_config('asm.workspace_id','malformed',true),"
+            "set_config('asm.context_xid',pg_current_xact_id()::text,true)",
+            "SELECT set_config('asm.workspace_id',:ws,true),"
+            "set_config('asm.actor_id',:actor,true),"
+            "set_config('asm.actor_kind','user_account',true),"
+            "set_config('asm.correlation_id',:correlation,true),"
+            "set_config('asm.context_xid','0',true)",
+        ):
+            async with runtime.begin() as connection:
+                if context_sql:
+                    await connection.execute(
+                        text(context_sql),
+                        {"ws": workspaces[0], "actor": actors[0], "correlation": uuid4()},
+                    )
+                for table in tables:
+                    assert (
+                        await connection.execute(text(f"SELECT count(*) FROM {table}"))
+                    ).scalar_one() == 0
+                with pytest.raises(DBAPIError) as command_denied:
+                    await connection.execute(
+                        text("SELECT * FROM platform.update_billing_contact(1,'Safe','xid-denied')")
+                    )
+            assert command_denied.value.orig.sqlstate == "42501"
+    finally:
+        await runtime.dispose()
+
+
 def _canonical_fingerprint(workspace, version, name):
     payload = {
         "contact_display_name": name,
@@ -452,19 +532,19 @@ def _canonical_fingerprint(workspace, version, name):
     ).digest()
 
 
-@pytest.mark.parametrize(
-    ("name", "expected"),
-    [
-        ("Example name", "813d712466b9605186455d77032311a5e7865f48a5db0524e90b3f120a1d4b2a"),
-        ("  Example name  ", "813d712466b9605186455d77032311a5e7865f48a5db0524e90b3f120a1d4b2a"),
-        ("Анна", "cc4623b8517c225cc787e1eb961997592535ef07fc4184193c43862484b25bd8"),
-        ('A"B\\C/D', "a90b071bf4761bda6e42a025e6c7f231b386e453238dddb58cc2db7b94e0d275"),
-        ("Studio 🎨", "ffa9252a316a9d8001d20c7d2efe2e842294de6f45710df0faca802fd8a52dbd"),
-        ("A\u2028B\u2029C", "fc36542d1fe82f730b56f8ad004d7aab3d6bb26208e0b740e0ac3e479f593d54"),
-        ("é", "69ebd81a850211d04df9055a77ff95468dc1ff88acb568514c11f62d416f0c87"),
-        ("e\u0301", "07c64318f29cbe6803800928ebf5d4b27436c63f850f1b190eb8418c79d79030"),
-    ],
-)
+PUBLISHED_FINGERPRINT_VECTORS = [
+    ("Example name", "813d712466b9605186455d77032311a5e7865f48a5db0524e90b3f120a1d4b2a"),
+    ("  Example name  ", "813d712466b9605186455d77032311a5e7865f48a5db0524e90b3f120a1d4b2a"),
+    ("Анна", "cc4623b8517c225cc787e1eb961997592535ef07fc4184193c43862484b25bd8"),
+    ('A"B\\C/D', "a90b071bf4761bda6e42a025e6c7f231b386e453238dddb58cc2db7b94e0d275"),
+    ("Studio 🎨", "ffa9252a316a9d8001d20c7d2efe2e842294de6f45710df0faca802fd8a52dbd"),
+    ("A\u2028B\u2029C", "fc36542d1fe82f730b56f8ad004d7aab3d6bb26208e0b740e0ac3e479f593d54"),
+    ("é", "69ebd81a850211d04df9055a77ff95468dc1ff88acb568514c11f62d416f0c87"),
+    ("e\u0301", "07c64318f29cbe6803800928ebf5d4b27436c63f850f1b190eb8418c79d79030"),
+]
+
+
+@pytest.mark.parametrize(("name", "expected"), PUBLISHED_FINGERPRINT_VECTORS)
 async def test_exact_published_fingerprint_vectors_in_postgres(migrator, name, expected):
     """Criterion 43: PostgreSQL SHA-256 matches every distinct published vector."""
     workspace = UUID("01990000-0000-7000-8000-000000000001")
@@ -756,6 +836,56 @@ async def test_billing_contact_authorization_cas_replay_audit_and_fingerprint(mi
                         {"version": version, "key": key},
                     )
             assert invalid.value.orig.sqlstate == "22023"
+        # Exercise the encoder inside the actual command, not merely the reference
+        # encoder above. Resetting this synthetic fixture is migrator-only test setup.
+        for index, (input_name, expected_digest) in enumerate(PUBLISHED_FINGERPRINT_VECTORS):
+            async with migrator.begin() as connection:
+                await connection.execute(
+                    text(
+                        "DELETE FROM platform.billing_contact_command_receipts "
+                        "WHERE workspace_id=:ws"
+                    ),
+                    {"ws": workspace},
+                )
+                await connection.execute(
+                    text(
+                        "DELETE FROM app.audit_events WHERE workspace_id=:ws AND "
+                        "event_type='BILLING_ACCOUNT_CONTACT_UPDATED'"
+                    ),
+                    {"ws": workspace},
+                )
+                await connection.execute(
+                    text(
+                        "UPDATE platform.workspace_billing_accounts SET "
+                        "contact_display_name='Reset fixture',version=7 WHERE workspace_id=:ws"
+                    ),
+                    {"ws": workspace},
+                )
+            async with runtime.begin() as connection:
+                await _set_context(connection, workspace, owner, uuid4())
+                encoded = (
+                    (
+                        await connection.execute(
+                            text("SELECT * FROM platform.update_billing_contact(7,:name,:key)"),
+                            {"name": input_name, "key": f"published-{index}"},
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+                assert encoded["result_outcome"] == "UPDATED"
+            async with migrator.connect() as connection:
+                stored = (
+                    await connection.execute(
+                        text(
+                            "SELECT encode(request_fingerprint,'hex') FROM "
+                            "platform.billing_contact_command_receipts WHERE "
+                            "workspace_id=:ws AND idempotency_key=:key"
+                        ),
+                        {"ws": workspace, "key": f"published-{index}"},
+                    )
+                ).scalar_one()
+                assert stored == expected_digest
     finally:
         await runtime.dispose()
 
