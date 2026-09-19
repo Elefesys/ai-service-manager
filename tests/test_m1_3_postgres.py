@@ -452,6 +452,45 @@ def _canonical_fingerprint(workspace, version, name):
     ).digest()
 
 
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Example name", "813d712466b9605186455d77032311a5e7865f48a5db0524e90b3f120a1d4b2a"),
+        ("  Example name  ", "813d712466b9605186455d77032311a5e7865f48a5db0524e90b3f120a1d4b2a"),
+        ("Анна", "cc4623b8517c225cc787e1eb961997592535ef07fc4184193c43862484b25bd8"),
+        ('A"B\\C/D', "a90b071bf4761bda6e42a025e6c7f231b386e453238dddb58cc2db7b94e0d275"),
+        ("Studio 🎨", "ffa9252a316a9d8001d20c7d2efe2e842294de6f45710df0faca802fd8a52dbd"),
+        ("A\u2028B\u2029C", "fc36542d1fe82f730b56f8ad004d7aab3d6bb26208e0b740e0ac3e479f593d54"),
+        ("é", "69ebd81a850211d04df9055a77ff95468dc1ff88acb568514c11f62d416f0c87"),
+        ("e\u0301", "07c64318f29cbe6803800928ebf5d4b27436c63f850f1b190eb8418c79d79030"),
+    ],
+)
+async def test_exact_published_fingerprint_vectors_in_postgres(migrator, name, expected):
+    """Criterion 43: PostgreSQL SHA-256 matches every distinct published vector."""
+    workspace = UUID("01990000-0000-7000-8000-000000000001")
+    normalized = name.strip(" ")
+    canonical = json.dumps(
+        {
+            "contact_display_name": normalized,
+            "expected_version": "7",
+            "operation": "UPDATE_BILLING_CONTACT",
+            "workspace_id": str(workspace),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    async with migrator.connect() as connection:
+        digest = (
+            await connection.execute(
+                text("SELECT encode(pg_catalog.sha256(convert_to(:value,'UTF8')),'hex')"),
+                {"value": canonical},
+            )
+        ).scalar_one()
+    assert digest == expected
+    assert _canonical_fingerprint(workspace, 7, normalized).hex() == expected
+
+
 async def _set_context(connection, workspace, actor, correlation):
     await connection.execute(
         text(
@@ -615,6 +654,48 @@ async def test_billing_contact_authorization_cas_replay_audit_and_fingerprint(mi
                 )
         assert conflict.value.orig.sqlstate == "23505"
         async with migrator.connect() as connection:
+            atomic_before = (
+                await connection.execute(
+                    text(
+                        "SELECT a.version,a.contact_display_name,"
+                        "(SELECT count(*) FROM platform.billing_contact_command_receipts r "
+                        "WHERE r.workspace_id=a.workspace_id),"
+                        "(SELECT count(*) FROM app.audit_events e WHERE "
+                        "e.workspace_id=a.workspace_id AND "
+                        "e.event_type='BILLING_ACCOUNT_CONTACT_UPDATED') "
+                        "FROM platform.workspace_billing_accounts a WHERE a.workspace_id=:ws"
+                    ),
+                    {"ws": workspace},
+                )
+            ).one()
+        with pytest.raises(DBAPIError):
+            async with runtime.begin() as connection:
+                await _set_context(connection, workspace, owner, uuid4())
+                changed = await connection.execute(
+                    text(
+                        "SELECT * FROM platform.update_billing_contact"
+                        "(8,'Atomic rollback sentinel','atomic-rollback')"
+                    )
+                )
+                assert changed.mappings().one()["result_outcome"] == "UPDATED"
+                await connection.execute(text("SELECT 1/0"))
+        async with migrator.connect() as connection:
+            atomic_after = (
+                await connection.execute(
+                    text(
+                        "SELECT a.version,a.contact_display_name,"
+                        "(SELECT count(*) FROM platform.billing_contact_command_receipts r "
+                        "WHERE r.workspace_id=a.workspace_id),"
+                        "(SELECT count(*) FROM app.audit_events e WHERE "
+                        "e.workspace_id=a.workspace_id AND "
+                        "e.event_type='BILLING_ACCOUNT_CONTACT_UPDATED') "
+                        "FROM platform.workspace_billing_accounts a WHERE a.workspace_id=:ws"
+                    ),
+                    {"ws": workspace},
+                )
+            ).one()
+            assert atomic_after == atomic_before
+        async with migrator.connect() as connection:
             receipt = (
                 await connection.execute(
                     text(
@@ -648,7 +729,7 @@ async def test_billing_contact_authorization_cas_replay_audit_and_fingerprint(mi
                 .all()
             )
             assert all("Example name" not in value for value in receipt_text)
-        for bad in ("", "A\nB", "A\tB", "A\x7fB", "A" * 201, "é" * 201):
+        for bad in ("", "A\nB", "A\tB", "A\x7fB", "A" * 201, "é" * 201, "🎨" * 201):
             async with runtime.begin() as connection:
                 await _set_context(connection, workspace, owner, uuid4())
                 with pytest.raises(DBAPIError) as invalid:
@@ -657,7 +738,13 @@ async def test_billing_contact_authorization_cas_replay_audit_and_fingerprint(mi
                         {"name": bad, "key": "invalid-" + uuid4().hex},
                     )
             assert invalid.value.orig.sqlstate == "22023"
-        for version, key in ((0, "zero"), (-1, "negative"), (8, "bad key!")):
+        for version, key in (
+            (0, "zero"),
+            (-1, "negative"),
+            (8, ""),
+            (8, "k" * 129),
+            (8, "bad key!"),
+        ):
             async with runtime.begin() as connection:
                 await _set_context(connection, workspace, owner, uuid4())
                 with pytest.raises(DBAPIError) as invalid:
@@ -739,4 +826,61 @@ async def test_coherent_entitlement_snapshot_and_service_mode_filtering(
             )
         ).scalar_one()
         assert inactive == 0
+        subscription_inactive, mode_active = (
+            await connection.execute(
+                text(
+                    "WITH instant AS (SELECT '2026-10-15T00:00:00Z'::timestamptz AS now) "
+                    "SELECT (SELECT count(*) FROM platform.workspace_subscriptions s,instant i "
+                    "WHERE s.workspace_id=:ws AND i.now>=s.effective_from AND i.now<s.effective_until),"
+                    "(SELECT count(*) FROM platform.workspace_service_modes m,instant i "
+                    "WHERE m.workspace_id=:ws AND i.now>=m.effective_from AND "
+                    "(m.effective_until IS NULL OR i.now<m.effective_until))"
+                ),
+                {"ws": workspace},
+            )
+        ).one()
+        assert subscription_inactive == 0
+        assert mode_active == 0  # finite initializer mode is independently expired
+        await connection.execute(
+            text(
+                "UPDATE platform.workspace_service_modes SET effective_from='2026-08-01T00:00:00Z',"
+                "effective_until=NULL WHERE workspace_id=:ws"
+            ),
+            {"ws": workspace},
+        )
+        subscription_inactive, mode_active = (
+            await connection.execute(
+                text(
+                    "WITH instant AS (SELECT '2026-10-15T00:00:00Z'::timestamptz AS now) "
+                    "SELECT (SELECT count(*) FROM platform.workspace_subscriptions s,instant i "
+                    "WHERE s.workspace_id=:ws AND i.now>=s.effective_from AND i.now<s.effective_until),"
+                    "(SELECT count(*) FROM platform.workspace_service_modes m,instant i "
+                    "WHERE m.workspace_id=:ws AND i.now>=m.effective_from AND "
+                    "(m.effective_until IS NULL OR i.now<m.effective_until))"
+                ),
+                {"ws": workspace},
+            )
+        ).one()
+        assert (subscription_inactive, mode_active) == (0, 1)
+        await connection.execute(
+            text(
+                "UPDATE platform.workspace_service_modes SET effective_from='2026-09-20T00:00:00Z',"
+                "effective_until='2026-11-01T00:00:00Z' WHERE workspace_id=:ws"
+            ),
+            {"ws": workspace},
+        )
+        subscription_active, mode_future = (
+            await connection.execute(
+                text(
+                    "WITH instant AS (SELECT '2026-09-15T00:00:00Z'::timestamptz AS now) "
+                    "SELECT (SELECT count(*) FROM platform.workspace_subscriptions s,instant i "
+                    "WHERE s.workspace_id=:ws AND i.now>=s.effective_from AND i.now<s.effective_until),"
+                    "(SELECT count(*) FROM platform.workspace_service_modes m,instant i "
+                    "WHERE m.workspace_id=:ws AND i.now>=m.effective_from AND "
+                    "(m.effective_until IS NULL OR i.now<m.effective_until))"
+                ),
+                {"ws": workspace},
+            )
+        ).one()
+        assert (subscription_active, mode_future) == (1, 0)
         await transaction.rollback()
