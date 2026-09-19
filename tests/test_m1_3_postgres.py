@@ -419,7 +419,11 @@ async def test_exact_physical_schema_constraints_keys_and_grants(migrator):
             expected_names = set(KEY_CONSTRAINTS[table]) | CHECK_NAMES[table]
             if table == "platform.workspace_subscriptions":
                 expected_names.add("workspace_subscriptions_no_overlap_excl")
-            assert {row[0] for row in constraints} == expected_names
+            # PostgreSQL 18 exposes generated named NOT NULL constraints in
+            # pg_constraint as well. Nullability is asserted from pg_attribute
+            # above; here require every contract-defined named constraint without
+            # treating those server-generated entries as part of the contract.
+            assert expected_names <= {row[0] for row in constraints}
             by_name = {row[0]: row for row in constraints}
             for constraint, signature in KEY_CONSTRAINTS[table].items():
                 kind, local, referenced, remote = signature
