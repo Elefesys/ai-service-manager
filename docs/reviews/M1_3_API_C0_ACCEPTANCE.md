@@ -1,10 +1,43 @@
 # C0 — M1.3 backend/API slice acceptance
 
-Дата: 2026-09-20. Приёмка для интеграции только backend/API PR #14.
+Дата: 2026-09-20. Приёмка после интеграции только backend/API PR #14.
 Единственный реестр — [TASK_REGISTER](../TASK_REGISTER.md); активные инструкции —
 верхний [M1_HANDOFF](../tasks/M1_HANDOFF.md). Это evidence, не второй task register.
 
-## Решение и границы
+## Текущий post-merge verdict
+
+**M1.3 BACKEND/API SLICE — INTEGRATED / VERIFIED.** C0 подтвердил фактическую
+интеграцию и отдельное исполнение main. DB сохраняет VERIFIED. Это evidence
+API-приёмки; текущий статус UI/M1.3 находится в едином реестре, UI review — в
+[отдельном UI receipt](M1_3_UI_C0_ACCEPTANCE.md). Все pre-merge указания ниже —
+история, не текущий незакрытый gate.
+
+- PR #14 MERGED пользователем 2026-09-20T11:34:47Z.
+- Actual merge / accepted C5 implementation base:
+  `43f22b5e28a93e269eccc25bf73653e47fd01426`.
+- Parents: `2bd339ee9bb4638588e5f07b63723caaf717c619` и
+  `817e9b472dab896d4afeca5eaf2d4f5313b9a686` — обычный merge commit.
+- Tree: `a6051034784d30e1ecb4af4c28caf4a596dafdab`, равен final reviewed PR tree.
+- [Отдельный main CI 35508232378](https://github.com/Elefesys/ai-service-manager/actions/runs/35508232378),
+  event push / branch main / attempt1: SUCCESS. Head и tested-commit равны actual
+  merge выше, это не PR virtual merge. Foundation job `106071528594`, browser
+  `106071528724`; оба clean-source gates PASS.
+- 153 non-integration + 189 real PostgreSQL + 30 frontend + 6 прежних M1.2 browser
+  = 378 cases. Canonical/lint/format/types, generated contracts, migration cycles,
+  reproducibility и smoke PASS. Новых локальных PostgreSQL/browser прогонов C0 нет.
+- Artifact `10603753909`, ZIP SHA-256
+  `427b7d7c5b177459dfc936e97dc35d57c3333e575e653810f9a1199e3c61977e`.
+  C0 скачал архив и подтвердил digest, exact tested SHA, пустой worktree,
+  reconstructed Git tree и byte equality 11/11 предоставленных originals.
+
+API-01/02 CLOSED, прежние C0 и targeted C8 verdict/evidence сохраняются.
+После review implementation bytes не менялись, повторное broad review не нужно.
+На момент API-приёмки следующим действием была выдача ограниченного C5 UI/browser
+slice от accepted base. Это выполненная историческая выдача; текущие действия
+задаются только верхним M1_HANDOFF. Первый coordination commit сохранил accepted
+implementation base без отдельного docs merge перед C5.
+
+## История pre-merge решения и границы
 
 **C0 full-PR review PASS; targeted C8 PASS для API-01/02. Backend/API готов к
 обычному merge commit при SUCCESS итогового опубликованного head.** Состояние API

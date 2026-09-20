@@ -25,7 +25,8 @@ docker compose --env-file "$tmp/.env" -f compose.yaml -f compose.browser.yaml --
 docker compose --env-file "$tmp/.env" -f compose.yaml -f compose.browser.yaml --profile browser config --format json > "$compose_model"
 python3 scripts/check_browser_compose.py "$compose_model"
 docker compose --env-file "$tmp/.env" -f compose.yaml -f compose.browser.yaml --profile browser up -d --build postgres migrate api frontend
-docker compose --env-file "$tmp/.env" -f compose.yaml -f compose.browser.yaml --profile browser run --rm -T --user "$(id -u):$(id -g)" -v "$password_file:/run/browser-password:ro" browser-provision python scripts/provision_browser_test.py --password-file /run/browser-password > "$tmp/fixture.json"
+docker compose --env-file "$tmp/.env" -f compose.yaml -f compose.browser.yaml --profile browser build browser-provision
+docker compose --env-file "$tmp/.env" -f compose.yaml -f compose.browser.yaml --profile browser run --no-deps --rm -T --user "$(id -u):$(id -g)" -v "$password_file:/run/browser-password:ro" browser-provision python scripts/provision_browser_test.py --password-file /run/browser-password > "$tmp/fixture.json"
 python3 - <<'PY'
 import json
 import time
@@ -46,4 +47,4 @@ else:
     raise SystemExit("Browser stack readiness failed")
 print("BROWSER_STACK_READINESS: PASS")
 PY
-ASM_BROWSER_LOGIN=browser.owner ASM_BROWSER_PASSWORD_FILE="$password_file" npm --prefix frontend run test:e2e
+ASM_BROWSER_FIXTURE_FILE="$tmp/fixture.json" ASM_BROWSER_ENV_FILE="$tmp/.env" ASM_BROWSER_LOGIN=browser.owner ASM_BROWSER_PASSWORD_FILE="$password_file" npm --prefix frontend run test:e2e

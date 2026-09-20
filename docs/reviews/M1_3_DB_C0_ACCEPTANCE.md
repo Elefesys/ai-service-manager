@@ -3,11 +3,14 @@
 Дата: 2026-09-20. Это receipt DB-среза PR #13, не приёмка всей M1.3.
 Единственный реестр — [TASK_REGISTER](../TASK_REGISTER.md); единственный активный
 handoff — верхний блок [M1_HANDOFF](../tasks/M1_HANDOFF.md).
+Этот документ сохраняет DB evidence и последующую на тот момент выдачу C1.
+Текущий статус зависимых API/UI находится только в реестре; API post-merge evidence
+теперь зафиксирован в [отдельном API receipt](M1_3_API_C0_ACCEPTANCE.md).
 
-## Текущий post-merge verdict — 2026-09-20
+## DB post-merge receipt — состояние на момент приёмки DB 2026-09-20
 
 **M1.3 DB SLICE — INTEGRATED / VERIFIED.** Это приёмка только DB. Milestone
-M1.3 остаётся IN_PROGRESS; backend/API и UI ещё не приняты. Исторические
+M1.3 оставался IN_PROGRESS; на момент DB-приёмки backend/API и UI ещё не были приняты. Исторические
 pre-merge условия ниже выполнены и сохранены как evidence, не как текущий блокер.
 
 PR #13 фактически MERGED пользователем 2026-09-20T09:54:20Z обычным merge commit:

@@ -6,6 +6,7 @@ import json
 import os
 import sys
 
+from m1_3_browser_fixture import FixtureFailure, setup_billing, target
 from provision_local_auth import ProvisioningError, provision, read_password, validate_target
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -14,6 +15,7 @@ LOGIN = "browser.owner"
 
 
 async def setup(url: str, password: str):
+    target()  # TEST environment/database/identity checked before any write.
     result = await provision("TEST", url, LOGIN, password)
     engine = create_async_engine(url, hide_parameters=True)
     try:
@@ -28,7 +30,8 @@ async def setup(url: str, password: str):
                 ),
                 {"workspace": result["workspace_id"], "business": result["business_id"]},
             )
-        return result
+        fixtures = await setup_billing(result, password)
+        return {**result, "billing_fixtures": fixtures}
     finally:
         await engine.dispose()
 
@@ -43,6 +46,9 @@ def main() -> int:
         result = asyncio.run(setup(url, read_password(args.password_file)))
         print(json.dumps({"login": LOGIN, **result}, sort_keys=True))
         return 0
+    except FixtureFailure as error:
+        print(error.code, file=sys.stderr)
+        return 1
     except Exception:
         print(
             "Browser fixture provisioning failed; no credentials have been printed.",

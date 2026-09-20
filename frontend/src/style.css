@@ -17,3 +17,11 @@ nav { display: flex; gap: 22px; border-bottom: 1px solid #cdd4de; padding-bottom
 .detail { margin-top: 20px; border-top: 1px solid #d8dee8; padding-top: 20px; } dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; } dd { margin: 0; } footer { margin-top: 34px; color: #687287; font-size: .88rem; }
 @media (max-width: 640px) { main { padding: 24px 16px 44px; } .auth-grid { grid-template-columns: 1fr; gap: 10px; } .identity { align-items: stretch; flex-direction: column; } .actions { flex-direction: column; } nav { gap: 14px; font-size: .9rem; } .panel { padding: 19px; } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+.billing-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
+.billing-facts dd { overflow-wrap: anywhere; min-width: 0; }
+.decisions { list-style: none; padding: 0; display: grid; gap: 8px; }
+.decisions li { display: flex; justify-content: space-between; gap: 14px; padding: 12px; background: #f2f5ff; border-radius: 8px; }
+.contact-form { max-width: 620px; margin-top: 24px; }.contact-form h3, .contact-form p { margin: 0; }
+.billing .notice { border-left: 4px solid #e1a932; padding: 8px 16px; margin: 18px 0; }.billing .notice button { margin: 4px 8px 4px 0; }
+.audit { border-top: 1px solid #d8dee8; padding-top: 20px; margin-top: 26px; }.audit ol { padding-left: 24px; }.audit li { padding: 8px 0; }.audit li > * { display: block; overflow-wrap: anywhere; }.audit time { font-size: .85rem; color: #525d71; }
+@media (max-width: 640px) { .billing-heading, .decisions li { flex-direction: column; }.billing-facts { grid-template-columns: 1fr; gap: 3px; }.billing-facts dd { margin-bottom: 8px; }.decisions strong { overflow-wrap: anywhere; } }

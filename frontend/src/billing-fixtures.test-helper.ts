@@ -1,0 +1,13 @@
+import { Billing, AuditItem, ContactResult } from './billing-api';
+import { Session } from './api';
+export const ws = '22222222-2222-4222-8222-222222222222';
+export const actor = '11111111-1111-4111-8111-111111111111';
+export const id = '00000000-0000-0000-0000-000000000001';
+export const stamp = '2026-09-20T12:00:00.123456Z';
+export const session = (csrf = 'test-csrf'): Session => ({ user_account_id: actor, csrf_token: csrf, expires_at: '2030-01-01T00:00:00Z', memberships: [{ workspace_id: ws, role: 'OWNER', permissions: ['tenancy:read'] }] });
+export const billing = (name = 'Initial', version = '1'): Billing => ({ workspace_id: ws, evaluated_at: stamp, account: { billing_account_id: id, contact_display_name: name, version }, subscription: { subscription_id: id, status: 'ACTIVE', funding_mode: 'COMPED', effective_from: stamp, effective_until: '2030-01-01T00:00:00.000000Z', version: '1', plan: { plan_id: id, revision_id: id, code: 'test', revision: 1 } }, mode: 'NORMAL', mode_active: true, availability: 'ACTIVE', decisions: [ { key: 'test.m1_3.essential_true', type: 'ENABLED', reason: null, limit: null }, { key: 'test.m1_3.expensive_positive', type: 'LIMIT', reason: null, limit: '3' }, { key: 'test.m1_3.expensive_zero', type: 'LIMIT', reason: null, limit: '0' }, { key: 'test.m1_3.standard_false', type: 'DISABLED', reason: 'NOT_ENTITLED', limit: null }, { key: 'test.m1_3.standard_true', type: 'ENABLED', reason: null, limit: null } ] });
+export const receipt = (outcome: 'UPDATED' | 'NOOP' = 'UPDATED'): ContactResult => ({ workspace_id: ws, billing_account_id: id, receipt_id: id, result_version: outcome === 'NOOP' ? '1' : '2', outcome, completed_at: stamp });
+export const event = (n = 1): AuditItem => ({ audit_event_id: `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`, occurred_at: stamp, correlation_id: id, object_type: 'WORKSPACE_BILLING_ACCOUNT', object_id: id, object_version: '1', event_type: 'BILLING_ACCOUNT_CONTACT_UPDATED', actor_kind: 'USER_ACCOUNT', actor_user_account_id: actor, payload: { changed_fields: ['contact_display_name'] } });
+export const deferred = <T,>() => { let resolve!: (value: T) => void; let reject!: (e: unknown) => void; const promise = new Promise<T>((yes,no) => { resolve=yes; reject=no; }); return { promise, resolve, reject }; };
+export const ok = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
+export const fail = (status: number, code: string) => ok({ error: { code } }, status);

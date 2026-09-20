@@ -16,6 +16,9 @@ services:
   api:
     environment:
       ASM_ENVIRONMENT: TEST
+      ASM_AUTH_PEER_LIMIT: "300"
+      ASM_AUTH_GLOBAL_LIMIT: "1000"
+      ASM_AUTH_LOGIN_LIMIT: "100"
       ASM_DATABASE_URL: postgresql+psycopg://asm_runtime:${PG_RUNTIME_PASSWORD:?Run init_local.py}@postgres:5432/asm_test
   browser-provision:
     profiles: [browser]
