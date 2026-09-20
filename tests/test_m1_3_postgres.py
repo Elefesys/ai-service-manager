@@ -1311,6 +1311,7 @@ async def test_concurrent_new_idempotency_key_serializes_before_account_lock(
     """C8-M1.3-DB-01: a UNIQUE claim waits, then replays or conflicts boundedly."""
     runtime = create_async_engine(os.environ["ASM_DATABASE_URL"], hide_parameters=True)
     workspace, owner = uuid4(), uuid4()
+    blocker = blocker_tx = winner = contender = None
     async with migrator.begin() as connection:
         await connection.execute(
             text("INSERT INTO platform.user_accounts(id) VALUES(:id)"), {"id": owner}
@@ -1320,29 +1321,22 @@ async def test_concurrent_new_idempotency_key_serializes_before_account_lock(
         )
         await connection.execute(
             text(
-                "INSERT INTO platform.workspace_memberships"
-                "(workspace_id,user_account_id,role) VALUES(:ws,:owner,'OWNER')"
+                "INSERT INTO platform.workspace_memberships(workspace_id,user_account_id,role) VALUES(:ws,:owner,'OWNER')"
             ),
             {"ws": workspace, "owner": owner},
         )
         await connection.execute(
             text(
-                "SELECT platform.initialize_local_billing(:ws,'test',1,'Before race',"
-                "'ACTIVE','COMPED','2026-09-01T00:00:00Z',"
-                "'2026-10-01T00:00:00Z','NORMAL')"
+                "SELECT platform.initialize_local_billing(:ws,'test',1,'Before race','ACTIVE','COMPED','2026-09-01T00:00:00Z','2026-10-01T00:00:00Z','NORMAL')"
             ),
             {"ws": workspace},
         )
 
-    blocker = await migrator.connect()
-    blocker_tx = await blocker.begin()
-    await blocker.execute(
-        text("SELECT 1 FROM platform.workspace_billing_accounts WHERE workspace_id=:ws FOR UPDATE"),
-        {"ws": workspace},
-    )
-
-    async def command(name):
+    async def command(name, pid_future):
         async with runtime.begin() as connection:
+            pid_future.set_result(
+                (await connection.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+            )
             await _set_context(connection, workspace, owner, uuid4())
             return (
                 (
@@ -1357,56 +1351,78 @@ async def test_concurrent_new_idempotency_key_serializes_before_account_lock(
                 .one()
             )
 
-    async def waiting_commands(expected):
-        for _ in range(50):
-            async with migrator.connect() as connection:
-                count = (
-                    await connection.execute(
-                        text(
-                            "SELECT count(*) FROM pg_stat_activity WHERE "
-                            "query LIKE '%platform.update_billing_contact%' AND "
-                            "wait_event_type='Lock'"
+    async def wait_until_lock_wait(pid):
+        async def observe():
+            while True:
+                async with migrator.connect() as connection:
+                    row = (
+                        await connection.execute(
+                            text(
+                                "SELECT state,wait_event_type FROM pg_stat_activity WHERE pid=:pid"
+                            ),
+                            {"pid": pid},
                         )
-                    )
-                ).scalar_one()
-            if count >= expected:
-                return
-            await asyncio.sleep(0.02)
-        pytest.fail(f"expected {expected} lock-waiting billing commands")
+                    ).one_or_none()
+                if row is not None and row.wait_event_type == "Lock":
+                    return
+                await asyncio.sleep(0.02)
 
-    winner = asyncio.create_task(command("Winner value"))
-    await waiting_commands(1)
-    assert not winner.done(), "claimant must be blocked only after claiming, on account FOR UPDATE"
-    contender = asyncio.create_task(
-        command("Different value" if different_fingerprint else "Winner value")
-    )
-    await waiting_commands(2)
-    assert not contender.done(), "same-key contender must wait for the uncommitted UNIQUE claim"
-    await blocker_tx.commit()
-    await blocker.close()
-    winning_result = await asyncio.wait_for(winner, 5)
-    if different_fingerprint:
-        with pytest.raises(DBAPIError) as conflict:
-            await asyncio.wait_for(contender, 5)
-        assert conflict.value.orig.sqlstate == "23505"
-    else:
-        replay = await asyncio.wait_for(contender, 5)
-        assert dict(replay) == dict(winning_result)
-    async with migrator.connect() as connection:
-        receipt_count, audit_count, version, value = (
-            await connection.execute(
-                text(
-                    "SELECT (SELECT count(*) FROM platform.billing_contact_command_receipts "
-                    "WHERE workspace_id=:ws AND idempotency_key='concurrent-key'),"
-                    "(SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws AND "
-                    "event_type='BILLING_ACCOUNT_CONTACT_UPDATED'),version,contact_display_name "
-                    "FROM platform.workspace_billing_accounts WHERE workspace_id=:ws"
-                ),
-                {"ws": workspace},
-            )
-        ).one()
-        assert (receipt_count, audit_count, version, value) == (1, 1, 2, "Winner value")
-    await runtime.dispose()
+        await asyncio.wait_for(observe(), 5)
+
+    try:
+        blocker = await migrator.connect()
+        blocker_tx = await blocker.begin()
+        await blocker.execute(
+            text(
+                "SELECT 1 FROM platform.workspace_billing_accounts WHERE workspace_id=:ws FOR NO KEY UPDATE"
+            ),
+            {"ws": workspace},
+        )
+        loop = asyncio.get_running_loop()
+        winner_pid = loop.create_future()
+        contender_pid = loop.create_future()
+        winner = asyncio.create_task(command("Winner value", winner_pid))
+        await wait_until_lock_wait(await asyncio.wait_for(winner_pid, 5))
+        assert not winner.done(), "claimant must wait on explicit account FOR UPDATE"
+        contender = asyncio.create_task(
+            command("Different value" if different_fingerprint else "Winner value", contender_pid)
+        )
+        await wait_until_lock_wait(await asyncio.wait_for(contender_pid, 5))
+        assert not contender.done(), "contender must wait on the uncommitted UNIQUE receipt claim"
+        await blocker_tx.commit()
+        blocker_tx = None
+        await blocker.close()
+        blocker = None
+        winning_result = await asyncio.wait_for(winner, 5)
+        if different_fingerprint:
+            with pytest.raises(DBAPIError) as conflict:
+                await asyncio.wait_for(contender, 5)
+            assert conflict.value.orig.sqlstate == "23505"
+        else:
+            replay = await asyncio.wait_for(contender, 5)
+            assert dict(replay) == dict(winning_result)
+        async with migrator.connect() as connection:
+            state = (
+                await connection.execute(
+                    text(
+                        "SELECT (SELECT count(*) FROM platform.billing_contact_command_receipts WHERE workspace_id=:ws AND idempotency_key='concurrent-key'),(SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws AND event_type='BILLING_ACCOUNT_CONTACT_UPDATED'),version,contact_display_name FROM platform.workspace_billing_accounts WHERE workspace_id=:ws"
+                    ),
+                    {"ws": workspace},
+                )
+            ).one()
+            assert state == (1, 1, 2, "Winner value")
+    finally:
+        if blocker_tx is not None and blocker_tx.is_active:
+            await blocker_tx.rollback()
+        if blocker is not None:
+            await blocker.close()
+        for task in (winner, contender):
+            if task is not None and not task.done():
+                task.cancel()
+        pending = [task for task in (winner, contender) if task is not None]
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        await runtime.dispose()
 
 
 @pytest.mark.parametrize(
