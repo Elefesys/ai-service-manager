@@ -1,10 +1,81 @@
-# C0 — M1.3 owner UI slice acceptance
+# C0 — M1.3: UI post-merge и итоговая приёмка
 
 Дата: 2026-09-20. Единственный реестр — [TASK_REGISTER](../TASK_REGISTER.md);
-единственный активный handoff — верхний [M1_HANDOFF](../tasks/M1_HANDOFF.md).
-Это evidence приёмки UI PR #15, не второй реестр и не завершение milestone.
+активные инструкции — верхний [M1_HANDOFF](../tasks/M1_HANDOFF.md).
+Это evidence UI и итогового решения C0 по всей принятой M1.3, не второй реестр.
 
-## Verdict и scope
+## Итоговый verdict C0
+
+**M1.3 — INTEGRATED / VERIFIED в принятом LOCAL/TEST scope R4.** DB, backend/API
+и owner UI приняты последовательно; общие проверки выполнены на actual main
+после последней интеграции. Открытых implementation blockers/незакрытых критериев
+M1.3 нет. M2 не выдан; milestone completion не означает production readiness.
+
+| Срез | Actual integration | Отдельный main CI | Детальный receipt |
+|---|---|---|---|
+| DB, PR #13 | `2bd339ee9bb4638588e5f07b63723caaf717c619` | [35503584157 SUCCESS](https://github.com/Elefesys/ai-service-manager/actions/runs/35503584157) | [DB-A01…32 и границы evidence](M1_3_DB_C0_ACCEPTANCE.md) |
+| Backend/API, PR #14 | `43f22b5e28a93e269eccc25bf73653e47fd01426` | [35508232378 SUCCESS](https://github.com/Elefesys/ai-service-manager/actions/runs/35508232378) | [API-A01…18](M1_3_API_C0_ACCEPTANCE.md) |
+| Owner UI/browser, PR #15 | `e03504e8a86764e6035f3264b75bb4ce17c16fce` | [35512653134 SUCCESS](https://github.com/Elefesys/ai-service-manager/actions/runs/35512653134) | UI-A01…18 ниже |
+
+Принимаются normal local PlanRevision/Subscription/Entitlements/service mode,
+immutable receipts/CAS/Audit, настоящий EntitlementService, три permission-gated
+маршрута, строгие DTO/errors/cursor/CORS и один owner panel с contact recovery и
+Audit. Прежние M1.1/M1.2 механизмы сохраняют приёмку. R4 SHA-256
+`0d33a26aa13fb3eda34b0a5c07a4a11dc263b1ee37ce9e3fda126f53e0c0282a` и D-01…D-13
+не изменены; недостающая историческая матрица1–48 не выдаётся за найденный оригинал.
+Результат опирается на опубликованные DB/API/UI матрицы без новых требований.
+
+## Actual UI merge и отдельное исполнение main
+
+- PR #15 MERGED пользователем 2026-09-20T13:08:55Z.
+- Actual merge/head/tested SHA:
+  **`e03504e8a86764e6035f3264b75bb4ce17c16fce`**.
+- Parents: `43f22b5e28a93e269eccc25bf73653e47fd01426` и
+  `cb7c7bcf4ea16783f0bc22fadd45b4559771a8f7`, обычный merge commit.
+- Tree: `2e0719c424ee229da740e841e0d2f824b1927f1d`; точно равен принятому final PR
+  tree. Перед merge [final PR CI 35512189841](https://github.com/Elefesys/ai-service-manager/actions/runs/35512189841)
+  также SUCCESS; virtual tested SHA `237fccd2f55ff787ed8e3d53c717263facc1122c`
+  имел те же parents/tree, но не выдаётся за actual merge SHA.
+- [Main CI 35512653134](https://github.com/Elefesys/ai-service-manager/actions/runs/35512653134):
+  event `push`, branch `main`, attempt 1, SUCCESS. Foundation job `106083167645`,
+  browser `106083167797`; оба clean-source gates PASS. Checkout/browser log и
+  `tested-commit.txt` подтверждают exact actual merge SHA.
+- Штатные `sh scripts/ci.sh` и `sh scripts/test_browser.sh`: **153 backend
+  non-integration + 189 real PostgreSQL + 58 frontend + 15 real browser = 415 cases**.
+  Все 378 accepted API-base cases сохранены; C5 добавил33, C0 добавил4regressions.
+  Canonical sources, Ruff/format/strict mypy, frontend typecheck/build,
+  generated OpenAPI, migrations fresh/repeated upgrade и disposable downgrade/
+  re-upgrade, wheel/assets reproducibility и HTTP/proxy smoke PASS.
+- Artifact `10605184383`, ZIP SHA-256
+  `8720a001c7aedcefe47b56f6db4abb09d9471361648a589db2d46855d7a4ce1c`.
+  C0 скачал ZIP и независимо подтвердил digest, exact tested SHA, пустой worktree,
+  reconstructed Git tree и byte equality 11/11 приложенных canonical originals.
+- C8-M1.3-UI-01 CLOSED. Targeted C8 PASS относится к fix head
+  `7630032d29dc3f79f48a9089b60492b2520384c5`, tree
+  `203fdd8c7da809a17866df8feb77dbfa90218139`; финальный docs commit и merge
+  implementation bytes не меняли. Полное PR review выполнено C0, не приписано C8.
+
+## Остаток и границы приёмки
+
+Обязательных работ по реализации/тестированию M1.3 не осталось. Один завершающий
+docs PR от actual merge записывает этот факт в едином реестре/handoff/receipt;
+его интеграция административная и не отменяет текущего технического VERIFIED.
+Final docs head/CI публикуются в PR/ответе C0; после docs merge не создавать
+самоссылочную цепочку коммитов. Новые implementation задачи не выданы.
+
+Принятые ограничения сохранены: memory-only intentions/drafts теряются при reload,
+после reload нет automatic write; component combinations не объявляются browser
+proof; управляемая потеря доставки PATCH после настоящего commit проверена browser
+journey. Full PostgreSQL/browser исполнение — GitHub Docker runner, не локальный
+Docker. Сохранены границы DB/API receipt, включая источник concurrency evidence.
+Нет paid providers, Usage/QuotaReservation, Jobs/Outbox, catalog/subscription/mode
+editors, production Ops, production/security certification или автоматического M2.
+
+## История — pre-merge verdict, scope и evidence
+
+Следующий блок сохраняет основание review и матрицу. Прежние указания «ожидает
+merge/main CI» выполнены; они не являются текущими blockers или новым поручением.
+
 
 **C0 full-PR review PASS. Targeted C8 UI-01 PASS. UI готов к обычному merge commit
 при SUCCESS CI итогового опубликованного head.** UI пока REVIEW; PR #15 Draft /

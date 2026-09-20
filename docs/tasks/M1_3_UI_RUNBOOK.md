@@ -2,7 +2,9 @@
 
 Implementation follows the accepted R4 and generated `contracts/openapi.json`;
 no API/schema/DDL/auth contract changes. This runbook records implementation and
-execution, not C0 acceptance. M1.3 remains IN_PROGRESS; PR #15 stays Draft.
+execution. Current acceptance is recorded in the single [TASK_REGISTER](../TASK_REGISTER.md)
+and the [C0 post-merge receipt](../reviews/M1_3_UI_C0_ACCEPTANCE.md); historical PR
+status is not a prerequisite for using this runbook.
 
 ## Owner Console
 
@@ -83,4 +85,5 @@ claimed as PostgreSQL/browser evidence.
 
 Final published SHA/tree, actual tested merge SHA/parents/tree and CI results are
 reported in PR #15 and the C5 return to C0; no self-referential SHA-only commit is
-required. UI/M1.3 acceptance, merge and separate actual main verification remain C0.
+required. C0 acceptance and actual main verification are recorded in the linked
+post-merge receipt; this runbook does not issue another implementation task.
