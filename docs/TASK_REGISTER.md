@@ -13,8 +13,8 @@ Owner UI/browser implementation подготовлена поверх старт
 ограниченный явный auth/CSRF recovery, Audit limit10 и component/browser journeys.
 Команды, поведение, TEST-only fixtures и границы evidence описаны в
 [M1_3_UI_RUNBOOK](tasks/M1_3_UI_RUNBOOK.md). Backend/DDL/grants/contracts/dependencies
-и прежние browser assertions неизменны. Локально typecheck/build и53frontend
-(30прежних +23новых) PASS; Docker отсутствует. Обязательные штатные Docker/realPG/
+и прежние browser assertions неизменны. Локально typecheck/build и54frontend
+(30прежних +24новых) PASS; Docker отсутствует. Обязательные штатные Docker/realPG/
 browser gates выполняются опубликованным GitHub snapshot, не заменяются mocks.
 Их final SHA/tree/run evidence возвращается в PR и C0 без SHA-only docs chain.
 

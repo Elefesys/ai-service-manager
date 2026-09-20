@@ -116,14 +116,15 @@ export function BillingPanel({ session, workspace, recover, expired }: { session
   }
   function discard() {
     if (intent.current?.phase === 'sending' && matching) return;
+    const confirmed = intent.current?.phase === 'confirmed';
     intent.current = null; refreshIntent();
-    update({ notice: 'Намерение завершено без повтора. Его результат мог остаться неизвестным.' });
+    update({ notice: confirmed ? 'Подтверждённое намерение завершено без повторной записи.' : 'Намерение завершено без повтора. Его результат мог остаться неизвестным.' });
     if (current()) void read();
   }
   const pending = intent.current;
   const detached = pending && (!matching || !owner || view.denied);
   return <>
-    {detached && <section className="panel alert" aria-label="Незавершённое сохранение"><p role="status">В прежнем контексте осталось сохранение с неподтверждённым результатом. Оно не будет перенесено или повторено в этом контексте.</p><button className="secondary" onClick={discard}>Завершить прежнее намерение без повтора</button></section>}
+    {detached && <section className="panel alert" aria-label="Незавершённое сохранение"><p role="status">{pending.phase === 'confirmed' ? 'Команда в прежнем контексте подтверждена; текущее состояние недоступно. Повторной записи не будет.' : 'В прежнем контексте осталось сохранение с неподтверждённым результатом. Оно не будет перенесено или повторено в этом контексте.'}</p><button className="secondary" onClick={discard}>Завершить прежнее намерение без повтора</button></section>}
     {owner && (view.denied ? <section className="panel alert" role="alert"><h2>Нет доступа к данным владельца</h2><p>Защищённые данные скрыты.</p><button onClick={recover}>Проверить доступ заново</button></section> : <section className="panel billing" aria-label="Панель владельца">
       <div className="billing-heading"><div><span className="kicker">OWNER · LOCAL / TEST</span><h2>Подписка и возможности</h2></div><button className="secondary" disabled={view.readBusy || pending?.phase === 'sending'} onClick={() => { if (!readInFlight.current) void read(!!pending); }}>Обновить подписку</button></div>
       {view.readBusy && <p role="status">Загружаем подписку…</p>}

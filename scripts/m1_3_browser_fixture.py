@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+from uuid import UUID
 
 from provision_local_auth import (
     PrivateArgumentParser,
@@ -12,6 +13,7 @@ from provision_local_auth import (
     validate_target,
 )
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 PRESETS = (
@@ -24,6 +26,37 @@ PRESETS = (
     "restricted",
     "mode_inactive",
 )
+
+
+class FixtureFailure(ProvisioningError):
+    def __init__(self, stage, error):
+        # Finite stage and error codes only. Never format an exception/SQL/params.
+        code = "UNEXPECTED"
+        if isinstance(error, TimeoutError):
+            code = "TIMEOUT"
+        elif isinstance(error, ProvisioningError):
+            code = "GUARD"
+        elif isinstance(error, DBAPIError):
+            sqlstate = getattr(error.orig, "sqlstate", None)
+            code = (
+                sqlstate
+                if sqlstate
+                in {
+                    "23505",
+                    "23514",
+                    "42501",
+                    "42883",
+                    "42804",
+                    "42703",
+                    "42P01",
+                    "55P03",
+                    "57014",
+                    "P1301",
+                }
+                else "DATABASE"
+            )
+        self.code = f"M1_3_FIXTURE_{stage}_{code}"
+        super().__init__(self.code)
 
 
 def target():
@@ -51,7 +84,7 @@ async def initialize(connection, workspace):
             "SELECT platform.initialize_local_billing(:ws,'test',1,'Example name','ACTIVE','COMPED',"
             "'2000-01-01T00:00:00Z','2100-01-01T00:00:00Z','NORMAL')"
         ),
-        {"ws": workspace},
+        {"ws": UUID(workspace)},
     )
     if result.scalar_one() != "INITIALIZED":
         raise ProvisioningError("Expected fresh disposable fixture")
@@ -61,13 +94,19 @@ async def setup_billing(original, password):
     url = target()
     fixtures = {"owner": original}
     for preset in PRESETS:
-        fixtures[preset] = await provision("TEST", url, f"browser.m13-{preset}", password)
+        try:
+            fixtures[preset] = await provision("TEST", url, f"browser.m13-{preset}", password)
+        except Exception as error:
+            raise FixtureFailure("IDENTITY", error) from None
     engine = create_async_engine(url, hide_parameters=True, connect_args={"connect_timeout": 3})
+    stage = "GUARD"
     try:
         async with asyncio.timeout(15), engine.begin() as connection:
             await guard(connection)
+            stage = "INITIALIZE"
             for fixture in fixtures.values():
                 await initialize(connection, fixture["workspace_id"])
+            stage = "PRESETS"
             await connection.execute(
                 text(
                     "UPDATE platform.workspace_subscriptions SET effective_until='2001-01-01T00:00:00Z' WHERE workspace_id=:ws"
@@ -87,6 +126,8 @@ async def setup_billing(original, password):
                 {"ws": fixtures["mode_inactive"]["workspace_id"]},
             )
         return fixtures
+    except Exception as error:
+        raise FixtureFailure(stage, error) from None
     finally:
         await engine.dispose()
 

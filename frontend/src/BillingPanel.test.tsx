@@ -70,6 +70,11 @@ describe('owner panel authority and request ownership', () => {
     setup(); await ready(); vi.mocked(billingApi.read).mockRejectedValueOnce(new BillingError(503,'UNAVAILABLE')).mockResolvedValue(billing('Current','2')); await submit();
     await screen.findByText('Команда подтверждена; текущее состояние пока недоступно.'); fireEvent.click(screen.getByRole('button',{name:'Повторить чтение'})); await ready(); expect(billingApi.save).toHaveBeenCalledTimes(1); expect(screen.getByTestId('current-contact')).toHaveTextContent('Current');
   });
+  it('preserves command confirmation if the subsequent current read loses permission',async()=>{
+    setup(); await ready(); vi.mocked(billingApi.read).mockRejectedValueOnce(new BillingError(403,'ACCESS_DENIED')); await submit();
+    await screen.findByText('Нет доступа к данным владельца'); expect(screen.getByText(/Команда в прежнем контексте подтверждена/)).toBeVisible();
+    expect(screen.queryByText(/В прежнем контексте осталось сохранение/)).not.toBeInTheDocument(); expect(screen.queryByDisplayValue('New contact')).not.toBeInTheDocument(); expect(billingApi.save).toHaveBeenCalledTimes(1);
+  });
   it.each(['success','error'])('detaches a pending save and ignores late %s in another context',async kind=>{
     const pending=deferred<ReturnType<typeof receipt>>(); vi.mocked(billingApi.save).mockImplementation(()=>pending.promise); const v=setup(); await submit('Private draft');
     v.rerender(<BillingPanel {...v.props} session={{...session(),user_account_id:'other'}}/>); await screen.findByText(/В прежнем контексте/);

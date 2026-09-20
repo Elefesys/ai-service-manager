@@ -6,7 +6,7 @@ import json
 import os
 import sys
 
-from m1_3_browser_fixture import setup_billing, target
+from m1_3_browser_fixture import FixtureFailure, setup_billing, target
 from provision_local_auth import ProvisioningError, provision, read_password, validate_target
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -46,6 +46,9 @@ def main() -> int:
         result = asyncio.run(setup(url, read_password(args.password_file)))
         print(json.dumps({"login": LOGIN, **result}, sort_keys=True))
         return 0
+    except FixtureFailure as error:
+        print(error.code, file=sys.stderr)
+        return 1
     except Exception:
         print(
             "Browser fixture provisioning failed; no credentials have been printed.",
