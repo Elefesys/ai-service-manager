@@ -2,7 +2,34 @@
 
 Ответственный за интеграцию: C0. Единственный task register: `docs/TASK_REGISTER.md`. Канон: `docs/architecture/01_ARCHITECTURE_SPEC.md`, действующие ADR, MVP/Roadmap и `09_IMPLEMENTATION_PLAN.md`; стек: IMPL-001; правила: AGENTS.md.
 
-## Текущий handoff C0 — M1.2 принята, M1.3 pre-DDL / 2026-09-18
+## Единственный активный handoff C0 — DB pre-merge M1.3 / 2026-09-20
+
+Статусы — в [TASK_REGISTER](../TASK_REGISTER.md); DB-решение, матрица и evidence — в [M1_3_DB_C0_ACCEPTANCE](../reviews/M1_3_DB_C0_ACCEPTANCE.md). M1.3 IN_PROGRESS; M0/M1.1/M1.2 сохраняют VERIFIED.
+
+PR #13 `codex/-m1.3-db-only-0004` → `main`, base `552e74c7b542b81ee523d1eccfa0fffe7de06a5b`. Reviewed implementation snapshot `cc172d12e3d48f47d294d862a0c73b6ea126320d`; текущая документационная синхронизация меняет только реестр, этот handoff и DB receipt. Не создавать новый commit только ради записи SHA этой синхронизации. Итоговый PR head и его SUCCESS CI фиксирует C0 в PR и сообщении пользователю.
+
+Ближайшее действие: C0 DB review и targeted C8 завершены **PASS**, implementation CI 35502644158 **SUCCESS**; C0 проверяет полный CI итогового docs head и фиксирует точный результат в PR. После явного READY TO MERGE пользователь переводит Draft PR #13 в Ready for review при необходимости и выполняет **Create a merge commit**. Без squash/rebase/auto-merge/обхода protections. При новой code delta или изменении base C0 проверяет её до merge. C0 сам не сливает PR.
+
+После фактического merge пользователь возвращает URL PR или merge SHA. C0 сам проверяет actual merge commit, родителей/дерево и отдельный `push` run на `main`; PR virtual merge не заменяет эту проверку. Принимается только DB-срез. Затем C0 готовит одно полностью готовое сообщение C1 от подтверждённого base; пользователь не собирает поручение из файлов и не выбирает SQL/поля/тесты.
+
+Фиксированный следующий scope C1 по неизменному R4:
+
+- Billing repository и настоящий EntitlementService с согласованным DB snapshot и accepted service-mode truth table.
+- Только `GET /api/v1/workspaces/{workspace_id}/billing`, `PATCH /api/v1/workspaces/{workspace_id}/billing-account`, `GET /api/v1/workspaces/{workspace_id}/audit-events`.
+- OWNER permissions `billing:read`, `billing:manage`, `audit:read`; exact DTO/errors/cursor/decimal/timestamps.
+- Принятый M1.2 auth admission, отдельный tenant UOW, XID context, Origin/CSRF и idempotency ordering/recovery; без изменения старого auth-контракта.
+- Только additive CORS: `PATCH` + `Idempotency-Key` с сохранением прежних методов/headers/configured Origin/credentials.
+- Generated contracts и существенные API/PostgreSQL проверки, включая negative permissions, replay/revocation/rollback, оба 503 discriminators, cursor и CORS.
+
+C1 ещё не выдан до main DB evidence. C5 не запускать до приёмки и интеграции C1. Следующее ограниченное поручение C5: один owner screen с subscription/entitlements, изменением `contact_display_name` и корректным recovery, просмотром Audit, component tests и реальными browser journeys M1.3. Никаких дополнительных экранов, billing providers или будущих capabilities. После обеих частей C0 проверяет milestone acceptance; до этого M1.3 не VERIFIED и M2 не выдаётся.
+
+Принятые R4/D-01…D-13, 0001/0002/0003, tenant/auth mechanisms и предыдущие acceptance остаются в силе. SQL feasibility тест не заменяет EntitlementService; шесть существующих browser journeys — regression M1.2, не доказательство UI M1.3. Дополнительные архитектурные предложения требуют отдельного явного решения и не входят автоматически в обязательный scope.
+
+## Архив handoff — не текущие задания
+
+Весь текст ниже сохраняет историю решений и прежних выдач. При расхождении текущие действия определяет единственный активный блок выше и TASK_REGISTER; старые base/status/запреты не переисполнять.
+
+### История — M1.2 принята, M1.3 pre-DDL / 2026-09-18
 
 Полная M1.2 INTEGRATED / VERIFIED на actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`, tree `0df4c1b9a2e6922f742ebe459e46dd93d2c2959f`, PR #8 MERGED. Новый push/main run `35368244266`: foundation + browser + clean-source SUCCESS, 246 tests. Полная приёмка и границы evidence: `docs/reviews/M1_2_C0_ACCEPTANCE.md`; статусы — только `docs/TASK_REGISTER.md`.
 
