@@ -2,7 +2,32 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущее решение C0 — M1.3 DB prerequisite PASS; migration 0004 RESERVED / 2026-09-20
+## Текущее решение C0 — приёмка DB-среза M1.3 / 2026-09-20
+
+M0/M1.1 и полная M1.2 сохраняют **VERIFIED**. M1.3 остаётся **IN_PROGRESS**. DB-срез PR #13 находится в **REVIEW**: C0 DB review PASS, targeted C8 PASS; до ручного merge обязателен SUCCESS итогового head. Actual merge и отдельный push/main CI ещё не выполнены. Backend/API и UI M1.3 не приняты и не выданы.
+
+- PR: https://github.com/Elefesys/ai-service-manager/pull/13, ветка `codex/-m1.3-db-only-0004`.
+- Проверенный base main: `552e74c7b542b81ee523d1eccfa0fffe7de06a5b`.
+- Implementation snapshot: `cc172d12e3d48f47d294d862a0c73b6ea126320d`, tree `f32ec3b726d5c008476530625b56ce32c31fe1e3`; execution/review evidence — в едином [DB receipt](reviews/M1_3_DB_C0_ACCEPTANCE.md).
+- Accepted R4 неизменен: `docs/tasks/M1_3_CONTRACT.md`, SHA-256 `0d33a26aa13fb3eda34b0a5c07a4a11dc263b1ee37ce9e3fda126f53e0c0282a`. Старые PROPOSED/PENDING в самом историческом contract snapshot закрыты последующей приёмкой контракта, не являются текущим поручением перепроектировать его.
+- Историческая матрица 1–48 не найдена. Новая C0 DB-матрица в receipt явно отделена от оригинала и не вводит новых требований.
+- C8-M1.3-DB-01 имеет прежний targeted PASS. Новые C0-M1.3-DB-02…05 воспроизведены на PostgreSQL и исправлены в существующем PR; targeted C8 **PASS** на `fa83d612… → cc172d12…`, implementation CI [35502644158](https://github.com/Elefesys/ai-service-manager/actions/runs/35502644158) **SUCCESS** (288 cases, в том числе 146 PostgreSQL). Оставшихся DB implementation blockers не выявлено; результат final-head gate фиксируется в PR и ответе C0.
+
+Единственный активный handoff — верхний блок [M1_HANDOFF](tasks/M1_HANDOFF.md). Текущие инструкции находятся только здесь, в актуальной таблице задач и в верхнем handoff; остальные датированные решения ниже — история, а не параллельные задания.
+
+Конечный остаток M1.3:
+
+1. Final-head CI и обычный merge commit PR #13 пользователем; C0 затем проверяет actual merge SHA и отдельный `push/main` CI. Только после этого DB-срез становится INTEGRATED / VERIFIED.
+2. C1 от подтверждённого main: billing repository + настоящий EntitlementService; три R4 routes; permissions/DTO/errors/cursor; сохранение auth/CSRF/idempotency; additive CORS; generated contracts и существенные API/PostgreSQL tests. Затем review и интеграция C1 с main CI.
+3. C5 только от принятого API: один owner screen, subscription/entitlements, contact edit/recovery, Audit, component tests и реальные browser journeys M1.3. Затем review, интеграция и итоговая приёмка milestone C0.
+
+M2 и production не выданы. Упрощения: использовать принятую инфраструктуру auth/tenant UOW и один экран; не добавлять общий billing framework, новые routes, редакторы каталога/подписки/mode, provider payments или универсальный Audit UI. Это реализация уже принятой границы, не отмена R4 и не новые архитектурные решения. Повторный review требуется только при конкретном риске/изменении или незакрытом обязательном критерии.
+
+## История решений до DB-приёмки
+
+Все последующие датированные выдачи/запреты сохраняются как история. Актуальная таблица задач отдельно обозначена ниже.
+
+### История — M1.3 DB prerequisite PASS; migration 0004 RESERVED / 2026-09-20
 
 M0/M1.1 и полная M1.2 сохраняют VERIFIED. M1.3 pre-DDL contract интегрирован в actual main `ce585d67168489083e9b94e4be4f5669b16a8552`, tree `ace73cdf8163428eb74872c35ce9e920d5e9066c`; PR #9 MERGED, push/main run `35460116356` SUCCESS. Canonical `docs/tasks/M1_3_CONTRACT.md` SHA-256 остаётся `0d33a26aa13fb3eda34b0a5c07a4a11dc263b1ee37ce9e3fda126f53e0c0282a`. M1.3 milestone остаётся **IN_PROGRESS**.
 
@@ -130,7 +155,7 @@ C0 подготовил только четыре документационны
 
 Предыдущие разделы M1.2 ниже — история решения на прежних snapshots. Их BLOCKED/CHANGES_REQUESTED и требования доработки заменены данным решением для указанного head; история не удалена. Подробное решение и границы: `docs/reviews/M1_2_BACKEND_C0_PREMERGE.md`.
 
-## Задачи
+## Задачи — актуальная таблица
 
 | ID | Цель | Зависимости | Ведущий | Статус | Evidence / результат | Следующий шаг |
 |---|---|---|---|---|---|---|
@@ -150,11 +175,13 @@ C0 подготовил только четыре документационны
 | M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
 | M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
 | M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5; C0/C8 review | VERIFIED | PR #8 MERGED; actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`; push/main 35368244266 SUCCESS, 246 tests; UI-01/02/04/05 CLOSED | Полная приёмка: docs/reviews/M1_2_C0_ACCEPTANCE.md; не production |
-| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 и принятая M1.2 | C1; C2 DDL; C0/C2/C8 review | IN_PROGRESS | Pre-DDL contract ACCEPTED: `4d371069…`, C2 PASS, run 35458868525 / 246 regression cases | acceptance-sync CI → merge PR #9 → actual main CI → C2 `btree_gist` preflight → отдельная выдача implementation |
+| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 и принятая M1.2 | C1; C2 DDL; C5 UI; C0/C8 review | IN_PROGRESS | R4 и prerequisite приняты; PR #13 DB в REVIEW, snapshot `cc172d12…`; новая C0 matrix и evidence: docs/reviews/M1_3_DB_C0_ACCEPTANCE.md | final-head CI → ручной merge DB → actual main CI → C1 API → принятый API → C5 UI/browser → приёмка M1.3 |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 
-## Evidence приёмки M1.1
+## Исторические evidence и решения (не текущие инструкции)
+
+### Evidence приёмки M1.1
 
 PR: https://github.com/Elefesys/ai-service-manager/pull/3
 Actual merge/head CI: `b480d864a246cb0573b40fa5211f66625a71de91`.
@@ -187,7 +214,7 @@ C8 test-only PR #4 закрыт без merge; отдельная ветка не
 
 11 оригиналов импортированы в `395b760175871a3d6cde10b8e01e1f9364e3bd57`, import run `34968001558`, artifact `10395434061`, SHA-256 `fd89f2dc453e0848341b55e93565779393e772ec682a607836af267407726751`. Оригиналы/manifest сохраняются; опечатка import SHA исправлялась только в review-документе. Bootstrap `34889055896` сформировал locks в `76fd251d2b323986306731505ce59773886e5ca7`, затем mypy/BaseSettings fix `c89b839c56d14c184650423a18ec35d1fc22de41` без отключения strict typing. Ранние runs `34889375796`/`34889853771` с 25 tests относятся к старым snapshots; промежуточные source failures остаются историей. Подробные предыдущие версии этого же реестра сохранены в Git, не в другом активном реестре.
 
-## Открытые ограничения и следующая migration
+## История — ограничения и очередь migration на этапе M1.2
 
 App пока LOCAL/TEST. M1.1 — tenant foundation; backend M1.2 с auth adapter уже принят в main `aa7e792555c19d798eafa0cae17d29b73ca12376`; UI PR #8 ожидает интеграции и отдельного main CI. AuthenticatedAccount создаётся только после проверки server session; UUID не аутентификация. Same-Workspace/different-Client authorization не пройдена: Client tables ещё нет. Runtime credentials/arbitrary Python/SQL compromise не покрываются одной RLS; application authorization обязательна.
 

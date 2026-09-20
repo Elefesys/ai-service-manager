@@ -21,9 +21,13 @@ from asm.auth.config import AuthSettings
 from asm.auth.http import install_auth
 from asm.auth.service import AuthService
 from asm.auth.store import AuthStore
-from asm.tenancy import SCHEMA_REVISION, TenantDatabase
+from asm.tenancy import TenantDatabase
 
 tracer = trace.get_tracer("ai-service-manager.foundation")
+
+# Runtime readiness tracks the exact accepted Alembic head independently from the
+# frozen historical revision embedded in the tenancy.v1 semantic contract.
+DATABASE_SCHEMA_REVISION = "0004"
 
 
 class Settings(AuthSettings):
@@ -96,7 +100,11 @@ class RuntimeDatabase:
                     )
                 ).scalar_one()
                 server = (await connection.execute(text("SHOW server_version_num"))).scalar_one()
-                if version != SCHEMA_REVISION or extension != "0.8.6" or int(server) // 10000 != 18:
+                if (
+                    version != DATABASE_SCHEMA_REVISION
+                    or extension != "0.8.6"
+                    or int(server) // 10000 != 18
+                ):
                     raise RuntimeError("Database capability/schema mismatch")
 
     async def close(self) -> None:

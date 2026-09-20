@@ -14,6 +14,7 @@ CREATE SCHEMA platform AUTHORIZATION asm_migrator;
 CREATE SCHEMA app AUTHORIZATION asm_migrator;
 CREATE SCHEMA extensions;
 CREATE EXTENSION vector WITH SCHEMA extensions VERSION '0.8.6';
+CREATE EXTENSION btree_gist WITH SCHEMA extensions VERSION '1.8';
 GRANT USAGE ON SCHEMA extensions TO asm_migrator, asm_runtime;
 ALTER ROLE asm_runtime IN DATABASE :"db_name" SET search_path = pg_catalog, app, extensions;
 ALTER ROLE asm_migrator IN DATABASE :"db_name" SET search_path = pg_catalog, platform, app, extensions;

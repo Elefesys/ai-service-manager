@@ -66,3 +66,11 @@ def test_schemas_are_strict():
 
 def test_settings_hide_connection_secret():
     assert "test@" not in repr(settings())
+
+
+def test_runtime_database_head_is_independent_from_frozen_tenancy_contract():
+    from asm.foundation import DATABASE_SCHEMA_REVISION
+    from asm.tenancy import SCHEMA_REVISION
+
+    assert SCHEMA_REVISION == "0003"
+    assert DATABASE_SCHEMA_REVISION == "0004"

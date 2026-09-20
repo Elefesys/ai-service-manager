@@ -95,6 +95,8 @@ services:
       ASM_ENVIRONMENT: TEST
       ASM_DATABASE_URL: postgresql+psycopg://asm_runtime:${PG_RUNTIME_PASSWORD:?Run init_local.py}@postgres-test:5432/asm_test
       ASM_MIGRATION_DATABASE_URL: postgresql+psycopg://asm_migrator:${PG_MIGRATION_PASSWORD:?Run init_local.py}@postgres-test:5432/asm_test
+      # Disposable TEST-only administrator used by extension prerequisite lifecycle tests.
+      ASM_ADMIN_DATABASE_URL: postgresql+psycopg://asm_admin:${PG_ADMIN_PASSWORD:?Run init_local.py}@postgres-test:5432/asm_test
     depends_on:
       postgres-test: {condition: service_healthy}
 volumes:
