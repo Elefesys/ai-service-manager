@@ -115,7 +115,7 @@ async def setup_billing(original, password):
             )
             await connection.execute(
                 text(
-                    "UPDATE platform.workspace_service_modes SET mode='SUSPENDED' WHERE workspace_id=:ws"
+                    "UPDATE platform.workspace_service_modes SET mode='SUSPENDED',reason_code='TEST_SUSPENDED' WHERE workspace_id=:ws"
                 ),
                 {"ws": fixtures["restricted"]["workspace_id"]},
             )

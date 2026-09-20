@@ -123,16 +123,18 @@ for(const preset of ['inactive','restricted','mode_inactive']) test(`real ${pres
 
 test('browser credentialed CORS PATCH and disallowed-header preflight without mutation',async({page})=>{
   await signIn(page,'foreign'); const current=await read(page.request,'foreign'); const auth=await session(page.request); const before=await stats('foreign');
-  const preflight=page.waitForResponse(r=>r.request().method()==='OPTIONS'&&r.url().includes('/billing-account'));
-  const positive=await page.evaluate(async({url,body,csrf,key})=>{try {const response=await fetch(url,{method:'PATCH',credentials:'include',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':key},body:JSON.stringify(body)});return response.status;}catch{return 0;}},{url:`http://127.0.0.1:8000${path('foreign','billing-account')}`,body:{expected_version:current.account.version,contact_display_name:'CORS committed'},csrf:auth.csrf_token,key:randomUUID()});
-  expect(positive).toBe(200); expect((await preflight).status()).toBe(200); const actual=await read(page.request,'foreign');expect(actual.account.contact_display_name==='CORS committed').toBe(true);
-  let delivered=0; const record=(r:import('@playwright/test').Request)=>{if(r.method()==='PATCH'&&r.url().startsWith('http://127.0.0.1:8000'))delivered++;};page.on('request',record);
+  const url=`http://127.0.0.1:8000${path('foreign','billing-account')}`;
+  // Chromium preflights may have no frame and are filtered by Playwright's page
+  // response events. Observe real network metadata via CDP, without interception.
+  const network=await page.context().newCDPSession(page); const preflights:number[]=[]; const corsErrors:string[]=[];
+  await network.send('Network.enable');
+  network.on('Network.responseReceived',event=>{if(event.type==='Preflight'&&event.response.url===url)preflights.push(event.response.status);});
+  network.on('Network.loadingFailed',event=>{if(event.corsErrorStatus)corsErrors.push(event.corsErrorStatus.corsError);});
   try {
-    const rejected=page.waitForResponse(r=>r.request().method()==='OPTIONS'&&r.url().includes('/billing-account'));
-    const result=await page.evaluate(async({url,body,csrf,key})=>{try {await fetch(url,{method:'PATCH',credentials:'include',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':key,'X-Disallowed':'1'},body:JSON.stringify(body)});return false;}catch{return true;}},{url:`http://127.0.0.1:8000${path('foreign','billing-account')}`,body:{expected_version:actual.account.version,contact_display_name:'Must not commit'},csrf:auth.csrf_token,key:randomUUID()});
-    expect(result).toBe(true);expect((await rejected).status()).toBe(400);
-    // Chromium may expose the attempted request event even though CORS blocks
-    // wire delivery. PostgreSQL receipts/version/Audit prove no mutation.
-    const after=await stats('foreign');expect(BigInt(after.version)-BigInt(before.version)).toBe(1n);expect(after.receipts-before.receipts).toBe(1);expect(after.contact_events-before.contact_events).toBe(1);expect(delivered<=1).toBe(true);
-  } finally {page.off('request',record);}
+    const positive=await page.evaluate(async({url,body,csrf,key})=>{try {const response=await fetch(url,{method:'PATCH',credentials:'include',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':key},body:JSON.stringify(body)});return response.status;}catch{return 0;}},{url,body:{expected_version:current.account.version,contact_display_name:'CORS committed'},csrf:auth.csrf_token,key:randomUUID()});
+    expect(positive).toBe(200); await expect.poll(()=>preflights.includes(200)).toBe(true); const actual=await read(page.request,'foreign');expect(actual.account.contact_display_name==='CORS committed').toBe(true);
+    const rejected=await page.evaluate(async({url,body,csrf,key})=>{try {await fetch(url,{method:'PATCH',credentials:'include',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf,'Idempotency-Key':key,'X-Disallowed':'1'},body:JSON.stringify(body)});return false;}catch{return true;}},{url,body:{expected_version:actual.account.version,contact_display_name:'Must not commit'},csrf:auth.csrf_token,key:randomUUID()});
+    expect(rejected).toBe(true);await expect.poll(()=>preflights.includes(400)).toBe(true);await expect.poll(()=>corsErrors.some(code=>code.includes('Preflight'))).toBe(true);
+    const after=await stats('foreign');expect(BigInt(after.version)-BigInt(before.version)).toBe(1n);expect(after.receipts-before.receipts).toBe(1);expect(after.contact_events-before.contact_events).toBe(1);
+  } finally {await network.detach();}
 });
