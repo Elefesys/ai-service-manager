@@ -34,7 +34,7 @@ function timestamp(v: unknown) {
   return !Number.isNaN(date.valueOf()) && date.toISOString() === v.slice(0, 23) + 'Z';
 }
 export function normalizeContact(value: string): string {
-  const name = value.replace(/^ +| +$/g, '');
+  const name = value.replace(/^ +| +$(?![\s\S])/g, '');
   const scalars = [...name];
   if (scalars.length < 1 || scalars.length > 200 || scalars.some(c => { const n = c.codePointAt(0)!; return n < 32 || n === 127 || (n >= 0xd800 && n <= 0xdfff); }) || new TextEncoder().encode(name).length > 800) throw new BillingError(422, 'INVALID_REQUEST');
   return name;

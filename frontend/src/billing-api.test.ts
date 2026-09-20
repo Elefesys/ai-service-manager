@@ -18,6 +18,7 @@ describe('R4 generated OpenAPI consumer', () => {
   it('implements scalar/padding/byte boundaries without normalization or Unicode trim', () => {
     expect(normalizeContact('  ' + '🎨'.repeat(200) + '  ')).toBe('🎨'.repeat(200));
     expect(normalizeContact('\u00a0Name\u00a0')).toBe('\u00a0Name\u00a0'); expect(normalizeContact('e\u0301')).not.toBe(normalizeContact('é'));
+    for (const separator of ['\u2028','\u2029']) { expect(normalizeContact('  A ' + separator)).toBe('A ' + separator); expect(parseBilling(billing('A ' + separator)).account.contact_display_name).toBe('A ' + separator); }
     for (const name of [' ', '🎨'.repeat(201), 'a\n', 'a\t', 'a\u007f', '\ud800', '\udfff', '\0']) expect(() => normalizeContact(name)).toThrow('INVALID_REQUEST');
   });
   it('accepts only exact disjoint error unions and correct status codes', () => {
