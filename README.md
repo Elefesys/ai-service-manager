@@ -1,12 +1,12 @@
 # AI Service Manager
 
-M0 engineering foundation. Architecture v0.28; stack decision: `docs/decisions/IMPL-001-stack.md`.
-Current task and acceptance state: `docs/TASK_REGISTER.md`. C0 review: `docs/reviews/M0_C0_REVIEW.md`.
+Modular monolith; architecture v0.28. Stack decision: `docs/decisions/IMPL-001-stack.md`.
+Current tasks and acceptance: [`docs/TASK_REGISTER.md`](docs/TASK_REGISTER.md). M1 is accepted in its LOCAL/TEST scope; the next execution plan is [`docs/tasks/M2_HANDOFF.md`](docs/tasks/M2_HANDOFF.md).
 All eleven canonical architecture documents are in `docs/architecture/`, byte-identical to the approved project attachments. Their historical pre-implementation/Freeze-pending wording is preserved; current implementation status belongs in the task register, not in a rewritten historical snapshot.
 
 ## Scope
 
-API/Worker/Scheduler, LOCAL/TEST server auth and Business read, Business Console login/session recovery, the separate Platform Ops shell, PostgreSQL 18 + pgvector 0.8.6, separate database identities, locked builds and real PostgreSQL tests. There are no production customer data, public signup/reset/MFA, Business mutations, real AI/payment integrations or durable job queue yet. Durable Inbox/Outbox/Jobs belongs to M2.1.
+API/Worker/Scheduler, LOCAL/TEST server auth and Business read, Business Console login/session recovery, LOCAL/TEST billing/entitlements and the minimal owner contact/Audit screen, the separate Platform Ops shell, PostgreSQL 18 + pgvector 0.8.6, separate database identities, locked builds and real PostgreSQL tests. There are no production customer data, public signup/reset/MFA, Business mutations, real AI/payment integrations or durable job queue yet. Durable Inbox/Outbox/Jobs belongs to M2.1.
 
 ## LOCAL start
 
@@ -50,4 +50,4 @@ Reproducibility means locked dependencies/image inputs and matching wheel/static
 
 Read `AGENTS.md`, canonical `docs/architecture/01_ARCHITECTURE_SPEC.md`, applicable ADRs and `09_IMPLEMENTATION_PLAN.md` before changing code. Verify all source hashes with the command above. Do not change manifest hashes to hide an accidental source modification; approved future architecture revisions require explicit review and a new documented source baseline.
 
-C0 owns the single task register and integration. C2 starts M1.1 only from the accepted full commit assigned by C0; `docs/tasks/M1_HANDOFF.md` defines the bounded scope and tests. The initial README-only commit is not a valid M1 base. Do not prebuild future business schemas or assume separate chats share a checkout.
+C0 owns the single task register and integration. [`M2_HANDOFF`](docs/tasks/M2_HANDOFF.md) defines the next sequential scope; M2 implementation is not yet accepted. [`M1_HANDOFF`](docs/tasks/M1_HANDOFF.md) is closed history. C0 assigns each task an actual accepted full main commit and bounded file/migration scope. Do not prebuild future milestones or assume separate chats share a checkout.
