@@ -12,7 +12,7 @@ const fixturePath = process.env.ASM_BROWSER_FIXTURE_FILE;
 const envPath = process.env.ASM_BROWSER_ENV_FILE;
 if (!passwordPath || !fixturePath || !envPath) throw new Error('Private browser fixture files required');
 const password = readFileSync(passwordPath,'utf8');
-const fixtures: Record<string,{workspace_id:string;user_account_id:string}> = JSON.parse(readFileSync(fixturePath,'utf8')).billing_fixtures;
+const fixtures: Record<string,{workspace_id:string;user_account_id:string}> = (() => { try { return JSON.parse(readFileSync(fixturePath,'utf8')).billing_fixtures; } catch { throw new Error('E2E_SAFE_FAILURE:FIXTURE_JSON'); } })();
 const origin='http://127.0.0.1:8080';
 const path=(preset:string,suffix:string)=>`/api/v1/workspaces/${fixtures[preset].workspace_id}/${suffix}`;
 async function json(response: import('@playwright/test').APIResponse) { return requireSafeResult(await safeDiagnostic('BILLING_BODY_FAILED',()=>response.json())); }
@@ -23,7 +23,7 @@ async function patch(request:APIRequestContext,preset:string,version:string,name
   return http(()=>request.patch(path(preset,'billing-account'),{headers:{Origin:origin,'X-CSRF-Token':csrf,'Idempotency-Key':key},data:{expected_version:version,contact_display_name:name}}));
 }
 async function stats(preset:string,action='stats'):Promise<{version:string;receipts:number;contact_events:number}> {
-  const result=requireSafeResult(await safeDiagnostic('BILLING_FIXTURE_FAILED',()=>promisify(execFile)('docker',['compose','--env-file',envPath!,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-provision','python','scripts/m1_3_browser_fixture.py','--preset',preset,'--action',action],{cwd:resolve(process.cwd(),'..'),timeout:20_000,maxBuffer:64*1024})));
+  const result=requireSafeResult(await safeDiagnostic('BILLING_FIXTURE_FAILED',()=>promisify(execFile)('docker',['compose','--env-file',envPath!,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`,'browser-provision','python','scripts/m1_3_browser_fixture.py','--preset',preset,'--action',action],{cwd:resolve(process.cwd(),'..'),timeout:20_000,maxBuffer:64*1024})));
   try { return JSON.parse(result.stdout); } catch { throw new Error('E2E_SAFE_FAILURE:BILLING_FIXTURE_OUTPUT'); }
 }
 async function signIn(page:Page,preset:string) {
