@@ -3,10 +3,12 @@ import { Session } from './api';
 import { AuditItem, Billing, billingApi, BillingError, ContactBody, ContactResult, normalizeContact } from './billing-api';
 
 type Intent = { actor: string; workspace: string; account: string; body: ContactBody; key: string; phase: 'sending' | 'uncertain' | 'confirmed' | 'conflict'; failedSession: Session; result?: ContactResult };
+type StaleDraft = { actor: string; workspace: string; value: string };
 type View = { generation: number; billing: Billing | null; readBusy: boolean; readError: string; draft: string; notice: string; rows: AuditItem[] | null; cursor: string | null; auditBusy: boolean; auditError: string; denied: boolean };
 const blank = (generation: number): View => ({ generation, billing: null, readBusy: true, readError: '', draft: '', notice: '', rows: null, cursor: null, auditBusy: true, auditError: '', denied: false });
 const unavailable = (e: unknown) => e instanceof BillingError && e.code === 'BILLING_STATE_UNAVAILABLE' ? `Состояние подписки недоступно: ${e.stateReason}.` : e instanceof BillingError && e.code === 'RATE_LIMITED' ? 'Слишком много запросов. Повторите позже.' : 'Не удалось получить данные. Повторите чтение.';
 const reasons = { SUBSCRIPTION_INACTIVE: 'Подписка не действует', SERVICE_MODE_INACTIVE: 'Режим не действует', NOT_ENTITLED: 'Не предоставлено', SERVICE_MODE_RESTRICTED: 'Ограничено режимом' };
+const staleNotice = 'Конфликт версии. Черновик сохранён. Проверьте текущее состояние и сохраните заново.';
 
 // Mounted for the lifetime of Console, including login/recovery. Secrets and
 // frozen intentions live only in this page's memory; reload performs reads only.
@@ -18,6 +20,11 @@ export function BillingPanel({ session, workspace, recover, expired }: { session
   const [stored, setView] = useState<View>(() => blank(generation));
   const view = stored.generation === generation ? stored : blank(generation);
   const intent = useRef<Intent | null>(null);
+  // A definitive stale response ends the old command, but its draft must survive
+  // failed reads and same-actor auth recovery until an explicit new save.
+  const staleDraft = useRef<StaleDraft | null>(null);
+  if (staleDraft.current && session && (staleDraft.current.actor !== session.user_account_id || staleDraft.current.workspace !== workspace || !owner)) staleDraft.current = null;
+  const retainedDraft = () => staleDraft.current?.actor === session?.user_account_id && staleDraft.current?.workspace === workspace ? staleDraft.current : null;
   const [, redraw] = useState(0);
   const controllers = useRef(new Set<AbortController>());
   const readSequence = useRef(0), auditSequence = useRef(0);
@@ -34,6 +41,7 @@ export function BillingPanel({ session, workspace, recover, expired }: { session
     if (e.status === 403 && e.code !== 'CSRF_REJECTED') {
       if (intent.current?.phase === 'sending') { intent.current.phase = 'uncertain'; refreshIntent(); }
       denied.current = generation;
+      staleDraft.current = null;
       controllers.current.forEach(c => c.abort());
       setView({ ...blank(generation), denied: true, readBusy: false, auditBusy: false });
       return true;
@@ -48,7 +56,8 @@ export function BillingPanel({ session, workspace, recover, expired }: { session
       if (!current() || sequence !== readSequence.current) return;
       const pending = intent.current;
       const confirmed = pending?.phase === 'confirmed' && pending.actor === session?.user_account_id && pending.workspace === workspace;
-      update({ billing, readBusy: false, ...(!keepDraft && (!pending || confirmed) ? { draft: billing.account.contact_display_name } : {}), ...(confirmed ? { notice: pending.result?.outcome === 'NOOP' ? 'Изменений нет. Версия и Audit сохранены.' : 'Сохранение подтверждено. Текущее состояние получено.' } : {}) });
+      const retained = retainedDraft();
+      update({ billing, readBusy: false, ...(retained ? { draft: retained.value, notice: staleNotice } : !keepDraft && (!pending || confirmed) ? { draft: billing.account.contact_display_name } : {}), ...(confirmed ? { notice: pending.result?.outcome === 'NOOP' ? 'Изменений нет. Версия и Audit сохранены.' : 'Сохранение подтверждено. Текущее состояние получено.' } : {}) });
       if (confirmed) { intent.current = null; refreshIntent(); }
     } catch (e) {
       if (!current() || sequence !== readSequence.current) return;
@@ -69,7 +78,8 @@ export function BillingPanel({ session, workspace, recover, expired }: { session
   }
   useEffect(() => {
     alive.current = true;
-    setView(blank(generation));
+    const retained = retainedDraft();
+    setView({ ...blank(generation), ...(retained ? { draft: retained.value, notice: staleNotice } : {}) });
     readInFlight.current = false; auditInFlight.current = false;
     if (intent.current?.phase === 'sending') { intent.current.phase = 'uncertain'; refreshIntent(); }
     if (owner) { void read(); void audit(); }
@@ -93,8 +103,9 @@ export function BillingPanel({ session, workspace, recover, expired }: { session
       pending.phase = 'uncertain'; pending.failedSession = session; refreshIntent();
       if (authorization(e)) return;
       if (e instanceof BillingError && e.code === 'STALE_STATE') {
+        staleDraft.current = { actor: pending.actor, workspace: pending.workspace, value: pending.body.contact_display_name };
         intent.current = null; refreshIntent();
-        update({ notice: 'Конфликт версии. Черновик сохранён. Проверьте текущее состояние и сохраните заново.' });
+        update({ draft: pending.body.contact_display_name, notice: staleNotice });
         await read(true);
       } else if (e instanceof BillingError && e.code === 'IDEMPOTENCY_KEY_CONFLICT') {
         pending.phase = 'conflict'; refreshIntent(); update({ notice: 'Конфликт ключа операции. Автоматический повтор остановлен.' });
@@ -104,6 +115,12 @@ export function BillingPanel({ session, workspace, recover, expired }: { session
       }
     } finally { controllers.current.delete(c); }
   }
+  function editDraft(value: string) {
+    if (!current()) return;
+    const retained = retainedDraft();
+    if (retained) retained.value = value;
+    update({ draft: value });
+  }
   function save(event: FormEvent) {
     event.preventDefault();
     if (!current() || !session || intent.current || !view.billing || readInFlight.current) return;
@@ -111,6 +128,7 @@ export function BillingPanel({ session, workspace, recover, expired }: { session
       normalizeContact(view.draft);
       // Preserve the EXACT original wire body, including allowed padding.
       const pending: Intent = { actor: session.user_account_id, workspace, account: view.billing.account.billing_account_id, body: Object.freeze({ expected_version: view.billing.account.version, contact_display_name: view.draft }), key: crypto.randomUUID(), phase: 'uncertain', failedSession: session };
+      staleDraft.current = null;
       intent.current = pending; void send(pending);
     } catch { update({ notice: 'Введите имя: 1–200 символов Unicode без управляющих символов.' }); }
   }
@@ -134,7 +152,7 @@ export function BillingPanel({ session, workspace, recover, expired }: { session
         <p className="muted">Подписка и активность режима учитываются сервером независимо.</p>
         <ul className="decisions" aria-label="Серверные возможности">{view.billing.decisions.map(d => <li key={d.key}><span className="mono">{d.key}</span><strong>{d.type === 'LIMIT' ? `Лимит: ${d.limit}` : d.type === 'ENABLED' ? 'Разрешено' : reasons[d.reason]}</strong></li>)}</ul>
       </>}
-      <form className="form contact-form" onSubmit={save}><h3>Контакт для подписки</h3><label htmlFor="billing-contact">Имя контакта</label><input id="billing-contact" value={matching && pending ? pending.body.contact_display_name : view.draft} onChange={e => update({ draft: e.target.value })} disabled={!!pending || !view.billing || view.readBusy} autoComplete="off" aria-describedby="contact-help" /><p id="contact-help" className="muted">До 200 символов Unicode. Пробелы по краям удаляются сервером.</p><button disabled={!!pending || !view.billing || view.readBusy} type="submit">Сохранить контакт</button></form>
+      <form className="form contact-form" onSubmit={save}><h3>Контакт для подписки</h3><label htmlFor="billing-contact">Имя контакта</label><input id="billing-contact" value={matching && pending ? pending.body.contact_display_name : view.draft} onChange={e => editDraft(e.target.value)} disabled={!!pending || !view.billing || view.readBusy} autoComplete="off" aria-describedby="contact-help" /><p id="contact-help" className="muted">До 200 символов Unicode. Пробелы по краям удаляются сервером.</p><button disabled={!!pending || !view.billing || view.readBusy} type="submit">Сохранить контакт</button></form>
       {view.notice && <p role="status">{view.notice}</p>}
       {matching && pending && <div className="notice" aria-live="polite">
         {pending.phase === 'sending' && <p role="status">Сохраняем… Повторная отправка заблокирована.</p>}
