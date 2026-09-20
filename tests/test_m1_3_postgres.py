@@ -1334,6 +1334,11 @@ async def test_concurrent_new_idempotency_key_serializes_before_account_lock(
 
     async def command(name, pid_future):
         async with runtime.begin() as connection:
+            # The observer has a five-second deadline for each lock phase. Keep the
+            # disposable test transaction alive across both phases without changing
+            # the runtime role's production defaults.
+            await connection.execute(text("SET LOCAL lock_timeout = '15s'"))
+            await connection.execute(text("SET LOCAL statement_timeout = '20s'"))
             pid_future.set_result(
                 (await connection.execute(text("SELECT pg_backend_pid()"))).scalar_one()
             )
@@ -1351,27 +1356,62 @@ async def test_concurrent_new_idempotency_key_serializes_before_account_lock(
                 .one()
             )
 
-    async def wait_until_lock_wait(pid):
+    def fail_if_command_finished(task, phase):
+        if not task.done():
+            return
+        if task.cancelled():
+            raise AssertionError(f"{phase} was cancelled before the expected lock wait")
+        error = task.exception()
+        if error is not None:
+            sqlstate = getattr(getattr(error, "orig", None), "sqlstate", None)
+            detail = f" with SQLSTATE {sqlstate}" if sqlstate is not None else ""
+            raise AssertionError(f"{phase} failed before the expected lock wait{detail}") from error
+        raise AssertionError(f"{phase} completed before the expected lock wait")
+
+    async def wait_until_lock_wait(task, pid, expected_blocker_pid, phase):
         async def observe():
             while True:
-                async with migrator.connect() as connection:
+                fail_if_command_finished(task, phase)
+                # Ordinary PostgreSQL roles can inspect their own sessions. Observing
+                # asm_runtime from asm_migrator hides the wait fields unless extra
+                # monitoring privileges are granted, which the application roles must
+                # not receive merely for this test.
+                async with runtime.connect() as connection:
                     row = (
                         await connection.execute(
                             text(
-                                "SELECT state,wait_event_type FROM pg_stat_activity WHERE pid=:pid"
+                                "SELECT state,wait_event_type,"
+                                ":expected_blocker_pid=ANY(pg_catalog.pg_blocking_pids(pid)) "
+                                "AS blocked_by_expected FROM pg_catalog.pg_stat_activity "
+                                "WHERE pid=:pid AND usename=current_user"
                             ),
-                            {"pid": pid},
+                            {
+                                "pid": pid,
+                                "expected_blocker_pid": expected_blocker_pid,
+                            },
                         )
                     ).one_or_none()
-                if row is not None and row.wait_event_type == "Lock":
+                if (
+                    row is not None
+                    and row.state == "active"
+                    and row.wait_event_type == "Lock"
+                    and row.blocked_by_expected
+                ):
                     return
                 await asyncio.sleep(0.02)
 
-        await asyncio.wait_for(observe(), 5)
+        try:
+            await asyncio.wait_for(observe(), 5)
+        except TimeoutError as error:
+            fail_if_command_finished(task, phase)
+            raise AssertionError(
+                f"{phase} did not enter the expected lock wait before the observer deadline"
+            ) from error
 
     try:
         blocker = await migrator.connect()
         blocker_tx = await blocker.begin()
+        blocker_pid = (await blocker.execute(text("SELECT pg_backend_pid()"))).scalar_one()
         await blocker.execute(
             text(
                 "SELECT 1 FROM platform.workspace_billing_accounts WHERE workspace_id=:ws FOR NO KEY UPDATE"
@@ -1382,12 +1422,19 @@ async def test_concurrent_new_idempotency_key_serializes_before_account_lock(
         winner_pid = loop.create_future()
         contender_pid = loop.create_future()
         winner = asyncio.create_task(command("Winner value", winner_pid))
-        await wait_until_lock_wait(await asyncio.wait_for(winner_pid, 5))
+        winner_backend_pid = await asyncio.wait_for(winner_pid, 5)
+        await wait_until_lock_wait(winner, winner_backend_pid, blocker_pid, "initial claimant")
         assert not winner.done(), "claimant must wait on explicit account FOR UPDATE"
         contender = asyncio.create_task(
             command("Different value" if different_fingerprint else "Winner value", contender_pid)
         )
-        await wait_until_lock_wait(await asyncio.wait_for(contender_pid, 5))
+        contender_backend_pid = await asyncio.wait_for(contender_pid, 5)
+        await wait_until_lock_wait(
+            contender,
+            contender_backend_pid,
+            winner_backend_pid,
+            "contending claimant",
+        )
         assert not contender.done(), "contender must wait on the uncommitted UNIQUE receipt claim"
         await blocker_tx.commit()
         blocker_tx = None
