@@ -7,9 +7,10 @@
 ## Текущий post-merge verdict
 
 **M1.3 BACKEND/API SLICE — INTEGRATED / VERIFIED.** C0 подтвердил фактическую
-интеграцию и отдельное исполнение main. DB сохраняет VERIFIED. UI M1.3 ещё не
-реализован/не принят; milestone IN_PROGRESS. C5 выдан отдельным верхним handoff,
-M2 не выдан. Все pre-merge указания ниже — история, не текущий незакрытый gate.
+интеграцию и отдельное исполнение main. DB сохраняет VERIFIED. Это evidence
+API-приёмки; текущий статус UI/M1.3 находится в едином реестре, UI review — в
+[отдельном UI receipt](M1_3_UI_C0_ACCEPTANCE.md). Все pre-merge указания ниже —
+история, не текущий незакрытый gate.
 
 - PR #14 MERGED пользователем 2026-09-20T11:34:47Z.
 - Actual merge / accepted C5 implementation base:
@@ -31,9 +32,10 @@ M2 не выдан. Все pre-merge указания ниже — истори�
 
 API-01/02 CLOSED, прежние C0 и targeted C8 verdict/evidence сохраняются.
 После review implementation bytes не менялись, повторное broad review не нужно.
-Следующее действие — ограниченный C5 UI/browser slice от accepted base. Первый
-coordination commit этой задачи обновляет только документы; не создаёт другой
-implementation base и не требует отдельного docs merge перед C5.
+На момент API-приёмки следующим действием была выдача ограниченного C5 UI/browser
+slice от accepted base. Это выполненная историческая выдача; текущие действия
+задаются только верхним M1_HANDOFF. Первый coordination commit сохранил accepted
+implementation base без отдельного docs merge перед C5.
 
 ## История pre-merge решения и границы
 

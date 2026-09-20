@@ -2,7 +2,61 @@
 
 Ответственный за интеграцию: C0. Единственный task register: `docs/TASK_REGISTER.md`. Канон: `docs/architecture/01_ARCHITECTURE_SPEC.md`, действующие ADR, MVP/Roadmap и `09_IMPLEMENTATION_PLAN.md`; стек: IMPL-001; правила: AGENTS.md.
 
-## Единственный активный handoff — C0 → C5, M1.3 owner UI / 2026-09-20
+## Единственный активный handoff — C0: ручная интеграция UI PR #15 / 2026-09-20
+
+Статус — только [TASK_REGISTER](../TASK_REGISTER.md). DB/API INTEGRATED / VERIFIED;
+UI REVIEW, C0 full-PR PASS; targeted C8 PASS исправления UI-01. M1.3 IN_PROGRESS.
+Поручение C5 выполнено и сохранено ниже как история; повторно его не запускать.
+
+- Repository: `https://github.com/Elefesys/ai-service-manager.git`.
+- PR: [#15](https://github.com/Elefesys/ai-service-manager/pull/15),
+  `c5/m1-3-owner-ui` → `main`, Draft / open / not merged.
+- Accepted base / actual API merge: `43f22b5e28a93e269eccc25bf73653e47fd01426`,
+  tree `a6051034784d30e1ecb4af4c28caf4a596dafdab`;
+  [push/main CI 35508232378](https://github.com/Elefesys/ai-service-manager/actions/runs/35508232378) SUCCESS.
+- Сохранён coordination head `2274667f06ddd72b1a02c57fb555456e948f2c50`.
+- Reviewed implementation с ограниченным fix:
+  `7630032d29dc3f79f48a9089b60492b2520384c5`,
+  tree `203fdd8c7da809a17866df8feb77dbfa90218139`.
+  [CI 35511904393](https://github.com/Elefesys/ai-service-manager/actions/runs/35511904393)
+  SUCCESS, 415 cases, оба clean-source gates PASS.
+- [UI C0 receipt](../reviews/M1_3_UI_C0_ACCEPTANCE.md) содержит проверяемую матрицу,
+  закрытый дефект и границы C0/C8/browser evidence. [UI runbook](M1_3_UI_RUNBOOK.md)
+  описывает работу готового UI и воспроизводимые команды, не новое задание.
+
+### Последнее действие до merge
+
+После этого согласованного docs update C0 проверяет SUCCESS CI именно итогового
+head и неизменный main/base; full head/tree, tested merge SHA/parents/tree и URL run
+фиксируются в PR и ответе C0. Не создавать новый commit лишь для записи SHA этого
+документа. Если head/base изменился неожиданно, проверить конкретную дельту прежде
+чем разрешать merge. Нельзя переносить старый SUCCESS на непроверенный snapshot.
+
+Пользователь открывает PR #15 и после финального подтверждения C0 выполняет
+**Ready for review → Create a merge commit → Confirm merge**. Без squash/rebase,
+force-push, auto-merge или обхода защит. Вернуть C0 «слито» либо URL merge commit;
+техническую проверку SHA/CI пользователь не собирает самостоятельно.
+
+### После фактического merge
+
+C0 проверяет actual merge parents = принятый main + final PR head, tree = final
+reviewed tree, отдельный workflow event `push` / branch `main` / head и tested SHA
+= actual merge. Оба jobs/clean-source gates, 153 backend non-integration,
+189 real PostgreSQL, 58 frontend и 15 real browser должны пройти на этом snapshot.
+Затем согласованно фиксирует интеграцию UI и итоговое решение всей M1.3 с учётом
+сохранённой DB/API приёмки. До этого UI не INTEGRATED/VERIFIED и M1.3 IN_PROGRESS.
+
+Никаких новых обязательных implementation работ или архитектурных изменений не
+назначено. Сохраняются R4/D-01…D-13, прежние auth/tenancy/grants, snapshot/service,
+одна typed DB command, три маршрута, один owner panel и Audit limit10. Новое broad
+C8 review без конкретного риска не нужно. M2/production/providers/payments/Jobs,
+catalog/subscription/mode editors и полный production Ops не выдаются.
+
+## История — выполненное поручение C0 → C5, owner UI / 2026-09-20
+
+Ниже сохранены принятый scope и критерии; это завершённое поручение, не активная
+инструкция снова начинать реализацию. Его приёмка/evidence находятся выше.
+
 
 Это полное конечное поручение C5. Единственный статус исполнения находится в
 [TASK_REGISTER](../TASK_REGISTER.md). DB и backend/API INTEGRATED / VERIFIED;
