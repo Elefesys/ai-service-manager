@@ -8,12 +8,30 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import AfterValidator, Field, StringConstraints
+from pydantic import AfterValidator, Field, StringConstraints, WithJsonSchema
 
 MAX_BIGINT = 9223372036854775807
 UUID_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 TIMESTAMP_PATTERN = r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$"
 KEY_PATTERN = r"^[A-Za-z0-9._:-]{1,128}$"
+
+# Input bounds apply after U+0020 trim. This JSON Schema expression counts
+# Unicode scalars with ECMA-262 Unicode matching, including astral characters.
+# The normalized first/last scalars cannot be U+0020; internal spaces are valid.
+ContactNameInput = Annotated[
+    str,
+    WithJsonSchema(
+        {
+            "type": "string",
+            "minLength": 1,
+            "pattern": (
+                r"^ *[^\u0000-\u0020\u007f\ud800-\udfff]"
+                r"(?:[^\u0000-\u001f\u007f\ud800-\udfff]{0,198}"
+                r"[^\u0000-\u0020\u007f\ud800-\udfff])? *(?![\s\S])"
+            ),
+        }
+    ),
+]
 
 
 def _decimal_pattern(zero: bool) -> str:

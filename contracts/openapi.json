@@ -1869,8 +1869,8 @@
                 "properties": {
                   "contact_display_name": {
                     "description": "Trim U+0020 only, then 1..200 Unicode scalars, <=800 UTF-8 bytes; no C0/DEL/surrogates.",
-                    "maxLength": 200,
                     "minLength": 1,
+                    "pattern": "^ *[^\\u0000-\\u0020\\u007f\\ud800-\\udfff](?:[^\\u0000-\\u001f\\u007f\\ud800-\\udfff]{0,198}[^\\u0000-\\u0020\\u007f\\ud800-\\udfff])? *(?![\\s\\S])",
                     "title": "Contact Display Name",
                     "type": "string"
                   },

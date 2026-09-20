@@ -716,10 +716,14 @@ async def test_revocation_cannot_overtake_admitted_http_command_then_blocks_repl
                     {"id": UA},
                 )
         assert waiting.value.orig.sqlstate == "55P03"
+        release.set()
+        response = await asyncio.wait_for(task, 2)
+        assert response.status_code == 200
     finally:
         release.set()
-    response = await asyncio.wait_for(task, 2)
-    assert response.status_code == 200
+        if not task.done():
+            task.cancel()
+        await asyncio.wait_for(asyncio.gather(task, return_exceptions=True), 2)
     async with h.migrator.begin() as connection:
         await connection.execute(
             text(
@@ -741,6 +745,10 @@ async def test_real_concurrent_http_claims_and_cas_have_one_changing_winner(
     original = TenantUnitOfWork.billing_contact
 
     async def capture_pid(self, *args):
+        # Test-local only. One observation deadline below both SQL deadlines
+        # and the unchanged four-second outer auth admission deadline.
+        await self._execute("SET LOCAL lock_timeout='3s'", {})
+        await self._execute("SET LOCAL statement_timeout='3500ms'", {})
         pids.append((await self._execute("SELECT pg_backend_pid()", {})).scalar_one())
         if len(pids) == 2:
             entered.set()
@@ -756,42 +764,48 @@ async def test_real_concurrent_http_claims_and_cas_have_one_changing_winner(
                 ),
                 {"ws": A},
             )
-            tasks = [
-                asyncio.create_task(patch(h, "Winner", key="first")),
-                asyncio.create_task(
-                    patch(
-                        h,
-                        "Winner" if case == "same_intent" else "Other",
-                        key="second" if case == "different_keys" else "first",
-                    )
-                ),
-            ]
-            await asyncio.wait_for(entered.wait(), 2)
 
             async def blocked():
                 while True:
-                    async with h.runtime.engine.connect() as connection:
-                        waiting = (
-                            await connection.execute(
-                                text(
-                                    "SELECT count(*) FROM pg_stat_activity WHERE pid IN (:a,:b) AND usename=current_user "
-                                    "AND wait_event_type='Lock' AND cardinality(pg_blocking_pids(pid))>0"
-                                ),
-                                {"a": pids[0], "b": pids[1]},
+                    for task in tasks:
+                        if task.done():
+                            response = await task
+                            pytest.fail(
+                                f"HTTP command ended before blocker release: {response.status_code} {response.text}"
                             )
-                        ).scalar_one()
-                    if waiting == 2:
-                        return
-                    assert all(not task.done() for task in tasks)
+                    if entered.is_set():
+                        async with h.runtime.engine.connect() as connection:
+                            waiting = (
+                                await connection.execute(
+                                    text(
+                                        "SELECT count(*) FROM pg_stat_activity WHERE pid IN (:a,:b) AND usename=current_user "
+                                        "AND wait_event_type='Lock' AND cardinality(pg_blocking_pids(pid))>0"
+                                    ),
+                                    {"a": pids[0], "b": pids[1]},
+                                )
+                            ).scalar_one()
+                        if waiting == 2:
+                            return
                     await asyncio.sleep(0.01)
 
-            await asyncio.wait_for(blocked(), 2)
+            async with asyncio.timeout(2):
+                tasks = [
+                    asyncio.create_task(patch(h, "Winner", key="first")),
+                    asyncio.create_task(
+                        patch(
+                            h,
+                            "Winner" if case == "same_intent" else "Other",
+                            key="second" if case == "different_keys" else "first",
+                        )
+                    ),
+                ]
+                await blocked()
         responses = await asyncio.wait_for(asyncio.gather(*tasks), 2)
     finally:
         for task in tasks:
             if not task.done():
                 task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), 2)
     if case == "same_intent":
         assert [r.status_code for r in responses] == [200, 200]
         assert responses[0].json() == responses[1].json()

@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from asm.billing.validation import (
     CanonicalUUID,
     CapabilityKey,
+    ContactNameInput,
     LimitDecimal,
     PositiveDecimal,
     Timestamp,
@@ -68,7 +69,7 @@ class ContactPatch(StrictModel):
         description="Trim U+0020 only, then 1..200 Unicode scalars, <=800 UTF-8 bytes; no C0/DEL/surrogates.",
     )
 
-    @field_validator("contact_display_name", mode="before")
+    @field_validator("contact_display_name", mode="before", json_schema_input_type=ContactNameInput)
     @classmethod
     def name(cls, value: object) -> str:
         return normalize_name(value)
