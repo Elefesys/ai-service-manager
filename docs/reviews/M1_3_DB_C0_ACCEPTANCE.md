@@ -4,7 +4,32 @@
 Единственный реестр — [TASK_REGISTER](../TASK_REGISTER.md); единственный активный
 handoff — верхний блок [M1_HANDOFF](../tasks/M1_HANDOFF.md).
 
-## Решение и граница
+## Текущий post-merge verdict — 2026-09-20
+
+**M1.3 DB SLICE — INTEGRATED / VERIFIED.** Это приёмка только DB. Milestone
+M1.3 остаётся IN_PROGRESS; backend/API и UI ещё не приняты. Исторические
+pre-merge условия ниже выполнены и сохранены как evidence, не как текущий блокер.
+
+PR #13 фактически MERGED пользователем 2026-09-20T09:54:20Z обычным merge commit:
+
+- Actual main / accepted C1 base: `2bd339ee9bb4638588e5f07b63723caaf717c619`.
+- Parents: `552e74c7b542b81ee523d1eccfa0fffe7de06a5b` и `0df55aa577b49b6bc863c2f8b76d1851eea01457`.
+- Tree: `5bf0a4fc429cc11b1b1b2da03147fad6ab088ad8`, совпадает с final reviewed PR tree.
+- Отдельный [main CI 35503584157](https://github.com/Elefesys/ai-service-manager/actions/runs/35503584157): event `push`, branch `main`, head/tested-commit равен actual merge. Это отдельный run после слияния, не PR virtual merge.
+- `foundation` job `106059511797`, `browser` job `106059511924`: SUCCESS, оба clean-source gates PASS.
+- 106 non-integration + 146 real PostgreSQL + 30 frontend + 6 прежних M1.2 Playwright = 288 cases. Canonical import, migration lifecycle/readiness, contracts/types/lint, Docker/proxy smoke и wheel/assets reproducibility прошли.
+- Artifact `10603615904`, ZIP SHA-256 `d7262e5802a1271907f4c215ed40258dcbe7217118d76fabf04615fd8f36b834`. C0 скачал archive, проверил digest, actual tested SHA, пустой worktree, reconstructed Git tree и byte equality 11/11 canonical originals.
+
+Новых code delta после C0/C8 acceptance нет. Прежние границы новой DB-A01…32
+матрицы и targeted C8 сохраняются; отдельный повторный review не нужен.
+
+C0 выдаёт следующий ограниченный backend/API scope C1 в единственном активном
+M1_HANDOFF от подтверждённого base выше. Первый docs commit task branch
+`c1/m1-3-billing-api` синхронизирует только реестр/handoff/этот receipt; code base
+сохраняется. C1 API acceptance и отдельная интеграция предшествуют C5 owner UI.
+После C5/integration C0 решает статус всей M1.3; до этого не выдавать M2.
+
+## История pre-merge решения и границы
 
 **C0 DB REVIEW — PASS; TARGETED C8 — PASS.** Оставшихся implementation blockers
 DB-среза не выявлено. Implementation PostgreSQL CI прошёл. Для разрешения
@@ -155,7 +180,7 @@ owner UI и M1.3 browser journeys. Их accepted specification уже есть �
 Принятая M1.2 admission/revocation семантика сохранена; прямые SQL tests не выдают
 её за уже выполненную интеграцию будущего billing HTTP handler.
 
-## Конечные действия
+## История pre-merge последовательности действий (DB шаг выполнен)
 
 1. После targeted C8 и SUCCESS final head C0 даёт пользователю READY TO MERGE
    только PR #13 DB. Пользователь выполняет обычный **Create a merge commit**
