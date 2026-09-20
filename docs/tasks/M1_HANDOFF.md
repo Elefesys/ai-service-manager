@@ -2,7 +2,58 @@
 
 Ответственный за интеграцию: C0. Единственный task register: `docs/TASK_REGISTER.md`. Канон: `docs/architecture/01_ARCHITECTURE_SPEC.md`, действующие ADR, MVP/Roadmap и `09_IMPLEMENTATION_PLAN.md`; стек: IMPL-001; правила: AGENTS.md.
 
-## Единственный активный handoff — C0: ручная интеграция UI PR #15 / 2026-09-20
+## Единственный активный handoff — C0: M1.3 принята / 2026-09-20
+
+**M1.3 INTEGRATED / VERIFIED.** Единственный статус —
+[TASK_REGISTER](../TASK_REGISTER.md). Поручения C2 DB, C1 API и C5 UI выполнены;
+исторические блоки ниже не являются заданиями начать их снова. M2 не выдан.
+
+### Подтверждённый общий implementation base
+
+- Repository: `https://github.com/Elefesys/ai-service-manager.git`.
+- PR #15 MERGED обычным merge commit
+  **`e03504e8a86764e6035f3264b75bb4ce17c16fce`**.
+- Parents: API main `43f22b5e28a93e269eccc25bf73653e47fd01426` и final UI head
+  `cb7c7bcf4ea16783f0bc22fadd45b4559771a8f7`.
+- Tree `2e0719c424ee229da740e841e0d2f824b1927f1d` равен принятому final PR tree.
+- [Push/main CI 35512653134](https://github.com/Elefesys/ai-service-manager/actions/runs/35512653134)
+  SUCCESS, exact head/tested SHA = actual merge; 415 cases и оба clean-source gates.
+- [Итоговое evidence M1.3](../reviews/M1_3_UI_C0_ACCEPTANCE.md) связывает приёмку
+  DB/API/UI и сохраняет матрицы и targeted C8 verdict с их реальными границами.
+
+### Единственное текущее действие
+
+Интегрировать один завершающий documentation PR от base выше, ветка
+`c0/m1-3-acceptance` → `main`. Номер, final head/tree и успешный CI C0 указывает
+в сопровождающем сообщении и PR после фактической публикации. Разрешены только:
+`docs/TASK_REGISTER.md`, этот handoff, `docs/reviews/M1_3_UI_C0_ACCEPTANCE.md`
+и статусная ссылка `docs/tasks/M1_3_UI_RUNBOOK.md`. Реализация не меняется.
+
+После green final-head CI пользователь выполняет Ready for review →
+**Create a merge commit → Confirm merge**, возвращает C0 «слито» или URL merge.
+C0 сверяет actual docs merge и отдельный push/main CI, после чего достаточно
+ответа/обновления PR metadata. **Не создавать следующий docs commit только для
+записи SHA этого docs merge.** Это закрывает административную фиксацию уже принятой
+M1.3, не переоткрывает её техническую приёмку.
+
+### Сохранённая граница и последующие задачи
+
+R4/D-01…D-13, auth/tenancy/grants, coherent SQL snapshot, EntitlementService,
+одна typed DB command, три маршрута, один owner panel, Audit limit10 и принятый
+memory-only recovery остаются без пересмотра. DB/API/UI findings закрыты;
+нет оснований повторять broad C8 review неизменного кода.
+
+Новых implementation задач в этом handoff нет. M2.1 указан следующим этапом
+в принятом плане, но его scope/контракт/ветка исполнителям здесь не выдаются.
+Перед отдельным новым заданием C0 проверяет actual main и его CI; docs-only
+потомок принятого base не требует нового проектирования M1.3.
+Production, provider billing, Jobs/Outbox, editors и privileged Ops не включены.
+
+## История — выполненная интеграция UI PR #15 / 2026-09-20
+
+Все ниже перечисленные merge/main gates PR #15 уже выполнены. Блок сохранён
+как история review и не является текущим поручением или blocker.
+
 
 Статус — только [TASK_REGISTER](../TASK_REGISTER.md). DB/API INTEGRATED / VERIFIED;
 UI REVIEW, C0 full-PR PASS; targeted C8 PASS исправления UI-01. M1.3 IN_PROGRESS.
