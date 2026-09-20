@@ -4,7 +4,7 @@
 
 ## Текущее решение C0 — DB принят; выдан backend/API C1 / 2026-09-20
 
-**DB-срез M1.3 — INTEGRATED / VERIFIED. M1.3 milestone — IN_PROGRESS.** M0/M1.1/полная M1.2 сохраняют VERIFIED. Backend/API C1 выдан; его реализация и приёмка ещё не подтверждены. C5 и M2 не выданы.
+**DB-срез M1.3 — INTEGRATED / VERIFIED. M1.3 milestone — IN_PROGRESS.** M0/M1.1/полная M1.2 сохраняют VERIFIED. Backend/API C1 реализован в продолжаемом Draft PR #14 и передаётся на CI/C0 review; приёмка и интеграция API не выполнены. C5 и M2 не выданы.
 
 PR #13 MERGED обычным merge commit `2bd339ee9bb4638588e5f07b63723caaf717c619`; parents `552e74c7b542b81ee523d1eccfa0fffe7de06a5b` и `0df55aa577b49b6bc863c2f8b76d1851eea01457`; tree `5bf0a4fc429cc11b1b1b2da03147fad6ab088ad8` совпадает с принятым PR snapshot. Отдельный [push/main CI 35503584157](https://github.com/Elefesys/ai-service-manager/actions/runs/35503584157) SUCCESS: foundation/browser и оба clean-source gates, 106 non-integration + 146 PostgreSQL + 30 frontend + 6 прежних M1.2 browser = 288 cases. C0 проверил actual tested SHA, ZIP digest, clean worktree, reconstructed tree и 11/11 canonical originals.
 
@@ -23,6 +23,28 @@ Receipt с полной матрицей и post-merge evidence: [M1_3_DB_C0_ACC
 Переиспользовать принятый auth/UOW и DB command; R4 не сокращается. Новые provider payments, catalog/subscription/mode editors, Jobs/Outbox, общий billing framework, production и дополнительные endpoints не входят. Новые архитектурные предложения отделяются от исправлений и не считаются принятыми автоматически.
 
 Текущие инструкции — только этот блок, актуальная таблица задач и верхний M1_HANDOFF. Датированные записи ниже сохранены как история.
+
+### C1 implementation candidate / 2026-09-20
+
+Продолжен [Draft PR #14](https://github.com/Elefesys/ai-service-manager/pull/14),
+с сохранением coordination commit `4c167e2ea1e2cb3e9721a7cefe5da72372eca0ad`
+над принятым base `2bd339ee9bb4638588e5f07b63723caaf717c619`.
+Реализованы один DB-time SQL snapshot/EntitlementService, отдельные live OWNER
+permissions, три точных R4 routes, guarded tenant adapters, единственная contact
+SQL command, строгие DTO/errors/cursor и additive CORS. OpenAPI сгенерирован;
+семь прежних routes и все прежние OpenAPI schemas сохранены семантически точно.
+R4, migrations/grants, frozen auth/tenancy contracts, frontend, dependencies и CI
+не менялись. Consumer/recovery сведения находятся в `contracts/README.md` рядом
+с generated OpenAPI; нового нормативного контракта нет.
+
+Локальный Python 3.13.15 / `uv sync --frozen --offline --python 3.13`: Ruff,
+format, strict mypy, 152 non-integration tests, generated OpenAPI check и 11/11
+canonical checksums PASS. Добавлены 43 real API/PostgreSQL cases; их collection
+не является исполнением. `sh scripts/ci.sh` и `sh scripts/test_browser.sh` здесь
+завершились `docker: not found`; полное исполнение — в неизменённом GitHub runner.
+Конечные head/tree, CI URL, фактически tested SHA/tree и результаты публикуются
+C1 в этом PR и едином возврате C0 после последнего commit, без SHA-only docs chain.
+Эта запись не заменяет CI evidence и не объявляет API INTEGRATED/VERIFIED.
 
 ## История — DB pre-merge решение
 

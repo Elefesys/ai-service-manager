@@ -288,7 +288,7 @@ def install_auth(app: FastAPI, service: AuthService, settings: AuthSettings) -> 
         CORSMiddleware,
         allow_origins=list(settings.auth_origins),
         allow_credentials=True,
-        allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", "X-CSRF-Token", "X-CSRF-Bootstrap"],
+        allow_methods=["GET", "POST", "PATCH"],
+        allow_headers=["Content-Type", "X-CSRF-Token", "X-CSRF-Bootstrap", "Idempotency-Key"],
         max_age=600,
     )

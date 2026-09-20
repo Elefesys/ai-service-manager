@@ -180,6 +180,39 @@ C5 endpoint/DTO/error/cursor/auth/CSRF/recovery сведения. PR остав�
 новый review назначает по конкретным рискам/критериям, затем разрешает пользователю
 интеграцию и проверяет actual main CI. C5 — только после этого, M2 не выдавать.
 
+### C1 — реализация активного backend/API поручения / 2026-09-20
+
+Implementation candidate находится в существующем Draft PR #14. Сохранены
+подготовленный coordination commit и принятый implementation base. Фактическое
+состояние — в TASK_REGISTER; приёмка API/C5/M2 самостоятельно не объявляется.
+
+- `asm/billing/`: strict models/validation/errors, отдельная OWNER policy,
+  fixed SQL repository и `EntitlementService.decide(snapshot, key)`, HTTP adapter.
+  Snapshot включает DB time и interval flags одним statement; критичность берётся
+  только из pinned SEALED revision. Archived plan, INTEGER zero и все precedence
+  уровни покрыты; billing state не управляет auth/contact admission.
+- `tenancy/database.py`: только guarded fixed billing methods на текущем connection,
+  live membership resolver и локальный mapping intentional contact-command RAISEs.
+  Общий tenancy SQLSTATE mapping не изменён; failed UOW остаётся poisoned.
+- OpenAPI сгенерирован из работающих routes/models; consumer сведения, включая
+  same-intent ambiguous-result recovery и GET current state, — `contracts/README.md`.
+- `tests/test_m1_3_service.py`: 37 unit cases для полной precedence, contradictory
+  snapshots (честно вне обычного DDL), восьми exact vectors и strict wire primitives.
+- `tests/test_m1_3_http_contract.py`: 9 schema/CORS cases; прежний auth inventory test
+  теперь требует точное множество семи старых плюс три новых routes.
+- `tests/test_m1_3_api_postgres.py`: 43 real PostgreSQL/API cases для modes/intervals,
+  OWNER/live revocation/foreign tenant, read failures и обоих 503, CAS/no-op/replay,
+  raw inputs, восьми fingerprints в receipts, Audit keyset, rollback, admission race,
+  concurrent claims и ambiguous committed result recovery. PostgreSQL fault injection
+  меняет только изолированные test fixtures/statements, не runtime DDL/privileges.
+
+Локально прошли 152 non-integration tests, Ruff/format/mypy, contract drift и
+canonical import. Docker здесь отсутствует; collection PostgreSQL tests не
+выдаётся за исполнение. Полный unchanged CI runner и шесть M1.2 browser journeys
+обязательны на конечном опубликованном snapshot. Exact final head/tree и CI/tested
+SHA/tree передаются в PR/сообщении C0 после последнего commit, без записи собственного
+SHA следующим docs commit. UI M1.3 browser proof остаётся будущим C5.
+
 ## Архив handoff — не текущие задания
 
 Весь текст ниже сохраняет историю решений и прежних выдач. При расхождении текущие действия определяет единственный активный блок выше и TASK_REGISTER; старые base/status/запреты не переисполнять.
@@ -386,4 +419,3 @@ C2 обязан вернуть exact base/head/tree, migration/grant diff, real 
 Не drop `btree_gist` на downgrade. Не выдавать `CREATE` на database/schema `extensions` роли `asm_migrator`. Не делать runtime owner/SUPERUSER/BYPASSRLS. Не расширять scope до billing provider/client payments/Jobs/production retention.
 
 После DB integration C0 отдельно выдаёт C1 backend/API/CORS slice; C5 только после принятого API SHA.
-
