@@ -2,7 +2,233 @@
 
 Ответственный за интеграцию: C0. Единственный task register: `docs/TASK_REGISTER.md`. Канон: `docs/architecture/01_ARCHITECTURE_SPEC.md`, действующие ADR, MVP/Roadmap и `09_IMPLEMENTATION_PLAN.md`; стек: IMPL-001; правила: AGENTS.md.
 
-## Единственный активный handoff — C0: интеграция backend/API PR #14 / 2026-09-20
+## Единственный активный handoff — C0 → C5, M1.3 owner UI / 2026-09-20
+
+Это полное конечное поручение C5. Единственный статус исполнения находится в
+[TASK_REGISTER](../TASK_REGISTER.md). DB и backend/API INTEGRATED / VERIFIED;
+полная M1.3 IN_PROGRESS. Реализовать только owner UI/browser часть принятого R4.
+
+### Repository, base и ветка
+
+- Repository: `https://github.com/Elefesys/ai-service-manager.git`.
+- Accepted implementation base: **`43f22b5e28a93e269eccc25bf73653e47fd01426`** — actual
+  merge PR #14; tree `a6051034784d30e1ecb4af4c28caf4a596dafdab`.
+- [Отдельный push/main CI 35508232378](https://github.com/Elefesys/ai-service-manager/actions/runs/35508232378)
+  SUCCESS, 378 cases, оба clean-source gates PASS; exact tested SHA равен base.
+- Task branch: **`c5/m1-3-owner-ui`**, target `main`. Продолжать единственный
+  подготовленный Draft PR этой ветки; его номер и полный стартовый head C0
+  передаёт в сопровождающем сообщении/PR. PR #14 закрыт после merge.
+- Сохранить первый C0 coordination commit. Он меняет только TASK_REGISTER,
+  этот handoff, API receipt и исторический контекст DB receipt. Не выполнять
+  отдельный docs merge, не переписывать coordination history.
+- Работать в отдельном checkout. Проверить refs/ancestry; при неожиданной code
+  delta/base сообщить C0 точное расхождение, не force-push/rebase/merge самостоятельно.
+
+### Источники и неизменяемая граница
+
+Прочитать AGENTS, актуальные Spec §§15–17, применимые ADR-002/005/006/064/099…109/
+126/182, MVP и Implementation Plan, [R4](M1_3_CONTRACT.md) §§4–7,
+[API acceptance](../reviews/M1_3_API_C0_ACCEPTANCE.md), существующий auth/UI contract
+и recovery tests M1.2. R4 SHA-256:
+`0d33a26aa13fb3eda34b0a5c07a4a11dc263b1ee37ce9e3fda126f53e0c0282a`.
+D-01…D-13 приняты; исторические PROPOSED/PENDING внутри R4 не открывают новый design gate.
+
+API DTO/schema source — **`contracts/openapi.json`** на accepted base, consumer/recovery
+notes — **`contracts/README.md`**. R4 нормативен. Не создавать новый конкурирующий
+контракт, не вычислять billing decisions по имени плана и не подменять разрешения UI.
+Auth/tenancy/DB и все 342 backend cases уже приняты; их не переписывать ради UI.
+
+### Разрешённые файлы
+
+- `frontend/src/`: только необходимые billing DTO/parser/API adapter, owner panel,
+  локальное UI state/recovery, wiring в существующую Console, styles и component tests.
+  Сохранить прежние auth request ownership/logout intent, Business read и Ops isolation.
+- `frontend/e2e/`: новые M1.3 journeys и необходимые узкие helpers; прежние шесть
+  journeys и safe diagnostics сохраняют assertions. `frontend/playwright.config.ts`
+  — только необходимое включение нового suite/desktop+narrow, без retries/skip ради PASS.
+- `scripts/provision_browser_test.py` и, если нужна отдельная узкая реализация,
+  `scripts/m1_3_browser_fixture.py`: TEST-only synthetic billing setup/fixtures,
+  используя принятую `platform.initialize_local_billing(...)`, существующую
+  provisioning identity и disposable `asm_test`. Никаких runtime test endpoints
+  или generic SQL interface. Новые fixture helpers имеют проверки environment,
+  database и identity до записи; текущие protections сохраняются.
+- `scripts/test_browser.sh`, `compose.browser.yaml`: только передача нужных
+  private fixture files/test presets и bounded TEST wiring. Сохранить rendered
+  Compose check, tmpfs, unprivileged API, 0600 secrets, cleanup и отсутствие их в artifacts.
+  Если дополнительные legitimate journeys упираются в общий rate budget, C0
+  разрешает только в browser TEST overlay `ASM_AUTH_PEER_LIMIT=300`,
+  `ASM_AUTH_GLOBAL_LIMIT=1000`, `ASM_AUTH_LOGIN_LIMIT=100`; defaults и реальные
+  backend rate-limit regressions неизменны. Это fixture capacity, не новая policy.
+- `README.md` и при необходимости `docs/tasks/M1_3_UI_RUNBOOK.md` — только реальные
+  команды запуска/fixtures/проверки готового UI. TASK_REGISTER и этот handoff —
+  фактический ход/evidence без самостоятельной приёмки; история сохраняется.
+
+Не выданы backend runtime, SQL/DDL/migrations 0001…0004/grants, R4, frozen auth/tenancy
+contracts и generated OpenAPI; package/lock/image changes, новые dependencies,
+перепроектирование CI, новые endpoints и privileged Ops. Если принятого API не
+хватает из-за конкретного defect, вернуть C0 воспроизводимый blocker; не обходить
+его frontend fallback или сменой DB contract.
+
+### Конечный UI
+
+Один минимальный owner panel внутри существующей Business Console для выбранного
+Workspace, с тремя понятными частями. Новый router/design system не нужен.
+
+1. **Подписка и entitlements.** Показать текущий contact, plan/revision и subscription
+   status/funding/effective interval (или явную INACTIVE/no-current-subscription),
+   mode и его независимую активность, пять серверных decisions и numeric limits,
+   включая `"0"`. Activity/availability/decisions брать из API. Отдельные loading,
+   empty/inactive, unavailable/error состояния; не показывать fake FREE/paid или
+   empty success вместо structural503. Сохранить LOCAL/TEST маркировку.
+2. **Contact edit.** Одна форма `contact_display_name`; expected_version из последнего
+   подтверждённого GET. Save/Pending/Recovery/ошибка/подтверждённый результат; mutation
+   pending блокирует повторный submit и изменение её замороженного body. После
+   подтверждённого PATCH получать current state через GET; replay metadata не является
+   текущим account. NOOP не обещает новый version/Audit; structural mode ограничения
+   не блокируют разрешённую contact administration, auth или Business read.
+3. **Audit.** Только два принятых event types/payload. Читаемые дата/действие/инициатор;
+   безопасные metadata при необходимости. Фиксированный limit10 и «Загрузить ещё»
+   по непрозрачному next_cursor; null прекращает загрузку. Refresh начинает страницу
+   заново; Workspace change сбрасывает старые rows/cursor. Без фильтров/экспорта/
+   универсального Audit editor и без contact values/keys/fingerprints в Audit.
+
+Панель доступна OWNER выбранного Workspace; role из session используется только для
+видимости UI. Реальная authority проверяется API на каждом запросе. ADMIN/PROVIDER,
+revoked/foreign не получают данные/controls через stale UI. Backend403 прекращает
+доступ и убирает защищённые данные этого контекста. Ops shell остаётся без billing/Audit.
+Layout, labels, клавиатура, focus/error announcements и narrow viewport должны работать
+в существующем интерфейсе; дополнительных экранов управления не требуется.
+
+### Точный API и wire
+
+Все пути относительно `/api/v1/workspaces/{workspace_id}`:
+
+| Метод/path | Live permission | Использование |
+|---|---|---|
+| GET `/billing` | OWNER billing:read | Без query; один snapshot account/subscription/mode/availability/decisions |
+| PATCH `/billing-account` | OWNER billing:manage | Только `{expected_version,contact_display_name}`; immutable receipt metadata |
+| GET `/audit-events` | OWNER audit:read | Только limit1…100 и cursor, exact items/next_cursor |
+
+PATCH response только `{workspace_id,billing_account_id,receipt_id,result_version,
+outcome,completed_at}`. Один `Idempotency-Key` `[A-Za-z0-9._:-]{1,128}`; генерировать
+новый через browser crypto только для нового намерения. Существующие HttpOnly
+cookie/credentials include, configured Origin и memory-only CSRF обязательны;
+If-Match запрещён. CORS уже реализован C1; backend allowlists не менять.
+
+Новые bigint versions/limits — decimal strings, не JavaScript Number. Новые UUID
+lowercase canonical по OpenAPI (не переносить старую v4/v7-only проверку DTO).
+Timestamps имеют шесть UTC fractional digits; сохранить точную wire строку, не
+восстанавливать cursor из Date с потерей microseconds. Canonical cursor передавать
+неизменным. Strict DTO/tagged decisions/error unions проверять на входе adapter.
+Старые auth/business DTO/parsers и их ошибки не ослаблять новым общим permissive parser.
+
+Contact trim — только U+0020, далее1…200 Unicode scalars/<=800 UTF-8 bytes, без
+C0/DEL/lone surrogates, без NFC/NFD/casefold. Не использовать обычный JS trim или
+HTML maxLength200 как подмену scalar bound: они отвергнут допустимые padded/emoji
+inputs. Backend остаётся authoritative; input schema API-01 уже исправлена.
+
+Errors:401/403 по прежнему auth contract; PATCH404 NOT_FOUND;409 STALE_STATE или
+IDEMPOTENCY_KEY_CONFLICT;422 INVALID_REQUEST. CommonError ровно `{error:{code}}`;
+только structural GET503 — `{error:{code:"BILLING_STATE_UNAVAILABLE",state_reason}}`
+с четырьмя bounded reasons. Отдельный503 UNAVAILABLE остаётся code-only. Billing503
+не означает logout и не даёт показывать отсутствующий plan как действующий.
+Ошибки/логи не содержат raw response diagnostics, credentials или contact/key contents.
+
+### Recovery и ownership — обязательные критерии
+
+- До отправки PATCH зафиксировать в памяти страницы actor, Workspace, intention,
+  exact body/expected_version и key. Timeout/network/abort/malformed success/5xx
+  могут означать commit. Не показывать ложный success или гарантированный rollback.
+- Сохранить это намерение через auth/current-session/bootstrap/login/CSRF recovery.
+  После проверки того же actor и выбранного Workspace и текущего доступа повторить
+  **тот же body/key/expected_version** только для того же намерения, затем GET.
+  Новый key или новый version из recovery GET не заменяет разрешение неоднозначности.
+  Повторная recovery failure оставляет pending/uncertain с явным bounded retry;
+  не выполнять бесконечные/слепые background mutations.
+- При смене actor/Workspace/намерения не переносить старую pending mutation в новый
+  контекст и не replay её автоматически. Защищённые данные скрыть, старое намерение
+  отделить/завершить явным решением пользователя с честным статусом неизвестного
+  результата.401/403 не доказывают rollback ранее допущенной команды.
+- STALE_STATE: показать конфликт, получить current state, сохранить draft отдельно;
+  только явное новое сохранение создаёт новое намерение/key от новой версии.
+  IDEMPOTENCY_KEY_CONFLICT: остановиться и показать конфликт, не обходить его новым
+  key автоматически. PATCH200 + GET failure — команда подтверждена, current read
+  недоступен; повторять GET, не создавать новую mutation.
+- Memory-only: cookies/CSRF/password/contact body/key не сохранять в localStorage,
+  sessionStorage, IndexedDB, URL или logs. Reload не даёт права придумывать потерянный
+  key и автоматически повторять запись; после reload только current state/read flow.
+- Reads, saves, recovery и Audit pages имеют request ownership по generation +
+  actor/Workspace. Поздние success **и error** старого контекста не обновляют новый
+  UI. Abort не является доказательством rollback. Сохранить уже принятые auth
+  sequence/logout-intent guards; focus/session recheck не должен терять pending contact
+  намерение или применять устаревший billing response.
+
+### Конечная проверка
+
+Component/adapter tests детерминированы deferred promises/barriers; покрыть:
+
+- exact new DTO/error unions, bigint0/max string, six-digit timestamps, padded200
+  emoji/Unicode normalization boundaries; no permissive auth-parser regression;
+- active/inactive/mode-disabled/missing-state UI, OWNER visibility и403, Audit
+  paging/end/reset; local billing failures не блокируют auth/Business;
+- change/NOOP, stale/conflict, PATCH success followed by GET failure; same-intent
+  repeated ambiguous recovery; auth/CSRF refresh; actor/Workspace changes, поздние
+  read/write/Audit success/error и отсутствие второго submit нового key.
+
+Реальные Playwright journeys через Console → существующий API → PostgreSQL,
+штатный asm_runtime и disposable TEST fixtures должны подтвердить:
+
+1. Owner login, billing snapshot/limit0, contact UPDATE и NOOP, fresh GET/reload,
+   Audit update без contact values, pagination/end. Happy path также @narrow/keyboard.
+2. Stale edit с другой реальной HTTP-сессией/командой:409, current GET, сохранённый
+   draft и явное новое намерение; не потеря update и не automatic overwrite.
+3. Потеря PATCH response **после настоящего route.fetch/commit**: контролируемо
+   abort только delivery, recovery auth/CSRF, проверенный same body/key replay,
+   один version increment и один contact Audit, затем GET. Fake successful body
+   без server call не считается этим evidence. Bounded callbacks/finally cleanup.
+4. Аутентифицированный A→foreign B отказ для billing/Audit/contact и отсутствие
+   чужих данных; текущая owner permission revoke/downgrade прекращает UI доступ.
+   Anonymous tamper из старого M1.2 suite не заменяет authenticated проверку.
+5. Реальное inactive/restricted состояние fixture отображается по API, contact
+   administration/auth/Business сохраняют принятые права. Браузерный CORS positive
+   PATCH из `http://127.0.0.1:8080` к API `http://127.0.0.1:8000` с credentials и
+   content-type,x-csrf-token,idempotency-key; disallowed-header preflight не отправляет
+   mutation. Configured origins уже приняты, новые origins не нужны.
+
+Сценарии можно объединять по общим fixtures; не нужен декартов набор всех modes
+или повтор DB/service matrix. Test-only setup может создать foreign Workspace и
+изменить synthetic membership/interval; это не production API/editor. Fixture
+параметры конечны и именованы, teardown не касается чужих/постоянных данных.
+Вызовы route.fetch/callbacks используют существующие safeDiagnostic conventions;
+secrets/body/key не выводятся даже при failed assertions. Если доказательство
+ограничено mock/component сценарием, так и отметить — это не browser/DB result.
+
+Выполнить штатные **`sh scripts/ci.sh`** и **`sh scripts/test_browser.sh`** на одном
+итоговом published snapshot; GitHub Docker runner допустим при local limitation.
+Сохранить 153 non-integration +189 PostgreSQL accepted base tests,30 frontend и6
+прежних journeys; новые tests добавляются. Также frontend typecheck/test/build,
+canonical imports, generated contract check, migrations/reproducibility/smoke и оба
+clean-source gates. Не отключать tests, не подменять PostgreSQL/mock или добавлять
+retry ради PASS. Node24 и существующий lock достаточны, новых dependencies не выдано.
+
+### Возврат C0 и оставшаяся последовательность
+
+Вернуть существующий Draft PR без merge: полный base/start/final head/tree, paths,
+точные команды/results, URL последнего CI и фактически tested SHA/parents/tree,
+отдельные counts старых/новых tests, список journeys с реальным evidence, recovery
+semantics, ограничения и конкретные blockers. Первый coordination commit сохранён;
+не создавать chain docs commits ради SHA. UI не объявлять VERIFIED самостоятельно.
+
+C0 review → при конкретном риске targeted C8 → ручной merge после final-head CI →
+проверка actual merge/main CI → итоговая приёмка всей M1.3. M2, production,
+providers/payments, Jobs/Outbox, catalog/subscription/mode editors и расширение R4
+не входят. Перепроектировать уже принятые части не требуется.
+
+## История — выполненная интеграция backend/API PR #14
+
+Следующий блок сохраняет прежнее поручение и pre-merge evidence. Его условия
+actual merge/main CI выполнены; он не является текущим заданием или blocker.
+
 
 Статус исполнения ведётся только в [TASK_REGISTER](../TASK_REGISTER.md).
 DB принят. Полный C0 review backend/API PASS; два конкретных targeted C8 P2
