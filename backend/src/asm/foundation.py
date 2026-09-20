@@ -21,6 +21,7 @@ from asm.auth.config import AuthSettings
 from asm.auth.http import install_auth
 from asm.auth.service import AuthService
 from asm.auth.store import AuthStore
+from asm.billing.http import install_billing
 from asm.tenancy import TenantDatabase
 
 tracer = trace.get_tracer("ai-service-manager.foundation")
@@ -162,6 +163,7 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
 
     app.state.auth_service = auth
     install_auth(app, auth, config)
+    install_billing(app, auth, config)
     return app
 
 

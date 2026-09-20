@@ -1,6 +1,51 @@
 {
   "components": {
     "schemas": {
+      "AuditPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "BILLING_ACCOUNT_CONTACT_UPDATED": "#/components/schemas/ContactAudit",
+                  "WORKSPACE_BILLING_PROVISIONED": "#/components/schemas/ProvisionAudit"
+                },
+                "propertyName": "event_type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/ProvisionAudit"
+                },
+                {
+                  "$ref": "#/components/schemas/ContactAudit"
+                }
+              ]
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "AuditPage",
+        "type": "object"
+      },
       "AuthCode": {
         "enum": [
           "INVALID_CREDENTIALS",
@@ -18,6 +63,167 @@
         ],
         "title": "AuthCode",
         "type": "string"
+      },
+      "BillingAccount": {
+        "additionalProperties": false,
+        "properties": {
+          "billing_account_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Billing Account Id",
+            "type": "string"
+          },
+          "contact_display_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Contact Display Name",
+            "type": "string"
+          },
+          "version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "billing_account_id",
+          "contact_display_name",
+          "version"
+        ],
+        "title": "BillingAccount",
+        "type": "object"
+      },
+      "BillingResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/BillingAccount"
+          },
+          "availability": {
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "title": "Availability",
+            "type": "string"
+          },
+          "decisions": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "DISABLED": "#/components/schemas/DisabledDecision",
+                  "ENABLED": "#/components/schemas/EnabledDecision",
+                  "LIMIT": "#/components/schemas/LimitDecision"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/EnabledDecision"
+                },
+                {
+                  "$ref": "#/components/schemas/DisabledDecision"
+                },
+                {
+                  "$ref": "#/components/schemas/LimitDecision"
+                }
+              ]
+            },
+            "maxItems": 100,
+            "title": "Decisions",
+            "type": "array",
+            "uniqueItems": true
+          },
+          "evaluated_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Evaluated At",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "NORMAL",
+              "GRACE",
+              "LIMITED",
+              "SUSPENDED"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "mode_active": {
+            "title": "Mode Active",
+            "type": "boolean"
+          },
+          "subscription": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Subscription"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "evaluated_at",
+          "account",
+          "subscription",
+          "mode",
+          "mode_active",
+          "availability",
+          "decisions"
+        ],
+        "title": "BillingResponse",
+        "type": "object"
+      },
+      "BillingStateDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "const": "BILLING_STATE_UNAVAILABLE",
+            "title": "Code",
+            "type": "string"
+          },
+          "state_reason": {
+            "enum": [
+              "BILLING_STATE_MISSING",
+              "BILLING_STATE_INVALID",
+              "REVISION_INVALID",
+              "DATABASE_UNAVAILABLE"
+            ],
+            "title": "State Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "state_reason"
+        ],
+        "title": "BillingStateDetail",
+        "type": "object"
+      },
+      "BillingStateError": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/BillingStateDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "BillingStateError",
+        "type": "object"
       },
       "BootstrapResponse": {
         "additionalProperties": false,
@@ -98,10 +304,268 @@
         "title": "BusinessesResponse",
         "type": "object"
       },
+      "CommonError": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/CommonErrorDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "CommonError",
+        "type": "object"
+      },
+      "CommonErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "SESSION_REQUIRED",
+              "ORIGIN_DENIED",
+              "CSRF_REJECTED",
+              "ACCESS_DENIED",
+              "BODY_TOO_LARGE",
+              "UNSUPPORTED_MEDIA_TYPE",
+              "INVALID_REQUEST",
+              "RATE_LIMITED",
+              "UNAVAILABLE",
+              "INTERNAL_ERROR",
+              "NOT_FOUND",
+              "STALE_STATE",
+              "IDEMPOTENCY_KEY_CONFLICT"
+            ],
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "CommonErrorDetail",
+        "type": "object"
+      },
+      "ContactAudit": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_kind": {
+            "const": "USER_ACCOUNT",
+            "title": "Actor Kind",
+            "type": "string"
+          },
+          "actor_user_account_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Actor User Account Id",
+            "type": "string"
+          },
+          "audit_event_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Audit Event Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "BILLING_ACCOUNT_CONTACT_UPDATED",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "object_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Object Id",
+            "type": "string"
+          },
+          "object_type": {
+            "const": "WORKSPACE_BILLING_ACCOUNT",
+            "title": "Object Type",
+            "type": "string"
+          },
+          "object_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Object Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ContactPayload"
+          }
+        },
+        "required": [
+          "audit_event_id",
+          "occurred_at",
+          "correlation_id",
+          "object_type",
+          "object_id",
+          "object_version",
+          "event_type",
+          "actor_kind",
+          "actor_user_account_id",
+          "payload"
+        ],
+        "title": "ContactAudit",
+        "type": "object"
+      },
+      "ContactPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "changed_fields": {
+            "items": {
+              "const": "contact_display_name",
+              "type": "string"
+            },
+            "maxItems": 1,
+            "minItems": 1,
+            "title": "Changed Fields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "changed_fields"
+        ],
+        "title": "ContactPayload",
+        "type": "object"
+      },
+      "ContactResult": {
+        "additionalProperties": false,
+        "properties": {
+          "billing_account_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Billing Account Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Completed At",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "UPDATED",
+              "NOOP"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "receipt_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "result_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Result Version",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "billing_account_id",
+          "receipt_id",
+          "result_version",
+          "outcome",
+          "completed_at"
+        ],
+        "title": "ContactResult",
+        "type": "object"
+      },
+      "DisabledDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "null"
+          },
+          "reason": {
+            "enum": [
+              "SUBSCRIPTION_INACTIVE",
+              "SERVICE_MODE_INACTIVE",
+              "NOT_ENTITLED",
+              "SERVICE_MODE_RESTRICTED"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "type": {
+            "const": "DISABLED",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "type",
+          "reason",
+          "limit"
+        ],
+        "title": "DisabledDecision",
+        "type": "object"
+      },
       "EmptyRequest": {
         "additionalProperties": false,
         "properties": {},
         "title": "EmptyRequest",
+        "type": "object"
+      },
+      "EnabledDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "null"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "null"
+          },
+          "type": {
+            "const": "ENABLED",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "type",
+          "reason",
+          "limit"
+        ],
+        "title": "EnabledDecision",
         "type": "object"
       },
       "ErrorDetail": {
@@ -155,6 +619,40 @@
           "component"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "LimitDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "pattern": "^[a-z][a-z0-9_.:-]{0,127}$",
+            "title": "Key",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Limit",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "null"
+          },
+          "type": {
+            "const": "LIMIT",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "type",
+          "reason",
+          "limit"
+        ],
+        "title": "LimitDecision",
         "type": "object"
       },
       "LoginRequest": {
@@ -224,6 +722,119 @@
         "title": "Permission",
         "type": "string"
       },
+      "Plan": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+            "title": "Code",
+            "type": "string"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_id",
+          "code",
+          "revision_id",
+          "revision"
+        ],
+        "title": "Plan",
+        "type": "object"
+      },
+      "ProvisionAudit": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_kind": {
+            "const": "LOCAL_PROVISIONER",
+            "title": "Actor Kind",
+            "type": "string"
+          },
+          "actor_user_account_id": {
+            "title": "Actor User Account Id",
+            "type": "null"
+          },
+          "audit_event_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Audit Event Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "WORKSPACE_BILLING_PROVISIONED",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "object_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Object Id",
+            "type": "string"
+          },
+          "object_type": {
+            "const": "WORKSPACE_BILLING_ACCOUNT",
+            "title": "Object Type",
+            "type": "string"
+          },
+          "object_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Object Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ProvisionPayload"
+          }
+        },
+        "required": [
+          "audit_event_id",
+          "occurred_at",
+          "correlation_id",
+          "object_type",
+          "object_id",
+          "object_version",
+          "event_type",
+          "actor_kind",
+          "actor_user_account_id",
+          "payload"
+        ],
+        "title": "ProvisionAudit",
+        "type": "object"
+      },
+      "ProvisionPayload": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "ProvisionPayload",
+        "type": "object"
+      },
       "SessionResponse": {
         "additionalProperties": false,
         "properties": {
@@ -256,6 +867,66 @@
           "memberships"
         ],
         "title": "SessionResponse",
+        "type": "object"
+      },
+      "Subscription": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_from": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "effective_until": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Effective Until",
+            "type": "string"
+          },
+          "funding_mode": {
+            "enum": [
+              "TRIAL",
+              "COMPED"
+            ],
+            "title": "Funding Mode",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/Plan"
+          },
+          "status": {
+            "enum": [
+              "TRIALING",
+              "ACTIVE"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subscription_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Subscription Id",
+            "type": "string"
+          },
+          "version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subscription_id",
+          "status",
+          "funding_mode",
+          "effective_from",
+          "effective_until",
+          "version",
+          "plan"
+        ],
+        "title": "Subscription",
         "type": "object"
       },
       "SystemInfo": {
@@ -900,6 +1571,444 @@
           }
         },
         "summary": "System"
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/audit-events": {
+      "get": {
+        "description": "OWNER audit:read. Tenant-scoped descending tuple pagination; cursor is not a credential or a frozen-history guarantee.",
+        "operationId": "audit_api_v1_workspaces__workspace_id__audit_events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Audit",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/billing": {
+      "get": {
+        "description": "OWNER billing:read. No query parameters. One DB-time snapshot of local state.",
+        "operationId": "billing_api_v1_workspaces__workspace_id__billing_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BillingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/CommonError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BillingStateError"
+                    }
+                  ],
+                  "title": "Response 503 Billing Api V1 Workspaces  Workspace Id  Billing Get"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Billing",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/billing-account": {
+      "patch": {
+        "description": "OWNER billing:manage. Exactly one Idempotency-Key; If-Match and query parameters forbidden. Replay returns original metadata; GET obtains current contact.",
+        "operationId": "contact_api_v1_workspaces__workspace_id__billing_account_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "contact_display_name": {
+                    "description": "Trim U+0020 only, then 1..200 Unicode scalars, <=800 UTF-8 bytes; no C0/DEL/surrogates.",
+                    "minLength": 1,
+                    "pattern": "^ *[^\\u0000-\\u0020\\u007f\\ud800-\\udfff](?:[^\\u0000-\\u001f\\u007f\\ud800-\\udfff]{0,198}[^\\u0000-\\u0020\\u007f\\ud800-\\udfff])? *(?![\\s\\S])",
+                    "title": "Contact Display Name",
+                    "type": "string"
+                  },
+                  "expected_version": {
+                    "description": "Canonical decimal string, 1..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Version",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expected_version",
+                  "contact_display_name"
+                ],
+                "title": "ContactPatch",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContactResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommonError"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Contact",
+        "tags": [
+          "billing"
+        ]
       }
     },
     "/api/v1/workspaces/{workspace_id}/businesses": {

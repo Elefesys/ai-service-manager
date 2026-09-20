@@ -2,7 +2,273 @@
 
 Ответственный за интеграцию: C0. Единственный task register: `docs/TASK_REGISTER.md`. Канон: `docs/architecture/01_ARCHITECTURE_SPEC.md`, действующие ADR, MVP/Roadmap и `09_IMPLEMENTATION_PLAN.md`; стек: IMPL-001; правила: AGENTS.md.
 
-## Единственный активный handoff C0 — DB pre-merge M1.3 / 2026-09-20
+## Единственный активный handoff — C0: интеграция backend/API PR #14 / 2026-09-20
+
+Статус исполнения ведётся только в [TASK_REGISTER](../TASK_REGISTER.md).
+DB принят. Полный C0 review backend/API PASS; два конкретных targeted C8 P2
+исправлены и проверены. API остаётся REVIEW до ручного merge и отдельного main CI.
+M1.3 IN_PROGRESS; C5 и M2 не запускать.
+
+- Repository: `https://github.com/Elefesys/ai-service-manager.git`.
+- PR: [#14](https://github.com/Elefesys/ai-service-manager/pull/14),
+  `c1/m1-3-billing-api` → `main`, без squash/rebase/force-push/auto-merge.
+- Accepted DB base: `2bd339ee9bb4638588e5f07b63723caaf717c619`;
+  tree `5bf0a4fc429cc11b1b1b2da03147fad6ab088ad8`, push/main 35503584157 SUCCESS.
+- Reviewed implementation с исправлением: `a6d44560f035a4a288ab62abbac1ad2bde3651ad`,
+  tree `2a587356a9591c6a997ab245a2c0c9403930222b`;
+  [CI 35507439390](https://github.com/Elefesys/ai-service-manager/actions/runs/35507439390)
+  SUCCESS: 153 non-integration + 189 real PostgreSQL + 30 frontend + 6 прежних browser = 378 cases; оба clean-source gates PASS. Evidence и критерии: [API receipt](../reviews/M1_3_API_C0_ACCEPTANCE.md).
+- Последующий согласованный docs commit содержит только TASK_REGISTER, этот
+  handoff и API receipt. Итоговые head/CI фиксируются в PR и ответе C0, а не
+  новым коммитом ради SHA предыдущего документа.
+
+### Точное следующее действие
+
+После проверки C0 SUCCESS итогового head пользователь открывает PR #14,
+нажимает **Ready for review**, выбирает **Create a merge commit** и подтверждает
+merge. Вернуть C0 «слито» или ссылку на merge commit. C0 сам проверяет фактические
+parents/tree/merge SHA и отдельный `push/main` CI; PR virtual merge его не заменяет.
+Не обходить неизвестные/красные gates. При неожиданной code delta/base — конкретная
+проверка C0, без автоматического нового design cycle.
+
+### После фактической интеграции API
+
+Только C0 после main evidence выдаёт полностью готовое ограниченное C5 поручение
+с точным base. Конечный scope: один минимальный owner screen, состояние
+subscription/entitlements, изменение `contact_display_name` с корректным recovery,
+Audit pagination, component tests и настоящие browser/API/PostgreSQL journeys M1.3.
+Источники DTO — generated `contracts/openapi.json`, consumer/recovery notes —
+`contracts/README.md`; нормативный R4 и D-01…D-13 сохраняются.
+
+Сохранить intention/body/key при неоднозначном PATCH; восстановить auth/CSRF,
+проверить actor/Workspace, повторять тот же key/body только для прежнего намерения,
+затем GET current state. Не заменять recovery новым key; не считать replay текущим
+account state. OWNER permissions отдельны от неизменной tenancy matrix.
+
+Дополнительные backend routes, catalog/subscription/mode editors, payments,
+провайдеры, generic frameworks, migrations и M2 не выданы. После C5/main CI
+нужна отдельная итоговая приёмка M1.3; API PASS не завершает milestone.
+
+## История — выполненное поручение C1 backend/API
+
+Следующий блок сохраняет выданный scope и критерии, но не требует повторной
+реализации или повторного review уже проверенных частей.
+
+
+Это готовое задание C1. Выполнить backend/API часть принятого R4 последовательно, без расширения scope и перепроектирования уже принятого DB/auth. Состояния задач ведутся только в [TASK_REGISTER](../TASK_REGISTER.md). DB-срез INTEGRATED / VERIFIED; M1.3 IN_PROGRESS. C5 и M2 не запускать.
+
+### Repository, base и продолжение
+
+- Repository: `https://github.com/Elefesys/ai-service-manager.git`.
+- Принятый implementation base: **`2bd339ee9bb4638588e5f07b63723caaf717c619`**, actual merge PR #13 в main.
+- Accepted tree: `5bf0a4fc429cc11b1b1b2da03147fad6ab088ad8`.
+- Отдельный main evidence: [push run 35503584157](https://github.com/Elefesys/ai-service-manager/actions/runs/35503584157), foundation + browser + clean-source SUCCESS, 288 cases.
+- Task branch: **`c1/m1-3-billing-api`**, integration target `main`. Продолжать единственный подготовленный Draft PR этой ветки; PR #13 уже слит, не переоткрывать его и не создавать конкурирующий implementation PR.
+- Первый C0 coordination commit на task branch меняет только TASK_REGISTER, этот handoff и DB receipt. Сохранить его при продолжении. Полный published head передан в PR/сообщении; не записывать SHA текущего docs commit следующим docs commit.
+- Отдельный checkout. Перед работой подтвердить refs/ancestry; при неожиданной code delta/base передать точную дельту C0, не применять force-push/rebase/merge самостоятельно.
+
+### Основание и разрешённые paths
+
+Прочитать AGENTS, актуальную Spec, применимые ADR, Implementation Plan и принятый
+[контракт R4](M1_3_CONTRACT.md), особенно §3–7. SHA-256 R4:
+`0d33a26aa13fb3eda34b0a5c07a4a11dc263b1ee37ce9e3fda126f53e0c0282a`.
+DB receipt и R4/C0 disposition фиксируют приёмку; исторические PROPOSED/PENDING
+в самом контракте не означают повторный design gate. D-01…D-13 сохраняются.
+Применимые области: Workspace/security boundaries, ADR-002/005/006,
+ADR-064, ADR-099…109, ADR-126 и ADR-182; исходные canonical docs не редактировать.
+
+Разрешены:
+
+- `backend/src/asm/billing/` — repository, typed models/errors/permissions, EntitlementService и HTTP adapter; создавать только необходимые модули.
+- `backend/src/asm/foundation.py` — узкий wiring новых services/router, без переноса domain logic в foundation.
+- `backend/src/asm/tenancy/database.py` — только необходимые узкие guarded методы/адаптация для billing repository на текущем tenant connection; сохранять task/XID/connection/transaction guard и rollback. Не делать общий публичный raw-SQL bypass.
+- `backend/src/asm/auth/http.py` — additive CORS и минимальное повторное использование существующей boundary/CSRF plumbing; auth protocol/семантику старых routes не менять. `auth/service.py` допускается лишь для необходимого узкого reuse, без изменения admission/revocation/TTL/cookie поведения.
+- `scripts/export_contracts.py`, `contracts/openapi.json`, `contracts/README.md` — генерация и описание новых schemas/routes; существующие `contracts/auth.v1.json`, `contracts/tenancy.v1.json` и их семантика остаются неизменными.
+- `tests/test_m1_3_*` и новые тематические billing/API tests; точные additive inventory/schema assertions в существующих contract/foundation tests, когда это нужно для трёх новых routes. Старые coverage/assertions не удалять ради зелёного CI.
+- Этот активный handoff и TASK_REGISTER — фактический ход/evidence без самоприёмки; API consumer details отражать generated OpenAPI, не вторым конкурирующим контрактом.
+
+Не выданы migrations/DDL/role grants, изменение 0001…0004, package/lock/image/CI
+перепроектирование, frontend и browser UI M1.3. Если найден DB defect, вернуть
+конкретный reproducer C0/C2; не переписывать уже интегрированную 0004.
+
+### Конечный результат C1
+
+1. **Billing repository и настоящий EntitlementService.** Один fixed SQL statement
+   с одним `CURRENT_TIMESTAMP` читает на принятом RLS tenant connection account,
+   subscription history/current `[)` interval, mode, pinned SEALED revision,
+   catalog/entitlements. Не собирать coherent snapshot из нескольких READ COMMITTED
+   SELECTs. Archived plan не отменяет pinned SEALED revision. Evaluated time — DB.
+   Decision precedence §6: structural failure → subscription inactive → mode
+   inactive → missing known key → mode restriction → typed value. NORMAL разрешает
+   все criticalities; GRACE ESSENTIAL/STANDARD; LIMITED ESSENTIAL; SUSPENDED none.
+   BOOLEAN true/false, INTEGER limit включая `"0"`, отсутствие known key и независимая
+   активность mode/subscription реализованы в service. Никаких `if plan == ...`,
+   fake paid state или provider calls. SQL feasibility test DB-среза не заменяет service.
+
+2. **Ровно три маршрута R4.**
+
+   | Method/path | Требование |
+   |---|---|
+   | `GET /api/v1/workspaces/{workspace_id}/billing` | OWNER `billing:read` |
+   | `PATCH /api/v1/workspaces/{workspace_id}/billing-account` | OWNER `billing:manage` |
+   | `GET /api/v1/workspaces/{workspace_id}/audit-events` | OWNER `audit:read` |
+
+   Workspace из route — selector. Authority приходит из server session и live
+   membership на том же tenant UOW. Billing permissions — отдельная явная typed
+   policy OWNER-only; использовать принятый live membership resolver внутри UOW.
+   Не выводить OWNER из `tenancy:write` (ADMIN тоже имеет его), не расширять старую
+   tenancy permission matrix/AuthResponse и не доверять UI role/actor/header.
+   ADMIN/PROVIDER/revoked/foreign/неаутентифицированные не получают billing/Audit.
+   Entitlements не заменяют permissions и не блокируют auth/старые Business reads
+   либо разрешённую contact administration при GRACE/LIMITED/SUSPENDED.
+
+3. **DTO и errors ровно §7.** Strict objects, UUID lowercase canonical,
+   timestamptz UTC с шестью дробными digits, bigint versions/limits как decimal
+   strings. Positive version 1…9223372036854775807; integer limit 0 допустим.
+   GET billing без query; точные account/subscription/mode/availability/decisions
+   поля §7.1, five known TEST keys, unique sorted decisions max100; missing keys
+   остаются NOT_ENTITLED entries. При valid history без current subscription —
+   200 INACTIVE/subscription null; структурный сбой не имитировать empty success.
+   Precedence reason: MISSING → INVALID → REVISION_INVALID; unreadable DB только
+   DATABASE_UNAVAILABLE, без выдуманного MISSING.
+
+   PATCH body только `{expected_version,contact_display_name}`. Response только
+   `{workspace_id,billing_account_id,receipt_id,result_version,outcome,completed_at}`;
+   outcome UPDATED/NOOP. Replay возвращает прежние immutable metadata, current
+   contact клиент получает через GET.
+
+   `CommonError` ровно `{error:{code}}`; `BillingStateError` ровно
+   `{error:{code:"BILLING_STATE_UNAVAILABLE",state_reason}}`. State reason обязателен
+   только во втором варианте: BILLING_STATE_MISSING/BILLING_STATE_INVALID/
+   REVISION_INVALID/DATABASE_UNAVAILABLE. Сохранить оба разных 503:
+   shared boundary `UNAVAILABLE` и structural billing GET `BILLING_STATE_UNAVAILABLE`.
+   401/403 — существующие auth codes; PATCH 404 NOT_FOUND, 409 STALE_STATE либо
+   IDEMPOTENCY_KEY_CONFLICT; strict input/cursor 422 INVALID_REQUEST.
+   SQLSTATE переводить только в контексте конкретной billing command, сохранив
+   общий tenancy mapping и poisoned-UOW rollback; не объявлять любой 40001 всей
+   системы STALE_STATE. Исключения/SQL/PII/cookie/key/fingerprint в response/logs не выводить.
+
+4. **Audit pagination.** Exact item/page §7.3; provisioning `{}` и contact
+   `{changed_fields:["contact_display_name"]}` без значений контакта. Только query
+   `limit` 1…100, default25, и один cursor. Order `(occurred_at DESC,audit_event_id DESC)`,
+   tuple `<`, fetch limit+1; next_cursor от последнего возвращённого item лишь при
+   наличии следующего; конец/empty → null. Cursor <=1024 ASCII, unpadded base64url
+   compact strict UTF-8 JSON с точными `{v:1,endpoint:"AUDIT_EVENTS",workspace_id,
+   direction:"DESC",occurred_at,id}`. Duplicate/extra/missing/wrong/foreign/nonexistent
+   tenant anchor → safe422; anchor lookup tenant-scoped. Cursor не credential,
+   не подписанный token и не обещание frozen-history.
+
+5. **Auth/CSRF/idempotency.** Сохранить R4 §4 order: HTTP size/header/Origin/CSRF
+   boundary → outer `AuthService.workspace` shared admission → distinct tenant
+   UOW/XID trusted context → live OWNER permission → bounded normalization/hash →
+   receipt → account CAS/Audit/finalize → tenant commit → release admission → response.
+   Использовать существующую `platform.update_billing_contact(bigint,text,text)`
+   как единственный write path; не выполнять direct DML и не переносить receipt/Audit
+   в другую transaction. Ранее принятый FOR NO KEY UPDATE/CAS порядок не менять.
+   Ровно один `Idempotency-Key` `[A-Za-z0-9._:-]{1,128}`, `If-Match` запрещён.
+   Strict UTF-8/scalars, trim только U+0020, name1…200 scalars/<=800bytes, без
+   C0/DEL/surrogates/NFC/NFD/casefold. Exact canonical bytes/hash §5, восемь vectors.
+   Auth/permission проверяются до fingerprint/receipt и снова при replay; ключ не
+   credential. Stale до no-op; no-op сохраняет version/updated_at и не добавляет Audit.
+   Changed name +1/один Audit; same key+same fingerprint exact replay после later
+   change; другой fingerprint конфликт; разные keys одной версии — один winner.
+   Audit/finalize/outer failure откатывают mutation/receipt/Audit; не продолжать
+   aborted transaction. Для C5 описать ambiguous-result recovery: тот же key/body
+   только для того же намерения после auth/CSRF recovery, затем GET current state;
+   не подменять неоднозначный результат новым key и не обещать слепой replay.
+
+6. **Только additive CORS.** Добавить PATCH к `[GET,POST]`, Idempotency-Key к
+   существующим Content-Type/X-CSRF-Token/X-CSRF-Bootstrap. Сохранить configured
+   Origins, credentials=true, Host/Origin/CSRF/JSON controls и отсутствие wildcard.
+   Положительный HTTP preflight: configured Origin + PATCH +
+   content-type,x-csrf-token,idempotency-key. Отрицательные: foreign Origin,
+   disallowed method/header. Реальный M1.3 browser proof — следующий C5 после API.
+
+7. **Generated contracts и существенные tests.** Generate/review/commit
+   `contracts/openapi.json` из реализованных Pydantic models/routes; exact error
+   union, strict DTO/decimal/timestamps и response codes должны совпасть с runtime.
+   Не добавлять nullable state_reason к старому auth error. Дрейф проверяет CI.
+   Сохранить все семь M1.2 routes и их wire semantics; endpoint inventory проверяет
+   точное прежнее множество плюс три разрешённых, а не произвольный superset.
+
+### Проверка и возврат C0
+
+Добавить реальные API + PostgreSQL tests под штатным `asm_runtime` для:
+
+- Success GET/service decisions по четырём modes, BOOLEAN false/INTEGER zero,
+  independent inactive/future intervals и missing state/DB-unreadable boundaries;
+  unit tests покрывают полную precedence matrix и невозможные при обычном DDL
+  contradictory snapshots с честным указанием границы evidence.
+- OWNER success, ADMIN/PROVIDER deny, foreign Workspace, disabled/revoked session/
+  membership, отсутствие receipt observation/write до auth; accepted revocation
+  admission ordering, pooled context cleanup и XID guards сохраняются.
+- HTTP PATCH→настоящая SQL command: change/no-op/stale/conflict/replay after later
+  change, ambiguous response after commit и последующий same-intent replay/GET;
+  same-key и different-key concurrency, rollback/Audit/finalize failure. Существенные
+  SQL инварианты уже приняты; повторять их только для нового API/UOW соединения.
+- Strict raw headers/body/query: duplicate/missing key, If-Match, extra
+  JSON fields по strict контракту, malformed UTF-8/surrogate/C0/DEL, decimal zero/leading-zero/overflow,
+  границы name; восемь fingerprint vectors через API совпадают с DB receipts.
+- Cursor pagination с одинаковыми timestamps/UUID tie-break, end/empty,
+  invalid/foreign/nonexistent anchors и сохранением tenant boundary.
+- Runtime responses + OpenAPI, оба 503 discriminators, безопасные ошибки;
+  additive CORS positive/negative preflight без регрессии прежней auth boundary.
+
+Выполнить штатные `sh scripts/ci.sh` и `sh scripts/test_browser.sh` в поддерживаемом
+Docker runner (GitHub CI допустим при sandbox limitation). Отдельно
+`python scripts/export_contracts.py --check`. Ruff/mypy/unit/real PostgreSQL,
+frontend regression, существующие шесть browser journeys, canonical imports,
+reproducibility и clean-source остаются обязательными. Новые browser journeys UI
+M1.3 сюда не выдаются. Не заменять реальную PostgreSQL/API проверку mock или
+описанием; не добавлять skip/xfail ради зелёного CI. После конечного commit нужен
+полный CI именно этого head; не суммировать повторные runs в число tests.
+
+Вернуть C0 в одном сообщении: PR URL; accepted base и полный final head/tree;
+что реализовано/изменённые paths; generated contract diff; команды и фактические
+результаты; exact CI/tested SHA/tree; ограничения/конкретные blockers; готовые для
+C5 endpoint/DTO/error/cursor/auth/CSRF/recovery сведения. PR оставить Draft/open,
+без merge, без самостоятельного INTEGRATED/VERIFIED. C0 проверяет implementation;
+новый review назначает по конкретным рискам/критериям, затем разрешает пользователю
+интеграцию и проверяет actual main CI. C5 — только после этого, M2 не выдавать.
+
+### C1 — реализация активного backend/API поручения / 2026-09-20
+
+Implementation candidate находится в существующем Draft PR #14. Сохранены
+подготовленный coordination commit и принятый implementation base. Фактическое
+состояние — в TASK_REGISTER; приёмка API/C5/M2 самостоятельно не объявляется.
+
+- `asm/billing/`: strict models/validation/errors, отдельная OWNER policy,
+  fixed SQL repository и `EntitlementService.decide(snapshot, key)`, HTTP adapter.
+  Snapshot включает DB time и interval flags одним statement; критичность берётся
+  только из pinned SEALED revision. Archived plan, INTEGER zero и все precedence
+  уровни покрыты; billing state не управляет auth/contact admission.
+- `tenancy/database.py`: только guarded fixed billing methods на текущем connection,
+  live membership resolver и локальный mapping intentional contact-command RAISEs.
+  Общий tenancy SQLSTATE mapping не изменён; failed UOW остаётся poisoned.
+- OpenAPI сгенерирован из работающих routes/models; consumer сведения, включая
+  same-intent ambiguous-result recovery и GET current state, — `contracts/README.md`.
+- `tests/test_m1_3_service.py`: 37 unit cases для полной precedence, contradictory
+  snapshots (честно вне обычного DDL), восьми exact vectors и strict wire primitives.
+- `tests/test_m1_3_http_contract.py`: 9 schema/CORS cases; прежний auth inventory test
+  теперь требует точное множество семи старых плюс три новых routes.
+- `tests/test_m1_3_api_postgres.py`: 43 real PostgreSQL/API cases для modes/intervals,
+  OWNER/live revocation/foreign tenant, read failures и обоих 503, CAS/no-op/replay,
+  raw inputs, восьми fingerprints в receipts, Audit keyset, rollback, admission race,
+  concurrent claims и ambiguous committed result recovery. PostgreSQL fault injection
+  меняет только изолированные test fixtures/statements, не runtime DDL/privileges.
+
+Локально прошли 152 non-integration tests, Ruff/format/mypy, contract drift и
+canonical import. Docker здесь отсутствует; collection PostgreSQL tests не
+выдаётся за исполнение. Полный unchanged CI runner и шесть M1.2 browser journeys
+обязательны на конечном опубликованном snapshot. Exact final head/tree и CI/tested
+SHA/tree передаются в PR/сообщении C0 после последнего commit, без записи собственного
+SHA следующим docs commit. UI M1.3 browser proof остаётся будущим C5.
+
+## Архив handoff — не текущие задания
+
+Весь текст ниже сохраняет историю решений и прежних выдач. При расхождении текущие действия определяет единственный активный блок выше и TASK_REGISTER; старые base/status/запреты не переисполнять.
+
+### История — DB pre-merge M1.3 / 2026-09-20
 
 Статусы — в [TASK_REGISTER](../TASK_REGISTER.md); DB-решение, матрица и evidence — в [M1_3_DB_C0_ACCEPTANCE](../reviews/M1_3_DB_C0_ACCEPTANCE.md). M1.3 IN_PROGRESS; M0/M1.1/M1.2 сохраняют VERIFIED.
 
@@ -24,10 +290,6 @@ PR #13 `codex/-m1.3-db-only-0004` → `main`, base `552e74c7b542b81ee523d1eccfa0
 C1 ещё не выдан до main DB evidence. C5 не запускать до приёмки и интеграции C1. Следующее ограниченное поручение C5: один owner screen с subscription/entitlements, изменением `contact_display_name` и корректным recovery, просмотром Audit, component tests и реальными browser journeys M1.3. Никаких дополнительных экранов, billing providers или будущих capabilities. После обеих частей C0 проверяет milestone acceptance; до этого M1.3 не VERIFIED и M2 не выдаётся.
 
 Принятые R4/D-01…D-13, 0001/0002/0003, tenant/auth mechanisms и предыдущие acceptance остаются в силе. SQL feasibility тест не заменяет EntitlementService; шесть существующих browser journeys — regression M1.2, не доказательство UI M1.3. Дополнительные архитектурные предложения требуют отдельного явного решения и не входят автоматически в обязательный scope.
-
-## Архив handoff — не текущие задания
-
-Весь текст ниже сохраняет историю решений и прежних выдач. При расхождении текущие действия определяет единственный активный блок выше и TASK_REGISTER; старые base/status/запреты не переисполнять.
 
 ### История — M1.2 принята, M1.3 pre-DDL / 2026-09-18
 
@@ -208,4 +470,3 @@ C2 обязан вернуть exact base/head/tree, migration/grant diff, real 
 Не drop `btree_gist` на downgrade. Не выдавать `CREATE` на database/schema `extensions` роли `asm_migrator`. Не делать runtime owner/SUPERUSER/BYPASSRLS. Не расширять scope до billing provider/client payments/Jobs/production retention.
 
 После DB integration C0 отдельно выдаёт C1 backend/API/CORS slice; C5 только после принятого API SHA.
-

@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -97,6 +98,73 @@ class TenantUnitOfWork:
         result = await self._execute(
             "SELECT * FROM app.businesses WHERE workspace_id = :workspace ORDER BY id",
             {"workspace": self.context.workspace_id},
+        )
+        return tuple(result.mappings().all())
+
+    async def billing_membership_role(self) -> MembershipRole | None:
+        """Resolve live authority on this same guarded connection, never from WRITE."""
+        result = await self._execute(
+            "SELECT platform.resolve_workspace_membership(:actor, :workspace)",
+            {"actor": self.context.actor.user_account_id, "workspace": self.context.workspace_id},
+        )
+        role = result.scalar_one()
+        return MembershipRole(role) if role is not None else None
+
+    async def billing_snapshot(self) -> RowMapping:
+        from asm.billing.queries import SNAPSHOT
+
+        return (
+            (await self._execute(SNAPSHOT, {"workspace": self.context.workspace_id}))
+            .mappings()
+            .one()
+        )
+
+    async def billing_contact(self, version: int, name: str, key: str) -> RowMapping:
+        from asm.billing.errors import contact_error
+        from asm.billing.queries import CONTACT
+
+        self._assert_active()
+        try:
+            result = await self._connection.execute(
+                text(CONTACT), {"version": version, "name": name, "key": key}
+            )
+            return result.mappings().one()
+        except DBAPIError as error:
+            self._failed = True
+            bounded = contact_error(error)
+            if bounded is not None:
+                raise bounded from None
+            raise
+        except BaseException:
+            self._failed = True
+            raise
+
+    async def billing_audit_anchor(self, at: datetime, event_id: UUID) -> bool:
+        from asm.billing.queries import AUDIT_ANCHOR
+
+        return bool(
+            (
+                await self._execute(
+                    AUDIT_ANCHOR, {"workspace": self.context.workspace_id, "at": at, "id": event_id}
+                )
+            ).scalar_one()
+        )
+
+    async def billing_audit_page(
+        self, limit: int, at: datetime | None, event_id: UUID | None
+    ) -> tuple[RowMapping, ...]:
+        from asm.billing.queries import AUDIT_PAGE
+
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise TenancyError(ErrorCode.INVALID_STATE)
+        result = await self._execute(
+            AUDIT_PAGE,
+            {
+                "workspace": self.context.workspace_id,
+                "at": at,
+                "id": event_id,
+                "count": limit + 1,
+            },
         )
         return tuple(result.mappings().all())
 
