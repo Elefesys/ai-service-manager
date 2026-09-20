@@ -129,7 +129,7 @@ def upgrade() -> None:
       CONSTRAINT operation_check CHECK(operation='UPDATE_BILLING_CONTACT'), CONSTRAINT key_check CHECK(idempotency_key ~ '^[A-Za-z0-9._:-]{1,128}$'),
       CONSTRAINT fingerprint_check CHECK(octet_length(request_fingerprint)=32), CONSTRAINT expected_version_positive_check CHECK(expected_version>0),
       CONSTRAINT created_at_finite_check CHECK(isfinite(created_at)),
-      CONSTRAINT status_result_check CHECK((status='IN_PROGRESS' AND result_version IS NULL AND result_outcome IS NULL AND completed_at IS NULL) OR (status='SUCCEEDED' AND result_version IS NOT NULL AND result_version>0 AND result_outcome IN ('UPDATED','NOOP') AND completed_at IS NOT NULL AND isfinite(completed_at))))""")
+      CONSTRAINT status_result_check CHECK((status='IN_PROGRESS' AND result_version IS NULL AND result_outcome IS NULL AND completed_at IS NULL) OR (status='SUCCEEDED' AND result_version IS NOT NULL AND result_version>0 AND result_outcome IS NOT NULL AND result_outcome IN ('UPDATED','NOOP') AND completed_at IS NOT NULL AND isfinite(completed_at))))""")
     _create_catalog_guards()
     _create_initializer()
     _create_contact_command()
@@ -160,7 +160,9 @@ def _create_initializer() -> None:
     DECLARE p_id uuid; r_id uuid; account platform.workspace_billing_accounts%ROWTYPE; sub_count int; mode_count int; audit_count int; manifest text; result text;
     BEGIN
       PERFORM pg_catalog.pg_advisory_xact_lock(1295070019,1);
-      IF p_catalog_code<>'test' OR p_catalog_revision<>1 THEN RETURN 'CONFLICT_CATALOG_MISMATCH'; END IF;
+      IF p_catalog_code IS DISTINCT FROM 'test' OR p_catalog_revision IS DISTINCT FROM 1 THEN RAISE EXCEPTION 'CONFLICT_CATALOG_MISMATCH' USING ERRCODE='P1301'; END IF;
+      IF p_workspace_id IS NULL THEN RAISE EXCEPTION 'CONFLICT_PARTIAL_STATE' USING ERRCODE='P1301'; END IF;
+      IF p_contact_display_name IS NULL OR char_length(btrim(p_contact_display_name,' ')) NOT BETWEEN 1 AND 200 OR octet_length(btrim(p_contact_display_name,' '))>800 OR p_contact_display_name ~ '[\x00-\x1F\x7F]' OR p_subscription_status IS DISTINCT FROM 'ACTIVE' OR p_funding_mode IS DISTINCT FROM 'COMPED' OR p_service_mode IS DISTINCT FROM 'NORMAL' OR p_effective_from IS NULL OR p_effective_until IS NULL OR NOT isfinite(p_effective_from) OR NOT isfinite(p_effective_until) OR p_effective_from>=p_effective_until THEN RAISE EXCEPTION 'CONFLICT_INPUT_MISMATCH' USING ERRCODE='P1301'; END IF;
       SELECT plan_id INTO p_id FROM platform.saas_plans WHERE code='test';
       IF NOT FOUND THEN INSERT INTO platform.saas_plans(code,display_name,status) VALUES('test','M1.3 TEST plan','ACTIVE') RETURNING plan_id INTO p_id; END IF;
       SELECT plan_revision_id INTO r_id FROM platform.saas_plan_revisions WHERE plan_id=p_id AND revision=1 FOR UPDATE;
@@ -175,24 +177,30 @@ def _create_initializer() -> None:
         UPDATE platform.saas_plan_revisions SET publication_state='SEALED',published_at=clock_timestamp() WHERE plan_revision_id=r_id;
       ELSE
         SELECT string_agg(capability_key||chr(9)||value_kind||chr(9)||CASE WHEN value_kind='BOOLEAN' THEN enabled::text ELSE limit_value::text END||chr(9)||criticality||chr(10),'' ORDER BY convert_to(capability_key,'UTF8')) INTO manifest FROM platform.plan_entitlements WHERE plan_revision_id=r_id;
-        IF (SELECT publication_state FROM platform.saas_plan_revisions WHERE plan_revision_id=r_id)<>'SEALED' OR (SELECT count(*) FROM platform.plan_entitlements WHERE plan_revision_id=r_id)<>5 OR encode(pg_catalog.sha256(convert_to(manifest,'UTF8')),'hex')<>'2aed3e0812691c4546997692e664660c7e328783422ae824c8279bd2cef963cc' THEN RETURN 'CONFLICT_CATALOG_MISMATCH'; END IF;
+        IF (SELECT publication_state FROM platform.saas_plan_revisions WHERE plan_revision_id=r_id)<>'SEALED' OR (SELECT count(*) FROM platform.plan_entitlements WHERE plan_revision_id=r_id)<>5 OR encode(pg_catalog.sha256(convert_to(manifest,'UTF8')),'hex')<>'2aed3e0812691c4546997692e664660c7e328783422ae824c8279bd2cef963cc' THEN RAISE EXCEPTION 'CONFLICT_CATALOG_MISMATCH' USING ERRCODE='P1301'; END IF;
       END IF;
-      PERFORM 1 FROM platform.workspaces WHERE id=p_workspace_id FOR UPDATE; IF NOT FOUND THEN RETURN 'CONFLICT_PARTIAL_STATE'; END IF;
+      PERFORM 1 FROM platform.workspaces WHERE id=p_workspace_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'CONFLICT_PARTIAL_STATE' USING ERRCODE='P1301'; END IF;
       SELECT * INTO account FROM platform.workspace_billing_accounts WHERE workspace_id=p_workspace_id FOR UPDATE;
       SELECT count(*) INTO sub_count FROM platform.workspace_subscriptions WHERE workspace_id=p_workspace_id;
       SELECT count(*) INTO mode_count FROM platform.workspace_service_modes WHERE workspace_id=p_workspace_id;
       SELECT count(*) INTO audit_count FROM app.audit_events WHERE workspace_id=p_workspace_id AND event_type='WORKSPACE_BILLING_PROVISIONED';
       IF account.workspace_id IS NOT NULL OR sub_count+mode_count+audit_count>0 THEN
-        IF account.workspace_id IS NULL OR sub_count<>1 OR mode_count<>1 OR audit_count<>1 THEN RETURN 'CONFLICT_PARTIAL_STATE'; END IF;
-        IF account.contact_display_name<>btrim(p_contact_display_name,' ') OR account.version<>1 OR NOT EXISTS(SELECT 1 FROM platform.workspace_subscriptions s WHERE s.workspace_id=p_workspace_id AND s.plan_revision_id=r_id AND s.status=p_subscription_status AND s.funding_mode=p_funding_mode AND s.effective_from=p_effective_from AND s.effective_until=p_effective_until AND s.version=1) OR NOT EXISTS(SELECT 1 FROM platform.workspace_service_modes m WHERE m.workspace_id=p_workspace_id AND m.mode=p_service_mode AND m.reason_code='PROVISIONED_LOCAL' AND m.effective_from=p_effective_from AND m.effective_until=p_effective_until AND m.version=1) THEN RETURN 'CONFLICT_STATE_DRIFT'; END IF;
+        IF account.workspace_id IS NULL OR sub_count<>1 OR mode_count<>1 OR audit_count<>1 THEN RAISE EXCEPTION 'CONFLICT_PARTIAL_STATE' USING ERRCODE='P1301'; END IF;
+        IF account.contact_display_name<>btrim(p_contact_display_name,' ') OR account.version<>1 OR NOT EXISTS(SELECT 1 FROM platform.workspace_subscriptions s WHERE s.workspace_id=p_workspace_id AND s.plan_revision_id=r_id AND s.status=p_subscription_status AND s.funding_mode=p_funding_mode AND s.effective_from=p_effective_from AND s.effective_until=p_effective_until AND s.version=1) OR NOT EXISTS(SELECT 1 FROM platform.workspace_service_modes m WHERE m.workspace_id=p_workspace_id AND m.mode=p_service_mode AND m.reason_code='PROVISIONED_LOCAL' AND m.effective_from=p_effective_from AND m.effective_until=p_effective_until AND m.version=1) THEN RAISE EXCEPTION 'CONFLICT_STATE_DRIFT' USING ERRCODE='P1301'; END IF;
+        IF NOT EXISTS(SELECT 1 FROM app.audit_events e WHERE e.workspace_id=p_workspace_id AND e.event_type='WORKSPACE_BILLING_PROVISIONED' AND e.object_id=account.billing_account_id AND e.object_version=1) THEN RAISE EXCEPTION 'CONFLICT_STATE_DRIFT' USING ERRCODE='P1301'; END IF;
         RETURN 'NOOP';
       END IF;
-      IF p_subscription_status<>'ACTIVE' OR p_funding_mode<>'COMPED' OR p_service_mode<>'NORMAL' THEN RETURN 'CONFLICT_INPUT_MISMATCH'; END IF;
       INSERT INTO platform.workspace_billing_accounts(workspace_id,contact_display_name) VALUES(p_workspace_id,btrim(p_contact_display_name,' ')) RETURNING * INTO account;
       INSERT INTO platform.workspace_subscriptions(workspace_id,plan_revision_id,required_publication_state,status,funding_mode,effective_from,effective_until) VALUES(p_workspace_id,r_id,'SEALED',p_subscription_status,p_funding_mode,p_effective_from,p_effective_until);
       INSERT INTO platform.workspace_service_modes(workspace_id,mode,reason_code,effective_from,effective_until) VALUES(p_workspace_id,p_service_mode,'PROVISIONED_LOCAL',p_effective_from,p_effective_until);
       INSERT INTO app.audit_events(workspace_id,actor_kind,correlation_id,event_type,object_type,object_id,object_version,payload) VALUES(p_workspace_id,'LOCAL_PROVISIONER',pg_catalog.uuidv7(),'WORKSPACE_BILLING_PROVISIONED','WORKSPACE_BILLING_ACCOUNT',account.billing_account_id,account.version,'{}');
       RETURN 'INITIALIZED';
+    EXCEPTION WHEN SQLSTATE 'P1301' THEN
+      -- This exception block rolls back any catalog writes before returning a
+      -- bounded conflict. Other SQL errors (including Audit failure) propagate.
+      GET STACKED DIAGNOSTICS result = MESSAGE_TEXT;
+      IF result NOT IN ('CONFLICT_PARTIAL_STATE','CONFLICT_INPUT_MISMATCH','CONFLICT_CATALOG_MISMATCH','CONFLICT_STATE_DRIFT') THEN RAISE; END IF;
+      RETURN result;
     END $$""")
 
 
@@ -204,7 +212,7 @@ def _create_contact_command() -> None:
     BEGIN
       IF pg_current_xact_id_if_assigned() IS NULL OR current_setting('asm.context_xid',true) IS DISTINCT FROM pg_current_xact_id_if_assigned()::text THEN RAISE EXCEPTION 'invalid workspace context' USING ERRCODE='42501'; END IF;
       BEGIN ws:=NULLIF(current_setting('asm.workspace_id',true),'')::uuid; actor:=NULLIF(current_setting('asm.actor_id',true),'')::uuid; corr:=NULLIF(current_setting('asm.correlation_id',true),'')::uuid; EXCEPTION WHEN invalid_text_representation THEN RAISE EXCEPTION 'invalid workspace context' USING ERRCODE='42501'; END;
-      IF ws IS NULL OR actor IS NULL OR corr IS NULL OR current_setting('asm.actor_kind',true)<>'user_account' OR NOT EXISTS(SELECT 1 FROM platform.workspace_memberships m JOIN platform.user_accounts u ON u.id=m.user_account_id JOIN platform.workspaces w ON w.id=m.workspace_id WHERE m.workspace_id=ws AND m.user_account_id=actor AND m.role='OWNER' AND m.status='ACTIVE' AND u.status='ACTIVE' AND w.status='ACTIVE') THEN RAISE EXCEPTION 'access denied' USING ERRCODE='42501'; END IF;
+      IF ws IS NULL OR actor IS NULL OR corr IS NULL OR current_setting('asm.actor_kind',true) IS DISTINCT FROM 'user_account' OR NOT EXISTS(SELECT 1 FROM platform.workspace_memberships m JOIN platform.user_accounts u ON u.id=m.user_account_id JOIN platform.workspaces w ON w.id=m.workspace_id WHERE m.workspace_id=ws AND m.user_account_id=actor AND m.role='OWNER' AND m.status='ACTIVE' AND u.status='ACTIVE' AND w.status='ACTIVE') THEN RAISE EXCEPTION 'access denied' USING ERRCODE='42501'; END IF;
       normalized:=btrim(contact_display_name,' ');
       IF expected_version IS NULL OR expected_version<=0 OR idempotency_key IS NULL OR idempotency_key !~ '^[A-Za-z0-9._:-]{1,128}$' OR normalized IS NULL OR char_length(normalized) NOT BETWEEN 1 AND 200 OR octet_length(normalized)>800 OR normalized ~ '[\x00-\x1F\x7F]' THEN RAISE EXCEPTION 'invalid request' USING ERRCODE='22023'; END IF;
       fp:=pg_catalog.sha256(convert_to('{"contact_display_name":"'||replace(replace(normalized,'\','\\'),'"','\"')||'","expected_version":"'||expected_version::text||'","operation":"UPDATE_BILLING_CONTACT","workspace_id":"'||ws::text||'"}','UTF8'));
@@ -216,7 +224,9 @@ def _create_contact_command() -> None:
         IF rec.request_fingerprint<>fp THEN RAISE EXCEPTION 'idempotency key conflict' USING ERRCODE='23505'; END IF;
         RETURN QUERY SELECT rec.workspace_id,rec.billing_account_id,rec.receipt_id,rec.result_version,rec.result_outcome,rec.completed_at; RETURN;
       END IF;
-      SELECT * INTO acc FROM platform.workspace_billing_accounts a WHERE a.workspace_id=ws FOR UPDATE;
+      -- Receipt FK checks hold KEY SHARE on this same account. NO KEY UPDATE
+      -- serializes the non-key mutation without a two-claim lock-upgrade deadlock.
+      SELECT * INTO acc FROM platform.workspace_billing_accounts a WHERE a.workspace_id=ws FOR NO KEY UPDATE;
       IF acc.version<>expected_version THEN RAISE EXCEPTION 'stale state' USING ERRCODE='40001'; END IF;
       done:=clock_timestamp();
       IF acc.contact_display_name=normalized THEN result_outcome:='NOOP'; result_version:=acc.version;
