@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, Business, Session } from './api';
+import { BillingPanel } from './BillingPanel';
 
 type Phase = 'checking' | 'anonymous' | 'authenticated' | 'recovering' | 'uncertain';
 const message = (error: unknown) => error instanceof ApiError && error.code === 'RATE_LIMITED' ? `Слишком много запросов. Повторите позже${error.retryAfter ? ` (${error.retryAfter})` : ''}.` : 'Сервис временно недоступен. Повторите проверку.';
@@ -23,6 +24,7 @@ function Console() {
   const businessControllers = useRef(new Set<AbortController>());
   const mounted = useRef(true);
   const logoutIntent = useRef(false);
+  const lastContext = useRef({ actor: '', workspace: '' });
   const beginAuth = useCallback(() => {
     const owner = ++authSequence.current;
     authControllers.current.forEach((controller) => controller.abort());
@@ -50,7 +52,9 @@ function Console() {
   }, [clearProtected]);
   const accept = useCallback((next: Session, owner: number, controller: AbortController) => {
     if (!ownsAuth(owner, controller)) return false;
-    clearProtected(); setSession(next); setWorkspace(next.memberships[0]?.workspace_id ?? ''); setPhase('authenticated'); setError('');
+    const preferred = lastContext.current.actor === next.user_account_id && next.memberships.some(m => m.workspace_id === lastContext.current.workspace) ? lastContext.current.workspace : next.memberships[0]?.workspace_id ?? '';
+    lastContext.current = { actor: next.user_account_id, workspace: preferred };
+    clearProtected(); setSession(next); setWorkspace(preferred); setPhase('authenticated'); setError('');
     return true;
   }, [clearProtected, ownsAuth]);
 
@@ -91,7 +95,7 @@ function Console() {
       else setError(message(e));
     }).finally(() => businessControllers.current.delete(c));
     return () => c.abort();
-  }, [workspace, session?.user_account_id, invalidateAuth]);
+  }, [workspace, session, invalidateAuth]);
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy) return; setBusy(true); setError('');
@@ -151,7 +155,8 @@ function Console() {
     {(phase === 'checking' || phase === 'recovering') && <section className="panel center" aria-busy="true"><div className="spinner" /><h2>{phase === 'checking' ? 'Проверяем сессию' : 'Уточняем результат'}</h2><p>Защищённые данные пока скрыты.</p></section>}
     {phase === 'uncertain' && <section className="panel alert" role="alert"><h2>Состояние сессии неизвестно</h2><p>{error}</p><button onClick={() => void checkSession(true)}>Проверить снова</button></section>}
     {phase === 'anonymous' && <section className="auth-grid"><div><span className="kicker">SERVER SESSION</span><h2>Вход в консоль</h2><p>Используйте синтетическую учётную запись LOCAL/TEST. Регистрация и восстановление пароля здесь не реализованы.</p></div><form className="panel form" onSubmit={(e) => void login(e)}><label htmlFor="login">Логин</label><input id="login" name="login" autoComplete="username" minLength={3} maxLength={72} required /><label htmlFor="password">Пароль</label><input id="password" name="password" type="password" autoComplete="current-password" minLength={15} maxLength={128} required /><button disabled={busy} type="submit">{busy ? 'Входим…' : 'Войти'}</button>{error && <p className="error" role="alert">{error}</p>}</form></section>}
-    {phase === 'authenticated' && session && <><section className="identity"><div><span className="kicker">ACTIVE SESSION</span><h2>Рабочее пространство</h2><p className="mono">Пользователь {session.user_account_id}</p></div><div className="actions"><button className="secondary" disabled={busy} onClick={() => void rotate()}>Обновить защиту сессии</button><button className="danger" disabled={busy} onClick={() => void finishLogout()}>Выйти</button></div></section><section className="panel"><label htmlFor="workspace">Workspace</label><select id="workspace" value={workspace} onChange={(e) => { businessGeneration.current++; setBusinesses(null); setSelected(null); setWorkspace(e.target.value); }}>{session.memberships.map((m) => <option value={m.workspace_id} key={m.workspace_id}>{m.workspace_id} · {m.role}</option>)}</select>{session.memberships.length === 0 && <p className="empty">Нет доступных memberships.</p>}<p className="muted">Сессия действует до: {session.expires_at} (решение об истечении принимает сервер).</p></section>{error && <p className="banner" role="alert">{error}</p>}<section className="panel"><h2>Business</h2>{businesses === null && workspace && <p role="status">Загружаем список…</p>}{businesses?.length === 0 && <p className="empty">В этом Workspace нет доступных Business.</p>}<div className="cards">{businesses?.map((b) => <button className="business" key={b.id} onClick={() => void selectBusiness(b.id)}><strong>{b.name}</strong><span>{b.status} · v{b.version}</span><span className="mono">{b.id}</span></button>)}</div>{selected && <article className="detail"><span className="kicker">DETAIL</span><h3>{selected.name}</h3><dl><dt>Status</dt><dd>{selected.status}</dd><dt>Version</dt><dd>{selected.version}</dd><dt>Business ID</dt><dd className="mono">{selected.id}</dd></dl></article>}</section></>}
+    {phase === 'authenticated' && session && <><section className="identity"><div><span className="kicker">ACTIVE SESSION</span><h2>Рабочее пространство</h2><p className="mono">Пользователь {session.user_account_id}</p></div><div className="actions"><button className="secondary" disabled={busy} onClick={() => void rotate()}>Обновить защиту сессии</button><button className="danger" disabled={busy} onClick={() => void finishLogout()}>Выйти</button></div></section><section className="panel"><label htmlFor="workspace">Workspace</label><select id="workspace" value={workspace} onChange={(e) => { businessGeneration.current++; setBusinesses(null); setSelected(null); lastContext.current = { actor: session.user_account_id, workspace: e.target.value }; setWorkspace(e.target.value); }}>{session.memberships.map((m) => <option value={m.workspace_id} key={m.workspace_id}>{m.workspace_id} · {m.role}</option>)}</select>{session.memberships.length === 0 && <p className="empty">Нет доступных memberships.</p>}<p className="muted">Сессия действует до: {session.expires_at} (решение об истечении принимает сервер).</p></section>{error && <p className="banner" role="alert">{error}</p>}<section className="panel"><h2>Business</h2>{businesses === null && workspace && <p role="status">Загружаем список…</p>}{businesses?.length === 0 && <p className="empty">В этом Workspace нет доступных Business.</p>}<div className="cards">{businesses?.map((b) => <button className="business" key={b.id} onClick={() => void selectBusiness(b.id)}><strong>{b.name}</strong><span>{b.status} · v{b.version}</span><span className="mono">{b.id}</span></button>)}</div>{selected && <article className="detail"><span className="kicker">DETAIL</span><h3>{selected.name}</h3><dl><dt>Status</dt><dd>{selected.status}</dd><dt>Version</dt><dd>{selected.version}</dd><dt>Business ID</dt><dd className="mono">{selected.id}</dd></dl></article>}</section></>}
+    <BillingPanel session={phase === 'authenticated' ? session : null} workspace={workspace} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} />
   </Shell>;
 }
 
@@ -160,4 +165,4 @@ function Ops() {
   useEffect(() => { const c = new AbortController(); const timer = setTimeout(() => c.abort(), 5000); void fetch('/health/ready', { signal: c.signal }).then(async (r) => { const v: unknown = await r.json(); setState(r.ok && typeof v === 'object' && v !== null && 'status' in v && v.status === 'ok' && 'component' in v && v.component === 'database' ? 'ok' : 'bad'); }).catch(() => setState('bad')).finally(() => clearTimeout(timer)); return () => { clearTimeout(timer); c.abort(); }; }, []);
   return <Shell title="Platform Operations"><section className="panel notice"><h2>Техническая shell</h2><p>Business-сессия не предоставляет операторских прав. Tenant-данные и privileged actions здесь отсутствуют.</p></section><section className="panel"><h2>Readiness backend</h2><p role="status">{state === 'checking' ? 'Проверка…' : state === 'ok' ? 'Проверка готовности пройдена' : 'Сервис недоступен или не готов'}</p></section></Shell>;
 }
-function Shell({ title, children }: { title: string; children: React.ReactNode }) { return <main><header><div><span className="eyebrow">AI SERVICE MANAGER</span><span className="badge">LOCAL / TEST</span></div><h1>{title}</h1></header><nav aria-label="Разделы"><a href="/">Business Console</a><a href="/ops/">Platform Operations</a></nav>{children}<footer>Ограниченный M1.2 preview — не production CRM.</footer></main>; }
+function Shell({ title, children }: { title: string; children: React.ReactNode }) { return <main><header><div><span className="eyebrow">AI SERVICE MANAGER</span><span className="badge">LOCAL / TEST</span></div><h1>{title}</h1></header><nav aria-label="Разделы"><a href="/">Business Console</a><a href="/ops/">Platform Operations</a></nav>{children}<footer>Ограниченный LOCAL/TEST preview — не production CRM.</footer></main>; }

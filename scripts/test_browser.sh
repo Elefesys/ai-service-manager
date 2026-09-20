@@ -46,4 +46,4 @@ else:
     raise SystemExit("Browser stack readiness failed")
 print("BROWSER_STACK_READINESS: PASS")
 PY
-ASM_BROWSER_LOGIN=browser.owner ASM_BROWSER_PASSWORD_FILE="$password_file" npm --prefix frontend run test:e2e
+ASM_BROWSER_FIXTURE_FILE="$tmp/fixture.json" ASM_BROWSER_ENV_FILE="$tmp/.env" ASM_BROWSER_LOGIN=browser.owner ASM_BROWSER_PASSWORD_FILE="$password_file" npm --prefix frontend run test:e2e

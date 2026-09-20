@@ -2,6 +2,25 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Исполнение C5 — PR #15 / 2026-09-20
+
+Owner UI/browser implementation подготовлена поверх стартового coordination
+`2274667f06ddd72b1a02c57fb555456e948f2c50` и accepted implementation base
+`43f22b5e28a93e269eccc25bf73653e47fd01426`. Первый coordination commit сохранён;
+ветка `c5/m1-3-owner-ui`, target main, PR Draft / без merge.
+
+Добавлены owner panel, строгий R4 adapter, memory-only frozen contact intention,
+ограниченный явный auth/CSRF recovery, Audit limit10 и component/browser journeys.
+Команды, поведение, TEST-only fixtures и границы evidence описаны в
+[M1_3_UI_RUNBOOK](tasks/M1_3_UI_RUNBOOK.md). Backend/DDL/grants/contracts/dependencies
+и прежние browser assertions неизменны. Локально typecheck/build и53frontend
+(30прежних +23новых) PASS; Docker отсутствует. Обязательные штатные Docker/realPG/
+browser gates выполняются опубликованным GitHub snapshot, не заменяются mocks.
+Их final SHA/tree/run evidence возвращается в PR и C0 без SHA-only docs chain.
+
+Это запись исполнения, не приёмка. **UI не VERIFIED; M1.3 IN_PROGRESS.** После
+зелёного final-head CI требуются C0 review, ручной merge и отдельный actual main CI.
+
 ## Текущее решение C0 — API принят; выдан owner UI C5 / 2026-09-20
 
 **DB и backend/API M1.3 — INTEGRATED / VERIFIED. M1.3 milestone — IN_PROGRESS.**
