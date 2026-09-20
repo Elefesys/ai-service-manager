@@ -2,7 +2,58 @@
 
 Ответственный за интеграцию: C0. Единственный task register: `docs/TASK_REGISTER.md`. Канон: `docs/architecture/01_ARCHITECTURE_SPEC.md`, действующие ADR, MVP/Roadmap и `09_IMPLEMENTATION_PLAN.md`; стек: IMPL-001; правила: AGENTS.md.
 
-## Единственный активный handoff — C0 → C1, M1.3 backend/API / 2026-09-20
+## Единственный активный handoff — C0: интеграция backend/API PR #14 / 2026-09-20
+
+Статус исполнения ведётся только в [TASK_REGISTER](../TASK_REGISTER.md).
+DB принят. Полный C0 review backend/API PASS; два конкретных targeted C8 P2
+исправлены и проверены. API остаётся REVIEW до ручного merge и отдельного main CI.
+M1.3 IN_PROGRESS; C5 и M2 не запускать.
+
+- Repository: `https://github.com/Elefesys/ai-service-manager.git`.
+- PR: [#14](https://github.com/Elefesys/ai-service-manager/pull/14),
+  `c1/m1-3-billing-api` → `main`, без squash/rebase/force-push/auto-merge.
+- Accepted DB base: `2bd339ee9bb4638588e5f07b63723caaf717c619`;
+  tree `5bf0a4fc429cc11b1b1b2da03147fad6ab088ad8`, push/main 35503584157 SUCCESS.
+- Reviewed implementation с исправлением: `a6d44560f035a4a288ab62abbac1ad2bde3651ad`,
+  tree `2a587356a9591c6a997ab245a2c0c9403930222b`;
+  [CI 35507439390](https://github.com/Elefesys/ai-service-manager/actions/runs/35507439390)
+  SUCCESS: 153 non-integration + 189 real PostgreSQL + 30 frontend + 6 прежних browser = 378 cases; оба clean-source gates PASS. Evidence и критерии: [API receipt](../reviews/M1_3_API_C0_ACCEPTANCE.md).
+- Последующий согласованный docs commit содержит только TASK_REGISTER, этот
+  handoff и API receipt. Итоговые head/CI фиксируются в PR и ответе C0, а не
+  новым коммитом ради SHA предыдущего документа.
+
+### Точное следующее действие
+
+После проверки C0 SUCCESS итогового head пользователь открывает PR #14,
+нажимает **Ready for review**, выбирает **Create a merge commit** и подтверждает
+merge. Вернуть C0 «слито» или ссылку на merge commit. C0 сам проверяет фактические
+parents/tree/merge SHA и отдельный `push/main` CI; PR virtual merge его не заменяет.
+Не обходить неизвестные/красные gates. При неожиданной code delta/base — конкретная
+проверка C0, без автоматического нового design cycle.
+
+### После фактической интеграции API
+
+Только C0 после main evidence выдаёт полностью готовое ограниченное C5 поручение
+с точным base. Конечный scope: один минимальный owner screen, состояние
+subscription/entitlements, изменение `contact_display_name` с корректным recovery,
+Audit pagination, component tests и настоящие browser/API/PostgreSQL journeys M1.3.
+Источники DTO — generated `contracts/openapi.json`, consumer/recovery notes —
+`contracts/README.md`; нормативный R4 и D-01…D-13 сохраняются.
+
+Сохранить intention/body/key при неоднозначном PATCH; восстановить auth/CSRF,
+проверить actor/Workspace, повторять тот же key/body только для прежнего намерения,
+затем GET current state. Не заменять recovery новым key; не считать replay текущим
+account state. OWNER permissions отдельны от неизменной tenancy matrix.
+
+Дополнительные backend routes, catalog/subscription/mode editors, payments,
+провайдеры, generic frameworks, migrations и M2 не выданы. После C5/main CI
+нужна отдельная итоговая приёмка M1.3; API PASS не завершает milestone.
+
+## История — выполненное поручение C1 backend/API
+
+Следующий блок сохраняет выданный scope и критерии, но не требует повторной
+реализации или повторного review уже проверенных частей.
+
 
 Это готовое задание C1. Выполнить backend/API часть принятого R4 последовательно, без расширения scope и перепроектирования уже принятого DB/auth. Состояния задач ведутся только в [TASK_REGISTER](../TASK_REGISTER.md). DB-срез INTEGRATED / VERIFIED; M1.3 IN_PROGRESS. C5 и M2 не запускать.
 

@@ -2,7 +2,51 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущее решение C0 — DB принят; выдан backend/API C1 / 2026-09-20
+## Текущее решение C0 — backend/API pre-merge review PASS / 2026-09-20
+
+**DB-срез INTEGRATED / VERIFIED. Backend/API-срез REVIEW: C0 PASS, targeted C8
+PASS; готов к обычному merge commit после SUCCESS итогового опубликованного head.
+API ещё не интегрирован. M1.3 milestone IN_PROGRESS; C5 и M2 не выданы.**
+
+Продолжается [PR #14](https://github.com/Elefesys/ai-service-manager/pull/14),
+`c1/m1-3-billing-api` → `main`. Принятый base остаётся actual merge PR #13
+`2bd339ee9bb4638588e5f07b63723caaf717c619`, tree
+`5bf0a4fc429cc11b1b1b2da03147fad6ab088ad8`, отдельный
+[push/main CI 35503584157](https://github.com/Elefesys/ai-service-manager/actions/runs/35503584157)
+SUCCESS. Первый coordination commit `4c167e2ea1e2cb3e9721a7cefe5da72372eca0ad` сохранён.
+
+C0 проверил весь C1 diff и исходный head `26ca3db6f5dd6c6e784583e02d3026edfa321954`
+с CI 35506227688 SUCCESS (377 cases). Два конкретных P2 targeted C8 закрыты
+ограниченным исправлением `a6d44560f035a4a288ab62abbac1ad2bde3651ad`, tree
+`2a587356a9591c6a997ab245a2c0c9403930222b`: входная OpenAPI-схема после U+0020 trim;
+согласованные deadlines и завершение фоновых HTTP tasks в concurrency tests.
+Runtime normalization, auth/DB semantics, migrations/grants, R4, frozen contracts,
+frontend, dependencies и CI неизменны. [CI исправления 35507439390](https://github.com/Elefesys/ai-service-manager/actions/runs/35507439390)
+SUCCESS: 153 non-integration + 189 real PostgreSQL + 30 frontend + 6 прежних browser = 378 cases; оба clean-source gates PASS. Полная матрица, проверенные snapshots и пределы evidence —
+[API C0 receipt](reviews/M1_3_API_C0_ACCEPTANCE.md); DB receipt сохраняет прежнюю приёмку.
+
+Единственный активный handoff — верхний блок [M1_HANDOFF](tasks/M1_HANDOFF.md).
+Этот согласованный docs update фиксирует решение; SHA и CI его итогового head
+публикуются в PR и ответе C0, без следующего SHA-only docs commit.
+До ручного merge C0 проверяет SUCCESS именно итогового head и неизменный base.
+
+Конечный остаток M1.3:
+
+1. Пользователь переводит PR #14 из Draft через Ready for review и выполняет
+   **Create a merge commit**; C0 затем проверяет actual merge commit/tree и отдельный
+   `push/main` CI. Только после этого API становится INTEGRATED / VERIFIED.
+2. C0 выдаёт C5 одно готовое задание от подтверждённого API base: один минимальный
+   owner screen, subscription/entitlements, contact edit с сохранением intention/body/key
+   и auth/CSRF recovery, Audit; component tests и реальные M1.3 browser journeys.
+3. После review/интеграции C5 и общего main CI C0 принимает всю M1.3. M2 до этого не выдавать.
+
+Сохраняются R4 и D-01…D-13. Упрощения уже соответствуют принятой границе: существующий
+auth/UOW, одна DB command, три routes и один owner screen. Дополнительные editors,
+generic billing/Audit framework, payments/providers, Jobs и production не требуются.
+Нового архитектурного решения нет. История ниже не является текущим поручением.
+
+## История — выдача C1 и implementation candidate
+
 
 **DB-срез M1.3 — INTEGRATED / VERIFIED. M1.3 milestone — IN_PROGRESS.** M0/M1.1/полная M1.2 сохраняют VERIFIED. Backend/API C1 реализован в продолжаемом Draft PR #14 и передаётся на CI/C0 review; приёмка и интеграция API не выполнены. C5 и M2 не выданы.
 
@@ -221,7 +265,7 @@ C0 подготовил только четыре документационны
 | M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
 | M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
 | M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5; C0/C8 review | VERIFIED | PR #8 MERGED; actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`; push/main 35368244266 SUCCESS, 246 tests; UI-01/02/04/05 CLOSED | Полная приёмка: docs/reviews/M1_2_C0_ACCEPTANCE.md; не production |
-| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 и принятая M1.2 | C1 backend; C2 DB; C5 UI; C0/C8 review | IN_PROGRESS | DB INTEGRATED / VERIFIED: PR #13, actual main `2bd339ee…`, push/main 35503584157 SUCCESS; R4 сохранён | C1 backend/API от принятого base → API acceptance/main CI → C5 owner UI/browser → итог M1.3 |
+| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 и принятая M1.2 | C1 backend; C2 DB; C5 UI; C0/C8 review | IN_PROGRESS | DB VERIFIED: PR #13 / main `2bd339ee…`; API PR #14 REVIEW, C0/targeted C8 PASS на исправлении `a6d44560…`, CI 35507439390; API receipt | Final-head CI → ручной merge PR #14 → actual main CI/API acceptance → C5 owner UI/browser → итог M1.3 |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 
