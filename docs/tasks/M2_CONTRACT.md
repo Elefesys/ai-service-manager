@@ -1,14 +1,18 @@
-# M2 — инкрементальный контракт; первая редакция M2.1-KERNEL
+# M2 — единый инкрементальный контракт
 
 Дата: 2026-09-21. Владелец: C0; предметное согласование: C2 (DB/tenancy),
-C3 (events/delivery). Статус: **CONTRACT ACCEPTED C0; C2/C3 CONTRACT PASS**.
-Это контракт реализации, не evidence выполненного M2. Текущий статус и поручение:
-[TASK_REGISTER](../TASK_REGISTER.md), [M2_HANDOFF](M2_HANDOFF.md).
+C3 (events/media/delivery). **C0 ACCEPTED; C2/C3 CONTRACT PASS** для M2.1 и
+добавления M2.2 §9. Это согласование контракта, не C8 review реализации M2.2.
+Текущие статусы и поручение: [TASK_REGISTER](../TASK_REGISTER.md),
+[M2_HANDOFF](M2_HANDOFF.md).
 
-Принятый implementation base: `8e5f125d424c0ce613ed9e0c787392f11a49aeae`,
-actual merge PR #17; [push/main CI 35522542861](https://github.com/Elefesys/ai-service-manager/actions/runs/35522542861)
-SUCCESS. Первая задача: **M2.1-KERNEL**, ветка `c3/m2-1-messaging-kernel`.
-Эта редакция задаёт только ядро M2.1; следующие части дополняют этот же файл.
+Разделы 1–8 сохраняют принятый kernel M2.1: первоначальный base
+`8e5f125d424c0ce613ed9e0c787392f11a49aeae`, PR #18. Его интегрированный main
+**`d3c849d4792f7af60f43eea0f0551659ee3cee5d`**, отдельный
+[push/main CI 35596593891](https://github.com/Elefesys/ai-service-manager/actions/runs/35596593891)
+SUCCESS — принятый base следующего среза **M2.2-PRIVATE-IMAGES**.
+В §1–8 отсутствие binary I/O описывает границу M2.1; §9 явно добавляет только
+private image path. SEND deadline/UNKNOWN и ранее принятые механизмы не меняются.
 
 Основание: AGENTS, IMPL-001, Spec §§2–4, 15.4–6, 17.4–5, 18, 19, 24.6;
 ADR-019–021, 121–128, 138–140; Implementation Plan M2.1–M2.4.
@@ -423,3 +427,201 @@ DB ingestion требует уже canonical `YYYY-MM-DDTHH:MM:SS.ffffffZ` дл�
 через raw SQL отвергаются; Python нормализует допустимый timezone-aware datetime
 перед вызовом. Поэтому один normalized event не меняет fingerprint со временем
 и не получает иной hash через обход Python validator.
+
+## 9. M2.2-PRIVATE-IMAGES — принято C0/C2/C3, 2026-09-21
+
+Основание: Spec §§3.10, 4.9, 17.5, 19.4–5; ADR-009/115/138–140;
+Implementation Plan M2.2 и действующая матрица M2_HANDOFF. Ведущий C6, предметное
+участие C3 (provider/media) и C2 (DB/migration). Только LOCAL/TEST. Ограничения
+формата/размера/TTL ниже — явные реализационные решения C0 для этого среза,
+а не восстановленные исторические требования или новый общий media-продукт.
+
+### 9.1. Один работающий путь и сохранённая семантика
+
+Controlled IMAGE_REFERENCE → прежний Inbox/Message → PENDING FileObject и
+FETCH_IMAGE Job → проверенный private object → READY → авторизованный signed GET.
+Реальны PostgreSQL, scheduler/worker и S3-compatible сервис; provider пока
+CONTROLLED. Telegram download/webhook/rights, owner messaging HTTP/DTO, UI и live
+smoke остаются M2.3/4. AI, upload владельцем, исходящие файлы, thumbnails/transforms,
+CDN/multipart, дополнительные форматы и общая retention/deletion платформа не выданы.
+
+Исходные Message.content_type=IMAGE_REFERENCE, image_file_id, projection hash,
+IDs и dedupe M2.1 остаются immutable. Один FileObject на один inbound image Message;
+новый generic Attachment слой не нужен. Message сохраняется даже при FAILED файле.
+Disconnected connection не запрещает хранить уже durably принятое изображение
+или читать историю актуальному OWNER; send policy остаётся прежней.
+
+### 9.2. Схема, связь и trusted capabilities
+
+C0/C2 резервируют **0006_private_images.py: revision 0006, down_revision 0005**.
+Применённые 0001–0005 не редактировать. Минимальный inventory:
+
+| Объект | Обязательная связь/состояние |
+|---|---|
+| `app.file_objects` | UUIDv7, Workspace, canonical Message/connection; UNIQUE по Workspace/Message; PENDING/READY/FAILED, положительная version, timestamps, bounded error; READY manifest и winner обязательны |
+| `platform.file_object_uploads` | Durable intent с FileObject/FETCH Job/claim, отдельным server key, immutable validated manifest; PREPARED/WINNER/ABANDONED; cleanup token/lease/next-check/outcome |
+| `platform.messaging_jobs` | Новый явный kind FETCH_IMAGE и file_id; typed composite FK и точная discriminator shape; один fetch Job на FileObject |
+
+FK/constraints подтверждают Workspace и принадлежность FileObject именно inbound
+IMAGE_REFERENCE Message и его connection, а READY winner — именно этому файлу.
+Manifest: actual MIME, size_bytes, SHA-256, width/height; storage_key ведёт к winner,
+бинарных данных в PostgreSQL нет. WINNER/READY pointer и ABANDONED→WINNER запрещено
+переписывать. Upload intent уникален по job/claim; новая claim получает новый key.
+Ключ выводится сервером из Workspace/FileObject/intent UUID, без имени файла,
+provider ID, URL или секрета; он не является доказательством права доступа.
+
+ENABLE/FORCE RLS, migrator policy и прежняя asm_runtime роль сохраняются.
+Upload internals не получают общий runtime SELECT/DML; только перечисленные typed
+SECURITY DEFINER capabilities с fixed search_path и canonical guards. Worker
+получает source refs по Job→FileObject→Message→Connection из БД. Caller claim,
+GUC, произвольный payload/key/URL не определяют Workspace/источник/winner.
+Отдельная DB login role и расширение app.current_workspace_id() не требуются.
+Прежние XID/task/physical transaction/pool и owner/worker mutual-exclusion guards
+применяются к новым capabilities; worker не получает human billing/Business доступ.
+
+0006 заменяет только необходимые branches messaging_process_inbox/job_json/
+reschedule/recover_expired и добавляет file capabilities. Поддерживающая дельта
+claim/admit/guard возможна только с сохранением проверенных инвариантов.
+SEND begin/finish, owner command/receipt/Audit, UNKNOWN/no-resend не перепроектировать.
+Python worker использует явный exhaustive dispatch трёх kinds: прежний implicit
+«всё кроме PROCESS_INBOX = SEND» для FETCH_IMAGE недопустим.
+
+### 9.3. Atomic planning и переход 0005 → 0006
+
+Обработка image Inbox создаёт Message + PENDING FileObject + один FETCH Job и
+фиксирует Inbox/PROCESS Job **одной транзакцией**. Точный повтор event/message
+возвращает прежний результат и не создаёт новый файл/job; conflict semantics прежние.
+Транзакционная ошибка любого звена откатывает весь новый набор.
+
+Upgrade в БД добавляет ровно один PENDING FileObject/FETCH Job для каждого уже
+существующего inbound IMAGE_REFERENCE Message, включая disconnected connection.
+Источник — сохранённые Message/Connection, correlation — первоначальный PROCESSED
+Inbox, если есть, иначе серверный migration correlation. Никакого внешнего I/O
+в Alembic; Message bytes/fingerprints, Inbox result, billing и SEND evidence прежние.
+Downgrade в disposable TEST удаляет только новые file jobs/metadata и восстанавливает
+функции/constraints 0005. Объекты disposable TEST bucket убирает test infrastructure,
+не SQL migration. Реальный rollback production этим не объявляется готовым.
+
+### 9.4. Provider stream и hostile image validation
+
+Небольшой provider boundary `open_image(FetchPermit)` возвращает ограниченный поток.
+Permit берётся из canonical DB source; provider/bot/image_file_id остаются opaque refs.
+Даже reference, похожий на URL, не разрешает HTTP по этому адресу. CONTROLLED provider
+использует synthetic fixtures и fault barriers; настоящий Telegram — следующая задача.
+
+Принятые лимиты: **JPEG, PNG, static WebP; 10 MiB = 10 485 760 bytes; максимум
+20 000 000 pixels, 8192 pixels на сторону, ровно один frame**. Ограничивать фактически
+прочитанные bytes независимо от Content-Length; provider MIME/filename не авторитетны.
+Проверять actual format, dimensions и полное декодирование. Truncated, malformed,
+animated, unsupported/SVG/GIF/PDF/archive content, bytes/pixel overflow — permanent
+bounded failure, не READY. Настроить decoder против decompression bombs.
+
+Сохранять оригинальные проверенные bytes без перекодирования/EXIF transforms,
+actual MIME/size/SHA-256/dimensions. Это не заявление о malware scanning.
+Временный private файл ограничен размером, очищается при любом исходе; после crash
+удаляются только собственные stale temporary files. Канонические bytes — только S3.
+Decoder и сетевой клиент имеют ограниченную concurrency/resource lifetime.
+
+### 9.5. Lease, upload intent и recovery
+
+FETCH использует прежние max 5 claims, max age 15 min от first claim и bounded
+backoff; lease **30 s**, отдельный общий fetch I/O budget **20 s**. SEND сохраняет
+**10 s** deadline и прежнее UNKNOWN. SDK retries не обходят эти бюджеты; transport
+connect/read deadlines заданы явно. Timeout/cancellation Python await не считается
+доказательством прекращения фонового synchronous I/O: поздний PUT остаётся возможен.
+Не накапливать неограниченные abandoned threads/tasks при недоступном storage.
+
+1. Короткая DB admission возвращает canonical source. Download/validation вне DB unit.
+2. Перед PUT новая короткая transaction проверяет live claim/lease и сохраняет
+   intent, validated manifest и отдельный key. Permit используется только после
+   подтверждённого commit; потерянный prepare ACK не разрешает внешний PUT.
+3. PUT проверенных bytes вне DB transaction, с проверяемой checksum/integrity
+   защитой SDK/S3. ETag или произвольная user metadata сами по себе не доказывают
+   SHA-256 объекта. Реальный round-trip проверяет exact bytes/hash/manifest.
+4. Подтверждённый PUT позволяет одной fenced transaction сделать intent WINNER,
+   FileObject READY и Job SUCCEEDED. Только текущая canonical claim и exact intent.
+5. При потере finalize ACK читать canonical result: уже READY того же intent —
+   ALREADY_FINALIZED, без второго download/PUT, смены metadata или cleanup winner.
+6. При неопределённом PUT/expiry старый intent становится ABANDONED; READY не
+   объявляется. Следующий bounded claim может повторно скачать/upload в **новый key**.
+   Stale worker не перезаписывает новый объект/pointer и не удаляет объекты сам.
+   Это безопасный повтор private storage работы, не повтор отправки человеку.
+7. Permanent invalid/missing либо retry exhaustion → FAILED FileObject/DEAD Job,
+   незавершённые intents ABANDONED. Недоступная БД оставляет durable состояние
+   для scheduler recovery, без предположения об успешном rollback/commit.
+
+Conditional PUT If-None-Match:* допустим как дополнительная immutable-key защита
+после проверки выбранного TEST сервиса; он не заменяет intent fencing и cleanup.
+Все provider/S3 calls выполняются без business DB transaction/connection. Локальное
+вычисление подписи без credential/network discovery — не внешний вызов.
+
+### 9.6. Минимальная надёжная очистка сирот
+
+Использовать существующий scheduler и узкую typed maintenance capability, без второй
+generic queue и бесконечного создания periodic Jobs. ABANDONED intent сохраняется
+как tombstone в течение жизни FileObject; WINNER никогда не eligible для cleanup.
+
+Один claim выбирает до **100** due intents через SKIP LOCKED, сохраняет random token
+и **30 s** lease. После commit DELETE canonical key с ограниченным deadline; guarded
+finish по token/lease фиксирует outcome и next check. Выполнять столько I/O одновременно,
+сколько укладывается в transport/concurrency budget; просроченную lease можно reclaim.
+Успех/NotFound назначает следующий check через **1 hour**, но не удаляет tombstone.
+Ошибка сохраняет bounded code и следующий retry с backoff не более 1 hour.
+Это позволяет убрать поздний PUT после первого успешного DELETE. Нужны tests именно
+такого порядка событий, а также отсутствие удаления нового READY winner.
+Очистка eventual при доступном сервисе; outage не выдаётся за подтверждённое удаление.
+
+### 9.7. Авторизованный read grant и private storage
+
+Внутренний owner service работает через настоящий authenticated M1 tenant unit:
+live OWNER/messaging:read, точные Workspace/Conversation/Message/FileObject и READY
+winner. ADMIN/PROVIDER, revoked membership, cross-Workspace и mismatched relation
+не получают URL. Внутри одного Workspace Owner вправе читать свои разные диалоги;
+тест неверной пары Message/FileObject не вводит нового Client principal.
+PENDING/FAILED не подписываются. Disconnect connection не закрывает историю.
+
+Результат — signed GET и expires_at, **фиксированный TTL 60 s**. Caller не задаёт
+bucket/key/TTL. Не возвращать отдельно provider reference, bot URL, credentials
+или internal upload/claim; signed URL по природе содержит object locator и bearer
+signature и не является «секретным key без URL». После revoke новые grants запрещены;
+уже выданная bearer URL может работать до TTL — это принятая граница отзыва.
+Согласовать content type с validated MIME, безопасное UUID-based filename,
+private/no-store cache response. Авторизация не заменяется знанием object key.
+Signing только локальный с заранее разрешёнными credentials; никакого SDK metadata
+network discovery внутри authorizing transaction. Публичный route/DTO — M2.3.
+
+Реальный LOCAL/TEST S3-compatible сервис, pinned image digest, private bucket;
+anonymous GET/LIST/PUT запрещены. Конфигурационные endpoint/credentials задаёт
+оператор, не event или user input. HTTP допустим только в изолированном LOCAL/TEST;
+внешний deployment требует HTTPS и отдельной проверки. API/worker используют
+ограниченные bucket credentials, bootstrap admin credentials не передаются runtime.
+Новые LOCAL secrets генерируются без вывода; существующие .env/PG secrets сохраняются.
+S3 SDK и image decoder разрешены как необходимые зависимости с narrow lock update.
+Не писать собственный SigV4. Реализовать только используемые PUT/HEAD/GET/DELETE/
+presignGET, без облачного provisioning, multipart, CDN или платных ресурсов.
+Успех локального S3 не подтверждает Yandex/другое облако или live Telegram.
+
+### 9.8. Проверка и предел приёмки
+
+Единая матрица остаётся M2-A01…A12 в handoff; новых критериев milestone не добавлено.
+Для A07/A08 и применимых A02/A04/A06/A12 нужны реальные PostgreSQL/S3 evidence:
+atomic planning/rollback/concurrent dedupe; exact bytes/hash signed GET; anonymous
+access denied/signature tamper/реальный expired URL; wrong Workspace и same-Workspace
+relation; OWNER revoke/role change; forged claim/key/intent, stale lease и XID/task.
+Missing/malformed/animated/oversized bytes/pixels и false/missing provider metadata;
+retry/exhaustion/outages; crash после intent/PUT/READY commit и потерянный ACK;
+late PUT после cleanup и после нового READY; cleanup outage/reclaim/winner safety.
+Provider/S3 I/O проверяется без DB transaction; migration clean/repeated/0005-data/
+downgrade-reupgrade сохраняет старые messages/billing/receipts/UNKNOWN.
+
+Все прежние M1/M2.1 tests, штатные ci.sh/test_browser.sh, contracts/reproducibility
+и оба clean-source gates сохраняются. Изменение old fixtures/inventory объясняется
+новой схемой/очередью, прежние assertions не удаляются. C8 private-file/worker/recovery
+review выполняется независимо после реализации; данный C2/C3 CONTRACT PASS его не заменяет.
+
+Первичные источники, проверенные C0 2026-09-21:
+[Yandex signed URLs](https://yandex.cloud/en/docs/storage/concepts/pre-signed-urls),
+[Yandex PutObject/checksums/conditions](https://yandex.cloud/en/docs/storage/s3/api-ref/object/upload),
+[S3 conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html),
+[Pillow image/decompression limits](https://pillow.readthedocs.io/en/stable/reference/Image.html).
+Это подтверждение доступных механизмов, не execution evidence выбранного сервиса.
