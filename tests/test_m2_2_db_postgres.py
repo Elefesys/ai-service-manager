@@ -347,15 +347,60 @@ async def test_exact_owner_relation_live_role_revoke_and_disconnect(messaging):
         h, "UPDATE app.channel_connections SET status='INACTIVE' WHERE id=:id RETURNING id", id=CA
     )
     assert (await read(h, row)).file_id == row["id"]
-    async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
-        await query(
-            h,
-            "UPDATE platform.workspace_memberships SET role='ADMIN' WHERE workspace_id=:ws AND user_account_id=:actor RETURNING workspace_id",
-            ws=A,
-            actor=UA,
-        )
-        with pytest.raises(MessagingError, match="ACCESS_DENIED"):
-            await unit.file_read_manifest(row["conversation_id"], row["message_id"], row["id"])
+    downgrade_started = asyncio.get_running_loop().create_future()
+
+    async def downgrade_owner():
+        async with h.migrator.begin() as connection:
+            await connection.execute(text("SET LOCAL lock_timeout='5s'"))
+            downgrade_started.set_result(
+                (await connection.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+            )
+            await connection.execute(
+                text(
+                    "UPDATE platform.workspace_memberships SET role='ADMIN' "
+                    "WHERE workspace_id=:ws AND user_account_id=:actor"
+                ),
+                {"ws": A, "actor": UA},
+            )
+
+    downgrade = None
+    try:
+        async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
+            owner_pid = (
+                await unit._connection.execute(text("SELECT pg_backend_pid()"))
+            ).scalar_one()
+            downgrade = asyncio.create_task(downgrade_owner())
+            downgrade_pid = await asyncio.wait_for(downgrade_started, 2)
+            # Frozen tenant admission holds FOR SHARE. Observe the real blocker,
+            # instead of awaiting an UPDATE that needs this same unit to commit.
+            async with asyncio.timeout(2):
+                while not (
+                    await query(
+                        h,
+                        "SELECT :owner=ANY(pg_blocking_pids(:downgrade)) AS blocked",
+                        owner=owner_pid,
+                        downgrade=downgrade_pid,
+                    )
+                )[0]["blocked"]:
+                    if downgrade.done():
+                        await downgrade
+                        raise AssertionError("Role change completed before admitted owner commit")
+                    await asyncio.sleep(0.01)
+            assert not downgrade.done()
+            admitted = await unit.file_read_manifest(
+                row["conversation_id"], row["message_id"], row["id"]
+            )
+            assert admitted.storage_key == permit.storage_key
+        await asyncio.wait_for(downgrade, 5)
+    finally:
+        if downgrade is not None:
+            if not downgrade.done():
+                downgrade.cancel()
+            await asyncio.gather(downgrade, return_exceptions=True)
+    # The already admitted transaction is serialized before the role change.
+    # Every fresh grant resolves the now-committed role and rejects ADMIN.
+    with pytest.raises(MessagingError, match="ACCESS_DENIED"):
+        await read(h, row)
     await query(
         h,
         "UPDATE platform.workspace_memberships SET role='OWNER',status='REVOKED' WHERE workspace_id=:ws AND user_account_id=:actor RETURNING workspace_id",

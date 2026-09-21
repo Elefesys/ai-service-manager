@@ -262,7 +262,11 @@ async def test_s3_checksum_conditional_put_and_runtime_privilege_boundaries(imag
             Body=content,
             ChecksumSHA256=base64.b64encode(b"x" * 32).decode(),
         )
-    assert bad.value.response["Error"]["Code"] == "BadDigest"
+    # This pinned MinIO release reports the SHA-256 mismatch with the S3
+    # checksum-specific code. Still require an actual server-side rejection
+    # and prove that the invalid write left no object below.
+    assert bad.value.response["Error"]["Code"] == "XAmzContentChecksumMismatch"
+    assert bad.value.response["ResponseMetadata"]["HTTPStatusCode"] == 400
     with pytest.raises(MessagingError, match="NOT_FOUND"):
         await h.storage.head(permit.storage_key)
     await h.storage.put(permit, content)
