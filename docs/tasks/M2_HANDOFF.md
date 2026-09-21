@@ -5,114 +5,317 @@
 Этот файл — принятый план и единственная активная точка передачи M2.
 Приёмка плана не является evidence выполненной реализации.
 
-## Активная передача C0 — M2.2-PRIVATE-IMAGES, до merge / 2026-09-21
+## Активный handoff C0 — M2.3 code/API, приёмка до merge / 2026-09-21
 
-**M2.2 REVIEW, не INTEGRATED/VERIFIED; M2.3/M2.4 TODO; весь M2 IN_PROGRESS.**
-M1.1–M1.3 и M2.1 приняты в LOCAL/TEST. Повторно не выполнять исторические поручения.
-Repository `Elefesys/ai-service-manager`; единственный
-[PR #19](https://github.com/Elefesys/ai-service-manager/pull/19), ветка
-**`c6/m2-2-private-images`** → main. Accepted actual base
-**`d3c849d4792f7af60f43eea0f0551659ee3cee5d`**, tree
-`f12aa90a3c3fb7fdfda84290315a3fd820816b4b`;
-[отдельный main CI 35596593891](https://github.com/Elefesys/ai-service-manager/actions/runs/35596593891)
-SUCCESS. Coordination commit `c4ad360e482f47a30e6f0756a13e6ce1cf68def4` сохранён.
-Ни параллельного PR, ни самостоятельного merge, ни поручения M2.3 сейчас нет.
+**M1.1–M1.3, M2.1 и M2.2 VERIFIED LOCAL/TEST. M2.3 REVIEW: code/API принят
+C0 и независимым scoped C8 после исправления C8-M2.3-01. Merge/main CI впереди.
+Live Telegram BLOCKED: внешнее runtime/DNS/TLS. M2.4 TODO; весь M2 IN_PROGRESS.**
+История ниже сохраняет прежние поручения и не переопределяет этот активный блок.
 
-### Результат C0 review и ограниченный fix
+Repository **Elefesys/ai-service-manager**; тот же
+[PR #20](https://github.com/Elefesys/ai-service-manager/pull/20), ветка
+**`c3/m2-3-telegram-api`** → main. Accepted base/main
+**`a321bdd58856fb41bccb5749b4212349832e623c`**; первый coordination
+**`5347e3de498752be2834573eadfb39d59dc51bcb`** сохранён.
+Технический контракт — [M2_CONTRACT §10](M2_CONTRACT.md#10-m23-telegram-api--принято-c0c2c3c1-2026-09-21).
 
-C0 сверил все 37 изменённых paths исходного implementation head
-`5d72557a1058906e0040d5f410968f769986f2e8`, tree
-`9d250238368d6f8b6087c1f34b87a18832791397`. Проверенный virtual merge
-`b69257dc2dc2c2f8acb77158466bd1242cc6cf34` имеет parents accepted base + этот head
-и то же дерево. [CI 35605713463](https://github.com/Elefesys/ai-service-manager/actions/runs/35605713463)
-SUCCESS: 220 non-integration, 303 PostgreSQL/S3, 60 frontend, 15 прежних M1 browser;
-оба штатных scripts/clean-source gates, migration cycles/contracts/reproducibility/
-smoke PASS. ZIP download получил 403 / Cloudflare 1010: C0 не утверждает побайтную
-проверку ZIP. Вместо этого проверены Git blob SHA всех изменённых файлов и полное
-реконструированное дерево, checkout logs и исполненные clean-source gates.
+### Что принято C0
 
-Scope соответствует [M2_CONTRACT §9](M2_CONTRACT.md#9-m22-private-images--принято-c0c2c3-2026-09-21):
-controlled provider → atomic Message/FileObject/FETCH → validated original в private
-S3 → READY → внутренний live OWNER signed GET. Canonical DB relations/FORCE RLS,
-worker trust/lease/XID/task, composite READY/WINNER FK, per-attempt keys, lost ACK,
-late PUT/tombstone cleanup, no-I/O-with-DB-transaction, migration/backfill и сохранение
-SEND UNKNOWN проверены. Старые fixtures адаптированы по фактической новой схеме,
-без удаления guards; точные причины и tests→матрица сохранены в истории ниже.
-0006→0005 согласована C2; 0001–0005, canonical originals, auth/tenancy/R4,
-OpenAPI/frontend, старые package blocks и пять image pins не изменены.
+Code/API LOCAL/TEST: официальный business text/photo webhook с durable receipt/Inbox/
+Jobs; trusted operator binding; private image pipeline; пять authenticated owner
+routes; manual text intention/Outbox/send с UNKNOWN/no-resend; generated OpenAPI,
+recovery notes и исполнимый TEST runbook. Это готовность к интеграции кода, не evidence
+живого Telegram или Console A11.
 
-Реальный независимый C8 review private-file authorization/validation/worker/cleanup
-нашёл **один blocker C8-M2.2-01, P2**. До fix WebP native decoder создавал canvas
-внутри Image.open до наших side/pixel checks. Безопасный subprocess probe с cap
-384 MiB показал: 5000×4001 увеличивал виртуальное адресное пространство до возврата
-INVALID_INPUT; 8192² получал native allocation error под cap. Фактический OOM или
-рост resident memory до этих величин не заявлялись. Исходный green CI этого риска
-не доказывал: прежний preallocation test использовал PNG/Image.load.
+C0 проверил52 changed paths и все204 source blobs/modes исходного implementation
+head `439eb3228a681dd1558ab98ebe232d4a266d9874`, tree
+`c4c308b2a4073ce2eaae7e6b0f5bd2f3778a3da1`; parents/coordination ancestry/оба checkout
+logs и [CI35632000530](https://github.com/Elefesys/ai-service-manager/actions/runs/35632000530)
+SUCCESS. Все11 приложенных canonical sources совпали побайтно. Сохранены47 выбранных
+frozen/accepted files, включая0001–0006, frontend/workflows/CI scripts и private
+validation/storage/transfer. Прежние OpenAPI paths/schemas структурно неизменны;
+lock package blocks неизменны кроме root metadata для httpx0.28.1 runtime promotion.
 
-C0 поручил C3 только три существующих path: `backend/src/asm/files/validation.py`,
-`tests/test_m2_2_media.py`, `tests/test_m2_2_recovery_postgres.py`. Fix проверяет
-bounded RIFF/chunk/VP8/VP8L/VP8X headers, canvas/bitstream dimensions и отсутствие
-animation **до Image.open**. Затем сохраняются verify, полный decode, original
-hash/bytes и все прежние лимиты/форматы. Миграции, dependencies/locks и CI не менялись.
-**Независимый targeted C8-M2.2-01 PASS: blocker закрыт по reviewed source.**
-C0 code/scope review PASS; готовность к merge требует итогового полного CI.
-C8 отдельно выполнил 96 media tests и исходный safe subprocess probe на pinned
-Python 3.13.15 / Pillow 12.3.0 / libwebp 1.6.0: 5000×4001 и 8192² отвергаются
-с native_calls=0; контрольный 1×1 проходит настоящий decoder. Patch SHA-256
-`b60264b29374c1f96a9de45bfc191e4119e16ee91032bbae179854dd61b428bd` проверен.
-Это независимый review дельты, не авторский CONTRACT PASS; новых blockers нет.
-Прежний scoped C8 review остальных private-file/DB/recovery областей остаётся
-действительным. Два новых PostgreSQL cases C8 прочитал, но локально не исполнял.
+Миграция0007→0006 соответствует принятому inventory: две platform tables, typed
+capabilities, provider/window/retry/probe metadata; runtime без общего DML. Новый
+product key использует настоящий EntitlementService, прежние пять TEST decisions
+GET billing и sealed catalog сохраняются. Дополнительного scope нет.
 
-| Применимый критерий | Дополнительная проверка C8-M2.2-01 и граница evidence |
+### Независимый scoped C8 и единственное исправление
+
+| Область | Реально выполненный review и результат |
 |---|---|
-| A07 validation | `test_webp_oversize_is_rejected_before_native_canvas`, `test_webp_canvas_and_bitstream_cannot_disagree`, `test_webp_malformed_structure_is_rejected_before_native_canvas`, `test_real_animated_webp_is_rejected_before_native_canvas`: native constructor не вызывается для oversized/contradictory/structurally malformed/animated headers |
-| A07 сохранение контракта | `test_webp_lossy_lossless_extended_originals_reach_real_decoder`, `test_webp_exact_side_and_pixel_boundaries_can_decode`: настоящий lossy/lossless/extended/alpha/metadata decode, original hash и точные лимиты; `test_bounded_webp_headers_do_not_replace_full_pixel_validation`: complete safe headers не пропускают отсутствующие compressed pixels |
-| A04/A07 worker | Два новых `test_invalid_input_is_terminal_before_storage[webp_pixels/webp_canvas]`: реальный DB Job DEAD/FileObject FAILED с INVALID_INPUT, attempt_count=1, никакого PUT/retry, Message сохранён. Их исполнение требуется в итоговом штатном PostgreSQL/S3 CI, local unit результат не заменяет этот gate |
+| Transport/webhook/media/setup | Независимый read-only C8 PASS: auth-before-parse, durable ACK, numeric/opaque IDs, fixed origin/TLS/bytes/time, secret-safe transport, send UNKNOWN, trusted bootstrap, private signed origin.84 targeted unit/setup PASS; дополнительный реальный TCP send-loss probe дал UNKNOWN/1 wire call, encoded JSON отвергнут до decoder, missing secret403 до receive |
+| DB/worker | Независимый review RLS/grants/FK, authoritative fingerprints/dedupe, claims/CAS, product, replay/recovery/429 и migration cycles. Найден единственный P2 C8-M2.3-01; прочие blockers отсутствуют |
+| Owner API/auth/product/recovery | Независимый review пяти routes, DTO/errors/cursor, двух auth UOW без network под DB admission, replay-before-CAS, isolation/private grant и frozen contracts. Подтверждён тот же C8-M2.3-01; других blockers нет |
+| Targeted closure | Независимые DB/API reviewers проверили точный narrow fix и новые PG assertions, затем exact-head runner evidence. **C8-M2.3-01 PASS / CLOSED** |
 
-Локально в pinned Python 3.13.15 / Pillow 12.3.0 / libwebp 1.6.0: 96 media unit,
-288 всех non-integration PASS; Ruff/check/format и strict mypy 40 backend files PASS.
-Ранний новый negative VP8L test ошибочно считал uniform stream с изменёнными dimensions
-невалидным. Исправлены bytes fixture: убраны compressed pixels при сохранённых
-complete headers. Assertion INVALID_INPUT сохранён; защитные проверки не ослаблены.
+Причина C8-M2.3-01: billing timestamp снимался до получения account lock, а reply
+window проверялось до potentially blocking billing guard. Принятый contact writer
+мог удерживать FOR NO KEY UPDATE, пока истекали subscription/mode/window; valid
+worker lease не устраняла эту гонку. Аналогичный порядок был в canonical owner SQL.
 
-C0 явно принимает реализационное упрощение §9.4: bounded RAM originals вместо
-private temporary disk file. Input cap 10 MiB не является total process-memory cap;
-decoder allocations имеют отдельные dimension/concurrency guards. Один decoder
-slot и два S3 slots удерживаются до реального завершения, включая cancellation;
-каноническое постоянное хранение — только S3. Это не отмена WebP blocker и не новый scope.
+C2 изменил только `migrations/versions/0007_telegram_api.py` и
+`tests/test_m2_3_db_postgres.py`: billing time теперь после всех billing locks;
+финальный Telegram window/observation guard повторяется после billing перед новым
+owner intent и worker DISPATCHING. Ранние denials/replay/structural precedence,
+frozen R4 snapshot, lock_timeout2s и lease30s сохранены.
 
-### Конечные gates и следующее действие
+| Новые реальные PostgreSQL cases | Assertions |
+|---|---|
+| `test_worker_denies_expiry_during_billing_lock_without_adapter_call[subscription/mode/window]` | Отдельный asm_runtime observer подтверждает ожидание account UPDATE через pg_blocking_pids и свежий activity snapshot; TEST boundary ставится в будущем после подтверждённого wait; pg_sleep_until ждёт DB deadline. Release после expiry при действующей lease → FAILED/NOT_ALLOWED, attempt_id/last_attempt_id NULL, send не вызван, wire ledger отсутствует |
+| `test_owner_denies_expiry_during_billing_lock_without_intention[subscription/mode/window]` | Тот же подтверждённый lock crossing; canonical request даёт именно P2001/NOT_ALLOWED. Нет outbound Message/receipt/Audit/Outbox/Job, последующий worker ничего не отправляет. Lock timeout/раннее завершение фоновой задачи не считаются PASS |
 
-Этот единый substantive fix/receipt commit обновляет register/handoff/contract,
-сохраняя историю. Свой будущий SHA и результат ещё не исполненного final CI он
-не выдумывает. **C0 ведёт один final receipt в PR #19**: exact head/tree/tested merge
-и его parents, полный CI именно итогового head, фактические C8 finding/closure и
-границы artifact evidence. Повторный документационный commit ради записи SHA
-предыдущего не нужен. Никакой Ready/merge по одному старому green run.
+Прочие assertions→A01–A09/A12 сохранены в исторической передаче C3 ниже и в tests.
+Количество локальных повторов/C8 probes не прибавляется к числу cases одного CI.
 
-1. C0 завершает targeted C8 по изменённой области и проверяет итоговые foundation/
-   browser jobs, оба scripts/clean-source gates и реальные PostgreSQL/S3 cases.
-   После всех PASS снимает Draft и даёт пользователю ссылку на обычный merge commit.
-2. Пользователь сливает только готовый PR #19 через **Create a merge commit**.
-   C0 проверяет actual merge commit/tree/parents и отдельный **push/main CI**.
-3. Только после этого C0 принимает M2.2 в LOCAL/TEST и выдаёт одну M2.3 от точного
-   принятого main. Ни API, ни UI, ни живой Telegram этим review не приняты.
+### Проверенная версия исправления и final-head gate
 
-Граница A07/A08 и применимых A02/A04/A06/A12 — controlled provider + настоящий
-private LOCAL/TEST S3 + внутренний owner service. 15 browser journeys — прежняя
-M1 regression; A01/A09/A10/A11 для Telegram/API/UI остаются следующим частям.
-Миграция 0006 и SDK/image pins — в [runbook](../runbooks/M2_STORAGE_LOCAL_TEST.md).
-Новых paid/cloud ресурсов, owner upload/derivatives/CDN, AI или M3 не добавлено.
+Implementation fix **`0ffd9e2146fe5fda1db22152b6feaa1737fc9151`**; parent —
+исходный439eb3228a681dd1558ab98ebe232d4a266d9874; tree
+**`90079c2c8874b6456b1710aef2538467513f018a`**.
+Tested virtual merge **`bd40f1e70e540e896a305cd5324d31d93b7e865f`** имеет parents
+accepted base + fix head, его tree совпадает.
+[CI35647402496](https://github.com/Elefesys/ai-service-manager/actions/runs/35647402496)
+**SUCCESS**:421 unit,390 real PostgreSQL/S3,60 frontend,15 прежних M1 browser.
+Исполнены оба scripts/clean-source gates, canonical import/migrations/contracts/
+reproducibility/smoke. Сохранены реальные TCP crash/restart UNKNOWN/1 wire call
+и private signed GET сценарии. Локально C0 повторил421 unit; Docker отсутствует,
+PostgreSQL/S3 execution относится к GitHub runner.
 
-### Telegram smoke — внешняя подготовка
+C0 сверил Git objects/blobs и логи; локальная загрузка исходного ZIP получила403,
+поэтому C0 не повторяет от своего имени byte-verification ZIP из отчёта C3.
+Artifact metadata и точный final receipt находятся в PR.
 
-По сообщению пользователя готовы test bot с Business/Secretary Mode и Owner/Client;
-TG_BOT_TOKEN и отдельный TG_WEBHOOK_SECRET находятся в менеджере паролей. Секреты
-не нужны для M2.2 и не передаются в чат/PR. Binding/rights, runtime injection,
-тестовый HTTPS endpoint и живой A11 пока не проверены. Конкретное безопасное
-поручение C0/C6 для deployment выдаётся в M2.3; платные ресурсы требуют предложения
-с точной ценой до подключения. Отсутствие внешнего доступа не блокирует private-S3 CI.
+Это одно согласованное документационное обновление после review/fix. Собственные
+final head/tree/tested SHA и CI этого обновления записываются в PR receipt, без
+следующего коммита ради SHA документа. C0 проверяет оба checks именно final head,
+после SUCCESS снимает Draft и предлагает пользователю обычный **merge commit**.
+Самостоятельный merge запрещён. После сообщения пользователя C0 проверяет actual
+merge parents/tree и отдельный push/main CI; только затем выдаёт C5 M2.4.
+
+### Открыта только соответствующая внешняя проверка подключения
+
+Bot с Business/Secretary Mode, Owner/Client и два секрета подготовлены пользователем.
+Live getMe/getBusinessConnection/getWebhookInfo, actual rights/binding, внешний HTTPS,
+browser-reachable private signed GET и получение reply Client ещё **не проверены**.
+[TEST runbook](../runbooks/M2_TELEGRAM_LOCAL_TEST.md) рассчитан на доступный оператору
+Linux host/Docker, два DNS имени и действительные TLS certificates; окружение ещё
+не предоставлено/не развёрнуто. Секреты передаются непосредственно в защищённый
+runtime file/secret store, не в чат/PR. Расходы и внешние отправки не выполнялись;
+платный вариант требует предложения конкретной стоимости до подключения.
+
+Недостающий доступ блокирует live smoke. Принятие code/API не закрывает эту проверку,
+M2.4 или весь M2. Следующее зависимое поручение C5 готовит минимальную переписку
+в существующей Console и реальные browser journeys после API/main acceptance.
+Весь M2 требует Client text+photo→Console→manual reply→Client A11; M3 не выдаётся.
+
+<details>
+<summary>История: принятое поручение и исходная передача реализации C3 — не текущие инструкции</summary>
+
+## История — выдача и первоначальная передача M2.3 в REVIEW / 2026-09-21
+
+**M1.1–M1.3, M2.1 и M2.2 VERIFIED в принятых LOCAL/TEST границах.
+M2.3 передан в REVIEW: Telegram/owner API реализованы в том же Draft PR #20;
+приёмка C0 и независимый scoped C8 ещё впереди. M2.4 TODO; весь M2 IN_PROGRESS.** История ниже не является текущим
+поручением. Ведущий **C3**; C2 — миграция/DB, C1 — owner API/product policy,
+C6 — необходимая TEST конфигурация/операционный runbook. C8 выполняется независимо
+после реализации, предметное согласование C2/C3/C1 его не заменяет.
+
+Repository **Elefesys/ai-service-manager**. Exact accepted implementation base/main:
+**`a321bdd58856fb41bccb5749b4212349832e623c`**. Ветка
+**`c3/m2-3-telegram-api`** → main; продолжить единственный Draft PR, подготовленный
+C0. Его номер, стартовые coordination head/tree и CI находятся в PR metadata и
+готовом поручении C0. **Первый coordination commit сохранить.** Локальный synthetic
+commit из source checkout не является accepted base. Не создавать параллельный PR
+и не выполнять самостоятельный merge.
+
+### Подтверждённая приёмка M2.2 после merge
+
+[PR #19](https://github.com/Elefesys/ai-service-manager/pull/19) MERGED пользователем.
+Merge parents `d3c849d4792f7af60f43eea0f0551659ee3cee5d` +
+`1e460ea58c7d9ceb48152cdd49a651b66ad625b7`; actual main выше. Tree
+**`8221b88b481378d49a185e29e95e3d20ea119c0c`** = accepted final PR tree.
+[Отдельный push/main CI 35611528733, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/35611528733)
+**SUCCESS**; head/tested SHA в обоих checkout logs = actual merge. Foundation/browser,
+оба scripts/clean-source gates, canonical import, migrations/contracts/reproducibility/
+smoke PASS: 288 unit, **305 real PostgreSQL/S3**, 60 frontend, 15 прежних M1 browser.
+Artifact10644182993, GitHub SHA-256
+`d3d4769abd230af57735a10dd641acb532adae4e9c6dac3b22b3880c645c2b83`;
+ZIP побайтно не проверен. Source tree/Git SHA/checkout и исполненные gates проверены.
+
+Независимый scoped C8 private-files/recovery и targeted **C8-M2.2-01 PASS** относятся
+к принятому коду; WebP preflight исправлен до native allocation. Финальный PR CI
+35610084640 также SUCCESS. C0 принимает **M2.2 controlled LOCAL/TEST private images**,
+применимые A07/A08 и A02/A04/A06/A12, а не настоящий Telegram/API/UI/Console A11.
+Не повторять M1 или проектирование M2.1/2; их regression и guards сохранить.
+
+### Один конечный результат M2.3
+
+Реальный официальный Telegram business adapter: verified webhook → durable shared
+Telegram receipt + прежний Inbox/Jobs → правильный Workspace/Message → photo через
+принятый private S3 → authenticated owner API → ручной TEXT intention → Outbox →
+одна Telegram send attempt с честным UNKNOWN. Публичный owner API готов для C5,
+generated contracts и recovery notes соответствуют фактическому поведению.
+
+Технические решения — только [M2_CONTRACT §10](M2_CONTRACT.md#10-m23-telegram-api--принято-c0c2c3c1-2026-09-21).
+C0 прочитал существующий код/канон и принял его после read-only C2/C3/C1 CONTRACT PASS.
+Во время review явно уточнены opaque provider IDs и отдельный one-UOW CONTROLLED
+public path; это не введение нового требования под видом старого. Миграция
+**0007_telegram_api.py, revision0007, predecessor0006** назначена C0/C2.
+
+Главные зафиксированные границы:
+
+- Доверенная operator-only binding предварительно подтверждённого Workspace/Business/
+  Telegram Owner, getMe/getBusinessConnection; connection ID сам по себе не authority.
+  Setup discovery не ACK/drop pending updates; setWebhook только после DB commit.
+- Один общий Telegram receipt без raw payload/второй очереди. ACK после durable commit;
+  known duplicate возвращает прежний результат, unknown business route503 без tenant
+  writes. Numeric и opaque IDs различаются; native/echo/edit/delete/unsupported durable
+  и не создают новую client Message. Входящее изображение — photo, не image-document;
+  original означает выбранный provider file, не исходник до обработки Telegram.
+- Snapshot rights с generation+observation-version CAS; old response не восстанавливает
+  разрешение. DB24h window из нового поддержанного входящего, duplicate не продлевает.
+  Worker всегда делает readonly preflight вне DB перед DISPATCHING. Timeout/неясный
+  send →UNKNOWN/no-resend;429 уважает retry_after при прежних5claims/15min.
+- Ровно пять owner routes §10.8. Cookie/Origin/CSRF/liveOWNER, строгие DTO/cursor,
+  exact append-only text/key/replay. TELEGRAM POST имеет две последовательные short
+  UOW с provider refresh между ними; replay проверяется до новых gates. CONTROLLED
+  public LOCAL/TEST POST — одна UOW без Telegram HTTP, с тем же product gate.
+- Product key messaging.manual_send BOOLEAN/ESSENTIAL, настоящий EntitlementService;
+  fresh-only test_messaging plan, старые TEST catalog/keys/GETbilling не меняются.
+  Read/history/grants и durable inbound/FETCH не блокируются subscription.
+- HTTPX0.28.1 только narrow runtime promotion; фиксированный Telegram origin, no hidden
+  retries/redirects, bounded bytes/time/pool, secret-safe logs; provider stream использует
+  неизменённые M2.2 validation/fencing/cleanup. Никаких AI/M3/цен/платежей.
+
+### Разрешённые области C3/C2/C1/C6
+
+| Пути | Точная разрешённая дельта / владелец |
+|---|---|
+| `backend/src/asm/telegram/` | C3: только §10 config/client/webhook/normalization/adapter/provider/provisioning helpers; без будущего универсального SDK |
+| `backend/src/asm/messaging/` | C3/C1: TELEGRAM alongside CONTROLLED, typed ingress/probe/dispatch/429 и ровно пять owner HTTP/DTO/repository/cursor routes; прежние fingerprints, atomicity/replay/UNKNOWN сохраняются |
+| `backend/src/asm/tenancy/database.py` | C1/C2: narrow typed owner helpers/cursor/receipt/observation seams в настоящем guarded UOW, без общего SQL/DML API |
+| `backend/src/asm/billing/service.py` | C1: evaluate known product capability через тот же validator/precedence, прежний GET billing/TEST set неизменен; без новой billing feature beyond manual_send |
+| `backend/src/asm/files/{models,provider,service}.py` | C3/C1: provider literal/dispatch и grant в текущем owner UOW. Validation/storage/transfer/cleanup и SQL file capabilities не переоткрывать |
+| `backend/src/asm/auth/http.py` | C1: только exact POST messages body64KiB вместо4KiB; старые paths/body/auth/session/Origin/CSRF/CORS guards сохраняются |
+| `backend/src/asm/foundation.py` | C3/C1: schema revision0007, small delegated Telegram/API lifecycle/config/wiring, default CONTROLLED; не помещать domain SQL/transport в entrypoint |
+| `migrations/versions/0007_telegram_api.py` | C2: §10 two-table inventory/provider CHECKs/window/typed capabilities/policy/429/read/provisioner; downgrade refusal без уничтожения Telegram history. 0001–0006 immutable |
+| `pyproject.toml`, `uv.lock` | Только httpx0.28.1 dev→runtime с необходимой root metadata, без package versions/hashes refresh/new SDK |
+| `.env.example`, `compose.yaml`, `infra/nginx.conf` | C6/C3: optional server-owned Telegram env и exact webhook forwarding/setup; disabled default и прежние LOCAL services/loopback isolation сохранены. Не публиковать DB/S3 admin или выбирать paid hosting |
+| `scripts/provision_telegram_test.py`, `scripts/smoke_telegram_test.py` | C3/C6/C2: одна исполнимая bounded LOCAL/TEST setup/binding и явно включаемый live check; no token CLI/logs, no pending drop/ad-hoc SQL, no automatic send в обычном CI |
+| `scripts/provision_local_auth.py`, `scripts/m1_3_browser_fixture.py`, `scripts/provision_browser_test.py`, `scripts/check_browser_compose.py` | Только необходимая current-revision/config compatibility, если реально нужна; старые TEST guards/assertions не ослаблять, каждую дельту объяснить |
+| `contracts/openapi.json`, `contracts/README.md` | C1: generated additive routes/DTO и готовые consumer/recovery notes; frozen auth/tenancy/R4 wire snapshots сохраняются |
+| `tests/test_m2_3_*.py`, `tests/fixtures/telegram/` | C3/C2/C1: finite parser/network/HTTP/PG/S3/recovery/migration tests §10, synthetic fixtures без пользовательских данных |
+| `tests/test_auth_contract.py`, `tests/test_foundation.py`, `tests/test_postgres.py`, `tests/test_tenancy_postgres.py`, `tests/test_m2_1_*.py`, `tests/test_m2_2_*.py`, `tests/test_m1_3_c0_acceptance.py`, `tests/test_browser_compose.py` | Только additive schema/head/inventory и FK-ordered fixture cleanup/config expectation; прежние guards/UNKNOWN/file/privacy assertions сохраняются, объяснить каждое изменение |
+| `docs/tasks/M2_CONTRACT.md`, `docs/tasks/M2_HANDOFF.md`, `docs/TASK_REGISTER.md`, `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` | Один контракт/реестр/активный handoff и один конкретный operational runbook/evidence; история отделена от текущих инструкций |
+
+Рутинные необходимые изменения этих paths по указанным причинам уже разрешены C0;
+не останавливать работу повторным запросом. Миграции ведёт C2 последовательно;
+SQL имена/реализацию выбирают C2/C3 по принятому контракту, не пользователь.
+Frontend, applied migrations, canonical originals/SOURCE_MANIFEST, R4 и новые billing
+routes/plan edits не изменять. Existing CI/workflows/scripts/gates не требуют redesign;
+local HTTP fault server живёт внутри tests. Иной конкретный конфликт вернуть C0 с
+минимальной дельтой/причиной до расширения, не скрывать его под изменением test.
+
+### Конечные критерии и evidence
+
+| Строки единой матрицы | Обязательная фактическая проверка |
+|---|---|
+| A01/A02 | Реальный HTTP webhook + runtime PostgreSQL: secret missing/wrong/duplicate, unknown/cross-bot/owner/Workspace binding; duplicate/concurrent/hash conflict; receipt/Inbox/Job rollback каждого звена; ACK только после commit, lost ACK/restart без дубля |
+| A06/A07 | Telegram-shaped text/photo/native/echo/edit/delete/unsupported/out-of-order fixtures; sender isolation, exact projection, media group correlation. getFile fixed host/hostile path/redirect/bytes/time/secret failures; настоящее photo→PostgreSQL/private S3→owner HTTP grant→signed GET |
+| A03/A08 | Все пять routes через auth/CSRF/Origin: cross-Workspace и false same-Workspace relation, revoked/downgraded OWNER. Exact text/key/fingerprint/concurrent replay/conflict/atomic Audit-Outbox rollback, потеря HTTP response после commit и один intention; новыйkey не recovery |
+| A04/A05/A09 | Worker с реальным PostgreSQL и локальным HTTP server: server принял send и потерял ответ →UNKNOWN; restart не делает второй wire call. Lifecycle/refresh CAS race, owner/plan/rights revoke до dispatch, exact24h/future-date/duplicate boundary;429 durable minimum delay/exhaustion/finalize ACK replay |
+| A03/A08/A09 | Настоящий EntitlementService/SQL parity: missing/false/inactive/modes/structural503, replay после plan/route restriction; history/grants/inbound сохраняются. Fresh TEST provisioning exactrepeat/conflict/concurrency и старый R4 catalog unchanged |
+| A12 | Strict DTO/errors/cursors и exact64KiBroute/old4KiB; current schema/inventories; clean/0006-data/repeated upgrade, downgrade refusal сохранил данные, явный TEST cycle. Full M1/M2.1/M2.2 regressions, generated contracts, reproducibility, оба clean-source gates |
+| Внешняя часть A09/A11 | Отдельно фактические getMe/getBusinessConnection/getWebhookInfo, тестовая binding/rights/HTTPS; client text+photo→owner API/private GET→ручной API reply→client. Exact code SHA/date/sanitized outcome. Это ещё не Console A11/M2.4 |
+
+Штатные **sh scripts/ci.sh** и **sh scripts/test_browser.sh** обязательны на final head.
+PostgreSQL/S3 не заменять collection/mocks; MockTransport не доказывает ambiguous
+wire-send recovery. При отсутствии local Docker — обычный GitHub runner, точные
+checkout SHA/tree/run и исполнившиеся gates. При failure сначала установить test
+или implementation defect; не убирать защиту ради green CI. Existing15browser —
+M1 regression, новые messaging browser journeys выдаются C5 только после API acceptance.
+
+C3 возвращает один PR в REVIEW: accepted base, preserved coordination, final head/
+tree/tested merge+parents, changed paths, migration/dependency/contract deltas,
+конкретные tests/assertions→матрица→run/results, ограничения/OPEN/внешние blockers.
+Первый coordination commit сохранить. Final SHA/CI в PR receipt, без цепочки SHA-only
+doc commits. Не объявлять самостоятельно INTEGRATED/VERIFIED и не сливать PR.
+C0 принимает scope/результат и организует реальный независимый scoped C8 Telegram/API
+trust/effect review; затем пользовательский merge и отдельный actual main CI.
+
+### Передача реализации C3/C2/C1/C6 в REVIEW
+
+[Draft PR #20](https://github.com/Elefesys/ai-service-manager/pull/20) содержит код,
+миграцию 0007→0006, generated OpenAPI, consumer notes и
+[исполняемый TEST runbook](../runbooks/M2_TELEGRAM_LOCAL_TEST.md). Coordination commit
+`5347e3de498752be2834573eadfb39d59dc51bcb` сохранён; accepted base выше не менялся.
+Точный final head/tree, tested virtual merge и parents, фактические CI/assertion
+результаты и полный список paths — **PR receipt**. SHA-only commits не нужны.
+Следующее действие — C0 acceptance и независимый scoped C8 Telegram/API review.
+
+| Критерий | Исполнимая проверка и проверяемый результат |
+|---|---|
+| A01/A02/A06 | `test_m2_3_transport.py` и `test_m2_3_db_postgres.py`: strict numeric/opaque projection и DB fingerprint; шесть concurrent duplicates → один receipt/Inbox/Job; conflict; cross-bot/unknown binding/чужой Owner без writes; native/echo/edit/delete/unsupported → явные terminal receipts без Message/Job |
+| A01/A02 | `test_m2_3_wire_postgres.py::test_real_tcp_webhook_never_acknowledges_before_durable_commit`: настоящий TCP HTTP request остаётся без ACK, пока barrier держит commit; другая PG connection не видит receipt; после commit HTTP200 и durable row. HTTP rollback/ACK-loss tests и DB fail-trigger каждого receipt/Inbox/Job звена |
+| A03/A08 | `test_m2_3_api_postgres.py`: ровно пять routes, точные DTO/text/key; concurrent receipt replay → один intention/Audit/Outbox/Job; fail-trigger каждого звена → ноль частичных rows; response loss → тот же receipt; все routes требуют live session/OWNER; forged tenant/relation/cursor отвергаются |
+| A03/A09 | `test_m2_3_api_telegram_postgres.py`: два настоящих auth units с refresh между ними и без занятого pool; replay выигрывает до stale CAS/новых restrictions; lifecycle invalidation →503 без намерения; OWNER/product revoke между units; bounded failure observation сохраняется |
+| A04/A05/A09 | `test_real_http_accept_lost_response_process_restart_never_second_wire_call`: настоящий локальный сервер принимает sendMessage и теряет response; отдельный worker process падает до/после finalize commit; durable wire ledger=1 после replacement worker/recovery, delivery UNKNOWN, второго wire call нет |
+| A04/A09 | DB tests `test_observation_cas_fences_invalidation_and_concurrent_refresh`, `test_old_begin_and_unprobed_claim_cannot_bypass_telegram_preflight`, `test_dispatch_rechecks_current_authority_business_billing_and_window`: generation/version/claim fences, live authority и exact24h denial; future date clamp и duplicate не продлевают окно |
+| A04/A05 | `test_429_finalized_delay_is_durable_replay_and_horizon_exhausts`: due не раньше retry_after, canonical finalize replay сохраняет due, changed delay отклонён, пересечение15min → DEAD/RETRY_EXHAUSTED; прежние M2.1 five-claim/backoff/crash/UNKNOWN tests продолжают выполняться |
+| A07/A08 | `test_real_telegram_photo_http_pg_s3_owner_grant_and_signed_get`: реальные getFile/photo HTTP → прежний validator/fencing → PG/private S3 → authenticated grant → реальные signed GET bytes; TTL60, anonymous403, forged relation404, без DB unit на provider I/O. Hostile paths/encoded bodies отклоняются до чтения |
+| A03/A08/A09 | `test_m2_3_policy.py`, API/DB policy cases: настоящий EntitlementService и SQL dispatch parity, missing/false/inactive/modes/structural503, чтение/grants без product gate. Fresh setup exact repeat/conflict/concurrency и старый TEST catalog неизменны |
+| A12 | `test_m2_3_schema_postgres.py`: ровно две новые FORCE RLS таблицы, нет runtime DML; composite FK/immutable owner; 0006 rows/FileObject winner/UNKNOWN/billing сохраняются при upgrade/repeat/downgrade/reupgrade; Telegram history →55000 до первой mutation. Штатные full CI/browser, contracts/reproducibility, оба clean-source gates |
+
+Необходимые изменения прежних tests объясняются принятой additive дельтой:
+
+- `test_auth_contract.py`: inventory дополнен ровно пятью owner routes; frozen auth
+  seven-endpoint snapshot неизменен. `test_foundation.py`: current head0007 при
+  неизменном frozen tenancy0003.
+- `test_m2_1_models.py`: отрицательный provider-вектор использует неподдерживаемое
+  имя, поскольку TELEGRAM теперь принят. Остальные validation vectors сохранены.
+- `test_m2_1_postgres.py`: scoped fixture cleanup удаляет новые receipt/state до
+  старой FK-цепочки; tenantless rows удаляются только для fixture bot identities.
+- `test_m2_2_migrations.py`: сравнение исходных0005 rows исключает только additive
+  nullable metadata0006/0007. Отдельный0007 migration test проверяет сохранность
+  FileObject winner, UNKNOWN и billing; privacy/recovery assertions сохранены.
+- `test_postgres.py` и `test_tenancy_postgres.py`: точные table/function inventories
+  расширены на принятые две таблицы и typed capabilities, без общих SQL/DML прав.
+
+**Live Telegram: BLOCKED — внешнее runtime/DNS/TLS окружение не предоставлено.**
+Bot token/webhook secret не запрашивались и не использовались. Реальные getMe/
+getBusinessConnection/getWebhookInfo, browser HTTPS signed GET и получение Client
+ответа должны быть записаны отдельно оператором по runbook. Обычный CI проверяет
+локальный HTTP fault server, настоящие PostgreSQL/S3 и прежний M1 browser; не доказывает
+внешний Telegram или Console A11. C5 начинает после принятого merge/actual main CI.
+
+### Что подготовить для live Telegram, не блокируя независимый код
+
+Пользователь уже подготовил test bot с Business/Secretary Mode, Owner/Client и
+TG_BOT_TOKEN/TG_WEBHOOK_SECRET в password manager. Повторно токены не запрашивать;
+подключать password manager к чату не надо. В runbook дать один конкретный порядок:
+
+- Exact accepted code, fresh TEST Workspace/Business и independently approved Owner ID;
+  operator setup разрешён только LOCAL/TEST, не rebind по чужому connection ID.
+- Секреты оператор помещает непосредственно в ignored runtime secret file, например
+  `.env.telegram` mode0600, или deployment secret store; никогда в чат/PR/артефакт.
+- C6 готовит тестовый HTTPS endpoint, exact Console Host/Origin+secure cookies,
+  worker/scheduler/private DB/S3. Signed GET должен открываться браузером: HTTPS
+  signing endpoint с неизменёнными host/path, а не подмена internal MinIO hostname.
+- Явно включаемый smoke отправляет только в согласованный тестовый диалог; cleanup
+  не сбрасывает pending updates. Зафиксировать действительные права/наблюдения,
+  не обещать их по одному флагу Business Mode или публичной документации.
+
+Внешний TEST deployment ещё не выбран/не запущен, текущий loopback Compose не
+является интернет-окружением. Расходы не разрешены; paid вариант сначала требует
+конкретной стоимости. Недостающий runtime/HTTPS доступ блокирует только live check,
+не adapter/API/DB/S3 tests. C0 может отдельно принять code/API с явным внешним blocker;
+C5 — только после интеграции API/main CI. M2 целиком требует всех четырёх частей и
+настоящего Client text+photo→Console→ручной reply→Client сценария A11; до этого M3 не выдаётся.
+
+
+</details>
 
 ## 1. Исходная точка и результат
 
@@ -343,6 +546,116 @@ production-параметры для обхода отсутствующего �
 
 Ниже сохранены прежние записи M2.1. Действуют только активный блок в начале
 этого файла и актуальный TASK_REGISTER; повторные merge/старты по истории не нужны.
+
+## История — M2.2 pre-merge передача C0 / 2026-09-21
+
+**M2.2 REVIEW, не INTEGRATED/VERIFIED; M2.3/M2.4 TODO; весь M2 IN_PROGRESS.**
+M1.1–M1.3 и M2.1 приняты в LOCAL/TEST. Повторно не выполнять исторические поручения.
+Repository `Elefesys/ai-service-manager`; единственный
+[PR #19](https://github.com/Elefesys/ai-service-manager/pull/19), ветка
+**`c6/m2-2-private-images`** → main. Accepted actual base
+**`d3c849d4792f7af60f43eea0f0551659ee3cee5d`**, tree
+`f12aa90a3c3fb7fdfda84290315a3fd820816b4b`;
+[отдельный main CI 35596593891](https://github.com/Elefesys/ai-service-manager/actions/runs/35596593891)
+SUCCESS. Coordination commit `c4ad360e482f47a30e6f0756a13e6ce1cf68def4` сохранён.
+Ни параллельного PR, ни самостоятельного merge, ни поручения M2.3 сейчас нет.
+
+### Результат C0 review и ограниченный fix
+
+C0 сверил все 37 изменённых paths исходного implementation head
+`5d72557a1058906e0040d5f410968f769986f2e8`, tree
+`9d250238368d6f8b6087c1f34b87a18832791397`. Проверенный virtual merge
+`b69257dc2dc2c2f8acb77158466bd1242cc6cf34` имеет parents accepted base + этот head
+и то же дерево. [CI 35605713463](https://github.com/Elefesys/ai-service-manager/actions/runs/35605713463)
+SUCCESS: 220 non-integration, 303 PostgreSQL/S3, 60 frontend, 15 прежних M1 browser;
+оба штатных scripts/clean-source gates, migration cycles/contracts/reproducibility/
+smoke PASS. ZIP download получил 403 / Cloudflare 1010: C0 не утверждает побайтную
+проверку ZIP. Вместо этого проверены Git blob SHA всех изменённых файлов и полное
+реконструированное дерево, checkout logs и исполненные clean-source gates.
+
+Scope соответствует [M2_CONTRACT §9](M2_CONTRACT.md#9-m22-private-images--принято-c0c2c3-2026-09-21):
+controlled provider → atomic Message/FileObject/FETCH → validated original в private
+S3 → READY → внутренний live OWNER signed GET. Canonical DB relations/FORCE RLS,
+worker trust/lease/XID/task, composite READY/WINNER FK, per-attempt keys, lost ACK,
+late PUT/tombstone cleanup, no-I/O-with-DB-transaction, migration/backfill и сохранение
+SEND UNKNOWN проверены. Старые fixtures адаптированы по фактической новой схеме,
+без удаления guards; точные причины и tests→матрица сохранены в истории ниже.
+0006→0005 согласована C2; 0001–0005, canonical originals, auth/tenancy/R4,
+OpenAPI/frontend, старые package blocks и пять image pins не изменены.
+
+Реальный независимый C8 review private-file authorization/validation/worker/cleanup
+нашёл **один blocker C8-M2.2-01, P2**. До fix WebP native decoder создавал canvas
+внутри Image.open до наших side/pixel checks. Безопасный subprocess probe с cap
+384 MiB показал: 5000×4001 увеличивал виртуальное адресное пространство до возврата
+INVALID_INPUT; 8192² получал native allocation error под cap. Фактический OOM или
+рост resident memory до этих величин не заявлялись. Исходный green CI этого риска
+не доказывал: прежний preallocation test использовал PNG/Image.load.
+
+C0 поручил C3 только три существующих path: `backend/src/asm/files/validation.py`,
+`tests/test_m2_2_media.py`, `tests/test_m2_2_recovery_postgres.py`. Fix проверяет
+bounded RIFF/chunk/VP8/VP8L/VP8X headers, canvas/bitstream dimensions и отсутствие
+animation **до Image.open**. Затем сохраняются verify, полный decode, original
+hash/bytes и все прежние лимиты/форматы. Миграции, dependencies/locks и CI не менялись.
+**Независимый targeted C8-M2.2-01 PASS: blocker закрыт по reviewed source.**
+C0 code/scope review PASS; готовность к merge требует итогового полного CI.
+C8 отдельно выполнил 96 media tests и исходный safe subprocess probe на pinned
+Python 3.13.15 / Pillow 12.3.0 / libwebp 1.6.0: 5000×4001 и 8192² отвергаются
+с native_calls=0; контрольный 1×1 проходит настоящий decoder. Patch SHA-256
+`b60264b29374c1f96a9de45bfc191e4119e16ee91032bbae179854dd61b428bd` проверен.
+Это независимый review дельты, не авторский CONTRACT PASS; новых blockers нет.
+Прежний scoped C8 review остальных private-file/DB/recovery областей остаётся
+действительным. Два новых PostgreSQL cases C8 прочитал, но локально не исполнял.
+
+| Применимый критерий | Дополнительная проверка C8-M2.2-01 и граница evidence |
+|---|---|
+| A07 validation | `test_webp_oversize_is_rejected_before_native_canvas`, `test_webp_canvas_and_bitstream_cannot_disagree`, `test_webp_malformed_structure_is_rejected_before_native_canvas`, `test_real_animated_webp_is_rejected_before_native_canvas`: native constructor не вызывается для oversized/contradictory/structurally malformed/animated headers |
+| A07 сохранение контракта | `test_webp_lossy_lossless_extended_originals_reach_real_decoder`, `test_webp_exact_side_and_pixel_boundaries_can_decode`: настоящий lossy/lossless/extended/alpha/metadata decode, original hash и точные лимиты; `test_bounded_webp_headers_do_not_replace_full_pixel_validation`: complete safe headers не пропускают отсутствующие compressed pixels |
+| A04/A07 worker | Два новых `test_invalid_input_is_terminal_before_storage[webp_pixels/webp_canvas]`: реальный DB Job DEAD/FileObject FAILED с INVALID_INPUT, attempt_count=1, никакого PUT/retry, Message сохранён. Их исполнение требуется в итоговом штатном PostgreSQL/S3 CI, local unit результат не заменяет этот gate |
+
+Локально в pinned Python 3.13.15 / Pillow 12.3.0 / libwebp 1.6.0: 96 media unit,
+288 всех non-integration PASS; Ruff/check/format и strict mypy 40 backend files PASS.
+Ранний новый negative VP8L test ошибочно считал uniform stream с изменёнными dimensions
+невалидным. Исправлены bytes fixture: убраны compressed pixels при сохранённых
+complete headers. Assertion INVALID_INPUT сохранён; защитные проверки не ослаблены.
+
+C0 явно принимает реализационное упрощение §9.4: bounded RAM originals вместо
+private temporary disk file. Input cap 10 MiB не является total process-memory cap;
+decoder allocations имеют отдельные dimension/concurrency guards. Один decoder
+slot и два S3 slots удерживаются до реального завершения, включая cancellation;
+каноническое постоянное хранение — только S3. Это не отмена WebP blocker и не новый scope.
+
+### Конечные gates и следующее действие
+
+Этот единый substantive fix/receipt commit обновляет register/handoff/contract,
+сохраняя историю. Свой будущий SHA и результат ещё не исполненного final CI он
+не выдумывает. **C0 ведёт один final receipt в PR #19**: exact head/tree/tested merge
+и его parents, полный CI именно итогового head, фактические C8 finding/closure и
+границы artifact evidence. Повторный документационный commit ради записи SHA
+предыдущего не нужен. Никакой Ready/merge по одному старому green run.
+
+1. C0 завершает targeted C8 по изменённой области и проверяет итоговые foundation/
+   browser jobs, оба scripts/clean-source gates и реальные PostgreSQL/S3 cases.
+   После всех PASS снимает Draft и даёт пользователю ссылку на обычный merge commit.
+2. Пользователь сливает только готовый PR #19 через **Create a merge commit**.
+   C0 проверяет actual merge commit/tree/parents и отдельный **push/main CI**.
+3. Только после этого C0 принимает M2.2 в LOCAL/TEST и выдаёт одну M2.3 от точного
+   принятого main. Ни API, ни UI, ни живой Telegram этим review не приняты.
+
+Граница A07/A08 и применимых A02/A04/A06/A12 — controlled provider + настоящий
+private LOCAL/TEST S3 + внутренний owner service. 15 browser journeys — прежняя
+M1 regression; A01/A09/A10/A11 для Telegram/API/UI остаются следующим частям.
+Миграция 0006 и SDK/image pins — в [runbook](../runbooks/M2_STORAGE_LOCAL_TEST.md).
+Новых paid/cloud ресурсов, owner upload/derivatives/CDN, AI или M3 не добавлено.
+
+### Telegram smoke — внешняя подготовка
+
+По сообщению пользователя готовы test bot с Business/Secretary Mode и Owner/Client;
+TG_BOT_TOKEN и отдельный TG_WEBHOOK_SECRET находятся в менеджере паролей. Секреты
+не нужны для M2.2 и не передаются в чат/PR. Binding/rights, runtime injection,
+тестовый HTTPS endpoint и живой A11 пока не проверены. Конкретное безопасное
+поручение C0/C6 для deployment выдаётся в M2.3; платные ресурсы требуют предложения
+с точной ценой до подключения. Отсутствие внешнего доступа не блокирует private-S3 CI.
+
 
 ## История — поручение и передача C6/C2/C3 M2.2 до C0 review / 2026-09-21
 

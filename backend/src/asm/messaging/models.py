@@ -78,7 +78,7 @@ class NormalizedEventV1:
     media_group_id: str | None = None
 
     def __post_init__(self) -> None:
-        if self.provider != "CONTROLLED" or type(self.kind) is not EventKind:
+        if self.provider not in {"CONTROLLED", "TELEGRAM"} or type(self.kind) is not EventKind:
             raise MessagingError(Code.INVALID_INPUT)
         for value in (self.bot_identity, self.event_id, self.external_connection_id):
             identifier(value)
@@ -147,9 +147,16 @@ class SendOutcome:
     kind: OutcomeKind
     provider_message_id: str | None = None
     error_code: Code | None = None
+    retry_after_seconds: int | None = None
 
     def __post_init__(self) -> None:
         if type(self.kind) is not OutcomeKind:
+            raise MessagingError(Code.INVALID_INPUT)
+        if self.retry_after_seconds is not None and (
+            self.kind != OutcomeKind.NOT_SENT_RETRYABLE
+            or type(self.retry_after_seconds) is not int
+            or not 1 <= self.retry_after_seconds <= 86400
+        ):
             raise MessagingError(Code.INVALID_INPUT)
         if self.kind == OutcomeKind.SUCCESS:
             identifier(self.provider_message_id)

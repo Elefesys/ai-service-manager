@@ -31,7 +31,7 @@ class FetchPermit(Result):
     file_id: UUID
     message_id: UUID
     conversation_id: UUID
-    provider: Literal["CONTROLLED"]
+    provider: Literal["CONTROLLED", "TELEGRAM"]
     bot_identity: str = Field(repr=False)
     external_connection_id: str = Field(repr=False)
     image_file_id: str = Field(repr=False)

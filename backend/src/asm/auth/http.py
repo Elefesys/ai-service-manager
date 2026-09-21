@@ -1,6 +1,7 @@
 """Browser boundary: exact origins, bounded input, no secret-bearing error payloads."""
 
 import asyncio
+import re
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -30,6 +31,8 @@ from asm.auth.service import AuthService
 from asm.tenancy import TenancyError
 
 BODY_LIMIT = 4096
+_UUID_PATH = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+_MESSAGES_PATH = re.compile(rf"/api/v1/workspaces/{_UUID_PATH}/conversations/{_UUID_PATH}/messages")
 HEADER_LIMIT = 16384
 
 
@@ -119,6 +122,11 @@ class AuthBoundary:
             await send(message)
 
         try:
+            body_limit = (
+                65536
+                if scope["method"] == "POST" and _MESSAGES_PATH.fullmatch(path)
+                else BODY_LIMIT
+            )
             headers = Headers(scope=scope)
             if sum(len(k) + len(v) for k, v in scope["headers"]) > HEADER_LIMIT:
                 raise AuthError(AuthCode.BODY_TOO_LARGE, 413)
@@ -152,7 +160,7 @@ class AuthBoundary:
             if lengths:
                 if not lengths[0].isascii() or not lengths[0].isdigit():
                     raise AuthError(AuthCode.INVALID_REQUEST, 422)
-                if len(lengths[0]) > 6 or int(lengths[0]) > BODY_LIMIT:
+                if len(lengths[0]) > 6 or int(lengths[0]) > body_limit:
                     raise AuthError(AuthCode.BODY_TOO_LARGE, 413)
             body = bytearray()
             async with asyncio.timeout(3):
@@ -161,7 +169,7 @@ class AuthBoundary:
                     if message["type"] == "http.disconnect":
                         return
                     body.extend(message.get("body", b""))
-                    if len(body) > BODY_LIMIT:
+                    if len(body) > body_limit:
                         raise AuthError(AuthCode.BODY_TOO_LARGE, 413)
                     if not message.get("more_body", False):
                         break

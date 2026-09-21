@@ -4,7 +4,7 @@ import json
 import signal
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -24,11 +24,15 @@ from asm.auth.store import AuthStore
 from asm.billing.http import install_billing
 from asm.tenancy import TenantDatabase
 
+if TYPE_CHECKING:
+    from asm.files.storage import ObjectStorage
+    from asm.telegram.client import TelegramClient
+
 tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0006"
+DATABASE_SCHEMA_REVISION = "0007"
 
 
 class Settings(AuthSettings):
@@ -126,18 +130,49 @@ class SystemInfo(BaseModel):
     business_features_enabled: Literal[False] = False
 
 
-def create_app(settings: Settings | None = None, database: Database | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    database: Database | None = None,
+    *,
+    telegram: "TelegramClient | None" = None,
+    object_storage: "ObjectStorage | None" = None,
+) -> FastAPI:
+    from asm.files.config import StorageSettings
+    from asm.files.storage import S3ObjectStorage
+    from asm.messaging.database import MessagingDatabase
+    from asm.messaging.http import install_messaging
+    from asm.telegram.adapter import TelegramRefresher
+    from asm.telegram.client import TelegramClient
+    from asm.telegram.config import TelegramSettings
+    from asm.telegram.database import TelegramIngress
+    from asm.telegram.webhook import install_webhook
+
     config = settings if settings is not None else Settings()
     db = database if database is not None else RuntimeDatabase(config)
 
     auth_store = AuthStore(config.database_url.get_secret_value())
     auth = AuthService(auth_store, db.tenancy if isinstance(db, RuntimeDatabase) else None, config)
 
+    telegram_settings = TelegramSettings(ASM_ENVIRONMENT=config.environment)
+    telegram_client = telegram or (
+        TelegramClient(telegram_settings) if telegram_settings.enabled else None
+    )
+    storage = object_storage
+    if isinstance(db, RuntimeDatabase) and storage is None:
+        storage_settings = StorageSettings()
+        if storage_settings.environment != config.environment:
+            raise RuntimeError("Storage environment mismatch")
+        storage = S3ObjectStorage(storage_settings)
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
             yield
         finally:
+            if telegram_client is not None:
+                await telegram_client.aclose()
+            if isinstance(storage, S3ObjectStorage):
+                await storage.close()
             await auth_store.close()
             await db.close()
 
@@ -164,18 +199,35 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
     app.state.auth_service = auth
     install_auth(app, auth, config)
     install_billing(app, auth, config)
+    install_messaging(
+        app,
+        auth,
+        config,
+        environment=config.environment,
+        storage=storage,
+        telegram=TelegramRefresher(telegram_client) if telegram_client is not None else None,
+    )
+    install_webhook(
+        app,
+        telegram_settings,
+        TelegramIngress(MessagingDatabase(db.engine), telegram_settings.bot_id)
+        if telegram_settings.enabled and isinstance(db, RuntimeDatabase)
+        else None,
+    )
     return app
 
 
 async def serve(role: Literal["worker", "scheduler"]) -> None:
     from asm.files.config import StorageSettings
     from asm.files.database import FileDatabase
-    from asm.files.provider import ControlledImageProvider
+    from asm.files.provider import ChannelImageProvider, ControlledImageProvider
     from asm.files.storage import S3ObjectStorage
     from asm.files.transfer import CleanupSweep, FetchTransfer
     from asm.messaging.adapter import ControlledAdapter
     from asm.messaging.database import MessagingDatabase
     from asm.messaging.worker import run
+    from asm.telegram.client import TelegramClient
+    from asm.telegram.config import TelegramSettings
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -185,7 +237,10 @@ async def serve(role: Literal["worker", "scheduler"]) -> None:
     db = RuntimeDatabase(settings)
     storage = None
     files = None
+    telegram = None
     try:
+        telegram_settings = TelegramSettings(ASM_ENVIRONMENT=settings.environment)
+        telegram = TelegramClient(telegram_settings) if telegram_settings.enabled else None
         await db.check()
         kernel = MessagingDatabase(db.engine)
         storage_settings = StorageSettings()
@@ -194,7 +249,12 @@ async def serve(role: Literal["worker", "scheduler"]) -> None:
         storage = S3ObjectStorage(storage_settings)
         file_db = FileDatabase(kernel)
         files = FetchTransfer(
-            file_db, kernel, ControlledImageProvider(environment=settings.environment), storage
+            file_db,
+            kernel,
+            ChannelImageProvider(
+                ControlledImageProvider(environment=settings.environment), telegram
+            ),
+            storage,
         )
         print(
             json.dumps(
@@ -209,8 +269,11 @@ async def serve(role: Literal["worker", "scheduler"]) -> None:
             stop,
             files=files,
             cleanup=CleanupSweep(file_db, storage),
+            telegram=telegram,
         )
     finally:
+        if telegram is not None:
+            await telegram.aclose()
         if files is not None:
             await files.close()
         if storage is not None:

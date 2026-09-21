@@ -34,6 +34,7 @@ KNOWN_KEYS = tuple(
         )
     )
 )
+MANUAL_SEND_KEY = "messaging.manual_send"
 ALLOWED: dict[Mode, frozenset[Criticality]] = {
     "NORMAL": frozenset(("ESSENTIAL", "STANDARD", "EXPENSIVE_OPTIONAL")),
     "GRACE": frozenset(("ESSENTIAL", "STANDARD")),
@@ -182,6 +183,19 @@ class EntitlementSnapshot:
 
 class EntitlementService:
     def evaluate(self, workspace_id: UUID, observed: Mapping[str, Any]) -> BillingResponse:
+        # The public R4 projection deliberately remains the original five TEST keys.
+        return self._evaluate(workspace_id, observed, KNOWN_KEYS)
+
+    def evaluate_product(
+        self, workspace_id: UUID, observed: Mapping[str, Any], key: str
+    ) -> Decision:
+        if key != MANUAL_SEND_KEY:
+            raise ValueError("Unknown product capability")
+        return self._evaluate(workspace_id, observed, (key,)).decisions[0]
+
+    def _evaluate(
+        self, workspace_id: UUID, observed: Mapping[str, Any], keys: tuple[str, ...]
+    ) -> BillingResponse:
         # Missing evidence takes precedence over contradictory/revision evidence.
         if any(observed.get(key) == [] for key in ("accounts", "modes", "history")):
             raise BillingUnavailable("BILLING_STATE_MISSING")
@@ -217,6 +231,12 @@ class EntitlementService:
                     or revision.plan_revision_id != sub.plan_revision_id
                 ):
                     raise ValueError("Invalid pinned revision")
+                if MANUAL_SEND_KEY in keys and any(
+                    item.capability_key == MANUAL_SEND_KEY
+                    and (item.value_kind, item.criticality) != ("BOOLEAN", "ESSENTIAL")
+                    for item in revision.entitlements
+                ):
+                    raise ValueError("Invalid product capability")
                 if (
                     sub.plan_revision_id in revisions
                     and revisions[sub.plan_revision_id] != revision
@@ -263,7 +283,7 @@ class EntitlementService:
             mode=mode.mode,
             mode_active=mode_active,
             availability="ACTIVE" if active is not None else "INACTIVE",
-            decisions=[self.decide(decisions_snapshot, key) for key in KNOWN_KEYS],
+            decisions=[self.decide(decisions_snapshot, key) for key in keys],
         )
 
     @staticmethod

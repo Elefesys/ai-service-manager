@@ -61,3 +61,77 @@ The existing Audit endpoint adds only `MESSAGE_SEND_REQUESTED` with object type
 are unchanged. The strict backend/OpenAPI/frontend union includes this event; no
 message body, provider IDs, command keys or claims are part of Audit. No messaging
 HTTP routes are introduced in this LOCAL/TEST kernel.
+
+## M2.3 owner messaging API
+
+The generated OpenAPI adds five routes under `/api/v1/workspaces/{workspace_id}`:
+
+| Method | Relative path | Result |
+| --- | --- | --- |
+| GET | `/channel-connections` | Current observed connection statuses |
+| GET | `/conversations` | Conversations and reply-window expiry |
+| GET | `/conversations/{conversation_id}/messages` | History with current file/delivery state |
+| POST | `/conversations/{conversation_id}/messages` | `202` durable manual text intention |
+| POST | `/conversations/{conversation_id}/messages/{message_id}/files/{file_id}/read-grant` | `200` private signed GET grant |
+
+All five require the current session cookie and live OWNER membership. Both POSTs
+require the configured Origin and current CSRF token. Send accepts exactly `{text}`,
+one `Idempotency-Key` in the existing ASCII format, no `If-Match`, and no query.
+Text is preserved exactly: 1–4096 Unicode scalars, at most 16384 UTF-8 bytes, no
+NUL/surrogates/whitespace-only value. Do not trim, normalize, split or add formatting.
+Only this exact POST route has a 64 KiB JSON body limit; other owner/auth routes
+retain their 4 KiB limit.
+
+The three collections return `{items,next_cursor}` and accept only one `limit`
+(1–100, default 25) and one `cursor`. Ordering is `(created_at,id)` descending;
+message `occurred_at` is separate provider event time. Pass `next_cursor` unchanged
+until null. It is scoped to the endpoint, Workspace and, for history, conversation;
+an invalid or missing anchor is `422 INVALID_REQUEST`. It does not freeze history
+or grant authorization. UUIDs are lowercase canonical, timestamps have six UTC
+fractional digits, and versions/file sizes are decimal strings. Nullable fields
+are always present. Image content type remains `IMAGE_REFERENCE`; READY file
+manifests expose only MIME type, byte size, width and height.
+
+Connection `AVAILABLE` reports a fresh observed enabled/can-reply snapshot. It does
+not promise an open 24-hour reply window, entitlement, or successful delivery.
+Stale/invalidated observations are `UNVERIFIED`; a failed last probe is
+`UNAVAILABLE`; confirmed disabled and missing rights are `DISABLED` and
+`RIGHTS_MISSING`. CONTROLLED LOCAL/TEST connections have no Telegram observation
+or reply-window timestamp. Every new Telegram send refreshes the connection outside
+the database transaction; the worker performs its own preflight before dispatch.
+
+New sends require the `messaging.manual_send` BOOLEAN/ESSENTIAL capability through
+the real entitlement service. NORMAL, GRACE and LIMITED allow a valid true key;
+inactive state, SUSPENDED, false or missing keys reject the new intention with
+`409 NOT_ALLOWED`. Structural billing failure is `503` with the separate
+`{error:{code:"BILLING_STATE_UNAVAILABLE",state_reason}}` envelope; ordinary
+dependency/auth admission failure remains code-only `503 UNAVAILABLE`. Billing GET
+still exposes exactly the five original TEST decisions. History, inbound processing
+and private grants remain available independently of product restrictions.
+
+Send returns only `{workspace_id,receipt_id,message_id,accepted_at,outcome}`, with
+`outcome` ACCEPTED or REPLAY and the original accepted metadata. `202` confirms
+commit of the intention, never delivery. Read history for PENDING, DISPATCHING,
+SENT, FAILED or UNKNOWN. SENT means Telegram accepted the message, not that the
+recipient received or read it. An ambiguous send becomes UNKNOWN and is not sent
+again automatically. There is no retry/resend endpoint.
+
+After a lost response or ambiguous 5xx, preserve the original actor, Workspace,
+conversation, exact text and key. Recover the current session/CSRF, confirm that
+identity/context still matches, and repeat that exact intention. A new key is a
+new send, not recovery. Authorized exact replay is recognized before new product,
+route or observation checks and does not call Telegram or send again; UNKNOWN
+remains UNKNOWN. Different text/context for an existing key is
+`409 IDEMPOTENCY_KEY_CONFLICT`. Revoked/downgraded authority cannot inspect a receipt.
+
+Read-grant accepts exactly `{}` and no query, with no idempotency requirement.
+Unknown, mismatched, foreign or not-ready relations return `404 NOT_FOUND`.
+The response is `{url,expires_at}` with a fixed 60-second lifetime. The URL is a
+bearer grant: use its original signed host/path, keep it out of logs, and do not
+cache or distribute it. Revocation prevents new grants; already issued URLs may
+remain usable until expiry. No separate storage key or provider identifier is
+returned. Local signing uses the current owner unit; network reads occur after
+the response.
+
+These contracts prepare the API for C5. The complete Console journey and external
+Telegram account/HTTPS verification remain separately evidenced M2 work.

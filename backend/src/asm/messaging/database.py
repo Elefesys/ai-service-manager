@@ -1,10 +1,11 @@
 """Short PostgreSQL capabilities; worker authority never uses a human principal."""
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from psycopg import AsyncConnection as PsycopgAsyncConnection
@@ -25,6 +26,9 @@ from asm.messaging.results import (
     TerminalRejection,
 )
 from asm.tenancy.database import _active as _owner_active
+
+if TYPE_CHECKING:
+    from asm.telegram.database import TelegramProbe
 
 _active: ContextVar["WorkerUnitOfWork | None"] = ContextVar("asm_worker_unit", default=None)
 
@@ -256,6 +260,34 @@ class MessagingDatabase:
         await self.checkpoint("start_after_commit")
         return result
 
+    async def telegram_probe(self, claim: JobClaim) -> "TelegramProbe | None":
+        from asm.telegram.database import TelegramProbe
+
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            result = await unit._execute("SELECT platform.telegram_worker_probe(:job, :token)")
+            return TelegramProbe.model_validate(result) if result is not None else None
+
+    async def telegram_begin_send(
+        self, claim: JobClaim, probe: "TelegramProbe", observation: dict[str, object]
+    ) -> SendPermit | TerminalRejection:
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit._execute(
+                "SELECT platform.telegram_begin_send(:job, :token, :generation, :version, CAST(:observation AS jsonb))",
+                {
+                    "generation": probe.generation,
+                    "version": probe.observation_version,
+                    "observation": json.dumps(observation),
+                },
+            )
+            result = (
+                SendPermit.model_validate(raw)
+                if raw["code"] == "PERMITTED"
+                else TerminalRejection.model_validate(raw)
+            )
+            await self.checkpoint("start_before_commit")
+        await self.checkpoint("start_after_commit")
+        return result
+
     async def finish_send(
         self, job_id: UUID, claim_token: UUID, attempt_id: UUID, outcome: SendOutcome
     ) -> FinalizeResult:
@@ -269,7 +301,7 @@ class MessagingDatabase:
             result = FinalizeResult.model_validate(
                 await call(
                     connection,
-                    "SELECT platform.messaging_finish_send(:job, :token, :attempt, :outcome, :provider_id, :error)",
+                    "SELECT platform.messaging_finish_send(:job, :token, :attempt, :outcome, :provider_id, :error, :delay)",
                     {
                         "job": job_id,
                         "token": claim_token,
@@ -277,6 +309,7 @@ class MessagingDatabase:
                         "outcome": outcome.kind.value,
                         "provider_id": outcome.provider_message_id,
                         "error": outcome.error_code.value if outcome.error_code else None,
+                        "delay": outcome.retry_after_seconds,
                     },
                 )
             )

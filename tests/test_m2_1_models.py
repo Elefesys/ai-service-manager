@@ -76,7 +76,7 @@ def test_manual_fingerprint_exact_bytes_not_json_or_normalized(value):
 @pytest.mark.parametrize(
     "changes",
     [
-        {"provider": "TELEGRAM"},
+        {"provider": "UNSUPPORTED_PROVIDER"},  # TELEGRAM is an accepted additive M2.3 provider.
         {"kind": "CLIENT_MESSAGE"},
         {"event_id": ""},
         {"sender_id": "bad\n"},

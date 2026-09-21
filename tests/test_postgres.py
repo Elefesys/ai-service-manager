@@ -129,13 +129,15 @@ async def test_real_postgres_capabilities_and_roles(database):
             "plan_entitlements",
             "saas_plan_revisions",
             "saas_plans",
+            "telegram_connection_state",
+            "telegram_update_receipts",
             "user_accounts",
             "workspace_billing_accounts",
             "workspace_memberships",
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "Only the accepted M0 through M2.2 tables are allowed"
+        ], "Only the accepted M0 through M2.3 tables are allowed"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

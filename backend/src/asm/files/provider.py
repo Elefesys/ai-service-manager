@@ -71,3 +71,20 @@ class ControlledImageProvider:
             await self._checkpoint("image_before_read")
             yield image.content[offset : offset + 65536]
         await self._checkpoint("image_after_read")
+
+
+class ChannelImageProvider:
+    """Only the two currently accepted provider paths, using DB-issued permits."""
+
+    def __init__(self, controlled: ControlledImageProvider, telegram: ImageProvider | None) -> None:
+        self.controlled, self.telegram = controlled, telegram
+
+    async def open_image(self, permit: FetchPermit) -> AsyncIterator[bytes]:
+        if permit.provider == "CONTROLLED":
+            provider: ImageProvider = self.controlled
+        elif permit.provider == "TELEGRAM" and self.telegram is not None:
+            provider = self.telegram
+        else:
+            raise MessagingError(Code.DEPENDENCY_UNAVAILABLE)
+        async for chunk in provider.open_image(permit):
+            yield chunk
