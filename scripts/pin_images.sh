@@ -16,6 +16,6 @@ pin UV_IMAGE ghcr.io/astral-sh/uv:0.10.0
 pin DB_IMAGE pgvector/pgvector:0.8.6-pg18-bookworm
 pin NODE_IMAGE node:24-bookworm-slim
 pin WEB_IMAGE nginxinc/nginx-unprivileged:stable-alpine
-pin STORAGE_IMAGE minio/minio:RELEASE.2025-09-07T16-13-09Z
-pin STORAGE_ADMIN_IMAGE minio/mc:RELEASE.2025-02-15T10-36-16Z
+pin STORAGE_IMAGE quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+pin STORAGE_ADMIN_IMAGE quay.io/minio/mc:RELEASE.2025-02-15T10-36-16Z
 mv infra/images.lock.env.tmp infra/images.lock.env

@@ -5,6 +5,9 @@ compose() { docker compose --env-file infra/images.lock.env --env-file .env --pr
 cleanup() { compose down --remove-orphans; }
 trap cleanup EXIT
 compose config --quiet
+# Verify the new LOCAL/TEST service release manifests while its pins are introduced.
+docker buildx imagetools inspect quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+docker buildx imagetools inspect quay.io/minio/mc:RELEASE.2025-02-15T10-36-16Z
 compose build --pull api checks frontend
 compose run --rm checks
 compose run --rm --no-deps --entrypoint minio storage --version
