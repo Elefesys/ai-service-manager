@@ -5,236 +5,114 @@
 Этот файл — принятый план и единственная активная точка передачи M2.
 Приёмка плана не является evidence выполненной реализации.
 
-## Активное поручение C0 — M2.1-KERNEL / 2026-09-21
+## Активная передача C0 — M2.2-PRIVATE-IMAGES, до merge / 2026-09-21
 
-**M2.1 REVIEW: pre-merge C0 PASS и независимый scoped C8 PASS.
-M2.2–M2.4 TODO.** Перед merge обязателен green CI итогового head. M1 не повторять.
-PR #17 MERGED; проверенный actual main/base:
-**`8e5f125d424c0ce613ed9e0c787392f11a49aeae`**.
-[Отдельный push/main CI 35522542861](https://github.com/Elefesys/ai-service-manager/actions/runs/35522542861)
-SUCCESS; head/tested SHA=actual merge, tree `3e2a2519c949461856c9f3c5ca1d1ec33a180953`,
-оба jobs/clean-source gates PASS. Post-merge receipt находится в [PR #17](https://github.com/Elefesys/ai-service-manager/pull/17).
+**M2.2 REVIEW, не INTEGRATED/VERIFIED; M2.3/M2.4 TODO; весь M2 IN_PROGRESS.**
+M1.1–M1.3 и M2.1 приняты в LOCAL/TEST. Повторно не выполнять исторические поручения.
+Repository `Elefesys/ai-service-manager`; единственный
+[PR #19](https://github.com/Elefesys/ai-service-manager/pull/19), ветка
+**`c6/m2-2-private-images`** → main. Accepted actual base
+**`d3c849d4792f7af60f43eea0f0551659ee3cee5d`**, tree
+`f12aa90a3c3fb7fdfda84290315a3fd820816b4b`;
+[отдельный main CI 35596593891](https://github.com/Elefesys/ai-service-manager/actions/runs/35596593891)
+SUCCESS. Coordination commit `c4ad360e482f47a30e6f0756a13e6ce1cf68def4` сохранён.
+Ни параллельного PR, ни самостоятельного merge, ни поручения M2.3 сейчас нет.
 
-Repository: `Elefesys/ai-service-manager`. Ветка: **`c3/m2-1-messaging-kernel`** → main.
-Продолжать единственный [PR #18](https://github.com/Elefesys/ai-service-manager/pull/18)
-этой ветки; итоговые head/tree/tested SHA и CI находятся в его C0 receipt. Первый
-coordination commit сохранить. Main/base — SHA выше; локальные synthetic commits
-из CI archive не являются GitHub base. Не начинать заново от старой M1 ветки.
+### Результат C0 review и ограниченный fix
 
-Ведущий исполнитель **C3**, DB/migration часть согласована с **C2**. C0 принимает
-контракт и интеграцию. Единый технический контракт: [M2_CONTRACT](M2_CONTRACT.md).
-Он принят предметной сверкой C0/C2/C3. Реализация прошла C0 acceptance и
-независимый scoped C8 review; интеграция в main ещё не выполнена.
-Один работающий срез: controlled event → durable Inbox/Job → Message правильного
-Workspace → owner manual text command → atomic receipt/Audit/Outbox/Job → controlled
-send/recovery. Проверьте существующий код и контракт перед изменениями.
+C0 сверил все 37 изменённых paths исходного implementation head
+`5d72557a1058906e0040d5f410968f769986f2e8`, tree
+`9d250238368d6f8b6087c1f34b87a18832791397`. Проверенный virtual merge
+`b69257dc2dc2c2f8acb77158466bd1242cc6cf34` имеет parents accepted base + этот head
+и то же дерево. [CI 35605713463](https://github.com/Elefesys/ai-service-manager/actions/runs/35605713463)
+SUCCESS: 220 non-integration, 303 PostgreSQL/S3, 60 frontend, 15 прежних M1 browser;
+оба штатных scripts/clean-source gates, migration cycles/contracts/reproducibility/
+smoke PASS. ZIP download получил 403 / Cloudflare 1010: C0 не утверждает побайтную
+проверку ZIP. Вместо этого проверены Git blob SHA всех изменённых файлов и полное
+реконструированное дерево, checkout logs и исполненные clean-source gates.
 
-### Разрешённая дельта
+Scope соответствует [M2_CONTRACT §9](M2_CONTRACT.md#9-m22-private-images--принято-c0c2c3-2026-09-21):
+controlled provider → atomic Message/FileObject/FETCH → validated original в private
+S3 → READY → внутренний live OWNER signed GET. Canonical DB relations/FORCE RLS,
+worker trust/lease/XID/task, composite READY/WINNER FK, per-attempt keys, lost ACK,
+late PUT/tombstone cleanup, no-I/O-with-DB-transaction, migration/backfill и сохранение
+SEND UNKNOWN проверены. Старые fixtures адаптированы по фактической новой схеме,
+без удаления guards; точные причины и tests→матрица сохранены в истории ниже.
+0006→0005 согласована C2; 0001–0005, canonical originals, auth/tenancy/R4,
+OpenAPI/frontend, старые package blocks и пять image pins не изменены.
 
-| Область | Разрешение и причина |
+Реальный независимый C8 review private-file authorization/validation/worker/cleanup
+нашёл **один blocker C8-M2.2-01, P2**. До fix WebP native decoder создавал canvas
+внутри Image.open до наших side/pixel checks. Безопасный subprocess probe с cap
+384 MiB показал: 5000×4001 увеличивал виртуальное адресное пространство до возврата
+INVALID_INPUT; 8192² получал native allocation error под cap. Фактический OOM или
+рост resident memory до этих величин не заявлялись. Исходный green CI этого риска
+не доказывал: прежний preallocation test использовал PNG/Image.load.
+
+C0 поручил C3 только три существующих path: `backend/src/asm/files/validation.py`,
+`tests/test_m2_2_media.py`, `tests/test_m2_2_recovery_postgres.py`. Fix проверяет
+bounded RIFF/chunk/VP8/VP8L/VP8X headers, canvas/bitstream dimensions и отсутствие
+animation **до Image.open**. Затем сохраняются verify, полный decode, original
+hash/bytes и все прежние лимиты/форматы. Миграции, dependencies/locks и CI не менялись.
+**Независимый targeted C8-M2.2-01 PASS: blocker закрыт по reviewed source.**
+C0 code/scope review PASS; готовность к merge требует итогового полного CI.
+C8 отдельно выполнил 96 media tests и исходный safe subprocess probe на pinned
+Python 3.13.15 / Pillow 12.3.0 / libwebp 1.6.0: 5000×4001 и 8192² отвергаются
+с native_calls=0; контрольный 1×1 проходит настоящий decoder. Patch SHA-256
+`b60264b29374c1f96a9de45bfc191e4119e16ee91032bbae179854dd61b428bd` проверен.
+Это независимый review дельты, не авторский CONTRACT PASS; новых blockers нет.
+Прежний scoped C8 review остальных private-file/DB/recovery областей остаётся
+действительным. Два новых PostgreSQL cases C8 прочитал, но локально не исполнял.
+
+| Применимый критерий | Дополнительная проверка C8-M2.2-01 и граница evidence |
 |---|---|
-| `backend/src/asm/messaging/` | Только используемые normalized models/validation/errors/policy, repository/DB capabilities, commands, worker/recovery и controlled adapter текущего kernel |
-| `migrations/versions/0005_messaging_kernel.py` | Revision `0005`, down_revision `0004`; C0/C2 назначили этой ветке. Новые messaging tables/typed commands/RLS/constraints и описанная Audit compatibility |
-| `backend/src/asm/foundation.py` | DATABASE_SCHEMA_REVISION=0005 и делегирование worker/scheduler реальному durable kernel; сохранить lifecycle/readiness/runtime role guards |
-| `backend/src/asm/tenancy/database.py` | Только узкие messaging owner calls через существующий guarded unit и взаимное исключение owner/worker units; guards, auth admission и SQLSTATE mapping не ослаблять |
-| `backend/src/asm/billing/models.py` | Один strict Audit variant MESSAGE_SEND_REQUESTED; прежние billing DTO/контракты сохраняются |
-| `contracts/openapi.json`, `contracts/README.md` | Generated additive Audit schema/consumer note; новых messaging HTTP routes нет |
-| `frontend/src/billing-api.ts`, `frontend/src/BillingPanel.tsx` | Только strict Audit type/parser и правильная подпись нового event; contact/recovery/navigation/layout без переработки |
-| `frontend/src/billing-api.test.ts`, `frontend/src/BillingPanel.test.tsx` | Mixed Audit compatibility и неверные discriminators/payloads; прочие frontend изменения не выдаются |
-| `tests/test_m2_1_*.py` | Существенные kernel/unit/real-PostgreSQL/recovery/migration/mixed Audit API проверки |
-| `tests/test_tenancy_postgres.py`, `tests/test_m1_3_postgres.py`, `tests/test_foundation.py`, `tests/test_m1_3_http_contract.py` | Только объяснённые новые table/function/Audit inventory, текущий schema head и добавление нового strict Audit schema; прежние защитные кейсы сохраняются |
-| `scripts/provision_local_auth.py`, `scripts/m1_3_browser_fixture.py` | C0 согласовал 2026-09-21: точное сравнение с `DATABASE_SCHEMA_REVISION`; LOCAL/TEST, DB/identity/password guards сохраняются |
-| `tests/test_postgres.py` | C0 согласовал: ровно 10 новых messaging tables в закрытом inventory, `jobs_enabled=true`, `mode=controlled`; role/SIGTERM/shutdown assertions сохраняются |
-| `tests/test_m1_3_c0_acceptance.py` | C0 согласовал: только `platform.messaging_command_receipts` в существующем TRUNCATE; TABLES/counters/assertions/FK/rollback не меняются, без CASCADE |
-| `docs/tasks/M2_CONTRACT.md`, `docs/tasks/M2_HANDOFF.md`, `docs/TASK_REGISTER.md` | Реализационные уточнения и фактическое evidence; один register/active handoff |
+| A07 validation | `test_webp_oversize_is_rejected_before_native_canvas`, `test_webp_canvas_and_bitstream_cannot_disagree`, `test_webp_malformed_structure_is_rejected_before_native_canvas`, `test_real_animated_webp_is_rejected_before_native_canvas`: native constructor не вызывается для oversized/contradictory/structurally malformed/animated headers |
+| A07 сохранение контракта | `test_webp_lossy_lossless_extended_originals_reach_real_decoder`, `test_webp_exact_side_and_pixel_boundaries_can_decode`: настоящий lossy/lossless/extended/alpha/metadata decode, original hash и точные лимиты; `test_bounded_webp_headers_do_not_replace_full_pixel_validation`: complete safe headers не пропускают отсутствующие compressed pixels |
+| A04/A07 worker | Два новых `test_invalid_input_is_terminal_before_storage[webp_pixels/webp_canvas]`: реальный DB Job DEAD/FileObject FAILED с INVALID_INPUT, attempt_count=1, никакого PUT/retry, Message сохранён. Их исполнение требуется в итоговом штатном PostgreSQL/S3 CI, local unit результат не заменяет этот gate |
 
-Audit compatibility — необходимое сохранение работающего M1 consumer: его строгие
-backend/frontend discriminators сейчас отвергают новые events. Разрешён ровно один
-новый typed variant с tenant-safe Message FK, без generic payload и скрытого фильтра.
-Это не выдача UI переписки M2.4. Точные SQL имена/индексы и модульное разбиение внутри
-разрешённых областей C2/C3 выбирают самостоятельно по принятому контракту.
+Локально в pinned Python 3.13.15 / Pillow 12.3.0 / libwebp 1.6.0: 96 media unit,
+288 всех non-integration PASS; Ruff/check/format и strict mypy 40 backend files PASS.
+Ранний новый negative VP8L test ошибочно считал uniform stream с изменёнными dimensions
+невалидным. Исправлены bytes fixture: убраны compressed pixels при сохранённых
+complete headers. Assertion INVALID_INPUT сохранён; защитные проверки не ослаблены.
 
-`0001`–`0004`, `app.current_workspace_id()`, frozen auth/tenancy snapshots,
-R4 TEST catalog/EntitlementService semantics, authentication/CSRF/CORS, dependencies,
-locks, CI/Compose/bootstrap, canonical originals и остальные frontend пути не менять.
-Необходимую иную совместимую дельту сначала показать C0 с конкретной причиной;
-не отправлять пользователю выбор SQL/полей. Нельзя отключать inventory/clean-source
-или ослаблять guards ради CI. M2.1 не требует новых платных ресурсов или секретов.
+C0 явно принимает реализационное упрощение §9.4: bounded RAM originals вместо
+private temporary disk file. Input cap 10 MiB не является total process-memory cap;
+decoder allocations имеют отдельные dimension/concurrency guards. Один decoder
+slot и два S3 slots удерживаются до реального завершения, включая cancellation;
+каноническое постоянное хранение — только S3. Это не отмена WebP blocker и не новый scope.
 
-### Конечные критерии M2.1-KERNEL
+### Конечные gates и следующее действие
 
-1. **A01/A02/A06, частично:** trusted source binding и immutable route определяют
-   Workspace; durable Inbox+Job до accepted result; duplicate/conflicting event и
-   другой event ID с прежним Message ID обработаны; image reference/ignored kinds
-   имеют явный результат. Это kernel evidence, не real webhook verification.
-2. **A03:** рабочая owner command, same-key replay/conflict и real concurrency;
-   ровно один Message/receipt/Audit/Outbox/Job; rollback любого звена не оставляет
-   частичного состояния. Python/DB fingerprints совпадают по конкретным bytes.
-3. **A04/A05:** реальные worker/scheduler, lease/reclaim/backoff/bounds/DLQ;
-   stale/malformed/expired/чужой claim не мутирует результат; adapter вызывается
-   вне DB unit. Fault barriers до/после commit/start/effect/finalize подтверждают
-   UNKNOWN без blind resend, safe NOT_SENT retry и late-result/commit-ACK recovery.
-4. **A08, частично:** runtime-role OWNER против ADMIN/PROVIDER, разные Workspace,
-   mismatched Client/Conversation/connection/job refs внутри одного Workspace,
-   revoked OWNER/connection до begin_send, непротекающий user/worker XID/task/pool
-   context. Worker не получает старый billing/Business доступ или общий SQL setter.
-5. **A12, частично:** clean upgrade и upgrade с данными 0004, повтор upgrade,
-   downgrade/re-upgrade в disposable TEST, old billing FK/check/receipt semantics,
-   mixed Audit через существующий API и frontend consumer. Фактический main CI
-   закрывается только после последующего пользовательского merge этого среза.
+Этот единый substantive fix/receipt commit обновляет register/handoff/contract,
+сохраняя историю. Свой будущий SHA и результат ещё не исполненного final CI он
+не выдумывает. **C0 ведёт один final receipt в PR #19**: exact head/tree/tested merge
+и его parents, полный CI именно итогового head, фактические C8 finding/closure и
+границы artifact evidence. Повторный документационный commit ради записи SHA
+предыдущего не нужен. Никакой Ready/merge по одному старому green run.
 
-Штатные gates: **`sh scripts/ci.sh`**, **`sh scripts/test_browser.sh`** и оба
-clean-source gate; generated contracts проверяются штатным export check.
-Docker/real PostgreSQL обязателен для DB evidence. Если Docker отсутствует локально,
-использовать обычный GitHub runner, получить logs/artifact и привязать результат к
-head/tested SHA/tree. SQLite/mock не заменяют PostgreSQL. Новые тесты не подменяют
-исходный failure: сначала установить, дефект теста это или поведения.
+1. C0 завершает targeted C8 по изменённой области и проверяет итоговые foundation/
+   browser jobs, оба scripts/clean-source gates и реальные PostgreSQL/S3 cases.
+   После всех PASS снимает Draft и даёт пользователю ссылку на обычный merge commit.
+2. Пользователь сливает только готовый PR #19 через **Create a merge commit**.
+   C0 проверяет actual merge commit/tree/parents и отдельный **push/main CI**.
+3. Только после этого C0 принимает M2.2 в LOCAL/TEST и выдаёт одну M2.3 от точного
+   принятого main. Ни API, ни UI, ни живой Telegram этим review не приняты.
 
-По результату C3 возвращает PR/head/tree и tested SHA, changed paths, миграцию,
-контрактные уточнения, tests/assertions → строки матрицы → run/results, оставшиеся
-ограничения и blockers. Не объявлять M2.1 INTEGRATED/VERIFIED или весь M2 завершённым.
-C0 завершил review результата и отдельный независимый C8 review новых
-routing/worker/RLS/side-effect risks — receipt ниже. После SUCCESS итогового head
-C0 снимает Draft и даёт пользователю одну инструкцию обычного merge commit.
-После merge — actual main CI, затем одна задача M2.2. Самостоятельный merge запрещён.
+Граница A07/A08 и применимых A02/A04/A06/A12 — controlled provider + настоящий
+private LOCAL/TEST S3 + внутренний owner service. 15 browser journeys — прежняя
+M1 regression; A01/A09/A10/A11 для Telegram/API/UI остаются следующим частям.
+Миграция 0006 и SDK/image pins — в [runbook](../runbooks/M2_STORAGE_LOCAL_TEST.md).
+Новых paid/cloud ресурсов, owner upload/derivatives/CDN, AI или M3 не добавлено.
 
-### Текущий receipt C0/C8 — M2.1 pre-merge / 2026-09-21
+### Telegram smoke — внешняя подготовка
 
-**C0 PASS; C8-M2.1-KERNEL PASS.** Блокирующих дефектов в принятой области не найдено.
-Исходный C3 head `2c7ada9b8b9b13956a56bd13e0a4f9f5b4cb33ae`, tree
-`5f2a53bfd43341d128a3a7d33bcfb478ace1d54b`, run 35593328892 проверены C0 по GitHub
-и CI archive. Девять failures подтверждены traces: provisioning revision (1),
-FK-dependent TRUNCATE (5), exact inventory (1), исторический Jobs shutdown flag (2).
-Browser остановился на том же provisioning; второй script имел такой же guard.
-C0 согласовал и применил только четыре перечисленные compatibility дельты.
-Не ослаблены assertions, FK, SQLSTATE/auth/tenancy guards или штатный pipeline.
-
-Проверенный implementation head: **`e772c2a92bb38cb0af869ef77ed36b2df9fcaf59`**;
-tree **`0df5224f9a31e3e7820aa269236e5383fc2347d5`**.
-[Полный CI 35594839363](https://github.com/Elefesys/ai-service-manager/actions/runs/35594839363)
-**SUCCESS**. Tested virtual merge **`9ba971d07db647bec3fed1691ae888b4ce0e3a81`**
-имеет parents accepted main + implementation head и тот же tree. Coordination
-commit сохранён; GitHub compare: ahead 4, behind 0, merge-base = accepted main.
-Artifact `10636510359`, SHA-256
-`62a7c5169af38d960945aa4eaa51017764cb944822cf2f1a12b5546ec33ae719` проверен C0;
-162 source files побайтно совпадают с reviewed tree; tested SHA точный, status пуст.
-
-| Проверка | Фактический результат и граница |
-|---|---|
-| `sh scripts/ci.sh` | PASS: Ruff/format/strict mypy, 192 backend non-integration, 259 real PostgreSQL, clean/repeated/full downgrade/upgrade, generated contracts, wheel/frontend reproducibility, HTTP/worker/scheduler smoke |
-| `sh scripts/test_browser.sh` | PASS: 60 frontend tests и 15 реальных прежних M1 browser journeys через API/PostgreSQL; это ещё не UI переписки |
-| Clean-source | Оба штатных gate PASS; не подменены пустым recorded status |
-| Scope/source | 34 изменённых paths после четырёх согласованных добавлений; `0001`–`0004`, frozen auth/tenancy, R4 billing logic, dependencies/locks/CI/Compose и 11 canonical originals сохранены |
-| C0 review | Разрешённый kernel/Audit scope, принятый контракт, сохранность M1, существенные assertions и execution evidence сверены; исходные failures объяснены совместимостью, проверки не удалены |
-| Независимый C8 | Отдельный read-only reviewer `c8_m21_kernel_review`, не автор C2/C3 и не C0 self-review: routing/dedupe, composite FK/FORCE RLS/grants, worker authority/XID/task/lease, live OWNER/atomic intent, UNKNOWN/late-result/finalize ACK и Audit compatibility; четыре C0-правки включены; PASS без blocker |
-
-Критерии остаются M2-A01…A12 из единой матрицы ниже. Конкретная таблица
-`tests/assertions → критерий` в сохранённом C3 receipt сверена C0/C8 и применяется
-к успешному run выше: новые kernel tests после исходного C3 head не менялись.
-Проверены реальные process crashes с внешним сохраняемым счётчиком, concurrency,
-rollback каждого звена, stale/forged claims, revocation, bounded retry и отсутствие
-DB connection при adapter call. PostgreSQL исполнен GitHub runner; локального
-Docker и отдельного локального PostgreSQL rerun C8 нет. C8 прочитал execution logs;
-привязку archive/tree отдельно проверил C0.
-
-Граница приёмки: controlled LOCAL/TEST kernel. A01/A02/A06 — kernel routing,
-durable ingestion и normalized image reference; A03/A04/A05 — внутренняя команда,
-Jobs и controlled effects/recovery; A08 — kernel isolation; A12 — pre-merge
-regressions/migrations. Реальная webhook verification/Telegram rights, private
-binary storage/выдача, messaging HTTP/API, Conversation UI и M2-A11 не выполнены.
-M1 browser regression не заменяет будущие journeys M2.4. M3 не выдан.
-
-Этот commit согласованно обновляет только TASK_REGISTER/M2_HANDOFF. Финальный
-head/tree/tested SHA и SUCCESS именно итогового head C0 дописывает в PR receipt
-после CI, без следующего SHA-only documentation commit. Для документационной
-дельты повтор полного C8 review не нужен: C8 явно подтвердил эту границу.
-До green final-head gates PR не готовится к merge. После них — Ready for review,
-пользовательский **Create a merge commit → Confirm merge**; затем C0 проверяет
-actual merge/main push CI и принимает только M2.1. M2.2 пока не выдана.
-
-### История — исполнение C3/C2 до решения C0, 2026-09-21
-
-Следующая запись сохранена как историческая. Её BLOCKED/запрос scope exception
-закрыты текущим receipt выше и больше не являются активным поручением.
-
-[Draft PR #18](https://github.com/Elefesys/ai-service-manager/pull/18) продолжен от
-`587531e71380a9a83549cba25c1b5c71c01d223c`; coordination commit и принятый base
-сохранены. C2 подготовил migration `0005` (down_revision `0004`), typed SQL
-capabilities, RLS/constraints, Audit FK и schema/cycle tests в отдельном checkout.
-C3 добавил normalized codec, owner command/read, отдельный task/XID-bound worker
-unit, реальные worker/scheduler и controlled adapter с сохраняемым TEST ledger.
-C2 participation — авторство DB-части, не независимый C8 review.
-
-Первый implementation run:
-[CI 35592297034](https://github.com/Elefesys/ai-service-manager/actions/runs/35592297034),
-head `7ef132fdc040eef5c6caf17d9c7aae3f40a46a58`,
-tree `afc90a8673fc506fab996266401169fedc62efac`,
-tested PR merge `ee6f051d772af0060a367d6967f8574e005087a7`.
-Artifact `10635275472`, SHA-256
-`dedaf48c017051ae14640104f9282b86678228edd3e5472729467b544f686e25`;
-archive побайтно совпадает со всеми 162 файлами head, recorded worktree status пуст.
-Это не заменяет два clean-source gates: оба пропущены после failures.
-
-Runner выполнил штатные `sh scripts/ci.sh` и `sh scripts/test_browser.sh`:
-192 backend non-integration PASS, 61 frontend PASS, PostgreSQL 241 PASS / 10 FAIL.
-Один новый тест неправильно ловил ожидаемый DB отказ внутри уже aborted unit;
-исправлено положение `pytest.raises` с сохранением обязательного rollback.
-Другие 9 failures и browser provisioning относятся к четырём неразрешённым файлам
-ниже. Дополнительно C2 закрыл обход canonical timestamp через raw SQL и добавил
-8 cases; удалён случайный повтор одного нового frontend case (итоговый набор — 60).
-Итоговые head/tree/tested SHA и повторный run фиксируются в PR receipt после push;
-отдельного SHA-only commit не требуется.
-
-| Критерий handoff | Конкретные tests/assertions нового kernel |
-|---|---|
-| A01/A02/A06, частично | `test_trusted_route_binding_and_concurrent_durable_event_dedupe`: source/route mismatch, concurrent identical event, exact conflict, durable Inbox+Job; `test_image_reference_message_projection_dedupe_and_identity_conflicts`: Message ID projection, image reference, client/conversation identity conflicts; ignored kinds имеют terminal receipt/result |
-| A03 | `test_manual_fingerprints_replay_concurrent_atomic_intent`: Python/DB exact UTF-8 fingerprints, concurrent replay/conflict и один intent; `test_command_rollback_at_every_atomic_link`: failure на каждом Message/receipt/Audit/Outbox/Job откатывает все звенья; actor/body/key проверяются live |
-| A04/A05 | `test_lease_reclaim_new_token_stale_claim_and_retry_age`, `test_safe_not_sent_jitter_and_exhaustion_count_every_call`: DB-clock lease, новый token, jitter, count/age bounds; durable UNKNOWN и terminal failure; `test_actual_process_crash_restart_durable_effect_ledger` + inbound/ingest boundaries: реальные os._exit/restart, внешние call/effect counters, ноль повторов после возможного эффекта |
-| A04/A05, finalize | `test_lost_finalize_ack_reads_canonical_success_and_replays_exact_outcome`, `test_finalize_not_sent_ack_loss_and_changed_claim_exact_replay`: canonical saved result после commit ACK loss, не понижать SENT, старый claim после нового не принимается; cancellation/timeout/late finalize не возвращают dispatch в READY; adapter не держит DB unit |
-| A08, частично | `test_owner_only_live_admission_replay_and_cross_workspace_reads`, revoke matrix и composite-ref tests: OWNER/ADMIN/PROVIDER, чужие Workspace и неверные связи внутри одного; forged claim/GUC, XID/task/autocommit/pool negative tests; runtime не читает control tables и не пишет app tables напрямую |
-| A12, частично | `test_0004_data_survives_upgrade_repeat_downgrade_reupgrade`: существующие billing rows/receipt/Audit, repeated upgrade, downgrade/re-upgrade; schema inventory/RLS/FKs/checks; `test_mixed_billing_message_audit_http_cursor_and_strict_payload` + frontend parser/component: два прежних и один новый typed event, cursor, label, invalid discriminators/payload |
-
-Первый run подтвердил 61 из 62 новых PostgreSQL cases; оставшийся case исправлен
-как описано выше. Новый итоговый набор — 39 model + 70 PostgreSQL cases; execution
-receipt повторного run в PR определяет их фактический результат. Это bounded
-LOCAL/TEST evidence: Telegram/webhook, storage/FileObject, messaging HTTP/UI и M3
-не реализованы и не проверялись. Credentials/secrets controlled adapter не нужны.
-
-**Точный запрос C0: разрешить только следующие совместимые дельты.** Они пока
-не применены, потому что отсутствуют в таблице разрешённых paths этого поручения.
-
-| Path вне scope | Наблюдённая причина и минимальная предлагаемая правка |
-|---|---|
-| `scripts/provision_local_auth.py` | Сравнение schema с literal `0004` ломает auth migration/provisioning test и browser setup на назначенной `0005`. Импортировать `asm.foundation.DATABASE_SCHEMA_REVISION`, использовать его в точном сравнении и сообщении; environment/identity/password guards сохранить |
-| `scripts/m1_3_browser_fixture.py` | Второй guard требует `0004`, поэтому заблокирует browser fixture после исправления provisioning. Сравнивать с той же общей текущей revision; остальные TEST/identity guards сохранить |
-| `tests/test_postgres.py` | Один exact inventory test не допускает 10 назначенных messaging tables; два shutdown cases требуют историческое `jobs_enabled=false`. Добавить точные 10 имён в sorted inventory, ожидать `jobs_enabled=true` и `mode=controlled`; runtime role, SIGTERM/shutdown и остальные assertions сохранить |
-| `tests/test_m1_3_c0_acceptance.py` | Пять initializer-conflict cases вызывают TRUNCATE Audit без новой referencing receipts table. В единственной команде использовать `",".join((*TABLES, "platform.messaging_command_receipts"))`. C2 подтвердил: глобальный TABLES, before/after counters и assertions не менять; CASCADE/отключение FK не нужны; transaction rollback всё восстанавливает |
-
-Разрешённые изменения прежних tests имеют конкретную причину:
-`test_foundation.py` — head `0005`; `test_tenancy_postgres.py` — ровно новые
-messaging tables/capabilities в exact inventory; `test_m1_3_postgres.py` — две
-новые generated typed Audit FK columns; `test_m1_3_http_contract.py` — additive
-strict MessageSendAuditEvent. Frontend изменён только новым parser/component
-case. Исходные защитные cases и общие SQLSTATE/auth/tenancy guards сохранены.
-`0001`–`0004`, canonical originals, dependencies/locks/CI/Compose не изменены.
-
-M2.1 BLOCKED на полной regression verification до этой C0 exception. После её
-получения: применить ровно четыре дельты, повторить оба штатных scripts и оба
-clean-source gates, затем C0 acceptance и независимый scoped C8 review реализации.
-PR остаётся Draft; merge и M2.1 VERIFIED не объявляются.
-
-### Внешний smoke — подготовка со слов пользователя
-
-2026-09-21 пользователь подтвердил: test bot создан, Business/Secretary Mode включён,
-Owner/Client accounts подготовлены; `TG_BOT_TOKEN` и отдельный `TG_WEBHOOK_SECRET`
-сохранены в менеджере паролей. Значения не получены, не запрашиваются и не нужны C3
-для M2.1. Это user-reported preparation, не проверенный connection/rights/live run.
-Остались фактическая binding аккаунта/Workspace и rights probe, безопасная runtime
-injection секретов, тестовый HTTPS endpoint/webhook и будущий полный journey.
-Они не блокируют M2.1; конкретный C6 test runbook будет выдан перед подключением.
-
-Ниже — принятая последовательность и общая матрица M2. Указанный далее initial
-snapshot PR #16 исторический; актуальный base первой задачи находится выше.
+По сообщению пользователя готовы test bot с Business/Secretary Mode и Owner/Client;
+TG_BOT_TOKEN и отдельный TG_WEBHOOK_SECRET находятся в менеджере паролей. Секреты
+не нужны для M2.2 и не передаются в чат/PR. Binding/rights, runtime injection,
+тестовый HTTPS endpoint и живой A11 пока не проверены. Конкретное безопасное
+поручение C0/C6 для deployment выдаётся в M2.3; платные ресурсы требуют предложения
+с точной ценой до подключения. Отсутствие внешнего доступа не блокирует private-S3 CI.
 
 ## 1. Исходная точка и результат
 
@@ -460,3 +338,436 @@ production-параметры для обхода отсутствующего �
   Не выдавать подготовленные инструкции за уже выполненную работу исполнителя.
 - M2 закрывает C0 после полного сценария и матрицы. M3 выдаётся отдельной задачей;
   production, AI и платежи не становятся готовыми от закрытия M2.
+
+## Исторические поручения — не текущие инструкции
+
+Ниже сохранены прежние записи M2.1. Действуют только активный блок в начале
+этого файла и актуальный TASK_REGISTER; повторные merge/старты по истории не нужны.
+
+## История — поручение и передача C6/C2/C3 M2.2 до C0 review / 2026-09-21
+
+**M1.1–M1.3 и M2.1 VERIFIED в принятых LOCAL/TEST границах.
+M2.2 REVIEW: реализация и runner evidence переданы, C0/C8 ещё не приняли.
+M2.3/M2.4 TODO; весь M2 IN_PROGRESS.** Реализацию подготовил C6
+с предметным участием C3 (media/provider) и C2 (DB/migration); следующий gate —
+C0 и независимый scoped C8 review. M1/M2.1 не повторять.
+
+Repository: `Elefesys/ai-service-manager`. Принятый actual main/base:
+**`d3c849d4792f7af60f43eea0f0551659ee3cee5d`** — merge PR #18.
+Ветка **`c6/m2-2-private-images`** → main. Продолжить её единственный Draft PR,
+созданный C0; номер PR и стартовые head/tree/CI — в PR metadata и готовом поручении
+C0. Сохранить первый coordination commit. Локальный synthetic commit из CI archive
+не является accepted base. Не создавать параллельный PR/ветку или самостоятельный merge.
+Единый технический контракт — [M2_CONTRACT §9](M2_CONTRACT.md#9-m22-private-images--принято-c0c2c3-2026-09-21),
+принятый C0 после read-only C2/C3 CONTRACT PASS. Это не C8 review новой реализации.
+
+### Принятый post-merge receipt M2.1
+
+[PR #18](https://github.com/Elefesys/ai-service-manager/pull/18) MERGED пользователем.
+Merge parents: `8e5f125d424c0ce613ed9e0c787392f11a49aeae` +
+`e9d5b748f19bb7d9d67b014947de3fb29ffc481f`; actual main указан выше.
+Tree **`f12aa90a3c3fb7fdfda84290315a3fd820816b4b`** совпадает с принятым final PR tree.
+[Отдельный push/main CI 35596593891](https://github.com/Elefesys/ai-service-manager/actions/runs/35596593891)
+**SUCCESS**, tested/head SHA = actual merge. Foundation/browser и оба clean-source
+gate PASS. Артефакт `10636449171`, SHA-256
+`732bfa41912436eba0db8256473585a646f68025f14c2b9c41d8a397c220d11e`:
+source tree/recorded SHA/empty status проверены C0, канонические оригиналы сохранены.
+
+192 backend non-integration, **259 real PostgreSQL**, 60 frontend и **15 прежних M1
+browser journeys** PASS; migration cycles, generated contracts, reproducibility,
+HTTP/worker/scheduler smoke PASS. Это execution на GitHub runner, не локальный Docker.
+Реальный независимый **C8-M2.1-KERNEL PASS** покрывает reviewed routing/RLS/worker/
+atomicity/UNKNOWN/recovery/Audit и четыре C0 compatibility fixes; его исторический
+receipt сохранён ниже. Итоговый PR CI 35595693979 также SUCCESS.
+
+C0 принимает **только M2.1 controlled LOCAL/TEST kernel**: применимые части
+A01/A02/A06/A08/A12, внутренняя команда/Jobs/controlled effects A03/A04/A05.
+Private binary storage, настоящий Telegram/webhook/rights, messaging HTTP/API/UI
+и A11 не подтверждены этим run. M1 browser regression не является M2 E2E.
+
+### Один конечный результат M2.2
+
+Controlled image reference → Message + PENDING FileObject/FETCH Job → validated
+private S3 object → READY → live OWNER signed GET. Реальные PostgreSQL и private
+S3-compatible LOCAL/TEST сервис. Только внутренние provider/storage/owner boundaries,
+без новых HTTP routes, Telegram, UI, owner upload, derivatives/CDN/multipart или M3.
+
+Миграция **0006_private_images.py**, revision **0006 → 0005**, назначена C0/C2.
+Применённые 0001–0005 не менять. C2 согласует DDL/functions/backfill и migration
+checks; C3 — canonical media permit/provider stream и worker dispatch/recovery.
+C6 выбирает конкретный SDK/LOCAL S3 image внутри разрешённого scope по реальной
+совместимости и фиксирует version/digest; пользователь не выбирает SQL, поля или tests.
+
+### Разрешённая дельта C6/C3/C2
+
+| Пути | Точная разрешённая причина |
+|---|---|
+| `backend/src/asm/files/` | Только текущие FileObject capabilities, S3 client, controlled byte provider, validation, transfer/cleanup и внутренний owner read service |
+| `backend/src/asm/messaging/{database,results,models,errors,adapter,worker}.py` | FETCH_IMAGE typed refs/explicit dispatch и существующий scheduler cleanup; сохранить SEND/OWNER/UNKNOWN semantics; без нового public command/API |
+| `backend/src/asm/tenancy/database.py` | Узкий owner file-read capability через настоящий guarded unit; прежние auth/admission/SQLSTATE/pool guards сохраняются |
+| `backend/src/asm/foundation.py` | Schema head 0006, narrow storage config/lifecycle и делегирование; не помещать file domain в entrypoint, не связывать auth/DB health с доступностью S3 без необходимости |
+| `migrations/versions/0006_private_images.py` | Только согласованный §9 inventory/FKs/RLS/typed capabilities/FETCH branches и backfill; 0001–0005 immutable |
+| `pyproject.toml`, `uv.lock` | Один S3 SDK и image decoder, необходимые typing/transitive dependencies; narrow pinned update, без общего refresh |
+| `compose.yaml`, `compose.browser.yaml`, `infra/images.lock.env`, `infra/storage/` | Реальный private LOCAL/TEST S3, bootstrap/bucket credentials/health/persistence и test wiring; новая image pinned digest, прежние pins сохраняются |
+| `infra/Dockerfile.backend`, `.dockerignore`, `.gitignore`, `.env.example` | Только необходимые build/runtime inputs, safe storage config/secret/temp exclusions; без секретов в build context, image или artifact |
+| `scripts/init_local.py`, `scripts/pin_images.sh` | Добавить отсутствующие LOCAL storage secrets, не выводить/не заменять прежние .env/PG значения; pin только нового storage image без обновления старых digests |
+| `scripts/ci.sh`, `scripts/check_backend.sh`, `scripts/test_browser.sh`, `scripts/check_browser_compose.py`, `.github/workflows/ci.yml` | Только необходимое additive real-S3 wiring/lifecycle/evidence; оба штатных scripts/jobs/clean-source и прежние checks остаются; сначала использовать Compose, не переписывать pipeline |
+| `tests/test_m2_2_*.py`, `tests/fixtures/m2_2/` | Unit/real PostgreSQL+S3/integration/recovery/private access/migration tests; маленькие synthetic images, без пользовательских данных |
+| `tests/test_m2_1_*.py`, `tests/test_postgres.py`, `tests/test_tenancy_postgres.py`, `tests/test_foundation.py`, `tests/test_browser_compose.py`, `tests/test_m1_3_c0_acceptance.py` | Только точные inventory/current revision/config expectations, новые FETCH jobs в прежних image fixtures и необходимый fixture cleanup FK-chain; каждую старую правку объяснить; assertions/guards не убирать и CASCADE не добавлять для обхода FK |
+| `docs/tasks/M2_CONTRACT.md`, `docs/tasks/M2_HANDOFF.md`, `docs/TASK_REGISTER.md`, `docs/runbooks/M2_STORAGE_LOCAL_TEST.md` | Уточнения реализации/evidence и конкретный storage setup/troubleshooting; register/handoff остаются единственными статусами, runbook не является вторым поручением |
+
+Общие файлы/зависимости выше явно согласованы C0 для этого среза; повторное разрешение
+на рутинные необходимые изменения внутри этих причин не нужно. Применённые migration,
+канонические originals, R4/billing, auth/tenancy frozen snapshots, frontend и generated
+OpenAPI не менять. Новых HTTP schemas нет: прежний export check должен пройти без
+перегенерации контракта ради drift. Если обнаружен иной настоящий scope conflict,
+вернуть C0 точную причину и минимальную дельту, не перекладывать выбор на пользователя.
+
+### Конечная проверка M2.2 по единой матрице
+
+1. **A02/A04/A06/A07:** image Message/FileObject/FETCH атомарны, concurrent repeats
+   дают один набор; явный FETCH branch; worker работает без human context и без
+   открытой DB transaction при provider/S3 I/O. Text/SEND regression прежняя.
+2. **A07:** exact original bytes/hash/metadata через real S3 и signed HTTP GET;
+   JPEG/PNG/static WebP, 10 MiB/20M pixels/8192-side/one-frame validation. Проверить
+   missing/malformed/truncated/animated/unsupported/oversized input и ложные headers.
+   Anonymous GET/LIST/PUT denied; tampered и реально expired URL отвергаются.
+3. **A08/A07:** live OWNER, revoked/downgraded membership, Workspace A/B и неверная
+   связка Conversation/Message/FileObject внутри Workspace; PENDING/FAILED не выдаются.
+   Signed GET TTL 60 s и возможность прежнего bearer grant до expiry после revoke
+   проверяются отдельно. Нельзя выдать raw provider/bot URL или секреты в логах.
+4. **A04/A07:** bounded retry/exhaustion; реальные crash после durable intent/PUT/
+   READY commit, lost ACK и stale claim; новый READY нельзя перезаписать старым PUT.
+   Проверить late PUT после первого cleanup DELETE, повторную очистку и её outage/
+   lease reclaim; WINNER не удаляется. SEND UNKNOWN/no-resend остаётся доказанным.
+5. **A12:** clean/repeated upgrade, переход с данными 0005 (text/image/disconnected
+   image/billing/receipts/UNKNOWN) и согласованный TEST downgrade/re-upgrade;
+   исходные Message/fingerprints и M1 сохраняются. Backfill без внешнего I/O.
+
+Штатные **`sh scripts/ci.sh`**, **`sh scripts/test_browser.sh`**, оба clean-source gate,
+contracts/migrations/reproducibility обязательны. PostgreSQL/S3 не заменять mock.
+При отсутствии Docker локально использовать обычный GitHub runner; архив/логи
+привязать к exact head/tested SHA/tree. При failure сначала определить дефект
+реализации или теста; объяснить изменение принятой проверки, не удалять её ради CI.
+
+C6 возвращает один PR, base/head/tree/tested SHA, changed paths, migration/SDK/image
+version, tests/assertions→строки матрицы→run/results, sanitized operational notes и
+оставшиеся blockers. Первый coordination commit сохранить; final SHA/CI фиксировать
+в PR, без SHA-only doc chains. Не объявлять самостоятельно INTEGRATED/VERIFIED.
+C0 затем проверит результат и организует **реальный независимый scoped C8 review**
+private-file authorization/validation/worker/cleanup risks. C2/C3 CONTRACT PASS
+не является этим review. После green final head/C0/C8 — пользовательский merge,
+отдельный actual main CI; только затем поручение M2.3.
+
+### Передача C6 с участием C2/C3 — M2.2 implementation
+
+Продолжен [Draft PR #19](https://github.com/Elefesys/ai-service-manager/pull/19),
+coordination commit `c4ad360e482f47a30e6f0756a13e6ce1cf68def4` сохранён. C2 реализовал
+0006, DB capabilities/backfill/constraints и DB migration tests; C3 — controlled
+provider, decoder, FETCH/cleanup, worker dispatch и crash/late-PUT tests; C6 —
+private S3, owner service, config/lifecycle/Compose, signed HTTP tests и общие gates.
+Это участие авторов, не независимый C8 review.
+
+Реализован полный controlled путь §9. SDK `boto3==1.43.98`, decoder
+`pillow==12.3.0`, typing `boto3-stubs[s3]==1.43.98`; все прежние external package
+blocks/hashes в lock сохранены. Два новых MinIO image pins — официальный Quay registry;
+пять прежних pins сохранены. Настройка и ограничения —
+[M2_STORAGE_LOCAL_TEST](../runbooks/M2_STORAGE_LOCAL_TEST.md).
+
+[Implementation CI 35604791065](https://github.com/Elefesys/ai-service-manager/actions/runs/35604791065)
+**SUCCESS** на обычном GitHub Linux runner: 220 non-integration, **303 real
+PostgreSQL/S3** (259 прежних + 44 новых), 60 frontend и 15 прежних M1 browser
+cases PASS. `sh scripts/ci.sh`, `sh scripts/test_browser.sh`, оба clean-source
+gate, clean/repeated/full downgrade/upgrade и 0005-data cycle, generated contracts,
+wheel/frontend reproducibility и HTTP/worker/scheduler smoke PASS. Новых unit cases
+28. Локально Docker отсутствует; mock/collection не используются как DB/S3 evidence.
+
+Итоговая дельта после этого run: данный implementation receipt/runbook и сохранение
+полных прежних package blocks в narrow lock (versions/hashes не меняются). Точные
+final head/tree/tested SHA, CI URL и artifact digest фиксируются в PR receipt после
+проверки итогового commit; отдельного SHA-only документационного коммита не нужно.
+
+| Критерий | Конкретные tests/assertions M2.2 |
+|---|---|
+| A02/A04/A06/A07 | `test_image_planning_rollback_is_one_transaction`, `test_concurrent_image_projection_dedupe_retains_bytes_and_fingerprint`: откат Message/FileObject/FETCH вместе; concurrent exact replay оставляет один набор, original bytes/projection hash неизменны. `test_source_is_canonical_despite_forged_claim_fields_and_disconnect`: source только из DB relations, caller Workspace/connection/file fields не дают полномочий |
+| A07 validation | `test_m2_2_media.py`: JPEG/PNG/static WebP, original hash/EXIF/dimensions; malformed/unsupported, truncated container/pixels, animated PNG/WebP, CRC, actual byte cap, exact side/pixel limits и oversized dimensions до pixel allocation. False provider metadata игнорируется; URL остаётся opaque reference. `test_invalid_input_is_terminal_before_storage`: пять DB/worker cases без PUT |
+| A07 private storage | `test_original_roundtrip_validated_manifest_and_private_signed_http` (JPEG/PNG/WebP): actual MIME/size/hash/dimensions, S3 checksum, exact original bytes через signed HTTP GET; PENDING denied, TTL ровно 60 s, UUID filename/private-no-store, anonymous GET/LIST/PUT и tampered signature denied. `test_s3_checksum_conditional_put_and_runtime_privilege_boundaries`: server-side checksum mismatch, conditional overwrite, чужой bucket/admin/outside prefix denied |
+| A08/A07 read | `test_live_owner_relation_workspace_role_and_failed_file_negatives`, `test_exact_owner_relation_live_role_revoke_and_disconnect`: Workspace A/B, неверные Conversation/Message/FileObject внутри Workspace, ADMIN/PROVIDER/revoke/downgrade, PENDING/FAILED denied; другой собственный диалог и disconnected history разрешены. `test_revoke_denies_new_grant_existing_bearer_expires_at_real_s3`: прежняя bearer URL работает после revoke, новая не выдаётся, после реальных 60 s S3 отвергает прежнюю |
+| A08 DB/worker boundary | `test_file_physical_rls_and_capability_privileges`, `test_raw_manifest_validation_cannot_be_bypassed`, `test_typed_message_job_file_foreign_keys_reject_forged_relations`, `test_file_fetch_transaction_xid_and_claim_lease_guards`, `test_file_guards_reject_cross_task_and_owner_worker_nesting`: FORCE RLS/grants, composite FK, strict raw JSON, fake/stale claims, XID/task/owner-worker guards. `test_fetch_roundtrip_no_provider_or_s3_io_with_held_transaction`: реальные provider/S3 calls без занятой DB connection |
+| A04/A07 recovery | `test_prepare_intent_replay_manifest_binding_and_fenced_finalize_ack`, `test_lost_finalize_ack_reads_winner_without_repeat_provider_or_put`, `test_lost_prepare_ack_never_authorizes_put_and_retries_new_key`: exact canonical winner после ACK loss, ни повторного PUT, ни PUT без подтверждённого prepare. `test_actual_process_death_intent_put_ready_and_restart`: настоящий дочерний process exit после intent/PUT/READY. Retry/exhaustion tests: пять claims/новых keys, Message сохраняется, FileObject FAILED/Job DEAD, все orphan intents ABANDONED |
+| A04/A07 cleanup | `test_late_put_after_first_delete_remains_durably_cleanable` (до/после нового READY), `test_cancelled_worker_sync_put_arrives_after_cleanup_and_new_ready`: реальный поздний PUT, включая sync boto3 после cancellation, tombstone остаётся, повторный DELETE убирает только старый key. `test_cleanup_outage_reclaim_stale_token_and_winner_safety`, `test_retry_new_key_stale_finalize_and_durable_cleanup_reclaim`, immutability test: outage/reclaim/stale token, bounded retry, winner и manifest неизменны |
+| A12 и сохранённые A02/A04/A06/A08 | `test_0005_exact_data_backfill_repeat_and_test_downgrade_reupgrade`: text/image/disconnected image, fallback correlation, exact Message IDs/content/fingerprints, billing/receipts/UNKNOWN; repeat upgrade и disposable TEST downgrade/re-upgrade без external I/O. Все прежние M1/M2.1 SEND UNKNOWN/crash/no-resend, tenancy/auth/billing, contracts и browser checks остаются в полном suite |
+
+Совместимые изменения старых проверок сохраняют их защитные assertions:
+
+| Старый path | Причина изменения |
+|---|---|
+| `tests/test_foundation.py` | Current database revision теперь 0006; frozen schema revision 0003 остаётся прежней |
+| `tests/test_postgres.py` | Exact closed inventory дополняется ровно `app.file_objects` и `platform.file_object_uploads` |
+| `tests/test_tenancy_postgres.py` | Exact table/function inventory включает новые file capabilities и закрытые helpers; прежние RLS/grants/SQLSTATE assertions сохранены |
+| `tests/test_m2_1_postgres.py` | Image fixture теперь создаёт FETCH Job; явно завершает его INVALID_INPUT при отсутствии registered bytes и проверяет один file/job. Ordered fixture teardown удаляет uploads → receipts/jobs → files → прежнюю цепь в одной transaction, без CASCADE/отключения FK; прежние projection/fingerprint/assertions сохранены |
+
+Первый runner 35603278055 остановился до backend/DB/S3 checks на недоступном
+Docker Hub `minio/mc`; browser job и его clean-source PASS. Исправлена только
+registry ссылка новых storage images на официальный Quay, прежние pins не тронуты.
+Это инфраструктурный failure до исполнения новых tests, не доказательство их PASS.
+
+Run 35603841495 подтвердил оба Quay digests, 220 unit и 301/303 real PostgreSQL/S3
+cases, 60 frontend и 15 browser PASS. Два новых test defects исправлены без изменения
+production capabilities: membership downgrade ожидает owner row lock (проверяется
+через реальную blocked DB session, затем новый ADMIN/revoked read denied); pinned
+MinIO возвращает `XAmzContentChecksumMismatch`, поэтому test требует именно этот
+код/HTTP 400 и отсутствующий объект, а не AWS `BadDigest`. Отказы, fencing и прежние
+assertions не удалены. После подтверждения pins временный lookup release tags убран;
+обычный CI снова использует только закреплённые digests.
+
+Ограничения: controlled synthetic provider, LOCAL/TEST S3, внутренний owner service.
+Нет Telegram/webhook, owner HTTP/OpenAPI/UI, paid infrastructure или M3. Новые
+private object grants не являются M2.3/4 E2E; 15 M1 browser journeys — regression.
+C0 acceptance, независимый scoped C8 review, merge и actual main CI ещё предстоят;
+PR остаётся Draft, M2.2 не INTEGRATED/VERIFIED, M2.3 не начинается.
+
+### Telegram smoke — текущая внешняя граница
+
+Со слов пользователя готовы test bot, Business/Secretary Mode, Owner/Client accounts;
+TG_BOT_TOKEN и отдельный TG_WEBHOOK_SECRET сохранены в менеджере паролей.
+Секреты не получены и не требуются для M2.2. Runtime injection, connection binding/
+rights, тестовый HTTPS endpoint и живой A11 ещё не проверены. C0/C6 дадут конкретную
+безопасную инструкцию для тестового deployment при M2.3; tokens не присылать в чат/PR.
+LOCAL/TEST storage не требует облачного аккаунта/оплаты. Платную инфраструктуру
+предлагать только с конкретной ценой до подключения; отсутствие её не блокирует M2.2.
+
+
+## История — M2.1 pre-merge поручение и receipts / 2026-09-21
+
+**Исторический snapshot; не текущее поручение.** PR #18 уже MERGED и принят
+по actual main CI в активном блоке выше. Старые merge/BLOCKED инструкции не выполнять.
+
+**M2.1 REVIEW: pre-merge C0 PASS и независимый scoped C8 PASS.
+M2.2–M2.4 TODO.** Перед merge обязателен green CI итогового head. M1 не повторять.
+PR #17 MERGED; проверенный actual main/base:
+**`8e5f125d424c0ce613ed9e0c787392f11a49aeae`**.
+[Отдельный push/main CI 35522542861](https://github.com/Elefesys/ai-service-manager/actions/runs/35522542861)
+SUCCESS; head/tested SHA=actual merge, tree `3e2a2519c949461856c9f3c5ca1d1ec33a180953`,
+оба jobs/clean-source gates PASS. Post-merge receipt находится в [PR #17](https://github.com/Elefesys/ai-service-manager/pull/17).
+
+Repository: `Elefesys/ai-service-manager`. Ветка: **`c3/m2-1-messaging-kernel`** → main.
+Продолжать единственный [PR #18](https://github.com/Elefesys/ai-service-manager/pull/18)
+этой ветки; итоговые head/tree/tested SHA и CI находятся в его C0 receipt. Первый
+coordination commit сохранить. Main/base — SHA выше; локальные synthetic commits
+из CI archive не являются GitHub base. Не начинать заново от старой M1 ветки.
+
+Ведущий исполнитель **C3**, DB/migration часть согласована с **C2**. C0 принимает
+контракт и интеграцию. Единый технический контракт: [M2_CONTRACT](M2_CONTRACT.md).
+Он принят предметной сверкой C0/C2/C3. Реализация прошла C0 acceptance и
+независимый scoped C8 review; интеграция в main ещё не выполнена.
+Один работающий срез: controlled event → durable Inbox/Job → Message правильного
+Workspace → owner manual text command → atomic receipt/Audit/Outbox/Job → controlled
+send/recovery. Проверьте существующий код и контракт перед изменениями.
+
+### Разрешённая дельта
+
+| Область | Разрешение и причина |
+|---|---|
+| `backend/src/asm/messaging/` | Только используемые normalized models/validation/errors/policy, repository/DB capabilities, commands, worker/recovery и controlled adapter текущего kernel |
+| `migrations/versions/0005_messaging_kernel.py` | Revision `0005`, down_revision `0004`; C0/C2 назначили этой ветке. Новые messaging tables/typed commands/RLS/constraints и описанная Audit compatibility |
+| `backend/src/asm/foundation.py` | DATABASE_SCHEMA_REVISION=0005 и делегирование worker/scheduler реальному durable kernel; сохранить lifecycle/readiness/runtime role guards |
+| `backend/src/asm/tenancy/database.py` | Только узкие messaging owner calls через существующий guarded unit и взаимное исключение owner/worker units; guards, auth admission и SQLSTATE mapping не ослаблять |
+| `backend/src/asm/billing/models.py` | Один strict Audit variant MESSAGE_SEND_REQUESTED; прежние billing DTO/контракты сохраняются |
+| `contracts/openapi.json`, `contracts/README.md` | Generated additive Audit schema/consumer note; новых messaging HTTP routes нет |
+| `frontend/src/billing-api.ts`, `frontend/src/BillingPanel.tsx` | Только strict Audit type/parser и правильная подпись нового event; contact/recovery/navigation/layout без переработки |
+| `frontend/src/billing-api.test.ts`, `frontend/src/BillingPanel.test.tsx` | Mixed Audit compatibility и неверные discriminators/payloads; прочие frontend изменения не выдаются |
+| `tests/test_m2_1_*.py` | Существенные kernel/unit/real-PostgreSQL/recovery/migration/mixed Audit API проверки |
+| `tests/test_tenancy_postgres.py`, `tests/test_m1_3_postgres.py`, `tests/test_foundation.py`, `tests/test_m1_3_http_contract.py` | Только объяснённые новые table/function/Audit inventory, текущий schema head и добавление нового strict Audit schema; прежние защитные кейсы сохраняются |
+| `scripts/provision_local_auth.py`, `scripts/m1_3_browser_fixture.py` | C0 согласовал 2026-09-21: точное сравнение с `DATABASE_SCHEMA_REVISION`; LOCAL/TEST, DB/identity/password guards сохраняются |
+| `tests/test_postgres.py` | C0 согласовал: ровно 10 новых messaging tables в закрытом inventory, `jobs_enabled=true`, `mode=controlled`; role/SIGTERM/shutdown assertions сохраняются |
+| `tests/test_m1_3_c0_acceptance.py` | C0 согласовал: только `platform.messaging_command_receipts` в существующем TRUNCATE; TABLES/counters/assertions/FK/rollback не меняются, без CASCADE |
+| `docs/tasks/M2_CONTRACT.md`, `docs/tasks/M2_HANDOFF.md`, `docs/TASK_REGISTER.md` | Реализационные уточнения и фактическое evidence; один register/active handoff |
+
+Audit compatibility — необходимое сохранение работающего M1 consumer: его строгие
+backend/frontend discriminators сейчас отвергают новые events. Разрешён ровно один
+новый typed variant с tenant-safe Message FK, без generic payload и скрытого фильтра.
+Это не выдача UI переписки M2.4. Точные SQL имена/индексы и модульное разбиение внутри
+разрешённых областей C2/C3 выбирают самостоятельно по принятому контракту.
+
+`0001`–`0004`, `app.current_workspace_id()`, frozen auth/tenancy snapshots,
+R4 TEST catalog/EntitlementService semantics, authentication/CSRF/CORS, dependencies,
+locks, CI/Compose/bootstrap, canonical originals и остальные frontend пути не менять.
+Необходимую иную совместимую дельту сначала показать C0 с конкретной причиной;
+не отправлять пользователю выбор SQL/полей. Нельзя отключать inventory/clean-source
+или ослаблять guards ради CI. M2.1 не требует новых платных ресурсов или секретов.
+
+### Конечные критерии M2.1-KERNEL
+
+1. **A01/A02/A06, частично:** trusted source binding и immutable route определяют
+   Workspace; durable Inbox+Job до accepted result; duplicate/conflicting event и
+   другой event ID с прежним Message ID обработаны; image reference/ignored kinds
+   имеют явный результат. Это kernel evidence, не real webhook verification.
+2. **A03:** рабочая owner command, same-key replay/conflict и real concurrency;
+   ровно один Message/receipt/Audit/Outbox/Job; rollback любого звена не оставляет
+   частичного состояния. Python/DB fingerprints совпадают по конкретным bytes.
+3. **A04/A05:** реальные worker/scheduler, lease/reclaim/backoff/bounds/DLQ;
+   stale/malformed/expired/чужой claim не мутирует результат; adapter вызывается
+   вне DB unit. Fault barriers до/после commit/start/effect/finalize подтверждают
+   UNKNOWN без blind resend, safe NOT_SENT retry и late-result/commit-ACK recovery.
+4. **A08, частично:** runtime-role OWNER против ADMIN/PROVIDER, разные Workspace,
+   mismatched Client/Conversation/connection/job refs внутри одного Workspace,
+   revoked OWNER/connection до begin_send, непротекающий user/worker XID/task/pool
+   context. Worker не получает старый billing/Business доступ или общий SQL setter.
+5. **A12, частично:** clean upgrade и upgrade с данными 0004, повтор upgrade,
+   downgrade/re-upgrade в disposable TEST, old billing FK/check/receipt semantics,
+   mixed Audit через существующий API и frontend consumer. Фактический main CI
+   закрывается только после последующего пользовательского merge этого среза.
+
+Штатные gates: **`sh scripts/ci.sh`**, **`sh scripts/test_browser.sh`** и оба
+clean-source gate; generated contracts проверяются штатным export check.
+Docker/real PostgreSQL обязателен для DB evidence. Если Docker отсутствует локально,
+использовать обычный GitHub runner, получить logs/artifact и привязать результат к
+head/tested SHA/tree. SQLite/mock не заменяют PostgreSQL. Новые тесты не подменяют
+исходный failure: сначала установить, дефект теста это или поведения.
+
+По результату C3 возвращает PR/head/tree и tested SHA, changed paths, миграцию,
+контрактные уточнения, tests/assertions → строки матрицы → run/results, оставшиеся
+ограничения и blockers. Не объявлять M2.1 INTEGRATED/VERIFIED или весь M2 завершённым.
+C0 завершил review результата и отдельный независимый C8 review новых
+routing/worker/RLS/side-effect risks — receipt ниже. После SUCCESS итогового head
+C0 снимает Draft и даёт пользователю одну инструкцию обычного merge commit.
+После merge — actual main CI, затем одна задача M2.2. Самостоятельный merge запрещён.
+
+### Исторический receipt C0/C8 — M2.1 pre-merge / 2026-09-21
+
+**C0 PASS; C8-M2.1-KERNEL PASS.** Блокирующих дефектов в принятой области не найдено.
+Исходный C3 head `2c7ada9b8b9b13956a56bd13e0a4f9f5b4cb33ae`, tree
+`5f2a53bfd43341d128a3a7d33bcfb478ace1d54b`, run 35593328892 проверены C0 по GitHub
+и CI archive. Девять failures подтверждены traces: provisioning revision (1),
+FK-dependent TRUNCATE (5), exact inventory (1), исторический Jobs shutdown flag (2).
+Browser остановился на том же provisioning; второй script имел такой же guard.
+C0 согласовал и применил только четыре перечисленные compatibility дельты.
+Не ослаблены assertions, FK, SQLSTATE/auth/tenancy guards или штатный pipeline.
+
+Проверенный implementation head: **`e772c2a92bb38cb0af869ef77ed36b2df9fcaf59`**;
+tree **`0df5224f9a31e3e7820aa269236e5383fc2347d5`**.
+[Полный CI 35594839363](https://github.com/Elefesys/ai-service-manager/actions/runs/35594839363)
+**SUCCESS**. Tested virtual merge **`9ba971d07db647bec3fed1691ae888b4ce0e3a81`**
+имеет parents accepted main + implementation head и тот же tree. Coordination
+commit сохранён; GitHub compare: ahead 4, behind 0, merge-base = accepted main.
+Artifact `10636510359`, SHA-256
+`62a7c5169af38d960945aa4eaa51017764cb944822cf2f1a12b5546ec33ae719` проверен C0;
+162 source files побайтно совпадают с reviewed tree; tested SHA точный, status пуст.
+
+| Проверка | Фактический результат и граница |
+|---|---|
+| `sh scripts/ci.sh` | PASS: Ruff/format/strict mypy, 192 backend non-integration, 259 real PostgreSQL, clean/repeated/full downgrade/upgrade, generated contracts, wheel/frontend reproducibility, HTTP/worker/scheduler smoke |
+| `sh scripts/test_browser.sh` | PASS: 60 frontend tests и 15 реальных прежних M1 browser journeys через API/PostgreSQL; это ещё не UI переписки |
+| Clean-source | Оба штатных gate PASS; не подменены пустым recorded status |
+| Scope/source | 34 изменённых paths после четырёх согласованных добавлений; `0001`–`0004`, frozen auth/tenancy, R4 billing logic, dependencies/locks/CI/Compose и 11 canonical originals сохранены |
+| C0 review | Разрешённый kernel/Audit scope, принятый контракт, сохранность M1, существенные assertions и execution evidence сверены; исходные failures объяснены совместимостью, проверки не удалены |
+| Независимый C8 | Отдельный read-only reviewer `c8_m21_kernel_review`, не автор C2/C3 и не C0 self-review: routing/dedupe, composite FK/FORCE RLS/grants, worker authority/XID/task/lease, live OWNER/atomic intent, UNKNOWN/late-result/finalize ACK и Audit compatibility; четыре C0-правки включены; PASS без blocker |
+
+Критерии остаются M2-A01…A12 из единой матрицы ниже. Конкретная таблица
+`tests/assertions → критерий` в сохранённом C3 receipt сверена C0/C8 и применяется
+к успешному run выше: новые kernel tests после исходного C3 head не менялись.
+Проверены реальные process crashes с внешним сохраняемым счётчиком, concurrency,
+rollback каждого звена, stale/forged claims, revocation, bounded retry и отсутствие
+DB connection при adapter call. PostgreSQL исполнен GitHub runner; локального
+Docker и отдельного локального PostgreSQL rerun C8 нет. C8 прочитал execution logs;
+привязку archive/tree отдельно проверил C0.
+
+Граница приёмки: controlled LOCAL/TEST kernel. A01/A02/A06 — kernel routing,
+durable ingestion и normalized image reference; A03/A04/A05 — внутренняя команда,
+Jobs и controlled effects/recovery; A08 — kernel isolation; A12 — pre-merge
+regressions/migrations. Реальная webhook verification/Telegram rights, private
+binary storage/выдача, messaging HTTP/API, Conversation UI и M2-A11 не выполнены.
+M1 browser regression не заменяет будущие journeys M2.4. M3 не выдан.
+
+Этот commit согласованно обновляет только TASK_REGISTER/M2_HANDOFF. Финальный
+head/tree/tested SHA и SUCCESS именно итогового head C0 дописывает в PR receipt
+после CI, без следующего SHA-only documentation commit. Для документационной
+дельты повтор полного C8 review не нужен: C8 явно подтвердил эту границу.
+До green final-head gates PR не готовится к merge. После них — Ready for review,
+пользовательский **Create a merge commit → Confirm merge**; затем C0 проверяет
+actual merge/main push CI и принимает только M2.1. M2.2 пока не выдана.
+
+### История — исполнение C3/C2 до решения C0, 2026-09-21
+
+Следующая запись сохранена как историческая. Её BLOCKED/запрос scope exception
+закрыты текущим receipt выше и больше не являются активным поручением.
+
+[Draft PR #18](https://github.com/Elefesys/ai-service-manager/pull/18) продолжен от
+`587531e71380a9a83549cba25c1b5c71c01d223c`; coordination commit и принятый base
+сохранены. C2 подготовил migration `0005` (down_revision `0004`), typed SQL
+capabilities, RLS/constraints, Audit FK и schema/cycle tests в отдельном checkout.
+C3 добавил normalized codec, owner command/read, отдельный task/XID-bound worker
+unit, реальные worker/scheduler и controlled adapter с сохраняемым TEST ledger.
+C2 participation — авторство DB-части, не независимый C8 review.
+
+Первый implementation run:
+[CI 35592297034](https://github.com/Elefesys/ai-service-manager/actions/runs/35592297034),
+head `7ef132fdc040eef5c6caf17d9c7aae3f40a46a58`,
+tree `afc90a8673fc506fab996266401169fedc62efac`,
+tested PR merge `ee6f051d772af0060a367d6967f8574e005087a7`.
+Artifact `10635275472`, SHA-256
+`dedaf48c017051ae14640104f9282b86678228edd3e5472729467b544f686e25`;
+archive побайтно совпадает со всеми 162 файлами head, recorded worktree status пуст.
+Это не заменяет два clean-source gates: оба пропущены после failures.
+
+Runner выполнил штатные `sh scripts/ci.sh` и `sh scripts/test_browser.sh`:
+192 backend non-integration PASS, 61 frontend PASS, PostgreSQL 241 PASS / 10 FAIL.
+Один новый тест неправильно ловил ожидаемый DB отказ внутри уже aborted unit;
+исправлено положение `pytest.raises` с сохранением обязательного rollback.
+Другие 9 failures и browser provisioning относятся к четырём неразрешённым файлам
+ниже. Дополнительно C2 закрыл обход canonical timestamp через raw SQL и добавил
+8 cases; удалён случайный повтор одного нового frontend case (итоговый набор — 60).
+Итоговые head/tree/tested SHA и повторный run фиксируются в PR receipt после push;
+отдельного SHA-only commit не требуется.
+
+| Критерий handoff | Конкретные tests/assertions нового kernel |
+|---|---|
+| A01/A02/A06, частично | `test_trusted_route_binding_and_concurrent_durable_event_dedupe`: source/route mismatch, concurrent identical event, exact conflict, durable Inbox+Job; `test_image_reference_message_projection_dedupe_and_identity_conflicts`: Message ID projection, image reference, client/conversation identity conflicts; ignored kinds имеют terminal receipt/result |
+| A03 | `test_manual_fingerprints_replay_concurrent_atomic_intent`: Python/DB exact UTF-8 fingerprints, concurrent replay/conflict и один intent; `test_command_rollback_at_every_atomic_link`: failure на каждом Message/receipt/Audit/Outbox/Job откатывает все звенья; actor/body/key проверяются live |
+| A04/A05 | `test_lease_reclaim_new_token_stale_claim_and_retry_age`, `test_safe_not_sent_jitter_and_exhaustion_count_every_call`: DB-clock lease, новый token, jitter, count/age bounds; durable UNKNOWN и terminal failure; `test_actual_process_crash_restart_durable_effect_ledger` + inbound/ingest boundaries: реальные os._exit/restart, внешние call/effect counters, ноль повторов после возможного эффекта |
+| A04/A05, finalize | `test_lost_finalize_ack_reads_canonical_success_and_replays_exact_outcome`, `test_finalize_not_sent_ack_loss_and_changed_claim_exact_replay`: canonical saved result после commit ACK loss, не понижать SENT, старый claim после нового не принимается; cancellation/timeout/late finalize не возвращают dispatch в READY; adapter не держит DB unit |
+| A08, частично | `test_owner_only_live_admission_replay_and_cross_workspace_reads`, revoke matrix и composite-ref tests: OWNER/ADMIN/PROVIDER, чужие Workspace и неверные связи внутри одного; forged claim/GUC, XID/task/autocommit/pool negative tests; runtime не читает control tables и не пишет app tables напрямую |
+| A12, частично | `test_0004_data_survives_upgrade_repeat_downgrade_reupgrade`: существующие billing rows/receipt/Audit, repeated upgrade, downgrade/re-upgrade; schema inventory/RLS/FKs/checks; `test_mixed_billing_message_audit_http_cursor_and_strict_payload` + frontend parser/component: два прежних и один новый typed event, cursor, label, invalid discriminators/payload |
+
+Первый run подтвердил 61 из 62 новых PostgreSQL cases; оставшийся case исправлен
+как описано выше. Новый итоговый набор — 39 model + 70 PostgreSQL cases; execution
+receipt повторного run в PR определяет их фактический результат. Это bounded
+LOCAL/TEST evidence: Telegram/webhook, storage/FileObject, messaging HTTP/UI и M3
+не реализованы и не проверялись. Credentials/secrets controlled adapter не нужны.
+
+**Точный запрос C0: разрешить только следующие совместимые дельты.** Они пока
+не применены, потому что отсутствуют в таблице разрешённых paths этого поручения.
+
+| Path вне scope | Наблюдённая причина и минимальная предлагаемая правка |
+|---|---|
+| `scripts/provision_local_auth.py` | Сравнение schema с literal `0004` ломает auth migration/provisioning test и browser setup на назначенной `0005`. Импортировать `asm.foundation.DATABASE_SCHEMA_REVISION`, использовать его в точном сравнении и сообщении; environment/identity/password guards сохранить |
+| `scripts/m1_3_browser_fixture.py` | Второй guard требует `0004`, поэтому заблокирует browser fixture после исправления provisioning. Сравнивать с той же общей текущей revision; остальные TEST/identity guards сохранить |
+| `tests/test_postgres.py` | Один exact inventory test не допускает 10 назначенных messaging tables; два shutdown cases требуют историческое `jobs_enabled=false`. Добавить точные 10 имён в sorted inventory, ожидать `jobs_enabled=true` и `mode=controlled`; runtime role, SIGTERM/shutdown и остальные assertions сохранить |
+| `tests/test_m1_3_c0_acceptance.py` | Пять initializer-conflict cases вызывают TRUNCATE Audit без новой referencing receipts table. В единственной команде использовать `",".join((*TABLES, "platform.messaging_command_receipts"))`. C2 подтвердил: глобальный TABLES, before/after counters и assertions не менять; CASCADE/отключение FK не нужны; transaction rollback всё восстанавливает |
+
+Разрешённые изменения прежних tests имеют конкретную причину:
+`test_foundation.py` — head `0005`; `test_tenancy_postgres.py` — ровно новые
+messaging tables/capabilities в exact inventory; `test_m1_3_postgres.py` — две
+новые generated typed Audit FK columns; `test_m1_3_http_contract.py` — additive
+strict MessageSendAuditEvent. Frontend изменён только новым parser/component
+case. Исходные защитные cases и общие SQLSTATE/auth/tenancy guards сохранены.
+`0001`–`0004`, canonical originals, dependencies/locks/CI/Compose не изменены.
+
+M2.1 BLOCKED на полной regression verification до этой C0 exception. После её
+получения: применить ровно четыре дельты, повторить оба штатных scripts и оба
+clean-source gates, затем C0 acceptance и независимый scoped C8 review реализации.
+PR остаётся Draft; merge и M2.1 VERIFIED не объявляются.
+
+### Внешний smoke — подготовка со слов пользователя
+
+2026-09-21 пользователь подтвердил: test bot создан, Business/Secretary Mode включён,
+Owner/Client accounts подготовлены; `TG_BOT_TOKEN` и отдельный `TG_WEBHOOK_SECRET`
+сохранены в менеджере паролей. Значения не получены, не запрашиваются и не нужны C3
+для M2.1. Это user-reported preparation, не проверенный connection/rights/live run.
+Остались фактическая binding аккаунта/Workspace и rights probe, безопасная runtime
+injection секретов, тестовый HTTPS endpoint/webhook и будущий полный journey.
+Они не блокируют M2.1; конкретный C6 test runbook будет выдан перед подключением.
+
+Ниже — принятая последовательность и общая матрица M2. Указанный далее initial
+snapshot PR #16 исторический; актуальный base первой задачи находится выше.

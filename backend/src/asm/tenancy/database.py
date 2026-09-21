@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from psycopg import AsyncConnection as PsycopgAsyncConnection
@@ -24,6 +24,10 @@ from asm.tenancy.types import (
     permissions_for,
     require_uuid,
 )
+
+if TYPE_CHECKING:
+    from asm.files.models import ReadManifest
+
 
 _active: ContextVar["TenantUnitOfWork | None"] = ContextVar("asm_tenant_unit", default=None)
 _SQL_ERRORS = {
@@ -159,6 +163,21 @@ class TenantUnitOfWork:
     async def messaging_inbox(self, inbox_id: UUID) -> Any:
         return await self._messaging_execute(
             "SELECT platform.messaging_read_inbox(:inbox)", {"inbox": inbox_id}
+        )
+
+    async def file_read_manifest(
+        self, conversation_id: UUID, message_id: UUID, file_id: UUID
+    ) -> "ReadManifest":
+        from asm.files.models import ReadManifest
+        from asm.messaging.database import require_uuid as require_file_uuid
+
+        for value in (conversation_id, message_id, file_id):
+            require_file_uuid(value)
+        return ReadManifest.model_validate(
+            await self._messaging_execute(
+                "SELECT platform.files_read_manifest(:conversation,:message,:file)",
+                {"conversation": conversation_id, "message": message_id, "file": file_id},
+            )
         )
 
     async def billing_snapshot(self) -> RowMapping:

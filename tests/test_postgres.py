@@ -118,6 +118,8 @@ async def test_real_postgres_capabilities_and_roles(database):
             "client_identities",
             "clients",
             "conversations",
+            "file_object_uploads",
+            "file_objects",
             "inbox_events",
             "locations",
             "messages",
@@ -133,7 +135,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "Only the accepted M0 through M2.1 tables are allowed"
+        ], "Only the accepted M0 through M2.2 tables are allowed"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

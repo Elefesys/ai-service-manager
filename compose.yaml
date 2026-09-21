@@ -8,7 +8,39 @@ x-backend: &backend
 x-runtime: &runtime
   ASM_ENVIRONMENT: LOCAL
   ASM_DATABASE_URL: postgresql+psycopg://asm_runtime:${PG_RUNTIME_PASSWORD:?Run init_local.py}@postgres:5432/asm_local
+  ASM_STORAGE_ENVIRONMENT: LOCAL
+  ASM_STORAGE_ENDPOINT: http://storage:9000
+  ASM_STORAGE_BUCKET: asm-private-local
+  ASM_STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?Run init_local.py}
+  ASM_STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Run init_local.py}
 services:
+  storage:
+    image: ${STORAGE_IMAGE:?Missing storage pin}
+    command: [server, /data, --console-address, ':9001']
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ROOT_USER:?Run init_local.py}
+      MINIO_ROOT_PASSWORD: ${STORAGE_ROOT_PASSWORD:?Run init_local.py}
+      MINIO_BROWSER: 'off'
+    volumes: [storage-data:/data]
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost:9000/minio/health/live]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  storage-init:
+    image: ${STORAGE_ADMIN_IMAGE:?Missing storage admin pin}
+    entrypoint: [sh, /bootstrap.sh]
+    environment: &storage-bootstrap
+      STORAGE_ROOT_USER: ${STORAGE_ROOT_USER:?Run init_local.py}
+      STORAGE_ROOT_PASSWORD: ${STORAGE_ROOT_PASSWORD:?Run init_local.py}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?Run init_local.py}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Run init_local.py}
+      STORAGE_HOST: storage
+      STORAGE_BUCKET: asm-private-local
+    tmpfs: [/tmp]
+    volumes: [./infra/storage/bootstrap.sh:/bootstrap.sh:ro]
+    depends_on:
+      storage: {condition: service_healthy}
   postgres:
     image: ${DB_IMAGE:?Missing images.lock.env}
     environment:
@@ -53,6 +85,7 @@ services:
     command: [python, -m, asm.foundation, worker]
     depends_on:
       migrate: {condition: service_completed_successfully}
+      storage-init: {condition: service_completed_successfully}
   scheduler:
     image: asm-backend:local
     build: {<<: *backend, target: runtime}
@@ -60,6 +93,7 @@ services:
     command: [python, -m, asm.foundation, scheduler]
     depends_on:
       migrate: {condition: service_completed_successfully}
+      storage-init: {condition: service_completed_successfully}
   frontend:
     image: asm-frontend:local
     build:
@@ -93,11 +127,44 @@ services:
     build: {<<: *backend, target: development}
     environment:
       ASM_ENVIRONMENT: TEST
+      ASM_STORAGE_ENVIRONMENT: TEST
+      ASM_STORAGE_ENDPOINT: http://storage-test:9000
+      ASM_STORAGE_BUCKET: asm-private-test
+      ASM_STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?Run init_local.py}
+      ASM_STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Run init_local.py}
       ASM_DATABASE_URL: postgresql+psycopg://asm_runtime:${PG_RUNTIME_PASSWORD:?Run init_local.py}@postgres-test:5432/asm_test
       ASM_MIGRATION_DATABASE_URL: postgresql+psycopg://asm_migrator:${PG_MIGRATION_PASSWORD:?Run init_local.py}@postgres-test:5432/asm_test
       # Disposable TEST-only administrator used by extension prerequisite lifecycle tests.
       ASM_ADMIN_DATABASE_URL: postgresql+psycopg://asm_admin:${PG_ADMIN_PASSWORD:?Run init_local.py}@postgres-test:5432/asm_test
     depends_on:
       postgres-test: {condition: service_healthy}
+      storage-test-init: {condition: service_completed_successfully}
+  storage-test:
+    profiles: [test]
+    image: ${STORAGE_IMAGE:?Missing storage pin}
+    command: [server, /data, --console-address, ':9001']
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ROOT_USER:?Run init_local.py}
+      MINIO_ROOT_PASSWORD: ${STORAGE_ROOT_PASSWORD:?Run init_local.py}
+      MINIO_BROWSER: 'off'
+    tmpfs: [/data]
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost:9000/minio/health/live]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  storage-test-init:
+    profiles: [test]
+    image: ${STORAGE_ADMIN_IMAGE:?Missing storage admin pin}
+    entrypoint: [sh, /bootstrap.sh]
+    environment:
+      <<: *storage-bootstrap
+      STORAGE_HOST: storage-test
+      STORAGE_BUCKET: asm-private-test
+    tmpfs: [/tmp]
+    volumes: [./infra/storage/bootstrap.sh:/bootstrap.sh:ro]
+    depends_on:
+      storage-test: {condition: service_healthy}
 volumes:
   pgdata:
+  storage-data:

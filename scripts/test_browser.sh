@@ -3,7 +3,7 @@ set -eu
 cd "$(dirname "$0")/.."
 root="$(pwd)"
 . ./infra/images.lock.env
-export DB_IMAGE NODE_IMAGE WEB_IMAGE UV_IMAGE PYTHON_IMAGE
+export DB_IMAGE NODE_IMAGE WEB_IMAGE UV_IMAGE PYTHON_IMAGE STORAGE_IMAGE STORAGE_ADMIN_IMAGE
 umask 077
 tmp="$(mktemp -d)"
 cleanup() {

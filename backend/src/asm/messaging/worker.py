@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -13,16 +13,25 @@ from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import OutcomeKind, SendOutcome
 from asm.messaging.results import JobClaim, SendPermit
 
+if TYPE_CHECKING:
+    from asm.files.transfer import CleanupSweep, FetchTransfer
+
 
 class Worker:
     def __init__(
-        self, database: MessagingDatabase, adapter: ControlledAdapter, *, deadline: float = 10
+        self,
+        database: MessagingDatabase,
+        adapter: ControlledAdapter,
+        *,
+        deadline: float = 10,
+        files: "FetchTransfer | None" = None,
     ) -> None:
         if not 0 < deadline < 30:
             raise MessagingError(Code.INVALID_INPUT)
         self.database = database
         self.adapter = adapter
         self.deadline = deadline
+        self.files = files
         self.worker_id = "controlled-" + str(uuid4())
 
     async def _finish(self, permit: SendPermit, outcome: SendOutcome) -> None:
@@ -50,6 +59,16 @@ class Worker:
                 else:
                     raise
             return
+
+        if claim.kind == "FETCH_IMAGE":
+            if self.files is None:
+                await self.database.retry(claim, Code.DEPENDENCY_UNAVAILABLE)
+            else:
+                await self.files.execute(claim)
+            return
+
+        if claim.kind != "SEND_MANUAL_TEXT":
+            raise MessagingError(Code.INVALID_INPUT)
 
         # If start commit ACK is lost, no permit reaches this code: recovery
         # conservatively marks the durable DISPATCHING attempt UNKNOWN.
@@ -93,15 +112,19 @@ async def run(
     database: MessagingDatabase,
     adapter: ControlledAdapter,
     stop: asyncio.Event,
+    *,
+    files: "FetchTransfer | None" = None,
+    cleanup: "CleanupSweep | None" = None,
 ) -> None:
-    worker = Worker(database, adapter)
+    worker = Worker(database, adapter, files=files)
     while not stop.is_set():
         try:
-            worked = (
-                await worker.run_once(stop)
-                if role == "worker"
-                else bool(await database.recover_expired())
-            )
+            if role == "worker":
+                worked = await worker.run_once(stop)
+            else:
+                worked = bool(await database.recover_expired())
+                if cleanup is not None:
+                    worked = await cleanup.run_once() or worked
         except (SQLAlchemyError, MessagingError):
             # Diagnostics contain no exception text, keys, provider data or IDs.
             print(json.dumps({"component": role, "event": "iteration_unavailable"}), flush=True)

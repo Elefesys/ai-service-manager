@@ -28,7 +28,7 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0005"
+DATABASE_SCHEMA_REVISION = "0006"
 
 
 class Settings(AuthSettings):
@@ -168,6 +168,11 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
 
 
 async def serve(role: Literal["worker", "scheduler"]) -> None:
+    from asm.files.config import StorageSettings
+    from asm.files.database import FileDatabase
+    from asm.files.provider import ControlledImageProvider
+    from asm.files.storage import S3ObjectStorage
+    from asm.files.transfer import CleanupSweep, FetchTransfer
     from asm.messaging.adapter import ControlledAdapter
     from asm.messaging.database import MessagingDatabase
     from asm.messaging.worker import run
@@ -178,8 +183,19 @@ async def serve(role: Literal["worker", "scheduler"]) -> None:
         loop.add_signal_handler(sig, stop.set)
     settings = Settings()
     db = RuntimeDatabase(settings)
+    storage = None
+    files = None
     try:
         await db.check()
+        kernel = MessagingDatabase(db.engine)
+        storage_settings = StorageSettings()
+        if storage_settings.environment != settings.environment:
+            raise RuntimeError("Storage environment mismatch")
+        storage = S3ObjectStorage(storage_settings)
+        file_db = FileDatabase(kernel)
+        files = FetchTransfer(
+            file_db, kernel, ControlledImageProvider(environment=settings.environment), storage
+        )
         print(
             json.dumps(
                 {"component": role, "event": "started", "mode": "controlled", "jobs_enabled": True}
@@ -188,11 +204,17 @@ async def serve(role: Literal["worker", "scheduler"]) -> None:
         )
         await run(
             role,
-            MessagingDatabase(db.engine),
+            kernel,
             ControlledAdapter(environment=settings.environment),
             stop,
+            files=files,
+            cleanup=CleanupSweep(file_db, storage),
         )
     finally:
+        if files is not None:
+            await files.close()
+        if storage is not None:
+            await storage.close()
         await db.close()
         print(json.dumps({"component": role, "event": "stopped"}), flush=True)
         for sig in (signal.SIGTERM, signal.SIGINT):
