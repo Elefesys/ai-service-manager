@@ -1,5 +1,12 @@
 name: ai-service-manager-browser
 services:
+  storage:
+    volumes: !override
+      - type: tmpfs
+        target: /data
+  storage-init:
+    environment:
+      STORAGE_BUCKET: asm-private-test
   postgres:
     environment:
       POSTGRES_DB: asm_test
@@ -16,6 +23,8 @@ services:
   api:
     environment:
       ASM_ENVIRONMENT: TEST
+      ASM_STORAGE_ENVIRONMENT: TEST
+      ASM_STORAGE_BUCKET: asm-private-test
       ASM_AUTH_PEER_LIMIT: "300"
       ASM_AUTH_GLOBAL_LIMIT: "1000"
       ASM_AUTH_LOGIN_LIMIT: "100"

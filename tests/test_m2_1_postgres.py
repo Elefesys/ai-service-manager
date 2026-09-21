@@ -64,7 +64,9 @@ async def provision(migrator):
 
 async def cleanup(migrator):
     async with migrator.begin() as c:
-        for table in TABLES:
+        # M2.2 adds a typed upload/job/file FK chain. Keep explicit scoped
+        # deletion in one transaction; the READY winner FK is deferred.
+        for table in ("platform.file_object_uploads", *TABLES[:2], "app.file_objects", *TABLES[2:]):
             suffix = (
                 " AND event_type='MESSAGE_SEND_REQUESTED'" if table == "app.audit_events" else ""
             )
@@ -219,6 +221,12 @@ async def test_image_reference_message_projection_dedupe_and_identity_conflicts(
     h = messaging
     value = event(text=" caption é\n ", image_file_id="provider-ref", media_group_id="album")
     _, original = await receive(h, value)
+    # This M2.1 projection fixture deliberately has no provider bytes. Consume
+    # its now-real FETCH job explicitly; all original dedupe assertions remain.
+    fetch = await h.kernel.claim_job("legacy-image-fixture")
+    assert fetch.kind == "FETCH_IMAGE"
+    assert len(await query(h, "SELECT id FROM app.file_objects")) == 1
+    await h.kernel.retry(fetch, Code.INVALID_INPUT, False)
     _, duplicate = await receive(h, replace(value, event_id="evt-2"))
     assert duplicate.code == "DUPLICATE" and duplicate.message_id == original.message_id
     _, conflict = await receive(h, replace(value, event_id="evt-3", text="changed"))
@@ -237,6 +245,10 @@ async def test_image_reference_message_projection_dedupe_and_identity_conflicts(
         }
     ]
     assert len(await query(h, "SELECT id FROM app.conversations")) == 1
+    assert len(await query(h, "SELECT id FROM app.file_objects")) == 1
+    assert (
+        len(await query(h, "SELECT id FROM platform.messaging_jobs WHERE kind='FETCH_IMAGE'")) == 1
+    )
 
 
 @pytest.mark.parametrize(

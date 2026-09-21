@@ -7,6 +7,8 @@ trap cleanup EXIT
 compose config --quiet
 compose build --pull api checks frontend
 compose run --rm checks
+compose run --rm --no-deps --entrypoint minio storage --version
+compose run --rm --no-deps --entrypoint mc storage-init --version
 compose up -d --wait api worker scheduler frontend
 python3 - <<'SMOKE'
 import json

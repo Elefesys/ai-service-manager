@@ -484,6 +484,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "clients",
             "client_identities",
             "conversations",
+            "file_objects",
             "messages",
             "outbox_events",
         }
@@ -597,6 +598,12 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                 "messaging_read_messages",
                 "messaging_read_delivery",
                 "messaging_read_inbox",
+                "files_begin_fetch",
+                "files_prepare_upload",
+                "files_finish_fetch",
+                "files_claim_cleanup",
+                "files_finish_cleanup",
+                "files_read_manifest",
             )
         }
         m2_profiles.update(
@@ -608,6 +615,9 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                     "messaging_fingerprint",
                     "messaging_immutable",
                     "messaging_job_json",
+                    "files_manifest_valid",
+                    "files_upload_json",
+                    "files_immutable",
                 )
             }
         )
@@ -618,6 +628,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                     "messaging_guard",
                     "messaging_reschedule",
                     "messaging_lock_owner",
+                    "files_plan",
                 )
             }
         )

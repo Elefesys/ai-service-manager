@@ -21,11 +21,12 @@ class InboxReceipt(Result):
 
 class JobClaim(Result):
     job_id: UUID
-    kind: Literal["PROCESS_INBOX", "SEND_MANUAL_TEXT"]
+    kind: Literal["PROCESS_INBOX", "SEND_MANUAL_TEXT", "FETCH_IMAGE"]
     workspace_id: UUID
     connection_id: UUID
     inbox_id: UUID | None
     outbox_id: UUID | None
+    file_id: UUID | None = None
     claim_token: UUID = Field(repr=False)
     lease_until: datetime
     correlation_id: UUID
