@@ -1,11 +1,12 @@
 """Short, task-owned transactions and explicit tenant-aware foundation queries."""
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from psycopg import AsyncConnection as PsycopgAsyncConnection
@@ -130,6 +131,17 @@ class TenantUnitOfWork:
             return (await self._connection.execute(text(sql), params)).scalar_one()
         except DBAPIError as error:
             self._failed = True
+            from asm.billing.errors import BillingUnavailable
+            from asm.billing.models import StateReason
+
+            diagnostic = getattr(error.orig, "diag", None)
+            reason = getattr(diagnostic, "message_detail", None)
+            if (
+                getattr(error.orig, "sqlstate", "") == "P2301"
+                and getattr(diagnostic, "message_primary", None) == "BILLING_STATE_UNAVAILABLE"
+                and reason in ("BILLING_STATE_MISSING", "BILLING_STATE_INVALID", "REVISION_INVALID")
+            ):
+                raise BillingUnavailable(cast(StateReason, reason)) from None
             bounded = database_error(error)
             if bounded is not None:
                 raise bounded from None
@@ -142,6 +154,66 @@ class TenantUnitOfWork:
         return await self._messaging_execute(
             "SELECT platform.messaging_request_text(:conversation, :value, :key)",
             {"conversation": conversation_id, "value": value, "key": key},
+        )
+
+    async def messaging_prepare_text(self, conversation_id: UUID, value: str, key: str) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.messaging_prepare_text(:conversation, :value, :key)",
+            {"conversation": conversation_id, "value": value, "key": key},
+        )
+
+    async def telegram_owner_observe(
+        self,
+        conversation_id: UUID,
+        generation: int,
+        observation_version: int,
+        observation: dict[str, object],
+    ) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.telegram_owner_observe(:conversation,:generation,:version,CAST(:observation AS jsonb))",
+            {
+                "conversation": conversation_id,
+                "generation": generation,
+                "version": observation_version,
+                "observation": json.dumps(observation, ensure_ascii=False, allow_nan=False),
+            },
+        )
+
+    async def messaging_lock_billing(self) -> None:
+        await self._messaging_execute("SELECT platform.messaging_lock_billing()", {})
+
+    @staticmethod
+    def _messaging_page_count(count: int) -> None:
+        from asm.messaging.errors import Code, MessagingError
+
+        if type(count) is not int or not 1 <= count <= 101:
+            raise MessagingError(Code.INVALID_INPUT)
+
+    async def messaging_connections_page(
+        self, count: int, at: datetime | None, anchor: UUID | None
+    ) -> Any:
+        self._messaging_page_count(count)
+        return await self._messaging_execute(
+            "SELECT platform.messaging_read_connections(:count,:at,:anchor)",
+            {"count": count, "at": at, "anchor": anchor},
+        )
+
+    async def messaging_conversations_page(
+        self, count: int, at: datetime | None, anchor: UUID | None
+    ) -> Any:
+        self._messaging_page_count(count)
+        return await self._messaging_execute(
+            "SELECT platform.messaging_read_conversations(:count,:at,:anchor)",
+            {"count": count, "at": at, "anchor": anchor},
+        )
+
+    async def messaging_messages_page(
+        self, conversation_id: UUID, count: int, at: datetime | None, anchor: UUID | None
+    ) -> Any:
+        self._messaging_page_count(count)
+        return await self._messaging_execute(
+            "SELECT platform.messaging_read_messages(:conversation,:count,:at,:anchor)",
+            {"conversation": conversation_id, "count": count, "at": at, "anchor": anchor},
         )
 
     async def messaging_conversations(self, limit: int) -> Any:

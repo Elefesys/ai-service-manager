@@ -67,7 +67,7 @@ class SendPermit(Result):
     attempt_id: UUID = Field(repr=False)
     workspace_id: UUID
     connection_id: UUID
-    provider: Literal["CONTROLLED"]
+    provider: Literal["CONTROLLED", "TELEGRAM"]
     bot_identity: str = Field(repr=False)
     external_connection_id: str = Field(repr=False)
     chat_id: str = Field(repr=False)
@@ -75,8 +75,8 @@ class SendPermit(Result):
 
 
 class TerminalRejection(Result):
-    code: Literal["NOT_ALLOWED"]
-    status: Literal["FAILED"]
+    code: Literal["NOT_ALLOWED", "UNAVAILABLE"]
+    status: Literal["FAILED", "PENDING"]
 
 
 class FinalizeResult(Result):
@@ -85,3 +85,5 @@ class FinalizeResult(Result):
     job_id: UUID
     outbox_id: UUID
     attempt_id: UUID
+    retry_after_seconds: int | None = None
+    available_at: datetime | None = None

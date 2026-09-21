@@ -36,14 +36,18 @@ async def test_0005_exact_data_backfill_repeat_and_test_downgrade_reupgrade(mess
             for table in tables:
                 values[table] = (
                     await connection.execute(
-                        text(f"SELECT to_jsonb(t) AS row FROM {table} t ORDER BY to_jsonb(t)::text")
+                        text(
+                            f"SELECT to_jsonb(t)-'last_client_inbound_at' AS row FROM {table} t ORDER BY to_jsonb(t)::text"
+                        )
                     )
                 ).all()
-            # file_id is the only additive field on the retained kernel Job rows.
+            # Compare the original 0005 fields; 0006/0007 add nullable metadata.
             values["platform.messaging_jobs"] = (
                 await connection.execute(
                     text(
-                        "SELECT to_jsonb(j)-'file_id' FROM platform.messaging_jobs j WHERE kind<>'FETCH_IMAGE' ORDER BY id"
+                        "SELECT to_jsonb(j)-ARRAY['file_id','last_retry_after_seconds','last_retry_due',"
+                        "'telegram_probe_claim','telegram_probe_generation','telegram_probe_version'] "
+                        "FROM platform.messaging_jobs j WHERE kind<>'FETCH_IMAGE' ORDER BY id"
                     )
                 )
             ).all()

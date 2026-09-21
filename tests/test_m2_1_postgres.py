@@ -64,6 +64,20 @@ async def provision(migrator):
 
 async def cleanup(migrator):
     async with migrator.begin() as c:
+        # M2.3 receipt/state references precede Inbox and connection deletion.
+        # Also clear tenantless receipts for bots bound only to this fixture.
+        await c.execute(
+            text(
+                "DELETE FROM platform.telegram_update_receipts WHERE workspace_id IN (:a,:b) OR "
+                "(workspace_id IS NULL AND bot_identity IN (SELECT bot_identity FROM "
+                "platform.telegram_connection_state WHERE workspace_id IN (:a,:b)))"
+            ),
+            {"a": A, "b": B},
+        )
+        await c.execute(
+            text("DELETE FROM platform.telegram_connection_state WHERE workspace_id IN (:a,:b)"),
+            {"a": A, "b": B},
+        )
         # M2.2 adds a typed upload/job/file FK chain. Keep explicit scoped
         # deletion in one transaction; the READY winner FK is deferred.
         for table in ("platform.file_object_uploads", *TABLES[:2], "app.file_objects", *TABLES[2:]):

@@ -15,6 +15,7 @@ from asm.messaging.results import JobClaim, SendPermit
 
 if TYPE_CHECKING:
     from asm.files.transfer import CleanupSweep, FetchTransfer
+    from asm.telegram.client import TelegramClient
 
 
 class Worker:
@@ -25,6 +26,7 @@ class Worker:
         *,
         deadline: float = 10,
         files: "FetchTransfer | None" = None,
+        telegram: "TelegramClient | None" = None,
     ) -> None:
         if not 0 < deadline < 30:
             raise MessagingError(Code.INVALID_INPUT)
@@ -32,6 +34,7 @@ class Worker:
         self.adapter = adapter
         self.deadline = deadline
         self.files = files
+        self.telegram = telegram
         self.worker_id = "controlled-" + str(uuid4())
 
     async def _finish(self, permit: SendPermit, outcome: SendOutcome) -> None:
@@ -72,13 +75,36 @@ class Worker:
 
         # If start commit ACK is lost, no permit reaches this code: recovery
         # conservatively marks the durable DISPATCHING attempt UNKNOWN.
-        permit = await self.database.begin_send(claim)
+        probe = await self.database.telegram_probe(claim)
+        if probe is None:
+            permit = await self.database.begin_send(claim)
+        else:
+            observation: dict[str, object] = (
+                await self.telegram.observe(
+                    probe.bot_identity, probe.external_connection_id, probe.owner_user_id
+                )
+                if self.telegram is not None
+                else {
+                    "bot_identity": None,
+                    "external_connection_id": None,
+                    "owner_user_id": None,
+                    "is_enabled": None,
+                    "can_reply": None,
+                    "error_code": Code.DEPENDENCY_UNAVAILABLE.value,
+                }
+            )
+            permit = await self.database.telegram_begin_send(claim, probe, observation)
         if not isinstance(permit, SendPermit):
             return
         try:
             async with asyncio.timeout(self.deadline):
                 await self.adapter.checkpoint("before_call")
-                outcome = await self.adapter.send(permit)
+                if permit.provider == "TELEGRAM":
+                    if self.telegram is None:
+                        raise MessagingError(Code.DEPENDENCY_UNAVAILABLE)
+                    outcome = await self.telegram.send(permit)
+                else:
+                    outcome = await self.adapter.send(permit)
         except asyncio.CancelledError:
             try:
                 await self._finish(
@@ -115,8 +141,9 @@ async def run(
     *,
     files: "FetchTransfer | None" = None,
     cleanup: "CleanupSweep | None" = None,
+    telegram: "TelegramClient | None" = None,
 ) -> None:
-    worker = Worker(database, adapter, files=files)
+    worker = Worker(database, adapter, files=files, telegram=telegram)
     while not stop.is_set():
         try:
             if role == "worker":

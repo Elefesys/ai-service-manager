@@ -604,6 +604,13 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                 "files_claim_cleanup",
                 "files_finish_cleanup",
                 "files_read_manifest",
+                "telegram_ingest",
+                "messaging_prepare_text",
+                "telegram_owner_observe",
+                "telegram_worker_probe",
+                "telegram_begin_send",
+                "messaging_lock_billing",
+                "messaging_read_connections",
             )
         }
         m2_profiles.update(
@@ -618,6 +625,11 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                     "files_manifest_valid",
                     "files_upload_json",
                     "files_immutable",
+                    "telegram_numeric_id",
+                    "telegram_validate_projection",
+                    "telegram_fingerprint",
+                    "telegram_validate_observation",
+                    "telegram_probe_json",
                 )
             }
         )
@@ -629,6 +641,12 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                     "messaging_reschedule",
                     "messaging_lock_owner",
                     "files_plan",
+                    "telegram_save_observation",
+                    "telegram_can_send",
+                    "messaging_lock_billing_workspace",
+                    "messaging_manual_send_allowed",
+                    "initialize_telegram_connection",
+                    "initialize_local_messaging_billing",
                 )
             }
         )

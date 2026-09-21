@@ -37,8 +37,18 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         "PATCH /api/v1/workspaces/{workspace_id}/billing-account",
         "GET /api/v1/workspaces/{workspace_id}/audit-events",
     ]
+    # M2.3 adds exactly five owner routes; frozen auth.v1 stays seven endpoints.
+    messaging_endpoints = [
+        "GET /api/v1/workspaces/{workspace_id}/channel-connections",
+        "GET /api/v1/workspaces/{workspace_id}/conversations",
+        "GET /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/messages",
+        "POST /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/messages",
+        "POST /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/messages/{message_id}/files/{file_id}/read-grant",
+    ]
     assert len(contract["endpoints"]) == 7
-    assert actual_endpoints == sorted(contract["endpoints"] + billing_endpoints)
+    assert actual_endpoints == sorted(
+        contract["endpoints"] + billing_endpoints + messaging_endpoints
+    )
     assert contract["schema_revision"] == "0003" and contract["down_revision"] == "0002"
     assert contract["environments"] == ["LOCAL", "TEST"]
     assert contract["error_codes"] == [code.value for code in AuthCode]

@@ -5,11 +5,19 @@ x-backend: &backend
   args:
     PYTHON_IMAGE: ${PYTHON_IMAGE:?Missing images.lock.env}
     UV_IMAGE: ${UV_IMAGE:?Missing images.lock.env}
+x-telegram: &telegram
+  ASM_TELEGRAM_ENABLED: ${ASM_TELEGRAM_ENABLED:-false}
+  TG_BOT_TOKEN: ${TG_BOT_TOKEN:-}
+  TG_WEBHOOK_SECRET: ${TG_WEBHOOK_SECRET:-}
+  ASM_TELEGRAM_EXPECTED_BOT_ID: ${ASM_TELEGRAM_EXPECTED_BOT_ID:-}
+  ASM_TELEGRAM_WEBHOOK_URL: ${ASM_TELEGRAM_WEBHOOK_URL:-}
 x-runtime: &runtime
+  <<: *telegram
   ASM_ENVIRONMENT: LOCAL
   ASM_DATABASE_URL: postgresql+psycopg://asm_runtime:${PG_RUNTIME_PASSWORD:?Run init_local.py}@postgres:5432/asm_local
+  ASM_AUTH_ORIGINS: '${ASM_AUTH_ORIGINS:-["http://localhost:8080","http://127.0.0.1:8080","http://localhost:8000","http://127.0.0.1:8000"]}'
   ASM_STORAGE_ENVIRONMENT: LOCAL
-  ASM_STORAGE_ENDPOINT: http://storage:9000
+  ASM_STORAGE_ENDPOINT: ${ASM_STORAGE_ENDPOINT:-http://storage:9000}
   ASM_STORAGE_BUCKET: asm-private-local
   ASM_STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?Run init_local.py}
   ASM_STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Run init_local.py}
@@ -105,6 +113,63 @@ services:
     ports: ["127.0.0.1:8080:8080"]
     depends_on:
       api: {condition: service_healthy}
+  # Explicit operator services only. No live invocation or external send in normal CI.
+  telegram-operator:
+    profiles: [telegram-operator]
+    build: {<<: *backend, target: development}
+    environment:
+      <<: *telegram
+      ASM_ENVIRONMENT: LOCAL
+      ASM_MIGRATION_DATABASE_URL: postgresql+psycopg://asm_migrator:${PG_MIGRATION_PASSWORD:?Run init_local.py}@postgres:5432/asm_local
+      ASM_TELEGRAM_WORKSPACE_ID: ${ASM_TELEGRAM_WORKSPACE_ID:-}
+      ASM_TELEGRAM_BUSINESS_ID: ${ASM_TELEGRAM_BUSINESS_ID:-}
+      ASM_TELEGRAM_EXPECTED_OWNER_ID: ${ASM_TELEGRAM_EXPECTED_OWNER_ID:-}
+      ASM_TELEGRAM_CONNECTION_ID: ${ASM_TELEGRAM_CONNECTION_ID:-}
+      ASM_TELEGRAM_BILLING_CONTACT: ${ASM_TELEGRAM_BILLING_CONTACT:-}
+      ASM_TELEGRAM_BILLING_FROM: ${ASM_TELEGRAM_BILLING_FROM:-}
+      ASM_TELEGRAM_BILLING_UNTIL: ${ASM_TELEGRAM_BILLING_UNTIL:-}
+    command: [python, scripts/provision_telegram_test.py]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  telegram-smoke:
+    profiles: [telegram-smoke]
+    build: {<<: *backend, target: development}
+    environment:
+      ASM_ENVIRONMENT: LOCAL
+      ASM_STORAGE_ENDPOINT: ${ASM_STORAGE_ENDPOINT:-http://storage:9000}
+      ASM_TELEGRAM_WORKSPACE_ID: ${ASM_TELEGRAM_WORKSPACE_ID:-}
+      ASM_TELEGRAM_BUSINESS_ID: ${ASM_TELEGRAM_BUSINESS_ID:-}
+      ASM_TELEGRAM_SMOKE_CONNECTION_ID: ${ASM_TELEGRAM_SMOKE_CONNECTION_ID:-}
+      ASM_TELEGRAM_SMOKE_ORIGIN: ${ASM_TELEGRAM_SMOKE_ORIGIN:-}
+      ASM_TELEGRAM_SMOKE_LOGIN: ${ASM_TELEGRAM_SMOKE_LOGIN:-}
+      ASM_TELEGRAM_SMOKE_PASSWORD: ${ASM_TELEGRAM_SMOKE_PASSWORD:-}
+      ASM_TELEGRAM_SMOKE_MARKER: ${ASM_TELEGRAM_SMOKE_MARKER:-}
+      ASM_TELEGRAM_SMOKE_CONVERSATION_ID: ${ASM_TELEGRAM_SMOKE_CONVERSATION_ID:-}
+      ASM_TELEGRAM_SMOKE_CLIENT_ID: ${ASM_TELEGRAM_SMOKE_CLIENT_ID:-}
+      ASM_TELEGRAM_SMOKE_REPLY: ${ASM_TELEGRAM_SMOKE_REPLY:-}
+      ASM_TELEGRAM_SMOKE_KEY: ${ASM_TELEGRAM_SMOKE_KEY:-}
+      ASM_TELEGRAM_SMOKE_APPROVAL: ${ASM_TELEGRAM_SMOKE_APPROVAL:-}
+    command: [python, scripts/smoke_telegram_test.py]
+  telegram-ingress:
+    profiles: [telegram-live]
+    image: ${WEB_IMAGE:?Missing images.lock.env}
+    # The operator owns the 0600 TLS keys; the pinned image remains unprivileged.
+    user: "${ASM_TELEGRAM_INGRESS_UID:-65534}:${ASM_TELEGRAM_INGRESS_GID:-65534}"
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
+    # Public HTTPS exists only when this profile/service is explicitly started.
+    ports: ["443:443"]
+    volumes:
+      - ./.env.telegram.ingress.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./.env.telegram.tls:/run/tls:ro
+    networks:
+      default:
+        aliases:
+          - ${ASM_TELEGRAM_STORAGE_HOST:-files.telegram-test.invalid}
+          - ${ASM_TELEGRAM_CONSOLE_HOST:-console.telegram-test.invalid}
+    depends_on:
+      frontend: {condition: service_started}
+      storage: {condition: service_healthy}
   postgres-test:
     profiles: [test]
     image: ${DB_IMAGE:?Missing images.lock.env}
