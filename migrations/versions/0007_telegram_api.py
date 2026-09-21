@@ -507,10 +507,12 @@ def _billing() -> None:
       END $$""")
     op.execute("""CREATE FUNCTION platform.messaging_manual_send_allowed(ws uuid) RETURNS boolean
       LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
-      DECLARE moment timestamptz:=clock_timestamp(); mode platform.workspace_service_modes%ROWTYPE;
+      DECLARE moment timestamptz; mode platform.workspace_service_modes%ROWTYPE;
         sub platform.workspace_subscriptions%ROWTYPE; ent platform.plan_entitlements%ROWTYPE;
       BEGIN
         PERFORM platform.messaging_lock_billing_workspace(ws);
+        -- Lock waits may cross subscription/mode expiry; use the admitted snapshot time.
+        moment:=clock_timestamp();
         IF NOT EXISTS(SELECT 1 FROM platform.workspace_billing_accounts WHERE workspace_id=ws) OR
           NOT EXISTS(SELECT 1 FROM platform.workspace_service_modes WHERE workspace_id=ws) OR
           NOT EXISTS(SELECT 1 FROM platform.workspace_subscriptions WHERE workspace_id=ws) THEN
@@ -744,6 +746,8 @@ def _owner() -> None:
             """          IF conn.provider='TELEGRAM' THEN
             IF platform.telegram_can_send(ws,conn.id,conv.id,true) IS NOT TRUE THEN RAISE EXCEPTION 'NOT_ALLOWED' USING ERRCODE='P2001'; END IF;
             IF platform.messaging_manual_send_allowed(ws) IS NOT TRUE THEN RAISE EXCEPTION 'NOT_ALLOWED' USING ERRCODE='P2001'; END IF;
+            -- The reply window can expire while acquiring the billing locks.
+            IF platform.telegram_can_send(ws,conn.id,conv.id,true) IS NOT TRUE THEN RAISE EXCEPTION 'NOT_ALLOWED' USING ERRCODE='P2001'; END IF;
           END IF;
           INSERT INTO app.messages(workspace_id,conversation_id,connection_id,provider_chat_id,direction,content_type,text,occurred_at)""",
         ),
@@ -805,7 +809,8 @@ def _worker() -> None:
           PERFORM platform.messaging_reschedule(j.id,'DEPENDENCY_UNAVAILABLE',true);
           RETURN jsonb_build_object('code','UNAVAILABLE','status',(SELECT status FROM app.outbox_events WHERE workspace_id=j.workspace_id AND id=box.id));
         END;
-        IF allowed IS NOT TRUE THEN
+        -- Recheck the Telegram time gates after every potentially blocking billing lock.
+        IF allowed IS NOT TRUE OR platform.telegram_can_send(j.workspace_id,j.connection_id,msg.conversation_id,true) IS NOT TRUE THEN
           PERFORM platform.messaging_reschedule(j.id,'NOT_ALLOWED',false);
           RETURN jsonb_build_object('code','NOT_ALLOWED','status','FAILED');
         END IF;

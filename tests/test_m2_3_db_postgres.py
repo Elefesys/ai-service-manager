@@ -5,12 +5,16 @@ import copy
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from asm.billing.errors import BillingUnavailable
 from asm.billing.service import EntitlementService
+from asm.messaging.models import OutcomeKind, SendOutcome
+from asm.messaging.worker import Worker
 from asm.tenancy import AuthenticatedAccount
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -535,6 +539,171 @@ async def test_dispatch_rechecks_current_authority_business_billing_and_window(t
     assert (await query(h, "SELECT status,attempt_id FROM app.outbox_events")) == [
         {"status": "FAILED", "attempt_id": None}
     ]
+
+
+async def expire_during_billing_lock(h, conversation, boundary, function, invoke):
+    # The account UPDATE holds the same NO KEY UPDATE lock as contact writes.
+    # Observe as asm_runtime: migrator cannot see another role's query/wait fields.
+    async with h.runtime.engine.connect() as observer, h.migrator.connect() as blocker:
+        assert (await observer.execute(text("SELECT current_user"))).scalar_one() == "asm_runtime"
+        assert (await observer.execute(text("SHOW lock_timeout"))).scalar_one() == "2s"
+        transaction = await blocker.begin()
+        task = None
+        try:
+            assert (
+                await blocker.execute(
+                    text(
+                        "UPDATE platform.workspace_billing_accounts "
+                        "SET contact_display_name=contact_display_name "
+                        "WHERE workspace_id=:ws RETURNING workspace_id"
+                    ),
+                    {"ws": A},
+                )
+            ).scalar_one() == A
+            blocker_pid = (await blocker.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+            task = asyncio.create_task(invoke())
+            async with asyncio.timeout(1):
+                while True:
+                    if task.done():
+                        await task  # Preserve the actual failure instead of a timeout.
+                        pytest.fail("Admission finished without waiting for the billing account")
+                    await observer.execute(text("SELECT pg_stat_clear_snapshot()"))
+                    waiting = (
+                        (
+                            await observer.execute(
+                                text(
+                                    "SELECT pid FROM pg_stat_activity WHERE usename=current_user "
+                                    "AND pid<>pg_backend_pid() AND state='active' AND wait_event_type='Lock' "
+                                    "AND :blocker=ANY(pg_blocking_pids(pid)) AND query LIKE :function"
+                                ),
+                                {"blocker": blocker_pid, "function": f"%platform.{function}(%"},
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    if waiting:
+                        assert len(waiting) == 1
+                        candidate_pid = waiting[0]
+                        break
+                    await asyncio.sleep(0.01)
+
+            # Arm a still-future TEST boundary only after the real wait is proven.
+            # This avoids racing worker startup against a fixed wall-clock sleep.
+            # Old code has already read its clock/window; it will see this committed
+            # interval after the wait but incorrectly admit using the earlier time.
+            if boundary == "window":
+                table, column, expression, where = (
+                    "app.conversations",
+                    "last_client_inbound_at",
+                    "clock_timestamp()-interval '24 hours'+interval '250 milliseconds'",
+                    "id=:conversation",
+                )
+                until = "last_client_inbound_at+interval '24 hours'"
+            else:
+                table = {
+                    "subscription": "platform.workspace_subscriptions",
+                    "mode": "platform.workspace_service_modes",
+                }[boundary]
+                column, expression, where = (
+                    "effective_until",
+                    "clock_timestamp()+interval '250 milliseconds'",
+                    "workspace_id=:ws",
+                )
+                until = "effective_until"
+            assert (
+                await blocker.execute(
+                    text(f"SELECT {until}>clock_timestamp() FROM {table} WHERE {where}"),
+                    {"ws": A, "conversation": conversation},
+                )
+            ).scalar_one()
+            deadline, armed_at = (
+                await blocker.execute(
+                    text(
+                        f"UPDATE {table} SET {column}={expression} WHERE {where} "
+                        f"RETURNING {until},clock_timestamp()"
+                    ),
+                    {"ws": A, "conversation": conversation},
+                )
+            ).one()
+            assert armed_at < deadline
+            await observer.execute(text("SELECT pg_sleep_until(:deadline)"), {"deadline": deadline})
+            released_at, blockers = (
+                await observer.execute(
+                    text("SELECT clock_timestamp(),pg_blocking_pids(:pid)"),
+                    {"pid": candidate_pid},
+                )
+            ).one()
+            assert released_at >= deadline and blocker_pid in blockers
+            assert not task.done()
+            # Release before the unchanged 2s runtime lock timeout and 30s lease.
+            await transaction.commit()
+            return await asyncio.wait_for(task, 5), released_at
+        finally:
+            if transaction.is_active:
+                await transaction.rollback()
+            if task is not None:
+                if not task.done():
+                    task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.parametrize("boundary", ["subscription", "mode", "window"])
+async def test_worker_denies_expiry_during_billing_lock_without_adapter_call(telegram, boundary):
+    h = telegram
+    _, _, conv = await receive(h)
+    await request(h, conv)
+    claim = await h.kernel.claim_job("expiry-during-billing-lock")
+    assert claim is not None
+    client = SimpleNamespace(
+        observe=AsyncMock(return_value=observed()),
+        send=AsyncMock(return_value=SendOutcome(OutcomeKind.SUCCESS, provider_message_id="9001")),
+    )
+    worker = Worker(h.kernel, h.adapter, telegram=client)
+    result, released_at = await expire_during_billing_lock(
+        h, conv, boundary, "telegram_begin_send", lambda: worker.execute(claim)
+    )
+    assert result is None and released_at < claim.lease_until
+    client.observe.assert_awaited_once()
+    client.send.assert_not_awaited()
+    assert not h.ledger.exists()
+    assert (await query(h, "SELECT status,attempt_id,error_code FROM app.outbox_events")) == [
+        {"status": "FAILED", "attempt_id": None, "error_code": "NOT_ALLOWED"}
+    ]
+    assert (
+        await query(
+            h,
+            "SELECT status,error_code,last_attempt_id FROM platform.messaging_jobs WHERE id=:id",
+            id=claim.job_id,
+        )
+    ) == [{"status": "DEAD", "error_code": "NOT_ALLOWED", "last_attempt_id": None}]
+
+
+@pytest.mark.parametrize("boundary", ["subscription", "mode", "window"])
+async def test_owner_denies_expiry_during_billing_lock_without_intention(telegram, boundary):
+    h = telegram
+    _, _, conv = await receive(h)
+
+    async def invoke():
+        try:
+            return await request(h, conv)
+        except DBAPIError as error:
+            return error.orig.sqlstate, error.orig.diag.message_primary
+
+    result, _ = await expire_during_billing_lock(
+        h, conv, boundary, "messaging_request_text", invoke
+    )
+    assert result == ("P2001", "NOT_ALLOWED")
+    for table, suffix in (
+        ("app.messages", " AND direction='OUTBOUND'"),
+        ("platform.messaging_command_receipts", ""),
+        ("app.audit_events", " AND event_type='MESSAGE_SEND_REQUESTED'"),
+        ("app.outbox_events", ""),
+        ("platform.messaging_jobs", " AND kind='SEND_MANUAL_TEXT'"),
+    ):
+        assert not await query(h, f"SELECT 1 FROM {table} WHERE workspace_id=:ws{suffix}", ws=A)
+    assert not await h.worker.run_once()
+    assert not h.ledger.exists()
 
 
 async def test_429_finalized_delay_is_durable_replay_and_horizon_exhausts(telegram):
