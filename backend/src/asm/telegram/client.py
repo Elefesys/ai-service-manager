@@ -324,6 +324,9 @@ class TelegramClient:
                         if response.status_code < 500
                         else Code.DEPENDENCY_UNAVAILABLE
                     )
+                if response.headers.get("content-encoding", "identity").lower() != "identity":
+                    # Reject before HTTPX's decoder can allocate an inflated body.
+                    raise TelegramError(Code.INVALID_INPUT)
                 async for chunk in response.aiter_bytes(chunk_size=65536):
                     yield chunk
         except TelegramError as error:

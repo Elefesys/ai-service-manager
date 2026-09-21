@@ -348,6 +348,36 @@ async def test_get_file_rejects_hostile_paths_without_second_request(path):
         await client.aclose()
 
 
+async def test_image_rejects_encoded_response_before_reading_or_decoding():
+    calls = []
+
+    class EncodedStream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            raise AssertionError("Encoded image body must not be read")
+            yield b""  # pragma: no cover
+
+    async def handler(request):
+        calls.append(request)
+        assert request.headers["Accept-Encoding"] == "identity"
+        if len(calls) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "result": {"file_id": "opaque-photo", "file_path": "photo/a.jpg"},
+                },
+            )
+        return httpx.Response(200, headers={"Content-Encoding": "gzip"}, stream=EncodedStream())
+
+    client = TelegramClient(config(), transport=httpx.MockTransport(handler))
+    try:
+        with pytest.raises(MessagingError, match="INVALID_INPUT"):
+            _ = [chunk async for chunk in client.open_image(fetch_permit())]
+        assert len(calls) == 2
+    finally:
+        await client.aclose()
+
+
 async def test_provider_bounded_json_and_observation_error_never_contains_secret():
     async def handler(request):
         return httpx.Response(200, content=b"x" * 65537)

@@ -529,7 +529,7 @@ def _billing() -> None:
       END $$""")
     op.execute(r"""CREATE FUNCTION platform.initialize_local_messaging_billing(p_workspace uuid,p_contact text,p_from timestamptz,p_until timestamptz) RETURNS text
       LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
-      DECLARE plan uuid; revision uuid; account platform.workspace_billing_accounts%ROWTYPE; manifest text; sub_count integer; mode_count integer; audit_count integer;
+      DECLARE plan uuid; v_revision uuid; account platform.workspace_billing_accounts%ROWTYPE; manifest text; sub_count integer; mode_count integer; audit_count integer;
       BEGIN
         PERFORM pg_advisory_xact_lock(1295070019,1);
         IF p_workspace IS NULL OR p_contact IS NULL OR p_contact<>btrim(p_contact,' ') OR char_length(p_contact) NOT BETWEEN 1 AND 200 OR octet_length(p_contact)>800 OR p_contact ~ '[\x00-\x1F\x7F]' OR p_from IS NULL OR p_until IS NULL OR NOT isfinite(p_from) OR NOT isfinite(p_until) OR p_from>=p_until THEN RAISE EXCEPTION 'CONFLICT_INPUT_MISMATCH' USING ERRCODE='P1301'; END IF;
@@ -538,29 +538,29 @@ def _billing() -> None:
         SELECT plan_id INTO plan FROM platform.saas_plans WHERE code='test_messaging';
         IF NOT FOUND THEN
           INSERT INTO platform.saas_plans(code,display_name,status) VALUES('test_messaging','M2.3 TEST messaging','ACTIVE') RETURNING plan_id INTO plan;
-          INSERT INTO platform.saas_plan_revisions(plan_id,revision,publication_state) VALUES(plan,1,'DRAFT') RETURNING plan_revision_id INTO revision;
-          INSERT INTO platform.plan_entitlements(plan_revision_id,capability_key,value_kind,enabled,limit_value,criticality) VALUES(revision,'messaging.manual_send','BOOLEAN',true,NULL,'ESSENTIAL');
-          UPDATE platform.saas_plan_revisions SET publication_state='SEALED',published_at=clock_timestamp() WHERE plan_revision_id=revision;
+          INSERT INTO platform.saas_plan_revisions(plan_id,revision,publication_state) VALUES(plan,1,'DRAFT') RETURNING plan_revision_id INTO v_revision;
+          INSERT INTO platform.plan_entitlements(plan_revision_id,capability_key,value_kind,enabled,limit_value,criticality) VALUES(v_revision,'messaging.manual_send','BOOLEAN',true,NULL,'ESSENTIAL');
+          UPDATE platform.saas_plan_revisions SET publication_state='SEALED',published_at=clock_timestamp() WHERE plan_revision_id=v_revision;
         ELSE
-          SELECT r.plan_revision_id INTO revision FROM platform.saas_plan_revisions r WHERE r.plan_id=plan AND r.revision=1 AND r.publication_state='SEALED';
-          IF revision IS NULL OR NOT EXISTS(SELECT 1 FROM platform.saas_plans WHERE plan_id=plan AND status='ACTIVE' AND display_name='M2.3 TEST messaging') OR
+          SELECT r.plan_revision_id INTO v_revision FROM platform.saas_plan_revisions r WHERE r.plan_id=plan AND r.revision=1 AND r.publication_state='SEALED';
+          IF v_revision IS NULL OR NOT EXISTS(SELECT 1 FROM platform.saas_plans WHERE plan_id=plan AND status='ACTIVE' AND display_name='M2.3 TEST messaging') OR
             (SELECT count(*) FROM platform.saas_plan_revisions WHERE plan_id=plan)<>1 THEN RAISE EXCEPTION 'CONFLICT_CATALOG_MISMATCH' USING ERRCODE='P1301'; END IF;
         END IF;
-        SELECT string_agg(capability_key||chr(9)||value_kind||chr(9)||CASE WHEN value_kind='BOOLEAN' THEN enabled::text ELSE limit_value::text END||chr(9)||criticality||chr(10),'' ORDER BY convert_to(capability_key,'UTF8')) INTO manifest FROM platform.plan_entitlements WHERE plan_revision_id=revision;
-        IF manifest IS DISTINCT FROM E'messaging.manual_send\tBOOLEAN\ttrue\tESSENTIAL\n' OR (SELECT count(*) FROM platform.plan_entitlements WHERE plan_revision_id=revision)<>1 THEN RAISE EXCEPTION 'CONFLICT_CATALOG_MISMATCH' USING ERRCODE='P1301'; END IF;
+        SELECT string_agg(capability_key||chr(9)||value_kind||chr(9)||CASE WHEN value_kind='BOOLEAN' THEN enabled::text ELSE limit_value::text END||chr(9)||criticality||chr(10),'' ORDER BY convert_to(capability_key,'UTF8')) INTO manifest FROM platform.plan_entitlements WHERE plan_revision_id=v_revision;
+        IF manifest IS DISTINCT FROM E'messaging.manual_send\tBOOLEAN\ttrue\tESSENTIAL\n' OR (SELECT count(*) FROM platform.plan_entitlements WHERE plan_revision_id=v_revision)<>1 THEN RAISE EXCEPTION 'CONFLICT_CATALOG_MISMATCH' USING ERRCODE='P1301'; END IF;
         SELECT * INTO account FROM platform.workspace_billing_accounts WHERE workspace_id=p_workspace FOR UPDATE;
         SELECT count(*) INTO sub_count FROM platform.workspace_subscriptions WHERE workspace_id=p_workspace;
         SELECT count(*) INTO mode_count FROM platform.workspace_service_modes WHERE workspace_id=p_workspace;
         SELECT count(*) INTO audit_count FROM app.audit_events WHERE workspace_id=p_workspace AND event_type='WORKSPACE_BILLING_PROVISIONED';
         IF account.workspace_id IS NOT NULL OR sub_count+mode_count+audit_count>0 THEN
           IF account.workspace_id IS NULL OR sub_count<>1 OR mode_count<>1 OR audit_count<>1 THEN RAISE EXCEPTION 'CONFLICT_PARTIAL_STATE' USING ERRCODE='P1301'; END IF;
-          IF account.contact_display_name<>p_contact OR account.version<>1 OR NOT EXISTS(SELECT 1 FROM platform.workspace_subscriptions WHERE workspace_id=p_workspace AND plan_revision_id=revision AND status='ACTIVE' AND funding_mode='COMPED' AND effective_from=p_from AND effective_until=p_until AND version=1) OR
+          IF account.contact_display_name<>p_contact OR account.version<>1 OR NOT EXISTS(SELECT 1 FROM platform.workspace_subscriptions WHERE workspace_id=p_workspace AND plan_revision_id=v_revision AND status='ACTIVE' AND funding_mode='COMPED' AND effective_from=p_from AND effective_until=p_until AND version=1) OR
             NOT EXISTS(SELECT 1 FROM platform.workspace_service_modes WHERE workspace_id=p_workspace AND mode='NORMAL' AND reason_code='PROVISIONED_LOCAL' AND effective_from=p_from AND effective_until=p_until AND version=1) OR
             NOT EXISTS(SELECT 1 FROM app.audit_events WHERE workspace_id=p_workspace AND event_type='WORKSPACE_BILLING_PROVISIONED' AND object_id=account.billing_account_id AND object_version=1) THEN RAISE EXCEPTION 'CONFLICT_STATE_DRIFT' USING ERRCODE='P1301'; END IF;
           RETURN 'NOOP';
         END IF;
         INSERT INTO platform.workspace_billing_accounts(workspace_id,contact_display_name) VALUES(p_workspace,p_contact) RETURNING * INTO account;
-        INSERT INTO platform.workspace_subscriptions(workspace_id,plan_revision_id,required_publication_state,status,funding_mode,effective_from,effective_until) VALUES(p_workspace,revision,'SEALED','ACTIVE','COMPED',p_from,p_until);
+        INSERT INTO platform.workspace_subscriptions(workspace_id,plan_revision_id,required_publication_state,status,funding_mode,effective_from,effective_until) VALUES(p_workspace,v_revision,'SEALED','ACTIVE','COMPED',p_from,p_until);
         INSERT INTO platform.workspace_service_modes(workspace_id,mode,reason_code,effective_from,effective_until) VALUES(p_workspace,'NORMAL','PROVISIONED_LOCAL',p_from,p_until);
         INSERT INTO app.audit_events(workspace_id,actor_kind,correlation_id,event_type,object_type,object_id,object_version,payload) VALUES(p_workspace,'LOCAL_PROVISIONER',uuidv7(),'WORKSPACE_BILLING_PROVISIONED','WORKSPACE_BILLING_ACCOUNT',account.billing_account_id,1,'{}');
         RETURN 'CREATED';

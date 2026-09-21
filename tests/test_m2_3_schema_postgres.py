@@ -1,5 +1,6 @@
 """Physical 0007 isolation, immutable provisioning and exact 0006 preservation."""
 
+import asyncio
 import importlib.util
 import json
 from pathlib import Path
@@ -17,7 +18,7 @@ from test_m2_1_schema_postgres import migrator as migrator
 from test_m2_2_db_postgres import ready
 from test_m2_3_db_postgres import BOT, EXTERNAL, OWNER, ingress, observed, projection, receive
 from test_m2_3_db_postgres import telegram as telegram
-from test_tenancy_postgres import BA, A, B
+from test_tenancy_postgres import BA, BB, A, B
 from test_tenancy_postgres import db as db
 from test_tenancy_postgres import seeded as seeded
 
@@ -118,6 +119,173 @@ async def test_operator_binding_is_exact_repeat_only_and_owner_identity_immutabl
         with pytest.raises(DBAPIError) as caught:
             await c.execute(text(statement), args)
         assert caught.value.orig.sqlstate == "42501"
+
+
+async def test_concurrent_fresh_provisioning_serializes_exact_repeat_and_identity_conflicts(
+    telegram,
+):
+    h = telegram
+    binding_sql = text(
+        "SELECT platform.initialize_telegram_connection(:ws,:business,:bot,:external,:owner,CAST(:o AS jsonb))"
+    )
+    binding = {
+        "ws": B,
+        "business": BB,
+        "bot": BOT,
+        "external": "concurrent-fresh-business-B",
+        "owner": "8000002",
+        "o": json.dumps(
+            observed(external_connection_id="concurrent-fresh-business-B", owner_user_id="8000002")
+        ),
+    }
+    billing_sql = text(
+        "SELECT platform.initialize_local_messaging_billing(:ws,'Concurrent TEST',:start,:end)"
+    )
+    billing = {"ws": B, "start": h.billing_interval[0], "end": h.billing_interval[1]}
+    release = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    first_ready = loop.create_future()
+    tasks = []
+
+    async def setup(hold=False, started=None):
+        try:
+            async with h.migrator.begin() as c:
+                pid = (await c.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+                if started is not None:
+                    started.set_result(pid)
+                account_result = (await c.execute(billing_sql, billing)).scalar_one()
+                connection_result = (await c.execute(binding_sql, binding)).scalar_one()
+                if hold:
+                    first_ready.set_result(pid)
+                    await release.wait()
+                return account_result, connection_result
+        except BaseException as error:
+            if hold and not first_ready.done():
+                first_ready.set_exception(error)
+            raise
+
+    async def conflicting_binding(overrides, started):
+        try:
+            async with h.migrator.begin() as c:
+                started.set_result((await c.execute(text("SELECT pg_backend_pid()"))).scalar_one())
+                await c.execute(binding_sql, {**binding, **overrides})
+        except DBAPIError as error:
+            return error.orig.sqlstate, error.orig.diag.message_primary
+        raise AssertionError("Conflicting binding unexpectedly committed")
+
+    try:
+        # The first transaction has both rows but has not committed. Independent
+        # connections still see a fresh B and must contend on the actual DB locks.
+        tasks.append(asyncio.create_task(setup(hold=True)))
+        first_pid = await asyncio.wait_for(first_ready, 5)
+        starts = [loop.create_future() for _ in range(3)]
+        tasks.extend(
+            (
+                asyncio.create_task(setup(started=starts[0])),
+                asyncio.create_task(
+                    conflicting_binding(
+                        {
+                            "owner": "8000003",
+                            "o": json.dumps(
+                                observed(
+                                    external_connection_id=binding["external"],
+                                    owner_user_id="8000003",
+                                )
+                            ),
+                        },
+                        starts[1],
+                    )
+                ),
+                asyncio.create_task(conflicting_binding({"ws": A, "business": BA}, starts[2])),
+            )
+        )
+        pids = await asyncio.wait_for(asyncio.gather(*starts), 5)
+        assert len({first_pid, *pids}) == 4
+        async with h.migrator.connect() as observer:
+            async with asyncio.timeout(5):
+                for pid, task in zip(pids, tasks[1:], strict=True):
+                    while True:
+                        blockers = (
+                            await observer.execute(
+                                text("SELECT pg_blocking_pids(:pid)"), {"pid": pid}
+                            )
+                        ).scalar_one()
+                        if first_pid in blockers:
+                            break
+                        if task.done():
+                            await task
+                            raise AssertionError(
+                                "Provisioning did not wait for the uncommitted setup"
+                            )
+                        await asyncio.sleep(0.01)
+        release.set()
+        created, repeated, owner_conflict, workspace_conflict = await asyncio.wait_for(
+            asyncio.gather(*tasks), 10
+        )
+        assert created[0] == "CREATED" and created[1]["code"] == "CREATED"
+        assert repeated == ("NOOP", {**created[1], "code": "NOOP"})
+        assert owner_conflict == workspace_conflict == ("P2001", "NOT_ALLOWED")
+        counts = (
+            await query(
+                h,
+                "SELECT "
+                "(SELECT count(*) FROM platform.workspace_billing_accounts WHERE workspace_id=:ws) AS accounts,"
+                "(SELECT count(*) FROM platform.workspace_subscriptions WHERE workspace_id=:ws) AS subscriptions,"
+                "(SELECT count(*) FROM platform.workspace_service_modes WHERE workspace_id=:ws) AS modes,"
+                "(SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws AND event_type='WORKSPACE_BILLING_PROVISIONED') AS audits,"
+                "(SELECT count(*) FROM app.channel_connections WHERE workspace_id=:ws AND provider='TELEGRAM') AS connections,"
+                "(SELECT count(*) FROM platform.channel_routes WHERE workspace_id=:ws AND provider='TELEGRAM') AS routes,"
+                "(SELECT count(*) FROM platform.telegram_connection_state WHERE workspace_id=:ws) AS states",
+                ws=B,
+            )
+        )[0]
+        assert counts == {
+            "accounts": 1,
+            "subscriptions": 1,
+            "modes": 1,
+            "audits": 1,
+            "connections": 1,
+            "routes": 1,
+            "states": 1,
+        }
+        state = (
+            await query(
+                h,
+                "SELECT connection_id::text AS connection_id,owner_user_id,generation,observation_version "
+                "FROM platform.telegram_connection_state WHERE workspace_id=:ws",
+                ws=B,
+            )
+        )[0]
+        assert state == {
+            "connection_id": created[1]["connection_id"],
+            "owner_user_id": binding["owner"],
+            "generation": 1,
+            "observation_version": 1,
+        }
+    finally:
+        release.set()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        # The existing messaging fixture removes B's state/route/connection chain.
+        # This test owns only B's fresh billing rows and their provisioning audit.
+        async with h.migrator.begin() as c:
+            for table in (
+                "platform.billing_contact_command_receipts",
+                "app.audit_events",
+                "platform.workspace_service_modes",
+                "platform.workspace_subscriptions",
+                "platform.workspace_billing_accounts",
+            ):
+                suffix = (
+                    " AND event_type='WORKSPACE_BILLING_PROVISIONED'"
+                    if table == "app.audit_events"
+                    else ""
+                )
+                await c.execute(
+                    text(f"DELETE FROM {table} WHERE workspace_id=:ws" + suffix), {"ws": B}
+                )
 
 
 async def test_composite_refs_reject_forged_workspace_connection_and_inbox(telegram):
