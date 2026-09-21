@@ -148,7 +148,9 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
         transaction = await connection.begin()
         try:
             # Transactional isolated catalog; rollback restores all existing test data.
-            await connection.execute(text("TRUNCATE " + ",".join(TABLES)))
+            await connection.execute(
+                text("TRUNCATE " + ",".join((*TABLES, "platform.messaging_command_receipts")))
+            )
             if case != "missing_workspace":
                 await connection.execute(
                     text("INSERT INTO platform.workspaces(id) VALUES(:ws)"), {"ws": workspace}

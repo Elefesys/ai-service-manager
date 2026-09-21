@@ -6,6 +6,7 @@ import os
 import sys
 from uuid import UUID
 
+from asm.foundation import DATABASE_SCHEMA_REVISION
 from provision_local_auth import (
     PrivateArgumentParser,
     ProvisioningError,
@@ -73,7 +74,7 @@ async def guard(connection):
         raise ProvisioningError("Unexpected TEST database or identity")
     if (
         await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
-    ).scalar_one() != "0004":
+    ).scalar_one() != DATABASE_SCHEMA_REVISION:
         raise ProvisioningError("Upgrade TEST first")
 
 
