@@ -518,13 +518,19 @@ def _billing() -> None:
         IF EXISTS(SELECT 1 FROM platform.workspace_subscriptions s LEFT JOIN platform.saas_plan_revisions r USING(plan_revision_id) LEFT JOIN platform.saas_plans p USING(plan_id)
           WHERE s.workspace_id=ws AND (r.plan_revision_id IS NULL OR r.publication_state<>'SEALED' OR r.published_at IS NULL OR p.plan_id IS NULL)) THEN
           RAISE EXCEPTION 'BILLING_STATE_UNAVAILABLE' USING ERRCODE='P2301',DETAIL='REVISION_INVALID'; END IF;
+        -- Validate the known product contract in every pinned history revision,
+        -- before subscription/mode decisions, exactly as EntitlementService does.
+        IF EXISTS(SELECT 1 FROM platform.workspace_subscriptions s JOIN platform.plan_entitlements e USING(plan_revision_id)
+          WHERE s.workspace_id=ws AND e.capability_key='messaging.manual_send' AND
+            (e.value_kind<>'BOOLEAN' OR e.criticality<>'ESSENTIAL')) THEN
+          RAISE EXCEPTION 'BILLING_STATE_UNAVAILABLE' USING ERRCODE='P2301',DETAIL='REVISION_INVALID'; END IF;
         SELECT * INTO sub FROM platform.workspace_subscriptions WHERE workspace_id=ws AND effective_from<=moment AND moment<effective_until;
         IF NOT FOUND THEN RETURN false; END IF;
         SELECT * INTO STRICT mode FROM platform.workspace_service_modes WHERE workspace_id=ws;
         IF NOT (mode.effective_from<=moment AND (mode.effective_until IS NULL OR moment<mode.effective_until)) THEN RETURN false; END IF;
         SELECT * INTO ent FROM platform.plan_entitlements WHERE plan_revision_id=sub.plan_revision_id AND capability_key='messaging.manual_send';
         IF NOT FOUND THEN RETURN false; END IF;
-        IF mode.mode='SUSPENDED' OR ent.criticality<>'ESSENTIAL' OR ent.value_kind<>'BOOLEAN' OR ent.enabled IS NOT TRUE OR ent.limit_value IS NOT NULL THEN RETURN false; END IF;
+        IF mode.mode='SUSPENDED' OR ent.enabled IS NOT TRUE OR ent.limit_value IS NOT NULL THEN RETURN false; END IF;
         RETURN true;
       END $$""")
     op.execute(r"""CREATE FUNCTION platform.initialize_local_messaging_billing(p_workspace uuid,p_contact text,p_from timestamptz,p_until timestamptz) RETURNS text

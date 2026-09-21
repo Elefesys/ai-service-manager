@@ -8,8 +8,8 @@
 ## Активное поручение C0 — M2.3-TELEGRAM-API / 2026-09-21
 
 **M1.1–M1.3, M2.1 и M2.2 VERIFIED в принятых LOCAL/TEST границах.
-M2.3 IN_PROGRESS: только контракт и подготовленный старт; новая реализация ещё
-не проверена. M2.4 TODO; весь M2 IN_PROGRESS.** История ниже не является текущим
+M2.3 передан в REVIEW: Telegram/owner API реализованы в том же Draft PR #20;
+приёмка C0 и независимый scoped C8 ещё впереди. M2.4 TODO; весь M2 IN_PROGRESS.** История ниже не является текущим
 поручением. Ведущий **C3**; C2 — миграция/DB, C1 — owner API/product policy,
 C6 — необходимая TEST конфигурация/операционный runbook. C8 выполняется независимо
 после реализации, предметное согласование C2/C3/C1 его не заменяет.
@@ -136,6 +136,51 @@ tree/tested merge+parents, changed paths, migration/dependency/contract deltas,
 doc commits. Не объявлять самостоятельно INTEGRATED/VERIFIED и не сливать PR.
 C0 принимает scope/результат и организует реальный независимый scoped C8 Telegram/API
 trust/effect review; затем пользовательский merge и отдельный actual main CI.
+
+### Передача реализации C3/C2/C1/C6 в REVIEW
+
+[Draft PR #20](https://github.com/Elefesys/ai-service-manager/pull/20) содержит код,
+миграцию 0007→0006, generated OpenAPI, consumer notes и
+[исполняемый TEST runbook](../runbooks/M2_TELEGRAM_LOCAL_TEST.md). Coordination commit
+`5347e3de498752be2834573eadfb39d59dc51bcb` сохранён; accepted base выше не менялся.
+Точный final head/tree, tested virtual merge и parents, фактические CI/assertion
+результаты и полный список paths — **PR receipt**. SHA-only commits не нужны.
+Следующее действие — C0 acceptance и независимый scoped C8 Telegram/API review.
+
+| Критерий | Исполнимая проверка и проверяемый результат |
+|---|---|
+| A01/A02/A06 | `test_m2_3_transport.py` и `test_m2_3_db_postgres.py`: strict numeric/opaque projection и DB fingerprint; шесть concurrent duplicates → один receipt/Inbox/Job; conflict; cross-bot/unknown binding/чужой Owner без writes; native/echo/edit/delete/unsupported → явные terminal receipts без Message/Job |
+| A01/A02 | `test_m2_3_wire_postgres.py::test_real_tcp_webhook_never_acknowledges_before_durable_commit`: настоящий TCP HTTP request остаётся без ACK, пока barrier держит commit; другая PG connection не видит receipt; после commit HTTP200 и durable row. HTTP rollback/ACK-loss tests и DB fail-trigger каждого receipt/Inbox/Job звена |
+| A03/A08 | `test_m2_3_api_postgres.py`: ровно пять routes, точные DTO/text/key; concurrent receipt replay → один intention/Audit/Outbox/Job; fail-trigger каждого звена → ноль частичных rows; response loss → тот же receipt; все routes требуют live session/OWNER; forged tenant/relation/cursor отвергаются |
+| A03/A09 | `test_m2_3_api_telegram_postgres.py`: два настоящих auth units с refresh между ними и без занятого pool; replay выигрывает до stale CAS/новых restrictions; lifecycle invalidation →503 без намерения; OWNER/product revoke между units; bounded failure observation сохраняется |
+| A04/A05/A09 | `test_real_http_accept_lost_response_process_restart_never_second_wire_call`: настоящий локальный сервер принимает sendMessage и теряет response; отдельный worker process падает до/после finalize commit; durable wire ledger=1 после replacement worker/recovery, delivery UNKNOWN, второго wire call нет |
+| A04/A09 | DB tests `test_observation_cas_fences_invalidation_and_concurrent_refresh`, `test_old_begin_and_unprobed_claim_cannot_bypass_telegram_preflight`, `test_dispatch_rechecks_current_authority_business_billing_and_window`: generation/version/claim fences, live authority и exact24h denial; future date clamp и duplicate не продлевают окно |
+| A04/A05 | `test_429_finalized_delay_is_durable_replay_and_horizon_exhausts`: due не раньше retry_after, canonical finalize replay сохраняет due, changed delay отклонён, пересечение15min → DEAD/RETRY_EXHAUSTED; прежние M2.1 five-claim/backoff/crash/UNKNOWN tests продолжают выполняться |
+| A07/A08 | `test_real_telegram_photo_http_pg_s3_owner_grant_and_signed_get`: реальные getFile/photo HTTP → прежний validator/fencing → PG/private S3 → authenticated grant → реальные signed GET bytes; TTL60, anonymous403, forged relation404, без DB unit на provider I/O. Hostile paths/encoded bodies отклоняются до чтения |
+| A03/A08/A09 | `test_m2_3_policy.py`, API/DB policy cases: настоящий EntitlementService и SQL dispatch parity, missing/false/inactive/modes/structural503, чтение/grants без product gate. Fresh setup exact repeat/conflict/concurrency и старый TEST catalog неизменны |
+| A12 | `test_m2_3_schema_postgres.py`: ровно две новые FORCE RLS таблицы, нет runtime DML; composite FK/immutable owner; 0006 rows/FileObject winner/UNKNOWN/billing сохраняются при upgrade/repeat/downgrade/reupgrade; Telegram history →55000 до первой mutation. Штатные full CI/browser, contracts/reproducibility, оба clean-source gates |
+
+Необходимые изменения прежних tests объясняются принятой additive дельтой:
+
+- `test_auth_contract.py`: inventory дополнен ровно пятью owner routes; frozen auth
+  seven-endpoint snapshot неизменен. `test_foundation.py`: current head0007 при
+  неизменном frozen tenancy0003.
+- `test_m2_1_models.py`: отрицательный provider-вектор использует неподдерживаемое
+  имя, поскольку TELEGRAM теперь принят. Остальные validation vectors сохранены.
+- `test_m2_1_postgres.py`: scoped fixture cleanup удаляет новые receipt/state до
+  старой FK-цепочки; tenantless rows удаляются только для fixture bot identities.
+- `test_m2_2_migrations.py`: сравнение исходных0005 rows исключает только additive
+  nullable metadata0006/0007. Отдельный0007 migration test проверяет сохранность
+  FileObject winner, UNKNOWN и billing; privacy/recovery assertions сохранены.
+- `test_postgres.py` и `test_tenancy_postgres.py`: точные table/function inventories
+  расширены на принятые две таблицы и typed capabilities, без общих SQL/DML прав.
+
+**Live Telegram: BLOCKED — внешнее runtime/DNS/TLS окружение не предоставлено.**
+Bot token/webhook secret не запрашивались и не использовались. Реальные getMe/
+getBusinessConnection/getWebhookInfo, browser HTTPS signed GET и получение Client
+ответа должны быть записаны отдельно оператором по runbook. Обычный CI проверяет
+локальный HTTP fault server, настоящие PostgreSQL/S3 и прежний M1 browser; не доказывает
+внешний Telegram или Console A11. C5 начинает после принятого merge/actual main CI.
 
 ### Что подготовить для live Telegram, не блокируя независимый код
 

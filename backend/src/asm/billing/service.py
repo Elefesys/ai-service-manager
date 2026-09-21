@@ -231,7 +231,7 @@ class EntitlementService:
                     or revision.plan_revision_id != sub.plan_revision_id
                 ):
                     raise ValueError("Invalid pinned revision")
-                if any(
+                if MANUAL_SEND_KEY in keys and any(
                     item.capability_key == MANUAL_SEND_KEY
                     and (item.value_kind, item.criticality) != ("BOOLEAN", "ESSENTIAL")
                     for item in revision.entitlements

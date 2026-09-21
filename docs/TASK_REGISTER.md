@@ -2,11 +2,11 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — M2.2 VERIFIED; выдан M2.3-TELEGRAM-API / 2026-09-21
+## Текущий статус — M2.3-TELEGRAM-API REVIEW / 2026-09-21
 
 **M1.1–M1.3, M2.1 и M2.2 VERIFIED в принятых LOCAL/TEST границах.
-M2.3 IN_PROGRESS: принят контракт и подготовлен документационный старт; функционал
-ещё не реализован. M2.4 TODO; весь M2 IN_PROGRESS.** Единственные текущие инструкции —
+M2.3 REVIEW: реализация Telegram/owner API передана в Draft PR #20; приёмка C0
+и независимый scoped C8 ещё впереди. M2.4 TODO; весь M2 IN_PROGRESS.** Единственные текущие инструкции —
 [M2_HANDOFF](tasks/M2_HANDOFF.md), единый технический контракт —
 [M2_CONTRACT §10](tasks/M2_CONTRACT.md#10-m23-telegram-api--принято-c0c2c3c1-2026-09-21).
 M1/R4 и закрытые kernel/storage срезы не переоткрывать.
@@ -25,13 +25,13 @@ Artifact digest указан по GitHub metadata; побайтная прове
 Приняты только private images и внутренний owner grant, применимые A07/A08 и
 A02/A04/A06/A12; настоящий Telegram/API/UI и полный A11 ещё не приняты.
 
-Следующее единственное поручение — **M2.3-TELEGRAM-API**, ведущий **C3**,
+Текущее единственное поручение — **M2.3-TELEGRAM-API**, ведущий **C3**,
 C2 — DB/0007, C1 — API/product policy, C6 — ограниченная TEST setup/runbook помощь.
 Accepted implementation base — actual main выше. Ветка
-**`c3/m2-3-telegram-api`** → main; один подготовленный C0 Draft PR. Его номер,
-coordination head/tree и стартовый CI — в PR metadata и готовом поручении C0,
-без дополнительного коммита ради SHA предыдущего документа. Первый coordination
-commit сохранить; реализацию продолжать в этой ветке/PR.
+**`c3/m2-3-telegram-api`** → main; тот же [Draft PR #20](https://github.com/Elefesys/ai-service-manager/pull/20).
+Первый coordination commit `5347e3de498752be2834573eadfb39d59dc51bcb` сохранён.
+Final head/tree, tested virtual merge/parents, CI/gates и изменённые paths публикуются
+в PR receipt без цепочки документальных коммитов только ради SHA.
 
 C0 прочитал код и канон; C2/C3 и C1 реально выполнили read-only CONTRACT review §10.
 Согласованы: verified operator binding, durable Telegram receipt/Inbox/ACK, opaque
@@ -41,10 +41,13 @@ CAS, 24h conservative window, 429 delay и UNKNOWN/no-resend. Пять owner rou
 через настоящий EntitlementService; старые TEST catalog/keys/GET billing сохранены.
 Новый test_messaging plan используется только явно для fresh LOCAL/TEST Workspace,
 без перепривязки прежних subscriptions. **0007_telegram_api.py, 0007→0006** назначена
-C0/C2; применённые 0001–0006 не редактировать. Это не C8 review реализации.
+C0/C2 и реализована; применённые 0001–0006 не изменены. Это не C8 review реализации.
 
-Следующий gate — реализация и полный CI → C0 + независимый scoped C8 по новым
-Telegram/API risks → ручной merge пользователя → actual main CI. C5 не стартует
+Реализация включает durable verified webhook, trusted binding/CAS, Telegram TEXT/photo,
+private S3, ровно пять owner routes и fresh-only product provisioning. Фактическая
+матрица tests/assertions находится в активном handoff; точные runs — в PR receipt.
+Следующий gate — C0 + независимый scoped C8 по новым Telegram/API risks →
+ручной merge пользователя → actual main CI. C5 не стартует
 до принятого интегрированного API. Нет новых AI/M3/цен/платежей или платной infra.
 Подготовленные пользователем bot/Owner/Client/secrets учтены; runtime injection,
 HTTPS/browser-reachable private S3, binding/rights и живой Telegram ещё требуют
@@ -76,8 +79,8 @@ HTTPS/browser-reachable private S3, binding/rights и живой Telegram ещё
 | M2.1-KERNEL | Controlled event → Message → owner command → durable send/recovery | M2_CONTRACT §§1–8 | C3; C2 DB/migration | VERIFIED | 0005→0004; post-merge C0 acceptance; 259 PostgreSQL и 15 прежних browser PASS | Сохранять SEND UNKNOWN/worker/RLS/Audit при расширениях |
 | M2.2 | Private ObjectStorage/FileObject и авторизация изображений | Принятый actual main M2.1 | C6+C3; C2 DB/migration; C0/C8 review | VERIFIED | PR #19 MERGED; actual main a321bdd58856fb41bccb5749b4212349832e623c; push/main 35611528733 SUCCESS; C8 PASS | Принято controlled LOCAL/TEST; настоящий provider/API — M2.3 |
 | M2.2-PRIVATE-IMAGES | Image reference → private file → owner signed GET | M2_CONTRACT §9 | C6; C3 media/fix; C2 migration | VERIFIED | 0006→0005; 305 PostgreSQL/S3; privacy/recovery/late-PUT/WebP guards; C8-M2.2-01 CLOSED; post-merge receipt | Сохранить private grant/fencing/cleanup; не объявлять весь M2 готовым |
-| M2.3 | Telegram adapter, test connection, capabilities, UNKNOWN и owner API | VERIFIED M2.1/M2.2 | C3; C1 API; C2 DB; C6 setup | IN_PROGRESS | Принят §10 после C2/C3/C1 CONTRACT review; документационный старт, реализации/evidence ещё нет | Одна задача M2.3-TELEGRAM-API на принятом base; затем C0/C8/merge/main CI |
-| M2.3-TELEGRAM-API | Verified webhook → existing kernel/private images → owner API → real Telegram manual text | Base a321bdd58856fb41bccb5749b4212349832e623c; §10 | C3, C2/C1/C6 по разрешённым областям | IN_PROGRESS | Ветка c3/m2-3-telegram-api; один Draft PR C0; 0007→0006 назначена, ещё не реализована | Сохранить coordination commit; вернуть точный final receipt, guards и границы live evidence |
+| M2.3 | Telegram adapter, test connection, capabilities, UNKNOWN и owner API | VERIFIED M2.1/M2.2 | C3; C1 API; C2 DB; C6 setup | REVIEW | Draft PR #20: реализация §10; HTTP/PG/S3/recovery tests и TEST runbook; exact CI receipt в PR | C0 и независимый scoped C8; live Telegram BLOCKED runtime/HTTPS |
+| M2.3-TELEGRAM-API | Verified webhook → existing kernel/private images → owner API → real Telegram manual text | Base a321bdd58856fb41bccb5749b4212349832e623c; §10 | C3, C2/C1/C6 по разрешённым областям | REVIEW | Тот же Draft PR #20; coordination сохранён; 0007→0006 реализована; immutable 0001–0006 и прежние wire contracts сохранены | Приёмка C0/scoped C8; не merge/VERIFIED; final SHA/CI только в PR receipt |
 | M2.4 | Console Inbox, manual reply и E2E | Принятый API M2.3 | C5+C3; C0/C8 review | TODO | План M2_HANDOFF | UI, browser + live Telegram scenario; затем приёмка всего M2 |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.

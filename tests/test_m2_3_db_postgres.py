@@ -9,6 +9,9 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
+from asm.billing.errors import BillingUnavailable
+from asm.billing.service import EntitlementService
+from asm.tenancy import AuthenticatedAccount
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_m2_1_postgres import messaging as messaging
@@ -69,16 +72,15 @@ def projection(update="101", message="201", at=None, **changes):
 
 
 def lifecycle(update="301", **changes):
-    return projection(
-        update,
+    values = dict(
         kind="BUSINESS_CONNECTION",
         event=None,
         owner_user_id=OWNER,
         is_enabled=False,
         can_reply=False,
         lifecycle_date=stamp(),
-        **changes,
     )
+    return projection(update, **(values | changes))
 
 
 async def sql(h, statement, **params):
@@ -523,7 +525,7 @@ async def test_dispatch_rechecks_current_authority_business_billing_and_window(t
     probe = await probe_worker(h, claim)
     statement = {
         "owner": "UPDATE platform.workspace_memberships SET role='ADMIN' WHERE workspace_id=:ws AND user_account_id=:actor RETURNING workspace_id",
-        "business": "UPDATE app.businesses SET status='INACTIVE' WHERE workspace_id=:ws RETURNING id",
+        "business": "UPDATE app.businesses SET status='ARCHIVED' WHERE workspace_id=:ws RETURNING id",
         "connection": "UPDATE app.channel_connections SET status='INACTIVE' WHERE id=:conn RETURNING id",
         "billing": "UPDATE platform.workspace_service_modes SET mode='SUSPENDED',reason_code='TEST_SUSPENDED' WHERE workspace_id=:ws RETURNING workspace_id",
         "window": "UPDATE app.conversations SET last_client_inbound_at=clock_timestamp()-interval '24 hours' WHERE id=:conv RETURNING id",
@@ -749,6 +751,135 @@ async def test_structural_billing_absence_is_unavailable_before_any_new_intent(t
     assert caught.value.orig.diag.message_detail == "BILLING_STATE_MISSING"
     assert not await query(h, "SELECT id FROM app.messages WHERE direction='OUTBOUND'")
     assert not await query(h, "SELECT id FROM platform.messaging_command_receipts")
+
+
+@pytest.mark.parametrize("malformed", ["INTEGER", "STANDARD"])
+@pytest.mark.parametrize("scenario", ["current", "inactive", "historical"])
+async def test_known_product_revision_type_precedes_gates_in_python_sql_and_worker(
+    telegram, malformed, scenario
+):
+    h = telegram
+    _, _, conv = await receive(h)
+    accepted = await request(h, conv)
+    # Publish a separate structurally legal catalog through its real lifecycle.
+    # Its known product key violates the product contract, not generic R4 typing.
+    # No SEALED row or guard is altered to construct this state.
+    async with h.migrator.begin() as c:
+        plan_id = (
+            await c.execute(
+                text(
+                    "INSERT INTO platform.saas_plans(code,display_name,status) "
+                    "VALUES(:code,'Malformed known product TEST','ACTIVE') RETURNING plan_id"
+                ),
+                {"code": "m23_parity_" + uuid4().hex},
+            )
+        ).scalar_one()
+        revision_id = (
+            await c.execute(
+                text(
+                    "INSERT INTO platform.saas_plan_revisions(plan_id,revision,publication_state) "
+                    "VALUES(:plan,1,'DRAFT') RETURNING plan_revision_id"
+                ),
+                {"plan": plan_id},
+            )
+        ).scalar_one()
+        await c.execute(
+            text(
+                "INSERT INTO platform.plan_entitlements(plan_revision_id,capability_key,value_kind,enabled,limit_value,criticality) "
+                "VALUES(:revision,'messaging.manual_send',:kind,:enabled,:limit,:criticality)"
+            ),
+            {
+                "revision": revision_id,
+                "kind": "INTEGER" if malformed == "INTEGER" else "BOOLEAN",
+                "enabled": None if malformed == "INTEGER" else True,
+                "limit": 1 if malformed == "INTEGER" else None,
+                "criticality": "ESSENTIAL" if malformed == "INTEGER" else "STANDARD",
+            },
+        )
+        await c.execute(
+            text(
+                "UPDATE platform.saas_plan_revisions SET publication_state='SEALED',"
+                "published_at=clock_timestamp() WHERE plan_revision_id=:revision"
+            ),
+            {"revision": revision_id},
+        )
+        if scenario == "historical":
+            await c.execute(
+                text(
+                    "INSERT INTO platform.workspace_subscriptions(workspace_id,plan_revision_id,required_publication_state,status,funding_mode,effective_from,effective_until) "
+                    "VALUES(:ws,:revision,'SEALED','ACTIVE','COMPED',:start,:end)"
+                ),
+                {
+                    "ws": A,
+                    "revision": revision_id,
+                    "start": h.billing_interval[0] - timedelta(days=3),
+                    "end": h.billing_interval[0] - timedelta(days=2),
+                },
+            )
+        else:
+            await c.execute(
+                text(
+                    "UPDATE platform.workspace_subscriptions SET plan_revision_id=:revision "
+                    "WHERE workspace_id=:ws"
+                ),
+                {"ws": A, "revision": revision_id},
+            )
+        if scenario != "current":
+            await c.execute(
+                text(
+                    "UPDATE platform.workspace_service_modes SET mode='SUSPENDED',reason_code='TEST_SUSPENDED' "
+                    "WHERE workspace_id=:ws"
+                ),
+                {"ws": A},
+            )
+        if scenario == "inactive":
+            for table in ("platform.workspace_subscriptions", "platform.workspace_service_modes"):
+                await c.execute(
+                    text(
+                        f"UPDATE {table} SET effective_from=:start,effective_until=:end WHERE workspace_id=:ws"
+                    ),
+                    {
+                        "ws": A,
+                        "start": h.billing_interval[1] + timedelta(days=1),
+                        "end": h.billing_interval[1] + timedelta(days=2),
+                    },
+                )
+
+    async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
+        snapshot = await unit.billing_snapshot()
+    with pytest.raises(BillingUnavailable) as python_error:
+        EntitlementService().evaluate_product(A, snapshot, "messaging.manual_send")
+    assert python_error.value.reason == "REVISION_INVALID"
+    if scenario == "historical":
+        assert len(snapshot["history"]) == 2
+        assert next(row for row in snapshot["history"] if row["is_current"])[
+            "plan_revision_id"
+        ] != str(revision_id)
+    elif scenario == "inactive":
+        assert not any(row["is_current"] for row in snapshot["history"])
+        assert snapshot["modes"][0]["is_active"] is False
+
+    with pytest.raises(DBAPIError) as sql_error:
+        await request(h, conv, key="malformed-product-must-not-enqueue")
+    assert sql_error.value.orig.sqlstate == "P2301"
+    assert sql_error.value.orig.diag.message_primary == "BILLING_STATE_UNAVAILABLE"
+    assert sql_error.value.orig.diag.message_detail == python_error.value.reason
+    assert (
+        await query(h, "SELECT id::text AS id FROM app.messages WHERE direction='OUTBOUND'")
+    ) == [{"id": accepted["message_id"]}]
+
+    claim = await h.kernel.claim_job("structural-product-recheck")
+    assert claim is not None
+    result = await begin_observed(h, claim, await probe_worker(h, claim))
+    assert result == {"code": "UNAVAILABLE", "status": "PENDING"}
+    assert (await query(h, "SELECT status,attempt_id,error_code FROM app.outbox_events")) == [
+        {"status": "PENDING", "attempt_id": None, "error_code": "DEPENDENCY_UNAVAILABLE"}
+    ]
+    assert (
+        await query(
+            h, "SELECT status,error_code FROM platform.messaging_jobs WHERE id=:id", id=claim.job_id
+        )
+    ) == [{"status": "READY", "error_code": "DEPENDENCY_UNAVAILABLE"}]
 
 
 async def test_readonly_failure_observation_commits_unavailable_without_permission(telegram):

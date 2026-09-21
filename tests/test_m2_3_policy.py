@@ -92,3 +92,37 @@ def test_structural_policy_failure_remains_unavailable_before_business_denial(ca
 def test_unknown_product_does_not_open_a_generic_capability_api():
     with pytest.raises(ValueError, match="Unknown product"):
         EntitlementService().evaluate_product(WS, messaging_snapshot(), "future.capability")
+
+
+@pytest.mark.parametrize(
+    "kind,enabled,limit,criticality",
+    [
+        ("INTEGER", None, 1, "ESSENTIAL"),
+        ("BOOLEAN", True, None, "STANDARD"),
+        ("INTEGER", None, 1, "STANDARD"),
+    ],
+)
+def test_product_shape_validation_does_not_change_legacy_billing_get(
+    kind, enabled, limit, criticality
+):
+    observed = snapshot()
+    service = EntitlementService()
+    original = service.evaluate(WS, observed)
+    observed["history"][0]["revision_state"]["entitlements"].append(
+        {
+            "plan_revision_id": RID,
+            "capability_key": MANUAL_SEND_KEY,
+            "value_kind": kind,
+            "enabled": enabled,
+            "limit_value": limit,
+            "criticality": criticality,
+        }
+    )
+    # This is valid generic catalog data for R4, whose five decisions ignore it.
+    legacy = service.evaluate(WS, observed)
+    assert legacy == original
+    assert [item.key for item in legacy.decisions] == list(KNOWN_KEYS)
+    assert len(legacy.decisions) == 5
+    with pytest.raises(BillingUnavailable) as failure:
+        service.evaluate_product(WS, observed, MANUAL_SEND_KEY)
+    assert failure.value.reason == "REVISION_INVALID"

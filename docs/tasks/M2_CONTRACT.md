@@ -1057,3 +1057,44 @@ manager; подключать manager к чату не нужно. Доступ 
 [HTTPX environment variables](https://www.python-httpx.org/environment_variables/).
 Документация объясняет provider constraints, не доказывает доступ/права конкретного
 тестового аккаунта. OPEN-052/085 остаются внешними account/release checks.
+
+### 10.10. Реализационное отображение принятого §10
+
+В Draft PR #20 §10 реализован через `asm.telegram`, пять owner routes в
+`asm.messaging.http` и миграцию `0007_telegram_api.py` (0007→0006). Это описание
+кода для review, не изменение принятого контракта и не объявление VERIFIED.
+Точный final head/tree, tested merge/parents и результаты gates находятся в PR receipt.
+
+- Единственные новые таблицы — `platform.telegram_connection_state` и
+  `platform.telegram_update_receipts`; runtime не получает прямой доступ. Typed
+  capabilities сохраняют receipt/Inbox/Job одним commit. Первый receipt содержит
+  DB fingerprint и timestamp; повтор возвращается до новых routing/rights gates.
+  Tenantless receipt допустим только для unsupported update без business route.
+- `telegram_worker_probe` сохраняет claim/generation/version. Затем readonly HTTP
+  выполняется без DB unit; `telegram_begin_send` сверяет claim и оба CAS значения,
+  текущего OWNER, Business/connection, окно и product permission перед durable
+  DISPATCHING. Старый `messaging_begin_send` не принимает TELEGRAM. Owner refresh
+  отдельно проверяется через `telegram_owner_observe` и transaction xid перед
+  новым намерением; replay читается раньше refresh/product gate в обеих auth units.
+- Public CONTROLLED POST использует одну guarded UOW и настоящий product gate;
+  внутренний CONTROLLED kernel остаётся прежним M2.1 LOCAL/TEST механизмом.
+  TELEGRAM worker дополнительно проверяет product permission перед отправкой.
+  Новый product key не включён в пять frozen TEST keys GET billing. Fresh-only
+  initializer `initialize_local_messaging_billing` и trusted binding исполняются
+  одним migrator commit; `setWebhook` вызывается после него.
+- Retry delay хранится в Job вместе с canonical finalized attempt. Повтор finalize
+  читает сохранённый outcome/due; не вызывает provider и не заменяет SENT на UNKNOWN.
+  `retry_after` не продлевает прежние five-claim/15-minute limits. UNKNOWN terminal:
+  новый idempotency key не является способом recovery.
+- `ChannelImageProvider` направляет TELEGRAM photo в прежний FETCH/validation/private
+  S3 pipeline. Fixed-origin getFile path проверяется до download; encoded response
+  отвергается до HTTPX decompression. Grant подписывается локально внутри текущей
+  owner UOW, возвращается после commit, TTL60 и relation/tenant checks прежние.
+- `httpx==0.28.1` перенесён из dev в runtime без изменения package versions/hashes.
+  Generated OpenAPI дополнен webhook и пятью routes/DTO; прежние paths/schemas,
+  auth/tenancy/R4 snapshots и frontend сохраняются.
+
+Исполнимый operator/live порядок, включая safe runtime injection, fresh Workspace,
+независимый Owner ID, HTTPS, secure cookie и исходный HTTPS signed origin, находится
+в [M2_TELEGRAM_LOCAL_TEST](../runbooks/M2_TELEGRAM_LOCAL_TEST.md). Live Telegram и
+Console A11 требуют отдельного наблюдения; автоматические tests их не подменяют.
