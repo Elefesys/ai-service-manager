@@ -1,6 +1,6 @@
 # M2.2 — private images в LOCAL/TEST
 
-Этот runbook описывает реализацию Draft PR #19. Статус и очередность работ —
+Этот runbook описывает реализацию PR #19. Статус и очередность работ —
 только в [TASK_REGISTER](../TASK_REGISTER.md) и активном
 [M2_HANDOFF](../tasks/M2_HANDOFF.md); технический контракт —
 [M2_CONTRACT §9](../tasks/M2_CONTRACT.md#9-m22-private-images--принято-c0c2c3-2026-09-21).

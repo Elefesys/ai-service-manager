@@ -20,7 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from test_m2_1_models import event
 from test_m2_1_postgres import due, expire, query, receive
 from test_m2_1_postgres import messaging as messaging
-from test_m2_2_media import image_bytes
+from test_m2_2_media import image_bytes, webp_dimension_header
 from test_tenancy_postgres import A, B
 from test_tenancy_postgres import db as db
 from test_tenancy_postgres import seeded as seeded
@@ -200,11 +200,17 @@ async def test_retry_exhaustion_keeps_message_and_sets_failed_file(files):
 
 
 @pytest.mark.parametrize(
-    "input_kind", ["missing", "malformed", "truncated", "animated", "oversized"]
+    "input_kind",
+    ["missing", "malformed", "truncated", "animated", "oversized", "webp_pixels", "webp_canvas"],
 )
-async def test_invalid_input_is_terminal_before_storage(files, input_kind):
+async def test_invalid_input_is_terminal_before_storage(files, input_kind, monkeypatch):
     h = files
     await plan_image(h)
+
+    async def forbidden_put(*args, **kwargs):
+        raise AssertionError("Invalid input reached storage PUT")
+
+    monkeypatch.setattr(h.storage, "put", forbidden_put)
     if input_kind == "missing":
         h.provider._images.clear()
     else:
@@ -213,11 +219,16 @@ async def test_invalid_input_is_terminal_before_storage(files, input_kind):
             "truncated": h.original[:-8],
             "animated": image_bytes("WEBP", animated=True),
             "oversized": b"x" * (10 * 1024 * 1024 + 1),
+            "webp_pixels": webp_dimension_header(5000, 4001),
+            "webp_canvas": webp_dimension_header(1, 1, canvas=(8192, 8192)),
         }[input_kind]
         h.provider.register("bot-a", "provider-ref", invalid, content_length=1)
     assert await h.worker.run_once()
     row = await file_state(h)
     assert row["status"] == "FAILED" and row["error_code"] == "INVALID_INPUT"
+    job = (await query(h, "SELECT * FROM platform.messaging_jobs WHERE kind='FETCH_IMAGE'"))[0]
+    assert job["status"] == "DEAD" and job["error_code"] == "INVALID_INPUT"
+    assert job["attempt_count"] == 1 and h.adapter.calls == 0
     assert await uploads(h) == []
     assert not await h.worker.run_once()
     assert len(await query(h, "SELECT id FROM app.messages")) == 1

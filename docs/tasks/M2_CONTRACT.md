@@ -518,9 +518,19 @@ bounded failure, не READY. Настроить decoder против decompressi
 
 Сохранять оригинальные проверенные bytes без перекодирования/EXIF transforms,
 actual MIME/size/SHA-256/dimensions. Это не заявление о malware scanning.
-Временный private файл ограничен размером, очищается при любом исходе; после crash
-удаляются только собственные stale temporary files. Канонические bytes — только S3.
-Decoder и сетевой клиент имеют ограниченную concurrency/resource lifetime.
+Первоначальная редакция §9.4 предполагала private temporary file. C0 явно принимает
+более простую реализацию: ограниченный memory buffer оригинала, без записи временного
+файла. Actual input по-прежнему не больше 10 MiB; возможные копии buffer и память
+decoder не выдаются за общий лимит процесса 10 MiB. Один decoder slot и два S3 I/O
+slots удерживаются до фактического окончания операций, включая cancellation.
+Crash не оставляет временных файлов; канонические bytes хранятся только в S3.
+Это реализационное упрощение в прежнем scope, не хранение клиентских файлов на ПК.
+
+WebP требует dimension/static preflight до Image.open: pinned native decoder может
+выделить canvas уже при открытии. Проверяются bounded RIFF/VP8/VP8L/VP8X headers;
+затем сохраняются actual-format verification, полный decode и совпадение размеров.
+Лимиты и JPEG/PNG/static WebP поддержка не сокращаются. Decoder и сетевой клиент
+имеют ограниченную concurrency/resource lifetime.
 
 ### 9.5. Lease, upload intent и recovery
 
@@ -628,7 +638,7 @@ review выполняется независимо после реализаци
 
 ### 9.9. Реализационные уточнения C6/C2/C3
 
-В Draft PR #19 реализована назначенная `0006 → 0005`, без изменения 0001–0005.
+В PR #19 реализована назначенная `0006 → 0005`, без изменения 0001–0005.
 `files_plan` вызывается внутри прежнего process-inbox commit и при backfill;
 original Message IDs/content/projection fingerprints не переписываются. Публичные
 typed capabilities: `files_begin_fetch`, `files_prepare_upload`, `files_finish_fetch`,
@@ -659,5 +669,6 @@ revoke запрещены, прежний grant живёт до expiry согл�
 
 Настройка, recovery и операционные ограничения — в
 [M2_STORAGE_LOCAL_TEST](../runbooks/M2_STORAGE_LOCAL_TEST.md). Конкретные execution
-results и tests→критерии — в активном handoff и final PR receipt. Эти уточнения не
-являются C0 acceptance, независимым C8 review или VERIFIED.
+results, tests→критерии и C0/C8 receipt — в активном handoff и PR #19. Этот раздел
+фиксирует контракт реализации; статус интеграции/VERIFIED определяется реестром
+после actual merge и отдельного main CI, а не наличием данных уточнений.

@@ -17,7 +17,7 @@ from asm.files.validation import MAX_BYTES, ImageValidator, decode_image, read_i
 from asm.messaging.errors import MessagingError
 from asm.messaging.results import JobClaim
 from asm.messaging.worker import Worker
-from PIL import Image
+from PIL import Image, _webp
 
 
 def image_bytes(image_format="PNG", size=(7, 5), *, animated=False, orientation=False):
@@ -38,6 +38,36 @@ def image_bytes(image_format="PNG", size=(7, 5), *, animated=False, orientation=
     first.save(output, format=image_format, **kwargs)
     first.close()
     return output.getvalue()
+
+
+def webp_container(*chunks):
+    payload = b"WEBP" + b"".join(
+        kind + struct.pack("<I", len(data)) + data + b"\0" * (len(data) & 1)
+        for kind, data in chunks
+    )
+    return b"RIFF" + struct.pack("<I", len(payload)) + payload
+
+
+def webp_dimension_header(width, height, *, kind=b"VP8L", canvas=None, flags=0):
+    if kind == b"VP8L":
+        # Valid one-pixel lossless stream with only its dimensions changed.
+        payload = bytes.fromhex("2f00000000071011fd0f4444ff03")
+        payload = (
+            payload[:1] + ((width - 1) | ((height - 1) << 14)).to_bytes(4, "little") + payload[5:]
+        )
+    else:
+        # Displayed key frame, uncompressed VP8 header. Compressed data is never
+        # reached in oversized-header cases, so no large fixture is necessary.
+        payload = b"\x10\0\0\x9d\x01\x2a" + struct.pack("<HH", width, height)
+    chunks = [(kind, payload)]
+    if canvas is not None:
+        extended = (
+            bytes([flags, 0, 0, 0])
+            + (canvas[0] - 1).to_bytes(3, "little")
+            + (canvas[1] - 1).to_bytes(3, "little")
+        )
+        chunks.insert(0, (b"VP8X", extended))
+    return webp_container(*chunks)
 
 
 def fetch_permit(ref="image-ref", bot="bot-a"):
@@ -130,6 +160,174 @@ def test_dimensions_and_decompression_bomb_rejected_before_pixel_allocation(size
 def test_exact_side_and_pixel_boundaries_can_decode(size):
     manifest = decode_image(image_bytes(size=size))
     assert (manifest.width, manifest.height) == size
+
+
+@pytest.mark.parametrize("kind", [b"VP8 ", b"VP8L"])
+@pytest.mark.parametrize("extended", [False, True])
+@pytest.mark.parametrize("size", [(8193, 1), (1, 8193), (5000, 4001), (8192, 8192)])
+def test_webp_oversize_is_rejected_before_native_canvas(kind, extended, size, monkeypatch):
+    def forbidden_constructor(*args, **kwargs):
+        raise AssertionError("Oversized WebP reached native canvas allocation")
+
+    content = webp_dimension_header(*size, kind=kind, canvas=size if extended else None)
+    monkeypatch.setattr(_webp, "WebPAnimDecoder", forbidden_constructor)
+    with pytest.raises(MessagingError, match="INVALID_INPUT"):
+        decode_image(content)
+
+
+@pytest.mark.parametrize("kind", [b"VP8 ", b"VP8L"])
+@pytest.mark.parametrize(
+    "canvas,size", [((1, 1), (8192, 8192)), ((8192, 8192), (1, 1)), ((7, 5), (1, 1))]
+)
+def test_webp_canvas_and_bitstream_cannot_disagree(kind, canvas, size, monkeypatch):
+    def forbidden_constructor(*args, **kwargs):
+        raise AssertionError("Contradictory WebP dimensions reached native decoder")
+
+    monkeypatch.setattr(_webp, "WebPAnimDecoder", forbidden_constructor)
+    with pytest.raises(MessagingError, match="INVALID_INPUT"):
+        decode_image(webp_dimension_header(*size, kind=kind, canvas=canvas))
+
+
+def invalid_webp_headers():
+    valid = webp_dimension_header(1, 1)
+    lossless = valid[20:]
+    extended = b"\0" * 10
+    lossy = webp_dimension_header(1, 1, kind=b"VP8 ")[20:]
+    return {
+        "riff_size_underflow": valid[:4] + struct.pack("<I", len(valid) - 10) + valid[8:],
+        "riff_size_overflow": valid[:4] + struct.pack("<I", len(valid)) + valid[8:],
+        "chunk_size_overflow": valid[:16] + b"\xff" * 4 + valid[20:],
+        "partial_chunk_header": webp_container((b"VP8L", lossless))[:4]
+        + struct.pack("<I", len(valid) - 4)
+        + valid[8:]
+        + b"JUNK",
+        "missing_padding": webp_container((b"VP8L", lossless), (b"JUNK", b"x"))[:-1],
+        "nonzero_padding": webp_container((b"VP8L", lossless), (b"JUNK", b"x"))[:-1] + b"x",
+        "short_lossless_header": webp_container((b"VP8L", lossless[:4])),
+        "lossless_signature": webp_container((b"VP8L", b"x" + lossless[1:])),
+        "lossless_version": webp_container((b"VP8L", lossless[:4] + b"\xe0" + lossless[5:])),
+        "short_lossy_header": webp_container((b"VP8 ", lossy[:9])),
+        "lossy_not_keyframe": webp_container((b"VP8 ", b"\x11" + lossy[1:])),
+        "lossy_version": webp_container((b"VP8 ", b"\x18" + lossy[1:])),
+        "lossy_not_displayed": webp_container((b"VP8 ", b"\0" + lossy[1:])),
+        "lossy_sync_code": webp_container((b"VP8 ", lossy[:3] + b"bad" + lossy[6:])),
+        "zero_lossy_width": webp_container((b"VP8 ", lossy[:6] + b"\0\0" + lossy[8:])),
+        "duplicate_bitstream": webp_container((b"VP8L", lossless), (b"VP8L", lossless)),
+        "mixed_bitstreams": webp_container((b"VP8 ", lossy), (b"VP8L", lossless)),
+        "late_extended_header": webp_container((b"VP8L", lossless), (b"VP8X", extended)),
+        "duplicate_extended_header": webp_container(
+            (b"VP8X", extended), (b"VP8X", extended), (b"VP8L", lossless)
+        ),
+        "missing_bitstream": webp_container((b"VP8X", extended)),
+        "short_extended_header": webp_container((b"VP8X", extended[:-1]), (b"VP8L", lossless)),
+        "extended_reserved_flags": webp_container(
+            (b"VP8X", b"\x80" + extended[1:]), (b"VP8L", lossless)
+        ),
+        "extended_reserved_bytes": webp_container(
+            (b"VP8X", extended[:1] + b"x" + extended[2:]), (b"VP8L", lossless)
+        ),
+        "animation_flag_without_frames": webp_dimension_header(1, 1, canvas=(1, 1), flags=2),
+        "animation_control_without_flag": webp_container(
+            (b"VP8X", extended), (b"ANIM", b"\0" * 6), (b"VP8L", lossless)
+        ),
+        "animation_frame_without_flag": webp_container(
+            (b"VP8X", extended), (b"ANMF", b"\0" * 16), (b"VP8L", lossless)
+        ),
+        "alpha_without_canvas": webp_container((b"VP8 ", lossy), (b"ALPH", b"\0x")),
+        "alpha_after_bitstream": webp_container(
+            (b"VP8X", extended), (b"VP8 ", lossy), (b"ALPH", b"\0x")
+        ),
+        "duplicate_alpha": webp_container(
+            (b"VP8X", extended), (b"ALPH", b"\0x"), (b"ALPH", b"\0x"), (b"VP8 ", lossy)
+        ),
+        "alpha_with_lossless": webp_container(
+            (b"VP8X", extended), (b"ALPH", b"\0x"), (b"VP8L", lossless)
+        ),
+        "invalid_alpha_compression": webp_container(
+            (b"VP8X", extended), (b"ALPH", b"\x02x"), (b"VP8 ", lossy)
+        ),
+        "invalid_raw_alpha_size": webp_container(
+            (b"VP8X", extended), (b"ALPH", b"\0xx"), (b"VP8 ", lossy)
+        ),
+    }
+
+
+@pytest.mark.parametrize(
+    "content", list(invalid_webp_headers().values()), ids=list(invalid_webp_headers())
+)
+def test_webp_malformed_structure_is_rejected_before_native_canvas(content, monkeypatch):
+    def forbidden_constructor(*args, **kwargs):
+        raise AssertionError("Malformed WebP headers reached native canvas allocation")
+
+    monkeypatch.setattr(_webp, "WebPAnimDecoder", forbidden_constructor)
+    with pytest.raises(MessagingError, match="INVALID_INPUT"):
+        decode_image(content)
+
+
+def test_real_animated_webp_is_rejected_before_native_canvas(monkeypatch):
+    content = image_bytes("WEBP", animated=True)
+
+    def forbidden_constructor(*args, **kwargs):
+        raise AssertionError("Animated WebP reached native canvas allocation")
+
+    monkeypatch.setattr(_webp, "WebPAnimDecoder", forbidden_constructor)
+    with pytest.raises(MessagingError, match="INVALID_INPUT"):
+        decode_image(content)
+
+
+@pytest.mark.parametrize("lossless", [False, True])
+@pytest.mark.parametrize("alpha", [False, True])
+@pytest.mark.parametrize("metadata", [False, True])
+def test_webp_lossy_lossless_extended_originals_reach_real_decoder(
+    lossless, alpha, metadata, monkeypatch
+):
+    output = BytesIO()
+    options = {"lossless": lossless}
+    if metadata:
+        exif = Image.Exif()
+        exif[274] = 6
+        options.update(exif=exif, icc_profile=b"controlled-profile", xmp=b"<xmp/>")
+    with Image.new(
+        "RGBA" if alpha else "RGB", (7, 5), (12, 92, 113, 72) if alpha else (12, 92, 113)
+    ) as original:
+        original.save(output, format="WEBP", **options)
+    content = output.getvalue()
+    native_calls = []
+    real_constructor = _webp.WebPAnimDecoder
+
+    def observed_constructor(data):
+        native_calls.append(True)
+        return real_constructor(data)
+
+    monkeypatch.setattr(_webp, "WebPAnimDecoder", observed_constructor)
+    manifest = decode_image(content)
+    assert manifest.mime_type == "image/webp"
+    assert manifest.sha256 == hashlib.sha256(content).hexdigest()
+    assert manifest.size_bytes == len(content)
+    assert (manifest.width, manifest.height) == (7, 5)
+    assert native_calls == [True, True]
+    expected_first_chunk = (
+        b"VP8X" if metadata or (alpha and not lossless) else b"VP8L" if lossless else b"VP8 "
+    )
+    assert content[12:16] == expected_first_chunk
+
+
+@pytest.mark.parametrize("kind", [b"VP8 ", b"VP8L"])
+def test_bounded_webp_headers_do_not_replace_full_pixel_validation(kind):
+    # Keep complete dimensions but remove the entropy-coded pixel data. Merely
+    # changing dimensions of a uniform lossless stream can still be valid.
+    payload = webp_dimension_header(7, 5, kind=kind)[20:]
+    content = webp_container((kind, payload[:5] if kind == b"VP8L" else payload[:10]))
+    with pytest.raises(MessagingError, match="INVALID_INPUT"):
+        decode_image(content)
+
+
+@pytest.mark.parametrize("size", [(8192, 1), (1, 8192), (4000, 5000)])
+def test_webp_exact_side_and_pixel_boundaries_can_decode(size):
+    content = webp_dimension_header(*size)
+    manifest = decode_image(content)
+    assert (manifest.width, manifest.height) == size
+    assert manifest.sha256 == hashlib.sha256(content).hexdigest()
 
 
 def test_crc_corruption_is_rejected():
