@@ -189,7 +189,26 @@ class ContactAudit(AuditBase):
     payload: ContactPayload
 
 
-AuditItem = Annotated[ProvisionAudit | ContactAudit, Field(discriminator="event_type")]
+class MessageSendPayload(StrictModel):
+    content_type: Literal["TEXT"]
+
+
+class MessageSendAudit(StrictModel):
+    audit_event_id: CanonicalUUID
+    occurred_at: Timestamp
+    correlation_id: CanonicalUUID
+    object_type: Literal["MESSAGE"]
+    object_id: CanonicalUUID
+    object_version: Literal["1"]
+    event_type: Literal["MESSAGE_SEND_REQUESTED"]
+    actor_kind: Literal["USER_ACCOUNT"]
+    actor_user_account_id: CanonicalUUID
+    payload: MessageSendPayload
+
+
+AuditItem = Annotated[
+    ProvisionAudit | ContactAudit | MessageSendAudit, Field(discriminator="event_type")
+]
 
 
 class AuditPage(StrictModel):

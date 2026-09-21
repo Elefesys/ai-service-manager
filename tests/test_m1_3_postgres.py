@@ -155,7 +155,7 @@ PHYSICAL_COLUMNS = {
     "platform.workspace_billing_accounts": "workspace_id:uuid! billing_account_id:uuid! contact_display_name:text! version:bigint! created_at:timestamp_with_time_zone! updated_at:timestamp_with_time_zone!",
     "platform.workspace_subscriptions": "workspace_id:uuid! subscription_id:uuid! plan_revision_id:uuid! required_publication_state:text! status:text! funding_mode:text! effective_from:timestamp_with_time_zone! effective_until:timestamp_with_time_zone! version:bigint! created_at:timestamp_with_time_zone! updated_at:timestamp_with_time_zone!",
     "platform.workspace_service_modes": "workspace_id:uuid! service_mode_id:uuid! mode:text! reason_code:text! effective_from:timestamp_with_time_zone! effective_until:timestamp_with_time_zone version:bigint! created_at:timestamp_with_time_zone! updated_at:timestamp_with_time_zone!",
-    "app.audit_events": "workspace_id:uuid! audit_event_id:uuid! occurred_at:timestamp_with_time_zone! actor_kind:text! actor_user_account_id:uuid correlation_id:uuid! event_type:text! object_type:text! object_id:uuid! object_version:bigint! payload:jsonb!",
+    "app.audit_events": "workspace_id:uuid! audit_event_id:uuid! occurred_at:timestamp_with_time_zone! actor_kind:text! actor_user_account_id:uuid correlation_id:uuid! event_type:text! object_type:text! object_id:uuid! object_version:bigint! payload:jsonb! billing_account_object_id:uuid message_object_id:uuid",
     "platform.billing_contact_command_receipts": "workspace_id:uuid! receipt_id:uuid! billing_account_id:uuid! operation:text! idempotency_key:text! request_fingerprint:bytea! expected_version:bigint! status:text! result_version:bigint result_outcome:text created_at:timestamp_with_time_zone! completed_at:timestamp_with_time_zone",
 }
 
@@ -263,11 +263,23 @@ KEY_CONSTRAINTS = {
             "platform.workspace_memberships",
             ("workspace_id", "user_account_id"),
         ),
-        "audit_events_object_fkey": (
+        "audit_events_billing_object_fkey": (
             "f",
-            ("workspace_id", "object_id"),
+            ("workspace_id", "billing_account_object_id"),
             "platform.workspace_billing_accounts",
             ("workspace_id", "billing_account_id"),
+        ),
+        "audit_events_message_object_fkey": (
+            "f",
+            ("workspace_id", "message_object_id"),
+            "app.messages",
+            ("workspace_id", "id"),
+        ),
+        "audit_events_message_ref_key": (
+            "u",
+            ("workspace_id", "audit_event_id", "message_object_id"),
+            None,
+            (),
         ),
     },
     "platform.billing_contact_command_receipts": {
@@ -398,6 +410,17 @@ async def test_exact_physical_schema_constraints_keys_and_grants(migrator):
                     assert default == "1"
                 elif column in {"created_at", "updated_at", "occurred_at"}:
                     assert default == "CURRENT_TIMESTAMP"
+                elif table == "app.audit_events" and column in {
+                    "billing_account_object_id",
+                    "message_object_id",
+                }:
+                    # M2.1 preserves the billing FK through a typed generated target.
+                    assert "CASE" in default and "object_id" in default
+                    assert (
+                        "WORKSPACE_BILLING_ACCOUNT"
+                        if column == "billing_account_object_id"
+                        else "MESSAGE"
+                    ) in default
                 else:
                     assert default is None
             constraints = (

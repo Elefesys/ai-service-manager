@@ -1,0 +1,113 @@
+"""Durable one-job-at-a-time worker and bounded scheduler, no adapter retries."""
+
+import asyncio
+import json
+from typing import Literal
+from uuid import uuid4
+
+from sqlalchemy.exc import SQLAlchemyError
+
+from asm.messaging.adapter import ControlledAdapter
+from asm.messaging.database import MessagingDatabase
+from asm.messaging.errors import Code, MessagingError
+from asm.messaging.models import OutcomeKind, SendOutcome
+from asm.messaging.results import JobClaim, SendPermit
+
+
+class Worker:
+    def __init__(
+        self, database: MessagingDatabase, adapter: ControlledAdapter, *, deadline: float = 10
+    ) -> None:
+        if not 0 < deadline < 30:
+            raise MessagingError(Code.INVALID_INPUT)
+        self.database = database
+        self.adapter = adapter
+        self.deadline = deadline
+        self.worker_id = "controlled-" + str(uuid4())
+
+    async def _finish(self, permit: SendPermit, outcome: SendOutcome) -> None:
+        try:
+            await self.database.finish_send(
+                permit.job_id, permit.claim_token, permit.attempt_id, outcome
+            )
+        except SQLAlchemyError:
+            # Includes a lost commit ACK: the narrow DB function first reads
+            # the canonical attempt/result. Never downgrade saved success and
+            # never call the adapter from this recovery path. One bounded DB retry.
+            await self.database.finish_send(
+                permit.job_id, permit.claim_token, permit.attempt_id, outcome
+            )
+
+    async def execute(self, claim: JobClaim) -> None:
+        if claim.kind == "PROCESS_INBOX":
+            try:
+                await self.database.process_inbox(claim)
+            except SQLAlchemyError:
+                await self.database.retry(claim, Code.DEPENDENCY_UNAVAILABLE)
+            except MessagingError as error:
+                if error.code == Code.DEPENDENCY_UNAVAILABLE:
+                    await self.database.retry(claim, error.code)
+                else:
+                    raise
+            return
+
+        # If start commit ACK is lost, no permit reaches this code: recovery
+        # conservatively marks the durable DISPATCHING attempt UNKNOWN.
+        permit = await self.database.begin_send(claim)
+        if not isinstance(permit, SendPermit):
+            return
+        try:
+            async with asyncio.timeout(self.deadline):
+                await self.adapter.checkpoint("before_call")
+                outcome = await self.adapter.send(permit)
+        except asyncio.CancelledError:
+            try:
+                await self._finish(
+                    permit,
+                    SendOutcome(OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT),
+                )
+            except (SQLAlchemyError, MessagingError):
+                pass  # durable DISPATCHING is left for scheduler recovery
+            raise
+        except Exception:
+            # Any unclassified/timeout error may follow a provider effect.
+            outcome = SendOutcome(OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT)
+        await self.adapter.checkpoint("before_finalize")
+        await self._finish(permit, outcome)
+
+    async def run_once(self, stop: asyncio.Event | None = None) -> bool:
+        if stop is not None and stop.is_set():
+            return False
+        claim = await self.database.claim_job(self.worker_id)
+        if claim is None:
+            return False
+        if stop is not None and stop.is_set():
+            # No external start; the scheduler can safely reclaim this lease.
+            return False
+        await self.execute(claim)
+        return True
+
+
+async def run(
+    role: Literal["worker", "scheduler"],
+    database: MessagingDatabase,
+    adapter: ControlledAdapter,
+    stop: asyncio.Event,
+) -> None:
+    worker = Worker(database, adapter)
+    while not stop.is_set():
+        try:
+            worked = (
+                await worker.run_once(stop)
+                if role == "worker"
+                else bool(await database.recover_expired())
+            )
+        except (SQLAlchemyError, MessagingError):
+            # Diagnostics contain no exception text, keys, provider data or IDs.
+            print(json.dumps({"component": role, "event": "iteration_unavailable"}), flush=True)
+            worked = False
+        if not worked:
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=0.25)
+            except TimeoutError:
+                pass

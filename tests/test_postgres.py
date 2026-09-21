@@ -113,7 +113,17 @@ async def test_real_postgres_capabilities_and_roles(database):
             "billing_contact_command_receipts",
             "business_members",
             "businesses",
+            "channel_connections",
+            "channel_routes",
+            "client_identities",
+            "clients",
+            "conversations",
+            "inbox_events",
             "locations",
+            "messages",
+            "messaging_command_receipts",
+            "messaging_jobs",
+            "outbox_events",
             "plan_entitlements",
             "saas_plan_revisions",
             "saas_plans",
@@ -123,7 +133,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "Only the accepted M0 through M1.3 tables are allowed"
+        ], "Only the accepted M0 through M2.1 tables are allowed"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):
@@ -201,7 +211,8 @@ async def test_process_graceful_shutdown_with_real_database(database, role):
         line = await asyncio.wait_for(process.stdout.readline(), 10)
         event = json.loads(line)
         assert event["event"] == "started"
-        assert event["jobs_enabled"] is False
+        assert event["jobs_enabled"] is True
+        assert event["mode"] == "controlled"
         process.terminate()
         out, err = await asyncio.wait_for(process.communicate(), 10)
         assert process.returncode == 0, err.decode()

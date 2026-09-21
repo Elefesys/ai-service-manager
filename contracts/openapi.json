@@ -9,6 +9,7 @@
               "discriminator": {
                 "mapping": {
                   "BILLING_ACCOUNT_CONTACT_UPDATED": "#/components/schemas/ContactAudit",
+                  "MESSAGE_SEND_REQUESTED": "#/components/schemas/MessageSendAudit",
                   "WORKSPACE_BILLING_PROVISIONED": "#/components/schemas/ProvisionAudit"
                 },
                 "propertyName": "event_type"
@@ -19,6 +20,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/ContactAudit"
+                },
+                {
+                  "$ref": "#/components/schemas/MessageSendAudit"
                 }
               ]
             },
@@ -713,6 +717,93 @@
         ],
         "title": "MembershipRole",
         "type": "string"
+      },
+      "MessageSendAudit": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_kind": {
+            "const": "USER_ACCOUNT",
+            "title": "Actor Kind",
+            "type": "string"
+          },
+          "actor_user_account_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Actor User Account Id",
+            "type": "string"
+          },
+          "audit_event_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Audit Event Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "MESSAGE_SEND_REQUESTED",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "object_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Object Id",
+            "type": "string"
+          },
+          "object_type": {
+            "const": "MESSAGE",
+            "title": "Object Type",
+            "type": "string"
+          },
+          "object_version": {
+            "const": "1",
+            "title": "Object Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/MessageSendPayload"
+          }
+        },
+        "required": [
+          "audit_event_id",
+          "occurred_at",
+          "correlation_id",
+          "object_type",
+          "object_id",
+          "object_version",
+          "event_type",
+          "actor_kind",
+          "actor_user_account_id",
+          "payload"
+        ],
+        "title": "MessageSendAudit",
+        "type": "object"
+      },
+      "MessageSendPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "content_type": {
+            "const": "TEXT",
+            "title": "Content Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content_type"
+        ],
+        "title": "MessageSendPayload",
+        "type": "object"
       },
       "Permission": {
         "enum": [

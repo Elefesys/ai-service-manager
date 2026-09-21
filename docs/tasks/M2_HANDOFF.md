@@ -2,8 +2,239 @@
 
 Дата подготовки: 2026-09-20. Ответственный за выдачу задач и интеграцию: C0.
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
-Этот файл — план исполнения и единственная точка передачи M2; он не является
-свидетельством выполненной реализации или самостоятельной приёмкой C0.
+Этот файл — принятый план и единственная активная точка передачи M2.
+Приёмка плана не является evidence выполненной реализации.
+
+## Активное поручение C0 — M2.1-KERNEL / 2026-09-21
+
+**M2.1 REVIEW: pre-merge C0 PASS и независимый scoped C8 PASS.
+M2.2–M2.4 TODO.** Перед merge обязателен green CI итогового head. M1 не повторять.
+PR #17 MERGED; проверенный actual main/base:
+**`8e5f125d424c0ce613ed9e0c787392f11a49aeae`**.
+[Отдельный push/main CI 35522542861](https://github.com/Elefesys/ai-service-manager/actions/runs/35522542861)
+SUCCESS; head/tested SHA=actual merge, tree `3e2a2519c949461856c9f3c5ca1d1ec33a180953`,
+оба jobs/clean-source gates PASS. Post-merge receipt находится в [PR #17](https://github.com/Elefesys/ai-service-manager/pull/17).
+
+Repository: `Elefesys/ai-service-manager`. Ветка: **`c3/m2-1-messaging-kernel`** → main.
+Продолжать единственный [PR #18](https://github.com/Elefesys/ai-service-manager/pull/18)
+этой ветки; итоговые head/tree/tested SHA и CI находятся в его C0 receipt. Первый
+coordination commit сохранить. Main/base — SHA выше; локальные synthetic commits
+из CI archive не являются GitHub base. Не начинать заново от старой M1 ветки.
+
+Ведущий исполнитель **C3**, DB/migration часть согласована с **C2**. C0 принимает
+контракт и интеграцию. Единый технический контракт: [M2_CONTRACT](M2_CONTRACT.md).
+Он принят предметной сверкой C0/C2/C3. Реализация прошла C0 acceptance и
+независимый scoped C8 review; интеграция в main ещё не выполнена.
+Один работающий срез: controlled event → durable Inbox/Job → Message правильного
+Workspace → owner manual text command → atomic receipt/Audit/Outbox/Job → controlled
+send/recovery. Проверьте существующий код и контракт перед изменениями.
+
+### Разрешённая дельта
+
+| Область | Разрешение и причина |
+|---|---|
+| `backend/src/asm/messaging/` | Только используемые normalized models/validation/errors/policy, repository/DB capabilities, commands, worker/recovery и controlled adapter текущего kernel |
+| `migrations/versions/0005_messaging_kernel.py` | Revision `0005`, down_revision `0004`; C0/C2 назначили этой ветке. Новые messaging tables/typed commands/RLS/constraints и описанная Audit compatibility |
+| `backend/src/asm/foundation.py` | DATABASE_SCHEMA_REVISION=0005 и делегирование worker/scheduler реальному durable kernel; сохранить lifecycle/readiness/runtime role guards |
+| `backend/src/asm/tenancy/database.py` | Только узкие messaging owner calls через существующий guarded unit и взаимное исключение owner/worker units; guards, auth admission и SQLSTATE mapping не ослаблять |
+| `backend/src/asm/billing/models.py` | Один strict Audit variant MESSAGE_SEND_REQUESTED; прежние billing DTO/контракты сохраняются |
+| `contracts/openapi.json`, `contracts/README.md` | Generated additive Audit schema/consumer note; новых messaging HTTP routes нет |
+| `frontend/src/billing-api.ts`, `frontend/src/BillingPanel.tsx` | Только strict Audit type/parser и правильная подпись нового event; contact/recovery/navigation/layout без переработки |
+| `frontend/src/billing-api.test.ts`, `frontend/src/BillingPanel.test.tsx` | Mixed Audit compatibility и неверные discriminators/payloads; прочие frontend изменения не выдаются |
+| `tests/test_m2_1_*.py` | Существенные kernel/unit/real-PostgreSQL/recovery/migration/mixed Audit API проверки |
+| `tests/test_tenancy_postgres.py`, `tests/test_m1_3_postgres.py`, `tests/test_foundation.py`, `tests/test_m1_3_http_contract.py` | Только объяснённые новые table/function/Audit inventory, текущий schema head и добавление нового strict Audit schema; прежние защитные кейсы сохраняются |
+| `scripts/provision_local_auth.py`, `scripts/m1_3_browser_fixture.py` | C0 согласовал 2026-09-21: точное сравнение с `DATABASE_SCHEMA_REVISION`; LOCAL/TEST, DB/identity/password guards сохраняются |
+| `tests/test_postgres.py` | C0 согласовал: ровно 10 новых messaging tables в закрытом inventory, `jobs_enabled=true`, `mode=controlled`; role/SIGTERM/shutdown assertions сохраняются |
+| `tests/test_m1_3_c0_acceptance.py` | C0 согласовал: только `platform.messaging_command_receipts` в существующем TRUNCATE; TABLES/counters/assertions/FK/rollback не меняются, без CASCADE |
+| `docs/tasks/M2_CONTRACT.md`, `docs/tasks/M2_HANDOFF.md`, `docs/TASK_REGISTER.md` | Реализационные уточнения и фактическое evidence; один register/active handoff |
+
+Audit compatibility — необходимое сохранение работающего M1 consumer: его строгие
+backend/frontend discriminators сейчас отвергают новые events. Разрешён ровно один
+новый typed variant с tenant-safe Message FK, без generic payload и скрытого фильтра.
+Это не выдача UI переписки M2.4. Точные SQL имена/индексы и модульное разбиение внутри
+разрешённых областей C2/C3 выбирают самостоятельно по принятому контракту.
+
+`0001`–`0004`, `app.current_workspace_id()`, frozen auth/tenancy snapshots,
+R4 TEST catalog/EntitlementService semantics, authentication/CSRF/CORS, dependencies,
+locks, CI/Compose/bootstrap, canonical originals и остальные frontend пути не менять.
+Необходимую иную совместимую дельту сначала показать C0 с конкретной причиной;
+не отправлять пользователю выбор SQL/полей. Нельзя отключать inventory/clean-source
+или ослаблять guards ради CI. M2.1 не требует новых платных ресурсов или секретов.
+
+### Конечные критерии M2.1-KERNEL
+
+1. **A01/A02/A06, частично:** trusted source binding и immutable route определяют
+   Workspace; durable Inbox+Job до accepted result; duplicate/conflicting event и
+   другой event ID с прежним Message ID обработаны; image reference/ignored kinds
+   имеют явный результат. Это kernel evidence, не real webhook verification.
+2. **A03:** рабочая owner command, same-key replay/conflict и real concurrency;
+   ровно один Message/receipt/Audit/Outbox/Job; rollback любого звена не оставляет
+   частичного состояния. Python/DB fingerprints совпадают по конкретным bytes.
+3. **A04/A05:** реальные worker/scheduler, lease/reclaim/backoff/bounds/DLQ;
+   stale/malformed/expired/чужой claim не мутирует результат; adapter вызывается
+   вне DB unit. Fault barriers до/после commit/start/effect/finalize подтверждают
+   UNKNOWN без blind resend, safe NOT_SENT retry и late-result/commit-ACK recovery.
+4. **A08, частично:** runtime-role OWNER против ADMIN/PROVIDER, разные Workspace,
+   mismatched Client/Conversation/connection/job refs внутри одного Workspace,
+   revoked OWNER/connection до begin_send, непротекающий user/worker XID/task/pool
+   context. Worker не получает старый billing/Business доступ или общий SQL setter.
+5. **A12, частично:** clean upgrade и upgrade с данными 0004, повтор upgrade,
+   downgrade/re-upgrade в disposable TEST, old billing FK/check/receipt semantics,
+   mixed Audit через существующий API и frontend consumer. Фактический main CI
+   закрывается только после последующего пользовательского merge этого среза.
+
+Штатные gates: **`sh scripts/ci.sh`**, **`sh scripts/test_browser.sh`** и оба
+clean-source gate; generated contracts проверяются штатным export check.
+Docker/real PostgreSQL обязателен для DB evidence. Если Docker отсутствует локально,
+использовать обычный GitHub runner, получить logs/artifact и привязать результат к
+head/tested SHA/tree. SQLite/mock не заменяют PostgreSQL. Новые тесты не подменяют
+исходный failure: сначала установить, дефект теста это или поведения.
+
+По результату C3 возвращает PR/head/tree и tested SHA, changed paths, миграцию,
+контрактные уточнения, tests/assertions → строки матрицы → run/results, оставшиеся
+ограничения и blockers. Не объявлять M2.1 INTEGRATED/VERIFIED или весь M2 завершённым.
+C0 завершил review результата и отдельный независимый C8 review новых
+routing/worker/RLS/side-effect risks — receipt ниже. После SUCCESS итогового head
+C0 снимает Draft и даёт пользователю одну инструкцию обычного merge commit.
+После merge — actual main CI, затем одна задача M2.2. Самостоятельный merge запрещён.
+
+### Текущий receipt C0/C8 — M2.1 pre-merge / 2026-09-21
+
+**C0 PASS; C8-M2.1-KERNEL PASS.** Блокирующих дефектов в принятой области не найдено.
+Исходный C3 head `2c7ada9b8b9b13956a56bd13e0a4f9f5b4cb33ae`, tree
+`5f2a53bfd43341d128a3a7d33bcfb478ace1d54b`, run 35593328892 проверены C0 по GitHub
+и CI archive. Девять failures подтверждены traces: provisioning revision (1),
+FK-dependent TRUNCATE (5), exact inventory (1), исторический Jobs shutdown flag (2).
+Browser остановился на том же provisioning; второй script имел такой же guard.
+C0 согласовал и применил только четыре перечисленные compatibility дельты.
+Не ослаблены assertions, FK, SQLSTATE/auth/tenancy guards или штатный pipeline.
+
+Проверенный implementation head: **`e772c2a92bb38cb0af869ef77ed36b2df9fcaf59`**;
+tree **`0df5224f9a31e3e7820aa269236e5383fc2347d5`**.
+[Полный CI 35594839363](https://github.com/Elefesys/ai-service-manager/actions/runs/35594839363)
+**SUCCESS**. Tested virtual merge **`9ba971d07db647bec3fed1691ae888b4ce0e3a81`**
+имеет parents accepted main + implementation head и тот же tree. Coordination
+commit сохранён; GitHub compare: ahead 4, behind 0, merge-base = accepted main.
+Artifact `10636510359`, SHA-256
+`62a7c5169af38d960945aa4eaa51017764cb944822cf2f1a12b5546ec33ae719` проверен C0;
+162 source files побайтно совпадают с reviewed tree; tested SHA точный, status пуст.
+
+| Проверка | Фактический результат и граница |
+|---|---|
+| `sh scripts/ci.sh` | PASS: Ruff/format/strict mypy, 192 backend non-integration, 259 real PostgreSQL, clean/repeated/full downgrade/upgrade, generated contracts, wheel/frontend reproducibility, HTTP/worker/scheduler smoke |
+| `sh scripts/test_browser.sh` | PASS: 60 frontend tests и 15 реальных прежних M1 browser journeys через API/PostgreSQL; это ещё не UI переписки |
+| Clean-source | Оба штатных gate PASS; не подменены пустым recorded status |
+| Scope/source | 34 изменённых paths после четырёх согласованных добавлений; `0001`–`0004`, frozen auth/tenancy, R4 billing logic, dependencies/locks/CI/Compose и 11 canonical originals сохранены |
+| C0 review | Разрешённый kernel/Audit scope, принятый контракт, сохранность M1, существенные assertions и execution evidence сверены; исходные failures объяснены совместимостью, проверки не удалены |
+| Независимый C8 | Отдельный read-only reviewer `c8_m21_kernel_review`, не автор C2/C3 и не C0 self-review: routing/dedupe, composite FK/FORCE RLS/grants, worker authority/XID/task/lease, live OWNER/atomic intent, UNKNOWN/late-result/finalize ACK и Audit compatibility; четыре C0-правки включены; PASS без blocker |
+
+Критерии остаются M2-A01…A12 из единой матрицы ниже. Конкретная таблица
+`tests/assertions → критерий` в сохранённом C3 receipt сверена C0/C8 и применяется
+к успешному run выше: новые kernel tests после исходного C3 head не менялись.
+Проверены реальные process crashes с внешним сохраняемым счётчиком, concurrency,
+rollback каждого звена, stale/forged claims, revocation, bounded retry и отсутствие
+DB connection при adapter call. PostgreSQL исполнен GitHub runner; локального
+Docker и отдельного локального PostgreSQL rerun C8 нет. C8 прочитал execution logs;
+привязку archive/tree отдельно проверил C0.
+
+Граница приёмки: controlled LOCAL/TEST kernel. A01/A02/A06 — kernel routing,
+durable ingestion и normalized image reference; A03/A04/A05 — внутренняя команда,
+Jobs и controlled effects/recovery; A08 — kernel isolation; A12 — pre-merge
+regressions/migrations. Реальная webhook verification/Telegram rights, private
+binary storage/выдача, messaging HTTP/API, Conversation UI и M2-A11 не выполнены.
+M1 browser regression не заменяет будущие journeys M2.4. M3 не выдан.
+
+Этот commit согласованно обновляет только TASK_REGISTER/M2_HANDOFF. Финальный
+head/tree/tested SHA и SUCCESS именно итогового head C0 дописывает в PR receipt
+после CI, без следующего SHA-only documentation commit. Для документационной
+дельты повтор полного C8 review не нужен: C8 явно подтвердил эту границу.
+До green final-head gates PR не готовится к merge. После них — Ready for review,
+пользовательский **Create a merge commit → Confirm merge**; затем C0 проверяет
+actual merge/main push CI и принимает только M2.1. M2.2 пока не выдана.
+
+### История — исполнение C3/C2 до решения C0, 2026-09-21
+
+Следующая запись сохранена как историческая. Её BLOCKED/запрос scope exception
+закрыты текущим receipt выше и больше не являются активным поручением.
+
+[Draft PR #18](https://github.com/Elefesys/ai-service-manager/pull/18) продолжен от
+`587531e71380a9a83549cba25c1b5c71c01d223c`; coordination commit и принятый base
+сохранены. C2 подготовил migration `0005` (down_revision `0004`), typed SQL
+capabilities, RLS/constraints, Audit FK и schema/cycle tests в отдельном checkout.
+C3 добавил normalized codec, owner command/read, отдельный task/XID-bound worker
+unit, реальные worker/scheduler и controlled adapter с сохраняемым TEST ledger.
+C2 participation — авторство DB-части, не независимый C8 review.
+
+Первый implementation run:
+[CI 35592297034](https://github.com/Elefesys/ai-service-manager/actions/runs/35592297034),
+head `7ef132fdc040eef5c6caf17d9c7aae3f40a46a58`,
+tree `afc90a8673fc506fab996266401169fedc62efac`,
+tested PR merge `ee6f051d772af0060a367d6967f8574e005087a7`.
+Artifact `10635275472`, SHA-256
+`dedaf48c017051ae14640104f9282b86678228edd3e5472729467b544f686e25`;
+archive побайтно совпадает со всеми 162 файлами head, recorded worktree status пуст.
+Это не заменяет два clean-source gates: оба пропущены после failures.
+
+Runner выполнил штатные `sh scripts/ci.sh` и `sh scripts/test_browser.sh`:
+192 backend non-integration PASS, 61 frontend PASS, PostgreSQL 241 PASS / 10 FAIL.
+Один новый тест неправильно ловил ожидаемый DB отказ внутри уже aborted unit;
+исправлено положение `pytest.raises` с сохранением обязательного rollback.
+Другие 9 failures и browser provisioning относятся к четырём неразрешённым файлам
+ниже. Дополнительно C2 закрыл обход canonical timestamp через raw SQL и добавил
+8 cases; удалён случайный повтор одного нового frontend case (итоговый набор — 60).
+Итоговые head/tree/tested SHA и повторный run фиксируются в PR receipt после push;
+отдельного SHA-only commit не требуется.
+
+| Критерий handoff | Конкретные tests/assertions нового kernel |
+|---|---|
+| A01/A02/A06, частично | `test_trusted_route_binding_and_concurrent_durable_event_dedupe`: source/route mismatch, concurrent identical event, exact conflict, durable Inbox+Job; `test_image_reference_message_projection_dedupe_and_identity_conflicts`: Message ID projection, image reference, client/conversation identity conflicts; ignored kinds имеют terminal receipt/result |
+| A03 | `test_manual_fingerprints_replay_concurrent_atomic_intent`: Python/DB exact UTF-8 fingerprints, concurrent replay/conflict и один intent; `test_command_rollback_at_every_atomic_link`: failure на каждом Message/receipt/Audit/Outbox/Job откатывает все звенья; actor/body/key проверяются live |
+| A04/A05 | `test_lease_reclaim_new_token_stale_claim_and_retry_age`, `test_safe_not_sent_jitter_and_exhaustion_count_every_call`: DB-clock lease, новый token, jitter, count/age bounds; durable UNKNOWN и terminal failure; `test_actual_process_crash_restart_durable_effect_ledger` + inbound/ingest boundaries: реальные os._exit/restart, внешние call/effect counters, ноль повторов после возможного эффекта |
+| A04/A05, finalize | `test_lost_finalize_ack_reads_canonical_success_and_replays_exact_outcome`, `test_finalize_not_sent_ack_loss_and_changed_claim_exact_replay`: canonical saved result после commit ACK loss, не понижать SENT, старый claim после нового не принимается; cancellation/timeout/late finalize не возвращают dispatch в READY; adapter не держит DB unit |
+| A08, частично | `test_owner_only_live_admission_replay_and_cross_workspace_reads`, revoke matrix и composite-ref tests: OWNER/ADMIN/PROVIDER, чужие Workspace и неверные связи внутри одного; forged claim/GUC, XID/task/autocommit/pool negative tests; runtime не читает control tables и не пишет app tables напрямую |
+| A12, частично | `test_0004_data_survives_upgrade_repeat_downgrade_reupgrade`: существующие billing rows/receipt/Audit, repeated upgrade, downgrade/re-upgrade; schema inventory/RLS/FKs/checks; `test_mixed_billing_message_audit_http_cursor_and_strict_payload` + frontend parser/component: два прежних и один новый typed event, cursor, label, invalid discriminators/payload |
+
+Первый run подтвердил 61 из 62 новых PostgreSQL cases; оставшийся case исправлен
+как описано выше. Новый итоговый набор — 39 model + 70 PostgreSQL cases; execution
+receipt повторного run в PR определяет их фактический результат. Это bounded
+LOCAL/TEST evidence: Telegram/webhook, storage/FileObject, messaging HTTP/UI и M3
+не реализованы и не проверялись. Credentials/secrets controlled adapter не нужны.
+
+**Точный запрос C0: разрешить только следующие совместимые дельты.** Они пока
+не применены, потому что отсутствуют в таблице разрешённых paths этого поручения.
+
+| Path вне scope | Наблюдённая причина и минимальная предлагаемая правка |
+|---|---|
+| `scripts/provision_local_auth.py` | Сравнение schema с literal `0004` ломает auth migration/provisioning test и browser setup на назначенной `0005`. Импортировать `asm.foundation.DATABASE_SCHEMA_REVISION`, использовать его в точном сравнении и сообщении; environment/identity/password guards сохранить |
+| `scripts/m1_3_browser_fixture.py` | Второй guard требует `0004`, поэтому заблокирует browser fixture после исправления provisioning. Сравнивать с той же общей текущей revision; остальные TEST/identity guards сохранить |
+| `tests/test_postgres.py` | Один exact inventory test не допускает 10 назначенных messaging tables; два shutdown cases требуют историческое `jobs_enabled=false`. Добавить точные 10 имён в sorted inventory, ожидать `jobs_enabled=true` и `mode=controlled`; runtime role, SIGTERM/shutdown и остальные assertions сохранить |
+| `tests/test_m1_3_c0_acceptance.py` | Пять initializer-conflict cases вызывают TRUNCATE Audit без новой referencing receipts table. В единственной команде использовать `",".join((*TABLES, "platform.messaging_command_receipts"))`. C2 подтвердил: глобальный TABLES, before/after counters и assertions не менять; CASCADE/отключение FK не нужны; transaction rollback всё восстанавливает |
+
+Разрешённые изменения прежних tests имеют конкретную причину:
+`test_foundation.py` — head `0005`; `test_tenancy_postgres.py` — ровно новые
+messaging tables/capabilities в exact inventory; `test_m1_3_postgres.py` — две
+новые generated typed Audit FK columns; `test_m1_3_http_contract.py` — additive
+strict MessageSendAuditEvent. Frontend изменён только новым parser/component
+case. Исходные защитные cases и общие SQLSTATE/auth/tenancy guards сохранены.
+`0001`–`0004`, canonical originals, dependencies/locks/CI/Compose не изменены.
+
+M2.1 BLOCKED на полной regression verification до этой C0 exception. После её
+получения: применить ровно четыре дельты, повторить оба штатных scripts и оба
+clean-source gates, затем C0 acceptance и независимый scoped C8 review реализации.
+PR остаётся Draft; merge и M2.1 VERIFIED не объявляются.
+
+### Внешний smoke — подготовка со слов пользователя
+
+2026-09-21 пользователь подтвердил: test bot создан, Business/Secretary Mode включён,
+Owner/Client accounts подготовлены; `TG_BOT_TOKEN` и отдельный `TG_WEBHOOK_SECRET`
+сохранены в менеджере паролей. Значения не получены, не запрашиваются и не нужны C3
+для M2.1. Это user-reported preparation, не проверенный connection/rights/live run.
+Остались фактическая binding аккаунта/Workspace и rights probe, безопасная runtime
+injection секретов, тестовый HTTPS endpoint/webhook и будущий полный journey.
+Они не блокируют M2.1; конкретный C6 test runbook будет выдан перед подключением.
+
+Ниже — принятая последовательность и общая матрица M2. Указанный далее initial
+snapshot PR #16 исторический; актуальный base первой задачи находится выше.
 
 ## 1. Исходная точка и результат
 
@@ -145,8 +376,8 @@ Telegram подтверждает принятие send-запроса, а не 
 
 ## 5. Единая матрица приёмки M2
 
-Это предлагаемая конечная матрица по канону; C0 подтверждает её при выдаче
-контракта. В evidence указывать фактический test/scenario и проверенный SHA/run,
+Это принятая C0 конечная матрица по канону, подтверждённая при выдаче
+контракта M2.1. В evidence указывать фактический test/scenario и проверенный SHA/run,
 а не только номера критериев или суммарное число tests.
 Промежуточные срезы закрывают применимые строки, итог M2 — все строки.
 Новые строки добавляются только с причиной и изменением scope, не ради числа.

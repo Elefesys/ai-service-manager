@@ -52,3 +52,12 @@ It is not a credential. Audit contains only event metadata and the accepted payl
 
 These are consumer notes for the implemented R4 contract, not authorization to
 start C5. C0 API review/integration and separate main CI remain prerequisites.
+
+## M2.1 Audit compatibility
+
+The existing Audit endpoint adds only `MESSAGE_SEND_REQUESTED` with object type
+`MESSAGE`, version `"1"`, a live command actor reference, and exact payload
+`{"content_type":"TEXT"}`. Both billing variants, permissions and cursor semantics
+are unchanged. The strict backend/OpenAPI/frontend union includes this event; no
+message body, provider IDs, command keys or claims are part of Audit. No messaging
+HTTP routes are introduced in this LOCAL/TEST kernel.

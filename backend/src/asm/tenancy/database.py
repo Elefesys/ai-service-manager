@@ -110,6 +110,57 @@ class TenantUnitOfWork:
         role = result.scalar_one()
         return MembershipRole(role) if role is not None else None
 
+    async def messaging_membership_role(self) -> MembershipRole | None:
+        """Live messaging permission admission; frozen tenancy permissions stay unchanged."""
+        return await self.billing_membership_role()
+
+    async def _messaging_execute(self, sql: str, params: dict[str, object]) -> Any:
+        from asm.messaging.database import physical_transaction, worker_active
+        from asm.messaging.errors import Code, MessagingError, database_error
+
+        self._assert_active()
+        if worker_active():
+            raise MessagingError(Code.TRANSACTION_STATE)
+        try:
+            await physical_transaction(self._connection)
+            return (await self._connection.execute(text(sql), params)).scalar_one()
+        except DBAPIError as error:
+            self._failed = True
+            bounded = database_error(error)
+            if bounded is not None:
+                raise bounded from None
+            raise
+        except BaseException:
+            self._failed = True
+            raise
+
+    async def messaging_request_text(self, conversation_id: UUID, value: str, key: str) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.messaging_request_text(:conversation, :value, :key)",
+            {"conversation": conversation_id, "value": value, "key": key},
+        )
+
+    async def messaging_conversations(self, limit: int) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.messaging_read_conversations(:limit)", {"limit": limit}
+        )
+
+    async def messaging_messages(self, conversation_id: UUID, limit: int) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.messaging_read_messages(:conversation, :limit)",
+            {"conversation": conversation_id, "limit": limit},
+        )
+
+    async def messaging_delivery(self, message_id: UUID) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.messaging_read_delivery(:message)", {"message": message_id}
+        )
+
+    async def messaging_inbox(self, inbox_id: UUID) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.messaging_read_inbox(:inbox)", {"inbox": inbox_id}
+        )
+
     async def billing_snapshot(self) -> RowMapping:
         from asm.billing.queries import SNAPSHOT
 
@@ -276,7 +327,9 @@ class TenantDatabase:
     async def transaction(
         self, actor: AuthenticatedAccount, workspace_id: UUID, correlation_id: UUID
     ) -> AsyncIterator[TenantUnitOfWork]:
-        if _active.get() is not None:
+        from asm.messaging.database import worker_active
+
+        if _active.get() is not None or worker_active():
             raise TenancyError(ErrorCode.TRANSACTION_STATE)
         if type(actor) is not AuthenticatedAccount:
             raise TenancyError(ErrorCode.CONTEXT_INVALID)

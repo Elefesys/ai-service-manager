@@ -17,6 +17,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from asm.auth.crypto import PASSWORD_HASHER, normalize_login
+from asm.foundation import DATABASE_SCHEMA_REVISION
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -84,8 +85,10 @@ async def provision(environment, database_url, login, password):
                 raise ProvisioningError("Unexpected provisioning identity")
             if (
                 await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
-            ).scalar_one() != "0004":
-                raise ProvisioningError("Upgrade the isolated database to 0004 first")
+            ).scalar_one() != DATABASE_SCHEMA_REVISION:
+                raise ProvisioningError(
+                    f"Upgrade the isolated database to {DATABASE_SCHEMA_REVISION} first"
+                )
             # UNIQUE(login) also protects concurrent setup: a collision rolls back all rows.
             await connection.execute(
                 text("INSERT INTO platform.user_accounts(id) VALUES (:id)"), {"id": account}

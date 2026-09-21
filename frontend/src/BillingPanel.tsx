@@ -164,7 +164,7 @@ export function BillingPanel({ session, workspace, recover, expired }: { session
       <section aria-label="Audit" className="audit"><div className="billing-heading"><h3>История изменений (Audit)</h3><button className="secondary" disabled={view.auditBusy} onClick={() => { if (!auditInFlight.current) void audit(); }}>Обновить историю</button></div>
         {view.auditBusy && <p role="status">Загружаем историю…</p>}{view.auditError && <p role="alert">{view.auditError}</p>}
         {view.rows?.length === 0 && <p>История пуста.</p>}
-        <ol>{view.rows?.map(item => <li key={item.audit_event_id}><time dateTime={item.occurred_at}>{item.occurred_at}</time><strong>{item.event_type === 'WORKSPACE_BILLING_PROVISIONED' ? 'Подписка настроена' : 'Контакт изменён'}</strong><span className="mono">{item.actor_kind === 'LOCAL_PROVISIONER' ? 'LOCAL_PROVISIONER' : `Пользователь ${item.actor_user_account_id}`}</span></li>)}</ol>
+        <ol>{view.rows?.map(item => <li key={item.audit_event_id}><time dateTime={item.occurred_at}>{item.occurred_at}</time><strong>{item.event_type === 'WORKSPACE_BILLING_PROVISIONED' ? 'Подписка настроена' : item.event_type === 'MESSAGE_SEND_REQUESTED' ? 'Ручной ответ поставлен в очередь' : 'Контакт изменён'}</strong><span className="mono">{item.actor_kind === 'LOCAL_PROVISIONER' ? 'LOCAL_PROVISIONER' : `Пользователь ${item.actor_user_account_id}`}</span></li>)}</ol>
         {view.cursor !== null && <button disabled={view.auditBusy} onClick={() => { if (!auditInFlight.current) void audit(view.cursor); }}>Загрузить ещё</button>}
         {view.rows !== null && view.cursor === null && !view.auditBusy && <p className="muted">Конец истории.</p>}
       </section>

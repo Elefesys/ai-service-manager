@@ -28,7 +28,7 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0004"
+DATABASE_SCHEMA_REVISION = "0005"
 
 
 class Settings(AuthSettings):
@@ -168,21 +168,30 @@ def create_app(settings: Settings | None = None, database: Database | None = Non
 
 
 async def serve(role: Literal["worker", "scheduler"]) -> None:
+    from asm.messaging.adapter import ControlledAdapter
+    from asm.messaging.database import MessagingDatabase
+    from asm.messaging.worker import run
+
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
-    db = RuntimeDatabase(Settings())
+    settings = Settings()
+    db = RuntimeDatabase(settings)
     try:
         await db.check()
         print(
             json.dumps(
-                {"component": role, "event": "started", "mode": "shell", "jobs_enabled": False}
+                {"component": role, "event": "started", "mode": "controlled", "jobs_enabled": True}
             ),
             flush=True,
         )
-        # M2.1 adds durable claiming/leases; M0 does not simulate a queue.
-        await stop.wait()
+        await run(
+            role,
+            MessagingDatabase(db.engine),
+            ControlledAdapter(environment=settings.environment),
+            stop,
+        )
     finally:
         await db.close()
         print(json.dumps({"component": role, "event": "stopped"}), flush=True)
