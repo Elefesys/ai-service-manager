@@ -1,8 +1,9 @@
 # M2 — единый инкрементальный контракт
 
 Дата: 2026-09-21. Владелец: C0; предметное согласование: C2 (DB/tenancy),
-C3 (events/media/delivery). **C0 ACCEPTED; C2/C3 CONTRACT PASS** для M2.1 и
-добавления M2.2 §9. Это согласование контракта, не C8 review реализации M2.2.
+C3 (events/media/delivery), C1 (owner API/product policy M2.3). **C0 ACCEPTED;
+C2/C3 CONTRACT PASS** для M2.1, M2.2 §9 и M2.3 §10; **C1 CONTRACT PASS** для
+API/policy §10. Это согласование контракта, не C8 review новой реализации M2.3.
 Текущие статусы и поручение: [TASK_REGISTER](../TASK_REGISTER.md),
 [M2_HANDOFF](M2_HANDOFF.md).
 
@@ -672,3 +673,387 @@ revoke запрещены, прежний grant живёт до expiry согл�
 results, tests→критерии и C0/C8 receipt — в активном handoff и PR #19. Этот раздел
 фиксирует контракт реализации; статус интеграции/VERIFIED определяется реестром
 после actual merge и отдельного main CI, а не наличием данных уточнений.
+
+## 10. M2.3-TELEGRAM-API — принято C0/C2/C3/C1, 2026-09-21
+
+Этот раздел добавляет только настоящий Telegram transport и минимальный owner API.
+Основание: Spec §§4, 15.4–6, 17.5, 18, 19, 24.6; ADR-019–021/121–128/138–140;
+Implementation Plan M2.3, принятый handoff и матрица M2-A01…A12. Accepted base:
+`a321bdd58856fb41bccb5749b4212349832e623c` (PR #19 merge); push/main CI
+35611528733 SUCCESS. M2.1/2 не проектируются повторно; §§1–9 остаются историей
+соответствующих срезов, явные additive TELEGRAM/API отличия определены только здесь.
+
+### 10.1. Конечный scope и сохранённые механизмы
+
+Один configured test bot, connected business bot/Profile Automation; Workspace
+остаётся tenant boundary. Официальный webhook принимает текст или Telegram photo;
+прежние Inbox/Jobs/Message/FileObject сохраняют их; пять owner routes читают историю,
+дают private file grant и принимают ручной TEXT reply через прежний Outbox.
+CONTROLLED остаётся для deterministic tests. Настоящий external adapter, HTTP/API
+и тестовое подключение проверяются отдельно; наличие fake server не закрывает A11.
+
+Без standalone fallback, userbot/MTProto client, owner upload, исходящего media,
+edit/delete commands, retry/resend endpoint, album aggregation, notifications,
+AI/Turn/takeover/resume/M3, prices/payments или дополнительной общей очереди.
+Полученный native owner/echo/edit/delete имеет явный ignored outcome, а не новую
+client Message. UI и полный Console→Telegram journey — M2.4 после принятого API.
+
+### 10.2. Минимальная DB-дельта и migration queue
+
+C0/C2 назначают **0007_telegram_api.py: revision 0007, predecessor 0006**.
+0001–0006 immutable. Только следующие physical additions и необходимые typed SQL
+capabilities; не создавать общий provider registry/secret table/raw-event queue.
+
+| Объект | Дельта / обязательный инвариант |
+|---|---|
+| Existing provider validators/CHECKs/permits | CONTROLLED или TELEGRAM. NormalizedEventV1 поля, порядок и fingerprint codec прежние; CONTROLLED vectors побайтно прежние |
+| `platform.telegram_connection_state` | Один state на canonical connection, composite Workspace/connection/bot identity FK; immutable independently approved owner Telegram ID; local invalidation generation/version, observed enabled/can_reply, DB observation time/error. Secrets здесь отсутствуют |
+| `platform.telegram_update_receipts` | UNIQUE(bot_identity,update_id), DB-authoritative fingerprint bounded typed projection, kind/result/received time; optional canonical connection/Inbox FK. Terminal ignored/lifecycle receipt либо ссылка на прежний Inbox/Job; собственной очереди нет |
+| `app.conversations.last_client_inbound_at` | Nullable finite timestamp, только Telegram reply-window evidence. Старые CONTROLLED строки NULL, immutable Message/time/hash не переписываются |
+| Existing retry/finalize state | Optional bounded retry_after_seconds для definite NOT_SENT_RETRYABLE; canonical saved result/due, без новой delivery state machine |
+| Owner typed reads | Connection list и cursor overloads conversation/message reads; projection Message/File/Outbox одним SQL snapshot, не raw dict наружу |
+
+FORCE RLS, tenant-composite FK, закрытые grants, pinned SECURITY DEFINER search_path
+и runtime non-owner/non-BYPASSRLS сохраняются. Никакого общего runtime SELECT/DML
+к new platform receipts/state. Непривязанный terminal unsupported receipt не имеет
+tenant authority. Caller Workspace/connection/claim/hash не является доказательством.
+
+SQL seams: typed Telegram ingress; owner/worker canonical connection probe и fenced
+observation; owner receipt/prepare helper; TELEGRAM guards request_text/begin_send;
+429 finalize/reschedule; bounded owner read/cursor helpers; fresh-only TEST initializer
+из §10.7. Старый begin_send path не может обойти TELEGRAM preflight. Worker permit
+привязан к canonical job/claim, generation и observation version; stale claim/probe
+не даёт permission. Telegram-specific atomic observation+begin проверяет текущую
+claim и CAS перед DISPATCHING; прежний begin path не заменяет эту capability. DB определяет контекст, никогда не caller boolean/Workspace.
+
+Порядок locks: owner admission → idempotency namespace → Business/connection →
+Telegram state/billing; worker job → Outbox → actor authority → Business/connection
+→ state/billing. Lifecycle не берёт worker locks в обратном порядке. Никакой network
+I/O внутри DB/auth admission unit. File SQL capabilities, READY/WINNER FK, per-attempt
+keys, fencing/late-PUT cleanup и C8-M2.2-01 guards менять не требуется.
+
+Upgrade проверяется с точными данными 0006. Downgrade 0007→0006 при наличии TELEGRAM
+domain rows **отказывает SQLSTATE 55000 до destructive изменений**; не удаляет историю.
+Disposable TEST сначала явно удаляет только свой Telegram dataset в FK-порядке.
+CONTROLLED/billing/receipts/FileObject/WINNER/UNKNOWN остаются неизменными. Новый
+SEALED test_messaging catalog может остаться в совместимой схеме 0006. Никаких
+CASCADE, правок применённых migrations или внешнего S3 I/O из Alembic.
+
+### 10.3. Доверенная LOCAL/TEST binding и секреты
+
+Одна operator-only процедура, не owner HTTP connect(connection_id). Она получает
+заранее подтверждённые Workspace/Business и expected Telegram Owner user ID;
+проверяет принадлежность Business Workspace. Bot identity — canonical decimal
+getMe.id и configured expected bot ID, не username и не caller webhook поле.
+
+1. getWebhookInfo/getMe; не менять чужой установленный webhook. Для discovery
+   допустим один bounded getUpdates до установки webhook: без offset, negative
+   offset, auto-pagination или drop. Это setup, не второй runtime transport.
+2. Выбрать только connection с independently approved owner ID; затем
+   getBusinessConnection и exact owner/bot/connection match, observed enabled/rights.
+   Первый случайный connection или один переданный connection ID не авторизуют bind.
+3. Одна short migrator-only transaction создаёт immutable binding/state/route;
+   exact повтор NOOP, конфликт identity/Workspace — отказ без rebind/переноса истории.
+4. Только после commit setWebhook: точный HTTPS URL, отдельный secret_token,
+   allowed_updates=[business_connection,business_message,edited_business_message,
+   deleted_business_messages], max_connections=1, drop_pending_updates=false.
+   Повтор setup восстанавливает webhook после неудачи этой внешней операции,
+   не удаляя и не подтверждая накопленные сообщения заранее.
+
+TG_BOT_TOKEN и отдельный TG_WEBHOOK_SECRET вводятся оператором только в защищённый
+runtime env/secret file (например, игнорируемый `.env.telegram`, mode 0600), не CLI
+аргументы, GitHub repo, build context, artifact или чат. Runtime не получает migrator
+credentials. В БД нет токена/secret URL; settings repr и diagnostics его не раскрывают.
+Один configured bot может иметь разные immutable Workspace bindings, но клиент
+не выбирает его credentials. Default LOCAL/TEST без Telegram secrets продолжает
+работать с CONTROLLED; Telegram endpoint в таком режиме недоступен, не fake-enabled.
+
+### 10.4. Webhook, общий receipt и normalization
+
+Точный route **POST /webhooks/telegram**, без bot token и Workspace в URL.
+Отдельная narrow boundary: один X-Telegram-Bot-Api-Secret-Token с constant-time
+comparison до parsing; header cap 16 KiB, body **256 KiB**, полный read ≤3 s.
+JSON Content-Type, identity encoding, strict Content-Length/stream cap, duplicate
+JSON keys/ambiguous known fields/невалидный Unicode отвергаются. Secret error —
+403; body413, media415, invalid422, transient DB503. Текст и secrets не включать
+в ответы/logs. Cookie/Origin/CSRF не нужны Telegram; owner routes сохраняют все
+прежние guards, wildcard exemptions для /api/v1/workspaces не добавляются.
+
+Используемые Telegram поля строго типизированы; integer не bool/float. Только исходно
+numeric IDs (bot/user/private chat/message/update) переводятся в точные canonical
+decimal strings без округления; здесь принимается положительный private-chat domain.
+Business connection ID, photo.file_id и media_group_id остаются bounded opaque strings;
+их не преобразовывать в числа/URL/authority. Unknown дополнительные provider fields
+допускаются и отбрасываются.
+Одна bounded typed projection для общего receipt включает discriminator и все
+значимые normalized/lifecycle/delete identifiers; immutable DB fingerprint считает
+сама DB. Python codec и SQL проверяются одинаковыми vectors. Не сохранять raw update,
+не выдумывать message ID для deleted array, не принимать caller-computed hash.
+
+Known supported event: общий Telegram receipt + прежний Inbox/PROCESS Job атомарно.
+Known lifecycle: receipt + generation invalidation атомарно; webhook не повышает rights.
+Known ignored event: явный durable outcome, без новой client Message/send/download.
+Неизвестный business connection — bounded503, без ACK/tenant writes. Неподдержанный
+nonbusiness update получает terminal IGNORED receipt без tenant refs, чтобы не создать
+вечный retry старых unwanted updates. При known duplicate сначала возвращается
+canonical receipt независимо от последующего disconnect. Same bot/update ID с другой
+relevant projection —409 EVENT_ID_CONFLICT, без overwrite.
+
+**200 только после commit или чтения подтверждённого сохранённого duplicate.**
+Lost commit ACK/DB outage →503, повтор безопасен. Состояние нельзя восстанавливать
+из in-memory queue или provider ACK. Нормализация не скачивает изображения до ACK.
+
+| Provider событие | Принятая семантика |
+|---|---|
+| Private business message: from.id=chat.id, sender не approved Owner и не bot | TEXT либо photo/caption → CLIENT_MESSAGE; forwarded origin/reply metadata не меняют sender |
+| sender_business_bot присутствует | Durable echo-ignore; не новый inbound, не подтверждение UNKNOWN |
+| from.id=approved Owner | Durable native-owner-ignore; M3 takeover не запускается |
+| edited/deleted business message | Durable explicit ignored outcome; локальный Message не редактируется/удаляется |
+| document, включая image-as-document, video/sticker/service/guest/неясный sender | Durable UNSUPPORTED; URL из текста/caption не скачивается |
+
+PHOTO-only — явное ограничение adapter M2.3, не уменьшение форматов validator M2.2.
+Наибольшая PhotoSize выбирается по (width*height,width,height,file_id) с стабильным
+лексикографическим tie-break, независимо от порядка массива. Optional caption
+сохраняется; один Message/FileObject на сообщение, media_group_id — correlation,
+без album aggregation. Original bytes — выбранный Telegram file после обработки
+платформой; побайтное совпадение с исходником до отправки в Telegram не обещается.
+
+update_id не использовать как вечный high-water cutoff: поздние события допустимы,
+после долгой паузы sequence может смениться. BusinessConnection.date — не revision.
+Message dedupe остаётся scoped connection/chat/message, не глобальный message_id.
+
+### 10.5. Observation, reply window и реальный SEND
+
+Lifecycle инвалидирует local generation; duplicate receipt не инвалидирует повторно.
+getBusinessConnection выполняется вне DB и сохраняется CAS по generation **и версии
+наблюдения**, чтобы старый response после invalidation/нового snapshot не восстановил
+rights. Наблюдение имеет DB time; для отображения AVAILABLE срок freshness **30 s**.
+Это display/cache bound, не разрешение worker пропустить новый preflight: перед
+каждым Telegram begin_send требуется проверка в текущей claim. Технический snapshot
+не гарантирует немедленный provider revoke; Telegram остаётся конечной enforcement
+boundary, и внешняя гонка после выдачи permit не скрывается.
+
+Для нового canonical поддержанного client Message:
+last_client_inbound_at=greatest(old,least(provider occurred_at,first Inbox received_at)).
+DB send admission требует DB now < last_client_inbound_at+24h; equality запрещена.
+Duplicate/native/echo/edit/delete/unsupported не продлевают окно, старое позднее
+сообщение не сокращает его. Это conservative supported-inbound evidence, не полная
+синхронизация Telegram history. Incoming persistence/FETCH не зависят от reply rights.
+
+Worker: canonical job/claim probe → commit → readonly getBusinessConnection ≤5 s
+→ short CAS + current OWNER/Business/product/window/lease check → durable DISPATCHING
+commit → один sendMessage ≤10 s → прежний finish/recovery. Lease остаётся30 s.
+Ошибки readonly probe до DISPATCHING безопасно retry в прежних count/age bounds.
+Следующий этап не использует stale permit; caller readiness flag недостаточен.
+
+sendMessage содержит canonical business_connection_id/chat_id и точный text. Без
+parse_mode, split/trim/NFC, reply markup/paid broadcast или standalone fallback.
+Success принимается только с корректными ожидаемыми business/chat refs и положительным
+message_id. SENT значит Telegram принял сообщение, не доставку/прочтение клиентом.
+
+| Фактический результат | Canonical исход |
+|---|---|
+| Строгий valid success | SUCCESS → SENT |
+| Доказанный connect/pool failure до отправки request bytes | NOT_SENT_RETRYABLE |
+| Валидный явный 400/401/403 отказ с ok=false | NOT_SENT_PERMANENT / bounded NOT_ALLOWED |
+| Валидный 429 с positive integer retry_after | NOT_SENT_RETRYABLE с durable delay |
+| Read/write timeout, разрыв после возможной записи, неверный success/refs, неясный 5xx | UNKNOWN_EXTERNAL_RESULT → UNKNOWN |
+| Crash/cancellation после DISPATCHING, в том числе до фактического send | Прежний conservative UNKNOWN, без повторного adapter call |
+
+Если wire-phase не доказана, ошибка не классифицируется как definitely NOT_SENT.
+Никаких HTTP retries внутри client. Для valid429 без корректного retry_after —
+консервативный terminal NOT_SENT_PERMANENT, не немедленный retry. Неизвестные/malformed
+ответы после потенциального send — UNKNOWN. Echo может не прийти; он не reconciliation.
+
+retry_after_seconds допустим только для NOT_SENT_RETRYABLE; due=max(old jitter due,
+DB now+delay). Предельные5 claims/15 min сохраняются; due≥first_started_at+15min →
+RETRY_EXHAUSTED. Delay/due входят в canonical finalized result: lost ACK replay
+не переносит due снова. CONTROLLED без delay сохраняет прежние vectors/behavior.
+
+### 10.6. Safe HTTP и media provider
+
+Использовать существующий locked **httpx 0.28.1**: narrow promotion dev→runtime,
+без package refresh/нового bot SDK. AsyncClient с TLS verify, trust_env=false,
+redirects=false, retries=0, pool≤4 connections, connect/pool≤2s и read/write≤5s;
+общие wall budgets выше обязательны независимо от chunk activity. Origin фиксирован
+https://api.telegram.org; TEST transport/server внедряется явно в tests, event/owner
+не задаёт endpoint. Никакого dependency на Telegram для прежнего DB/auth health.
+
+JSON responses ≤64 KiB. getFile принимает только opaque canonical FetchPermit.image_file_id;
+file_unique_id/filename/provider metadata не заменяют его. Relative file_path bounded,
+без scheme/host/query/fragment, backslash, percent escapes, empty/dot/dot-dot segments;
+не применять urljoin к произвольной строке. File download только фиксированного origin,
+без redirects, stream через прежний read_image actual≤10MiB. Общий FETCH≤20s, прежние
+20M pixels/8192-side/static/WebP-before-native guards, hash/bytes и S3 fencing сохранены.
+Image Content-Length/Type не authority. Missing/invalid terminal, readonly transport
+outage — bounded retry; download не является отправкой человеку.
+
+Токен находится в Bot API request path по протоколу: отключить/редактировать его во
+всех HTTPX/httpcore/exception/tracing logs до первого запроса, не логировать full URL,
+response body, текст/получателя или claims. Проверить secrets redaction на failures.
+Внутренний ImageProvider и простой explicit CONTROLLED/TELEGRAM dispatch достаточны;
+будущий универсальный plugin registry не нужен.
+
+### 10.7. Product policy, новый intent и replay
+
+Ровно один продуктовый key **messaging.manual_send**, BOOLEAN/ESSENTIAL. Реальный
+EntitlementService используется с прежним R4 precedence: structural→subscription
+inactive→mode inactive→missing key→mode restriction→typed value. NORMAL/GRACE/LIMITED
+позволяют корректный true key; SUSPENDED/missing/false/inactive запрещают новый send.
+Security live OWNER отдельно и не ослабляется entitlement. Read/history/private grants,
+durable inbound/FETCH не блокируются billing; данные не удаляются при ограничениях.
+
+Внутренний API сервиса допускает этот known product key; старый GET billing по-прежнему
+возвращает ровно пять TEST decisions. Старые TEST catalog/hash/SEALED revisions и
+initializer не менять. Отдельный migrator-only initialize_local_messaging_billing:
+fresh LOCAL/TEST Workspace без billing, фиксированный test_messaging revision1 с
+одним BOOLEAN true/ESSENTIAL key, обычные ACTIVE+COMPED/NORMAL/account и provisioning
+Audit. Использовать прежний global catalog lock(1295070019,1), DRAFT→SEALED и
+immutable manifest. Finite explicit TEST interval; exact repeat NOOP. Existing M1,
+partial/drift state — conflict+rollback, никакой silent repin/upgrade старой subscription.
+Это тестовое подключение, не pricing, paid billing, plan editor или production catalog.
+
+SQL перед новым TELEGRAM intention и перед DISPATCHING проверяет canonical billing
+с DB time/SEALED revision/type/value; caller allow=true недостаточен. Python/SQL
+решения совпадают; структурный сбой —503, не ложное NOT_ENTITLED. CONTROLLED internal
+path сохраняет принятый M2.1 scope. OWNER actor перед send берётся из receipt, не Job JSON.
+
+Новый **TELEGRAM** HTTP POST использует две последовательные короткие auth.workspace:
+1. Live OWNER, строгий body/key, canonical conversation/binding и exact receipt probe.
+   REPLAY/conflict разрешаются прежде новых route/product checks. Закрыть обе DB
+   connections/auth admission до следующего network step.
+2. Для нового намерения getBusinessConnection≤5s вне DB; затем новая auth.workspace,
+   повтор cookie/session/liveOWNER/canonical binding и **сначала** idempotency replay/
+   conflict. Конкурентно созданный exact receipt возвращается даже при stale response.
+3. Только если receipt ещё нет: generation/version CAS, observed rights/window,
+   locked coherent billing snapshot → EntitlementService → guarded request_manual_text
+   в этом unit. DB повторяет policy guard и атомарность Message/receipt/Audit/Outbox/Job.
+   Ответ после commit/release admission. CAS mismatch→503 UNAVAILABLE, known deny→409
+   NOT_ALLOWED, без нового intent. Observation может быть сохранён с bounded rejection,
+   но отказ не выдаётся за принятый Message; не полагаться на случайный rollback.
+
+Public CONTROLLED POST допускается только LOCAL/TEST: одна auth.workspace, live OWNER,
+receipt recognition, настоящий EntitlementService для нового intention и прежний append;
+Telegram HTTP не вызывается. Это позволяет реальные API/browser tests без секретов.
+Старый внутренний CONTROLLED command contract не меняется.
+
+Это не nested UOW и не HTTP внутри business transaction. Не использовать convenience
+send_manual_text/read_image wrappers, которые открывают второй UOW внутри route.
+Receipt replay требует текущую session/liveOWNER и совпадение actor/workspace/text/key;
+последующий plan/connection restriction не скрывает ранее принятую операцию. Replay
+не отправляет заново; UNKNOWN остаётся UNKNOWN. Потеря ответа: сохранить исходные
+actor/Workspace/conversation/text/key, восстановить auth/CSRF и повторить то же
+намерение; новый key не является recovery. Worker отдельно перепроверяет policy.
+
+### 10.8. Пять owner routes и wire contract
+
+Префикс **/api/v1/workspaces/{workspace_id}**. Только live OWNER; ADMIN/PROVIDER,
+revoked session/membership, cross-Workspace и неправильные relation не разрешены.
+
+| Method/path | Permission / результат |
+|---|---|
+| GET /channel-connections | messaging:read; collection statuses |
+| GET /conversations | messaging:read; collection conversations |
+| GET /conversations/{conversation_id}/messages | messaging:read; history + current file/delivery |
+| POST /conversations/{conversation_id}/messages | messaging:send; ровно {text}, ровно один Idempotency-Key, no If-Match;202 ACCEPTED/REPLAY |
+| POST /conversations/{conversation_id}/messages/{message_id}/files/{file_id}/read-grant | messaging:read; ровно {}, cookie/Origin/CSRF;200 {url,expires_at}, fixed60s; idempotency не применяется |
+
+Все public objects strict/additionalProperties=false; UUID lowercase canonical,
+UTC timestamps с6fractions, bigint version/size decimal strings. Никаких bot/provider
+external IDs, raw dicts, storage keys/claims/Jobs/fingerprint/Outbox internals в DTO.
+Signed URL по принятому §9 содержит bearer locator/signature; отдельно key не выдаётся.
+
+| DTO | Точные поля |
+|---|---|
+| Connection | connection_id,business_id,provider,state,observed_at,created_at,version |
+| Conversation | conversation_id,connection_id,business_id,client_id,created_at,version,reply_window_expires_at |
+| Message | message_id,conversation_id,direction,content_type,text,occurred_at,created_at,version,file,delivery |
+| File | file_id,status,error_code,manifest; manifest только READY: mime_type,size_bytes,width,height |
+| Delivery | status,error_code,completed_at,version; PENDING/DISPATCHING/SENT/FAILED/UNKNOWN |
+| Send response | workspace_id,receipt_id,message_id,accepted_at,outcome; original metadata, outcome ACCEPTED/REPLAY |
+
+TEXT.file=null, inbound.delivery=null; missing dates/error fields nullable по state,
+все nullable поля явно присутствуют. Connection.state: AVAILABLE/DISABLED/RIGHTS_MISSING/
+UNVERIFIED/UNAVAILABLE; AVAILABLE — observed enabled/can_reply, не обещание открытого
+окна или разрешённого тарифа. Stale/invalidated →UNVERIFIED; last probe failure→
+UNAVAILABLE; successful disabled→DISABLED; enabled без rights→RIGHTS_MISSING.
+Для CONTROLLED state отражает существующее active/inactive, без выдуманного Telegram
+observation; observed_at=null, reply_window_expires_at=null. Manifest width/height
+bounded integers; file/error codes — закрытый bounded набор существующего домена.
+
+Три collection GET: {items,next_cursor}, defaultlimit25, 1…100, только limit/cursor;
+duplicate/extra query запрещены. Stable(created_at,id) DESC; history — creation order,
+provider occurred_at показывается отдельно. Cursor≤1024 canonical unpadded base64url
+JSON: v=1,endpoint,workspace_id,direction=DESC,created_at,id; messages дополнительно
+conversation_id. Endpoint=CHANNEL_CONNECTIONS/CONVERSATIONS/MESSAGES. Exact anchor
+проверяется в том же tenant/conversation; malformed/чужой/missing anchor→422. SQL
+limit+1≤101; конец next_cursor=null. Cursor не credential и не frozen-history snapshot.
+Остальные routes query не принимают. Read-grant использует текущий owner unit и
+local presign, возвращается после commit; TTL/revoke semantics §9 неизменны.
+
+Text — прежний exact1…4096 scalars/≤16384UTF8 bytes, valid Unicode, no NUL и не
+whitespace-only, без trim/NFC. AuthBoundary body cap **64KiB только exact POST messages
+route**; прежние routes остаются4096 bytes. Header/actual streaming/Content-Length/
+3s read/Host/Origin/CSRF/session locks и bounded errors сохраняются. Новый webhook
+имеет отдельный cap; он не получает глобальное исключение для Console. CORS уже
+имеет GET/POST и нужные headers: расширение allow-list не нужно; positive/negative
+configured-origin preflight tests обязательны. Generated OpenAPI/consumer notes
+меняются только additive messaging/webhook contracts; frozen M1 snapshots сохраняются.
+
+Errors: прежние401/403 security;404 NOT_FOUND для чужого/unknown/mismatched/not-ready
+file;409 IDEMPOTENCY_KEY_CONFLICT или NOT_ALLOWED для нового запрещённого intent;
+422 INVALID_REQUEST для DTO/key/query/cursor/UUID; прежние413/415/429/500 envelopes.
+503 union сохраняет boundary UNAVAILABLE и BILLING_STATE_UNAVAILABLE с bounded
+state_reason только для структурного billing сбоя. Provider body/SQL/секреты наружу
+не возвращаются. Current delivery/recovery читается history, отдельный retry route
+или optimistic SUCCESS из202 не добавляется.
+
+### 10.9. Конечная проверка и внешняя граница
+
+Критерии остаются M2-A01…A12. Нужны tests/assertions→строка→actual SHA/run:
+verified webhook/unknown route/binding A01; receipt/Inbox commit/repeat/crash A02;
+HTTP intention/replay/atomic rollback A03; claim/CAS/429/exhaustion A04; real wire
+accept+response loss/process crash→UNKNOWN/no-resend A05; typed Telegram fixtures/
+photo/native/echo/edit/delete/out-of-order A06; real provider stream→PG/private S3/
+HTTP grant A07; все пять routes и forged claims/relations/liveOWNER/revoke A08;
+rights/window/revocation/errors и честный observed status A09; migration/M1/M2.1/2
+regression/contracts/gates A12. A10 и полный A11 через Console остаются M2.4.
+
+Полный HTTP/PG путь обязателен. Для ambiguous send — локальный HTTP server реально
+принимает POST и рвёт ответ, wire counter переживает restart worker; MockTransport
+не заменяет этот case. Поддерживаемые event fixtures и negative parsing можно
+проверять детерминированно. Внешний Telegram не включать в обычный CI и не подменять
+его успехом fake adapter. Проверить отсутствие provider/S3 I/O при удержании DB,
+secret redaction, future-date/window boundary, concurrent refresh/replay, drop
+OWNER/billing между enqueue/dispatch, TTL/host/path signed GET и downgrade refusal.
+
+Сохраняются штатные ci.sh/test_browser.sh, оба clean-source gates, exact inventories,
+full migration cycles, generated contracts, reproducibility и smoke. Старые fixtures
+адаптируются только по новой схеме/current revision с объяснением; guards не удалять.
+C8 после реализации независимо проверяет новый Telegram/API trust и effect boundary;
+настоящее C2/C3/C1 CONTRACT согласование его не заменяет.
+
+Live TEST: C6 даёт один исполнимый runbook от точного SHA: safe secrets injection,
+getMe/getBusinessConnection/getWebhookInfo/binding, тестовый HTTPS webhook и exact
+Console origin/secure cookies, backend/worker/scheduler, private DB/S3. Signed S3 URL
+должна быть доступна браузеру по HTTPS с исходными подписанными host/path: внутренний
+minio hostname после подписи не заменять. Existing loopback Compose не готовый
+internet deployment. Пользователь подготовил bot/Owner/Client и секреты в password
+manager; подключать manager к чату не нужно. Доступ к runtime/HTTPS блокирует только
+соответствующий live check. Платная инфраструктура — только после отдельного
+предложения конкретной цены; в этом поручении расходы/production не разрешены.
+
+Внешний adapter smoke: Client text+photo → корректные owner API/history/private GET
+→ ручной API reply → Client получает text; отдельно observed rights/native behavior.
+Это подготовка A11, не завершённый Console journey. M2.3 code/API можно принять с
+явным external-check blocker, но M2 целиком нельзя завершать без реального A11.
+Следующий C5 начинает только от принятого интегрированного API и отдельного main CI.
+
+Первичные источники, проверенные C0/C3 2026-09-21:
+[Telegram Bot API](https://core.telegram.org/bots/api),
+[connected business bots](https://core.telegram.org/api/bots/connected-business-bots),
+[HTTPX timeouts](https://www.python-httpx.org/advanced/timeouts/),
+[HTTPX transports](https://www.python-httpx.org/advanced/transports/),
+[HTTPX environment variables](https://www.python-httpx.org/environment_variables/).
+Документация объясняет provider constraints, не доказывает доступ/права конкретного
+тестового аккаунта. OPEN-052/085 остаются внешними account/release checks.
