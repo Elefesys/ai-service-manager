@@ -31,6 +31,19 @@ describe('R4 generated OpenAPI consumer', () => {
     for (const item of [{...a,payload:{...a.payload,contact:'private'}},{...a,actor_user_account_id:null},{...a,payload:{changed_fields:[]}},{...a,secret:'private'}]) expect(() => parseAuditPage({items:[item],next_cursor:null})).toThrow();
     expect(() => parseAuditPage({items:Array(11).fill(a),next_cursor:null})).toThrow();
   });
+  it('parses mixed billing and messaging Audit without a generic payload fallback', () => {
+    const contact = event();
+    const provision = {...event(2), event_type:'WORKSPACE_BILLING_PROVISIONED',actor_kind:'LOCAL_PROVISIONER',actor_user_account_id:null,payload:{}};
+    const message = {...event(3),object_type:'MESSAGE',event_type:'MESSAGE_SEND_REQUESTED',payload:{content_type:'TEXT'}};
+    expect(parseAuditPage({items:[message,contact,provision],next_cursor:'opaque'}).items).toEqual([message,contact,provision]);
+    for (const item of [
+      {...message,object_type:'WORKSPACE_BILLING_ACCOUNT'}, {...message,object_version:'2'},
+      {...message,actor_kind:'LOCAL_PROVISIONER'}, {...message,actor_user_account_id:null},
+      {...message,object_id:'invalid'}, {...message,payload:{content_type:'IMAGE_REFERENCE'}},
+      {...message,payload:{content_type:'TEXT',text:'private'}}, {...message,payload:{}},
+      {...contact,object_type:'MESSAGE'}, {...provision,object_type:'MESSAGE'},
+    ]) expect(() => parseAuditPage({items:[item],next_cursor:null})).toThrow('INVALID_RESPONSE');
+  });
   it('passes opaque cursor and frozen PATCH body/key with credentials; rejects foreign snapshot', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(ok({items:[],next_cursor:null})).mockResolvedValueOnce(ok(receipt())).mockResolvedValueOnce(ok({...billing(),workspace_id:'00000000-0000-0000-0000-000000000009'})); vi.stubGlobal('fetch',fetch);
     await billingApi.audit(ws,'opaque_ABC-123'); const body={expected_version:'9223372036854775807',contact_display_name:'  Name  '}; await billingApi.save(ws,body,'test-key','csrf');

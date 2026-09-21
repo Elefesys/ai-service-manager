@@ -5,7 +5,7 @@
 ## Текущий статус — M2.1-KERNEL выдана / 2026-09-21
 
 **M1.1–M1.3 VERIFIED в принятых LOCAL/TEST границах. M2.1 IN_PROGRESS;
-M2.2–M2.4 TODO.** Код M2 ещё не реализован/не принят; начаты контракт и выдача.
+M2.2–M2.4 TODO.** Ограниченный kernel реализуется в PR #18; приёмка ещё не выполнена.
 Единственный активный handoff — [M2_HANDOFF](tasks/M2_HANDOFF.md), единственный
 инкрементальный технический контракт — [M2_CONTRACT](tasks/M2_CONTRACT.md).
 M1_HANDOFF закрыт; R4/D-01…D-13 и инварианты M1 не переоткрываются.
@@ -23,7 +23,9 @@ SUCCESS; actual head/tested SHA, оба jobs/clean-source gates и artifact пр
 стартовый head/CI фиксируются в PR metadata и сообщении C0 без SHA-only commits.
 Миграция этой задачи: `0005`, predecessor `0004`; `0001`–`0004` неизменны.
 C0/C2/C3 согласовали routing/IDs, typed worker admission, Inbox/Outbox/Jobs,
-atomicity/UNKNOWN и ограниченную Audit compatibility; execution/C8 ещё впереди.
+atomicity/UNKNOWN и ограниченную Audit compatibility. C2 подготовил migration/DB
+capabilities, C3 — Python kernel/worker/Audit compatibility и tests; полный runner
+verification и C8 ещё впереди.
 
 Единственное содержательное дополнение существующих consumers — strict
 MESSAGE_SEND_REQUESTED в общем Audit: typed FK/DTO/generated OpenAPI и frontend
@@ -35,7 +37,11 @@ Owner/Client accounts готовы; TG_BOT_TOKEN/TG_WEBHOOK_SECRET сохран�
 паролей. Секреты не получены. Binding/rights, runtime secret injection, HTTPS webhook
 и живой сценарий ещё не проверены; M2.1 от этих внешних проверок не зависит.
 
-Следующий шаг: C3 реализует ограниченное ядро, возвращает PR/tests/assertions/evidence;
+Известный scope blocker: два provisioning scripts требуют `0004`; назначенная
+миграция `0005` требует узкой C0 exception для сравнения текущей schema revision.
+Подробность и точные paths — в активном M2_HANDOFF. Scripts не изменены.
+
+Следующий шаг: C3 проверяет ограниченное ядро, возвращает PR/tests/assertions/evidence;
 C0 выполняет приёмку и scoped C8 review новых рисков. M2.2 выдаётся после merge
 ядра и отдельного main CI. M2 VERIFIED только после всех четырёх частей и M2-A11.
 

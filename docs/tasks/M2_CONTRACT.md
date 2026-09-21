@@ -381,3 +381,37 @@ PostgreSQL 18: [queue row locking](https://www.postgresql.org/docs/18/sql-select
 [SECURITY DEFINER privileges/search_path](https://www.postgresql.org/docs/18/sql-createfunction.html),
 [RLS/FORCE RLS](https://www.postgresql.org/docs/18/ddl-rowsecurity.html).
 Документация сверена 2026-09-21; она не заменяет runtime-role execution tests.
+
+## 8. Реализационные имена текущего kernel (C3/C2, 2026-09-21)
+
+Migration `0005` сохраняет revision chain `0004 → 0005`. Typed capabilities
+`platform.messaging_ingest`, `messaging_claim`, `messaging_admit`,
+`messaging_process_inbox`, `messaging_request_text`, `messaging_begin_send`,
+`messaging_finish_send`, `messaging_retry`, `messaging_recover_expired` возвращают
+bounded JSON результата; arbitrary SQL/status/recipient inputs не принимаются.
+Owner reads — `messaging_read_conversations/messages/delivery/inbox` и отдельный
+`app.current_messaging_owner_workspace_id`. PRIVATE helpers не имеют runtime
+EXECUTE. Ошибки нового домена — SQLSTATE `P2001` + exact bounded code; mapping M1
+не меняется. Owner DTO не содержит attempt/claim internals.
+
+Lock order: job → Inbox/Outbox → authority/connection; Owner command берёт
+workspace/account/membership → idempotency lock → Business/connection и создаёт
+новые Message/receipt/Audit/Outbox/Job. Inbound writers сериализуются по connection,
+затем по Workspace/provider/sender identity. Эти advisory locks сериализуют
+конкуренцию, но не являются authorization. Новая claim инвалидирует recognition
+результата старой claim; до неё exact finalized replay работает без live lease.
+
+`finish_send` сначала читает canonical attempt/outcome; при совпадении возвращает
+ALREADY_FINALIZED без смены состояния. Для новой mutation она внутри восстанавливает
+worker admission. После потери finalize commit ACK wrapper делает один повтор
+этого же typed DB вызова; adapter повторно не вызывается, сохранённый SENT или
+NOT_SENT не заменяется UNKNOWN. Недоступная DB оставляет DISPATCHING для recovery.
+Все вызовы adapter находятся после выхода из DB connection/unit.
+
+Controlled adapter считает каждый вызов и каждый simulated effect, без dedupe;
+TEST ledger из коротких fsync records находится вне процесса worker и не хранит
+text/recipient/claim. Fault tests прекращают отдельный процесс через os._exit на
+границах commit/start/effect/finalize и используют тот же ledger после restart.
+Это fault instrumentation LOCAL/TEST, не гарантия distributed exactly-once и
+не подтверждение Telegram. Runtime lease 30s, deadline 10s, retry bounds/backoff
+соответствуют §5; test time manipulation доступна только migrator.

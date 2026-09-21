@@ -478,7 +478,15 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             .mappings()
             .all()
         )
-        assert {row["tablename"] for row in tables} == set(TABLES) | {"audit_events"}
+        assert {row["tablename"] for row in tables} == set(TABLES) | {
+            "audit_events",
+            "channel_connections",
+            "clients",
+            "client_identities",
+            "conversations",
+            "messages",
+            "outbox_events",
+        }
         assert all(row["tableowner"] == "asm_migrator" and row["rowsecurity"] for row in tables)
         for table in TABLES:
             assert (
@@ -571,7 +579,52 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "initialize_local_billing": (True, False),
             "update_billing_contact": (True, True),
         }
-        assert {row["proname"] for row in functions} == legacy_functions | set(m1_3_profiles)
+        # M2.1 adds typed messaging capabilities; M1 guard profiles stay frozen.
+        m2_profiles = {
+            name: (True, True)
+            for name in (
+                "current_messaging_owner_workspace_id",
+                "messaging_ingest",
+                "messaging_claim",
+                "messaging_admit",
+                "messaging_process_inbox",
+                "messaging_request_text",
+                "messaging_begin_send",
+                "messaging_finish_send",
+                "messaging_retry",
+                "messaging_recover_expired",
+                "messaging_read_conversations",
+                "messaging_read_messages",
+                "messaging_read_delivery",
+                "messaging_read_inbox",
+            )
+        }
+        m2_profiles.update(
+            {
+                name: (False, False)
+                for name in (
+                    "messaging_valid_id",
+                    "messaging_validate_event",
+                    "messaging_fingerprint",
+                    "messaging_immutable",
+                    "messaging_job_json",
+                )
+            }
+        )
+        m2_profiles.update(
+            {
+                name: (True, False)
+                for name in (
+                    "messaging_guard",
+                    "messaging_reschedule",
+                    "messaging_lock_owner",
+                )
+            }
+        )
+        assert {row["proname"] for row in functions} == legacy_functions | set(m1_3_profiles) | set(
+            m2_profiles
+        )
+        m1_3_profiles.update(m2_profiles)
         legacy_rows = [row for row in functions if row["proname"] in legacy_functions]
         assert all(
             row["prosecdef"] and row["rolname"] == "asm_migrator" and not row["public_execute"]

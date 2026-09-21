@@ -43,6 +43,19 @@ describe('owner panel authority and request ownership', () => {
     fireEvent.click(screen.getByRole('button',{name:'Обновить историю'})); await screen.findByText('История пуста.');
     v.rerender(<BillingPanel {...v.props} workspace="other"/>); expect(screen.queryByText('Контакт изменён')).not.toBeInTheDocument(); expect(screen.queryByRole('button',{name:'Загрузить ещё'})).not.toBeInTheDocument();
   });
+  it('renders mixed Audit labels and preserves pagination for queued manual answers', async () => {
+    const contact = event(1);
+    const provision = {...event(2),event_type:'WORKSPACE_BILLING_PROVISIONED' as const,object_type:'WORKSPACE_BILLING_ACCOUNT' as const,actor_kind:'LOCAL_PROVISIONER' as const,actor_user_account_id:null,payload:{}};
+    const message = {...event(3),event_type:'MESSAGE_SEND_REQUESTED' as const,object_type:'MESSAGE' as const,object_version:'1' as const,actor_kind:'USER_ACCOUNT' as const,actor_user_account_id:session().user_account_id,payload:{content_type:'TEXT' as const}};
+    vi.mocked(billingApi.audit).mockResolvedValueOnce({items:[message,contact],next_cursor:'mixed_cursor'}).mockResolvedValueOnce({items:[provision],next_cursor:null});
+    setup();
+    expect(await screen.findByText('Ручной ответ поставлен в очередь')).toBeVisible();
+    expect(screen.getAllByText('Контакт изменён')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button',{name:'Загрузить ещё'}));
+    expect(await screen.findByText('Подписка настроена')).toBeVisible();
+    expect(screen.getByText('Конец истории.')).toBeVisible();
+    expect(billingApi.audit).toHaveBeenLastCalledWith(ws,'mixed_cursor',expect.any(AbortSignal));
+  });
   it.each(['success','error'])('ignores late read and Audit %s after actor/Workspace change', async (kind) => {
     const oldRead=deferred<Billing>(), oldAudit=deferred<Awaited<ReturnType<typeof billingApi.audit>>>();
     vi.mocked(billingApi.read).mockImplementationOnce(()=>oldRead.promise).mockResolvedValue({...billing('Other contact'),workspace_id:'other'});
@@ -74,6 +87,19 @@ describe('owner panel authority and request ownership', () => {
     setup(); await ready(); vi.mocked(billingApi.read).mockRejectedValueOnce(new BillingError(403,'ACCESS_DENIED')); await submit();
     await screen.findByText('Нет доступа к данным владельца'); expect(screen.getByText(/Команда в прежнем контексте подтверждена/)).toBeVisible();
     expect(screen.queryByText(/В прежнем контексте осталось сохранение/)).not.toBeInTheDocument(); expect(screen.queryByDisplayValue('New contact')).not.toBeInTheDocument(); expect(billingApi.save).toHaveBeenCalledTimes(1);
+  });
+  it('renders mixed Audit labels and preserves pagination for queued manual answers', async () => {
+    const contact = event(1);
+    const provision = {...event(2),event_type:'WORKSPACE_BILLING_PROVISIONED' as const,object_type:'WORKSPACE_BILLING_ACCOUNT' as const,actor_kind:'LOCAL_PROVISIONER' as const,actor_user_account_id:null,payload:{}};
+    const message = {...event(3),event_type:'MESSAGE_SEND_REQUESTED' as const,object_type:'MESSAGE' as const,object_version:'1' as const,actor_kind:'USER_ACCOUNT' as const,actor_user_account_id:session().user_account_id,payload:{content_type:'TEXT' as const}};
+    vi.mocked(billingApi.audit).mockResolvedValueOnce({items:[message,contact],next_cursor:'mixed_cursor'}).mockResolvedValueOnce({items:[provision],next_cursor:null});
+    setup();
+    expect(await screen.findByText('Ручной ответ поставлен в очередь')).toBeVisible();
+    expect(screen.getAllByText('Контакт изменён')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button',{name:'Загрузить ещё'}));
+    expect(await screen.findByText('Подписка настроена')).toBeVisible();
+    expect(screen.getByText('Конец истории.')).toBeVisible();
+    expect(billingApi.audit).toHaveBeenLastCalledWith(ws,'mixed_cursor',expect.any(AbortSignal));
   });
   it.each(['success','error'])('detaches a pending save and ignores late %s in another context',async kind=>{
     const pending=deferred<ReturnType<typeof receipt>>(); vi.mocked(billingApi.save).mockImplementation(()=>pending.promise); const v=setup(); await submit('Private draft');

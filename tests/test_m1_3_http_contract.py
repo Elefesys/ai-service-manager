@@ -101,6 +101,9 @@ def test_generated_billing_schemas_are_strict_disjoint_complete_and_keep_auth_er
         "ContactAudit",
         "ProvisionPayload",
         "ContactPayload",
+        # Additive M2.1 Audit variant must satisfy the same strict schema gate.
+        "MessageSendAudit",
+        "MessageSendPayload",
     ):
         schema = schemas[name]
         assert schema["additionalProperties"] is False, name

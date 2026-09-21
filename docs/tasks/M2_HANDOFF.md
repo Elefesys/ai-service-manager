@@ -93,6 +93,38 @@ routing/worker/RLS/side-effect risks; этот review пока не выполн
 Draft до C0 acceptance; C0 готовит Ready for review и одну инструкцию пользователю
 для обычного merge. После merge — actual main CI, затем одна задача M2.2.
 
+### Исполнение C3/C2 — реализация и проверка, 2026-09-21
+
+В PR #18 подготовлена реализация ограниченного kernel; первый coordination commit
+сохранён. C2 работал в отдельном checkout: migration `0005`, typed SQL capabilities,
+RLS/constraints, Audit FK и inventory/cycle tests. C3 добавил Python normalized
+codec, owner command/read, отдельный task/XID-bound worker unit, реальные worker/
+scheduler entrypoints и controlled adapter с сохраняемым TEST счётчиком calls/effects.
+C2 participation — авторство DB-части, не независимый C8 review.
+
+Новые tests: `test_m2_1_models.py`, `test_m2_1_postgres.py`,
+`test_m2_1_schema_postgres.py`, `test_m2_1_audit_postgres.py`; frontend — только
+mixed Audit parser/component cases. Старые tests изменены только для нового
+schema head, точного function/table/generated-column inventory и strict Audit
+schema. Guards и исходные cases сохранены. `0001`–`0004`, frozen tenancy/auth,
+canonical originals, dependencies/locks/CI не изменены.
+
+Локально: locked `uv sync --frozen --group dev`; Ruff/format/mypy и 192 backend
+non-integration cases PASS; frontend Vitest/build PASS; OpenAPI штатно сгенерирован.
+Реальные PostgreSQL и оба штатных scripts проверяются обычным PR runner; их
+результат привязывается к head/tested SHA/tree в PR receipt, не к локальному
+synthetic commit. LOCAL/TEST credentials не запрашивались.
+
+**Конкретный scope blocker для C0:** `scripts/provision_local_auth.py` и
+`scripts/m1_3_browser_fixture.py` требуют schema revision `0004`. Это конфликтует
+с назначенной `0005` и блокирует штатное provisioning/browser verification.
+Оба файла вне разрешённой дельты. Предлагается только импорт/сравнение общей
+`asm.foundation.DATABASE_SCHEMA_REVISION` вместо hardcoded `0004`, без ослабления
+проверки environment/identity/schema и без изменения test expectations.
+Эти scripts пока не изменены; нужна явная узкая C0 scope exception.
+
+M2.1 остаётся IN_PROGRESS, приёмка C0/scoped C8 и main CI не выполнены.
+
 ### Внешний smoke — подготовка со слов пользователя
 
 2026-09-21 пользователь подтвердил: test bot создан, Business/Secretary Mode включён,

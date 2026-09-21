@@ -12,9 +12,10 @@ export type Billing = {
 };
 export type ContactBody = Readonly<{ expected_version: string; contact_display_name: string }>;
 export type ContactResult = { workspace_id: string; billing_account_id: string; receipt_id: string; result_version: string; outcome: 'UPDATED' | 'NOOP'; completed_at: string };
-export type AuditItem = { audit_event_id: string; occurred_at: string; correlation_id: string; object_type: 'WORKSPACE_BILLING_ACCOUNT'; object_id: string; object_version: string } & (
-  { event_type: 'WORKSPACE_BILLING_PROVISIONED'; actor_kind: 'LOCAL_PROVISIONER'; actor_user_account_id: null; payload: Record<string, never> } |
-  { event_type: 'BILLING_ACCOUNT_CONTACT_UPDATED'; actor_kind: 'USER_ACCOUNT'; actor_user_account_id: string; payload: { changed_fields: ['contact_display_name'] } });
+export type AuditItem = { audit_event_id: string; occurred_at: string; correlation_id: string; object_id: string; object_version: string } & (
+  { object_type: 'WORKSPACE_BILLING_ACCOUNT'; event_type: 'WORKSPACE_BILLING_PROVISIONED'; actor_kind: 'LOCAL_PROVISIONER'; actor_user_account_id: null; payload: Record<string, never> } |
+  { object_type: 'WORKSPACE_BILLING_ACCOUNT'; event_type: 'BILLING_ACCOUNT_CONTACT_UPDATED'; actor_kind: 'USER_ACCOUNT'; actor_user_account_id: string; payload: { changed_fields: ['contact_display_name'] } } |
+  { object_type: 'MESSAGE'; object_version: '1'; event_type: 'MESSAGE_SEND_REQUESTED'; actor_kind: 'USER_ACCOUNT'; actor_user_account_id: string; payload: { content_type: 'TEXT' } });
 export type AuditPage = { items: AuditItem[]; next_cursor: string | null };
 export class BillingError extends Error {
   constructor(public status: number, public code: string, public stateReason?: string) { super(code); }
@@ -67,11 +68,14 @@ export function parseContactResult(value: unknown): ContactResult {
 }
 function auditItem(value: unknown): AuditItem {
   const v = object(value, ['audit_event_id','occurred_at','event_type','actor_kind','actor_user_account_id','correlation_id','object_type','object_id','object_version','payload']);
-  if (!uuid(v.audit_event_id) || !timestamp(v.occurred_at) || !uuid(v.correlation_id) || v.object_type !== 'WORKSPACE_BILLING_ACCOUNT' || !uuid(v.object_id) || !decimal(v.object_version)) invalid();
-  if (v.event_type === 'WORKSPACE_BILLING_PROVISIONED' && v.actor_kind === 'LOCAL_PROVISIONER' && v.actor_user_account_id === null) object(v.payload, []);
-  else if (v.event_type === 'BILLING_ACCOUNT_CONTACT_UPDATED' && v.actor_kind === 'USER_ACCOUNT' && uuid(v.actor_user_account_id)) {
+  if (!uuid(v.audit_event_id) || !timestamp(v.occurred_at) || !uuid(v.correlation_id) || !uuid(v.object_id) || !decimal(v.object_version)) invalid();
+  if (v.event_type === 'WORKSPACE_BILLING_PROVISIONED' && v.object_type === 'WORKSPACE_BILLING_ACCOUNT' && v.actor_kind === 'LOCAL_PROVISIONER' && v.actor_user_account_id === null) object(v.payload, []);
+  else if (v.event_type === 'BILLING_ACCOUNT_CONTACT_UPDATED' && v.object_type === 'WORKSPACE_BILLING_ACCOUNT' && v.actor_kind === 'USER_ACCOUNT' && uuid(v.actor_user_account_id)) {
     const p = object(v.payload, ['changed_fields']);
     if (!Array.isArray(p.changed_fields) || p.changed_fields.length !== 1 || p.changed_fields[0] !== 'contact_display_name') invalid();
+  } else if (v.event_type === 'MESSAGE_SEND_REQUESTED' && v.object_type === 'MESSAGE' && v.object_version === '1' && v.actor_kind === 'USER_ACCOUNT' && uuid(v.actor_user_account_id)) {
+    const p = object(v.payload, ['content_type']);
+    if (p.content_type !== 'TEXT') invalid();
   } else invalid();
   return v as AuditItem;
 }
