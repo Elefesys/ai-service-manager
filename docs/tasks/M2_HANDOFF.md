@@ -5,7 +5,115 @@
 Этот файл — принятый план и единственная активная точка передачи M2.
 Приёмка плана не является evidence выполненной реализации.
 
-## Активное поручение C0 — M2.3-TELEGRAM-API / 2026-09-21
+## Активный handoff C0 — M2.3 code/API, приёмка до merge / 2026-09-21
+
+**M1.1–M1.3, M2.1 и M2.2 VERIFIED LOCAL/TEST. M2.3 REVIEW: code/API принят
+C0 и независимым scoped C8 после исправления C8-M2.3-01. Merge/main CI впереди.
+Live Telegram BLOCKED: внешнее runtime/DNS/TLS. M2.4 TODO; весь M2 IN_PROGRESS.**
+История ниже сохраняет прежние поручения и не переопределяет этот активный блок.
+
+Repository **Elefesys/ai-service-manager**; тот же
+[PR #20](https://github.com/Elefesys/ai-service-manager/pull/20), ветка
+**`c3/m2-3-telegram-api`** → main. Accepted base/main
+**`a321bdd58856fb41bccb5749b4212349832e623c`**; первый coordination
+**`5347e3de498752be2834573eadfb39d59dc51bcb`** сохранён.
+Технический контракт — [M2_CONTRACT §10](M2_CONTRACT.md#10-m23-telegram-api--принято-c0c2c3c1-2026-09-21).
+
+### Что принято C0
+
+Code/API LOCAL/TEST: официальный business text/photo webhook с durable receipt/Inbox/
+Jobs; trusted operator binding; private image pipeline; пять authenticated owner
+routes; manual text intention/Outbox/send с UNKNOWN/no-resend; generated OpenAPI,
+recovery notes и исполнимый TEST runbook. Это готовность к интеграции кода, не evidence
+живого Telegram или Console A11.
+
+C0 проверил52 changed paths и все204 source blobs/modes исходного implementation
+head `439eb3228a681dd1558ab98ebe232d4a266d9874`, tree
+`c4c308b2a4073ce2eaae7e6b0f5bd2f3778a3da1`; parents/coordination ancestry/оба checkout
+logs и [CI35632000530](https://github.com/Elefesys/ai-service-manager/actions/runs/35632000530)
+SUCCESS. Все11 приложенных canonical sources совпали побайтно. Сохранены47 выбранных
+frozen/accepted files, включая0001–0006, frontend/workflows/CI scripts и private
+validation/storage/transfer. Прежние OpenAPI paths/schemas структурно неизменны;
+lock package blocks неизменны кроме root metadata для httpx0.28.1 runtime promotion.
+
+Миграция0007→0006 соответствует принятому inventory: две platform tables, typed
+capabilities, provider/window/retry/probe metadata; runtime без общего DML. Новый
+product key использует настоящий EntitlementService, прежние пять TEST decisions
+GET billing и sealed catalog сохраняются. Дополнительного scope нет.
+
+### Независимый scoped C8 и единственное исправление
+
+| Область | Реально выполненный review и результат |
+|---|---|
+| Transport/webhook/media/setup | Независимый read-only C8 PASS: auth-before-parse, durable ACK, numeric/opaque IDs, fixed origin/TLS/bytes/time, secret-safe transport, send UNKNOWN, trusted bootstrap, private signed origin.84 targeted unit/setup PASS; дополнительный реальный TCP send-loss probe дал UNKNOWN/1 wire call, encoded JSON отвергнут до decoder, missing secret403 до receive |
+| DB/worker | Независимый review RLS/grants/FK, authoritative fingerprints/dedupe, claims/CAS, product, replay/recovery/429 и migration cycles. Найден единственный P2 C8-M2.3-01; прочие blockers отсутствуют |
+| Owner API/auth/product/recovery | Независимый review пяти routes, DTO/errors/cursor, двух auth UOW без network под DB admission, replay-before-CAS, isolation/private grant и frozen contracts. Подтверждён тот же C8-M2.3-01; других blockers нет |
+| Targeted closure | Независимые DB/API reviewers проверили точный narrow fix и новые PG assertions, затем exact-head runner evidence. **C8-M2.3-01 PASS / CLOSED** |
+
+Причина C8-M2.3-01: billing timestamp снимался до получения account lock, а reply
+window проверялось до potentially blocking billing guard. Принятый contact writer
+мог удерживать FOR NO KEY UPDATE, пока истекали subscription/mode/window; valid
+worker lease не устраняла эту гонку. Аналогичный порядок был в canonical owner SQL.
+
+C2 изменил только `migrations/versions/0007_telegram_api.py` и
+`tests/test_m2_3_db_postgres.py`: billing time теперь после всех billing locks;
+финальный Telegram window/observation guard повторяется после billing перед новым
+owner intent и worker DISPATCHING. Ранние denials/replay/structural precedence,
+frozen R4 snapshot, lock_timeout2s и lease30s сохранены.
+
+| Новые реальные PostgreSQL cases | Assertions |
+|---|---|
+| `test_worker_denies_expiry_during_billing_lock_without_adapter_call[subscription/mode/window]` | Отдельный asm_runtime observer подтверждает ожидание account UPDATE через pg_blocking_pids и свежий activity snapshot; TEST boundary ставится в будущем после подтверждённого wait; pg_sleep_until ждёт DB deadline. Release после expiry при действующей lease → FAILED/NOT_ALLOWED, attempt_id/last_attempt_id NULL, send не вызван, wire ledger отсутствует |
+| `test_owner_denies_expiry_during_billing_lock_without_intention[subscription/mode/window]` | Тот же подтверждённый lock crossing; canonical request даёт именно P2001/NOT_ALLOWED. Нет outbound Message/receipt/Audit/Outbox/Job, последующий worker ничего не отправляет. Lock timeout/раннее завершение фоновой задачи не считаются PASS |
+
+Прочие assertions→A01–A09/A12 сохранены в исторической передаче C3 ниже и в tests.
+Количество локальных повторов/C8 probes не прибавляется к числу cases одного CI.
+
+### Проверенная версия исправления и final-head gate
+
+Implementation fix **`0ffd9e2146fe5fda1db22152b6feaa1737fc9151`**; parent —
+исходный439eb3228a681dd1558ab98ebe232d4a266d9874; tree
+**`90079c2c8874b6456b1710aef2538467513f018a`**.
+Tested virtual merge **`bd40f1e70e540e896a305cd5324d31d93b7e865f`** имеет parents
+accepted base + fix head, его tree совпадает.
+[CI35647402496](https://github.com/Elefesys/ai-service-manager/actions/runs/35647402496)
+**SUCCESS**:421 unit,390 real PostgreSQL/S3,60 frontend,15 прежних M1 browser.
+Исполнены оба scripts/clean-source gates, canonical import/migrations/contracts/
+reproducibility/smoke. Сохранены реальные TCP crash/restart UNKNOWN/1 wire call
+и private signed GET сценарии. Локально C0 повторил421 unit; Docker отсутствует,
+PostgreSQL/S3 execution относится к GitHub runner.
+
+C0 сверил Git objects/blobs и логи; локальная загрузка исходного ZIP получила403,
+поэтому C0 не повторяет от своего имени byte-verification ZIP из отчёта C3.
+Artifact metadata и точный final receipt находятся в PR.
+
+Это одно согласованное документационное обновление после review/fix. Собственные
+final head/tree/tested SHA и CI этого обновления записываются в PR receipt, без
+следующего коммита ради SHA документа. C0 проверяет оба checks именно final head,
+после SUCCESS снимает Draft и предлагает пользователю обычный **merge commit**.
+Самостоятельный merge запрещён. После сообщения пользователя C0 проверяет actual
+merge parents/tree и отдельный push/main CI; только затем выдаёт C5 M2.4.
+
+### Открыта только соответствующая внешняя проверка подключения
+
+Bot с Business/Secretary Mode, Owner/Client и два секрета подготовлены пользователем.
+Live getMe/getBusinessConnection/getWebhookInfo, actual rights/binding, внешний HTTPS,
+browser-reachable private signed GET и получение reply Client ещё **не проверены**.
+[TEST runbook](../runbooks/M2_TELEGRAM_LOCAL_TEST.md) рассчитан на доступный оператору
+Linux host/Docker, два DNS имени и действительные TLS certificates; окружение ещё
+не предоставлено/не развёрнуто. Секреты передаются непосредственно в защищённый
+runtime file/secret store, не в чат/PR. Расходы и внешние отправки не выполнялись;
+платный вариант требует предложения конкретной стоимости до подключения.
+
+Недостающий доступ блокирует live smoke. Принятие code/API не закрывает эту проверку,
+M2.4 или весь M2. Следующее зависимое поручение C5 готовит минимальную переписку
+в существующей Console и реальные browser journeys после API/main acceptance.
+Весь M2 требует Client text+photo→Console→manual reply→Client A11; M3 не выдаётся.
+
+<details>
+<summary>История: принятое поручение и исходная передача реализации C3 — не текущие инструкции</summary>
+
+## История — выдача и первоначальная передача M2.3 в REVIEW / 2026-09-21
 
 **M1.1–M1.3, M2.1 и M2.2 VERIFIED в принятых LOCAL/TEST границах.
 M2.3 передан в REVIEW: Telegram/owner API реализованы в том же Draft PR #20;
@@ -205,6 +313,9 @@ TG_BOT_TOKEN/TG_WEBHOOK_SECRET в password manager. Повторно токен�
 не adapter/API/DB/S3 tests. C0 может отдельно принять code/API с явным внешним blocker;
 C5 — только после интеграции API/main CI. M2 целиком требует всех четырёх частей и
 настоящего Client text+photo→Console→ручной reply→Client сценария A11; до этого M3 не выдаётся.
+
+
+</details>
 
 ## 1. Исходная точка и результат
 

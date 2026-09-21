@@ -1098,3 +1098,18 @@ manager; подключать manager к чату не нужно. Доступ 
 независимый Owner ID, HTTPS, secure cookie и исходный HTTPS signed origin, находится
 в [M2_TELEGRAM_LOCAL_TEST](../runbooks/M2_TELEGRAM_LOCAL_TEST.md). Live Telegram и
 Console A11 требуют отдельного наблюдения; автоматические tests их не подменяют.
+
+### 10.11. C8-M2.3-01 — временные проверки после получения блокировок
+
+C0/C2 исправили выполнение принятого temporal admission: `messaging_manual_send_allowed`
+снимает DB clock после получения всех billing locks. Canonical owner request и
+worker повторяют окончательный `telegram_can_send` после billing gate, перед созданием
+нового intention/DISPATCHING. Иначе ожидание account lock могло пересечь конец
+subscription/service-mode interval или24h window при ещё действующей lease.
+
+Прежние ранние отказы, receipt replay, structural precedence, R4 snapshot,
+lock_timeout2s и lease30s сохраняются. Шесть PG barrier regressions проверяют
+worker/owner × subscription/mode/window, подтверждённое ожидание через runtime
+observer/pg_blocking_pids, release после DB deadline и отказ без effect/partial intent.
+Независимый targeted C8 и exact implementation CI приведены в активном handoff;
+final head/CI документационной приёмки — в PR receipt. Принятый scope §10 сохраняется.
