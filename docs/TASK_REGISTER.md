@@ -2,10 +2,10 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — M2.1 принят; выдан M2.2-PRIVATE-IMAGES / 2026-09-21
+## Текущий статус — M2.2-PRIVATE-IMAGES передан на review / 2026-09-21
 
 **M1.1–M1.3 и M2.1 VERIFIED в принятых LOCAL/TEST границах.
-M2.2 IN_PROGRESS: принятый контракт/поручение, ещё не принятая реализация.
+M2.2 REVIEW: реализация C6/C2/C3 и execution evidence переданы; C0/C8 ещё не приняли.
 M2.3/M2.4 TODO; весь M2 IN_PROGRESS.** Один активный
 [M2_HANDOFF](tasks/M2_HANDOFF.md), один инкрементальный
 [M2_CONTRACT](tasks/M2_CONTRACT.md). M1_HANDOFF закрыт; M1/R4 не переоткрывать.
@@ -22,22 +22,29 @@ C0 post-merge receipt в PR #18 и активном handoff; независим�
 **C8-M2.1-KERNEL PASS** уже выполнен и относится только к reviewed kernel рискам.
 M2.1 **INTEGRATED / VERIFIED** — controlled LOCAL/TEST, не Telegram/storage/API/UI.
 
-Единственное следующее поручение **M2.2-PRIVATE-IMAGES**, ведущий **C6**, участие
-C3/C2. Base — actual main выше; ветка **`c6/m2-2-private-images`**, один Draft PR,
-первый coordination commit сохраняется. Точные PR/head/tree/CI первого коммита
-фиксируются в PR metadata/сообщении C0, без SHA-only doc commits.
-C0 после read-only C2/C3 CONTRACT PASS принял §9: FileObject/FETCH и private S3,
-validated original bytes, 60 s owner signed GET, per-attempt keys и durable cleanup.
-Миграция **0006 → 0005** зарезервирована; 0001–0005 не менять. Handoff заранее
-разрешает необходимые narrow SDK/lock/Compose/test-compatibility изменения.
-Это контракт и выдача задания, не implementation, PostgreSQL/S3 evidence или C8 PASS.
+Реализовано единственное поручение **M2.2-PRIVATE-IMAGES**, ведущий **C6**, участие
+C3 (provider/media/worker) и C2 (миграция/DB). Base — actual main выше; ветка
+**`c6/m2-2-private-images`**, [Draft PR #19](https://github.com/Elefesys/ai-service-manager/pull/19).
+Первый coordination commit `c4ad360e482f47a30e6f0756a13e6ce1cf68def4` сохранён.
+Принятый §9 реализован: atomic FileObject/FETCH и backfill, validated original bytes
+в private S3, 60 s live OWNER signed GET, fenced per-attempt keys и durable cleanup.
+Миграция **0006_private_images.py, 0006 → 0005**; применённые 0001–0005 неизменны.
 
-Следующий gate — реализация C6/C3/C2 → полный CI → C0 и независимый scoped C8 review
-новых private-files/recovery рисков → ручной merge пользователем → actual main CI.
-До этого M2.3 не выдавать. Реальный Telegram/owner messaging API — M2.3, UI — M2.4;
-полное M2 требует A11. Tokens сохранены пользователем в password manager; binding/
-rights, runtime secrets, HTTPS и live smoke ещё не проверены. Для M2.2 не нужны
-токены, данные мастера или платная инфраструктура.
+[Implementation CI 35604791065](https://github.com/Elefesys/ai-service-manager/actions/runs/35604791065)
+**SUCCESS**: 220 backend non-integration, **303 real PostgreSQL/S3**, 60 frontend,
+15 прежних M1 browser cases; оба штатных scripts/clean-source gates, migration cycles,
+contracts, reproducibility и smoke PASS. Новые 28 unit + 44 PostgreSQL/S3 cases
+покрывают A07/A08 и применимые A02/A04/A06/A12; конкретные tests/assertions и объяснения
+исправленных двух новых test defects — в активном handoff. Runbook добавлен;
+SDK/decoder и два новых storage images pinned, прежние package lock blocks/image
+pins сохранены. Final head/tree/tested SHA/CI/artifact — в PR receipt после проверки
+итогового documentation/narrow-lock commit, без SHA-only цепочки.
+
+M2.2 **REVIEW**, не INTEGRATED/VERIFIED. Следующий gate — C0 и независимый scoped
+C8 review новых private-files/recovery рисков → ручной merge пользователем → actual
+main CI. PR остаётся Draft. До этих gates M2.3 не выдавать. Telegram/owner messaging
+API — M2.3, UI — M2.4; полное M2 требует A11. Tokens в password manager, binding/
+rights, runtime secrets, HTTPS и live smoke ещё не проверены; M2.2 их не использует.
 
 ## Задачи — актуальная таблица
 
@@ -62,8 +69,8 @@ rights, runtime secrets, HTTPS и live smoke ещё не проверены. Д�
 | M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 и принятая M1.2 | C1 backend; C2 DB; C5 UI; C0/C8 review | VERIFIED | DB/API/UI приняты; PR #15 + документы PR #16 в main; push/main 35513585580 SUCCESS, 415 cases; итоговый receipt | Закрыто в R4 LOCAL/TEST scope; сохранять принятые механизмы |
 | M2.1 | Normalized channel events и durable Inbox/Outbox/Jobs | VERIFIED M1; принятый контракт M2.1 | C3+C2; C0/C8 review | VERIFIED | PR #18 MERGED; actual main d3c849d4792f7af60f43eea0f0551659ee3cee5d; push/main 35596593891 SUCCESS; C8 PASS | Завершено controlled LOCAL/TEST; M2.2 |
 | M2.1-KERNEL | Controlled event → Message → owner command → durable send/recovery | M2_CONTRACT §§1–8 | C3; C2 DB/migration | VERIFIED | 0005→0004; post-merge C0 acceptance; 259 PostgreSQL и 15 прежних browser PASS | Сохранять SEND UNKNOWN/worker/RLS/Audit при расширениях |
-| M2.2 | Private ObjectStorage/FileObject и авторизация изображений | Принятый actual main M2.1 | C6+C3; C2 DB/migration | IN_PROGRESS | M2_CONTRACT §9 принят C0/C2/C3; реализация не принята | Одно поручение M2.2-PRIVATE-IMAGES, далее C0/C8/main gates |
-| M2.2-PRIVATE-IMAGES | Image reference → private file → owner signed GET | Base d3c849d4792f7af60f43eea0f0551659ee3cee5d; §9 | C6; C3 media; C2 migration | IN_PROGRESS | Ветка c6/m2-2-private-images; 0006→0005 RESERVED; разрешённые paths/конечные критерии в handoff | Продолжить первый coordination commit/Draft PR; реальный PostgreSQL+S3 evidence |
+| M2.2 | Private ObjectStorage/FileObject и авторизация изображений | Принятый actual main M2.1 | C6+C3; C2 DB/migration | REVIEW | Draft PR #19: controlled private image path; 303 PostgreSQL/S3 + 220 unit PASS, полный CI 35604791065 SUCCESS | C0/C8 review; затем пользовательский merge и actual main CI |
+| M2.2-PRIVATE-IMAGES | Image reference → private file → owner signed GET | Base d3c849d4792f7af60f43eea0f0551659ee3cee5d; §9 | C6; C3 media; C2 migration | REVIEW | 0006→0005 реализована; original bytes/signed GET/fenced recovery/late-PUT cleanup проверены, tests→A07/A08/A02/A04/A06/A12 в handoff | Final-head receipt в Draft PR #19; C0 организует независимый scoped C8 review |
 | M2.3 | Telegram adapter, test connection, capabilities, UNKNOWN и owner API | Принятые M2.1/M2.2 | C3; C1 API | TODO | План M2_HANDOFF; живой provider ещё не проверен | Подготовить доступы заранее; реализация после зависимостей |
 | M2.4 | Console Inbox, manual reply и E2E | Принятый API M2.3 | C5+C3; C0/C8 review | TODO | План M2_HANDOFF | UI, browser + live Telegram scenario; затем приёмка всего M2 |
 

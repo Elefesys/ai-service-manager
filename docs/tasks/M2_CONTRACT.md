@@ -453,7 +453,7 @@ Disconnected connection не запрещает хранить уже durably п
 
 ### 9.2. Схема, связь и trusted capabilities
 
-C0/C2 резервируют **0006_private_images.py: revision 0006, down_revision 0005**.
+Назначена и реализована **0006_private_images.py: revision 0006, down_revision 0005**.
 Применённые 0001–0005 не редактировать. Минимальный inventory:
 
 | Объект | Обязательная связь/состояние |
@@ -625,3 +625,39 @@ review выполняется независимо после реализаци
 [S3 conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html),
 [Pillow image/decompression limits](https://pillow.readthedocs.io/en/stable/reference/Image.html).
 Это подтверждение доступных механизмов, не execution evidence выбранного сервиса.
+
+### 9.9. Реализационные уточнения C6/C2/C3
+
+В Draft PR #19 реализована назначенная `0006 → 0005`, без изменения 0001–0005.
+`files_plan` вызывается внутри прежнего process-inbox commit и при backfill;
+original Message IDs/content/projection fingerprints не переписываются. Публичные
+typed capabilities: `files_begin_fetch`, `files_prepare_upload`, `files_finish_fetch`,
+`files_claim_cleanup`, `files_finish_cleanup`, `files_read_manifest`. Общего runtime
+доступа к uploads нет. `files_plan` и serialization/validation/immutability helpers
+не доступны runtime. Реализация меняет ровно три определения kernel: job JSON,
+process inbox и reschedule; прежний recover-expired вызывает этот reschedule,
+SEND begin/finish и UNKNOWN остаются прежними.
+
+READY pointer имеет полный composite FK на WINNER key/manifest. FK `DEFERRABLE
+INITIALLY DEFERRED` позволяет только явный ordered teardown связанных TEST rows в
+одной транзакции; immediate triggers запрещают изменение READY/WINNER и переход
+ABANDONED→WINNER. Это не отключение FK или проверок lease/claim.
+
+Используются `boto3==1.43.98`, `pillow==12.3.0` и реальный MinIO LOCAL/TEST с
+digest pins из `infra/images.lock.env`. PUT передаёт SHA-256 checksum и
+`If-None-Match: *`, проверяет ответную checksum. Сетевая подпись не написана вручную.
+SDK имеет один attempt, connect/read 2/5 s, await 8 s, два sync slots до фактического
+окончания I/O. Decode — один отдельный slot. FETCH общий budget 20 s; cleanup
+sweep берёт два intent, оставляя SQL limit 1…100. Успех cleanup не удаляет tombstone.
+
+Runtime S3 user получает Get/Put/Delete только своего `workspaces/*` и ListBucket
+только собственного private bucket, чтобы HEAD absent key возвращал 404. Anonymous
+доступ и bucket admin запрещены; root credentials остаются в server/bootstrap.
+Presign вычисляется локально внутри live owner unit, URL возвращается после commit;
+`expires_at` вычислен из фактического SigV4 timestamp + 60 s. Новые grants после
+revoke запрещены, прежний grant живёт до expiry согласно §9.7.
+
+Настройка, recovery и операционные ограничения — в
+[M2_STORAGE_LOCAL_TEST](../runbooks/M2_STORAGE_LOCAL_TEST.md). Конкретные execution
+results и tests→критерии — в активном handoff и final PR receipt. Эти уточнения не
+являются C0 acceptance, независимым C8 review или VERIFIED.

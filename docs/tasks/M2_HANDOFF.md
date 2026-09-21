@@ -8,9 +8,10 @@
 ## Активное поручение C0 — M2.2-PRIVATE-IMAGES / 2026-09-21
 
 **M1.1–M1.3 и M2.1 VERIFIED в принятых LOCAL/TEST границах.
-M2.2 IN_PROGRESS: контракт и поручение выданы, реализация не принята.
-M2.3/M2.4 TODO; весь M2 IN_PROGRESS.** Единственный текущий исполнитель — C6
-с предметным участием C3 (media/provider) и C2 (DB/migration). M1/M2.1 не повторять.
+M2.2 REVIEW: реализация и runner evidence переданы, C0/C8 ещё не приняли.
+M2.3/M2.4 TODO; весь M2 IN_PROGRESS.** Реализацию подготовил C6
+с предметным участием C3 (media/provider) и C2 (DB/migration); следующий gate —
+C0 и независимый scoped C8 review. M1/M2.1 не повторять.
 
 Repository: `Elefesys/ai-service-manager`. Принятый actual main/base:
 **`d3c849d4792f7af60f43eea0f0551659ee3cee5d`** — merge PR #18.
@@ -118,6 +119,74 @@ C0 затем проверит результат и организует **ре
 private-file authorization/validation/worker/cleanup risks. C2/C3 CONTRACT PASS
 не является этим review. После green final head/C0/C8 — пользовательский merge,
 отдельный actual main CI; только затем поручение M2.3.
+
+### Передача C6 с участием C2/C3 — M2.2 implementation
+
+Продолжен [Draft PR #19](https://github.com/Elefesys/ai-service-manager/pull/19),
+coordination commit `c4ad360e482f47a30e6f0756a13e6ce1cf68def4` сохранён. C2 реализовал
+0006, DB capabilities/backfill/constraints и DB migration tests; C3 — controlled
+provider, decoder, FETCH/cleanup, worker dispatch и crash/late-PUT tests; C6 —
+private S3, owner service, config/lifecycle/Compose, signed HTTP tests и общие gates.
+Это участие авторов, не независимый C8 review.
+
+Реализован полный controlled путь §9. SDK `boto3==1.43.98`, decoder
+`pillow==12.3.0`, typing `boto3-stubs[s3]==1.43.98`; все прежние external package
+blocks/hashes в lock сохранены. Два новых MinIO image pins — официальный Quay registry;
+пять прежних pins сохранены. Настройка и ограничения —
+[M2_STORAGE_LOCAL_TEST](../runbooks/M2_STORAGE_LOCAL_TEST.md).
+
+[Implementation CI 35604791065](https://github.com/Elefesys/ai-service-manager/actions/runs/35604791065)
+**SUCCESS** на обычном GitHub Linux runner: 220 non-integration, **303 real
+PostgreSQL/S3** (259 прежних + 44 новых), 60 frontend и 15 прежних M1 browser
+cases PASS. `sh scripts/ci.sh`, `sh scripts/test_browser.sh`, оба clean-source
+gate, clean/repeated/full downgrade/upgrade и 0005-data cycle, generated contracts,
+wheel/frontend reproducibility и HTTP/worker/scheduler smoke PASS. Новых unit cases
+28. Локально Docker отсутствует; mock/collection не используются как DB/S3 evidence.
+
+Итоговая дельта после этого run: данный implementation receipt/runbook и сохранение
+полных прежних package blocks в narrow lock (versions/hashes не меняются). Точные
+final head/tree/tested SHA, CI URL и artifact digest фиксируются в PR receipt после
+проверки итогового commit; отдельного SHA-only документационного коммита не нужно.
+
+| Критерий | Конкретные tests/assertions M2.2 |
+|---|---|
+| A02/A04/A06/A07 | `test_image_planning_rollback_is_one_transaction`, `test_concurrent_image_projection_dedupe_retains_bytes_and_fingerprint`: откат Message/FileObject/FETCH вместе; concurrent exact replay оставляет один набор, original bytes/projection hash неизменны. `test_source_is_canonical_despite_forged_claim_fields_and_disconnect`: source только из DB relations, caller Workspace/connection/file fields не дают полномочий |
+| A07 validation | `test_m2_2_media.py`: JPEG/PNG/static WebP, original hash/EXIF/dimensions; malformed/unsupported, truncated container/pixels, animated PNG/WebP, CRC, actual byte cap, exact side/pixel limits и oversized dimensions до pixel allocation. False provider metadata игнорируется; URL остаётся opaque reference. `test_invalid_input_is_terminal_before_storage`: пять DB/worker cases без PUT |
+| A07 private storage | `test_original_roundtrip_validated_manifest_and_private_signed_http` (JPEG/PNG/WebP): actual MIME/size/hash/dimensions, S3 checksum, exact original bytes через signed HTTP GET; PENDING denied, TTL ровно 60 s, UUID filename/private-no-store, anonymous GET/LIST/PUT и tampered signature denied. `test_s3_checksum_conditional_put_and_runtime_privilege_boundaries`: server-side checksum mismatch, conditional overwrite, чужой bucket/admin/outside prefix denied |
+| A08/A07 read | `test_live_owner_relation_workspace_role_and_failed_file_negatives`, `test_exact_owner_relation_live_role_revoke_and_disconnect`: Workspace A/B, неверные Conversation/Message/FileObject внутри Workspace, ADMIN/PROVIDER/revoke/downgrade, PENDING/FAILED denied; другой собственный диалог и disconnected history разрешены. `test_revoke_denies_new_grant_existing_bearer_expires_at_real_s3`: прежняя bearer URL работает после revoke, новая не выдаётся, после реальных 60 s S3 отвергает прежнюю |
+| A08 DB/worker boundary | `test_file_physical_rls_and_capability_privileges`, `test_raw_manifest_validation_cannot_be_bypassed`, `test_typed_message_job_file_foreign_keys_reject_forged_relations`, `test_file_fetch_transaction_xid_and_claim_lease_guards`, `test_file_guards_reject_cross_task_and_owner_worker_nesting`: FORCE RLS/grants, composite FK, strict raw JSON, fake/stale claims, XID/task/owner-worker guards. `test_fetch_roundtrip_no_provider_or_s3_io_with_held_transaction`: реальные provider/S3 calls без занятой DB connection |
+| A04/A07 recovery | `test_prepare_intent_replay_manifest_binding_and_fenced_finalize_ack`, `test_lost_finalize_ack_reads_winner_without_repeat_provider_or_put`, `test_lost_prepare_ack_never_authorizes_put_and_retries_new_key`: exact canonical winner после ACK loss, ни повторного PUT, ни PUT без подтверждённого prepare. `test_actual_process_death_intent_put_ready_and_restart`: настоящий дочерний process exit после intent/PUT/READY. Retry/exhaustion tests: пять claims/новых keys, Message сохраняется, FileObject FAILED/Job DEAD, все orphan intents ABANDONED |
+| A04/A07 cleanup | `test_late_put_after_first_delete_remains_durably_cleanable` (до/после нового READY), `test_cancelled_worker_sync_put_arrives_after_cleanup_and_new_ready`: реальный поздний PUT, включая sync boto3 после cancellation, tombstone остаётся, повторный DELETE убирает только старый key. `test_cleanup_outage_reclaim_stale_token_and_winner_safety`, `test_retry_new_key_stale_finalize_and_durable_cleanup_reclaim`, immutability test: outage/reclaim/stale token, bounded retry, winner и manifest неизменны |
+| A12 и сохранённые A02/A04/A06/A08 | `test_0005_exact_data_backfill_repeat_and_test_downgrade_reupgrade`: text/image/disconnected image, fallback correlation, exact Message IDs/content/fingerprints, billing/receipts/UNKNOWN; repeat upgrade и disposable TEST downgrade/re-upgrade без external I/O. Все прежние M1/M2.1 SEND UNKNOWN/crash/no-resend, tenancy/auth/billing, contracts и browser checks остаются в полном suite |
+
+Совместимые изменения старых проверок сохраняют их защитные assertions:
+
+| Старый path | Причина изменения |
+|---|---|
+| `tests/test_foundation.py` | Current database revision теперь 0006; frozen schema revision 0003 остаётся прежней |
+| `tests/test_postgres.py` | Exact closed inventory дополняется ровно `app.file_objects` и `platform.file_object_uploads` |
+| `tests/test_tenancy_postgres.py` | Exact table/function inventory включает новые file capabilities и закрытые helpers; прежние RLS/grants/SQLSTATE assertions сохранены |
+| `tests/test_m2_1_postgres.py` | Image fixture теперь создаёт FETCH Job; явно завершает его INVALID_INPUT при отсутствии registered bytes и проверяет один file/job. Ordered fixture teardown удаляет uploads → receipts/jobs → files → прежнюю цепь в одной transaction, без CASCADE/отключения FK; прежние projection/fingerprint/assertions сохранены |
+
+Первый runner 35603278055 остановился до backend/DB/S3 checks на недоступном
+Docker Hub `minio/mc`; browser job и его clean-source PASS. Исправлена только
+registry ссылка новых storage images на официальный Quay, прежние pins не тронуты.
+Это инфраструктурный failure до исполнения новых tests, не доказательство их PASS.
+
+Run 35603841495 подтвердил оба Quay digests, 220 unit и 301/303 real PostgreSQL/S3
+cases, 60 frontend и 15 browser PASS. Два новых test defects исправлены без изменения
+production capabilities: membership downgrade ожидает owner row lock (проверяется
+через реальную blocked DB session, затем новый ADMIN/revoked read denied); pinned
+MinIO возвращает `XAmzContentChecksumMismatch`, поэтому test требует именно этот
+код/HTTP 400 и отсутствующий объект, а не AWS `BadDigest`. Отказы, fencing и прежние
+assertions не удалены. После подтверждения pins временный lookup release tags убран;
+обычный CI снова использует только закреплённые digests.
+
+Ограничения: controlled synthetic provider, LOCAL/TEST S3, внутренний owner service.
+Нет Telegram/webhook, owner HTTP/OpenAPI/UI, paid infrastructure или M3. Новые
+private object grants не являются M2.3/4 E2E; 15 M1 browser journeys — regression.
+C0 acceptance, независимый scoped C8 review, merge и actual main CI ещё предстоят;
+PR остаётся Draft, M2.2 не INTEGRATED/VERIFIED, M2.3 не начинается.
 
 ### Telegram smoke — текущая внешняя граница
 
