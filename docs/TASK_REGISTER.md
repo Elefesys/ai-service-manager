@@ -2,10 +2,11 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — M2.1-KERNEL выдана / 2026-09-21
+## Текущий статус — M2.1-KERNEL, C0 scope blocker / 2026-09-21
 
-**M1.1–M1.3 VERIFIED в принятых LOCAL/TEST границах. M2.1 IN_PROGRESS;
-M2.2–M2.4 TODO.** Ограниченный kernel реализуется в PR #18; приёмка ещё не выполнена.
+**M1.1–M1.3 VERIFIED в принятых LOCAL/TEST границах. M2.1 BLOCKED;
+M2.2–M2.4 TODO.** Kernel реализован в Draft PR #18; полные regression gates
+требуют узкой scope exception C0, приёмка ещё не выполнена.
 Единственный активный handoff — [M2_HANDOFF](tasks/M2_HANDOFF.md), единственный
 инкрементальный технический контракт — [M2_CONTRACT](tasks/M2_CONTRACT.md).
 M1_HANDOFF закрыт; R4/D-01…D-13 и инварианты M1 не переоткрываются.
@@ -24,8 +25,12 @@ SUCCESS; actual head/tested SHA, оба jobs/clean-source gates и artifact пр
 Миграция этой задачи: `0005`, predecessor `0004`; `0001`–`0004` неизменны.
 C0/C2/C3 согласовали routing/IDs, typed worker admission, Inbox/Outbox/Jobs,
 atomicity/UNKNOWN и ограниченную Audit compatibility. C2 подготовил migration/DB
-capabilities, C3 — Python kernel/worker/Audit compatibility и tests; полный runner
-verification и C8 ещё впереди.
+capabilities, C3 — Python kernel/worker/Audit compatibility и tests.
+Первый runner [35592297034](https://github.com/Elefesys/ai-service-manager/actions/runs/35592297034):
+192 non-integration PASS, 241 PostgreSQL PASS / 10 FAIL, 61 frontend PASS; browser
+setup FAIL, оба clean-source gates skipped. Один новый test-context defect исправлен;
+9 старых failures требуют scope exception. Итоговый повторный run и exact SHA/tree
+в PR receipt; independent C8 ещё не выполнен.
 
 Единственное содержательное дополнение существующих consumers — strict
 MESSAGE_SEND_REQUESTED в общем Audit: typed FK/DTO/generated OpenAPI и frontend
@@ -37,12 +42,13 @@ Owner/Client accounts готовы; TG_BOT_TOKEN/TG_WEBHOOK_SECRET сохран�
 паролей. Секреты не получены. Binding/rights, runtime secret injection, HTTPS webhook
 и живой сценарий ещё не проверены; M2.1 от этих внешних проверок не зависит.
 
-Известный scope blocker: два provisioning scripts требуют `0004`; назначенная
-миграция `0005` требует узкой C0 exception для сравнения текущей schema revision.
-Подробность и точные paths — в активном M2_HANDOFF. Scripts не изменены.
+Scope blocker: два provisioning scripts требуют `0004`; `test_postgres.py`
+не допускает новый table inventory/реальные Jobs; `test_m1_3_c0_acceptance.py`
+не включает новую receipt→Audit FK в TRUNCATE. Четыре точные совместимые дельты
+предложены в активном M2_HANDOFF, но не применены без C0. Guards/CI не ослаблены.
 
-Следующий шаг: C3 проверяет ограниченное ядро, возвращает PR/tests/assertions/evidence;
-C0 выполняет приёмку и scoped C8 review новых рисков. M2.2 выдаётся после merge
+Следующий шаг: C0 разрешает четыре совместимые дельты; C3 завершает оба штатных
+scripts/clean-source gates. Затем C0 выполняет приёмку и scoped C8 review новых рисков. M2.2 выдаётся после merge
 ядра и отдельного main CI. M2 VERIFIED только после всех четырёх частей и M2-A11.
 
 ## Задачи — актуальная таблица
@@ -66,8 +72,8 @@ C0 выполняет приёмку и scoped C8 review новых рисков
 | M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
 | M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5; C0/C8 review | VERIFIED | PR #8 MERGED; actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`; push/main 35368244266 SUCCESS, 246 tests; UI-01/02/04/05 CLOSED | Полная приёмка: docs/reviews/M1_2_C0_ACCEPTANCE.md; не production |
 | M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 и принятая M1.2 | C1 backend; C2 DB; C5 UI; C0/C8 review | VERIFIED | DB/API/UI приняты; PR #15 + документы PR #16 в main; push/main 35513585580 SUCCESS, 415 cases; итоговый receipt | Завершено в R4 LOCAL/TEST scope; перейти к планированию M2 |
-| M2.1 | Normalized channel events и durable Inbox/Outbox/Jobs | VERIFIED M1; принятые PR #17/main и контракт M2.1 | C3+C2; C0 integration | IN_PROGRESS | Actual base 8e5f125d424c0ce613ed9e0c787392f11a49aeae; main CI 35522542861 SUCCESS; контракт/выдача, реализации ещё нет | Выполнить M2.1-KERNEL, затем C0/scoped C8 review |
-| M2.1-KERNEL | Controlled event → Message → owner command → durable send/recovery | M2_CONTRACT; actual main 8e5f125d424c0ce613ed9e0c787392f11a49aeae | C3; C2 DB/migration | IN_PROGRESS | c3/m2-1-messaging-kernel; стартовый coordination PR; 0005→0004; execution не проверено | Продолжить подготовленный Draft PR, вернуть finite criteria/evidence из active handoff |
+| M2.1 | Normalized channel events и durable Inbox/Outbox/Jobs | VERIFIED M1; принятые PR #17/main и контракт M2.1 | C3+C2; C0 integration | BLOCKED | Draft PR #18: kernel реализован; runner 35592297034 выявил четыре scope compatibility blockers | C0 exception → полные gates → C0/scoped C8 review |
+| M2.1-KERNEL | Controlled event → Message → owner command → durable send/recovery | M2_CONTRACT; actual main 8e5f125d424c0ce613ed9e0c787392f11a49aeae | C3; C2 DB/migration | BLOCKED | c3/m2-1-messaging-kernel; 0005→0004; controlled PostgreSQL evidence и критерии в M2_HANDOFF/PR #18 | Разрешить только четыре дельты из active handoff, не объявлять VERIFIED |
 | M2.2 | Private ObjectStorage/FileObject и авторизация изображений | M1; контракт M2.1; последовательный план | C6+C3 | TODO | План M2_HANDOFF | После приёмки M2.1 выдать storage-срез |
 | M2.3 | Telegram adapter, test connection, capabilities, UNKNOWN и owner API | Принятые M2.1/M2.2 | C3; C1 API | TODO | План M2_HANDOFF; живой provider ещё не проверен | Подготовить доступы заранее; реализация после зависимостей |
 | M2.4 | Console Inbox, manual reply и E2E | Принятый API M2.3 | C5+C3; C0/C8 review | TODO | План M2_HANDOFF | UI, browser + live Telegram scenario; затем приёмка всего M2 |

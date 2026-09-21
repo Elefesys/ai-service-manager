@@ -245,6 +245,55 @@ async def test_nullable_state_and_outcome_fields_cannot_bypass_checks(migrator):
         await connection.rollback()
 
 
+@pytest.mark.parametrize(
+    "occurred_at",
+    [
+        "now",
+        "tomorrow",
+        "2026-09-21",
+        "2026-09-21T00:00:00Z",
+        "2026-09-21T01:00:00.000000+01:00",
+        "2026-02-30T00:00:00.000000Z",
+        "2026-09-21T00:00:60.000000Z",
+        "0000-01-01T00:00:00.000000Z",
+    ],
+)
+async def test_public_ingestion_rejects_unstable_or_noncanonical_timestamp(migrator, occurred_at):
+    event = {
+        "provider": "CONTROLLED",
+        "bot_identity": "timestamp-test",
+        "event_id": "timestamp-test",
+        "kind": "UNSUPPORTED",
+        "external_connection_id": "timestamp-test",
+        "chat_id": None,
+        "message_id": None,
+        "sender_id": None,
+        "occurred_at": occurred_at,
+        "text": None,
+        "image_file_id": None,
+        "media_group_id": None,
+    }
+    with pytest.raises(DBAPIError) as caught:
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text(
+                    "SELECT platform.messaging_ingest('CONTROLLED','timestamp-test',CAST(:event AS jsonb),:corr)"
+                ),
+                {"event": json.dumps(event), "corr": uuid4()},
+            )
+    assert caught.value.orig.sqlstate == "P2001"
+    assert caught.value.orig.diag.message_primary == "INVALID_INPUT"
+    event["occurred_at"] = "2026-09-21T00:00:00.123456Z"
+    async with migrator.connect() as connection:
+        # Exact canonical input survives unchanged, so the codec sees stable bytes.
+        assert (
+            await connection.execute(
+                text("SELECT platform.messaging_validate_event(CAST(:event AS jsonb))"),
+                {"event": json.dumps(event)},
+            )
+        ).scalar_one() == event
+
+
 async def _migrate(*arguments):
     process = await asyncio.create_subprocess_exec(
         sys.executable,

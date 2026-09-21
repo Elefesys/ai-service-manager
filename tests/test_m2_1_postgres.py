@@ -326,7 +326,8 @@ async def test_owner_only_live_admission_replay_and_cross_workspace_reads(messag
         await command(h, cid, actor=UB, workspace=B)
     async with h.runtime.tenancy.transaction(AuthenticatedAccount(UB), B, uuid4()) as unit:
         assert await OwnerRepository(unit).conversations() == ()
-        with pytest.raises(MessagingError, match="NOT_FOUND"):
+    with pytest.raises(MessagingError, match="NOT_FOUND"):
+        async with h.runtime.tenancy.transaction(AuthenticatedAccount(UB), B, uuid4()) as unit:
             await OwnerRepository(unit).delivery(receipt.message_id)
     await query(
         h,

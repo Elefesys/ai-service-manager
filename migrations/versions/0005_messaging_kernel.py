@@ -270,10 +270,11 @@ def _helpers() -> None:
            (e->>'text' IS NOT NULL AND (char_length(e->>'text')>4096 OR octet_length(e->>'text')>16384)) THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
         normalized:=e;
         IF e->>'occurred_at' IS NOT NULL THEN
+          -- Reject relative PostgreSQL timestamps: fingerprint bytes cannot depend on DB time.
+          IF e->>'occurred_at' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$' THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
           BEGIN occurred:=(e->>'occurred_at')::timestamptz;
           EXCEPTION WHEN OTHERS THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END;
-          IF NOT isfinite(occurred) THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
-          normalized:=jsonb_set(e,'{occurred_at}',to_jsonb(to_char(occurred AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')));
+          IF NOT isfinite(occurred) OR to_char(occurred AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') IS DISTINCT FROM e->>'occurred_at' THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
         END IF;
         IF e->>'kind'='CLIENT_MESSAGE' AND (e->>'chat_id' IS NULL OR e->>'message_id' IS NULL OR e->>'sender_id' IS NULL OR occurred IS NULL OR
           (coalesce(char_length(e->>'text'),0)=0 AND e->>'image_file_id' IS NULL)) THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;

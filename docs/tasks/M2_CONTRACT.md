@@ -371,8 +371,9 @@ retry/exhaustion и отсутствие открытой DB transaction во в
 Дополнить mixed Audit API/парсер/component tests с обоими старыми вариантами,
 новым событием, pagination и отвергаемыми неправильными payload/refs.
 
-В этой редакции нет execution evidence M2.1. C2/C3 согласуют контракт; C0 принимает
-реализацию после фактических tests/CI и независимого scoped C8 review новых
+Первоначальная принятая редакция не содержала execution evidence M2.1. Текущее
+evidence находится в активном M2_HANDOFF и PR #18. C0 принимает реализацию после
+фактических tests/CI и независимого scoped C8 review новых
 worker/routing/isolation/side-effect рисков. Прежние C8 PASS M1 сюда не переносятся.
 
 ## 7. Источники проверенных механизмов
@@ -415,3 +416,10 @@ text/recipient/claim. Fault tests прекращают отдельный про
 Это fault instrumentation LOCAL/TEST, не гарантия distributed exactly-once и
 не подтверждение Telegram. Runtime lease 30s, deadline 10s, retry bounds/backoff
 соответствуют §5; test time manipulation доступна только migrator.
+
+DB ingestion требует уже canonical `YYYY-MM-DDTHH:MM:SS.ffffffZ` для occurred_at:
+точная shape, существующий UTC calendar timestamp и roundtrip equality. Слова
+`now`/`tomorrow`, свободные PostgreSQL timestamp literals и неканонические offsets
+через raw SQL отвергаются; Python нормализует допустимый timezone-aware datetime
+перед вызовом. Поэтому один normalized event не меняет fingerprint со временем
+и не получает иной hash через обход Python validator.
