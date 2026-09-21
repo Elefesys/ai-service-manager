@@ -1113,3 +1113,191 @@ worker/owner × subscription/mode/window, подтверждённое ожид�
 observer/pg_blocking_pids, release после DB deadline и отказ без effect/partial intent.
 Независимый targeted C8 и exact implementation CI приведены в активном handoff;
 final head/CI документационной приёмки — в PR receipt. Принятый scope §10 сохраняется.
+
+## 11. M2.4-CONSOLE — текущий ограниченный UI/browser-контракт
+
+Принят C0 для последовательной выдачи C5 от integrated API/base
+`ffc437f125aa6af4dcf1c61a035a0d5df517e062` (PR #20, push/main CI 35649907678 SUCCESS).
+**C1 CONTRACT PASS**: предметная read-only проверка совместимости consumer semantics
+с фактическим §10/API и App/BillingPanel выполнена; это не C8 review будущего UI. Разделы 1–10 и wire contract сохраняются.
+Матрица M2-A01…A12 остаётся единственной в M2_HANDOFF; новых критериев milestone нет.
+
+### 11.1. Один экран и достаточное обновление
+
+В существующую Business Console добавить одну панель «Переписка»: connections с
+observed status, список диалогов, выбранная история, входящие text/photo и ручной
+текстовый ответ. Использовать пять routes §10.8 и generated OpenAPI; новые backend
+routes/DTO, SQL, миграции, зависимости, поиск, read receipts, аватары/имена клиентов,
+редактирование/загрузка файлов, AI/takeover/resume/Action Center не требуются.
+Из доступного client_id можно показать короткую подпись диалога; не выдумывать имя.
+
+Достаточно первоначального GET и явных «Обновить»/«Загрузить ещё»; после принятой
+команды — GET истории. WebSocket, polling, realtime service и фоновая повторная
+отправка не вводятся. Это обычный рабочий сценарий с ручным обновлением.
+Пустые данные, ожидание, отказ и ошибка имеют понятные отдельные состояния.
+На узком экране всё доступно без горизонтальной прокрутки; form/selection/image
+controls доступны клавиатурой, labels/status/error читаются assistive technology.
+Сохраняются login/logout/rotate/recovery, Business, Billing/Audit и отдельная Ops shell.
+
+### 11.2. Authority и честное состояние подключения
+
+UI visibility — актуальная membership.role === OWNER выбранного Workspace.
+Frozen session.permissions не содержит messaging:*; не требовать этих строк и не
+расширять auth contract. Сервер проверяет live OWNER на каждом GET/POST/replay.
+
+Connection.state и observed_at показываются как наблюдение, а reply window отдельно.
+AVAILABLE не означает разрешённый продукт, открытое окно или доставку. UNVERIFIED/
+UNAVAILABLE и прежнее DISABLED/RIGHTS_MISSING не заменяют свежий server probe:
+GET не вызывает Telegram refresh. Оставить явное действие «Проверить и отправить»
+для нового намерения с объяснением текущего статуса; POST сам проверяет актуальные
+rights/window/product, worker повторяет admission. Не открывать отправку по одному
+client clock и не делать бессрочный UI deadlock по устаревшему observation.
+
+Не вычислять messaging.manual_send по пяти TEST decisions GET billing: такого key
+в этом ответе нет. Не скрывать history/images по billing restriction. NOT_ALLOWED
+показывать как отказ нового запроса без выдуманной точной причины; два 503 envelopes
+сохраняются. Обновление списка/истории не является provider resync.
+
+### 11.3. Строгий consumer и изоляция чтений
+
+Добавить отдельный typed messaging-api.ts по принятому OpenAPI/http_models.py.
+Не копировать допущения billing wrapper: send возвращает именно202, read/grant200;
+collection limit25, а BILLING_STATE_UNAVAILABLE возможен на POST send. Nullable fields,
+закрытые enums, file/delivery state relations и exact object shapes проверяются.
+UUID canonical lowercase; versions/sizes — decimal strings без округления Number;
+UTC timestamps сохраняют шесть fractional digits. Не нормализовать входящие DTO.
+
+Три collection GET используют limit=25, opaque next_cursor до null. Cursor и pending
+response принадлежат endpoint/actor/Workspace, а history ещё conversation. Отмена
+запроса дополняется generation/sequence checks: поздний ответ старого контекста не
+должен вернуть чужой список, текст, image URL или изменить текущую отправку.
+Проверять принадлежность результата до success/error/401/403 handling: поздний
+ответ не разлогинивает новую сессию. При смене actor/Workspace, logout/recovery/denial
+защищённые данные сразу скрыты.
+
+Пагинация объединяет страницы по canonical ID без дублей, сохраняя серверный
+(created_at,id) DESC. Для отображения от старых к новым можно развернуть полученную
+последовательность; не пересортировывать по occurred_at или Date с потерей precision.
+Явный refresh сбрасывает страницы/cursors и читает свежую первую страницу. При422
+cursor не менять самостоятельно: показать ошибку и предложить fresh GET. Отсутствие
+message на первой странице не доказывает отсутствие сохранённой команды. Новая
+проекция того же Message заменяет старые file/delivery fields, не теряется из-за
+keep-first dedupe; совпадение текста не является подтверждением receipt.
+
+### 11.4. Exact intention и два разных вида неопределённости
+
+Текст — исходный Unicode без trim/NFC/formatting/split. Проверять 1…4096 scalars,
+≤16384 UTF-8 bytes, no NUL/lone surrogate/whitespace-only по принятому Python-набору.
+Не использовать textarea maxLength=4096 как лимит scalars: HTML считает UTF-16 units.
+Ввод/рендер — plain text с сохранением переносов; Enter остаётся переводом строки.
+Не исполнять HTML/Markdown/URL.
+
+При явном submit создать один key и заморозить actor/Workspace/conversation/exact
+body {text}/key. Один pending intent в памяти страницы; double-click/Enter/refresh
+не создают новую команду. POST содержит текущий CSRF и один Idempotency-Key, без
+If-Match и query. Не писать текст, ключ, CSRF или private URL в browser storage/logs.
+
+MessagingPanel живёт весь lifetime Console, включая login/recovery, как BillingPanel;
+не unmount его условно по authenticated phase. Protected view скрыт без текущего
+OWNER, исходное намерение хранится отдельно и никогда не переносится в другой
+actor/Workspace/conversation. Abort/context switch не доказывает rollback.
+
+- Потеря HTTP ответа, invalid success body, network/ambiguous5xx: сохранить прежние
+  context/body/key. Восстановить session/CSRF существующим auth flow, проверить тот же
+  actor/Workspace и выбранный conversation; затем только явный same-key/body replay.
+  Нельзя автоматически заменять key, менять текст или replay после смены контекста.
+- Подтверждённый202 ACCEPTED/REPLAY: сохранить immutable receipt/message metadata.
+  Это только durable intention; дальнейшее recovery — GET истории, без нового POST
+  при ошибке чтения. Не объявлять DELIVERED/READ. Delivery из history: PENDING — очередь,
+  DISPATCHING — отправка начата, SENT — канал принял, FAILED — конечный отказ,
+  UNKNOWN — результат неизвестен, автоматического повтора нет.
+- UNKNOWN delivery является canonical terminal state, не неполученным HTTP receipt.
+  Нет resend/retry button, автоматического копирования его текста или нового ключа
+  для этой операции. Same-key receipt recovery не вызывает adapter повторно. После
+  подтверждённого receipt возможен новый пустой composer для другого явного намерения;
+  UNKNOWN не блокирует всю дальнейшую переписку.
+- 401/403 не доказывает, что прежняя попытка не committed. Скрыть защищённые данные,
+  восстановить текущую authority; CSRF_REJECTED обрабатывается через auth recovery.
+  IDEMPOTENCY_KEY_CONFLICT останавливает replay. Даже поздний4xx после прежней
+  неоднозначности не доказывает отсутствие первого intent. Если первая попытка
+  получила достоверный отказ без предшествующей неопределённости, сохранить editable
+  draft и показать отказ. Не отправлять его автоматически при восстановлении.
+
+При смене контекста показывать только нейтральное уведомление о незавершённой
+операции без текста/чужих IDs/URL. Явное «Завершить без повтора» может освободить
+pending UI с предупреждением, что это не отмена серверной команды. Hard reload
+утрачивает memory-only intent и выполняет только чтения; никаких writes из storage,
+URL, mount/focus/refresh. Это не обещание восстановления ключа после закрытия страницы.
+
+### 11.5. Private image в браузере
+
+PENDING/FAILED показывать без фиктивного готового изображения. Для READY владелец
+явно открывает изображение: current-session/CSRF read-grant POST с ровно{} и без
+Idempotency-Key. Только полученный signed URL используется как img src без изменения
+host/path/query, без Console auth headers и с referrerPolicy=no-referrer. Не принимать
+javascript/data URL и URL с userinfo (username/password); HTTPS обязателен на HTTPS Console, HTTP
+допустим для loopback LOCAL/TEST. Текст URL не выводить в UI/errors/artifacts.
+
+Не сохранять bearer URL в local/session storage или persistent cache. При смене
+контекста/denial скрыть изображение и удалить удерживаемый grant; поздний ответ не
+может снова его открыть. После expires_at/ошибки GET предложить явную новую выдачу
+через API, без бесконечного retry/re-sign loop. Уже выданный URL может действовать
+до60s; скачанный image не отзывается задним числом. Не обещать немедленный global revoke.
+
+### 11.6. Реальные browser journeys и ограниченный TEST harness
+
+Playwright идёт через собранную Console, настоящий cookie/auth API, asm_runtime
+PostgreSQL и private MinIO. CONTROLLED adapter/provider обозначаются явно; это не
+внешний Telegram. Результат UI не фабрикуется route.fulfill happy-path JSON.
+
+Fresh disposable TEST fixtures имеют отдельные identities/Workspaces и фиксированные
+presets. Migrator настраивает identity/binding и fresh messaging billing через уже
+принятые provisioners/DB functions. Старый M1 test plan/fixtures не перепривязывается.
+Current DATABASE_SCHEMA_REVISION, asm_test, environment/role/secret guards сохраняются.
+
+Отдельный finite browser runtime runner получает только asm_runtime и S3 credentials;
+у него нет migrator/admin URL. Он использует существующие MessagingDatabase,
+ControlledAdapter/ControlledImageProvider, Worker/FetchTransfer и durable Jobs:
+normalized text/image → canonical ingest/process/fetch → real private S3. Для send
+браузер вызывает настоящий owner POST, затем runner исполняет job с определённым
+SUCCESS/UNKNOWN/permanent outcome. Не заполнять Message/File READY/receipt/Audit/
+Outbox/Job напрямую ради успешного сценария. TEST-only seed/негативные state changes
+и bounded read-only counters отделены от проверяемого runtime command path.
+
+В compose.browser.yaml C0 разрешает только необходимую TEST-дельту: private storage
+в tmpfs, bootstrap private asm-private-test, доступ браузера к signed origin и
+browser-profile runtime runner. Достаточный LOCAL вариант: storage port
+127.0.0.1:9000, API signer endpoint http://127.0.0.1:9000; runtime FETCH/worker использует
+http://storage:9000. API read-grant выполняет local presign без S3 I/O; endpoint
+не переписывается после подписи. Одинаковые bucket/runtime S3 credentials, разные
+достижимые origins в своих процессах. Public bucket/listing, TLS bypass, production
+endpoint switch и изменение базового compose.yaml не нужны.
+
+Finite helper actions и arguments проверяются до записи; нет arbitrary SQL/host/
+workspace selection, runtime test endpoints или production switches. Process
+counter CALL/EFFECT в private temporary TEST file может переживать runner restart;
+это instrumentation, не очередь. Cleanup удаляет именно disposable project/files.
+Существующий test_browser.sh запускает все старые и новые journeys; проверка rendered
+Compose сохраняет tmpfs/identity/environment guards и дополняет runner/storage guards.
+
+Нужны фактические assertions для A10 и применимых A03/A05/A07/A08/A09/A12: text/image
+и manual reply, пагинация/обновление без дублей, потеря202 после реального commit и
+same-key recovery, UNKNOWN после worker/restart без второго CALL, private image/new
+grant denial, чужой Workspace/отзыв OWNER/поздний ответ, policy/connection/error states,
+keyboard/narrow и сохранность M1. Component/parser tests дополняют эти journeys для
+strict DTO, всех состояний, Unicode, context races и expired grant; не заменяют БД/S3.
+
+### 11.7. Внешняя граница и порядок приёмки
+
+В existing M2_TELEGRAM_LOCAL_TEST runbook добавить конечный сценарий из Console:
+на принятом SHA Client присылает уникальные text+photo → Owner обновляет правильный
+Workspace/диалог, видит текст и private image → вводит один manual reply → Client
+подтверждает получение. Зафиксировать дату/SHA, binding/rights и очищенное evidence;
+SENT в UI/успех CONTROLLED не закрывает A11. Токены не попадают в чат/PR/CI.
+
+Bot/Owner/Client/secrets подготовлены пользователем; host/DNS/TLS ещё не предоставлены.
+Отсутствие runtime блокирует только live часть A09/A11, не C5 implementation/browser.
+C5 возвращает REVIEW с exact head/tree/tested SHA/run и tests/assertions→матрица.
+C0 проводит приёмку и независимый scoped C8 по новому UI trust/recovery/private-image
+риску; прежний C8 M2.3 не объявляется review нового UI. Затем user merge и отдельный
+push/main CI. Весь M2 VERIFIED только после всех четырёх частей и реального A11.

@@ -5,7 +5,155 @@
 Этот файл — принятый план и единственная активная точка передачи M2.
 Приёмка плана не является evidence выполненной реализации.
 
-## Активный handoff C0 — M2.3 code/API, приёмка до merge / 2026-09-21
+## Активный handoff C0 → C5 — M2.4-CONSOLE / 2026-09-21
+
+**M1.1–M1.3, M2.1/M2.2 VERIFIED LOCAL/TEST. M2.3 code/API интегрирован и
+VERIFIED в LOCAL/TEST после PR #20 и отдельного push/main CI. Live Telegram
+A09/A11 BLOCKED: внешнее runtime/DNS/TLS. M2.4 IN_PROGRESS — выдача единственной
+задачи C5, UI ещё не реализован; весь M2 IN_PROGRESS. M3 не выдан.**
+
+Это единственное текущее поручение. История ниже не отменяет его. Repository:
+**Elefesys/ai-service-manager**; ветка **c5/m2-4-console** → main. Продолжить один
+подготовленный C0 Draft PR этой ветки; номер, стартовые head/tree/tested SHA и CI
+указаны в PR receipt/готовом сообщении C0. **Первый coordination commit сохранить.**
+Никакого отдельного docs merge и параллельного implementation PR не требуется.
+
+### Принятый base и завершённая интеграция M2.3
+
+Implementation base / actual main **`ffc437f125aa6af4dcf1c61a035a0d5df517e062`**;
+tree **`0ed75735d6c9d9b7d35fac13dbfb6cc3b6ede814`**. Actual merge PR #20 имеет parents
+`a321bdd58856fb41bccb5749b4212349832e623c` +
+`2aece2df399a722ba6d978977527c3b92eb0adf6`, tree совпадает с принятым final tree.
+[Push/main CI 35649907678](https://github.com/Elefesys/ai-service-manager/actions/runs/35649907678)
+**SUCCESS**, attempt1: оба checkout logs указывают именно actual merge SHA;
+421 unit,390 real PostgreSQL/S3,60 frontend,15 прежних browser PASS, оба source gates
+и штатные scripts/canonical/migrations/contracts/reproducibility/smoke PASS.
+
+Независимый scoped C8 M2.3 выполнен реально: transport/webhook/media/setup PASS;
+DB/API обнаружили C8-M2.3-01, ограниченное исправление C2 прошло независимый targeted
+PASS/CLOSED и полный CI. Итоговый PR CI35648702138 SUCCESS. Code/API принято;
+этот receipt не является C8 review будущего UI или live Telegram evidence.
+Локального Docker нет, PostgreSQL/S3/browser execution подтверждён GitHub runner.
+Git objects/checkout logs проверены; загрузка ZIP C0 ранее получила403, новая
+локальная проверка байтов ZIP не заявляется.
+
+C1 выполнил read-only проверку consumer-контракта по реальным HTTP/models/service,
+§10, App/BillingPanel: **CONTRACT PASS**. Уточнения по Owner role,202/recovery,
+connection observations, Unicode и private grants включены в §11. Backend-дельта
+не требуется. Это предметное согласование, не review ещё отсутствующей реализации.
+
+### Задача и обязательное чтение
+
+**ID M2.4-CONSOLE. Ведущий C5**, C3 участвует только в TEST event/worker harness,
+C6 — browser Compose/runbook, C1 — совместимость принятого API; авторы сериализуют
+общие edits в том же PR. C2 нужен только при выявленном конкретном DB-дефекте:
+миграций в этом задании нет, применённые0001–0007 неизменны. C0 принимает scope;
+независимый C8 назначается после implementation, не подменяется предметной консультацией.
+
+Сначала проверить refs/ancestry и прочитать AGENTS, этот активный блок, TASK_REGISTER,
+[M2_CONTRACT §§10–11](M2_CONTRACT.md), contracts/openapi.json и contracts/README.md,
+App.tsx, BillingPanel.tsx, api.ts, billing-api.ts, существующие browser tests/fixture/
+Compose guards, messaging/http.py/http_models.py и tests/test_m2_3_* как accepted evidence.
+Применимы Spec §§4,17.5,18,19,24.6, ADR-019–021/115/121–128/138–140,
+MVP Console (только функции M2), Roadmap M2, Implementation Plan M2.4 и общая DoD.
+Канон приложений импортирован в docs/architecture; не заменять его пересказом.
+
+Результат: одна панель переписки существующей Console. Owner видит список connections/
+диалогов, историю текста/изображения, пишет manual text и различает queued/sending/
+accepted-by-channel/failed/unknown. Обновление вручную и load-more достаточны.
+Private image выдаётся через current-owner read-grant; HTTP recovery сохраняет
+прежние actor/Workspace/conversation/text/key. Все подробные решения — §11 контракта.
+Сохранить предыдущие auth/Business/Billing/Audit/Ops mechanisms. Не добавлять AI,
+takeover/resume, цены, запись, платежи, outbound media, edit/delete, новые API или Ops.
+
+### Разрешённые пути и точный смысл дельты
+
+| Paths | Разрешение C0 |
+|---|---|
+| frontend/src/messaging-api.ts; messaging-api.test.ts; MessagingPanel.tsx; MessagingPanel.test.tsx; messaging-fixtures.test-helper.ts | Новый узкий typed consumer, одна панель, component/parser fixtures/tests по §11 |
+| frontend/src/App.tsx; App.test.tsx; style.css | Additive mounting/page-lifetime context wiring и responsive styling; auth/recovery/Ops semantics сохраняются |
+| frontend/e2e/messaging.spec.ts | Новые реальные browser journeys через API/PG/S3 и явно CONTROLLED worker |
+| frontend/e2e/safe-diagnostic.ts; frontend/src/safe-diagnostic.test.ts | Только finite messaging diagnostic codes/проверка redaction; не печатать body/URL/secret |
+| frontend/e2e/auth.spec.ts; frontend/e2e/billing.spec.ts | Только если новый panel делает старые selectors неоднозначными: scoped selectors с сохранением действий и assertions; объяснить каждую дельту |
+| scripts/m2_4_browser_fixture.py; scripts/m2_4_browser_worker.py; tests/test_m2_4_browser_fixture.py | Finite TEST seed/counters/state changes отдельно от runtime ingest/Worker/FetchTransfer; guards и private diagnostics |
+| scripts/provision_browser_test.py | Additive fresh messaging fixtures/результат; существующие M1 billing presets сохраняются |
+| compose.browser.yaml; scripts/test_browser.sh | Только private TEST MinIO/browser origin, browser-profile runtime runner и штатный запуск новых fixtures/journeys/cleanup (§11.6) |
+| scripts/check_browser_compose.py; tests/test_browser_compose.py | Сохранить прежние guards, проверить новые runtime/storage TEST ограничения; не удалять проверки |
+| docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md | Добавить executable/manual Console live journey к существующему setup; честно отделить внешний blocker |
+| docs/TASK_REGISTER.md; docs/tasks/M2_HANDOFF.md; docs/tasks/M2_CONTRACT.md | Одно согласованное обновление результатов/уточнений; один active handoff, история сохранена |
+
+В таблице относительные frontend names после первого prefix относятся к frontend/src/.
+Backend runtime, migrations, grants, frozen auth/tenancy/R4, contracts/openapi.json,
+base compose.yaml, workflows, manifests/lockfiles/images и canonical sources вне
+этого scope. Новые зависимости не нужны. Конкретный blocker в этих областях вернуть
+C0 с минимальной предлагаемой дельтой; не обходить защиту тестом и не расширять silently.
+Уже перечисленные TEST harness paths разрешены: повторного согласования не требуют.
+
+### Ключевые consumer решения — не переизобретать API
+
+- Owner gate по membership.role; frozen permissions не содержит messaging:*.
+- Три коллекции limit25/cursor, send202 с {text}/Idempotency-Key, grant200 с{};
+  обычные GET200. Два503 и строгие DTO читаются по принятому контракту.
+- Не вычислять entitlement из пяти billing TEST keys. Stale connection observation
+  не блокирует навсегда явный «Проверить и отправить»: POST refresh и worker authority.
+- Single page-memory intention; panel не unmount при recovery. Смена контекста скрывает
+  data/URLs и отвергает late responses. Same-key recovery возможен только для того же
+  actor/Workspace/conversation;202 ведёт к GET, UNKNOWN не создаёт retry/resend.
+- Text exact Unicode, не trim/NFC, не native UTF16 maxLength как scalar limit.
+- Private READY image открывается по явному current-owner grant, URL не переписывать,
+  не логировать/сохранять. Expiry/denial — явный новый grant, без фонового цикла.
+- TEST runtime/PG/S3 путь настоящий; только внешний adapter/provider CONTROLLED.
+  No production test endpoints и no direct canonical fixture writes ради PASS.
+
+### Конечные проверки и границы evidence
+
+Это детализация существующих строк M2-A01…A12, не новая acceptance matrix.
+
+| Проверка | Фактическое evidence C5 |
+|---|---|
+| A10 + A06/A07: повседневный сценарий | Browser login → нужный Workspace/conversation → text и реальный private image → ручной POST → существующий worker → обновлённый delivery. 202 не рисуется как доставлено; anonymous S3 GET не раскрывает object |
+| A10: страницы и обновления | More-than-one-page fixture; opaque cursor/end/null, без duplicate rows; fresh refresh/reload делает GET, не POST. Смена диалога/Workspace с задержанным ответом не возвращает прежние данные |
+| A03/A10: потеря ответа | Playwright route.fetch исполняет настоящий POST/commit, затем теряется ответ браузеру; восстановить session/CSRF и тот же key/body. Exact receipt/message сохранены; counts Message/receipt/Audit/Outbox/Job увеличились ровно один раз |
+| A05/A10: UNKNOWN | Настоящий Worker с CONTROLLED UNKNOWN и сохраняемым CALL/EFFECT counter; replacement runner/recovery/UI refresh/same-key receipt не вызывают второй adapter call. UNKNOWN не имеет resend action |
+| A07/A08: private/authority | Image pending/error/ready; real grant+GET; cross-Workspace/mismatched refs/OWNER revoke запрещают новый grant/send/history. Уже выданная ссылка имеет прежнюю TTL границу; late grant не открывает image после context change |
+| A09/A10: состояния и отказы | Component/parser coverage всех connection/file/delivery states и двух503; real API/browser NOT_ALLOWED/revocation, история доступна при product restriction; cached status не authority. Actual Telegram rights остаются live проверкой |
+| A10/A12: UI и регрессия | keyboard/narrow, double submit, Unicode astral/NUL/surrogate/whitespace, safe text rendering; прежние auth/logout/Business/Billing/Audit/Ops journeys и guards сохранены |
+| A11: внешний Console smoke | Только при реально доступном runtime: разрешённый Client text+photo → Owner Console/private image → reply → Client подтверждает получение; exact SHA/date и очищенный receipt. Без доступа — BLOCKED, не fake PASS |
+| A12: штатные gates | sh scripts/ci.sh; sh scripts/test_browser.sh; оба clean-source gate; canonical imports, migrations, contracts, reproducibility/smoke на одном итоговом head. После merge отдельный main CI проверяет C0 |
+
+Автор пишет нужные тесты; C0/C8 проверяют поведение, не количество. При падении
+сначала установить причину, сохранить исходный failure и объяснить исправление
+теста принятым поведением. Не заменять real PostgreSQL/S3 SQLite/mocks; component
+mocks допускаются в своей явно обозначенной границе. Full real TCP Telegram send-loss
+из M2.3 остаётся в регрессии; повторно проектировать его для браузера не требуется.
+
+### Возврат C5 → C0
+
+Оставить PR **Draft/open/not merged**, статус REVIEW. Вернуть одним receipt:
+accepted base, сохранённый coordination, final head/parent/tree, actually tested
+SHA и его parents/tree, ссылки/attempt/jobs CI, все changed paths, commands/results,
+tests/assertions→A-criteria, причины старых test/fixture deltas, ограничения Docker/
+artifact/live evidence и следующий шаг. Browser mock, CONTROLLED и настоящий Telegram
+не смешивать. ZIP bytes заявлять только после фактической загрузки/сверки.
+
+Одним обновлением привести register/active handoff/contract в REVIEW; не создавать
+цепочку SHA-only commits. После последней дельты проверить именно итоговый head.
+C5 не объявляет M2.4/M2 VERIFIED, не снимает Draft и не сливает PR самостоятельно.
+C0 назначит независимый scoped C8 по реализации и подготовит user merge после PASS.
+
+### Что остаётся от пользователя для live Telegram
+
+Bot с Business/Secretary Mode, Owner/Client и секреты уже подготовлены. Подключать
+password manager к чату не нужно. Нужен доступный Linux host/Docker, два DNS имени
+для Console/private files и TLS; пока их нет, A09/A11 live BLOCKED. Секреты помещаются
+непосредственно в operator-owned0600 .env.telegram/secret store на runtime по runbook,
+не в чат/PR. C0/C6 подготовят конкретное deployment действие; платная инфраструктура
+только после предложения точной стоимости и разрешения. Это не блокирует C5.
+
+<details>
+<summary>История: приёмка M2.3 до фактического merge — не текущие инструкции</summary>
+
+## История — handoff C0: M2.3 code/API, приёмка до merge / 2026-09-21
 
 **M1.1–M1.3, M2.1 и M2.2 VERIFIED LOCAL/TEST. M2.3 REVIEW: code/API принят
 C0 и независимым scoped C8 после исправления C8-M2.3-01. Merge/main CI впереди.
@@ -109,6 +257,9 @@ runtime file/secret store, не в чат/PR. Расходы и внешние �
 M2.4 или весь M2. Следующее зависимое поручение C5 готовит минимальную переписку
 в существующей Console и реальные browser journeys после API/main acceptance.
 Весь M2 требует Client text+photo→Console→manual reply→Client A11; M3 не выдаётся.
+
+
+</details>
 
 <details>
 <summary>История: принятое поручение и исходная передача реализации C3 — не текущие инструкции</summary>
