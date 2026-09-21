@@ -2,7 +2,81 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — M1 завершена; M2 подготовлена к выдаче / 2026-09-20
+## Текущий статус — M2.1-KERNEL выдана / 2026-09-21
+
+**M1.1–M1.3 VERIFIED в принятых LOCAL/TEST границах. M2.1 IN_PROGRESS;
+M2.2–M2.4 TODO.** Код M2 ещё не реализован/не принят; начаты контракт и выдача.
+Единственный активный handoff — [M2_HANDOFF](tasks/M2_HANDOFF.md), единственный
+инкрементальный технический контракт — [M2_CONTRACT](tasks/M2_CONTRACT.md).
+M1_HANDOFF закрыт; R4/D-01…D-13 и инварианты M1 не переоткрываются.
+
+[PR #17](https://github.com/Elefesys/ai-service-manager/pull/17) MERGED пользователем.
+Принятый actual main/base: **`8e5f125d424c0ce613ed9e0c787392f11a49aeae`**;
+tree `3e2a2519c949461856c9f3c5ca1d1ec33a180953` совпадает с reviewed PR tree.
+[Отдельный push/main CI 35522542861](https://github.com/Elefesys/ai-service-manager/actions/runs/35522542861)
+SUCCESS; actual head/tested SHA, оба jobs/clean-source gates и artifact проверены C0.
+Это приёмка интеграции плана, не реализации M2; post-merge receipt записан в PR #17.
+
+Текущее единственное implementation поручение — **M2.1-KERNEL**, ведущий C3 с C2,
+ветка `c3/m2-1-messaging-kernel`, подготовленный Draft PR → main.
+Продолжить первый coordination commit с контрактом/поручением; номер PR и точный
+стартовый head/CI фиксируются в PR metadata и сообщении C0 без SHA-only commits.
+Миграция этой задачи: `0005`, predecessor `0004`; `0001`–`0004` неизменны.
+C0/C2/C3 согласовали routing/IDs, typed worker admission, Inbox/Outbox/Jobs,
+atomicity/UNKNOWN и ограниченную Audit compatibility; execution/C8 ещё впереди.
+
+Единственное содержательное дополнение существующих consumers — strict
+MESSAGE_SEND_REQUESTED в общем Audit: typed FK/DTO/generated OpenAPI и frontend
+parser/label. Оно сохраняет прежние billing events и предотвращает их consumer
+failure после новой send-команды. UI переписки/owner messaging API этим не выданы.
+
+Подготовка Telegram со слов пользователя: test bot и Business/Secretary Mode,
+Owner/Client accounts готовы; TG_BOT_TOKEN/TG_WEBHOOK_SECRET сохранены в менеджере
+паролей. Секреты не получены. Binding/rights, runtime secret injection, HTTPS webhook
+и живой сценарий ещё не проверены; M2.1 от этих внешних проверок не зависит.
+
+Следующий шаг: C3 реализует ограниченное ядро, возвращает PR/tests/assertions/evidence;
+C0 выполняет приёмку и scoped C8 review новых рисков. M2.2 выдаётся после merge
+ядра и отдельного main CI. M2 VERIFIED только после всех четырёх частей и M2-A11.
+
+## Задачи — актуальная таблица
+
+| ID | Цель | Зависимости | Ведущий | Статус | Evidence / результат | Следующий шаг |
+|---|---|---|---|---|---|---|
+| M0.ACCESS | Repository и доступ | — | C0 | VERIFIED | PR #1/#2 merged, доступ подтверждён | Проверять refs перед каждой задачей |
+| M0.BASELINE | Spec/ADR/baseline/plan | ACCESS | C0 | VERIFIED | 11 канонических оригиналов и IMPL-001 | Не менять канон молча |
+| M0.SOURCE | Точный импорт | BASELINE | C0 | VERIFIED | 11/11 SHA-256 и byte comparison | CI проверяет SOURCE_MANIFEST |
+| M0.STACK | Зафиксированный стек | BASELINE | C0 | VERIFIED | IMPL-001, locks/digests и CI | Только обоснованные reviewed изменения |
+| M0.BACKEND | API/Worker/Scheduler shell | STACK | C0 | VERIFIED | Types/health/env/shutdown tests | Auth — M1.2 |
+| M0.FRONTEND | Console/Ops shells | STACK | C0 | VERIFIED | 3 frontend tests/build/reproducibility | Login UI — C5 в M1.2 |
+| M0.DB | PostgreSQL/vector/roles/migrations | STACK | C0 | VERIFIED | Real PostgreSQL и migration cycles | 0002 уже реализована в M1.1 |
+| M0.LOCAL | Docker/local smoke | BACKEND/FRONTEND/DB/LOCK | C0 | VERIFIED | GitHub Linux/amd64 runner | Пользовательский ПК не проверен |
+| M0.TEST | Существенные PostgreSQL tests | DB | C0 | VERIFIED | 7 первоначальных DB cases сохранены | Tenant/auth regression развивается |
+| M0.LOCK | Locks/digests/build repeatability | STACK | C0 | VERIFIED | uv/npm locks, image digests, wheel/assets | Bootstrap при обычном checkout не нужен |
+| M0.CI | Общий pipeline | LOCAL/LOCK | C0 | VERIFIED | Main runs 34970531911 и 34972872410 | Read-only CI, source/drift gates |
+| M0.FIXTURES | Synthetic A–D | STACK | C0 | VERIFIED | UUID/money/modes/environment guards | Не production defaults |
+| M0.HANDOFF | Правила, реестр и очередь | BASELINE/STACK | C0 | VERIFIED | AGENTS и M1_HANDOFF | Передача по точному SHA |
+| M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
+| M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
+| M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5; C0/C8 review | VERIFIED | PR #8 MERGED; actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`; push/main 35368244266 SUCCESS, 246 tests; UI-01/02/04/05 CLOSED | Полная приёмка: docs/reviews/M1_2_C0_ACCEPTANCE.md; не production |
+| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 и принятая M1.2 | C1 backend; C2 DB; C5 UI; C0/C8 review | VERIFIED | DB/API/UI приняты; PR #15 + документы PR #16 в main; push/main 35513585580 SUCCESS, 415 cases; итоговый receipt | Завершено в R4 LOCAL/TEST scope; перейти к планированию M2 |
+| M2.1 | Normalized channel events и durable Inbox/Outbox/Jobs | VERIFIED M1; принятые PR #17/main и контракт M2.1 | C3+C2; C0 integration | IN_PROGRESS | Actual base 8e5f125d424c0ce613ed9e0c787392f11a49aeae; main CI 35522542861 SUCCESS; контракт/выдача, реализации ещё нет | Выполнить M2.1-KERNEL, затем C0/scoped C8 review |
+| M2.1-KERNEL | Controlled event → Message → owner command → durable send/recovery | M2_CONTRACT; actual main 8e5f125d424c0ce613ed9e0c787392f11a49aeae | C3; C2 DB/migration | IN_PROGRESS | c3/m2-1-messaging-kernel; стартовый coordination PR; 0005→0004; execution не проверено | Продолжить подготовленный Draft PR, вернуть finite criteria/evidence из active handoff |
+| M2.2 | Private ObjectStorage/FileObject и авторизация изображений | M1; контракт M2.1; последовательный план | C6+C3 | TODO | План M2_HANDOFF | После приёмки M2.1 выдать storage-срез |
+| M2.3 | Telegram adapter, test connection, capabilities, UNKNOWN и owner API | Принятые M2.1/M2.2 | C3; C1 API | TODO | План M2_HANDOFF; живой provider ещё не проверен | Подготовить доступы заранее; реализация после зависимостей |
+| M2.4 | Console Inbox, manual reply и E2E | Принятый API M2.3 | C5+C3; C0/C8 review | TODO | План M2_HANDOFF | UI, browser + live Telegram scenario; затем приёмка всего M2 |
+
+Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
+
+## История — прежние решения и evidence
+
+Всё ниже — записи прежних snapshots. Их статусы и команды не переопределяют
+текущий блок, таблицу выше и M2_HANDOFF. Не выполнять старые поручения повторно.
+
+## Историческая исходная запись подготовки PR #17 / 2026-09-20
+
+Следующий snapshot сохранён как история подготовки; его TODO/запрос review
+заменены текущим решением выше. Актуальная таблица находится выше.
 
 **M1.1, M1.2, M1.3 — VERIFIED в принятых границах LOCAL/TEST.**
 Сохранено итоговое решение C0: обязательные DB/API/UI работы M1.3 завершены,
@@ -29,38 +103,6 @@ SUCCESS, foundation/browser и оба clean-source gate PASS.
 storage или production. После его интеграции достаточно post-merge проверки
 C0 и ссылки на evidence в PR; отдельный SHA-only docs commit не требуется.
 
-## Задачи — актуальная таблица
-
-| ID | Цель | Зависимости | Ведущий | Статус | Evidence / результат | Следующий шаг |
-|---|---|---|---|---|---|---|
-| M0.ACCESS | Repository и доступ | — | C0 | VERIFIED | PR #1/#2 merged, доступ подтверждён | Проверять refs перед каждой задачей |
-| M0.BASELINE | Spec/ADR/baseline/plan | ACCESS | C0 | VERIFIED | 11 канонических оригиналов и IMPL-001 | Не менять канон молча |
-| M0.SOURCE | Точный импорт | BASELINE | C0 | VERIFIED | 11/11 SHA-256 и byte comparison | CI проверяет SOURCE_MANIFEST |
-| M0.STACK | Зафиксированный стек | BASELINE | C0 | VERIFIED | IMPL-001, locks/digests и CI | Только обоснованные reviewed изменения |
-| M0.BACKEND | API/Worker/Scheduler shell | STACK | C0 | VERIFIED | Types/health/env/shutdown tests | Auth — M1.2 |
-| M0.FRONTEND | Console/Ops shells | STACK | C0 | VERIFIED | 3 frontend tests/build/reproducibility | Login UI — C5 в M1.2 |
-| M0.DB | PostgreSQL/vector/roles/migrations | STACK | C0 | VERIFIED | Real PostgreSQL и migration cycles | 0002 уже реализована в M1.1 |
-| M0.LOCAL | Docker/local smoke | BACKEND/FRONTEND/DB/LOCK | C0 | VERIFIED | GitHub Linux/amd64 runner | Пользовательский ПК не проверен |
-| M0.TEST | Существенные PostgreSQL tests | DB | C0 | VERIFIED | 7 первоначальных DB cases сохранены | Tenant/auth regression развивается |
-| M0.LOCK | Locks/digests/build repeatability | STACK | C0 | VERIFIED | uv/npm locks, image digests, wheel/assets | Bootstrap при обычном checkout не нужен |
-| M0.CI | Общий pipeline | LOCAL/LOCK | C0 | VERIFIED | Main runs 34970531911 и 34972872410 | Read-only CI, source/drift gates |
-| M0.FIXTURES | Synthetic A–D | STACK | C0 | VERIFIED | UUID/money/modes/environment guards | Не production defaults |
-| M0.HANDOFF | Правила, реестр и очередь | BASELINE/STACK | C0 | VERIFIED | AGENTS и M1_HANDOFF | Передача по точному SHA |
-| M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
-| M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
-| M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5; C0/C8 review | VERIFIED | PR #8 MERGED; actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`; push/main 35368244266 SUCCESS, 246 tests; UI-01/02/04/05 CLOSED | Полная приёмка: docs/reviews/M1_2_C0_ACCEPTANCE.md; не production |
-| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 и принятая M1.2 | C1 backend; C2 DB; C5 UI; C0/C8 review | VERIFIED | DB/API/UI приняты; PR #15 + документы PR #16 в main; push/main 35513585580 SUCCESS, 415 cases; итоговый receipt | Завершено в R4 LOCAL/TEST scope; перейти к планированию M2 |
-| M2.1 | Normalized channel events и durable Inbox/Outbox/Jobs | VERIFIED M1; согласованный контракт M2.1 | C3+C2; C0 integration | TODO | План M2_HANDOFF; реализации/evidence пока нет | C0: назначить base, согласовать минимальный контракт и выдать первый срез |
-| M2.2 | Private ObjectStorage/FileObject и авторизация изображений | M1; контракт M2.1; последовательный план | C6+C3 | TODO | План M2_HANDOFF | После приёмки M2.1 выдать storage-срез |
-| M2.3 | Telegram adapter, test connection, capabilities, UNKNOWN и owner API | Принятые M2.1/M2.2 | C3; C1 API | TODO | План M2_HANDOFF; живой provider ещё не проверен | Подготовить доступы заранее; реализация после зависимостей |
-| M2.4 | Console Inbox, manual reply и E2E | Принятый API M2.3 | C5+C3; C0/C8 review | TODO | План M2_HANDOFF | UI, browser + live Telegram scenario; затем приёмка всего M2 |
-
-Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
-
-## История — прежние решения и evidence
-
-Всё ниже — записи прежних snapshots. Их статусы и команды не переопределяют
-текущий блок, таблицу выше и M2_HANDOFF. Не выполнять старые поручения повторно.
 
 ## История — UI pre-merge review / 2026-09-20
 
