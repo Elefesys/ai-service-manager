@@ -1347,3 +1347,31 @@ CONTROLLED evidence не live Telegram. Runbook содержит конечны�
 но runtime/DNS/TLS отсутствуют: live A09/A11 BLOCKED, внешних sends/расходов нет.
 C5 возвращает REVIEW; приёмка C0 и независимый scoped C8, user merge/main CI и
 реальный Client receipt ещё требуются. M2.4/M2 VERIFIED самостоятельно не объявлены.
+
+
+### 11.9. C0/C8 — ограниченная коррекция и приёмка
+
+C0 принял LOCAL/TEST code/UI после реального независимого C8 и targeted closure
+**C8-M2.4-01/02/03**. Это уточняет реализацию §§11.1/11.3–11.5, не добавляет API,
+архитектурных решений или функций будущего этапа; §11.8 сохраняется как C5 REVIEW history.
+
+- History pagination и send не выполняются одновременно в одном выбранном контексте.
+  Только чтение, начатое после202 с тем же confirmed intent, завершает recovery.
+  Неоднозначность POST, exact body/key, GET-only recovery и UNKNOWN/no-resend неизменны.
+- Актуальный OWNER denial в любой owner-панели Console распространяется на обе.
+  Панели получают недоступный protected context, оставаясь mounted; grant удаляется,
+  pending intent сохраняется отдельно. Восстановление authority использует прежний
+  session flow; исходный command повторяется только явно. Late-response guards
+  проверяются до callback. C0 разрешил только этот callback в прежнем BillingPanel.
+- Browser проверки private image не используют locator failure previews, содержащие
+  img.src. Visibility/naturalWidth проверяются через безопасные boolean/number probes;
+  exceptions заменяются bounded code без исходного URL/cause. Private GET и header
+  assertions сохранены, это не смягчение проверки изображения.
+
+Исправленный implementation **842b9ee3300fcea06fbb1394c13a01faae21493b**, tree
+**f1dd4f5c9442febd192f3a81061634117aa3d7fe**; CI35703839157:
+**SUCCESS:492 unit,390 PostgreSQL/S3,111 frontend,27 browser; оба штатных scripts и clean-source gates, canonical/migrations/contracts/reproducibility/smoke PASS**. Exact tested merge, scoped review boundaries, assertions→A01–A12
+и дальнейшее действие находятся в единственном активном M2_HANDOFF. Этот acceptance
+update повторно проходит полный CI; собственный final SHA записывается в PR receipt.
+До user merge/actual main CI M2.4-CONSOLE остаётся REVIEW. До фактического live A11
+весь M2 IN_PROGRESS, live A09/A11 BLOCKED runtime/DNS/TLS; M3 не выдан.

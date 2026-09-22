@@ -5,7 +5,99 @@
 Этот файл — принятый план и единственная активная точка передачи M2.
 Приёмка плана не является evidence выполненной реализации.
 
-## Активный handoff C5 → C0 — M2.4-CONSOLE REVIEW / 2026-09-22
+## Активный handoff C0 → пользователь — M2.4-CONSOLE к merge / 2026-09-22
+
+**C0 и независимый scoped C8 приняли исправленный code/UI LOCAL/TEST.**
+M2.4-CONSOLE/M2.4 пока REVIEW: merge ещё не выполнен, отдельный main CI не проверен.
+Весь M2 IN_PROGRESS; внешний live A09/A11 BLOCKED runtime/DNS/TLS. M3 не выдан.
+Старые задания ниже — история, их не выполнять повторно.
+
+### Единственное следующее действие и точный source
+
+[PR #21](https://github.com/Elefesys/ai-service-manager/pull/21), **c5/m2-4-console** → main.
+После полного SUCCESS итогового head и снятия Draft пользователь выбирает **Create a
+merge commit → Confirm merge**. Не squash/rebase: первый coordination и review history
+сохраняются. Вернуть C0 «слито» или ссылку на merge commit. C0 самостоятельно не сливает.
+
+| Ref | Exact SHA |
+|---|---|
+| Accepted main / implementation base | ffc437f125aa6af4dcf1c61a035a0d5df517e062 |
+| Первый сохранённый coordination | 76d44a7e0559f470b3de07c97a4b61581e7e00a8 |
+| Проверенный C5 REVIEW head / parent исправления | 1323648d4cd889bc35dcfcf9291fb918412c8d86 |
+| Исправленный implementation head | 842b9ee3300fcea06fbb1394c13a01faae21493b |
+| Implementation tree | f1dd4f5c9442febd192f3a81061634117aa3d7fe |
+| Tested virtual merge | 17713ebd43c69273f12ee2961fed8c1d8dd79c6b |
+
+Ordered tested parents: accepted base + исправленный implementation; tree совпадает.
+[CI35703839157, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/35703839157):
+**SUCCESS:492 unit,390 PostgreSQL/S3,111 frontend,27 browser; оба штатных scripts и clean-source gates, canonical/migrations/contracts/reproducibility/smoke PASS**. Оба jobs должны checkout ровно tested merge выше; реальные
+PG/S3/browser results получены GitHub runner, локального Docker нет.
+
+Этот финальный acceptance update меняет только register/handoff/contract.
+Его собственный head/tree/tested merge, CI/jobs/source gates после последней дельты
+находятся **в верхнем PR receipt**. Перед Ready/merge C0 обязан проверить их повторно.
+Не создавать дополнительный документационный commit ради SHA этого документа.
+C0 сверил213 исходных blobs/modes C5 head и frozen области; ZIP bytes не проверены.
+
+### Независимый review и разрешённая коррекция
+
+C8 реально выполнен тремя отдельными read-only reviewers: recovery/Console isolation;
+strict consumer/private-image/privacy diagnostics; finite TEST harness/execution evidence.
+Harness и основной consumer получили PASS. Три P2 findings воспроизведены, исправлены
+C0 в том же PR и закрыты отдельным targeted C8:
+
+| Finding | Причина и минимальное исправление | Regression / evidence |
+|---|---|---|
+| C8-M2.4-01 CLOSED | Старый pagination GET поглощал fresh GET после202 и освобождал composer. History и send сериализованы; только read с уже confirmed intent закрывает recovery | Component `blocks pagination during POST…`; real pagination journey задерживает настоящий committed202, pagination disabled, затем fresh first-page GET и PENDING; один command |
+| C8-M2.4-02 CLOSED | Billing403 скрывал только Billing, сохраняя Messaging private view. Общий context-scoped denial скрывает обе owner-панели, компоненты остаются mounted | Оба направления denial, pending body/key, late202 и явное session recovery в component; real OWNER downgrade обнаружен Billing и скрывает Audit/contact/history/image, raw grant/history/send403 сохранены |
+| C8-M2.4-03 CLOSED | Playwright visibility failure включал private img.src в preview/call log. Boolean/number probes под bounded safeDiagnostic | Visibility и naturalWidth23, no-cookie/auth/CSRF/referrer, unsigned403 сохранены;6 diagnostic cases и7 независимых installed Playwright/Node/JSDOM probes без URL/signature в error/stack |
+
+C8 recovery независимо исполнил11 targeted component checks; checked component diff
+SHA-256 **cc3ef1d78904c0e7373f755e71294b5461feea625e783b050f5254912e2c1a8c**,
+C0 привязал идентичные bytes к implementation head выше. Privacy re-review проверил
+именно исправленные helpers, не Chromium failure run. Полный CI — отдельное evidence.
+
+C0 разрешил **frontend/src/BillingPanel.tsx** только как интеграционный callback общей
+live OWNER authority. Итого24 changed paths; остальные23 — прежний разрешённый scope.
+Runtime backend/API/migrations0001–0007/grants/OpenAPI/R4/auth/tenancy/base Compose/
+workflows/dependencies/image pins/канон не менялись. Исходные15 M1 browser journeys
+сохранены. Browser pagination дополнен намеренной записью только после assertions
+нулевых POST при чтении; denial journey меняет источник обнаружения на Billing,
+не убирая grant/history/send403. Это проверки принятого поведения, не ослабление gates.
+
+### Приёмка по прежней матрице A01–A12
+
+| Критерии | Принятое evidence и граница |
+|---|---|
+| A01/A02/A04/A06/A09 | Принятые M2.1–M2.3 transport/DB/HTTP/lease/receipt тесты сохранены,390 PG/S3 regression; это не внешний Telegram smoke |
+| A03/A05/A10 | Реальная потеря committed202 → auth/CSRF → exact replay с одним набором Message/receipt/Audit/Outbox/Job; valid202+GET failure только читает; UNKNOWN после замены runner сохраняет CALL1/EFFECT1 без resend |
+| A06/A07/A10 | Inbound text и private image через реальный Worker/FetchTransfer/MinIO, naturalWidth23 и header/unsigned403 guards; manual text exact → PENDING → Worker → SENT; SENT не доставка клиенту |
+| A08/A10 | Foreign Workspace403/mismatched refs404, live OWNER downgrade и общий denial, late history/grant/401/403 guards, скрытие private views; исходные scopes/keys не переносятся |
+| A09/A10 | Реальные product restrictions409, editable draft, доступная история; connection/file/delivery states и оба503; observation не authority |
+| A10/A12 | Limit25/cursor/null, replacement проекций, refresh/reload без writes, устранённая pagination/202 гонка; Unicode/plain text, keyboard/narrow и27 browser запусков с прежними15 M1 |
+| A11 | **BLOCKED внешней инфраструктурой**. CONTROLLED browser не закрывает Client text+photo → Console → manual reply → настоящий Client receipt |
+| A12 | Полные scripts/clean-source/migration/contracts/reproducibility/smoke на implementation и итоговом head; отдельный actual main CI проверяется только после пользовательского merge |
+
+### Конечный остаток M2
+
+1. Пользовательский обычный merge PR21 после final-head SUCCESS.
+2. C0 проверяет actual merge parents/tree и отдельный push/main CI; фиксирует только
+   M2.4-CONSOLE code/UI LOCAL/TEST, без объявления всего M2 VERIFIED.
+3. Единственный внешний шаг — разрешённый live A09/A11 по готовому
+   [runbook](../runbooks/M2_TELEGRAM_LOCAL_TEST.md), включая §5.1 Console journey.
+   Bot/Owner/Client готовы, TG_BOT_TOKEN/TG_WEBHOOK_SECRET уже в password manager.
+   Нужны доступный Linux/Docker host, два DNS имени и TLS; секреты вводятся оператором
+   напрямую в private .env.telegram/secret store, не в чат/PR. C0/C6 ведут runtime setup;
+   платные ресурсы только после отдельного предложения точной стоимости.
+4. После фактического Client receipt, сохранения изоляции/rights, полного evidence
+   A01–A12 и успешного main CI C0 может завершить M2. M3 автоматически не выдаётся.
+
+Новых функций/миграций и повторной реализации M1–M2.3 в этом handoff нет.
+
+<details>
+<summary>История: передача C5 в REVIEW — не текущие инструкции</summary>
+
+## История — передача C5 → C0 — M2.4-CONSOLE REVIEW / 2026-09-22
 
 **M2.4-CONSOLE и M2.4 REVIEW. PR #21 остаётся Draft/open/not merged.**
 M1 и принятые M2.1–M2.3 LOCAL/TEST receipts сохраняются. Весь M2 IN_PROGRESS;
@@ -100,6 +192,8 @@ Live blocker: доступный Linux/Docker host, два DNS имени и TLS
 у пользователя готовы; секреты не запрашивались, внешних Telegram sends/расходов нет.
 Оператор выполняет live runbook только после отдельной авторизации. Это не стопор
 независимой UI реализации и не основание снимать Draft/объявлять M2 VERIFIED.
+
+</details>
 
 <details>
 <summary>История: исходное поручение C0 → C5 — не текущая задача</summary>
