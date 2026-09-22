@@ -1,0 +1,15 @@
+import { Session } from './api';
+import { Connection, Conversation, Delivery, ImageFile, Message, SendReceipt } from './messaging-api';
+export const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+export const ws = id(1), actor = id(2), conversationId = id(3), when = '2030-01-01T00:00:00.123456Z';
+export const session = (csrf = 'csrf'): Session => ({ user_account_id: actor, csrf_token: csrf, expires_at: when, memberships: [{ workspace_id: ws, role: 'OWNER', permissions: ['tenancy:read'] }] });
+export const connection = (n = 4): Connection => ({ connection_id: id(n), business_id: id(5), provider: 'CONTROLLED', state: 'AVAILABLE', observed_at: null, created_at: when, version: '9223372036854775807' });
+export const conversation = (n = 3): Conversation => ({ conversation_id: id(n), connection_id: id(4), business_id: id(5), client_id: id(n + 100), created_at: when, version: '1', reply_window_expires_at: null });
+export const message = (n = 6): Message => ({ message_id: id(n), conversation_id: conversationId, direction: 'INBOUND', content_type: 'TEXT', text: '  Точный\nтекст 🙂 e\u0301 <script>  ', occurred_at: when, created_at: when, version: '1', file: null, delivery: null });
+export const delivery = (status: Delivery['status'] = 'SENT'): Delivery => ({ status, error_code: status === 'FAILED' ? 'NOT_ALLOWED' : status === 'UNKNOWN' ? 'UNKNOWN_EXTERNAL_RESULT' : null, completed_at: ['SENT','FAILED','UNKNOWN'].includes(status) ? when : null, version: '2' });
+export const outbound = (status: Delivery['status'] = 'PENDING'): Message => ({ ...message(), direction: 'OUTBOUND', delivery: delivery(status) });
+export const photo = (status: ImageFile['status'] = 'READY', n = 7): Message => ({ ...message(n), content_type: 'IMAGE_REFERENCE', text: null, file: { file_id: id(n + 10), status, error_code: status === 'FAILED' ? 'INVALID_INPUT' : null, manifest: status === 'READY' ? { mime_type: 'image/png', size_bytes: '80', width: 2, height: 2 } : null } });
+export const receipt = (): SendReceipt => ({ workspace_id: ws, receipt_id: id(8), message_id: id(9), accepted_at: when, outcome: 'ACCEPTED' });
+export const page = <T,>(...items: T[]) => ({ items, next_cursor: null });
+export const deferred = <T,>() => { let resolve!: (v: T) => void, reject!: (e: unknown) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
+export const ok = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });

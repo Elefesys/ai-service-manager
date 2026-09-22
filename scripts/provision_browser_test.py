@@ -7,6 +7,7 @@ import os
 import sys
 
 from m1_3_browser_fixture import FixtureFailure, setup_billing, target
+from m2_4_browser_fixture import setup_messaging
 from provision_local_auth import ProvisioningError, provision, read_password, validate_target
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -31,7 +32,8 @@ async def setup(url: str, password: str):
                 {"workspace": result["workspace_id"], "business": result["business_id"]},
             )
         fixtures = await setup_billing(result, password)
-        return {**result, "billing_fixtures": fixtures}
+        messaging = await setup_messaging(password)
+        return {**result, "billing_fixtures": fixtures, "messaging_fixtures": messaging}
     finally:
         await engine.dispose()
 
