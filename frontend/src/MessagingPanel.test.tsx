@@ -2,8 +2,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { api } from './api';
 import { MessagingPanel } from './MessagingPanel';
-import { billingApi } from './billing-api';
+import { billingApi, BillingError } from './billing-api';
+import { billing } from './billing-fixtures.test-helper';
 import { MessagingError, Message, ReadGrant, SendReceipt, messagingApi } from './messaging-api';
 import { connection, conversation, conversationId, deferred, id, message, ok, outbound, page, photo, receipt, session, ws } from './messaging-fixtures.test-helper';
 
@@ -86,6 +88,23 @@ describe('owner conversation view and private reads', () => {
   });
 });
 describe('one frozen intention and receipt-aware recovery',()=>{
+  it('blocks pagination during POST and reads a fresh first page after202 without another send',async()=>{
+    const accepted=deferred<SendReceipt>();
+    const fresh=deferred<ReturnType<typeof page<Message>>>();
+    vi.mocked(messagingApi.send).mockImplementationOnce(()=>accepted.promise);
+    vi.mocked(messagingApi.messages).mockResolvedValueOnce({items:[message()],next_cursor:'older_cursor'}).mockImplementationOnce(()=>fresh.promise);
+    setup(); await submit('Exact pending reply');
+    const more=screen.getByRole('button',{name:'Ещё сообщения'});
+    expect(more).toBeDisabled(); fireEvent.click(more);
+    expect(messagingApi.messages).toHaveBeenCalledTimes(1);
+    await act(async()=>accepted.resolve(receipt()));
+    expect(messagingApi.messages).toHaveBeenCalledTimes(2);
+    expect(messagingApi.messages).toHaveBeenLastCalledWith(ws,conversationId,null,expect.any(AbortSignal));
+    expect(screen.getByRole('button',{name:'Проверить и отправить'})).toBeDisabled();
+    await act(async()=>fresh.resolve(page({...outbound(),message_id:receipt().message_id,text:'Exact pending reply'})));
+    await ready(); expect(screen.getByTestId(`message-${receipt().message_id}`)).toHaveTextContent('В очереди');
+    expect(screen.getByLabelText('Ручной текстовый ответ')).toHaveValue(''); expect(messagingApi.send).toHaveBeenCalledTimes(1);
+  });
   it('blocks double submit, freezes exact astral text and uses202 only as intention',async()=>{
     const pending=deferred<SendReceipt>(); vi.mocked(messagingApi.send).mockImplementation(()=>pending.promise); setup(); const text=' 🙂'.repeat(2000)+'\ne\u0301 ';
     await submit(text); const form=screen.getByRole('button',{name:'Проверить и отправить'}).closest('form')!; fireEvent.submit(form);fireEvent.submit(form); expect(messagingApi.send).toHaveBeenCalledTimes(1); expect(vi.mocked(messagingApi.send).mock.calls[0][2].text).toBe(text); expect(Object.isFrozen(vi.mocked(messagingApi.send).mock.calls[0][2])).toBe(true);
@@ -127,5 +146,29 @@ describe('one frozen intention and receipt-aware recovery',()=>{
     vi.mocked(messagingApi.send).mockRejectedValueOnce(new MessagingError(401,'SESSION_REQUIRED')).mockResolvedValue(receipt()); const v=render(<App/>); await ready(); authenticated=false; await submit('exact retained answer'); await screen.findByLabelText('Логин'); fireEvent.change(screen.getByLabelText('Логин'),{target:{value:'owner.test'}});fireEvent.change(screen.getByLabelText('Пароль'),{target:{value:'long-test-password'}});fireEvent.submit(screen.getByRole('button',{name:'Войти'}).closest('form')!);
     await screen.findByRole('button',{name:'Повторить исходный ответ'}); const before=checks; fireEvent.focus(window); await waitFor(()=>expect(checks).toBeGreaterThan(before)); await waitFor(()=>expect(screen.getByRole('button',{name:'Повторить исходный ответ'})).toBeEnabled()); fireEvent.click(screen.getByRole('button',{name:'Повторить исходный ответ'})); await ready(); expect(messagingApi.send).toHaveBeenCalledTimes(2);
     v.unmount(); const reloaded=render(<App/>); await ready(); expect(messagingApi.send).toHaveBeenCalledTimes(2); const reads=vi.mocked(messagingApi.connections).mock.calls.length; reloaded.unmount(); render(<App pathname="/ops/"/>); await screen.findByText('Проверка готовности пройдена'); expect(messagingApi.connections).toHaveBeenCalledTimes(reads); expect(screen.queryByRole('region',{name:'Переписка'})).toBeNull(); expect(localStorage.length+sessionStorage.length).toBe(0);
+  });
+  it.each(['billing','messaging'] as const)('current %s OWNER denial hides both panels and preserves a pending reply until explicit recovery',async source=>{
+    vi.spyOn(api,'session').mockResolvedValue(session()); vi.spyOn(api,'businesses').mockResolvedValue([]);
+    vi.spyOn(billingApi,'read').mockResolvedValue({...billing(),workspace_id:ws});
+    vi.spyOn(billingApi,'audit').mockResolvedValue({items:[],next_cursor:null});
+    vi.mocked(messagingApi.messages).mockResolvedValue(page(message(),photo()));
+    const pending=deferred<SendReceipt>(); vi.mocked(messagingApi.send).mockImplementationOnce(()=>pending.promise).mockResolvedValue(receipt());
+    render(<App/>); await ready(); await screen.findByTestId('current-contact');
+    fireEvent.click(screen.getByRole('button',{name:'Открыть изображение'})); await screen.findByRole('img');
+    await submit('Frozen reply through owner denial');
+    if(source==='billing') {vi.mocked(billingApi.read).mockRejectedValueOnce(new BillingError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить подписку'}));}
+    else {vi.mocked(messagingApi.connections).mockRejectedValueOnce(new MessagingError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить подключения'}));}
+    await screen.findByText('Нет доступа к данным владельца');
+    expect(screen.queryByRole('img')).toBeNull(); expect(screen.queryByTestId('current-contact')).toBeNull();
+    expect(screen.queryByRole('region',{name:'Переписка'})).toBeNull(); expect(screen.queryByRole('region',{name:'Audit'})).toBeNull();
+    expect(screen.queryByDisplayValue('Frozen reply through owner denial')).toBeNull(); expect(api.session).toHaveBeenCalledTimes(1);
+    await act(async()=>pending.resolve(receipt())); // A late202 cannot reopen the denied context.
+    expect(screen.queryByRole('img')).toBeNull(); expect(messagingApi.send).toHaveBeenCalledTimes(1);
+    vi.mocked(api.session).mockResolvedValue(session('recovered'));
+    fireEvent.click(screen.getByRole('button',{name:'Проверить доступ заново'}));
+    const replay=await screen.findByRole('button',{name:'Повторить исходный ответ'}); await waitFor(()=>expect(replay).toBeEnabled());
+    expect(messagingApi.send).toHaveBeenCalledTimes(1); expect(screen.queryByRole('img')).toBeNull();
+    fireEvent.click(replay); await ready(); const calls=vi.mocked(messagingApi.send).mock.calls;
+    expect(calls).toHaveLength(2); expect(calls[1].slice(0,4)).toEqual(calls[0].slice(0,4)); expect(calls[1][4]).toBe('recovered');
   });
 });

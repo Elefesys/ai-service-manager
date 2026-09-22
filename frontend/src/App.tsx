@@ -15,6 +15,10 @@ function Console() {
   const [phase, setPhase] = useState<Phase>('checking');
   const [session, setSession] = useState<Session | null>(null);
   const [workspace, setWorkspace] = useState('');
+  const [deniedOwner, setDeniedOwner] = useState<{ session: Session; workspace: string } | null>(null);
+  const ownerBlocked = !!session && deniedOwner?.session === session && deniedOwner.workspace === workspace;
+  const ownerSession = phase === 'authenticated' && !ownerBlocked ? session : null;
+  const denyOwner = () => { if (session) setDeniedOwner({ session, workspace }); };
   const [businesses, setBusinesses] = useState<Business[] | null>(null);
   const [selected, setSelected] = useState<Business | null>(null);
   const [error, setError] = useState('');
@@ -40,6 +44,7 @@ function Console() {
     businessControllers.current.forEach((controller) => controller.abort());
     businessControllers.current.clear();
     setSession(null); setWorkspace(''); setBusinesses(null); setSelected(null);
+    setDeniedOwner(null);
   }, []);
   const invalidateAuth = useCallback((notice: string) => {
     authSequence.current++;
@@ -157,8 +162,9 @@ function Console() {
     {phase === 'uncertain' && <section className="panel alert" role="alert"><h2>Состояние сессии неизвестно</h2><p>{error}</p><button onClick={() => void checkSession(true)}>Проверить снова</button></section>}
     {phase === 'anonymous' && <section className="auth-grid"><div><span className="kicker">SERVER SESSION</span><h2>Вход в консоль</h2><p>Используйте синтетическую учётную запись LOCAL/TEST. Регистрация и восстановление пароля здесь не реализованы.</p></div><form className="panel form" onSubmit={(e) => void login(e)}><label htmlFor="login">Логин</label><input id="login" name="login" autoComplete="username" minLength={3} maxLength={72} required /><label htmlFor="password">Пароль</label><input id="password" name="password" type="password" autoComplete="current-password" minLength={15} maxLength={128} required /><button disabled={busy} type="submit">{busy ? 'Входим…' : 'Войти'}</button>{error && <p className="error" role="alert">{error}</p>}</form></section>}
     {phase === 'authenticated' && session && <><section className="identity"><div><span className="kicker">ACTIVE SESSION</span><h2>Рабочее пространство</h2><p className="mono">Пользователь {session.user_account_id}</p></div><div className="actions"><button className="secondary" disabled={busy} onClick={() => void rotate()}>Обновить защиту сессии</button><button className="danger" disabled={busy} onClick={() => void finishLogout()}>Выйти</button></div></section><section className="panel"><label htmlFor="workspace">Workspace</label><select id="workspace" value={workspace} onChange={(e) => { businessGeneration.current++; setBusinesses(null); setSelected(null); lastContext.current = { actor: session.user_account_id, workspace: e.target.value }; setError(''); setWorkspace(e.target.value); }}>{session.memberships.map((m) => <option value={m.workspace_id} key={m.workspace_id}>{m.workspace_id} · {m.role}</option>)}</select>{session.memberships.length === 0 && <p className="empty">Нет доступных memberships.</p>}<p className="muted">Сессия действует до: {session.expires_at} (решение об истечении принимает сервер).</p></section>{error && <p className="banner" role="alert">{error}</p>}<section className="panel"><h2>Business</h2>{businesses === null && workspace && <p role="status">Загружаем список…</p>}{businesses?.length === 0 && <p className="empty">В этом Workspace нет доступных Business.</p>}<div className="cards">{businesses?.map((b) => <button className="business" key={b.id} onClick={() => void selectBusiness(b.id)}><strong>{b.name}</strong><span>{b.status} · v{b.version}</span><span className="mono">{b.id}</span></button>)}</div>{selected && <article className="detail"><span className="kicker">DETAIL</span><h3>{selected.name}</h3><dl><dt>Status</dt><dd>{selected.status}</dd><dt>Version</dt><dd>{selected.version}</dd><dt>Business ID</dt><dd className="mono">{selected.id}</dd></dl></article>}</section></>}
-    <BillingPanel session={phase === 'authenticated' ? session : null} workspace={workspace} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} />
-    <MessagingPanel session={phase === 'authenticated' ? session : null} workspace={workspace} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} />
+    {phase === 'authenticated' && ownerBlocked && <section className="panel alert" role="alert"><h2>Нет доступа к данным владельца</h2><p>Подписка, Audit, переписка и изображения скрыты до проверки сессии.</p><button onClick={() => void checkSession(true)}>Проверить доступ заново</button></section>}
+    <BillingPanel session={ownerSession} workspace={workspace} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
+    <MessagingPanel session={ownerSession} workspace={workspace} recover={() => void checkSession(true)} expired={() => invalidateAuth('Сессия завершена. Войдите снова.')} accessDenied={denyOwner} />
   </Shell>;
 }
 

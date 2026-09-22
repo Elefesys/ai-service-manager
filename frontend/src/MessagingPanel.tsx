@@ -18,7 +18,7 @@ function merge<T extends { created_at: string }>(old: T[], next: T[], id: (v: T)
 }
 
 // Page lifetime includes login/recovery. No storage, polling, or write on mount.
-export function MessagingPanel({ session, workspace, recover, expired }: { session: Session | null; workspace: string; recover: () => void; expired: () => void }) {
+export function MessagingPanel({ session, workspace, recover, expired, accessDenied }: { session: Session | null; workspace: string; recover: () => void; expired: () => void; accessDenied?: () => void }) {
   const owner = !!session && !!workspace && session.memberships.some(m => m.workspace_id === workspace && m.role === 'OWNER');
   const scope = useRef({ session, workspace, owner, generation: 0 });
   const selection = useRef({ id: '', epoch: 0 });
@@ -55,6 +55,7 @@ export function MessagingPanel({ session, workspace, recover, expired }: { sessi
       interruptSend(); denied.current = generation;
       controllers.current.forEach(c => c.abort());
       setView({ ...blank(generation), denied: true });
+      accessDenied?.();
       return true;
     }
     return false;
@@ -86,7 +87,9 @@ export function MessagingPanel({ session, workspace, recover, expired }: { sessi
     } finally { controllers.current.delete(c); if (current() && seq === sequence.current[kind]) reading.current[kind] = false; }
   }
   async function history(id = selection.current.id, cursor: string | null = null) {
-    if (!current() || !id || reading.current.messages) return;
+    if (!current() || !id || reading.current.messages || intent.current?.phase === 'sending') return;
+    // Only a read begun after acceptance may finish receipt recovery.
+    const confirmed = intent.current?.phase === 'confirmed' ? intent.current : null;
     const epoch = selection.current.epoch, seq = ++sequence.current.messages, c = controller();
     reading.current.messages = true;
     if (cursor === null) { sequence.current.image++; update({ image: null }); }
@@ -96,7 +99,7 @@ export function MessagingPanel({ session, workspace, recover, expired }: { sessi
       if (!inConversation(id, epoch) || seq !== sequence.current.messages) return;
       setView(v => ({ ...v, messages: { items: merge(cursor === null ? [] : v.messages.items ?? [], page.items, x => x.message_id), cursor: page.next_cursor, busy: false, error: '' } }));
       const p = intent.current;
-      if (p?.phase === 'confirmed' && sameActor(p) && p.conversation === id) {
+      if (p && p === confirmed && p.phase === 'confirmed' && sameActor(p) && p.conversation === id) {
         update({ receipt: p.receipt!, notice: 'Намерение принято. Доставка показана по текущей истории.', draft: '' });
         intent.current = null; changed();
       }
@@ -123,7 +126,7 @@ export function MessagingPanel({ session, workspace, recover, expired }: { sessi
 
   async function send(p: Intent) {
     const id = selection.current.id, epoch = selection.current.epoch;
-    if (!session || !current() || !sameActor(p) || p.conversation !== id || intent.current !== p || p.phase === 'sending' || p.phase === 'confirmed' || p.phase === 'conflict') return;
+    if (!session || !current() || reading.current.messages || !sameActor(p) || p.conversation !== id || intent.current !== p || p.phase === 'sending' || p.phase === 'confirmed' || p.phase === 'conflict') return;
     p.phase = 'sending'; p.failedSession = session; changed(); update({ notice: '' });
     const c = controller();
     try {
@@ -224,7 +227,7 @@ export function MessagingPanel({ session, workspace, recover, expired }: { sessi
             {view.image?.message === m.message_id && <>{view.image.busy && <p role="status">Проверяем доступ к изображению…</p>}{view.image.error && <p role="alert">{view.image.error}</p>}{view.image.grant && <img key={view.image.grant.url} alt="Изображение из диалога" src={view.image.grant.url} crossOrigin="anonymous" referrerPolicy="no-referrer" onError={() => { if (current() && imageState.current === view.image) update({ image: { message: m.message_id, busy: false, grant: null, error: 'Изображение не загрузилось. Запросите доступ снова.' } }); }} />}</>}
           </div>}
         </article></li>)}</ol>
-        {view.messages.cursor && <button disabled={view.messages.busy} onClick={() => void history(view.selected, view.messages.cursor)}>Ещё сообщения</button>}
+        {view.messages.cursor && <button disabled={view.messages.busy || p?.phase === 'sending'} onClick={() => void history(view.selected, view.messages.cursor)}>Ещё сообщения</button>}
         {view.messages.items !== null && view.messages.cursor === null && !view.messages.busy && <p className="muted">Начало истории.</p>}
         <p className="muted">«Канал принял» не означает получение или прочтение клиентом. UNKNOWN не отправляется повторно.</p>
         {view.selected && <form className="form reply-form" onSubmit={submit}><label htmlFor="manual-reply">Ручной текстовый ответ</label><textarea id="manual-reply" rows={4} value={matching && p && p.phase !== 'confirmed' ? p.body.text : view.draft} onChange={e => update({ draft: e.target.value })} disabled={!!p} aria-describedby="reply-help" /><p id="reply-help" className="muted">1–4096 символов Unicode. Пробелы и переносы сохраняются; Enter добавляет строку.</p><button type="submit" disabled={!!p || view.messages.busy}>Проверить и отправить</button></form>}

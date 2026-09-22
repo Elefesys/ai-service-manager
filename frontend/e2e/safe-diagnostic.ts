@@ -15,6 +15,7 @@ export type SafeDiagnosticCode =
   | 'MESSAGING_ROUTE_FETCH_FAILED'
   | 'MESSAGING_ROUTE_ABORT_FAILED'
   | 'MESSAGING_ROUTE_CONTINUE_FAILED'
+  | 'MESSAGING_PRIVATE_IMAGE_FAILED'
   | 'MESSAGING_ROUTE_RELEASE_FAILED';
 
 export async function safeDiagnostic<T>(code: SafeDiagnosticCode, operation: () => Promise<T>): Promise<SafeResult<T>> {

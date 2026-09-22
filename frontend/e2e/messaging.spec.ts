@@ -1,6 +1,6 @@
 // CONTROLLED boundary only: browser -> real owner API / PostgreSQL / private
 // MinIO / accepted Worker. No happy-path JSON or canonical rows are fabricated.
-import { expect, test, type APIRequestContext, type APIResponse, type Page, type Route } from '@playwright/test';
+import { expect, test, type APIRequestContext, type APIResponse, type Locator, type Page, type Route } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -23,6 +23,13 @@ const grantPath=(preset:string,ref=inventory[preset].images.ready)=>`${messages(
 const panel=(page:Page)=>page.getByRole('region',{name:'Переписка',exact:true});
 const http=async(operation:()=>Promise<APIResponse>)=>requireSafeResult(await safeDiagnostic('MESSAGING_HTTP_FAILED',operation));
 const json=async(response:APIResponse)=>requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>response.json()));
+const privateImageValue=async<T,>(operation:()=>Promise<T>)=>requireSafeResult(await safeDiagnostic('MESSAGING_PRIVATE_IMAGE_FAILED',operation));
+async function loadedPrivateImage(image:Locator){
+  // Locator assertions preview src on failure. Poll only booleans/numbers, and
+  // replace probe exceptions before they can expose the signed bearer URL.
+  await expect.poll(()=>privateImageValue(()=>image.isVisible())).toBe(true);
+  await expect.poll(()=>privateImageValue(()=>image.evaluate(n=>(n as HTMLImageElement).naturalWidth))).toBe(23);
+}
 async function csrf(request:APIRequestContext) {const r=await http(()=>request.get('/api/v1/auth/session'));expect(r.status()).toBe(200);return (await json(r)).csrf_token as string;}
 async function helper(preset:string,action:string,runtime=false):Promise<Record<string,number|boolean>> {
   const args=['compose','--env-file',envPath!,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`];
@@ -61,8 +68,8 @@ test('@narrow CONTROLLED incoming text/private image -> exact keyboard reply -> 
   if(info.project.name==='chromium-desktop'){await expect(panel(page).getByText('Изображение загружается.')).toBeVisible();await expect(panel(page).getByText(/Изображение недоступно · INVALID_INPUT/)).toBeVisible();}
   const ready=row(page,inventory.happy.images.ready.message_id);const imageRequests:Promise<boolean>[]=[];
   page.on('request',request=>{if(request.resourceType()==='image'){imageRequests.push(request.allHeaders().then(h=>!h['x-csrf-token']&&!h.authorization&&!h.referer&&!h.cookie));}});
-  await ready.getByRole('button',{name:'Открыть изображение'}).click();const img=ready.getByRole('img');await expect(img).toBeVisible();await expect.poll(()=>img.evaluate(n=>(n as HTMLImageElement).naturalWidth)).toBe(23);
-  const signed=await img.getAttribute('src');expect(!!signed).toBe(true);expect((await panel(page).textContent())!.includes(signed!)).toBe(false);expect(imageRequests.length>0).toBe(true);expect((await Promise.all(imageRequests)).every(Boolean)).toBe(true);
+  await ready.getByRole('button',{name:'Открыть изображение'}).click();const img=ready.getByRole('img');await loadedPrivateImage(img);
+  const signed=await privateImageValue(()=>img.getAttribute('src'));expect(!!signed).toBe(true);expect((await panel(page).textContent())!.includes(signed!)).toBe(false);expect(imageRequests.length>0).toBe(true);expect((await Promise.all(imageRequests)).every(Boolean)).toBe(true);
   const unsigned=new URL(signed!);unsigned.search='';const anonymous=await http(()=>page.request.get(unsigned.href));expect(anonymous.status()).toBe(403);
   const before=await helper('happy','stats'),calls=await worker('happy','stats');const text=`  Manual ${randomUUID()}\ne\u0301 🙂  `;let posts=0;
   page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname.endsWith('/messages'))posts++;});
@@ -113,7 +120,8 @@ test('valid202 plus failed history GET permits only read recovery and no second 
   await panel(page).getByRole('button',{name:'Повторить чтение сообщений'}).click();await expect(panel(page).getByRole('button',{name:'Проверить и отправить'})).toBeEnabled();await refresh(page);expect(posts).toBe(1);await worker('read_failure');await page.unrouteAll({behavior:'wait'});
 });
 
-test('real limit25 pagination/cursor/null, stable distinct rows and fresh refresh without sends',async({page})=>{
+test('real limit25 pagination/cursor/null, read-only refresh and fresh history after pending202',async({page})=>{
+  test.setTimeout(60000);
   await signIn(page,'pagination');const p=panel(page);let posts=0;page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname.endsWith('/messages'))posts++;});
   const connections=p.getByRole('region',{name:'Подключения',exact:true}),conversations=p.getByRole('region',{name:'Диалоги',exact:true}),historyRegion=p.getByRole('region',{name:'История сообщений',exact:true});
   await connections.getByRole('button',{name:'Ещё подключения'}).click();await expect(connections.locator('li')).toHaveCount(inventory.pagination.connection_ids.length);await expect(conversations.locator('li')).toHaveCount(inventory.pagination.conversation_ids.length);
@@ -121,6 +129,23 @@ test('real limit25 pagination/cursor/null, stable distinct rows and fresh refres
   const response=page.waitForResponse(r=>r.url().includes(`${messages('pagination')}?limit=25&cursor=`));await historyRegion.getByRole('button',{name:'Ещё сообщения'}).click();const loaded=await response;expect(new URL(loaded.url()).searchParams.get('cursor')===first.next_cursor).toBe(true);
   await expect(historyRegion.locator('ol > li')).toHaveCount(first.items.length+second.items.length);const ids=await historyRegion.locator('ol > li').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('data-testid')));expect(new Set(ids).size).toBe(ids.length);expect(await historyRegion.getByRole('button',{name:'Ещё сообщения'}).count()).toBe(0);
   await refresh(page);await expect(historyRegion.locator('ol > li')).toHaveCount(25);await connections.getByRole('button',{name:'Обновить подключения'}).click();await expect(connections.locator('li')).toHaveCount(25);expect(posts).toBe(0);
+  const before=await helper('pagination','stats');let release!:()=>void,complete!:(result:SafeResult<number>)=>void;
+  const gate=new Promise<void>(r=>{release=r;}),committed=new Promise<SafeResult<number>>(r=>{complete=r;});
+  await page.route(`**${messages('pagination')}`,async route=>{
+    if(route.request().method()!=='POST'){await safeContinue(route);return;}
+    const real=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',()=>route.fetch());
+    complete(real.ok?{ok:true,value:real.value.status()}:real);if(!real.ok)return;
+    await gate;requireSafeResult(await safeDiagnostic('MESSAGING_ROUTE_RELEASE_FAILED',()=>route.fulfill({response:real.value})));
+  });
+  try{
+    await p.getByLabel('Ручной текстовый ответ').fill('Reply while older history is available');
+    const accepted=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===messages('pagination'));
+    await p.getByRole('button',{name:'Проверить и отправить'}).click();expect(requireSafeResult(await committed)).toBe(202);
+    await expect(historyRegion.getByRole('button',{name:'Ещё сообщения'})).toBeDisabled();
+    const fresh=page.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname===messages('pagination')&&!new URL(r.url()).searchParams.has('cursor'));
+    release();const receipt=parseReceipt(requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',async()=>(await accepted).json())));expect((await fresh).status()).toBe(200);
+    await expect(row(page,receipt.message_id).getByText('В очереди',{exact:true})).toBeVisible();expect(posts).toBe(1);oneCommand(before,await helper('pagination','stats'));await worker('pagination');
+  }finally{release();await page.unrouteAll({behavior:'wait'});}
 });
 
 test('authenticated isolation, mismatched private refs and real late history/grant across Workspace',async({page})=>{
@@ -138,14 +163,15 @@ test('authenticated isolation, mismatched private refs and real late history/gra
 });
 
 test('OWNER downgrade denies new grants/send/history and hides private UI; issued grant keeps TTL boundary',async({page})=>{
-  test.setTimeout(60000);await signIn(page,'revoked');const ready=row(page,inventory.revoked.images.ready.message_id);await ready.getByRole('button',{name:'Открыть изображение'}).click();const image=ready.getByRole('img');await expect.poll(()=>image.evaluate(n=>(n as HTMLImageElement).naturalWidth)).toBe(23);const signed=(await image.getAttribute('src'))!;const token=await csrf(page.request),before=await helper('revoked','stats');await helper('revoked','downgrade');
-  expect((await http(()=>page.request.get(signed))).status()).toBe(200);await ready.getByRole('button',{name:'Открыть изображение'}).click();await expect(page.getByText('Нет доступа к переписке',{exact:true})).toBeVisible();expect(await page.getByRole('img').count()).toBe(0);expect(await page.getByLabel('Ручной текстовый ответ').count()).toBe(0);
+  test.setTimeout(60000);await signIn(page,'revoked');const ready=row(page,inventory.revoked.images.ready.message_id);await ready.getByRole('button',{name:'Открыть изображение'}).click();const image=ready.getByRole('img');await loadedPrivateImage(image);const signed=(await privateImageValue(()=>image.getAttribute('src')))!;const token=await csrf(page.request),before=await helper('revoked','stats');await helper('revoked','downgrade');
+  expect((await http(()=>page.request.get(signed))).status()).toBe(200);await page.getByRole('button',{name:'Обновить подписку'}).click();await expect(page.getByText('Нет доступа к данным владельца',{exact:true})).toBeVisible();expect(await page.getByRole('img').count()).toBe(0);expect(await page.getByLabel('Ручной текстовый ответ').count()).toBe(0);
+  await expect(page.getByRole('region',{name:'Audit',exact:true})).toHaveCount(0);expect(await page.getByTestId('current-contact').count()).toBe(0);expect((await http(()=>page.request.post(grantPath('revoked'),{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}))).status()).toBe(403);
   expect((await http(()=>page.request.get(messages('revoked')+'?limit=25'))).status()).toBe(403);expect((await post(page.request,'revoked','Forbidden',randomUUID(),token)).status()).toBe(403);expect(await helper('revoked','stats')).toEqual(before);
   await page.getByLabel('Workspace',{exact:true}).selectOption(fixtures.isolation_peer.workspace_id);await expect(panel(page)).toBeVisible();await page.reload();await page.getByLabel('Workspace',{exact:true}).selectOption(fixtures.revoked.workspace_id);await expect(panel(page)).toHaveCount(0);await expect(page.getByText('ACTIVE SESSION')).toBeVisible();
 });
 
 for(const [preset,action] of [['restricted','restrict'],['inactive','disable']] as const)test(`real ${preset} admission preserves history/private reads and editable draft`,async({page})=>{
-  test.setTimeout(60000);await signIn(page,preset);await expect(panel(page).getByText(/Доступно по наблюдению/)).toBeVisible();const before=await helper(preset,'stats');await helper(preset,action);const draft='  Explicit new reply  ';await panel(page).getByLabel('Ручной текстовый ответ').fill(draft);const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===messages(preset));await panel(page).getByRole('button',{name:'Проверить и отправить'}).click();expect((await response).status()).toBe(409);await expect(panel(page).getByText('Сервер не разрешил новый ответ. Черновик сохранён.')).toBeVisible();expect((await panel(page).getByLabel('Ручной текстовый ответ').inputValue())===draft).toBe(true);await expect(panel(page).getByRole('button',{name:'Проверить и отправить'})).toBeEnabled();await refresh(page);await row(page,inventory[preset].images.ready.message_id).getByRole('button',{name:'Открыть изображение'}).click();await expect(panel(page).getByRole('img')).toBeVisible();expect(await helper(preset,'stats')).toEqual(before);
+  test.setTimeout(60000);await signIn(page,preset);await expect(panel(page).getByText(/Доступно по наблюдению/)).toBeVisible();const before=await helper(preset,'stats');await helper(preset,action);const draft='  Explicit new reply  ';await panel(page).getByLabel('Ручной текстовый ответ').fill(draft);const response=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===messages(preset));await panel(page).getByRole('button',{name:'Проверить и отправить'}).click();expect((await response).status()).toBe(409);await expect(panel(page).getByText('Сервер не разрешил новый ответ. Черновик сохранён.')).toBeVisible();expect((await panel(page).getByLabel('Ручной текстовый ответ').inputValue())===draft).toBe(true);await expect(panel(page).getByRole('button',{name:'Проверить и отправить'})).toBeEnabled();await refresh(page);await row(page,inventory[preset].images.ready.message_id).getByRole('button',{name:'Открыть изображение'}).click();await loadedPrivateImage(panel(page).getByRole('img'));expect(await helper(preset,'stats')).toEqual(before);
 });
 
 test('permanent CONTROLLED refusal is current FAILED without resend',async({page})=>{
