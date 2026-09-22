@@ -1,6 +1,9 @@
 name: ai-service-manager-browser
 services:
   storage:
+    ports: ["127.0.0.1:9000:9000"]
+    environment:
+      MINIO_API_CORS_ALLOW_ORIGIN: http://127.0.0.1:8080
     volumes: !override
       - type: tmpfs
         target: /data
@@ -23,12 +26,20 @@ services:
   api:
     environment:
       ASM_ENVIRONMENT: TEST
+      ASM_TELEGRAM_ENABLED: "false"
+      TG_BOT_TOKEN: ""
+      TG_WEBHOOK_SECRET: ""
+      ASM_TELEGRAM_EXPECTED_BOT_ID: ""
+      ASM_TELEGRAM_WEBHOOK_URL: ""
       ASM_STORAGE_ENVIRONMENT: TEST
+      ASM_STORAGE_ENDPOINT: http://127.0.0.1:9000
       ASM_STORAGE_BUCKET: asm-private-test
       ASM_AUTH_PEER_LIMIT: "300"
       ASM_AUTH_GLOBAL_LIMIT: "1000"
       ASM_AUTH_LOGIN_LIMIT: "100"
       ASM_DATABASE_URL: postgresql+psycopg://asm_runtime:${PG_RUNTIME_PASSWORD:?Run init_local.py}@postgres:5432/asm_test
+    depends_on:
+      storage-init: {condition: service_completed_successfully}
   browser-provision:
     profiles: [browser]
     build:
@@ -43,3 +54,28 @@ services:
       ASM_MIGRATION_DATABASE_URL: postgresql+psycopg://asm_migrator:${PG_MIGRATION_PASSWORD:?Run init_local.py}@postgres:5432/asm_test
     depends_on:
       migrate: {condition: service_completed_successfully}
+  browser-runtime:
+    profiles: [browser]
+    build:
+      context: .
+      dockerfile: infra/Dockerfile.backend
+      target: development
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:?Missing images.lock.env}
+        UV_IMAGE: ${UV_IMAGE:?Missing images.lock.env}
+    environment:
+      ASM_ENVIRONMENT: TEST
+      ASM_DATABASE_URL: postgresql+psycopg://asm_runtime:${PG_RUNTIME_PASSWORD:?Run init_local.py}@postgres:5432/asm_test
+      ASM_STORAGE_ENVIRONMENT: TEST
+      ASM_STORAGE_ENDPOINT: http://storage:9000
+      ASM_STORAGE_BUCKET: asm-private-test
+      ASM_STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?Run init_local.py}
+      ASM_STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?Run init_local.py}
+    command: [python, scripts/m2_4_browser_worker.py]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      storage-init: {condition: service_completed_successfully}

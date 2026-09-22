@@ -12,7 +12,7 @@ const staleNotice = 'Конфликт версии. Черновик сохра�
 
 // Mounted for the lifetime of Console, including login/recovery. Secrets and
 // frozen intentions live only in this page's memory; reload performs reads only.
-export function BillingPanel({ session, workspace, recover, expired }: { session: Session | null; workspace: string; recover: () => void; expired: () => void }) {
+export function BillingPanel({ session, workspace, recover, expired, accessDenied }: { session: Session | null; workspace: string; recover: () => void; expired: () => void; accessDenied?: () => void }) {
   const owner = !!session && !!workspace && session.memberships.some(m => m.workspace_id === workspace && m.role === 'OWNER');
   const scope = useRef({ session, workspace, owner, generation: 0 });
   if (scope.current.session !== session || scope.current.workspace !== workspace || scope.current.owner !== owner) scope.current = { session, workspace, owner, generation: scope.current.generation + 1 };
@@ -44,6 +44,7 @@ export function BillingPanel({ session, workspace, recover, expired }: { session
       staleDraft.current = null;
       controllers.current.forEach(c => c.abort());
       setView({ ...blank(generation), denied: true, readBusy: false, auditBusy: false });
+      accessDenied?.();
       return true;
     }
     return false;

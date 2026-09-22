@@ -1,8 +1,8 @@
-# M2.3 — официальный Telegram adapter в LOCAL/TEST
+# M2.3/M2.4 — Telegram и переписка Console в LOCAL/TEST
 
 Контракт: [M2_CONTRACT §10](../tasks/M2_CONTRACT.md#10-m23-telegram-api--принято-c0c2c3c1-2026-09-21).
 Статус ведётся только в [TASK_REGISTER](../TASK_REGISTER.md). Этот runbook готовит
-внешнюю проверку A09/A11 через owner API; Console messaging journey относится к M2.4.
+внешнюю проверку A09/A11 через owner API и Console (раздел 5.1).
 Наличие файла, deterministic tests или `SENT` не доказывает получение ответа клиентом.
 
 ## 1. Конкретное окружение и предварительные условия
@@ -343,12 +343,95 @@ void (async () => {
 ignored event без новой client Message; изменение/revoke rights — как observed
 state/отказ нового send, без обещаний по одному флагу Business Mode.
 
+### 5.1. Client text+photo → Owner Console → manual reply → Client receipt
+
+Этот ручной сценарий выполняется оператором **после отдельного разрешения внешних
+отправок** в согласованном тестовом диалоге. Текущее поручение M2.4 не разрешает
+live sends или расходы. Подготовленные bot/accounts/secrets не заменяют доступный
+runtime, DNS и TLS: пока этих условий нет, **live A09/A11 BLOCKED**. CONTROLLED
+browser suite ниже проверяет другой, явно ограниченный уровень evidence.
+
+1. На host из разделов 1–4 проверить точный принятый M2.4 implementation SHA и
+   чистый checkout; запустить прежний TLS stack и проверить health. Эти команды
+   не посылают сообщения Client:
+
+   ```sh
+   test "$(git rev-parse HEAD)" = "$ASM_TELEGRAM_ACCEPTED_SHA"
+   test -z "$(git status --porcelain --untracked-files=all)"
+   git rev-parse HEAD
+   date -u +%Y-%m-%dT%H:%M:%SZ
+   tgcompose --profile telegram-live up -d --build api worker scheduler frontend telegram-ingress
+   tgcompose exec telegram-ingress nginx -t
+   ```
+
+   Записать SHA/date и ранее подтверждённые bot/Owner/binding/rights в очищенный
+   receipt. Не запускать API send smoke из раздела 5 параллельно этому UI сценарию:
+   здесь единственное новое намерение создаёт Owner в Console.
+2. Согласованный Client отправляет Owner **новый уникальный текстовый marker** и
+   одну Telegram photo с таким же caption. Использовать только synthetic content,
+   photo не document. Не считать прежние marker/messages результатом этого запуска.
+3. Owner входит в существующую Console по её HTTPS имени и выбирает согласованный
+   Workspace. В панели «Переписка» явно обновляет connections/список диалогов,
+   выбирает нужный диалог, обновляет историю и находит оба новых сообщения.
+   Если нужная строка вне первой страницы, использует загрузку следующей страницы.
+   Проверяет полный текст, переносы и правильный Workspace/connection/client relation.
+   Observed connection state и время наблюдения не обещают доступного окна/rights.
+4. После обработки FETCH изображение имеет READY. Owner открывает его отдельным
+   действием в панели: настоящий current-owner grant и браузерный HTTPS GET должны
+   показать private photo. Не копировать signed URL в адресную строку, отчёт или
+   storage; host/path/query не менять. PENDING/FAILED не засчитывать как image PASS.
+   При expiry использовать явную новую выдачу через API, не повторять старую ссылку.
+5. Owner вводит один согласованный новый текст ответа и явно отправляет его.
+   Принятый202 означает durable intention; сразу после него не заявлять доставку.
+   После работы worker Owner обновляет историю. PENDING — очередь, DISPATCHING —
+   отправка начата, SENT — **канал принял**. FAILED/UNKNOWN не являются получением
+   клиентом; у UNKNOWN нет resend. Client отдельно проверяет получение **этого**
+   ответа в Telegram и сообщает результат оператору. Только это подтверждение
+   закрывает live Client-receipt часть A11.
+6. После подтверждённого202 ошибка чтения исправляется обновлением истории;
+   повторного POST для этого намерения нет. Если HTTP результат исходного POST
+   неизвестен, сохраняются actor/Workspace/conversation/exact text/key в памяти
+   этой страницы: выполнить предложенное session/CSRF recovery и только явный
+   повтор исходного намерения в том же контексте. Не менять key или текст ради
+   recovery. Hard reload утрачивает это memory-only намерение и выполняет чтения;
+   он ничего не отправляет и не доказывает rollback. UNKNOWN остаётся конечным
+   неизвестным результатом и после restart/refresh.
+7. Проверить явное обновление и переход между страницами без дублей, отсутствие
+   прежнего текста/изображения после смены Workspace/logout, доступ к form/image
+   controls с клавиатуры и на узком экране. Это UI наблюдения этого запуска;
+   полномочия всё равно проверяет сервер. Уже выданный grant может жить до60s,
+   а скачанное изображение не отзывается задним числом.
+
+Очищенный receipt содержит SHA/date, среду и согласованный внутренний dialog ID,
+результаты text/photo/READY/private browser GET, принятие намерения и последнее
+delivery state, **отдельное подтверждение Client**, актуальные observed rights и
+ограничения. Не включать текст сообщений, пароли, cookies/CSRF/idempotency key,
+provider/signed URLs, raw network export или скриншоты с private content.
+Если Client не подтвердил получение, A11 не PASS даже при SENT в Console.
+
+Автоматический CONTROLLED уровень воспроизводится в отдельном disposable checkout:
+
+```sh
+sh scripts/ci.sh
+sh scripts/test_browser.sh
+test -z "$(git status --porcelain --untracked-files=all)"
+```
+
+Browser script поднимает PostgreSQL `asm_test` и private MinIO в tmpfs, создаёт
+fresh identities через migrator, затем отдельным `browser-runtime` с **только
+asm_runtime и runtime S3 credentials** исполняет canonical ingest/Worker/FetchTransfer.
+API подписывает loopback `http://127.0.0.1:9000`, runner пишет через `http://storage:9000`;
+signed URL не переписывается. CALL/EFFECT counters живут в private temporary files
+между заменами runner. Штатный запуск включает прежние M1 и новые messaging journeys,
+а cleanup удаляет disposable project/files. Настоящие API/PostgreSQL/MinIO/браузер
+здесь используются с CONTROLLED внешним adapter/provider; это **не live Telegram**.
+
 ## 6. Evidence и остановка
 
 В sanitized receipt записать exact `git rev-parse HEAD`, UTC дату, LOCAL project,
 getMe/Owner match, getWebhookInfo own URL match/pending count без URL token,
 observed enabled/can_reply, внутренние IDs, TEXT+photo/private browser GET,
-manual API ACCEPTED/REPLAY и delivery, подтверждение Client, native/rights outcome.
+manual API/Console ACCEPTED/REPLAY и delivery, подтверждение Client, native/rights outcome.
 Не прикладывать `.env*`, private keys, Compose rendered model, raw payloads,
 password/cookie/CSRF, provider URLs или signed URLs. Runbook/tests не являются live evidence.
 

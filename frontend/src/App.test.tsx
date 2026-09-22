@@ -6,6 +6,8 @@ import { parseSession } from './api';
 
 // Preserve the exact M1.2 request/assertion suite; M1.3 integration is covered separately.
 vi.mock('./BillingPanel', () => ({ BillingPanel: () => null }));
+// Keep the accepted auth request assertions; full messaging integration has its own suite.
+vi.mock('./MessagingPanel', () => ({ MessagingPanel: () => null }));
 
 const uid = '11111111-1111-4111-8111-111111111111';
 const wid = '22222222-2222-4222-8222-222222222222';
