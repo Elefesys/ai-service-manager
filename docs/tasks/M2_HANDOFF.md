@@ -5,7 +5,106 @@
 Этот файл — принятый план и единственная активная точка передачи M2.
 Приёмка плана не является evidence выполненной реализации.
 
-## Активный handoff C0 → C5 — M2.4-CONSOLE / 2026-09-21
+## Активный handoff C5 → C0 — M2.4-CONSOLE REVIEW / 2026-09-22
+
+**M2.4-CONSOLE и M2.4 REVIEW. PR #21 остаётся Draft/open/not merged.**
+M1 и принятые M2.1–M2.3 LOCAL/TEST receipts сохраняются. Весь M2 IN_PROGRESS;
+live A09/A11 BLOCKED только внешними runtime/DNS/TLS. C5 не объявляет UI или M2 VERIFIED.
+Следующее действие — приёмка C0 и независимый scoped C8 нового UI/recovery/private-image
+среза; прежний C8 M2.3 его не заменяет. Затем user merge и отдельный actual main CI.
+
+### Exact source и выполненные проверки
+
+Repository **Elefesys/ai-service-manager**, тот же
+[Draft PR #21](https://github.com/Elefesys/ai-service-manager/pull/21), ветка
+**c5/m2-4-console** → main. Accepted base **ffc437f125aa6af4dcf1c61a035a0d5df517e062**.
+Первый coordination **76d44a7e0559f470b3de07c97a4b61581e7e00a8** сохранён;
+его parent — accepted base, tree **f416c7f8a3230d7b4bb5b8edfa9ec53cc6ff8139**.
+
+Implementation **cd2cce43acf2556d49e865e198a717acdc67dc96**, parent — coordination,
+tree **de2b4b708791f3c55f815d947b00fa13e4888a64**. Реальный
+[CI 35694903440, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/35694903440)
+**SUCCESS**: foundation106639523049 и browser106639523244. Оба checkout logs указывают
+**05344240fffd5d67340db1db292fd3fb00fb3f29**; ordered parents accepted base + implementation,
+tree совпадает с implementation tree. **492 unit,390 PostgreSQL/S3,107 frontend,27 browser PASS**.
+Оба штатных scripts/clean-source gates, canonical imports, migrations, contracts,
+reproducibility и HTTP/frontend smoke PASS. Это фактический implementation receipt.
+
+Текущее изменение согласует register/handoff/contract одним REVIEW update.
+Его собственные final head/parent/tree, tested SHA/parents/tree и **повторный полный CI
+после последней дельты** находятся в итоговом PR receipt; SHA-only follow-up не нужен.
+Локально сверены все204 исходных blob/modes с coordination tree; Docker отсутствует,
+реальные PostgreSQL/S3/browser результаты получены GitHub runner. Локальные unit,
+frontend/typecheck/build, Ruff/mypy PASS. Локальные синтетические Git parents не
+выдаются за remote ancestry. Проверка байтов artifact ZIP не заявляется.
+
+### Что реализовано и что сохранено
+
+Один page-lifetime MessagingPanel рядом с прежним BillingPanel. OWNER gate —
+membership.role без изменения frozen permissions. Connections/диалоги/история
+используют strict consumer принятого OpenAPI, fixed limit25 и opaque cursor;
+refresh сбрасывает страницы, новые проекции заменяют старые delivery/file fields.
+Exact text без trim/NFC/UTF16 maxLength; plain text rendering и keyboard/narrow UI.
+
+Actor/Workspace/conversation/body/key заморожены в одном memory-only intent.
+Неоднозначный POST допускает только явный исходный replay после session/CSRF recovery.
+Valid202 сохраняет receipt; последующая ошибка GET не создаёт новый POST.
+UNKNOWN terminal/no-resend; SENT означает принятие каналом. Hard reload только читает.
+Generation/selection/sequence guards проверяются до success/error/401/403 handling;
+старые ответы не меняют новый контекст/сессию. После denial защищённые данные скрыты.
+
+Private image открывается отдельным current-owner grant. Исходный signed URL не
+переписывается, не логируется и не сохраняется; img использует anonymous CORS и
+no-referrer. Context/denial/expiry удаляют удерживаемый URL, новый grant только явно.
+TEST MinIO private/tmpfs; exact Console CORS origin, loopback signer и internal
+runtime origin. Backend API/0001–0007/grants/R4/tenancy/OpenAPI/base Compose/workflows/
+locks/pins/canonical sources не изменены. Новых endpoints/dependencies нет.
+
+C3 реально реализовал isolated TEST provisioning/counters и runtime runner;
+C6 — TEST Compose/guards/runbook. Их отдельные checkout patches интегрированы
+последовательно в этом PR. Это соавторы, не независимый C8. Finite migrator actions
+не записывают canonical Message/File READY/receipt/Audit/Outbox/Job ради PASS.
+Runtime имеет только asm_runtime/S3 и использует прежние ingest/Worker/FetchTransfer;
+93 входящих события прошли настоящий kernel, private изображения — MinIO.
+
+### Assertions → существующие M2-A01…A12
+
+| Критерии | Фактическая проверка и граница |
+|---|---|
+| A01/A02/A04/A06/A09 | Прежние390 PostgreSQL/S3 и принятые transport/HTTP/lease/receipt tests сохранены; webhook/Telegram runtime не менялся. CONTROLLED browser не подменяет live rights |
+| A03/A10 | messaging.spec: route.fetch выполняет настоящий POST/commit202, браузер теряет ответ; затем401/login, настоящий rotate→CSRF403→session recovery и exact replay202. Body/key и исходные receipt/message/accepted_at совпадают; Message/receipt/Audit/Outbox/Job каждый +1 |
+| A05/A10 | UNKNOWN через настоящий Worker/CONTROLLED с CALL=1/EFFECT=1; новый runner recover, same-key receipt и reload сохраняют UNKNOWN и counters. Resend отсутствует. Отдельный valid202+GET failure: всего1 POST, далее только чтения |
+| A06/A07/A10 | Реальные inbound text, PENDING/FAILED/READY file, private grant→MinIO image naturalWidth23; browser image без Cookie/Authorization/CSRF/Referer, unsigned object GET403. Manual text exact→PENDING→Worker→SENT, без обещания Client receipt |
+| A08/A10 | Authenticated foreign Workspace GET/send/grant403, mismatched refs404, OWNER downgrade запрещает новый grant/history/send без DB delta; прежний grant имеет TTL boundary. Real delayed GET/grant не возвращают данные после Workspace switch; component late401/403 не меняют новую сессию |
+| A09/A10 | Connection INACTIVE и SUSPENDED product restriction дают real409 NOT_ALLOWED, editable draft и доступные history/private image; permanent worker refusal→FAILED. Component coverage всех5 connection,3 file,5 delivery states и двух503; observation не authority |
+| A10 | Более25 connections/conversations/history, exact opaque cursor/null, ID dedupe и replacement projection, fresh refresh/reload без POST. Component scalar/UTF8/NUL/surrogate/Python-whitespace, strict DTO/enums/relations/IDs/timestamps/decimal strings, safe rendering, double submit, grant expiry/URL scheme |
+| A10/A12 | 27 browser:15 прежних auth/Business/Billing/Audit/Ops +12 новых messaging запусков, включая Chromium narrow/keyboard. Положительный CORS POST202 и negative preflight400 без второго command; source gates PASS |
+| A11 | BLOCKED live: runtime/DNS/TLS отсутствуют. Existing runbook расширен Client text+photo→Owner Console/private image→manual reply→Client receipt. Ни CONTROLLED, ни SENT не закрывают A11 |
+| A12 | sh scripts/ci.sh + sh scripts/test_browser.sh PASS на implementation и обязательный повтор на final head в PR receipt; actual main CI остаётся действием C0 после merge |
+
+### Старые fixtures/tests и конкретные ограничения
+
+Все прежние assertions сохранены. App.test дополнительно изолирует MessagingPanel,
+чтобы сохранить точные M1.2 auth request counts; полноценный Console login/focus/recovery/
+reload/Ops проверяется новым MessagingPanel.test. Старые auth.spec/billing.spec и
+BillingPanel/c0-review tests не менялись. provision_browser_test только добавляет
+fresh messaging identities/Workspaces/test_messaging; прежние billing presets не repin.
+Compose model fixture расширен storage/runtime полями, старые14 guard cases сохранены;
+добавлены35 отрицательных/positive guard cases. Diagnostic tests расширены redact
+message/key/signed URL; unsafe causes не печатаются. Локальные первоначальные ошибки
+были TypeScript test option `exact` и форматирование двух новых guard edits: исправлены
+тестовый вызов/format, без удаления проверки поведения. Первый published CI зелёный.
+
+Вне разрешённых paths implementation blockers не обнаружены; backend-дельта не нужна.
+Live blocker: доступный Linux/Docker host, два DNS имени и TLS. Bot/accounts/secrets
+у пользователя готовы; секреты не запрашивались, внешних Telegram sends/расходов нет.
+Оператор выполняет live runbook только после отдельной авторизации. Это не стопор
+независимой UI реализации и не основание снимать Draft/объявлять M2 VERIFIED.
+
+<details>
+<summary>История: исходное поручение C0 → C5 — не текущая задача</summary>
+
+## История — старт C0 → C5 M2.4-CONSOLE / 2026-09-21
 
 **M1.1–M1.3, M2.1/M2.2 VERIFIED LOCAL/TEST. M2.3 code/API интегрирован и
 VERIFIED в LOCAL/TEST после PR #20 и отдельного push/main CI. Live Telegram
@@ -149,6 +248,8 @@ password manager к чату не нужно. Нужен доступный Linu
 непосредственно в operator-owned0600 .env.telegram/secret store на runtime по runbook,
 не в чат/PR. C0/C6 подготовят конкретное deployment действие; платная инфраструктура
 только после предложения точной стоимости и разрешения. Это не блокирует C5.
+
+</details>
 
 <details>
 <summary>История: приёмка M2.3 до фактического merge — не текущие инструкции</summary>

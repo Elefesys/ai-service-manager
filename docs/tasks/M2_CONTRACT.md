@@ -1301,3 +1301,49 @@ C5 возвращает REVIEW с exact head/tree/tested SHA/run и tests/assert
 C0 проводит приёмку и независимый scoped C8 по новому UI trust/recovery/private-image
 риску; прежний C8 M2.3 не объявляется review нового UI. Затем user merge и отдельный
 push/main CI. Весь M2 VERIFIED только после всех четырёх частей и реального A11.
+
+
+### 11.8. Реализация C5 → REVIEW / 2026-09-22
+
+§§1–10 и принятые wire/schema/authority semantics не изменены. В том же Draft PR #21
+реализованы messaging-api.ts и page-lifetime MessagingPanel.tsx; App/style wiring
+additive. Panel не вычисляет entitlement из billing TEST decisions и не требует
+messaging:* в frozen permissions. Exact actor/Workspace/conversation/body/key
+хранятся отдельно от защищённого view; valid202 receipt не превращается обратно в
+неоднозначный POST из-за GET failure. Context/selection/sequence ownership проверяется
+до обработки поздних success/401/403. UNKNOWN не предлагает resend, composer для
+нового намерения пустой. Refresh и hard reload ничего не отправляют.
+
+Три коллекции fixed25, opaque cursor/null и ID merge с replacement новых file/delivery
+проекций; exact created_at/id ordering без потери microseconds. Parser повторяет
+nullable/enum/state-relation правила OpenAPI/http_models, два503 различаются. Unicode
+ввод сохраняется без trim/NFC, scalar/Python-whitespace validation отдельно от UTF16.
+Private current-owner grant используется как исходный img URL с anonymous CORS и
+no-referrer; API/storage no-store сохранён, URL удаляется при context/denial/expiry.
+Локальный display timer ограничен максимум60s; он не заменяет серверную TTL/authority.
+
+C3 finite TEST scripts добавляют fresh messaging identities/bindings/product fixture,
+bounded outbound DB counters и отдельный runtime-only runner. Существующие Worker,
+ControlledAdapter/ControlledImageProvider/FetchTransfer исполнили93 normalized events
+и real private MinIO path; никакого fixture-side canonical READY/receipt/Job insert.
+C6 browser overlay сохраняет private tmpfs/roles/secrets guards и добавляет MinIO
+loopback signer origin, internal runtime origin, exact TEST CORS и private CALL/EFFECT
+instrumentation между runner restarts. Browser worker не имеет migrator/admin URL;
+production test endpoints, base Compose/workflow/dependency changes отсутствуют.
+
+Implementation CI35694903440 SUCCESS на tree de2b4b708791f3c55f815d947b00fa13e4888a64:
+492 unit,390 PostgreSQL/S3,107 frontend,27 browser и оба штатных scripts/source gates.
+Assertions→A01–A12 и точный source/CI receipt находятся в единственном active
+M2_HANDOFF; final REVIEW docs snapshot заново проверяется полным CI, итоговые
+head/parent/tree/tested SHA/jobs фиксируются в PR receipt без SHA-only commits.
+
+Прежние fixtures/guards/assertions сохранены: App auth tests отдельно изолируют
+новую panel, full Console recovery тестируется в новой suite; browser auth/billing
+selectors не потребовали изменений. TEST model fixture расширен новой storage/runtime
+границей, старые14 guard cases сохранены. Local compiler/format corrections не
+ослабляли behavioral assertions. Первый опубликованный implementation CI зелёный.
+
+CONTROLLED evidence не live Telegram. Runbook содержит конечный Console journey,
+но runtime/DNS/TLS отсутствуют: live A09/A11 BLOCKED, внешних sends/расходов нет.
+C5 возвращает REVIEW; приёмка C0 и независимый scoped C8, user merge/main CI и
+реальный Client receipt ещё требуются. M2.4/M2 VERIFIED самостоятельно не объявлены.
