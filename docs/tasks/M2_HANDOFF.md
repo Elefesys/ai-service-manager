@@ -5,7 +5,101 @@
 Этот файл — принятый план и единственная активная точка передачи M2.
 Приёмка плана не является evidence выполненной реализации.
 
-## Активный handoff C0 → пользователь — M2.4-CONSOLE к merge / 2026-09-22
+## Активный handoff C0 → C6 — M2-LIVE-A09-A11 / 2026-09-22
+
+**M2.4-CONSOLE code/UI INTEGRATED / VERIFIED LOCAL/TEST. Весь M2 IN_PROGRESS.**
+Следующая и единственная зависимая задача — завершить существующие live A09/A11
+M2.3/4. Runtime/DNS/TLS пока BLOCKED внешними ресурсами; подготовка ниже не считается
+выполненным live smoke. M3, AI, production onboarding и новые продуктовые функции не выданы.
+
+### Подтверждённая интеграция и точный base
+
+[PR21](https://github.com/Elefesys/ai-service-manager/pull/21) merged, actual main/base
+**96d9f09dd16d8b6ab019ac76a9c72ce910d81191**, tree
+**28de72ca6737cbe18bb4856a1636f70fae1131ee**. Merge parents: прежний main
+**ffc437f125aa6af4dcf1c61a035a0d5df517e062** + принятый head
+**770e7db905732b3ed2a25a1d9a2c31bcd89a161b**. Дерево совпало с final PR tree.
+[Отдельный push/main CI35706123814, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/35706123814)
+**SUCCESS**:492 unit,390 PostgreSQL/S3,111 frontend,27 browser; оба scripts/source
+gates, canonical/migrations/contracts/reproducibility/smoke PASS. Jobs
+foundation106675369660/browser106675369293 реально checkout actual main выше.
+C0 прочитал оба logs; прежний C8 PASS/CLOSED01/02/03 сохранён, повторного review
+неизменного implementation не требуется. ZIP bytes отдельно не проверены.
+
+### ID, владелец, ветка и допустимый scope
+
+- **ID M2-LIVE-A09-A11**, ведущий **C6**. C3 подключается для фактических Telegram
+  connection/rights/provider вопросов; C0 принимает результат. C2/миграции не выданы.
+- Repository **Elefesys/ai-service-manager**, branch **c6/m2-live-smoke** → main.
+  Продолжать один Draft PR этой ветки, сохранить первый coordination commit.
+  Его номер/start SHA/tree/CI — в PR receipt. Accepted implementation base указан выше;
+  не начинать от старого C5 coordination или старого M2.3 head.
+- Разрешённые repository paths: **docs/TASK_REGISTER.md**, **docs/tasks/M2_HANDOFF.md**,
+  **docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md** — точные инструкции и очищенное evidence.
+  Runtime env/DNS/TLS выполняются в отдельном разрешённом тестовом окружении по runbook;
+  secret files/cert keys не добавлять в Git, чат, PR, build context или artifacts.
+- Backend/UI/kernel/API/DTO/generated contracts, dependencies/pins, CI/base Compose и
+  применённые0001–0007 не менять. Конкретный blocker сначала воспроизвести и вернуть
+  C0 с узким proposed fix; не перепроектировать уже принятые срезы.
+- Читать AGENTS, актуальный register, M2_CONTRACT §§9–11, runbook; Implementation Plan
+  §§6–7, Roadmap M2, ADR019/020/136–142/243 и deployment §1.1 применительно к test scope.
+  Production checklist/M12 не становится новым обязательным scope M2.
+
+### Ближайший шаг и распределение действий
+
+Пользователю сейчас не поручается самостоятельно спроектировать или настроить
+runtime/DNS/TLS. **Один запрос фактов:** есть ли уже доступный сервер/VPS и свой домен
+с возможностью менять DNS, или нужно подготовить всё с нуля. В ответ не включать
+SSH private keys, passwords, bot token или webhook secret. Можно назвать провайдера
+и наличие ресурсов; точные secrets и доступы передаются только штатным безопасным способом.
+
+C6 после ответа готовит один последовательный маршрут настройки в существующем
+runbook: где выполнить действие, точная команда/настройка, ожидаемый non-secret
+результат и что вернуть C0. C0 берёт технический выбор на себя. Если внешние ресурсы
+ещё не приобретены, сначала актуальное предложение с конкретной стоимостью и
+ограниченным сроком теста; RU/Yandex-preferred baseline сохраняется. До принятия
+стоимости нет покупок/подписок. Сейчас провайдер, домен и доступ не выдуманы.
+
+Пользователь выполняет только account/billing/DNS permissions и вводит собственные
+секреты, либо запускает выданные C6 команды на своём host, когда агент не имеет
+доступа. Наличие cloud/browser/SSH возможностей нельзя предполагать. Bot, business
+mode, Owner/Client и TG secrets уже подготовлены — не требовать их создания повторно.
+
+### Конечный технический результат
+
+1. Отдельный тестовый Linux/Docker runtime **asm-telegram-test**, accepted source SHA,
+   готовые Console и private-storage HTTPS endpoints. По принятому runbook это
+   isolated LOCAL **asm_local**, не production и не переиспользованная browser fixture.
+   Два DNS имени могут быть subdomains одного домена; public TCP443 и исходящий
+   api.telegram.org HTTPS, правильные runtime/migrator роли и private files.
+2. Секреты прямо из password manager в private .env.telegram/secret store; точные
+   bot/Owner IDs проверены оператором. Существующие provision/setup/webhook guards,
+   secret_token, live OWNER/product/rights/window admission сохраняются.
+3. Принятый основной transport connected business bot/Profile Automation, ограниченный
+   тестовыми Owner/Client. C3/C6 проверяют actual connection/right state; не делать
+   неподтверждённых выводов о Premium/доступности на конкретном аккаунте.
+4. Реальный Client отправляет текст и тестовое изображение; Owner видит правильный
+   диалог и private image в существующей Console, отправляет ручной текст, Client
+   подтверждает получение. Record exact code/date, очищенные IDs/state outcomes.
+   Accepted202/SENT, curl/mock/CONTROLLED или screenshot одной Console не заменяют
+   Client receipt. Не вводить новую библиотеку/route/UI ради demonstration.
+5. A09: зафиксировать фактические права/состояние подключения и применимые ограничения
+   отправки. Детерминированные negative/window/UNKNOWN tests остаются своим evidence;
+   не устраивать неконтролируемые внешние retries. Timeout/возможный effect сохраняет
+   UNKNOWN/исходное намерение; новый key не заменяет recovery.
+6. Очищенный receipt в этом handoff/runbook: выполненные шаги, exact refs/CI, реальная
+   проверка и её границы по A09/A11, remaining blockers, безопасное завершение стенда.
+   Если репозиторий менялся — полный CI final head, C0 review и user merge/main CI.
+   Независимый C8 заново нужен только для конкретной рискованной дельты/незакрытого gate.
+
+До внешнего выполнения задача остаётся **BLOCKED runtime/DNS/TLS**. Это конечный
+оставшийся gate M2, а не основание переходить к M3. C0 объявит M2 VERIFIED только
+после фактических A09/A11, сохранённых остальных A01–A12 и успешного actual main CI.
+
+<details>
+<summary>История: приёмка M2.4 до merge — не текущие инструкции</summary>
+
+## История — pre-merge handoff C0 → пользователь — M2.4-CONSOLE к merge / 2026-09-22
 
 **C0 и независимый scoped C8 приняли исправленный code/UI LOCAL/TEST.**
 M2.4-CONSOLE/M2.4 пока REVIEW: merge ещё не выполнен, отдельный main CI не проверен.
@@ -93,6 +187,8 @@ workflows/dependencies/image pins/канон не менялись. Исходн
    A01–A12 и успешного main CI C0 может завершить M2. M3 автоматически не выдаётся.
 
 Новых функций/миграций и повторной реализации M1–M2.3 в этом handoff нет.
+
+</details>
 
 <details>
 <summary>История: передача C5 в REVIEW — не текущие инструкции</summary>
