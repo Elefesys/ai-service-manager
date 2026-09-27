@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — M2.4 code/UI интегрирован; подготовка live M2 с нуля / 2026-09-24
+## Текущий статус — M2.4 code/UI интегрирован; регистрация доменов для live M2 / 2026-09-27
 
 **M2.4-CONSOLE INTEGRATED / VERIFIED только в LOCAL/TEST code/UI scope.**
 M2.4 — INTEGRATED с оставшимся live E2E; M2.3 live-проверка также не закрыта.
@@ -33,26 +33,33 @@ Draft PR этой ветки хранит единое продолжение. �
 
 Пользователь подтвердил: **runtime/домены/DNS/TLS нужны с нуля**; основной домен
 предпочтительно **.ru**, также международный домен для будущего расширения.
-Bot/Owner/Client и TG_BOT_TOKEN/TG_WEBHOOK_SECRET уже подготовлены. C0 предлагает
-одинаковое латинское имя **.ru + .com** в аккаунте владельца (Timeweb, только домены
-и бесплатный DNS) и один тестовый host в **Yandex Cloud / Россия**. Международный
-домен пока резервируется; единственный Console origin остаётся на .ru. Имя, наличие
-свободной пары и расходы пока не приняты; покупать или включать платные ресурсы нельзя.
+Bot/Owner/Client и TG_BOT_TOKEN/TG_WEBHOOK_SECRET уже подготовлены. **Бюджет принят
+владельцем**, предпочтение имени — `managerai` или близкое по тематике. В форме Timeweb
+2026-09-27 `managerai.ru` и `managerai.com` заняты. C0 выбрал свободную при проверке
+пару **clientmanagerai.ru + clientmanagerai.com**: 200 ₽ + 1560 ₽ за первый год.
+В неподтверждённой корзине оставлены только эти два домена; автоматически добавленный
+Optimo за 4704 ₽ удалён. Это проверка доступности/корзины, не регистрация или резерв.
+Домены/DNS оформляются в аккаунте владельца Timeweb; host — **Yandex Cloud / Россия**.
+.com планируется зарегистрировать для будущего расширения; один Console origin — .ru.
 
-Конкретная конфигурация, расчёт на 2026-09-24 и последовательность C6 находятся в
+Конкретная конфигурация, расчёт cloud на 2026-09-24 и последовательность C6 находятся в
 [runbook §0.1–0.2](runbooks/M2_TELEGRAM_LOCAL_TEST.md#01-предложение-стенда-с-нуля--2026-09-24).
-Предложение: 2×100% vCPU/8 GiB/60 GiB SSD + static IPv4, **4735,81 ₽/30 суток**;
-обычные свободные .ru/.com — **1760 ₽ первый год**, текущее продление **2209 ₽/год**.
+Принятый вариант: 2×100% vCPU/8 GiB/60 GiB SSD + static IPv4, **4735,81 ₽/30 суток**;
+выбранная пара — **1760 ₽ первый год**, текущее продление **от 2209 ₽/год**.
 Итого ориентир **6495,81 ₽ за первый месяц и год регистрации двух доменов**;
-цена конкретных имён и корзины проверяется перед оплатой. Это оценка, не счёт и не
-разрешение расходов. Тестовый Compose/MinIO/asm_local сохраняются; production
+корзина пары проверена 2026-09-27. Это принятая оценка, не фиксированный счёт;
+повторно согласовывать тот же бюджет не нужно, платные дополнения не включены.
+Тестовый Compose/MinIO/asm_local сохраняются; production
 managed PostgreSQL/private object storage и one-region ADR не пересматриваются.
 
 Продолжать [Draft PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
 Первый coordination CI35712429280 SUCCESS; актуальный final head/tested tree/CI
 записываются в PR receipt без SHA-only commits. Ближайшее действие владельца —
-назвать желаемое имя и согласовать предложение по расходам. C6 затем даёт точные
-действия для account/billing/DNS/host; секреты вводятся прямо в private runtime files.
+создать аккаунт Timeweb, подтвердить администратора доменов у регистратора и оформить
+только два выбранных домена на один год за 1760 ₽; вернуть non-secret подтверждение
+регистрации. [Форма пары](https://timeweb.com/ru/services/domains/?d=clientmanagerai)
+и точный маршрут — runbook §0.2. Затем C6 ведёт Yandex account/billing/host/DNS/TLS;
+секреты вводятся прямо в private runtime files. Runtime/DNS/TLS ещё не созданы.
 
 Live DoD: Client text+photo → правильный Workspace/Owner Console/private image →
 ручной ответ → реальное получение Client, плюс фактические connection/rights A09.
@@ -88,7 +95,7 @@ CONTROLLED и SENT это не заменяют. Реальных Telegram sends
 | M2.3-TELEGRAM-API | Official Telegram → durable kernel/private images → five owner API routes | M2_CONTRACT §10 | C3; C2/C1/C6; C0/C8 | VERIFIED | Accepted main ffc437f125aa6af4dcf1c61a035a0d5df517e062; code/API LOCAL/TEST, C8-M2.3-01 CLOSED; actual main CI SUCCESS | Сохранять API/0007/time guards/UNKNOWN; live evidence отдельно |
 | M2.4 | Console Inbox, manual reply и E2E | Интегрированный API M2.3 + main CI | C5; C3/C6; C0/C8 | INTEGRATED | PR21 merged; main96d9f09dd16d8b6ab019ac76a9c72ce910d81191; push/main35706123814 SUCCESS; code/UI VERIFIED LOCAL/TEST | Реальный A11 остаётся внешним gate M2-LIVE-A09-A11 |
 | M2.4-CONSOLE | Owner panel + private image + exact manual intention/recovery + browser | M2_CONTRACT §§10–11 | C5; C3/C6 TEST harness; C0/C8 | VERIFIED | Actual main96d9f09dd16d8b6ab019ac76a9c72ce910d81191, separate main CI SUCCESS; C8-M2.4-01/02/03 CLOSED, code/UI LOCAL/TEST | Сохранять принятые механизмы; это не live Telegram acceptance |
-| M2-LIVE-A09-A11 | Тестовый HTTPS runtime и реальная ручная Telegram переписка | Принятый actual main M2.4; разрешённые тестовые аккаунты | C6; C3 connection; C0 acceptance | BLOCKED | Подтверждено: инфраструктура с нуля; .ru + международный домен. В Draft PR22 подготовлен вариант Yandex RU + .ru/.com с ценами; имя/расходы не приняты, runtime отсутствует | Имя домена и согласование расходов → C6 setup → настоящий A09/A11 и очищенный receipt |
+| M2-LIVE-A09-A11 | Тестовый HTTPS runtime и реальная ручная Telegram переписка | Принятый actual main M2.4; разрешённые тестовые аккаунты | C6; C3 connection; C0 acceptance | BLOCKED | Бюджет принят; clientmanagerai.ru/.com свободны в Timeweb на 2026-09-27, корзина 1760 ₽/первый год без hosting. Аккаунт/регистрация доменов и runtime/DNS/TLS ещё не готовы | Владелец регистрирует пару → C6 Yandex setup → настоящий A09/A11 и очищенный receipt |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 
