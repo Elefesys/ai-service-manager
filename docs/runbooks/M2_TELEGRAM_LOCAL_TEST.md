@@ -101,11 +101,18 @@ production/Pilot не добавляется к существующим A09/A11
 
 ### 0.2. Последовательность C6 и действия владельца
 
-1. **Ближайшее поручение C6 — M2-ENV-01-REGISTRY**, по единственному активному
-   [handoff](../tasks/M2_HANDOFF.md). CI36308372607 attempts1/2 остановились на pull
-   MinIO/mc из Quay с `unauthorized`, до PG/S3/browser tests. Диагноз и immutable
-   source recovery независимы от домена, bot token и paid runtime. Не создавать VM
-   до C0 приёмки полного CI; не заменять storage тесты mock/skip.
+1. **M2-ENV-01-REGISTRY BLOCKED; диагноз C6 передан C0**, по единственному активному
+   [handoff](../tasks/M2_HANDOFF.md). Свежий CI36715183155 attempt2 повторил отказ
+   pull MinIO/mc из Quay на новых runners; PG/S3/browser не исполнились, оба
+   clean-source gates SKIPPED. Quay/Hub не предоставляют anonymous pull grant,
+   Google mirror не содержит exact manifests. Причина upstream policy не доказана.
+   Оба official GitHub release binary скачаны и проверены по полному SHA-256;
+   это не OCI identity proof. Pins/версии сохранены. Предложение переупаковки этих
+   binaries в project-owned digest-pinned images требует отдельного scope C0 и
+   C8; сейчас rebuild/новые credentials/публикация не выполняются. Exact refs,
+   provenance, hashes и команды — в активном handoff; final head/CI — в PR22 receipt.
+   Registry recovery не зависит от домена, bot token и paid runtime. Не создавать
+   VM до C0 приёмки полного CI; не заменять storage тесты mock/skip.
 2. **Параллельно владелец продолжает существующий тикет Timeweb.** .com заявлен
    зарегистрированным, .ru ждёт сверки данных; повторная покупка не нужна. Для smoke
    достаточно работоспособного .com — ждать готовности .ru не требуется. Перед

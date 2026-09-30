@@ -8,8 +8,10 @@
 
 **M2.4 code/UI INTEGRATED / VERIFIED LOCAL/TEST; весь M2 IN_PROGRESS.**
 Задача — восстановить доступность принятых storage images и штатный CI, не ожидая
-доменов. Это устранение blocker родительской M2-LIVE-A09-A11. Задание подготовлено
-к передаче; реализация и независимый C8 ещё не выполнены. M3/AI/новые функции не выданы.
+доменов. Это устранение blocker родительской M2-LIVE-A09-A11. **Диагноз C6 готов для
+C0 REVIEW; задача BLOCKED:** доступный same-content OCI source не подтверждён,
+полный CI не восстановлен. Pins и implementation bytes не изменены; rebuild и
+публикация новых images не выполнялись. M3/AI/новые функции не выданы.
 
 ### Repository, base, ветка и evidence старта
 
@@ -61,6 +63,124 @@ LOCAL/TEST границы; Implementation Plan §§6–7. Исторически
 чистом runner с обычным разрешённым сетевым доступом. Network/auth ограничения не обходить.
 Различать отсутствие объекта, отказ registry/token service, network failure и cache.
 Не ждать домена, bot token, cloud account или пользовательского Docker для этого шага.
+
+### Результат диагностики C6 / 2026-09-30 UTC
+
+Старт сохранён: head **0b417f581831bcd0c3c938b447f1e05510077ec6**, tree
+**9cc294ee718f4e1c89ebbd6c2ae2f18e2a4eb0c7**. История от первого coordination не
+переписывалась. В [CI36715183155 attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36715183155/attempts/1)
+browser109886245494 и foundation109886245605 отказали на pull. C6 запросил обычный
+rerun failed jobs: [attempt2](https://github.com/Elefesys/ai-service-manager/actions/runs/36715183155/attempts/2),
+browser109889123888 и foundation109889127360, новые GitHub-hosted ubuntu-24.04
+linux/amd64 runners, runner image20260920.314.1. Workflow не содержит Docker cache
+restore или registry login. В обоих checkout logs исполнен virtual merge
+**60073eaf5738f1f29c6ffb98e6db796d3098f28f**, ordered parents accepted main + стартовый
+head, tree идентичен стартовому. В12:39UTC mc pull снова получил `unauthorized`;
+предыдущий attempt также показывал отказ server pull. Успешного полного pull нет.
+
+`sh scripts/ci.sh` и `sh scripts/test_browser.sh` действительно запущены штатным
+workflow и завершились FAILURE при provisioning storage. Canonical import,
+frontend111 и Compose model checks прошли; PostgreSQL/S3/private-file/изоляция/
+UNKNOWN-no-resend и browser cases в этих attempts не исполнились. Оба штатных
+clean-source steps **SKIPPED** после failure, не PASS. Исторический main SUCCESS выше
+не подменяет текущий результат. Final documentation head/tree, actual checkout,
+ordered parents, tree comparison и CI приведены в PR receipt без SHA-only commit.
+
+Дополнительно из среды C6 выполнены обычные HTTPS GET, без credentials и обходов.
+Они не выдаются за runner pull. Для каждого exact digest использован registry v2
+manifest GET с Docker/OCI Accept, затем стандартный anonymous Bearer token exchange
+по `WWW-Authenticate` и повтор GET. Tokens оставались в памяти, не логировались.
+
+| Endpoint / оба сохранённых digest | Наблюдаемый ответ |
+|---|---|
+| quay.io/v2/minio/{minio,mc}/manifests/sha256:… | Initial401; anonymous token200, granted actions пусты; повтор manifest401 UNAUTHORIZED |
+| registry-1.docker.io/v2/minio/{minio,mc}/manifests/sha256:… | Initial401; anonymous token200 без pull grant; повтор401 authentication required |
+| hub.docker.com/v2/repositories/minio/{minio,mc}/ и exact release tags |404 object not found |
+| mirror.gcr.io/v2/minio/{minio,mc}/manifests/sha256:… |404 MANIFEST_UNKNOWN |
+| dl.min.io/{server/minio,client/mc}/release/linux-amd64/archive/{binary}.{accepted-release}.sha256sum |410 Gone; upstream сообщает об архивировании community проектов и прекращении раздачи этих файлов |
+
+Initial401 сам по себе — штатный auth challenge. Подтверждённый технический blocker:
+после anonymous exchange registry не предоставляет pull authority для обоих
+repository names. По этим ответам нельзя отличить private/deleted/disabled repo,
+доказать общий outage либо обещать исправление через credentials. Сообщение410
+от download site — отдельное upstream evidence, не доказанная причина Quay policy.
+Публичный Google cache не дал manifests; его содержимое также не имеет гарантии
+удержания ([Google documentation](https://docs.cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images)).
+Недоступность всех возможных mirrors не утверждается; допустимый доступный источник
+с проверяемой идентичностью linux/amd64 index/manifest/config/layers не найден.
+
+Provenance исходных refs подтверждён publisher scripts в принятых release tags:
+[MinIO docker-buildx.sh](https://github.com/minio/minio/blob/RELEASE.2025-09-07T16-13-09Z/docker-buildx.sh)
+и [mc docker-buildx.sh](https://github.com/minio/mc/blob/RELEASE.2025-02-15T10-36-16Z/docker-buildx.sh)
+публикуют соответствующие artifacts в Docker Hub и Quay. Из-за отказа доступа
+исходные OCI manifests/config/layers заново не прочитаны; новые pins не придуманы.
+Совпадение release tag или binary digest с OCI digest не заявляется.
+
+### Конкретное предложение C0 — ещё не разрешённый rebuild
+
+Официальные GitHub Releases сохраняют **оба принятых linux/amd64 binary**. C6
+полностью скачал их обычным HTTPS GET (200), посчитал SHA-256 по bytes и сравнил
+с `digest` официального release-asset API; binaries не запускались и не публиковались.
+
+| Official release asset | Размер, bytes | Проверенный binary SHA-256 |
+|---|---|---|
+| [minio.linux-amd64.RELEASE.2025-09-07T16-13-09Z](https://github.com/minio/minio/releases/download/RELEASE.2025-09-07T16-13-09Z/minio.linux-amd64.RELEASE.2025-09-07T16-13-09Z) |110989496|7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f|
+| [mc.linux-amd64.RELEASE.2025-02-15T10-36-16Z](https://github.com/minio/mc/releases/download/RELEASE.2025-02-15T10-36-16Z/mc.linux-amd64.RELEASE.2025-02-15T10-36-16Z) |29208728|7a03ba39e158708a9e88f1bf5c346c6651b15c784e4b2c7150b5b5f282f43c28|
+
+Это **binary SHA-256, не OCI pins и не доказательство прежних runtime bytes**.
+Release API также перечисляет minisig/checksum assets; подписи в этой диагностике
+не проверялись. Существующие upstream Dockerfile.release зависят от недоступных
+download endpoints и mutable base inputs, поэтому простая повторная сборка не
+воспроизводит принятые OCI artifacts.
+
+Минимальное предлагаемое отдельное поручение: упаковать эти два exact binary в
+project-owned linux/amd64 images с digest-pinned base/дополнительными tools, проверкой
+hash/signature и сохранением нужных Compose entrypoint/healthcheck/shell semantics.
+Предлагаемые новые paths: `infra/storage/Minio.Dockerfile`,
+`infra/storage/Mc.Dockerfile`, `infra/storage/inputs.lock.json` и отдельный
+`.github/workflows/storage-images.yml` для ограниченного build/provenance/publish.
+После разрешённой публикации в публичные GHCR packages проекта — заменить только
+две исходные ссылки и два pins в уже разрешённых файлах; прежний основной workflow,
+Compose и assertions сохранять. GITHUB_TOKEN с job-scoped packages:write, доступность
+public packages и отсутствие оплаты требуют решения/проверки C0; credential не
+создавался. Scope включает новые OCI bytes и независимый C8, затем uncached pull и
+полный штатный CI на одном head. Новые base digests ещё не выбраны/приняты.
+
+Это предложение упаковки, а не компиляции нового MinIO release, смены версии или
+подмены S3 тестов. Пока C0 не расширит scope из пяти paths, выполнять его нельзя.
+Если C0 располагает официальным доступным архивом точных OCI objects, сначала
+проверить их index→linux/amd64 manifest→config/layers hashes: такой перенос может
+обойтись исходным scope без rebuild. Новые credentials не считать решением без
+подтверждения upstream. До решения C0 pins остаются прежними, PR Draft, merge запрещён.
+
+Для повторного uncached pull на disposable linux/amd64 runner (без Docker config
+с credentials; команды не удаляют чужой локальный cache):
+
+```sh
+set -eu
+. infra/images.lock.env
+for ref in "$STORAGE_IMAGE" "$STORAGE_ADMIN_IMAGE"; do
+  if docker image inspect "$ref" >/dev/null 2>&1; then
+    echo 'Use a fresh disposable runner: image is already cached' >&2
+    exit 1
+  fi
+done
+docker pull --platform linux/amd64 "$STORAGE_IMAGE"
+docker pull --platform linux/amd64 "$STORAGE_ADMIN_IMAGE"
+docker buildx imagetools inspect "$STORAGE_IMAGE"
+docker buildx imagetools inspect "$STORAGE_ADMIN_IMAGE"
+sh scripts/ci.sh
+test -z "$(git status --porcelain --untracked-files=all)"
+sh scripts/test_browser.sh
+test -z "$(git status --porcelain --untracked-files=all)"
+```
+
+Это диагностические команды для чистого runner, не изменение штатных scripts.
+Фактический attempt2 запускал прежний workflow с двумя указанными scripts;
+отдельные inspect команды выше ещё не исполнялись на runner. HTTP probes выполняли
+`GET /v2/<repo>/manifests/<exact digest>` и anonymous token exchange, а не `--version`.
+Полный recovery DoD ниже остаётся невыполненным; оба clean-source gates нужно
+подтвердить после реального восстановления storage, без skip/xfail/ослаблений.
 
 ### Точный разрешённый scope C0
 
