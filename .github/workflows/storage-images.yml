@@ -168,6 +168,7 @@ jobs:
                       assert config['config']['Entrypoint'] == ['/usr/local/bin/' + name]
                       assert config['config']['Labels']['org.opencontainers.image.revision'] == os.environ['GITHUB_SHA']
                       assert config['config']['Labels']['org.opencontainers.image.version'] == spec['release']
+                      assert config['config']['Labels']['org.opencontainers.image.source'] == 'https://github.com/Elefesys/ai-service-manager'
                       assert config['rootfs']['diff_ids'][:len(lock['base']['diff_ids'])] == lock['base']['diff_ids']
                       files, layers = {}, []
                       for number, layer in enumerate(manifest['Layers']):
@@ -359,6 +360,10 @@ jobs:
               subprocess.run(['docker', 'load', '-i', str(root / (name + '.tar'))], check=True)
               config = subprocess.check_output(['docker', 'image', 'inspect', '-f', '{{.Id}}', 'asm-' + name + ':verified']).decode().strip()
               assert config == spec['config_digest']
+              labels = json.loads(subprocess.check_output(['docker', 'image', 'inspect', '-f', '{{json .Config.Labels}}', 'asm-' + name + ':verified']))
+              assert labels['org.opencontainers.image.source'] == 'https://github.com/Elefesys/ai-service-manager'
+              print(json.dumps({'image': spec['package'], 'config_digest': config,
+                                'source_label': labels['org.opencontainers.image.source']}))
           print('VERIFIED_ARTIFACT_BINDING_PASS; no image code executed in publish job')
           PY
       - name: Check package ownership and publish exact verified images
@@ -385,9 +390,16 @@ jobs:
           repository = api('repos/Elefesys/ai-service-manager')
           assert repository and repository['full_name'] == 'Elefesys/ai-service-manager'
           owner_route = 'orgs' if repository['owner']['type'] == 'Organization' else 'users'
+          def package_binding(name, package, phase):
+              linked = (package or {}).get('repository') or {}
+              print(json.dumps({'phase': phase, 'package': 'ghcr.io/elefesys/asm-' + name,
+                  'exists': package is not None, 'package_id': (package or {}).get('id'),
+                  'visibility': (package or {}).get('visibility'), 'repository_id': linked.get('id'),
+                  'repository_full_name': linked.get('full_name'), 'expected_repository_id': repository['id']}), flush=True)
           preexisting = {}
           for name in receipt['images']:
               package = api(owner_route + '/Elefesys/packages/container/asm-' + name)
+              package_binding(name, package, 'preflight')
               preexisting[name] = package is not None
               if package is not None:
                   assert package.get('repository', {}).get('id') == repository['id'], 'existing package ownership conflict'
@@ -411,7 +423,9 @@ jobs:
                   ref = spec['package'] + '@' + digest
                   manifest = json.loads(subprocess.check_output(['docker', 'manifest', 'inspect', ref]))
                   assert manifest['config']['digest'] == spec['config_digest']
+                  print(name.upper() + '_REGISTRY_MANIFEST_MATCH ' + ref, flush=True)
                   package = api(owner_route + '/Elefesys/packages/container/asm-' + name)
+                  package_binding(name, package, 'post-push')
                   assert package and package.get('repository', {}).get('id') == repository['id']
                   if not preexisting[name]:
                       assert package['visibility'] == 'private', 'unexpected initial package visibility'
