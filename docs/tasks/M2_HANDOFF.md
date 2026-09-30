@@ -6,7 +6,7 @@
 
 ## Активный handoff C0 → C6 — M2-ENV-02-STORAGE-IMAGES / 2026-09-30
 
-**Выдана ограниченная задача упаковки; IN_PROGRESS. Registry recovery пока BLOCKED.**
+**Private artifacts готовы; IN_PROGRESS / ACCESS gate public visibility. Registry recovery BLOCKED.**
 M2.4 code/UI VERIFIED только LOCAL/TEST; весь M2 IN_PROGRESS, внешние A09/A11
 BLOCKED runtime/DNS/TLS. M3 не выдан. Это продолжение устранения provisioning
 blocker M2-ENV-01-REGISTRY внутри M2-LIVE-A09-A11, а не новая продуктовая часть.
@@ -32,8 +32,9 @@ IMPL-001/production storage ADR и бизнес-контракты M2 остаю
   последующую историю. Непосредственный parent этого задания:
   **6159a64cfb08c853dac4ff51c415e32c083e735f**,
   tree **bf1ae81a65c7b1695a6f413f92a2c0cd49399593**.
-  **Exact старт — новый coordination head из сообщения C0/PR receipt**, содержащий
-  этот handoff. Начинать от него, не от parent; force-push/новый PR не нужны.
+  **Exact старт — 1450dfeefeead337ca8a8a670d339e085adfe323**,
+  tree **7f5ff73b4c2f6bb5c952ac2b1c1dab87b2725325**, содержит этот handoff.
+  Вся история сохранена; force-push/новый PR не нужны.
 - C0 прочитал оба job logs [CI36717840363, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36717840363):
   foundation109895106793 и browser109895107151 FAILURE на MinIO pull unauthorized.
   Checkout **349b84b9a942d21e0d4db92f84b2cd2e15d21b20** — virtual merge;
@@ -146,7 +147,8 @@ linux/amd64 manifest и attestation metadata. Rebuild из тех же locked in
    Package settings → Change visibility → Public. GitHub предупреждает, что вернуть
    public package в private нельзя; поэтому согласование этой операции проводится
    для готовых проверенных artifacts, не для абстрактного будущего результата.
-   Видимость самого private repository не менять. Сейчас действие владельца не нужно.
+   Видимость самого private repository не менять. Конкретные packages готовы:
+   C0 проверяет receipt ниже и организует действие владельца.
 5. До public visibility C6 завершает все доступные build/signature/provenance/runtime
    проверки и возвращает конкретный ACCESS blocker, если нужен оператор. Не просить
    token в чате и не подменять anonymous pull логином в основном CI. Pins переключать
@@ -164,8 +166,8 @@ linux/amd64 manifest и attestation metadata. Rebuild из тех же locked in
 — push/dispatch. По [GitHub billing](https://docs.github.com/en/billing/concepts/product-billing/github-packages)
 на 2026-09-30 хранение/трафик GHCR container images бесплатны; Actions minutes/artifacts
 имеют отдельные условия. Использовать существующие repo runner/лимиты; billing,
-spending limits и платные сервисы не подключать/не повышать. Доступ/публикация пока
-не проверены исполнением; их не выдавать за подтверждённые.
+spending limits и платные сервисы не подключать/не повышать. Private публикация
+подтверждена исполнением в receipt ниже; public anonymous pull ещё не подтверждён.
 
 ### Конечная приёмка C0 и новый независимый scoped C8
 
@@ -194,6 +196,186 @@ reply → Client receipt. Бюджет принят ранее; VM сейчас 
 console.telegram-test.clientmanagerai.com и files.telegram-test.clientmanagerai.com;
 .ru остаётся будущим основным доменом. Ни домены, ни Telegram secrets для этой задачи
 не нужны. Live sends/production и M3 не добавлены.
+
+### Receipt C6 — private artifacts готовы; ACCESS gate / 2026-09-30
+
+**M2-ENV-02 IN_PROGRESS; M2-ENV-01 BLOCKED до anonymous pull и полного final-head CI.**
+Оба artifacts опубликованы private; независимые build/signature/runtime проверки
+завершены. Сейчас C0 может проверить конкретный состав и организовать public
+visibility владельцем. C6 видимость packages/repository не менял. C8 не проводился.
+
+| Ref / выполнение | Exact value |
+|---|---|
+| Accepted base/main | 96d9f09dd16d8b6ab019ac76a9c72ce910d81191 |
+| Сохранённый первый coordination | 914e2894f98330d62e1cc57ca5da5c62662d6960 |
+| Exact task start | 1450dfeefeead337ca8a8a670d339e085adfe323 |
+| Build / фактически tested source SHA | f74c240febd963c79408e80600c29d7739e08867 |
+| Tested source tree | 3e742d07440bcd2e4516922d5698ed1aee735db0 |
+| Storage workflow | [36734267078, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36734267078), push точной c6/m2-live-smoke, SUCCESS |
+| Jobs | verify109951705630 SUCCESS; publish109956285144 SUCCESS |
+
+Это прямой checkout build SHA, не PR virtual merge. Последующий commit только
+трёх документов фиксирует этот результат; его exact final head/tree и проверка
+ancestry указаны в PR22 receipt без SHA-only цепочки. Вся история сохраняется.
+
+#### Packages, digests и состав для C0
+
+Оба packages принадлежат User Elefesys; repository ID1369650588. Visibility
+проверена до и после финального push: private. Tag обоих финальных образов:
+source-f74c240febd963c79408e80600c29d7739e08867.
+
+| Образ | Package URL / ID | Immutable linux/amd64 ref |
+|---|---|---|
+| MinIO | [asm-minio](https://github.com/users/Elefesys/packages/container/package/asm-minio), ID15482993 | ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa |
+| mc | [asm-mc](https://github.com/users/Elefesys/packages/container/package/asm-mc), ID15484077 | ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4 |
+
+Это **новые OCI artifacts**, не старые Quay bytes. Registry возвращает одиночные
+Docker V2 platform manifests linux/amd64; OCI index и embedded attestation
+отсутствуют. Provenance/verification сохранены отдельными receipts.
+Registry manifest/config сверены с проверенным загруженным image; fresh anonymous
+pull всех layers пока не выполнен и не подразумевается private push.
+
+| Образ | Image config digest | SHA-256 каждого из двух независимо построенных Docker archives |
+|---|---|---|
+| MinIO | sha256:b7bb806bee433a13f30a01509f324cfc5c764e4a07b11353aa423eda2e995c1d | 320c55ca2ff8c05f80f38262f0ed233bc9dd8d2ddd65d78e933d818f73deff40 |
+| mc | sha256:85c9b02133dbec707e92450e93ca5a98e139423839b02946583bdd9ddd2cf2f6 | 9ac91013b51c188691dd290ce543e3749647e30f2445e0cc6c2cea659f9db450 |
+
+Проверены два независимых no-cache builders: полные config (включая history),
+layers, allowlist files и **полные archive bytes** совпали. SOURCE_DATE_EPOCH1790726400.
+Dockerfiles не содержат RUN/install. Context каждого build состоит ровно из
+Dockerfile, binary, LICENSE, CREDITS, source.tar.gz, binary.minisig, NOTICE,
+inputs.lock.json. Added layer — только /usr/local/bin/minio либо mc и шесть
+vendor/provenance файлов /usr/share/licenses/asm-minio либо asm-mc.
+Base содержит curl/CA/sh; app/private docs/.git/env/secrets отсутствуют в этих
+contexts, image additions и storage-workflow artifacts. Source label раскрывает
+только URL этого repository и source SHA. USER0:0 сохранён для совместимости с
+существующими volumes; это не новое изменение runtime privileges приложения.
+
+Предыдущие private source tags сохранены: MinIO source-d2f192febb4e5cbbfd4b56e1f2d77cf31c42c529
+manifest sha256:57de2e9db9536d6ec4e0977ba1850a2fb270e711ed7641b3dbf149366fe92503;
+mc source-302242245a37975c6a8c1410ac3d6cb972d1d14b
+manifest sha256:7b9fd93fe007f7b257ae7d437b119b87a989aa873a0501655d16796baafabe58.
+Их Dockerfiles/locked vendor inputs те же; отличаются source metadata.
+C0 проверяет package целиком перед public, не только финальный tag.
+Partial receipt11106091457 из run36732619535 документирует первые packages.
+
+#### Проверенные inputs и receipts
+
+Оба полных binary hashes/sizes из таблицы C0 выше повторно подтверждены **до
+исполнения**, minisign0.12 проверил оба minisig; tampered-byte negative отклонён.
+Binary hashes внутри обоих образов совпали с теми же полными SHA-256.
+MinIO source commit07c3a429bfed433e49018cb0f78a52145d4bedeb;
+mc source commit383560b1c3d6912042e8c8c275bb78e83e67ef2b.
+Ключ из official MinIO Dockerfile.release exact commit07c3…:
+SHA-256 provenance-файла749dd8f1b5eaa04408999c3d0c2fa148b70de5b33239b604c4a9e9cd86f2cdee.
+MinIO minisig SHA-256d71cf680e1de21ae4a71d8d6ff2c80d6f8b07cbe8a9e00e157ef40be213fd47f;
+mc minisig SHA-25640f432ba89f9bca5c4bd5398a0669eb4d23eb142ff2c35c8b86ae894cbc95edb.
+Все exact official URLs, sizes, SHA-256, source/licenses и tools зафиксированы в
+infra/storage/inputs.lock.json, SHA-256
+7d583ff59bda9f880f71522954e415bc9976979b03f458aca606d234774a1c51.
+
+Base — official curlimages/curl8.19.0, linux/amd64
+sha256:a2e4c1ef9b660f8ca90b2b725768e0ceade4fc1e52b5859a8d3e6c93db2dc47c;
+index sha256:c03110c736db81bbe1be0296f1f1608c81b954b01626bdfb0a8f84e5bd00ff3c.
+BuildKit0.25.0 pinned platform
+sha256:939060f02be6f297aa8038d1ada85e8c7c031f4c364c6456bd9adf43a20f3b5e;
+Buildx0.29.1 binary SHA-256
+7d2d7d6d4680aa349614965aaa33ccec43f1a9a21e908a5ce4cb6adfa5ad5141.
+Minisign0.12 archive SHA-256
+9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73,
+extracted executable SHA-256
+2c74dffcc1c9a5ee55957c60971998ace2b89f22585631594ec2152c588af8db.
+Actions также pinned полными commit SHA; остальные project dependencies не менялись.
+
+| Artifact из final storage run | ID / размер | ZIP SHA-256 |
+|---|---|---|
+| storage-images-f74c240febd963c79408e80600c29d7739e08867-1 |11107176489 /96523927 bytes|9fcb573012a1907a70bcc3ad2b7b893677e6ddb49a977a6442f6336e94bac644|
+| storage-publish-f74c240febd963c79408e80600c29d7739e08867-1 |11106623061 /3040 bytes|224a19ac249afe93515395c7c8c384ca62a8ff24cd61000e120470816d36cf41|
+
+Первый ZIP содержит только minio.tar, mc.tar, inputs.lock.json, receipt.json.
+Publisher скачал его по exact artifact ID, подтвердил download digest, verify-receipt
+SHA/source SHA/lock/archive/config binding. C6 локально повторно проверил **полные
+bytes второго ZIP**, оба JSON и их взаимную связь; первый большой ZIP повторно
+локально не скачан. Retention7days, до2026-10-07; ссылки/логи не заменяют bytes.
+receipt.json SHA-2568e315f18e4187f780e4c8125666f1775d13ea3dfac1892b972260b38ba2ffc39;
+publish-receipt.json SHA-256e06e40fccdce27b6f30fe5c2f364791c34889868167a4b23d019c64c5c182650.
+
+#### Реальное исполнение, assertions и исправленные дефекты нового workflow
+
+На fresh ubuntu-24.04 runner выполнена прежняя команда:
+`STORAGE_IMAGE=asm-minio:verified STORAGE_ADMIN_IMAGE=asm-mc:verified sh scripts/ci.sh`.
+Использован штатный environment override Compose; сами script/Compose/lock не
+изменены. **492 unit,390 real PostgreSQL/S3,111 frontend PASS**, canonical/contracts,
+migration cycles/reproducibility/HTTP smoke PASS. После foundation и дополнительного
+storage runtime probe `test -z "$(git status --porcelain --untracked-files=all)"` PASS.
+
+- tests/test_m2_2_storage_postgres.py: original_roundtrip_validated_manifest_and_private_signed_http
+  проверяет exact bytes/hash/MIME/dimensions через real signed GET и anonymous deny;
+  live_owner_relation_workspace_role_and_failed_file_negatives проверяет exact
+  relations/Workspace/live OWNER, PENDING/FAILED; revoke_denies_new_grant_existing_bearer_expires_at_real_s3
+  проверяет revoke новой ссылки и реальное истечение прежней; checksum/conditional PUT
+  и runtime privilege boundaries сохранены.
+- tests/test_m2_2_db_postgres.py, test_m2_2_recovery_postgres.py,
+  test_m2_2_media.py и test_m2_2_migrations.py исполнены прежним suite: atomic
+  rollback/concurrent dedupe, invalid/truncated/animated/limits, retry/exhaustion,
+  crashes/lost finalize ACK/stale claims, late PUT/repeated cleanup/winner safety,
+  upgrade/downgrade/re-upgrade. Это проверка принятой реализации на новых образах.
+- tests/test_m2_1_postgres.py и M2.3 real-wire/DB/API cases сохранены и исполнены
+  прежним suite: SEND crash/UNKNOWN/no-resend, tenant isolation и live authority/
+  product revocation. M1 regressions также включены; live Telegram не выполнялся.
+- Дополнительный runtime probe: exact minio/mc versions и binary SHA, CA HTTPS,
+  sh/cat/rm и tmp permissions; неизменный sh bootstrap; доступ внутри workspace prefix,
+  отказ PUT вне prefix, HTTP403 anonymous GET; SIGTERM/exit0, одинаковые volume
+  Mounts до/после restart, повтор bootstrap и сохранение exact bytes после restart.
+
+Ранние красные runs выявили дефекты **нового** workflow, не старых tests:
+runner-local env paths; недетерминированный EXPOSE history в BuildKit0.24.0
+(перешли на pinned0.25.0 с upstream fix); пропущенный stdin -i у mc pipe.
+Strict config/history/layer/byte assertions сохранены.
+Пробный browser run36727812609 остановлен BROWSER_COMPOSE_PROJECT_INVALID:
+script требует свой project и безусловно reload прежних Quay pins.
+Защитный guard/script не менялся; полный browser остаётся обязательным после public
+pull/pin switch. Packaging SUCCESS не означает browser PASS.
+
+Первичный private push создал разрешённые package IDs, но новый publisher ошибочно
+ожидал package.repository.id в GitHub API. Ответы не предоставляют repository
+metadata даже при корректном OCI source label и успешном GITHUB_TOKEN push.
+Это не установленный auth failure и не основание просить PAT/Connect repository.
+Run36732619535 сохранил partial receipt и независимо подготовил оба packages.
+Исправление на final SHA закрепило **наблюдённые immutable package IDs**15482993/
+15484077: exact name/type/owner проверяются; если repository metadata присутствует,
+ID обязан совпасть с1369650588. Missing/recreated package, иной owner/name/type,
+source label mismatch, tag/config collision или visibility drift отказывают.
+Только отдельный publish job получает contents:read/packages:write; verified
+artifact binding сохранён, image code в publish не исполняется; token удаляется
+logout/cleanup, не попадает в build/log/artifact. Все errors завершают job failure.
+
+Обычный CI на том же source [36734280555](https://github.com/Elefesys/ai-service-manager/actions/runs/36734280555)
+остаётся FAILURE: foundation109951736395 storage-test-init и browser109951736980
+storage вернули unauthorized со старыми pins; оба source gates SKIPPED.
+Actual checkout5d51adbcba492b0d07736cf646cca8fdb8682794 имеет ordered parents
+96d9f09dd16d8b6ab019ac76a9c72ce910d81191 + f74c240febd963c79408e80600c29d7739e08867,
+tree3e742d07440bcd2e4516922d5698ed1aee735db0, равен source tree.
+Full final-head CI/browser/оба gates и fresh anonymous pull пока **не выполнены
+успешно**. Это сохранённый registry gate, не снятый ради зелёного статуса.
+
+#### Дельта и следующий шаг C0
+
+Изменены семь из девяти разрешённых paths: два Dockerfile, inputs.lock.json,
+storage-images.yml и три текущих документа. infra/images.lock.env и pin_images.sh
+пока byte-identical; основной CI/Compose/bootstrap/app/migrations/tests/assertions
+и прочие dependencies не менялись.
+
+C0 проверяет оба packages/receipts/состав, затем организует владельцу действие
+**Package settings → Change visibility → Public** для двух точных URLs выше.
+Repository остаётся private; новых credentials/Connect repository не требуется.
+После подтверждения C6 выполняет на fresh runner anonymous immutable pulls без
+cache/auth, сверяет config/layers и in-image binary hashes, переключает только две
+storage pins/refs и запускает оба прежних scripts/оба source gates на одном final
+head. Команды и порядок — runbook§0.3. При изменении image bytes нужны новые build/
+receipts/pins. Независимый scoped C8 организует C0; self-check C6 его не заменяет.
+PR остаётся Draft/open, merge/VERIFIED не объявлены; M2 IN_PROGRESS, live A09/A11
+BLOCKED, M3 не выдан. VM/DNS/TLS/Telegram secrets/live sends не выполнялись.
 
 <details>
 <summary>История — M2-ENV-01: диагноз C6 принят; прежний scope заменён M2-ENV-02 / 2026-09-30</summary>

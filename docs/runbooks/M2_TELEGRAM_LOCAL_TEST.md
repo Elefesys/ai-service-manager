@@ -101,31 +101,22 @@ production/Pilot не добавляется к существующим A09/A11
 
 ### 0.2. Последовательность C6 и действия владельца
 
-1. **M2-ENV-02-STORAGE-IMAGES выдана C6; M2-ENV-01 recovery пока BLOCKED.**
-   C0 принял диагноз C6 и явно разрешил новую упаковку двух exact official release
-   binaries вместо недоступных identical OCI artifacts. Версии сохраняются; это
-   новые image bytes с новой приёмкой. Девять разрешённых paths, binary SHA-256,
-   signature key/provenance, runtime compatibility и DoD — в единственном активном
-   [handoff](../tasks/M2_HANDOFF.md). CI36717840363 FAILURE подтверждён C0 по обоим
-   logs; PG/S3/browser не исполнились, оба clean-source gates SKIPPED.
-   C6 готовит два Dockerfile/input lock и отдельный branch-push build/verify/publish
-   workflow; основной CI/Compose/private bootstrap/assertions сохраняются.
-   Целевые packages: ghcr.io/elefesys/asm-minio и ghcr.io/elefesys/asm-mc.
-   Первичный private push разрешён только job-scoped GITHUB_TOKEN; PAT не нужен.
-   После готовности конкретных проверенных artifacts C0 даст владельцу URLs и одно
-   действие Package settings → Change visibility → Public. Public package нельзя
-   затем вернуть в private; до проверки состава такую операцию не выполнять.
-   Сейчас действия владельца с registry не нужны. Private push не является
-   восстановлением anonymous pull. GHCR container storage/traffic по официальным
-   условиям на2026-09-30 бесплатны; Actions и существующие лимиты учитываются отдельно,
-   billing/платные планы не менять.
-   Затем — свежий anonymous pull обоих @sha256 без cache, два storage pins/refs,
-   полный final-head CI обоими прежними scripts и clean-source gates, реальные
-   PostgreSQL/S3/browser/private-file/UNKNOWN checks и независимый scoped C8.
-   Head/tree/CI — в PR22 receipt без SHA-only commits. Нужный операторский шаг
-   публичности блокирует только public pull/final gates: все независимые build/
-   signature/runtime проверки C6 завершает до передачи. Registry task не зависит
-   от домена, bot token или paid host. VM до C0 приёмки полного CI не создавать.
+1. **M2-ENV-02: private artifacts готовы; M2-ENV-01 recovery пока BLOCKED.**
+   C0 разрешил новую упаковку exact MinIO/mc binaries; версии сохранены.
+   [Storage CI36734267078](https://github.com/Elefesys/ai-service-manager/actions/runs/36734267078)
+   SUCCESS: signatures/hashes/rebuild, реальные PG/S3, private policy и restart;
+   492 unit/390 PG-S3/111 frontend PASS. Это не полный обычный CI/browser gate.
+   Семь разрешённых paths изменены; основной CI/Compose/bootstrap/assertions
+   и пока обе storage refs/pins сохранены. Exact source, digests, package URLs,
+   receipts и операторское действие находятся в §0.3 и активном
+   [handoff](../tasks/M2_HANDOFF.md).
+   C0 проверяет состав уже готовых artifacts и организует владельцу
+   Package settings → Change visibility → Public для двух packages. C6 public
+   visibility не меняет; repository остаётся private. PAT/новых credentials/
+   Connect repository не требуется. После подтверждения public — fresh anonymous
+   immutable pull без cache, только два storage pins/refs, полный final-head CI,
+   оба scripts/source gates и независимый scoped C8. До этого M2-ENV-01 BLOCKED,
+   M2 IN_PROGRESS, PR22 Draft. Домены/VM/Telegram secrets для этого шага не нужны.
 2. **Параллельно владелец продолжает существующий тикет Timeweb.** .com заявлен
    зарегистрированным, .ru ждёт сверки данных; повторная покупка не нужна. Для smoke
    достаточно работоспособного .com — ждать готовности .ru не требуется. Перед
@@ -156,6 +147,99 @@ production/Pilot не добавляется к существующим A09/A11
    secrets непосредственно от владельца, preflight/binding/setWebhook и Console live
    scenario. C6 возвращает sanitized runtime/DNS/TLS/billing receipt; C3 — фактические
    connection/rights/Client receipt. Только C0 принимает live A09/A11.
+
+## 0.3. Проверенные storage artifacts и public access gate / 2026-09-30
+
+Build/test source **f74c240febd963c79408e80600c29d7739e08867**, tree
+**3e742d07440bcd2e4516922d5698ed1aee735db0**;
+[run36734267078 attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36734267078)
+verify109951705630 и publish109956285144 SUCCESS. Exact final documentation
+head/tree — в [Draft PR22 receipt](https://github.com/Elefesys/ai-service-manager/pull/22).
+Новые OCI bytes не идентичны прежним Quay artifacts; releases не обновлены.
+
+| Package / ID | Final immutable linux/amd64 ref |
+|---|---|
+| [asm-minio](https://github.com/users/Elefesys/packages/container/package/asm-minio) /15482993 | ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa |
+| [asm-mc](https://github.com/users/Elefesys/packages/container/package/asm-mc) /15484077 | ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4 |
+
+Visibility обоих — **private**, подтверждена pre/post push; anonymous pull receipt
+пока отсутствует. Tag source-f74c240febd963c79408e80600c29d7739e08867.
+Manifest → config → layers, binary hashes, two-build archive hashes и старые private
+tags перечислены в активном handoff. C0 проверяет package целиком перед открытием.
+
+В images входят pinned official curlimages/curl8.19.0 base, exact signed vendor
+binary и vendor LICENSE/CREDITS/source/minisig/NOTICE/input lock. Build contexts
+созданы по allowlist, приложение/private docs/.git/env/secrets не копируются.
+MinIO RELEASE.2025-09-07T16-13-09Z binary SHA-256
+7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f;
+mc RELEASE.2025-02-15T10-36-16Z binary SHA-256
+7a03ba39e158708a9e88f1bf5c346c6651b15c784e4b2c7150b5b5f282f43c28.
+Exact source/key provenance, minisign0.12, Buildx0.29.1, BuildKit0.25.0 и полный
+input lock — infra/storage/inputs.lock.json. Полные hashes и minisig проверены до
+execution; in-image binary hashes совпали; полный второй build byte-identical.
+
+Storage workflow автоматически срабатывает до merge по push четырёх build files
+в точную c6/m2-live-smoke; workflow_dispatch main предусмотрен только после
+интеграции. Основной CI не заменён. Build имеет contents:read; отдельный publisher
+contents:read/packages:write и только временный GITHUB_TOKEN, без исполнения image
+code. Artifact11107176489 содержит два Docker archives/input lock/verify receipt;
+artifact11106623061 — verify/publish receipts, ZIP SHA-256
+224a19ac249afe93515395c7c8c384ca62a8ff24cd61000e120470816d36cf41.
+Второй ZIP полностью скачан/проверен C6; первый скачан и проверен publisher.
+Retention7days до2026-10-07. Состав/хеши JSON и archives — в handoff.
+
+**Шаг владельца после проверки C0:** в settings **каждого из двух packages выше**
+Change visibility → Public. Эта операция необратима по правилам GHCR; private
+repository не открывать. C6 не выполнял её. Никаких PAT, новых secrets или Connect
+repository для уже успешно опубликованных packages не требуется.
+
+После подтверждения C6 на **новом disposable linux/amd64 GitHub runner**, без
+cache restore и без registry login, выполняет следующие команды (пока не исполнены):
+
+~~~sh
+set -eu
+storage_pull_config="$(mktemp -d)"
+trap 'rm -rf "$storage_pull_config"' EXIT
+export DOCKER_CONFIG="$storage_pull_config"
+minio_ref='ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa'
+mc_ref='ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4'
+if docker image inspect "$minio_ref" >/dev/null 2>&1; then exit 1; fi
+if docker image inspect "$mc_ref" >/dev/null 2>&1; then exit 1; fi
+docker pull --platform linux/amd64 "$minio_ref"
+docker pull --platform linux/amd64 "$mc_ref"
+docker image inspect --format '{{.Id}} {{json .RepoDigests}} {{json .RootFS.Layers}}' "$minio_ref" "$mc_ref"
+docker run --rm --entrypoint sha256sum "$minio_ref" /usr/local/bin/minio
+docker run --rm --entrypoint sha256sum "$mc_ref" /usr/local/bin/mc
+~~~
+
+Полные config/layers сравнить с verify receipt; binary hashes — с lock выше.
+Пустой Docker auth config и отсутствие обоих images обязательны, cache-only
+результат не принимается. Expected configs: MinIO
+sha256:b7bb806bee433a13f30a01509f324cfc5c764e4a07b11353aa423eda2e995c1d;
+mc sha256:85c9b02133dbec707e92450e93ca5a98e139423839b02946583bdd9ddd2cf2f6.
+Зафиксировать fresh-run pull receipt; затем обновить только STORAGE_IMAGE/
+STORAGE_ADMIN_IMAGE в infra/images.lock.env и две storage refs pin_images.sh.
+Если меняются recipe/image bytes, нужны новые build/digests/review.
+
+На одном новом final head обычный CI выполняет в своих прежних изолированных jobs:
+
+~~~sh
+sh scripts/ci.sh
+test -z "$(git status --porcelain --untracked-files=all)"
+~~~
+
+~~~sh
+sh scripts/test_browser.sh
+test -z "$(git status --porcelain --untracked-files=all)"
+~~~
+
+Сейчас ci.sh с local-image environment override уже PASS на build SHA, включая
+реальные private files/isolation/recovery/UNKNOWN. test_browser.sh reload committed
+Quay pins и сохраняет project guard; обход/редактирование script не допускаются.
+Полные browser/обычный final-head CI/оба gates остаются обязательными после смены
+pins. Обычный CI36734280555 на build SHA FAILURE со старым unauthorized; оба gates
+SKIPPED. M2-ENV-01 не закрывать до полного восстановления; C0 организует scoped C8.
+VM/DNS/TLS/webhook и live Telegram начинают только по следующему handoff.
 
 ## 1. Конкретное окружение и предварительные условия
 

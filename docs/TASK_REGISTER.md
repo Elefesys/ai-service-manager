@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — упаковка storage images выдана C6; registry recovery BLOCKED / 2026-09-30
+## Текущий статус — private storage artifacts готовы; public access gate / 2026-09-30
 
 **M2.4-CONSOLE INTEGRATED / VERIFIED только в LOCAL/TEST code/UI scope.**
 M2.4 — INTEGRATED с оставшимся live E2E; M2.3 live-проверка также не закрыта.
@@ -38,7 +38,8 @@ binary hashes/sizes с official release API; полный download/hash — evid
 Новые OCI bytes не объявляются идентичными недоступным старым; их приёмка новая.
 Два Dockerfile, input lock и отдельный build/verify/publish workflow разрешены.
 Основной CI/Compose/bootstrap/application/tests неизменны, исключение для lock —
-только две storage refs/pins. Новая упаковка ещё не реализована/не принята.
+только две storage refs/pins. Новая упаковка реализована и проверена на runner;
+C0/C8 acceptance и anonymous public pull/final CI ещё не завершены.
 
 C0 проверил [final CI C6 36717840363, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36717840363):
 оба jobs FAILURE при MinIO pull; checkout **349b84b9a942d21e0d4db92f84b2cd2e15d21b20**,
@@ -49,14 +50,33 @@ Canonical/frontend111/Compose PASS; PostgreSQL/S3/browser/UNKNOWN не испо�
 отсутствует, mirror404 — evidence C6; policy причина не установлена. История
 диагностики и исходные hashes/refs сохранены свёрнуто в handoff.
 
-Выбран GHCR для двух project-owned images. C6 может собрать/проверить и впервые
-опубликовать **private packages** через временный job-scoped GITHUB_TOKEN.
-Private push не доказывает anonymous pull. После подготовки конкретных artifacts
-C0 проверит состав и передаст владельцу точное действие для public visibility;
-repo остаётся private, PAT в чат/PR не нужен. Новый workflow должен запускаться
-до merge по точному branch push, не зависеть от first dispatch на main.
-GHCR storage/traffic сейчас бесплатны; billing/лимиты/платные сервисы не меняются.
-Никаких действий владельца с registry на текущем подготовительном шаге не требуется.
+**Результат C6:** [Storage CI36734267078, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36734267078)
+SUCCESS; tested source **f74c240febd963c79408e80600c29d7739e08867**, tree
+**3e742d07440bcd2e4516922d5698ed1aee735db0**. Две независимые no-cache сборки,
+полные binary hashes/minisig/tamper negative, config/layers/полные archives,
+in-image hashes/CA/shell/private policy/volume restart PASS. На новых local images
+неизменный ci.sh: **492 unit,390 real PostgreSQL/S3,111 frontend PASS** и source
+gate PASS. Browser/оба обычных gates и anonymous pull пока не подтверждены.
+
+Оба final packages опубликованы **private**:
+[asm-minio](https://github.com/users/Elefesys/packages/container/package/asm-minio),
+ID15482993, manifest sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa;
+[asm-mc](https://github.com/users/Elefesys/packages/container/package/asm-mc),
+ID15484077, manifest sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4.
+Exact inputs/config/archive/registry binding, receipt ZIP hashes и конкретные
+assertions приведены в активном handoff. Только publish job имеет временный
+GITHUB_TOKEN packages:write; private source/app/docs/env/secrets в images не входят.
+Publisher учитывает фактический API: repository metadata отсутствует; identity
+закреплена проверенными package IDs, exact name/type/owner и source label.
+Это исправление нового guard, а не основание требовать PAT/Connect repository.
+
+**Следующий внешний шаг:** C0 проверяет состав и организует владельцу public
+visibility двух готовых packages; private repository не открывать. C6 эту операцию
+не выполнял. До fresh anonymous pull storage pins/refs сохранены без изменений.
+Обычный CI36734280555 на том же source остаётся FAILURE на старом Quay unauthorized;
+PG/S3/browser в нём не дошли до исполнения, оба gates SKIPPED. Полный registry
+recovery не объявлен. Семь разрешённых paths изменены; остальные inputs и assertions
+сохранены. Final documentation head/tree ведутся в PR22 receipt без SHA-only commit.
 
 Конечный gate: оба public immutable refs скачаны без credentials/cache, прежние
 scripts и source gates полностью SUCCESS на итоговом head, реальные S3/PG/browser
@@ -121,8 +141,8 @@ CONTROLLED и SENT это не заменяют. Реальных Telegram sends
 | M2.4 | Console Inbox, manual reply и E2E | Интегрированный API M2.3 + main CI | C5; C3/C6; C0/C8 | INTEGRATED | PR21 merged; main96d9f09dd16d8b6ab019ac76a9c72ce910d81191; push/main35706123814 SUCCESS; code/UI VERIFIED LOCAL/TEST | Реальный A11 остаётся внешним gate M2-LIVE-A09-A11 |
 | M2.4-CONSOLE | Owner panel + private image + exact manual intention/recovery + browser | M2_CONTRACT §§10–11 | C5; C3/C6 TEST harness; C0/C8 | VERIFIED | Actual main96d9f09dd16d8b6ab019ac76a9c72ce910d81191, separate main CI SUCCESS; C8-M2.4-01/02/03 CLOSED, code/UI LOCAL/TEST | Сохранять принятые механизмы; это не live Telegram acceptance |
 | M2-LIVE-A09-A11 | Тестовый HTTPS runtime и реальная ручная Telegram переписка | Принятый actual main M2.4; доступный runtime и домен | C6; C3 connection; C0 acceptance | BLOCKED | .com зарегистрирован по ответу поддержки; .ru на проверке; external DNS/TLS/runtime не подтверждены; smoke на .com принят пользователем | M2-ENV-02 → восстановление M2-ENV-01/C0/C8/CI → runtime/.com HTTPS → фактические A09/A11 |
-| M2-ENV-01-REGISTRY | Восстановить storage provisioning и полный CI | M2.4 accepted main; pull failure PR22 | C6; C0/C8 | BLOCKED | Диагноз C6 принят; CI36717840363 FAILURE, PG/S3/browser не исполнились; upstream policy неизвестна | Зависит от M2-ENV-02, anonymous pull и полного CI; старое ограничение same-OCI явно заменено |
-| M2-ENV-02-STORAGE-IMAGES | Упаковать два exact official binary в проверяемые project-owned images | Принятый диагноз M2-ENV-01; решение C0 о новой упаковке | C6; C0 acceptance; независимый scoped C8 | IN_PROGRESS | Разрешены 9 paths; exact binary hashes подтверждены release API; новые images/build ещё не выполнены | Build/signatures/private GHCR → проверка public content/visibility → anonymous pull/pins → полный CI/C8; тот же PR22 |
+| M2-ENV-01-REGISTRY | Восстановить storage provisioning и полный CI | M2.4 accepted main; pull failure PR22 | C6; C0/C8 | BLOCKED | Новые private artifacts проверены в CI36734267078; обычный CI36734280555 FAILURE на прежних Quay pins | C0/owner public visibility → fresh anonymous pull → pins → оба scripts/gates и C8 |
+| M2-ENV-02-STORAGE-IMAGES | Упаковать два exact official binary в проверяемые project-owned images | Принятый диагноз M2-ENV-01; решение C0 о новой упаковке | C6; C0 acceptance; независимый scoped C8 | IN_PROGRESS | CI36734267078 SUCCESS: hash/minisig/rebuild/runtime;492 unit/390 PG-S3/111 frontend; оба private packages и exact digests готовы | ACCESS gate: C0 проверяет состав, владелец открывает два packages; затем anonymous pull/pins/final CI/C8; Draft PR22 |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 
