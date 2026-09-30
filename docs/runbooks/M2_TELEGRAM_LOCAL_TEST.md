@@ -101,18 +101,31 @@ production/Pilot не добавляется к существующим A09/A11
 
 ### 0.2. Последовательность C6 и действия владельца
 
-1. **M2-ENV-01-REGISTRY BLOCKED; диагноз C6 передан C0**, по единственному активному
-   [handoff](../tasks/M2_HANDOFF.md). Свежий CI36715183155 attempt2 повторил отказ
-   pull MinIO/mc из Quay на новых runners; PG/S3/browser не исполнились, оба
-   clean-source gates SKIPPED. Quay/Hub не предоставляют anonymous pull grant,
-   Google mirror не содержит exact manifests. Причина upstream policy не доказана.
-   Оба official GitHub release binary скачаны и проверены по полному SHA-256;
-   это не OCI identity proof. Pins/версии сохранены. Предложение переупаковки этих
-   binaries в project-owned digest-pinned images требует отдельного scope C0 и
-   C8; сейчас rebuild/новые credentials/публикация не выполняются. Exact refs,
-   provenance, hashes и команды — в активном handoff; final head/CI — в PR22 receipt.
-   Registry recovery не зависит от домена, bot token и paid runtime. Не создавать
-   VM до C0 приёмки полного CI; не заменять storage тесты mock/skip.
+1. **M2-ENV-02-STORAGE-IMAGES выдана C6; M2-ENV-01 recovery пока BLOCKED.**
+   C0 принял диагноз C6 и явно разрешил новую упаковку двух exact official release
+   binaries вместо недоступных identical OCI artifacts. Версии сохраняются; это
+   новые image bytes с новой приёмкой. Девять разрешённых paths, binary SHA-256,
+   signature key/provenance, runtime compatibility и DoD — в единственном активном
+   [handoff](../tasks/M2_HANDOFF.md). CI36717840363 FAILURE подтверждён C0 по обоим
+   logs; PG/S3/browser не исполнились, оба clean-source gates SKIPPED.
+   C6 готовит два Dockerfile/input lock и отдельный branch-push build/verify/publish
+   workflow; основной CI/Compose/private bootstrap/assertions сохраняются.
+   Целевые packages: ghcr.io/elefesys/asm-minio и ghcr.io/elefesys/asm-mc.
+   Первичный private push разрешён только job-scoped GITHUB_TOKEN; PAT не нужен.
+   После готовности конкретных проверенных artifacts C0 даст владельцу URLs и одно
+   действие Package settings → Change visibility → Public. Public package нельзя
+   затем вернуть в private; до проверки состава такую операцию не выполнять.
+   Сейчас действия владельца с registry не нужны. Private push не является
+   восстановлением anonymous pull. GHCR container storage/traffic по официальным
+   условиям на2026-09-30 бесплатны; Actions и существующие лимиты учитываются отдельно,
+   billing/платные планы не менять.
+   Затем — свежий anonymous pull обоих @sha256 без cache, два storage pins/refs,
+   полный final-head CI обоими прежними scripts и clean-source gates, реальные
+   PostgreSQL/S3/browser/private-file/UNKNOWN checks и независимый scoped C8.
+   Head/tree/CI — в PR22 receipt без SHA-only commits. Нужный операторский шаг
+   публичности блокирует только public pull/final gates: все независимые build/
+   signature/runtime проверки C6 завершает до передачи. Registry task не зависит
+   от домена, bot token или paid host. VM до C0 приёмки полного CI не создавать.
 2. **Параллельно владелец продолжает существующий тикет Timeweb.** .com заявлен
    зарегистрированным, .ru ждёт сверки данных; повторная покупка не нужна. Для smoke
    достаточно работоспособного .com — ждать готовности .ru не требуется. Перед
