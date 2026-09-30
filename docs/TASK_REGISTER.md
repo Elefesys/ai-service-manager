@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — M2.4 code/UI интегрирован; регистрация доменов для live M2 / 2026-09-27
+## Текущий статус — задача C6 по доступности MinIO; live smoke на .com / 2026-09-30
 
 **M2.4-CONSOLE INTEGRATED / VERIFIED только в LOCAL/TEST code/UI scope.**
 M2.4 — INTEGRATED с оставшимся live E2E; M2.3 live-проверка также не закрыта.
@@ -24,42 +24,43 @@ logs: исполнен именно actual merge SHA выше, не виртуа
 clean-source gates, canonical/migrations/contracts/reproducibility/smoke PASS.
 Все213 исходных blobs/modes соответствуют принятому дереву; ZIP bytes не проверены.
 
-Единственный следующий шаг — **M2-LIVE-A09-A11**, ведёт C6, C3 — только фактические
-Telegram connection/rights; C0 — scope/приёмка. Это завершение M2.3/4 по прежней
-матрице, не новый milestone и не production launch. Подготовлен один handoff в
-[M2_HANDOFF](tasks/M2_HANDOFF.md) и ветка **c6/m2-live-smoke** от main выше;
-Draft PR этой ветки хранит единое продолжение. Стартовый номер/head/tree/CI находятся
-в PR receipt; отдельного предварительного документационного merge не требуется.
+Ближайшая выданная задача — **M2-ENV-01-REGISTRY**, ведущий C6, приёмка C0.
+Это устранение конкретного provisioning blocker внутри **M2-LIVE-A09-A11**,
+не новый milestone. Существующие **c6/m2-live-smoke / Draft PR #22** продолжаются;
+первый coordination **914e2894f98330d62e1cc57ca5da5c62662d6960** сохраняется.
+Один активный [M2_HANDOFF](tasks/M2_HANDOFF.md) содержит точный scope и DoD.
+Задание подготовлено к передаче C6; выполнение/исправление ещё не заявлены.
 
-Пользователь подтвердил: **runtime/домены/DNS/TLS нужны с нуля**; основной домен
-предпочтительно **.ru**, также международный домен для будущего расширения.
-Bot/Owner/Client и TG_BOT_TOKEN/TG_WEBHOOK_SECRET уже подготовлены. **Бюджет принят
-владельцем**, предпочтение имени — `managerai` или близкое по тематике. В форме Timeweb
-2026-09-27 `managerai.ru` и `managerai.com` заняты. C0 выбрал свободную при проверке
-пару **clientmanagerai.ru + clientmanagerai.com**: 200 ₽ + 1560 ₽ за первый год.
-В неподтверждённой корзине оставлены только эти два домена; автоматически добавленный
-Optimo за 4704 ₽ удалён. Это проверка доступности/корзины, не регистрация или резерв.
-Домены/DNS оформляются в аккаунте владельца Timeweb; host — **Yandex Cloud / Россия**.
-.com планируется зарегистрировать для будущего расширения; один Console origin — .ru.
+**Подтверждённый blocker:** [CI36308372607](https://github.com/Elefesys/ai-service-manager/actions/runs/36308372607),
+attempts1/2, head **90fcdd968b00442d805839c8a205b673502fa122**, оба jobs FAILURE.
+C0 прочитал logs: `storage-test` и `storage-init` не загрузили принятые MinIO/mc pins
+из Quay (`unauthorized`), до PostgreSQL/S3/browser execution. Это не failed assertion;
+причина отказа registry пока не установлена. Отдельного домена/TG token для исправления
+не нужно. Head/tree/final CI текущего coordination и результата C6 ведутся в PR receipt;
+SHA-only документационные commits не создавать. Красный старт допускает исправление
+этого blocker, но не merge/приёмку.
 
-Конкретная конфигурация, расчёт cloud на 2026-09-24 и последовательность C6 находятся в
-[runbook §0.1–0.2](runbooks/M2_TELEGRAM_LOCAL_TEST.md#01-предложение-стенда-с-нуля--2026-09-24).
-Принятый вариант: 2×100% vCPU/8 GiB/60 GiB SSD + static IPv4, **4735,81 ₽/30 суток**;
-выбранная пара — **1760 ₽ первый год**, текущее продление **от 2209 ₽/год**.
-Итого ориентир **6495,81 ₽ за первый месяц и год регистрации двух доменов**;
-корзина пары проверена 2026-09-27. Это принятая оценка, не фиксированный счёт;
-повторно согласовывать тот же бюджет не нужно, платные дополнения не включены.
-Тестовый Compose/MinIO/asm_local сохраняются; production
-managed PostgreSQL/private object storage и one-region ADR не пересматриваются.
+**Решение владельца 2026-09-30:** внешний smoke проводить на **.com**, когда его
+работоспособность подтверждена. Плановые адреса:
+`console.telegram-test.clientmanagerai.com` и `files.telegram-test.clientmanagerai.com`.
+Это явное изменение прежнего плана smoke на .ru; .ru остаётся предпочтительным
+основным доменом будущего продукта. Вторую Console, общий cookie domain или второй
+регион не вводим. Перенос на .ru после smoke не выполняется автоматически.
 
-Продолжать [Draft PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
-Первый coordination CI35712429280 SUCCESS; актуальный final head/tested tree/CI
-записываются в PR receipt без SHA-only commits. Ближайшее действие владельца —
-создать аккаунт Timeweb, подтвердить администратора доменов у регистратора и оформить
-только два выбранных домена на один год за 1760 ₽; вернуть non-secret подтверждение
-регистрации. [Форма пары](https://timeweb.com/ru/services/domains/?d=clientmanagerai)
-и точный маршрут — runbook §0.2. Затем C6 ведёт Yandex account/billing/host/DNS/TLS;
-секреты вводятся прямо в private runtime files. Runtime/DNS/TLS ещё не созданы.
+По сообщению владельца и процитированному ответу Timeweb: **clientmanagerai.com
+зарегистрирован, NS Timeweb установлены**; публичная DNS/HTTPS-работоспособность C0
+не проверена. **clientmanagerai.ru ожидает проверки администратора/ЕСИА**. Это
+сообщённый статус провайдера, не independent registry/DNS evidence. Личные данные,
+логины, переписка с паспортными данными и secrets в репозиторий не переносятся.
+Повторная регистрация/покупка пары не требуется; владелец продолжает существующий тикет.
+
+Бюджет и Yandex RU test host приняты: ориентир **4735,81 ₽/30 суток runtime**,
+**1760 ₽ первый год пары**, итого **6495,81 ₽**, по расчёту/корзине 24–27 сентября.
+Точные условия сохранены в [runbook §0.1](runbooks/M2_TELEGRAM_LOCAL_TEST.md#01-предложение-стенда-с-нуля--2026-09-24).
+Повторного согласования того же бюджета не нужно. **До восстановления CI платную VM
+не создавать.** Текущая задача C6 не включает ресурсы/аккаунты/DNS/TLS/webhook/live sends.
+Bot/Owner/Client и два Telegram секрета уже подготовлены. LOCAL Compose/MinIO/asm_local
+и принятый production managed PostgreSQL/private storage ADR сохраняются.
 
 Live DoD: Client text+photo → правильный Workspace/Owner Console/private image →
 ручной ответ → реальное получение Client, плюс фактические connection/rights A09.
@@ -95,7 +96,8 @@ CONTROLLED и SENT это не заменяют. Реальных Telegram sends
 | M2.3-TELEGRAM-API | Official Telegram → durable kernel/private images → five owner API routes | M2_CONTRACT §10 | C3; C2/C1/C6; C0/C8 | VERIFIED | Accepted main ffc437f125aa6af4dcf1c61a035a0d5df517e062; code/API LOCAL/TEST, C8-M2.3-01 CLOSED; actual main CI SUCCESS | Сохранять API/0007/time guards/UNKNOWN; live evidence отдельно |
 | M2.4 | Console Inbox, manual reply и E2E | Интегрированный API M2.3 + main CI | C5; C3/C6; C0/C8 | INTEGRATED | PR21 merged; main96d9f09dd16d8b6ab019ac76a9c72ce910d81191; push/main35706123814 SUCCESS; code/UI VERIFIED LOCAL/TEST | Реальный A11 остаётся внешним gate M2-LIVE-A09-A11 |
 | M2.4-CONSOLE | Owner panel + private image + exact manual intention/recovery + browser | M2_CONTRACT §§10–11 | C5; C3/C6 TEST harness; C0/C8 | VERIFIED | Actual main96d9f09dd16d8b6ab019ac76a9c72ce910d81191, separate main CI SUCCESS; C8-M2.4-01/02/03 CLOSED, code/UI LOCAL/TEST | Сохранять принятые механизмы; это не live Telegram acceptance |
-| M2-LIVE-A09-A11 | Тестовый HTTPS runtime и реальная ручная Telegram переписка | Принятый actual main M2.4; разрешённые тестовые аккаунты | C6; C3 connection; C0 acceptance | BLOCKED | Бюджет принят; clientmanagerai.ru/.com свободны в Timeweb на 2026-09-27, корзина 1760 ₽/первый год без hosting. Аккаунт/регистрация доменов и runtime/DNS/TLS ещё не готовы | Владелец регистрирует пару → C6 Yandex setup → настоящий A09/A11 и очищенный receipt |
+| M2-LIVE-A09-A11 | Тестовый HTTPS runtime и реальная ручная Telegram переписка | Принятый actual main M2.4; доступный runtime и домен | C6; C3 connection; C0 acceptance | BLOCKED | .com зарегистрирован по ответу поддержки; .ru на проверке; external DNS/TLS/runtime не подтверждены; smoke на .com принят пользователем | M2-ENV-01 → C0 принятие CI → подготовка runtime/.com HTTPS → фактические A09/A11 |
+| M2-ENV-01-REGISTRY | Восстановить загрузку закреплённых MinIO/mc и полный CI | M2.4 accepted main; фактический pull failure PR22 | C6; C0; scoped C8 при изменении источников/образов | TODO | Поручение выдано в том же PR22; два attempts CI36308372607 failed до PG/browser; точный scope в активном handoff | C6 диагноз → ограниченный fix либо доказанный no-change recovery → полный final-head CI и receipt |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 

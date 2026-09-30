@@ -2,114 +2,140 @@
 
 Дата подготовки: 2026-09-20. Ответственный за выдачу задач и интеграцию: C0.
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
-Этот файл — принятый план и единственная активная точка передачи M2.
-Приёмка плана не является evidence выполненной реализации.
+Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный handoff C0 → C6 — M2-LIVE-A09-A11 / 2026-09-27
+## Активный handoff C0 → C6 — M2-ENV-01-REGISTRY / 2026-09-30
 
-**M2.4-CONSOLE code/UI INTEGRATED / VERIFIED LOCAL/TEST. Весь M2 IN_PROGRESS.**
-Следующая и единственная зависимая задача — завершить существующие live A09/A11
-M2.3/4. Runtime/DNS/TLS пока BLOCKED внешними ресурсами; подготовка ниже не считается
-выполненным live smoke. M3, AI, production onboarding и новые продуктовые функции не выданы.
+**M2.4 code/UI INTEGRATED / VERIFIED LOCAL/TEST; весь M2 IN_PROGRESS.**
+Задача — восстановить доступность принятых storage images и штатный CI, не ожидая
+доменов. Это устранение blocker родительской M2-LIVE-A09-A11. Задание подготовлено
+к передаче; реализация и независимый C8 ещё не выполнены. M3/AI/новые функции не выданы.
 
-### Подтверждённая интеграция и точный base
+### Repository, base, ветка и evidence старта
 
-[PR21](https://github.com/Elefesys/ai-service-manager/pull/21) merged, actual main/base
-**96d9f09dd16d8b6ab019ac76a9c72ce910d81191**, tree
-**28de72ca6737cbe18bb4856a1636f70fae1131ee**. Merge parents: прежний main
-**ffc437f125aa6af4dcf1c61a035a0d5df517e062** + принятый head
-**770e7db905732b3ed2a25a1d9a2c31bcd89a161b**. Дерево совпало с final PR tree.
-[Отдельный push/main CI35706123814, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/35706123814)
-**SUCCESS**:492 unit,390 PostgreSQL/S3,111 frontend,27 browser; оба scripts/source
-gates, canonical/migrations/contracts/reproducibility/smoke PASS. Jobs
-foundation106675369660/browser106675369293 реально checkout actual main выше.
-C0 прочитал оба logs; прежний C8 PASS/CLOSED01/02/03 сохранён, повторного review
-неизменного implementation не требуется. ZIP bytes отдельно не проверены.
+- Repository **Elefesys/ai-service-manager**; продолжать **c6/m2-live-smoke → main**,
+  существующий [Draft PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
+- Принятый implementation base / actual main:
+  **96d9f09dd16d8b6ab019ac76a9c72ce910d81191**,
+  tree **28de72ca6737cbe18bb4856a1636f70fae1131ee**.
+  PR21 merged; ordered parents **ffc437f125aa6af4dcf1c61a035a0d5df517e062** +
+  **770e7db905732b3ed2a25a1d9a2c31bcd89a161b**. Implementation bytes не менялись.
+- [Отдельный push/main CI35706123814](https://github.com/Elefesys/ai-service-manager/actions/runs/35706123814)
+  SUCCESS:492 unit,390 PostgreSQL/S3,111 frontend,27 browser; оба scripts/gates,
+  canonical/migrations/contracts/reproducibility/smoke PASS. C0 прочитал оба actual
+  main checkout logs; C8-M2.4-01/02/03 CLOSED сохраняются для прежних implementation bytes.
+  Это историческая приёмка, не green CI текущего PR head. ZIP bytes не проверены.
+- Сохранить первый coordination **914e2894f98330d62e1cc57ca5da5c62662d6960** и всю
+  последующую историю. Непосредственный parent этого задания:
+  **90fcdd968b00442d805839c8a205b673502fa122**,
+  tree **59b95121b494e487fdb8d53087d7d26cb6927adf**.
+  Exact стартовый coordination head указан в сообщении передачи C0 и PR receipt;
+  начать от него, не откатываться на parent/старую ветку M2.2 и не force-push.
+- [CI36308372607, attempts1/2](https://github.com/Elefesys/ai-service-manager/actions/runs/36308372607)
+  FAILURE: `storage-test` (MinIO server) и `storage-init` (mc) получили `unauthorized`
+  при pull из Quay. C0 прочитал logs attempts1/2; attempt2 jobs108589635786/108589635665.
+  Checkout **ce62ff7eaf640d580cef44d53a8648255e9c9d28**, parents accepted main +
+  parent задания; tree идентичен parent tree. Canonical/frontend111/Compose model
+  прошли; PG/S3/browser и clean-source gates не завершены. Не заявлять их PASS.
 
-### ID, владелец, ветка и допустимый scope
+### Читать перед работой
 
-- **ID M2-LIVE-A09-A11**, ведущий **C6**. C3 подключается для фактических Telegram
-  connection/rights/provider вопросов; C0 принимает результат. C2/миграции не выданы.
-- Repository **Elefesys/ai-service-manager**, branch **c6/m2-live-smoke** → main.
-  Продолжать [Draft PR #22](https://github.com/Elefesys/ai-service-manager/pull/22),
-  сохранить первый coordination commit; его CI35712429280 SUCCESS.
-  Exact start/final SHA/tree/CI — в PR receipt. Accepted implementation base указан выше;
-  не начинать от старого C5 coordination или старого M2.3 head.
-- Разрешённые repository paths: **docs/TASK_REGISTER.md**, **docs/tasks/M2_HANDOFF.md**,
-  **docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md** — точные инструкции и очищенное evidence.
-  Runtime env/DNS/TLS выполняются в отдельном разрешённом тестовом окружении по runbook;
-  secret files/cert keys не добавлять в Git, чат, PR, build context или artifacts.
-- Backend/UI/kernel/API/DTO/generated contracts, dependencies/pins, CI/base Compose и
-  применённые0001–0007 не менять. Конкретный blocker сначала воспроизвести и вернуть
-  C0 с узким proposed fix; не перепроектировать уже принятые срезы.
-- Читать AGENTS, актуальный register, M2_CONTRACT §§9–11, runbook; Implementation Plan
-  §§6–7, Roadmap M2, ADR019/020/136–142/243 и deployment §1.1 применительно к test scope.
-  Production checklist/M12 не становится новым обязательным scope M2.
+AGENTS; актуальный register и этот активный handoff; `docs/decisions/IMPL-001-stack.md`;
+M2_CONTRACT §§9–11 и runbook M2_TELEGRAM_LOCAL_TEST §§0–1; `infra/images.lock.env`,
+`scripts/pin_images.sh`, `compose.yaml`, `scripts/ci.sh`, `scripts/test_browser.sh`,
+`.github/workflows/ci.yml`; применимые Spec/ADR private storage, immutable inputs и
+LOCAL/TEST границы; Implementation Plan §§6–7. Исторические M1 задания не исполнять.
 
-### Ближайший шаг и распределение действий
+### Что установлено и что нужно диагностировать
 
-**Ответ владельца получен:** всё с нуля, основной домен .ru и международный домен;
-`managerai` или близкое тематическое имя, **бюджет подходит**. Повторно спрашивать
-inventory/имя/тот же бюджет не нужно. В форме Timeweb 2026-09-27 оба `managerai`
-заняты; C0 выбрал свободные при проверке **clientmanagerai.ru + clientmanagerai.com**.
-Для runtime принят тестовый Yandex Cloud host в России: обычная VM Intel Ice
-Lake/100%,2 vCPU,8 GiB RAM,60 GiB network SSD,static IPv4. Ресурсы ещё не созданы.
+Принятые release inputs в `scripts/pin_images.sh`:
 
-Публичный расчёт на 2026-09-24: **4735,81 ₽/30 суток runtime**, **1760 ₽/год первая
-регистрация выбранной пары**, текущее продление **от 2209 ₽/год**.
-Итого ориентир первого месяца **6495,81 ₽**. Точные ставки, источники, условия и
-ближайший маршрут — [runbook §0.1–0.2](../runbooks/M2_TELEGRAM_LOCAL_TEST.md#01-предложение-стенда-с-нуля--2026-09-24).
-Первый период планирования — 30 суток; удержание/остановка ресурсов учитываются
-отдельно. В форме заказа 2026-09-27 подтверждены 200 ₽ за .ru и 1560 ₽ за .com на
-один год; автоматический hosting Optimo за 4704 ₽ исключён. Корзина не подтверждена,
-домены не оплачены/не зарегистрированы; доступность не является резервированием.
+- MinIO `RELEASE.2025-09-07T16-13-09Z`, pin
+  `quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`.
+- mc `RELEASE.2025-02-15T10-36-16Z`, pin
+  `quay.io/minio/mc@sha256:9ae9ed28d04f7c36ee6b84c36b2c0168f1be28350d54344c3e5088a631f4c603`.
 
-C6 ведёт один последовательный маршрут в существующем runbook: где выполнить действие,
-точная настройка/команда, ожидаемый non-secret результат и что вернуть C0. Ближайшее
-действие владельца — аккаунт Timeweb, подтверждение администратора непосредственно
-у регистратора и регистрация только выбранной пары на один год за 1760 ₽, без hosting
-и платных дополнений. Вернуть факт регистрации; личные данные/секреты в чат не нужны.
-Затем — account/billing Yandex и техническая настройка C6; платный cloud не запущен.
-Для Console/private files запланированы `console.telegram-test.clientmanagerai.ru`
-и `files.telegram-test.clientmanagerai.ru`, один auth origin; .com резервируется,
-не запускает вторую Console/region и не расширяет CORS/cookies. Production ADR и
-принятый LOCAL Compose сохраняются. Не выдавать полный production rollout за M2.
+Отказ доступа воспроизведён на двух CI attempts. Причина ответа registry не установлена:
+не считать доказанными удаление образа, общий outage, необходимость логина или смены
+версии. Сначала проверить исходные refs свежим anonymous pull/manifest inspection на
+чистом runner с обычным разрешённым сетевым доступом. Network/auth ограничения не обходить.
+Различать отсутствие объекта, отказ registry/token service, network failure и cache.
+Не ждать домена, bot token, cloud account или пользовательского Docker для этого шага.
 
-Пользователь выполняет только account/billing/DNS permissions и вводит собственные
-секреты, либо запускает выданные C6 команды на своём host, когда агент не имеет
-доступа. Наличие cloud/browser/SSH возможностей нельзя предполагать. Bot, business
-mode, Owner/Client и TG secrets уже подготовлены — не требовать их создания повторно.
+### Точный разрешённый scope C0
 
-### Конечный технический результат
+Этот блок **явно заменяет прежний полный запрет изменения storage pins** только для
+данного blocker. Продуктовые контракты, версии и остальная инфраструктура сохраняются.
 
-1. Отдельный тестовый Linux/Docker runtime **asm-telegram-test**, accepted source SHA,
-   готовые Console и private-storage HTTPS endpoints. По принятому runbook это
-   isolated LOCAL **asm_local**, не production и не переиспользованная browser fixture.
-   Два DNS имени могут быть subdomains одного домена; public TCP443 и исходящий
-   api.telegram.org HTTPS, правильные runtime/migrator роли и private files.
-2. Секреты прямо из password manager в private .env.telegram/secret store; точные
-   bot/Owner IDs проверены оператором. Существующие provision/setup/webhook guards,
-   secret_token, live OWNER/product/rights/window admission сохраняются.
-3. Принятый основной transport connected business bot/Profile Automation, ограниченный
-   тестовыми Owner/Client. C3/C6 проверяют actual connection/right state; не делать
-   неподтверждённых выводов о Premium/доступности на конкретном аккаунте.
-4. Реальный Client отправляет текст и тестовое изображение; Owner видит правильный
-   диалог и private image в существующей Console, отправляет ручной текст, Client
-   подтверждает получение. Record exact code/date, очищенные IDs/state outcomes.
-   Accepted202/SENT, curl/mock/CONTROLLED или screenshot одной Console не заменяют
-   Client receipt. Не вводить новую библиотеку/route/UI ради demonstration.
-5. A09: зафиксировать фактические права/состояние подключения и применимые ограничения
-   отправки. Детерминированные negative/window/UNKNOWN tests остаются своим evidence;
-   не устраивать неконтролируемые внешние retries. Timeout/возможный effect сохраняет
-   UNKNOWN/исходное намерение; новый key не заменяет recovery.
-6. Очищенный receipt в этом handoff/runbook: выполненные шаги, exact refs/CI, реальная
-   проверка и её границы по A09/A11, remaining blockers, безопасное завершение стенда.
-   Если репозиторий менялся — полный CI final head, C0 review и user merge/main CI.
-   Независимый C8 заново нужен только для конкретной рискованной дельты/незакрытого gate.
+1. `infra/images.lock.env` — только **STORAGE_IMAGE** и **STORAGE_ADMIN_IMAGE**.
+2. `scripts/pin_images.sh` — только две соответствующие исходные ссылки; сохранить
+   exact release versions, immutable resolution и правило не обновлять уже принятые pins.
+   Не запускать массовое обновление пяти остальных pins.
+3. `docs/TASK_REGISTER.md`, `docs/tasks/M2_HANDOFF.md`,
+   `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` — диагноз, provenance, точные команды,
+   результат и границы evidence, одно согласованное итоговое обновление.
 
-До внешнего выполнения задача остаётся **BLOCKED runtime/DNS/TLS**. Это конечный
-оставшийся gate M2, а не основание переходить к M3. C0 объявит M2 VERIFIED только
-после фактических A09/A11, сохранённых остальных A01–A12 и успешного actual main CI.
+Если нужен перенос источника: допускается официальный публичный registry/mirror с
+доказанным происхождением **тех же release artifacts**. Сохранять `@sha256`; проверить
+index/platform manifest, config и layer identities для принятого linux/amd64.
+Одинаковый tag/вывод `--version` сам по себе не доказывает одинаковые bytes. Разницу
+между index digest и platform manifest не выдавать за изменение runtime. Для иной
+платформы не заявлять проверку без исполнения. Не использовать случайные community
+rebuilds, непроверенный proxy/cache или pin от другого release.
+
+Если исходный доступ восстановился и свежий полный CI проходит без изменения images,
+зафиксировать no-change recovery; не создавать fix ради коммита и не выдумывать причину.
+Если тех же artifacts нет либо нужны rebuild/version change/new registry credentials,
+вернуть C0 конкретный диагноз и минимальную proposed delta с источниками. Такой выбор
+не делегирован автоматически, но не блокирует остальные доступные read-only проверки.
+
+Не менять backend/frontend/API/DTO/generated contracts, auth/CORS/RLS, private ACL,
+S3 bootstrap policy, applied0001–0007, остальные dependencies/pins, Compose/workflows,
+`scripts/ci.sh`, `scripts/test_browser.sh` и существующие tests/assertions. Не добавлять
+skip/xfail, `latest`, `continue-on-error`, registry login или более широкие credentials.
+Обоснованный обнаруженный blocker вне этих пяти paths сначала вернуть C0.
+
+### Конечные критерии результата
+
+- Диагноз опирается на точные refs, команды и sanitized registry/runner evidence;
+  различает observed error и подтверждённую причину. Secrets/auth tokens не логировать.
+- Оба final immutable refs реально скачаны на чистом linux/amd64 runner без заранее
+  загруженного локального image. Проверены digest/provenance и MinIO/mc versions.
+  Обычный pull, использовавший локальный image cache, недостаточен для recovery evidence.
+- На одном final head полностью прошли **sh scripts/ci.sh** и
+  **sh scripts/test_browser.sh**, оба clean-source gates, migrations/contracts/
+  reproducibility/smoke. PG/S3 действительно исполняются; private access, signed GET,
+  CORS/isolation, interrupted upload/recovery, SEND UNKNOWN/no-resend и M1 regression
+  сохраняются. Количество cases — справка, не замена assertions/evidence.
+- Final-head SHA, tree, actually checked-out virtual merge, ordered parents и tree
+  comparison подтверждены logs/Git objects. Если ZIP bytes недоступны, это указать.
+- Единственный register/активный handoff/runbook обновлены согласованно. Не делать
+  коммит только ради записи предыдущего documentation SHA; refs/CI — в PR receipt.
+- Вернуть C0 REVIEW, список paths/delta, причину выбранного fix/no-change, exact refs,
+  команды/CI/results и ограничения. Не merge и не объявлять M2/A09/A11 VERIFIED.
+
+Если изменены источники/pins, C0 организует **реальный scoped C8** по provenance,
+воспроизводимости и сохранности private-storage checks перед приёмкой. Это новая
+граница review; прежний C8 PASS не покрывает новые image bytes автоматически.
+Для подтверждённого no-change recovery отдельный повтор C8 без нового риска не нужен.
+
+### Зафиксированное решение о доменах и следующий шаг после приёмки
+
+Владелец 2026-09-30 согласовал **smoke на .com после подтверждения работоспособности**:
+`console.telegram-test.clientmanagerai.com` + `files.telegram-test.clientmanagerai.com`.
+Это явное изменение прежних .ru smoke endpoints, с одним Console/API/webhook origin
+и отдельным private-files hostname. Вторую Console/region/shared-cookie domain или
+CORS wildcard не создавать; .ru остаётся будущим основным доменом по предпочтению
+владельца. Автоматическая смена .com → .ru в эту задачу не входит.
+
+По сообщению владельца/ответу поддержки: .com зарегистрирован, NS Timeweb прописаны;
+.ru ждёт проверки администратора. Публичные DNS/HTTPS C0 не проверены. Не копировать
+личные данные из обращения, не повторять регистрацию и не просить TG secrets.
+Бюджет принят; в **M2-ENV-01** не создавать платный runtime, не менять DNS/TLS/webhook
+и не отправлять Telegram. После C0 приёмки CI выдаётся следующий шаг существующей
+M2-LIVE-A09-A11: host/preflight → проверенные .com DNS/TLS → реальный Client text+photo
+→ правильный Workspace/Owner Console/private image → manual reply → Client receipt.
+CONTROLLED/202/SENT не заменяют live evidence; A09/A11 остаются BLOCKED, M3 не выдан.
 
 <details>
 <summary>История: приёмка M2.4 до merge — не текущие инструкции</summary>
