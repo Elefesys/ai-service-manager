@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "platform": "linux/amd64",
+  "source_date_epoch": 1790726400,
+  "base": {
+    "repo": "curlimages/curl",
+    "tag": "8.19.0",
+    "index_digest": "sha256:c03110c736db81bbe1be0296f1f1608c81b954b01626bdfb0a8f84e5bd00ff3c",
+    "platform_digest": "sha256:a2e4c1ef9b660f8ca90b2b725768e0ceade4fc1e52b5859a8d3e6c93db2dc47c",
+    "manifest": {
+      "schemaVersion": 2,
+      "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+      "config": {
+        "mediaType": "application/vnd.docker.container.image.v1+json",
+        "size": 959,
+        "digest": "sha256:ffa0c7daf725e85d72826c834502ffef21542e1952f1b8ba1ed4160062654ea2"
+      },
+      "layers": [
+        {
+          "mediaType": "application/vnd.docker.image.rootfs.diff.tar.gzip",
+          "size": 10603173,
+          "digest": "sha256:04027a6317a7884d6c49672c464e9819f59a8a37a61ba35ab1519530c802467e"
+        }
+      ]
+    },
+    "diff_ids": [
+      "sha256:868af4250ecc283b7dbed8ba0b5db408a7dfecb88bdaad00fe4163bf3f56bf0c"
+    ],
+    "provenance": "https://github.com/curl/curl-container"
+  },
+  "buildkit": {
+    "repo": "moby/buildkit",
+    "tag": "v0.24.0",
+    "index_digest": "sha256:6eceb8971ce4fceb3daca562832642706238b7eea72941fcf9896c93c3c4a53e",
+    "platform_digest": "sha256:8c2ce26a3722e0cf4514fad4cfcd0e0f0f16214219ca7b73f3e1fcef74640ac4",
+    "manifest": {
+      "schemaVersion": 2,
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "config": {
+        "mediaType": "application/vnd.oci.image.config.v1+json",
+        "digest": "sha256:ea1737f76f8c276e68138fdd053eb06a2c09704fa4a7a843db7801ba705e1f70",
+        "size": 2099
+      },
+      "layers": [
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:9824c27679d3b27c5e1cb00a73adb6f4f8d556994111c12db3c5d61a0c843df8",
+          "size": 3799689
+        },
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:4ff988c3d129a66efeab4ec6af8fb235b281ee7ccbb578d1d6a8e4f8d52d65de",
+          "size": 9898508
+        },
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:9c3d595e02bde2b5a8fbdbc2fbe3cb62aa43331428ab211f2f4a99d6de5b9488",
+          "size": 940
+        },
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:2780d72e4180f76a0cbf781a96ec373c5af622883f5ea30a9367797adb4639c9",
+          "size": 169
+        },
+        {
+          "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+          "digest": "sha256:9cb1f405986d4569e78e74135727c3fe2299314d2dc24362fee575dc4120b6f9",
+          "size": 88391557
+        }
+      ],
+      "annotations": {
+        "org.opencontainers.image.revision": "b772c318368090fb2ffc9c0fed92e0a35bf82389",
+        "org.opencontainers.image.source": "https://github.com/moby/buildkit",
+        "org.opencontainers.image.title": "BuildKit",
+        "org.opencontainers.image.url": "https://github.com/moby/buildkit",
+        "org.opencontainers.image.version": "v0.24.0"
+      }
+    }
+  },
+  "buildx": {
+    "version": "0.29.1",
+    "url": "https://github.com/docker/buildx/releases/download/v0.29.1/buildx-v0.29.1.linux-amd64",
+    "bytes": 68251832,
+    "sha256": "7d2d7d6d4680aa349614965aaa33ccec43f1a9a21e908a5ce4cb6adfa5ad5141"
+  },
+  "minisign": {
+    "version": "0.12",
+    "url": "https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12-linux.tar.gz",
+    "bytes": 271043,
+    "sha256": "9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73",
+    "member": "minisign-linux/x86_64/minisign",
+    "binary_sha256": "2c74dffcc1c9a5ee55957c60971998ace2b89f22585631594ec2152c588af8db"
+  },
+  "signature": {
+    "public_key": "RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav",
+    "key_provenance": {
+      "url": "https://raw.githubusercontent.com/minio/minio/07c3a429bfed433e49018cb0f78a52145d4bedeb/Dockerfile.release",
+      "bytes": 3115,
+      "sha256": "749dd8f1b5eaa04408999c3d0c2fa148b70de5b33239b604c4a9e9cd86f2cdee"
+    },
+    "upstream_commit": "07c3a429bfed433e49018cb0f78a52145d4bedeb"
+  },
+  "images": {
+    "minio": {
+      "release": "RELEASE.2025-09-07T16-13-09Z",
+      "source_commit": "07c3a429bfed433e49018cb0f78a52145d4bedeb",
+      "package": "ghcr.io/elefesys/asm-minio",
+      "binary": {
+        "url": "https://github.com/minio/minio/releases/download/RELEASE.2025-09-07T16-13-09Z/minio.linux-amd64.RELEASE.2025-09-07T16-13-09Z",
+        "bytes": 110989496,
+        "sha256": "7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f"
+      },
+      "minisig": {
+        "url": "https://github.com/minio/minio/releases/download/RELEASE.2025-09-07T16-13-09Z/minio.linux-amd64.RELEASE.2025-09-07T16-13-09Z.minisig",
+        "bytes": 326,
+        "sha256": "d71cf680e1de21ae4a71d8d6ff2c80d6f8b07cbe8a9e00e157ef40be213fd47f"
+      },
+      "source": {
+        "url": "https://github.com/minio/minio/archive/07c3a429bfed433e49018cb0f78a52145d4bedeb.tar.gz",
+        "bytes": 24232436,
+        "sha256": "8819e3e7817e46b7b3798f8f200ead208562e571563c2e040352378031abe9f2"
+      },
+      "license": {
+        "url": "https://raw.githubusercontent.com/minio/minio/07c3a429bfed433e49018cb0f78a52145d4bedeb/LICENSE",
+        "bytes": 34523,
+        "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+      },
+      "credits": {
+        "url": "https://raw.githubusercontent.com/minio/minio/07c3a429bfed433e49018cb0f78a52145d4bedeb/CREDITS",
+        "bytes": 1882228,
+        "sha256": "113b8c63dfd987d3652950d7c2aecb1c0952b41781e79bcdac6a316418d48542"
+      }
+    },
+    "mc": {
+      "release": "RELEASE.2025-02-15T10-36-16Z",
+      "source_commit": "383560b1c3d6912042e8c8c275bb78e83e67ef2b",
+      "package": "ghcr.io/elefesys/asm-mc",
+      "binary": {
+        "url": "https://github.com/minio/mc/releases/download/RELEASE.2025-02-15T10-36-16Z/mc.linux-amd64.RELEASE.2025-02-15T10-36-16Z",
+        "bytes": 29208728,
+        "sha256": "7a03ba39e158708a9e88f1bf5c346c6651b15c784e4b2c7150b5b5f282f43c28"
+      },
+      "minisig": {
+        "url": "https://github.com/minio/mc/releases/download/RELEASE.2025-02-15T10-36-16Z/mc.linux-amd64.RELEASE.2025-02-15T10-36-16Z.minisig",
+        "bytes": 323,
+        "sha256": "40f432ba89f9bca5c4bd5398a0669eb4d23eb142ff2c35c8b86ae894cbc95edb"
+      },
+      "source": {
+        "url": "https://github.com/minio/mc/archive/383560b1c3d6912042e8c8c275bb78e83e67ef2b.tar.gz",
+        "bytes": 559612,
+        "sha256": "874b95062b735aa4c5614651eda853ec46b7cf20a66d65796a628054053d1724"
+      },
+      "license": {
+        "url": "https://raw.githubusercontent.com/minio/mc/383560b1c3d6912042e8c8c275bb78e83e67ef2b/LICENSE",
+        "bytes": 34523,
+        "sha256": "0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0"
+      },
+      "credits": {
+        "url": "https://raw.githubusercontent.com/minio/mc/383560b1c3d6912042e8c8c275bb78e83e67ef2b/CREDITS",
+        "bytes": 668850,
+        "sha256": "4ead58181c478e2f449d5778165684f4fceb1e7b8b3ee150051c8e7adfe4f337"
+      }
+    }
+  }
+}
