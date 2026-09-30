@@ -390,10 +390,21 @@ jobs:
           repository = api('repos/Elefesys/ai-service-manager')
           assert repository and repository['full_name'] == 'Elefesys/ai-service-manager'
           owner_route = 'orgs' if repository['owner']['type'] == 'Organization' else 'users'
+          # Immutable identities observed after the authorized first private pushes:
+          # minio: run36728044544; mc: run36732619535 (partial receipt11106091457).
+          # The package API omits repository metadata for these GHCR packages.
+          package_ids = {'minio': 15482993, 'mc': 15484077}
+          def require_package_identity(name, package):
+              assert package and package['id'] == package_ids[name], 'package identity changed or inaccessible'
+              assert package['name'] == 'asm-' + name and package['package_type'] == 'container'
+              assert package['owner']['id'] == repository['owner']['id'], 'package owner conflict'
+              linked = package.get('repository')
+              if linked is not None:
+                  assert linked['id'] == repository['id'], 'package repository conflict'
           def package_binding(name, package, phase):
               linked = (package or {}).get('repository') or {}
               value = {'phase': phase, 'package': 'ghcr.io/elefesys/asm-' + name,
-                  'exists': package is not None, 'package_id': (package or {}).get('id'),
+                  'exists': package is not None, 'package_id': (package or {}).get('id'), 'expected_package_id': package_ids[name],
                   'visibility': (package or {}).get('visibility'), 'repository_id': linked.get('id'),
                   'repository_full_name': linked.get('full_name'), 'expected_repository_id': repository['id']}
               print(json.dumps(value), flush=True)
@@ -412,23 +423,7 @@ jobs:
               for name, spec in receipt['images'].items():
                   try:
                       package = preexisting[name]
-                      if package is not None:
-                          assert package['name'] == 'asm-' + name and package['package_type'] == 'container'
-                          assert package['owner']['id'] == repository['owner']['id'], 'package owner conflict'
-                          if (package.get('repository') or {}).get('id') != repository['id']:
-                              # Read-only receipt for an earlier partial push; never authorizes a write.
-                              versions = api(owner_route + '/Elefesys/packages/container/asm-' + name + '/versions?per_page=100')
-                              assert isinstance(versions, list) and package['version_count'] <= 100
-                              observed = []
-                              for version in versions:
-                                  assert re.fullmatch(r'sha256:[0-9a-f]{64}', version['name'])
-                                  ref = spec['package'] + '@' + version['name']
-                                  manifest = json.loads(subprocess.check_output(['docker', 'manifest', 'inspect', ref]))
-                                  observed.append({'ref': ref, 'tags': version['metadata']['container']['tags'],
-                                      'config_digest': manifest['config']['digest'], 'layers': manifest['layers'],
-                                      'manifest_type': manifest['mediaType']})
-                              published['existing_versions'][name] = observed
-                          assert (package.get('repository') or {}).get('id') == repository['id'], 'existing package repository binding unconfirmed'
+                      require_package_identity(name, package)
                       target = spec['package'] + ':source-' + os.environ['GITHUB_SHA']
                       # A rerun may reuse an immutable tag only when its config is identical.
                       existing = subprocess.run(['docker', 'manifest', 'inspect', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -448,9 +443,8 @@ jobs:
                       published['images'][name] = {'ref': ref, 'tag': target, 'visibility': (package or {}).get('visibility'),
                           'config_digest': manifest['config']['digest'], 'layers': manifest['layers'],
                           'binary_sha256': spec['binary_sha256'], 'manifest_type': manifest['mediaType']}
-                      assert package and (package.get('repository') or {}).get('id') == repository['id'], 'published package repository binding unconfirmed'
-                      if preexisting[name] is None:
-                          assert package['visibility'] == 'private', 'unexpected initial package visibility'
+                      require_package_identity(name, package)
+                      assert package['visibility'] == preexisting[name]['visibility'], 'package visibility changed during publication'
                       print(name.upper() + '_PUBLISHED ' + ref + ' visibility=' + package['visibility'])
                   except (AssertionError, RuntimeError, subprocess.CalledProcessError) as error:
                       published['errors'][name] = str(error) or 'package assertion failed'
