@@ -258,7 +258,7 @@ jobs:
           secrets = dict(line.split('=', 1) for line in pathlib.Path('.env').read_text().splitlines() if line and not line.startswith('#'))
           environment = dict(os.environ, MC_HOST_probe='http://' + secrets['STORAGE_ACCESS_KEY'] + ':' +
                              secrets['STORAGE_SECRET_KEY'] + '@storage:9000')
-          mc = ['docker', 'run', '--rm', '--network', os.environ['COMPOSE_PROJECT_NAME'] + '_default',
+          mc = ['docker', 'run', '--rm', '-i', '--network', os.environ['COMPOSE_PROJECT_NAME'] + '_default',
                 '--env', 'MC_HOST_probe', 'asm-mc:verified']
           key = 'probe/asm-private-local/workspaces/00000000-0000-0000-0000-000000000001/restart-proof'
           data = b'PRIVATE_STORAGE_RESTART_PROOF\x00\xff'
@@ -289,7 +289,24 @@ jobs:
           finally:
               run(compose + ['down', '--remove-orphans'])
           PY
-      - name: Require unchanged tracked and untracked source
+      - name: Require unchanged source after foundation and storage runtime checks
+        run: test -z "$(git status --porcelain --untracked-files=all)"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24.8.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked frontend and Chromium
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Execute existing browser script with verified local images
+        env:
+          STORAGE_IMAGE: asm-minio:verified
+          STORAGE_ADMIN_IMAGE: asm-mc:verified
+        run: sh scripts/test_browser.sh
+      - name: Require unchanged source after browser checks
         run: test -z "$(git status --porcelain --untracked-files=all)"
       - name: Finalize verified receipt
         id: receipt
@@ -301,7 +318,8 @@ jobs:
           receipt = json.loads(path.read_text())
           receipt['runtime_checks'] = ['binary hashes and exact versions', 'CA HTTPS trust and shell/tmp tools',
               'unmodified scripts/ci.sh with local-image environment override',
-              'private policy, bootstrap idempotency, SIGTERM and data-preserving volume restart', 'clean-source gate']
+              'private policy, bootstrap idempotency, SIGTERM and data-preserving volume restart',
+              'unmodified scripts/test_browser.sh with local-image environment override', 'both clean-source gates']
           path.write_text(json.dumps(receipt, indent=2) + '\n')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('sha256=' + hashlib.sha256(path.read_bytes()).hexdigest() + '\n')
