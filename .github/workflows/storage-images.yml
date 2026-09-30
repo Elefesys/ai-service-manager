@@ -392,47 +392,69 @@ jobs:
           owner_route = 'orgs' if repository['owner']['type'] == 'Organization' else 'users'
           def package_binding(name, package, phase):
               linked = (package or {}).get('repository') or {}
-              print(json.dumps({'phase': phase, 'package': 'ghcr.io/elefesys/asm-' + name,
+              value = {'phase': phase, 'package': 'ghcr.io/elefesys/asm-' + name,
                   'exists': package is not None, 'package_id': (package or {}).get('id'),
                   'visibility': (package or {}).get('visibility'), 'repository_id': linked.get('id'),
-                  'repository_full_name': linked.get('full_name'), 'expected_repository_id': repository['id']}), flush=True)
-          preexisting = {}
+                  'repository_full_name': linked.get('full_name'), 'expected_repository_id': repository['id']}
+              print(json.dumps(value), flush=True)
+              return value
+          preexisting, bindings = {}, {}
           for name in receipt['images']:
               package = api(owner_route + '/Elefesys/packages/container/asm-' + name)
-              package_binding(name, package, 'preflight')
-              preexisting[name] = package is not None
-              if package is not None:
-                  assert package.get('repository', {}).get('id') == repository['id'], 'existing package ownership conflict'
+              bindings[name] = package_binding(name, package, 'preflight')
+              preexisting[name] = package
           login = subprocess.run(['docker', 'login', 'ghcr.io', '--username', os.environ['GITHUB_ACTOR'], '--password-stdin'],
                                  input=token.encode(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
           assert login.returncode == 0, 'GHCR_LOGIN_FAILED'
-          published = {'source_sha': os.environ['GITHUB_SHA'], 'verify_receipt_sha256': None, 'images': {}}
+          published = {'source_sha': os.environ['GITHUB_SHA'], 'verify_receipt_sha256': None,
+                       'images': {}, 'bindings': bindings, 'existing_versions': {}, 'errors': {}}
           try:
               for name, spec in receipt['images'].items():
-                  target = spec['package'] + ':source-' + os.environ['GITHUB_SHA']
-                  # A rerun may reuse an immutable tag only when its config is identical.
-                  existing = subprocess.run(['docker', 'manifest', 'inspect', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                  if existing.returncode == 0:
-                      assert json.loads(existing.stdout)['config']['digest'] == spec['config_digest'], 'tag collision'
-                  subprocess.run(['docker', 'tag', 'asm-' + name + ':verified', target], check=True)
-                  push = subprocess.run(['docker', 'push', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                  assert push.returncode == 0, 'GHCR_PUSH_FAILED'
-                  match = re.search(rb'digest: (sha256:[0-9a-f]{64})', push.stdout)
-                  assert match, 'missing registry digest'
-                  digest = match.group(1).decode()
-                  ref = spec['package'] + '@' + digest
-                  manifest = json.loads(subprocess.check_output(['docker', 'manifest', 'inspect', ref]))
-                  assert manifest['config']['digest'] == spec['config_digest']
-                  print(name.upper() + '_REGISTRY_MANIFEST_MATCH ' + ref, flush=True)
-                  package = api(owner_route + '/Elefesys/packages/container/asm-' + name)
-                  package_binding(name, package, 'post-push')
-                  assert package and package.get('repository', {}).get('id') == repository['id']
-                  if not preexisting[name]:
-                      assert package['visibility'] == 'private', 'unexpected initial package visibility'
-                  published['images'][name] = {'ref': ref, 'tag': target, 'visibility': package['visibility'],
-                      'config_digest': manifest['config']['digest'], 'layers': manifest['layers'],
-                      'binary_sha256': spec['binary_sha256'], 'manifest_type': manifest['mediaType']}
-                  print(name.upper() + '_PUBLISHED ' + ref + ' visibility=' + package['visibility'])
+                  try:
+                      package = preexisting[name]
+                      if package is not None:
+                          assert package['name'] == 'asm-' + name and package['package_type'] == 'container'
+                          assert package['owner']['id'] == repository['owner']['id'], 'package owner conflict'
+                          if (package.get('repository') or {}).get('id') != repository['id']:
+                              # Read-only receipt for an earlier partial push; never authorizes a write.
+                              versions = api(owner_route + '/Elefesys/packages/container/asm-' + name + '/versions?per_page=100')
+                              assert isinstance(versions, list) and package['version_count'] <= 100
+                              observed = []
+                              for version in versions:
+                                  assert re.fullmatch(r'sha256:[0-9a-f]{64}', version['name'])
+                                  ref = spec['package'] + '@' + version['name']
+                                  manifest = json.loads(subprocess.check_output(['docker', 'manifest', 'inspect', ref]))
+                                  observed.append({'ref': ref, 'tags': version['metadata']['container']['tags'],
+                                      'config_digest': manifest['config']['digest'], 'layers': manifest['layers'],
+                                      'manifest_type': manifest['mediaType']})
+                              published['existing_versions'][name] = observed
+                          assert (package.get('repository') or {}).get('id') == repository['id'], 'existing package repository binding unconfirmed'
+                      target = spec['package'] + ':source-' + os.environ['GITHUB_SHA']
+                      # A rerun may reuse an immutable tag only when its config is identical.
+                      existing = subprocess.run(['docker', 'manifest', 'inspect', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                      if existing.returncode == 0:
+                          assert json.loads(existing.stdout)['config']['digest'] == spec['config_digest'], 'tag collision'
+                      subprocess.run(['docker', 'tag', 'asm-' + name + ':verified', target], check=True)
+                      push = subprocess.run(['docker', 'push', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                      assert push.returncode == 0, 'GHCR_PUSH_FAILED'
+                      match = re.search(rb'digest: (sha256:[0-9a-f]{64})', push.stdout)
+                      assert match, 'missing registry digest'
+                      ref = spec['package'] + '@' + match.group(1).decode()
+                      manifest = json.loads(subprocess.check_output(['docker', 'manifest', 'inspect', ref]))
+                      assert manifest['config']['digest'] == spec['config_digest']
+                      print(name.upper() + '_REGISTRY_MANIFEST_MATCH ' + ref, flush=True)
+                      package = api(owner_route + '/Elefesys/packages/container/asm-' + name)
+                      published['bindings'][name] = package_binding(name, package, 'post-push')
+                      published['images'][name] = {'ref': ref, 'tag': target, 'visibility': (package or {}).get('visibility'),
+                          'config_digest': manifest['config']['digest'], 'layers': manifest['layers'],
+                          'binary_sha256': spec['binary_sha256'], 'manifest_type': manifest['mediaType']}
+                      assert package and (package.get('repository') or {}).get('id') == repository['id'], 'published package repository binding unconfirmed'
+                      if preexisting[name] is None:
+                          assert package['visibility'] == 'private', 'unexpected initial package visibility'
+                      print(name.upper() + '_PUBLISHED ' + ref + ' visibility=' + package['visibility'])
+                  except (AssertionError, RuntimeError, subprocess.CalledProcessError) as error:
+                      published['errors'][name] = str(error) or 'package assertion failed'
+                      print(json.dumps({'image': name, 'blocked': published['errors'][name]}), flush=True)
           finally:
               subprocess.run(['docker', 'logout', 'ghcr.io'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
           import hashlib
@@ -441,13 +463,17 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write('Private publication is not anonymous-pull or full final-CI evidence. No visibility change performed.\n\n')
               summary.write('```json\n' + json.dumps(published, indent=2) + '\n```\n')
+          assert not published['errors'], 'package publication/binding gate failed; see partial receipt'
           PY
       - name: Remove ephemeral Docker credentials
         if: always()
         run: rm -rf -- "$RUNNER_TEMP/storage-publish-auth"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
         with:
           name: storage-publish-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/storage-verified/publish-receipt.json
+          path: |
+            ${{ runner.temp }}/storage-verified/publish-receipt.json
+            ${{ runner.temp }}/storage-verified/receipt.json
           retention-days: 7
           if-no-files-found: error
