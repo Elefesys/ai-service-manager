@@ -154,7 +154,7 @@ jobs:
                           prefix + 'source.tar.gz': spec['source']['sha256'], prefix + 'binary.minisig': spec['minisig']['sha256'],
                           prefix + 'inputs.lock.json': sha(lock_bytes), prefix + 'NOTICE': sha((root / name / 'NOTICE').read_bytes())}
               directories = {str(p) for path in expected for p in pathlib.PurePosixPath(path).parents}
-              builds = []
+              builds, configs = [], []
               for iteration in (1, 2):
                   with tarfile.open(root / f'{name}-{iteration}.tar') as archive:
                       manifest = json.load(archive.extractfile('manifest.json'))
@@ -162,6 +162,7 @@ jobs:
                       manifest = manifest[0]
                       config_bytes = archive.extractfile(manifest['Config']).read()
                       config = json.loads(config_bytes)
+                      configs.append(config)
                       assert config['architecture'] == 'amd64' and config['os'] == 'linux'
                       assert config['config']['User'] == '0:0'
                       assert config['config']['Entrypoint'] == ['/usr/local/bin/' + name]
@@ -188,6 +189,12 @@ jobs:
                                   files[path] = sha(added.extractfile(member).read())
                       assert files == expected, 'added file inventory/hash mismatch'
                       builds.append({'config_digest': 'sha256:' + sha(config_bytes), 'layers': layers, 'files': files})
+              if builds[0] != builds[1]:
+                  differences = {key: [configs[0].get(key), configs[1].get(key)]
+                                 for key in configs[0].keys() | configs[1].keys()
+                                 if configs[0].get(key) != configs[1].get(key)}
+                  print(json.dumps({'image': name, 'config_differences': differences,
+                                    'layer_digests': [build['layers'] for build in builds]}))
               assert builds[0] == builds[1], 'runtime config/layers are not reproducible'
               target = root / f'artifacts/{name}.tar'
               shutil.copyfile(root / f'{name}-1.tar', target)

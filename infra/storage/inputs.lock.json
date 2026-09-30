@@ -30,16 +30,16 @@
   },
   "buildkit": {
     "repo": "moby/buildkit",
-    "tag": "v0.24.0",
-    "index_digest": "sha256:6eceb8971ce4fceb3daca562832642706238b7eea72941fcf9896c93c3c4a53e",
-    "platform_digest": "sha256:8c2ce26a3722e0cf4514fad4cfcd0e0f0f16214219ca7b73f3e1fcef74640ac4",
+    "tag": "v0.25.0",
+    "index_digest": "sha256:faffcac91decfb3b981234bf2762d88ed6c90771b689a3d8a5049cd0e874759a",
+    "platform_digest": "sha256:939060f02be6f297aa8038d1ada85e8c7c031f4c364c6456bd9adf43a20f3b5e",
     "manifest": {
       "schemaVersion": 2,
       "mediaType": "application/vnd.oci.image.manifest.v1+json",
       "config": {
         "mediaType": "application/vnd.oci.image.config.v1+json",
-        "digest": "sha256:ea1737f76f8c276e68138fdd053eb06a2c09704fa4a7a843db7801ba705e1f70",
-        "size": 2099
+        "digest": "sha256:83b240d5d38a5212860669b31cdacb992d410023038489e1eaa6a6a2857907e2",
+        "size": 2107
       },
       "layers": [
         {
@@ -49,31 +49,31 @@
         },
         {
           "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
-          "digest": "sha256:4ff988c3d129a66efeab4ec6af8fb235b281ee7ccbb578d1d6a8e4f8d52d65de",
-          "size": 9898508
+          "digest": "sha256:9c1f2b512701a62a25acad4829f5624b8efed1426aabee7af961bbf171f2f5a8",
+          "size": 12717808
         },
         {
           "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
-          "digest": "sha256:9c3d595e02bde2b5a8fbdbc2fbe3cb62aa43331428ab211f2f4a99d6de5b9488",
-          "size": 940
+          "digest": "sha256:3e33e7e79902ee4497427e606617a8881a15cb7ad71a1001c55e7b4044c23f2a",
+          "size": 939
         },
         {
           "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
-          "digest": "sha256:2780d72e4180f76a0cbf781a96ec373c5af622883f5ea30a9367797adb4639c9",
+          "digest": "sha256:de3f47516d79814067b5ff83dba7a8ec5745a6ccb8c9d6ea811de300deb2d89a",
           "size": 169
         },
         {
           "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
-          "digest": "sha256:9cb1f405986d4569e78e74135727c3fe2299314d2dc24362fee575dc4120b6f9",
-          "size": 88391557
+          "digest": "sha256:fad10acf07b89290052a8ff42556e6051d895304df8876d0823f8b8d73b9304c",
+          "size": 86727673
         }
       ],
       "annotations": {
-        "org.opencontainers.image.revision": "b772c318368090fb2ffc9c0fed92e0a35bf82389",
+        "org.opencontainers.image.revision": "14d1ccb56dbc5e1748c73cda77af2a61a5c3603a",
         "org.opencontainers.image.source": "https://github.com/moby/buildkit",
         "org.opencontainers.image.title": "BuildKit",
         "org.opencontainers.image.url": "https://github.com/moby/buildkit",
-        "org.opencontainers.image.version": "v0.24.0"
+        "org.opencontainers.image.version": "v0.25.0"
       }
     }
   },
