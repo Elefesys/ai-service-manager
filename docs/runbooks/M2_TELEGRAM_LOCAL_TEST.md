@@ -5,10 +5,312 @@
 внешнюю проверку A09/A11 через owner API и Console (раздел 5.1).
 Наличие файла, deterministic tests или `SENT` не доказывает получение ответа клиентом.
 
+## 0. Когда и кто готовит стенд
+
+Этот шаг нужен **сейчас для завершения M2**, после принятия кода и отдельного main CI.
+Implementation Plan §§6–7 и Roadmap M2 требуют реальную тестовую Telegram переписку.
+Полный production rollout относится к последующей готовности релиза; здесь только
+ограниченный test runtime с тестовыми Owner/Client.
+
+C0 ведёт выбор и приёмку; C6 готовит/настраивает runtime, DNS/HTTPS и точные действия
+оператора, C3 проверяет Telegram connection. Владельцу проекта не нужно самостоятельно
+выбирать поля/env/SQL или собирать сценарий из нескольких документов. При отсутствии
+доступа агента к host оператор выполняет предоставленные команды и возвращает
+non-secret результаты; account/billing/DNS права и ввод секретов остаются у владельца.
+
+Владелец подтвердил **подготовку всего с нуля**, предпочтение основного .ru и ещё
+одного международного домена для будущего расширения. **Бюджет принят 2026-09-27**,
+домены — `clientmanagerai.ru/.com`. **2026-09-30 принят smoke на .com**, как только
+его работоспособность подтверждена; .ru остаётся будущим основным доменом.
+Токены/passwords не запрашивать. Bot/Owner/Client и
+два Telegram секрета уже подготовлены, повторять эту работу не нужно.
+
+Следующие разделы предполагают готовые host/DNS/TLS. Их наличие в runbook — инструкция,
+а не утверждение, что внешняя инфраструктура уже развёрнута. Exact accepted source и
+статус внешней проверки берутся из единственного активного M2_HANDOFF/TASK_REGISTER.
+
+### 0.1. Предложение стенда с нуля — 2026-09-24
+
+**Вариант принят владельцем 2026-09-27; платный runtime ещё не создан.** Один Linux host в
+Yandex Cloud, регион Россия, исходно zone `ru-central1-a`, Ubuntu24.04 LTS/x86_64,
+обычная непрерываемая VM `standard-v3` Intel Ice Lake: **2 vCPU/100%,8 GiB RAM,
+60 GiB network-ssd и один static public IPv4**. Это стартовая оценка для одного
+тестового подключения и текущих Docker builds; достаточность на этом host ещё не
+измерена. Параметры API/worker/PostgreSQL/MinIO берутся из принятого Compose.
+Проверка builds/health/resources до подключения Telegram входит в работу C6.
+
+История выбора 2026-09-27: managerai.ru/.com заняты; выбрана свободная при проверке
+пара clientmanagerai.ru/.com, корзина 200 ₽ +1560 ₽ на первый год. Автоматически
+добавленный Optimo исключён. Это историческая проверка корзины, не текущий статус.
+По сообщению владельца и ответу поддержки 2026-09-30 **.com зарегистрирован, NS Timeweb
+установлены**; **.ru ожидает проверки администратора/ЕСИА**. Независимая публичная
+DNS/HTTPS-проверка пока не выполнена. Повторно покупать домены или вводить паспортные
+данные в чат/PR не требуется; обращение Timeweb продолжает сам владелец.
+
+**Принятая замена тестовых адресов от 2026-09-30:**
+
+| Назначение | Прежний план | Новый принятый smoke hostname |
+|---|---|---|
+| Console/API/webhook, единственный auth origin | console.telegram-test.clientmanagerai.ru | console.telegram-test.clientmanagerai.com |
+| Private signed files | files.telegram-test.clientmanagerai.ru | files.telegram-test.clientmanagerai.com |
+
+Две A-записи направляются на один будущий static IPv4 после готовности host; HTTPS
+обязателен. В примерах §2–6 `console.telegram-test.example.net` заменяется на
+`console.telegram-test.clientmanagerai.com`, `files.telegram-test.example.net` — на
+`files.telegram-test.clientmanagerai.com`. Runtime env, точный Origin/CSRF/CORS,
+Storage public endpoint, TLS names и webhook URL согласуются с этой парой. Контракт
+одного auth origin сохраняется: обе зоны одновременно не включать, wildcard/shared
+cookie domain не добавлять. .ru остаётся предпочтительным будущим основным доменом;
+перенос после smoke не выполняется автоматически. Это не смена Yandex RU/cloud ADR.
+
+Публичные cloud-цены проверены 2026-09-24, корзина выбранной пары — 2026-09-27;
+обычные свободные имена, без покупки у текущего владельца/премиум-цены. При изменении
+имён или стоимости перед оплатой зафиксировать отличие; hosting/дополнения не приняты.
+
+| Ресурс | Ставка | Расчёт |
+|---|---|---|
+| Yandex2×100% vCPU Intel Ice Lake | 1,24 ₽/vCPU·час | 1785,60 ₽/720 часов |
+| Yandex8 GiB RAM | 0,33 ₽/GiB·час | 1900,80 ₽/720 часов |
+| Yandex60 GiB network SSD | 0,0199 ₽/GiB·час | 859,68 ₽/720 часов |
+| Один активный public IPv4 | 0,26352 ₽/час | 189,73 ₽/720 часов |
+| **Runtime всего, с НДС** | **6,57752 ₽/час** | **4735,81 ₽/30 суток; 1105,02 ₽/7 суток** |
+| Timeweb clientmanagerai.ru | 200 ₽ первый год | Текущее продление от399 ₽/год |
+| Timeweb clientmanagerai.com | 1560 ₽ первый год, акция | Текущее продление от1810 ₽/год |
+| **Два домена** | **1760 ₽ первый год** | **От2209 ₽/год по текущим ценам продления** |
+| DNS Timeweb, тариф «Парковка»; Let's Encrypt | 0 ₽ | Отдельный hosting/платный SSL не требуется |
+
+Итого первый месяц runtime + год двух доменов: **6495,81 ₽**. 31 день runtime —
+4893,67 ₽. В расчёте исходящий трафик укладывается в первые100 GiB/месяц Yandex;
+гранты/пробный период не вычитаются. Это плановая оценка, не фиксированный счёт или
+автоматический spending cap. Первый период — 30 суток; C6 контролирует фактическое
+потребление и возвращает владельцу дату/стоимость дальнейшего удержания стенда.
+Остановка VM убирает compute charge, но SSD и зарезервированный IP продолжают
+тарифицироваться; idle static IPv4 —0,6039 ₽/час. Не удалять durable dataset, volume
+или pending updates ради прекращения оплаты без отдельного решения владельца.
+
+Источники цен: [Yandex Compute, официальный опубликованный Markdown](https://github.com/yandex-cloud/docs/blob/master/md-docs/compute/pricing.md),
+[Yandex VPC](https://yandex.cloud/ru/docs/vpc/pricing),
+[домены Timeweb](https://timeweb.com/ru/services/domains/),
+[бесплатный DNS без hosting](https://timeweb.com/ru/services/hosting/dns/),
+[Let's Encrypt](https://letsencrypt.org/getting-started/).
+
+Один host/PostgreSQL/MinIO сохраняет уже принятый disposable LOCAL/TEST профиль с
+synthetic данными. Это не смена ADR137/138/142/143/243: production managed PostgreSQL,
+private Object Storage и изоляция окружений остаются принятыми решениями. Подготовка
+production/Pilot не добавляется к существующим A09/A11.
+
+### 0.2. Последовательность C6 и действия владельца
+
+1. **M2-ENV-01/02 приняты C0/C8 в REVIEW; пользовательский merge ещё впереди.**
+   Оба packages Public, полные anonymous OCI bytes совпали с build receipts.
+   Только две storage refs/pins переведены на exact GHCR digests. [обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856) SUCCESS:
+   492 unit/390 PostgreSQL-S3/111 frontend/27 browser; оба штатных scripts и source
+   gates PASS. Exact final head и обязательный CI после последнего изменения —
+   в PR22 receipt. Пользователь выполняет обычный merge commit по инструкции C0;
+   C0 проверяет actual merge и отдельный push/main CI, затем выдаёт следующий host
+   шаг. Повторно открывать packages/публиковать images или вводить PAT не нужно.
+   Раздел0.3 содержит текущие refs, границы evidence и команды воспроизведения.
+2. **Параллельно владелец продолжает существующий тикет Timeweb.** .com заявлен
+   зарегистрированным, .ru ждёт сверки данных; повторная покупка не нужна. Для smoke
+   достаточно работоспособного .com — ждать готовности .ru не требуется. Перед
+   переключением live режима C6 проверяет публичное делегирование .com, фактические
+   A-records обоих subdomains и доверенный TLS, а не только плашку панели регистратора.
+   После merge PR22 и отдельного успешного main CI выдаётся следующий account/billing/host
+   шаг в Yandex Cloud; наличие доступа агента заранее не предполагается. Не просить
+   пароли, паспортные данные или Telegram secrets в чат/PR.
+3. **После merge PR22, отдельного успешного main CI и нового handoff C0:** C6 в разрешённом Yandex TEST folder создаёт
+   ровно указанную VM/диск/IP после сверки итоговой цены. Настраивает non-root operator, SSH key admission, Docker
+   Engine + Compose, синхронизацию времени. SSH22 — только с operator IP, HTTPS443 —
+   публично; TCP80 нужен только для ACME HTTP-01. API8000/frontend8080 остаются loopback,
+   PostgreSQL/MinIO9000/9001 не публикуются отдельными host ports. Исходящий HTTPS к
+   Telegram, DNS, ACME и registry/dependency endpoints нужен для принятого build/runtime.
+4. **C6 в DNS:** добавляет две A-записи выше на static IPv4, проверяет resolution снаружи.
+   Не добавляет неподтверждённую AAAA-запись или wildcard. .com — единственная
+   тестовая Console; .ru параллельно не включает. Точные записи предоставляются
+   владельцу одной таблицей, если он вносит их сам.
+5. **C6 на host:** выпускает бесплатный TLS для двух точных имён через host Certbot
+   `certonly --standalone`/HTTP-01, настраивает renewal и проверяет dry-run. Использует
+   прежние filenames/owner/modes §3; renewal deploy hook обновляет private копии и
+   reload существующего ingress. Это настройка host, не новый image/plugin в репозитории.
+   [Официальная процедура Certbot](https://eff-certbot.readthedocs.io/en/stable/using.html#standalone).
+   Точные команды с выбранными именами выдаются в этом runbook до выполнения; их запуск
+   и успешный TLS пока не заявлены. Если агент не имеет доступа, владелец получает один
+   последовательный блок команд с non-secret ожидаемыми результатами.
+6. **Далее §2–6 этого же runbook:** exact accepted implementation checkout, private
+   secrets непосредственно от владельца, preflight/binding/setWebhook и Console live
+   scenario. C6 возвращает sanitized runtime/DNS/TLS/billing receipt; C3 — фактические
+   connection/rights/Client receipt. Только C0 принимает live A09/A11.
+
+## 0.3. Принятые storage artifacts и воспроизведение / 2026-10-01
+
+Оба packages **Public** по действию владельца; private repository остаётся private.
+Anonymous manifest/config/all-layer HTTP download подтверждён 2026-10-01; новый
+Docker pull и реальный runtime подтверждены отдельно [обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856). CI на implementation
+head **809d44c77b45d86b54750969db5b4a3ec411e0e3**, tree **42a17e82cae204a1f4a8d3f3bc3dcd798fc03cc8**, SUCCESS. Последнее изменение трёх
+документов требует своего полного CI; его exact receipt ведётся в [PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
+
+| Package | Принятый immutable linux/amd64 ref |
+|---|---|
+| asm-minio /15482993 | ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa |
+| asm-mc /15484077 | ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4 |
+
+Build source **f74c240febd963c79408e80600c29d7739e08867**;
+[storage run36734267078](https://github.com/Elefesys/ai-service-manager/actions/runs/36734267078)
+SUCCESS: exact vendor hash/minisig/negative, два byte-identical no-cache builds,
+реальные PG/S3/private policy/CA/shell/SIGTERM и data-preserving volume restart.
+Новые OCI artifacts не идентичны прежним Quay bytes; MinIO/mc releases сохранены.
+Исходники, лицензии, подписи/key provenance и build tools закреплены в
+infra/storage/inputs.lock.json. App/private docs/.git/env/secrets в image не входят.
+OCI source label содержит repo URL и build SHA; source content private repo не публикуется.
+
+**Разделение evidence C0:** локально Docker отсутствовал. Поэтому сначала C6
+полностью скачал все public OCI blobs без credentials/cache, затем переключены два
+pins, после этого неизменный CI на свежих hosted runners выполнил Docker pull и
+все runtime checks. Runtime gate сохранён до acceptance/merge; HTTP download не
+выдаётся за запуск Docker. Receipt SHA-256 **07992f7085ad9826503870ed0984ad469ebbe9d761fb13134ae553f5c1eba211**; 95 747 170 bytes,
+оба manifest/config, все шесть layers, exact compressed hashes/sizes/diffIDs,
+seven-file allowlist каждого image и оба binary hash/size PASS. C0/C8 отдельно
+пересчитали сохранённые bytes. Новых rebuild/publish/workflow изменений не было.
+
+При необходимости воспроизвести pull на новом disposable linux/amd64 host
+(это диагностическая инструкция, не дополнительный незакрытый gate):
+
+~~~sh
+set -eu
+storage_pull_config="$(mktemp -d)"
+trap 'rm -rf "$storage_pull_config"' EXIT
+export DOCKER_CONFIG="$storage_pull_config"
+minio_ref='ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa'
+mc_ref='ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4'
+if docker image inspect "$minio_ref" >/dev/null 2>&1; then exit 1; fi
+if docker image inspect "$mc_ref" >/dev/null 2>&1; then exit 1; fi
+docker pull --platform linux/amd64 "$minio_ref"
+docker pull --platform linux/amd64 "$mc_ref"
+docker image inspect --format '{{.Id}} {{json .RepoDigests}} {{json .RootFS.Layers}}' "$minio_ref" "$mc_ref"
+docker run --rm --entrypoint sha256sum "$minio_ref" /usr/local/bin/minio
+docker run --rm --entrypoint sha256sum "$mc_ref" /usr/local/bin/mc
+~~~
+
+Expected config digests: MinIO
+sha256:b7bb806bee433a13f30a01509f324cfc5c764e4a07b11353aa423eda2e995c1d;
+mc sha256:85c9b02133dbec707e92450e93ca5a98e139423839b02946583bdd9ddd2cf2f6.
+Binary SHA-256: MinIO
+7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f;
+mc 7a03ba39e158708a9e88f1bf5c346c6651b15c784e4b2c7150b5b5f282f43c28.
+Full layer descriptors/diffIDs — receipt PR #22; mismatch
+является blocker. Старые pins не возвращать и версии не обновлять автоматически.
+
+Обычная проверка остаётся прежней: в отдельных jobs `sh scripts/ci.sh` и
+`sh scripts/test_browser.sh`, после каждого
+`test -z "$(git status --porcelain --untracked-files=all)"`.
+Основной CI/Compose/bootstrap/assertions сохранены; новый scoped C8 выполнен.
+Storage workflow по-прежнему имеет только contents:read в build и временный
+packages:write в изолированном publisher; images повторно не публиковались.
+Source/ref bindings и полная история разрешённых packaging изменений — в handoff.
+VM/DNS/TLS/webhook/live Telegram — следующий шаг после merge и actual main CI.
+
+<details>
+<summary>История — прежний public access gate до действия владельца и CI</summary>
+
+## 0.3. Проверенные storage artifacts и public access gate / 2026-09-30
+
+Build/test source **f74c240febd963c79408e80600c29d7739e08867**, tree
+**3e742d07440bcd2e4516922d5698ed1aee735db0**;
+[run36734267078 attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36734267078)
+verify109951705630 и publish109956285144 SUCCESS. Exact final documentation
+head/tree — в [Draft PR22 receipt](https://github.com/Elefesys/ai-service-manager/pull/22).
+Новые OCI bytes не идентичны прежним Quay artifacts; releases не обновлены.
+
+| Package / ID | Final immutable linux/amd64 ref |
+|---|---|
+| [asm-minio](https://github.com/users/Elefesys/packages/container/package/asm-minio) /15482993 | ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa |
+| [asm-mc](https://github.com/users/Elefesys/packages/container/package/asm-mc) /15484077 | ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4 |
+
+Visibility обоих — **private**, подтверждена pre/post push; anonymous pull receipt
+пока отсутствует. Tag source-f74c240febd963c79408e80600c29d7739e08867.
+Manifest → config → layers, binary hashes, two-build archive hashes и старые private
+tags перечислены в активном handoff. C0 проверяет package целиком перед открытием.
+
+В images входят pinned official curlimages/curl8.19.0 base, exact signed vendor
+binary и vendor LICENSE/CREDITS/source/minisig/NOTICE/input lock. Build contexts
+созданы по allowlist, приложение/private docs/.git/env/secrets не копируются.
+MinIO RELEASE.2025-09-07T16-13-09Z binary SHA-256
+7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f;
+mc RELEASE.2025-02-15T10-36-16Z binary SHA-256
+7a03ba39e158708a9e88f1bf5c346c6651b15c784e4b2c7150b5b5f282f43c28.
+Exact source/key provenance, minisign0.12, Buildx0.29.1, BuildKit0.25.0 и полный
+input lock — infra/storage/inputs.lock.json. Полные hashes и minisig проверены до
+execution; in-image binary hashes совпали; полный второй build byte-identical.
+
+Storage workflow автоматически срабатывает до merge по push четырёх build files
+в точную c6/m2-live-smoke; workflow_dispatch main предусмотрен только после
+интеграции. Основной CI не заменён. Build имеет contents:read; отдельный publisher
+contents:read/packages:write и только временный GITHUB_TOKEN, без исполнения image
+code. Artifact11107176489 содержит два Docker archives/input lock/verify receipt;
+artifact11106623061 — verify/publish receipts, ZIP SHA-256
+224a19ac249afe93515395c7c8c384ca62a8ff24cd61000e120470816d36cf41.
+Второй ZIP полностью скачан/проверен C6; первый скачан и проверен publisher.
+Retention7days до2026-10-07. Состав/хеши JSON и archives — в handoff.
+
+**Шаг владельца после проверки C0:** в settings **каждого из двух packages выше**
+Change visibility → Public. Эта операция необратима по правилам GHCR; private
+repository не открывать. C6 не выполнял её. Никаких PAT, новых secrets или Connect
+repository для уже успешно опубликованных packages не требуется.
+
+После подтверждения C6 на **новом disposable linux/amd64 GitHub runner**, без
+cache restore и без registry login, выполняет следующие команды (пока не исполнены):
+
+~~~sh
+set -eu
+storage_pull_config="$(mktemp -d)"
+trap 'rm -rf "$storage_pull_config"' EXIT
+export DOCKER_CONFIG="$storage_pull_config"
+minio_ref='ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa'
+mc_ref='ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4'
+if docker image inspect "$minio_ref" >/dev/null 2>&1; then exit 1; fi
+if docker image inspect "$mc_ref" >/dev/null 2>&1; then exit 1; fi
+docker pull --platform linux/amd64 "$minio_ref"
+docker pull --platform linux/amd64 "$mc_ref"
+docker image inspect --format '{{.Id}} {{json .RepoDigests}} {{json .RootFS.Layers}}' "$minio_ref" "$mc_ref"
+docker run --rm --entrypoint sha256sum "$minio_ref" /usr/local/bin/minio
+docker run --rm --entrypoint sha256sum "$mc_ref" /usr/local/bin/mc
+~~~
+
+Полные config/layers сравнить с verify receipt; binary hashes — с lock выше.
+Пустой Docker auth config и отсутствие обоих images обязательны, cache-only
+результат не принимается. Expected configs: MinIO
+sha256:b7bb806bee433a13f30a01509f324cfc5c764e4a07b11353aa423eda2e995c1d;
+mc sha256:85c9b02133dbec707e92450e93ca5a98e139423839b02946583bdd9ddd2cf2f6.
+Зафиксировать fresh-run pull receipt; затем обновить только STORAGE_IMAGE/
+STORAGE_ADMIN_IMAGE в infra/images.lock.env и две storage refs pin_images.sh.
+Если меняются recipe/image bytes, нужны новые build/digests/review.
+
+На одном новом final head обычный CI выполняет в своих прежних изолированных jobs:
+
+~~~sh
+sh scripts/ci.sh
+test -z "$(git status --porcelain --untracked-files=all)"
+~~~
+
+~~~sh
+sh scripts/test_browser.sh
+test -z "$(git status --porcelain --untracked-files=all)"
+~~~
+
+Сейчас ci.sh с local-image environment override уже PASS на build SHA, включая
+реальные private files/isolation/recovery/UNKNOWN. test_browser.sh reload committed
+Quay pins и сохраняет project guard; обход/редактирование script не допускаются.
+Полные browser/обычный final-head CI/оба gates остаются обязательными после смены
+pins. Обычный CI36734280555 на build SHA FAILURE со старым unauthorized; оба gates
+SKIPPED. M2-ENV-01 не закрывать до полного восстановления; C0 организует scoped C8.
+VM/DNS/TLS/webhook и live Telegram начинают только по следующему handoff.
+
+</details>
+
 ## 1. Конкретное окружение и предварительные условия
 
-Выбран один вариант: **уже доступный оператору Linux host с Docker Compose, двумя
-DNS именами и готовыми публично доверенными TLS сертификатами**. На нём отдельный
+После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker
+Compose, двумя DNS именами и публично доверенными TLS сертификатами**. На нём отдельный
 Compose project `asm-telegram-test`; только тестовые bot/Owner/Client и новый
 synthetic Workspace. Это изолированный LOCAL deployment (`asm_local`), не production.
 Процедуры Python также проверяют отдельный TEST target `asm_test`, если оператор
@@ -23,8 +325,8 @@ synthetic Workspace. Это изолированный LOCAL deployment (`asm_lo
   заменить оба example имени во всех примерах ниже на свои. DNS обоих имён ведёт
   на выбранный host; TCP443 доступен браузеру и Telegram. Исходящий HTTPS к
   `api.telegram.org` доступен API/worker/operator. Часы host синхронизированы.
-- Готовые certificate chains и private keys для обоих имён. Здесь нет выпуска
-  сертификатов, регистрации DNS, cloud provisioning или разрешённых расходов.
+- Готовые certificate chains и private keys для обоих имён из §0.2. Принятый
+  бюджет не является фактом выпуска TLS, регистрации DNS или создания runtime.
 - Независимо подтверждённые expected bot numeric ID и **Owner user ID** из
   доверенного operator/account context. Первый попавшийся update/connection ID
   не является подтверждением Owner. Bot token и отдельный webhook secret уже

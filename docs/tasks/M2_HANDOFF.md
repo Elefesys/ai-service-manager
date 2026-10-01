@@ -2,10 +2,772 @@
 
 Дата подготовки: 2026-09-20. Ответственный за выдачу задач и интеграцию: C0.
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
-Этот файл — принятый план и единственная активная точка передачи M2.
-Приёмка плана не является evidence выполненной реализации.
+Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный handoff C0 → пользователь — M2.4-CONSOLE к merge / 2026-09-22
+## Активный handoff C0 — M2-ENV-01/02: приёмка и интеграция PR #22 / 2026-10-01
+
+**M2-ENV-01-REGISTRY / M2-ENV-02-STORAGE-IMAGES — REVIEW.** C0 и независимый scoped
+C8 приняли ограниченное исправление LOCAL/TEST storage provisioning. Полный CI на
+implementation head восстановлен. Merge ещё не выполнен; final-head CI после
+последнего документационного изменения проверяется отдельно и записывается в PR.
+Весь M2 IN_PROGRESS; live A09/A11 BLOCKED внешними runtime/DNS/TLS. M3 не выдан.
+
+### Точная версия и единственный следующий шаг
+
+- Repository **Elefesys/ai-service-manager**, **c6/m2-live-smoke → main**, [PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
+- Accepted main/base **96d9f09dd16d8b6ab019ac76a9c72ce910d81191**, tree
+  **28de72ca6737cbe18bb4856a1636f70fae1131ee**; отдельный исторический main CI35706123814 SUCCESS.
+- Первый coordination **914e2894f98330d62e1cc57ca5da5c62662d6960** и вся история сохранены.
+  Старт упаковки **1450dfeefeead337ca8a8a670d339e085adfe323**; перед public access
+  head **4f6180be1496aceb1a0ee292ce39790bd42bf81a**.
+- Принятый implementation head **809d44c77b45d86b54750969db5b4a3ec411e0e3**, tree **42a17e82cae204a1f4a8d3f3bc3dcd798fc03cc8**; только две строки
+  в каждом из infra/images.lock.env / scripts/pin_images.sh относительно 4f618…;
+  Git modes обоих файлов **100644** сохранены.
+- [обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856) **SUCCESS**. Фактический checkout/ordered parents/tree проверены C0/C8 и
+  записаны в receipt PR. После него меняются согласованно только TASK_REGISTER,
+  этот handoff и runbook; exact final head/tree/final CI ведутся в PR receipt,
+  без цепочки коммитов ради SHA предыдущего документационного коммита.
+- После сообщения C0 о SUCCESS именно последнего head пользователь выбирает
+  **Merge pull request → Create a merge commit → Confirm merge**
+  (Draft предварительно снимает C0). Squash/rebase не использовать. C0 самостоятельно
+  не сливает PR. Затем C0 проверяет actual merge commit/tree и отдельный push/main CI.
+
+### Что принято и что осталось неизменным
+
+Решение C0 2026-09-30 о новой упаковке двух exact official binaries сохранено:
+новые OCI bytes принимаются по собственному evidence; идентичность старым
+недоступным Quay images не заявляется. Оба прежних MinIO/mc releases неизменны.
+Применимы IMPL-001, Spec private storage/immutable inputs/LOCAL-TEST, ADR138/141/142,
+Implementation Plan §§6–7 и M2_CONTRACT §§9–11. Production storage/cloud ADR не менялись.
+
+Полная дельта PR — ровно девять разрешённых paths:
+
+| Paths | Принятая дельта |
+|---|---|
+| infra/storage/Minio.Dockerfile; infra/storage/Mc.Dockerfile | Пакетирование exact подписанных binaries на pinned curl/CA/sh base |
+| infra/storage/inputs.lock.json | Единственный immutable lock binaries/signatures/key/source/licenses/base/build tools |
+| .github/workflows/storage-images.yml | Изолированные build/verify/publish jobs; pinned actions, временный token только publisher |
+| infra/images.lock.env; scripts/pin_images.sh | Только две storage refs/pins на точные public GHCR digests; прочие pins и guard существующих значений сохранены |
+| docs/TASK_REGISTER.md; docs/tasks/M2_HANDOFF.md; docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md | Один актуальный статус/handoff, evidence и воспроизведение; прежние инструкции отделены как история |
+
+Приложение/frontend/API/contracts, миграции 0001–0007, основной CI/Compose/bootstrap,
+tests/assertions и прочие dependencies byte-identical принятому scope. Новых
+workflow/build/publish после открытия packages не выполнялось; storage workflow
+не срабатывает на два pins или документацию.
+
+### Public artifacts: полные bytes и отдельный runtime gate
+
+Владелец подтвердил Public обоих packages 2026-10-01. C0 проверил anonymous manifest
+GET; C6 в новом пустом Linux/x86_64 каталоге скачал **95 747 170 bytes**: оба manifest,
+оба config и все шесть layers. HTTP200, descriptor SHA/size, platform/source labels,
+uncompressed diffIDs и семь added files каждого image (bytes/modes/UID/GID, без
+дополнительных files/symlinks) совпали с build/publish receipts. C0 и C8 независимо
+пересчитали сохранённые blobs; C8 дополнительно проверил allowlist tar members.
+Команда C6: `python verify_public_images.py`, завершена 2026-10-01T06:08:02Z;
+local receipt SHA-256 **07992f7085ad9826503870ed0984ad469ebbe9d761fb13134ae553f5c1eba211**. Это byte/access evidence, не Docker execution.
+
+**Явное решение C0 2026-10-01 о порядке:** локально Docker отсутствует. Полный
+anonymous OCI download и hash verification выполнены до двух pins; fresh Docker
+pull/runtime — затем в неизменном обычном CI на новых hosted runners без storage
+login/cache restore. Обязательный gate до приёмки/merge сохранён; HTTP download
+его не подменяет. C8 принял это разделение evidence. Повторная сборка или новый
+workflow только ради probe не нужны.
+
+| Image | Принятый immutable linux/amd64 ref | Config SHA-256 |
+|---|---|---|
+| MinIO | ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa | b7bb806bee433a13f30a01509f324cfc5c764e4a07b11353aa423eda2e995c1d |
+| mc | ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4 | 85c9b02133dbec707e92450e93ca5a98e139423839b02946583bdd9ddd2cf2f6 |
+
+Image source **f74c240febd963c79408e80600c29d7739e08867**; одиночные linux/amd64 manifests,
+не OCI index, embedded attestations отсутствуют. Provenance — отдельные bound receipts.
+Binary hashes: MinIO **7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f**
+(110989496 bytes); mc **7a03ba39e158708a9e88f1bf5c346c6651b15c784e4b2c7150b5b5f282f43c28**
+(29208728 bytes). Source/license/minisig/key/base/tools сохранены в historical build receipt ниже;
+registry layer digests/diffIDs — в receipt PR #22. Exact input lock остался прежним.
+
+### Фактическая проверка и независимый C8
+
+[обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856): **sh scripts/ci.sh** и **sh scripts/test_browser.sh**, оба source gates,
+canonical/migration cycles/contracts/reproducibility/HTTP smoke PASS.
+**492 unit / 390 PostgreSQL-S3 / 111 frontend / 27 browser** — справочные counts,
+а основание приёмки — следующие инварианты и исполнение соответствующего suite:
+
+| Критерий | Конкретное evidence |
+|---|---|
+| Подлинность и воспроизводимость packaging | Storage run36734267078: полный vendor hash/minisig + tampered negative; два no-cache builds, exact config/layers/archive hashes; bound receipts до publish |
+| Публично доступны только принятые image bytes | C0 pre-public review четырёх версий; C6 anonymous download всех final blobs; C0/C8 повторный hash/diffID/added-files audit; private repo не открывался |
+| Private storage, A07/A08 | test_m2_2_storage_postgres: signed GET exact bytes/hash/MIME/private-no-store; anonymous GET/PUT/list/tamper403; Workspace/relation/OWNER, revoke/TTL; checksum rejection/conditional PUT |
+| Durable recovery, A06/A08 | test_m2_2_recovery_postgres: реальные process crashes, late PUT/cleanup winner/fencing; M2.1 и M2.3 real-wire cases: UNKNOWN после потерянного ACK, ровно один сохранённый call, без resend |
+| Совместимость runtime | Обычный CI реально скачал GHCR images; bootstrap/health/version/private S3 PASS. Storage run36734267078 дополнительно проверил SIGTERM/exit0, неизменные Mounts и сохранение exact data после restart без удаления volume |
+| Console regression в CONTROLLED scope | 27 browser journeys: private image + unsigned403, exact reply, committed202 recovery без дубля, UNKNOWN после replacement worker с одним call, isolation/revocation и прежние M1 journeys |
+
+**C8-M2-ENV-02 — независимый scoped PASS:** reviewer самостоятельно прочитал четыре
+packaging файла, official input/key metadata, Git objects/delta, logs/receipts;
+проверил минимальные permissions, allowlist/context isolation, artifact/source/config/
+package binding, все anonymous OCI blobs, два pins и фактический полный CI.
+Блокирующих findings нет. C6 self-check и прежний M2.4 C8 этим review не подменялись.
+Локальный Docker/PostgreSQL rerun C0/C8 и загрузка большого 96MB build ZIP не заявляются;
+runtime evidence получено с GitHub runner. Полные OCI bytes скачаны отдельно, small
+receipt ZIPs проверены побайтно. Final source artifact/checkout границы — в PR receipt.
+
+### Конечный остаток M2
+
+1. Пользовательский merge PR #22 после final-head CI; C0 подтверждает actual merge
+   и отдельный push/main CI. Только после этого M2-ENV задачи INTEGRATED/VERIFIED.
+2. Ограниченный Yandex RU TEST host по принятому бюджету, два .com hostnames,
+   DNS/TLS и безопасная инъекция уже подготовленных секретов; точное следующее
+   поручение C6 выдаётся от подтверждённого нового main.
+3. Реальные A09/A11: connection/rights и Client text+photo → правильный Workspace/
+   Owner Console/private image → ручной ответ → фактическое получение Client.
+
+Bot/Owner/Client и TG_BOT_TOKEN/TG_WEBHOOK_SECRET в менеджере паролей уже готовы.
+Токены в чат/PR не передавать. Платный host/DNS/TLS/webhook/live sends здесь не
+настраивались. CONTROLLED/SENT/зелёный CI не закрывают live Telegram и весь M2.
+
+<details>
+<summary>История — исходный M2-ENV-02 и private-public access gate / 2026-09-30</summary>
+
+## Исторический handoff C0 → C6 — M2-ENV-02-STORAGE-IMAGES / 2026-09-30
+
+**Private artifacts готовы; IN_PROGRESS / ACCESS gate public visibility. Registry recovery BLOCKED.**
+M2.4 code/UI VERIFIED только LOCAL/TEST; весь M2 IN_PROGRESS, внешние A09/A11
+BLOCKED runtime/DNS/TLS. M3 не выдан. Это продолжение устранения provisioning
+blocker M2-ENV-01-REGISTRY внутри M2-LIVE-A09-A11, а не новая продуктовая часть.
+
+### Решение C0 и точный старт
+
+Диагноз C6 принят: доступный подтверждённый источник прежних OCI artifacts не
+найден; повторять одинаковые reruns или ждать домена для решения registry не нужно.
+**C0 явно заменяет прежнее условие «только идентичные OCI bytes» разрешением новой
+упаковки двух exact official release binaries.** Версии MinIO/mc сохраняются,
+новые OCI config/layers/digests принимаются только по новому evidence и scoped C8.
+Это не восстановление byte identity старых images и не обновление storage продукта.
+IMPL-001/production storage ADR и бизнес-контракты M2 остаются без изменений.
+
+- Repository **Elefesys/ai-service-manager**, та же **c6/m2-live-smoke → main**,
+  [Draft PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
+- Accepted implementation base / actual main:
+  **96d9f09dd16d8b6ab019ac76a9c72ce910d81191**,
+  tree **28de72ca6737cbe18bb4856a1636f70fae1131ee**.
+  [Отдельный main CI35706123814](https://github.com/Elefesys/ai-service-manager/actions/runs/35706123814)
+  исторически SUCCESS; он не заменяет текущий failing CI.
+- Сохранить первый coordination **914e2894f98330d62e1cc57ca5da5c62662d6960** и всю
+  последующую историю. Непосредственный parent этого задания:
+  **6159a64cfb08c853dac4ff51c415e32c083e735f**,
+  tree **bf1ae81a65c7b1695a6f413f92a2c0cd49399593**.
+  **Exact старт — 1450dfeefeead337ca8a8a670d339e085adfe323**,
+  tree **7f5ff73b4c2f6bb5c952ac2b1c1dab87b2725325**, содержит этот handoff.
+  Вся история сохранена; force-push/новый PR не нужны.
+- C0 прочитал оба job logs [CI36717840363, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36717840363):
+  foundation109895106793 и browser109895107151 FAILURE на MinIO pull unauthorized.
+  Checkout **349b84b9a942d21e0d4db92f84b2cd2e15d21b20** — virtual merge;
+  Git object подтвердил ordered parents accepted main +6159a64… и тот же tree.
+  Canonical/frontend111/Compose PASS; PG/S3/browser/UNKNOWN не исполнились;
+  оба clean-source gates SKIPPED. Диагноз не означает, что проверки восстановлены.
+  C0 также сверил hashes/sizes с official GitHub release API; повторное скачивание
+  binary bytes C0 в этом review не заявляет. Полный download/hash — evidence C6.
+
+### Читать перед реализацией
+
+AGENTS; текущий TASK_REGISTER; этот активный блок; IMPL-001; M2_CONTRACT §§9–11;
+runbook M2_TELEGRAM_LOCAL_TEST §§0–1; images.lock.env, pin_images.sh, Compose,
+infra/storage/bootstrap.sh, оба штатных scripts и основной ci.yml. Применимые
+Spec/ADR — immutable inputs/private storage/LOCAL-TEST, Implementation Plan §§6–7.
+Исторические M1/M2 поручения ниже не являются повторно выданными задачами.
+
+### Единственный разрешённый результат и 9 paths
+
+Два project-owned **linux/amd64** image с проверенными vendor binaries, совместимые
+с существующими Compose/health/bootstrap semantics; затем anonymous immutable pull
+и полный CI. C6 самостоятельно выбирает минимальный официальный base с нужными
+tools и фиксирует реально проверенный digest. Выбор base внутри этих условий —
+реализация C6, не вопрос к пользователю. Переход на другой MinIO/mc release не разрешён.
+
+| Path | Разрешённая дельта |
+|---|---|
+| infra/storage/Minio.Dockerfile | Новая упаковка принятого MinIO binary; необходимые curl/CA/shell/runtime metadata |
+| infra/storage/Mc.Dockerfile | Новая упаковка принятого mc binary; shell/CA/bootstrap tools |
+| infra/storage/inputs.lock.json | Единственный lock этих build inputs: releases, URLs, bytes/SHA-256, signatures/key provenance, pinned bases/tools, upstream source/licenses |
+| .github/workflows/storage-images.yml | Отдельные build/verify и ограниченный GHCR publish jobs, receipts; не заменяет основной CI |
+| infra/images.lock.env | Только STORAGE_IMAGE и STORAGE_ADMIN_IMAGE после фактического подтверждения новых artifacts |
+| scripts/pin_images.sh | Только две storage source refs; immutable resolution, запрет обновлять существующие pins сохраняются |
+| docs/TASK_REGISTER.md | Текущий статус, результат/границы; история сохраняется |
+| docs/tasks/M2_HANDOFF.md | Один активный handoff и конкретный receipt |
+| docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md | Воспроизводимые build/pull/operator действия, без секретов |
+
+Новые shared lock/workflow paths согласованы C0 этим поручением. Не требуется ещё
+одно согласование тех же девяти paths. Основной ci.yml, Compose, storage bootstrap,
+ci.sh/test_browser.sh, application/frontend/contracts, migrations0001–0007, прочие
+pins/dependencies и tests/assertions не меняются. Не добавлять mock/skip/xfail,
+continue-on-error или обходы registry auth/network. Конкретный новый blocker вне
+перечня возвращать C0 с минимальной дельтой; не останавливать независимые проверки.
+
+### Проверяемые inputs и runtime contract
+
+| Binary / official GitHub Release | Bytes | SHA-256 |
+|---|---:|---|
+| minio.linux-amd64.RELEASE.2025-09-07T16-13-09Z | 110989496 | 7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f |
+| mc.linux-amd64.RELEASE.2025-02-15T10-36-16Z | 29208728 | 7a03ba39e158708a9e88f1bf5c346c6651b15c784e4b2c7150b5b5f282f43c28 |
+
+Exact URLs и прежние OCI pins сохранены в историческом receipt C6 ниже. Для build
+повторно проверить полные bytes/SHA-256 до исполнения. Verify оба minisig с ключом
+из официального MinIO release Dockerfile:
+**RWTx5Zr1tiHQLwG9keckT0c45M3AGeHD6IvimQHpyRywVWGbP1aVSGav**.
+Зафиксировать exact upstream commit/key provenance и signature asset hashes в lock.
+Не доверять ключу, впервые найденному только рядом с неизвестным mirror. Проверяющий
+tool тоже имеет pinned input; mismatch/missing signature — явный blocker, не
+автоматический переход к одному --version.
+
+Base и все дополнительные build inputs фиксируются digest/hash. Не переносить
+mutable latest, unpinned apt/apk/go install из upstream Dockerfile. Предпочесть base
+с уже нужными curl/CA/sh, чтобы не строить отдельную цепочку package dependencies.
+Сохранить LICENSE/CREDITS/соответствующие source references и необходимые материалы
+распространения; не представлять project image официальным image MinIO.
+В public content могут попадать только проверенные vendor inputs и минимальная
+упаковка: не копировать private repository root, приложение, docs, .git или env.
+Build context собрать из явного allowlist; секреты не передавать в image/build args.
+
+Необходимые реальные проверки: minio/mc --version; server command/arguments;
+curl health endpoint; sh /bootstrap.sh с mc/cat/rm; CA trust; /data и /tmp/config
+permissions; exit/signals. Совместимость volume/data и restart проверяется без
+удаления данных ради PASS. Не добавлять самопроизвольный minio update или mc update.
+Новый image должен обслуживать принятый S3/private policy без изменения bootstrap.
+
+Сохранить mapping: exact inputs → build source SHA → binary hashes внутри image →
+platform manifest/config/layers и registry digest. Отдельно обозначить OCI index,
+linux/amd64 manifest и attestation metadata. Rebuild из тех же locked inputs нужен
+как проверка воспроизводимости; если меняется только служебная attestation, показать
+это отдельно. Одинаковое --version не заменяет проверку bytes или объяснение
+различающихся runtime config/layers.
+
+### Публикация до merge: рабочая последовательность без PAT
+
+Целевые packages: **ghcr.io/elefesys/asm-minio** и **ghcr.io/elefesys/asm-mc**.
+Проверить отсутствие конфликта с уже существующими packages; ничего чужого не
+перезаписывать. Использовать уникальные tags от build input/source SHA, не latest;
+в runtime сохраняются только полные @sha256 refs.
+
+1. Новый workflow запускается по **push в точную c6/m2-live-smoke** с paths filter
+   четырёх новых build файлов. Для сопровождения после интеграции допустим
+   workflow_dispatch только для main, с проверкой ref; никаких schedules/PR-target/
+   arbitrary ref inputs. Не полагаться на первый workflow_dispatch до merge:
+   GitHub документирует зависимость от default branch. Push в branch допускает
+   проверку нового workflow до интеграции.
+2. Build/verify job имеет только contents:read, checkout persist-credentials:false,
+   actions pinned по полным commit SHA. Нет пользовательских secrets/PAT, общего
+   Docker login и shared runner. Безопасный build receipt включает image archive
+   hashes, input lock, manifest и точный source SHA; source gates не обходятся.
+3. C0 разрешает **первичную публикацию двух новых private GHCR packages** этим
+   workflow через временный **GITHUB_TOKEN**, только отдельному publish job с
+   contents:read/packages:write. Guard проверяет exact repository, разрешённый
+   event/ref, успешный verify job и соответствие проверенных image artifacts.
+   В publish job не исполнять непроверенный скачанный код; не давать contents:write,
+   PAT, production secrets, pull_request_target или общий packages:write workflow.
+   Token не попадает в build context, logs или artifacts. Основной CI остаётся read-only.
+4. **Успешный private push ещё не означает recovery.** Сначала подготовить оба
+   packages, exact digests и проверяемое содержимое. Перед открытием public C0
+   проверяет состав и выдаёт владельцу одно конкретное действие с URL обоих packages:
+   Package settings → Change visibility → Public. GitHub предупреждает, что вернуть
+   public package в private нельзя; поэтому согласование этой операции проводится
+   для готовых проверенных artifacts, не для абстрактного будущего результата.
+   Видимость самого private repository не менять. Конкретные packages готовы:
+   C0 проверяет receipt ниже и организует действие владельца.
+5. До public visibility C6 завершает все доступные build/signature/provenance/runtime
+   проверки и возвращает конкретный ACCESS blocker, если нужен оператор. Не просить
+   token в чате и не подменять anonymous pull логином в основном CI. Pins переключать
+   только после подтверждения публичного доступа к обоим новым digest.
+6. После открытия public проверить pull обоих immutable refs на свежем disposable
+   linux/amd64 runner с пустым Docker auth config и без image cache. Зафиксировать
+   downloaded digest/config/layers и binary hashes. Обновить только две refs/pins,
+   затем выполнить оба прежних scripts/gates на final head. Если C0/C8 исправляет
+   recipe/image bytes, пересобрать, перепроверить pins и итоговый CI.
+
+Это один этап с возможным внешним шагом видимости, не новая функция продукта.
+[GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
+подтверждает default-private/GITHUB_TOKEN/anonymous public pulls;
+[workflow events](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)
+— push/dispatch. По [GitHub billing](https://docs.github.com/en/billing/concepts/product-billing/github-packages)
+на 2026-09-30 хранение/трафик GHCR container images бесплатны; Actions minutes/artifacts
+имеют отдельные условия. Использовать существующие repo runner/лимиты; billing,
+spending limits и платные сервисы не подключать/не повышать. Private публикация
+подтверждена исполнением в receipt ниже; public anonymous pull ещё не подтверждён.
+
+### Конечная приёмка C0 и новый независимый scoped C8
+
+- Проверены оба signature/hash, pinned inputs, безопасный состав и реальный
+  build/publish/pull по exact SHA; новый OCI artifact не выдан за исходный.
+- На одном final head SUCCESS **sh scripts/ci.sh**, **sh scripts/test_browser.sh**,
+  оба clean-source gates, canonical/migrations/contracts/reproducibility/smoke.
+  Реально исполнились PostgreSQL/S3/private images и browser, включая изоляцию,
+  anonymous deny/signed GET, interrupted upload/recovery, SEND UNKNOWN/no-resend,
+  persisted call counter и прежнюю M1/M2 regression. Число tests — справка;
+  конкретные assertions и исполнение обязательны.
+- C0 организует **реальный независимый C8** по изменённым Dockerfiles/input lock,
+  workflow permissions/provenance, двум pins и сохранности private-storage/recovery
+  checks. Старый M2.4 C8 не покрывает новые image bytes. C6 self-review не называть C8.
+  Повторять targeted review только по конкретным исправлениям или незакрытому риску.
+- Exact final head/tree/tested checkout, ordered parents/tree comparison, commands,
+  changed paths и фактические результаты — в одном PR receipt. ZIP byte check только
+  если реально выполнен. Документы обновить согласованно; SHA-only commit не нужен.
+- PR22 остаётся Draft до C0 приёмки; merge выполняет пользователь. После actual merge
+  отдельно проверить push/main CI. M2-ENV-01 считается восстановленным только после
+  полной проверки, M2/A09/A11 от этого VERIFIED не становятся.
+
+После этой приёмки — прежняя M2-LIVE-A09-A11: ограниченный Yandex TEST host, проверка
+.com DNS/TLS, реальный Client text+photo → Workspace/Console/private image → manual
+reply → Client receipt. Бюджет принят ранее; VM сейчас не создавать. Согласованы
+console.telegram-test.clientmanagerai.com и files.telegram-test.clientmanagerai.com;
+.ru остаётся будущим основным доменом. Ни домены, ни Telegram secrets для этой задачи
+не нужны. Live sends/production и M3 не добавлены.
+
+### Receipt C6 — private artifacts готовы; ACCESS gate / 2026-09-30
+
+**M2-ENV-02 IN_PROGRESS; M2-ENV-01 BLOCKED до anonymous pull и полного final-head CI.**
+Оба artifacts опубликованы private; независимые build/signature/runtime проверки
+завершены. Сейчас C0 может проверить конкретный состав и организовать public
+visibility владельцем. C6 видимость packages/repository не менял. C8 не проводился.
+
+| Ref / выполнение | Exact value |
+|---|---|
+| Accepted base/main | 96d9f09dd16d8b6ab019ac76a9c72ce910d81191 |
+| Сохранённый первый coordination | 914e2894f98330d62e1cc57ca5da5c62662d6960 |
+| Exact task start | 1450dfeefeead337ca8a8a670d339e085adfe323 |
+| Build / фактически tested source SHA | f74c240febd963c79408e80600c29d7739e08867 |
+| Tested source tree | 3e742d07440bcd2e4516922d5698ed1aee735db0 |
+| Storage workflow | [36734267078, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36734267078), push точной c6/m2-live-smoke, SUCCESS |
+| Jobs | verify109951705630 SUCCESS; publish109956285144 SUCCESS |
+
+Это прямой checkout build SHA, не PR virtual merge. Последующий commit только
+трёх документов фиксирует этот результат; его exact final head/tree и проверка
+ancestry указаны в PR22 receipt без SHA-only цепочки. Вся история сохраняется.
+
+#### Packages, digests и состав для C0
+
+Оба packages принадлежат User Elefesys; repository ID1369650588. Visibility
+проверена до и после финального push: private. Tag обоих финальных образов:
+source-f74c240febd963c79408e80600c29d7739e08867.
+
+| Образ | Package URL / ID | Immutable linux/amd64 ref |
+|---|---|---|
+| MinIO | [asm-minio](https://github.com/users/Elefesys/packages/container/package/asm-minio), ID15482993 | ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa |
+| mc | [asm-mc](https://github.com/users/Elefesys/packages/container/package/asm-mc), ID15484077 | ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4 |
+
+Это **новые OCI artifacts**, не старые Quay bytes. Registry возвращает одиночные
+Docker V2 platform manifests linux/amd64; OCI index и embedded attestation
+отсутствуют. Provenance/verification сохранены отдельными receipts.
+Registry manifest/config сверены с проверенным загруженным image; fresh anonymous
+pull всех layers пока не выполнен и не подразумевается private push.
+
+| Образ | Image config digest | SHA-256 каждого из двух независимо построенных Docker archives |
+|---|---|---|
+| MinIO | sha256:b7bb806bee433a13f30a01509f324cfc5c764e4a07b11353aa423eda2e995c1d | 320c55ca2ff8c05f80f38262f0ed233bc9dd8d2ddd65d78e933d818f73deff40 |
+| mc | sha256:85c9b02133dbec707e92450e93ca5a98e139423839b02946583bdd9ddd2cf2f6 | 9ac91013b51c188691dd290ce543e3749647e30f2445e0cc6c2cea659f9db450 |
+
+Проверены два независимых no-cache builders: полные config (включая history),
+layers, allowlist files и **полные archive bytes** совпали. SOURCE_DATE_EPOCH1790726400.
+Dockerfiles не содержат RUN/install. Context каждого build состоит ровно из
+Dockerfile, binary, LICENSE, CREDITS, source.tar.gz, binary.minisig, NOTICE,
+inputs.lock.json. Added layer — только /usr/local/bin/minio либо mc и шесть
+vendor/provenance файлов /usr/share/licenses/asm-minio либо asm-mc.
+Base содержит curl/CA/sh; app/private docs/.git/env/secrets отсутствуют в этих
+contexts, image additions и storage-workflow artifacts. Source label раскрывает
+только URL этого repository и source SHA. USER0:0 сохранён для совместимости с
+существующими volumes; это не новое изменение runtime privileges приложения.
+
+Предыдущие private source tags сохранены: MinIO source-d2f192febb4e5cbbfd4b56e1f2d77cf31c42c529
+manifest sha256:57de2e9db9536d6ec4e0977ba1850a2fb270e711ed7641b3dbf149366fe92503;
+mc source-302242245a37975c6a8c1410ac3d6cb972d1d14b
+manifest sha256:7b9fd93fe007f7b257ae7d437b119b87a989aa873a0501655d16796baafabe58.
+Их Dockerfiles/locked vendor inputs те же; отличаются source metadata.
+C0 проверяет package целиком перед public, не только финальный tag.
+Partial receipt11106091457 из run36732619535 документирует первые packages.
+
+#### Проверенные inputs и receipts
+
+Оба полных binary hashes/sizes из таблицы C0 выше повторно подтверждены **до
+исполнения**, minisign0.12 проверил оба minisig; tampered-byte negative отклонён.
+Binary hashes внутри обоих образов совпали с теми же полными SHA-256.
+MinIO source commit07c3a429bfed433e49018cb0f78a52145d4bedeb;
+mc source commit383560b1c3d6912042e8c8c275bb78e83e67ef2b.
+Ключ из official MinIO Dockerfile.release exact commit07c3…:
+SHA-256 provenance-файла749dd8f1b5eaa04408999c3d0c2fa148b70de5b33239b604c4a9e9cd86f2cdee.
+MinIO minisig SHA-256d71cf680e1de21ae4a71d8d6ff2c80d6f8b07cbe8a9e00e157ef40be213fd47f;
+mc minisig SHA-25640f432ba89f9bca5c4bd5398a0669eb4d23eb142ff2c35c8b86ae894cbc95edb.
+Все exact official URLs, sizes, SHA-256, source/licenses и tools зафиксированы в
+infra/storage/inputs.lock.json, SHA-256
+7d583ff59bda9f880f71522954e415bc9976979b03f458aca606d234774a1c51.
+
+Base — official curlimages/curl8.19.0, linux/amd64
+sha256:a2e4c1ef9b660f8ca90b2b725768e0ceade4fc1e52b5859a8d3e6c93db2dc47c;
+index sha256:c03110c736db81bbe1be0296f1f1608c81b954b01626bdfb0a8f84e5bd00ff3c.
+BuildKit0.25.0 pinned platform
+sha256:939060f02be6f297aa8038d1ada85e8c7c031f4c364c6456bd9adf43a20f3b5e;
+Buildx0.29.1 binary SHA-256
+7d2d7d6d4680aa349614965aaa33ccec43f1a9a21e908a5ce4cb6adfa5ad5141.
+Minisign0.12 archive SHA-256
+9a599b48ba6eb7b1e80f12f36b94ceca7c00b7a5173c95c3efc88d9822957e73,
+extracted executable SHA-256
+2c74dffcc1c9a5ee55957c60971998ace2b89f22585631594ec2152c588af8db.
+Actions также pinned полными commit SHA; остальные project dependencies не менялись.
+
+| Artifact из final storage run | ID / размер | ZIP SHA-256 |
+|---|---|---|
+| storage-images-f74c240febd963c79408e80600c29d7739e08867-1 |11107176489 /96523927 bytes|9fcb573012a1907a70bcc3ad2b7b893677e6ddb49a977a6442f6336e94bac644|
+| storage-publish-f74c240febd963c79408e80600c29d7739e08867-1 |11106623061 /3040 bytes|224a19ac249afe93515395c7c8c384ca62a8ff24cd61000e120470816d36cf41|
+
+Первый ZIP содержит только minio.tar, mc.tar, inputs.lock.json, receipt.json.
+Publisher скачал его по exact artifact ID, подтвердил download digest, verify-receipt
+SHA/source SHA/lock/archive/config binding. C6 локально повторно проверил **полные
+bytes второго ZIP**, оба JSON и их взаимную связь; первый большой ZIP повторно
+локально не скачан. Retention7days, до2026-10-07; ссылки/логи не заменяют bytes.
+receipt.json SHA-2568e315f18e4187f780e4c8125666f1775d13ea3dfac1892b972260b38ba2ffc39;
+publish-receipt.json SHA-256e06e40fccdce27b6f30fe5c2f364791c34889868167a4b23d019c64c5c182650.
+
+#### Реальное исполнение, assertions и исправленные дефекты нового workflow
+
+На fresh ubuntu-24.04 runner выполнена прежняя команда:
+`STORAGE_IMAGE=asm-minio:verified STORAGE_ADMIN_IMAGE=asm-mc:verified sh scripts/ci.sh`.
+Использован штатный environment override Compose; сами script/Compose/lock не
+изменены. **492 unit,390 real PostgreSQL/S3,111 frontend PASS**, canonical/contracts,
+migration cycles/reproducibility/HTTP smoke PASS. После foundation и дополнительного
+storage runtime probe `test -z "$(git status --porcelain --untracked-files=all)"` PASS.
+
+- tests/test_m2_2_storage_postgres.py: original_roundtrip_validated_manifest_and_private_signed_http
+  проверяет exact bytes/hash/MIME/dimensions через real signed GET и anonymous deny;
+  live_owner_relation_workspace_role_and_failed_file_negatives проверяет exact
+  relations/Workspace/live OWNER, PENDING/FAILED; revoke_denies_new_grant_existing_bearer_expires_at_real_s3
+  проверяет revoke новой ссылки и реальное истечение прежней; checksum/conditional PUT
+  и runtime privilege boundaries сохранены.
+- tests/test_m2_2_db_postgres.py, test_m2_2_recovery_postgres.py,
+  test_m2_2_media.py и test_m2_2_migrations.py исполнены прежним suite: atomic
+  rollback/concurrent dedupe, invalid/truncated/animated/limits, retry/exhaustion,
+  crashes/lost finalize ACK/stale claims, late PUT/repeated cleanup/winner safety,
+  upgrade/downgrade/re-upgrade. Это проверка принятой реализации на новых образах.
+- tests/test_m2_1_postgres.py и M2.3 real-wire/DB/API cases сохранены и исполнены
+  прежним suite: SEND crash/UNKNOWN/no-resend, tenant isolation и live authority/
+  product revocation. M1 regressions также включены; live Telegram не выполнялся.
+- Дополнительный runtime probe: exact minio/mc versions и binary SHA, CA HTTPS,
+  sh/cat/rm и tmp permissions; неизменный sh bootstrap; доступ внутри workspace prefix,
+  отказ PUT вне prefix, HTTP403 anonymous GET; SIGTERM/exit0, одинаковые volume
+  Mounts до/после restart, повтор bootstrap и сохранение exact bytes после restart.
+
+Ранние красные runs выявили дефекты **нового** workflow, не старых tests:
+runner-local env paths; недетерминированный EXPOSE history в BuildKit0.24.0
+(перешли на pinned0.25.0 с upstream fix); пропущенный stdin -i у mc pipe.
+Strict config/history/layer/byte assertions сохранены.
+Пробный browser run36727812609 остановлен BROWSER_COMPOSE_PROJECT_INVALID:
+script требует свой project и безусловно reload прежних Quay pins.
+Защитный guard/script не менялся; полный browser остаётся обязательным после public
+pull/pin switch. Packaging SUCCESS не означает browser PASS.
+
+Первичный private push создал разрешённые package IDs, но новый publisher ошибочно
+ожидал package.repository.id в GitHub API. Ответы не предоставляют repository
+metadata даже при корректном OCI source label и успешном GITHUB_TOKEN push.
+Это не установленный auth failure и не основание просить PAT/Connect repository.
+Run36732619535 сохранил partial receipt и независимо подготовил оба packages.
+Исправление на final SHA закрепило **наблюдённые immutable package IDs**15482993/
+15484077: exact name/type/owner проверяются; если repository metadata присутствует,
+ID обязан совпасть с1369650588. Missing/recreated package, иной owner/name/type,
+source label mismatch, tag/config collision или visibility drift отказывают.
+Только отдельный publish job получает contents:read/packages:write; verified
+artifact binding сохранён, image code в publish не исполняется; token удаляется
+logout/cleanup, не попадает в build/log/artifact. Все errors завершают job failure.
+
+Обычный CI на том же source [36734280555](https://github.com/Elefesys/ai-service-manager/actions/runs/36734280555)
+остаётся FAILURE: foundation109951736395 storage-test-init и browser109951736980
+storage вернули unauthorized со старыми pins; оба source gates SKIPPED.
+Actual checkout5d51adbcba492b0d07736cf646cca8fdb8682794 имеет ordered parents
+96d9f09dd16d8b6ab019ac76a9c72ce910d81191 + f74c240febd963c79408e80600c29d7739e08867,
+tree3e742d07440bcd2e4516922d5698ed1aee735db0, равен source tree.
+Full final-head CI/browser/оба gates и fresh anonymous pull пока **не выполнены
+успешно**. Это сохранённый registry gate, не снятый ради зелёного статуса.
+
+#### Дельта и следующий шаг C0
+
+Изменены семь из девяти разрешённых paths: два Dockerfile, inputs.lock.json,
+storage-images.yml и три текущих документа. infra/images.lock.env и pin_images.sh
+пока byte-identical; основной CI/Compose/bootstrap/app/migrations/tests/assertions
+и прочие dependencies не менялись.
+
+C0 проверяет оба packages/receipts/состав, затем организует владельцу действие
+**Package settings → Change visibility → Public** для двух точных URLs выше.
+Repository остаётся private; новых credentials/Connect repository не требуется.
+После подтверждения C6 выполняет на fresh runner anonymous immutable pulls без
+cache/auth, сверяет config/layers и in-image binary hashes, переключает только две
+storage pins/refs и запускает оба прежних scripts/оба source gates на одном final
+head. Команды и порядок — runbook§0.3. При изменении image bytes нужны новые build/
+receipts/pins. Независимый scoped C8 организует C0; self-check C6 его не заменяет.
+PR остаётся Draft/open, merge/VERIFIED не объявлены; M2 IN_PROGRESS, live A09/A11
+BLOCKED, M3 не выдан. VM/DNS/TLS/Telegram secrets/live sends не выполнялись.
+
+</details>
+
+<details>
+<summary>История — M2-ENV-01: диагноз C6 принят; прежний scope заменён M2-ENV-02 / 2026-09-30</summary>
+
+Этот блок сохранён как evidence; его запреты на rebuild/publish и прежние поручения
+не переопределяют активное решение C0 выше.
+
+## Исторический handoff C0 → C6 — M2-ENV-01-REGISTRY / 2026-09-30
+
+**M2.4 code/UI INTEGRATED / VERIFIED LOCAL/TEST; весь M2 IN_PROGRESS.**
+Задача — восстановить доступность принятых storage images и штатный CI, не ожидая
+доменов. Это устранение blocker родительской M2-LIVE-A09-A11. **Диагноз C6 готов для
+C0 REVIEW; задача BLOCKED:** доступный same-content OCI source не подтверждён,
+полный CI не восстановлен. Pins и implementation bytes не изменены; rebuild и
+публикация новых images не выполнялись. M3/AI/новые функции не выданы.
+
+### Repository, base, ветка и evidence старта
+
+- Repository **Elefesys/ai-service-manager**; продолжать **c6/m2-live-smoke → main**,
+  существующий [Draft PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
+- Принятый implementation base / actual main:
+  **96d9f09dd16d8b6ab019ac76a9c72ce910d81191**,
+  tree **28de72ca6737cbe18bb4856a1636f70fae1131ee**.
+  PR21 merged; ordered parents **ffc437f125aa6af4dcf1c61a035a0d5df517e062** +
+  **770e7db905732b3ed2a25a1d9a2c31bcd89a161b**. Implementation bytes не менялись.
+- [Отдельный push/main CI35706123814](https://github.com/Elefesys/ai-service-manager/actions/runs/35706123814)
+  SUCCESS:492 unit,390 PostgreSQL/S3,111 frontend,27 browser; оба scripts/gates,
+  canonical/migrations/contracts/reproducibility/smoke PASS. C0 прочитал оба actual
+  main checkout logs; C8-M2.4-01/02/03 CLOSED сохраняются для прежних implementation bytes.
+  Это историческая приёмка, не green CI текущего PR head. ZIP bytes не проверены.
+- Сохранить первый coordination **914e2894f98330d62e1cc57ca5da5c62662d6960** и всю
+  последующую историю. Непосредственный parent этого задания:
+  **90fcdd968b00442d805839c8a205b673502fa122**,
+  tree **59b95121b494e487fdb8d53087d7d26cb6927adf**.
+  Exact стартовый coordination head указан в сообщении передачи C0 и PR receipt;
+  начать от него, не откатываться на parent/старую ветку M2.2 и не force-push.
+- [CI36308372607, attempts1/2](https://github.com/Elefesys/ai-service-manager/actions/runs/36308372607)
+  FAILURE: `storage-test` (MinIO server) и `storage-init` (mc) получили `unauthorized`
+  при pull из Quay. C0 прочитал logs attempts1/2; attempt2 jobs108589635786/108589635665.
+  Checkout **ce62ff7eaf640d580cef44d53a8648255e9c9d28**, parents accepted main +
+  parent задания; tree идентичен parent tree. Canonical/frontend111/Compose model
+  прошли; PG/S3/browser и clean-source gates не завершены. Не заявлять их PASS.
+
+### Читать перед работой
+
+AGENTS; актуальный register и этот активный handoff; `docs/decisions/IMPL-001-stack.md`;
+M2_CONTRACT §§9–11 и runbook M2_TELEGRAM_LOCAL_TEST §§0–1; `infra/images.lock.env`,
+`scripts/pin_images.sh`, `compose.yaml`, `scripts/ci.sh`, `scripts/test_browser.sh`,
+`.github/workflows/ci.yml`; применимые Spec/ADR private storage, immutable inputs и
+LOCAL/TEST границы; Implementation Plan §§6–7. Исторические M1 задания не исполнять.
+
+### Что установлено и что нужно диагностировать
+
+Принятые release inputs в `scripts/pin_images.sh`:
+
+- MinIO `RELEASE.2025-09-07T16-13-09Z`, pin
+  `quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e`.
+- mc `RELEASE.2025-02-15T10-36-16Z`, pin
+  `quay.io/minio/mc@sha256:9ae9ed28d04f7c36ee6b84c36b2c0168f1be28350d54344c3e5088a631f4c603`.
+
+Отказ доступа воспроизведён на двух CI attempts. Причина ответа registry не установлена:
+не считать доказанными удаление образа, общий outage, необходимость логина или смены
+версии. Сначала проверить исходные refs свежим anonymous pull/manifest inspection на
+чистом runner с обычным разрешённым сетевым доступом. Network/auth ограничения не обходить.
+Различать отсутствие объекта, отказ registry/token service, network failure и cache.
+Не ждать домена, bot token, cloud account или пользовательского Docker для этого шага.
+
+### Результат диагностики C6 / 2026-09-30 UTC
+
+Старт сохранён: head **0b417f581831bcd0c3c938b447f1e05510077ec6**, tree
+**9cc294ee718f4e1c89ebbd6c2ae2f18e2a4eb0c7**. История от первого coordination не
+переписывалась. В [CI36715183155 attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36715183155/attempts/1)
+browser109886245494 и foundation109886245605 отказали на pull. C6 запросил обычный
+rerun failed jobs: [attempt2](https://github.com/Elefesys/ai-service-manager/actions/runs/36715183155/attempts/2),
+browser109889123888 и foundation109889127360, новые GitHub-hosted ubuntu-24.04
+linux/amd64 runners, runner image20260920.314.1. Workflow не содержит Docker cache
+restore или registry login. В обоих checkout logs исполнен virtual merge
+**60073eaf5738f1f29c6ffb98e6db796d3098f28f**, ordered parents accepted main + стартовый
+head, tree идентичен стартовому. В12:39UTC mc pull снова получил `unauthorized`;
+предыдущий attempt также показывал отказ server pull. Успешного полного pull нет.
+
+`sh scripts/ci.sh` и `sh scripts/test_browser.sh` действительно запущены штатным
+workflow и завершились FAILURE при provisioning storage. Canonical import,
+frontend111 и Compose model checks прошли; PostgreSQL/S3/private-file/изоляция/
+UNKNOWN-no-resend и browser cases в этих attempts не исполнились. Оба штатных
+clean-source steps **SKIPPED** после failure, не PASS. Исторический main SUCCESS выше
+не подменяет текущий результат. Final documentation head/tree, actual checkout,
+ordered parents, tree comparison и CI приведены в PR receipt без SHA-only commit.
+
+Дополнительно из среды C6 выполнены обычные HTTPS GET, без credentials и обходов.
+Они не выдаются за runner pull. Для каждого exact digest использован registry v2
+manifest GET с Docker/OCI Accept, затем стандартный anonymous Bearer token exchange
+по `WWW-Authenticate` и повтор GET. Tokens оставались в памяти, не логировались.
+
+| Endpoint / оба сохранённых digest | Наблюдаемый ответ |
+|---|---|
+| quay.io/v2/minio/{minio,mc}/manifests/sha256:… | Initial401; anonymous token200, granted actions пусты; повтор manifest401 UNAUTHORIZED |
+| registry-1.docker.io/v2/minio/{minio,mc}/manifests/sha256:… | Initial401; anonymous token200 без pull grant; повтор401 authentication required |
+| hub.docker.com/v2/repositories/minio/{minio,mc}/ и exact release tags |404 object not found |
+| mirror.gcr.io/v2/minio/{minio,mc}/manifests/sha256:… |404 MANIFEST_UNKNOWN |
+| dl.min.io/{server/minio,client/mc}/release/linux-amd64/archive/{binary}.{accepted-release}.sha256sum |410 Gone; upstream сообщает об архивировании community проектов и прекращении раздачи этих файлов |
+
+Initial401 сам по себе — штатный auth challenge. Подтверждённый технический blocker:
+после anonymous exchange registry не предоставляет pull authority для обоих
+repository names. По этим ответам нельзя отличить private/deleted/disabled repo,
+доказать общий outage либо обещать исправление через credentials. Сообщение410
+от download site — отдельное upstream evidence, не доказанная причина Quay policy.
+Публичный Google cache не дал manifests; его содержимое также не имеет гарантии
+удержания ([Google documentation](https://docs.cloud.google.com/artifact-registry/docs/pull-cached-dockerhub-images)).
+Недоступность всех возможных mirrors не утверждается; допустимый доступный источник
+с проверяемой идентичностью linux/amd64 index/manifest/config/layers не найден.
+
+Provenance исходных refs подтверждён publisher scripts в принятых release tags:
+[MinIO docker-buildx.sh](https://github.com/minio/minio/blob/RELEASE.2025-09-07T16-13-09Z/docker-buildx.sh)
+и [mc docker-buildx.sh](https://github.com/minio/mc/blob/RELEASE.2025-02-15T10-36-16Z/docker-buildx.sh)
+публикуют соответствующие artifacts в Docker Hub и Quay. Из-за отказа доступа
+исходные OCI manifests/config/layers заново не прочитаны; новые pins не придуманы.
+Совпадение release tag или binary digest с OCI digest не заявляется.
+
+### Конкретное предложение C0 — ещё не разрешённый rebuild
+
+Официальные GitHub Releases сохраняют **оба принятых linux/amd64 binary**. C6
+полностью скачал их обычным HTTPS GET (200), посчитал SHA-256 по bytes и сравнил
+с `digest` официального release-asset API; binaries не запускались и не публиковались.
+
+| Official release asset | Размер, bytes | Проверенный binary SHA-256 |
+|---|---|---|
+| [minio.linux-amd64.RELEASE.2025-09-07T16-13-09Z](https://github.com/minio/minio/releases/download/RELEASE.2025-09-07T16-13-09Z/minio.linux-amd64.RELEASE.2025-09-07T16-13-09Z) |110989496|7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f|
+| [mc.linux-amd64.RELEASE.2025-02-15T10-36-16Z](https://github.com/minio/mc/releases/download/RELEASE.2025-02-15T10-36-16Z/mc.linux-amd64.RELEASE.2025-02-15T10-36-16Z) |29208728|7a03ba39e158708a9e88f1bf5c346c6651b15c784e4b2c7150b5b5f282f43c28|
+
+Это **binary SHA-256, не OCI pins и не доказательство прежних runtime bytes**.
+Release API также перечисляет minisig/checksum assets; подписи в этой диагностике
+не проверялись. Существующие upstream Dockerfile.release зависят от недоступных
+download endpoints и mutable base inputs, поэтому простая повторная сборка не
+воспроизводит принятые OCI artifacts.
+
+Минимальное предлагаемое отдельное поручение: упаковать эти два exact binary в
+project-owned linux/amd64 images с digest-pinned base/дополнительными tools, проверкой
+hash/signature и сохранением нужных Compose entrypoint/healthcheck/shell semantics.
+Предлагаемые новые paths: `infra/storage/Minio.Dockerfile`,
+`infra/storage/Mc.Dockerfile`, `infra/storage/inputs.lock.json` и отдельный
+`.github/workflows/storage-images.yml` для ограниченного build/provenance/publish.
+После разрешённой публикации в публичные GHCR packages проекта — заменить только
+две исходные ссылки и два pins в уже разрешённых файлах; прежний основной workflow,
+Compose и assertions сохранять. GITHUB_TOKEN с job-scoped packages:write, доступность
+public packages и отсутствие оплаты требуют решения/проверки C0; credential не
+создавался. Scope включает новые OCI bytes и независимый C8, затем uncached pull и
+полный штатный CI на одном head. Новые base digests ещё не выбраны/приняты.
+
+Это предложение упаковки, а не компиляции нового MinIO release, смены версии или
+подмены S3 тестов. Пока C0 не расширит scope из пяти paths, выполнять его нельзя.
+Если C0 располагает официальным доступным архивом точных OCI objects, сначала
+проверить их index→linux/amd64 manifest→config/layers hashes: такой перенос может
+обойтись исходным scope без rebuild. Новые credentials не считать решением без
+подтверждения upstream. До решения C0 pins остаются прежними, PR Draft, merge запрещён.
+
+Для повторного uncached pull на disposable linux/amd64 runner (без Docker config
+с credentials; команды не удаляют чужой локальный cache):
+
+```sh
+set -eu
+. infra/images.lock.env
+for ref in "$STORAGE_IMAGE" "$STORAGE_ADMIN_IMAGE"; do
+  if docker image inspect "$ref" >/dev/null 2>&1; then
+    echo 'Use a fresh disposable runner: image is already cached' >&2
+    exit 1
+  fi
+done
+docker pull --platform linux/amd64 "$STORAGE_IMAGE"
+docker pull --platform linux/amd64 "$STORAGE_ADMIN_IMAGE"
+docker buildx imagetools inspect "$STORAGE_IMAGE"
+docker buildx imagetools inspect "$STORAGE_ADMIN_IMAGE"
+sh scripts/ci.sh
+test -z "$(git status --porcelain --untracked-files=all)"
+sh scripts/test_browser.sh
+test -z "$(git status --porcelain --untracked-files=all)"
+```
+
+Это диагностические команды для чистого runner, не изменение штатных scripts.
+Фактический attempt2 запускал прежний workflow с двумя указанными scripts;
+отдельные inspect команды выше ещё не исполнялись на runner. HTTP probes выполняли
+`GET /v2/<repo>/manifests/<exact digest>` и anonymous token exchange, а не `--version`.
+Полный recovery DoD ниже остаётся невыполненным; оба clean-source gates нужно
+подтвердить после реального восстановления storage, без skip/xfail/ослаблений.
+
+### Точный разрешённый scope C0
+
+Этот блок **явно заменяет прежний полный запрет изменения storage pins** только для
+данного blocker. Продуктовые контракты, версии и остальная инфраструктура сохраняются.
+
+1. `infra/images.lock.env` — только **STORAGE_IMAGE** и **STORAGE_ADMIN_IMAGE**.
+2. `scripts/pin_images.sh` — только две соответствующие исходные ссылки; сохранить
+   exact release versions, immutable resolution и правило не обновлять уже принятые pins.
+   Не запускать массовое обновление пяти остальных pins.
+3. `docs/TASK_REGISTER.md`, `docs/tasks/M2_HANDOFF.md`,
+   `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` — диагноз, provenance, точные команды,
+   результат и границы evidence, одно согласованное итоговое обновление.
+
+Если нужен перенос источника: допускается официальный публичный registry/mirror с
+доказанным происхождением **тех же release artifacts**. Сохранять `@sha256`; проверить
+index/platform manifest, config и layer identities для принятого linux/amd64.
+Одинаковый tag/вывод `--version` сам по себе не доказывает одинаковые bytes. Разницу
+между index digest и platform manifest не выдавать за изменение runtime. Для иной
+платформы не заявлять проверку без исполнения. Не использовать случайные community
+rebuilds, непроверенный proxy/cache или pin от другого release.
+
+Если исходный доступ восстановился и свежий полный CI проходит без изменения images,
+зафиксировать no-change recovery; не создавать fix ради коммита и не выдумывать причину.
+Если тех же artifacts нет либо нужны rebuild/version change/new registry credentials,
+вернуть C0 конкретный диагноз и минимальную proposed delta с источниками. Такой выбор
+не делегирован автоматически, но не блокирует остальные доступные read-only проверки.
+
+Не менять backend/frontend/API/DTO/generated contracts, auth/CORS/RLS, private ACL,
+S3 bootstrap policy, applied0001–0007, остальные dependencies/pins, Compose/workflows,
+`scripts/ci.sh`, `scripts/test_browser.sh` и существующие tests/assertions. Не добавлять
+skip/xfail, `latest`, `continue-on-error`, registry login или более широкие credentials.
+Обоснованный обнаруженный blocker вне этих пяти paths сначала вернуть C0.
+
+### Конечные критерии результата
+
+- Диагноз опирается на точные refs, команды и sanitized registry/runner evidence;
+  различает observed error и подтверждённую причину. Secrets/auth tokens не логировать.
+- Оба final immutable refs реально скачаны на чистом linux/amd64 runner без заранее
+  загруженного локального image. Проверены digest/provenance и MinIO/mc versions.
+  Обычный pull, использовавший локальный image cache, недостаточен для recovery evidence.
+- На одном final head полностью прошли **sh scripts/ci.sh** и
+  **sh scripts/test_browser.sh**, оба clean-source gates, migrations/contracts/
+  reproducibility/smoke. PG/S3 действительно исполняются; private access, signed GET,
+  CORS/isolation, interrupted upload/recovery, SEND UNKNOWN/no-resend и M1 regression
+  сохраняются. Количество cases — справка, не замена assertions/evidence.
+- Final-head SHA, tree, actually checked-out virtual merge, ordered parents и tree
+  comparison подтверждены logs/Git objects. Если ZIP bytes недоступны, это указать.
+- Единственный register/активный handoff/runbook обновлены согласованно. Не делать
+  коммит только ради записи предыдущего documentation SHA; refs/CI — в PR receipt.
+- Вернуть C0 REVIEW, список paths/delta, причину выбранного fix/no-change, exact refs,
+  команды/CI/results и ограничения. Не merge и не объявлять M2/A09/A11 VERIFIED.
+
+Если изменены источники/pins, C0 организует **реальный scoped C8** по provenance,
+воспроизводимости и сохранности private-storage checks перед приёмкой. Это новая
+граница review; прежний C8 PASS не покрывает новые image bytes автоматически.
+Для подтверждённого no-change recovery отдельный повтор C8 без нового риска не нужен.
+
+### Зафиксированное решение о доменах и следующий шаг после приёмки
+
+Владелец 2026-09-30 согласовал **smoke на .com после подтверждения работоспособности**:
+`console.telegram-test.clientmanagerai.com` + `files.telegram-test.clientmanagerai.com`.
+Это явное изменение прежних .ru smoke endpoints, с одним Console/API/webhook origin
+и отдельным private-files hostname. Вторую Console/region/shared-cookie domain или
+CORS wildcard не создавать; .ru остаётся будущим основным доменом по предпочтению
+владельца. Автоматическая смена .com → .ru в эту задачу не входит.
+
+По сообщению владельца/ответу поддержки: .com зарегистрирован, NS Timeweb прописаны;
+.ru ждёт проверки администратора. Публичные DNS/HTTPS C0 не проверены. Не копировать
+личные данные из обращения, не повторять регистрацию и не просить TG secrets.
+Бюджет принят; в **M2-ENV-01** не создавать платный runtime, не менять DNS/TLS/webhook
+и не отправлять Telegram. После C0 приёмки CI выдаётся следующий шаг существующей
+M2-LIVE-A09-A11: host/preflight → проверенные .com DNS/TLS → реальный Client text+photo
+→ правильный Workspace/Owner Console/private image → manual reply → Client receipt.
+CONTROLLED/202/SENT не заменяют live evidence; A09/A11 остаются BLOCKED, M3 не выдан.
+
+
+</details>
+
+<details>
+<summary>История: приёмка M2.4 до merge — не текущие инструкции</summary>
+
+## История — pre-merge handoff C0 → пользователь — M2.4-CONSOLE к merge / 2026-09-22
 
 **C0 и независимый scoped C8 приняли исправленный code/UI LOCAL/TEST.**
 M2.4-CONSOLE/M2.4 пока REVIEW: merge ещё не выполнен, отдельный main CI не проверен.
@@ -93,6 +855,8 @@ workflows/dependencies/image pins/канон не менялись. Исходн
    A01–A12 и успешного main CI C0 может завершить M2. M3 автоматически не выдаётся.
 
 Новых функций/миграций и повторной реализации M1–M2.3 в этом handoff нет.
+
+</details>
 
 <details>
 <summary>История: передача C5 в REVIEW — не текущие инструкции</summary>

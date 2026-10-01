@@ -1,0 +1,473 @@
+name: Storage image packaging
+on:
+  push:
+    branches: [c6/m2-live-smoke]
+    paths:
+      - infra/storage/Minio.Dockerfile
+      - infra/storage/Mc.Dockerfile
+      - infra/storage/inputs.lock.json
+      - .github/workflows/storage-images.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: storage-images-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: >-
+      github.repository == 'Elefesys/ai-service-manager' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/c6/m2-live-smoke') ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    outputs:
+      artifact_id: ${{ steps.artifact.outputs.artifact-id }}
+      receipt_sha256: ${{ steps.receipt.outputs.sha256 }}
+    env:
+      COMPOSE_PROJECT_NAME: storage-image-verification
+    steps:
+      - name: Set runner-local paths
+        run: |
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/storage-docker" >> "$GITHUB_ENV"
+          echo "PACK_ROOT=$RUNNER_TEMP/storage-pack" >> "$GITHUB_ENV"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Verify locked vendor inputs and prepare allowlisted contexts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, shutil, subprocess, tarfile, urllib.request
+          root = pathlib.Path(os.environ['PACK_ROOT'])
+          root.mkdir(mode=0o700)
+          (root / 'artifacts').mkdir()
+          lock_path = pathlib.Path('infra/storage/inputs.lock.json')
+          lock_bytes = lock_path.read_bytes()
+          lock = json.loads(lock_bytes)
+          assert lock['schema_version'] == 1 and lock['platform'] == 'linux/amd64'
+          assert set(lock['images']) == {'minio', 'mc'}
+          assert subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip() == os.environ['GITHUB_SHA']
+          def fetch(spec, path):
+              assert spec['url'].startswith(('https://github.com/', 'https://raw.githubusercontent.com/'))
+              h, size = hashlib.sha256(), 0
+              with urllib.request.urlopen(spec['url'], timeout=30) as response, path.open('wb') as output:
+                  while block := response.read(1024 * 1024):
+                      size += len(block)
+                      assert size <= spec['bytes'], 'input exceeds locked size'
+                      output.write(block)
+                      h.update(block)
+              assert size == spec['bytes'] and h.hexdigest() == spec['sha256'], 'input hash/size mismatch'
+          fetch(lock['signature']['key_provenance'], root / 'key-provenance')
+          assert lock['signature']['public_key'] in (root / 'key-provenance').read_text()
+          fetch(lock['minisign'], root / 'minisign.tar.gz')
+          with tarfile.open(root / 'minisign.tar.gz') as archive:
+              member = archive.getmember(lock['minisign']['member'])
+              assert member.isfile()
+              verifier = archive.extractfile(member).read()
+          assert hashlib.sha256(verifier).hexdigest() == lock['minisign']['binary_sha256']
+          (root / 'minisign').write_bytes(verifier)
+          (root / 'minisign').chmod(0o755)
+          plugin = pathlib.Path(os.environ['DOCKER_CONFIG']) / 'cli-plugins/docker-buildx'
+          plugin.parent.mkdir(parents=True, mode=0o700)
+          fetch(lock['buildx'], plugin)
+          plugin.chmod(0o755)
+          for name, spec in lock['images'].items():
+              context = root / name
+              context.mkdir()
+              for key, destination in [('binary', name), ('minisig', 'binary.minisig'),
+                                       ('source', 'source.tar.gz'), ('license', 'LICENSE'), ('credits', 'CREDITS')]:
+                  fetch(spec[key], context / destination)
+              command = [str(root / 'minisign'), '-Vm', str(context / name), '-x',
+                         str(context / 'binary.minisig'), '-P', lock['signature']['public_key']]
+              subprocess.run(command, check=True)
+              bad = root / 'tampered-binary'
+              bad.write_bytes(b'tampered')
+              negative = command.copy()
+              negative[2] = str(bad)
+              assert subprocess.run(negative, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0
+              bad.unlink()
+              notice = (f'Project packaging of unmodified MinIO {name} {spec["release"]}.\n'
+                        f'Upstream source commit: {spec["source_commit"]}\n'
+                        f'Corresponding upstream source: {spec["source"]["url"]}\n'
+                        'The matching source archive, LICENSE, CREDITS and detached signature are included here.\n'
+                        'Not an official MinIO container image. No application or private repository source is included.\n')
+              (context / 'NOTICE').write_text(notice)
+              (context / 'inputs.lock.json').write_bytes(lock_bytes)
+              recipe = pathlib.Path('infra/storage') / ('Minio.Dockerfile' if name == 'minio' else 'Mc.Dockerfile')
+              shutil.copyfile(recipe, context / 'Dockerfile')
+              assert f'FROM {lock["base"]["repo"]}@{lock["base"]["platform_digest"]}' in recipe.read_text()
+              assert {p.name for p in context.iterdir()} == {name, 'binary.minisig', 'source.tar.gz', 'LICENSE',
+                                                           'CREDITS', 'NOTICE', 'inputs.lock.json', 'Dockerfile'}
+              for path in context.iterdir():
+                  assert path.is_file() and not path.is_symlink()
+                  path.chmod(0o644)
+                  os.utime(path, (lock['source_date_epoch'], lock['source_date_epoch']))
+              print(name.upper() + '_HASH_SIGNATURE_AND_NEGATIVE_CHECK_PASS')
+          (root / 'artifacts/inputs.lock.json').write_bytes(lock_bytes)
+          PY
+      - name: Build twice with isolated pinned BuildKit daemons
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          root = pathlib.Path(os.environ['PACK_ROOT'])
+          lock = json.loads((root / 'artifacts/inputs.lock.json').read_text())
+          subprocess.run(['docker', 'buildx', 'version'], check=True)
+          for iteration in (1, 2):
+              builder = f'storage-repro-{iteration}'
+              subprocess.run(['docker', 'buildx', 'create', '--name', builder, '--driver', 'docker-container',
+                              '--driver-opt', 'image=' + lock['buildkit']['repo'] + '@' + lock['buildkit']['platform_digest']], check=True)
+              try:
+                  subprocess.run(['docker', 'buildx', 'inspect', '--builder', builder, '--bootstrap'], check=True)
+                  for name in lock['images']:
+                      subprocess.run(['docker', 'buildx', 'build', '--builder', builder, '--platform', lock['platform'],
+                                      '--pull', '--no-cache', '--network=none', '--provenance=false', '--sbom=false',
+                                      '--build-arg', 'SOURCE_SHA=' + os.environ['GITHUB_SHA'],
+                                      '--build-arg', 'SOURCE_DATE_EPOCH=' + str(lock['source_date_epoch']),
+                                      '--tag', 'asm-' + name + ':verified', '--output',
+                                      f'type=docker,dest={root}/{name}-{iteration}.tar,rewrite-timestamp=true',
+                                      str(root / name)], check=True)
+              finally:
+                  subprocess.run(['docker', 'buildx', 'rm', builder], check=True)
+          PY
+      - name: Compare runtime config/layers and audit every added file
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import gzip, hashlib, io, json, os, pathlib, shutil, tarfile
+          root = pathlib.Path(os.environ['PACK_ROOT'])
+          lock_bytes = (root / 'artifacts/inputs.lock.json').read_bytes()
+          lock = json.loads(lock_bytes)
+          sha = lambda data: hashlib.sha256(data).hexdigest()
+          receipt = {'source_sha': os.environ['GITHUB_SHA'], 'platform': lock['platform'],
+                     'lock_sha256': sha(lock_bytes), 'attestations': 'disabled; separate verified receipt', 'images': {}}
+          for name, spec in lock['images'].items():
+              prefix = f'usr/share/licenses/asm-{name}/'
+              expected = {'usr/local/bin/' + name: spec['binary']['sha256'],
+                          prefix + 'LICENSE': spec['license']['sha256'], prefix + 'CREDITS': spec['credits']['sha256'],
+                          prefix + 'source.tar.gz': spec['source']['sha256'], prefix + 'binary.minisig': spec['minisig']['sha256'],
+                          prefix + 'inputs.lock.json': sha(lock_bytes), prefix + 'NOTICE': sha((root / name / 'NOTICE').read_bytes())}
+              directories = {str(p) for path in expected for p in pathlib.PurePosixPath(path).parents}
+              builds, configs = [], []
+              for iteration in (1, 2):
+                  with tarfile.open(root / f'{name}-{iteration}.tar') as archive:
+                      manifest = json.load(archive.extractfile('manifest.json'))
+                      assert len(manifest) == 1
+                      manifest = manifest[0]
+                      config_bytes = archive.extractfile(manifest['Config']).read()
+                      config = json.loads(config_bytes)
+                      configs.append(config)
+                      assert config['architecture'] == 'amd64' and config['os'] == 'linux'
+                      assert config['config']['User'] == '0:0'
+                      assert config['config']['Entrypoint'] == ['/usr/local/bin/' + name]
+                      assert config['config']['Labels']['org.opencontainers.image.revision'] == os.environ['GITHUB_SHA']
+                      assert config['config']['Labels']['org.opencontainers.image.version'] == spec['release']
+                      assert config['config']['Labels']['org.opencontainers.image.source'] == 'https://github.com/Elefesys/ai-service-manager'
+                      assert config['rootfs']['diff_ids'][:len(lock['base']['diff_ids'])] == lock['base']['diff_ids']
+                      files, layers = {}, []
+                      for number, layer in enumerate(manifest['Layers']):
+                          payload = archive.extractfile(layer).read()
+                          raw = gzip.decompress(payload) if payload[:2] == b'\x1f\x8b' else payload
+                          assert 'sha256:' + sha(raw) == config['rootfs']['diff_ids'][number]
+                          layers.append({'archive_sha256': sha(payload), 'diff_id': 'sha256:' + sha(raw)})
+                          if number < len(lock['base']['diff_ids']):
+                              continue
+                          with tarfile.open(fileobj=io.BytesIO(raw)) as added:
+                              for member in added:
+                                  path = member.name.removeprefix('./').rstrip('/')
+                                  if member.isdir():
+                                      assert path in directories, 'unexpected directory: ' + path
+                                      continue
+                                  assert member.isfile() and path in expected, 'unexpected added image path: ' + path
+                                  assert path not in files and member.uid == member.gid == 0
+                                  assert member.mode == (0o755 if path.startswith('usr/local/bin/') else 0o644)
+                                  files[path] = sha(added.extractfile(member).read())
+                      assert files == expected, 'added file inventory/hash mismatch'
+                      builds.append({'config_digest': 'sha256:' + sha(config_bytes), 'layers': layers, 'files': files})
+              if builds[0] != builds[1]:
+                  differences = {key: [configs[0].get(key), configs[1].get(key)]
+                                 for key in configs[0].keys() | configs[1].keys()
+                                 if configs[0].get(key) != configs[1].get(key)}
+                  print(json.dumps({'image': name, 'config_differences': differences,
+                                    'layer_digests': [build['layers'] for build in builds]}))
+              assert builds[0] == builds[1], 'runtime config/layers are not reproducible'
+              target = root / f'artifacts/{name}.tar'
+              shutil.copyfile(root / f'{name}-1.tar', target)
+              receipt['images'][name] = {**builds[0], 'archive_sha256': sha(target.read_bytes()),
+                                        'rebuild_archive_sha256': sha((root / f'{name}-2.tar').read_bytes()),
+                                        'recipe_sha256': sha((root / name / 'Dockerfile').read_bytes()),
+                                        'package': spec['package'], 'binary_sha256': spec['binary']['sha256'],
+                                        'reproduction': 'two isolated no-cache builds; exact config/layers/files match'}
+              print(name.upper() + '_REPRODUCIBLE_CONFIG_LAYERS_ALLOWLIST_PASS')
+          (root / 'artifacts/receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          PY
+      - name: Load verified images and check binary bytes, version, CA and shell
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          root = pathlib.Path(os.environ['PACK_ROOT'])
+          lock = json.loads((root / 'artifacts/inputs.lock.json').read_text())
+          receipt = json.loads((root / 'artifacts/receipt.json').read_text())
+          for name, spec in lock['images'].items():
+              subprocess.run(['docker', 'load', '-i', str(root / f'artifacts/{name}.tar')], check=True)
+              image = 'asm-' + name + ':verified'
+              image_id = subprocess.check_output(['docker', 'image', 'inspect', '-f', '{{.Id}}', image]).decode().strip()
+              assert image_id == receipt['images'][name]['config_digest']
+              result = subprocess.check_output(['docker', 'run', '--rm', '--entrypoint', 'sha256sum', image, '/usr/local/bin/' + name]).decode()
+              assert result.split()[0] == spec['binary']['sha256']
+              version = subprocess.check_output(['docker', 'run', '--rm', image, '--version']).decode()
+              assert spec['release'] in version
+              print(version.splitlines()[0])
+              subprocess.run(['docker', 'run', '--rm', '--entrypoint', 'sh', image, '-ec',
+                              'command -v curl; command -v cat; command -v rm; test -s /etc/ssl/certs/ca-certificates.crt; '
+                              'mkdir -p /tmp/mc; echo probe >/tmp/mc/probe; test "$(cat /tmp/mc/probe)" = probe; rm /tmp/mc/probe'], check=True)
+              ca_probe = subprocess.check_output(['docker', 'run', '--rm', '--entrypoint', 'curl', image,
+                                                   '--fail', '--silent', '--show-error', spec['license']['url']])
+              assert hashlib.sha256(ca_probe).hexdigest() == spec['license']['sha256']
+              print(name.upper() + '_IN_IMAGE_HASH_VERSION_CA_SHELL_PASS')
+          PY
+      - name: Execute existing full foundation script with verified local images
+        # Only process environment overrides; committed pins and the normal CI are unchanged.
+        env:
+          STORAGE_IMAGE: asm-minio:verified
+          STORAGE_ADMIN_IMAGE: asm-mc:verified
+        run: sh scripts/ci.sh
+      - name: Verify bootstrap idempotency, private policy and persistent volume restart
+        env:
+          STORAGE_IMAGE: asm-minio:verified
+          STORAGE_ADMIN_IMAGE: asm-mc:verified
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess, time
+          root = pathlib.Path(os.environ['PACK_ROOT'])
+          compose = ['docker', 'compose', '--env-file', 'infra/images.lock.env', '--env-file', '.env']
+          def run(args, *, env=None):
+              result = subprocess.run(args, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+              if result.returncode:
+                  raise RuntimeError('STORAGE_RUNTIME_PROBE_FAILED')
+              return result.stdout
+          secrets = dict(line.split('=', 1) for line in pathlib.Path('.env').read_text().splitlines() if line and not line.startswith('#'))
+          environment = dict(os.environ, MC_HOST_probe='http://' + secrets['STORAGE_ACCESS_KEY'] + ':' +
+                             secrets['STORAGE_SECRET_KEY'] + '@storage:9000')
+          mc = ['docker', 'run', '--rm', '-i', '--network', os.environ['COMPOSE_PROJECT_NAME'] + '_default',
+                '--env', 'MC_HOST_probe', 'asm-mc:verified']
+          key = 'probe/asm-private-local/workspaces/00000000-0000-0000-0000-000000000001/restart-proof'
+          data = b'PRIVATE_STORAGE_RESTART_PROOF\x00\xff'
+          try:
+              run(compose + ['up', '-d', '--wait', 'storage'])
+              run(compose + ['run', '--rm', 'storage-init'])
+              process = subprocess.run(mc + ['pipe', key], env=environment, input=data,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+              assert process.returncode == 0
+              assert run(mc + ['cat', key], env=environment) == data
+              denied = subprocess.run(mc + ['pipe', 'probe/asm-private-local/outside-prefix'], env=environment,
+                                      input=b'forbidden', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+              assert denied.returncode != 0
+              container = run(compose + ['ps', '-q', 'storage']).decode().strip()
+              status = run(['docker', 'exec', container, 'curl', '-s', '-o', '/dev/null', '-w', '%{http_code}',
+                            'http://localhost:9000/asm-private-local/workspaces/00000000-0000-0000-0000-000000000001/restart-proof'])
+              assert status == b'403'
+              before = json.loads(run(['docker', 'inspect', container]))[0]['Mounts']
+              run(compose + ['stop', '--timeout', '20', 'storage'])
+              assert json.loads(run(['docker', 'inspect', container]))[0]['State']['ExitCode'] == 0
+              run(compose + ['up', '-d', '--wait', 'storage'])
+              after = json.loads(run(['docker', 'inspect', container]))[0]['Mounts']
+              assert before == after
+              run(compose + ['run', '--rm', 'storage-init'])
+              assert run(mc + ['cat', key], env=environment) == data
+              run(mc + ['rm', key], env=environment)
+              print('PRIVATE_POLICY_BOOTSTRAP_IDEMPOTENCY_SIGTERM_PERSISTENT_RESTART_PASS')
+          finally:
+              run(compose + ['down', '--remove-orphans'])
+          PY
+      - name: Require unchanged source after foundation and storage runtime checks
+        run: test -z "$(git status --porcelain --untracked-files=all)"
+      # test_browser.sh reloads the committed Quay pins. Its full run and second
+      # source gate belong to normal CI after owner-approved public pull/pin switch.
+      - name: Finalize verified receipt
+        id: receipt
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          path = pathlib.Path(os.environ['PACK_ROOT']) / 'artifacts/receipt.json'
+          receipt = json.loads(path.read_text())
+          receipt['runtime_checks'] = ['binary hashes and exact versions', 'CA HTTPS trust and shell/tmp tools',
+              'unmodified scripts/ci.sh with local-image environment override',
+              'private policy, bootstrap idempotency, SIGTERM and data-preserving volume restart', 'clean-source gate']
+          path.write_text(json.dumps(receipt, indent=2) + '\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('sha256=' + hashlib.sha256(path.read_bytes()).hexdigest() + '\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        id: artifact
+        with:
+          name: storage-images-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/storage-pack/artifacts/
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+  publish:
+    needs: verify
+    if: >-
+      needs.verify.result == 'success' && github.repository == 'Elefesys/ai-service-manager' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/c6/m2-live-smoke') ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Set runner-local paths
+        run: |
+          echo "DOCKER_CONFIG=$RUNNER_TEMP/storage-publish-auth" >> "$GITHUB_ENV"
+          echo "ARTIFACT_ROOT=$RUNNER_TEMP/storage-verified" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          artifact-ids: ${{ needs.verify.outputs.artifact_id }}
+          path: ${{ runner.temp }}/storage-verified
+          merge-multiple: true
+      - name: Bind downloaded archives to the successful verify job
+        env:
+          EXPECTED_RECEIPT: ${{ needs.verify.outputs.receipt_sha256 }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          root = pathlib.Path(os.environ['ARTIFACT_ROOT'])
+          assert {p.name for p in root.iterdir()} == {'minio.tar', 'mc.tar', 'inputs.lock.json', 'receipt.json'}
+          sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+          assert sha(root / 'receipt.json') == os.environ['EXPECTED_RECEIPT']
+          receipt = json.loads((root / 'receipt.json').read_text())
+          assert receipt['source_sha'] == os.environ['GITHUB_SHA']
+          assert sha(root / 'inputs.lock.json') == receipt['lock_sha256']
+          assert set(receipt['images']) == {'minio', 'mc'} and receipt['runtime_checks']
+          pathlib.Path(os.environ['DOCKER_CONFIG']).mkdir(mode=0o700)
+          for name, spec in receipt['images'].items():
+              assert spec['package'] == 'ghcr.io/elefesys/asm-' + name
+              assert sha(root / (name + '.tar')) == spec['archive_sha256']
+              subprocess.run(['docker', 'load', '-i', str(root / (name + '.tar'))], check=True)
+              config = subprocess.check_output(['docker', 'image', 'inspect', '-f', '{{.Id}}', 'asm-' + name + ':verified']).decode().strip()
+              assert config == spec['config_digest']
+              labels = json.loads(subprocess.check_output(['docker', 'image', 'inspect', '-f', '{{json .Config.Labels}}', 'asm-' + name + ':verified']))
+              assert labels['org.opencontainers.image.source'] == 'https://github.com/Elefesys/ai-service-manager'
+              print(json.dumps({'image': spec['package'], 'config_digest': config,
+                                'source_label': labels['org.opencontainers.image.source']}))
+          print('VERIFIED_ARTIFACT_BINDING_PASS; no image code executed in publish job')
+          PY
+      - name: Check package ownership and publish exact verified images
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, pathlib, re, subprocess, urllib.error, urllib.request
+          root = pathlib.Path(os.environ['ARTIFACT_ROOT'])
+          receipt = json.loads((root / 'receipt.json').read_text())
+          token = os.environ['GH_TOKEN']
+          def api(path):
+              request = urllib.request.Request('https://api.github.com/' + path,
+                  headers={'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'})
+              try:
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  if error.code == 404:
+                      return None
+                  raise RuntimeError('PACKAGE_API_FAILURE_HTTP_' + str(error.code)) from None
+          repository = api('repos/Elefesys/ai-service-manager')
+          assert repository and repository['full_name'] == 'Elefesys/ai-service-manager'
+          owner_route = 'orgs' if repository['owner']['type'] == 'Organization' else 'users'
+          # Immutable identities observed after the authorized first private pushes:
+          # minio: run36728044544; mc: run36732619535 (partial receipt11106091457).
+          # The package API omits repository metadata for these GHCR packages.
+          package_ids = {'minio': 15482993, 'mc': 15484077}
+          def require_package_identity(name, package):
+              assert package and package['id'] == package_ids[name], 'package identity changed or inaccessible'
+              assert package['name'] == 'asm-' + name and package['package_type'] == 'container'
+              assert package['owner']['id'] == repository['owner']['id'], 'package owner conflict'
+              linked = package.get('repository')
+              if linked is not None:
+                  assert linked['id'] == repository['id'], 'package repository conflict'
+          def package_binding(name, package, phase):
+              linked = (package or {}).get('repository') or {}
+              value = {'phase': phase, 'package': 'ghcr.io/elefesys/asm-' + name,
+                  'exists': package is not None, 'package_id': (package or {}).get('id'), 'expected_package_id': package_ids[name],
+                  'visibility': (package or {}).get('visibility'), 'repository_id': linked.get('id'),
+                  'repository_full_name': linked.get('full_name'), 'expected_repository_id': repository['id']}
+              print(json.dumps(value), flush=True)
+              return value
+          preexisting, bindings = {}, {}
+          for name in receipt['images']:
+              package = api(owner_route + '/Elefesys/packages/container/asm-' + name)
+              bindings[name] = package_binding(name, package, 'preflight')
+              preexisting[name] = package
+          login = subprocess.run(['docker', 'login', 'ghcr.io', '--username', os.environ['GITHUB_ACTOR'], '--password-stdin'],
+                                 input=token.encode(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+          assert login.returncode == 0, 'GHCR_LOGIN_FAILED'
+          published = {'source_sha': os.environ['GITHUB_SHA'], 'verify_receipt_sha256': None,
+                       'images': {}, 'bindings': bindings, 'existing_versions': {}, 'errors': {}}
+          try:
+              for name, spec in receipt['images'].items():
+                  try:
+                      package = preexisting[name]
+                      require_package_identity(name, package)
+                      target = spec['package'] + ':source-' + os.environ['GITHUB_SHA']
+                      # A rerun may reuse an immutable tag only when its config is identical.
+                      existing = subprocess.run(['docker', 'manifest', 'inspect', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                      if existing.returncode == 0:
+                          assert json.loads(existing.stdout)['config']['digest'] == spec['config_digest'], 'tag collision'
+                      subprocess.run(['docker', 'tag', 'asm-' + name + ':verified', target], check=True)
+                      push = subprocess.run(['docker', 'push', target], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                      assert push.returncode == 0, 'GHCR_PUSH_FAILED'
+                      match = re.search(rb'digest: (sha256:[0-9a-f]{64})', push.stdout)
+                      assert match, 'missing registry digest'
+                      ref = spec['package'] + '@' + match.group(1).decode()
+                      manifest = json.loads(subprocess.check_output(['docker', 'manifest', 'inspect', ref]))
+                      assert manifest['config']['digest'] == spec['config_digest']
+                      print(name.upper() + '_REGISTRY_MANIFEST_MATCH ' + ref, flush=True)
+                      package = api(owner_route + '/Elefesys/packages/container/asm-' + name)
+                      published['bindings'][name] = package_binding(name, package, 'post-push')
+                      published['images'][name] = {'ref': ref, 'tag': target, 'visibility': (package or {}).get('visibility'),
+                          'config_digest': manifest['config']['digest'], 'layers': manifest['layers'],
+                          'binary_sha256': spec['binary_sha256'], 'manifest_type': manifest['mediaType']}
+                      require_package_identity(name, package)
+                      assert package['visibility'] == preexisting[name]['visibility'], 'package visibility changed during publication'
+                      print(name.upper() + '_PUBLISHED ' + ref + ' visibility=' + package['visibility'])
+                  except (AssertionError, RuntimeError, subprocess.CalledProcessError) as error:
+                      published['errors'][name] = str(error) or 'package assertion failed'
+                      print(json.dumps({'image': name, 'blocked': published['errors'][name]}), flush=True)
+          finally:
+              subprocess.run(['docker', 'logout', 'ghcr.io'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+          import hashlib
+          published['verify_receipt_sha256'] = hashlib.sha256((root / 'receipt.json').read_bytes()).hexdigest()
+          (root / 'publish-receipt.json').write_text(json.dumps(published, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Private publication is not anonymous-pull or full final-CI evidence. No visibility change performed.\n\n')
+              summary.write('```json\n' + json.dumps(published, indent=2) + '\n```\n')
+          assert not published['errors'], 'package publication/binding gate failed; see partial receipt'
+          PY
+      - name: Remove ephemeral Docker credentials
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/storage-publish-auth"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: storage-publish-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/storage-verified/publish-receipt.json
+            ${{ runner.temp }}/storage-verified/receipt.json
+          retention-days: 7
+          if-no-files-found: error
