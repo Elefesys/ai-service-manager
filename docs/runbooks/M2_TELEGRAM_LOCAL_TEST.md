@@ -101,31 +101,24 @@ production/Pilot не добавляется к существующим A09/A11
 
 ### 0.2. Последовательность C6 и действия владельца
 
-1. **M2-ENV-02: private artifacts готовы; M2-ENV-01 recovery пока BLOCKED.**
-   C0 разрешил новую упаковку exact MinIO/mc binaries; версии сохранены.
-   [Storage CI36734267078](https://github.com/Elefesys/ai-service-manager/actions/runs/36734267078)
-   SUCCESS: signatures/hashes/rebuild, реальные PG/S3, private policy и restart;
-   492 unit/390 PG-S3/111 frontend PASS. Это не полный обычный CI/browser gate.
-   Семь разрешённых paths изменены; основной CI/Compose/bootstrap/assertions
-   и пока обе storage refs/pins сохранены. Exact source, digests, package URLs,
-   receipts и операторское действие находятся в §0.3 и активном
-   [handoff](../tasks/M2_HANDOFF.md).
-   C0 проверяет состав уже готовых artifacts и организует владельцу
-   Package settings → Change visibility → Public для двух packages. C6 public
-   visibility не меняет; repository остаётся private. PAT/новых credentials/
-   Connect repository не требуется. После подтверждения public — fresh anonymous
-   immutable pull без cache, только два storage pins/refs, полный final-head CI,
-   оба scripts/source gates и независимый scoped C8. До этого M2-ENV-01 BLOCKED,
-   M2 IN_PROGRESS, PR22 Draft. Домены/VM/Telegram secrets для этого шага не нужны.
+1. **M2-ENV-01/02 приняты C0/C8 в REVIEW; пользовательский merge ещё впереди.**
+   Оба packages Public, полные anonymous OCI bytes совпали с build receipts.
+   Только две storage refs/pins переведены на exact GHCR digests. [обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856) SUCCESS:
+   492 unit/390 PostgreSQL-S3/111 frontend/27 browser; оба штатных scripts и source
+   gates PASS. Exact final head и обязательный CI после последнего изменения —
+   в PR22 receipt. Пользователь выполняет обычный merge commit по инструкции C0;
+   C0 проверяет actual merge и отдельный push/main CI, затем выдаёт следующий host
+   шаг. Повторно открывать packages/публиковать images или вводить PAT не нужно.
+   Раздел0.3 содержит текущие refs, границы evidence и команды воспроизведения.
 2. **Параллельно владелец продолжает существующий тикет Timeweb.** .com заявлен
    зарегистрированным, .ru ждёт сверки данных; повторная покупка не нужна. Для smoke
    достаточно работоспособного .com — ждать готовности .ru не требуется. Перед
    переключением live режима C6 проверяет публичное делегирование .com, фактические
    A-records обоих subdomains и доверенный TLS, а не только плашку панели регистратора.
-   Когда C0 примет registry/CI recovery, выдаётся точный следующий account/billing/host
+   После merge PR22 и отдельного успешного main CI выдаётся следующий account/billing/host
    шаг в Yandex Cloud; наличие доступа агента заранее не предполагается. Не просить
    пароли, паспортные данные или Telegram secrets в чат/PR.
-3. **После C0 приёмки M2-ENV-01, C6 в разрешённом Yandex TEST folder:** создаёт
+3. **После merge PR22, отдельного успешного main CI и нового handoff C0:** C6 в разрешённом Yandex TEST folder создаёт
    ровно указанную VM/диск/IP после сверки итоговой цены. Настраивает non-root operator, SSH key admission, Docker
    Engine + Compose, синхронизацию времени. SSH22 — только с operator IP, HTTPS443 —
    публично; TCP80 нужен только для ACME HTTP-01. API8000/frontend8080 остаются loopback,
@@ -147,6 +140,77 @@ production/Pilot не добавляется к существующим A09/A11
    secrets непосредственно от владельца, preflight/binding/setWebhook и Console live
    scenario. C6 возвращает sanitized runtime/DNS/TLS/billing receipt; C3 — фактические
    connection/rights/Client receipt. Только C0 принимает live A09/A11.
+
+## 0.3. Принятые storage artifacts и воспроизведение / 2026-10-01
+
+Оба packages **Public** по действию владельца; private repository остаётся private.
+Anonymous manifest/config/all-layer HTTP download подтверждён 2026-10-01; новый
+Docker pull и реальный runtime подтверждены отдельно [обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856). CI на implementation
+head **809d44c77b45d86b54750969db5b4a3ec411e0e3**, tree **42a17e82cae204a1f4a8d3f3bc3dcd798fc03cc8**, SUCCESS. Последнее изменение трёх
+документов требует своего полного CI; его exact receipt ведётся в [PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
+
+| Package | Принятый immutable linux/amd64 ref |
+|---|---|
+| asm-minio /15482993 | ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa |
+| asm-mc /15484077 | ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4 |
+
+Build source **f74c240febd963c79408e80600c29d7739e08867**;
+[storage run36734267078](https://github.com/Elefesys/ai-service-manager/actions/runs/36734267078)
+SUCCESS: exact vendor hash/minisig/negative, два byte-identical no-cache builds,
+реальные PG/S3/private policy/CA/shell/SIGTERM и data-preserving volume restart.
+Новые OCI artifacts не идентичны прежним Quay bytes; MinIO/mc releases сохранены.
+Исходники, лицензии, подписи/key provenance и build tools закреплены в
+infra/storage/inputs.lock.json. App/private docs/.git/env/secrets в image не входят.
+OCI source label содержит repo URL и build SHA; source content private repo не публикуется.
+
+**Разделение evidence C0:** локально Docker отсутствовал. Поэтому сначала C6
+полностью скачал все public OCI blobs без credentials/cache, затем переключены два
+pins, после этого неизменный CI на свежих hosted runners выполнил Docker pull и
+все runtime checks. Runtime gate сохранён до acceptance/merge; HTTP download не
+выдаётся за запуск Docker. Receipt SHA-256 **07992f7085ad9826503870ed0984ad469ebbe9d761fb13134ae553f5c1eba211**; 95 747 170 bytes,
+оба manifest/config, все шесть layers, exact compressed hashes/sizes/diffIDs,
+seven-file allowlist каждого image и оба binary hash/size PASS. C0/C8 отдельно
+пересчитали сохранённые bytes. Новых rebuild/publish/workflow изменений не было.
+
+При необходимости воспроизвести pull на новом disposable linux/amd64 host
+(это диагностическая инструкция, не дополнительный незакрытый gate):
+
+~~~sh
+set -eu
+storage_pull_config="$(mktemp -d)"
+trap 'rm -rf "$storage_pull_config"' EXIT
+export DOCKER_CONFIG="$storage_pull_config"
+minio_ref='ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa'
+mc_ref='ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4'
+if docker image inspect "$minio_ref" >/dev/null 2>&1; then exit 1; fi
+if docker image inspect "$mc_ref" >/dev/null 2>&1; then exit 1; fi
+docker pull --platform linux/amd64 "$minio_ref"
+docker pull --platform linux/amd64 "$mc_ref"
+docker image inspect --format '{{.Id}} {{json .RepoDigests}} {{json .RootFS.Layers}}' "$minio_ref" "$mc_ref"
+docker run --rm --entrypoint sha256sum "$minio_ref" /usr/local/bin/minio
+docker run --rm --entrypoint sha256sum "$mc_ref" /usr/local/bin/mc
+~~~
+
+Expected config digests: MinIO
+sha256:b7bb806bee433a13f30a01509f324cfc5c764e4a07b11353aa423eda2e995c1d;
+mc sha256:85c9b02133dbec707e92450e93ca5a98e139423839b02946583bdd9ddd2cf2f6.
+Binary SHA-256: MinIO
+7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f;
+mc 7a03ba39e158708a9e88f1bf5c346c6651b15c784e4b2c7150b5b5f282f43c28.
+Full layer descriptors/diffIDs — receipt PR #22; mismatch
+является blocker. Старые pins не возвращать и версии не обновлять автоматически.
+
+Обычная проверка остаётся прежней: в отдельных jobs `sh scripts/ci.sh` и
+`sh scripts/test_browser.sh`, после каждого
+`test -z "$(git status --porcelain --untracked-files=all)"`.
+Основной CI/Compose/bootstrap/assertions сохранены; новый scoped C8 выполнен.
+Storage workflow по-прежнему имеет только contents:read в build и временный
+packages:write в изолированном publisher; images повторно не публиковались.
+Source/ref bindings и полная история разрешённых packaging изменений — в handoff.
+VM/DNS/TLS/webhook/live Telegram — следующий шаг после merge и actual main CI.
+
+<details>
+<summary>История — прежний public access gate до действия владельца и CI</summary>
 
 ## 0.3. Проверенные storage artifacts и public access gate / 2026-09-30
 
@@ -240,6 +304,8 @@ Quay pins и сохраняет project guard; обход/редактирова
 pins. Обычный CI36734280555 на build SHA FAILURE со старым unauthorized; оба gates
 SKIPPED. M2-ENV-01 не закрывать до полного восстановления; C0 организует scoped C8.
 VM/DNS/TLS/webhook и live Telegram начинают только по следующему handoff.
+
+</details>
 
 ## 1. Конкретное окружение и предварительные условия
 

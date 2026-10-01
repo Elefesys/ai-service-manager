@@ -4,7 +4,130 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный handoff C0 → C6 — M2-ENV-02-STORAGE-IMAGES / 2026-09-30
+## Активный handoff C0 — M2-ENV-01/02: приёмка и интеграция PR #22 / 2026-10-01
+
+**M2-ENV-01-REGISTRY / M2-ENV-02-STORAGE-IMAGES — REVIEW.** C0 и независимый scoped
+C8 приняли ограниченное исправление LOCAL/TEST storage provisioning. Полный CI на
+implementation head восстановлен. Merge ещё не выполнен; final-head CI после
+последнего документационного изменения проверяется отдельно и записывается в PR.
+Весь M2 IN_PROGRESS; live A09/A11 BLOCKED внешними runtime/DNS/TLS. M3 не выдан.
+
+### Точная версия и единственный следующий шаг
+
+- Repository **Elefesys/ai-service-manager**, **c6/m2-live-smoke → main**, [PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
+- Accepted main/base **96d9f09dd16d8b6ab019ac76a9c72ce910d81191**, tree
+  **28de72ca6737cbe18bb4856a1636f70fae1131ee**; отдельный исторический main CI35706123814 SUCCESS.
+- Первый coordination **914e2894f98330d62e1cc57ca5da5c62662d6960** и вся история сохранены.
+  Старт упаковки **1450dfeefeead337ca8a8a670d339e085adfe323**; перед public access
+  head **4f6180be1496aceb1a0ee292ce39790bd42bf81a**.
+- Принятый implementation head **809d44c77b45d86b54750969db5b4a3ec411e0e3**, tree **42a17e82cae204a1f4a8d3f3bc3dcd798fc03cc8**; только две строки
+  в каждом из infra/images.lock.env / scripts/pin_images.sh относительно 4f618…;
+  Git modes обоих файлов **100644** сохранены.
+- [обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856) **SUCCESS**. Фактический checkout/ordered parents/tree проверены C0/C8 и
+  записаны в receipt PR. После него меняются согласованно только TASK_REGISTER,
+  этот handoff и runbook; exact final head/tree/final CI ведутся в PR receipt,
+  без цепочки коммитов ради SHA предыдущего документационного коммита.
+- После сообщения C0 о SUCCESS именно последнего head пользователь выбирает
+  **Merge pull request → Create a merge commit → Confirm merge**
+  (Draft предварительно снимает C0). Squash/rebase не использовать. C0 самостоятельно
+  не сливает PR. Затем C0 проверяет actual merge commit/tree и отдельный push/main CI.
+
+### Что принято и что осталось неизменным
+
+Решение C0 2026-09-30 о новой упаковке двух exact official binaries сохранено:
+новые OCI bytes принимаются по собственному evidence; идентичность старым
+недоступным Quay images не заявляется. Оба прежних MinIO/mc releases неизменны.
+Применимы IMPL-001, Spec private storage/immutable inputs/LOCAL-TEST, ADR138/141/142,
+Implementation Plan §§6–7 и M2_CONTRACT §§9–11. Production storage/cloud ADR не менялись.
+
+Полная дельта PR — ровно девять разрешённых paths:
+
+| Paths | Принятая дельта |
+|---|---|
+| infra/storage/Minio.Dockerfile; infra/storage/Mc.Dockerfile | Пакетирование exact подписанных binaries на pinned curl/CA/sh base |
+| infra/storage/inputs.lock.json | Единственный immutable lock binaries/signatures/key/source/licenses/base/build tools |
+| .github/workflows/storage-images.yml | Изолированные build/verify/publish jobs; pinned actions, временный token только publisher |
+| infra/images.lock.env; scripts/pin_images.sh | Только две storage refs/pins на точные public GHCR digests; прочие pins и guard существующих значений сохранены |
+| docs/TASK_REGISTER.md; docs/tasks/M2_HANDOFF.md; docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md | Один актуальный статус/handoff, evidence и воспроизведение; прежние инструкции отделены как история |
+
+Приложение/frontend/API/contracts, миграции 0001–0007, основной CI/Compose/bootstrap,
+tests/assertions и прочие dependencies byte-identical принятому scope. Новых
+workflow/build/publish после открытия packages не выполнялось; storage workflow
+не срабатывает на два pins или документацию.
+
+### Public artifacts: полные bytes и отдельный runtime gate
+
+Владелец подтвердил Public обоих packages 2026-10-01. C0 проверил anonymous manifest
+GET; C6 в новом пустом Linux/x86_64 каталоге скачал **95 747 170 bytes**: оба manifest,
+оба config и все шесть layers. HTTP200, descriptor SHA/size, platform/source labels,
+uncompressed diffIDs и семь added files каждого image (bytes/modes/UID/GID, без
+дополнительных files/symlinks) совпали с build/publish receipts. C0 и C8 независимо
+пересчитали сохранённые blobs; C8 дополнительно проверил allowlist tar members.
+Команда C6: `python verify_public_images.py`, завершена 2026-10-01T06:08:02Z;
+local receipt SHA-256 **07992f7085ad9826503870ed0984ad469ebbe9d761fb13134ae553f5c1eba211**. Это byte/access evidence, не Docker execution.
+
+**Явное решение C0 2026-10-01 о порядке:** локально Docker отсутствует. Полный
+anonymous OCI download и hash verification выполнены до двух pins; fresh Docker
+pull/runtime — затем в неизменном обычном CI на новых hosted runners без storage
+login/cache restore. Обязательный gate до приёмки/merge сохранён; HTTP download
+его не подменяет. C8 принял это разделение evidence. Повторная сборка или новый
+workflow только ради probe не нужны.
+
+| Image | Принятый immutable linux/amd64 ref | Config SHA-256 |
+|---|---|---|
+| MinIO | ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa | b7bb806bee433a13f30a01509f324cfc5c764e4a07b11353aa423eda2e995c1d |
+| mc | ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4 | 85c9b02133dbec707e92450e93ca5a98e139423839b02946583bdd9ddd2cf2f6 |
+
+Image source **f74c240febd963c79408e80600c29d7739e08867**; одиночные linux/amd64 manifests,
+не OCI index, embedded attestations отсутствуют. Provenance — отдельные bound receipts.
+Binary hashes: MinIO **7c5bd8512c6e966455b1d198209358b2d191c77a83ab377c4073281065fb855f**
+(110989496 bytes); mc **7a03ba39e158708a9e88f1bf5c346c6651b15c784e4b2c7150b5b5f282f43c28**
+(29208728 bytes). Source/license/minisig/key/base/tools сохранены в historical build receipt ниже;
+registry layer digests/diffIDs — в receipt PR #22. Exact input lock остался прежним.
+
+### Фактическая проверка и независимый C8
+
+[обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856): **sh scripts/ci.sh** и **sh scripts/test_browser.sh**, оба source gates,
+canonical/migration cycles/contracts/reproducibility/HTTP smoke PASS.
+**492 unit / 390 PostgreSQL-S3 / 111 frontend / 27 browser** — справочные counts,
+а основание приёмки — следующие инварианты и исполнение соответствующего suite:
+
+| Критерий | Конкретное evidence |
+|---|---|
+| Подлинность и воспроизводимость packaging | Storage run36734267078: полный vendor hash/minisig + tampered negative; два no-cache builds, exact config/layers/archive hashes; bound receipts до publish |
+| Публично доступны только принятые image bytes | C0 pre-public review четырёх версий; C6 anonymous download всех final blobs; C0/C8 повторный hash/diffID/added-files audit; private repo не открывался |
+| Private storage, A07/A08 | test_m2_2_storage_postgres: signed GET exact bytes/hash/MIME/private-no-store; anonymous GET/PUT/list/tamper403; Workspace/relation/OWNER, revoke/TTL; checksum rejection/conditional PUT |
+| Durable recovery, A06/A08 | test_m2_2_recovery_postgres: реальные process crashes, late PUT/cleanup winner/fencing; M2.1 и M2.3 real-wire cases: UNKNOWN после потерянного ACK, ровно один сохранённый call, без resend |
+| Совместимость runtime | Обычный CI реально скачал GHCR images; bootstrap/health/version/private S3 PASS. Storage run36734267078 дополнительно проверил SIGTERM/exit0, неизменные Mounts и сохранение exact data после restart без удаления volume |
+| Console regression в CONTROLLED scope | 27 browser journeys: private image + unsigned403, exact reply, committed202 recovery без дубля, UNKNOWN после replacement worker с одним call, isolation/revocation и прежние M1 journeys |
+
+**C8-M2-ENV-02 — независимый scoped PASS:** reviewer самостоятельно прочитал четыре
+packaging файла, official input/key metadata, Git objects/delta, logs/receipts;
+проверил минимальные permissions, allowlist/context isolation, artifact/source/config/
+package binding, все anonymous OCI blobs, два pins и фактический полный CI.
+Блокирующих findings нет. C6 self-check и прежний M2.4 C8 этим review не подменялись.
+Локальный Docker/PostgreSQL rerun C0/C8 и загрузка большого 96MB build ZIP не заявляются;
+runtime evidence получено с GitHub runner. Полные OCI bytes скачаны отдельно, small
+receipt ZIPs проверены побайтно. Final source artifact/checkout границы — в PR receipt.
+
+### Конечный остаток M2
+
+1. Пользовательский merge PR #22 после final-head CI; C0 подтверждает actual merge
+   и отдельный push/main CI. Только после этого M2-ENV задачи INTEGRATED/VERIFIED.
+2. Ограниченный Yandex RU TEST host по принятому бюджету, два .com hostnames,
+   DNS/TLS и безопасная инъекция уже подготовленных секретов; точное следующее
+   поручение C6 выдаётся от подтверждённого нового main.
+3. Реальные A09/A11: connection/rights и Client text+photo → правильный Workspace/
+   Owner Console/private image → ручной ответ → фактическое получение Client.
+
+Bot/Owner/Client и TG_BOT_TOKEN/TG_WEBHOOK_SECRET в менеджере паролей уже готовы.
+Токены в чат/PR не передавать. Платный host/DNS/TLS/webhook/live sends здесь не
+настраивались. CONTROLLED/SENT/зелёный CI не закрывают live Telegram и весь M2.
+
+<details>
+<summary>История — исходный M2-ENV-02 и private-public access gate / 2026-09-30</summary>
+
+## Исторический handoff C0 → C6 — M2-ENV-02-STORAGE-IMAGES / 2026-09-30
 
 **Private artifacts готовы; IN_PROGRESS / ACCESS gate public visibility. Registry recovery BLOCKED.**
 M2.4 code/UI VERIFIED только LOCAL/TEST; весь M2 IN_PROGRESS, внешние A09/A11
@@ -376,6 +499,8 @@ head. Команды и порядок — runbook§0.3. При изменени
 receipts/pins. Независимый scoped C8 организует C0; self-check C6 его не заменяет.
 PR остаётся Draft/open, merge/VERIFIED не объявлены; M2 IN_PROGRESS, live A09/A11
 BLOCKED, M3 не выдан. VM/DNS/TLS/Telegram secrets/live sends не выполнялись.
+
+</details>
 
 <details>
 <summary>История — M2-ENV-01: диагноз C6 принят; прежний scope заменён M2-ENV-02 / 2026-09-30</summary>
