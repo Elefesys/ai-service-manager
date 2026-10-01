@@ -16,6 +16,6 @@ pin UV_IMAGE ghcr.io/astral-sh/uv:0.10.0
 pin DB_IMAGE pgvector/pgvector:0.8.6-pg18-bookworm
 pin NODE_IMAGE node:24-bookworm-slim
 pin WEB_IMAGE nginxinc/nginx-unprivileged:stable-alpine
-pin STORAGE_IMAGE quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-pin STORAGE_ADMIN_IMAGE quay.io/minio/mc:RELEASE.2025-02-15T10-36-16Z
+pin STORAGE_IMAGE ghcr.io/elefesys/asm-minio@sha256:c6c3b418f4b7bbea2f07c4095fc6e59d38ed538a33486f19bb9450a63a6a2efa
+pin STORAGE_ADMIN_IMAGE ghcr.io/elefesys/asm-mc@sha256:4da81d17279b9fcdaeee8967c0de4f5d9c7fd589f8022b66e2766b9ac4fe5ce4
 mv infra/images.lock.env.tmp infra/images.lock.env
