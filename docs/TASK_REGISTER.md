@@ -35,10 +35,18 @@ Public DNS проверен 2026-10-01 через Google DNS-over-HTTPS: .com NS
 servers; A для console.telegram-test.clientmanagerai.com и
 files.telegram-test.clientmanagerai.com ещё NXDOMAIN. .ru NS — NXDOMAIN у этого
 resolver; это не вывод о внутреннем статусе ЕСИА/регистратора. Для .com smoke ждать
-.ru не нужно. VM/DNS records/TLS ещё не созданы; cloud account/billing/SSH доступ
-не подтверждён и не предполагается. Первый шаг владельца — свой Yandex Cloud
-account, активный billing и отдельный folder asm-telegram-test без default network;
-готовый порядок в runbook §0.4. Секреты/ключи в чат и PR не передавать.
+.ru не нужно. **2026-10-01 владелец подтвердил: billing активен, каталог
+asm-telegram-test создан.** Это owner receipt; агент не входил в его аккаунт.
+VM/DNS records/TLS/SSH пока не созданы и не проверены. C6 подготовил единый порядок
+настройки в runbook §0.4: локальный SSH key → ограниченная сеть/одна VM → точный
+source → DNS/TLS → pre-live readiness. Публичный IP VM и результаты возвращаются после
+фактического исполнения; ключи/токены и платёжные данные в чат и PR не передавать.
+
+**C8-M2-ENV-03-PROCEDURE — независимый scoped PASS** для точных команд runbook;
+C0 принял ограниченные исправления environment precedence и HTTPS/TLS probes.
+11 Bash blocks/hook и 6 Python heredocs syntax PASS, PowerShell static review.
+Actual Yandex/Windows/VM/DNS/TLS execution не заявляется; процедура не закрывает
+приёмку host или живой A09/A11. Hash/scope — активный handoff; итоговый CI — PR receipt.
 
 Бюджет **4735,81 ₽/30 суток runtime** сохранён; cloud rates перепроверены 2026-10-01.
 Одна VM standard-v3/2vCPU100%/8GiB/60GiB network-ssd/staticIPv4, ru-central1-a,
@@ -83,7 +91,7 @@ Workspace/Owner Console/private image → ручной ответ → подтв
 | M2-LIVE-A09-A11 | Реальная ручная Telegram переписка | Принятый main; готовый TEST runtime/HTTPS | C6; C3 connection; C0 acceptance | BLOCKED | PR22 integrated; .com NS подтверждены; host/A-records/TLS ещё отсутствуют | M2-ENV-03 → live connection/rights и реальные A09/A11 |
 | M2-ENV-01-REGISTRY | Восстановить storage provisioning и полный CI | M2.4; pull failure PR22 | C6; C0/C8 | VERIFIED | PR22 merged80e51c4; scoped C8 PASS; отдельный push/main36825583134 SUCCESS, оба scripts/source gates и реальные PG/S3/browser | Сохранять проверенные GHCR pins; registry blocker CLOSED |
 | M2-ENV-02-STORAGE-IMAGES | Два exact official binary в project-owned images | Решение C0 о новой упаковке | C6; C0/C8 | VERIFIED | Build36734267078; anonymous full OCI bytes; scoped C8; final PR36824246755 и actual main36825583134 SUCCESS | Не пересобирать и не менять visibility/pins без причины |
-| M2-ENV-03-TEST-HOST | Один TEST host/.com DNS/HTTPS до Telegram connection | Actual main80e51c4 + push/main36825583134 SUCCESS | C6; C0; scoped C8 внешних границ | IN_PROGRESS | Выдано ограниченное поручение; read-only preflight; cloud account/billing/SSH ещё недоступны | Владелец: account/billing/folder; C6: точные команды и фактический host receipt |
+| M2-ENV-03-TEST-HOST | Один TEST host/.com DNS/HTTPS до Telegram connection | Actual main80e51c4 + push/main36825583134 SUCCESS | C6; C0; scoped C8 внешних границ | IN_PROGRESS | Owner подтвердил billing/folder; procedure C0/C8 PASS. Фактические VM/SSH/DNS/TLS ещё не проверены | Владелец исполняет готовые шаги runbook; C6/C0 принимают sanitized host receipt, затем live connection |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 

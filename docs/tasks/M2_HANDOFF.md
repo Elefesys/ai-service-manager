@@ -6,15 +6,17 @@
 
 ## Активный handoff C0 → C6 — M2-ENV-03-TEST-HOST / 2026-10-01
 
-**IN_PROGRESS: подготовка одного внешнего TEST host.** Внешнее исполнение ждёт
-доступного владельцу Yandex account/billing/SSH; отсутствие этого доступа не
-останавливает подготовку точной процедуры. Telegram connection и реальные sends
-не входят в этот шаг. M2 IN_PROGRESS; live A09/A11 пока BLOCKED runtime/DNS/TLS.
+**IN_PROGRESS: процедура подготовлена; ожидается исполнение на одном внешнем TEST host.**
+2026-10-01 владелец подтвердил активный billing и созданный folder asm-telegram-test.
+Это owner receipt; доступа к личному cloud account/SSH у C0/C6 нет. Точная процедура
+находится в runbook §0.4; исполнение VM/DNS/TLS ещё не подтверждено. Telegram
+connection и реальные sends не входят в этот шаг. M2 IN_PROGRESS;
+live A09/A11 пока BLOCKED runtime/DNS/TLS.
 
 ### Подтверждённая интеграция и точный base
 
 - Repository **Elefesys/ai-service-manager**, новая отдельная ветка
-  **c6/m2-test-host → main**. Продолжать один Draft PR этой ветки; PR #22 уже merged.
+  **c6/m2-test-host → main**, [Draft PR #23](https://github.com/Elefesys/ai-service-manager/pull/23). PR #22 уже merged.
 - Accepted base / actual main **80e51c43e31541940f1ccf18b8281adf1a061748**,
   tree **88ed308b4c56114aa977dcf91204964d9b7348e5**.
 - Actual merge PR22 имеет ordered parents
@@ -27,8 +29,10 @@
   также SUCCESS. Registry/storage задачи INTEGRATED и VERIFIED в LOCAL/TEST scope.
 - C8-M2-ENV-02 действительно выполнен и PASS для packaging/anonymous bytes/pins/
   полного CI. Новых implementation bytes при merge нет; повтор этого review не нужен.
-- Первый coordination commit новой задачи сохранять. Его exact SHA/tree и Draft PR
-  записываются в PR receipt; не добавлять docs commit только для собственной SHA.
+- Сохранённый первый coordination commit **1f42a617ed64bc6fd4dd573cd5c721d22a7bf256**,
+  tree **1b5188bed8de7fd0be98097eb9f7b4dbd6a86b0a**; его CI36830564375 SUCCESS.
+  Exact final head/tree/CI этого дополнения записываются в PR receipt;
+  не добавлять docs commit только для собственной SHA.
   Runtime разворачивается с принятого **80e51c43e31541940f1ccf18b8281adf1a061748**;
   последующие docs-only commits не являются новой реализацией приложения.
 
@@ -111,17 +115,38 @@ reply → Client выдаются следующим коротким поруч
 повторять слепо. Не запускать общий CI script на persistent live Compose project,
 не использовать down -v/reset и не терять durable state ради проверки.
 
-### Первый шаг владельца и возврат C6
+### Подготовленная процедура, следующий шаг владельца и возврат C6
 
-Владелец открывает **https://console.yandex.cloud/** под своим аккаунтом, создаёт
-или активирует свой billing account и связывает его с cloud; тип плательщика/страну
-указывает по своим фактическим данным только в UI провайдера. Затем создаёт отдельный
-folder **asm-telegram-test**, **без опции default network**. Пока не создаёт VM/IP,
-не меняет DNS и не вставляет Telegram secrets. Возвращает только подтверждение
-«Платёжный аккаунт активен; каталог asm-telegram-test создан» либо точный текст
-ошибки без персональных/платёжных данных. Ключи/токены/паспортные данные не нужны.
-Причина участия владельца — личный cloud account/billing и отсутствие подключения
-к нему у C0/C6, а не повторное согласование уже принятого бюджета.
+Account/billing/folder завершены **по подтверждению владельца 2026-10-01**;
+повторять onboarding не нужно. Следующая работа — существующий runbook §0.4:
+локальный SSH key, operator IPv4/32, одна ограниченная сеть/VM в выбранном folder,
+затем проверенный source/DNS/TLS и pre-live readiness. C6 выбирает конкретные
+технические поля и команды; владелец выполняет их в своём личном кабинете/терминале.
+Причина owner execution — отсутствие cloud/SSH подключения у агента. Повторного
+согласования той же конфигурации/бюджета нет. Факт покупки/создания ресурса и каждый
+PASS утверждаются только после результата оператора или независимой внешней проверки.
+
+**C8-M2-ENV-03-PROCEDURE — независимый scoped PASS, 2026-10-01.**
+Проверен точный runbook SHA-256
+**96d2c128b9d51c9665a7d03d4fed1f239340c910eaa345f8afbf53f968314066**:
+ресурсы/сеть/SSH, exact source и read-only deploy key, secrets/build context,
+TG-disabled до запуска, TLS/renewal, private bucket, внешние ports и сохранение state.
+После review добавлены и независимо перечитаны prestart shell-override guard,
+HTTPS probe внутри API через принятые network aliases, строгий SAN/unknown-SNI alert,
+внешние PowerShell health/private403/ports assertions; лишний HOME override убран.
+C6/C0/C8 проверили syntax: **11 Bash blocks + renewal hook**, **6 Python heredocs**;
+PowerShell прочитан статически. P0/P1/P2 blockers процедуры не осталось.
+Это review команд и existing source80e51c4, **не** Yandex/Windows/host execution.
+Runtime/DNS/TLS, authenticated browser/signed files и live A09/A11 пока не проверены.
+Обязательный CI итогового documentation head записывается в PR receipt после его
+завершения; он не подменяет actual host acceptance и не требует SHA-only commit.
+
+Процедура и прежние §2–6 различают pre-live TG=false и последующий live setup.
+До приёмки host не вызывать setWebhook/provision_telegram_test/smoke send. C0
+принимает factual host receipt, затем выдаёт connection/rights/live A09/A11.
+Если консоль/команда отказывает или результат неоднозначен, сохранить non-secret
+ошибку и проверить actual ресурсы; не повторять paid create/менять параметры/удалять
+состояние вслепую. Runtime/Telegram secrets и private SSH keys не присылать.
 
 C6 возвращает PR/head/tree/parent/base ancestry, полный changed-path list, exact
 commands и реальные результаты по таблице, scoped review status, runtime SHA и
