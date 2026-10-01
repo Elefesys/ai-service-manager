@@ -2,7 +2,100 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — storage registry восстановлен в PR; приёмка до merge / 2026-10-01
+## Текущий статус — PR #22 интегрирован; следующий шаг C6 TEST host / 2026-10-01
+
+**M2-ENV-01-REGISTRY и M2-ENV-02-STORAGE-IMAGES — VERIFIED после интеграции.**
+Пользователь слил [PR #22](https://github.com/Elefesys/ai-service-manager/pull/22)
+обычным merge commit **80e51c43e31541940f1ccf18b8281adf1a061748**,
+tree **88ed308b4c56114aa977dcf91204964d9b7348e5**. Ordered parents:
+**96d9f09dd16d8b6ab019ac76a9c72ce910d81191** +
+**925952086b8ec83f2648b84094f546ec458cfde4**. Tree совпадает с принятым final PR tree.
+[Отдельный push/main CI36825583134, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36825583134)
+**SUCCESS** на этом actual merge: foundation110250425002 и browser110250424676
+checkout именно 80e51c4; 492 unit,390 PostgreSQL/S3,111 frontend,27 browser PASS.
+Оба штатных scripts, clean-source gates, canonical/migrations/contracts/
+reproducibility/HTTP smoke PASS. Независимый scoped C8 packaging/pins уже PASS;
+actual merge не меняет проверенные bytes и не требует повторного того же review.
+Public GHCR refs и vendor releases сохранены; недоступные Quay artifacts не возвращать.
+
+**Следующая единственная задача — M2-ENV-03-TEST-HOST, C6, IN_PROGRESS (подготовка).**
+Repository Elefesys/ai-service-manager, отдельная ветка **c6/m2-test-host → main**,
+accepted base — actual main **80e51c43e31541940f1ccf18b8281adf1a061748**.
+Точный coordination head и Draft PR указываются в PR receipt, без SHA-only commits.
+Scope: один ранее согласованный Yandex RU TEST host, SSH/network, два .com DNS имени,
+бесплатный TLS/renewal и готовность существующего Compose при **Telegram disabled**.
+Разрешены только TASK_REGISTER, активный M2_HANDOFF и существующий TEST runbook;
+cloud/host настройки исполняются по точной процедуре C6, когда есть доступ владельца.
+App/Compose/pins/workflows/tests/миграции не меняются. Полное поручение и критерии —
+в единственном [активном handoff](tasks/M2_HANDOFF.md); команды — в одном
+[runbook](runbooks/M2_TELEGRAM_LOCAL_TEST.md). Это продолжение подготовки A09/A11,
+не новая продуктовая часть или production rollout.
+
+Public DNS проверен 2026-10-01 через Google DNS-over-HTTPS: .com NS — четыре Timeweb
+servers; A для console.telegram-test.clientmanagerai.com и
+files.telegram-test.clientmanagerai.com ещё NXDOMAIN. .ru NS — NXDOMAIN у этого
+resolver; это не вывод о внутреннем статусе ЕСИА/регистратора. Для .com smoke ждать
+.ru не нужно. VM/DNS records/TLS ещё не созданы; cloud account/billing/SSH доступ
+не подтверждён и не предполагается. Первый шаг владельца — свой Yandex Cloud
+account, активный billing и отдельный folder asm-telegram-test без default network;
+готовый порядок в runbook §0.4. Секреты/ключи в чат и PR не передавать.
+
+Бюджет **4735,81 ₽/30 суток runtime** сохранён; cloud rates перепроверены 2026-10-01.
+Одна VM standard-v3/2vCPU100%/8GiB/60GiB network-ssd/staticIPv4, ru-central1-a,
+Ubuntu24.04 amd64. Покупка доменов повторно не требуется. Bot/Owner/Client и два
+Telegram секрета уже подготовлены. TG включается только следующим live шагом после
+приёмки стенда; внешние отправки сейчас не выполнялись.
+
+Весь **M2 IN_PROGRESS**; live A09/A11 **BLOCKED внешним runtime/DNS/TLS**.
+M1 и M2.1–M2.4 code LOCAL/TEST не выполнять заново; M3 не выдан. Конечный остаток:
+готовый TEST host → C3/C6 connection/rights → реальный Client text+photo → правильный
+Workspace/Owner Console/private image → ручной ответ → подтверждённое получение Client.
+
+## Задачи — актуальная таблица
+
+| ID | Цель | Зависимости | Ведущий | Статус | Evidence / результат | Следующий шаг |
+|---|---|---|---|---|---|---|
+| M0.ACCESS | Repository и доступ | — | C0 | VERIFIED | PR #1/#2 merged, доступ подтверждён | Проверять refs перед каждой задачей |
+| M0.BASELINE | Spec/ADR/baseline/plan | ACCESS | C0 | VERIFIED | 11 канонических оригиналов и IMPL-001 | Не менять канон молча |
+| M0.SOURCE | Точный импорт | BASELINE | C0 | VERIFIED | 11/11 SHA-256 и byte comparison | CI проверяет SOURCE_MANIFEST |
+| M0.STACK | Зафиксированный стек | BASELINE | C0 | VERIFIED | IMPL-001, locks/digests и CI | Только обоснованные reviewed изменения |
+| M0.BACKEND | API/Worker/Scheduler shell | STACK | C0 | VERIFIED | Types/health/env/shutdown tests | Auth — M1.2 |
+| M0.FRONTEND | Console/Ops shells | STACK | C0 | VERIFIED | 3 frontend tests/build/reproducibility | Login UI — C5 в M1.2 |
+| M0.DB | PostgreSQL/vector/roles/migrations | STACK | C0 | VERIFIED | Real PostgreSQL и migration cycles | 0002 уже реализована в M1.1 |
+| M0.LOCAL | Docker/local smoke | BACKEND/FRONTEND/DB/LOCK | C0 | VERIFIED | GitHub Linux/amd64 runner | Пользовательский ПК не проверен |
+| M0.TEST | Существенные PostgreSQL tests | DB | C0 | VERIFIED | 7 первоначальных DB cases сохранены | Tenant/auth regression развивается |
+| M0.LOCK | Locks/digests/build repeatability | STACK | C0 | VERIFIED | uv/npm locks, image digests, wheel/assets | Bootstrap при обычном checkout не нужен |
+| M0.CI | Общий pipeline | LOCAL/LOCK | C0 | VERIFIED | Main runs 34970531911 и 34972872410 | Read-only CI, source/drift gates |
+| M0.FIXTURES | Synthetic A–D | STACK | C0 | VERIFIED | UUID/money/modes/environment guards | Не production defaults |
+| M0.HANDOFF | Правила, реестр и очередь | BASELINE/STACK | C0 | VERIFIED | AGENTS и M1_HANDOFF | Передача по точному SHA |
+| M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
+| M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
+| M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5; C0/C8 review | VERIFIED | PR #8 MERGED; actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`; push/main 35368244266 SUCCESS, 246 tests; UI-01/02/04/05 CLOSED | Полная приёмка: docs/reviews/M1_2_C0_ACCEPTANCE.md; не production |
+| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 и принятая M1.2 | C1 backend; C2 DB; C5 UI; C0/C8 review | VERIFIED | DB/API/UI приняты; PR #15 + документы PR #16 в main; push/main 35513585580 SUCCESS, 415 cases; итоговый receipt | Закрыто в R4 LOCAL/TEST scope; сохранять принятые механизмы |
+| M2.1 | Normalized channel events и durable Inbox/Outbox/Jobs | VERIFIED M1; принятый контракт M2.1 | C3+C2; C0/C8 review | VERIFIED | PR #18 MERGED; actual main d3c849d4792f7af60f43eea0f0551659ee3cee5d; push/main 35596593891 SUCCESS; C8 PASS | Сохранять принятый kernel при additive Telegram extension |
+| M2.1-KERNEL | Controlled event → Message → owner command → durable send/recovery | M2_CONTRACT §§1–8 | C3; C2 DB/migration | VERIFIED | 0005→0004; post-merge C0 acceptance; 259 PostgreSQL и 15 прежних browser PASS | Сохранять SEND UNKNOWN/worker/RLS/Audit при расширениях |
+| M2.2 | Private ObjectStorage/FileObject и авторизация изображений | Принятый actual main M2.1 | C6+C3; C2 DB/migration; C0/C8 review | VERIFIED | PR #19 MERGED; actual main a321bdd58856fb41bccb5749b4212349832e623c; push/main 35611528733 SUCCESS; C8 PASS | Принято controlled LOCAL/TEST; настоящий provider/API — M2.3 |
+| M2.2-PRIVATE-IMAGES | Image reference → private file → owner signed GET | M2_CONTRACT §9 | C6; C3 media/fix; C2 migration | VERIFIED | 0006→0005; 305 PostgreSQL/S3; privacy/recovery/late-PUT/WebP guards; C8-M2.2-01 CLOSED; post-merge receipt | Сохранить private grant/fencing/cleanup; не объявлять весь M2 готовым |
+| M2.3 | Telegram adapter, test connection, capabilities, UNKNOWN и owner API | VERIFIED M2.1/M2.2 | C3; C1/C2/C6; C0/C8 | INTEGRATED | PR #20 merged, main ffc437f125aa6af4dcf1c61a035a0d5df517e062; push/main 35649907678 SUCCESS; code/API VERIFIED LOCAL/TEST | Actual Telegram A09/A11 BLOCKED runtime/DNS/TLS; UI C5 M2.4 |
+| M2.3-TELEGRAM-API | Official Telegram → durable kernel/private images → five owner API routes | M2_CONTRACT §10 | C3; C2/C1/C6; C0/C8 | VERIFIED | Accepted main ffc437f125aa6af4dcf1c61a035a0d5df517e062; code/API LOCAL/TEST, C8-M2.3-01 CLOSED; actual main CI SUCCESS | Сохранять API/0007/time guards/UNKNOWN; live evidence отдельно |
+| M2.4 | Console Inbox, manual reply и E2E | Интегрированный API M2.3 + main CI | C5; C3/C6; C0/C8 | INTEGRATED | PR21 merged; main96d9f09dd16d8b6ab019ac76a9c72ce910d81191; push/main35706123814 SUCCESS; code/UI VERIFIED LOCAL/TEST | Реальный A11 остаётся внешним gate M2-LIVE-A09-A11 |
+| M2.4-CONSOLE | Owner panel + private image + exact manual intention/recovery + browser | M2_CONTRACT §§10–11 | C5; C3/C6 TEST harness; C0/C8 | VERIFIED | Actual main96d9f09dd16d8b6ab019ac76a9c72ce910d81191, separate main CI SUCCESS; C8-M2.4-01/02/03 CLOSED, code/UI LOCAL/TEST | Сохранять принятые механизмы; это не live Telegram acceptance |
+| M2-LIVE-A09-A11 | Реальная ручная Telegram переписка | Принятый main; готовый TEST runtime/HTTPS | C6; C3 connection; C0 acceptance | BLOCKED | PR22 integrated; .com NS подтверждены; host/A-records/TLS ещё отсутствуют | M2-ENV-03 → live connection/rights и реальные A09/A11 |
+| M2-ENV-01-REGISTRY | Восстановить storage provisioning и полный CI | M2.4; pull failure PR22 | C6; C0/C8 | VERIFIED | PR22 merged80e51c4; scoped C8 PASS; отдельный push/main36825583134 SUCCESS, оба scripts/source gates и реальные PG/S3/browser | Сохранять проверенные GHCR pins; registry blocker CLOSED |
+| M2-ENV-02-STORAGE-IMAGES | Два exact official binary в project-owned images | Решение C0 о новой упаковке | C6; C0/C8 | VERIFIED | Build36734267078; anonymous full OCI bytes; scoped C8; final PR36824246755 и actual main36825583134 SUCCESS | Не пересобирать и не менять visibility/pins без причины |
+| M2-ENV-03-TEST-HOST | Один TEST host/.com DNS/HTTPS до Telegram connection | Actual main80e51c4 + push/main36825583134 SUCCESS | C6; C0; scoped C8 внешних границ | IN_PROGRESS | Выдано ограниченное поручение; read-only preflight; cloud account/billing/SSH ещё недоступны | Владелец: account/billing/folder; C6: точные команды и фактический host receipt |
+
+Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
+
+## История — прежние решения и evidence
+
+Всё ниже — записи прежних snapshots. Их статусы и команды не переопределяют
+текущий блок, таблицу выше и M2_HANDOFF. Не выполнять старые поручения повторно.
+
+<details>
+<summary>История — приёмка PR #22 до actual merge / 2026-10-01</summary>
+
+## Исторический статус — storage registry восстановлен в PR; приёмка до merge / 2026-10-01
 
 **M2-ENV-01-REGISTRY и M2-ENV-02-STORAGE-IMAGES — REVIEW, приняты C0 и независимым
 scoped C8 в LOCAL/TEST scope.** [обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856) SUCCESS после переключения двух storage pins:
@@ -50,45 +143,7 @@ DNS/TLS и Client text+photo → Console/private image → manual reply → по
 .ru остаётся предпочтительным будущим основным доменом. Bot/Owner/Client и два
 Telegram секрета подготовлены; повторный ввод в чат/PR не нужен.
 
-## Задачи — актуальная таблица
-
-| ID | Цель | Зависимости | Ведущий | Статус | Evidence / результат | Следующий шаг |
-|---|---|---|---|---|---|---|
-| M0.ACCESS | Repository и доступ | — | C0 | VERIFIED | PR #1/#2 merged, доступ подтверждён | Проверять refs перед каждой задачей |
-| M0.BASELINE | Spec/ADR/baseline/plan | ACCESS | C0 | VERIFIED | 11 канонических оригиналов и IMPL-001 | Не менять канон молча |
-| M0.SOURCE | Точный импорт | BASELINE | C0 | VERIFIED | 11/11 SHA-256 и byte comparison | CI проверяет SOURCE_MANIFEST |
-| M0.STACK | Зафиксированный стек | BASELINE | C0 | VERIFIED | IMPL-001, locks/digests и CI | Только обоснованные reviewed изменения |
-| M0.BACKEND | API/Worker/Scheduler shell | STACK | C0 | VERIFIED | Types/health/env/shutdown tests | Auth — M1.2 |
-| M0.FRONTEND | Console/Ops shells | STACK | C0 | VERIFIED | 3 frontend tests/build/reproducibility | Login UI — C5 в M1.2 |
-| M0.DB | PostgreSQL/vector/roles/migrations | STACK | C0 | VERIFIED | Real PostgreSQL и migration cycles | 0002 уже реализована в M1.1 |
-| M0.LOCAL | Docker/local smoke | BACKEND/FRONTEND/DB/LOCK | C0 | VERIFIED | GitHub Linux/amd64 runner | Пользовательский ПК не проверен |
-| M0.TEST | Существенные PostgreSQL tests | DB | C0 | VERIFIED | 7 первоначальных DB cases сохранены | Tenant/auth regression развивается |
-| M0.LOCK | Locks/digests/build repeatability | STACK | C0 | VERIFIED | uv/npm locks, image digests, wheel/assets | Bootstrap при обычном checkout не нужен |
-| M0.CI | Общий pipeline | LOCAL/LOCK | C0 | VERIFIED | Main runs 34970531911 и 34972872410 | Read-only CI, source/drift gates |
-| M0.FIXTURES | Synthetic A–D | STACK | C0 | VERIFIED | UUID/money/modes/environment guards | Не production defaults |
-| M0.HANDOFF | Правила, реестр и очередь | BASELINE/STACK | C0 | VERIFIED | AGENTS и M1_HANDOFF | Передача по точному SHA |
-| M0.ACCEPT | Приёмка foundation | M0 gates | C0 | VERIFIED | C0 review + exact import + main CI | История M0 сохранена ниже |
-| M1.1 | Tenant schema/context/RLS | VERIFIED M0 | C2; C0/C8 review | VERIFIED | PR #3 merged; C8 PASS; main run 35015308300; 89 tests PASS | Auth consumer C1; не весь M1 |
-| M1.2 | Auth/session/membership/login UI | Интегрированный M1.1; принятый backend API | C1+C5; C0/C8 review | VERIFIED | PR #8 MERGED; actual main `28c289ce6f77e33676cfa416585cc0e20c0be4e3`; push/main 35368244266 SUCCESS, 246 tests; UI-01/02/04/05 CLOSED | Полная приёмка: docs/reviews/M1_2_C0_ACCEPTANCE.md; не production |
-| M1.3 | Local Plan/Subscription/Entitlements/Audit | M1.1 и принятая M1.2 | C1 backend; C2 DB; C5 UI; C0/C8 review | VERIFIED | DB/API/UI приняты; PR #15 + документы PR #16 в main; push/main 35513585580 SUCCESS, 415 cases; итоговый receipt | Закрыто в R4 LOCAL/TEST scope; сохранять принятые механизмы |
-| M2.1 | Normalized channel events и durable Inbox/Outbox/Jobs | VERIFIED M1; принятый контракт M2.1 | C3+C2; C0/C8 review | VERIFIED | PR #18 MERGED; actual main d3c849d4792f7af60f43eea0f0551659ee3cee5d; push/main 35596593891 SUCCESS; C8 PASS | Сохранять принятый kernel при additive Telegram extension |
-| M2.1-KERNEL | Controlled event → Message → owner command → durable send/recovery | M2_CONTRACT §§1–8 | C3; C2 DB/migration | VERIFIED | 0005→0004; post-merge C0 acceptance; 259 PostgreSQL и 15 прежних browser PASS | Сохранять SEND UNKNOWN/worker/RLS/Audit при расширениях |
-| M2.2 | Private ObjectStorage/FileObject и авторизация изображений | Принятый actual main M2.1 | C6+C3; C2 DB/migration; C0/C8 review | VERIFIED | PR #19 MERGED; actual main a321bdd58856fb41bccb5749b4212349832e623c; push/main 35611528733 SUCCESS; C8 PASS | Принято controlled LOCAL/TEST; настоящий provider/API — M2.3 |
-| M2.2-PRIVATE-IMAGES | Image reference → private file → owner signed GET | M2_CONTRACT §9 | C6; C3 media/fix; C2 migration | VERIFIED | 0006→0005; 305 PostgreSQL/S3; privacy/recovery/late-PUT/WebP guards; C8-M2.2-01 CLOSED; post-merge receipt | Сохранить private grant/fencing/cleanup; не объявлять весь M2 готовым |
-| M2.3 | Telegram adapter, test connection, capabilities, UNKNOWN и owner API | VERIFIED M2.1/M2.2 | C3; C1/C2/C6; C0/C8 | INTEGRATED | PR #20 merged, main ffc437f125aa6af4dcf1c61a035a0d5df517e062; push/main 35649907678 SUCCESS; code/API VERIFIED LOCAL/TEST | Actual Telegram A09/A11 BLOCKED runtime/DNS/TLS; UI C5 M2.4 |
-| M2.3-TELEGRAM-API | Official Telegram → durable kernel/private images → five owner API routes | M2_CONTRACT §10 | C3; C2/C1/C6; C0/C8 | VERIFIED | Accepted main ffc437f125aa6af4dcf1c61a035a0d5df517e062; code/API LOCAL/TEST, C8-M2.3-01 CLOSED; actual main CI SUCCESS | Сохранять API/0007/time guards/UNKNOWN; live evidence отдельно |
-| M2.4 | Console Inbox, manual reply и E2E | Интегрированный API M2.3 + main CI | C5; C3/C6; C0/C8 | INTEGRATED | PR21 merged; main96d9f09dd16d8b6ab019ac76a9c72ce910d81191; push/main35706123814 SUCCESS; code/UI VERIFIED LOCAL/TEST | Реальный A11 остаётся внешним gate M2-LIVE-A09-A11 |
-| M2.4-CONSOLE | Owner panel + private image + exact manual intention/recovery + browser | M2_CONTRACT §§10–11 | C5; C3/C6 TEST harness; C0/C8 | VERIFIED | Actual main96d9f09dd16d8b6ab019ac76a9c72ce910d81191, separate main CI SUCCESS; C8-M2.4-01/02/03 CLOSED, code/UI LOCAL/TEST | Сохранять принятые механизмы; это не live Telegram acceptance |
-| M2-LIVE-A09-A11 | Тестовый HTTPS runtime и реальная ручная Telegram переписка | Принятый actual main M2.4; доступный runtime и домен | C6; C3 connection; C0 acceptance | BLOCKED | .com зарегистрирован по ответу поддержки; .ru на проверке; external DNS/TLS/runtime не подтверждены; smoke на .com принят пользователем | Merge PR22 + actual main CI → ограниченный runtime/.com HTTPS → фактические A09/A11 |
-| M2-ENV-01-REGISTRY | Восстановить storage provisioning и полный CI | M2.4 accepted main; pull failure PR22 | C6; C0/C8 | REVIEW | Public OCI bytes и обычный CI36823298856 SUCCESS; оба scripts/source gates, реальные PG/S3/browser; C8 PASS | Пользовательский merge PR22 после final-head CI; C0 проверяет отдельный push/main CI |
-| M2-ENV-02-STORAGE-IMAGES | Упаковать два exact official binary в проверяемые project-owned images | Принятый диагноз M2-ENV-01; решение C0 о новой упаковке | C6; C0 acceptance; независимый scoped C8 | REVIEW | CI36734267078 build/signature/reproduction PASS; anonymous full OCI bytes PASS;2pins; fullCI36823298856 SUCCESS; C0/C8 PASS | Готовить обычный merge PR22 только с актуальным final-head CI; после merge — actual main gate |
-
-Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
-
-## История — прежние решения и evidence
-
-Всё ниже — записи прежних snapshots. Их статусы и команды не переопределяют
-текущий блок, таблицу выше и M2_HANDOFF. Не выполнять старые поручения повторно.
+</details>
 
 <details>
 <summary>История — private artifacts и public access gate до 2026-10-01</summary>

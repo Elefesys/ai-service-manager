@@ -43,8 +43,10 @@ Yandex Cloud, регион Россия, исходно zone `ru-central1-a`, Ub
 пара clientmanagerai.ru/.com, корзина 200 ₽ +1560 ₽ на первый год. Автоматически
 добавленный Optimo исключён. Это историческая проверка корзины, не текущий статус.
 По сообщению владельца и ответу поддержки 2026-09-30 **.com зарегистрирован, NS Timeweb
-установлены**; **.ru ожидает проверки администратора/ЕСИА**. Независимая публичная
-DNS/HTTPS-проверка пока не выполнена. Повторно покупать домены или вводить паспортные
+установлены**; **.ru ожидает проверки администратора/ЕСИА**. Публичный DNS проверен C0 2026-10-01 через Google DNS-over-HTTPS:
+NS .com — ns1.timeweb.ru/ns2.timeweb.ru/ns3.timeweb.org/ns4.timeweb.org;
+две будущие A-записи console/files пока NXDOMAIN. NS .ru — NXDOMAIN у этого
+resolver, что не определяет внутренний статус ЕСИА/регистратора. TLS ещё не готов. Повторно покупать домены или вводить паспортные
 данные в чат/PR не требуется; обращение Timeweb продолжает сам владелец.
 
 **Принятая замена тестовых адресов от 2026-09-30:**
@@ -63,7 +65,7 @@ Storage public endpoint, TLS names и webhook URL согласуются с эт
 cookie domain не добавлять. .ru остаётся предпочтительным будущим основным доменом;
 перенос после smoke не выполняется автоматически. Это не смена Yandex RU/cloud ADR.
 
-Публичные cloud-цены проверены 2026-09-24, корзина выбранной пары — 2026-09-27;
+Публичные cloud-цены перепроверены 2026-10-01 (ставки не изменились), корзина выбранной пары — 2026-09-27;
 обычные свободные имена, без покупки у текущего владельца/премиум-цены. При изменении
 имён или стоимости перед оплатой зафиксировать отличие; hosting/дополнения не приняты.
 
@@ -101,24 +103,20 @@ production/Pilot не добавляется к существующим A09/A11
 
 ### 0.2. Последовательность C6 и действия владельца
 
-1. **M2-ENV-01/02 приняты C0/C8 в REVIEW; пользовательский merge ещё впереди.**
-   Оба packages Public, полные anonymous OCI bytes совпали с build receipts.
-   Только две storage refs/pins переведены на exact GHCR digests. [обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856) SUCCESS:
-   492 unit/390 PostgreSQL-S3/111 frontend/27 browser; оба штатных scripts и source
-   gates PASS. Exact final head и обязательный CI после последнего изменения —
-   в PR22 receipt. Пользователь выполняет обычный merge commit по инструкции C0;
-   C0 проверяет actual merge и отдельный push/main CI, затем выдаёт следующий host
-   шаг. Повторно открывать packages/публиковать images или вводить PAT не нужно.
-   Раздел0.3 содержит текущие refs, границы evidence и команды воспроизведения.
-2. **Параллельно владелец продолжает существующий тикет Timeweb.** .com заявлен
-   зарегистрированным, .ru ждёт сверки данных; повторная покупка не нужна. Для smoke
-   достаточно работоспособного .com — ждать готовности .ru не требуется. Перед
-   переключением live режима C6 проверяет публичное делегирование .com, фактические
-   A-records обоих subdomains и доверенный TLS, а не только плашку панели регистратора.
-   После merge PR22 и отдельного успешного main CI выдаётся следующий account/billing/host
-   шаг в Yandex Cloud; наличие доступа агента заранее не предполагается. Не просить
-   пароли, паспортные данные или Telegram secrets в чат/PR.
-3. **После merge PR22, отдельного успешного main CI и нового handoff C0:** C6 в разрешённом Yandex TEST folder создаёт
+1. **M2-ENV-01/02 интегрированы и VERIFIED.** PR22 merged пользователем,
+   actual main **80e51c43e31541940f1ccf18b8281adf1a061748**, tree
+   **88ed308b4c56114aa977dcf91204964d9b7348e5** равен принятому final PR tree.
+   [Отдельный push/main CI36825583134, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36825583134)
+   SUCCESS: оба jobs checkout actual merge;492 unit/390 PG-S3/111 frontend/27 browser,
+   оба штатных scripts/source gates. C8 packaging/pins PASS до merge; новых bytes нет.
+   Public packages/две refs приняты; повторный publish/PAT не нужен. Следующий
+   **M2-ENV-03-TEST-HOST**, exact scope — активный M2_HANDOFF; первая подготовка §0.4.
+2. **.com NS уже подтверждены публично; host/A-records/TLS ещё отсутствуют.**
+   .ru продолжает свой отдельный регистрационный путь; ждать его для .com smoke
+   не нужно. Первое действие владельца — account/billing/folder в §0.4. Доступ к его
+   аккаунту у агента не предполагается; пароли/паспортные данные/ключи в чат не нужны.
+   Перед live C6 отдельно проверит оба A и trusted TLS, а не плашку панели Timeweb.
+3. **После доступности account/billing и подготовки точной процедуры C6:** C6 в разрешённом Yandex TEST folder создаёт
    ровно указанную VM/диск/IP после сверки итоговой цены. Настраивает non-root operator, SSH key admission, Docker
    Engine + Compose, синхронизацию времени. SSH22 — только с operator IP, HTTPS443 —
    публично; TCP80 нужен только для ACME HTTP-01. API8000/frontend8080 остаются loopback,
@@ -136,7 +134,7 @@ production/Pilot не добавляется к существующим A09/A11
    Точные команды с выбранными именами выдаются в этом runbook до выполнения; их запуск
    и успешный TLS пока не заявлены. Если агент не имеет доступа, владелец получает один
    последовательный блок команд с non-secret ожидаемыми результатами.
-6. **Далее §2–6 этого же runbook:** exact accepted implementation checkout, private
+6. **После отдельной приёмки host C0 — live §2–6 этого же runbook:** exact accepted implementation checkout, private
    secrets непосредственно от владельца, preflight/binding/setWebhook и Console live
    scenario. C6 возвращает sanitized runtime/DNS/TLS/billing receipt; C3 — фактические
    connection/rights/Client receipt. Только C0 принимает live A09/A11.
@@ -147,7 +145,11 @@ production/Pilot не добавляется к существующим A09/A11
 Anonymous manifest/config/all-layer HTTP download подтверждён 2026-10-01; новый
 Docker pull и реальный runtime подтверждены отдельно [обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856). CI на implementation
 head **809d44c77b45d86b54750969db5b4a3ec411e0e3**, tree **42a17e82cae204a1f4a8d3f3bc3dcd798fc03cc8**, SUCCESS. Последнее изменение трёх
-документов требует своего полного CI; его exact receipt ведётся в [PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
+документов прошло отдельный final PR CI36824246755. PR #22 уже merged;
+actual main **80e51c43e31541940f1ccf18b8281adf1a061748**, tree
+**88ed308b4c56114aa977dcf91204964d9b7348e5**, [push/main36825583134](https://github.com/Elefesys/ai-service-manager/actions/runs/36825583134)
+SUCCESS, оба source gates PASS. Текущий статус — VERIFIED после интеграции;
+полная pre-merge история сохранена в [PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
 
 | Package | Принятый immutable linux/amd64 ref |
 |---|---|
@@ -207,7 +209,7 @@ Full layer descriptors/diffIDs — receipt PR #22; mismatch
 Storage workflow по-прежнему имеет только contents:read в build и временный
 packages:write в изолированном publisher; images повторно не публиковались.
 Source/ref bindings и полная история разрешённых packaging изменений — в handoff.
-VM/DNS/TLS/webhook/live Telegram — следующий шаг после merge и actual main CI.
+VM/DNS/TLS — текущая ограниченная задача C6; webhook/live Telegram — после приёмки host. Все внешние проверки ещё не исполнены.
 
 <details>
 <summary>История — прежний public access gate до действия владельца и CI</summary>
@@ -307,6 +309,67 @@ VM/DNS/TLS/webhook и live Telegram начинают только по след�
 
 </details>
 
+## 0.4. Текущий первый шаг — account и подготовка host без Telegram / 2026-10-01
+
+Accepted deployment source: **80e51c43e31541940f1ccf18b8281adf1a061748**;
+push/main36825583134 SUCCESS. Задача **M2-ENV-03-TEST-HOST**, branch
+**c6/m2-test-host**; точная allowlist и критерии — верхний активный M2_HANDOFF.
+Этот раздел имеет приоритет над live example §2 до приёмки host C0.
+Никакие cloud ресурсы, DNS записи, TLS или Telegram connection пока не созданы.
+
+**Владельцу сейчас одно действие — подготовить свой cloud account и отдельный folder.**
+
+1. Открыть https://console.yandex.cloud/ и войти/зарегистрировать свой Yandex account.
+2. В разделе Billing создать или активировать платёжный аккаунт и связать его с
+   cloud. Тип плательщика, страну и реквизиты указать по своим фактическим данным
+   непосредственно провайдеру; C0 их не выбирает и не получает. Требуется статус
+   активного billing; необязательный стартовый grant не считается частью бюджета.
+3. В нужном cloud создать **folder asm-telegram-test**. Отключить опцию
+   **«Создать сеть по умолчанию»**: C6 выдаст конкретную ограниченную security group.
+   Не создавать VM/диски/IP, не включать дополнительные платные услуги на этом шаге.
+4. Вернуть только: **«Платёжный аккаунт активен; каталог asm-telegram-test создан»**.
+   Если шаг не проходит — точный текст ошибки без платёжных/паспортных данных.
+   Пароли, cloud tokens, private SSH key, TG_BOT_TOKEN/TG_WEBHOOK_SECRET не присылать.
+
+Официальные инструкции: [billing account](https://yandex.cloud/ru/docs/billing/operations/create-new-account),
+[folder](https://yandex.cloud/ru/docs/resource-manager/operations/folder/create),
+[Linux VM/SSH](https://yandex.cloud/ru/docs/compute/operations/vm-create/create-linux-vm).
+Это необходимый owner action из-за отсутствия доступа агента к личному аккаунту;
+бюджет §0.1 уже принят и повторного согласования той же конфигурации не требует.
+
+**C6 до исполнения дополняет этот же раздел точными host/DNS/TLS командами.**
+Выбрать non-root `asmoperator`, отдельную SSH key pair на устройстве оператора;
+в Cloud передаётся только public key, private key остаётся у владельца. Private
+repository доставлять с narrow read-only доступом либо проверенным source transfer;
+никаких долгоживущих write PAT в cloud-init/build context. Проверить source SHA,
+сохранить §2 file privacy и существующий Compose project без down -v/reset.
+Runtime profile остаётся LOCAL; не менять его на TEST без отдельного контракта.
+
+Минимальный pre-live `.env.telegram` (создаётся с прежними mode/owner guards §2):
+
+```dotenv
+ASM_TELEGRAM_ENABLED=false
+ASM_TELEGRAM_CONSOLE_HOST=console.telegram-test.clientmanagerai.com
+ASM_TELEGRAM_STORAGE_HOST=files.telegram-test.clientmanagerai.com
+ASM_AUTH_ORIGINS='["https://console.telegram-test.clientmanagerai.com"]'
+ASM_STORAGE_ENDPOINT=https://files.telegram-test.clientmanagerai.com
+```
+
+Все credentials PostgreSQL/S3 генерирует существующий `scripts/init_local.py`
+в private `.env`; Telegram secrets в pre-live файле не нужны. C6 использует
+существующие `tgcompose`/UID/GID/mode checks и ingress §2–3 с **точными .com именами**,
+build/health/DNS/TLS/private access assertions из handoff. Live dotenv с
+`ASM_TELEGRAM_ENABLED=true` ниже на этом шаге не копировать: с пустыми TG secrets/IDs
+приложение обоснованно откажет при startup. **Остановиться до §4**: не создавать
+live binding, не запускать provision_telegram_test, setWebhook или smoke sends.
+Если для проверки auth boundary нужен synthetic owner login, C6 явно выделяет
+однократный local-auth-only provision без billing/Telegram и не повторяет его далее.
+
+После готовности host C0 принимает sanitized receipt и организует scoped C8 только
+новых внешних network/TLS/secrets/private-file границ. Затем отдельно выдаётся
+connection/rights и живой A09/A11 сценарий. Host health или successful CI не закрывают
+получение Telegram сообщения клиентом и не означают завершение M2.
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker
@@ -318,8 +381,10 @@ synthetic Workspace. Это изолированный LOCAL deployment (`asm_lo
 
 Нужны заранее:
 
-- Один точный **принятый implementation SHA из PR receipt**, не coordination/base SHA.
-  Отдельный checkout этого SHA и штатные успешные CI/gates на принятом head.
+- Один точный **принятый runtime SHA из активного handoff**: сейчас actual main
+  **80e51c43e31541940f1ccf18b8281adf1a061748** после merge PR22 и отдельного main CI.
+  Отдельный clean checkout; будущий docs-only coordination commit не заменяет
+  эту проверенную версию приложения.
 - Non-root operator account с разрешённым доступом к Docker. Свои
   `console.telegram-test.example.net` и `files.telegram-test.example.net`:
   заменить оба example имени во всех примерах ниже на свои. DNS обоих имён ведёт
@@ -338,6 +403,8 @@ synthetic Workspace. Это изолированный LOCAL deployment (`asm_lo
 можно рассматривать только после отдельного предложения конкретной стоимости.
 
 ## 2. Exact code и непосредственная инъекция секретов
+
+**Live шаг после приёмки host. Для M2-ENV-03 брать pre-live env из §0.4 и остановиться до §4.**
 
 В отдельном checkout оператор подставляет принятую 40-символьную SHA:
 
@@ -406,8 +473,9 @@ ASM_TELEGRAM_SMOKE_KEY=
 ASM_TELEGRAM_SMOKE_APPROVAL=
 ```
 
-Оператор выбирает **явный конечный текущий TEST interval**, меняя обе example даты
-до первого setup; при exact repeat сохраняет их. Не подставлять новый `now()` при
+Перед live setup C6 задаёт **явный конечный текущий TEST interval**, заменяет обе
+example даты в готовой инструкции и фиксирует их один раз; оператор не выбирает
+billing policy. При exact repeat даты сохраняются. Не подставлять новый `now()` при
 каждом повторе. Old M1 `test` plan не обновляется: нужен Workspace **без billing**,
 для которого provisioner создаёт фиксированный `test_messaging` revision1,
 BOOLEAN `messaging.manual_send=true`, ESSENTIAL, ACTIVE+COMPED/NORMAL и Audit.
