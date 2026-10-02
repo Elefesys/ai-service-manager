@@ -103,15 +103,15 @@ synthetic данными. Это не смена ADR137/138/142/143/243: product
 private Object Storage и изоляция окружений остаются принятыми решениями. Подготовка
 production/Pilot не добавляется к существующим A09/A11.
 
-### 0.2. Текущий порядок после исполнения host — 2026-10-02
+### 0.2. Текущий порядок после интеграции host — 2026-10-02
 
-M2-ENV-01/02 интегрированы, runtime **80e51c43e31541940f1ccf18b8281adf1a061748**
-с separate main CI36825583134 SUCCESS. Один согласованный host уже работает,
-DNS/HTTPS/renewal и Telegram-disabled checks исполнены владельцем (§0.4.9).
-Не повторять создание ресурсов, ключей и env. C0 завершает scoped C8/final-head CI
-PR23, затем даёт обычный merge владельцу; после actual main CI выдаёт live A09/A11.
-Секреты, provisioning/binding/setWebhook/sends сейчас не нужны. .ru отдельно от
-работающего .com smoke; повторная покупка доменов и второй auth origin не требуются.
+PR23 merged в22993f558c5e7e933c65e9c999933bd2e3ab41c4; push/main37016012805 SUCCESS.
+ENV03 INTEGRATED/VERIFIED с явно записанными TEST ограничениями §0.4.9.
+Единственный активный шаг — **M2-LIVE-A09-A11, §0.5**. Source приложения на VM
+остаётся80e51c43e31541940f1ccf18b8281adf1a061748, потому что после него изменились
+только три docs. Сейчас выполнить только fresh Console Owner §0.5.1; новые TG
+secrets/billing/binding/webhook/sends ещё не запускать. Создание host/DNS/TLS не
+повторять. .com остаётся единственным smoke origin; .ru отдельно от этой проверки.
 
 <details>
 <summary>История — последовательность подготовки до исполнения host</summary>
@@ -969,9 +969,9 @@ private modes, DNS/SAN/expiry/renewal, externalports/browserlogin и огран�
 account/billing сведения. Host checks должны быть фактически исполнены; commands
 и hostedCI не доказывают готовность этого host.
 
-**STOP до §4**: не создавать Owner/billing/live binding, не запускать
+**Историческая граница ENV03 (теперь закрыт):** до его приёмки не создавать Owner/billing/live binding, не запускать
 `provision_telegram_test`, `setWebhook`, smoke sends и не вставлять TG secrets.
-C0 организует scoped C8 новых внешних границ и приёмку host, затем отдельно A09/A11.
+C8-HOST и приёмка выполнены в PR23; текущее продолжение A09/A11 — §0.5.
 
 ### 0.4.8. Первичные источники процедуры
 
@@ -993,7 +993,9 @@ Syntax/документационная сверка не являются ис�
 
 ### 0.4.9. Фактическое исполнение и решения C0 — 2026-10-02
 
-**ENV03 REVIEW; приёмка host до live Telegram.** Ниже фактические очищенные выводы
+**ENV03 INTEGRATED/VERIFIED после PR23/mainCI37016012805.** Приёмка только pre-live
+TEST host; далее сохранён фактический receipt до merge. Финальные PR23 head/review/CI
+находятся в merged PR, а текущее поручение — §0.5. Ниже фактические очищенные выводы
 и screenshots владельца, проверенные C0. Агент не входил в облако/SSH и не заявляет
 независимое исполнение команд на VM. Обновление только трёх docs в PR23; source
 runtime/Compose/pins/tests и TG-disabled граница сохранены. Final C8/hash/scope и
@@ -1072,9 +1074,155 @@ SSH deny с независимого IP, backup/restore, restart автозап�
 Console/signed image и live A09/A11 не исполнены этим receipt. После reboot действует
 ручной state-preserving start §0.4.7; background autopilot/production SLA не заявлен.
 
-Следующий gate — C8 и final-head CI → merge PR23 владельцем → actual push/main CI,
-затем отдельно live поручение. TG secrets/Owner/billing/binding/setWebhook/sends
-пока не вводить и не выполнять. M2 IN_PROGRESS, M3 не выдан.
+Исторические host gates C8/final-head CI/mergePR23/mainCI выполнены. Продолжение
+выдаётся последовательно по §0.5; этот receipt сам по себе не разрешает пропустить
+identity/setup gates и не объявляет M2 завершённым. M3 не выдан.
+
+## 0.5. Активный live-шаг после принятого host — 2026-10-02
+
+**M2-LIVE-A09-A11 IN_PROGRESS.** Accepted task base/main
+**22993f558c5e7e933c65e9c999933bd2e3ab41c4**, tree
+**c30415b48a08dabac6a59f1294843a0bd25ff353**. PR23 actual merge имеет parents
+80e51c43e31541940f1ccf18b8281adf1a061748 +902e9f1d51235f1441ce4378a4d3a909adefea74;
+[push/main37016012805](https://github.com/Elefesys/ai-service-manager/actions/runs/37016012805)
+SUCCESS, оба checkout именно22993f5,492 unit/390 PostgreSQL-S3/111 frontend/27 browser,
+оба scripts/clean-source gates. Tree равен reviewed PR; C8-HOST PASS не повторяется.
+11 переданных канонических файлов совпали с SOURCE_MANIFEST. Новый branch
+**c6/m2-telegram-live** сохраняет только три docs и первый coordination commit.
+
+Работающий checkout остаётся **80e51c43e31541940f1ccf18b8281adf1a061748**,
+tree **88ed308b4c56114aa977dcf91204964d9b7348e5**. Git80e→22993f5 показал только
+три docs: приложение/Compose/pins/provisioners/миграции одинаковы. Не fetching/
+пересоздавать приложения ради документации, не заявлять runtime22993f5. Текущая
+граница задаётся этим разделом и активным handoff; generic §2–5 не выполнять одним
+заходом и не заменять их placeholder значения самостоятельно.
+
+### 0.5.1. Первый шаг — владелец Console без Telegram
+
+На Windows подключиться по прежнему SSH key к asmoperator@89.169.141.53.
+Следующий блок запускается **в SSH Bash**, где prompt asmoperator@asm-telegram-test-vm.
+В password manager создать новый пароль Console24–32ASCII символа. Это новая веб-
+учётная запись **telegram.test.owner**, не Telegram login/password и не bot token.
+На два скрытых terminal prompt вставить один и тот же пароль; символы не отображаются.
+
+Блок проверяет exact source/clean и pre-live config; собирает только existing
+telegram-operator development target, которого ранее не требовалось на host.
+API/worker/frontend/PG/storage не пересобирает/не рестартует. Одноразовый tooling
+container имеет DB identity asm_migrator; runtime identity не расширяется. В image
+development OS root, но без host mounts/privileged flags; это прежний accepted
+operator service. Пароль передаётся только его terminal getpass, не argv/env/files.
+
+```bash
+bash <<'ASM_OWNER_CREATE'
+set -euo pipefail
+trap 'printf "OWNER_SETUP_STOP: строка %s. Не повторять создание; передать C0 только эту ошибку.\n" "$LINENO" >&2' ERR
+cd /home/asmoperator/asm-telegram-test
+
+test "$(id -un)" = asmoperator
+test "$(git rev-parse HEAD)" = 80e51c43e31541940f1ccf18b8281adf1a061748
+test "$(git rev-parse 'HEAD^{tree}')" = 88ed308b4c56114aa977dcf91204964d9b7348e5
+test -z "$(git status --porcelain --untracked-files=all)"
+test -t 0 </dev/tty
+
+export ASM_TELEGRAM_INGRESS_UID="$(id -u)"
+export ASM_TELEGRAM_INGRESS_GID="$(id -g)"
+tgcompose() {
+  docker compose --project-name asm-telegram-test \
+    --env-file infra/images.lock.env --env-file .env --env-file .env.telegram "$@"
+}
+
+tgcompose exec -T api python - <<'PYOWNER_PREFLIGHT'
+import json
+import os
+import sys
+import urllib.request
+
+from asm.foundation import DATABASE_SCHEMA_REVISION
+from asm.telegram.config import TelegramSettings
+
+try:
+    cfg = TelegramSettings()
+    assert not cfg.enabled and not cfg.token.get_secret_value() and not cfg.webhook_secret.get_secret_value()
+    assert os.environ['ASM_ENVIRONMENT'] == 'LOCAL'
+    assert os.environ['ASM_AUTH_ORIGINS'] == '["https://console.telegram-test.clientmanagerai.com"]'
+    assert os.environ['ASM_STORAGE_ENDPOINT'] == 'https://files.telegram-test.clientmanagerai.com'
+    assert DATABASE_SCHEMA_REVISION == '0007'
+    with urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=10) as response:
+        assert response.status == 200
+        assert json.load(response) == {'status': 'ok', 'component': 'database'}
+except Exception:
+    print('OWNER_PREFLIGHT_FAILED: no secret values printed', file=sys.stderr)
+    raise SystemExit(1)
+print('OWNER_PREFLIGHT_PASS: accepted runtime, schema, Telegram disabled')
+PYOWNER_PREFLIGHT
+
+tgcompose --profile telegram-operator build telegram-operator </dev/null
+tgcompose --profile telegram-operator run --rm --no-deps telegram-operator \
+  python scripts/provision_local_auth.py --login telegram.test.owner </dev/tty
+printf '%s\n' CONSOLE_OWNER_PROVISIONED_PASS
+ASM_OWNER_CREATE
+```
+
+Вернуть C0 только JSON с **user_account_id/workspace_id/business_id** и
+**CONSOLE_OWNER_PROVISIONED_PASS** либо очищенную ошибку. Пароль сохранить локально.
+Фактическое выполнение, DB inserts и login ещё не подтверждены. До этого шага нет
+Owner/billing/binding; после успеха будут только fresh account/OWNER/Workspace/
+synthetic Business. TG=false, secrets отсутствуют, webhook/sends не включаются.
+
+Build использует существующий Dockerfile/locks/exclusions, без новых dependencies
+или pins. `/dev/null` закрывает build stdin; `</dev/tty` у interactive run сохраняет
+getpass даже внутри внешнего heredoc. Не добавлять `-T` к password run. C6/C0
+проверили Bash syntax/Python AST; это не фактический Docker/getpass/DB receipt.
+
+Если error/UNIQUE collision/SSH disconnect или marker не получен — не повторять
+create, не менять login/password, не удалять account/Workspace. UNIQUE откатывает
+все пять вставок при collision, но потеря вывода после commit не доказывает rollback.
+C0 выполнит/даст bounded read-only lookup exact login для восстановления3UUID и
+проверки единственной OWNER/Workspace/Business связи. SQL владельцу выбирать не нужно.
+
+### 0.5.2. Конечный порядок следующих шагов — команды выдаются после receipt
+
+1. Войти в HTTPS Console с созданным login и подтвердить правильный Workspace.
+2. Получить независимый numeric Telegram Owner ID в официальном Telegram Desktop
+   выбранного test Owner: Settings → Advanced → Export Telegram data → только
+   Account information, Machine-readable JSON. Локально взять
+   `result.json` → `personal_information.user_id`; полный экспорт не передавать и
+   не копировать на VM. [Официальная схема](https://core.telegram.org/import-export).
+   Если Telegram задержит экспорт, соблюдать ограничение; не брать ID первого
+   входящего события вместо подтверждённого аккаунта. Console UUID — другое поле.
+3. Проверить выбранного test bot у официального BotFather; token остаётся private.
+   Numeric prefix выбранного token задаёт expected bot ID в принятом config; getMe
+   проверяет ID/is_bot, но не can_connect_to_business. Связать bot с test Owner через
+   official Business/Secretary controls, только тестовый диалог/необходимые rights.
+4. C0/C6 выдаёт один private-entry блок с точными IDs/именами для существующей
+   .env.telegram, сохраняя DB/S3/TLS secrets. Synthetic contact фиксирован:
+   **Synthetic Telegram test owner**, interval
+   **2026-10-02T00:00:00+00:00 → 2026-10-09T00:00:00+00:00**. Это ещё не DB state;
+   до первого commit должен оставаться действующим, иначе C0 уточняет его явно.
+   После первой попытки даты/contact не пересчитывать при retries. Старые примеры
+   сентября не выполнять; продление/новые тарифы не добавляются.
+5. Existing discovery проверяет bot/Owner/webhook, не ACK/drop очередь, не задаёт
+   offset/negative offset/pagination; getUpdates permitted только без webhook.
+   `allowed_updates` может изменить future subscription — это не обещание полной
+   неизменности provider state. Candidate external ID сохранить перед setup.
+   Ноль/несколько candidates — STOP; старый lifecycle мог истечь после24h, не угадывать.
+6. Existing atomic billing/binding setup → setWebhook **после** DB commit, exact URL,
+   четыре update types, max_connections1/drop_pending_updatesfalse. Сохранить
+   internal connection UUID отдельно. READY не гарантирует is_enabled/can_reply:
+   проверить оба actual flags и текущую доступность; closed window не обходить.
+   COMMITTED_WEBHOOK_UNCONFIRMED восстанавливать с теми же IDs/dates, без rebind/reset.
+7. Единственный UI-сценарий §5.1: Client пишет **Owner**, не standalone bot, свежий
+   synthetic text и Telegram photo; Owner видит правильный Workspace, открывает
+   READY private image, один раз отвечает из Console; Client подтверждает получение.
+   API send smoke параллельно не запускать. UNKNOWN/неоднозначный202 — только
+   принятый exact-intention recovery, не новый key/слепой resend. SENT не Client receipt.
+
+C3 source/official-doc contract review и C6 first-step review выполнены2026-10-02;
+новый C8/live PASS этим не заявляется. Existing code tests закрывают свой scope,
+реальные A09/A11 ещё впереди. Новый scoped C8 нужен при конкретном изменении/риске,
+не для повторного ревью неизменённого host. После live receipt C0 обновляет три docs,
+проверяет final-head CI, владелец merge, C0 actual main CI; до этого M2 IN_PROGRESS.
+Production/M3, новые платные ресурсы, backup/restore drill не добавляются.
 
 ## 1. Конкретное окружение и предварительные условия
 
@@ -1087,10 +1235,11 @@ synthetic Workspace. Это изолированный LOCAL deployment (`asm_lo
 
 Нужны заранее:
 
-- Один точный **принятый runtime SHA из активного handoff**: сейчас actual main
-  **80e51c43e31541940f1ccf18b8281adf1a061748** после merge PR22 и отдельного main CI.
-  Отдельный clean checkout; будущий docs-only coordination commit не заменяет
-  эту проверенную версию приложения.
+- Один точный **принятый runtime SHA из активного handoff**:
+  **80e51c43e31541940f1ccf18b8281adf1a061748**, сохранённый чистый checkout на VM.
+  Current main после PR23 — **22993f558c5e7e933c65e9c999933bd2e3ab41c4**;
+  сравнение показало только три docs. Accepted base и runtime различаются явно
+  по §0.5; приложение ради документации повторно не разворачивать.
 - Non-root operator account с разрешённым доступом к Docker. Свои
   `console.telegram-test.example.net` и `files.telegram-test.example.net`:
   заменить оба example имени во всех примерах ниже на свои. DNS обоих имён ведёт
@@ -1165,8 +1314,8 @@ ASM_TELEGRAM_WORKSPACE_ID=
 ASM_TELEGRAM_BUSINESS_ID=
 ASM_TELEGRAM_CONNECTION_ID=
 ASM_TELEGRAM_BILLING_CONTACT=Synthetic Telegram test owner
-ASM_TELEGRAM_BILLING_FROM=2026-09-21T00:00:00+00:00
-ASM_TELEGRAM_BILLING_UNTIL=2026-09-28T00:00:00+00:00
+ASM_TELEGRAM_BILLING_FROM=2026-10-02T00:00:00+00:00
+ASM_TELEGRAM_BILLING_UNTIL=2026-10-09T00:00:00+00:00
 ASM_TELEGRAM_SMOKE_ORIGIN=https://console.telegram-test.example.net
 ASM_TELEGRAM_SMOKE_LOGIN=telegram.test.owner
 ASM_TELEGRAM_SMOKE_PASSWORD=''
@@ -1422,8 +1571,8 @@ state/отказ нового send, без обещаний по одному ф
 ### 5.1. Client text+photo → Owner Console → manual reply → Client receipt
 
 Этот ручной сценарий выполняется оператором **после отдельного разрешения внешних
-отправок** в согласованном тестовом диалоге. Текущее поручение M2.4 не разрешает
-live sends или расходы. Подготовленные bot/accounts/secrets не заменяют доступный
+отправок** в согласованном тестовом диалоге. Code-only поручение M2.4 само по себе не разрешало live sends. Текущий
+разрешённый оператору шаг задаётся активным M2_HANDOFF/§0.5, без новых расходов. Подготовленные bot/accounts/secrets не заменяют доступный
 runtime, DNS и TLS: пока этих условий нет, **live A09/A11 BLOCKED**. CONTROLLED
 browser suite ниже проверяет другой, явно ограниченный уровень evidence.
 

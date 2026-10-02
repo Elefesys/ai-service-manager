@@ -4,7 +4,110 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный handoff C0 — M2-ENV-03-TEST-HOST: приёмка / 2026-10-02
+## Активный handoff C0 → C6/C3 — M2-LIVE-A09-A11 / 2026-10-02
+
+**IN_PROGRESS; одна последовательная live-задача.** ENV03 интегрирован/VERIFIED
+только как TEST host с выключенным Telegram. Теперь требуется реальный согласованный
+Client text+photo → Owner Console/private image → manual reply → Client receipt.
+Это оставшаяся внешняя проверка принятого M2, не новая реализация или production.
+Сейчас выдан только первый шаг §0.5.1: Console identity. Остальные команды C0/C6
+дают после фактического результата предыдущего, без повторного выбора полей владельцем.
+
+### Repository, точный base и границы изменений
+
+- Repository **Elefesys/ai-service-manager**, branch **c6/m2-telegram-live → main**,
+  отдельный Draft PR задачи. Точный номер/coordination head/tree/CI — PR receipt;
+  первый coordination commit сохранять, без SHA-only commits.
+- Accepted base/main **22993f558c5e7e933c65e9c999933bd2e3ab41c4**, tree
+  **c30415b48a08dabac6a59f1294843a0bd25ff353** — actual PR23 merge.
+  Ordered parents80e51c43e31541940f1ccf18b8281adf1a061748 +
+  902e9f1d51235f1441ce4378a4d3a909adefea74.
+  [Separate push/main37016012805](https://github.com/Elefesys/ai-service-manager/actions/runs/37016012805)
+  SUCCESS: foundation110866924584/browser110866924421 checkout actual merge;
+  492 unit/390 PostgreSQL-S3/111 frontend/27 browser, оба scripts/source gates.
+- Existing runtime on VM остаётся **80e51c43e31541940f1ccf18b8281adf1a061748**,
+  tree **88ed308b4c56114aa977dcf91204964d9b7348e5**. C0 сравнил80e→22993f5:
+  только TASK_REGISTER/M2_HANDOFF/runbook. Поэтому не fetch/redeploy/rebuild app
+  ради документации; exact runtime в каждом live receipt указывать честно.
+- Repository allowlist ровно три docs: **docs/TASK_REGISTER.md**,
+  **docs/tasks/M2_HANDOFF.md**, **docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md**.
+  Runtime private env/TLS/операционные команды не коммитить. App/Compose/locks/pins/
+  CI/tests/assertions/contracts/миграции0001–0007 не менять без конкретного blocker
+  и ограниченного решения C0. Applied migrations не переписывать.
+- Прочитать AGENTS; этот active block; runbook§0.5 и§§2–5.1; M2_CONTRACT§§10–11;
+  Spec§24.6/private files/auth/recovery, ADR138/141/142/243, Implementation Plan§§6–7.
+  Переданные11оригиналов совпали с current SOURCE_MANIFEST поSHA256. M1 задания
+  не повторять; production managed DB/storage и M12 restore gates сохраняются.
+
+### Конечное поручение и разделение ответственности
+
+1. **C6/C0:** первый блок §0.5.1 проверяет текущий source/config/readiness и создаёт
+   только fresh Console login **telegram.test.owner**, Workspace/Business/OWNER
+   через существующий provisioner. До него собрать только существующий development
+   image telegram-operator. Пароль вводится дважды скрыто; TG=false и без TG secrets.
+   Не применять init/reset, не пересоздавать API/PG/S3. UNIQUE collision/потерянный
+   ответ — STOP и read-only восстановление IDs по exact login, не новая учётка.
+2. **C3 + владелец:** независимо подтвердить numeric Telegram Owner ID из официального
+   account export и выбранный test bot из BotFather; это не UUID Console и не первый
+   business_connection update. Связать bot с подготовленным test Owner через official
+   Business/Secretary controls, только согласованный test dialog и необходимые rights.
+3. **C6/C0:** один готовый private-entry блок для прежней .env.telegram после identity
+   receipt; owner непосредственно вводит token/webhook secret на VM. Прежние DB/S3/TLS
+   credentials не менять; не печатать secrets, token URLs или raw provider responses.
+   Fixed synthetic billing contact **Synthetic Telegram test owner** и interval
+   **2026-10-02T00:00:00+00:00 → 2026-10-09T00:00:00+00:00**. Это config для будущего
+   первого setup, ещё не DB state; при задержке до expiry C0 уточняет interval до
+   первого commit. После первой попытки exact даты/contact сохранять на retries.
+4. **C3/C6:** accepted getMe/getWebhookInfo → optional bounded discovery только без
+   webhook → exact getBusinessConnection/Owner verification. Сохранить external
+   connection ID **до** setup; нельзя ACK/drop/offset/paginate очередь или заменить
+   чужой webhook. getUpdates не ACK очередь, но allowed_updates может изменить
+   provider subscription; не называть его полностью свободным от side effects.
+5. **C3/C6:** существующий setup атомарно коммитит typed billing/binding, затем
+   setWebhook. Проверить actual configuration/health/is_enabled/can_reply; READY
+   сам по себе не доказывает права/свежее окно. При COMMITTED_WEBHOOK_UNCONFIRMED
+   восстанавливать exact setup с сохранёнными IDs/dates, без reset/rebind/drop.
+6. **Владелец/test Client под руководством C0:** свежий synthetic text+Telegram photo
+   в диалог **с Owner**, правильный Console Workspace, READY private image через
+   реальный браузер, один ручной ответ из Console, отдельное подтверждение Client.
+   API send smoke не запускать параллельно UI: единственное намерение создаёт Owner.
+   UNKNOWN/timeout/потеря202 — существующий exact-intention recovery, не новый key.
+7. **C0:** собрать очищенный dated receipt и закрыть только доказанные A09/A11;
+   согласованно обновить три docs, final-head CI, обычный merge владельцем и actual
+   main CI. M2 VERIFIED только после всех принятых частей и фактического Client receipt.
+
+### Матрица результата и границы проверки
+
+| Критерий | Уже подтверждено | Осталось фактически исполнить |
+|---|---|---|
+| A12 | Actual main37016012805 SUCCESS; C8-HOST PASS; неизменённые code/CI и миграции | Final receipt PR и после его интеграции separate main CI |
+| A09 external | Детерминированные rights/window/errors tests и accepted UNKNOWN recovery | Approved Owner/bot/connection, actual rights и webhook; ограничения доступа видны, нет обхода |
+| A11 | Controlled Console journeys и trusted host/HTTPS prerequisites | Реальные text/photo→правильный Workspace/Console→private browser image→manual reply→Client receipt |
+| A07/A08/A10 live path | DB/S3/API/browser isolation/recovery tests сохранены | Signed image в браузере этого host, правильный actor/Workspace/dialog и наблюдаемый delivery |
+| A02/A04/A05 | Existing real PostgreSQL/crash/wire-call tests PASS | Сохранять durable state и не вводить слепой resend; destructive live fault injection не добавлять |
+
+C3 выполнил source/official-doc identity+setup review, C6 — source/первый terminal
+block review, C0 — syntax/состав/refs. Это не новый C8 и не live execution. Новый
+scoped C8 назначать при конкретной новой границе или найденном defect; прежний
+C8-HOST не расширять на будущую binding/переписку автоматически.
+
+### Действие владельца сейчас и неизменные ограничения
+
+В PowerShell подключиться прежним SSH key к **asmoperator@89.169.141.53**; на VM
+исполнить **один блок §0.5.1**. Новый пароль24–32ASCII хранить в password manager,
+не вводить пароль Telegram или token. Вернуть только JSON с3UUID и marker либо
+очищенную ошибку. C0 не имеет SSH доступа и не может выполнить этот ввод за владельца.
+Новых покупок, секретов в чате, ручного выбора SQL/env/полей и повторного mergePR23 нет.
+
+Boot auto_delete=true и отсутствие backup/restore PASS остаются явными TEST
+ограничениями. Удаление VM/disk/volumes/reset/down-v не разрешено; budget reviewNov1
+не удаляет ресурсы автоматически. M2 IN_PROGRESS; AI/M3/takeover/запись/цены/платежи
+не входят в задачу. Архивы ниже — история, не текущие инструкции.
+
+<details>
+<summary>История — приёмка host до merge PR23 / 2026-10-02</summary>
+
+## Исторический handoff C0 — M2-ENV-03-TEST-HOST: приёмка / 2026-10-02
 
 **REVIEW: один внешний TEST host исполнен владельцем; TG disabled.** Не повторять
 старый onboarding, создание VM/ключей/env, init/reset или уже выполненные probes без
@@ -98,6 +201,8 @@ UNKNOWN не resend. Production требования и M12 restore drill не �
 IN_PROGRESS до фактического Client scenario и успешного main CI. M1 и принятый
 M2.1–M2.4 code не переделывать; M3 не выдан. От владельца сейчас новые host-команды
 не требуются. История ниже не является текущими инструкциями.
+
+</details>
 
 <details>
 <summary>История — поручение подготовки до actual host / 2026-10-01</summary>
