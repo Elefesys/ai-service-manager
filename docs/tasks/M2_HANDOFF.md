@@ -4,7 +4,105 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный handoff C0 → C6 — M2-ENV-03-TEST-HOST / 2026-10-01
+## Активный handoff C0 — M2-ENV-03-TEST-HOST: приёмка / 2026-10-02
+
+**REVIEW: один внешний TEST host исполнен владельцем; TG disabled.** Не повторять
+старый onboarding, создание VM/ключей/env, init/reset или уже выполненные probes без
+конкретной причины. Текущая работа C0 — принять фактическое evidence и исправления
+процедуры через scoped C8, проверить final-head CI PR23 и подготовить обычный merge
+владельцем. Доступа C0/C6 к личному облаку/SSH нет; выводы оператора не выдаются за
+прямые проверки агента. M2 IN_PROGRESS; live A09/A11 ещё не исполнены.
+
+### Точные refs, scope и состояние интеграции
+
+- Repository **Elefesys/ai-service-manager**, **c6/m2-test-host → main**,
+  [PR #23](https://github.com/Elefesys/ai-service-manager/pull/23).
+- Accepted base/main/runtime **80e51c43e31541940f1ccf18b8281adf1a061748**,
+  tree **88ed308b4c56114aa977dcf91204964d9b7348e5**.
+  [Отдельный push/main CI36825583134](https://github.com/Elefesys/ai-service-manager/actions/runs/36825583134)
+  SUCCESS:492 unit/390 PostgreSQL-S3/111 frontend/27 browser; оба штатных scripts и
+  clean-source gates. Эти counts относятся к тому run, не к ручным host checks.
+- Сохранён первый coordination **1f42a617ed64bc6fd4dd573cd5c721d22a7bf256**,
+  tree **1b5188bed8de7fd0be98097eb9f7b4dbd6a86b0a**; промежуточный procedure head
+  **61a96f1842071614ce338da88a359775d61bcfdb** имеет CI36836569381 SUCCESS.
+  История не переписывается. Exact final head/tree/tested checkout, актуальный C8
+  и CI — в PR receipt; не делать коммит ради SHA собственного docs commit.
+- Ровно три разрешённых paths: **docs/TASK_REGISTER.md**,
+  **docs/tasks/M2_HANDOFF.md**, **docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md**.
+  Runtime/app/Compose/pins/зависимости/CI/assertions/contracts/миграции не изменяются.
+  PR23 не обновляет приложение на VM и не требует повторной сборки из-за docs.
+- Применимые документы: AGENTS, Spec M2/environment/private files/auth/recovery,
+  ADR138/141/142/243, IMPL-001, M2_CONTRACT §§9–11, Implementation Plan §§6–7,
+  Production Runbooks §§1–3. Production managed DB/storage и restore gates сохранены.
+
+### Фактический результат и точные границы
+
+Единственный подробный receipt и исправленная процедура —
+[runbook §0.4.9](../runbooks/M2_TELEGRAM_LOCAL_TEST.md#049-фактическое-исполнение-и-решения-c0--2026-10-02).
+
+| Критерий host | Фактическая проверка / граница |
+|---|---|
+| Source/входы | Accepted SHA/tree и clean source повторно PASS после renewal; старые pins; temporary read-only deploy key удалён владельцем; private env/TLS modes сохранены |
+| TEST ресурсы | VM fhm53804pjetng9i46h2 RUNNING, created2026-10-02T04:57:26Z; согласованные2vCPU/8GiB/60GiB; idle memory/disk без OOM, NTPyes; не load/SLA test |
+| Сеть | SoleSG:22 от31.135.48.89/32,80/443 public; static89.169.141.53. С ПК22/443 доступны,5432/8000/8080/9000/9001 недоступны. Отдельный deny22 с другого IP не исполнен |
+| DNS/TLS/renewal | Два exact .com A/hostnames; CA/SAN/expiry PASS, unknown-SNI exact alert; Certbot dry-run + copy/reload + повторный HTTPS PASS; timer NEXT подтверждён |
+| Compose/private storage | migrate/storage-init exit0; STORAGE_PRIVATE_BOOTSTRAP_PASS; семь running/OOMfalse; HTTPS health200; anonymous bucket403 AccessDenied внутри/снаружи |
+| Telegram boundary | cfg.disabled и TG secrets empty, LOCAL/exact origin/endpoint assertions; webhook503 UNAVAILABLE/no-store и other404. Никаких provision/binding/setWebhook/sends |
+| UI граница | Login screen открыт с trusted TLS; authenticated Console, signed image и Client delivery ещё не проверены |
+| Review/CI | Новый scoped C8 готового config/receipt и final-head CI обязательны; старый static PASS не заменяет их. Hash/scope/результат — PR receipt |
+
+### Явные исправления и ограничение сохранности TEST state
+
+Причины host-сбоев установлены; protective assertions не убраны:
+cloud-init26.1 exact datasource schema warning не очищен/не перезапущен;
+исходный umask077 сделал tracked bootstrap нечитаемым для postgres — права только
+Git-tracked файлов исправлены, прежний DB container/volume сохранён и bootstrap
+выполнен после empty-state guard. Непривилегированные app images пересобраны из тех
+же source bytes; исходные pins не менялись. Исправлены stdin у команд без входа и
+Windows PowerShell explicit TLS1.2; причина исходного SystemDefault сбоя не доказана.
+
+**Решение C0, явно меняющее ошибочную host-инструкцию:** boot disk actual
+**auto_delete=true**. Standalone VM deletion-protection и in-place boot flag setter
+в проверенных интерфейсах отсутствуют; provider Terraform требует replacement.
+Для уже работающего синтетического TEST сохранить VM как есть, без нового ресурса/
+расхода/миграции ради переключателя. Это принятие известного риска, а не утверждение
+disk protection/backup: удаление VM удалит DB/files. IP protection отдельно PASS.
+Удаление/recreate/detach диска, down-v/reset сейчас не разрешены. Перед будущей
+заменой C0 готовит отдельное сохранение/проверку восстановления состояния; после
+потери state effects остаются выключены до Inbox/Outbox/provider reconciliation,
+UNKNOWN не resend. Production требования и M12 restore drill не отменяются.
+
+Стоимость прежней конфигурации **4735,81₽/30 суток** подтверждена Console estimate,
+не фиксированным счётом. Контроль расходов **2026-11-01** после VM creationOct2;
+ранее зарезервированный IP и неинвентаризированные прежние snapshots могут
+тарифицироваться отдельно. Snapshot schedule INACTIVE — owner receipt. Никакой
+автоматический spending cap/reminder/auto-delete этим документом не настроен.
+
+### Единственная ближайшая последовательность
+
+1. C0 завершает независимый **C8-M2-ENV-03-HOST** именно этих изменений/evidence;
+   сохраняет ограничения и устраняет конкретные blockers, если найдены. Предыдущий
+   C8-PROCEDURE Oct1 и отдельный PG-RECOVERY Oct2 — разные ограниченные reviews.
+2. Один согласованный docs commit в существующий PR23; финальный CI после него,
+   exact tested tree/checkout и checks в PR receipt. До PASS не снимать Draft.
+3. После PASS C0 даёт владельцу прямую ссылку и действие **обычный merge commit PR23**;
+   самостоятельно merge не выполняет. После сообщения о merge проверяет actual
+   main commit/tree и отдельный push/main CI; только тогда ENV03 INTEGRATED/VERIFIED.
+4. От принятого actual main C0 выдаёт одно готовое ограниченное C3/C6 поручение
+   **M2-LIVE-A09-A11**: private secret entry, preflight/binding/rights, Client text+image
+   → нужный Workspace/Owner Console/private image → manual reply → получение Client.
+   Пока не запускать §4–6, provision_telegram_test/setWebhook, не создавать Owner/billing
+   и не включать TG. Не запрашивать токены/пароли в чате/PR.
+
+Это prerequisite A07/A08/A09/A11/A12, не новая продуктовая матрица. M2 остаётся
+IN_PROGRESS до фактического Client scenario и успешного main CI. M1 и принятый
+M2.1–M2.4 code не переделывать; M3 не выдан. От владельца сейчас новые host-команды
+не требуются. История ниже не является текущими инструкциями.
+
+<details>
+<summary>История — поручение подготовки до actual host / 2026-10-01</summary>
+
+## Исторический handoff C0 → C6 — M2-ENV-03-TEST-HOST / 2026-10-01
 
 **IN_PROGRESS: процедура подготовлена; ожидается исполнение на одном внешнем TEST host.**
 2026-10-01 владелец подтвердил активный billing и созданный folder asm-telegram-test.
@@ -153,6 +251,8 @@ commands и реальные результаты по таблице, scoped re
 sanitized host/DNS/TLS/cost receipt. Невыполненные проверки назвать BLOCKED, без
 заявлений о ready host/live Telegram. PR оставить Draft до приёмки C0, не merge.
 Это один активный handoff; архивы ниже не текущие команды.
+
+</details>
 
 <details>
 <summary>История — приёмка PR #22 до actual merge / 2026-10-01</summary>
