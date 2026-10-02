@@ -29,7 +29,9 @@ non-secret результаты; account/billing/DNS права и ввод се
 а не утверждение, что внешняя инфраструктура уже развёрнута. Exact accepted source и
 статус внешней проверки берутся из единственного активного M2_HANDOFF/TASK_REGISTER.
 
-### 0.1. Предложение стенда с нуля — 2026-09-24
+### 0.1. История выбора стенда и бюджета — 2026-09-24–2026-10-01
+
+Этот раздел — snapshot планирования до создания VM; текущий host receipt — §0.4.9.
 
 **Вариант принят владельцем 2026-09-27; платный runtime ещё не создан.** Один Linux host в
 Yandex Cloud, регион Россия, исходно zone `ru-central1-a`, Ubuntu24.04 LTS/x86_64,
@@ -43,8 +45,10 @@ Yandex Cloud, регион Россия, исходно zone `ru-central1-a`, Ub
 пара clientmanagerai.ru/.com, корзина 200 ₽ +1560 ₽ на первый год. Автоматически
 добавленный Optimo исключён. Это историческая проверка корзины, не текущий статус.
 По сообщению владельца и ответу поддержки 2026-09-30 **.com зарегистрирован, NS Timeweb
-установлены**; **.ru ожидает проверки администратора/ЕСИА**. Независимая публичная
-DNS/HTTPS-проверка пока не выполнена. Повторно покупать домены или вводить паспортные
+установлены**; **.ru ожидает проверки администратора/ЕСИА**. Публичный DNS проверен C0 2026-10-01 через Google DNS-over-HTTPS:
+NS .com — ns1.timeweb.ru/ns2.timeweb.ru/ns3.timeweb.org/ns4.timeweb.org;
+две будущие A-записи console/files пока NXDOMAIN. NS .ru — NXDOMAIN у этого
+resolver, что не определяет внутренний статус ЕСИА/регистратора. TLS ещё не готов. Повторно покупать домены или вводить паспортные
 данные в чат/PR не требуется; обращение Timeweb продолжает сам владелец.
 
 **Принятая замена тестовых адресов от 2026-09-30:**
@@ -63,7 +67,7 @@ Storage public endpoint, TLS names и webhook URL согласуются с эт
 cookie domain не добавлять. .ru остаётся предпочтительным будущим основным доменом;
 перенос после smoke не выполняется автоматически. Это не смена Yandex RU/cloud ADR.
 
-Публичные cloud-цены проверены 2026-09-24, корзина выбранной пары — 2026-09-27;
+Публичные cloud-цены перепроверены 2026-10-01 (ставки не изменились), корзина выбранной пары — 2026-09-27;
 обычные свободные имена, без покупки у текущего владельца/премиум-цены. При изменении
 имён или стоимости перед оплатой зафиксировать отличие; hosting/дополнения не приняты.
 
@@ -99,26 +103,36 @@ synthetic данными. Это не смена ADR137/138/142/143/243: product
 private Object Storage и изоляция окружений остаются принятыми решениями. Подготовка
 production/Pilot не добавляется к существующим A09/A11.
 
-### 0.2. Последовательность C6 и действия владельца
+### 0.2. Текущий порядок после исполнения host — 2026-10-02
 
-1. **M2-ENV-01/02 приняты C0/C8 в REVIEW; пользовательский merge ещё впереди.**
-   Оба packages Public, полные anonymous OCI bytes совпали с build receipts.
-   Только две storage refs/pins переведены на exact GHCR digests. [обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856) SUCCESS:
-   492 unit/390 PostgreSQL-S3/111 frontend/27 browser; оба штатных scripts и source
-   gates PASS. Exact final head и обязательный CI после последнего изменения —
-   в PR22 receipt. Пользователь выполняет обычный merge commit по инструкции C0;
-   C0 проверяет actual merge и отдельный push/main CI, затем выдаёт следующий host
-   шаг. Повторно открывать packages/публиковать images или вводить PAT не нужно.
-   Раздел0.3 содержит текущие refs, границы evidence и команды воспроизведения.
-2. **Параллельно владелец продолжает существующий тикет Timeweb.** .com заявлен
-   зарегистрированным, .ru ждёт сверки данных; повторная покупка не нужна. Для smoke
-   достаточно работоспособного .com — ждать готовности .ru не требуется. Перед
-   переключением live режима C6 проверяет публичное делегирование .com, фактические
-   A-records обоих subdomains и доверенный TLS, а не только плашку панели регистратора.
-   После merge PR22 и отдельного успешного main CI выдаётся следующий account/billing/host
-   шаг в Yandex Cloud; наличие доступа агента заранее не предполагается. Не просить
-   пароли, паспортные данные или Telegram secrets в чат/PR.
-3. **После merge PR22, отдельного успешного main CI и нового handoff C0:** C6 в разрешённом Yandex TEST folder создаёт
+M2-ENV-01/02 интегрированы, runtime **80e51c43e31541940f1ccf18b8281adf1a061748**
+с separate main CI36825583134 SUCCESS. Один согласованный host уже работает,
+DNS/HTTPS/renewal и Telegram-disabled checks исполнены владельцем (§0.4.9).
+Не повторять создание ресурсов, ключей и env. C0 завершает scoped C8/final-head CI
+PR23, затем даёт обычный merge владельцу; после actual main CI выдаёт live A09/A11.
+Секреты, provisioning/binding/setWebhook/sends сейчас не нужны. .ru отдельно от
+работающего .com smoke; повторная покупка доменов и второй auth origin не требуются.
+
+<details>
+<summary>История — последовательность подготовки до исполнения host</summary>
+
+### Историческая последовательность C6 и действия владельца
+
+1. **M2-ENV-01/02 интегрированы и VERIFIED.** PR22 merged пользователем,
+   actual main **80e51c43e31541940f1ccf18b8281adf1a061748**, tree
+   **88ed308b4c56114aa977dcf91204964d9b7348e5** равен принятому final PR tree.
+   [Отдельный push/main CI36825583134, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/36825583134)
+   SUCCESS: оба jobs checkout actual merge;492 unit/390 PG-S3/111 frontend/27 browser,
+   оба штатных scripts/source gates. C8 packaging/pins PASS до merge; новых bytes нет.
+   Public packages/две refs приняты; повторный publish/PAT не нужен. Следующий
+   **M2-ENV-03-TEST-HOST**, exact scope — активный M2_HANDOFF; первая подготовка §0.4.
+2. **.com NS уже подтверждены публично; host/A-records/TLS ещё отсутствуют.**
+   .ru продолжает свой отдельный регистрационный путь; ждать его для .com smoke
+   не нужно. Account/billing/folder подтверждены владельцем2026-10-01; следующий
+   шаг — локальный SSH key/operator IP §0.4.1. Доступ к его
+   аккаунту у агента не предполагается; пароли/паспортные данные/ключи в чат не нужны.
+   Перед live C6 отдельно проверит оба A и trusted TLS, а не плашку панели Timeweb.
+3. **После доступности account/billing и подготовки точной процедуры C6:** C6 в разрешённом Yandex TEST folder создаёт
    ровно указанную VM/диск/IP после сверки итоговой цены. Настраивает non-root operator, SSH key admission, Docker
    Engine + Compose, синхронизацию времени. SSH22 — только с operator IP, HTTPS443 —
    публично; TCP80 нужен только для ACME HTTP-01. API8000/frontend8080 остаются loopback,
@@ -136,10 +150,12 @@ production/Pilot не добавляется к существующим A09/A11
    Точные команды с выбранными именами выдаются в этом runbook до выполнения; их запуск
    и успешный TLS пока не заявлены. Если агент не имеет доступа, владелец получает один
    последовательный блок команд с non-secret ожидаемыми результатами.
-6. **Далее §2–6 этого же runbook:** exact accepted implementation checkout, private
+6. **После отдельной приёмки host C0 — live §2–6 этого же runbook:** exact accepted implementation checkout, private
    secrets непосредственно от владельца, preflight/binding/setWebhook и Console live
    scenario. C6 возвращает sanitized runtime/DNS/TLS/billing receipt; C3 — фактические
    connection/rights/Client receipt. Только C0 принимает live A09/A11.
+
+</details>
 
 ## 0.3. Принятые storage artifacts и воспроизведение / 2026-10-01
 
@@ -147,7 +163,11 @@ production/Pilot не добавляется к существующим A09/A11
 Anonymous manifest/config/all-layer HTTP download подтверждён 2026-10-01; новый
 Docker pull и реальный runtime подтверждены отдельно [обычный CI 36823298856, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/36823298856). CI на implementation
 head **809d44c77b45d86b54750969db5b4a3ec411e0e3**, tree **42a17e82cae204a1f4a8d3f3bc3dcd798fc03cc8**, SUCCESS. Последнее изменение трёх
-документов требует своего полного CI; его exact receipt ведётся в [PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
+документов прошло отдельный final PR CI36824246755. PR #22 уже merged;
+actual main **80e51c43e31541940f1ccf18b8281adf1a061748**, tree
+**88ed308b4c56114aa977dcf91204964d9b7348e5**, [push/main36825583134](https://github.com/Elefesys/ai-service-manager/actions/runs/36825583134)
+SUCCESS, оба source gates PASS. Текущий статус — VERIFIED после интеграции;
+полная pre-merge история сохранена в [PR #22](https://github.com/Elefesys/ai-service-manager/pull/22).
 
 | Package | Принятый immutable linux/amd64 ref |
 |---|---|
@@ -207,7 +227,7 @@ Full layer descriptors/diffIDs — receipt PR #22; mismatch
 Storage workflow по-прежнему имеет только contents:read в build и временный
 packages:write в изолированном publisher; images повторно не публиковались.
 Source/ref bindings и полная история разрешённых packaging изменений — в handoff.
-VM/DNS/TLS/webhook/live Telegram — следующий шаг после merge и actual main CI.
+VM/DNS/TLS — текущая ограниченная задача C6; webhook/live Telegram — после приёмки host. Все внешние проверки ещё не исполнены.
 
 <details>
 <summary>История — прежний public access gate до действия владельца и CI</summary>
@@ -307,6 +327,755 @@ VM/DNS/TLS/webhook и live Telegram начинают только по след�
 
 </details>
 
+## 0.4. TEST host: процедура и actual receipt / 2026-10-02
+
+**Владелец подтвердил active billing и folder `asm-telegram-test` 2026-10-01.**
+Accepted runtime **80e51c43e31541940f1ccf18b8281adf1a061748**, tree
+**88ed308b4c56114aa977dcf91204964d9b7348e5**, push/main36825583134 SUCCESS.
+Задача M2-ENV-03-TEST-HOST: `c6/m2-test-host`, [Draft PR23](https://github.com/Elefesys/ai-service-manager/pull/23),
+сохранить coordination **1f42a617ed64bc6fd4dd573cd5c721d22a7bf256**.
+Прежняя account-инструкция выполнена; история сохранена в Git.
+
+**Процедура исполнена владельцем 2026-10-02; результаты и отклонения — §0.4.9.**
+Шаги создания ниже сохранены для воспроизведения и анализа, не для повторного
+запуска на действующем host. Текущее поручение — верхний активный M2_HANDOFF.
+Исправления umask/stdin/PowerShell внесены в текст; это не повторное исполнение
+всех команд и не изменение уже установленного renewal hook.
+Основной путь: Yandex Console → локальный Windows PowerShell/SSH → Bash на VM.
+Доступ агента к account/SSH не предполагается; владелец исполняет готовые шаги.
+Бюджет уже принят. Ошибка/existing resource — остановить блок и вернуть C6 marker,
+не повторять создание и не перезаписывать существующее. Этот §0.4 приоритетнее
+live примеров §2–6: Telegram остаётся выключенным.
+
+### 0.4.1. Первый шаг владельца — локальный SSH key и operator IPv4
+
+В обычном **Windows PowerShell на своём компьютере**:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+Get-Command ssh.exe, ssh-keygen.exe | Out-Null
+$asmKey = Join-Path $env:USERPROFILE '.ssh\asm-telegram-test'
+if ((Test-Path $asmKey) -or (Test-Path "$asmKey.pub")) {
+    throw 'ASM_KEY_EXISTS: не перезаписывать; сообщить C6'
+}
+New-Item -ItemType Directory -Force (Split-Path $asmKey) | Out-Null
+ssh-keygen.exe -t ed25519 -a 64 -C 'asm-telegram-test-owner' -f $asmKey
+if ($LASTEXITCODE -ne 0) { throw 'ASM_KEY_GENERATION_FAILED' }
+$asmOperatorIPv4 = (Invoke-RestMethod -Uri 'https://api.ipify.org?format=json').ip
+if ([System.Net.IPAddress]::Parse($asmOperatorIPv4).AddressFamily -ne
+    [System.Net.Sockets.AddressFamily]::InterNetwork) { throw 'IPV4_REQUIRED' }
+"SSH_KEY_READY; OPERATOR_CIDR=$asmOperatorIPv4/32"
+```
+
+На запрос passphrase задать парольную фразу, сохранить её в своём password manager.
+Файл **без `.pub` — private**, никуда не отправлять. `.pub` позднее загружается
+непосредственно Yandex. Вернуть C0 только marker и `OPERATOR_CIDR=…/32`.
+Если OpenSSH Client отсутствует — вернуть эту ошибку, C6 даст штатную установку.
+IP нужен с устройства оператора, не Cloud Shell/VM. Сеть/VPN до SSH не менять;
+при смене IP заменить только разрешённый `/32`, не открывать22 для всех.
+
+### 0.4.2. Точные ресурсы в Yandex Console
+
+Выбрать **folder `asm-telegram-test`**. До платных IP/VM готовы key, operator `/32`
+и выбранный folder. Создать последовательно через Virtual Private Cloud:
+
+| Раздел | Поля |
+|---|---|
+| Облачные сети → Создать | `asm-telegram-test-net`; «Создать подсети» выключено |
+| Подсети → Создать | `asm-telegram-test-a`; сеть выше; `ru-central1-a`; CIDR `10.73.0.0/24`; DHCP default; без route table/NAT |
+| Группы безопасности → Создать | `asm-telegram-test-sg`; сеть выше; только четыре правила ниже |
+| Публичные IP → Зарезервировать | `ru-central1-a`; защита от удаления включена; DDoS-опция выключена; без Cloud DNS; записать один IPv4 |
+
+| Направление | Протокол / порт | CIDR | Назначение |
+|---|---|---|---|
+| Входящий | TCP22 | `OPERATOR_CIDR` из §0.4.1 | Только SSH оператора |
+| Входящий | TCP443 | `0.0.0.0/0` | HTTPS |
+| Входящий | TCP80 | `0.0.0.0/0` | Временный Certbot HTTP-01 listener |
+| Исходящий | Любой / все | `0.0.0.0/0` | DNS/NTP, packages/registry/GitHub, ACME, будущий Telegram |
+
+Не прикреплять default SG: разрешения групп суммируются; пустое поле выбирает default.
+Никаких inbound5432/8000/8080/9000/9001/RDP/self-all. На80 приложение не запускается;
+между challenges порт не слушается. Outbound proxy/firewall design сейчас не вводится.
+
+Compute Cloud → Виртуальные машины → Создать:
+
+| Поле | Значение |
+|---|---|
+| Имя / зона | `asm-telegram-test-vm` / `ru-central1-a` |
+| Образ | Официальный Yandex Ubuntu24.04 LTS **x86_64/amd64**, без платного ПО; записать actual image ID |
+| Своя конфигурация | Intel Ice Lake `standard-v3`,2vCPU,100%,8GiB; обычная **непрерываемая** |
+| Boot disk | `asm-telegram-test-boot`, `network-ssd`,60GiB; Console default auto_delete=true, явное ограничение текущего TEST — ниже и §0.4.9 |
+| Сеть / подсеть | `asm-telegram-test-net` / `asm-telegram-test-a`; internalIPv4 автоматически |
+| PublicIP | «Список» → ранее зарезервированный staticIPv4, не «Автоматически» |
+| Security groups | Только `asm-telegram-test-sg` |
+| Доступ | SSH-ключ, логин **asmoperator**, ключ `asm-telegram-test-owner` → загрузить свой файл `.pub` |
+| Дополнительно | Без service account, Cloud Backup, KMS, ускоренной сети и дополнительных дисков |
+
+**Исправление C0 от 2026-10-02:** первоначальные указания включить защиту удаления
+отдельной VM и отключить auto-delete boot disk через Console были ошибочными.
+[Instance.Get](https://yandex.cloud/en/docs/compute/api-ref/Instance/get) не имеет
+instance deletion-protection, [CLI update](https://yandex.cloud/en/docs/compute/cli-ref/instance/update)
+и [Instance.Update](https://yandex.cloud/en/docs/compute/api-ref/Instance/update)
+не содержат boot setter. В официальном [Terraform provider source](https://github.com/yandex-cloud/terraform-provider-yandex/blob/master/yandex/resource_yandex_compute_instance.go)
+boot_disk.auto_delete имеет ForceNew=true. Общее описание Disks об изменении
+параметра не подтверждает безопасную in-place команду для boot disk.
+
+Actual read-only CLI на VM fhm53804pjetng9i46h2 показал **auto_delete=true**.
+Решение C0 для этого уже подготовленного синтетического TEST — сохранить работающий
+host и явно принять это ограничение, без пересоздания/отсоединения/новой VM или
+платного backup. Это **не** защита данных: удаление VM удалит DB/files. IP deletion
+protection относится только к адресу. Никакое удаление VM/boot/volumes сейчас не
+разрешено; перед будущей заменой требуется отдельный план сохранения/проверки
+состояния. При потере DB effects выключены до reconciliation; UNKNOWN не повторять.
+Новая VM не создаётся этим решением; production managed DB/files и backup/restore
+gates сохранены. Отсутствующий UI checkbox не является ошибкой владельца.
+
+Перед созданием сверить поля и оценку: около **4735,81₽/30 суток** за compute+SSD+IP,
+без грантов/доменов, в уже принятом бюджете. Существенное расхождение цены или иной
+SKU вернуть C0 до подключения. Оплата начинается с создания. Зафиксировать дату
+начала и следующую проверку расходов через30суток; никакого автоматического удаления.
+
+После RUNNING: карточка VM → **Последовательный порт → Исходные данные** → найти
+cloud-init **ED25519 host fingerprint** `SHA256:…`. Это ключ сервера, не пользователя.
+В локальном PowerShell:
+
+```powershell
+$asmPublicIPv4 = Read-Host 'Публичный IPv4 из карточки VM'
+if ([System.Net.IPAddress]::Parse($asmPublicIPv4).AddressFamily -ne
+    [System.Net.Sockets.AddressFamily]::InterNetwork) { throw 'IPV4_REQUIRED' }
+$asmKey = Join-Path $env:USERPROFILE '.ssh\asm-telegram-test'
+ssh.exe -o IdentitiesOnly=yes -o HostKeyAlgorithms=ssh-ed25519 `
+    -i $asmKey "asmoperator@$asmPublicIPv4"
+```
+
+На первом запросе `yes` только после совпадения server fingerprint; затем passphrase.
+При отсутствии fingerprint в cloud-init — C6 проверяет доверенный источник; не
+отключать host-key verification. Timeout: сверить operatorIP/SG, не расширять CIDR.
+Changed host key: выяснить причину, не удалять known_hosts вслепую.
+
+### 0.4.3. Ubuntu/Docker — Bash в SSH как asmoperator
+
+```bash
+set -euo pipefail
+test "$(id -un)" = asmoperator
+test "$(id -u)" -ne 0
+sudo cloud-init status --wait
+. /etc/os-release
+test "$ID" = ubuntu
+test "$VERSION_ID" = 24.04
+test "$(dpkg --print-architecture)" = amd64
+sudo timedatectl set-ntp true
+timedatectl show -p NTPSynchronized --value
+nproc
+free -h
+df -h /
+```
+
+Если cloud-init возвращает nonzero, остановить установку и передать только
+`cloud-init status --long` и `cloud-init schema --system`, без user-data/секретов.
+`|| true`, clean/rerun cloud-init и blanket игнорирование warning не разрешены.
+Для данного host C0 отдельно проверил единственный datasource warning (§0.4.9);
+это не общее разрешение игнорировать любые ошибки следующей VM.
+
+Ожидаются `yes`,2CPU, около8GiB RAM и согласованный диск. Если NTP ещё `no`, дождаться
+синхронизации, повторить read-only проверку. Затем официальный Docker apt repository:
+
+```bash
+set -euo pipefail
+if command -v docker >/dev/null || test -e /etc/apt/sources.list.d/docker.sources; then
+  echo EXISTING_DOCKER_REQUIRES_C6_CHECK; exit 1
+fi
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl git python3 openssl snapd
+sudo install -d -m 0755 /etc/apt/keyrings
+sudo curl --fail --silent --show-error --location https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod 0644 /etc/apt/keyrings/docker.asc
+sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<'EOF'
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: noble
+Components: stable
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker asmoperator
+exit
+```
+
+Войти снова предыдущей SSH командой. `docker info >/dev/null`, `docker version`,
+`docker compose version` должны работать без sudo; версии сохранить в receipt.
+Группа docker даёт administrative возможности на этом TEST host; других пользователей
+в неё не добавлять. SG — внешняя граница, UFW не подменяет контроль Docker ports.
+
+### 0.4.4. Exact private source без write PAT
+
+На VM создать временный **read-only deploy key**, отдельно от ключа входа:
+
+```bash
+set -euo pipefail
+umask 077
+test ! -e "$HOME/.ssh/asm_source_readonly"
+test ! -e "$HOME/.ssh/asm_source_readonly.pub"
+ssh-keygen -t ed25519 -a 64 -C asm-telegram-test-source -f "$HOME/.ssh/asm_source_readonly"
+cat "$HOME/.ssh/asm_source_readonly.pub"
+```
+
+Задать passphrase. В браузере private repository → **Settings → Deploy keys → Add**,
+title `asm-telegram-test-source`, вставить только показанный public key;
+**Allow write access не включать**. Затем в SSH, с pinned official GitHub host key:
+
+```bash
+set -euo pipefail
+umask 077
+test ! -e "$HOME/asm-telegram-test"
+test ! -e "$HOME/.ssh/asm_github_known_hosts"
+printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$HOME/.ssh/asm_github_known_hosts"
+export GIT_SSH_COMMAND='ssh -i /home/asmoperator/.ssh/asm_source_readonly -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/home/asmoperator/.ssh/asm_github_known_hosts -o HostKeyAlgorithms=ssh-ed25519'
+git init "$HOME/asm-telegram-test"
+cd "$HOME/asm-telegram-test"
+git config core.autocrlf false
+git remote add origin git@github.com:Elefesys/ai-service-manager.git
+git fetch --depth=1 origin 80e51c43e31541940f1ccf18b8281adf1a061748
+(umask 022; git checkout --detach 80e51c43e31541940f1ccf18b8281adf1a061748)
+test "$(stat -c %a .)" = 700
+test "$(stat -c %a .git)" = 700
+test "$(stat -c %a infra/postgres/bootstrap.sh)" = 644
+test "$(stat -c %a infra/storage/bootstrap.sh)" = 644
+test "$(git rev-parse HEAD)" = 80e51c43e31541940f1ccf18b8281adf1a061748
+test "$(git rev-parse HEAD^{tree})" = 88ed308b4c56114aa977dcf91204964d9b7348e5
+test -z "$(git status --porcelain --untracked-files=all)"
+printf '%s\n' EXACT_SOURCE_PASS
+unset GIT_SSH_COMMAND
+```
+
+Исправление umask: private checkout root/.git создаются при077; только checkout
+Git-tracked source выполняется с022, иначе container UID не прочитает bind/COPY.
+Секреты создаются позднее с077/600/700; рекурсивный chmod всего проекта запрещён.
+На существующем host не повторять checkout; выполненная guarded recovery — §0.4.9.
+
+После `EXACT_SOURCE_PASS` владелец удаляет **этот deploy key из GitHub Settings**;
+build использует локальный checkout и публичные pinned images. Private key остаётся
+вне repo/context; отзыв GitHub доступа важнее удаления локального файла. Ключ входа
+на VM сохраняется. Неудачный fetch не повод reset/reclone стенда: C6 разбирает ошибку.
+
+### 0.4.5. Pre-live файлы, DNS и TLS
+
+На VM в отдельном checkout:
+
+```bash
+set -euo pipefail
+cd /home/asmoperator/asm-telegram-test
+umask 077
+python3 scripts/init_local.py
+python3 - <<'PYENV'
+import os
+from pathlib import Path
+import stat
+value = Path('.env').lstat()
+assert stat.S_ISREG(value.st_mode) and value.st_uid == os.getuid()
+assert stat.S_IMODE(value.st_mode) == 0o600
+body = '''ASM_TELEGRAM_ENABLED=false
+ASM_TELEGRAM_CONSOLE_HOST=console.telegram-test.clientmanagerai.com
+ASM_TELEGRAM_STORAGE_HOST=files.telegram-test.clientmanagerai.com
+ASM_AUTH_ORIGINS='["https://console.telegram-test.clientmanagerai.com"]'
+ASM_STORAGE_ENDPOINT=https://files.telegram-test.clientmanagerai.com
+'''
+fd = os.open('.env.telegram', os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+with os.fdopen(fd, 'w') as stream:
+    stream.write(body)
+os.mkdir('.env.telegram.tls', 0o700)
+print('PRELIVE_FILES_CREATED')
+PYENV
+```
+
+Existing files сохраняются: не повторять этот create block. `init_local.py` сохраняет
+прежние DB/S3 passwords. `.env*` игнорируются Git и Docker. TG/owner secrets сейчас
+не нужны. Не делать `source .env*`, `set -x`, full `docker compose config`, `env`,
+`printenv` или full `docker inspect`. Рабочая функция **для каждого нового SSH shell**:
+
+```bash
+cd /home/asmoperator/asm-telegram-test
+export ASM_TELEGRAM_INGRESS_UID="$(id -u)"
+export ASM_TELEGRAM_INGRESS_GID="$(id -g)"
+tgcompose() {
+  docker compose --project-name asm-telegram-test \
+    --env-file infra/images.lock.env --env-file .env --env-file .env.telegram "$@"
+}
+tgcompose config -q
+```
+
+Timeweb → Домены → `clientmanagerai.com` → DNS:
+
+| Type | Имя относительно clientmanagerai.com | Значение | TTL |
+|---|---|---|---|
+| A | `console.telegram-test` | staticIPv4 VM | 600s либо ближайшее доступное |
+| A | `files.telegram-test` | **Тот же** staticIPv4 | То же |
+
+Не менять NS/MX/apex, не добавлять wildcard/AAAA/parking/proxy. При существующей
+конфликтующей записи сначала C6. Из локального PowerShell:
+
+```powershell
+Resolve-DnsName console.telegram-test.clientmanagerai.com -Type A -Server 1.1.1.1
+Resolve-DnsName files.telegram-test.clientmanagerai.com -Type A -Server 1.1.1.1
+Resolve-DnsName console.telegram-test.clientmanagerai.com -Type A -Server 8.8.8.8
+Resolve-DnsName files.telegram-test.clientmanagerai.com -Type A -Server 8.8.8.8
+```
+
+Ожидается ровно один выбранный IPv4. Resolver timeout проверяется C6 через другой
+public resolver/DoH, это не доказательство ошибки домена. TLS — после совпадения A.
+Один бесплатный SAN certificate на два имени, host Certbot Snap. В SSH:
+
+```bash
+set -euo pipefail
+if command -v certbot >/dev/null || snap list certbot >/dev/null 2>&1; then
+  echo EXISTING_CERTBOT_REQUIRES_C6_CHECK; exit 1
+fi
+sudo snap install --classic certbot
+sudo /snap/bin/certbot --version
+sudo ss -ltnp 'sport = :80'
+```
+
+`ss` должен показать только header, без listener. Затем:
+
+```bash
+sudo /snap/bin/certbot certonly --standalone --preferred-challenges http \
+  --cert-name asm-telegram-test \
+  -d console.telegram-test.clientmanagerai.com \
+  -d files.telegram-test.clientmanagerai.com
+```
+
+E-mail и условия Let's Encrypt вводятся непосредственно в terminal; в receipt e-mail
+не нужен. При ошибке challenge C6 проверяет DNS/80; не повторять production issuance
+сериями. Certbot временно слушает80, ingress443 при последующем renewal не останавливается.
+
+Root-owned deploy hook: active cert → прежние четыре600 файла в operator700 directory,
+затем nginx validation/reload существующего контейнера. Никаких новых repo scripts:
+
+```bash
+set -euo pipefail
+test ! -e /usr/local/sbin/asm-telegram-cert-deploy
+sudo tee /usr/local/sbin/asm-telegram-cert-deploy >/dev/null <<'HOOK'
+#!/bin/bash
+set -euo pipefail
+export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+asm_app=/home/asmoperator/asm-telegram-test
+asm_tls="$asm_app/.env.telegram.tls"
+asm_lineage=/etc/letsencrypt/live/asm-telegram-test
+test "${RENEWED_LINEAGE:-$asm_lineage}" = "$asm_lineage"
+asm_uid=$(id -u asmoperator)
+asm_gid=$(id -g asmoperator)
+for asm_dir in /home/asmoperator "$asm_app" "$asm_tls"; do
+  test -d "$asm_dir" && test ! -L "$asm_dir"
+  test "$(stat -c %u "$asm_dir")" = "$asm_uid"
+done
+test "$(stat -c %a "$asm_tls")" = 700
+for asm_name in console files; do
+  for asm_kind in fullchain key; do
+    asm_source=fullchain.pem
+    if test "$asm_kind" = key; then asm_source=privkey.pem; fi
+    asm_dest="$asm_tls/$asm_name.$asm_kind.pem"
+    test ! -L "$asm_dest"
+    asm_tmp=$(mktemp "$asm_tls/.renew.XXXXXXXX")
+    install -o "$asm_uid" -g "$asm_gid" -m 0600 "$asm_lineage/$asm_source" "$asm_tmp"
+    mv -fT "$asm_tmp" "$asm_dest"
+  done
+done
+asm_compose() {
+  runuser -u asmoperator -- env \
+    ASM_TELEGRAM_INGRESS_UID="$asm_uid" ASM_TELEGRAM_INGRESS_GID="$asm_gid" \
+    /usr/bin/docker compose --project-name asm-telegram-test \
+    --project-directory "$asm_app" -f "$asm_app/compose.yaml" \
+    --env-file "$asm_app/infra/images.lock.env" --env-file "$asm_app/.env" \
+    --env-file "$asm_app/.env.telegram" --profile telegram-live "$@"
+}
+if test -n "$(asm_compose ps --status running -q telegram-ingress)"; then
+  asm_compose exec -T telegram-ingress nginx -t
+  asm_compose exec -T telegram-ingress nginx -s reload
+  printf '%s\n' TLS_COPIED_AND_RELOADED
+else
+  printf '%s\n' TLS_COPIED_INGRESS_NOT_RUNNING
+fi
+HOOK
+sudo chmod 0755 /usr/local/sbin/asm-telegram-cert-deploy
+sudo chown root:root /usr/local/sbin/asm-telegram-cert-deploy
+sudo install -d -m 0755 /etc/letsencrypt/renewal-hooks/deploy
+test ! -e /etc/letsencrypt/renewal-hooks/deploy/asm-telegram-test
+sudo ln -s /usr/local/sbin/asm-telegram-cert-deploy /etc/letsencrypt/renewal-hooks/deploy/asm-telegram-test
+sudo /usr/local/sbin/asm-telegram-cert-deploy </dev/null
+```
+
+На первом bootstrap ожидается `TLS_COPIED_INGRESS_NOT_RUNNING`. Hook не меняет
+source/env и не запускает app. Key material/temporary files никогда не печатает.
+
+### 0.4.6. Exact ingress и запуск
+
+В SSH с function `tgcompose` из §0.4.5:
+
+```bash
+set -euo pipefail
+cd /home/asmoperator/asm-telegram-test
+umask 077
+set -o noclobber
+cat > .env.telegram.ingress.conf <<'NGINX'
+server {
+    listen 443 ssl default_server;
+    server_name _;
+    ssl_reject_handshake on;
+}
+server {
+    listen 443 ssl;
+    server_name console.telegram-test.clientmanagerai.com;
+    ssl_certificate /run/tls/console.fullchain.pem;
+    ssl_certificate_key /run/tls/console.key.pem;
+    access_log off;
+    error_log /dev/null;
+    client_max_body_size 256k;
+    location / {
+        proxy_pass http://frontend:8080;
+        proxy_set_header Host console.telegram-test.clientmanagerai.com;
+        proxy_request_buffering off;
+    }
+}
+server {
+    listen 443 ssl;
+    server_name files.telegram-test.clientmanagerai.com;
+    ssl_certificate /run/tls/files.fullchain.pem;
+    ssl_certificate_key /run/tls/files.key.pem;
+    access_log off;
+    error_log /dev/null;
+    client_max_body_size 11m;
+    location / {
+        proxy_pass http://storage:9000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header Connection "";
+        proxy_request_buffering off;
+    }
+}
+NGINX
+set +o noclobber
+python3 - <<'PYPRIV'
+import os
+from pathlib import Path
+import stat
+for name in ('.env', '.env.telegram', '.env.telegram.ingress.conf',
+             '.env.telegram.tls/console.fullchain.pem', '.env.telegram.tls/console.key.pem',
+             '.env.telegram.tls/files.fullchain.pem', '.env.telegram.tls/files.key.pem'):
+    value = Path(name).lstat()
+    assert stat.S_ISREG(value.st_mode) and value.st_uid == os.getuid()
+    assert stat.S_IMODE(value.st_mode) == 0o600
+value = Path('.env.telegram.tls').lstat()
+assert stat.S_ISDIR(value.st_mode) and value.st_uid == os.getuid()
+assert stat.S_IMODE(value.st_mode) == 0o700
+print('RUNTIME_FILES_PRIVATE_PASS')
+PYPRIV
+python3 - <<'PYINPUTS'
+import os
+inputs = (
+    'ASM_TELEGRAM_ENABLED', 'TG_BOT_TOKEN', 'TG_WEBHOOK_SECRET',
+    'ASM_TELEGRAM_EXPECTED_BOT_ID', 'ASM_TELEGRAM_WEBHOOK_URL',
+    'ASM_TELEGRAM_CONSOLE_HOST', 'ASM_TELEGRAM_STORAGE_HOST',
+    'ASM_AUTH_ORIGINS', 'ASM_STORAGE_ENDPOINT',
+)
+for name in inputs:
+    if name in os.environ:
+        raise SystemExit('EXPORTED_RUNTIME_INPUT_REQUIRES_C6_CHECK: ' + name)
+print('PRELIVE_ENVFILE_PRECEDENCE_PASS')
+PYINPUTS
+tgcompose config -q
+tgcompose build api worker scheduler frontend
+tgcompose --profile telegram-live up -d --no-build api worker scheduler frontend telegram-ingress
+tgcompose exec -T telegram-ingress nginx -t </dev/null
+```
+
+Guard до запуска исключает shell overrides над `.env.telegram`, не выводя их значения;
+он допускает необходимые INGRESS_UID/GID и ACCEPTED_SHA. При его отказе C6 проверяет
+указанное имя, сохраняет нужное private значение и очищает только конфликтующий
+export; не запускать stack поверх отказавшего guard.
+Не менять image refs, Compose, `ASM_ENVIRONMENT=LOCAL`, asm_local/private local bucket.
+Общий CI/browser script на persistent project **не запускать**: его disposable
+teardown не подходит сохраняемым volumes. TG остаётся false даже с profile telegram-live:
+название profile включает только TLS service, не разрешает webhook/bot execution.
+
+### 0.4.7. Readiness и возврат C0
+
+На VM, с тем же `tgcompose`. При передаче блока через `bash <<'MARKER'`
+команды без входных данных получают `</dev/null`: `compose exec -T` отключает TTY,
+но по умолчанию всё ещё читает stdin. Python-блоки ниже получают собственный heredoc.
+Отсутствие финального marker не считать успехом всего блока.
+
+```bash
+set -euo pipefail
+tgcompose ps -a
+for asm_service in migrate storage-init; do
+  asm_container=$(tgcompose ps -a -q "$asm_service")
+  test -n "$asm_container"
+  test "$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$asm_container")" = exited:0
+done
+tgcompose logs --no-color storage-init | grep -F STORAGE_PRIVATE_BOOTSTRAP_PASS
+for asm_service in api worker scheduler frontend postgres storage telegram-ingress; do
+  asm_container=$(tgcompose --profile telegram-live ps -q "$asm_service")
+  test -n "$asm_container"
+  test "$(docker inspect --format '{{.State.Running}}:{{.State.OOMKilled}}' "$asm_container")" = true:false
+done
+tgcompose exec -T api python - <<'PYOFF'
+import os
+from asm.telegram.config import TelegramSettings
+cfg = TelegramSettings()
+assert not cfg.enabled and not cfg.token.get_secret_value() and not cfg.webhook_secret.get_secret_value()
+assert os.environ['ASM_ENVIRONMENT'] == 'LOCAL'
+assert os.environ['ASM_AUTH_ORIGINS'] == '["https://console.telegram-test.clientmanagerai.com"]'
+assert os.environ['ASM_STORAGE_ENDPOINT'] == 'https://files.telegram-test.clientmanagerai.com'
+print('TELEGRAM_DISABLED_NO_SECRETS_EXACT_ORIGIN_PASS')
+PYOFF
+tgcompose exec -T api python - <<'PYHTTPS'
+import json
+import urllib.error
+import urllib.request
+base = 'https://console.telegram-test.clientmanagerai.com'
+with urllib.request.urlopen(base + '/health/ready', timeout=15) as response:
+    assert response.status == 200
+    assert json.load(response) == {'status': 'ok', 'component': 'database'}
+for path, status in [('/webhooks/telegram', 503), ('/webhooks/other', 404)]:
+    request = urllib.request.Request(base + path, data=b'{}', headers={'Content-Type': 'application/json'})
+    try:
+        urllib.request.urlopen(request, timeout=15)
+    except urllib.error.HTTPError as error:
+        assert error.code == status
+        if status == 503:
+            assert error.headers.get('Cache-Control') == 'no-store'
+            assert json.load(error) == {'error': {'code': 'UNAVAILABLE'}}
+    else:
+        raise AssertionError('WEBHOOK_UNEXPECTED_SUCCESS')
+try:
+    urllib.request.urlopen('https://files.telegram-test.clientmanagerai.com/asm-private-local?list-type=2', timeout=15)
+except urllib.error.HTTPError as error:
+    assert error.code == 403 and b'<Code>AccessDenied</Code>' in error.read()
+else:
+    raise AssertionError('BUCKET_PUBLIC')
+print('HTTPS_READY_WEBHOOK_DISABLED_PRIVATE_BUCKET_PASS')
+PYHTTPS
+tgcompose exec -T api python - <<'PYTLS'
+import json
+import socket
+import ssl
+expected = {'console.telegram-test.clientmanagerai.com',
+            'files.telegram-test.clientmanagerai.com'}
+context = ssl.create_default_context()
+for host in sorted(expected):
+    with socket.create_connection((host, 443), timeout=15) as connection:
+        with context.wrap_socket(connection, server_hostname=host) as secured:
+            certificate = secured.getpeercert()
+    names = {value for kind, value in certificate['subjectAltName'] if kind == 'DNS'}
+    assert names == expected
+    issuer = ', '.join(f'{key}={value}' for group in certificate['issuer'] for key, value in group)
+    print(json.dumps({'host': host, 'SAN': sorted(names),
+                      'issuer': issuer, 'notAfter': certificate['notAfter']}))
+# Disable hostname matching only in this negative SNI probe; keep CA trust.
+# A certificate-name mismatch or TCP failure must not count as SNI rejection.
+negative = ssl.create_default_context()
+negative.check_hostname = False
+try:
+    with socket.create_connection(('telegram-ingress', 443), timeout=15) as connection:
+        with negative.wrap_socket(connection, server_hostname='unexpected.telegram-test.invalid'):
+            raise AssertionError('UNKNOWN_SNI_ACCEPTED')
+except ssl.SSLError as error:
+    assert error.reason == 'TLSV1_UNRECOGNIZED_NAME', error.reason
+print('TRUSTED_TLS_SAN_UNKNOWN_SNI_PASS')
+PYTLS
+sudo /snap/bin/certbot renew --cert-name asm-telegram-test --dry-run --run-deploy-hooks --non-interactive </dev/null
+systemctl list-timers --all --no-pager | grep certbot
+free -h
+df -h /
+docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}'
+test -z "$(git status --porcelain --untracked-files=all)"
+```
+
+HTTPS/TLS probes внутри API используют принятые network aliases и тот же TLS endpoint,
+что signed-file provider, без предположения о NAT hairpin на собственный publicIP.
+Внешний путь проверяется отдельно с устройства оператора ниже.
+Dry-run success и `TLS_COPIED_AND_RELOADED` обязательны; test renew использует current
+active certificate, не staging cert. У timer должен быть будущий **NEXT**; при его
+отсутствии C6 чинит renewal. Повторить HTTPS block после reload. `free/df/stats` дают
+фактические ресурсы; OOM, build/exit error или недостаток диска не обходить.
+
+Из **локального PowerShell**, вне VM, с `$asmPublicIPv4`:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+$asmHealth = Invoke-RestMethod 'https://console.telegram-test.clientmanagerai.com/health/ready' -UseBasicParsing -TimeoutSec 15
+if ($asmHealth.status -ne 'ok' -or $asmHealth.component -ne 'database') {
+    throw 'EXTERNAL_READY_MISMATCH'
+}
+'EXTERNAL_HTTPS_READY_PASS'
+$asmRequest = [System.Net.HttpWebRequest]::Create('https://files.telegram-test.clientmanagerai.com/asm-private-local?list-type=2')
+$asmRequest.Method = 'GET'
+$asmRequest.Timeout = 15000
+$asmRequest.ReadWriteTimeout = 15000
+try {
+    $asmResponse = $asmRequest.GetResponse()
+    $asmResponse.Close()
+    throw 'EXTERNAL_PRIVATE_BUCKET_UNEXPECTED_SUCCESS'
+} catch [System.Net.WebException] {
+    $asmResponse = $_.Exception.Response
+    if ($null -eq $asmResponse) { throw 'EXTERNAL_PRIVATE_BUCKET_NO_HTTP_RESPONSE' }
+    $asmReader = New-Object System.IO.StreamReader($asmResponse.GetResponseStream())
+    try {
+        $asmBody = $asmReader.ReadToEnd()
+        if ([int]$asmResponse.StatusCode -ne 403 -or $asmBody -notmatch '<Code>AccessDenied</Code>') {
+            throw 'EXTERNAL_PRIVATE_BUCKET_DENIAL_MISMATCH'
+        }
+    } finally {
+        $asmReader.Dispose()
+        $asmResponse.Close()
+    }
+    'EXTERNAL_PRIVATE_BUCKET_DENIED_PASS'
+}
+foreach ($asmPort in @(22, 443, 5432, 8000, 8080, 9000, 9001)) {
+    $asmTcp = New-Object System.Net.Sockets.TcpClient
+    try {
+        $asmConnect = $asmTcp.ConnectAsync($asmPublicIPv4, $asmPort)
+        $asmOpen = $asmConnect.Wait(4000) -and $asmTcp.Connected
+    } catch { $asmOpen = $false }
+    finally { $asmTcp.Dispose() }
+    "TCP $asmPort open=$asmOpen"
+    if ($asmOpen -ne ($asmPort -in @(22, 443))) { throw "PORT_EXPOSURE_MISMATCH_$asmPort" }
+}
+```
+
+Windows PowerShell5.1: explicit TLS1.2 меняет только протокол этой сессии,
+проверка цепочки/hostname остаётся штатной. SystemDefault failure сам по себе не
+доказывает использование TLS1.0; не отключать certificate validation.
+
+Из operator сети22/443=True, остальные=False. Это **не** внешний deny22 от другого IP:
+C6 сверяет soleSG/`/32` в Console и по доступности независимый deny probe.
+Открыть Console браузером: trusted TLS/exacthostname/login screen, пока без credentials.
+C6 фиксирует выведенные оба SAN/issuer/notAfter, exact unknownSNI alert, A и оба private bucket deny.
+Signed file/authenticated cookie/journeys остаются следующему live шагу.
+
+После reboot автозапуск app не заявляется. Войти по тому же SSH, повторить function/
+UID/GID §0.4.5, затем `tgcompose --profile telegram-live up -d --no-build api worker scheduler frontend telegram-ingress`
+и readiness. Existing volumes сохраняются; `down -v`, init/reset/rebuild/смена secrets
+и слепой resend не нужны. Production systemd/IaC/SLA в эту задачу не добавляются.
+
+Receipt C0: VM/zone/imageID/resources/soleSG rules/staticIP; время начала и контроль
+расходов через30суток; sourceSHA/tree, Docker/Compose versions, markers/exit/health,
+private modes, DNS/SAN/expiry/renewal, externalports/browserlogin и ограничения.
+Не присылать `.env`, privatekeys, полные inspect/metadata/logs, signedURLs и личные
+account/billing сведения. Host checks должны быть фактически исполнены; commands
+и hostedCI не доказывают готовность этого host.
+
+**STOP до §4**: не создавать Owner/billing/live binding, не запускать
+`provision_telegram_test`, `setWebhook`, smoke sends и не вставлять TG secrets.
+C0 организует scoped C8 новых внешних границ и приёмку host, затем отдельно A09/A11.
+
+### 0.4.8. Первичные источники процедуры
+
+Сверены2026-10-01: [Yandex network](https://yandex.cloud/ru/docs/vpc/operations/network-create),
+[subnet](https://yandex.cloud/ru/docs/vpc/operations/subnet-create),
+[SG](https://yandex.cloud/ru/docs/vpc/operations/security-group-create),
+[staticIP](https://yandex.cloud/ru/docs/vpc/operations/get-static-ip),
+[VM](https://yandex.cloud/ru/docs/compute/operations/vm-create/create-linux-vm),
+[serial output](https://yandex.cloud/ru/docs/compute/operations/vm-info/get-serial-port-output),
+[Microsoft SSH keys](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_keymanagement),
+[ipify IPv4](https://www.ipify.org/), [Docker Ubuntu](https://docs.docker.com/engine/install/ubuntu/),
+[Docker operator group](https://docs.docker.com/engine/install/linux-postinstall/),
+[GitHub deploy keys](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys),
+[GitHub host key](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints),
+[Certbot Snap](https://certbot.eff.org/instructions?ws=other&os=snap),
+[Certbot hooks/dry-run](https://eff-certbot.readthedocs.io/en/stable/using.html),
+[Let's Encrypt HTTP-01](https://letsencrypt.org/docs/challenge-types/).
+Syntax/документационная сверка не являются исполнением на Windows/Yandex/VM.
+
+### 0.4.9. Фактическое исполнение и решения C0 — 2026-10-02
+
+**ENV03 REVIEW; приёмка host до live Telegram.** Ниже фактические очищенные выводы
+и screenshots владельца, проверенные C0. Агент не входил в облако/SSH и не заявляет
+независимое исполнение команд на VM. Обновление только трёх docs в PR23; source
+runtime/Compose/pins/tests и TG-disabled граница сохранены. Final C8/hash/scope и
+CI последнего docs head — в PR receipt; прежний static review не заменяет итоговый.
+
+| Объект | Наблюдение |
+|---|---|
+| Runtime source | HEAD80e51c43e31541940f1ccf18b8281adf1a061748; tree88ed308b4c56114aa977dcf91204964d9b7348e5; EXACT_SOURCE_PASS и повторный EXACT_SOURCE_STILL_CLEAN_PASS |
+| VM | asm-telegram-test-vm / fhm53804pjetng9i46h2; RUNNING; created2026-10-02T04:57:26Z; ru-central1-a; non-preemptible standard-v3,2vCPU100%,8GiB,60GiB network-ssd |
+| OS/image | Ubuntu24.04 amd64; official free ubuntu-2404-lts-oslogin-v20260928; description Ubuntu24.04 lts with oslogin v20260925040407. Source image ID виден в owner CLI screenshot; из неоднозначного OCR в команды не перенесён. OS Login по карточке выключен; имя образа этого не опровергает |
+| SSH/network | asmoperator, groups asmoperator/docker/google-sudoers; host ED25519 SHA256:wzX5xwbgPVPm9BkcmUFAjqa4cIP6wslSd4J0K23LO+A; private10.73.0.26; sole asm-telegram-test-sg; inbound22=31.135.48.89/32,80/443=0.0.0.0/0, outbound all; serial console off |
+| Public IP | Один static89.169.141.53, in use, deletion protection=true; DDoS option off. Это не VM/disk protection |
+| Boot state | asm-telegram-test-boot; auto_delete=true подтверждён Cloud Shell instance get+disk get. Safe setter не найден; явное TEST disposition §0.4.2. Не считать false/backup PASS |
+| Versions | Docker Engine/Client29.8.2, API1.56/min1.40; containerd2.3.6,runc1.5.1,docker-init0.19.0; Compose5.5.1; Certbot5.8.0; cloud-init26.1-0ubuntu1~24.04.1 |
+| DNS/TLS | console.telegram-test.clientmanagerai.com и files.telegram-test.clientmanagerai.com →89.169.141.53; exact two SAN; trusted Let's Encrypt YE2; expiry2026-12-31T07:42:21Z; no second origin |
+| Cert storage/renewal | /etc/letsencrypt/live/asm-telegram-test; private operator copies0600 in0700 directory; root-owned deploy hook. Dry-run --run-deploy-hooks success, TLS_COPIED_AND_RELOADED; nginx syntax/reload success. Timer NEXT был2026-10-02T22:18Z; повторный HTTPS PASS |
+| Cost | Console estimate4735,81₽/30суток, тот же принятый scope. Review date2026-11-01; не cap/autodelete. IP создан раньше VM. Snapshot schedule INACTIVE по владельцу; прежние snapshots/их charges отдельно не инвентаризированы |
+
+**Исполненные checks и их границы:**
+
+| Команда/assertion | Фактический результат |
+|---|---|
+| git rev-parse HEAD/tree + git status --porcelain; timedatectl | Exact accepted bytes/tree, source clean, NTPyes; повторено после renewal |
+| guarded source/PG recovery и rebuild прежних Dockerfiles | TRACKED_SOURCE_PERMISSIONS_PASS; EMPTY_ASM_BOOTSTRAP_STATE_PASS; PG_BOOTSTRAP_RECOVERY_PASS; BACKEND_SOURCE_READABLE_PASS; FRONTEND_SOURCE_READABLE_PASS; POSTGRES_CONTAINER_AND_VOLUME_PRESERVED_PASS |
+| Compose inspect restricted fields + storage-init log marker | migrate/storage-init exited:0, private bootstrap PASS; api/worker/scheduler/frontend/postgres/storage/ingress running:true/OOMfalse; api/PG/storage healthy |
+| API TelegramSettings/env assertions без вывода значений | cfg.enabled=false, TG token/secret empty; ASM_ENVIRONMENT=LOCAL; exact console origin + files endpoint; TELEGRAM_DISABLED_NO_SECRETS_EXACT_ORIGIN_PASS |
+| urllib HTTPS probes inside API network aliases | health200 exact status:ok/component:database; Telegram webhook503 exact UNAVAILABLE/no-store; other webhook404; private bucket403+AccessDenied; HTTPS_READY_WEBHOOK_DISABLED_PRIVATE_BUCKET_PASS |
+| ssl.create_default_context + two SAN + specific unknown-SNI error | TRUSTED_TLS_SAN_UNKNOWN_SNI_PASS; CA trust retained, unexpected hostname получил TLSV1_UNRECOGNIZED_NAME. Это реальный ingress через внутренний alias; внешний путь проверен отдельно |
+| Certbot renew --cert-name asm-telegram-test --dry-run --run-deploy-hooks --non-interactive с закрытым stdin; nginx -t/reload | All simulated renewals succeeded; копии active certificate перезагружены, staging certificate не установлен. Строки nginx в hook stderr сами по себе не failure |
+| Windows PowerShell5.1.26100.9444, explicit TLS1.2; ready/private bucket/TCP | EXTERNAL_HTTPS_READY_PASS, EXTERNAL_PRIVATE_BUCKET_DENIED_PASS, EXTERNAL_HOST_CHECKS_PASS;22/443 openTrue;5432/8000/8080/9000/9001 openFalse |
+| Browser console URL | Trusted HTTPS/login page без TLS interstitial; login не выполнялся, auth/signed file journey не заявлен |
+| post-renewal exact source/NTP/TG/HTTPS + free/df/stats | POST_RENEWAL_HOST_CHECKS_PASS;7.8Gi total/1.1Gi used/6.7Gi available, swap0; disk58G/5.7G used/52G available. Idle TEST snapshot, не нагрузочная оценка |
+
+**Разбор и исправления выполненной процедуры:**
+
+1. `cloud-init status` вернул2, done/degraded, errors пуст, единственный warning
+   schema: datasource additional property. `cloud-init schema --system` подтвердил
+   этот user-data issue, network-config valid; C0 сверил конкретное datasource
+   Ec2/strict_id:false и отсутствие иных errors перед продолжением Docker install.
+   Warning остаётся; cloud-init clean/rerun и изменения network/SSH/user-data не
+   выполнялись. Это ограниченное решение для наблюдённого warning, не ignore-all.
+2. Первый checkout под umask077 дал tracked bootstrap0600. PG initdb+CREATE DATABASE
+   успели выполниться, затем OS user postgres получил Permission denied при source
+   неизменённого bootstrap; Exit1/OOMfalse. Это ошибка host-процедуры, не миграций.
+   C0 и отдельный C8 проверили bounded recovery: exact HEAD/tree/clean/private modes;
+   только tracked regular files→644/755 и их dirs→755 при root/.git700/env600/TLS700;
+   тот же container/volume; отсутствие asm roles/schemas/user relations до bootstrap;
+   исходный bootstrap в транзакции ON_ERROR_STOP и postchecks roles/extensions/TCP
+   auth/timeouts. Все три recovery markers PASS. Reset/down-v не применялись.
+3. App images rebuilt после исправления файлов из тех же accepted bytes/locks;
+   source readability проверена как non-root backend10001 и frontend nginx. PG
+   container+mounts сохранены. Будущий checkout теперь ограничивает umask022 только
+   tracked files внутри private root; chmod секретов/всего проекта запрещён.
+4. Первый составной startup block закончился после nginx-t без конечных checks.
+   `compose exec -T` по умолчанию читает stdin и может забрать остаток внешнего
+   `bash <<...`; поведение child reader воспроизведено локально. Это объяснение
+   совместимо с наблюдением, точный Docker stdin trace не снимался. Исправленная
+   readiness с `</dev/null` для no-input commands исполнена целиком, все markers
+   получены. Certbot dry-run также noninteractive/closed stdin. Установленный hook
+   не переписывался; его вызов с закрытым stdin и reload фактически проверены.
+5. PowerShell SystemDefault сначала дал unexpected error on send. Явный TLS1.2
+   дал PASS без bypass CA/hostname. Конкретная первопричина SystemDefault не
+   установлена; утверждать, что Windows использовал TLS1.0, нельзя.
+6. Cloud protection instructions исправлены явно §0.4.2: boot auto_delete=true —
+   фактическое ограничение принятого TEST, не скрытый PASS. До будущего удаления/
+   замены требуется отдельный preservation plan; после потери state никаких
+   слепых replay/новых ключей вместо recovery. Пересоздание текущего host не нужно.
+
+**Review boundary:** C8-M2-ENV-03-PROCEDURE Oct1 проверял статически исходный runbook
+hash96d2c128b9d51c9665a7d03d4fed1f239340c910eaa345f8afbf53f968314066;
+C8-PG-RECOVERY Oct2 — конкретный recovery script
+hashfbd57c1e508d8d6afee18a7468ab045fc37ae3b095124ef75ea7bf4dfe623267.
+Новый C8-M2-ENV-03-HOST проверяет готовые изменения и фактический operator receipt;
+его статус/hash находятся в PR23. Не выдавать прошлый static PASS за actual host review.
+SSH deny с независимого IP, backup/restore, restart автозапуск, нагрузка, authenticated
+Console/signed image и live A09/A11 не исполнены этим receipt. После reboot действует
+ручной state-preserving start §0.4.7; background autopilot/production SLA не заявлен.
+
+Следующий gate — C8 и final-head CI → merge PR23 владельцем → actual push/main CI,
+затем отдельно live поручение. TG secrets/Owner/billing/binding/setWebhook/sends
+пока не вводить и не выполнять. M2 IN_PROGRESS, M3 не выдан.
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker
@@ -318,8 +1087,10 @@ synthetic Workspace. Это изолированный LOCAL deployment (`asm_lo
 
 Нужны заранее:
 
-- Один точный **принятый implementation SHA из PR receipt**, не coordination/base SHA.
-  Отдельный checkout этого SHA и штатные успешные CI/gates на принятом head.
+- Один точный **принятый runtime SHA из активного handoff**: сейчас actual main
+  **80e51c43e31541940f1ccf18b8281adf1a061748** после merge PR22 и отдельного main CI.
+  Отдельный clean checkout; будущий docs-only coordination commit не заменяет
+  эту проверенную версию приложения.
 - Non-root operator account с разрешённым доступом к Docker. Свои
   `console.telegram-test.example.net` и `files.telegram-test.example.net`:
   заменить оба example имени во всех примерах ниже на свои. DNS обоих имён ведёт
@@ -338,6 +1109,8 @@ synthetic Workspace. Это изолированный LOCAL deployment (`asm_lo
 можно рассматривать только после отдельного предложения конкретной стоимости.
 
 ## 2. Exact code и непосредственная инъекция секретов
+
+**Live шаг после приёмки host. Для M2-ENV-03 брать pre-live env из §0.4 и остановиться до §4.**
 
 В отдельном checkout оператор подставляет принятую 40-символьную SHA:
 
@@ -406,8 +1179,9 @@ ASM_TELEGRAM_SMOKE_KEY=
 ASM_TELEGRAM_SMOKE_APPROVAL=
 ```
 
-Оператор выбирает **явный конечный текущий TEST interval**, меняя обе example даты
-до первого setup; при exact repeat сохраняет их. Не подставлять новый `now()` при
+Перед live setup C6 задаёт **явный конечный текущий TEST interval**, заменяет обе
+example даты в готовой инструкции и фиксирует их один раз; оператор не выбирает
+billing policy. При exact repeat даты сохраняются. Не подставлять новый `now()` при
 каждом повторе. Old M1 `test` plan не обновляется: нужен Workspace **без billing**,
 для которого provisioner создаёт фиксированный `test_messaging` revision1,
 BOOLEAN `messaging.manual_send=true`, ESSENTIAL, ACTIVE+COMPED/NORMAL и Audit.
