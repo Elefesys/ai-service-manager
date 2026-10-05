@@ -1114,6 +1114,22 @@ observer/pg_blocking_pids, release после DB deadline и отказ без e
 Независимый targeted C8 и exact implementation CI приведены в активном handoff;
 final head/CI документационной приёмки — в PR receipt. Принятый scope §10 сохраняется.
 
+### 10.12. Operational extension — M2-ENV-04 TEST egress
+
+C0 разрешил отдельный opt-in overlay на принятом Xray26.9.9 digest (runbook§0.6),
+без изменения §§10.1–10.11/domain/API/app. Callers ровно api/worker/telegram-operator;
+official api.telegram.org сохраняет TLS/SNI и фиксируется на устойчивом private IP
+для A/AAAA, включая stop/recreate. Relay opaque TCP, non-root/read-only/default deny,
+один выбранный VLESS/TCP/REALITY/Vision connection, без direct/DNS target fallback,
+sniffing, TLS termination, HTTP retries или TG/DB/S3 credentials. Scheduler прежний.
+Timeout/retry/permission/media/private-S3/UNKNOWN semantics неизменны; relay health
+не является auth/DB readiness или разрешением send. Подготовка проверяет exact Git
+blobs, private files, image/config и непересекающийся IPAM; runtime остаётся disabled.
+Rollback сначала выключает Telegram с mapping, затем снимает route, сохраняя durable
+state/receipts/env/volumes. E01–E06 проверяются настоящими Docker/PG/S3 и controlled
+TLS wire; fixture CA/peer не входят в live config. Самостоятельного live включения
+нет; C0 выдаёт deployment после scoped C8/final CI. ADR239/production/M3 не изменены.
+
 ## 11. M2.4-CONSOLE — текущий ограниченный UI/browser-контракт
 
 Принят C0 для последовательной выдачи C5 от integrated API/base

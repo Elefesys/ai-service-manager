@@ -280,6 +280,73 @@ def test_rollback_disables_first_retains_other_private_bytes_and_never_resets(
     assert json.loads((tmp_path / "rollback.json").read_bytes())["telegram_disabled"] is True
 
 
+def test_docker_mount_order_is_not_drift_but_every_mount_field_remains_guarded(monkeypatch):
+    state = {"project": "fixture", "image_id": "relay-image", "subnet": "10.203.0.0/28"}
+    containers = []
+    for name in ("api", "worker", "postgres", "storage", "telegram-egress"):
+        containers.append(
+            {
+                "Id": name,
+                "Image": "relay-image" if name == "telegram-egress" else "image",
+                "Config": {
+                    "Labels": {"com.docker.compose.service": name},
+                    "Env": ["ASM_TELEGRAM_ENABLED=false"],
+                },
+                "Mounts": [],
+                "NetworkSettings": {
+                    "Networks": {
+                        "fixture_default": {"Gateway": "172.18.0.1"},
+                        "fixture_telegram-egress": {"IPAddress": "10.203.0.2"},
+                    }
+                },
+            }
+        )
+    mounts = [
+        dict(
+            Type="volume", Name="fixture_pgdata", Source="/vol/data", Destination="/data", RW=True
+        ),
+        dict(
+            Type="bind",
+            Name=None,
+            Source="/source/bootstrap.sh",
+            Destination="/bootstrap.sh",
+            RW=False,
+        ),
+    ]
+    containers[2]["Mounts"] = copy.deepcopy(mounts)
+    monkeypatch.setattr(
+        egress,
+        "checked_model",
+        lambda *_: {"services": {name: {"environment": {}} for name in ("api", "worker")}},
+    )
+    monkeypatch.setattr(egress, "compose_prefix", lambda *_: ["compose"])
+    monkeypatch.setattr(egress, "source_image_check", lambda *_: None)
+
+    def inspect(args, **_):
+        if args == ["compose", "ps", "-q"]:
+            return b"api worker postgres storage telegram-egress"
+        assert args[:2] == ["docker", "inspect"]
+        return egress.encoded(containers)
+
+    monkeypatch.setattr(egress, "command", inspect)
+    before = egress.snapshot(state, Path("/unused"))
+    containers[2]["Mounts"].reverse()
+    after = egress.snapshot(state, Path("/unused"))
+    assert before == after
+    egress.compare_deployment(before, after, state)
+    for field, changed in {
+        "Type": "bind",
+        "Name": "other",
+        "Source": "/other",
+        "Destination": "/other",
+        "RW": False,
+    }.items():
+        containers[2]["Mounts"] = copy.deepcopy(mounts)
+        containers[2]["Mounts"][0][field] = changed
+        with pytest.raises(egress.EgressError, match="EGRESS_UNRELATED_CONTAINER_CHANGED"):
+            egress.compare_deployment(before, egress.snapshot(state, Path("/unused")), state)
+
+
 def test_cli_never_prints_provider_exception_or_secret(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(egress.os, "getuid", lambda: 1000)
     monkeypatch.setattr(

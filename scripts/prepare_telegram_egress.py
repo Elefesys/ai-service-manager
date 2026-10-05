@@ -674,10 +674,15 @@ def snapshot(state, directory, *, disabled=True):
             "process_sha256": sha(
                 encoded({k: container["Config"].get(k) for k in ("Cmd", "Entrypoint", "User")})
             ),
-            "mounts": [
-                {k: m.get(k) for k in ("Type", "Name", "Source", "Destination", "RW")}
-                for m in container["Mounts"]
-            ],
+            # Docker constructs this array from a Go map: order is not identity.
+            # Preserve every mount/field, including duplicates, in canonical order.
+            "mounts": sorted(
+                [
+                    {k: m.get(k) for k in ("Type", "Name", "Source", "Destination", "RW")}
+                    for m in container["Mounts"]
+                ],
+                key=encoded,
+            ),
             "networks": {
                 k: {v: n.get(v) for v in ("IPAddress", "Gateway")}
                 for k, n in container["NetworkSettings"]["Networks"].items()

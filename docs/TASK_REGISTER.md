@@ -2,11 +2,11 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — bot identity подтверждена; TEST egress / 2026-10-05
+## Текущий статус — TEST egress REVIEW / 2026-10-05
 
 **M2 остаётся IN_PROGRESS.** M1 и код M2.1–M2.4 приняты в прежнем LOCAL/TEST scope;
 реальная переписка A09/A11 ещё не завершена. Единственная ближайшая implementation
-задача — **M2-ENV-04-TELEGRAM-EGRESS**, C6 с контрактным участием C3, затем scoped C8.
+задача — **M2-ENV-04-TELEGRAM-EGRESS — REVIEW**, C6 с участием C3; далее scoped C8.
 Это ограниченное устранение подтверждённого сетевого blocker существующего TEST,
 не новый Telegram adapter, production VPN или M3.
 
@@ -16,8 +16,10 @@ branch **c6/m2-telegram-live → main**. Accepted base/main:
 **c30415b48a08dabac6a59f1294843a0bd25ff353**;
 [push/main37016012805](https://github.com/Elefesys/ai-service-manager/actions/runs/37016012805)
 SUCCESS. Сохранить первый coordination commit
-**e58c4a1a731ad238ccf9a79e6c478969642cd088**. Точный текущий coordination head/tree и
-его CI указываются в PR receipt/выданном C0 сообщении; не делать SHA-only commits.
+**e58c4a1a731ad238ccf9a79e6c478969642cd088** сохранён. Старт реализации:
+**dbfba47a3d92bcee258f5ab490384f496e16a217**, tree
+**8a0ac1988f8479f72d882bca53ed53c1ea63c216**, CI37270554509 SUCCESS.
+Final head/tree/tested merge и final CI фиксируются в PR receipt без SHA-only commits.
 VM checkout и application image остаются от **80e51c43e31541940f1ccf18b8281adf1a061748**,
 tree **88ed308b4c56114aa977dcf91204964d9b7348e5**. Документационный head не выдавать
 за фактически развёрнутое приложение.
@@ -49,7 +51,17 @@ operator route должен сохранить TLS, official origin, deadlines �
 Scheduler route не нужен по проверенному текущему коду. ADR239 остаётся принят:
 этот временный synthetic TEST путь не разрешает production Client traffic.
 
-Пока **не выполнены** постоянный route/deployment, external connection discovery,
+C6 опубликовал opt-in overlay, private generator и обязательный real Docker lane.
+[Implementation CI37279935914](https://github.com/Elefesys/ai-service-manager/actions/runs/37279935914)
+SUCCESS: шесть новых relay/PG/S3 cases плюс held-state deploy/preflight/rollback,
+525 unit/390 прежних PostgreSQL-S3/111 frontend/27 browser; оба scripts и clean-source
+gates PASS. UNKNOWN и persistent send counter1 сохраняются после restart/rollback.
+В итоговую дельту также вошла canonical ordering Docker mounts (все поля и проверки
+сохранены) с отдельной regression; новые unit cases теперь34. Final-head CI/refs
+должны быть SUCCESS и сверены в PR24 receipt до C0/C8 acceptance. Procedure и mapping
+E01–E06 — runbook§0.6.4–0.6.5. App/старые assertions сохранены, owner VM не изменялась.
+
+Пока **не выполнены** owner deployment подготовленного route, external connection discovery,
 atomic billing/binding, webhook и реальный Client text+photo → Console/private image →
 manual reply → Client receipt. ENV04 требует real Docker/PG boundary evidence,
 полного CI и независимого scoped C8 до инструкции владельцу по deployment. GetMe
@@ -150,7 +162,7 @@ M3 не выдан. Секреты не присылать в чат/PR. Нов�
 | M2-ENV-01-REGISTRY | Восстановить storage provisioning и полный CI | M2.4; pull failure PR22 | C6; C0/C8 | VERIFIED | PR22 merged80e51c4; scoped C8 PASS; отдельный push/main36825583134 SUCCESS, оба scripts/source gates и реальные PG/S3/browser | Сохранять проверенные GHCR pins; registry blocker CLOSED |
 | M2-ENV-02-STORAGE-IMAGES | Два exact official binary в project-owned images | Решение C0 о новой упаковке | C6; C0/C8 | VERIFIED | Build36734267078; anonymous full OCI bytes; scoped C8; final PR36824246755 и actual main36825583134 SUCCESS | Не пересобирать и не менять visibility/pins без причины |
 | M2-ENV-03-TEST-HOST | Один TEST host/.com DNS/HTTPS до Telegram connection | Actual main80e51c4 + host evidence | C6; C0; independent C8 | VERIFIED | PR23 merged22993f5; main37016012805 SUCCESS; C8-HOST PASS; operator host/HTTPS/private403/renewal receipt; известные TEST ограничения сохранены | Закрыто только pre-live host; продолжить M2-LIVE-A09-A11 |
-| M2-ENV-04-TELEGRAM-EGRESS | Opt-in постоянный synthetic TEST route для Telegram callers | ENV03; temporary TLS/fail-closed/getMe PASS; C0 bounded scope | C6; C3 contract; C0/C8 review | IN_PROGRESS | Поручение принято/выдано, код/CI/deployment не выполнены; PR24 Draft | Реализация E01–E06, real Docker/PG evidence, full CI и scoped C8 до operator deployment |
+| M2-ENV-04-TELEGRAM-EGRESS | Opt-in постоянный synthetic TEST route для Telegram callers | ENV03; temporary TLS/fail-closed/getMe PASS; C0 bounded scope | C6; C3 contract/tests; C0/C8 review | REVIEW | PR24 Draft; implementation CI37279935914 SUCCESS,7 новых real boundary assertions; final-head refs/CI — PR receipt; runbook§0.6.4–0.6.5 | C0 проверяет final CI и организует scoped C8; затем отдельно выдаёт owner deployment |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 

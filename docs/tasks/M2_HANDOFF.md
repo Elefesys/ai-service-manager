@@ -6,11 +6,11 @@
 
 ## Активный handoff C0 → C6/C3 — M2-ENV-04-TELEGRAM-EGRESS / 2026-10-05
 
-**IN_PROGRESS — выдана реализация, не выполнена.** Единственная ближайшая задача:
+**REVIEW — реализация и synthetic evidence передаются C0.** Единственная задача:
 воспроизводимый opt-in egress только для существующего synthetic LOCAL/TEST Telegram.
 Прямой outbound с VM timeout; temporary official-Xray route и exact-client getMe
-фактически PASS. Постоянного подключения API/worker/operator пока нет. C0 принимает
-ограниченный infra remedy; ADR239/production и scope M2 не пересматриваются.
+фактически PASS. Opt-in route реализован в PR; на owner VM он ещё не развёрнут.
+ADR239/production и scope M2 не пересматриваются.
 
 ### Repository, base и продолжение
 
@@ -128,6 +128,73 @@ Synthetic CI проверяет реальный relay/transport с тестов
 по GitHub runtime80e51c4 проверены consumers/scheduler, media и conservative UNKNOWN.
 Это не C8 и не review готовой реализации. C0 назначит независимый scoped C8 после
 готового diff/evidence E01–E06; только затем выдаст владельцу deployment block.
+
+### C6 implementation receipt — ENV04
+
+Начало реализации — exact coordination **dbfba47a3d92bcee258f5ab490384f496e16a217**,
+tree **8a0ac1988f8479f72d882bca53ed53c1ea63c216**, CI37270554509 SUCCESS. Первый
+coordinatione58c4a1 и вся последующая история сохранены; force-push/merge не было.
+
+Изменены ровно12 разрешённых paths: три `infra/telegram-egress/{compose.yaml,
+compose.test.yaml,image.lock.env}`, `scripts/{prepare_telegram_egress.py,
+test_telegram_egress.sh,ci.sh}`, два новых `tests/test_telegram_egress{,_postgres}.py`
+и четыре текущих документа register/handoff/runbook/contract. Старый direct-wire
+test импортируется без edits. App/frontend/base Compose/workflows/старые pins,
+dependencies, API contracts и migrations0001–0007 byte-unchanged.
+
+Private /28 выбирается с проверкой Docker/host routes; нижняя половина резервируется
+для fixed endpoints, dynamic allocation — верхняя /29. Callers сохраняют обычный
+gateway и получают official-host IPv4/IPv4-mapped IPv6; scheduler не меняется.
+Generated relay имеет только fixed dokodemo-door и один выбранный VLESS connection,
+default blackhole, без target sniffing/fallback/HTTP retries/TLS termination.
+Profile600/parent700 и generated state вне checkout; pinned binary проверяет config
+с network none. Canonical client/config проверяются как exact Git blobs в checkout
+и actual application/operator images. Два publisher VOLUME закрыты read-only tmpfs.
+
+E05 использует настоящий CLI deploy/preflight/rollback и private container/image/
+mount/env-hash receipts. Fixtures удерживают canonical UNKNOWN, Console auth session
+и command receipt; read-only snapshot сравнивает все строки app/platform до/после,
+включая IDs/dates/fingerprints. Runtime выключается до снятия mapping. Операторская
+процедура подготовлена в runbook§0.6.4; выдаёт её владельцу только C0 после scoped C8.
+
+Диагноз промежуточных failures зафиксирован без удаления старых проверок:
+
+- Точное поле pinned binary — `Password (PublicKey)`; parser исправлен по publisher
+  source. Реальный Compose представляет пустую network mapping как `{}`; проверка
+  модели согласована с этим output, static-IP reservation добавлена явно.
+- One-shot storage bootstrap выполняется до exit0 отдельно от health/running wait.
+- Xray26.9.9 запрещает private VLESS target по умолчанию. Только synthetic peer
+  допускает exact fixture /32/TCP443; actual relay не получает freedom/исключение.
+- CI37277576724: browser PASS, foundation6 new failures. Cause — synthetic CA без
+  keyUsage при default Python3.13 VERIFY_X509_STRICT; exact OpenSSL strict probe
+  воспроизвёл error92. Добавлены корректные RFC5280 extensions и строгая precheck;
+  wrong-host требует code62. Client trust/тайм-ауты/защитные assertions не ослаблены.
+- CI37279250778 на506be1a: все6 relay/PG/S3 wire cases PASS, browser PASS; E05
+  остановился. Старый driver потерял bounded stdout code: точная причина того exit
+  ретроспективно не доказана. Исправлена сохранность code/stage без private data.
+- C3 нашёл отдельную доказанную нестабильность: Moby `GetMountPoints()` строит список
+  из Go map без порядка. Snapshot теперь сортирует полные Type/Name/Source/Destination/
+  RW records, сохраняя все mounts и assertions. Regression допускает перестановку,
+  но по-прежнему отвергает изменение каждого поля. Это не разрешение volume drift.
+
+**Implementation CI37279935914 — SUCCESS** на
+**4c2dc7deffe1b115cdd32a321bd1c89a5d3f6e3b**, tree
+**f10c64c68a122994ce0fd58dc9b918e6867d71b9**. Tested virtual merge:
+**0e91a57a6611b1a4c610b21f692b7724e666abf0**, то же tree, ordered parents — accepted
+main22993f5 и implementation4c2dc7d. Реально выполнены6 wire cases и1 held-state
+rollback case, deploy/preflight/rollback CLI markers,525 unit/390 прежних PostgreSQL-S3/
+111 frontend/27 browser, migration/contract/reproducibility/smoke и оба clean-source
+gates. [Run](https://github.com/Elefesys/ai-service-manager/actions/runs/37279935914).
+После этого добавлена указанная mount-order regression (34 новых unit PASS locally)
+и согласованы четыре документа. **Их final head требует отдельного полного CI**;
+его exact receipt закрепляется в PR24 до передачи C0. Старый successful SHA не
+выдаётся за tested SHA итогового diff; SHA-only commits для receipt не создаются.
+
+Mapping E01–E06 к конкретным assertions/commands — runbook§0.6.5; final head/tree,
+tested virtual merge/parents, run и artifact receipt закрепляются в PR24. Новые
+runtime secrets/config/key files не входят в source/build/reports. CI использует
+только synthetic fixtures на обычном GitHub runner; локального Docker нет.
+C3 участвовал в контракте и новых transport tests, это не независимый C8.
 
 ### Передача и дальнейшая последовательность
 

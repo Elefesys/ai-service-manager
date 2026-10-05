@@ -1247,10 +1247,11 @@ Production/M3, новые платные ресурсы, backup/restore drill н
 
 ## 0.6. Текущий шаг — постоянный TEST egress после getMe PASS / 2026-10-05
 
-**Сейчас C6 реализует M2-ENV-04-TELEGRAM-EGRESS в существующем Draft PR24.** Владелец
+**M2-ENV-04-TELEGRAM-EGRESS подготовлен к REVIEW в существующем Draft PR24.** Владелец
 пока не меняет VM и не повторяет старые terminal blocks. Точное поручение, allowlist
 и E01–E06 — единственный активный M2_HANDOFF. Один authoritative статус — TASK_REGISTER.
-Бот подтверждён через temporary route; persistent route/deployment ещё не принят.
+Бот подтверждён через temporary route; opt-in implementation имеет synthetic Docker
+evidence, но owner deployment и независимая приёмка C0/C8 ещё не выполнены.
 
 ### 0.6.1. Датированный фактический receipt и границы
 
@@ -1340,6 +1341,127 @@ IDs/contact/dates неизменны при recovery. Даты2026-10-02→2026-
 ADR239 не меняется: данный synthetic TEST route не допускает production Client data.
 Новых платных ресурсов/AI/M3, reset/down-v или production rollout нет. Успех getMe и
 будущая приёмка ENV04 по отдельности не означают VERIFIED всего M2.
+
+### 0.6.4. Подготовленная ENV04 процедура для выдачи C0
+
+Это review artifact, **не команда владельцу выполнить deployment сейчас**. После
+scoped C8 и final CI C0 выдаёт один блок с принятым полным `ENV04_ACCEPTED_SHA` и
+ранее подтверждённым абсолютным `ENV04_PROFILE` (существующий приватный profile).
+Ни endpoint/UUID/profile contents, ни token/webhook secret не присылаются в PR.
+Оператор не выбирает subnet/IP/SQL или новые параметры подключения. Рабочая копия
+должна быть на принятом SHA; существующие app/operator images сохраняются, их
+canonical client/config blobs проверяются внутри image без сети. Pull только Xray.
+
+```sh
+set -eu
+cd /home/asmoperator/asm-telegram-test
+test "$(git rev-parse HEAD)" = "$ENV04_ACCEPTED_SHA"
+docker pull --platform linux/amd64 ghcr.io/xtls/xray-core@sha256:9a17fb7fcda36f80d041fc1f12f1d661d3f7c502572b2a6f2e4432534789a20b
+python3 scripts/prepare_telegram_egress.py prepare \
+  --accepted-sha "$ENV04_ACCEPTED_SHA" --profile "$ENV04_PROFILE" \
+  --telegram-env /home/asmoperator/asm-telegram-test/.env.telegram \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress \
+  --project asm-telegram-test
+python3 scripts/prepare_telegram_egress.py verify \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+python3 scripts/prepare_telegram_egress.py deploy \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+python3 scripts/prepare_telegram_egress.py preflight \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+```
+
+Блок выполняется с `set -eu`, от существующего non-root operator, без shell tracing.
+`prepare` требует clean exact checkout, profile600/parent700, owner/no-symlinks,
+JSON≤64KiB и единственный VLESS/TCP(or raw)/REALITY/Vision connection. Остальные
+desktop DNS/inbounds/routes не импортируются. Автоматически выбирается свободная
+private /28 с проверкой Docker IPAM и всех host IPv4 routes. State/config/route.env
+создаются атомарно с600 в700 вне checkout; повторная подготовка сохраняет mapping,
+любое противоречие прекращает выполнение. Config проверяет **закреплённый binary
+с `--network none`**. Profile/env не source/exec; relay не получает TG/DB/S3 env.
+
+`deploy` требует persisted **и runtime Telegram=false**. Сохраняет private
+`deployment-before.json`/`deployment-after.json`: container/image IDs, mounts,
+networks, hashes environment/process без самих значений. Поднимает только relay
+и пересоздаёт api/worker из тех же images с прежними env/default gateway. Проверяет
+три callers, включая одноразовый operator: AF_UNSPEC/AF_INET/AF_INET6 разрешают
+только сохранённый relay IP; ordinary DB readiness доступна. Scheduler/PG/S3/frontend/
+ingress не пересоздаются. Нет provider HTTP/getMe/setup/send; этот preflight не
+утверждает доступность подписки, права Telegram или получение сообщения.
+Mount records сравниваются в canonical order: порядок Docker inspect не является
+изменением volume. Type/Name/Source/Destination/RW и число записей сохраняются;
+изменение любого из этих полей по-прежнему останавливает процедуру.
+
+Ожидаемые terminal markers: `TELEGRAM_EGRESS_PREPARE_PASS`, `...VERIFY_PASS`,
+`...DEPLOY_PASS`, `...PREFLIGHT_PASS`. При bounded `EGRESS_*` error не менять flags,
+pins или state вручную: вернуть C0 код и stage, не содержимое private inputs.
+Файлы state содержат приватный config: целиком не архивировать/публиковать.
+
+Последующее C0-разрешённое включение callers и operator идут только через
+`prepare_telegram_egress.py compose --state-dir ... -- <exact allowed command>`.
+Wrapper фиксирует project/env/overlay, повторно проверяет source/config/image/IPAM
+и допускает только явные grammars `ps -q`, recreate api/worker, существующий
+provisioner `--live [--discover]`; новых HTTP методов или обхода guards нет.
+Историческая plain-Compose функция ниже для enabled callers больше не применяется.
+Включение runtime/discovery/setup/webhook всё ещё требует отдельной выдачи C0.
+
+Для C0-разрешённого rollback используется одна команда:
+
+```sh
+python3 scripts/prepare_telegram_egress.py rollback \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+```
+
+Она атомарно меняет **только** `ASM_TELEGRAM_ENABLED=false` в существующем private env,
+пересоздаёт api/worker сначала **с** mapping и проверяет disabled runtime; затем
+пересоздаёт их без overlay и останавливает relay. Offline relay не блокирует disable.
+`rollback.json` фиксирует IDs/mounts и сохранность прочих containers/images/env.
+PG/S3 volumes, Console identities, pending/DISPATCHING/UNKNOWN, command receipts,
+connection/billing dates и private state сохраняются. Нет down-v/reset/drop/rebind.
+Если любой шаг прервался — не включать Telegram; повторить тот же rollback после
+устранения указанной локальной ошибки. Новый private state/subnet для retry не создавать.
+
+### 0.6.5. Воспроизводимое synthetic evidence ENV04
+
+`sh scripts/ci.sh` дополнен обязательным `sh scripts/test_telegram_egress.sh` после
+сборки штатных images, до прежних backend/PG/S3 checks. Standalone lane требует
+уже собранных штатных images
+и локального `.env`, созданного прежним `init_local.py`; workflow не изменён.
+Временный700 каталог вне build context содержит только свежие synthetic profile,
+REALITY keys, CA/cert и wire/control files. Контейнеры не получают Docker socket.
+Host driver допускает ровно stop/recreate собственного relay и сохраняет его IP.
+Real relay использует тот же generated config/image; TEST peer перенаправляет только
+fixed official domain:443 в private TLS recipient, с default deny. TLS CA injection
+находится только в test fixture; live config/client trust store не меняются.
+Xray26.9.9 имеет default private-destination block после VLESS: только TEST peer
+получает явный `finalRules` allow для exact recipient /32/TCP443. Live relay не
+получает freedom или такого исключения. Это восстановление synthetic topology,
+не отключение TLS/hostname/deadline либо защитных assertions приложения.
+Synthetic CA содержит critical basicConstraints/keyUsage, leaf — SAN/serverAuth и
+key identifiers; `openssl verify -x509_strict -purpose sslserver -verify_hostname`
+проверяет цепочку до topology. Python3.13 default VERIFY_X509_STRICT не отключается.
+Wrong-host case требует именно X.509 code62; ошибка CA не может заменить hostname
+negative. При failure публикуются только stage/exception class и счётчики событий,
+без exception messages, URL/body/config/env или private key bytes.
+
+| ID | Конкретные assertions и команда |
+|---|---|
+| E01 | 34 новых unit cases: strict JSON/connection fields, modes/owner/symlink, canonical-byte addition rejection, collision/stable IPAM, wrapper argv/rollback/redaction, mount order/field guards; pinned binary version/config test с network none, runtime Git blobs |
+| E02 | Real resolved base/overlay comparison; exact caller mapping all address families before/after stop/recreate; no relay ports/writable anonymous volumes; bounded unavailable; actual API auth/DB и private S3 доступны при stopped relay |
+| E03 | `TelegramEgressPostgresChecks`: wire peer/SNI/Host assertions; readonly recovery; partial download→тот же FETCH/File→READY, exact JPEG hash/bytes/private GET60/anonymous403; wrong CA/hostname, redirect и actual10MiB+1 reject |
+| E04 | Два real worker process crashes: finalize before/after commit, fsynced effect→relay stop/lost response→UNKNOWN→new worker PID/relay ID→NO_CLAIM; durable job DEAD/attempt1 и повторно прочитанный wire counter1 |
+| E05 | `--durable-receipt before/after`: fixtures удерживают real UNKNOWN, Console session и command receipt во время exact deploy/preflight/rollback; read-only hashes/counts всех app/platform таблиц равны, wire counter1; IDs/mounts/env preserved |
+| E06 | Полные обычные `ci.sh`/`test_browser.sh`, прежние assertions и оба clean-source gates на final PR head; exact run/head/tree/tested merge закрепляются в PR receipt |
+
+Новый lane выбирает свои два класса явным pytest collector; обычная integration
+suite без relay topology сохраняет все прежние cases. Это не skip/xfail: CI всегда
+запускает шесть wire cases и один held-state rollback case. Non-secret evidence —
+`reports/telegram-egress.json` в прежнем verification artifact; приватные fixture
+keys/config/env туда не копируются. Local Docker отсутствует, реальное исполнение —
+GitHub runner. Synthetic результат не является owner deployment или live A09/A11.
+Implementation run37279935914 SUCCESS:6+1 новых real cases,525 прежних+новых unit,
+390 прежних PG/S3,111 frontend,27 browser, оба scripts/source gates. Последующая
+mount-order regression увеличивает unit total на1; final head/tree/tested SHA и
+его обязательный полный CI — PR24 receipt, отдельно от этого implementation run.
 
 
 ## 1. Конкретное окружение и предварительные условия
