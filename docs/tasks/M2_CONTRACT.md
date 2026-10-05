@@ -1159,6 +1159,11 @@ Rollback явный: disabled with route → remove caller route → stop relay.
 private bridges и stopped relay сохраняются без application endpoints для audit;
 owner inputs, volumes и durable receipts не удаляются. Legacy partial rollback требует
 тех же explicit from/accepted SHA и guards. Recovery после recorded rollback запрещён.
+Повторные synthetic E05 lifecycles сохраняют SEALED catalog первого fixture;
+исходный empty-DB guard выполняется до него. Между cases проверяется полный exact
+fingerprint31 таблицы после scoped cleanup, без исключения неизвестных rows/сброса
+immutable catalog. Каждый held before/after относится к той же actual caller DB.
+
 Exact-source execution receipt и команды — runbook§0.6.12/PR24; это не новый C8 verdict.
 
 C0 разрешил отдельный opt-in overlay на принятом Xray26.9.9 digest (runbook§0.6),

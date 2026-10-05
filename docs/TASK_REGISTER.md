@@ -56,6 +56,14 @@ Engine29.8.2/8af9fe3 + Compose5.5.1: CI37351449973, compatibility111903261317 SU
 оба прежних jobs/scripts/gates неизменны. Exact final head/tree/merge/parents/run/jobs
 и результаты находятся в едином C6 receipt PR24, без SHA-only commits. Подробные
 assertions и подготовленные recovery/rollback команды — runbook§0.6.12.
+CI37355302621 подтвердил native mapping, шесть transport cases и fresh lifecycle
+на Docker29 и штатном runner; browser PASS. Следующий E05 case остановился на
+empty-DB guard: первый case законно оставляет SEALED billing catalog. Fixture теперь
+сохраняет неизменный исходный empty guard для fresh, затем требует exact fingerprint
+всех31 таблицы после scoped cleanup и перед recovery. Три созданные catalog rows
+сохраняются byte-for-byte; другие domain/auth rows обязаны отсутствовать. Catalog
+не удаляется, trigger не отключается, тайм-аут180s и durable assertions прежние.
+
 Это авторская передача, не C0 acceptance/C8 PASS и не owner deployment.
 
 Temporary GitHub deploy key asm-telegram-test-env04 подлежит отзыву после уже

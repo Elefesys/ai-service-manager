@@ -735,6 +735,10 @@ async def durable_local():
     password = SecretStr(new_token())
     session_hashes = []
     seeded_local = False
+    catalog = None
+    lifecycle = os.environ["ASM_EGRESS_LIFECYCLE"]
+    assert lifecycle in {"fresh", "recovery"}
+    catalog_file = fixture_directory() / "durable-catalog.json"
     try:
         await runtime.check()
         for engine in (runtime.engine, migrator):
@@ -747,11 +751,20 @@ async def durable_local():
             await connection.execute(text("SET TRANSACTION READ ONLY"))
             empty = await canonical_fingerprint(connection)
             assert empty["platform.alembic_version"]["count"] == 1
-            assert all(
-                row["count"] == 0
-                for name, row in empty.items()
-                if name != "platform.alembic_version"
-            ), "E05_FRESH_EMPTY_LOCAL_DATABASE_REQUIRED"
+            if lifecycle == "fresh":
+                assert not catalog_file.exists(), "E05_FRESH_CATALOG_RECEIPT_MUST_BE_ABSENT"
+                assert all(
+                    row["count"] == 0
+                    for name, row in empty.items()
+                    if name != "platform.alembic_version"
+                ), "E05_FRESH_EMPTY_LOCAL_DATABASE_REQUIRED"
+            else:
+                # The first case's sealed billing catalog is immutable by contract.
+                # Require its complete attested cleanup fingerprint (all 31 tables),
+                # not a relaxed empty-DB check or a destructive catalog reset.
+                previous = read_json(catalog_file)
+                assert previous["database_identity"] == target["database_identity"]
+                assert previous["fingerprint"] == empty, "E05_PREVIOUS_FIXTURE_STATE_DRIFT"
         # Reproduce the reviewed mismatch on the real, separate PostgreSQL service.
         # A complete set of asm_test row hashes cannot satisfy the callers' identity.
         reviewed_url = make_url(os.environ["ASM_MIGRATION_DATABASE_URL"]).set(
@@ -827,6 +840,18 @@ async def durable_local():
                 {"ws": A},
             )
         seeded_local = True
+        async with migrator.connect() as connection:
+            await connection.execute(text("SET TRANSACTION READ ONLY"))
+            seeded = await canonical_fingerprint(connection)
+            catalog = {
+                name: seeded[name]
+                for name in (
+                    "platform.saas_plans",
+                    "platform.saas_plan_revisions",
+                    "platform.plan_entitlements",
+                )
+            }
+            assert all(row["count"] == 1 for row in catalog.values())
         assert settings.auth_origins == ("https://console.egress.test:8443",)
         assert settings.auth_secure and settings.auth_cookie_name == "__Host-asm_session"
         assert os.environ["ASM_STORAGE_ENDPOINT"] == "https://files.egress.test:8443"
@@ -903,6 +928,24 @@ async def durable_local():
                 await connection.execute(
                     text("DELETE FROM platform.user_accounts WHERE id=:id"), {"id": UA}
                 )
+                cleaned = await canonical_fingerprint(connection)
+                assert {name: cleaned[name] for name in catalog} == catalog
+                assert all(
+                    row["count"] == 0
+                    for name, row in cleaned.items()
+                    if name not in {*catalog, "platform.alembic_version"}
+                ), "E05_FIXTURE_CLEANUP_INCOMPLETE"
+                assert cleaned["platform.alembic_version"]["count"] == 1
+            if lifecycle == "fresh":
+                write_json(
+                    catalog_file,
+                    {"database_identity": target["database_identity"], "fingerprint": cleaned},
+                )
+            else:
+                assert read_json(catalog_file) == {
+                    "database_identity": target["database_identity"],
+                    "fingerprint": cleaned,
+                }
         await runtime.close()
         await migrator.dispose()
 

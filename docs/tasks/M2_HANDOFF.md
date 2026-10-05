@@ -36,6 +36,14 @@ focused59 PASS; это не Docker evidence. Fresh/recovery real execution и fi
 assertions и подготовленную процедуру. REVIEW не закрывает C0 finding и не заменяет
 независимый targeted C8. Owner VM остаётся на c29aabd36; новых owner действий C6 не выполнял.
 
+CI37355302621 подтвердил native mapping, шесть transport cases и fresh lifecycle
+на Docker29 и штатном runner; browser PASS. Следующий E05 case остановился на
+empty-DB guard: первый case законно оставляет SEALED billing catalog. Fixture теперь
+сохраняет неизменный исходный empty guard для fresh, затем требует exact fingerprint
+всех31 таблицы после scoped cleanup и перед recovery. Три созданные catalog rows
+сохраняются byte-for-byte; другие domain/auth rows обязаны отсутствовать. Catalog
+не удаляется, trigger не отключается, тайм-аут180s и durable assertions прежние.
+
 ### Repository, точный старт и источники
 
 Repository **Elefesys/ai-service-manager**, существующий

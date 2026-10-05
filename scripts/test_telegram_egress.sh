@@ -483,7 +483,8 @@ http {
                     assert recovery.returncode == -signal.SIGKILL, 'EXACT_RECOVERY_NOT_INTERRUPTED'
                 assert not (state_dir / 'deployment-after.json').exists()
                 assert not (state_dir / 'recovery.json').exists()
-                assert {n: e.snapshot(fresh_state, fresh_dir)[n]['id'] for n in ('api', 'worker')} == {
+                interrupted = e.snapshot(fresh_state, fresh_dir)
+                assert {n: interrupted[n]['id'] for n in ('api', 'worker')} == {
                     n: partial[n]['id'] for n in ('api', 'worker')}
                 # Real retry refuses changed baseline/private input before any recreate.
                 for path in (state_dir / 'deployment-before.json', directory / 'telegram.env'):
@@ -504,9 +505,11 @@ http {
                         assert (state_dir / name).read_bytes() == raw
                 assert (state_dir / 'deployment-before.json').read_bytes() == original_before
                 # Explicit completed-response retry is read/verify only, no recreate.
-                recovered_ids = {n: e.snapshot(state, state_dir)[n]['id'] for n in ('api', 'worker')}
+                recovered = e.snapshot(state, state_dir)
+                recovered_ids = {n: recovered[n]['id'] for n in ('api', 'worker')}
                 operator('recover')
-                assert recovered_ids == {n: e.snapshot(state, state_dir)[n]['id'] for n in ('api', 'worker')}
+                retried = e.snapshot(state, state_dir)
+                assert recovered_ids == {n: retried[n]['id'] for n in ('api', 'worker')}
 
             current_mapping = mapping_evidence()
             runtime_deployed = assert_runtime_boundary()
@@ -552,7 +555,7 @@ http {
                 receipt['recovery'] = json.loads((state_dir / 'recovery.json').read_text())
                 receipt['recovery'].update(exact_cli_sigkill_after_manifest=True,
                     baseline_and_staged_drift_rejected=True, original_generated_bytes_preserved=True,
-                    completed_retry_without_recreate=True)
+                    completed_retry_without_recreate=True, immutable_catalog_retained_between_cases=True)
             lifecycle_receipts[lifecycle] = receipt
         reports = root / 'reports'
         reports.mkdir(exist_ok=True)
@@ -564,6 +567,11 @@ http {
     except Exception as error:
         # No private config, environment, process argv or raw Docker inspect output.
         print('TELEGRAM_EGRESS_TEST_FAILURE phase=' + phase + ' type=' + type(error).__name__, flush=True)
+        trace = error.__traceback__
+        while trace is not None:
+            # Line/function only; never locals, source statements, argv or values.
+            print('TEST_FAILURE_FRAME=' + trace.tb_frame.f_code.co_name + ':' + str(trace.tb_lineno), flush=True)
+            trace = trace.tb_next
         if isinstance(error, e.EgressError):
             print(str(error), flush=True)
         # Preserve only fixture stage/error classes and aggregate event counts.

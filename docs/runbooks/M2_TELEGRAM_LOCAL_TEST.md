@@ -2002,6 +2002,14 @@ Local focused59 PASS — только unit checks. Реальные execution re
 не в соседней asm_test. Reports не содержат private profiles/env/keys. Ограничения:
 synthetic peer/CA, не Telegram API; owner TLS/provider/live counters ещё не проверены.
 
+CI37355302621 подтвердил native mapping, шесть transport cases и fresh lifecycle
+на Docker29 и штатном runner; browser PASS. Следующий E05 case остановился на
+empty-DB guard: первый case законно оставляет SEALED billing catalog. Fixture теперь
+сохраняет неизменный исходный empty guard для fresh, затем требует exact fingerprint
+всех31 таблицы после scoped cleanup и перед recovery. Три созданные catalog rows
+сохраняются byte-for-byte; другие domain/auth rows обязаны отсутствовать. Catalog
+не удаляется, trigger не отключается, тайм-аут180s и durable assertions прежние.
+
 **Guarded state transition.** Root legacy config.json/route.env/runtime.json и
 original deployment-before.json сохраняются byte-identical. Recovery-v1 хранит их
 private immutable audit, старый manifest, frozen old overlay и input hashes;
