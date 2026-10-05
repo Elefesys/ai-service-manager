@@ -106,6 +106,12 @@ gates исполняет обычный GitHub runner. Exact final head/tree/tes
 операторская процедура §0.6.7 подготовлена для отдельной выдачи C0; VM/live Telegram,
 secrets и domains не изменялись.
 
+Первый correction run37288745538: шесть E02–E04 PASS, E05 fixture setup ERROR до
+seed/deploy. Причина доказана логом: PostgreSQL inet::text возвращает 172.18.0.2/32,
+а ip_address принимает bare IP. Исправлен только parser fixture: ip_interface с
+обязательными private IP и полной /32 либо /128 host mask, без изменения raw SQL
+identity/equality. Финальные full gates после этого исправления — тот же PR receipt.
+
 ### Уже доказано и сохранено
 
 2026-10-05 12:50+07 владелец исполнил artifact

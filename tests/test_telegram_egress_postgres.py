@@ -627,7 +627,10 @@ def durable_target():
     }
     assert identity["database"] == "asm_local" and identity["server_port"] == 5432
     assert type(identity["database_oid"]) is int and identity["database_oid"] > 0
-    assert ipaddress.ip_address(identity["server_address"]).is_private
+    # PostgreSQL inet::text includes its host mask (/32 or /128). Preserve
+    # the exact SQL identity and require a private single-host address.
+    endpoint = ipaddress.ip_interface(identity["server_address"])
+    assert endpoint.ip.is_private and endpoint.network.prefixlen == endpoint.max_prefixlen
     assert isinstance(identity["postmaster_started"], str) and identity["postmaster_started"]
     assert set(target["callers"]) == {"api", "worker"}
     for caller in target["callers"].values():

@@ -1543,6 +1543,12 @@ tested merge, CI outcomes и проверенный artifact находятся 
 не создавать SHA-only commits. Перед выдачей C0 требует successful final run и targeted
 C8 по этим трём corrections; данный текст не объявляет их независимую приёмку.
 
+CI37288745538 на первом correction headdff90aec: шесть E02–E04 PASS, E05 setup
+остановлен до seed/deploy. Диагноз — PostgreSQL inet::text отдаёт address/32, старый
+fixture parser ожидал bare IP. Использован ip_interface с обязательными private IP
+и полной host mask (/32 либо /128); raw SQL identity и equality assertions прежние.
+Это исправление test defect, не ослабление network guard; final CI обязателен заново.
+
 После приёмки C0 выдаёт следующий единый блок с полным принятым `ENV04_ACCEPTED_SHA`
 и уже известным absolute `ENV04_PROFILE`. Не вводить secrets повторно, не копировать
 staged inputs в runtime. Текущий `.env` должен разрешаться в фактические disabled

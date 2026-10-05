@@ -87,6 +87,10 @@ Real Docker E05 и полные final-head scripts/clean gates обязател�
 head/tree/tested SHA, CI и artifact receipts фиксируются в том же PR24 без SHA-only
 commits. Procedure/assertions/ограничения — runbook§0.6.7. Старый §0.6.4 исторический.
 Новых dependencies/migrations/pins нет; E02–E04 и frozen source bytes сохранены.
+Первый correction CI37288745538 прошёл шесть transport cases и остановил E05 setup:
+PostgreSQL inet::text вернул host address с /32. Narrow fixture parser теперь принимает
+этот фактический формат, требуя private IP и полную host mask; exact SQL identity
+comparison сохранён. Это test defect, не повод менять application/тайм-ауты/assertions.
 
 Пока **не выполнены** owner deployment подготовленного route, external connection discovery,
 atomic billing/binding, webhook и реальный Client text+photo → Console/private image →
