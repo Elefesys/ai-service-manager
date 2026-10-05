@@ -6,7 +6,7 @@
 
 ## Активный handoff C0 → C6/C3 — M2-ENV-04-TELEGRAM-EGRESS / 2026-10-05
 
-**REVIEW — реализация и synthetic evidence передаются C0.** Единственная задача:
+**IN_PROGRESS — ограниченная доработка после C0/C8 CHANGES_REQUESTED.** Единственная задача:
 воспроизводимый opt-in egress только для существующего synthetic LOCAL/TEST Telegram.
 Прямой outbound с VM timeout; temporary official-Xray route и exact-client getMe
 фактически PASS. Opt-in route реализован в PR; на owner VM он ещё не развёрнут.
@@ -29,6 +29,44 @@ ADR239/production и scope M2 не пересматриваются.
 - Читать AGENTS, register, runbook§0.6, M2_CONTRACT§§10–11, Spec§24.6/private files,
   ADR138/141/142/239/243 и Implementation Plan§§6–7. Frozen app/send semantics
   не перепроектировать. Existing client/config source bytes сверять с Git blobs.
+
+### Активная ограниченная доработка C0 → C6
+
+**Review verdict: CHANGES_REQUESTED. Task status: IN_PROGRESS.** Независимый scoped
+C8 выполнен по готовой реализации, затем C0 сопоставил процедуру с фактическим VM
+receipt. Доработка закрывает существующие E01/E05, без новых требований M2.
+
+Проверен implementation head **3fffdda5d5e3f866cf2f25c30bc9e619091de081**,
+tree **6ffff63ac85097ab63e53538213bde9cde70edc6**. Tested merge
+**160a9f41de201308e92121fc05f996006af92894** имеет ordered parents
+accepted base22993f558c5e7e933c65e9c999933bd2e3ab41c4 + указанный implementation head;
+его tree совпадает. [CI37281699500](https://github.com/Elefesys/ai-service-manager/actions/runs/37281699500)
+SUCCESS: оба штатных scripts и clean-source gates,526 unit/390 PostgreSQL-S3/
+111 frontend/27 browser и6+1 relay cases. Это фактический successful run,
+но его E05 fixture не доказывает сохранность БД пересоздаваемых callers.
+
+| Finding | Дефект и обязательный результат |
+|---|---|
+| C8-M2-ENV04-01, P2, E05 | На VM api/worker disabled и TG fields пустые; существующий .env.telegram уже содержит staged token/secret/bot ID/webhook URL. snapshot сравнивает все эти model fields с running containers и выдаёт EGRESS_RUNNING_ENVIRONMENT_DRIFT до deploy. Исправить disabled deployment для этого реального исходного состояния: текущие caller env и disabled/no-secret граница сохраняются, staged operator inputs не переписываются. Их последующее применение к runtime — только отдельный C0 live-шаг. Общие проверки env/image/process/mount/gateway не ослаблять и не заменять исключением всех TG fields. |
+| C8-M2-ENV04-02, P2, E05 | Held UNKNOWN/session/receipt и hashes читаются из postgres-test/asm_test, но перед exact CLI api/worker пересоздаются через base Compose на postgres/asm_local. Проверять данные именно той БД, к которой подключены пересоздаваемые callers: автоматический identity assertion до и после deploy/rollback, существующие UNKNOWN/receipt/Console state, отсутствие второго wire send. Реальный isolated Docker/PG, без правок owner VM, base Compose, приложения или frozen tests. |
+| C8-M2-ENV04-03, P2, E01 | Path.absolute()+lexical is_relative_to допускает outside/../checkout/private-state и запись приватного config внутрь checkout. До mkdir/config write/image call доказать каноническую границу каталога, сохранив no-symlink/owner/mode guards. Проверить .. alias внутрь checkout, отсутствие writes при отказе и нормальный outside path; никакой нормализации source bytes. |
+
+Один fix cycle в том же PR24/ветке, без reset/force-push и повторной реализации E02–E04.
+Разрешённая дельта этой доработки: scripts/prepare_telegram_egress.py,
+scripts/test_telegram_egress.sh, tests/test_telegram_egress.py,
+tests/test_telegram_egress_postgres.py, при необходимости существующие два
+infra/telegram-egress/compose*.yaml; согласованный register/handoff/runbook и только
+необходимое уточнение operational M2_CONTRACT. Прежние запреты и pin сохраняются.
+Новую общую framework/config architecture или возможности будущих этапов не вводить.
+
+Сначала воспроизвести каждый defect на reviewed bytes; затем добавить точные
+regressions. Новый Docker lane обязан начинаться с disabled/empty running TG fields
+и отдельно staged synthetic inputs, а E05 обязан assert same actual DB identity.
+Полные scripts/final-head CI/source gates сохранить. C0/C8 повторно проверят только
+эти corrections и затронутые boundaries; прежний successful E04 не обнуляется.
+Возврат C6 — REVIEW с exact refs/CI/assertions/limits в том же Draft PR. Owner не
+выполняет deployment/discovery/setup/send; не повторяет Console provisioning или
+secret entry. C0 выдаст операторский блок только после закрытия трёх findings.
 
 ### Уже доказано и сохранено
 
@@ -129,7 +167,10 @@ Synthetic CI проверяет реальный relay/transport с тестов
 Это не C8 и не review готовой реализации. C0 назначит независимый scoped C8 после
 готового diff/evidence E01–E06; только затем выдаст владельцу deployment block.
 
-### C6 implementation receipt — ENV04
+### C6 implementation receipt — ENV04 (до C0/C8 findings)
+
+Ниже сохранён исходный implementation receipt. Его E05 acceptance ограничена
+находками выше; actual CI SUCCESS и пройденные E02–E04 не отменяются.
 
 Начало реализации — exact coordination **dbfba47a3d92bcee258f5ab490384f496e16a217**,
 tree **8a0ac1988f8479f72d882bca53ed53c1ea63c216**, CI37270554509 SUCCESS. Первый

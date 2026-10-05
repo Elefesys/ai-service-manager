@@ -2,11 +2,12 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — TEST egress REVIEW / 2026-10-05
+## Текущий статус — TEST egress: ограниченная доработка / 2026-10-05
 
 **M2 остаётся IN_PROGRESS.** M1 и код M2.1–M2.4 приняты в прежнем LOCAL/TEST scope;
 реальная переписка A09/A11 ещё не завершена. Единственная ближайшая implementation
-задача — **M2-ENV-04-TELEGRAM-EGRESS — REVIEW**, C6 с участием C3; далее scoped C8.
+задача — **M2-ENV-04-TELEGRAM-EGRESS — IN_PROGRESS**, C6; C0/C8 review
+выполнен с вердиктом **CHANGES_REQUESTED**. Три обязательных fixes — активный handoff.
 Это ограниченное устранение подтверждённого сетевого blocker существующего TEST,
 не новый Telegram adapter, production VPN или M3.
 
@@ -51,15 +52,25 @@ operator route должен сохранить TLS, official origin, deadlines �
 Scheduler route не нужен по проверенному текущему коду. ADR239 остаётся принят:
 этот временный synthetic TEST путь не разрешает production Client traffic.
 
-C6 опубликовал opt-in overlay, private generator и обязательный real Docker lane.
-[Implementation CI37279935914](https://github.com/Elefesys/ai-service-manager/actions/runs/37279935914)
-SUCCESS: шесть новых relay/PG/S3 cases плюс held-state deploy/preflight/rollback,
-525 unit/390 прежних PostgreSQL-S3/111 frontend/27 browser; оба scripts и clean-source
-gates PASS. UNKNOWN и persistent send counter1 сохраняются после restart/rollback.
-В итоговую дельту также вошла canonical ordering Docker mounts (все поля и проверки
-сохранены) с отдельной regression; новые unit cases теперь34. Final-head CI/refs
-должны быть SUCCESS и сверены в PR24 receipt до C0/C8 acceptance. Procedure и mapping
-E01–E06 — runbook§0.6.4–0.6.5. App/старые assertions сохранены, owner VM не изменялась.
+Проверен implementation head **3fffdda5d5e3f866cf2f25c30bc9e619091de081**,
+tree **6ffff63ac85097ab63e53538213bde9cde70edc6**. Tested merge
+**160a9f41de201308e92121fc05f996006af92894** имеет ordered parents
+accepted base22993f558c5e7e933c65e9c999933bd2e3ab41c4 + указанный implementation head;
+его tree совпадает. [CI37281699500](https://github.com/Elefesys/ai-service-manager/actions/runs/37281699500)
+SUCCESS: оба штатных scripts и clean-source gates,526 unit/390 PostgreSQL-S3/
+111 frontend/27 browser и6+1 relay cases. Это фактический successful run,
+но его E05 fixture не доказывает сохранность БД пересоздаваемых callers.
+
+Независимый scoped C8 реально прочитал готовый diff/CI и выполнил локальные synthetic
+reproductions. C0 также воспроизвёл EGRESS_RUNNING_ENVIRONMENT_DRIFT по текущему
+VM staged-vs-running состоянию. **Три P2 findings**: C8-M2-ENV04-01 — disabled
+deployment не принимает подготовленные отдельно секреты; -02 — E05 проверяет
+другую БД; -03 — lexical path guard допускает private state внутрь checkout через .. .
+Полный receipt/границы — runbook§0.6.6; один точный fix task — активный handoff.
+E02–E04 transport/TLS/media/UNKNOWN evidence сохраняется. VM не менялась; C0 не
+выдаёт deployment до fix/final CI и targeted C8. Это существующие E01/E05,
+без расширения M2 или пересмотра ADR239. ZIP bytes C0/C8 повторно не сверяли;
+отдельная проверка ZIP C6 сохранена как его receipt.
 
 Пока **не выполнены** owner deployment подготовленного route, external connection discovery,
 atomic billing/binding, webhook и реальный Client text+photo → Console/private image →

@@ -1344,6 +1344,11 @@ ADR239 не меняется: данный synthetic TEST route не допус�
 
 ### 0.6.4. Подготовленная ENV04 процедура для выдачи C0
 
+**C0/C8 2026-10-05: CHANGES_REQUESTED — эту версию не выполнять на owner VM.**
+Ниже сохранён reviewed artifact C6; staged/runtime-env и E05 исправления ещё не
+приняты. Current findings и пределы evidence — §0.6.6; точная доработка — один
+активный M2_HANDOFF. После исправления C0 выдаст актуальный единый блок.
+
 Это review artifact, **не команда владельцу выполнить deployment сейчас**. После
 scoped C8 и final CI C0 выдаёт один блок с принятым полным `ENV04_ACCEPTED_SHA` и
 ранее подтверждённым абсолютным `ENV04_PROFILE` (существующий приватный profile).
@@ -1422,6 +1427,10 @@ connection/billing dates и private state сохраняются. Нет down-v/
 
 ### 0.6.5. Воспроизводимое synthetic evidence ENV04
 
+Таблица ниже — submitted C6 evidence, сохранённое как история. Фактический CI
+SUCCESS подтверждён C0/C8, но E01/E05 acceptance ограничена finding03 и findings01–02
+соответственно; актуальный review verdict — §0.6.6. E02–E04 остаются подтверждёнными.
+
 `sh scripts/ci.sh` дополнен обязательным `sh scripts/test_telegram_egress.sh` после
 сборки штатных images, до прежних backend/PG/S3 checks. Standalone lane требует
 уже собранных штатных images
@@ -1463,6 +1472,45 @@ Implementation run37279935914 SUCCESS:6+1 новых real cases,525 прежни
 mount-order regression увеличивает unit total на1; final head/tree/tested SHA и
 его обязательный полный CI — PR24 receipt, отдельно от этого implementation run.
 
+
+### 0.6.6. C0 и независимый scoped C8 — CHANGES_REQUESTED / 2026-10-05
+
+Проверен implementation head **3fffdda5d5e3f866cf2f25c30bc9e619091de081**,
+tree **6ffff63ac85097ab63e53538213bde9cde70edc6**. Tested merge
+**160a9f41de201308e92121fc05f996006af92894** имеет ordered parents
+accepted base22993f558c5e7e933c65e9c999933bd2e3ab41c4 + указанный implementation head;
+его tree совпадает. [CI37281699500](https://github.com/Elefesys/ai-service-manager/actions/runs/37281699500)
+SUCCESS: оба штатных scripts и clean-source gates,526 unit/390 PostgreSQL-S3/
+111 frontend/27 browser и6+1 relay cases. Это фактический successful run,
+но его E05 fixture не доказывает сохранность БД пересоздаваемых callers.
+
+Review выполнен отдельным C8, не автором C3: новая network/operator boundary,
+generator/Compose, private path/env safety, E01–E06 mapping, реальная цепочка E04,
+deploy/rollback и оба CI logs. C0 независимо сверил Git tree/ordered parents,
+12 разрешённых changed paths, canonical source bytes и соответствие принятому
+VM receipt. Старые application/API/SQL/CI assertions не изменены. Новых dependencies
+или миграций нет. Данные конкретного мастера/production не использовались.
+
+| ID / priority | Reviewed source и воспроизведение | Закрытие |
+|---|---|---|
+| C8-M2-ENV04-01 / P2 | prepare_telegram_egress.py snapshot, lines659–664: модель из staged .env.telegram содержит TG values, фактические api/worker — disabled/empty. Actual snapshot с synthetic inspect/model прекращается EGRESS_RUNNING_ENVIRONMENT_DRIFT. Процедура§0.6.4 не содержит согласованного перехода между этими состояниями. | Disabled/no-secret runtime сохраняется; staged inputs неизменны; explicit later C0 activation. Реальный Docker regression исходной комбинации; другие env/mount/image/gateway guards сохранены. |
+| C8-M2-ENV04-02 / P2 | test_telegram_egress.sh246 вызывает base recreate api/worker → postgres/asm_local; compose.test.yaml и durable_snapshot используют postgres-test/asm_test. Равные hashes31 таблиц относятся к отдельной БД. | Runtime callers и before/after proof используют одну фактическую БД; обязательный identity assertion, реальные UNKNOWN/receipt/session и wire counter1 через exact CLI deploy/rollback. |
+| C8-M2-ENV04-03 / P2 | prepare_telegram_egress.py444–449: Path.absolute() оставляет ..; lexical is_relative_to(ROOT) пропускает outside/../checkout/private-state. C8 воспроизвёл реальную запись config/state внутрь disposable checkout при substituted external checks. | Каноническая граница до effects и no-symlink/owner/mode сохранены; adversarial path regression доказывает отсутствие записи/вызовов при отказе. |
+
+Граница локальных reproductions: actual Python guard/write code с synthetic inputs
+и substituted Docker/source/image checks; это не локальный Docker или owner VM run.
+Реальные Docker/PostgreSQL/S3/wire результаты взяты из final GitHub runner logs;
+C0/C8 не скачивали повторно ZIP и не заявляют собственную проверку всех224 ZIP files.
+C6 ZIP receipt сохранён отдельно в PR. Scoped C8 **выполнен / CHANGES_REQUESTED**,
+не PASS и не полный security audit всего продукта.
+
+Сохраняются E02–E04: actual fixed relay, strict TLS, bounded interrupted readonly/
+media recovery, два real worker crash сценария, durable UNKNOWN и fsynced count1
+после новых worker PID/relay ID. Находки не разрешают новый proxy product, M3,
+изменение source-byte hashes, retry policy, тайм-аутов или снятие защитных assertions.
+Единственный следующий шаг — ограниченное исправление C6 в текущем PR24 по активному
+handoff; затем exact-head full CI и targeted C8 по трём находкам. PR остаётся Draft,
+owner VM/внешний Telegram не меняются, M2 IN_PROGRESS. Это не приёмка ENV04/M2.
 
 ## 1. Конкретное окружение и предварительные условия
 
