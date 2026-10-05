@@ -164,7 +164,12 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
                         'shortIds': [short_id]}}}],
             'outbounds': [{'tag': 'deny', 'protocol': 'blackhole'},
                 {'tag': 'synthetic-recipient', 'protocol': 'freedom',
-                    'settings': {'redirect': wire_ip + ':443'}}],
+                    # 26.9.9 blocks private targets for VLESS by default. Only
+                    # this synthetic recipient /32:443 is explicitly allowed.
+                    # This TEST peer rule never enters the actual relay config.
+                    'settings': {'redirect': wire_ip + ':443', 'finalRules': [
+                        {'action': 'allow', 'network': 'tcp', 'port': '443',
+                         'ip': [wire_ip + '/32']}]}}],
             'routing': {'domainStrategy': 'AsIs', 'rules': [{'type': 'field',
                 'inboundTag': ['test-peer'], 'domain': ['full:api.telegram.org'],
                 'port': '443', 'network': 'tcp', 'outboundTag': 'synthetic-recipient'},
