@@ -52,6 +52,12 @@ def phase_start(name):
     phase = name
     print('TELEGRAM_EGRESS_TEST_' + name.upper(), flush=True)
 
+def operator(action):
+    output = run(['python3', 'scripts/prepare_telegram_egress.py', action,
+                  '--state-dir', str(state_dir)], 120).decode().strip()
+    assert output == 'TELEGRAM_EGRESS_' + action.upper() + '_PASS'
+    print(output, flush=True)
+
 def relay_info():
     identity = compose('ps', '-a', '-q', 'telegram-egress').decode().strip()
     assert re.fullmatch('[a-f0-9]{12,64}', identity), 'RELAY_CONTAINER_REQUIRED'
@@ -178,14 +184,24 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         phase_start('synthetic_peer_config')
         e.image_check(directory / 'peer.json', os.getuid(), os.getgid())
         run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+            '-addext', 'basicConstraints=critical,CA:TRUE',
+            '-addext', 'keyUsage=critical,keyCertSign,cRLSign',
             '-subj', '/CN=Synthetic TEST CA', '-keyout', str(directory / 'ca.key'),
             '-out', str(directory / 'ca.pem')])
         run(['openssl', 'req', '-newkey', 'rsa:2048', '-nodes', '-subj', '/CN=api.telegram.org',
             '-keyout', str(directory / 'server.key'), '-out', str(directory / 'server.csr')])
-        e.write_private(directory / 'extensions', b'subjectAltName=DNS:api.telegram.org\nextendedKeyUsage=serverAuth\n')
+        # CPython 3.13 defaults to VERIFY_X509_STRICT. Supply a valid bounded
+        # TEST chain; do not weaken the accepted client's certificate checks.
+        e.write_private(directory / 'extensions',
+            b'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\n'
+            b'subjectAltName=DNS:api.telegram.org\nextendedKeyUsage=serverAuth\n'
+            b'subjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\n')
         run(['openssl', 'x509', '-req', '-in', str(directory / 'server.csr'),
             '-CA', str(directory / 'ca.pem'), '-CAkey', str(directory / 'ca.key'), '-CAcreateserial',
             '-out', str(directory / 'server.pem'), '-days', '1', '-extfile', str(directory / 'extensions')])
+        run(['openssl', 'verify', '-x509_strict', '-purpose', 'sslserver',
+            '-verify_hostname', 'api.telegram.org', '-CAfile', str(directory / 'ca.pem'),
+            str(directory / 'server.pem')])
         phase_start('topology')
         run([*base, 'build', 'telegram-operator'], 180)
         run(['docker', 'tag', project + '-telegram-operator', 'asm-telegram-egress-checks:test'])
@@ -223,14 +239,15 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         # Keep actual UNKNOWN/receipt/session fixtures open while running the exact
         # operator code on real containers. No domain reset, volume deletion or rebind.
         run([*base, 'up', '-d', '--no-deps', '--force-recreate', '--wait', 'api', 'worker'])
-        e.deploy(state, state_dir)
+        operator('deploy')
+        operator('preflight')
         e.compare_deployment(json.loads((state_dir / 'deployment-before.json').read_text()),
                              e.snapshot(state, state_dir), state)
         e.caller_probe(state, state_dir)
         before_env = (directory / 'telegram.env').read_bytes()
         compose('stop', '--timeout', '1', 'telegram-egress')
         e.caller_probe(state, state_dir)
-        e.rollback(state, state_dir)
+        operator('rollback')
         assert (directory / 'telegram.env').read_bytes() == before_env
         compose('run', '--rm', '--no-deps', '-T', 'egress-checks', 'python',
                 'tests/test_telegram_egress_postgres.py', '--durable-receipt', 'after')
@@ -255,6 +272,19 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         print('TELEGRAM_EGRESS_TEST_FAILURE phase=' + phase + ' type=' + type(error).__name__, flush=True)
         if isinstance(error, e.EgressError):
             print(str(error), flush=True)
+        # Preserve only fixture stage/error classes and aggregate event counts.
+        # Never include exception messages, request paths, bodies or TLS material.
+        for filename in ('wire-failures.jsonl', 'wire-stages.jsonl', 'wire-calls.jsonl'):
+            path = directory / filename
+            if path.exists():
+                rows = [json.loads(line) for line in path.read_text().splitlines()]
+                counts = {}
+                for row in rows:
+                    fields = ('event', 'operation') if filename == 'wire-calls.jsonl' else ('stage', 'error')
+                    key = '/'.join(str(row.get(field, 'none')) for field in fields)
+                    assert re.fullmatch('[A-Za-z0-9_/]{1,100}', key), 'UNSAFE_TEST_DIAGNOSTIC'
+                    counts[key] = counts.get(key, 0) + 1
+                print(filename + ' ' + json.dumps(counts, sort_keys=True), flush=True)
         raise SystemExit(1) from None
     finally:
         for process in processes:

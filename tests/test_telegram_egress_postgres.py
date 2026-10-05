@@ -228,7 +228,7 @@ async def egress_case():
             if failure_path.exists()
             else []
         )
-        assert not [row for row in failures if row.get("case") == case.identity]
+        assert not [row for row in failures if row.get("case") in {None, case.identity}]
 
 
 CHILD = r"""
@@ -378,7 +378,7 @@ class TelegramEgressPostgresChecks:
         finally:
             await untrusted.aclose()
         assert not case_events(case, "REQUEST")
-        with pytest.raises(ssl.SSLCertVerificationError):
+        with pytest.raises(ssl.SSLCertVerificationError) as bad_hostname:
             await asyncio.wait_for(
                 asyncio.open_connection(
                     os.environ["ASM_EGRESS_RELAY_IP"],
@@ -388,6 +388,7 @@ class TelegramEgressPostgresChecks:
                 ),
                 8,
             )
+        assert bad_hostname.value.verify_code == 62  # X509_V_ERR_HOSTNAME_MISMATCH
         client = official_client(case.directory)
         try:
             scenario(case, "hold_readonly")
@@ -734,17 +735,25 @@ async def serve():
 
     async def handle(reader, writer):
         case = None
+        stage = "header"
         ssl_object = writer.get_extra_info("ssl_object")
         try:
             try:
                 header = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), 8)
-            except (asyncio.IncompleteReadError, TimeoutError):
+            except (asyncio.IncompleteReadError, TimeoutError) as error:
                 # REALITY's cover handshake and negative TLS probes need no HTTP.
+                append_event(
+                    directory,
+                    {"stage": stage, "error": type(error).__name__},
+                    filename="wire-stages.jsonl",
+                )
                 return
             assert len(header) <= 16384
+            stage = "scenario"
             state = read_json(directory / "scenario.json")
             case, mode = state["case"], state["mode"]
             assert re.fullmatch(r"[a-f0-9]{32}", case) and mode in MODES
+            stage = "header_fields"
             method, path, _ = header.split(b"\r\n", 1)[0].decode().split(" ")
             headers = {}
             for line in header.split(b"\r\n")[1:]:
@@ -753,11 +762,14 @@ async def serve():
                     headers[key.decode().lower()] = value.strip().decode()
             length = int(headers.get("content-length", "0"))
             assert 0 <= length <= 16384
+            stage = "body"
             body = await asyncio.wait_for(reader.readexactly(length), 5)
+            stage = "wire_identity"
             peer = writer.get_extra_info("peername")[0]
             sni = names.get(id(ssl_object))
             assert peer == os.environ["ASM_EGRESS_PEER_IP"]
             assert sni == headers.get("host") == "api.telegram.org"
+            stage = "operation"
             if path == "/file/bot" + TOKEN + "/photos/file_77.jpg":
                 operation = "download"
                 assert method == "GET" and body == b""
@@ -803,6 +815,7 @@ async def serve():
                 ("hold_send", "sendMessage"),
                 ("hold_media", "download"),
             }:
+                stage = "fault_action"
                 if mode == "hold_media":
                     raw = image_bytes("JPEG")
                     writer.write(
@@ -823,6 +836,7 @@ async def serve():
                     pass
                 return
             if operation == "download":
+                stage = "media_response"
                 if mode == "redirect":
                     await response(
                         writer,
@@ -838,6 +852,7 @@ async def serve():
                     )
                     await response(writer, raw, extra=b"Content-Type: text/plain\r\n")
                 return
+            stage = "json_response"
             await response(
                 writer,
                 json.dumps({"ok": True, "result": result}).encode(),
@@ -850,7 +865,7 @@ async def serve():
         except Exception as error:
             append_event(
                 directory,
-                {"case": case, "error": type(error).__name__},
+                {"case": case, "stage": stage, "error": type(error).__name__},
                 filename="wire-failures.jsonl",
             )
         finally:
