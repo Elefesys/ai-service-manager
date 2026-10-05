@@ -343,7 +343,9 @@ def select_subnet(networks, routes, previous=None, own_name=None):
 
 
 def command(args, *, timeout=40, environment=None):
-    result = subprocess.run(args, capture_output=True, timeout=timeout, env=environment)
+    result = subprocess.run(
+        args, stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout, env=environment
+    )
     require(result.returncode == 0, "EGRESS_COMMAND_FAILED")
     return result.stdout
 
@@ -626,7 +628,7 @@ def checked_model(state, directory):
 
 
 def snapshot(state, directory, *, disabled=True):
-    checked_model(state, directory)
+    model = checked_model(state, directory)
     ids = (
         command([*compose_prefix(state, directory), "ps", "-q"], environment=clean_environment())
         .decode()
@@ -644,9 +646,25 @@ def snapshot(state, directory, *, disabled=True):
             )
         if name in {"api", "worker"}:
             source_image_check(container["Image"])
+            require(
+                all(
+                    values.get(k) == str(v)
+                    for k, v in model["services"][name]["environment"].items()
+                    if k != "ASM_TELEGRAM_ENABLED"
+                ),
+                "EGRESS_RUNNING_ENVIRONMENT_DRIFT",
+            )
         result[name] = {
             "id": container["Id"],
             "image": container["Image"],
+            # Never persist environment values; include DB/S3/TG/TLS identity
+            # in the preservation check. Rollback deliberately changes enabled.
+            "environment_sha256": sha(
+                encoded({k: v for k, v in values.items() if k != "ASM_TELEGRAM_ENABLED"})
+            ),
+            "process_sha256": sha(
+                encoded({k: container["Config"].get(k) for k in ("Cmd", "Entrypoint", "User")})
+            ),
             "mounts": [
                 {k: m.get(k) for k in ("Type", "Name", "Source", "Destination", "RW")}
                 for m in container["Mounts"]
@@ -740,7 +758,9 @@ def compare_deployment(before, after, state):
     for name in ("api", "worker"):
         require(
             before[name]["image"] == after[name]["image"]
-            and before[name]["mounts"] == after[name]["mounts"],
+            and before[name]["mounts"] == after[name]["mounts"]
+            and before[name]["environment_sha256"] == after[name]["environment_sha256"]
+            and before[name]["process_sha256"] == after[name]["process_sha256"],
             "EGRESS_CALLER_IMAGE_OR_VOLUME_CHANGED",
         )
         require(
@@ -854,7 +874,9 @@ def rollback(state, directory):
             if name in {"api", "worker"}:
                 require(
                     after[name]["image"] == previous["image"]
-                    and after[name]["mounts"] == previous["mounts"],
+                    and after[name]["mounts"] == previous["mounts"]
+                    and after[name]["environment_sha256"] == previous["environment_sha256"]
+                    and after[name]["process_sha256"] == previous["process_sha256"],
                     "EGRESS_ROLLBACK_CALLER_DRIFT",
                 )
             continue
@@ -962,7 +984,9 @@ def main():
                 require(permitted_compose(extra), "EGRESS_COMPOSE_OPERATION")
                 require(
                     subprocess.run(
-                        [*compose_prefix(state, directory), *extra], env=clean_environment()
+                        [*compose_prefix(state, directory), *extra],
+                        stdin=subprocess.DEVNULL,
+                        env=clean_environment(),
                     ).returncode
                     == 0,
                     "EGRESS_COMPOSE_FAILED",

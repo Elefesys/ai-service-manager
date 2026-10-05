@@ -243,6 +243,8 @@ def test_rollback_disables_first_retains_other_private_bytes_and_never_resets(
         n: {
             "id": n,
             "image": "unchanged",
+            "environment_sha256": "unchanged-environment",
+            "process_sha256": "unchanged-process",
             "mounts": ["persistent"],
             "networks": {"fixture_default": {}},
         }

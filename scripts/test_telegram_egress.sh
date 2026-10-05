@@ -27,7 +27,7 @@ controls = []
 last_control = None
 
 def run(args, timeout=120):
-    result = subprocess.run(args, capture_output=True, timeout=timeout, env=environment)
+    result = subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout, env=environment)
     if result.returncode:
         raise RuntimeError('TEST_COMMAND_FAILED:' + phase)
     return result.stdout
@@ -94,7 +94,7 @@ def await_process(process, *, marker=None, timeout=240):
 def start_checks(args):
     # Only bounded synthetic pytest/fixture output is inherited. Never print config/env.
     process = subprocess.Popen([*prefix, 'run', '--rm', '--no-deps', '-T',
-        'egress-checks', *args], env=environment)
+        'egress-checks', *args], stdin=subprocess.DEVNULL, env=environment)
     processes.append(process)
     return process
 
@@ -109,13 +109,15 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         routes = json.loads(run(['ip', '-j', '-4', 'route', 'show', 'table', 'all']))
         subnet = ipaddress.ip_network(e.select_subnet(networks, routes))
         relay_ip, peer_ip, wire_ip = map(str, (subnet[2], subnet[3], subnet[4]))
+        phase_start('synthetic_keys')
         key_output = run(['docker', 'run', '--rm', '--network', 'none', '--read-only',
             '--cap-drop=ALL', '--security-opt=no-new-privileges', '--log-driver=none',
             e.IMAGE, 'x25519']).decode()
         keys = {re.sub('[^a-z]', '', k.lower()): v.strip()
                 for k, v in (line.split(':', 1) for line in key_output.splitlines() if ':' in line)}
         private_key = keys['privatekey']
-        public_key = keys.get('password') or keys['publickey']
+        # Exact 26.9.9 publisher source: "Password (PublicKey): ...".
+        public_key = keys['passwordpublickey']
         assert all(re.fullmatch('[A-Za-z0-9_-]{43}', k) for k in (private_key, public_key))
         user_id, short_id = str(uuid4()), '0123456789abcdef'
         profile = {'outbounds': [{'protocol': 'vless', 'settings': {'vnext': [{
@@ -127,6 +129,7 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         e.write_private(directory / 'profile.json', e.encoded(profile))
         e.write_private(directory / 'telegram.env', b'ASM_TELEGRAM_ENABLED=false\n')
         state_dir = directory / 'state'
+        phase_start('private_prepare')
         e.prepare(argparse.Namespace(accepted_sha=source, profile=str(directory / 'profile.json'),
             state_dir=str(state_dir), telegram_env=str(directory / 'telegram.env'), project=project))
         state = e.verify(state_dir)
@@ -134,6 +137,7 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         assert values['ASM_TELEGRAM_EGRESS_IP'] == relay_ip
         live = e.compose_prefix(state, state_dir)
         base = e.compose_prefix(state, state_dir, overlay=False)
+        phase_start('resolved_model')
         e.checked_model(state, state_dir)
         environment.update(ASM_EGRESS_TEST_DIR=str(directory), ASM_EGRESS_PEER_IP=peer_ip,
                            ASM_EGRESS_WIRE_IP=wire_ip)
@@ -154,6 +158,7 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
                 'port': '443', 'network': 'tcp', 'outboundTag': 'synthetic-recipient'},
                 {'type': 'field', 'network': 'tcp,udp', 'outboundTag': 'deny'}]}}
         e.write_private(directory / 'peer.json', e.encoded(peer))
+        phase_start('synthetic_peer_config')
         e.image_check(directory / 'peer.json', os.getuid(), os.getgid())
         run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
             '-subj', '/CN=Synthetic TEST CA', '-keyout', str(directory / 'ca.key'),
