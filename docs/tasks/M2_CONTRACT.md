@@ -1116,6 +1116,18 @@ final head/CI документационной приёмки — в PR receipt.
 
 ### 10.12. Operational extension — M2-ENV-04 TEST egress
 
+CI37367018261 attempt2 после восстановления Actions реально исполнил exact Docker29:
+6 transport, fresh/recovery, recover-stopped/recover-missing и legacy-disable PASS.
+Следующий legacy-stop остановился до своего held-state baseline: test controller
+ожидал dual-family relay, но предыдущий legacy rollback оставил stopped IPv4-only
+container. Узкая коррекция harness перед каждым независимым fixture восстанавливает
+только disposable seed relay из fresh model и проверяет оба private endpoints до
+создания UNKNOWN/session. Original before/audit предыдущих cases и DB rows не
+перезаписываются; sealed-catalog guard,180s и все assertions сохранены.
+Это fixture sequencing defect, не runner incident; legacy-stop PASS и полный
+final-head CI после коррекции ещё ожидаются в едином PR24 receipt.
+
+
 **C6 correction REVIEW, 2026-10-06.** Для04/05 добавлены immutable rollback intent
 с exact before/disabled dotenv bytes и stage receipts; audit hashes не заменяются
 текущим hash после own write. Completed rollback retry проверяет original operation

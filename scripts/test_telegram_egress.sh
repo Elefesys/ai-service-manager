@@ -482,6 +482,11 @@ http {
             prefix = [*live, '-f', str(root / 'infra/telegram-egress/compose.test.yaml'), '--profile', 'test']
             # Independent disposable cases; no reset/drop of the actual caller DB.
             e.write_private(root / '.env', original_env, private_parent=False)
+            # A legacy rollback leaves its IPv4-only relay stopped. Restore the
+            # disposable dual-family seed transport before holding the next case's
+            # UNKNOWN/session, without touching any prior baseline/audit or DB rows.
+            compose('up', '-d', '--no-deps', '--pull', 'never', '--force-recreate', 'telegram-egress')
+            relay_info()
             for filename in ('durable-before.json', 'durable-after.json', 'durable-release.json'):
                 (directory / filename).unlink(missing_ok=True)
             # E05 uses the exact base runtime database, not the six cases' asm_test.

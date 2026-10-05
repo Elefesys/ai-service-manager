@@ -2145,6 +2145,18 @@ PR Draft/open/not merged; production/M3 не выдаются. Этот coordina
 
 ### 0.6.14. C6 REVIEW — guarded recovery/rollback resume / 2026-10-06
 
+CI37367018261 attempt2 после восстановления Actions реально исполнил exact Docker29:
+6 transport, fresh/recovery, recover-stopped/recover-missing и legacy-disable PASS.
+Следующий legacy-stop остановился до своего held-state baseline: test controller
+ожидал dual-family relay, но предыдущий legacy rollback оставил stopped IPv4-only
+container. Узкая коррекция harness перед каждым независимым fixture восстанавливает
+только disposable seed relay из fresh model и проверяет оба private endpoints до
+создания UNKNOWN/session. Original before/audit предыдущих cases и DB rows не
+перезаписываются; sealed-catalog guard,180s и все assertions сохранены.
+Это fixture sequencing defect, не runner incident; legacy-stop PASS и полный
+final-head CI после коррекции ещё ожидаются в едином PR24 receipt.
+
+
 Owner issuance остаётся приостановлена до targeted C8/C0 по04/05. VM/schema1 на
 c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14 не изменялась. Новые helper команды ниже
 подготовлены для отдельной выдачи C0, не являются выполненным deployment.

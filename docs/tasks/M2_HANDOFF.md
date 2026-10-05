@@ -12,6 +12,18 @@ C8-01/02/03 CLOSED. M2 IN_PROGRESS, PR24 Draft/open/not merged, VM/live неиз
 
 ### Реализация C6 — interruption/resume correction, REVIEW
 
+CI37367018261 attempt2 после восстановления Actions реально исполнил exact Docker29:
+6 transport, fresh/recovery, recover-stopped/recover-missing и legacy-disable PASS.
+Следующий legacy-stop остановился до своего held-state baseline: test controller
+ожидал dual-family relay, но предыдущий legacy rollback оставил stopped IPv4-only
+container. Узкая коррекция harness перед каждым независимым fixture восстанавливает
+только disposable seed relay из fresh model и проверяет оба private endpoints до
+создания UNKNOWN/session. Original before/audit предыдущих cases и DB rows не
+перезаписываются; sealed-catalog guard,180s и все assertions сохранены.
+Это fixture sequencing defect, не runner incident; legacy-stop PASS и полный
+final-head CI после коррекции ещё ожидаются в едином PR24 receipt.
+
+
 Продолжение от coordination **6fcec41b25676d657a64f443bd804760b7a20520**,
 tree **f793c432338540ebdbef2d50b08c1a9833c42180**; parent reviewed94a402f3 сохранён.
 Coordination CI37362669654 завершился FAILURE с тремя cancelled jobs и недоступными
