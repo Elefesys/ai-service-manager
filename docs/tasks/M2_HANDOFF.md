@@ -4,7 +4,152 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный handoff C0 → C6/C3 — M2-LIVE-A09-A11 / 2026-10-02
+## Активный handoff C0 → C6/C3 — M2-ENV-04-TELEGRAM-EGRESS / 2026-10-05
+
+**IN_PROGRESS — выдана реализация, не выполнена.** Единственная ближайшая задача:
+воспроизводимый opt-in egress только для существующего synthetic LOCAL/TEST Telegram.
+Прямой outbound с VM timeout; temporary official-Xray route и exact-client getMe
+фактически PASS. Постоянного подключения API/worker/operator пока нет. C0 принимает
+ограниченный infra remedy; ADR239/production и scope M2 не пересматриваются.
+
+### Repository, base и продолжение
+
+- **Elefesys/ai-service-manager**, **c6/m2-telegram-live → main**, продолжать
+  существующий **Draft PR24**, https://github.com/Elefesys/ai-service-manager/pull/24.
+- Accepted implementation base **22993f558c5e7e933c65e9c999933bd2e3ab41c4**, tree
+  **c30415b48a08dabac6a59f1294843a0bd25ff353**. Actual main CI37016012805 SUCCESS.
+- Сохранить первый coordination commit **e58c4a1a731ad238ccf9a79e6c478969642cd088**;
+  продолжить от точного нового coordination head, указанного C0 в PR receipt/сообщении.
+  Его дополнительный docs commit согласует этот handoff/register/runbook, не реализует
+  route. Перед стартом сверить ancestry/base/head/tree и CI, без force-push/merge.
+- Existing VM runtime **80e51c43e31541940f1ccf18b8281adf1a061748**, tree
+  **88ed308b4c56114aa977dcf91204964d9b7348e5**. Не считать его новым PR head.
+  Private env/profile/TLS и реальный Docker находятся только у владельца; доступа
+  C6 к его cloud/SSH не предполагать. Реализация и CI от этого не блокируются.
+- Читать AGENTS, register, runbook§0.6, M2_CONTRACT§§10–11, Spec§24.6/private files,
+  ADR138/141/142/239/243 и Implementation Plan§§6–7. Frozen app/send semantics
+  не перепроектировать. Existing client/config source bytes сверять с Git blobs.
+
+### Уже доказано и сохранено
+
+2026-10-05 12:50+07 владелец исполнил artifact
+**cc799386a922eaca78376a7acc0a2687a8465f2e32a8558643b7de5421174ba1**: actual fixed
+relay config, exact API image source, token-free verified TLS, отказ при выключенном
+relay с неизменным hosts mapping, single getMe ID/is_bot/username, unchanged app/env,
+cleanup и SSH_EXIT0 — PASS. Это не постоянный route, Business rights, webhook,
+real send/media или A09/A11 PASS. Telegram в работающем приложении остаётся disabled.
+Console login/provisioning и private secret entry уже завершены, не повторять.
+
+Официальный cached Xray26.9.9 linux/amd64:
+**ghcr.io/xtls/xray-core@sha256:9a17fb7fcda36f80d041fc1f12f1d661d3f7c502572b2a6f2e4432534789a20b**.
+Publisher/config source reviewed at **52a412d9e2f5c2a5142b1b4e2ab3771dacb8b120**.
+Это publisher metadata/source evidence, не reproducible rebuild/signature claim.
+Приватный вход — существующий mode600 profile.json в mode700 operator-owned каталоге
+вне checkout; provider values/UUID/endpoints не копировать в Git/CI/reports.
+
+### Разрешённая дельта C6
+
+Старый allowlist из трёх docs **явно расширен C0 из-за доказанного outbound blocker**:
+
+- `infra/telegram-egress/compose.yaml` — новый opt-in overlay, base compose не менять;
+- `infra/telegram-egress/image.lock.env` — только указанный официальный Xray digest;
+- `infra/telegram-egress/compose.test.yaml` — isolated controlled runner topology;
+- `scripts/prepare_telegram_egress.py` — bounded private config/overlay preparation;
+- `scripts/test_telegram_egress.sh` — реальные Docker/transport boundary checks;
+- `scripts/ci.sh` — только обязательный additive вызов новой проверки, существующие
+  команды, failure propagation и cleanup/source gates сохранить;
+- `tests/test_telegram_egress.py`, `tests/test_telegram_egress_postgres.py` — новые
+  существенные config/isolation/recovery проверки; synthetic fixtures внутри них;
+- `tests/test_m2_3_wire_postgres.py` — только минимальное переиспользование/параметризация
+  реального wire fixture, прежние cases/assertions не удалять и не заменять mocks;
+- `docs/TASK_REGISTER.md`, `docs/tasks/M2_HANDOFF.md`,
+  `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md`, `docs/tasks/M2_CONTRACT.md` — согласованный
+  receipt и короткое operational extension без изменения domain/API contracts.
+
+Не создавать файл лишь потому, что он разрешён. Иное изменение требует конкретного
+blocker и ограниченного решения C0 до edits. **Запрещены** app/frontend changes,
+`compose.yaml`, `.github/workflows/*`, существующие image/dependency locks, auth/tenancy,
+grants, API snapshots и миграции0001–0007. Новые dependencies/paid resources, general
+proxy product, TUN/host route, production/AI/M3 не входят в задачу. CI не использует
+реальные profile/token/webhook secret или Telegram account и не делает external sends.
+
+### Принятый минимальный контракт
+
+1. **Opt-in.** Отдельный overlay; без него обычный запуск прежний. Relay non-root,
+   read-only/cap-drop/no-new-privileges/resource bounds, private configRO; только
+   opaque TCP к `api.telegram.org:443` через выбранный connection. Default deny,
+   без freedom/direct/failover, HTTP retries, sniffed target override, TLS termination,
+   host ports/network, Docker socket или широкого импортирования desktop routes.
+   Сохранить выбранные VLESS/TCP/REALITY/Vision/fingerprint параметры. Ни TG token,
+   ни DB/S3 credentials relay не получает. Генератор не source/exec чужой JSON/env.
+2. **Route.** Callers ровно `api`, `worker`, `telegram-operator`: explicit hosts mapping
+   official name → устойчивый private relay IPv4, сохраняемый при stop/recreate.
+   Отсутствие relay не включает public A/AAAA/direct fallback. C6 сам выбирает и
+   проверяет IPAM на пересечения с существующими Docker networks/host routes;
+   технический выбор IP/SQL/config не передавать владельцу. Не менять app network,
+   её default gateway, PostgreSQL/S3/ingress/private signed-GET paths. Отказ relay
+   не ломает обычные API DB readiness/auth. Scheduler Telegram methods не вызывает
+   в текущем коде: его route не добавлять; S3 cleanup/recovery сохраняются.
+3. **Transport.** Existing official origin, verified TLS/SNI/hostname, trust_env=False,
+   redirects/retries0, connect/pool2s, read/write5s и общие operation budgets неизменны.
+   Worker route покрывает getFile **и** последующий `/file/bot...` GET; byte/format/
+   redirect limits и private image publication сохраняются. Это не HTTPS_PROXY
+   настройка: accepted client её игнорирует. Route health не заменяет actual permissions.
+4. **Durability.** Relay ничего не знает об Outbox/receipts и не повторяет HTTP.
+   До HTTP доказанный connection failure сохраняет accepted definitely-unsent
+   handling; после возможной записи/эффекта — canonical UNKNOWN, без второго send.
+   Не менять leases/claim limits/429/exhaustion/finalize recovery ради сети.
+5. **Operation/rollback.** Подготовить одну точную deploy/preflight/rollback процедуру
+   для C0. Все последующие команды используют один и тот же resolved overlay/config;
+   нельзя случайно пересоздать enabled callers plain Compose без mapping. При rollback
+   сначала disable Telegram, затем убрать route; preserve PG/S3 volumes, pending/
+   DISPATCHING/UNKNOWN, receipts, Console identities и connection/billing dates.
+   No down-v/reset/rebind/drop; никакой live setup/send в implementation turn.
+
+### Критерии результата — каждый связан с фактическим evidence
+
+| ID | Обязательное доказательство |
+|---|---|
+| E01 | Canonical Git blob/pinned image identity; private owner/mode/no-symlink checks, bounded minimal config; no credentials in artifacts/logs/build context; offline pinned-binary config test |
+| E02 | Real Docker resolved overlay: opt-in only; no public relay port; same static mapping after stop/recreate; all A/AAAA resolutions restricted; relay unavailable → bounded failure, no direct fallback; PG/S3/auth/readiness remain available |
+| E03 | Actual controlled relay carries accepted readonly **and media** request paths; recoverable readonly/media interruption recovers under existing policy; no redirect/size/TLS relaxation; TEST fixture hooks/CA never enter live config |
+| E04 | **Новый relay действительно на wire path**: accepted effect → lost response/relay failure → durable UNKNOWN → worker/relay restart → persistent wire counter remains1. Real PostgreSQL + real sockets; старый direct-wire PASS в одиночку недостаточен. Не проводить destructive fault injection на owner VM |
+| E05 | Prepared deploy/preflight/rollback records affected container/image IDs and necessary caller recreation; unrelated services, durable state/volumes/secrets and tested fixed mapping are preserved. Telegram remains disabled until отдельное C0 operator instruction. Owner не выбирает fields/ports/tests |
+| E06 | Полные `sh scripts/ci.sh` и `sh scripts/test_browser.sh`, прежние tests/migrations/contracts/reproducibility/smoke и оба clean-source gates PASS на final head. Mapping E01–E05→commands/assertions/run/logs; actual scoped C8 новой boundary после реализации, не C3/self-review |
+
+Synthetic CI проверяет реальный relay/transport с тестовым peer/получателем;
+доступность частной подписки и real Telegram не выдавать за CI evidence. В CI нет
+реальных секретов/клиентов; legitimate TEST-only origin/CA hooks только внутри fixture,
+не новый параметр production client. Минимальные meaningful cases, не план на количество.
+При failures установить причину в fixture/test/implementation и объяснить изменения;
+не убирать защиту ради зелёного CI.
+
+**C3 plan review фактически выполнен 2026-10-05:** контракт допустим при этих границах;
+по GitHub runtime80e51c4 проверены consumers/scheduler, media и conservative UNKNOWN.
+Это не C8 и не review готовой реализации. C0 назначит независимый scoped C8 после
+готового diff/evidence E01–E06; только затем выдаст владельцу deployment block.
+
+### Передача и дальнейшая последовательность
+
+C6 возвращает в том же Draft PR24: preserved ancestry, final head/tree/parent,
+actually tested merge SHA/tree/parents, точные changed paths, один receipt E01–E06,
+commands/CI links и честные ограничения. При отсутствии Docker locally — CI runner,
+не mock вместо реальной проверки; zip bytes не заявлять без сверки. Register/handoff/
+runbook/operational contract обновить одним согласованным изменением; никаких SHA-only
+commits. C6 самостоятельно не merge, не activate runtime, не пишет владельцу за C0.
+
+После C0/C8 и final CI — один operator deploy/preflight шаг с disabled runtime,
+затем существующие discovery→saved external connection ID→atomic setup/webhook→UI
+text/photo/manual reply→Client receipt. Ранее созданные Console/секреты не повторять.
+До первого setup проверить expiry TEST billing interval; после попытки preserveexact.
+Потом итоговый receipt, обычный merge владельцем и отдельный actual main CI.
+**ENV04 implementation acceptance не означает M2 VERIFIED; M3 не выдан.**
+
+
+<details>
+<summary>История — первое live поручение / 2026-10-02</summary>
+
+## Исторический handoff C0 → C6/C3 — M2-LIVE-A09-A11 / 2026-10-02
 
 **IN_PROGRESS; одна последовательная live-задача.** ENV03 интегрирован/VERIFIED
 только как TEST host с выключенным Telegram. Теперь требуется реальный согласованный
@@ -103,6 +248,8 @@ Boot auto_delete=true и отсутствие backup/restore PASS остаютс
 ограничениями. Удаление VM/disk/volumes/reset/down-v не разрешено; budget reviewNov1
 не удаляет ресурсы автоматически. M2 IN_PROGRESS; AI/M3/takeover/запись/цены/платежи
 не входят в задачу. Архивы ниже — история, не текущие инструкции.
+
+</details>
 
 <details>
 <summary>История — приёмка host до merge PR23 / 2026-10-02</summary>

@@ -103,7 +103,21 @@ synthetic данными. Это не смена ADR137/138/142/143/243: product
 private Object Storage и изоляция окружений остаются принятыми решениями. Подготовка
 production/Pilot не добавляется к существующим A09/A11.
 
-### 0.2. Текущий порядок после интеграции host — 2026-10-02
+### 0.2. Текущий порядок — TEST egress / 2026-10-05
+
+PR24 остаётся Draft; accepted main22993f558c5e7e933c65e9c999933bd2e3ab41c4 и
+push/main37016012805 SUCCESS. Existing runtime80e51c43e31541940f1ccf18b8281adf1a061748
+сохраняется. Console login/private staging и actual single getMe через temporary
+route PASS, cleanup завершён; runtime Telegram disabled. Теперь **M2-ENV-04**,
+активный handoff и§0.6: C6 готовит opt-in route, real Docker/PG checks, full CI и
+scoped C8. Владелец пока не выполняет новые VM команды. Старые Owner provisioning,
+secret entry, host/DNS/TLS не повторять. Discovery/binding/webhook/Console journey
+ещё не исполнены; M2 IN_PROGRESS. .com — прежний единственный smoke origin.
+
+<details>
+<summary>История — порядок сразу после интеграции host / 2026-10-02</summary>
+
+### Исторический порядок после интеграции host — 2026-10-02
 
 PR23 merged в22993f558c5e7e933c65e9c999933bd2e3ab41c4; push/main37016012805 SUCCESS.
 ENV03 INTEGRATED/VERIFIED с явно записанными TEST ограничениями §0.4.9.
@@ -112,6 +126,8 @@ ENV03 INTEGRATED/VERIFIED с явно записанными TEST огранич
 только три docs. Сейчас выполнить только fresh Console Owner §0.5.1; новые TG
 secrets/billing/binding/webhook/sends ещё не запускать. Создание host/DNS/TLS не
 повторять. .com остаётся единственным smoke origin; .ru отдельно от этой проверки.
+
+</details>
 
 <details>
 <summary>История — последовательность подготовки до исполнения host</summary>
@@ -1078,7 +1094,10 @@ Console/signed image и live A09/A11 не исполнены этим receipt. �
 выдаётся последовательно по §0.5; этот receipt сам по себе не разрешает пропустить
 identity/setup gates и не объявляет M2 завершённым. M3 не выдан.
 
-## 0.5. Активный live-шаг после принятого host — 2026-10-02
+<details>
+<summary>История — первые live инструкции; выполненное не повторять</summary>
+
+## 0.5. Исторический первый live-шаг после принятого host — 2026-10-02
 
 **M2-LIVE-A09-A11 IN_PROGRESS.** Accepted task base/main
 **22993f558c5e7e933c65e9c999933bd2e3ab41c4**, tree
@@ -1223,6 +1242,105 @@ C3 source/official-doc contract review и C6 first-step review выполнен�
 не для повторного ревью неизменённого host. После live receipt C0 обновляет три docs,
 проверяет final-head CI, владелец merge, C0 actual main CI; до этого M2 IN_PROGRESS.
 Production/M3, новые платные ресурсы, backup/restore drill не добавляются.
+
+</details>
+
+## 0.6. Текущий шаг — постоянный TEST egress после getMe PASS / 2026-10-05
+
+**Сейчас C6 реализует M2-ENV-04-TELEGRAM-EGRESS в существующем Draft PR24.** Владелец
+пока не меняет VM и не повторяет старые terminal blocks. Точное поручение, allowlist
+и E01–E06 — единственный активный M2_HANDOFF. Один authoritative статус — TASK_REGISTER.
+Бот подтверждён через temporary route; persistent route/deployment ещё не принят.
+
+### 0.6.1. Датированный фактический receipt и границы
+
+Accepted repository base/main22993f558c5e7e933c65e9c999933bd2e3ab41c4 с отдельным
+push/main37016012805 SUCCESS. Сохранён coordinatione58c4a1a731ad238ccf9a79e6c478969642cd088.
+VM остаётся checkout/runtime80e51c43e31541940f1ccf18b8281adf1a061748,
+tree88ed308b4c56114aa977dcf91204964d9b7348e5. Все execution receipts ниже предоставлены
+владельцем; C0 не имеет прямого SSH/cloud доступа.
+
+- Console Owner login и3UUID созданы/подтверждены; повторный provisioner не запускать.
+  Сообщение BILLING_STATE_MISSING соответствует этапу до atomic billing setup.
+- Telegram Owner identity получена независимо; выбранный bot @saasaimanagerbot
+  подключён через Business/Secretary UI для тестового диалога. Private token/secret
+  сохранены mode600 на VM при persisted/runtime Telegram disabled; повторный ввод
+  не нужен. getMe сам не проверяет Business rights/окно ответа.
+- Direct VM/container IPv4 TCP443 к Telegram timeout; GHCR control успешен. SG/route/
+  OUTPUT diagnosis не нашла deny в проверенной области; provider ticket FS471775
+  сообщил внешнюю фильтрацию. Точный hop/механизм самостоятельно не установлен.
+- Temporary token-free route artifact43a11b23f7472394def9e2fee57b38a9d1a0aebaa6fb60b5ea06b14506d157e7
+  фактически PASS: curl0, HTTP302, CONNECT200, TLS verification0, total0.195588s;
+  official pinned image/config/loopback/cleanup PASS. Это public HTTPS reachability.
+- **2026-10-05 12:50:51+07:** corrected artifact
+  **cc799386a922eaca78376a7acc0a2687a8465f2e32a8558643b7de5421174ba1**,
+  23076bytes, фактически вернул exact runtime/source/private inputs/runtime-off PASS;
+  fixed relay config/private network/no published ports PASS;
+  **EXACT_IMAGE_TOKEN_FREE_TLS_PASS**, **EXACT_MAPPING_CLOSED_RELAY_PASS**,
+  **EXACT_CLIENT_BOT_IDENTITY_PASS** после ровно одного getMe;
+  **APPLICATION_AND_PRIVATE_INPUTS_UNCHANGED_PASS**, **IDENTITY_PROBE_CLEANUP_PASS**,
+  **TG_BOT_IDENTITY_VIA_TEMP_RELAY_PASS**, SSH_EXIT0. Strict numeric expected ID,
+  is_bot=True и username проверялись accepted client request path. Profile parameters
+  сохранены; runtime services не включались, temporary network/containers удалены.
+
+Не исполнены discovery/actual connection rights, billing/binding/setWebhook,
+живые inbound/private media/manual reply/Client receipt. Permanent route и A09/A11
+не подтверждены. Нового C8 PASS нет; предыдущие C3 reviews относятся к процедуре.
+
+### 0.6.2. Исправление reference-byte проверки без ослабления guard
+
+Предыдущий artifact323dbe7180fc0b7e41a257d0ef6a7ff69d79fb42ba8c039c738281bf344e0d41
+остановился в IMPORT_AND_SOURCE **до** HTTP/getMe, с unchanged/cleanup PASS. Причина
+подготовки C0: локальные reference copies имели лишний завершающий LF. Это ошибка
+operator artifact, не доказательство дефекта приложения/токена/сети. Исправление:
+canonical bytes из принятого tree, точные Git blob/size и SHA256; затем отдельные
+source/UID/env stages. Никакой strip/нормализации/второго допустимого hash/обхода.
+
+| Файл | Canonical Git blob | Bytes | SHA256 |
+|---|---|---:|---|
+| client.py | 53800d23c718910dd338cadee6ba595510c95ff9 | 14251 | 2a9995fb09b89f3787a0bcf48f7b643278148c231623b612e880bb7b30ffd496 |
+| config.py | 31cba499681270d708cdb55e7c8e44202c07b4b7 | 2218 | 0a3a7dde5a458778f67fd484c15147ba668073e3497ef44377dc0a5a4686122a |
+
+C0 сверил tree→blob через GitHub, C3 независимо bytes→blob/size/hash и diff. Обращение
+только ограниченной правки восстановило точный старый artifact hash: остальные
+guards/TLS/single getMe/cleanup byte-identical. Targeted C3 PASS, host/embedded syntax
+и canonical accept/added-byte reject PASS; затем операторский execution выше PASS.
+Не использовать прежние padded copies для нового reference hashing.
+
+### 0.6.3. Ограниченное решение C0 и следующий порядок
+
+Нужен **opt-in TEST overlay**, не правка TelegramClient и не общий VPN продукта.
+Official Xray26.9.9 linux/amd64 pin:
+`ghcr.io/xtls/xray-core@sha256:9a17fb7fcda36f80d041fc1f12f1d661d3f7c502572b2a6f2e4432534789a20b`.
+PRIVATE profile вне checkout остаётся у владельца. No credentials/endpoints/UUID
+в Git/CI/artifacts. Принятые параметры VLESS/TCP/REALITY/Vision/fingerprint сохраняются.
+Publisher source review не является подписанной/воспроизводимой сборкой.
+
+Callers — api/worker/telegram-operator; fixed private IPv4 mapping official
+api.telegram.org:443, без fallback при остановке/recreate relay. Scheduler route
+не нужен: его ветка — durable recovery и S3 cleanup. Worker getFile и последующий
+file GET покрываются одним fixed official origin. TLS/SNI/verify, timeouts, retries0,
+redirects0, auth/RLS/permissions и private storage invariants остаются прежними.
+
+Реальные controlled Docker/PG tests должны провести запрос через новый relay,
+включая возможный effect/lost response→UNKNOWN→restart→wire count1. Старые direct-wire
+tests сохраняются, но не заменяют evidence новой boundary. Synthetic fixture CA/hooks
+допустимы только в TEST; реальные Telegram secrets/подписка не нужны CI. API/DB
+readiness/auth должны оставаться доступны при отказе relay. Rollback сначала disable
+Telegram, затем remove route; pending/DISPATCHING/UNKNOWN/receipts/PG/S3 сохранять.
+
+После готовой реализации C0/C3 review, полный final-head CI и **новый scoped C8**.
+Затем C0 даст владельцу один готовый deployment/preflight блок; пока commands не
+выданы. После него существующие discovery и запись verified external ID, проверка
+актуальности первого TEST billing interval, atomic setup/webhook и§5.1 Console journey.
+Старый business_connection event мог истечь: по результату bounded discovery C0
+даст конкретный UI шаг; не polling/drop/rebind наугад. После первой setup попытки
+IDs/contact/dates неизменны при recovery. Даты2026-10-02→2026-10-09 пока только config.
+
+ADR239 не меняется: данный synthetic TEST route не допускает production Client data.
+Новых платных ресурсов/AI/M3, reset/down-v или production rollout нет. Успех getMe и
+будущая приёмка ENV04 по отдельности не означают VERIFIED всего M2.
+
 
 ## 1. Конкретное окружение и предварительные условия
 

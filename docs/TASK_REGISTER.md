@@ -2,7 +2,74 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — TEST host интегрирован; live A09/A11 / 2026-10-02
+## Текущий статус — bot identity подтверждена; TEST egress / 2026-10-05
+
+**M2 остаётся IN_PROGRESS.** M1 и код M2.1–M2.4 приняты в прежнем LOCAL/TEST scope;
+реальная переписка A09/A11 ещё не завершена. Единственная ближайшая implementation
+задача — **M2-ENV-04-TELEGRAM-EGRESS**, C6 с контрактным участием C3, затем scoped C8.
+Это ограниченное устранение подтверждённого сетевого blocker существующего TEST,
+не новый Telegram adapter, production VPN или M3.
+
+Repository **Elefesys/ai-service-manager**, существующий [Draft PR24](https://github.com/Elefesys/ai-service-manager/pull/24),
+branch **c6/m2-telegram-live → main**. Accepted base/main:
+**22993f558c5e7e933c65e9c999933bd2e3ab41c4**, tree
+**c30415b48a08dabac6a59f1294843a0bd25ff353**;
+[push/main37016012805](https://github.com/Elefesys/ai-service-manager/actions/runs/37016012805)
+SUCCESS. Сохранить первый coordination commit
+**e58c4a1a731ad238ccf9a79e6c478969642cd088**. Точный текущий coordination head/tree и
+его CI указываются в PR receipt/выданном C0 сообщении; не делать SHA-only commits.
+VM checkout и application image остаются от **80e51c43e31541940f1ccf18b8281adf1a061748**,
+tree **88ed308b4c56114aa977dcf91204964d9b7348e5**. Документационный head не выдавать
+за фактически развёрнутое приложение.
+
+Фактический progress, предоставленный владельцем:
+
+- Console Owner/Workspace/Business созданы, login работает. Независимый Telegram
+  Owner ID и Business/Secretary UI connection подготовлены; private config сохранён.
+- Прямой VM/container TCP443 до Telegram timeout; поддержка FS471775 сообщила о
+  воспроизведении и внешней фильтрации. Точный hop самостоятельно не установлен.
+- 2026-10-05 token-free profile probe: verified TLS, HTTP302/CONNECT200/curl0,
+  cleanup PASS. Это evidence конкретного тестового маршрута, не ремонта direct egress.
+- **2026-10-05 12:50 Asia/Novosibirsk:** исправленная процедура
+  **cc799386a922eaca78376a7acc0a2687a8465f2e32a8558643b7de5421174ba1** прошла на VM:
+  exact source/runtime-off, fixed relay config, token-free TLS, отказ при выключенном
+  relay с тем же hosts mapping, **один actual getMe со строгой bot identity**, unchanged
+  application/private inputs, cleanup и SSH_EXIT0. Временные ресурсы удалены.
+
+Предыдущая версия процедуры остановилась до HTTP/getMe: C0 ошибочно вычислил reference
+hashes по локальным копиям с лишним trailing LF. Ошибка проверочного artifact исправлена
+по canonical Git blobs, без нормализации/ослабления проверки. Targeted C3 review фикса
+PASS; exact VM исполнение затем PASS. Это не C8. Полные refs и границы — runbook§0.6.
+
+**Решение C0 по scope:** разрешено подготовить opt-in TEST Compose overlay, приватный
+генератор config, отдельный официальный Xray pin и необходимые проверки новой сети;
+точный allowlist и критерии E01–E06 — единственный активный M2_HANDOFF. Прежние app,
+миграции, grants, storage pins, contracts и защитные assertions сохраняются. API/worker/
+operator route должен сохранить TLS, official origin, deadlines и UNKNOWN/no-resend.
+Scheduler route не нужен по проверенному текущему коду. ADR239 остаётся принят:
+этот временный synthetic TEST путь не разрешает production Client traffic.
+
+Пока **не выполнены** постоянный route/deployment, external connection discovery,
+atomic billing/binding, webhook и реальный Client text+photo → Console/private image →
+manual reply → Client receipt. ENV04 требует real Docker/PG boundary evidence,
+полного CI и независимого scoped C8 до инструкции владельцу по deployment. GetMe
+не доказывает Business rights или окно ответа. Не повторять provisioning/secret entry.
+
+После ENV04 приёмки C0 выдаёт следующий один operator шаг и сохраняет exact IDs/dates
+при setup recovery. До первого setup проверить актуальность конечного TEST billing
+interval; после попытки его молча не менять. M2 VERIFIED — только после оставшихся
+live критериев, merge владельцем и отдельного actual main CI. PR24 пока Draft, merge
+не выполнять. Старые задания ниже — история.
+
+Host ограничения неизменны: boot auto_delete=true, backup/restore PASS отсутствует,
+delete/reset/down-v запрещены. Принятый бюджет4735,81₽/30суток и review2026-11-01 не
+являются spending cap. Новые платные ресурсы и production/M3 не выдаются.
+
+
+<details>
+<summary>История — выдача первых live шагов / 2026-10-02</summary>
+
+## Исторический статус — TEST host интегрирован; live A09/A11 / 2026-10-02
 
 **M2-ENV-03-TEST-HOST — INTEGRATED / VERIFIED в принятом pre-live TEST scope.**
 Владелец слил [PR23](https://github.com/Elefesys/ai-service-manager/pull/23), actual
@@ -48,6 +115,8 @@ managed DB/storage/restore решения сохраняются. Подробн
 **M2 IN_PROGRESS; live A09/A11 ещё не PASS.** M1/M2 code LOCAL/TEST не переделывать;
 M3 не выдан. Секреты не присылать в чат/PR. Новых платных ресурсов не требуется.
 
+</details>
+
 ## Задачи — актуальная таблица
 
 | ID | Цель | Зависимости | Ведущий | Статус | Evidence / результат | Следующий шаг |
@@ -77,10 +146,11 @@ M3 не выдан. Секреты не присылать в чат/PR. Нов�
 | M2.3-TELEGRAM-API | Official Telegram → durable kernel/private images → five owner API routes | M2_CONTRACT §10 | C3; C2/C1/C6; C0/C8 | VERIFIED | Accepted main ffc437f125aa6af4dcf1c61a035a0d5df517e062; code/API LOCAL/TEST, C8-M2.3-01 CLOSED; actual main CI SUCCESS | Сохранять API/0007/time guards/UNKNOWN; live evidence отдельно |
 | M2.4 | Console Inbox, manual reply и E2E | Интегрированный API M2.3 + main CI | C5; C3/C6; C0/C8 | INTEGRATED | PR21 merged; main96d9f09dd16d8b6ab019ac76a9c72ce910d81191; push/main35706123814 SUCCESS; code/UI VERIFIED LOCAL/TEST | Реальный A11 остаётся внешним gate M2-LIVE-A09-A11 |
 | M2.4-CONSOLE | Owner panel + private image + exact manual intention/recovery + browser | M2_CONTRACT §§10–11 | C5; C3/C6 TEST harness; C0/C8 | VERIFIED | Actual main96d9f09dd16d8b6ab019ac76a9c72ce910d81191, separate main CI SUCCESS; C8-M2.4-01/02/03 CLOSED, code/UI LOCAL/TEST | Сохранять принятые механизмы; это не live Telegram acceptance |
-| M2-LIVE-A09-A11 | Реальная ручная Telegram переписка | Accepted main22993f5 + mainCI37016012805; VERIFIED TEST host | C6; C3 connection; C0 acceptance | IN_PROGRESS | Код/host приняты; external identity/binding/Client receipt ещё не исполнены. C3/C6 source/procedure review выполнен | Первый шаг §0.5.1: fresh Console Owner, затем последовательные live steps |
+| M2-LIVE-A09-A11 | Реальная ручная Telegram переписка | Accepted base22993f5; VERIFIED TEST host; ENV04 | C6/C3; C0 acceptance | IN_PROGRESS | Console/secret staging и actual single getMe через temporary relay PASS2026-10-05; runtime disabled; discovery/binding/webhook/переписка ещё не исполнены | Сначала M2-ENV-04, затем последовательные operator шаги; не повторять provisioning |
 | M2-ENV-01-REGISTRY | Восстановить storage provisioning и полный CI | M2.4; pull failure PR22 | C6; C0/C8 | VERIFIED | PR22 merged80e51c4; scoped C8 PASS; отдельный push/main36825583134 SUCCESS, оба scripts/source gates и реальные PG/S3/browser | Сохранять проверенные GHCR pins; registry blocker CLOSED |
 | M2-ENV-02-STORAGE-IMAGES | Два exact official binary в project-owned images | Решение C0 о новой упаковке | C6; C0/C8 | VERIFIED | Build36734267078; anonymous full OCI bytes; scoped C8; final PR36824246755 и actual main36825583134 SUCCESS | Не пересобирать и не менять visibility/pins без причины |
 | M2-ENV-03-TEST-HOST | Один TEST host/.com DNS/HTTPS до Telegram connection | Actual main80e51c4 + host evidence | C6; C0; independent C8 | VERIFIED | PR23 merged22993f5; main37016012805 SUCCESS; C8-HOST PASS; operator host/HTTPS/private403/renewal receipt; известные TEST ограничения сохранены | Закрыто только pre-live host; продолжить M2-LIVE-A09-A11 |
+| M2-ENV-04-TELEGRAM-EGRESS | Opt-in постоянный synthetic TEST route для Telegram callers | ENV03; temporary TLS/fail-closed/getMe PASS; C0 bounded scope | C6; C3 contract; C0/C8 review | IN_PROGRESS | Поручение принято/выдано, код/CI/deployment не выполнены; PR24 Draft | Реализация E01–E06, real Docker/PG evidence, full CI и scoped C8 до operator deployment |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 
