@@ -2,12 +2,12 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — TEST egress: ограниченная доработка / 2026-10-05
+## Текущий статус — TEST egress: исправления C8 переданы на REVIEW / 2026-10-05
 
 **M2 остаётся IN_PROGRESS.** M1 и код M2.1–M2.4 приняты в прежнем LOCAL/TEST scope;
 реальная переписка A09/A11 ещё не завершена. Единственная ближайшая implementation
-задача — **M2-ENV-04-TELEGRAM-EGRESS — IN_PROGRESS**, C6; C0/C8 review
-выполнен с вердиктом **CHANGES_REQUESTED**. Три обязательных fixes — активный handoff.
+задача — **M2-ENV-04-TELEGRAM-EGRESS — REVIEW**, C6; исправлены три P2 предыдущего
+C0/C8 **CHANGES_REQUESTED**. Это передача на targeted C8, не его PASS.
 Это ограниченное устранение подтверждённого сетевого blocker существующего TEST,
 не новый Telegram adapter, production VPN или M3.
 
@@ -71,6 +71,22 @@ E02–E04 transport/TLS/media/UNKNOWN evidence сохраняется. VM не �
 выдаёт deployment до fix/final CI и targeted C8. Это существующие E01/E05,
 без расширения M2 или пересмотра ADR239. ZIP bytes C0/C8 повторно не сверяли;
 отдельная проверка ZIP C6 сохранена как его receipt.
+
+Ограниченная доработка начинается от coordination **7a9eca3d2e1509b029d1ef0ba2f2c0d2d590ce7c**,
+tree **1da0e2da06269457e91de1752fe224f93681b8ba**, CI37285033299 SUCCESS; история
+сохранена. C8-01: runtime Compose использует текущий `.env`; staged `.env.telegram`
+доступен только явно выданному one-shot operator, deploy его не применяет. Rollback
+выключает runtime в `.env`, сохраняет остальные bytes и staged inputs целиком.
+C8-02: E05 удерживает реальные UNKNOWN/receipt/Console session в fresh isolated
+`postgres/asm_local`, общей с пересоздаваемыми api/worker; SQL identity обоих callers,
+OID/address/postmaster start и полный fingerprint сверяются до/после exact CLI.
+Старая отдельная `asm_test` отвергается identity assertion. C8-03: canonical private
+state boundary и symlink spelling проверяются до любых команд/mkdir/write.
+Два исходных дефекта воспроизведены failing regressions; локально38 unit cases PASS.
+Real Docker E05 и полные final-head scripts/clean gates обязательны; фактические
+head/tree/tested SHA, CI и artifact receipts фиксируются в том же PR24 без SHA-only
+commits. Procedure/assertions/ограничения — runbook§0.6.7. Старый §0.6.4 исторический.
+Новых dependencies/migrations/pins нет; E02–E04 и frozen source bytes сохранены.
 
 Пока **не выполнены** owner deployment подготовленного route, external connection discovery,
 atomic billing/binding, webhook и реальный Client text+photo → Console/private image →

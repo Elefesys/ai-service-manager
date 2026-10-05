@@ -1130,6 +1130,15 @@ state/receipts/env/volumes. E01–E06 проверяются настоящим�
 TLS wire; fixture CA/peer не входят в live config. Самостоятельного live включения
 нет; C0 выдаёт deployment после scoped C8/final CI. ADR239/production/M3 не изменены.
 
+C8 correction E01/E05: deployment читает текущий runtime `.env`, не применяет
+staged `.env.telegram`; staged inputs сохранены для отдельного C0 operator шага.
+Rollback выключает enabled flag именно runtime `.env` до снятия mapping, не меняя
+остальные values или staged file. Snapshot проверяет actual SQL DB identity api и
+worker и её сохранность при recreate; durable evidence должно относиться к этой
+же БД. Private state canonical outside-checkout проверяется до effects, при этом
+requested symlink components не нормализуются в разрешённые пути. Domain/API,
+timeouts, TLS, permissions и UNKNOWN/no-resend остаются прежними.
+
 ## 11. M2.4-CONSOLE — текущий ограниченный UI/browser-контракт
 
 Принят C0 для последовательной выдачи C5 от integrated API/base

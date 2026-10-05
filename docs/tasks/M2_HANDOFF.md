@@ -6,7 +6,7 @@
 
 ## Активный handoff C0 → C6/C3 — M2-ENV-04-TELEGRAM-EGRESS / 2026-10-05
 
-**IN_PROGRESS — ограниченная доработка после C0/C8 CHANGES_REQUESTED.** Единственная задача:
+**REVIEW — ограниченные исправления C0/C8 передаются на targeted review.** Единственная задача:
 воспроизводимый opt-in egress только для существующего synthetic LOCAL/TEST Telegram.
 Прямой outbound с VM timeout; temporary official-Xray route и exact-client getMe
 фактически PASS. Opt-in route реализован в PR; на owner VM он ещё не развёрнут.
@@ -32,7 +32,7 @@ ADR239/production и scope M2 не пересматриваются.
 
 ### Активная ограниченная доработка C0 → C6
 
-**Review verdict: CHANGES_REQUESTED. Task status: IN_PROGRESS.** Независимый scoped
+**Предыдущий review verdict: CHANGES_REQUESTED. Task status: REVIEW.** Независимый scoped
 C8 выполнен по готовой реализации, затем C0 сопоставил процедуру с фактическим VM
 receipt. Доработка закрывает существующие E01/E05, без новых требований M2.
 
@@ -67,6 +67,44 @@ regressions. Новый Docker lane обязан начинаться с disable
 Возврат C6 — REVIEW с exact refs/CI/assertions/limits в том же Draft PR. Owner не
 выполняет deployment/discovery/setup/send; не повторяет Console provisioning или
 secret entry. C0 выдаст операторский блок только после закрытия трёх findings.
+
+### C6 correction receipt — три P2, без расширения задачи
+
+Старт — coordination **7a9eca3d2e1509b029d1ef0ba2f2c0d2d590ce7c**, tree
+**1da0e2da06269457e91de1752fe224f93681b8ba**, CI37285033299 SUCCESS. Локальный checkout
+был clean; история и первый coordination сохранены без reset/force-push.
+
+- **C8-M2-ENV04-01:** exact snapshot regression сначала завершалась
+  EGRESS_RUNNING_ENVIRONMENT_DRIFT. Runtime model теперь читает прежний `.env`,
+  отдельный staged env используется только explicit one-shot operator. Ни одно TG
+  поле не исключено из drift comparison. Docker lane начинает с disabled/empty
+  runtime + populated synthetic staged env; проверяет эту границу после deploy и
+  rollback. Rollback меняет только enabled flag фактического runtime `.env` (добавляет
+  false при отсутствующем default field), остальные bytes и staged env сохраняет.
+  Старый unit rollback уточняет именно источник flag, сохраняя disable-first,
+  byte-preservation, mounts, no-reset и ordered command assertions.
+- **C8-M2-ENV04-02:** reviewed base Compose фактически ведёт в postgres/asm_local;
+  старый E05 в asm_test не был evidence этой БД. Новый отдельный LOCAL harness
+  допускает записи только после fresh isolated project/volume attestation, exact
+  DB/role endpoints, equality с SQL identity из actual api/worker и empty domain
+  state. Шесть E02–E04 и frozen asm_test fixtures/guards не изменены. Новая negative
+  проверка отвергает реальный postgres-test/asm_test. Held UNKNOWN с fsynced counter1,
+  command receipt и настоящая HTTP Console session проходят exact deploy/preflight/
+  rollback на одной БД; before/after hashes покрывают все app/platform rows.
+- **C8-M2-ENV04-03:** regression на reviewed bytes позволяла alias
+  outside/../checkout/private-state и реальную запись в disposable checkout.
+  Теперь canonical containment проверяется до source/Docker calls и mkdir;
+  requested symlink components проверяются до resolve, чтобы .. не скрывал symlink.
+  Positive outside path и owner/mode/no-symlink assertions сохранены.
+
+Дельта correction: четыре scripts/tests paths и четыре согласованных документа;
+Compose, image pin, основной CI, приложение и миграции byte-unchanged. Локально38
+unit cases PASS; ruff/syntax проверяются перед публикацией. Docker отсутствует
+локально: обязательные full scripts, семь real relay/PG cases и оба clean-source
+gates исполняет обычный GitHub runner. Exact final head/tree/tested merge, результаты
+и artifact identity — receipt PR24. Это REVIEW, не C8 PASS/VERIFIED. Актуальная
+операторская процедура §0.6.7 подготовлена для отдельной выдачи C0; VM/live Telegram,
+secrets и domains не изменялись.
 
 ### Уже доказано и сохранено
 

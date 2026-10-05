@@ -1,5 +1,6 @@
 """E01/E02/E05 config and operator guards; real boundary is a mandatory Docker lane."""
 
+import argparse
 import copy
 import json
 import os
@@ -9,6 +10,134 @@ from uuid import UUID
 import pytest
 
 from scripts import prepare_telegram_egress as egress
+
+
+@pytest.mark.parametrize("alias", [False, True])
+def test_prepare_rejects_canonical_checkout_state_before_any_effect(tmp_path, monkeypatch, alias):
+    checkout, outside = tmp_path / "checkout", tmp_path / "outside"
+    checkout.mkdir(mode=0o700)
+    outside.mkdir(mode=0o700)
+    monkeypatch.setattr(egress, "ROOT", checkout)
+    egress.write_private(outside / "profile.json", egress.encoded(profile()))
+    egress.write_private(outside / "telegram.env", b"ASM_TELEGRAM_ENABLED=false\n")
+    target = checkout / "private-state"
+    requested = outside / ".." / "checkout" / "private-state" if alias else target
+    calls = []
+    monkeypatch.setattr(egress, "source_check", lambda *_: calls.append("source"))
+    monkeypatch.setattr(egress, "command", lambda *_: calls.append("command") or b"[]")
+    monkeypatch.setattr(egress, "image_check", lambda *_: calls.append("image") or "image")
+    with pytest.raises(egress.EgressError, match="EGRESS_PRIVATE_STATE_OUTSIDE_CHECKOUT"):
+        egress.prepare(
+            argparse.Namespace(
+                accepted_sha="a" * 40,
+                profile=str(outside / "profile.json"),
+                telegram_env=str(outside / "telegram.env"),
+                state_dir=str(requested),
+                project="fixture",
+            )
+        )
+    assert not target.exists() and not list(checkout.iterdir())
+    assert calls == []
+
+
+def test_prepare_canonical_outside_path_and_symlink_alias_guard(tmp_path, monkeypatch):
+    checkout, outside = tmp_path / "checkout", tmp_path / "outside"
+    checkout.mkdir(mode=0o700)
+    outside.mkdir(mode=0o700)
+    monkeypatch.setattr(egress, "ROOT", checkout)
+    monkeypatch.setattr(egress, "source_check", lambda *_: None)
+    calls = []
+    monkeypatch.setattr(egress, "command", lambda *_: b"[]")
+    monkeypatch.setattr(egress, "image_check", lambda *_: calls.append("image") or "image")
+    egress.write_private(outside / "profile.json", egress.encoded(profile()))
+    egress.write_private(outside / "telegram.env", b"ASM_TELEGRAM_ENABLED=false\n")
+    alias = tmp_path / "alias"
+    alias.symlink_to(outside, target_is_directory=True)
+    args = argparse.Namespace(
+        accepted_sha="a" * 40,
+        profile=str(outside / "profile.json"),
+        telegram_env=str(outside / "telegram.env"),
+        project="fixture",
+    )
+    # A later '..' must not normalize away the traversed symlink.
+    args.state_dir = str(alias / ".." / "new-state")
+    with pytest.raises(egress.EgressError, match="EGRESS_SYMLINK"):
+        egress.prepare(args)
+    assert not (tmp_path / "new-state").exists() and calls == []
+    args.state_dir = str(outside / ".." / "outside" / "new-state")
+    egress.prepare(args)
+    target = outside / "new-state"
+    assert egress.checked_path(target, directory=True) == target
+    state = json.loads(egress.private_bytes(target / "state.json"))
+    assert state["profile"] == str(outside / "profile.json")
+    assert str(target / "config.json").encode() in egress.private_bytes(target / "route.env")
+    assert b".." not in egress.private_bytes(target / "route.env")
+    assert calls == ["image"] and not list(checkout.iterdir())
+
+
+def test_staged_inputs_do_not_enter_disabled_runtime_model_or_relax_drift(monkeypatch):
+    state = {"project": "fixture", "telegram_env": "/private/staged.env"}
+    fields = {
+        "TG_BOT_TOKEN": "",
+        "TG_WEBHOOK_SECRET": "",
+        "ASM_TELEGRAM_EXPECTED_BOT_ID": "",
+        "ASM_TELEGRAM_WEBHOOK_URL": "",
+        "ASM_DATABASE_URL": "unchanged-db",
+        "ASM_STORAGE_BUCKET": "unchanged-bucket",
+    }
+    values = dict(fields, ASM_TELEGRAM_ENABLED="false")
+    containers = [
+        {
+            "Id": n,
+            "Image": "image",
+            "Config": {
+                "Labels": {"com.docker.compose.service": n},
+                "Env": [k + "=" + v for k, v in values.items()],
+            },
+            "Mounts": [],
+            "NetworkSettings": {"Networks": {}},
+        }
+        for n in ("api", "worker", "postgres", "storage")
+    ]
+
+    def model(s, d):
+        expected = dict(values)
+        if s["telegram_env"] in egress.compose_prefix(s, d):
+            expected.update(
+                TG_BOT_TOKEN="staged-token",
+                TG_WEBHOOK_SECRET="staged-secret",
+                ASM_TELEGRAM_EXPECTED_BOT_ID="9911",
+                ASM_TELEGRAM_WEBHOOK_URL="https://synthetic.invalid/webhook",
+            )
+        return {"services": {n: {"environment": expected} for n in ("api", "worker")}}
+
+    monkeypatch.setattr(egress, "checked_model", model)
+    monkeypatch.setattr(egress, "source_image_check", lambda *_: None)
+    monkeypatch.setattr(
+        egress,
+        "command",
+        lambda args, **_: (
+            egress.encoded(containers)
+            if args[:2] == ["docker", "inspect"]
+            else b"api worker postgres storage"
+        ),
+    )
+    # The identity probe is independent of this exact environment regression.
+    monkeypatch.setattr(egress, "database_identity", lambda *_: {"database": "same"}, raising=False)
+    egress.snapshot(state, Path("/private/state"))
+    assert state["telegram_env"] in egress.compose_prefix(
+        state, Path("/private/state"), operator_inputs=True
+    )
+    for key in fields:
+        containers[0]["Config"]["Env"] = [
+            k + "=" + ("drift" if k == key else v) for k, v in values.items()
+        ]
+        with pytest.raises(egress.EgressError, match="EGRESS_RUNNING_ENVIRONMENT_DRIFT"):
+            egress.snapshot(state, Path("/private/state"))
+    containers[0]["Config"]["Env"] = [k + "=" + v for k, v in values.items()]
+    monkeypatch.setattr(egress, "database_identity", lambda container: {"database": container})
+    with pytest.raises(egress.EgressError, match="EGRESS_CALLER_DATABASE_MISMATCH"):
+        egress.snapshot(state, Path("/private/state"))
 
 
 def profile():
@@ -236,11 +365,15 @@ def test_rollback_disables_first_retains_other_private_bytes_and_never_resets(
     tmp_path, monkeypatch
 ):
     tmp_path.chmod(0o700)
+    monkeypatch.setattr(egress, "ROOT", tmp_path)
     private = tmp_path / "telegram.env"
+    staged = b"TG_BOT_TOKEN='staged-do-not-print'\nASM_TELEGRAM_ENABLED=false\n"
+    egress.write_private(private, staged)
+    runtime = tmp_path / ".env"
     raw = (
         b"TG_BOT_TOKEN='synthetic-do-not-print'\nASM_TELEGRAM_ENABLED=true\nKEEP_DATE=2030-01-01\n"
     )
-    egress.write_private(private, raw)
+    egress.write_private(runtime, raw)
     state = {"project": "fixture", "telegram_env": str(private)}
     before = {
         n: {
@@ -248,6 +381,7 @@ def test_rollback_disables_first_retains_other_private_bytes_and_never_resets(
             "image": "unchanged",
             "environment_sha256": "unchanged-environment",
             "process_sha256": "unchanged-process",
+            "database_identity": {"database": "same"},
             "mounts": ["persistent"],
             "networks": {"fixture_default": {}},
         }
@@ -259,7 +393,8 @@ def test_rollback_disables_first_retains_other_private_bytes_and_never_resets(
     )
 
     def capture(args, **kwargs):
-        assert b"ASM_TELEGRAM_ENABLED=false\n" in private.read_bytes()
+        assert b"ASM_TELEGRAM_ENABLED=false\n" in runtime.read_bytes()
+        assert private.read_bytes() == staged
         calls.append(args)
         return b""
 
@@ -274,7 +409,7 @@ def test_rollback_disables_first_retains_other_private_bytes_and_never_resets(
     assert [c[0] for c in calls] == ["overlay", "plain", "overlay"]
     assert calls[-1][-2:] == ["stop", "telegram-egress"]
     assert not any(v in {"down", "-v", "reset", "drop"} for c in calls for v in c)
-    assert private.read_bytes() == raw.replace(
+    assert runtime.read_bytes() == raw.replace(
         b"ASM_TELEGRAM_ENABLED=true", b"ASM_TELEGRAM_ENABLED=false"
     )
     assert json.loads((tmp_path / "rollback.json").read_bytes())["telegram_disabled"] is True
@@ -321,6 +456,7 @@ def test_docker_mount_order_is_not_drift_but_every_mount_field_remains_guarded(m
     )
     monkeypatch.setattr(egress, "compose_prefix", lambda *_: ["compose"])
     monkeypatch.setattr(egress, "source_image_check", lambda *_: None)
+    monkeypatch.setattr(egress, "database_identity", lambda *_: {"database": "same"})
 
     def inspect(args, **_):
         if args == ["compose", "ps", "-q"]:
@@ -334,6 +470,9 @@ def test_docker_mount_order_is_not_drift_but_every_mount_field_remains_guarded(m
     after = egress.snapshot(state, Path("/unused"))
     assert before == after
     egress.compare_deployment(before, after, state)
+    after["api"]["database_identity"] = {"database": "different"}
+    with pytest.raises(egress.EgressError, match="EGRESS_CALLER_DATABASE_CHANGED"):
+        egress.compare_deployment(before, after, state)
     for field, changed in {
         "Type": "bind",
         "Name": "other",

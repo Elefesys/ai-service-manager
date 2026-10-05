@@ -19,27 +19,34 @@ import os
 import re
 import socket
 import ssl
+import stat
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 import pytest_asyncio
+from asm.auth.crypto import PASSWORD_HASHER, new_token, token_verifier
 from asm.files.database import FileDatabase
 from asm.files.transfer import FetchTransfer
+from asm.foundation import RuntimeDatabase, Settings
+from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.commands import request_manual_text
+from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code
 from asm.messaging.worker import Worker
 from asm.telegram.client import TelegramClient, TelegramError
+from asm.telegram.database import TelegramIngress
 from asm.tenancy import AuthenticatedAccount
+from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 from test_auth_postgres import LOGIN, login
 from test_auth_postgres import auth as auth
-from test_m2_1_postgres import delivery, due, expire, query
+from test_m2_1_postgres import cleanup, delivery, due, expire, query
 from test_m2_1_postgres import messaging as messaging
 from test_m2_2_storage_postgres import grant, image_bytes, plan
 from test_m2_2_storage_postgres import images as images
@@ -57,7 +64,7 @@ from test_m2_3_transport import (
 )
 from test_m2_3_wire_postgres import inbound
 from test_m2_3_wire_postgres import telegram_case as telegram_case
-from test_tenancy_postgres import UA, A
+from test_tenancy_postgres import BA, UA, A
 from test_tenancy_postgres import db as db
 from test_tenancy_postgres import seeded as seeded
 
@@ -583,50 +590,296 @@ class TelegramEgressPostgresChecks:
         )
 
 
-async def durable_snapshot():
-    """Read-only canonical TEST rows; output contains counts/hashes, never rows."""
+DATABASE_IDENTITY_SQL = (
+    "SELECT current_database() AS database, "
+    "(SELECT oid::bigint FROM pg_database WHERE datname=current_database()) AS database_oid, "
+    "inet_server_addr()::text AS server_address, inet_server_port() AS server_port, "
+    "pg_postmaster_start_time()::text AS postmaster_started"
+)
+
+
+async def database_identity(connection):
+    return dict((await connection.execute(text(DATABASE_IDENTITY_SQL))).mappings().one())
+
+
+def require_same_database(actual, expected):
+    assert actual == expected, "E05_CALLER_DATABASE_IDENTITY_MISMATCH"
+
+
+def durable_target():
+    """Only the host-attested disposable project's actual LOCAL database is writable."""
     assert os.environ["ASM_ENVIRONMENT"] == "TEST"
-    url = os.environ["ASM_MIGRATION_DATABASE_URL"]
-    assert make_url(url).database == "asm_test"
-    engine = create_async_engine(url, hide_parameters=True)
+    path = fixture_directory() / "durable-target.json"
+    info = path.lstat()
+    assert stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o600
+    assert info.st_uid == os.getuid()
+    target = read_json(path)
+    assert set(target) == {"project", "postgres_id", "database_identity", "callers"}
+    assert target["project"] == "asm-telegram-egress-test"
+    assert re.fullmatch(r"[0-9a-f]{64}", target["postgres_id"])
+    identity = target["database_identity"]
+    assert set(identity) == {
+        "database",
+        "database_oid",
+        "server_address",
+        "server_port",
+        "postmaster_started",
+    }
+    assert identity["database"] == "asm_local" and identity["server_port"] == 5432
+    assert type(identity["database_oid"]) is int and identity["database_oid"] > 0
+    assert ipaddress.ip_address(identity["server_address"]).is_private
+    assert isinstance(identity["postmaster_started"], str) and identity["postmaster_started"]
+    assert set(target["callers"]) == {"api", "worker"}
+    for caller in target["callers"].values():
+        require_same_database(caller, identity)
+    for variable, user in (
+        ("ASM_DATABASE_URL", "asm_runtime"),
+        ("ASM_MIGRATION_DATABASE_URL", "asm_migrator"),
+    ):
+        url = make_url(os.environ[variable])
+        valid = (
+            url.drivername == "postgresql+psycopg"
+            and url.host == "postgres"
+            and url.port == 5432
+            and url.database == "asm_local"
+            and url.username == user
+            and bool(url.password)
+            and not url.query
+        )
+        assert valid, "E05_EXACT_ISOLATED_LOCAL_ENDPOINT_REQUIRED"
+    return target
+
+
+async def canonical_fingerprint(connection):
+    tables = (
+        await connection.execute(
+            text(
+                "SELECT n.nspname,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+                "WHERE n.nspname IN ('app','platform') AND c.relkind='r' ORDER BY n.nspname,c.relname"
+            )
+        )
+    ).all()
+    fingerprint = {}
+    for namespace, table in tables:
+        assert re.fullmatch(r"[a-z_][a-z_0-9]*", namespace)
+        assert re.fullmatch(r"[a-z_][a-z_0-9]*", table)
+        rows = (
+            (
+                await connection.execute(
+                    text(f'SELECT to_jsonb(t) FROM "{namespace}"."{table}" AS t')
+                )
+            )
+            .scalars()
+            .all()
+        )
+        # Stable multiset comparison covers UUIDs, statuses, receipts,
+        # timestamps, fingerprints, exact text bytes and Console state.
+        canonical = sorted(json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows)
+        fingerprint[namespace + "." + table] = {
+            "count": len(rows),
+            "sha256": hashlib.sha256("\n".join(canonical).encode()).hexdigest(),
+        }
+    return fingerprint
+
+
+@pytest_asyncio.fixture
+async def durable_local():
+    """Dedicated fresh LOCAL fixture; frozen asm_test fixtures are never overridden."""
+    target = durable_target()
+    settings = Settings(environment="LOCAL")
+    runtime = RuntimeDatabase(settings, pool_size=2)
+    migrator = create_async_engine(os.environ["ASM_MIGRATION_DATABASE_URL"], hide_parameters=True)
+    kernel = MessagingDatabase(runtime.engine)
+    h = SimpleNamespace(runtime=runtime, migrator=migrator, kernel=kernel)
+    h.worker = Worker(kernel, ControlledAdapter(environment="TEST"))
+    h.ingress = TelegramIngress(kernel, str(BOT))
+    password = SecretStr(new_token())
+    session_hashes = []
+    seeded_local = False
+    try:
+        await runtime.check()
+        for engine in (runtime.engine, migrator):
+            async with engine.connect() as connection:
+                await connection.execute(text("SET TRANSACTION READ ONLY"))
+                require_same_database(
+                    await database_identity(connection), target["database_identity"]
+                )
+        async with migrator.connect() as connection:
+            await connection.execute(text("SET TRANSACTION READ ONLY"))
+            empty = await canonical_fingerprint(connection)
+            assert empty["platform.alembic_version"]["count"] == 1
+            assert all(
+                row["count"] == 0
+                for name, row in empty.items()
+                if name != "platform.alembic_version"
+            ), "E05_FRESH_EMPTY_LOCAL_DATABASE_REQUIRED"
+        # Reproduce the reviewed mismatch on the real, separate PostgreSQL service.
+        # A complete set of asm_test row hashes cannot satisfy the callers' identity.
+        reviewed_url = make_url(os.environ["ASM_MIGRATION_DATABASE_URL"]).set(
+            host="postgres-test", database="asm_test"
+        )
+        reviewed = create_async_engine(reviewed_url, hide_parameters=True)
+        try:
+            async with reviewed.connect() as connection:
+                await connection.execute(text("SET TRANSACTION READ ONLY"))
+                other = await database_identity(connection)
+                assert other["database"] == "asm_test"
+                with pytest.raises(AssertionError, match="E05_CALLER_DATABASE_IDENTITY_MISMATCH"):
+                    require_same_database(other, target["database_identity"])
+        finally:
+            await reviewed.dispose()
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("INSERT INTO platform.user_accounts(id) VALUES(:id)"), {"id": UA}
+            )
+            await connection.execute(
+                text("INSERT INTO platform.workspaces(id) VALUES(:id)"), {"id": A}
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO platform.workspace_memberships(workspace_id,user_account_id,role) VALUES(:ws,:user,'OWNER')"
+                ),
+                {"ws": A, "user": UA},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.businesses(workspace_id,id,name) VALUES(:ws,:id,'Synthetic E05')"
+                ),
+                {"ws": A, "id": BA},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO platform.auth_credentials(user_account_id,login,password_hash) VALUES(:id,:login,:encoded)"
+                ),
+                {
+                    "id": UA,
+                    "login": LOGIN,
+                    "encoded": PASSWORD_HASHER.hash(password.get_secret_value()),
+                },
+            )
+            observation = dict(
+                bot_identity=str(BOT),
+                external_connection_id=EXTERNAL,
+                owner_user_id=str(OWNER),
+                is_enabled=True,
+                can_reply=True,
+                error_code=None,
+            )
+            binding = (
+                await connection.execute(
+                    text(
+                        "SELECT platform.initialize_telegram_connection(:ws,:business,:bot,:external,:owner,CAST(:obs AS jsonb))"
+                    ),
+                    dict(
+                        ws=A,
+                        business=BA,
+                        bot=str(BOT),
+                        external=EXTERNAL,
+                        owner=str(OWNER),
+                        obs=json.dumps(observation),
+                    ),
+                )
+            ).scalar_one()
+            h.telegram_connection = UUID(binding["connection_id"])
+            await connection.execute(
+                text(
+                    "SELECT platform.initialize_local_messaging_billing(:ws,'Telegram TEST','2000-01-01T00:00:00Z','2100-01-01T00:00:00Z')"
+                ),
+                {"ws": A},
+            )
+        seeded_local = True
+        async with httpx.AsyncClient(
+            base_url="http://api:8000",
+            headers={"Host": "localhost:8000"},
+            timeout=5,
+            trust_env=False,
+        ) as api:
+            h.api = api
+            bootstrap = await api.post(
+                "/api/v1/auth/bootstrap",
+                json={},
+                headers={"Origin": "http://localhost:8000", "X-CSRF-Bootstrap": "1"},
+            )
+            assert bootstrap.status_code == 200
+            session_hashes.append(token_verifier(api.cookies.get(settings.auth_cookie_name)))
+            signed_in = await api.post(
+                "/api/v1/auth/login",
+                json={"login": LOGIN, "password": password.get_secret_value()},
+                headers={
+                    "Origin": "http://localhost:8000",
+                    "X-CSRF-Token": bootstrap.json()["csrf_token"],
+                },
+            )
+            assert signed_in.status_code == 200
+            session_hashes.append(token_verifier(api.cookies.get(settings.auth_cookie_name)))
+            await assert_durable_console(h)
+            yield h
+    finally:
+        if seeded_local:
+            # Only this attested disposable fixture's canonical rows are removed,
+            # after the held before/after assertions, never by deploy or rollback.
+            async with migrator.begin() as connection:
+                require_same_database(
+                    await database_identity(connection), target["database_identity"]
+                )
+                await connection.execute(
+                    text(
+                        "DELETE FROM platform.auth_sessions WHERE user_account_id=:user OR token_hash=ANY(:hashes)"
+                    ),
+                    {"user": UA, "hashes": session_hashes},
+                )
+                await connection.execute(
+                    text("DELETE FROM platform.auth_credentials WHERE user_account_id=:id"),
+                    {"id": UA},
+                )
+                await connection.execute(
+                    text("DELETE FROM platform.telegram_update_receipts WHERE bot_identity=:bot"),
+                    {"bot": str(BOT)},
+                )
+            await cleanup(migrator)
+            async with migrator.begin() as connection:
+                for table in (
+                    "platform.billing_contact_command_receipts",
+                    "app.audit_events",
+                    "platform.workspace_service_modes",
+                    "platform.workspace_subscriptions",
+                    "platform.workspace_billing_accounts",
+                    "app.businesses",
+                    "platform.workspace_memberships",
+                ):
+                    await connection.execute(
+                        text(f"DELETE FROM {table} WHERE workspace_id=:ws"), {"ws": A}
+                    )
+                await connection.execute(
+                    text("DELETE FROM platform.workspaces WHERE id=:id"), {"id": A}
+                )
+                await connection.execute(
+                    text("DELETE FROM platform.user_accounts WHERE id=:id"), {"id": UA}
+                )
+        await runtime.close()
+        await migrator.dispose()
+
+
+async def assert_durable_console(h):
+    session = await h.api.get("/api/v1/auth/session")
+    assert session.status_code == 200 and session.json()["user_account_id"] == str(UA)
+    businesses = await h.api.get(f"/api/v1/workspaces/{A}/businesses")
+    assert businesses.status_code == 200
+    assert [row["id"] for row in businesses.json()["businesses"]] == [str(BA)]
+
+
+async def durable_snapshot():
+    """Read-only rows of the actual callers' attested LOCAL DB; no raw rows escape."""
+    target = durable_target()
+    engine = create_async_engine(os.environ["ASM_MIGRATION_DATABASE_URL"], hide_parameters=True)
     try:
         async with engine.connect() as connection:
             await connection.execute(
                 text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
             )
-            assert (
-                await connection.execute(text("SELECT current_database()"))
-            ).scalar_one() == "asm_test"
-            tables = (
-                await connection.execute(
-                    text(
-                        "SELECT n.nspname,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
-                        "WHERE n.nspname IN ('app','platform') AND c.relkind='r' ORDER BY n.nspname,c.relname"
-                    )
-                )
-            ).all()
-            fingerprint = {}
-            for namespace, table in tables:
-                assert re.fullmatch(r"[a-z_][a-z_0-9]*", namespace)
-                assert re.fullmatch(r"[a-z_][a-z_0-9]*", table)
-                rows = (
-                    (
-                        await connection.execute(
-                            text(f'SELECT to_jsonb(t) FROM "{namespace}"."{table}" AS t')
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                # Stable multiset comparison covers UUIDs, statuses, receipts,
-                # timestamps, fingerprints, exact text bytes and Console state.
-                canonical = sorted(
-                    json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows
-                )
-                fingerprint[namespace + "." + table] = {
-                    "count": len(rows),
-                    "sha256": hashlib.sha256("\n".join(canonical).encode()).hexdigest(),
-                }
+            identity = await database_identity(connection)
+            require_same_database(identity, target["database_identity"])
+            fingerprint = await canonical_fingerprint(connection)
             assert fingerprint["app.outbox_events"]["count"] == 1
             assert fingerprint["platform.messaging_command_receipts"]["count"] == 1
             assert fingerprint["platform.auth_credentials"]["count"] == 1
@@ -638,6 +891,7 @@ async def durable_snapshot():
             )
             assert states == ["UNKNOWN"]
             return {
+                "identity": identity,
                 "tables": fingerprint,
                 "sha256": hashlib.sha256(
                     json.dumps(fingerprint, sort_keys=True, separators=(",", ":")).encode()
@@ -648,14 +902,13 @@ async def durable_snapshot():
 
 
 class TelegramEgressDurableRollbackCheck:
-    """A held accepted fixture keeps real UNKNOWN/Console rows during rollback."""
+    """Keep actual LOCAL callers' UNKNOWN/Console rows through exact CLI rollback."""
 
     async def test_deploy_rollback_preserves_console_unknown_receipts_and_wire_counter(
-        self, egress_case, telegram_case, auth
+        self, egress_case, durable_local
     ):
-        case, h = egress_case, telegram_case
+        case, h = egress_case, durable_local
         result = await unknown_scenario(case, h, "finalize_after_commit")
-        assert (await login(auth)).status_code == 200
         before = await durable_snapshot()
         assert len(case_events(case, "SEND_EFFECT")) == 1
         write_json(
@@ -675,6 +928,7 @@ class TelegramEgressDurableRollbackCheck:
             while not release.exists():
                 await asyncio.sleep(0.1)
         assert read_json(release) == {"case": case.identity, "verified": True}
+        await assert_durable_console(h)
         assert await durable_snapshot() == before
         assert (await delivery(h, result.message_id))["status"] == "UNKNOWN"
         assert len(case_events(case, "SEND_EFFECT")) == 1
@@ -682,7 +936,10 @@ class TelegramEgressDurableRollbackCheck:
             case,
             "E05",
             "DEPLOY_ROLLBACK_PRESERVES_CANONICAL_UNKNOWN_CONSOLE_RECEIPTS",
+            database_identity=before["identity"],
             database_sha256=before["sha256"],
+            reviewed_mismatch_rejected=True,
+            persistent_console_session=True,
             wire_counter=1,
         )
 

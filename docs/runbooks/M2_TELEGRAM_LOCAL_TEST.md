@@ -1345,9 +1345,9 @@ ADR239 не меняется: данный synthetic TEST route не допус�
 ### 0.6.4. Подготовленная ENV04 процедура для выдачи C0
 
 **C0/C8 2026-10-05: CHANGES_REQUESTED — эту версию не выполнять на owner VM.**
-Ниже сохранён reviewed artifact C6; staged/runtime-env и E05 исправления ещё не
-приняты. Current findings и пределы evidence — §0.6.6; точная доработка — один
-активный M2_HANDOFF. После исправления C0 выдаст актуальный единый блок.
+Ниже сохранён исторический reviewed artifact C6. Исправленная процедура — §0.6.7,
+пока REVIEW; выдаёт её только C0 после targeted C8. Findings/границы старого evidence
+сохранены в §0.6.6; одно текущее поручение — активный M2_HANDOFF.
 
 Это review artifact, **не команда владельцу выполнить deployment сейчас**. После
 scoped C8 и final CI C0 выдаёт один блок с принятым полным `ENV04_ACCEPTED_SHA` и
@@ -1511,6 +1511,88 @@ media recovery, два real worker crash сценария, durable UNKNOWN и fs
 Единственный следующий шаг — ограниченное исправление C6 в текущем PR24 по активному
 handoff; затем exact-head full CI и targeted C8 по трём находкам. PR остаётся Draft,
 owner VM/внешний Telegram не меняются, M2 IN_PROGRESS. Это не приёмка ENV04/M2.
+
+### 0.6.7. C6 correction REVIEW — текущая процедура и три P2
+
+Продолжение от **7a9eca3d2e1509b029d1ef0ba2f2c0d2d590ce7c**, tree
+**1da0e2da06269457e91de1752fe224f93681b8ba**, CI37285033299 SUCCESS. История сохранена.
+Это исправленный artifact для C0/targeted C8, **не инструкция владельцу запускать
+deployment сейчас**. §0.6.4 больше не является текущей процедурой. M2 IN_PROGRESS,
+PR24 Draft; VM/live Telegram и существующие private inputs C6 не меняет.
+
+| Finding / criteria | Regression и новое доказательство |
+|---|---|
+| C8-M2-ENV04-01 / E05 | `test_staged_inputs_do_not_enter_disabled_runtime_model_or_relax_drift`: на reviewed code EGRESS_RUNNING_ENVIRONMENT_DRIFT; после fix default Compose читает текущий runtime `.env`, explicit operator отдельно читает staged file. Все четыре TG fields, DB/storage env по-прежнему сравниваются строго; любое изменение отклоняется. Mandatory Docker lane начинает с disabled/empty callers и заполненного synthetic staged env, сверяет это до/после deploy/rollback, staged bytes неизменны. |
+| C8-M2-ENV04-02 / E05 | `durable_local`, `durable_snapshot`, `test_deploy_rollback_preserves_console_unknown_receipts_and_wire_counter`: fresh isolated project/volume и empty domain state, exact postgres/asm_local endpoints. SQL identity из actual api и worker (database/OID/server address/port/postmaster start) совпадает с harness до/после CLI. Реальная отдельная asm_test отвергается; удерживаются UNKNOWN, receipt и Console session, повторный HTTP session/business GET с тем же cookie после rollback; все app/platform rows и persistent counter1 неизменны. |
+| C8-M2-ENV04-03 / E01 | `test_prepare_rejects_canonical_checkout_state_before_any_effect` воспроизводит прямой путь и outside/../checkout/private-state, доказывает отсутствие writes и source/Docker/image calls при отказе. `test_prepare_canonical_outside_path_and_symlink_alias_guard`: правильный outside path проходит с canonical output; symlink/../ alias отклоняется до resolve. Owner/mode/no-symlink проверки сохранены. |
+
+E02–E04 cases, их assertions, pinned Xray/TLS/official origin, application/client
+source blobs, operation budgets/retries0 и UNKNOWN recovery не изменены. Дополнительный
+SQL identity check не заменяет fingerprint: проверяются и actual target, и содержимое.
+Six transport cases остаются на asm_test со старыми строгими guards. Отдельный E05
+LOCAL harness имеет собственные более узкие fresh-project/endpoint/empty-state guards;
+обычные asm_test fixtures не получают исключений для LOCAL. Worker останавливается
+только на время synthetic seed/effect, затем реальные disabled API/worker проходят
+exact CLI deploy/preflight/rollback; приложение/Compose base не патчатся.
+
+Локально Docker отсутствует. Reproductions C8-01/03 выполнены actual Python guards
+с substituted external checks: это не owner VM или Docker receipt. После fix38 unit
+cases PASS; обязательный runner выполняет `sh scripts/ci.sh` (включая семь real relay
+cases), `sh scripts/test_browser.sh` и оба clean-source gates. Exact final head/tree/
+tested merge, CI outcomes и проверенный artifact находятся в PR24 receipt, чтобы
+не создавать SHA-only commits. Перед выдачей C0 требует successful final run и targeted
+C8 по этим трём corrections; данный текст не объявляет их независимую приёмку.
+
+После приёмки C0 выдаёт следующий единый блок с полным принятым `ENV04_ACCEPTED_SHA`
+и уже известным absolute `ENV04_PROFILE`. Не вводить secrets повторно, не копировать
+staged inputs в runtime. Текущий `.env` должен разрешаться в фактические disabled
+callers с пустыми TG fields; вся остальная env/image/process/mount/gateway identity
+строго проверяется. При drift остановиться с bounded error и вернуть C0 только код.
+
+```sh
+set -eu
+cd /home/asmoperator/asm-telegram-test
+test "$(git rev-parse HEAD)" = "$ENV04_ACCEPTED_SHA"
+docker pull --platform linux/amd64 ghcr.io/xtls/xray-core@sha256:9a17fb7fcda36f80d041fc1f12f1d661d3f7c502572b2a6f2e4432534789a20b
+python3 scripts/prepare_telegram_egress.py prepare \
+  --accepted-sha "$ENV04_ACCEPTED_SHA" --profile "$ENV04_PROFILE" \
+  --telegram-env /home/asmoperator/asm-telegram-test/.env.telegram \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress \
+  --project asm-telegram-test
+python3 scripts/prepare_telegram_egress.py verify \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+python3 scripts/prepare_telegram_egress.py deploy \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+python3 scripts/prepare_telegram_egress.py preflight \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+```
+
+Ожидаемые markers: `TELEGRAM_EGRESS_PREPARE_PASS`, `...VERIFY_PASS`, `...DEPLOY_PASS`,
+`...PREFLIGHT_PASS`. Private state700/config600 находятся canonical вне checkout;
+публиковать их содержимое нельзя. Deploy сохраняет текущий runtime env, только
+добавляет fixed mapping и relay. Preflight проверяет mapping трёх callers и обычную
+DB readiness, не делает Telegram HTTP и не доказывает доступность подписки/rights.
+Staged `.env.telegram` не попадает в runtime containers. Только явно выданный
+one-shot operator wrapper читает этот файл; данный блок не вызывает operator/live.
+Будущая активация runtime — отдельный согласованный C0 шаг: обычный wrapper recreate
+сам не импортирует staged inputs. Ни discovery/setup/webhook, ни send здесь нет.
+
+Для отдельно разрешённого C0 rollback:
+
+```sh
+python3 scripts/prepare_telegram_egress.py rollback \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+```
+
+Сначала атомарно фиксируется `ASM_TELEGRAM_ENABLED=false` в фактическом runtime
+`.env`; если default field отсутствовал, добавляется только он. Прочие bytes
+сохраняются; staged `.env.telegram` не переписывается. API/worker пересоздаются с
+mapping и проверенным disabled env, затем без mapping; обе стадии ждут readiness
+в прежнем command budget. Relay останавливается. Его outage не блокирует rollback.
+Private receipt сверяет прежние images/mounts/process/env (кроме disabled flag),
+actual DB identity и unrelated containers. Нет down-v/reset/rebind/drop. PG/S3
+volumes, UNKNOWN/receipt/Console и staged inputs сохраняются. При ошибке не включать
+Telegram: вернуть C0 bounded code, после исправления повторить тот же rollback.
 
 ## 1. Конкретное окружение и предварительные условия
 

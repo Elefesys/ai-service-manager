@@ -441,12 +441,27 @@ def route_env(values):
     return "".join(f"{k}={v}\n" for k, v in sorted(values.items())).encode()
 
 
+def state_directory(path):
+    # Check the requested spelling before resolving it: resolve() alone would
+    # hide a symlink component, including a symlink followed by '..'.
+    requested = Path(path).absolute()
+    require(SAFE_PATH.fullmatch(str(requested)) is not None, "EGRESS_UNSAFE_PATH")
+    for part in (requested, *requested.parents):
+        try:
+            info = part.lstat()
+        except FileNotFoundError:
+            continue
+        require(not stat.S_ISLNK(info.st_mode), "EGRESS_SYMLINK")
+    directory = requested.resolve()
+    require(not directory.is_relative_to(ROOT.resolve()), "EGRESS_PRIVATE_STATE_OUTSIDE_CHECKOUT")
+    return directory
+
+
 def prepare(args):
+    directory = state_directory(args.state_dir)
     source_check(args.accepted_sha)
     profile = checked_path(args.profile)
     raw = private_bytes(profile)
-    directory = Path(args.state_dir).absolute()
-    require(not directory.is_relative_to(ROOT), "EGRESS_PRIVATE_STATE_OUTSIDE_CHECKOUT")
     require(re.fullmatch(r"[a-z][a-z0-9-]{0,40}", args.project) is not None, "EGRESS_PROJECT")
     if not directory.exists():
         directory.mkdir(mode=0o700, parents=True)
@@ -496,7 +511,7 @@ def prepare(args):
 
 
 def verify(directory):
-    directory = checked_path(directory, directory=True)
+    directory = checked_path(state_directory(directory), directory=True)
     state = strict_json(private_bytes(directory / "state.json"))
     require(state.get("version") == 1 and state.get("image") == IMAGE, "EGRESS_STATE_VERSION")
     require(state["uid"] == os.getuid() and state["gid"] == os.getgid(), "EGRESS_STATE_OWNER")
@@ -527,7 +542,7 @@ def verify(directory):
     return state
 
 
-def compose_prefix(state, directory, *, overlay=True):
+def compose_prefix(state, directory, *, overlay=True, operator_inputs=False):
     args = [
         "docker",
         "compose",
@@ -539,8 +554,12 @@ def compose_prefix(state, directory, *, overlay=True):
         str(ROOT / "infra/images.lock.env"),
         "--env-file",
         str(ROOT / ".env"),
-        "--env-file",
-        state["telegram_env"],
+    ]
+    # Runtime deployment uses the existing base env. Staged Telegram inputs
+    # belong to an explicitly issued one-shot operator command, not deployment.
+    if operator_inputs:
+        args += ["--env-file", state["telegram_env"]]
+    args += [
         "--env-file",
         str(ROOT / "infra/telegram-egress/image.lock.env"),
         "--env-file",
@@ -688,10 +707,47 @@ def snapshot(state, directory, *, disabled=True):
                 for k, n in container["NetworkSettings"]["Networks"].items()
             },
         }
+        if name in {"api", "worker"}:
+            result[name]["database_identity"] = database_identity(container["Id"])
     require(
         {"api", "worker", "postgres", "storage"} <= set(result), "EGRESS_RUNNING_STACK_REQUIRED"
     )
+    require(
+        result["api"]["database_identity"] == result["worker"]["database_identity"],
+        "EGRESS_CALLER_DATABASE_MISMATCH",
+    )
     return result
+
+
+def database_identity(container):
+    # Read the actual caller environment inside each running container. No URL,
+    # role credential or business rows leave the container; transaction is read-only.
+    query = (
+        "SELECT current_database() AS database, "
+        "(SELECT oid::bigint FROM pg_database WHERE datname=current_database()) AS database_oid, "
+        "inet_server_addr()::text AS server_address, inet_server_port() AS server_port, "
+        "pg_postmaster_start_time()::text AS postmaster_started"
+    )
+    probe = (
+        "import json,os; from sqlalchemy import create_engine,text; "
+        "engine=create_engine(os.environ['ASM_DATABASE_URL'],hide_parameters=True,"
+        "connect_args={'connect_timeout':4})\n"
+        "with engine.connect() as connection:\n"
+        " connection.execute(text('SET TRANSACTION READ ONLY'))\n"
+        " connection.execute(text('SET LOCAL statement_timeout=4000'))\n"
+        " print(json.dumps(dict(connection.execute(text(" + repr(query) + ")).mappings().one())))\n"
+    )
+    identity = json.loads(command(["docker", "exec", container, "python", "-c", probe]))
+    require(
+        set(identity)
+        == {"database", "database_oid", "server_address", "server_port", "postmaster_started"}
+        and identity["database"] == "asm_local"
+        and isinstance(identity["database_oid"], int)
+        and identity["server_address"]
+        and identity["postmaster_started"],
+        "EGRESS_CALLER_DATABASE_IDENTITY",
+    )
+    return identity
 
 
 def source_image_check(image):
@@ -778,6 +834,10 @@ def compare_deployment(before, after, state):
             "EGRESS_CALLER_IMAGE_OR_VOLUME_CHANGED",
         )
         require(
+            before[name]["database_identity"] == after[name]["database_identity"],
+            "EGRESS_CALLER_DATABASE_CHANGED",
+        )
+        require(
             after[name]["networks"][default]["Gateway"]
             == before[name]["networks"][default]["Gateway"],
             "EGRESS_DEFAULT_GATEWAY_CHANGED",
@@ -840,13 +900,19 @@ def deploy(state, directory):
 
 def rollback(state, directory):
     # Explicit operator action only; disable first while the fixed route still exists.
-    path = checked_path(state["telegram_env"])
+    # Only the actual runtime source is changed; private staged inputs are retained.
+    path = checked_path(ROOT / ".env")
     raw = path.read_bytes()
     require(len(raw) <= 65536, "EGRESS_ENV_LIMIT")
     lines = raw.splitlines(keepends=True)
     matches = [i for i, line in enumerate(lines) if line.startswith(b"ASM_TELEGRAM_ENABLED=")]
-    require(len(matches) == 1, "EGRESS_ENV_ENABLED_FIELD")
-    lines[matches[0]] = b"ASM_TELEGRAM_ENABLED=false\n"
+    require(len(matches) <= 1, "EGRESS_ENV_ENABLED_FIELD")
+    if matches:
+        lines[matches[0]] = b"ASM_TELEGRAM_ENABLED=false\n"
+    else:
+        if lines and not lines[-1].endswith(b"\n"):
+            lines[-1] += b"\n"
+        lines.append(b"ASM_TELEGRAM_ENABLED=false\n")
     write_private(path, b"".join(lines), private_parent=False)
     env = clean_environment()
     before = snapshot(state, directory, disabled=False)
@@ -859,6 +925,7 @@ def rollback(state, directory):
             "--pull",
             "never",
             "--force-recreate",
+            "--wait",
             "api",
             "worker",
         ],
@@ -875,6 +942,7 @@ def rollback(state, directory):
             "--pull",
             "never",
             "--force-recreate",
+            "--wait",
             "api",
             "worker",
         ],
@@ -892,6 +960,10 @@ def rollback(state, directory):
                     and after[name]["environment_sha256"] == previous["environment_sha256"]
                     and after[name]["process_sha256"] == previous["process_sha256"],
                     "EGRESS_ROLLBACK_CALLER_DRIFT",
+                )
+                require(
+                    after[name]["database_identity"] == previous["database_identity"],
+                    "EGRESS_ROLLBACK_DATABASE_CHANGED",
                 )
             continue
         require(after.get(name) == previous, "EGRESS_ROLLBACK_UNRELATED_DRIFT")
@@ -962,7 +1034,7 @@ def main():
             )
             prepare(args)
         else:
-            directory = Path(args.state_dir).absolute()
+            directory = state_directory(args.state_dir)
             if args.action == "rollback":
                 state = strict_json(private_bytes(directory / "state.json"))
                 source_check(state["source_sha"])
@@ -998,7 +1070,10 @@ def main():
                 require(permitted_compose(extra), "EGRESS_COMPOSE_OPERATION")
                 require(
                     subprocess.run(
-                        [*compose_prefix(state, directory), *extra],
+                        [
+                            *compose_prefix(state, directory, operator_inputs=extra[:1] == ["run"]),
+                            *extra,
+                        ],
                         stdin=subprocess.DEVNULL,
                         env=clean_environment(),
                     ).returncode
