@@ -41,6 +41,10 @@ def run(args, timeout=120):
         diagnostic = re.sub(r'(://)[^/\s]*@', r'\1<redacted>@', diagnostic)
         print('TEST_COMMAND_EXIT=' + str(result.returncode) + ' phase=' + phase, flush=True)
         print(diagnostic, flush=True)
+        if args[:2] == ['python3', 'scripts/prepare_telegram_egress.py']:
+            code = result.stdout.decode(errors='replace').strip()
+            if re.fullmatch('EGRESS_[A-Za-z0-9_]{1,120}', code):
+                print(code, flush=True)
         raise RuntimeError('TEST_COMMAND_FAILED:' + phase)
     return result.stdout
 
@@ -53,6 +57,7 @@ def phase_start(name):
     print('TELEGRAM_EGRESS_TEST_' + name.upper(), flush=True)
 
 def operator(action):
+    phase_start('operator_' + action)
     output = run(['python3', 'scripts/prepare_telegram_egress.py', action,
                   '--state-dir', str(state_dir)], 120).decode().strip()
     assert output == 'TELEGRAM_EGRESS_' + action.upper() + '_PASS'
