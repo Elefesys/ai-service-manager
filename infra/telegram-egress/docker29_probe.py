@@ -33,7 +33,7 @@ def main():
     occupied = [
         ipaddress.ip_network(v["Subnet"])
         for n in json.loads(run(["docker", "network", "inspect", *networks]))
-        for v in n["IPAM"]["Config"]
+        for v in (n["IPAM"]["Config"] or [])
         if v.get("Subnet")
     ]
     subnet = next(
