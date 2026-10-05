@@ -1,0 +1,62 @@
+# Opt-in only. Use the private route.env produced by prepare_telegram_egress.py.
+# Preserve the existing default gateway; Telegram alone resolves to this relay.
+x-egress-hosts: &egress-hosts
+  - api.telegram.org=${ASM_TELEGRAM_EGRESS_IP:?Prepare private egress state}
+  - api.telegram.org=::ffff:${ASM_TELEGRAM_EGRESS_IP:?Prepare private egress state}
+x-egress-networks: &egress-networks
+  default:
+    gw_priority: 1
+  telegram-egress: {}
+services:
+  api:
+    extra_hosts: *egress-hosts
+    networks: *egress-networks
+  worker:
+    extra_hosts: *egress-hosts
+    networks: *egress-networks
+  telegram-operator:
+    extra_hosts: *egress-hosts
+    networks: *egress-networks
+  telegram-egress:
+    profiles: [telegram-egress]
+    image: ${TELEGRAM_EGRESS_IMAGE:?Missing telegram-egress/image.lock.env}
+    platform: linux/amd64
+    user: "${ASM_TELEGRAM_EGRESS_UID:?}:${ASM_TELEGRAM_EGRESS_GID:?}"
+    command: [run, -config, /run/telegram-egress/config.json]
+    read_only: true
+    # Shadow the publisher's writable anonymous VOLUME declarations.
+    tmpfs:
+      - /usr/local/etc/xray:ro,noexec,nosuid,size=64k
+      - /var/log/xray:ro,noexec,nosuid,size=64k
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
+    pids_limit: 64
+    mem_limit: 96m
+    cpus: 0.5
+    ulimits:
+      nofile: {soft: 512, hard: 512}
+    restart: unless-stopped
+    stop_grace_period: 10s
+    logging: {driver: none}
+    volumes:
+      - type: bind
+        source: ${ASM_TELEGRAM_EGRESS_CONFIG:?Prepare private egress state}
+        target: /run/telegram-egress/config.json
+        read_only: true
+        bind: {create_host_path: false}
+    networks:
+      telegram-egress:
+        ipv4_address: ${ASM_TELEGRAM_EGRESS_IP:?}
+networks:
+  telegram-egress:
+    name: ${ASM_TELEGRAM_EGRESS_NETWORK:?}
+    driver: bridge
+    enable_ipv6: false
+    labels:
+      asm.scope: synthetic-telegram-test
+    ipam:
+      config:
+        - subnet: ${ASM_TELEGRAM_EGRESS_SUBNET:?}
+          gateway: ${ASM_TELEGRAM_EGRESS_GATEWAY:?}
