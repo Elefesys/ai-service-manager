@@ -6,11 +6,35 @@
 
 ## Активный handoff C0 → C6 — M2-ENV-04-DOCKER29-MAPPING
 
-**Одна ограниченная доработка ENV04, IN_PROGRESS.** Новая operational находка
+**Одна ограниченная доработка ENV04, передача C6 REVIEW.** Новая operational находка
 **C0-M2-ENV04-04, P2 / E02 и E05** воспроизведена владельцем на existing TEST VM.
 Нужны совместимый с Docker29 mapping и сохранное продолжение после частичного
 deployment. Прежние C8-01/02/03 CLOSED, M2 IN_PROGRESS, PR24 Draft/open/not merged.
 Не выполнять старое поручение source access/первого deployment из истории ниже.
+
+### Реализация C6 и текущая граница REVIEW
+
+Реализованы native private IPv6 того же relay и явный guarded `recover`; original
+before и legacy generated inputs неизменны. Recovery допускает только известный
+schema1/source c29aabd36 и exact accepted checkout; immutable audit/generation,
+operation lock и atomic manifest позволяют возобновить interruption без rebaseline.
+`deployment-after` появляется только после strict mapping/readiness/preservation.
+`deploy`/`snapshot` не перезаписывают existing before. Explicit rollback доступен
+для нового state и guarded legacy partial state; automatic rollback отсутствует.
+
+Старый дефект реально воспроизведён **до** исправления в CI37351449973:
+compatibility job111903261317 SUCCESS, tested merge0d2bd888cd396389dcecfdf05f3064d992cee107,
+Engine29.8.2/server8af9fe3, Compose5.5.1, Python3.13.15/glibc2.36. Safe report показывает
+model/HostConfig mapped pair, hosts two IPv4 и чужой synthetic AAAA у всех трёх callers.
+Первый setup CI37350175798 имел ошибку APT source selection; второй CI37350872633 —
+fixture inventory IPAM.Config=null. Исправлены setup/fixture, assertions не ослаблялись.
+
+Новая mandatory lane запускает reproduction и полный synthetic egress lifecycle на
+exact Engine/Compose; foundation/browser jobs и их scripts/gates прежние. Local
+focused59 PASS; это не Docker evidence. Fresh/recovery real execution и final refs
+публикуются одним receipt PR24 после final-head CI. Runbook§0.6.12 содержит матрицу
+assertions и подготовленную процедуру. REVIEW не закрывает C0 finding и не заменяет
+независимый targeted C8. Owner VM остаётся на c29aabd36; новых owner действий C6 не выполнял.
 
 ### Repository, точный старт и источники
 

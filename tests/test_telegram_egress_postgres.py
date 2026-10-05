@@ -157,20 +157,52 @@ def official_client(directory):
 
 
 async def assert_mapping():
-    expected = ipaddress.ip_address(os.environ["ASM_EGRESS_RELAY_IP"])
+    expected = {
+        ipaddress.ip_address(os.environ[key])
+        for key in ("ASM_EGRESS_RELAY_IP", "ASM_EGRESS_RELAY_IPV6")
+    }
     for family in (socket.AF_UNSPEC, socket.AF_INET, socket.AF_INET6):
         addresses = await asyncio.wait_for(
             asyncio.to_thread(
-                socket.getaddrinfo, "api.telegram.org", 443, family, socket.SOCK_STREAM
+                socket.getaddrinfo, "api.telegram.org", 443, family, socket.SOCK_STREAM, 0, 0
             ),
             5,
         )
         assert addresses, "OFFICIAL_HOST_MAPPING_MISSING"
         for _, _, _, _, endpoint in addresses:
             address = ipaddress.ip_address(endpoint[0])
-            if isinstance(address, ipaddress.IPv6Address):
-                address = address.ipv4_mapped or address
-            assert address == expected, "DIRECT_OR_DNS_FALLBACK_ADDRESS"
+            assert address in expected, "DIRECT_OR_DNS_FALLBACK_ADDRESS"
+            if family != socket.AF_UNSPEC:
+                assert address.version == (4 if family == socket.AF_INET else 6)
+
+
+async def both_relay_families(directory, *, available):
+    for family, key in (
+        (socket.AF_INET, "ASM_EGRESS_RELAY_IP"),
+        (socket.AF_INET6, "ASM_EGRESS_RELAY_IPV6"),
+    ):
+        if not available:
+            with pytest.raises((OSError, TimeoutError)):
+                _, writer = await asyncio.wait_for(
+                    asyncio.open_connection(os.environ[key], 443, family=family), 2
+                )
+                writer.close()
+            continue
+        # End-to-end verified TLS reaches the synthetic recipient through each
+        # actual Xray listener. No extra HTTP request/send or provider retry.
+        _, writer = await asyncio.wait_for(
+            asyncio.open_connection(
+                os.environ[key],
+                443,
+                family=family,
+                ssl=tls_context(directory),
+                server_hostname="api.telegram.org",
+            ),
+            8,
+        )
+        assert writer.get_extra_info("ssl_object").version() == "TLSv1.3"
+        writer.close()
+        await asyncio.wait_for(writer.wait_closed(), 2)
 
 
 def case_events(case, event=None):
@@ -375,6 +407,7 @@ class TelegramEgressPostgresChecks:
         case, h = egress_case, telegram_case
         monkeypatch.setenv("HTTPS_PROXY", "http://unusable-proxy.invalid:9")
         await assert_mapping()
+        await both_relay_families(case.directory, available=True)
         # A globally trusted CA was not installed. The frozen default client
         # rejects the synthetic certificate; the explicit TEST transport trusts it.
         untrusted = TelegramClient(config())
@@ -406,6 +439,7 @@ class TelegramEgressPostgresChecks:
             assert asyncio.get_running_loop().time() - started < 7
             await wait_stopped(case)
             await assert_mapping()
+            await both_relay_families(case.directory, available=False)
             assert len(case_events(case, "REQUEST")) == 1
             with pytest.raises(TelegramError) as offline:
                 await client.get_me()
@@ -455,6 +489,7 @@ class TelegramEgressPostgresChecks:
             replacement = await relay_action(case.directory, "recreate")
             assert replacement["relay_id"] != case.relay_id
             await assert_mapping()
+            await both_relay_families(case.directory, available=True)
             scenario(case, "normal")
             assert await client.get_me() == str(BOT)
             connection = await client.get_business_connection(EXTERNAL)
@@ -470,6 +505,7 @@ class TelegramEgressPostgresChecks:
                 case,
                 "E02/E03",
                 "READONLY_TLS_MAPPING_AUTH_DB_PRIVATE_S3",
+                native_ipv4_ipv6_tls_and_fail_closed=True,
                 relay_before=case.relay_id,
                 relay_after=replacement["relay_id"],
             )
@@ -947,6 +983,7 @@ class TelegramEgressDurableRollbackCheck:
             case,
             "E05",
             "DEPLOY_ROLLBACK_PRESERVES_CANONICAL_UNKNOWN_CONSOLE_RECEIPTS",
+            lifecycle=os.environ["ASM_EGRESS_LIFECYCLE"],
             database_identity=before["identity"],
             database_sha256=before["sha256"],
             reviewed_mismatch_rejected=True,

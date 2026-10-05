@@ -5,6 +5,8 @@ Errors are deliberately bounded codes: provider configuration is never printed.
 """
 
 import argparse
+import copy
+import fcntl
 import hashlib
 import ipaddress
 import json
@@ -13,6 +15,7 @@ import re
 import stat
 import subprocess
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from uuid import UUID
 
@@ -27,6 +30,11 @@ CALLERS = ("api", "worker", "telegram-operator")
 RUNTIME_FIELDS = ("ASM_AUTH_ORIGINS", "ASM_STORAGE_ENDPOINT")
 ROOT = Path(__file__).resolve().parents[1]
 SAFE_PATH = re.compile(r"/[A-Za-z0-9_./-]+")
+
+LEGACY_SHA = "c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14"
+LEGACY_OVERLAY_BLOB = "5a6158a648d553fe80a917f6ebca8867c20bbfe6"
+# Exact accepted schema1 overlay, retained only to verify/recover the known partial state.
+LEGACY_OVERLAY = b'# Opt-in only. Use the private route.env produced by prepare_telegram_egress.py.\n# Preserve the existing default gateway; Telegram alone resolves to this relay.\nx-egress-hosts: &egress-hosts\n  - api.telegram.org=${ASM_TELEGRAM_EGRESS_IP:?Prepare private egress state}\n  - api.telegram.org=::ffff:${ASM_TELEGRAM_EGRESS_IP:?Prepare private egress state}\nx-egress-networks: &egress-networks\n  default:\n    gw_priority: 1\n  telegram-egress: {}\nservices:\n  api:\n    extra_hosts: *egress-hosts\n    networks: *egress-networks\n  worker:\n    extra_hosts: *egress-hosts\n    networks: *egress-networks\n  telegram-operator:\n    extra_hosts: *egress-hosts\n    networks: *egress-networks\n  telegram-egress:\n    profiles: [telegram-egress]\n    image: ${TELEGRAM_EGRESS_IMAGE:?Missing telegram-egress/image.lock.env}\n    platform: linux/amd64\n    user: "${ASM_TELEGRAM_EGRESS_UID:?}:${ASM_TELEGRAM_EGRESS_GID:?}"\n    command: [run, -config, /run/telegram-egress/config.json]\n    read_only: true\n    # Shadow the publisher\'s writable anonymous VOLUME declarations.\n    tmpfs:\n      - /usr/local/etc/xray:ro,noexec,nosuid,size=64k\n      - /var/log/xray:ro,noexec,nosuid,size=64k\n    cap_drop: [ALL]\n    security_opt: [no-new-privileges:true]\n    sysctls:\n      net.ipv4.ip_unprivileged_port_start: "0"\n    pids_limit: 64\n    mem_limit: 96m\n    cpus: 0.5\n    ulimits:\n      nofile: {soft: 512, hard: 512}\n    restart: unless-stopped\n    stop_grace_period: 10s\n    logging: {driver: none}\n    volumes:\n      - type: bind\n        source: ${ASM_TELEGRAM_EGRESS_CONFIG:?Prepare private egress state}\n        target: /run/telegram-egress/config.json\n        read_only: true\n        bind: {create_host_path: false}\n    networks:\n      telegram-egress:\n        ipv4_address: ${ASM_TELEGRAM_EGRESS_IP:?}\nnetworks:\n  telegram-egress:\n    name: ${ASM_TELEGRAM_EGRESS_NETWORK:?}\n    driver: bridge\n    enable_ipv6: false\n    labels:\n      asm.scope: synthetic-telegram-test\n    ipam:\n      config:\n        - subnet: ${ASM_TELEGRAM_EGRESS_SUBNET:?}\n          gateway: ${ASM_TELEGRAM_EGRESS_GATEWAY:?}\n          # Reserve the lower half for fixed endpoints, even while relay is stopped.\n          ip_range: ${ASM_TELEGRAM_EGRESS_DYNAMIC_RANGE:?}\n'
 
 
 class EgressError(Exception):
@@ -126,7 +134,7 @@ def encoded(value):
     return (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
 
 
-def minimal_config(profile, relay_ip):
+def minimal_config(profile, relay_ip, relay_ipv6=None):
     """Copy only the single selected VLESS/TCP/REALITY/Vision connection."""
     require(isinstance(profile, dict), "EGRESS_PROFILE_SHAPE")
     choices = profile.get("outbounds")
@@ -265,7 +273,7 @@ def minimal_config(profile, relay_ip):
         "streamSettings": stream,
         "mux": {"enabled": False},
     }
-    return {
+    result = {
         "log": {"access": "none", "error": "none", "loglevel": "none", "dnsLog": False},
         "inbounds": [
             {
@@ -298,6 +306,15 @@ def minimal_config(profile, relay_ip):
             ],
         },
     }
+
+    if relay_ipv6 is not None:
+        address6 = ipaddress.IPv6Address(relay_ipv6)
+        require(address6 in ipaddress.ip_network("fd00::/8"), "EGRESS_PRIVATE_IPV6")
+        inbound = copy.deepcopy(result["inbounds"][0])
+        inbound.update(tag="telegram-only-v6", listen=str(address6))
+        result["inbounds"].append(inbound)
+        result["routing"]["rules"][0]["inboundTag"].append("telegram-only-v6")
+    return result
 
 
 def select_subnet(networks, routes, previous=None, own_name=None):
@@ -422,16 +439,35 @@ def image_check(config, uid, gid):
 
 def route_values(state, directory):
     subnet = ipaddress.ip_network(state["subnet"])
-    return {
+    result = {
         "ASM_TELEGRAM_EGRESS_SUBNET": str(subnet),
         "ASM_TELEGRAM_EGRESS_DYNAMIC_RANGE": str(list(subnet.subnets(prefixlen_diff=1))[1]),
         "ASM_TELEGRAM_EGRESS_GATEWAY": str(subnet[1]),
         "ASM_TELEGRAM_EGRESS_IP": str(subnet[2]),
         "ASM_TELEGRAM_EGRESS_NETWORK": state["project"] + "_telegram-egress",
-        "ASM_TELEGRAM_EGRESS_CONFIG": str(directory / "config.json"),
+        "ASM_TELEGRAM_EGRESS_CONFIG": str(generated_directory(state, directory) / "config.json"),
         "ASM_TELEGRAM_EGRESS_UID": str(state["uid"]),
         "ASM_TELEGRAM_EGRESS_GID": str(state["gid"]),
     }
+
+    if state.get("version") == 2:
+        block = ipaddress.ip_network(state["subnet6"])
+        result.update(
+            {
+                "ASM_TELEGRAM_EGRESS_SUBNET6": str(block),
+                "ASM_TELEGRAM_EGRESS_GATEWAY6": str(block[1]),
+                "ASM_TELEGRAM_EGRESS_IPV6": str(block[2]),
+                "ASM_TELEGRAM_EGRESS_DYNAMIC_RANGE6": str(list(block.subnets(prefixlen_diff=1))[1]),
+                "ASM_TELEGRAM_EGRESS_NETWORK6": state["project"] + "_telegram-egress-v6",
+            }
+        )
+    return result
+
+
+def generated_directory(state, directory):
+    generation = state.get("generation", ".")
+    require(generation in {".", "recovery-v2"}, "EGRESS_GENERATION")
+    return directory / generation
 
 
 def route_env(values):
@@ -504,7 +540,7 @@ def runtime_overlay(state):
 
 
 def verify_runtime(state, directory):
-    raw = private_bytes(directory / "runtime.json")
+    raw = private_bytes(generated_directory(state, directory) / "runtime.json")
     require(
         sha(raw) == state["runtime_sha256"] and raw == runtime_overlay(state),
         "EGRESS_RUNTIME_INPUTS_CHANGED",
@@ -536,12 +572,23 @@ def prepare(args):
     subnet = select_subnet(
         networks, routes, old["subnet"] if old else None, args.project + "_telegram-egress"
     )
-    config = encoded(minimal_config(strict_json(raw), str(ipaddress.ip_network(subnet)[2])))
+    routes6 = json.loads(command(["ip", "-j", "-6", "route", "show", "table", "all"]))
+    subnet6 = select_subnet6(
+        networks, routes6, old.get("subnet6") if old else None, args.project + "_telegram-egress-v6"
+    )
+    config = encoded(
+        minimal_config(
+            strict_json(raw),
+            str(ipaddress.ip_network(subnet)[2]),
+            str(ipaddress.ip_network(subnet6)[2]),
+        )
+    )
     state = {
-        "version": 1,
+        "version": 2,
         "source_sha": args.accepted_sha,
         "project": args.project,
         "subnet": subnet,
+        "subnet6": subnet6,
         "uid": os.getuid(),
         "gid": os.getgid(),
         "profile": str(profile),
@@ -567,26 +614,43 @@ def prepare(args):
     write_private(directory / "state.json", encoded(state))
 
 
-def verify(directory):
+def verify(directory, *, legacy=False, accepted_sha=None, saved_state=None):
     directory = checked_path(state_directory(directory), directory=True)
-    state = strict_json(private_bytes(directory / "state.json"))
-    require(state.get("version") == 1 and state.get("image") == IMAGE, "EGRESS_STATE_VERSION")
+    state = (
+        saved_state
+        if saved_state is not None
+        else strict_json(private_bytes(directory / "state.json"))
+    )
+    require(
+        state.get("version") == (1 if legacy else 2) and state.get("image") == IMAGE,
+        "EGRESS_STATE_VERSION",
+    )
+    if legacy:
+        require(state["source_sha"] == LEGACY_SHA, "EGRESS_LEGACY_SOURCE")
     require(state["uid"] == os.getuid() and state["gid"] == os.getgid(), "EGRESS_STATE_OWNER")
-    source_check(state["source_sha"])
+    source_check(accepted_sha if legacy else state["source_sha"])
     raw = private_bytes(state["profile"])
     require(sha(raw) == state["profile_sha256"], "EGRESS_PROFILE_CHANGED")
     values = route_values(state, directory)
-    config = private_bytes(directory / "config.json")
+    generated = generated_directory(state, directory)
+    config = private_bytes(generated / "config.json")
     require(
-        config == encoded(minimal_config(strict_json(raw), values["ASM_TELEGRAM_EGRESS_IP"]))
+        config
+        == encoded(
+            minimal_config(
+                strict_json(raw),
+                values["ASM_TELEGRAM_EGRESS_IP"],
+                values.get("ASM_TELEGRAM_EGRESS_IPV6"),
+            )
+        )
         and sha(config) == state["config_sha256"],
         "EGRESS_CONFIG_CHANGED",
     )
-    require(private_bytes(directory / "route.env") == route_env(values), "EGRESS_MAPPING_CHANGED")
+    require(private_bytes(generated / "route.env") == route_env(values), "EGRESS_MAPPING_CHANGED")
     checked_path(state["telegram_env"])
     verify_runtime(state, directory)
     require(
-        image_check(directory / "config.json", state["uid"], state["gid"]) == state["image_id"],
+        image_check(generated / "config.json", state["uid"], state["gid"]) == state["image_id"],
         "EGRESS_IMAGE_CHANGED",
     )
     ids = command(["docker", "network", "ls", "-q"]).decode().split()
@@ -597,6 +661,15 @@ def verify(directory):
         == state["subnet"],
         "EGRESS_NETWORK_CHANGED",
     )
+    if not legacy:
+        routes6 = json.loads(command(["ip", "-j", "-6", "route", "show", "table", "all"]))
+        require(
+            select_subnet6(
+                networks, routes6, state["subnet6"], values["ASM_TELEGRAM_EGRESS_NETWORK6"]
+            )
+            == state["subnet6"],
+            "EGRESS_NETWORK_CHANGED",
+        )
     return state
 
 
@@ -621,16 +694,18 @@ def compose_prefix(state, directory, *, overlay=True, operator_inputs=False):
         "--env-file",
         str(ROOT / "infra/telegram-egress/image.lock.env"),
         "--env-file",
-        str(directory / "route.env"),
+        str(generated_directory(state, directory) / "route.env"),
         "-f",
         str(ROOT / "compose.yaml"),
         "-f",
-        str(directory / "runtime.json"),
+        str(generated_directory(state, directory) / "runtime.json"),
     ]
     if overlay:
         args += [
             "-f",
-            str(ROOT / "infra/telegram-egress/compose.yaml"),
+            str(directory / "recovery-v1/compose.yaml")
+            if state.get("version") == 1
+            else str(ROOT / "infra/telegram-egress/compose.yaml"),
             "--profile",
             "telegram-egress",
         ]
@@ -655,10 +730,15 @@ def validate_model(base, model, values):
             expected["extra_hosts"] = sorted(
                 [
                     "api.telegram.org=" + values["ASM_TELEGRAM_EGRESS_IP"],
-                    "api.telegram.org=::ffff:" + values["ASM_TELEGRAM_EGRESS_IP"],
+                    "api.telegram.org="
+                    + values.get(
+                        "ASM_TELEGRAM_EGRESS_IPV6", "::ffff:" + values["ASM_TELEGRAM_EGRESS_IP"]
+                    ),
                 ]
             )
             expected["networks"] = {"default": {"gw_priority": 1}, "telegram-egress": {}}
+            if "ASM_TELEGRAM_EGRESS_IPV6" in values:
+                expected["networks"]["telegram-egress-v6"] = {}
             for field in set(actual) | set(expected):
                 require(
                     actual.get(field) == expected.get(field),
@@ -693,11 +773,29 @@ def validate_model(base, model, values):
         and relay["volumes"][0]["source"] == values["ASM_TELEGRAM_EGRESS_CONFIG"],
         "EGRESS_RELAY_MOUNT",
     )
-    require(
-        relay["networks"]
-        == {"telegram-egress": {"ipv4_address": values["ASM_TELEGRAM_EGRESS_IP"]}},
-        "EGRESS_RELAY_NETWORK",
-    )
+    expected_networks = {"telegram-egress": {"ipv4_address": values["ASM_TELEGRAM_EGRESS_IP"]}}
+    if "ASM_TELEGRAM_EGRESS_IPV6" in values:
+        expected_networks["telegram-egress-v6"] = {
+            "ipv6_address": values["ASM_TELEGRAM_EGRESS_IPV6"]
+        }
+        network = model["networks"]["telegram-egress-v6"]
+        require(
+            network["internal"]
+            and network["enable_ipv6"]
+            and not network["enable_ipv4"]
+            and network["driver"] == "bridge"
+            and network["name"] == values["ASM_TELEGRAM_EGRESS_NETWORK6"]
+            and network["ipam"]["config"]
+            == [
+                {
+                    "subnet": values["ASM_TELEGRAM_EGRESS_SUBNET6"],
+                    "gateway": values["ASM_TELEGRAM_EGRESS_GATEWAY6"],
+                    "ip_range": values["ASM_TELEGRAM_EGRESS_DYNAMIC_RANGE6"],
+                }
+            ],
+            "EGRESS_IPV6_MODEL_DRIFT",
+        )
+    require(relay["networks"] == expected_networks, "EGRESS_RELAY_NETWORK")
 
 
 def checked_model(state, directory):
@@ -764,7 +862,14 @@ def snapshot(state, directory, *, disabled=True):
                 key=encoded,
             ),
             "networks": {
-                k: {v: n.get(v) for v in ("IPAddress", "Gateway")}
+                k: {
+                    v: n.get(v)
+                    for v in (
+                        ("IPAddress", "Gateway", "GlobalIPv6Address", "IPv6Gateway")
+                        if k == state["project"] + "_telegram-egress-v6"
+                        else ("IPAddress", "Gateway")
+                    )
+                }
                 for k, n in container["NetworkSettings"]["Networks"].items()
             },
         }
@@ -836,14 +941,24 @@ def source_image_check(image):
 
 def caller_probe(state, directory):
     values = route_values(state, directory)
+    expected = [values["ASM_TELEGRAM_EGRESS_IP"], values["ASM_TELEGRAM_EGRESS_IPV6"]]
     probe = (
-        "import socket,ipaddress; expected=ipaddress.ip_address("
-        + repr(values["ASM_TELEGRAM_EGRESS_IP"])
-        + "); "
+        "import socket,ipaddress; expected={ipaddress.ip_address(v) for v in "
+        + repr(expected)
+        + "}; "
     )
-    probe += "rows=[socket.getaddrinfo('api.telegram.org',443,f,socket.SOCK_STREAM) for f in (socket.AF_UNSPEC,socket.AF_INET,socket.AF_INET6)]; "
-    probe += "assert all(rows); ips=[ipaddress.ip_address(x[4][0]) for row in rows for x in row]; "
-    probe += "assert all((getattr(x,'ipv4_mapped',None) or x)==expected for x in ips)"
+    probe += "rows=[socket.getaddrinfo('api.telegram.org',443,f,socket.SOCK_STREAM,0,0) for f in (socket.AF_UNSPEC,socket.AF_INET,socket.AF_INET6)]; "
+    probe += "assert all(rows); assert all(ipaddress.ip_address(x[4][0]) in expected for row in rows for x in row); "
+    probe += (
+        "assert {ipaddress.ip_address(x[4][0]) for x in rows[1]}=={ipaddress.ip_address("
+        + repr(expected[0])
+        + ")}; "
+    )
+    probe += (
+        "assert {ipaddress.ip_address(x[4][0]) for x in rows[2]}=={ipaddress.ip_address("
+        + repr(expected[1])
+        + ")}"
+    )
     prefix = compose_prefix(state, directory)
     for name in ("api", "worker"):
         command(
@@ -911,8 +1026,21 @@ def compare_deployment(before, after, state):
         "EGRESS_RUNNING_RELAY_IDENTITY",
     )
 
+    if state.get("version") == 2:
+        require(
+            relay["networks"][state["project"] + "_telegram-egress-v6"]["GlobalIPv6Address"]
+            == str(ipaddress.ip_network(state["subnet6"])[2]),
+            "EGRESS_RUNNING_RELAY_IPV6",
+        )
+
 
 def deploy(state, directory):
+    require(
+        not (directory / "deployment-before.json").exists()
+        and not (directory / "deployment-after.json").exists()
+        and not (directory / "recovery-v1").exists(),
+        "EGRESS_BASELINE_EXISTS_USE_RECOVERY",
+    )
     model = checked_model(state, directory)
     require(
         all(
@@ -1030,14 +1158,31 @@ def rollback(state, directory):
         require(after.get(name) == previous, "EGRESS_ROLLBACK_UNRELATED_DRIFT")
     require(
         all(
-            state["project"] + "_telegram-egress" not in after[n]["networks"]
+            all(
+                state["project"] + suffix not in after[n]["networks"]
+                for suffix in ("_telegram-egress", "_telegram-egress-v6")
+            )
             for n in ("api", "worker")
         ),
         "EGRESS_ROLLBACK_MAPPING_RETAINED",
     )
     write_private(
         directory / "rollback.json",
-        encoded({"before": before, "after": after, "telegram_disabled": True}),
+        encoded(
+            {
+                "before": before,
+                "after": after,
+                "telegram_disabled": True,
+                "route_networks_retained_inactive": [
+                    state["project"] + suffix
+                    for suffix in (
+                        ("_telegram-egress", "_telegram-egress-v6")
+                        if state.get("version") == 2
+                        else ("_telegram-egress",)
+                    )
+                ],
+            }
+        ),
     )
 
 
@@ -1073,17 +1218,364 @@ def permitted_compose(extra):
     ]
 
 
+def select_subnet6(networks, routes, previous=None, own_name=None):
+    occupied, own = [], None
+    for network in networks:
+        blocks = network.get("IPAM", {}).get("Config") or []
+        if network.get("Name") == own_name:
+            require(
+                network.get("Labels", {}).get("asm.scope") == "synthetic-telegram-test"
+                and network.get("Internal") is True
+                and network.get("EnableIPv6") is True
+                and network.get("EnableIPv4") is False,
+                "EGRESS_IPV6_NETWORK_COLLISION",
+            )
+            require(
+                previous is not None and len(blocks) == 1 and blocks[0]["Subnet"] == previous,
+                "EGRESS_IPV6_NETWORK_CHANGED",
+            )
+            own = ipaddress.ip_network(previous)
+            require(
+                blocks[0].get("Gateway") == str(own[1])
+                and blocks[0].get("IPRange") == str(list(own.subnets(prefixlen_diff=1))[1]),
+                "EGRESS_IPV6_DYNAMIC_RANGE_CHANGED",
+            )
+            continue
+        occupied.extend(ipaddress.ip_network(v["Subnet"]) for v in blocks if v.get("Subnet"))
+    for route in routes:
+        if route.get("dst", "default") == "default":
+            continue
+        block = ipaddress.ip_network(route["dst"], strict=False)
+        if own and (block == own or (block.prefixlen == 128 and block.subnet_of(own))):
+            continue
+        occupied.append(block)
+    candidates = (
+        [ipaddress.ip_network(previous)]
+        if previous
+        else ipaddress.ip_network("fd42:6173:6d00::/48").subnets(new_prefix=64)
+    )
+    for candidate in candidates:
+        require(
+            candidate.version == 6
+            and candidate.prefixlen == 64
+            and candidate.subnet_of(ipaddress.ip_network("fd00::/8")),
+            "EGRESS_PRIVATE_IPV6_SUBNET",
+        )
+        if all(
+            candidate.version != used.version or not candidate.overlaps(used) for used in occupied
+        ):
+            return str(candidate)
+    raise EgressError("EGRESS_NO_NONOVERLAPPING_IPV6_SUBNET")
+
+
+@contextmanager
+def operation_lock(directory):
+    checked_path(directory, directory=True)
+    path = directory / "operation.lock"
+    if path.exists() or path.is_symlink():
+        checked_path(path)
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(fd)
+        require(
+            stat.S_ISREG(info.st_mode)
+            and info.st_uid == os.getuid()
+            and stat.S_IMODE(info.st_mode) == 0o600,
+            "EGRESS_LOCK_IDENTITY",
+        )
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise EgressError("EGRESS_OPERATION_BUSY") from None
+        yield
+    finally:
+        os.close(fd)
+
+
+def atomic_bundle(destination, files):
+    """Publish an immutable generation at one rename; partial staging is never active."""
+    checked_path(destination.parent, directory=True)
+    require(all(re.fullmatch(r"[a-z0-9.-]+", name) for name in files), "EGRESS_BUNDLE_NAME")
+    if destination.exists() or destination.is_symlink():
+        checked_path(destination, directory=True)
+        require({p.name for p in destination.iterdir()} == set(files), "EGRESS_BUNDLE_INVENTORY")
+        require(
+            all(private_bytes(destination / name) == raw for name, raw in files.items()),
+            "EGRESS_BUNDLE_CHANGED",
+        )
+        return
+    with tempfile.TemporaryDirectory(prefix=".generation-", dir=destination.parent) as tmp:
+        temporary = Path(tmp)
+        for name, raw in files.items():
+            write_private(temporary / name, raw)
+        os.rename(temporary, destination)
+        fd = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+
+def input_hashes(state):
+    result = {}
+    for name, path in {
+        "runtime_env": ROOT / ".env",
+        "staged_env": state["telegram_env"],
+        "profile": state["profile"],
+    }.items():
+        raw = checked_path(path).read_bytes()
+        require(len(raw) <= 65536, "EGRESS_ENV_LIMIT")
+        result[name] = sha(raw)
+    return result
+
+
+def recovery_archive(directory, accepted_sha):
+    """Attest only the known owner schema1; never substitute a new baseline."""
+    source_check(accepted_sha)
+    require(not (directory / "rollback.json").exists(), "EGRESS_RECOVERY_ALREADY_ROLLED_BACK")
+    current_raw = private_bytes(directory / "state.json")
+    current = strict_json(current_raw)
+    audit = directory / "recovery-v1"
+    if current.get("version") == 1:
+        raw = current_raw
+        require(not (directory / "deployment-after.json").exists(), "EGRESS_RECOVERY_NOT_PARTIAL")
+    else:
+        require(
+            current.get("version") == 2
+            and current.get("generation") == "recovery-v2"
+            and current.get("source_sha") == accepted_sha,
+            "EGRESS_RECOVERY_STATE",
+        )
+        raw = private_bytes(audit / "state.json")
+        require(current.get("legacy_state_sha256") == sha(raw), "EGRESS_LEGACY_STATE_CHANGED")
+    old = strict_json(raw)
+    require(
+        set(old)
+        == {
+            "version",
+            "source_sha",
+            "project",
+            "subnet",
+            "uid",
+            "gid",
+            "profile",
+            "profile_sha256",
+            "telegram_env",
+            "config_sha256",
+            "image",
+            "runtime_sha256",
+            "image_id",
+        },
+        "EGRESS_LEGACY_STATE_FIELDS",
+    )
+    require(old["version"] == 1 and old["source_sha"] == LEGACY_SHA, "EGRESS_LEGACY_SOURCE")
+    verify(directory, legacy=True, accepted_sha=accepted_sha, saved_state=old)
+    before_raw = private_bytes(directory / "deployment-before.json")
+    before = strict_json(before_raw)
+    require({"api", "worker", "postgres", "storage"} <= set(before), "EGRESS_LEGACY_BASELINE")
+    require(
+        hashlib.sha1(
+            b"blob " + str(len(LEGACY_OVERLAY)).encode() + b"\0" + LEGACY_OVERLAY
+        ).hexdigest()
+        == LEGACY_OVERLAY_BLOB,
+        "EGRESS_LEGACY_OVERLAY_CHANGED",
+    )
+    files = {
+        name: private_bytes(directory / name)
+        for name in ("config.json", "route.env", "runtime.json")
+    }
+    files.update(
+        {
+            "state.json": raw,
+            "deployment-before.json": before_raw,
+            "compose.yaml": LEGACY_OVERLAY,
+            "inputs.json": encoded(input_hashes(old)),
+            "transition.json": encoded({"from_sha": LEGACY_SHA, "accepted_sha": accepted_sha}),
+        }
+    )
+    atomic_bundle(audit, files)
+    return old, before, sha(before_raw)
+
+
+def recovery_candidate(old, directory, accepted_sha, before_hash):
+    destination = directory / "recovery-v2"
+    previous = (
+        strict_json(private_bytes(destination / "state.json")) if destination.exists() else None
+    )
+    ids = command(["docker", "network", "ls", "-q"]).decode().split()
+    networks = json.loads(command(["docker", "network", "inspect", *ids])) if ids else []
+    routes = json.loads(command(["ip", "-j", "-6", "route", "show", "table", "all"]))
+    subnet6 = select_subnet6(
+        networks,
+        routes,
+        previous.get("subnet6") if previous else None,
+        old["project"] + "_telegram-egress-v6",
+    )
+    state = dict(
+        old,
+        version=2,
+        source_sha=accepted_sha,
+        generation="recovery-v2",
+        subnet6=subnet6,
+        legacy_state_sha256=sha(private_bytes(directory / "recovery-v1/state.json")),
+        recovery_before_sha256=before_hash,
+    )
+    values = route_values(state, directory)
+    config = encoded(
+        minimal_config(
+            strict_json(private_bytes(old["profile"])),
+            values["ASM_TELEGRAM_EGRESS_IP"],
+            values["ASM_TELEGRAM_EGRESS_IPV6"],
+        )
+    )
+    state["config_sha256"] = sha(config)
+    require(
+        image_check(directory / "recovery-v1/config.json", old["uid"], old["gid"])
+        == old["image_id"],
+        "EGRESS_IMAGE_CHANGED",
+    )
+    atomic_bundle(
+        destination,
+        {
+            "state.json": encoded(state),
+            "config.json": config,
+            "runtime.json": private_bytes(directory / "runtime.json"),
+            "route.env": route_env(values),
+        },
+    )
+    require(
+        image_check(destination / "config.json", state["uid"], state["gid"]) == state["image_id"],
+        "EGRESS_IMAGE_CHANGED",
+    )
+    return state
+
+
+def attest_partial_recovery(args):
+    directory = checked_path(state_directory(args.state_dir), directory=True)
+    require(args.from_sha == LEGACY_SHA and args.accepted_sha, "EGRESS_RECOVERY_INPUTS")
+    old, before, before_hash = recovery_archive(directory, args.accepted_sha)
+    # The current model has the same frozen application environment. Its old
+    # topology is used only to attest the already-recreated partial deployment.
+    actual = snapshot(old, directory)
+    compare_deployment(before, actual, old)
+    require(
+        all(actual[n]["id"] != before[n]["id"] for n in ("api", "worker")),
+        "EGRESS_RECOVERY_CALLERS_NOT_RECREATED",
+    )
+    model = checked_model(old, directory)
+    require(
+        all(
+            model["services"][n]["environment"]["ASM_TELEGRAM_ENABLED"] == "false" for n in CALLERS
+        ),
+        "EGRESS_RECOVERY_REQUIRES_DISABLED_TELEGRAM",
+    )
+    for name in ("api", "worker"):
+        info = json.loads(
+            command(["docker", "image", "inspect", model["services"][name]["image"]])
+        )[0]
+        require(info["Id"] == actual[name]["image"], "EGRESS_APP_TAG_DRIFT")
+    source_image_check(
+        model["services"]["telegram-operator"].get("image", old["project"] + "-telegram-operator")
+    )
+    return old, before, before_hash
+
+
+def recover(args):
+    directory = checked_path(state_directory(args.state_dir), directory=True)
+    old, before, before_hash = attest_partial_recovery(args)
+    candidate = recovery_candidate(old, directory, args.accepted_sha, before_hash)
+    # Files were fsynced as an immutable generation. Only this single manifest
+    # publication makes it active. The original root generated files remain intact.
+    if strict_json(private_bytes(directory / "state.json"))["version"] == 1:
+        write_private(directory / "state.json", encoded(candidate))
+    require(
+        private_bytes(directory / "state.json") == encoded(candidate),
+        "EGRESS_RECOVERY_MANIFEST_CHANGED",
+    )
+    state = verify(directory)
+    prefix, env = compose_prefix(state, directory), clean_environment()
+    if not (directory / "deployment-after.json").exists():
+        command(
+            [
+                *prefix,
+                "up",
+                "-d",
+                "--no-deps",
+                "--pull",
+                "never",
+                "--force-recreate",
+                "telegram-egress",
+            ],
+            timeout=90,
+            environment=env,
+        )
+        command(
+            [
+                *prefix,
+                "up",
+                "-d",
+                "--no-deps",
+                "--pull",
+                "never",
+                "--force-recreate",
+                "--wait",
+                "api",
+                "worker",
+            ],
+            timeout=120,
+            environment=env,
+        )
+    after = snapshot(state, directory)
+    compare_deployment(before, after, state)
+    caller_probe(state, directory)
+    recovery_archive(directory, args.accepted_sha)  # Recheck baseline and inputs before success.
+    after_raw = encoded(after)
+    if (directory / "deployment-after.json").exists():
+        require(
+            private_bytes(directory / "deployment-after.json") == after_raw,
+            "EGRESS_RECOVERY_AFTER_DRIFT",
+        )
+    else:
+        write_private(directory / "deployment-after.json", after_raw)
+    receipt = encoded(
+        {
+            "from_sha": LEGACY_SHA,
+            "source_sha": args.accepted_sha,
+            "original_before_sha256": before_hash,
+            "after_sha256": sha(after_raw),
+            "legacy_state_sha256": state["legacy_state_sha256"],
+            "mapping_readiness_preservation": "PASS",
+        }
+    )
+    if (directory / "recovery.json").exists():
+        require(
+            private_bytes(directory / "recovery.json") == receipt, "EGRESS_RECOVERY_RECEIPT_CHANGED"
+        )
+    else:
+        write_private(directory / "recovery.json", receipt)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "action",
-        choices=("prepare", "verify", "snapshot", "deploy", "preflight", "compose", "rollback"),
+        choices=(
+            "prepare",
+            "verify",
+            "snapshot",
+            "deploy",
+            "preflight",
+            "compose",
+            "rollback",
+            "recover",
+        ),
     )
     parser.add_argument("--state-dir", required=True)
     parser.add_argument("--profile")
     parser.add_argument("--telegram-env")
     parser.add_argument("--project", default="asm-telegram-test")
     parser.add_argument("--accepted-sha")
+    parser.add_argument("--from-sha")
     args, compose_args = parser.parse_known_args()
     os.umask(0o077)
     try:
@@ -1096,51 +1588,67 @@ def main():
             prepare(args)
         else:
             directory = state_directory(args.state_dir)
-            if args.action == "rollback":
-                state = strict_json(private_bytes(directory / "state.json"))
-                source_check(state["source_sha"])
-                require(
-                    state["image"] == IMAGE and state["uid"] == os.getuid(), "EGRESS_ROLLBACK_STATE"
-                )
-            else:
-                state = verify(directory)
-            model = checked_model(state, directory)
-            if args.action == "snapshot":
-                require(
-                    all(
-                        model["services"][n]["environment"]["ASM_TELEGRAM_ENABLED"] == "false"
-                        for n in ("api", "worker")
-                    ),
-                    "EGRESS_PERSISTED_TELEGRAM_MUST_BE_DISABLED",
-                )
-                write_private(
-                    directory / "deployment-before.json", encoded(snapshot(state, directory))
-                )
-            elif args.action == "rollback":
-                rollback(state, directory)
-            elif args.action == "deploy":
-                deploy(state, directory)
-            elif args.action == "preflight":
-                before = strict_json(private_bytes(directory / "deployment-before.json"))
-                compare_deployment(before, snapshot(state, directory), state)
-                caller_probe(state, directory)
-            elif args.action == "compose":
-                extra = compose_args
-                if extra[:1] == ["--"]:
-                    extra = extra[1:]
-                require(permitted_compose(extra), "EGRESS_COMPOSE_OPERATION")
-                require(
-                    subprocess.run(
-                        [
-                            *compose_prefix(state, directory, operator_inputs=extra[:1] == ["run"]),
-                            *extra,
-                        ],
-                        stdin=subprocess.DEVNULL,
-                        env=clean_environment(),
-                    ).returncode
-                    == 0,
-                    "EGRESS_COMPOSE_FAILED",
-                )
+            with operation_lock(directory):
+                if args.action == "recover":
+                    recover(args)
+                else:
+                    if args.action == "rollback":
+                        state = strict_json(private_bytes(directory / "state.json"))
+                        if state.get("version") == 1:
+                            state, _, _ = attest_partial_recovery(args)
+                        else:
+                            source_check(state["source_sha"])
+                        require(
+                            state["image"] == IMAGE and state["uid"] == os.getuid(),
+                            "EGRESS_ROLLBACK_STATE",
+                        )
+                    else:
+                        state = verify(directory)
+                    model = checked_model(state, directory)
+                    if args.action == "snapshot":
+                        require(
+                            all(
+                                model["services"][n]["environment"]["ASM_TELEGRAM_ENABLED"]
+                                == "false"
+                                for n in ("api", "worker")
+                            ),
+                            "EGRESS_PERSISTED_TELEGRAM_MUST_BE_DISABLED",
+                        )
+                        require(
+                            not (directory / "deployment-before.json").exists(),
+                            "EGRESS_BASELINE_EXISTS_USE_RECOVERY",
+                        )
+                        write_private(
+                            directory / "deployment-before.json",
+                            encoded(snapshot(state, directory)),
+                        )
+                    elif args.action == "rollback":
+                        rollback(state, directory)
+                    elif args.action == "deploy":
+                        deploy(state, directory)
+                    elif args.action == "preflight":
+                        before = strict_json(private_bytes(directory / "deployment-before.json"))
+                        compare_deployment(before, snapshot(state, directory), state)
+                        caller_probe(state, directory)
+                    elif args.action == "compose":
+                        extra = compose_args
+                        if extra[:1] == ["--"]:
+                            extra = extra[1:]
+                        require(permitted_compose(extra), "EGRESS_COMPOSE_OPERATION")
+                        require(
+                            subprocess.run(
+                                [
+                                    *compose_prefix(
+                                        state, directory, operator_inputs=extra[:1] == ["run"]
+                                    ),
+                                    *extra,
+                                ],
+                                stdin=subprocess.DEVNULL,
+                                env=clean_environment(),
+                            ).returncode
+                            == 0,
+                            "EGRESS_COMPOSE_FAILED",
+                        )
         print("TELEGRAM_EGRESS_" + args.action.upper() + "_PASS")
     except (
         EgressError,

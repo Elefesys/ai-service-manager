@@ -12,6 +12,7 @@ x-fixture-env: &fixture-env
   ASM_ADMIN_DATABASE_URL: postgresql+psycopg://asm_admin:${PG_ADMIN_PASSWORD:?}@postgres-test:5432/asm_test
   ASM_EGRESS_TEST_DIR: /run/egress-test
   ASM_EGRESS_RELAY_IP: ${ASM_TELEGRAM_EGRESS_IP:?}
+  ASM_EGRESS_RELAY_IPV6: ${ASM_TELEGRAM_EGRESS_IPV6:?}
   ASM_EGRESS_PEER_IP: ${ASM_EGRESS_PEER_IP:?}
   ASM_EGRESS_WIRE_IP: ${ASM_EGRESS_WIRE_IP:?}
 services:
@@ -48,10 +49,11 @@ services:
       - ${ASM_EGRESS_TEST_DIR:?}:/run/egress-test
     extra_hosts:
       - api.telegram.org=${ASM_TELEGRAM_EGRESS_IP:?}
-      - api.telegram.org=::ffff:${ASM_TELEGRAM_EGRESS_IP:?}
+      - api.telegram.org=${ASM_TELEGRAM_EGRESS_IPV6:?}
     networks:
       default: {gw_priority: 1}
       telegram-egress: {}
+      telegram-egress-v6: {}
   egress-wire:
     image: asm-telegram-egress-checks:test
     user: "${ASM_TELEGRAM_EGRESS_UID:?}:${ASM_TELEGRAM_EGRESS_GID:?}"

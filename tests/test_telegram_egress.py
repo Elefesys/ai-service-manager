@@ -641,3 +641,336 @@ def test_cli_never_prints_provider_exception_or_secret(tmp_path, monkeypatch, ca
         egress.main()
     assert error.value.code == 1
     assert capsys.readouterr().out == "EGRESS_INVALID_INPUT_OR_COMMAND\n"
+
+
+def test_native_ipv6_inbound_keeps_exact_fixed_upstream_and_selected_connection():
+    old = egress.minimal_config(profile(), "10.203.0.2")
+    new = egress.minimal_config(profile(), "10.203.0.2", "fd42:6173:6d00::2")
+    assert new["outbounds"] == old["outbounds"] and new["log"] == old["log"]
+    assert new["inbounds"][0] == old["inbounds"][0]
+    second = dict(old["inbounds"][0], tag="telegram-only-v6", listen="fd42:6173:6d00::2")
+    assert new["inbounds"][1:] == [second]
+    expected = copy.deepcopy(old["routing"])
+    expected["rules"][0]["inboundTag"].append("telegram-only-v6")
+    assert new["routing"] == expected
+    for address in ("::1", "::ffff:10.203.0.2", "fe80::2", "2001:db8::2"):
+        with pytest.raises(egress.EgressError, match="EGRESS_PRIVATE_IPV6"):
+            egress.minimal_config(profile(), "10.203.0.2", address)
+
+
+def test_ipv6_ipam_collision_identity_and_static_reservation():
+    subnet = "fd42:6173:6d00::/64"
+    assert egress.select_subnet6([], []) == subnet
+    assert egress.select_subnet6([], [{"dst": subnet}]) == "fd42:6173:6d00:1::/64"
+    own = {
+        "Name": "fixture_telegram-egress-v6",
+        "Internal": True,
+        "EnableIPv6": True,
+        "EnableIPv4": False,
+        "Labels": {"asm.scope": "synthetic-telegram-test"},
+        "IPAM": {
+            "Config": [
+                {
+                    "Subnet": subnet,
+                    "Gateway": "fd42:6173:6d00::1",
+                    "IPRange": "fd42:6173:6d00:0:8000::/65",
+                }
+            ]
+        },
+    }
+    assert (
+        egress.select_subnet6(
+            [own], [{"dst": subnet}, {"dst": "fd42:6173:6d00::1"}], subnet, own["Name"]
+        )
+        == subnet
+    )
+    for key, value in (("Internal", False), ("EnableIPv6", False), ("EnableIPv4", True)):
+        changed = dict(own, **{key: value})
+        with pytest.raises(egress.EgressError, match="EGRESS_IPV6_NETWORK_COLLISION"):
+            egress.select_subnet6([changed], [], subnet, own["Name"])
+    changed = copy.deepcopy(own)
+    changed["IPAM"]["Config"][0]["IPRange"] = subnet
+    with pytest.raises(egress.EgressError, match="EGRESS_IPV6_DYNAMIC_RANGE_CHANGED"):
+        egress.select_subnet6([changed], [], subnet, own["Name"])
+    with pytest.raises(egress.EgressError, match="EGRESS_NO_NONOVERLAPPING_IPV6_SUBNET"):
+        egress.select_subnet6([], [{"dst": "fd00::/8"}], subnet)
+
+
+@pytest.mark.parametrize("bad", [None, "mapped", "foreign", "empty"])
+def test_all_three_callers_keep_strict_flags_zero_for_every_address(monkeypatch, bad):
+    import socket
+
+    state = {
+        "version": 2,
+        "subnet": "10.203.0.0/28",
+        "subnet6": "fd42:6173:6d00::/64",
+        "project": "fixture",
+        "uid": 1000,
+        "gid": 1000,
+    }
+    calls, families = [], []
+
+    def resolve(host, port, family, kind, proto, flags):
+        assert host == "api.telegram.org" and port == 443 and proto == flags == 0
+        families.append(family)
+        rows = [
+            (socket.AF_INET, kind, 6, "", ("10.203.0.2", 443)),
+            (socket.AF_INET6, kind, 6, "", ("fd42:6173:6d00::2", 443, 0, 0)),
+        ]
+        if family == socket.AF_INET6 and bad:
+            if bad == "empty":
+                return []
+            rows[1] = (
+                socket.AF_INET6,
+                kind,
+                6,
+                "",
+                ("::ffff:10.203.0.2" if bad == "mapped" else "2001:db8::91", 443, 0, 0),
+            )
+        return rows if family == socket.AF_UNSPEC else [r for r in rows if r[0] == family]
+
+    def execute(args, **_):
+        calls.append(args)
+        if args[-1].startswith("import socket,ipaddress;"):
+            exec(args[-1], {})
+        return b""
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolve)
+    monkeypatch.setattr(egress, "command", execute)
+    if bad:
+        with pytest.raises(AssertionError):
+            egress.caller_probe(state, Path("/private"))
+    else:
+        egress.caller_probe(state, Path("/private"))
+        assert families == [socket.AF_UNSPEC, socket.AF_INET, socket.AF_INET6] * 3
+        assert len(calls) == 4 and "telegram-operator" in calls[2]
+
+
+def test_immutable_bundle_atomic_publish_and_private_operation_lock(tmp_path, monkeypatch):
+    tmp_path.chmod(0o700)
+    target = tmp_path / "generation"
+    rename = egress.os.rename
+    monkeypatch.setattr(egress.os, "rename", lambda *_: (_ for _ in ()).throw(OSError("crash")))
+    with pytest.raises(OSError):
+        egress.atomic_bundle(target, {"state.json": b"{}\n"})
+    assert not target.exists()
+    monkeypatch.setattr(egress.os, "rename", rename)
+    egress.atomic_bundle(target, {"state.json": b"{}\n"})
+    egress.atomic_bundle(target, {"state.json": b"{}\n"})
+    with pytest.raises(egress.EgressError, match="EGRESS_BUNDLE_CHANGED"):
+        egress.atomic_bundle(target, {"state.json": b"changed"})
+    with egress.operation_lock(tmp_path):
+        with pytest.raises(egress.EgressError, match="EGRESS_OPERATION_BUSY"):
+            with egress.operation_lock(tmp_path):
+                raise AssertionError("concurrent mutation accepted")
+
+
+def partial_state(tmp_path, monkeypatch):
+    root, directory = tmp_path / "checkout", tmp_path / "state"
+    root.mkdir(mode=0o700)
+    directory.mkdir(mode=0o700)
+    monkeypatch.setattr(egress, "ROOT", root)
+    egress.write_private(root / ".env", b"PG_RUNTIME_PASSWORD=synthetic\n")
+    egress.write_private(tmp_path / "telegram.env", b"TG_BOT_TOKEN=staged\n")
+    raw = egress.encoded(profile())
+    egress.write_private(tmp_path / "profile.json", raw)
+    runtime = egress.encoded(
+        {
+            "services": {
+                n: {
+                    "environment": {
+                        "ASM_AUTH_ORIGINS": '["https://console.test"]',
+                        "ASM_STORAGE_ENDPOINT": "https://files.test",
+                    }
+                }
+                for n in ("api", "worker")
+            }
+        }
+    )
+    old = {
+        "version": 1,
+        "source_sha": egress.LEGACY_SHA,
+        "project": "fixture",
+        "subnet": "10.203.0.0/28",
+        "uid": os.getuid(),
+        "gid": os.getgid(),
+        "profile": str(tmp_path / "profile.json"),
+        "profile_sha256": egress.sha(raw),
+        "telegram_env": str(tmp_path / "telegram.env"),
+        "image": egress.IMAGE,
+        "image_id": "relay-image",
+        "runtime_sha256": egress.sha(runtime),
+    }
+    config = egress.encoded(egress.minimal_config(profile(), "10.203.0.2"))
+    old["config_sha256"] = egress.sha(config)
+    before = {
+        n: {
+            "id": n + "-original",
+            "image": "app-image",
+            "mounts": [],
+            "environment_sha256": "env",
+            "process_sha256": "process",
+            "database_identity": {"database": "same"},
+            "networks": {"fixture_default": {"IPAddress": "172.18.0.2", "Gateway": "172.18.0.1"}},
+        }
+        for n in ("api", "worker", "postgres", "storage")
+    }
+    for name, data in {
+        "state.json": egress.encoded(old),
+        "config.json": config,
+        "runtime.json": runtime,
+        "route.env": egress.route_env(egress.route_values(old, directory)),
+        "deployment-before.json": egress.encoded(before),
+    }.items():
+        egress.write_private(directory / name, data)
+    actual = copy.deepcopy(before)
+    for n in ("api", "worker"):
+        actual[n]["id"] = n + "-partial"
+    actual["telegram-egress"] = {
+        "id": "relay-partial",
+        "image": "relay-image",
+        "networks": {"fixture_telegram-egress": {"IPAddress": "10.203.0.2"}},
+    }
+    ups = []
+
+    def command(args, **_):
+        if args[:3] == ["docker", "image", "inspect"]:
+            return egress.encoded([{"Id": "app-image"}])
+        if "up" in args:
+            ups.append(args)
+            actual["telegram-egress"]["networks"]["fixture_telegram-egress-v6"] = {
+                "GlobalIPv6Address": "fd42:6173:6d00::2"
+            }
+        return b"[]"
+
+    def source(expected):
+        egress.require(expected == "a" * 40, "EGRESS_CHECKOUT_MISMATCH")
+
+    monkeypatch.setattr(egress, "source_check", source)
+    monkeypatch.setattr(egress, "source_image_check", lambda *_: None)
+    monkeypatch.setattr(egress, "image_check", lambda *_: "relay-image")
+    monkeypatch.setattr(egress, "runtime_overlay", lambda *_: runtime)
+    monkeypatch.setattr(egress, "command", command)
+    monkeypatch.setattr(egress, "snapshot", lambda *_: copy.deepcopy(actual))
+    monkeypatch.setattr(egress, "caller_probe", lambda *_: None)
+    monkeypatch.setattr(
+        egress,
+        "checked_model",
+        lambda *_: {
+            "services": {
+                n: {"image": "app-image", "environment": {"ASM_TELEGRAM_ENABLED": "false"}}
+                for n in egress.CALLERS
+            }
+        },
+    )
+    args = argparse.Namespace(
+        state_dir=str(directory), from_sha=egress.LEGACY_SHA, accepted_sha="a" * 40
+    )
+    return args, directory, actual, ups
+
+
+@pytest.mark.parametrize(
+    "phase", ["audit", "generation", "manifest", "relay", "callers", "probe", "after"]
+)
+def test_partial_recovery_interruptions_resume_without_rebaseline_or_false_success(
+    tmp_path, monkeypatch, phase
+):
+    args, directory, _, ups = partial_state(tmp_path, monkeypatch)
+    original = {
+        name: (directory / name).read_bytes()
+        for name in (
+            "state.json",
+            "config.json",
+            "route.env",
+            "runtime.json",
+            "deployment-before.json",
+        )
+    }
+    write, bundle, command = egress.write_private, egress.atomic_bundle, egress.command
+    tripped = False
+
+    def crash():
+        nonlocal tripped
+        if not tripped:
+            tripped = True
+            raise OSError("synthetic interruption")
+
+    def publish(path, files):
+        bundle(path, files)
+        if (phase, path.name) in {("audit", "recovery-v1"), ("generation", "recovery-v2")}:
+            crash()
+
+    def save(path, data, **kwargs):
+        write(path, data, **kwargs)
+        if path == directory / (
+            "state.json"
+            if phase == "manifest"
+            else "deployment-after.json"
+            if phase == "after"
+            else "unused"
+        ):
+            crash()
+
+    def execute(command_args, **kwargs):
+        value = command(command_args, **kwargs)
+        if "up" in command_args and (
+            (phase == "relay" and command_args[-1] == "telegram-egress")
+            or (phase == "callers" and command_args[-1] == "worker")
+        ):
+            crash()
+        return value
+
+    monkeypatch.setattr(egress, "atomic_bundle", publish)
+    monkeypatch.setattr(egress, "write_private", save)
+    monkeypatch.setattr(egress, "command", execute)
+    monkeypatch.setattr(egress, "caller_probe", lambda *_: crash() if phase == "probe" else None)
+    with pytest.raises(OSError, match="synthetic interruption"):
+        egress.recover(args)
+    assert tripped and not (directory / "recovery.json").exists()
+    assert (directory / "deployment-after.json").exists() == (phase == "after")
+    egress.recover(args)
+    for name, raw in original.items():
+        assert (directory / "recovery-v1" / name).read_bytes() == raw
+        if name != "state.json":
+            assert (directory / name).read_bytes() == raw
+    state = json.loads((directory / "state.json").read_bytes())
+    assert state["version"] == 2 and state["source_sha"] == args.accepted_sha
+    assert state["legacy_state_sha256"] == egress.sha(original["state.json"])
+    receipt = json.loads((directory / "recovery.json").read_bytes())
+    assert receipt["original_before_sha256"] == egress.sha(original["deployment-before.json"])
+    previous_ups = len(ups)
+    egress.recover(args)  # Completed response retry has no recreate or changed receipt.
+    assert len(ups) == previous_ups
+    with pytest.raises(egress.EgressError, match="EGRESS_BASELINE_EXISTS_USE_RECOVERY"):
+        egress.deploy(state, directory)
+
+
+@pytest.mark.parametrize(
+    "drift", ["unknown_source", "before", "staged", "database", "image", "gateway"]
+)
+def test_partial_recovery_drift_stops_before_runtime_mutation(tmp_path, monkeypatch, drift):
+    args, directory, actual, ups = partial_state(tmp_path, monkeypatch)
+    original = (directory / "deployment-before.json").read_bytes()
+    if drift in {"before", "staged"}:
+        egress.recovery_archive(directory, args.accepted_sha)
+        path = (
+            directory / "deployment-before.json" if drift == "before" else tmp_path / "telegram.env"
+        )
+        egress.write_private(path, path.read_bytes() + b"\n")
+    elif drift == "unknown_source":
+        state = json.loads((directory / "state.json").read_bytes())
+        state["source_sha"] = "b" * 40
+        egress.write_private(directory / "state.json", egress.encoded(state))
+    elif drift == "database":
+        actual["api"]["database_identity"] = {"database": "other"}
+    elif drift == "image":
+        actual["worker"]["image"] = "other-image"
+    else:
+        actual["api"]["networks"]["fixture_default"]["Gateway"] = "172.18.0.99"
+    with pytest.raises(egress.EgressError):
+        egress.recover(args)
+    assert not ups and not (directory / "deployment-after.json").exists()
+    assert json.loads((directory / "state.json").read_bytes())["version"] == 1
+    assert (directory / "deployment-before.json").read_bytes() == original + (
+        b"\n" if drift == "before" else b""
+    )

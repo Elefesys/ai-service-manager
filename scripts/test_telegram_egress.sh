@@ -6,6 +6,7 @@ import ipaddress
 import json
 import os
 import re
+import signal
 import subprocess
 import tempfile
 import time
@@ -59,7 +60,8 @@ def operator(action):
     phase_start('operator_' + action)
     prepare_args = (['--accepted-sha', source, '--profile', str(directory / 'profile.json'),
                      '--telegram-env', str(directory / 'telegram.env'), '--project', project]
-                    if action == 'prepare' else [])
+                    if action == 'prepare' else ['--accepted-sha', source, '--from-sha', e.LEGACY_SHA]
+                    if action == 'recover' else [])
     output = run(['python3', 'scripts/prepare_telegram_egress.py', action,
                   '--state-dir', str(state_dir), *prepare_args], 120).decode().strip()
     assert output == 'TELEGRAM_EGRESS_' + action.upper() + '_PASS'
@@ -76,7 +78,38 @@ def relay_info():
     assert info['Config']['User'] == f'{os.getuid()}:{os.getgid()}'
     assert all(m['Type'] != 'volume' for m in info['Mounts']), 'NO_ANONYMOUS_WRITABLE_VOLUME'
     assert info['NetworkSettings']['Networks'][values['ASM_TELEGRAM_EGRESS_NETWORK']]['IPAMConfig']['IPv4Address'] == relay_ip
+    assert info['NetworkSettings']['Networks'][values['ASM_TELEGRAM_EGRESS_NETWORK6']]['IPAMConfig']['IPv6Address'] == values['ASM_TELEGRAM_EGRESS_IPV6']
     return identity
+
+def mapping_evidence():
+    model = e.checked_model(state, state_dir)
+    expected = {values['ASM_TELEGRAM_EGRESS_IP'], values['ASM_TELEGRAM_EGRESS_IPV6']}
+    probe = """import json,pathlib,platform,socket
+rows={str(f):[x[4][0] for x in socket.getaddrinfo('api.telegram.org',443,f,socket.SOCK_STREAM,0,0)] for f in (socket.AF_UNSPEC,socket.AF_INET,socket.AF_INET6)}
+hosts=[line.split()[0] for line in pathlib.Path('/etc/hosts').read_text().splitlines() if 'api.telegram.org' in line.split()[1:]]
+print(json.dumps({'hosts':hosts,'resolver_flags':0,'resolver':rows,'python':platform.python_version(),'libc':platform.libc_ver()}))
+"""
+    result = {}
+    for name in ('api', 'worker', 'telegram-operator'):
+        temporary = name == 'telegram-operator'
+        identity = (run([*live, 'run', '-d', '--rm', '--no-deps', '--pull', 'never',
+            '--entrypoint', 'python', name, '-c', 'import time; time.sleep(120)']).decode().strip()
+            if temporary else run([*live, 'ps', '-q', name]).decode().strip())
+        try:
+            info = json.loads(run(['docker', 'inspect', identity]))[0]
+            data = json.loads(run(['docker', 'exec', identity, 'python', '-c', probe]))
+            assert set(data['hosts']) == expected and len(data['hosts']) == 2
+            assert all(row and set(row) <= expected for row in data['resolver'].values())
+            assert set(data['resolver']['2']) == {values['ASM_TELEGRAM_EGRESS_IP']}
+            assert set(data['resolver']['10']) == {values['ASM_TELEGRAM_EGRESS_IPV6']}
+            data.update(model=model['services'][name]['extra_hosts'], host_config=info['HostConfig']['ExtraHosts'])
+            assert set(data['model']) == {'api.telegram.org=' + v for v in expected}
+            assert set(data['host_config']) == {'api.telegram.org:' + v for v in expected}
+            result[name] = data
+        finally:
+            if temporary:
+                run(['docker', 'rm', '-f', identity])
+    return result
 
 def control():
     global last_control
@@ -121,7 +154,8 @@ def local_database_args():
     return ['-e', 'ASM_DATABASE_URL=' + model['api']['environment']['ASM_DATABASE_URL'],
             '-e', 'ASM_MIGRATION_DATABASE_URL=' + model['telegram-operator']['environment']['ASM_MIGRATION_DATABASE_URL'],
             '-e', 'ASM_AUTH_ORIGINS=' + model['api']['environment']['ASM_AUTH_ORIGINS'],
-            '-e', 'ASM_STORAGE_ENDPOINT=' + model['api']['environment']['ASM_STORAGE_ENDPOINT']]
+            '-e', 'ASM_STORAGE_ENDPOINT=' + model['api']['environment']['ASM_STORAGE_ENDPOINT'],
+            '-e', 'ASM_EGRESS_LIFECYCLE=' + lifecycle]
 
 def assert_https_callers(command_prefix):
     ids = {}
@@ -217,6 +251,7 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         assert (root / '.env').read_bytes() == original_env
         assert (directory / 'telegram.env').read_bytes() == staged_inputs
         state = e.verify(state_dir)
+        lifecycle = 'fresh'
         values = e.route_values(state, state_dir)
         assert values['ASM_TELEGRAM_EGRESS_IP'] == relay_ip
         live = e.compose_prefix(state, state_dir)
@@ -342,90 +377,189 @@ http {
         assert network['EnableIPv6'] is False
         assert network['IPAM']['Config'][0]['Subnet'] == state['subnet']
         assert network['IPAM']['Config'][0]['IPRange'] == values['ASM_TELEGRAM_EGRESS_DYNAMIC_RANGE']
+        network6 = json.loads(run(['docker', 'network', 'inspect', values['ASM_TELEGRAM_EGRESS_NETWORK6']]))[0]
+        assert network6['Internal'] and network6['EnableIPv6'] and not network6['EnableIPv4']
+        assert network6['IPAM']['Config'] == [{'Subnet': state['subnet6'],
+            'IPRange': values['ASM_TELEGRAM_EGRESS_DYNAMIC_RANGE6'], 'Gateway': values['ASM_TELEGRAM_EGRESS_GATEWAY6']}]
         relay_info()
         e.caller_probe(state, state_dir)
+        corrected_mapping = mapping_evidence()
         phase_start('postgres_wire')
         checks = start_checks(['pytest', '-q', '-o', 'python_classes=TelegramEgressPostgresChecks',
                                'tests/test_telegram_egress_postgres.py'])
         await_process(checks)
         assertions = [json.loads(row) for row in (directory / 'assertions.jsonl').read_text().splitlines()]
         assert len(assertions) == 6 and all(row['result'] == 'PASS' for row in assertions)
-        phase_start('durable_rollback')
-        # E05 uses the exact base runtime database, not the six cases' asm_test.
-        # Keep the relay attached while the isolated LOCAL harness creates UNKNOWN.
-        # Restore the independently captured pre-staging baseline, not runtime.json.
-        run([*prelive_live, 'up', '-d', '--no-deps', '--force-recreate', '--wait', 'api', 'worker'])
-        assert_https_callers(prelive_live)
-        compose('up', '-d', '--no-deps', '--wait', 'egress-https')
-        target = e.snapshot(state, state_dir)
-        assert target['postgres']['id'] == postgres_id
-        identity = target['api']['database_identity']
-        assert identity == target['worker']['database_identity'] and identity['database'] == 'asm_local'
-        e.write_private(directory / 'durable-target.json', e.encoded({
-            'project': project, 'postgres_id': postgres_id, 'database_identity': identity,
-            'callers': {name: target[name]['database_identity'] for name in ('api', 'worker')}}))
-        run([*base, 'stop', 'worker'])
-        durable = start_checks(['python', 'tests/test_telegram_egress_postgres.py', '--durable-receipt', 'before'], local=True)
-        await_process(durable, marker=directory / 'durable-before.json', timeout=90)
-        # Keep actual UNKNOWN/receipt/session fixtures open while running the exact
-        # operator code on real containers. No domain reset, volume deletion or rebind.
-        run([*prelive, 'up', '-d', '--no-deps', '--force-recreate', '--wait', 'api', 'worker'])
-        def assert_runtime_boundary():
-            current = e.snapshot(state, state_dir)
-            assert current['postgres']['id'] == postgres_id
-            for name in ('api', 'worker'):
-                assert current[name]['database_identity'] == identity, 'E05_ACTUAL_CALLER_DATABASE_CHANGED'
-                info = json.loads(run(['docker', 'inspect', current[name]['id']]))[0]
-                actual = dict(v.split('=', 1) for v in info['Config']['Env'])
-                assert actual['ASM_TELEGRAM_ENABLED'] == 'false'
-                assert all(actual[k] == '' for k in ('TG_BOT_TOKEN', 'TG_WEBHOOK_SECRET',
-                    'ASM_TELEGRAM_EXPECTED_BOT_ID', 'ASM_TELEGRAM_WEBHOOK_URL')), 'E05_STAGED_INPUT_LEAK'
-                assert {key: actual[key] for key in operational} == operational, 'E05_HTTPS_INPUT_DRIFT'
-            assert (directory / 'telegram.env').read_bytes() == staged_inputs
-            return current
-        runtime_before = assert_runtime_boundary()
-        operator('deploy')
-        runtime_deployed = assert_runtime_boundary()
-        operator('preflight')
-        assert (root / '.env').read_bytes() == original_env
-        e.compare_deployment(json.loads((state_dir / 'deployment-before.json').read_text()),
-                             e.snapshot(state, state_dir), state)
-        e.caller_probe(state, state_dir)
-        before_env = (directory / 'telegram.env').read_bytes()
-        compose('stop', '--timeout', '1', 'telegram-egress')
-        e.caller_probe(state, state_dir)
-        operator('rollback')
-        runtime_rolled_back = assert_runtime_boundary()
-        assert (root / '.env').read_bytes() == original_env + b'ASM_TELEGRAM_ENABLED=false\n'
-        assert (directory / 'telegram.env').read_bytes() == before_env
-        compose('run', '--rm', '--no-deps', '-T', *local_database_args(), 'egress-checks', 'python',
-                'tests/test_telegram_egress_postgres.py', '--durable-receipt', 'after')
-        await_process(durable, timeout=30)
-        assertions = [json.loads(row) for row in (directory / 'assertions.jsonl').read_text().splitlines()]
-        assert len(assertions) == 7 and all(row['result'] == 'PASS' for row in assertions)
-        durable_before = json.loads((directory / 'durable-before.json').read_text())
-        durable_after = json.loads((directory / 'durable-after.json').read_text())
-        assert durable_before['database']['identity'] == durable_after['database']['identity'] == identity
-        receipt = {'source_sha': source, 'image': e.IMAGE, 'image_id': state['image_id'],
-            'E01': 'source/blob/private-config/offline-pinned-binary PASS',
-            'E02': 'resolved opt-in/real all-callers mapping/stop/recreate/auth/DB/S3 PASS',
-            'assertions': assertions, 'relay_controls': controls,
-            'C8_01': {'runtime_disabled_empty_TG': True, 'staged_inputs_unchanged': True,
-                'https_settings_preserved': True, 'independent_baseline_before_prepare': True,
-                'runtime_input_bytes_preserved_except_disable': True,
-                'operational_sha256': e.sha(e.encoded(operational))},
-            'C8_02': {'actual_database_identity': identity, 'postgres_id': postgres_id,
-                'callers': {phase: {name: data[name]['database_identity'] for name in ('api', 'worker')}
-                    for phase, data in [('before', runtime_before), ('deployed', runtime_deployed),
-                                        ('rolled_back', runtime_rolled_back)]}},
-            'deployment_before': json.loads((state_dir / 'deployment-before.json').read_text()),
-            'deployment_after': json.loads((state_dir / 'deployment-after.json').read_text()),
-            'rollback': json.loads((state_dir / 'rollback.json').read_text()),
-            'durable_before': json.loads((directory / 'durable-before.json').read_text()),
-            'durable_after': json.loads((directory / 'durable-after.json').read_text())}
+        lifecycle_receipts = {}
+        fresh_state, fresh_dir = state, state_dir
+        for lifecycle in ('fresh', 'recovery'):
+            phase_start('durable_' + lifecycle)
+            # Independent disposable cases; no reset/drop of the actual caller DB.
+            e.write_private(root / '.env', original_env, private_parent=False)
+            for filename in ('durable-before.json', 'durable-after.json', 'durable-release.json'):
+                (directory / filename).unlink(missing_ok=True)
+            # E05 uses the exact base runtime database, not the six cases' asm_test.
+            # Keep the relay attached while the isolated LOCAL harness creates UNKNOWN.
+            # Restore the independently captured pre-staging baseline, not runtime.json.
+            run([*prelive_live, 'up', '-d', '--no-deps', '--force-recreate', '--wait', 'api', 'worker'])
+            assert_https_callers(prelive_live)
+            compose('up', '-d', '--no-deps', '--wait', 'egress-https')
+            target = e.snapshot(state, state_dir)
+            assert target['postgres']['id'] == postgres_id
+            identity = target['api']['database_identity']
+            assert identity == target['worker']['database_identity'] and identity['database'] == 'asm_local'
+            e.write_private(directory / 'durable-target.json', e.encoded({
+                'project': project, 'postgres_id': postgres_id, 'database_identity': identity,
+                'callers': {name: target[name]['database_identity'] for name in ('api', 'worker')}}))
+            run([*base, 'stop', 'worker'])
+            durable = start_checks(['python', 'tests/test_telegram_egress_postgres.py', '--durable-receipt', 'before'], local=True)
+            await_process(durable, marker=directory / 'durable-before.json', timeout=90)
+            # Keep actual UNKNOWN/receipt/session fixtures open while running the exact
+            # operator code on real containers. No domain reset, volume deletion or rebind.
+            run([*prelive, 'up', '-d', '--no-deps', '--force-recreate', '--wait', 'api', 'worker'])
+            def assert_runtime_boundary():
+                current = e.snapshot(state, state_dir)
+                assert current['postgres']['id'] == postgres_id
+                for name in ('api', 'worker'):
+                    assert current[name]['database_identity'] == identity, 'E05_ACTUAL_CALLER_DATABASE_CHANGED'
+                    info = json.loads(run(['docker', 'inspect', current[name]['id']]))[0]
+                    actual = dict(v.split('=', 1) for v in info['Config']['Env'])
+                    assert actual['ASM_TELEGRAM_ENABLED'] == 'false'
+                    assert all(actual[k] == '' for k in ('TG_BOT_TOKEN', 'TG_WEBHOOK_SECRET',
+                        'ASM_TELEGRAM_EXPECTED_BOT_ID', 'ASM_TELEGRAM_WEBHOOK_URL')), 'E05_STAGED_INPUT_LEAK'
+                    assert {key: actual[key] for key in operational} == operational, 'E05_HTTPS_INPUT_DRIFT'
+                assert (directory / 'telegram.env').read_bytes() == staged_inputs
+                return current
+            runtime_before = assert_runtime_boundary()
+            if lifecycle == 'fresh':
+                operator('deploy')
+            else:
+                # Materialize the exact accepted schema1 and partial deployment using
+                # the frozen old overlay, independently of corrected prepare/deploy.
+                compose('rm', '-f', '-s', 'telegram-egress')
+                held = run(['docker', 'ps', '-q', '--filter', 'label=com.docker.compose.project=' + project,
+                            '--filter', 'label=com.docker.compose.service=egress-checks']).decode().split()
+                assert len(held) == 1
+                run(['docker', 'network', 'disconnect', values['ASM_TELEGRAM_EGRESS_NETWORK6'], held[0]])
+                run(['docker', 'network', 'rm', values['ASM_TELEGRAM_EGRESS_NETWORK6']])
+                original_before = e.encoded(e.snapshot(state, state_dir))
+                old = {k: v for k, v in state.items() if k != 'subnet6'}
+                old.update(version=1, source_sha=e.LEGACY_SHA)
+                state_dir = directory / 'partial-state'
+                state_dir.mkdir(mode=0o700)
+                legacy_config = e.encoded(e.minimal_config(profile, relay_ip))
+                old['config_sha256'] = e.sha(legacy_config)
+                for name, raw in {'config.json': legacy_config,
+                        'runtime.json': (fresh_dir / 'runtime.json').read_bytes(),
+                        'route.env': e.route_env(e.route_values(old, state_dir)),
+                        'state.json': e.encoded(old), 'deployment-before.json': original_before}.items():
+                    e.write_private(state_dir / name, raw)
+                e.write_private(directory / 'legacy-compose.yaml', e.LEGACY_OVERLAY)
+                legacy_prefix = [*e.compose_prefix(old, state_dir, overlay=False),
+                    '-f', str(directory / 'legacy-compose.yaml'), '--profile', 'telegram-egress']
+                run([*legacy_prefix, 'up', '-d', '--no-deps', '--pull', 'never', '--force-recreate', 'telegram-egress'])
+                run([*legacy_prefix, 'up', '-d', '--no-deps', '--pull', 'never', '--force-recreate', '--wait', 'api', 'worker'])
+                partial = e.snapshot(fresh_state, fresh_dir)
+                e.compare_deployment(json.loads(original_before), partial, old)
+                assert all(partial[n]['id'] != json.loads(original_before)[n]['id'] for n in ('api', 'worker'))
+                assert not (state_dir / 'deployment-after.json').exists()
+                before_files = {name: (state_dir / name).read_bytes() for name in
+                    ('state.json', 'config.json', 'runtime.json', 'route.env', 'deployment-before.json')}
+                command = ['python3', 'scripts/prepare_telegram_egress.py', 'recover', '--state-dir', str(state_dir),
+                           '--accepted-sha', source, '--from-sha', e.LEGACY_SHA]
+                # Crash the exact CLI after atomic manifest publication, before up.
+                with (directory / 'interrupted-recovery.log').open('wb') as output:
+                    recovery = subprocess.Popen(command, stdout=output, stderr=output, stdin=subprocess.DEVNULL,
+                                                env=environment, start_new_session=True)
+                    processes.append(recovery)
+                    deadline = time.monotonic() + 30
+                    while recovery.poll() is None:
+                        if json.loads((state_dir / 'state.json').read_text())['version'] == 2:
+                            os.killpg(recovery.pid, signal.SIGKILL)
+                            recovery.wait(timeout=5)
+                            break
+                        assert time.monotonic() < deadline, 'RECOVERY_MANIFEST_DEADLINE'
+                        time.sleep(.005)
+                    assert recovery.returncode == -signal.SIGKILL, 'EXACT_RECOVERY_NOT_INTERRUPTED'
+                assert not (state_dir / 'deployment-after.json').exists()
+                assert not (state_dir / 'recovery.json').exists()
+                assert {n: e.snapshot(fresh_state, fresh_dir)[n]['id'] for n in ('api', 'worker')} == {
+                    n: partial[n]['id'] for n in ('api', 'worker')}
+                # Real retry refuses changed baseline/private input before any recreate.
+                for path in (state_dir / 'deployment-before.json', directory / 'telegram.env'):
+                    original = path.read_bytes()
+                    e.write_private(path, original + b'\n')
+                    rejected = subprocess.run(command, capture_output=True, timeout=40, env=environment)
+                    assert rejected.returncode == 1 and rejected.stdout.strip() == b'EGRESS_BUNDLE_CHANGED'
+                    assert not (state_dir / 'deployment-after.json').exists()
+                    e.write_private(path, original)
+                operator('recover')
+                state = e.verify(state_dir)
+                values = e.route_values(state, state_dir)
+                live, base = e.compose_prefix(state, state_dir), e.compose_prefix(state, state_dir, overlay=False)
+                prefix = [*live, '-f', str(root / 'infra/telegram-egress/compose.test.yaml'), '--profile', 'test']
+                for name, raw in before_files.items():
+                    assert (state_dir / 'recovery-v1' / name).read_bytes() == raw
+                    if name != 'state.json':
+                        assert (state_dir / name).read_bytes() == raw
+                assert (state_dir / 'deployment-before.json').read_bytes() == original_before
+                # Explicit completed-response retry is read/verify only, no recreate.
+                recovered_ids = {n: e.snapshot(state, state_dir)[n]['id'] for n in ('api', 'worker')}
+                operator('recover')
+                assert recovered_ids == {n: e.snapshot(state, state_dir)[n]['id'] for n in ('api', 'worker')}
+
+            current_mapping = mapping_evidence()
+            runtime_deployed = assert_runtime_boundary()
+            operator('preflight')
+            assert (root / '.env').read_bytes() == original_env
+            e.compare_deployment(json.loads((state_dir / 'deployment-before.json').read_text()),
+                                 e.snapshot(state, state_dir), state)
+            e.caller_probe(state, state_dir)
+            before_env = (directory / 'telegram.env').read_bytes()
+            compose('stop', '--timeout', '1', 'telegram-egress')
+            e.caller_probe(state, state_dir)
+            operator('rollback')
+            runtime_rolled_back = assert_runtime_boundary()
+            assert (root / '.env').read_bytes() == original_env + b'ASM_TELEGRAM_ENABLED=false\n'
+            assert (directory / 'telegram.env').read_bytes() == before_env
+            compose('run', '--rm', '--no-deps', '-T', *local_database_args(), 'egress-checks', 'python',
+                    'tests/test_telegram_egress_postgres.py', '--durable-receipt', 'after')
+            await_process(durable, timeout=30)
+            assertions = [json.loads(row) for row in (directory / 'assertions.jsonl').read_text().splitlines()]
+            assert len(assertions) == (7 if lifecycle == 'fresh' else 8) and all(row['result'] == 'PASS' for row in assertions)
+            durable_before = json.loads((directory / 'durable-before.json').read_text())
+            durable_after = json.loads((directory / 'durable-after.json').read_text())
+            assert durable_before['database']['identity'] == durable_after['database']['identity'] == identity
+            receipt = {'source_sha': source, 'image': e.IMAGE, 'image_id': state['image_id'],
+                'E01': 'source/blob/private-config/offline-pinned-binary PASS',
+                'E02': 'resolved opt-in/real all-callers mapping/stop/recreate/auth/DB/S3 PASS',
+                'assertions': assertions, 'relay_controls': controls,
+                'C8_01': {'runtime_disabled_empty_TG': True, 'staged_inputs_unchanged': True,
+                    'https_settings_preserved': True, 'independent_baseline_before_prepare': True,
+                    'runtime_input_bytes_preserved_except_disable': True,
+                    'operational_sha256': e.sha(e.encoded(operational))},
+                'C8_02': {'actual_database_identity': identity, 'postgres_id': postgres_id,
+                    'callers': {phase: {name: data[name]['database_identity'] for name in ('api', 'worker')}
+                        for phase, data in [('before', runtime_before), ('deployed', runtime_deployed),
+                                            ('rolled_back', runtime_rolled_back)]}},
+                'mapping': current_mapping,
+                'deployment_before': json.loads((state_dir / 'deployment-before.json').read_text()),
+                'deployment_after': json.loads((state_dir / 'deployment-after.json').read_text()),
+                'rollback': json.loads((state_dir / 'rollback.json').read_text()),
+                'durable_before': json.loads((directory / 'durable-before.json').read_text()),
+                'durable_after': json.loads((directory / 'durable-after.json').read_text())}
+            if lifecycle == 'recovery':
+                receipt['recovery'] = json.loads((state_dir / 'recovery.json').read_text())
+                receipt['recovery'].update(exact_cli_sigkill_after_manifest=True,
+                    baseline_and_staged_drift_rejected=True, original_generated_bytes_preserved=True,
+                    completed_retry_without_recreate=True)
+            lifecycle_receipts[lifecycle] = receipt
         reports = root / 'reports'
         reports.mkdir(exist_ok=True)
-        (reports / 'telegram-egress.json').write_text(json.dumps(receipt, indent=2) + '\n')
+        (reports / 'telegram-egress.json').write_text(json.dumps({'source_sha': source,
+            'lifecycles': lifecycle_receipts, 'assertions': assertions, 'corrected_mapping': corrected_mapping,
+            'docker': json.loads(run(['docker', 'version', '--format', '{{json .}}'])),
+            'compose': run(['docker', 'compose', 'version', '--short']).decode().strip()}, indent=2) + '\n')
         print('TELEGRAM_EGRESS_E01_E05_PASS', flush=True)
     except Exception as error:
         # No private config, environment, process argv or raw Docker inspect output.

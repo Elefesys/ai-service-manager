@@ -109,6 +109,11 @@ jobs:
           python3 scripts/init_local.py
           docker compose --env-file infra/images.lock.env --env-file .env build --pull api
           python3 infra/telegram-egress/docker29_probe.py | tee reports/docker29-probe.log
+      - name: Verify corrected dual-family route and durable recovery on exact Docker29
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh scripts/test_telegram_egress.sh 2>&1 | tee reports/docker29-egress.log
       - name: Require unchanged tracked and untracked source
         run: test -z "$(git status --porcelain --untracked-files=all)"
       - name: Record compatibility source

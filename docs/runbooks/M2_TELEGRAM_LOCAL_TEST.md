@@ -108,7 +108,7 @@ production/Pilot не добавляется к существующим A09/A11
 Текущая owner VM уже на c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14; prepare/verify
 PASS, deployment частичный, before PRESENT / after ABSENT. Relay/api/worker running,
 Telegram disabled/empty TG. Preflight остановлен несовместимым IPv6 mapping на
-Docker29.8.2. Current gate — §0.6.11 и активный M2_HANDOFF: bounded correction C6,
+Docker29.8.2. Current gate — §0.6.12 и активный M2_HANDOFF: correction C6 REVIEW,
 затем full CI/targeted C8 и отдельное guarded recovery от C0. Владелец пока не
 выполняет новые VM команды, не повторяет deploy/prepare/snapshot/rollback или
 source-access/provisioning/secret entry. Accepted main22993f558c5e7e933c65e9c999933bd2e3ab41c4
@@ -1947,6 +1947,117 @@ Private env/profile/TLS, HTTPS two-field overlay и staged TG остаются �
 никакого automatic retry, app build/init/migrations/reset/down-v. После correction,
 full CI и независимого targeted C8 C0 отдельно выдаёт filled owner recovery block;
 до первого setup заново проверит срок подготовленного TEST billing interval.
+
+### 0.6.12. C6 Docker29 correction — REVIEW и подготовленный recovery
+
+**Статус REVIEW, до независимого targeted C8/C0 owner issuance.** §0.6.11 остаётся
+фактическим состоянием VM. C6 не выполнял VM/live commands. Closed C8-01/02/03,
+accepted app/images/HTTPS/staged-input/DB/TLS/deadlines/UNKNOWN границы сохраняются.
+Exact final head/tree/tested merge/ordered parents и run/jobs — единый C6 receipt PR24;
+source archives и оба clean-source gates должны соответствовать этому же final head.
+
+**Реальная исходная regression:** CI37351449973 / job111903261317 SUCCESS,
+head45f2af639afc791a5ff1c0613d18b90108066b9a,
+tested merge0d2bd888cd396389dcecfdf05f3064d992cee107. До изменения mapping real
+Docker29.8.2/server8af9fe3/API1.56/Go1.26.8 + Compose5.5.1 воспроизвёл отказ всех
+трёх callers: HostConfig сохраняет mapped; hosts содержит два private IPv4;
+AF_INET6 flags0 получает synthetic2001:db8::91. Public DNS/Telegram не использованы.
+Runner kernel6.17.0-1022-azure, Python3.13.15/glibc2.36; это не owner kernel6.8.
+Artifact11362024418 SHA256
+`4bca452a1c57844f9f93af9eb27a36c0d45c2c903f56b70136a0a06089dea363`
+содержит bounded model/HostConfig/hosts/resolver/versions и source/tested-SHA.
+
+Mandatory disposable-runner lane устанавливает official Docker CE/CLI
+`5:29.8.2-1~ubuntu.24.04~noble` из signed download.docker.com APT, проверяет signing
+fingerprint `9DC858229FC7DD38854AE2D88D81803C0EBFCD88` и actual version/server commit.
+Official Compose5.5.1 linux-x86_64 SHA256
+`db1889184726840f75c4f9c001048430d4f25b3be3cb084d3ddd762bc0aed576` проверяется до install.
+Эта установка относится только к disposable CI runner; на VM daemon не меняется.
+CI37350175798 остановился на setup APT source mismatch; CI37350872633 на nullable
+host/none IPAM inventory. Это дефекты нового harness, не доказательство mapping fix;
+защитные assertions сохранены. После их исправления старый отказ воспроизведён.
+
+**Исправление.** Второй native ULA listener pinned Xray обслуживает тот же fixed
+upstream443 через прежний selected connection. Три callers получают IPv4 и native
+IPv6 endpoints relay. Новая internal IPv6-only bridge имеет bounded /64 из
+fd42:6173:6d00::/48, gateway::1/static relay::2 и upper /65 для dynamic allocations.
+Проверяются collisions с Docker IPAM и host routes, собственные network identity и
+reservation. Default gateway, root Compose, приложение, client/config blobs, pins,
+TLS/SNI/Host, deadlines/retries0 и permissions/media не меняются. Host/DNS/sysctl
+patches, mapped normalization и fallback отсутствуют.
+
+| Boundary | Точные assertions / execution |
+|---|---|
+| E01 | `test_native_ipv6_inbound_keeps_exact_fixed_upstream_and_selected_connection`, `test_ipv6_ipam_collision_identity_and_static_reservation`; private owner/mode/no-symlink и canonical outside-checkout прежние |
+| E02 | `docker29_probe.py`: old failure на exact Engine; `mapping_evidence` + `caller_probe`: model/HostConfig/hosts, все addresses и три flags0 families на api/worker/operator; `both_relay_families` подтверждает TLS и fail-closed IPv4/IPv6 после stop/recreate |
+| E03/E04 | Прежние шесть real PG/TLS wire cases; readonly/media, effect→response loss/relay stop→UNKNOWN→restart; persistent counter1, bad TLS, permissions/media/private S3 сохранены |
+| E05 fresh | Exact prepare/deploy/preflight/rollback на независимом двухфайловом HTTPS baseline; actual caller asm_local, Secure Console session, UNKNOWN/receipt,31 fingerprints/counter1 |
+| E05 partial recovery | Old schema1/c29 + frozen old overlay + already-recreated callers; original before PRESENT/after ABSENT; exact CLI SIGKILL после manifest, повтор с baseline/staged drift STOP, resume без перезаписи before; completed retry без recreate; explicit rollback и те же durable checks |
+| E05 interruption guards | `test_partial_recovery_interruptions_resume_without_rebaseline_or_false_success`: audit/generation/manifest/relay/callers/probe/after; `test_partial_recovery_drift_stops_before_runtime_mutation`: source/before/staged/DB/image/gateway; operation lock и immutable bundle |
+| E06 | Unchanged `sh scripts/ci.sh`, `sh scripts/test_browser.sh`, оба clean-source gates + обязательная Docker29 lane; один final-head receipt PR24 |
+
+Local focused59 PASS — только unit checks. Реальные execution reports должны показать
+шесть transport cases + два отдельных E05 lifecycles; для каждого прежний held
+180-second deadline сохраняется. Console/UNKNOWN rows создаются в actual caller DB,
+не в соседней asm_test. Reports не содержат private profiles/env/keys. Ограничения:
+synthetic peer/CA, не Telegram API; owner TLS/provider/live counters ещё не проверены.
+
+**Guarded state transition.** Root legacy config.json/route.env/runtime.json и
+original deployment-before.json сохраняются byte-identical. Recovery-v1 хранит их
+private immutable audit, старый manifest, frozen old overlay и input hashes;
+recovery-v2 — новую config/route/runtime/state generation. После fsync/rename
+единственный root state.json атомарно выбирает generation. Exclusive private lock
+исключает concurrent mutations. Resume строго проверяет archive/current input hashes,
+source/schema/image/model/actual DB/env/process/gateway и disabled callers. After/receipt
+появляются только после strict mapping/readiness/preservation. Completed retry даёт
+тот же receipt без recreate. Interrupted unpublished `.generation-*` не используются;
+автоматическое удаление private audit и rollback отсутствуют. `prepare`, `deploy`
+или `snapshot` не заменяют original before из partial state.
+
+**Подготовленные команды (C0 заполняет exact accepted head после C8).** Это спецификация
+helper invocation для последующей отдельной выдачи, не разрешение выполнять сейчас.
+Prerequisites: exact clean checkout принятого нового SHA, прежний state directory700,
+private files600 и прежние source/profile/env/images/disabled runtime. Никаких prepare,
+app build/init/migrations/down-v/reset. Не подставлять tested virtual merge вместо PR head.
+
+```sh
+# C0 задаёт полный принятый NEW_SHA из final receipt после targeted C8.
+: "${NEW_SHA:?C0 must supply the exact accepted implementation head}"
+test "$(git rev-parse HEAD)" = "$NEW_SHA" || exit 1
+python3 scripts/prepare_telegram_egress.py recover \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress \
+  --from-sha c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14 \
+  --accepted-sha "$NEW_SHA"
+python3 scripts/prepare_telegram_egress.py preflight \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+```
+
+Expected markers: RECOVER_PASS и PREFLIGHT_PASS с префиксом TELEGRAM_EGRESS_. При
+bounded STOP сохранить state/audit/original before; C0 разбирает drift. После
+interruption тот же exact `recover` является явным resume, без repeated deploy/snapshot.
+Никакого автоматического rollback. Если C0 отдельно выбирает rollback для schema2
+(в том числе после interruption уже опубликованного manifest):
+
+```sh
+python3 scripts/prepare_telegram_egress.py rollback \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+```
+
+Для ещё не опубликованного schema2 (исходный schema1/c29) отдельный explicit rollback:
+
+```sh
+python3 scripts/prepare_telegram_egress.py rollback \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress \
+  --from-sha c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14 \
+  --accepted-sha "$NEW_SHA"
+```
+
+Оба rollback сначала сохраняют Telegram=false при mapping, потом снимают route
+api/worker и останавливают relay. Новые/старые private bridges и stopped relay
+сохраняются как bounded inactive resources; application endpoints на них отсутствуют,
+никаких ports наружу. Owner env/profile/staged inputs, volumes, before/after/audit/
+durable receipts не удаляются. Recovery после recorded rollback даёт STOP. Следующая
+активация/discovery/setup/webhook/send — только отдельный C0 шаг после приёмки.
 
 ## 1. Конкретное окружение и предварительные условия
 

@@ -1119,7 +1119,7 @@ final head/CI документационной приёмки — в PR receipt.
 **Operational finding 2026-10-05 — C0-M2-ENV04-04/P2:** на owner Docker29.8.2
 extra_hosts сохраняет mapped IPv6 в model/HostConfig, но Engine Unmap() записывает
 в hosts второй IPv4. Actual AF_INET6/flags=0 у api/worker получает посторонний
-native IPv6. Поэтому actual deployment/preflight не принят; ENV04 IN_PROGRESS,
+native IPv6. Поэтому actual deployment/preflight не принят; correction C6 REVIEW,
 ограниченная correction C6 — верхний M2_HANDOFF, VM receipt runbook§0.6.11.
 Прежние C8-01/02/03 CLOSED сохраняются; нового C8 PASS пока нет.
 
@@ -1141,6 +1141,25 @@ mapping/readiness/preservation; interruption не оставляет ложны�
 Fresh deploy и explicit disable-first rollback сохраняются. Targeted C8 проверяет
 новую mapping/recovery boundary после real Docker29/full CI; owner VM changes —
 только отдельным шагом C0. Domain/API/production/M3 scope прежний.
+
+C6 correction реализует второй native ULA listener того же pinned Xray, тот же
+fixed upstream/selected outbound. Internal IPv6-only bridge имеет непересекающийся
+/64 ULA, static ::2 и отдельный dynamic /65; existing default gateway сохраняется.
+Model/HostConfig/hosts и resolver flags=0 проверяются на api/worker/operator. Нет
+mapped-address substitution, host sysctl/DNS patch или caller TLS/config change.
+
+Generated schema2 проверяет оба private endpoints. Явный recover разрешён только
+из schema1/source c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14 и original partial before.
+Private immutable recovery-v1 хранит прежние bytes и hashes inputs; recovery-v2 —
+новую generation. Atomic manifest + exclusive operation lock сохраняют resumability.
+Оригинальный before не переписывается, accepted after/receipt появляются лишь после
+полного сравнения, mapping и readiness. Completed retry не пересоздаёт callers.
+Изменение baseline/input/schema/source/image/DB/gateway даёт STOP, не новый baseline.
+Rollback явный: disabled with route → remove caller route → stop relay. Оба bounded
+private bridges и stopped relay сохраняются без application endpoints для audit;
+owner inputs, volumes и durable receipts не удаляются. Legacy partial rollback требует
+тех же explicit from/accepted SHA и guards. Recovery после recorded rollback запрещён.
+Exact-source execution receipt и команды — runbook§0.6.12/PR24; это не новый C8 verdict.
 
 C0 разрешил отдельный opt-in overlay на принятом Xray26.9.9 digest (runbook§0.6),
 без изменения §§10.1–10.11/domain/API/app. Callers ровно api/worker/telegram-operator;
