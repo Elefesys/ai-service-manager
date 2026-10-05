@@ -13,7 +13,14 @@ PROJECT = "asm-docker29-mapping"
 
 
 def run(args):
-    return subprocess.check_output(args, stderr=subprocess.PIPE, timeout=120)
+    result = subprocess.run(args, capture_output=True, timeout=120)
+    if result.returncode:
+        # This fixture has no private inputs/credentials. Preserve bounded Docker
+        # startup errors rather than losing the cause of a failed isolated probe.
+        print("DOCKER29_PROBE_COMMAND_FAILED=" + str(result.returncode), flush=True)
+        print(result.stderr.decode(errors="replace")[-4096:], flush=True)
+        result.check_returncode()
+    return result.stdout
 
 
 def main():
@@ -42,6 +49,7 @@ def main():
         if all(s.version != v.version or not s.overlaps(v) for v in occupied)
     )
     relay, dns = str(subnet[2]), str(subnet[3])
+    dynamic = list(subnet.subnets(prefixlen_diff=1))[1]
     os.umask(0o077)
     with tempfile.TemporaryDirectory(prefix="asm-docker29-probe-") as tmp:
         directory = Path(tmp)
@@ -86,7 +94,16 @@ while True:
                 "probe": {
                     "internal": True,
                     "enable_ipv6": False,
-                    "ipam": {"config": [{"subnet": str(subnet)}]},
+                    "ipam": {
+                        "config": [
+                            {
+                                "subnet": str(subnet),
+                                # Keep fixed DNS .3 outside dynamic allocation even when
+                                # Compose starts callers before the DNS service.
+                                "ip_range": str(dynamic),
+                            }
+                        ]
+                    },
                 }
             },
         }
@@ -107,6 +124,8 @@ print(json.dumps({'hosts':hosts,'resolver':rows,'python':platform.python_version
             for name in ("api", "worker", "telegram-operator"):
                 identity = run([*prefix, "ps", "-q", name]).decode().strip()
                 info = json.loads(run(["docker", "inspect", identity]))[0]
+                allocated = info["NetworkSettings"]["Networks"][PROJECT + "_probe"]["IPAddress"]
+                assert ipaddress.ip_address(allocated) in dynamic and allocated not in {relay, dns}
                 row = json.loads(run(["docker", "exec", identity, "python", "-c", probe]))
                 assert sorted(resolved["services"][name]["extra_hosts"]) == sorted(hosts)
                 assert sorted(info["HostConfig"]["ExtraHosts"]) == sorted(
@@ -122,6 +141,7 @@ print(json.dumps({'hosts':hosts,'resolver':rows,'python':platform.python_version
                     "model": resolved["services"][name]["extra_hosts"],
                     "host_config": info["HostConfig"]["ExtraHosts"],
                     "old_strict_mapping_rejected": True,
+                    "caller_private_ip": allocated,
                 }
             reports = ROOT / "reports"
             reports.mkdir(exist_ok=True)

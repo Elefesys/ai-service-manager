@@ -64,6 +64,14 @@ empty-DB guard: первый case законно оставляет SEALED billi
 сохраняются byte-for-byte; другие domain/auth rows обязаны отсутствовать. Catalog
 не удаляется, trigger не отключается, тайм-аут180s и durable assertions прежние.
 
+CI37356534441: foundation111920229766 и browser111920229503 SUCCESS;551 unit,
+390 PG/S3,111 frontend,27 browser,6 transport + fresh/recovery E05, оба штатных
+scripts/clean gates прошли. Recovery SIGKILL/resume/drift/rollback PASS в157s при180s.
+Compatibility остановился на startup старой DNS fixture; она не резервировала static
+DNS address от dynamic IPAM. Добавлены reservation/assertion и bounded diagnostics;
+исторический stderr не сохранён, точный прежний Docker response не заявляется.
+Полный final-head CI после этого изменения — в итоговом PR24 receipt.
+
 Это авторская передача, не C0 acceptance/C8 PASS и не owner deployment.
 
 Temporary GitHub deploy key asm-telegram-test-env04 подлежит отзыву после уже

@@ -2010,6 +2010,16 @@ empty-DB guard: первый case законно оставляет SEALED billi
 сохраняются byte-for-byte; другие domain/auth rows обязаны отсутствовать. Catalog
 не удаляется, trigger не отключается, тайм-аут180s и durable assertions прежние.
 
+CI37356534441: foundation111920229766 и browser111920229503 SUCCESS. Оба штатных
+scripts/clean gates,551 unit,390 PG/S3,111 frontend,27 browser,6 transport + fresh E05
+и recovery E05 PASS. Exact recovery SIGKILL/resume и две drift rejections, повтор без
+recreate и explicit rollback прошли; held recovery157s при неизменном180s. Это real
+обычный runner; compatibility job111920229489 отдельно остановился на startup старой
+DNS fixture до проверки mapping. Её fixed DNS .3 пересекался с dynamic IPAM pool;
+теперь lower /29 зарезервирован, фактические caller addresses обязаны быть upper /29.
+Исторический stderr был отброшен, конкретный прежний Docker response неизвестен;
+добавлена bounded диагностика. Final-head full CI с исправленной fixture — PR24 receipt.
+
 **Guarded state transition.** Root legacy config.json/route.env/runtime.json и
 original deployment-before.json сохраняются byte-identical. Recovery-v1 хранит их
 private immutable audit, старый manifest, frozen old overlay и input hashes;

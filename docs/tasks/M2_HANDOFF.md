@@ -44,6 +44,14 @@ empty-DB guard: первый case законно оставляет SEALED billi
 сохраняются byte-for-byte; другие domain/auth rows обязаны отсутствовать. Catalog
 не удаляется, trigger не отключается, тайм-аут180s и durable assertions прежние.
 
+CI37356534441 подтвердил foundation/browser/scripts/оба gates:551 unit,390 PG/S3,
+111 frontend,27 browser,6 transport и оба E05 lifecycles. Recovery SIGKILL/resume,
+baseline/staged drift, unchanged original/audit и explicit rollback PASS (157s/180s).
+Отдельная compatibility lane остановилась при startup old DNS fixture; недостающая
+reservation static DNS в IPAM исправлена без изменения mapping assertions. Bounded
+Docker stderr теперь сохраняется; точный ответ прежнего startup ретроспективно
+не установлен. После helper-fixture correction обязательный полный final-head CI.
+
 ### Repository, точный старт и источники
 
 Repository **Elefesys/ai-service-manager**, существующий
