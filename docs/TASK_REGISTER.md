@@ -2,7 +2,61 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — TEST egress code принят; далее owner deployment / 2026-10-05
+## Текущий статус — ENV04: Docker29 mapping и partial-deploy recovery / 2026-10-05
+
+**M2 — IN_PROGRESS. M2-ENV-04-TELEGRAM-EGRESS — IN_PROGRESS, C6.**
+Новое ограниченное поручение **M2-ENV-04-DOCKER29-MAPPING** закрывает наблюдаемую
+на owner VM находку **C0-M2-ENV04-04, P2 / E02 и E05**. Это C0 operational finding,
+не новый вердикт C8. Прежние C8-M2-ENV04-01/02/03 остаются CLOSED; их exact-source
+CI/review evidence сохраняется. Единственный активный handoff — верхний M2_HANDOFF;
+новый VM receipt и причина — runbook§0.6.11. Владелец пока не выполняет новые команды.
+
+Repository **Elefesys/ai-service-manager**, PR24 **Draft / OPEN / NOT MERGED**,
+branch **c6/m2-telegram-live → main**. Accepted main/base
+**22993f558c5e7e933c65e9c999933bd2e3ab41c4** неизменён. Исследованный PR/VM checkout
+**c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14**, tree
+**2994f5f259321f1a13639107a28dbcac52e1c403**; implementation d57ae07f10cd603910876068da444829b326bdab.
+[CI37300041270](https://github.com/Elefesys/ai-service-manager/actions/runs/37300041270)
+SUCCESS; tested merge d286d72cf9b6b0ee1089283ba4bbe4aeab230fe8, same tree.
+Последующий coordination меняет только четыре документа; его head/tree/CI — PR receipt.
+Сохранить всю историю, не создавать SHA-only commit и не обновлять VM вслед за docs.
+
+**Owner evidence:** source fetch/exact checkout и prepare/verify PASS. Deployment
+частично выполнен: relay running, api/worker пересозданы с теми же images,
+Telegram=false/четыре TG fields пустые. deployment-before.json PRESENT;
+deployment-after.json и rollback.json ABSENT. Штатное сравнение original baseline
+с actual snapshot PASS: env/process/images/mounts/default gateway, actual SQL DB
+identity и unrelated containers сохранены. Диагностика не изменила private files
+или runtime. Это не проверка всех business rows или новый Console login.
+
+**Отказ:** у api И worker Compose/HostConfig имеют IPv4 + mapped IPv6, но
+/etc/hosts — две IPv4-записи и ни одной mapped. AF_UNSPEC/AF_INET дают relay;
+AF_INET6 с исходными flags=0 даёт один посторонний native IPv6. Только отдельная
+диагностическая проба AI_V4MAPPED даёт mapped relay — она не заменяет preflight.
+Engine29.8.2/API1.56, server commit8af9fe3; Compose5.5.1; Python3.13.15/glibc2.36;
+host/container IPv6 не отключён. Exact Engine source подтверждает Unmap() для
+extra_hosts перед передачей в sandbox; полные refs и доказательства — §0.6.11.
+
+C6 исправляет воспроизводимый opt-in mapping трёх callers без public/DNS fallback
+и готовит guarded helper recovery от этого partial state с неизменным первоначальным
+deployment-before. Нельзя просто повторить deploy/snapshot, очистить state, вручную
+патчить hosts или заменить AF_INET6 проверку диагностическим AI_V4MAPPED. Actual
+Docker29 regression, прежние E01–E06/full CI и targeted C8 по новой boundary — до
+возобновления owner deployment. App/source pins, env/HTTPS/TG split, DB/S3/Console,
+UNKNOWN/no-resend и отсутствие app build/migrations/reset на VM обязательны.
+
+Temporary GitHub deploy key asm-telegram-test-env04 подлежит отзыву после уже
+подтверждённого fetch; напоминание выдано, отдельного owner подтверждения отзыва пока
+нет. SSH key входа не менять. Не повторять Console provisioning/secret entry или
+temporary getMe. Discovery/setup/webhook/activation/send ещё не выполнены; billing
+interval проверить перед первой setup-попыткой, затем сохранять те же IDs/dates.
+M2 закрывается только после actual route/live A09/A11, owner merge и отдельного
+successful push/main CI. Production/M3 и новый бюджет не выдаются.
+
+<details>
+<summary>История — приёмка code и source access до фактического deployment</summary>
+
+## История — TEST egress code принят; далее owner deployment / 2026-10-05
 
 **M2 — IN_PROGRESS. M2-ENV-04-TELEGRAM-EGRESS — REVIEW: code принят C0/C8,
 owner deployment и интеграция ещё не выполнены.** Нового implementation задания C6
@@ -57,6 +111,8 @@ secret staging и temporary getMe уже PASS, не повторять. До п�
 актуальность TEST billing interval; после попытки сохранить точные IDs/dates.
 ENV04/M2 не объявлены INTEGRATED/VERIFIED; нужны owner evidence, merge владельцем
 и отдельный actual main CI. ADR239/LOCAL-TEST и прежний бюджет сохраняются; M3 не выдан.
+
+</details>
 
 <details>
 <summary>История — C6 REVIEW перед финальной приёмкой01 / 2026-10-05</summary>
@@ -357,7 +413,7 @@ M3 не выдан. Секреты не присылать в чат/PR. Нов�
 | M2-ENV-01-REGISTRY | Восстановить storage provisioning и полный CI | M2.4; pull failure PR22 | C6; C0/C8 | VERIFIED | PR22 merged80e51c4; scoped C8 PASS; отдельный push/main36825583134 SUCCESS, оба scripts/source gates и реальные PG/S3/browser | Сохранять проверенные GHCR pins; registry blocker CLOSED |
 | M2-ENV-02-STORAGE-IMAGES | Два exact official binary в project-owned images | Решение C0 о новой упаковке | C6; C0/C8 | VERIFIED | Build36734267078; anonymous full OCI bytes; scoped C8; final PR36824246755 и actual main36825583134 SUCCESS | Не пересобирать и не менять visibility/pins без причины |
 | M2-ENV-03-TEST-HOST | Один TEST host/.com DNS/HTTPS до Telegram connection | Actual main80e51c4 + host evidence | C6; C0; independent C8 | VERIFIED | PR23 merged22993f5; main37016012805 SUCCESS; C8-HOST PASS; operator host/HTTPS/private403/renewal receipt; известные TEST ограничения сохранены | Закрыто только pre-live host; продолжить M2-LIVE-A09-A11 |
-| M2-ENV-04-TELEGRAM-EGRESS | Opt-in постоянный synthetic TEST route для Telegram callers | ENV03; temporary TLS/fail-closed/getMe PASS; C0 bounded scope | C0/owner deployment; C6 implementation complete | REVIEW | C0 ACCEPTED, targeted C8 PASS:01/02/03 CLOSED на d57ae07; CI37297119410 SUCCESS; runbook§0.6.10 | Временный read-only source access → exact checkout → disabled deploy/preflight; далее live шаги, owner merge и actual main CI; M2 IN_PROGRESS |
+| M2-ENV-04-TELEGRAM-EGRESS | Opt-in постоянный synthetic TEST route для Telegram callers | ENV03; prior C0 / C8-01–03 PASS; actual partial VM deployment | C6: M2-ENV-04-DOCKER29-MAPPING | IN_PROGRESS | C0-M2-ENV04-04 OPEN/P2: Engine Unmap(), AF_INET6 fallback; before сохранён; runbook§0.6.11 | Real Docker29 correction + guarded partial-state recovery → full CI/targeted C8 → owner resume; live A09/A11/merge/main CI впереди |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 

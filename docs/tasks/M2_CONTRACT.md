@@ -1116,6 +1116,32 @@ final head/CI документационной приёмки — в PR receipt.
 
 ### 10.12. Operational extension — M2-ENV-04 TEST egress
 
+**Operational finding 2026-10-05 — C0-M2-ENV04-04/P2:** на owner Docker29.8.2
+extra_hosts сохраняет mapped IPv6 в model/HostConfig, но Engine Unmap() записывает
+в hosts второй IPv4. Actual AF_INET6/flags=0 у api/worker получает посторонний
+native IPv6. Поэтому actual deployment/preflight не принят; ENV04 IN_PROGRESS,
+ограниченная correction C6 — верхний M2_HANDOFF, VM receipt runbook§0.6.11.
+Прежние C8-01/02/03 CLOSED сохраняются; нового C8 PASS пока нет.
+
+Семантический контракт не ослабляется: AF_UNSPEC/AF_INET/AF_INET6 с исходными
+flags=0 на всех трёх callers возвращают только адреса того же private relay,
+без public/DNS fallback. Разрешён bounded private IPv6 endpoint/IPAM этого relay
+в opt-in overlay, если требуется совместимость; он не меняет official TLS/Host/
+SNI, fixed upstream, client/config blobs, deadlines/retries, permissions/media
+или UNKNOWN. Нельзя исключить AF_INET6, подменить его AI_V4MAPPED/AI_ADDRCONFIG
+или изменить global host networking/daemon ради PASS.
+
+Existing partial deployment — отдельное проверяемое начальное состояние:
+schema1/source c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14, before PRESENT / after ABSENT,
+relay running и disabled/emptyTG callers уже пересозданы. Guarded helper recovery
+сохраняет первоначальный before byte-for-byte, сравнивает с ним actual state и
+явно проверяет source/schema/generated-state transition. Reset/rebaseline и
+неявное принятие старого source_sha запрещены. Новый receipt/PASS — только после
+mapping/readiness/preservation; interruption не оставляет ложный commit receipt.
+Fresh deploy и explicit disable-first rollback сохраняются. Targeted C8 проверяет
+новую mapping/recovery boundary после real Docker29/full CI; owner VM changes —
+только отдельным шагом C0. Domain/API/production/M3 scope прежний.
+
 C0 разрешил отдельный opt-in overlay на принятом Xray26.9.9 digest (runbook§0.6),
 без изменения §§10.1–10.11/domain/API/app. Callers ровно api/worker/telegram-operator;
 official api.telegram.org сохраняет TLS/SNI и фиксируется на устойчивом private IP
@@ -1136,9 +1162,10 @@ d57ae07f10cd603910876068da444829b326bdab, CI37297119410 SUCCESS; прежние0
 исходных inputs отдельно от staged TG. Independent pre-live baseline, strict drift,
 actual DB/Secure session/UNKNOWN preservation проверены real runner и targeted C8.
 Изложения прежнего open finding ниже — история причины, не незакрытая текущая задача.
-Contract/domain scope не меняется. Current operator gate — runbook§0.6.10/верхний
-M2_HANDOFF: source access, затем exact disabled deployment; actual VM/live evidence
-и merge/main CI ещё не получены, M2 остаётся IN_PROGRESS.
+Contract/domain scope не меняется. Этот code-acceptance receipt исторический;
+current gate — runbook§0.6.11/верхний M2_HANDOFF. Source и partial VM deployment уже
+подтверждены; IPv6 mapping/recovery correction, live A09/A11 и merge/main CI впереди,
+M2 остаётся IN_PROGRESS.
 
 C0 targeted disposition 2026-10-05: C8-02/03 закрыты на implementation
 2536a1aa2b41792fff381c4d222906e2ff9ad23c; остаток C8-01/E05 требует сохранения

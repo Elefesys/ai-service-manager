@@ -103,16 +103,16 @@ synthetic данными. Это не смена ADR137/138/142/143/243: product
 private Object Storage и изоляция окружений остаются принятыми решениями. Подготовка
 production/Pilot не добавляется к существующим A09/A11.
 
-### 0.2. Текущий порядок — TEST egress / 2026-10-05
+### 0.2. Текущий порядок — Docker29 mapping correction / 2026-10-05
 
-PR24 остаётся Draft; accepted main22993f558c5e7e933c65e9c999933bd2e3ab41c4 и
-push/main37016012805 SUCCESS. Existing runtime80e51c43e31541940f1ccf18b8281adf1a061748
-сохраняется. Console login/private staging и actual single getMe через temporary
-route PASS, cleanup завершён; runtime Telegram disabled. Теперь **M2-ENV-04**,
-активный handoff и§0.6.9: correction остатка01 передан C6 на REVIEW; full CI и
-targeted C8 только01/затронутая boundary — до отдельной выдачи C0. Владелец пока не выполняет новые VM команды. Старые Owner provisioning,
-secret entry, host/DNS/TLS не повторять. Discovery/binding/webhook/Console journey
-ещё не исполнены; M2 IN_PROGRESS. .com — прежний единственный smoke origin.
+Текущая owner VM уже на c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14; prepare/verify
+PASS, deployment частичный, before PRESENT / after ABSENT. Relay/api/worker running,
+Telegram disabled/empty TG. Preflight остановлен несовместимым IPv6 mapping на
+Docker29.8.2. Current gate — §0.6.11 и активный M2_HANDOFF: bounded correction C6,
+затем full CI/targeted C8 и отдельное guarded recovery от C0. Владелец пока не
+выполняет новые VM команды, не повторяет deploy/prepare/snapshot/rollback или
+source-access/provisioning/secret entry. Accepted main22993f558c5e7e933c65e9c999933bd2e3ab41c4
+не изменён; PR24 Draft, M2 IN_PROGRESS, discovery/setup/webhook/live A09/A11 впереди.
 
 <details>
 <summary>История — порядок сразу после интеграции host / 2026-10-02</summary>
@@ -1680,6 +1680,9 @@ owner block; секреты, profile и старые успешные шаги �
 
 ### 0.6.9. C6 — correction остатка01/P2/E05, REVIEW / 2026-10-05
 
+**После partial deployment на owner VM этот first-deploy block не повторять.**
+Текущий operational gate/recovery task — §0.6.11; ниже сохранён принятый synthetic receipt.
+
 Историческая передача C6 сохранена ниже; финальный C0/C8 PASS и текущий owner
 шаг — §0.6.10. Подготовленный deploy/rollback artifact принят в synthetic scope,
 но исполняется только отдельным готовым блоком C0 с exact accepted SHA после
@@ -1763,6 +1766,9 @@ Private receipt сверяет прежние images/mounts/process/env (кро�
 actual DB identity и unrelated containers. Нет down-v/reset/rebind/drop. PG/S3
 volumes, UNKNOWN/receipt/Console и staged inputs сохраняются. При ошибке не включать
 Telegram: вернуть C0 bounded code, после исправления повторить тот же rollback.
+
+<details>
+<summary>История — C0/C8 code acceptance и source access, выполненный до Docker29 failure</summary>
 
 ### 0.6.10. C0 приёмка / targeted C8 PASS; owner source access / 2026-10-05
 
@@ -1858,6 +1864,89 @@ Review PASS не выдаёт автоматического права на dis
 accepted disable-first/retained HTTPS/UNKNOWN rules прежние. Actual route receipt,
 потом live A09/A11, merge владельцем и отдельный main CI остаются конечным остатком.
 M2-ENV-04 REVIEW, M2 IN_PROGRESS; INTEGRATED/VERIFIED и M3 не объявлены.
+
+</details>
+
+### 0.6.11. Owner partial deployment — Docker29 IPv6 mapping failure / 2026-10-05
+
+**Текущий gate:** C0-M2-ENV04-04, P2 / E02,E05; ENV04 IN_PROGRESS,
+ограниченная correction M2-ENV-04-DOCKER29-MAPPING выдана C6. До final CI и targeted
+C8 новой mapping/recovery boundary владелец не выполняет новые команды VM.
+Это operational finding C0, прежние C8-01/02/03 CLOSED и их CI evidence сохраняются.
+M2 IN_PROGRESS, PR24 Draft/open/not merged; live A09/A11 не выполнены.
+
+**Source и применение.** Владелец подтвердил SOURCE_ACCESS_ADDED. Первая попытка
+fetch остановилась до checkout; последующие isolated-agent diagnostics подтвердили
+unlock/key-pair/repository read. Точную причину первого отказа/passphrase ошибку
+ретроспективно не заявляем. Следующая попытка получила SOURCE_FETCH_VERIFIED_PASS,
+SOURCE_EXACT_CHECKOUT_PASS, HEAD **c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14**,
+tree **2994f5f259321f1a13639107a28dbcac52e1c403**; temporary SSH agent cleanup PASS.
+Это actual VM checkout, в отличие от прежнего tested merge
+d286d72cf9b6b0ee1089283ba4bbe4aeab230fe8 (CI37300041270 SUCCESS).
+TELEGRAM_EGRESS_PREPARE_PASS и VERIFY_PASS получены. Deploy завершился
+EGRESS_COMMAND_FAILED / ENV04_STOP_STAGE=DEPLOY / HELPER_DEPLOY_FAILED;
+DEPLOY_PASS/PREFLIGHT_PASS отсутствуют. После этого deploy не повторялся.
+
+Временный GitHub deploy key **asm-telegram-test-env04** должен быть отозван после
+успешного fetch; SOURCE_KEY_REVOCATION_REQUIRED и напоминание переданы. Отдельного
+owner подтверждения отзыва пока нет. Ключ входа на VM сохраняется; новых secrets нет.
+
+| Фактическое состояние после остановки | Evidence владельца |
+|---|---|
+| Private state | `/home/asmoperator/.local/state/asm-telegram-egress`; original deployment-before.json PRESENT, deployment-after.json/rollback.json ABSENT |
+| api/worker | Running; api healthy; restart count0; новые container IDs, те же images. ASM_TELEGRAM_ENABLED=false, четыре TG fields пустые |
+| Relay | telegram-egress running, restart count0; отдельной healthcheck нет, это не Telegram connectivity PASS |
+| Unrelated runtime | frontend/postgres/scheduler/storage/telegram-ingress running, прежние IDs/images; postgres/storage healthy. migrate/storage-init exited0 |
+| Pre-deploy reads | Accepted verify/snapshot/operator image checks PASS; private files/runtime unchanged; diagnostic SSH_EXIT=0 |
+| Original preservation comparison | Accepted compare_deployment с прежним before и actual snapshot PASS: caller images/env/process/mounts/default gateway/actual SQL DB identity и unrelated containers |
+| Preflight stop | caller_probe/api/DNS → AssertionError: UNSPEC MATCH, INET MATCH, INET6 MISMATCH. Worker/operator/readiness после этой точки не запускались; SSH_EXIT=1 |
+| Cleanup | Только собственные temporary offline probes удалены; DIAG_PROBE_CONTAINERS_CLEANUP_PASS; private files/runtime unchanged |
+
+Последующая **read-only mapping diagnostic** выполнила только чтения существующих
+api/worker, host и Compose model. Контейнеры не создавались/не пересоздавались,
+DB queries/Telegram HTTP не выполнялись. MAP_DIAGNOSTIC_COMPLETE_NO_CHANGES,
+MAP_PRIVATE_FILES_AND_RUNTIME_UNCHANGED_PASS и SSH_EXIT=0 получены.
+
+| Layer / параметр | api и worker |
+|---|---|
+| Engine / Compose | Engine29.8.2, API1.56, server GitCommit8af9fe3, client7fc2dff, Go1.26.8; Compose5.5.1 |
+| Kernel / app image runtime | Host6.8.0-142-generic; Python3.13.15, glibc2.36 |
+| IPv6 flags | Host и оба callers: all/default/lo disable_ipv6=0; default и egress networks EnableIPv6=false |
+| Model extra_hosts | EXPECTED_IPV4=1, EXPECTED_MAPPED=1, прочие0 |
+| Docker HostConfig.ExtraHosts | EXPECTED_IPV4=1, EXPECTED_MAPPED=1, прочие0 |
+| Actual /etc/hosts | EXPECTED_IPV4=2, EXPECTED_MAPPED=0, прочие0 |
+| NSS / resolver | files→dns, action blocks0, unknown modules0; единственный nameserver Docker127.0.0.11 |
+| AF_UNSPEC / AF_INET, flags=0 | Два expected IPv4, все прочие0 |
+| AF_INET6, flags=0 | Один посторонний native IPv6, expected mapped0 |
+| Отдельный AF_INET6/AI_V4MAPPED | Два expected mapped; **диагностическая проба, не замена строгого preflight** |
+
+**Установленная причина.** Reported Engine GitCommit разрешён в exact
+**8af9fe3a36bab3e039862a2ab1cef1880c9b4d03**. C0 прочитал
+[daemon/container_operations.go](https://github.com/moby/moby/blob/8af9fe3a36bab3e039862a2ab1cef1880c9b4d03/daemon/container_operations.go)
+(Git blob7f9d30595de0e34c6f0b0f44d366b4e63821bdb8),
+sandbox_options.go (ba05582dec2702e9cfc0a80c08078052ff4dd08d) и
+etchosts/etchosts.go (436e788db136f3058f01169d6567c4f142282160).
+Engine передаёт OptionExtraHost(host, ipAddr.Unmap()), поэтому mapped IPv6
+преобразуется в IPv4 до записи hosts. Это согласуется с фактической границей
+HostConfig→hosts на обоих callers; отсутствие host IPv6 или ошибка Compose model
+не объясняют наблюдение. [Go Addr.Unmap](https://pkg.go.dev/net/netip#Addr.Unmap)
+определяет именно это преобразование. Не утверждаем, что C0 запускал Docker
+локально или проверял пакет/binary provenance VM сверх предоставленного receipt.
+
+**Продолжение:** полный task/allowlist/регрессии — единственный активный M2_HANDOFF.
+Нужны real Docker29 reproduction/fix, строгий mapping всех трёх callers и guarded
+recovery от текущего state. Повторный deploy или snapshot перезапишет before
+текущими container IDs: так продолжать нельзя. Original before должен сохраниться
+byte-identical; новый deployment-after/PASS только после actual строгих проверок.
+Допускается проверенный helper transition generated state, без wipe/rebaseline,
+ручной правки hosts, global DNS/IPv6 и downgrade Docker на owner host.
+
+Private env/profile/TLS, HTTPS two-field overlay и staged TG остаются прежними.
+Прежние comparisons не считаются новой проверкой всех domain rows, Console login
+или live delivery на VM. Rollback/активация/discovery/setup/webhook/send не выданы;
+никакого automatic retry, app build/init/migrations/reset/down-v. После correction,
+full CI и независимого targeted C8 C0 отдельно выдаёт filled owner recovery block;
+до первого setup заново проверит срок подготовленного TEST billing interval.
 
 ## 1. Конкретное окружение и предварительные условия
 
