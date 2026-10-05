@@ -315,6 +315,10 @@ def select_subnet(networks, routes, previous=None, own_name=None):
                 "EGRESS_NETWORK_CHANGED",
             )
             own = ipaddress.ip_network(previous)
+            require(
+                blocks[0].get("IPRange") == str(list(own.subnets(prefixlen_diff=1))[1]),
+                "EGRESS_DYNAMIC_RANGE_CHANGED",
+            )
             continue
         occupied.extend(ipaddress.ip_network(v["Subnet"]) for v in blocks if v.get("Subnet"))
     for route in routes:
@@ -419,6 +423,7 @@ def route_values(state, directory):
     subnet = ipaddress.ip_network(state["subnet"])
     return {
         "ASM_TELEGRAM_EGRESS_SUBNET": str(subnet),
+        "ASM_TELEGRAM_EGRESS_DYNAMIC_RANGE": str(list(subnet.subnets(prefixlen_diff=1))[1]),
         "ASM_TELEGRAM_EGRESS_GATEWAY": str(subnet[1]),
         "ASM_TELEGRAM_EGRESS_IP": str(subnet[2]),
         "ASM_TELEGRAM_EGRESS_NETWORK": state["project"] + "_telegram-egress",
@@ -574,8 +579,12 @@ def validate_model(base, model, values):
                     "api.telegram.org=::ffff:" + values["ASM_TELEGRAM_EGRESS_IP"],
                 ]
             )
-            expected["networks"] = {"default": {"gw_priority": 1}, "telegram-egress": None}
-            require(actual == expected, "EGRESS_CALLER_MODEL_DRIFT")
+            expected["networks"] = {"default": {"gw_priority": 1}, "telegram-egress": {}}
+            for field in set(actual) | set(expected):
+                require(
+                    actual.get(field) == expected.get(field),
+                    f"EGRESS_CALLER_MODEL_DRIFT_{name}_{field}",
+                )
         else:
             require(actual == service, "EGRESS_UNRELATED_SERVICE_DRIFT")
     require(

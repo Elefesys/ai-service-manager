@@ -184,12 +184,15 @@ def test_ipam_avoids_host_and_docker_routes_and_never_changes_existing_mapping()
     own = {
         "Name": "fixture_telegram-egress",
         "Labels": {"asm.scope": "synthetic-telegram-test"},
-        "IPAM": {"Config": [{"Subnet": "10.203.0.0/28"}]},
+        "IPAM": {"Config": [{"Subnet": "10.203.0.0/28", "IPRange": "10.203.0.8/29"}]},
     }
     assert (
         egress.select_subnet([own], [{"dst": "10.203.0.0/28"}], "10.203.0.0/28", own["Name"])
         == "10.203.0.0/28"
     )
+    own["IPAM"]["Config"][0]["IPRange"] = "10.203.0.0/28"
+    with pytest.raises(egress.EgressError, match="DYNAMIC_RANGE_CHANGED"):
+        egress.select_subnet([own], [], "10.203.0.0/28", own["Name"])
     own["Labels"] = {}
     with pytest.raises(egress.EgressError):
         egress.select_subnet([own], [], "10.203.0.0/28", own["Name"])

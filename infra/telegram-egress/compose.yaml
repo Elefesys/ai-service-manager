@@ -60,3 +60,5 @@ networks:
       config:
         - subnet: ${ASM_TELEGRAM_EGRESS_SUBNET:?}
           gateway: ${ASM_TELEGRAM_EGRESS_GATEWAY:?}
+          # Reserve the lower half for fixed endpoints, even while relay is stopped.
+          ip_range: ${ASM_TELEGRAM_EGRESS_DYNAMIC_RANGE:?}

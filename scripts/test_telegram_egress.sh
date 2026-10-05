@@ -176,7 +176,7 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         compose('config', '--quiet')
         compose('up', '-d', '--wait', 'postgres-test', 'storage-test-init')
         compose('run', '--rm', '--no-deps', '-T', 'egress-checks', 'alembic', 'upgrade', 'head')
-        compose('up', '-d', '--no-deps', '--wait', 'api', 'egress-wire', 'egress-peer', 'telegram-egress')
+        compose('up', '-d', '--no-deps', '--wait', 'api', 'worker', 'egress-wire', 'egress-peer', 'telegram-egress')
         deadline = time.monotonic() + 15
         while not (directory / 'wire-ready.json').exists():
             assert time.monotonic() < deadline, 'TLS_RECIPIENT_START'
@@ -184,6 +184,7 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         network = json.loads(run(['docker', 'network', 'inspect', values['ASM_TELEGRAM_EGRESS_NETWORK']]))[0]
         assert network['EnableIPv6'] is False
         assert network['IPAM']['Config'][0]['Subnet'] == state['subnet']
+        assert network['IPAM']['Config'][0]['IPRange'] == values['ASM_TELEGRAM_EGRESS_DYNAMIC_RANGE']
         relay_info()
         e.caller_probe(state, state_dir)
         phase_start('postgres_wire')
