@@ -2,13 +2,16 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C8: interruption/retry correction / 2026-10-06
+## Текущий статус — C6 REVIEW: interruption/retry correction / 2026-10-06
 
-**M2 — IN_PROGRESS. M2-ENV-04-TELEGRAM-EGRESS — IN_PROGRESS, C6.**
+**M2 — IN_PROGRESS. M2-ENV-04-TELEGRAM-EGRESS — REVIEW, C6.**
 Независимый targeted C8 новой Docker29 mapping/recovery boundary: **CHANGES_REQUESTED**.
 Открыты ровно **C8-M2-ENV04-04 и C8-M2-ENV04-05, P2 / E05**; прежние01/02/03
 остаются CLOSED. Единственный активный handoff — M2_HANDOFF, bounded task
-**M2-ENV-04-RECOVERY-RESUME**. Owner VM не изменялась; новые команды не выдаются.
+**M2-ENV-04-RECOVERY-RESUME**. Реализованы exact disable-first intent/stage retry и
+attested stopped/missing relay continuation. Runbook§0.6.14 содержит assertions и
+готовую процедуру; actual final-head execution — единый PR24 receipt. C8-04/05
+не закрываются авторским REVIEW. Owner VM не изменялась; новые команды не выдаются.
 
 Reviewed C6 head **94a402f3cf7c9d5ad9cd5837cd3d91d738fcf684**, tree
 **2a1b4952514e3ce6c56207478ed330ab0d507a7a**. Accepted main/base
@@ -491,7 +494,7 @@ M3 не выдан. Секреты не присылать в чат/PR. Нов�
 | M2-ENV-01-REGISTRY | Восстановить storage provisioning и полный CI | M2.4; pull failure PR22 | C6; C0/C8 | VERIFIED | PR22 merged80e51c4; scoped C8 PASS; отдельный push/main36825583134 SUCCESS, оба scripts/source gates и реальные PG/S3/browser | Сохранять проверенные GHCR pins; registry blocker CLOSED |
 | M2-ENV-02-STORAGE-IMAGES | Два exact official binary в project-owned images | Решение C0 о новой упаковке | C6; C0/C8 | VERIFIED | Build36734267078; anonymous full OCI bytes; scoped C8; final PR36824246755 и actual main36825583134 SUCCESS | Не пересобирать и не менять visibility/pins без причины |
 | M2-ENV-03-TEST-HOST | Один TEST host/.com DNS/HTTPS до Telegram connection | Actual main80e51c4 + host evidence | C6; C0; independent C8 | VERIFIED | PR23 merged22993f5; main37016012805 SUCCESS; C8-HOST PASS; operator host/HTTPS/private403/renewal receipt; известные TEST ограничения сохранены | Закрыто только pre-live host; продолжить M2-LIVE-A09-A11 |
-| M2-ENV-04-TELEGRAM-EGRESS | Opt-in постоянный synthetic TEST route для Telegram callers | ENV03; prior C8-01–03 CLOSED; actual partial VM deployment | C6: M2-ENV-04-RECOVERY-RESUME | IN_PROGRESS | C8-04/05 P2/E05: disable-first retry и stopped/missing relay interruption; mapping/CI evidence сохранено, runbook§0.6.13 | Bounded correction → final-head three-job CI → targeted C8 → отдельный C0 owner step; live A09/A11/merge/main CI впереди |
+| M2-ENV-04-TELEGRAM-EGRESS | Opt-in постоянный synthetic TEST route для Telegram callers | ENV03; prior C8-01–03 CLOSED; actual partial VM deployment | C6: M2-ENV-04-RECOVERY-RESUME | REVIEW | C8-04/05 P2/E05: disable-first retry и stopped/missing relay interruption; mapping/CI evidence сохранено, runbook§0.6.13 | Bounded correction → final-head three-job CI → targeted C8 → отдельный C0 owner step; live A09/A11/merge/main CI впереди |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 

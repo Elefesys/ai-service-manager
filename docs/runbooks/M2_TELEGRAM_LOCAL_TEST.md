@@ -2143,6 +2143,96 @@ Actual deployment/live A09/A11, owner merge и отдельный push/main CI �
 PR Draft/open/not merged; production/M3 не выдаются. Этот coordination меняет только
 четыре документа; exact head/tree/tested merge/CI — PR receipt, без SHA-only commit.
 
+### 0.6.14. C6 REVIEW — guarded recovery/rollback resume / 2026-10-06
+
+Owner issuance остаётся приостановлена до targeted C8/C0 по04/05. VM/schema1 на
+c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14 не изменялась. Новые helper команды ниже
+подготовлены для отдельной выдачи C0, не являются выполненным deployment.
+
+### Реализация C6 — interruption/resume correction, REVIEW
+
+Продолжение от coordination **6fcec41b25676d657a64f443bd804760b7a20520**,
+tree **f793c432338540ebdbef2d50b08c1a9833c42180**; parent reviewed94a402f3 сохранён.
+Coordination CI37362669654 завершился FAILURE с тремя cancelled jobs и недоступными
+logs; повтор этого head не запускался. Это не execution evidence новой реализации.
+
+До изменения helper воспроизведены reviewed failures: после own disabled env write
+и caller recreate — EGRESS_BUNDLE_CHANGED; stopped/missing relay — KeyError до repair.
+Локальный probe использовал настоящие private filesystem transitions и заменённые
+Docker/DB boundaries; он не выдаётся за реальный Docker run.
+
+Исправление: private immutable rollback-intent хранит исходные и точно вычисленные
+disabled bytes, original baseline/input hashes и operation-before. Immutable stage
+receipts разрешают продолжать ту же disable-first/remove/stop операцию; исходный
+recovery-v1 и deployment-before никогда не переписываются. Completed retry сверяет
+receipt/actual state и не пересоздаёт callers. Восстановление после начала rollback
+запрещено. Перед recreate сохраняется exact generation intent; stopped relay проверяется
+через all-container inventory, отсутствие допускается только для attested recreate/stop.
+Foreign image/tag/config/entrypoint/env/network/duplicate relay — STOP. Actual callers,
+source/private paths, PG identity, HTTPS/emptyTG, gateway и unrelated containers сохраняют guards.
+
+Focused unit89 PASS (прежние59 +30); shell/Python syntax, Ruff и diff checks PASS.
+Реальная обязательная lane расширена четырьмя отдельными bounded E05 fixtures:
+recover-stopped/recover-missing, legacy-disable/legacy-stop. Fault injection выполняет
+настоящие Docker stop/remove или helper fsync/recreate boundaries, затем SIGKILL
+в exact main; production fault flags отсутствуют. Это controlled recreate-gap,
+не утверждение о случайном daemon crash. Старые fresh/recovery и шесть transport
+cases сохраняются. Each held fixture180s, command/app deadlines и retries прежние.
+У всех lifecycles same actual DB, Secure Console, UNKNOWN/receipt,31 fingerprints,
+counter1, unchanged staged/audit/original before проверяются до PASS.
+
+Final-head CI всех трёх jobs, обоих scripts и clean-source gates обязателен.
+Точный результат исполнения/head/tree/tested merge+parents публикуется единым PR24
+receipt; этот текст не объявляет ещё не выполненный CI успешным. Mapping и закрытые
+C8-01/02/03 не менялись.04/05 закрывает только следующий targeted C8/C0.
+
+| Finding / boundary | Точная regression / обязательное execution evidence |
+|---|---|
+| C8-04 own env delta | test_legacy_rollback_exact_disable_delta_resumes_each_interruption: env/callers/remove/stop/receipt; actual legacy-disable SIGKILL после fsync .env без enabled key и после первого caller recreate; retry/completed retry; original before/audit/staged bytes exact |
+| C8-05 recreate gap | test_recovery_resumes_relay_recreate_gap_only_with_exact_intent; actual recover-stopped/recover-missing после schema2 manifest: real Docker stop/remove, SIGKILL, same-command retry → strict mapping/after/recovery receipt |
+| C8-05 explicit rollback | actual legacy-stop: initial relay outage, SIGKILL после caller route removal, затем после stop до receipt, missing stopped container → retry; no false after, completed retry без recreate |
+| Drift | runtime/staged/profile/baseline/intent/DB/image/gateway/unrelated unit negatives; existing real baseline/staged rejects; real foreign duplicate stopped relay/config-byte rejects; 31-table/actual DB guards прежние |
+| E02–E04 и C8-01/02/03 | existing three-callers flags0/native mapping, TLS, readonly/media/private S3, send-loss→UNKNOWN→restart counter1; independent two-file HTTPS/emptyTG baseline и canonical outside-checkout state unchanged |
+| E06 | три final-head jobs, оба штатных scripts и clean-source gates; exact runner versions/refs/artifact receipts в PR24 |
+
+После отдельной приёмки C0 выбирает **одно** действие. Чистый exact checkout должен
+совпадать с полным final head из принятого PR receipt; не повторять prepare/deploy/
+snapshot и не переносить поля вручную. В private state ничего не удалять/не редактировать.
+
+```sh
+python3 scripts/prepare_telegram_egress.py recover \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress \
+  --from-sha c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14 \
+  --accepted-sha "$accepted_final_head"
+python3 scripts/prepare_telegram_egress.py preflight \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+```
+
+Recovery interruption: повторить тот же recover с теми же refs. Explicit rollback
+legacy schema1 — отдельная команда C0 (её retry использует те же аргументы):
+
+```sh
+python3 scripts/prepare_telegram_egress.py rollback \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress \
+  --from-sha c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14 \
+  --accepted-sha "$accepted_final_head"
+```
+
+Для schema2, в том числе после publication manifest и recreate gap, explicit rollback:
+
+```sh
+python3 scripts/prepare_telegram_egress.py rollback \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+```
+
+Rollback interruption: повторить только тот же rollback. Disabled inputs/stages
+объясняются immutable intent, baseline не переснимается. Завершённый retry проверяет
+существующий receipt без up. После начала rollback recover не является продолжением.
+Любой unexpected drift — STOP и bounded error для C0; автоматического rollback,
+activation/discovery/setup/webhook/send нет. Private runtime-before/disabled bytes
+остаются только в owner state mode0600/0700, не входят в source/build/CI artifacts.
+PR Draft, M2 IN_PROGRESS; live A09/A11, merge и main CI впереди.
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker

@@ -6,9 +6,46 @@
 
 ## Активный handoff C0 → C6 — M2-ENV-04-RECOVERY-RESUME
 
-**IN_PROGRESS; targeted C8 CHANGES_REQUESTED.** Одна bounded correction по двум
+**REVIEW реализации C6; targeted C8 pending.** Одна bounded correction по двум
 новым P2/E05 **C8-M2-ENV04-04/05**. Native IPv6 mapping не перепроектировать;
 C8-01/02/03 CLOSED. M2 IN_PROGRESS, PR24 Draft/open/not merged, VM/live неизменны.
+
+### Реализация C6 — interruption/resume correction, REVIEW
+
+Продолжение от coordination **6fcec41b25676d657a64f443bd804760b7a20520**,
+tree **f793c432338540ebdbef2d50b08c1a9833c42180**; parent reviewed94a402f3 сохранён.
+Coordination CI37362669654 завершился FAILURE с тремя cancelled jobs и недоступными
+logs; повтор этого head не запускался. Это не execution evidence новой реализации.
+
+До изменения helper воспроизведены reviewed failures: после own disabled env write
+и caller recreate — EGRESS_BUNDLE_CHANGED; stopped/missing relay — KeyError до repair.
+Локальный probe использовал настоящие private filesystem transitions и заменённые
+Docker/DB boundaries; он не выдаётся за реальный Docker run.
+
+Исправление: private immutable rollback-intent хранит исходные и точно вычисленные
+disabled bytes, original baseline/input hashes и operation-before. Immutable stage
+receipts разрешают продолжать ту же disable-first/remove/stop операцию; исходный
+recovery-v1 и deployment-before никогда не переписываются. Completed retry сверяет
+receipt/actual state и не пересоздаёт callers. Восстановление после начала rollback
+запрещено. Перед recreate сохраняется exact generation intent; stopped relay проверяется
+через all-container inventory, отсутствие допускается только для attested recreate/stop.
+Foreign image/tag/config/entrypoint/env/network/duplicate relay — STOP. Actual callers,
+source/private paths, PG identity, HTTPS/emptyTG, gateway и unrelated containers сохраняют guards.
+
+Focused unit89 PASS (прежние59 +30); shell/Python syntax, Ruff и diff checks PASS.
+Реальная обязательная lane расширена четырьмя отдельными bounded E05 fixtures:
+recover-stopped/recover-missing, legacy-disable/legacy-stop. Fault injection выполняет
+настоящие Docker stop/remove или helper fsync/recreate boundaries, затем SIGKILL
+в exact main; production fault flags отсутствуют. Это controlled recreate-gap,
+не утверждение о случайном daemon crash. Старые fresh/recovery и шесть transport
+cases сохраняются. Each held fixture180s, command/app deadlines и retries прежние.
+У всех lifecycles same actual DB, Secure Console, UNKNOWN/receipt,31 fingerprints,
+counter1, unchanged staged/audit/original before проверяются до PASS.
+
+Final-head CI всех трёх jobs, обоих scripts и clean-source gates обязателен.
+Точный результат исполнения/head/tree/tested merge+parents публикуется единым PR24
+receipt; этот текст не объявляет ещё не выполненный CI успешным. Mapping и закрытые
+C8-01/02/03 не менялись.04/05 закрывает только следующий targeted C8/C0.
 
 ### Точный старт и источники
 

@@ -494,29 +494,18 @@ def test_rollback_disables_first_retains_other_private_bytes_and_never_resets(
     tmp_path, monkeypatch
 ):
     tmp_path.chmod(0o700)
-    monkeypatch.setattr(egress, "ROOT", tmp_path)
-    private = tmp_path / "telegram.env"
+    args, directory, actual, _ = partial_state(tmp_path, monkeypatch)
+    state = json.loads((directory / "state.json").read_bytes())
+    private = Path(state["telegram_env"])
     staged = b"TG_BOT_TOKEN='staged-do-not-print'\nASM_TELEGRAM_ENABLED=false\n"
     egress.write_private(private, staged)
-    runtime = tmp_path / ".env"
+    runtime = egress.ROOT / ".env"
     raw = (
         b"TG_BOT_TOKEN='synthetic-do-not-print'\nASM_TELEGRAM_ENABLED=true\nKEEP_DATE=2030-01-01\n"
     )
     egress.write_private(runtime, raw)
-    state = {"project": "fixture", "telegram_env": str(private)}
-    before = {
-        n: {
-            "id": n,
-            "image": "unchanged",
-            "environment_sha256": "unchanged-environment",
-            "process_sha256": "unchanged-process",
-            "database_identity": {"database": "same"},
-            "mounts": ["persistent"],
-            "networks": {"fixture_default": {}},
-        }
-        for n in ("api", "worker", "postgres", "storage")
-    }
     calls, snapshots = [], []
+    before = copy.deepcopy(actual)
     monkeypatch.setattr(
         egress, "compose_prefix", lambda s, d, overlay=True: ["overlay" if overlay else "plain"]
     )
@@ -525,23 +514,31 @@ def test_rollback_disables_first_retains_other_private_bytes_and_never_resets(
         assert b"ASM_TELEGRAM_ENABLED=false\n" in runtime.read_bytes()
         assert private.read_bytes() == staged
         calls.append(args)
+        if "stop" in args:
+            actual.pop("telegram-egress")
         return b""
 
     def snap(s, d, disabled=True):
         snapshots.append(disabled)
-        return copy.deepcopy(before)
+        return copy.deepcopy(actual)
 
     monkeypatch.setattr(egress, "command", capture)
     monkeypatch.setattr(egress, "snapshot", snap)
-    egress.rollback(state, tmp_path)
-    assert snapshots == [False, True, True]
+    egress.rollback(state, directory)
+    assert snapshots == [False, True, True, True]
     assert [c[0] for c in calls] == ["overlay", "plain", "overlay"]
     assert calls[-1][-2:] == ["stop", "telegram-egress"]
     assert not any(v in {"down", "-v", "reset", "drop"} for c in calls for v in c)
     assert runtime.read_bytes() == raw.replace(
         b"ASM_TELEGRAM_ENABLED=true", b"ASM_TELEGRAM_ENABLED=false"
     )
-    assert json.loads((tmp_path / "rollback.json").read_bytes())["telegram_disabled"] is True
+    receipt = json.loads((directory / "rollback.json").read_bytes())
+    assert receipt["telegram_disabled"] is True and receipt["before"] == before
+    assert (directory / "rollback-intent/runtime-before.env").read_bytes() == raw
+    assert (directory / "rollback-intent/runtime-disabled.env").read_bytes() == runtime.read_bytes()
+    calls.clear()
+    egress.rollback(state, directory)
+    assert not calls, "COMPLETED_ROLLBACK_MUST_NOT_RECREATE"
 
 
 def test_docker_mount_order_is_not_drift_but_every_mount_field_remains_guarded(monkeypatch):
@@ -832,16 +829,43 @@ def partial_state(tmp_path, monkeypatch):
         "networks": {"fixture_telegram-egress": {"IPAddress": "10.203.0.2"}},
     }
     ups = []
+    owned_relay = copy.deepcopy(actual["telegram-egress"])
 
     def command(args, **_):
         if args[:3] == ["docker", "image", "inspect"]:
             return egress.encoded([{"Id": "app-image"}])
         if "up" in args:
             ups.append(args)
-            actual["telegram-egress"]["networks"]["fixture_telegram-egress-v6"] = {
-                "GlobalIPv6Address": "fd42:6173:6d00::2"
-            }
+            if args[-1] == "telegram-egress":
+                actual["telegram-egress"] = copy.deepcopy(owned_relay)
+                actual["telegram-egress"]["networks"]["fixture_telegram-egress-v6"] = {
+                    "GlobalIPv6Address": "fd42:6173:6d00::2"
+                }
+            else:
+                for n in ("api", "worker"):
+                    actual[n]["id"] = n + "-recreated-" + str(len(ups))
+        if "stop" in args:
+            actual.pop("telegram-egress", None)
         return b"[]"
+
+    def relay(states, directory, *, missing=False):
+        if "telegram-egress" in actual:
+            egress.require(
+                actual["telegram-egress"]["image"] == "relay-image",
+                "EGRESS_RELAY_TRANSITION_IDENTITY",
+            )
+            return {
+                "status": "running",
+                "id": "relay-partial",
+                "image": "relay-image",
+                "config_sha256": states[-1]["config_sha256"],
+            }
+        return {
+            "status": "stopped",
+            "id": "relay-partial",
+            "image": "relay-image",
+            "config_sha256": states[-1]["config_sha256"],
+        }
 
     def source(expected):
         egress.require(expected == "a" * 40, "EGRESS_CHECKOUT_MISMATCH")
@@ -851,7 +875,8 @@ def partial_state(tmp_path, monkeypatch):
     monkeypatch.setattr(egress, "image_check", lambda *_: "relay-image")
     monkeypatch.setattr(egress, "runtime_overlay", lambda *_: runtime)
     monkeypatch.setattr(egress, "command", command)
-    monkeypatch.setattr(egress, "snapshot", lambda *_: copy.deepcopy(actual))
+    monkeypatch.setattr(egress, "snapshot", lambda *_, **__: copy.deepcopy(actual))
+    monkeypatch.setattr(egress, "transition_relay", relay)
     monkeypatch.setattr(egress, "caller_probe", lambda *_: None)
     monkeypatch.setattr(
         egress,
@@ -974,3 +999,274 @@ def test_partial_recovery_drift_stops_before_runtime_mutation(tmp_path, monkeypa
     assert (directory / "deployment-before.json").read_bytes() == original + (
         b"\n" if drift == "before" else b""
     )
+
+
+@pytest.mark.parametrize("phase", ["env", "callers", "remove", "stop", "receipt"])
+def test_legacy_rollback_exact_disable_delta_resumes_each_interruption(
+    tmp_path, monkeypatch, phase
+):
+    args, directory, actual, ups = partial_state(tmp_path, monkeypatch)
+    old, _, _ = egress.attest_partial_recovery(args, rolling_back=True)
+    original_before = (directory / "deployment-before.json").read_bytes()
+    original_env = (egress.ROOT / ".env").read_bytes()
+    staged = Path(old["telegram_env"]).read_bytes()
+    audit = {p.name: p.read_bytes() for p in (directory / "recovery-v1").iterdir()}
+    save, execute = egress.write_private, egress.command
+    tripped = False
+
+    def crash():
+        nonlocal tripped
+        if not tripped:
+            tripped = True
+            raise OSError("interrupted rollback")
+
+    def write(path, raw, **kwargs):
+        if phase == "receipt" and path == directory / "rollback.json":
+            crash()
+        save(path, raw, **kwargs)
+        if phase == "env" and path == egress.ROOT / ".env":
+            crash()
+
+    def command(argv, **kwargs):
+        result = execute(argv, **kwargs)
+        if (
+            phase == "callers"
+            and "up" in argv
+            and len(ups) == 1
+            or phase == "remove"
+            and "up" in argv
+            and len(ups) == 2
+            or phase == "stop"
+            and "stop" in argv
+        ):
+            crash()
+        return result
+
+    monkeypatch.setattr(egress, "write_private", write)
+    monkeypatch.setattr(egress, "command", command)
+    with pytest.raises(OSError, match="interrupted rollback"):
+        egress.rollback(old, directory)
+    assert tripped and not (directory / "rollback.json").exists()
+    resumed, _, _ = egress.attest_partial_recovery(args, rolling_back=True)
+    egress.rollback(resumed, directory)
+    assert (egress.ROOT / ".env").read_bytes() == original_env + b"ASM_TELEGRAM_ENABLED=false\n"
+    assert Path(old["telegram_env"]).read_bytes() == staged
+    assert (directory / "deployment-before.json").read_bytes() == original_before
+    assert {p.name: p.read_bytes() for p in (directory / "recovery-v1").iterdir()} == audit
+    receipt = (directory / "rollback.json").read_bytes()
+    previous = copy.deepcopy(actual)
+    previous_ups = len(ups)
+    resumed, _, _ = egress.attest_partial_recovery(args, rolling_back=True)
+    egress.rollback(resumed, directory)
+    assert len(ups) == previous_ups and actual == previous
+    assert (directory / "rollback.json").read_bytes() == receipt
+    with pytest.raises(egress.EgressError, match="EGRESS_RECOVERY_ALREADY_ROLLED_BACK"):
+        egress.recover(args)
+
+
+@pytest.mark.parametrize(
+    "drift",
+    [
+        "runtime",
+        "staged",
+        "profile",
+        "baseline",
+        "intent",
+        "database",
+        "image",
+        "gateway",
+        "unrelated",
+    ],
+)
+def test_legacy_rollback_retry_keeps_all_other_drift_guards(tmp_path, monkeypatch, drift):
+    args, directory, actual, ups = partial_state(tmp_path, monkeypatch)
+    old, _, _ = egress.attest_partial_recovery(args, rolling_back=True)
+    execute = egress.command
+    monkeypatch.setattr(
+        egress,
+        "command",
+        lambda argv, **kw: (
+            (_ for _ in ()).throw(OSError("interrupted")) if "up" in argv else execute(argv, **kw)
+        ),
+    )
+    with pytest.raises(OSError):
+        egress.rollback(old, directory)
+    monkeypatch.setattr(egress, "command", execute)
+    paths = {
+        "runtime": egress.ROOT / ".env",
+        "staged": Path(old["telegram_env"]),
+        "profile": Path(old["profile"]),
+        "baseline": directory / "deployment-before.json",
+        "intent": directory / "rollback-intent/runtime-disabled.env",
+    }
+    if drift in paths:
+        path = paths[drift]
+        egress.write_private(path, path.read_bytes() + b"\n")
+    elif drift == "database":
+        actual["api"]["database_identity"] = {"database": "foreign"}
+    elif drift == "image":
+        actual["worker"]["image"] = "foreign"
+    elif drift == "gateway":
+        actual["api"]["networks"]["fixture_default"]["Gateway"] = "172.18.0.99"
+    else:
+        actual["storage"]["id"] = "foreign"
+    previous = len(ups)
+    with pytest.raises(egress.EgressError):
+        resumed, _, _ = egress.attest_partial_recovery(args, rolling_back=True)
+        egress.rollback(resumed, directory)
+    assert len(ups) == previous and not (directory / "rollback.json").exists()
+
+
+@pytest.mark.parametrize("relay_status", ["stopped", "missing"])
+def test_recovery_resumes_relay_recreate_gap_only_with_exact_intent(
+    tmp_path, monkeypatch, relay_status
+):
+    args, directory, actual, ups = partial_state(tmp_path, monkeypatch)
+    original = (directory / "deployment-before.json").read_bytes()
+    execute, relay = egress.command, egress.transition_relay
+    tripped = False
+
+    def command(argv, **kwargs):
+        nonlocal tripped
+        if "up" in argv and argv[-1] == "telegram-egress" and not tripped:
+            actual.pop("telegram-egress")
+            tripped = True
+            raise OSError("recreate gap")
+        return execute(argv, **kwargs)
+
+    def inspect(states, path, *, missing=False):
+        if tripped and "telegram-egress" not in actual and relay_status == "missing":
+            egress.require(missing, "EGRESS_RELAY_MISSING_WITHOUT_INTENT")
+            return {"status": "missing"}
+        return relay(states, path, missing=missing)
+
+    monkeypatch.setattr(egress, "command", command)
+    monkeypatch.setattr(egress, "transition_relay", inspect)
+    with pytest.raises(OSError, match="recreate gap"):
+        egress.recover(args)
+    assert not (directory / "deployment-after.json").exists()
+    intent = directory / "recovery-recreate.json"
+    raw = intent.read_bytes()
+    egress.write_private(intent, raw + b"\n")
+    with pytest.raises(egress.EgressError, match="EGRESS_RECOVERY_RECREATE_CHANGED"):
+        egress.recover(args)
+    assert not ups
+    egress.write_private(intent, raw)
+    egress.recover(args)
+    assert (directory / "deployment-before.json").read_bytes() == original
+    assert (directory / "recovery-v1/deployment-before.json").read_bytes() == original
+    assert (directory / "recovery.json").exists()
+
+
+@pytest.mark.parametrize(
+    "drift",
+    [
+        None,
+        "stopped",
+        "missing",
+        "foreign_image",
+        "foreign_tag",
+        "foreign_config",
+        "config_bytes",
+        "entrypoint",
+        "project",
+        "privileged",
+        "network",
+        "address",
+        "duplicate",
+        "status",
+    ],
+)
+def test_transition_relay_attests_stopped_container_and_rejects_foreign_identity(
+    tmp_path, monkeypatch, drift
+):
+    args, directory, _, _ = partial_state(tmp_path, monkeypatch)
+    state = json.loads((directory / "state.json").read_bytes())
+    # Real guard: partial_state substitutes only orchestration's Docker boundary.
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "relay_guard", Path(__file__).resolve().parents[1] / "scripts/prepare_telegram_egress.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    info = {
+        "Id": "owned",
+        "Image": state["image_id"],
+        "Config": {
+            "Image": egress.IMAGE,
+            "User": f"{state['uid']}:{state['gid']}",
+            "Cmd": ["run", "-config", "/run/telegram-egress/config.json"],
+            "Entrypoint": ["xray"],
+            "Labels": {
+                "com.docker.compose.project": "fixture",
+                "com.docker.compose.service": "telegram-egress",
+                "com.docker.compose.oneoff": "False",
+            },
+        },
+        "HostConfig": {
+            "ReadonlyRootfs": True,
+            "Privileged": False,
+            "PortBindings": {},
+            "CapDrop": ["ALL"],
+            "SecurityOpt": ["no-new-privileges:true"],
+            "NetworkMode": "fixture_telegram-egress",
+            "LogConfig": {"Type": "none"},
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "RW": False,
+                "Source": str(directory / "config.json"),
+                "Destination": "/run/telegram-egress/config.json",
+            }
+        ],
+        "NetworkSettings": {
+            "Networks": {"fixture_telegram-egress": {"IPAMConfig": {"IPv4Address": "10.203.0.2"}}}
+        },
+        "State": {"Status": "exited" if drift == "stopped" else "running", "Dead": False},
+    }
+    if drift == "foreign_image":
+        info["Image"] = "foreign"
+    elif drift == "foreign_tag":
+        info["Config"]["Image"] = "foreign:latest"
+    elif drift == "foreign_config":
+        info["Mounts"][0]["Source"] = str(directory / "foreign.json")
+    elif drift == "config_bytes":
+        (directory / "config.json").write_bytes(b"{}")
+    elif drift == "entrypoint":
+        info["Config"]["Entrypoint"] = ["sh"]
+    elif drift == "project":
+        info["Config"]["Labels"]["com.docker.compose.project"] = "foreign"
+    elif drift == "privileged":
+        info["HostConfig"]["Privileged"] = True
+    elif drift == "network":
+        info["NetworkSettings"]["Networks"]["foreign"] = {}
+    elif drift == "address":
+        info["NetworkSettings"]["Networks"]["fixture_telegram-egress"]["IPAMConfig"][
+            "IPv4Address"
+        ] = "10.203.0.3"
+    elif drift == "status":
+        info["State"]["Status"] = "dead"
+
+    def command(argv, **_):
+        if argv[:3] == ["docker", "ps", "-aq"]:
+            return (
+                b"" if drift == "missing" else b"owned\nother" if drift == "duplicate" else b"owned"
+            )
+        if argv[:3] == ["docker", "image", "inspect"]:
+            return egress.encoded([{"Config": {"Entrypoint": ["xray"]}}])
+        return egress.encoded([info])
+
+    monkeypatch.setattr(module, "command", command)
+    if drift in {None, "stopped"}:
+        assert module.transition_relay([state], directory)["status"] == (
+            "stopped" if drift else "running"
+        )
+    else:
+        with pytest.raises(module.EgressError):
+            module.transition_relay([state], directory)
+        if drift == "missing":
+            assert module.transition_relay([state], directory, missing=True) == {
+                "status": "missing"
+            }

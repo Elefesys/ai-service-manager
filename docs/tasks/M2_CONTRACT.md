@@ -1116,6 +1116,15 @@ final head/CI документационной приёмки — в PR receipt.
 
 ### 10.12. Operational extension — M2-ENV-04 TEST egress
 
+**C6 correction REVIEW, 2026-10-06.** Для04/05 добавлены immutable rollback intent
+с exact before/disabled dotenv bytes и stage receipts; audit hashes не заменяются
+текущим hash после own write. Completed rollback retry проверяет original operation
+before/after и не повторяет recreate. Recovery intent привязан к exact generation;
+stopped relay проверяется включая image/tag/config/process/network, missing допускается
+только в подтверждённом recreate/stop переходе. Остальные guards и deadlines прежние.
+Новые real isolated cases и final-head результаты — runbook§0.6.14/PR24 receipt;
+приёмка04/05 остаётся targeted независимому C8/C0. Ниже сохранён исходный verdict.
+
 **Targeted C0/C8 disposition 2026-10-06: CHANGES_REQUESTED, C8-M2-ENV04-04/05,
 P2 / E05.** Reviewed head94a402f3cf7c9d5ad9cd5837cd3d91d738fcf684, final CI37358453152
 SUCCESS. Native strict mapping/full executed cases подтверждены; legacy rollback

@@ -61,11 +61,63 @@ def operator(action):
     prepare_args = (['--accepted-sha', source, '--profile', str(directory / 'profile.json'),
                      '--telegram-env', str(directory / 'telegram.env'), '--project', project]
                     if action == 'prepare' else ['--accepted-sha', source, '--from-sha', e.LEGACY_SHA]
-                    if action == 'recover' else [])
+                    if action == 'recover' or action == 'rollback' and
+                    json.loads((state_dir / 'state.json').read_text())['version'] == 1 else [])
     output = run(['python3', 'scripts/prepare_telegram_egress.py', action,
                   '--state-dir', str(state_dir), *prepare_args], 120).decode().strip()
     assert output == 'TELEGRAM_EGRESS_' + action.upper() + '_PASS'
     print(output, flush=True)
+
+def interrupted_operator(action, fault):
+    # Fault injection wraps only real command/fsync boundaries, then SIGKILLs this
+    # exact helper main(). No Docker/PG substitutes or production fault switches.
+    injector = r'''
+import os, signal, sys
+from pathlib import Path
+from scripts import prepare_telegram_egress as e
+fault, destination = sys.argv[1:3]
+sys.argv = ["prepare_telegram_egress.py", *sys.argv[3:]]
+execute, save = e.command, e.write_private
+up_count = 0
+def crash():
+    save(Path(destination), e.encoded({"fault": fault, "real_boundary": True}))
+    os.kill(os.getpid(), signal.SIGKILL)
+def write(path, data, **kwargs):
+    if fault == "rollback-receipt" and path.name == "rollback.json":
+        crash()
+    save(path, data, **kwargs)
+    if fault == "rollback-env" and path == e.ROOT / ".env":
+        crash()
+def command(argv, **kwargs):
+    global up_count
+    if fault in {"relay-stopped", "relay-missing"} and "up" in argv and argv[-1] == "telegram-egress":
+        prefix = argv[:argv.index("up")]
+        execute([*prefix, "stop", "telegram-egress"], **kwargs)
+        if fault == "relay-missing":
+            execute([*prefix, "rm", "-f", "telegram-egress"], **kwargs)
+        crash()
+    result = execute(argv, **kwargs)
+    if "up" in argv and argv[-2:] == ["api", "worker"]:
+        up_count += 1
+        if (fault == "rollback-callers" and up_count == 1 or fault == "rollback-remove" and up_count == 2):
+            crash()
+    return result
+e.command, e.write_private = command, write
+e.main()
+'''
+    marker = directory / ('interruption-' + lifecycle + '-' + fault + '.json')
+    assert not marker.exists()
+    result = subprocess.run(['python3', '-c', injector, fault, str(marker), action,
+        '--state-dir', str(state_dir), '--accepted-sha', source, '--from-sha', e.LEGACY_SHA],
+        stdin=subprocess.DEVNULL, capture_output=True, timeout=120, env=environment)
+    if result.returncode != -signal.SIGKILL:
+        code = result.stdout.decode(errors='replace').strip()
+        if re.fullmatch('EGRESS_[A-Za-z0-9_]{1,120}', code):
+            print(code, flush=True)
+    assert result.returncode == -signal.SIGKILL, 'EXPECTED_HELPER_SIGKILL_' + fault
+    assert json.loads(marker.read_text()) == {'fault': fault, 'real_boundary': True}
+    assert not (state_dir / 'rollback.json').exists()
+    print('REAL_HELPER_INTERRUPTION_' + fault.upper(), flush=True)
 
 def relay_info():
     identity = compose('ps', '-a', '-q', 'telegram-egress').decode().strip()
@@ -384,6 +436,35 @@ http {
         relay_info()
         e.caller_probe(state, state_dir)
         corrected_mapping = mapping_evidence()
+        # Real Docker identity negatives, outside each bounded held-state fixture.
+        # A stopped spoof carrying our Compose labels is never treated as an outage.
+        transition_guard = e.transition_relay([state], state_dir)
+        assert transition_guard['status'] == 'running'
+        foreign = run(['docker', 'create', '--label', 'com.docker.compose.project=' + project,
+            '--label', 'com.docker.compose.service=telegram-egress', '--label', 'com.docker.compose.oneoff=False',
+            '--entrypoint', '/bin/false', e.IMAGE]).decode().strip()
+        try:
+            try:
+                e.transition_relay([state], state_dir, missing=True)
+            except e.EgressError as error:
+                assert str(error) == 'EGRESS_RELAY_MULTIPLE'
+            else:
+                raise AssertionError('FOREIGN_RELAY_NOT_REJECTED')
+        finally:
+            run(['docker', 'rm', foreign])
+        config_path = state_dir / 'config.json'
+        config_bytes = config_path.read_bytes()
+        e.write_private(config_path, config_bytes + b'\n')
+        try:
+            try:
+                e.transition_relay([state], state_dir)
+            except e.EgressError as error:
+                assert str(error) == 'EGRESS_RELAY_TRANSITION_CONFIG'
+            else:
+                raise AssertionError('RELAY_CONFIG_DRIFT_NOT_REJECTED')
+        finally:
+            e.write_private(config_path, config_bytes)
+        assert e.transition_relay([state], state_dir) == transition_guard
         phase_start('postgres_wire')
         checks = start_checks(['pytest', '-q', '-o', 'python_classes=TelegramEgressPostgresChecks',
                                'tests/test_telegram_egress_postgres.py'])
@@ -392,8 +473,13 @@ http {
         assert len(assertions) == 6 and all(row['result'] == 'PASS' for row in assertions)
         lifecycle_receipts = {}
         fresh_state, fresh_dir = state, state_dir
-        for lifecycle in ('fresh', 'recovery'):
+        lifecycles = ('fresh', 'recovery', 'recover-stopped', 'recover-missing', 'legacy-disable', 'legacy-stop')
+        for lifecycle_index, lifecycle in enumerate(lifecycles):
             phase_start('durable_' + lifecycle)
+            state, state_dir = fresh_state, fresh_dir
+            values = e.route_values(state, state_dir)
+            live, base = e.compose_prefix(state, state_dir), e.compose_prefix(state, state_dir, overlay=False)
+            prefix = [*live, '-f', str(root / 'infra/telegram-egress/compose.test.yaml'), '--profile', 'test']
             # Independent disposable cases; no reset/drop of the actual caller DB.
             e.write_private(root / '.env', original_env, private_parent=False)
             for filename in ('durable-before.json', 'durable-after.json', 'durable-release.json'):
@@ -445,7 +531,7 @@ http {
                 original_before = e.encoded(e.snapshot(state, state_dir))
                 old = {k: v for k, v in state.items() if k != 'subnet6'}
                 old.update(version=1, source_sha=e.LEGACY_SHA)
-                state_dir = directory / 'partial-state'
+                state_dir = directory / ('partial-state-' + lifecycle)
                 state_dir.mkdir(mode=0o700)
                 legacy_config = e.encoded(e.minimal_config(profile, relay_ip))
                 old['config_sha256'] = e.sha(legacy_config)
@@ -465,63 +551,107 @@ http {
                 assert not (state_dir / 'deployment-after.json').exists()
                 before_files = {name: (state_dir / name).read_bytes() for name in
                     ('state.json', 'config.json', 'runtime.json', 'route.env', 'deployment-before.json')}
-                command = ['python3', 'scripts/prepare_telegram_egress.py', 'recover', '--state-dir', str(state_dir),
-                           '--accepted-sha', source, '--from-sha', e.LEGACY_SHA]
-                # Crash the exact CLI after atomic manifest publication, before up.
-                with (directory / 'interrupted-recovery.log').open('wb') as output:
-                    recovery = subprocess.Popen(command, stdout=output, stderr=output, stdin=subprocess.DEVNULL,
-                                                env=environment, start_new_session=True)
-                    processes.append(recovery)
-                    deadline = time.monotonic() + 30
-                    while recovery.poll() is None:
-                        if json.loads((state_dir / 'state.json').read_text())['version'] == 2:
-                            os.killpg(recovery.pid, signal.SIGKILL)
-                            recovery.wait(timeout=5)
-                            break
-                        assert time.monotonic() < deadline, 'RECOVERY_MANIFEST_DEADLINE'
-                        time.sleep(.005)
-                    assert recovery.returncode == -signal.SIGKILL, 'EXACT_RECOVERY_NOT_INTERRUPTED'
-                assert not (state_dir / 'deployment-after.json').exists()
-                assert not (state_dir / 'recovery.json').exists()
-                interrupted = e.snapshot(fresh_state, fresh_dir)
-                assert {n: interrupted[n]['id'] for n in ('api', 'worker')} == {
-                    n: partial[n]['id'] for n in ('api', 'worker')}
-                # Real retry refuses changed baseline/private input before any recreate.
-                for path in (state_dir / 'deployment-before.json', directory / 'telegram.env'):
-                    original = path.read_bytes()
-                    e.write_private(path, original + b'\n')
-                    rejected = subprocess.run(command, capture_output=True, timeout=40, env=environment)
-                    assert rejected.returncode == 1 and rejected.stdout.strip() == b'EGRESS_BUNDLE_CHANGED'
-                    assert not (state_dir / 'deployment-after.json').exists()
-                    e.write_private(path, original)
-                operator('recover')
-                state = e.verify(state_dir)
-                values = e.route_values(state, state_dir)
-                live, base = e.compose_prefix(state, state_dir), e.compose_prefix(state, state_dir, overlay=False)
-                prefix = [*live, '-f', str(root / 'infra/telegram-egress/compose.test.yaml'), '--profile', 'test']
-                for name, raw in before_files.items():
-                    assert (state_dir / 'recovery-v1' / name).read_bytes() == raw
-                    if name != 'state.json':
+                if lifecycle.startswith('legacy-'):
+                    state = old
+                    if lifecycle == 'legacy-disable':
+                        interrupted_operator('rollback', 'rollback-env')
+                        audit = {p.name: p.read_bytes() for p in (state_dir / 'recovery-v1').iterdir()}
+                        interrupted_operator('rollback', 'rollback-callers')
+                    else:
+                        # Initial outage, then interruption after route removal and
+                        # after the real stop, before receipt. Finally the stopped
+                        # owned container disappears: the durable stop intent remains.
+                        run([*legacy_prefix, 'stop', 'telegram-egress'])
+                        interrupted_operator('rollback', 'rollback-remove')
+                        audit = {p.name: p.read_bytes() for p in (state_dir / 'recovery-v1').iterdir()}
+                        interrupted_operator('rollback', 'rollback-receipt')
+                        run([*legacy_prefix, 'rm', '-f', 'telegram-egress'])
+                    operator('rollback')
+                    assert {p.name: p.read_bytes() for p in (state_dir / 'recovery-v1').iterdir()} == audit
+                    for name, raw in before_files.items():
                         assert (state_dir / name).read_bytes() == raw
-                assert (state_dir / 'deployment-before.json').read_bytes() == original_before
-                # Explicit completed-response retry is read/verify only, no recreate.
-                recovered = e.snapshot(state, state_dir)
-                recovered_ids = {n: recovered[n]['id'] for n in ('api', 'worker')}
-                operator('recover')
-                retried = e.snapshot(state, state_dir)
-                assert recovered_ids == {n: retried[n]['id'] for n in ('api', 'worker')}
+                        assert (state_dir / 'recovery-v1' / name).read_bytes() == raw
+                    receipt_bytes = (state_dir / 'rollback.json').read_bytes()
+                    rolled_back = e.snapshot(old, state_dir)
+                    operator('rollback')
+                    assert e.snapshot(old, state_dir) == rolled_back
+                    assert (state_dir / 'rollback.json').read_bytes() == receipt_bytes
+                    assert not (state_dir / 'deployment-after.json').exists()
+                    assert not (state_dir / 'recovery.json').exists()
+                else:
+                    command = ['python3', 'scripts/prepare_telegram_egress.py', 'recover', '--state-dir', str(state_dir),
+                               '--accepted-sha', source, '--from-sha', e.LEGACY_SHA]
+                    if lifecycle == 'recovery':
+                        # Crash the exact CLI after atomic manifest publication, before up.
+                        with (directory / 'interrupted-recovery.log').open('wb') as output:
+                            recovery = subprocess.Popen(command, stdout=output, stderr=output, stdin=subprocess.DEVNULL,
+                                                        env=environment, start_new_session=True)
+                            processes.append(recovery)
+                            deadline = time.monotonic() + 30
+                            while recovery.poll() is None:
+                                if json.loads((state_dir / 'state.json').read_text())['version'] == 2:
+                                    os.killpg(recovery.pid, signal.SIGKILL)
+                                    recovery.wait(timeout=5)
+                                    break
+                                assert time.monotonic() < deadline, 'RECOVERY_MANIFEST_DEADLINE'
+                                time.sleep(.005)
+                            assert recovery.returncode == -signal.SIGKILL, 'EXACT_RECOVERY_NOT_INTERRUPTED'
+                    else:
+                        interrupted_operator('recover', 'relay-stopped' if lifecycle == 'recover-stopped' else 'relay-missing')
+                        assert json.loads((state_dir / 'state.json').read_text())['version'] == 2
+                        identities = run([*legacy_prefix, 'ps', '-a', '-q', 'telegram-egress']).decode().split()
+                        if lifecycle == 'recover-stopped':
+                            assert len(identities) == 1
+                            assert json.loads(run(['docker', 'inspect', identities[0]]))[0]['State']['Status'] == 'exited'
+                        else:
+                            assert not identities
+                    assert not (state_dir / 'deployment-after.json').exists()
+                    assert not (state_dir / 'recovery.json').exists()
+                    interrupted = e.snapshot(fresh_state, fresh_dir)
+                    assert {n: interrupted[n]['id'] for n in ('api', 'worker')} == {
+                        n: partial[n]['id'] for n in ('api', 'worker')}
+                    if lifecycle == 'recovery':
+                        # Real retry refuses changed baseline/private input before any recreate.
+                        for path in (state_dir / 'deployment-before.json', directory / 'telegram.env'):
+                            original = path.read_bytes()
+                            e.write_private(path, original + b'\n')
+                            rejected = subprocess.run(command, capture_output=True, timeout=40, env=environment)
+                            assert rejected.returncode == 1 and rejected.stdout.strip() == b'EGRESS_BUNDLE_CHANGED'
+                            assert not (state_dir / 'deployment-after.json').exists()
+                            e.write_private(path, original)
+                    operator('recover')
+                    state = e.verify(state_dir)
+                    values = e.route_values(state, state_dir)
+                    live, base = e.compose_prefix(state, state_dir), e.compose_prefix(state, state_dir, overlay=False)
+                    prefix = [*live, '-f', str(root / 'infra/telegram-egress/compose.test.yaml'), '--profile', 'test']
+                    for name, raw in before_files.items():
+                        assert (state_dir / 'recovery-v1' / name).read_bytes() == raw
+                        if name != 'state.json':
+                            assert (state_dir / name).read_bytes() == raw
+                    assert (state_dir / 'deployment-before.json').read_bytes() == original_before
+                    # Explicit completed-response retry is read/verify only, no recreate.
+                    recovered = e.snapshot(state, state_dir)
+                    recovered_ids = {n: recovered[n]['id'] for n in ('api', 'worker')}
+                    operator('recover')
+                    retried = e.snapshot(state, state_dir)
+                    assert recovered_ids == {n: retried[n]['id'] for n in ('api', 'worker')}
 
-            current_mapping = mapping_evidence()
-            runtime_deployed = assert_runtime_boundary()
-            operator('preflight')
-            assert (root / '.env').read_bytes() == original_env
-            e.compare_deployment(json.loads((state_dir / 'deployment-before.json').read_text()),
-                                 e.snapshot(state, state_dir), state)
-            e.caller_probe(state, state_dir)
-            before_env = (directory / 'telegram.env').read_bytes()
-            compose('stop', '--timeout', '1', 'telegram-egress')
-            e.caller_probe(state, state_dir)
-            operator('rollback')
+            if not lifecycle.startswith('legacy-'):
+                current_mapping = mapping_evidence()
+                runtime_deployed = assert_runtime_boundary()
+                operator('preflight')
+                assert (root / '.env').read_bytes() == original_env
+                e.compare_deployment(json.loads((state_dir / 'deployment-before.json').read_text()),
+                                     e.snapshot(state, state_dir), state)
+                e.caller_probe(state, state_dir)
+                before_env = (directory / 'telegram.env').read_bytes()
+                compose('stop', '--timeout', '1', 'telegram-egress')
+                e.caller_probe(state, state_dir)
+                operator('rollback')
+            else:
+                current_mapping = {'legacy_rollback_only': True}
+                runtime_deployed = partial
+                before_env = staged_inputs
             runtime_rolled_back = assert_runtime_boundary()
             assert (root / '.env').read_bytes() == original_env + b'ASM_TELEGRAM_ENABLED=false\n'
             assert (directory / 'telegram.env').read_bytes() == before_env
@@ -529,7 +659,7 @@ http {
                     'tests/test_telegram_egress_postgres.py', '--durable-receipt', 'after')
             await_process(durable, timeout=30)
             assertions = [json.loads(row) for row in (directory / 'assertions.jsonl').read_text().splitlines()]
-            assert len(assertions) == (7 if lifecycle == 'fresh' else 8) and all(row['result'] == 'PASS' for row in assertions)
+            assert len(assertions) == 7 + lifecycle_index and all(row['result'] == 'PASS' for row in assertions)
             durable_before = json.loads((directory / 'durable-before.json').read_text())
             durable_after = json.loads((directory / 'durable-after.json').read_text())
             assert durable_before['database']['identity'] == durable_after['database']['identity'] == identity
@@ -547,20 +677,26 @@ http {
                                             ('rolled_back', runtime_rolled_back)]}},
                 'mapping': current_mapping,
                 'deployment_before': json.loads((state_dir / 'deployment-before.json').read_text()),
-                'deployment_after': json.loads((state_dir / 'deployment-after.json').read_text()),
+                'deployment_after': (None if lifecycle.startswith('legacy-') else json.loads((state_dir / 'deployment-after.json').read_text())),
                 'rollback': json.loads((state_dir / 'rollback.json').read_text()),
                 'durable_before': json.loads((directory / 'durable-before.json').read_text()),
                 'durable_after': json.loads((directory / 'durable-after.json').read_text())}
-            if lifecycle == 'recovery':
+            if lifecycle in ('recovery', 'recover-stopped', 'recover-missing'):
                 receipt['recovery'] = json.loads((state_dir / 'recovery.json').read_text())
-                receipt['recovery'].update(exact_cli_sigkill_after_manifest=True,
-                    baseline_and_staged_drift_rejected=True, original_generated_bytes_preserved=True,
+                receipt['recovery'].update(exact_cli_sigkill_after_manifest=lifecycle == 'recovery',
+                    relay_gap=lifecycle if lifecycle != 'recovery' else None,
+                    baseline_and_staged_drift_rejected=lifecycle == 'recovery', original_generated_bytes_preserved=True,
                     completed_retry_without_recreate=True, immutable_catalog_retained_between_cases=True)
+            receipt['interruptions'] = [json.loads(p.read_text()) for p in sorted(directory.glob('interruption-' + lifecycle + '-*.json'))]
+            if lifecycle.startswith('legacy-'):
+                receipt['legacy_retry'] = {'original_before_audit_staged_preserved': True, 'completed_retry_without_recreate': True,
+                    'exact_disabled_delta': True, 'absent_deployment_after': True, 'missing_after_stop': lifecycle == 'legacy-stop'}
             lifecycle_receipts[lifecycle] = receipt
         reports = root / 'reports'
         reports.mkdir(exist_ok=True)
         (reports / 'telegram-egress.json').write_text(json.dumps({'source_sha': source,
             'lifecycles': lifecycle_receipts, 'assertions': assertions, 'corrected_mapping': corrected_mapping,
+            'transition_guard': {'real_stopped_foreign_relay_rejected': True, 'config_bytes_drift_rejected': True},
             'docker': json.loads(run(['docker', 'version', '--format', '{{json .}}'])),
             'compose': run(['docker', 'compose', 'version', '--short']).decode().strip()}, indent=2) + '\n')
         print('TELEGRAM_EGRESS_E01_E05_PASS', flush=True)

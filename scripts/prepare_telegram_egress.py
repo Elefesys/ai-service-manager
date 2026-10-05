@@ -995,7 +995,8 @@ def caller_probe(state, directory):
     )
 
 
-def compare_deployment(before, after, state):
+def compare_callers(before, after, state):
+    """Preservation is mandatory even while our relay is between stop and create."""
     for name, previous in before.items():
         if name in {"api", "worker", "telegram-egress"}:
             continue
@@ -1018,6 +1019,11 @@ def compare_deployment(before, after, state):
             == before[name]["networks"][default]["Gateway"],
             "EGRESS_DEFAULT_GATEWAY_CHANGED",
         )
+
+
+def compare_deployment(before, after, state):
+    compare_callers(before, after, state)
+    require("telegram-egress" in after, "EGRESS_RUNNING_RELAY_REQUIRED")
     relay = after["telegram-egress"]
     require(
         relay["image"] == state["image_id"]
@@ -1032,6 +1038,121 @@ def compare_deployment(before, after, state):
             == str(ipaddress.ip_network(state["subnet6"])[2]),
             "EGRESS_RUNNING_RELAY_IPV6",
         )
+
+
+def transition_relay(states, directory, *, missing=False):
+    """Inspect our relay including stopped containers, never infer identity from absence."""
+    state = states[-1]
+    ids = (
+        command(
+            [
+                "docker",
+                "ps",
+                "-aq",
+                "--filter",
+                "label=com.docker.compose.project=" + state["project"],
+                "--filter",
+                "label=com.docker.compose.service=telegram-egress",
+            ]
+        )
+        .decode()
+        .split()
+    )
+    require(len(ids) <= 1, "EGRESS_RELAY_MULTIPLE")
+    if not ids:
+        require(missing, "EGRESS_RELAY_MISSING_WITHOUT_INTENT")
+        return {"status": "missing"}
+    info = json.loads(command(["docker", "inspect", ids[0]]))[0]
+    labels = info["Config"]["Labels"]
+    require(
+        labels["com.docker.compose.project"] == state["project"]
+        and labels["com.docker.compose.service"] == "telegram-egress"
+        and labels.get("com.docker.compose.oneoff") == "False"
+        and info["Image"] == state["image_id"]
+        and info["Config"]["Image"] == IMAGE
+        and info["Config"]["User"] == f"{state['uid']}:{state['gid']}"
+        and info["Config"]["Cmd"] == ["run", "-config", "/run/telegram-egress/config.json"],
+        "EGRESS_RELAY_TRANSITION_IDENTITY",
+    )
+    image = json.loads(command(["docker", "image", "inspect", state["image_id"]]))[0]
+    require(
+        info["Config"]["Entrypoint"] == image["Config"]["Entrypoint"]
+        and info["Config"].get("Env") == image["Config"].get("Env")
+        and info["Config"].get("WorkingDir") == image["Config"].get("WorkingDir"),
+        "EGRESS_RELAY_ENTRYPOINT",
+    )
+    host = info["HostConfig"]
+    require(
+        host["ReadonlyRootfs"]
+        and not host["Privileged"]
+        and not host["PortBindings"]
+        and host["CapDrop"] == ["ALL"]
+        and host["SecurityOpt"] == ["no-new-privileges:true"]
+        and host["NetworkMode"] not in {"host", "none"}
+        and host["LogConfig"]["Type"] == "none",
+        "EGRESS_RELAY_TRANSITION_PRIVILEGE",
+    )
+    binds = [m for m in info["Mounts"] if m["Type"] != "tmpfs"]
+    require(
+        len(binds) == 1
+        and binds[0]["Type"] == "bind"
+        and not binds[0]["RW"]
+        and binds[0]["Destination"] == "/run/telegram-egress/config.json",
+        "EGRESS_RELAY_TRANSITION_MOUNT",
+    )
+    matches = [
+        s
+        for s in states
+        if str(generated_directory(s, directory) / "config.json") == binds[0]["Source"]
+    ]
+    require(len(matches) == 1, "EGRESS_RELAY_TRANSITION_CONFIG")
+    actual_state = matches[0]
+    require(
+        sha(private_bytes(binds[0]["Source"])) == actual_state["config_sha256"],
+        "EGRESS_RELAY_TRANSITION_CONFIG",
+    )
+    values = route_values(actual_state, directory)
+    expected = {
+        values["ASM_TELEGRAM_EGRESS_NETWORK"]: {"IPv4Address": values["ASM_TELEGRAM_EGRESS_IP"]}
+    }
+    if actual_state.get("version") == 2:
+        expected[values["ASM_TELEGRAM_EGRESS_NETWORK6"]] = {
+            "IPv6Address": values["ASM_TELEGRAM_EGRESS_IPV6"]
+        }
+    networks = info["NetworkSettings"]["Networks"]
+    require(set(networks) == set(expected), "EGRESS_RELAY_TRANSITION_NETWORKS")
+    for name, addresses in expected.items():
+        require(networks[name]["IPAMConfig"] == addresses, "EGRESS_RELAY_TRANSITION_ADDRESS")
+    status = info["State"]["Status"]
+    require(
+        status in {"running", "exited", "created"} and not info["State"].get("Dead"),
+        "EGRESS_RELAY_TRANSITION_STATUS",
+    )
+    return {
+        "status": "running" if status == "running" else "stopped",
+        "id": info["Id"],
+        "image": info["Image"],
+        "config_sha256": actual_state["config_sha256"],
+    }
+
+
+def recovery_recreate_pending(state, directory):
+    path = directory / "recovery-recreate.json"
+    if not path.exists():
+        return False
+    require(state.get("generation") == "recovery-v2", "EGRESS_RECOVERY_RECREATE_STATE")
+    require(
+        private_bytes(path)
+        == encoded(
+            {
+                "state_sha256": sha(encoded(state)),
+                "before_sha256": state["recovery_before_sha256"],
+                "legacy_state_sha256": state["legacy_state_sha256"],
+            }
+        ),
+        "EGRESS_RECOVERY_RECREATE_CHANGED",
+    )
+    return not (directory / "deployment-after.json").exists()
 
 
 def deploy(state, directory):
@@ -1087,11 +1208,8 @@ def deploy(state, directory):
     write_private(directory / "deployment-after.json", encoded(after))
 
 
-def rollback(state, directory):
-    # Explicit operator action only; disable first while the fixed route still exists.
-    # Only the actual runtime source is changed; private staged inputs are retained.
-    path = checked_path(ROOT / ".env")
-    raw = path.read_bytes()
+def disabled_runtime(raw):
+    """The sole permitted runtime-input delta; preserve every other byte."""
     require(len(raw) <= 65536, "EGRESS_ENV_LIMIT")
     lines = raw.splitlines(keepends=True)
     matches = [i for i, line in enumerate(lines) if line.startswith(b"ASM_TELEGRAM_ENABLED=")]
@@ -1102,60 +1220,186 @@ def rollback(state, directory):
         if lines and not lines[-1].endswith(b"\n"):
             lines[-1] += b"\n"
         lines.append(b"ASM_TELEGRAM_ENABLED=false\n")
-    write_private(path, b"".join(lines), private_parent=False)
+    return b"".join(lines)
+
+
+def rollback_inputs(state, directory):
+    """Validate the immutable intent, including both exact dotenv byte strings."""
+    bundle = directory / "rollback-intent"
+    checked_path(bundle, directory=True)
+    require(
+        {p.name for p in bundle.iterdir()}
+        == {"intent.json", "runtime-before.env", "runtime-disabled.env", "before.json"},
+        "EGRESS_ROLLBACK_INTENT_INVENTORY",
+    )
+    plan = strict_json(private_bytes(bundle / "intent.json"))
+    original = private_bytes(bundle / "runtime-before.env")
+    disabled = private_bytes(bundle / "runtime-disabled.env")
+    require(
+        set(plan) == {"state_sha256", "baseline_sha256", "inputs", "before_sha256", "relay"}
+        and plan["state_sha256"] == sha(encoded(state))
+        and plan["baseline_sha256"] == sha(private_bytes(directory / "deployment-before.json"))
+        and plan["before_sha256"] == sha(private_bytes(bundle / "before.json"))
+        and plan["inputs"]["runtime_env"] == sha(original)
+        and disabled == disabled_runtime(original),
+        "EGRESS_ROLLBACK_INTENT_CHANGED",
+    )
+    current = input_hashes(state)
+    expected = dict(plan["inputs"])
+    require(set(current) == set(expected), "EGRESS_ROLLBACK_INPUT_FIELDS")
+    require(
+        current["runtime_env"] in {sha(original), sha(disabled)}
+        and all(current[k] == expected[k] for k in ("profile", "staged_env")),
+        "EGRESS_ROLLBACK_INPUT_DRIFT",
+    )
+    return plan
+
+
+def rollback_stage(directory, name, intent_hash, *, publish=False):
+    path = directory / ("rollback-" + name + ".json")
+    raw = encoded({"intent_sha256": intent_hash, "stage": name})
+    if path.exists() or path.is_symlink():
+        require(private_bytes(path) == raw, "EGRESS_ROLLBACK_STAGE_CHANGED")
+        return True
+    if publish:
+        write_private(path, raw)
+    return False
+
+
+def rollback(state, directory):
+    # Explicit action, with an immutable byte-exact disable-first intent before I/O.
+    # No retry re-baselines either the original deployment or this operation.
+    baseline = strict_json(private_bytes(directory / "deployment-before.json"))
+    before = snapshot(state, directory, disabled=(directory / "rollback-disabled.json").exists())
+    compare_callers(baseline, before, state)
+    states = [state]
+    if state.get("generation") == "recovery-v2":
+        old, _, before_hash = recovery_archive(directory, state["source_sha"], rolling_back=True)
+        candidate = recovery_candidate(old, directory, state["source_sha"], before_hash)
+        require(state == candidate, "EGRESS_RECOVERY_MANIFEST_CHANGED")
+        states.insert(0, old)
+    bundle = directory / "rollback-intent"
+    existed = bundle.exists()
+    if existed:
+        plan = rollback_inputs(state, directory)
+        intent_hash = sha(private_bytes(bundle / "intent.json"))
+    else:
+        require(not (directory / "rollback.json").exists(), "EGRESS_ROLLBACK_INTENT_REQUIRED")
+        intent_hash = None
+    stopping = existed and rollback_stage(directory, "stop-intent", intent_hash)
+    relay = transition_relay(
+        states, directory, missing=stopping or recovery_recreate_pending(state, directory)
+    )
+    if not existed:
+        original = checked_path(ROOT / ".env").read_bytes()
+        plan = {
+            "state_sha256": sha(encoded(state)),
+            "baseline_sha256": sha(private_bytes(directory / "deployment-before.json")),
+            "inputs": input_hashes(state),
+            "before_sha256": sha(encoded(before)),
+            "relay": relay,
+        }
+        atomic_bundle(
+            bundle,
+            {
+                "intent.json": encoded(plan),
+                "before.json": encoded(before),
+                "runtime-before.env": original,
+                "runtime-disabled.env": disabled_runtime(original),
+            },
+        )
+        intent_hash = sha(private_bytes(bundle / "intent.json"))
+    plan = rollback_inputs(state, directory)
+    actual = before
+    before = strict_json(private_bytes(bundle / "before.json"))
+    compare_callers(before, actual, state)
+    disabled_done = rollback_stage(directory, "disabled", intent_hash)
+    remove_intent = rollback_stage(directory, "remove-intent", intent_hash)
+    removed = rollback_stage(directory, "removed", intent_hash)
+    require(not remove_intent or disabled_done, "EGRESS_ROLLBACK_STAGE_ORDER")
+    require(not removed or remove_intent, "EGRESS_ROLLBACK_STAGE_ORDER")
+    require(not stopping or removed, "EGRESS_ROLLBACK_STAGE_ORDER")
+    if removed:
+        require_unrouted(state, actual)
+    receipt_path = directory / "rollback.json"
+    if receipt_path.exists():
+        require(stopping and relay["status"] != "running", "EGRESS_ROLLBACK_INCOMPLETE")
+        require(
+            checked_path(ROOT / ".env").read_bytes()
+            == private_bytes(bundle / "runtime-disabled.env"),
+            "EGRESS_ROLLBACK_NOT_DISABLED",
+        )
+        receipt = strict_json(private_bytes(receipt_path))
+        require(
+            receipt["before"] == before and receipt["after"] == snapshot(state, directory),
+            "EGRESS_ROLLBACK_AFTER_DRIFT",
+        )
+        require(
+            receipt == rollback_receipt(state, before, receipt["after"], intent_hash),
+            "EGRESS_ROLLBACK_RECEIPT_CHANGED",
+        )
+        return
+    path = checked_path(ROOT / ".env")
+    disabled = private_bytes(bundle / "runtime-disabled.env")
+    if path.read_bytes() != disabled:
+        require(not disabled_done, "EGRESS_ROLLBACK_ENV_REVERTED")
+        write_private(path, disabled, private_parent=False)
     env = clean_environment()
-    before = snapshot(state, directory, disabled=False)
-    command(
-        [
-            *compose_prefix(state, directory),
-            "up",
-            "-d",
-            "--no-deps",
-            "--pull",
-            "never",
-            "--force-recreate",
-            "--wait",
-            "api",
-            "worker",
-        ],
-        timeout=120,
-        environment=env,
-    )
-    snapshot(state, directory)  # disabled callers, with mapping still installed
-    command(
-        [
-            *compose_prefix(state, directory, overlay=False),
-            "up",
-            "-d",
-            "--no-deps",
-            "--pull",
-            "never",
-            "--force-recreate",
-            "--wait",
-            "api",
-            "worker",
-        ],
-        timeout=120,
-        environment=env,
-    )
-    command([*compose_prefix(state, directory), "stop", "telegram-egress"], environment=env)
+    if not disabled_done:
+        command(
+            [
+                *compose_prefix(state, directory),
+                "up",
+                "-d",
+                "--no-deps",
+                "--pull",
+                "never",
+                "--force-recreate",
+                "--wait",
+                "api",
+                "worker",
+            ],
+            timeout=120,
+            environment=env,
+        )
+        compare_callers(before, snapshot(state, directory), state)
+        rollback_stage(directory, "disabled", intent_hash, publish=True)
+    rollback_stage(directory, "remove-intent", intent_hash, publish=True)
+    if not removed:
+        command(
+            [
+                *compose_prefix(state, directory, overlay=False),
+                "up",
+                "-d",
+                "--no-deps",
+                "--pull",
+                "never",
+                "--force-recreate",
+                "--wait",
+                "api",
+                "worker",
+            ],
+            timeout=120,
+            environment=env,
+        )
+        actual = snapshot(state, directory)
+        compare_callers(before, actual, state)
+        require_unrouted(state, actual)
+        rollback_stage(directory, "removed", intent_hash, publish=True)
+    rollback_stage(directory, "stop-intent", intent_hash, publish=True)
+    relay = transition_relay(states, directory, missing=True)
+    if relay["status"] != "missing":
+        command([*compose_prefix(state, directory), "stop", "telegram-egress"], environment=env)
+    relay = transition_relay(states, directory, missing=True)
+    require(relay["status"] != "running", "EGRESS_ROLLBACK_RELAY_RUNNING")
     after = snapshot(state, directory)
-    for name, previous in before.items():
-        if name in {"api", "worker", "telegram-egress"}:
-            if name in {"api", "worker"}:
-                require(
-                    after[name]["image"] == previous["image"]
-                    and after[name]["mounts"] == previous["mounts"]
-                    and after[name]["environment_sha256"] == previous["environment_sha256"]
-                    and after[name]["process_sha256"] == previous["process_sha256"],
-                    "EGRESS_ROLLBACK_CALLER_DRIFT",
-                )
-                require(
-                    after[name]["database_identity"] == previous["database_identity"],
-                    "EGRESS_ROLLBACK_DATABASE_CHANGED",
-                )
-            continue
-        require(after.get(name) == previous, "EGRESS_ROLLBACK_UNRELATED_DRIFT")
+    compare_callers(before, after, state)
+    require_unrouted(state, after)
+    rollback_inputs(state, directory)
+    write_private(receipt_path, encoded(rollback_receipt(state, before, after, intent_hash)))
+
+
+def require_unrouted(state, after):
     require(
         all(
             all(
@@ -1166,24 +1410,23 @@ def rollback(state, directory):
         ),
         "EGRESS_ROLLBACK_MAPPING_RETAINED",
     )
-    write_private(
-        directory / "rollback.json",
-        encoded(
-            {
-                "before": before,
-                "after": after,
-                "telegram_disabled": True,
-                "route_networks_retained_inactive": [
-                    state["project"] + suffix
-                    for suffix in (
-                        ("_telegram-egress", "_telegram-egress-v6")
-                        if state.get("version") == 2
-                        else ("_telegram-egress",)
-                    )
-                ],
-            }
-        ),
-    )
+
+
+def rollback_receipt(state, before, after, intent_hash):
+    return {
+        "intent_sha256": intent_hash,
+        "before": before,
+        "after": after,
+        "telegram_disabled": True,
+        "route_networks_retained_inactive": [
+            state["project"] + suffix
+            for suffix in (
+                ("_telegram-egress", "_telegram-egress-v6")
+                if state.get("version") == 2
+                else ("_telegram-egress",)
+            )
+        ],
+    }
 
 
 def permitted_compose(extra):
@@ -1329,10 +1572,14 @@ def input_hashes(state):
     return result
 
 
-def recovery_archive(directory, accepted_sha):
+def recovery_archive(directory, accepted_sha, *, rolling_back=False):
     """Attest only the known owner schema1; never substitute a new baseline."""
     source_check(accepted_sha)
-    require(not (directory / "rollback.json").exists(), "EGRESS_RECOVERY_ALREADY_ROLLED_BACK")
+    require(
+        rolling_back
+        or not ((directory / "rollback.json").exists() or (directory / "rollback-intent").exists()),
+        "EGRESS_RECOVERY_ALREADY_ROLLED_BACK",
+    )
     current_raw = private_bytes(directory / "state.json")
     current = strict_json(current_raw)
     audit = directory / "recovery-v1"
@@ -1384,12 +1631,19 @@ def recovery_archive(directory, accepted_sha):
         name: private_bytes(directory / name)
         for name in ("config.json", "route.env", "runtime.json")
     }
+    # The audit always keeps the pre-operation hashes. Only a byte-exact recorded
+    # rollback delta can explain the different current runtime_env hash on retry.
+    inputs = (
+        rollback_inputs(current, directory)["inputs"]
+        if rolling_back and (directory / "rollback-intent").exists()
+        else input_hashes(old)
+    )
     files.update(
         {
             "state.json": raw,
             "deployment-before.json": before_raw,
             "compose.yaml": LEGACY_OVERLAY,
-            "inputs.json": encoded(input_hashes(old)),
+            "inputs.json": encoded(inputs),
             "transition.json": encoded({"from_sha": LEGACY_SHA, "accepted_sha": accepted_sha}),
         }
     )
@@ -1450,14 +1704,16 @@ def recovery_candidate(old, directory, accepted_sha, before_hash):
     return state
 
 
-def attest_partial_recovery(args):
+def attest_partial_recovery(args, *, rolling_back=False, for_recover=False):
     directory = checked_path(state_directory(args.state_dir), directory=True)
     require(args.from_sha == LEGACY_SHA and args.accepted_sha, "EGRESS_RECOVERY_INPUTS")
-    old, before, before_hash = recovery_archive(directory, args.accepted_sha)
+    old, before, before_hash = recovery_archive(
+        directory, args.accepted_sha, rolling_back=rolling_back
+    )
     # The current model has the same frozen application environment. Its old
     # topology is used only to attest the already-recreated partial deployment.
     actual = snapshot(old, directory)
-    compare_deployment(before, actual, old)
+    compare_callers(before, actual, old)
     require(
         all(actual[n]["id"] != before[n]["id"] for n in ("api", "worker")),
         "EGRESS_RECOVERY_CALLERS_NOT_RECREATED",
@@ -1477,13 +1733,41 @@ def attest_partial_recovery(args):
     source_image_check(
         model["services"]["telegram-operator"].get("image", old["project"] + "-telegram-operator")
     )
-    return old, before, before_hash
+    current = strict_json(private_bytes(directory / "state.json"))
+    states = [old]
+    missing = False
+    candidate = (
+        recovery_candidate(old, directory, args.accepted_sha, before_hash)
+        if current.get("version") == 2 or for_recover
+        else None
+    )
+    if current.get("version") == 2:
+        require(current == candidate, "EGRESS_RECOVERY_MANIFEST_CHANGED")
+        states.append(candidate)
+        missing = recovery_recreate_pending(candidate, directory)
+    if rolling_back and (directory / "rollback-intent").exists():
+        rollback_inputs(current, directory)
+        intent_hash = sha(private_bytes(directory / "rollback-intent/intent.json"))
+        missing = missing or rollback_stage(directory, "stop-intent", intent_hash)
+    transition_relay(states, directory, missing=missing)
+    return (old, before, before_hash, candidate) if for_recover else (old, before, before_hash)
 
 
 def recover(args):
     directory = checked_path(state_directory(args.state_dir), directory=True)
-    old, before, before_hash = attest_partial_recovery(args)
-    candidate = recovery_candidate(old, directory, args.accepted_sha, before_hash)
+    old, before, before_hash, candidate = attest_partial_recovery(args, for_recover=True)
+    recreate = encoded(
+        {
+            "state_sha256": sha(encoded(candidate)),
+            "before_sha256": before_hash,
+            "legacy_state_sha256": candidate["legacy_state_sha256"],
+        }
+    )
+    recreate_path = directory / "recovery-recreate.json"
+    if recreate_path.exists():
+        require(private_bytes(recreate_path) == recreate, "EGRESS_RECOVERY_RECREATE_CHANGED")
+    else:
+        write_private(recreate_path, recreate)
     # Files were fsynced as an immutable generation. Only this single manifest
     # publication makes it active. The original root generated files remain intact.
     if strict_json(private_bytes(directory / "state.json"))["version"] == 1:
@@ -1595,9 +1879,9 @@ def main():
                     if args.action == "rollback":
                         state = strict_json(private_bytes(directory / "state.json"))
                         if state.get("version") == 1:
-                            state, _, _ = attest_partial_recovery(args)
+                            state, _, _ = attest_partial_recovery(args, rolling_back=True)
                         else:
-                            source_check(state["source_sha"])
+                            state = verify(directory)
                         require(
                             state["image"] == IMAGE and state["uid"] == os.getuid(),
                             "EGRESS_ROLLBACK_STATE",

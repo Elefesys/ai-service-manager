@@ -737,7 +737,14 @@ async def durable_local():
     seeded_local = False
     catalog = None
     lifecycle = os.environ["ASM_EGRESS_LIFECYCLE"]
-    assert lifecycle in {"fresh", "recovery"}
+    assert lifecycle in {
+        "fresh",
+        "recovery",
+        "recover-stopped",
+        "recover-missing",
+        "legacy-disable",
+        "legacy-stop",
+    }
     catalog_file = fixture_directory() / "durable-catalog.json"
     try:
         await runtime.check()
