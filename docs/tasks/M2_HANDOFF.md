@@ -4,7 +4,95 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный handoff C0 → C6 — M2-ENV-04-TELEGRAM-EGRESS / остаток C8-01
+## Активный handoff C0 → владелец — M2-ENV-04 / source access и disabled deployment
+
+**Implementation принят C0. Независимый targeted C8 PASS, все три finding CLOSED.**
+M2-ENV-04 остаётся REVIEW до owner evidence/интеграции; M2 IN_PROGRESS. C6 не получает
+повторное implementation поручение. PR24 Draft/open/not merged, самостоятельного merge нет.
+
+### Принятая версия и границы
+
+Repository **Elefesys/ai-service-manager**, branch **c6/m2-telegram-live → main**.
+Accepted implementation head **d57ae07f10cd603910876068da444829b326bdab**,
+tree **bc8b10fe8be27c237e0b62665068c0ef9e14ece5**. Tested virtual merge
+**91720ac87671166e3a066b9301fe29a6762b05fb**: ordered parents accepted base
+**22993f558c5e7e933c65e9c999933bd2e3ab41c4** + implementation head; tree совпадает.
+[CI37297119410, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/37297119410)
+**SUCCESS**:531 unit,390 PostgreSQL/S3,111 frontend,27 browser,6+1 relay/E05;
+оба штатных scripts и clean-source gates. Foundation111720865066 и browser111720864815
+checkout exact tested merge. [C6 full receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-5992911966).
+
+**C0 ACCEPTED / независимый targeted C8 PASS. Все C8-M2-ENV04-01/02/03 CLOSED.**
+Последний review выполнен по01 и изменённым runtime-overlay/baseline/HTTPS/rollback
+boundaries, не по всему будущему продукту. C8 независимо сверил26 Git blobs,
+оба execution logs и выполнил local substituted boundary checks. HTTPS/empty TG
+сохраняются; изменения9 runtime fields, двух operational inputs и runtime.json
+отвергаются прежними guards.11 AST boundaries подтверждают сохранение закрытых
+02/03 и E02–E04. C0 сверил fresh GitHub refs/девять paths/CI и принял результат.
+
+Real Docker baseline использует прежний двухфайловый recipe до prepare, затем
+stage TG без recreate. Exact CLI сохраняет два HTTPS values, disabled/empty TG,
+private input bytes и ту же actual БД callers. Secure Console session, UNKNOWN/
+receipt, fingerprints31 таблицы и persistent counter1 проходят deploy/rollback.
+Guard обходов и ослабления TLS/timeouts/UNKNOWN нет; приложение/root Compose/
+workflows/pins/dependencies/migrations неизменны. Zip verification остаётся receipt
+C6: C0/C8 ZIP bytes повторно не скачивали. Local C8 substitutes не называются Docker
+execution; реальная Docker/PG/S3/TLS проверка исполнена GitHub runner.
+
+Последующий C0 coordination меняет только четыре текущих документа; его exact
+head/tree/tested merge/CI находятся в PR receipt. Это не отдельная реализация и
+не повод повторять C8 source review без изменения проверенных bytes. Перед выдачей
+owner commands C0 проверяет CI итогового head; SHA-only commits запрещены.
+
+### Единственный ближайший шаг владельца
+
+Существующая VM остаётся на80e51c43e31541940f1ccf18b8281adf1a061748, tree
+88ed308b4c56114aa977dcf91204964d9b7348e5; app image и Telegram disabled/no-secret
+runtime прежние. Временный read-only GitHub deploy key был отозван после первоначального
+checkout. C0 выдаёт точный блок runbook§0.6.10: показать только public key существующей
+пары (создать её с passphrase только если оба файла отсутствуют), добавить его
+в Settings → Deploy keys этого repository, **без Allow write access**. Приватный
+key/пароль/token/profile не передаются в чат или PR. Вернуть SOURCE_ACCESS_ADDED;
+при bounded STOP вернуть только код. SSH key входа и SG не менять, Happ выключить
+на время прямого SSH с ранее разрешённого operator IP.
+
+После этого C0 выдаёт единый guarded exact fetch/checkout + prepare/verify/deploy/
+preflight блок с полными SHA и известными paths, без выбора fields/SQL/IP владельцем.
+Для tracked checkout только umask022 внутри private root; env/profile/TLS не менять.
+До checkout и recreate сохраняются guards чистого source, exact prior HEAD/tree,
+private file hashes, current image IDs и disabled state. Не запускать app build,
+init_local/migrations или plain Compose. Accepted helper выполняет only api/worker
+recreate с fixed route; scheduler/PG/S3/ingress/Console data прежние. Ключ GitHub
+после получения exact source снова отозвать. Пользователь не выполняет rollback
+или live команды вместе с первым deployment автоматически.
+
+Prepared accepted operation — runbook§0.6.9, значения подставляет C0; результат:
+TELEGRAM_EGRESS_PREPARE_PASS, VERIFY_PASS, DEPLOY_PASS, PREFLIGHT_PASS. Если stop,
+C0 разбирает конкретную причину; source/data не сбрасывать. Эти markers означают
+disabled topology/readiness, не Telegram rights, getMe/send или завершение M2.
+
+### Сохранённый контракт и конечный остаток
+
+Runtime overlay содержит только два уже действующих HTTPS значения; staged TG
+inputs остаются отдельно. Полные drift/source/image/private path/DB guards прежние.
+Новый pin/opaque TCP route ограничен api/worker/operator и api.telegram.org:443,
+без host ports/direct fallback/TLS termination/retry. No-resend/UNKNOWN и private
+media сохранены. Rollback disable-first с mapping, затем снятие route, без
+reset/down-v/rebind; исходные inputs сохраняются, кроме допустимого enabled=false.
+E01–E06 accepted synthetic evidence и матрица A01–A12 ниже остаются критериями;
+production/ADR239, новые платные ресурсы, AI/M3 не входят в эту задачу.
+
+После actual route receipt — последовательные discovery, atomic binding/billing,
+webhook/activation и реальный Client text+image → Console/private image → manual
+reply → Client. Existing Owner/Console provisioning, секреты и temporary getMe
+не повторять. Перед первым setup проверить срок TEST billing interval; после любой
+попытки сохранять intention/key/IDs/dates. M2 VERIFIED только после live A09/A11,
+merge владельцем и отдельного successful push/main CI.
+
+<details>
+<summary>История — исправление01 и передача C6 до финального targeted C8</summary>
+
+## Исторический handoff C0 → C6 — M2-ENV-04-TELEGRAM-EGRESS / остаток C8-01
 
 **Task: REVIEW.** Остаток01/P2/E05 исправлен C6 и передан C0 на targeted C8.
 Независимый targeted C8 от2026-10-05 закрыл02/03; его прежний CHANGES_REQUESTED
@@ -185,6 +273,8 @@ VM activation, discovery/setup/webhook/send и не объявляет VERIFIED.
 C0 выдаёт один точный блок для disabled deployment и сверяет фактические markers;
 затем отдельно live operator шаги с сохранением IDs/dates/receipts. M2 IN_PROGRESS
 до real Client text+image → Console → reply → Client, merge владельцем и main CI.
+
+</details>
 
 <details>
 <summary>История — прежнее поручение и C6 correction receipt до targeted C8</summary>

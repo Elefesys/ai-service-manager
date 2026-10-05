@@ -1130,6 +1130,16 @@ state/receipts/env/volumes. E01–E06 проверяются настоящим�
 TLS wire; fixture CA/peer не входят в live config. Самостоятельного live включения
 нет; C0 выдаёт deployment после scoped C8/final CI. ADR239/production/M3 не изменены.
 
+C0 final targeted disposition 2026-10-05: **C8-01 CLOSED/PASS** на implementation
+d57ae07f10cd603910876068da444829b326bdab, CI37297119410 SUCCESS; прежние02/03 CLOSED.
+Принятый two-field private runtime overlay сохраняет HTTPS origin/endpoint из
+исходных inputs отдельно от staged TG. Independent pre-live baseline, strict drift,
+actual DB/Secure session/UNKNOWN preservation проверены real runner и targeted C8.
+Изложения прежнего open finding ниже — история причины, не незакрытая текущая задача.
+Contract/domain scope не меняется. Current operator gate — runbook§0.6.10/верхний
+M2_HANDOFF: source access, затем exact disabled deployment; actual VM/live evidence
+и merge/main CI ещё не получены, M2 остаётся IN_PROGRESS.
+
 C0 targeted disposition 2026-10-05: C8-02/03 закрыты на implementation
 2536a1aa2b41792fff381c4d222906e2ff9ad23c; остаток C8-01/E05 требует сохранения
 действующих non-TG runtime настроек. Принятый pre-live env состоит из `.env` с PG/S3

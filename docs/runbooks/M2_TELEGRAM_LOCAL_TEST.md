@@ -1680,10 +1680,10 @@ owner block; секреты, profile и старые успешные шаги �
 
 ### 0.6.9. C6 — correction остатка01/P2/E05, REVIEW / 2026-10-05
 
-Это текущая передача C0; §0.6.8 сохраняет независимый targeted verdict CLOSED02/03
-и основание коррекции01. Новый scoped C8 только01/затронутая boundary ещё проводит
-C0. PR24 Draft, M2 IN_PROGRESS; VM и live runtime не менялись. Ниже подготовленный
-operator artifact, **не команда владельцу исполнять сейчас**.
+Историческая передача C6 сохранена ниже; финальный C0/C8 PASS и текущий owner
+шаг — §0.6.10. Подготовленный deploy/rollback artifact принят в synthetic scope,
+но исполняется только отдельным готовым блоком C0 с exact accepted SHA после
+source-access шага. PR24 Draft, M2 IN_PROGRESS; actual VM deployment ещё не выполнен.
 
 Accepted base22993f558c5e7e933c65e9c999933bd2e3ab41c4; exact старт после C0
 6296f26f76c944b18a53feaba46a2b975eca247a, tree3e1cbecb95d9220bfcc4ade5fb0907737eb1cedc,
@@ -1763,6 +1763,101 @@ Private receipt сверяет прежние images/mounts/process/env (кро�
 actual DB identity и unrelated containers. Нет down-v/reset/rebind/drop. PG/S3
 volumes, UNKNOWN/receipt/Console и staged inputs сохраняются. При ошибке не включать
 Telegram: вернуть C0 bounded code, после исправления повторить тот же rollback.
+
+### 0.6.10. C0 приёмка / targeted C8 PASS; owner source access / 2026-10-05
+
+Accepted implementation head **d57ae07f10cd603910876068da444829b326bdab**,
+tree **bc8b10fe8be27c237e0b62665068c0ef9e14ece5**. Tested virtual merge
+**91720ac87671166e3a066b9301fe29a6762b05fb**: ordered parents accepted base
+**22993f558c5e7e933c65e9c999933bd2e3ab41c4** + implementation head; tree совпадает.
+[CI37297119410, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/37297119410)
+**SUCCESS**:531 unit,390 PostgreSQL/S3,111 frontend,27 browser,6+1 relay/E05;
+оба штатных scripts и clean-source gates. Foundation111720865066 и browser111720864815
+checkout exact tested merge. [C6 full receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-5992911966).
+
+**C0 ACCEPTED / независимый targeted C8 PASS. Все C8-M2-ENV04-01/02/03 CLOSED.**
+Последний review выполнен по01 и изменённым runtime-overlay/baseline/HTTPS/rollback
+boundaries, не по всему будущему продукту. C8 независимо сверил26 Git blobs,
+оба execution logs и выполнил local substituted boundary checks. HTTPS/empty TG
+сохраняются; изменения9 runtime fields, двух operational inputs и runtime.json
+отвергаются прежними guards.11 AST boundaries подтверждают сохранение закрытых
+02/03 и E02–E04. C0 сверил fresh GitHub refs/девять paths/CI и принял результат.
+
+Real Docker baseline использует прежний двухфайловый recipe до prepare, затем
+stage TG без recreate. Exact CLI сохраняет два HTTPS values, disabled/empty TG,
+private input bytes и ту же actual БД callers. Secure Console session, UNKNOWN/
+receipt, fingerprints31 таблицы и persistent counter1 проходят deploy/rollback.
+Guard обходов и ослабления TLS/timeouts/UNKNOWN нет; приложение/root Compose/
+workflows/pins/dependencies/migrations неизменны. Zip verification остаётся receipt
+C6: C0/C8 ZIP bytes повторно не скачивали. Local C8 substitutes не называются Docker
+execution; реальная Docker/PG/S3/TLS проверка исполнена GitHub runner.
+
+| Критерий | Приёмка и граница |
+|---|---|
+| C8-01 / E05 | CLOSED: accepted split env files → private two-field runtime overlay, независимый old-recipe baseline до prepare, strict drift/hash/re-derivation, exact Docker CLI и HTTPS/Secure session preservation. |
+| C8-02 / E05 | Ранее CLOSED сохраняется: same actual caller DB, UNKNOWN/receipt/Console session/31 table fingerprints/counter1 до/после. |
+| C8-03 / E01 | Ранее CLOSED сохраняется: canonical outside-checkout guard до effects, owner/mode/no-symlink и private runtime.json. |
+| E02–E04 | Прежние real mapping/readonly/media/TLS и relay effect→loss→UNKNOWN/restart/no-resend cases прошли; исходные transport semantics не менялись. |
+| E06 | Exact-source full CI/оба scripts/clean gates и реальный независимый C8 PASS; это controlled LOCAL/TEST evidence. |
+| Owner VM / live A09/A11 | НЕ ИСПОЛНЕНО: нового permanent route, discovery/setup/webhook/send ещё нет. Temporary getMe и прежний host/Console уже PASS. |
+
+**Сейчас выполняется только подготовка source access.** VM checkout остаётся
+80e51c43e31541940f1ccf18b8281adf1a061748; предыдущий GitHub read-only key отозван.
+Accepted deployment source будет указан полным SHA после текущего docs-only
+coordination и его CI; эта запись не выдаётся за actual VM receipt.
+
+Владелец открывает обычную SSH-сессию `asmoperator@asm-telegram-test-vm` с ранее
+разрешённого operator IP (Happ выключен). Следующий блок читает только public key
+и его fingerprint; если оба source-key файла отсутствуют, создаёт отдельную пару
+с passphrase. Passphrase сохраняется в менеджере паролей и вводится только на VM.
+Существующие key files не перезаписываются. Это отдельный source key, не ключ входа.
+
+```bash
+bash <<'ASM_SOURCE_ACCESS'
+set -euo pipefail
+trap 'printf "SOURCE_ACCESS_STOP: line %s\n" "$LINENO" >&2' ERR
+test "$(id -un)" = asmoperator
+umask 077
+asmKey=/home/asmoperator/.ssh/asm_source_readonly
+test -d /home/asmoperator/.ssh
+test ! -L /home/asmoperator/.ssh
+test "$(stat -c '%u:%a' /home/asmoperator/.ssh)" = "$(id -u):700"
+test ! -L "$asmKey" && test ! -L "$asmKey.pub"
+if [ ! -e "$asmKey" ] && [ ! -e "$asmKey.pub" ]; then
+  ssh-keygen -t ed25519 -a 64 -C asm-telegram-test-source -f "$asmKey" </dev/tty
+fi
+test -f "$asmKey" && test ! -L "$asmKey"
+test -f "$asmKey.pub" && test ! -L "$asmKey.pub"
+test "$(stat -c '%u:%a' "$asmKey")" = "$(id -u):600"
+ssh-keygen -lf "$asmKey.pub"
+cat "$asmKey.pub"
+printf '%s\n' SOURCE_READONLY_KEY_READY
+ASM_SOURCE_ACCESS
+```
+
+После SOURCE_READONLY_KEY_READY скопировать только строку `ssh-ed25519 ...` в
+https://github.com/Elefesys/ai-service-manager/settings/keys → Add deploy key.
+Title: `asm-telegram-test-env04`; **Allow write access оставить выключенным**.
+Подтвердить Add key, вернуть C0 только **SOURCE_ACCESS_ADDED**. Public key не нужно
+присылать в чат; private key/token/env/profile тем более не передавать. При STOP
+не перезаписывать ключи, вернуть bounded marker. C0 не предполагает, что доступ
+уже восстановлен. После exact fetch ключ снова отзывается в GitHub.
+
+**Следующая подготовленная последовательность C0:** guarded fetch immutable accepted
+SHA из этого repository с прежним pinned GitHub known_hosts; проверить target tree,
+clean current80e51c4 checkout, private inputs и app image IDs; checkout при umask022
+только tracked files внутри existing private root. Без reset/clean/reclone/build/
+migrations/down-v. Затем accepted §0.6.9 prepare/verify/deploy/preflight с реальными
+известными profile/env/state paths, Telegram disabled, без operator/live HTTP.
+Прежние env/profile/TLS, volumes и Console identities сохраняются; helper проверяет
+actual DB/env/image/mount/gateway. Выдать владельцу один заполненный блок после
+SOURCE_ACCESS_ADDED; не заставлять вручную собирать значения из разных документов.
+
+Review PASS не выдаёт автоматического права на discovery/setup/webhook/send или
+удаление/сброс TEST host. Rollback только по отдельному конкретному решению C0;
+accepted disable-first/retained HTTPS/UNKNOWN rules прежние. Actual route receipt,
+потом live A09/A11, merge владельцем и отдельный main CI остаются конечным остатком.
+M2-ENV-04 REVIEW, M2 IN_PROGRESS; INTEGRATED/VERIFIED и M3 не объявлены.
 
 ## 1. Конкретное окружение и предварительные условия
 
