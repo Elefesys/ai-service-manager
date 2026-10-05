@@ -791,9 +791,12 @@ async def durable_local():
                 {"ws": A},
             )
         seeded_local = True
+        assert settings.auth_origins == ("https://console.egress.test:8443",)
+        assert settings.auth_secure and settings.auth_cookie_name == "__Host-asm_session"
+        assert os.environ["ASM_STORAGE_ENDPOINT"] == "https://files.egress.test:8443"
         async with httpx.AsyncClient(
-            base_url="http://api:8000",
-            headers={"Host": "localhost:8000"},
+            base_url=settings.auth_origins[0],
+            verify=tls_context(fixture_directory()),
             timeout=5,
             trust_env=False,
         ) as api:
@@ -801,7 +804,7 @@ async def durable_local():
             bootstrap = await api.post(
                 "/api/v1/auth/bootstrap",
                 json={},
-                headers={"Origin": "http://localhost:8000", "X-CSRF-Bootstrap": "1"},
+                headers={"Origin": settings.auth_origins[0], "X-CSRF-Bootstrap": "1"},
             )
             assert bootstrap.status_code == 200
             session_hashes.append(token_verifier(api.cookies.get(settings.auth_cookie_name)))
@@ -809,12 +812,17 @@ async def durable_local():
                 "/api/v1/auth/login",
                 json={"login": LOGIN, "password": password.get_secret_value()},
                 headers={
-                    "Origin": "http://localhost:8000",
+                    "Origin": settings.auth_origins[0],
                     "X-CSRF-Token": bootstrap.json()["csrf_token"],
                 },
             )
             assert signed_in.status_code == 200
+            assert api.cookies.jar and all(cookie.secure for cookie in api.cookies.jar)
             session_hashes.append(token_verifier(api.cookies.get(settings.auth_cookie_name)))
+            anonymous = await api.get(
+                os.environ["ASM_STORAGE_ENDPOINT"] + "/asm-private-local/not-public"
+            )
+            assert anonymous.status_code == 403
             await assert_durable_console(h)
             yield h
     finally:

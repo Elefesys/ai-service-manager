@@ -24,6 +24,7 @@ SOURCE = {
     "backend/src/asm/telegram/config.py": "31cba499681270d708cdb55e7c8e44202c07b4b7",
 }
 CALLERS = ("api", "worker", "telegram-operator")
+RUNTIME_FIELDS = ("ASM_AUTH_ORIGINS", "ASM_STORAGE_ENDPOINT")
 ROOT = Path(__file__).resolve().parents[1]
 SAFE_PATH = re.compile(r"/[A-Za-z0-9_./-]+")
 
@@ -457,6 +458,59 @@ def state_directory(path):
     return directory
 
 
+def runtime_overlay(state):
+    # Let Compose parse the accepted dotenv syntax without source/eval. Only two
+    # non-Telegram values leave this in-memory model; never serialize its secrets.
+    for path in (ROOT / ".env", Path(state["telegram_env"])):
+        require(checked_path(path).stat().st_size <= 65536, "EGRESS_ENV_LIMIT")
+    model = json.loads(
+        command(
+            [
+                "docker",
+                "compose",
+                "--project-directory",
+                str(ROOT),
+                "--project-name",
+                state["project"],
+                "--env-file",
+                str(ROOT / "infra/images.lock.env"),
+                "--env-file",
+                str(ROOT / ".env"),
+                "--env-file",
+                state["telegram_env"],
+                "-f",
+                str(ROOT / "compose.yaml"),
+                "config",
+                "--format",
+                "json",
+            ],
+            environment=clean_environment(),
+        )
+    )
+    services = {}
+    for name in ("api", "worker"):
+        values = {key: model["services"][name]["environment"][key] for key in RUNTIME_FIELDS}
+        require(
+            all(
+                isinstance(v, str) and 0 < len(v) <= 4096 and not any(ord(c) < 32 for c in v)
+                for v in values.values()
+            ),
+            "EGRESS_RUNTIME_INPUT_SHAPE",
+        )
+        services[name] = {"environment": values}
+    require(services["api"] == services["worker"], "EGRESS_RUNTIME_INPUT_MISMATCH")
+    # JSON is a Compose YAML subset; literal '$' must survive its second parse.
+    return encoded({"services": services}).replace(b"$", b"$$")
+
+
+def verify_runtime(state, directory):
+    raw = private_bytes(directory / "runtime.json")
+    require(
+        sha(raw) == state["runtime_sha256"] and raw == runtime_overlay(state),
+        "EGRESS_RUNTIME_INPUTS_CHANGED",
+    )
+
+
 def prepare(args):
     directory = state_directory(args.state_dir)
     source_check(args.accepted_sha)
@@ -496,6 +550,8 @@ def prepare(args):
         "config_sha256": sha(config),
         "image": IMAGE,
     }
+    runtime = runtime_overlay(state)
+    state["runtime_sha256"] = sha(runtime)
     if old:
         require(all(old.get(k) == v for k, v in state.items()), "EGRESS_PREPARATION_DRIFT")
         verify(directory)
@@ -506,6 +562,7 @@ def prepare(args):
         write_private(temporary / "config.json", config)
         state["image_id"] = image_check(temporary / "config.json", state["uid"], state["gid"])
     write_private(directory / "config.json", config)
+    write_private(directory / "runtime.json", runtime)
     write_private(directory / "route.env", route_env(route_values(state, directory)))
     write_private(directory / "state.json", encoded(state))
 
@@ -527,6 +584,7 @@ def verify(directory):
     )
     require(private_bytes(directory / "route.env") == route_env(values), "EGRESS_MAPPING_CHANGED")
     checked_path(state["telegram_env"])
+    verify_runtime(state, directory)
     require(
         image_check(directory / "config.json", state["uid"], state["gid"]) == state["image_id"],
         "EGRESS_IMAGE_CHANGED",
@@ -555,8 +613,8 @@ def compose_prefix(state, directory, *, overlay=True, operator_inputs=False):
         "--env-file",
         str(ROOT / ".env"),
     ]
-    # Runtime deployment uses the existing base env. Staged Telegram inputs
-    # belong to an explicitly issued one-shot operator command, not deployment.
+    # The base env supplies credentials; runtime.json preserves only the two
+    # accepted non-TG settings from both inputs. Staged TG stays operator-only.
     if operator_inputs:
         args += ["--env-file", state["telegram_env"]]
     args += [
@@ -566,6 +624,8 @@ def compose_prefix(state, directory, *, overlay=True, operator_inputs=False):
         str(directory / "route.env"),
         "-f",
         str(ROOT / "compose.yaml"),
+        "-f",
+        str(directory / "runtime.json"),
     ]
     if overlay:
         args += [
@@ -641,6 +701,7 @@ def validate_model(base, model, values):
 
 
 def checked_model(state, directory):
+    verify_runtime(state, directory)
     env = clean_environment()
     base = json.loads(
         command(

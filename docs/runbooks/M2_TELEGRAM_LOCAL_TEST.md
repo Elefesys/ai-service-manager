@@ -109,8 +109,8 @@ PR24 остаётся Draft; accepted main22993f558c5e7e933c65e9c999933bd2e3ab41
 push/main37016012805 SUCCESS. Existing runtime80e51c43e31541940f1ccf18b8281adf1a061748
 сохраняется. Console login/private staging и actual single getMe через temporary
 route PASS, cleanup завершён; runtime Telegram disabled. Теперь **M2-ENV-04**,
-активный handoff и§0.6: C6 готовит opt-in route, real Docker/PG checks, full CI и
-scoped C8. Владелец пока не выполняет новые VM команды. Старые Owner provisioning,
+активный handoff и§0.6.9: correction остатка01 передан C6 на REVIEW; full CI и
+targeted C8 только01/затронутая boundary — до отдельной выдачи C0. Владелец пока не выполняет новые VM команды. Старые Owner provisioning,
 secret entry, host/DNS/TLS не повторять. Discovery/binding/webhook/Console journey
 ещё не исполнены; M2 IN_PROGRESS. .com — прежний единственный smoke origin.
 
@@ -1677,6 +1677,92 @@ ZIP artifact C0/C8 повторно не скачивали: C6 byte-verificatio
 не выданы за них. E02–E04 evidence и TLS/timeouts/UNKNOWN assertions сохраняются.
 PR24 Draft; no merge/VERIFIED, M2 IN_PROGRESS. После исправления C0 выдаст готовый
 owner block; секреты, profile и старые успешные шаги повторять не нужно.
+
+### 0.6.9. C6 — correction остатка01/P2/E05, REVIEW / 2026-10-05
+
+Это текущая передача C0; §0.6.8 сохраняет независимый targeted verdict CLOSED02/03
+и основание коррекции01. Новый scoped C8 только01/затронутая boundary ещё проводит
+C0. PR24 Draft, M2 IN_PROGRESS; VM и live runtime не менялись. Ниже подготовленный
+operator artifact, **не команда владельцу исполнять сейчас**.
+
+Accepted base22993f558c5e7e933c65e9c999933bd2e3ab41c4; exact старт после C0
+6296f26f76c944b18a53feaba46a2b975eca247a, tree3e1cbecb95d9220bfcc4ade5fb0907737eb1cedc,
+CI37292611679 SUCCESS. История/первый coordination сохранены. Final head/tree/tested
+merge+ordered parents, оба scripts/clean gates, runner jobs и artifact digest
+фиксируются одним PR24 receipt без SHA-only commits.
+
+| Assertion | Correction/evidence |
+|---|---|
+| C8-01 / E05 inputs | Regression сначала получила EGRESS_RUNNING_ENVIRONMENT_DRIFT на reviewed code. Теперь штатный Compose config читает два accepted input files без source/eval; private runtime.json содержит только origin/endpoint для api/worker, не credentials/TG. Hash/re-derivation и полный actual drift guard обязательны. |
+| E05 independent baseline | `.env` имеет ровно семь исходных PG/S3 keys; отдельный файл содержит действующие HTTPS settings. Docker запускает callers до generator, затем TG fields stage без recreate. Exact prepare/deploy/preflight/rollback не создаёт baseline исправленной моделью. Staged bytes сохранены, `.env` меняется только на enabled=false при rollback. |
+| E05 / closed02 | До/после actual callers HTTPS/disabled/empty TG и тот же SQL identity; прежние UNKNOWN/receipt,31 table fingerprints/fsynced counter1. Та же Console session теперь через проверенный TLS и Secure cookie; private S3 anonymous403 через HTTPS. Закрытые identity guards не перепроектированы. |
+| E01 / closed03 | Canonical outside-checkout, owner700/file600/no-symlink и отказ до effects сохранены. Runtime overlay также private, вне build/artifacts. |
+| E02–E04 | Прежние шесть real wire cases/relay controls, official origin/TLS/budgets/retries0 и UNKNOWN/no-resend неизменны. HTTP auth defaults шести asm_test cases указаны явно, чтобы HTTPS operational model E05 не меняла их исходную fixture. |
+| E06 | Локально39 targeted unit, Ruff/syntax и actual Compose config resolution PASS; Docker локально отсутствует. Полные scripts, PostgreSQL/S3/browser и оба clean gates исполняются GitHub runner, результаты/границы — final PR receipt. |
+
+Необходимая HTTPS fixture добавлена только в compose.test.yaml: существующий
+WEB_IMAGE digest, non-root/read-only/cap-drop, три точных private RO mounts,
+private network aliases, без host ports. Её TLS leaf проверяется по TEST CA/hostname;
+CA и fixture hooks не входят в live config. Application/base Compose/workflows/
+pins/migrations/dependencies и защитные assertions не меняются.
+
+**Порядок для отдельной выдачи C0 после targeted C8.** C0 подставляет принятый final
+ENV04_ACCEPTED_SHA и уже имеющийся ENV04_PROFILE; owner не вводит повторно secrets
+и не переносит поля. Рабочий checkout должен соответствовать этому SHA; actual
+application image/source blobs и disabled callers проверяются helper. `.env` и
+`.env.telegram` сохраняют принятое распределение. State path ниже canonical вне
+checkout, parent/private files принадлежат оператору с прежними700/600. Не
+переносить старый state вручную: несовпадение preparation inputs — bounded отказ
+для C0. Содержимое config/runtime/env/inspect не публиковать.
+
+```sh
+set -eu
+cd /home/asmoperator/asm-telegram-test
+test "$(git rev-parse HEAD)" = "$ENV04_ACCEPTED_SHA"
+docker pull --platform linux/amd64 ghcr.io/xtls/xray-core@sha256:9a17fb7fcda36f80d041fc1f12f1d661d3f7c502572b2a6f2e4432534789a20b
+python3 scripts/prepare_telegram_egress.py prepare \
+  --accepted-sha "$ENV04_ACCEPTED_SHA" --profile "$ENV04_PROFILE" \
+  --telegram-env /home/asmoperator/asm-telegram-test/.env.telegram \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress \
+  --project asm-telegram-test
+python3 scripts/prepare_telegram_egress.py verify \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+python3 scripts/prepare_telegram_egress.py deploy \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+python3 scripts/prepare_telegram_egress.py preflight \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+```
+
+Ожидаемые markers: `TELEGRAM_EGRESS_PREPARE_PASS`, `...VERIFY_PASS`, `...DEPLOY_PASS`,
+`...PREFLIGHT_PASS`. Private state700/config600 находятся canonical вне checkout;
+публиковать их содержимое нельзя. Private runtime.json600 содержит ровно две non-TG HTTPS настройки accepted inputs;
+при verify они заново выводятся из исходных files и сверяются по hash.
+Deploy сохраняет текущий runtime env, только
+добавляет fixed mapping и relay. Preflight проверяет mapping трёх callers и обычную
+DB readiness, не делает Telegram HTTP и не доказывает доступность подписки/rights.
+Из staged `.env.telegram` в api/worker входят только прежние ASM_AUTH_ORIGINS и
+ASM_STORAGE_ENDPOINT через runtime.json; четыре TG fields не импортируются.
+Никакого ручного переноса полей владельцем нет. Только явно выданный
+one-shot operator wrapper читает этот файл; данный блок не вызывает operator/live.
+Будущая активация runtime — отдельный согласованный C0 шаг: обычный wrapper recreate
+сам не импортирует staged inputs. Ни discovery/setup/webhook, ни send здесь нет.
+
+Для отдельно разрешённого C0 rollback:
+
+```sh
+python3 scripts/prepare_telegram_egress.py rollback \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+```
+
+Сначала атомарно фиксируется `ASM_TELEGRAM_ENABLED=false` в фактическом runtime
+`.env`; если default field отсутствовал, добавляется только он. Прочие bytes
+сохраняются; staged `.env.telegram` не переписывается. API/worker пересоздаются с
+mapping и проверенным disabled env, затем без mapping с тем же HTTPS runtime.json; обе стадии ждут readiness
+в прежнем command budget. Relay останавливается. Его outage не блокирует rollback.
+Private receipt сверяет прежние images/mounts/process/env (кроме disabled flag),
+actual DB identity и unrelated containers. Нет down-v/reset/rebind/drop. PG/S3
+volumes, UNKNOWN/receipt/Console и staged inputs сохраняются. При ошибке не включать
+Telegram: вернуть C0 bounded code, после исправления повторить тот же rollback.
 
 ## 1. Конкретное окружение и предварительные условия
 

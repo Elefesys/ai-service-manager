@@ -1147,11 +1147,22 @@ owner. Staged inputs доступны отдельно explicit one-shot operato
 с mapping, затем снимает route; допустим только enabled=false в runtime source,
 прочие inputs/durable state остаются неизменными.
 
+Реализация остатка01 передана C6 на REVIEW: prepare создаёт private runtime.json600
+в canonical state700 вне checkout, только services.api/worker.environment с этими
+двумя keys. Values разрешаются из accepted env files штатным Compose config без
+source/eval; JSON экранирует повторную Compose interpolation. Hash и повторная
+деривация проверяются перед resolved model. Snapshot строго сравнивает модель
+с actual callers, без исключений для HTTPS/TG/DB/S3. Runtime overlay сохраняется
+при снятии route, исходные private files не переписываются. Regression начинает
+с независимого двухфайлового HTTPS baseline до generator. Console evidence использует
+настоящий TLS/Secure cookie; E02–E04 transport и closed02/03 guards не ослаблены.
+Это не targeted C8 PASS; final execution receipt и готовая процедура — runbook§0.6.9/PR24.
+
 Actual SQL DB identity api/worker и её сохранность при recreate обязательны;
 durable evidence относится к той же БД. Canonical outside-checkout boundary
 проверяется до effects, requested symlink components не нормализуются в разрешённые
 пути. Domain/API, TLS, timeouts, permissions и UNKNOWN/no-resend прежние. Подробный
-targeted review и один оставшийся task — runbook§0.6.8/активный M2_HANDOFF.
+targeted verdict — runbook§0.6.8; текущий correction REVIEW — §0.6.9/активный M2_HANDOFF.
 
 <details>
 <summary>История — первая C6 correction формулировка до targeted C8</summary>

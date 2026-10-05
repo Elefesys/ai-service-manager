@@ -2,7 +2,52 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — TEST egress: одна доработка после targeted C8 / 2026-10-05
+## Текущий статус — TEST egress: остаток C8-01 передан на REVIEW / 2026-10-05
+
+**M2 — IN_PROGRESS. M2-ENV-04-TELEGRAM-EGRESS — REVIEW, C6.** Исправлен только
+остаток C8-M2-ENV04-01/P2/E05. Закрытые независимым targeted C8 находки02/03
+сохраняются; новый targeted C8 по01 и затронутой boundary организует C0. Этот
+implementation receipt не является C8 PASS или VERIFIED. PR24 остаётся Draft.
+
+Repository **Elefesys/ai-service-manager**, branch **c6/m2-telegram-live → main**,
+[PR24](https://github.com/Elefesys/ai-service-manager/pull/24). Accepted base
+**22993f558c5e7e933c65e9c999933bd2e3ab41c4**. Старт correction после C0:
+**6296f26f76c944b18a53feaba46a2b975eca247a**, tree
+**3e1cbecb95d9220bfcc4ade5fb0907737eb1cedc**, CI37292611679 SUCCESS.
+Первый coordinatione58c4a1a731ad238ccf9a79e6c478969642cd088 и вся история сохранены.
+Final head/tree/tested merge, ordered parents и результат полного runner CI
+публикуются одним receipt в PR24; отдельный SHA-only commit не создаётся.
+
+Причина01 воспроизведена regression: `.env` с PG/S3 credentials, `.env.telegram`
+с действующими HTTPS origin/endpoint и staged TG; actual callers уже HTTPS,
+disabled/empty TG. Reviewed code отказал EGRESS_RUNNING_ENVIRONMENT_DRIFT.
+Теперь prepare читает accepted inputs через Compose config без source/eval,
+сохраняет ровно ASM_AUTH_ORIGINS/ASM_STORAGE_ENDPOINT в private runtime.json
+вне checkout. API/worker получают эти два значения, staged TG не импортируются.
+Hash/re-derivation overlay и прежний полный actual-environment guard обязательны;
+неожиданный drift HTTPS/TG/DB/S3 по-прежнему отклоняется. Исходные files не меняются,
+кроме прежнего enabled=false при rollback; ручной перенос owner не требуется.
+
+39 targeted unit checks, Ruff и actual Compose config resolution локально PASS.
+Локального Docker нет: real lane исполняется обычным GitHub runner. Новый Docker
+baseline создаётся по прежнему двухфайловому recipe до generator. Exact CLI
+prepare/deploy/preflight/rollback проверяет HTTPS/disabled/empty TG/staged bytes,
+actual DB identity, прежние UNKNOWN/receipt/31 table fingerprints/counter1 и ту же
+Console session через verified TLS/Secure cookie. Необходимый HTTPS fixture
+использует существующий WEB_IMAGE pin, без host ports; шесть E02–E04 cases сохраняют
+прежние HTTP TEST defaults и все transport assertions. Полные scripts/clean gates
+и source artifact проверяются на итоговом head; результаты — PR receipt/§0.6.9.
+
+Изменены только пять разрешённых code/test paths и четыре текущих документа.
+Application, root Compose/workflows, pins/dependencies, migrations, TLS/deadlines,
+UNKNOWN/no-resend и закрытые DB/path guards сохраняются. Owner VM/live не тронуты.
+Процедура §0.6.9 подготовлена для отдельной выдачи C0 после targeted C8; activation,
+discovery/setup/webhook/send, merge, VERIFIED и M3 в эту работу не входят.
+
+<details>
+<summary>История — C0 targeted verdict и выдача остатка01 / 2026-10-05</summary>
+
+## История — решение C0 после targeted C8 — TEST egress: одна доработка после targeted C8 / 2026-10-05
 
 **M2 — IN_PROGRESS. M2-ENV-04-TELEGRAM-EGRESS — IN_PROGRESS, C6.**
 Независимый targeted C8 реально выполнен: **CHANGES_REQUESTED** только по остатку
@@ -52,6 +97,8 @@ reply → Client receipt ещё не выполнены. После fix/final CI
 один готовый operator шаг. PR остаётся Draft, merge и VERIFIED не объявляются.
 M2 завершается только с real A09/A11, merge владельцем и отдельным actual main CI.
 ADR239/LOCAL-TEST границы, запрет reset/down-v и прежний бюджет сохраняются.
+
+</details>
 
 <details>
 <summary>История — C6 correction receipt до targeted C8 / 2026-10-05</summary>
@@ -249,7 +296,7 @@ M3 не выдан. Секреты не присылать в чат/PR. Нов�
 | M2-ENV-01-REGISTRY | Восстановить storage provisioning и полный CI | M2.4; pull failure PR22 | C6; C0/C8 | VERIFIED | PR22 merged80e51c4; scoped C8 PASS; отдельный push/main36825583134 SUCCESS, оба scripts/source gates и реальные PG/S3/browser | Сохранять проверенные GHCR pins; registry blocker CLOSED |
 | M2-ENV-02-STORAGE-IMAGES | Два exact official binary в project-owned images | Решение C0 о новой упаковке | C6; C0/C8 | VERIFIED | Build36734267078; anonymous full OCI bytes; scoped C8; final PR36824246755 и actual main36825583134 SUCCESS | Не пересобирать и не менять visibility/pins без причины |
 | M2-ENV-03-TEST-HOST | Один TEST host/.com DNS/HTTPS до Telegram connection | Actual main80e51c4 + host evidence | C6; C0; independent C8 | VERIFIED | PR23 merged22993f5; main37016012805 SUCCESS; C8-HOST PASS; operator host/HTTPS/private403/renewal receipt; известные TEST ограничения сохранены | Закрыто только pre-live host; продолжить M2-LIVE-A09-A11 |
-| M2-ENV-04-TELEGRAM-EGRESS | Opt-in постоянный synthetic TEST route для Telegram callers | ENV03; temporary TLS/fail-closed/getMe PASS; C0 bounded scope | C6; C0/C8 acceptance | IN_PROGRESS | PR24 Draft; CI37289340867 SUCCESS; targeted C8: 02/03 CLOSED, остаток01 OPEN/P2; runbook§0.6.8 | Исправить сохранение действующих non-TG HTTPS inputs; full final CI и targeted C8 только01; owner deployment пока не выдан |
+| M2-ENV-04-TELEGRAM-EGRESS | Opt-in постоянный synthetic TEST route для Telegram callers | ENV03; temporary TLS/fail-closed/getMe PASS; C0 bounded scope | C6; C0/C8 acceptance | REVIEW | PR24 Draft; 02/03 CLOSED; остаток01 correction передан, final refs/CI в PR receipt; runbook§0.6.9 | C0: targeted C8 только01/затронутая boundary; owner deployment отдельно, M2 IN_PROGRESS |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 

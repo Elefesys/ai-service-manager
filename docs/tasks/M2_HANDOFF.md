@@ -6,8 +6,42 @@
 
 ## Активный handoff C0 → C6 — M2-ENV-04-TELEGRAM-EGRESS / остаток C8-01
 
-**Task: IN_PROGRESS. Review: CHANGES_REQUESTED.** Targeted C8 завершён 2026-10-05:
-02/03 закрыты, одна оставшаяся 01/P2/E05. Это единственное implementation поручение.
+**Task: REVIEW.** Остаток01/P2/E05 исправлен C6 и передан C0 на targeted C8.
+Независимый targeted C8 от2026-10-05 закрыл02/03; его прежний CHANGES_REQUESTED
+по01 сохранён ниже как основание коррекции. Самостоятельного C8 PASS нет.
+Это единственная активная передача; исторические поручения не выполнять.
+
+### C6 correction receipt — только остаток01
+
+Старт **6296f26f76c944b18a53feaba46a2b975eca247a**, tree
+**3e1cbecb95d9220bfcc4ade5fb0907737eb1cedc**, CI37292611679 SUCCESS.
+Regression test_split_private_inputs_preserve_https_runtime_and_strict_drift
+сначала воспроизвёл EGRESS_RUNNING_ENVIRONMENT_DRIFT на reviewed code; после
+correction все39 targeted unit checks PASS. Actual Compose config resolution,
+Ruff/syntax PASS; Docker локально отсутствует, full scripts запускаются runner.
+Final head/tree/tested merge+parents, CI/jobs и source artifact — один PR receipt.
+
+prepare сохраняет ровно два non-TG operational values в private runtime.json600
+в canonical state700 вне checkout. Их значения получены из accepted env files
+через read-only Compose config, без source/eval или записи credentials. Повторная
+деривация и hash проверяются перед моделью; runtime overlay действует на api/worker
+с route и после rollback без route. TG inputs остаются staged. Полное сравнение
+с actual callers не ослаблено. Неожиданный HTTPS/TG/DB/storage drift отклоняется;
+private source files сохраняются, кроме существующего rollback enabled=false.
+
+Real Docker regression независимо запускает HTTPS callers из двух env files до
+prepare, затем добавляет staged TG без recreate. Exact CLI deploy/preflight/rollback
+сохраняет HTTPS/disabled/empty TG/inputs и закрытый02 actual DB evidence. Console
+session теперь проверяется через настоящий HTTPS/Secure cookie, S3 anonymous403 —
+через тот же verified TLS fixture. Fixture использует прежний nginx WEB_IMAGE pin,
+без host ports/новых зависимостей. Шесть старых TEST wire cases получают прежние
+HTTP auth defaults явно; их TLS, timeouts, recovery/UNKNOWN assertions не изменены.
+Закрытые03 canonical path guards сохранены. Полный runner CI/clean gates обязателен.
+
+Изменены только четыре code/test paths, необходимый compose.test.yaml и четыре
+документа из allowlist ниже. Операторский блок — runbook§0.6.9 для отдельной выдачи
+C0 после targeted C8 только01/затронутой boundary. VM/live не исполнялись.
+
 
 ### Точный старт и источники
 
@@ -22,7 +56,7 @@ e58c4a1a731ad238ccf9a79e6c478969642cd088 и всю историю; без reset/
 Перед стартом сверить current refs/ancestry/CI. Если head изменился, установить его
 состав; не затирать чужую работу.
 
-Прочитать AGENTS, этот register/handoff, runbook§§0.4.5/0.6.7–0.6.8,
+Прочитать AGENTS, этот register/handoff, runbook§§0.4.5/0.6.8–0.6.9,
 M2_CONTRACT§10.12, Spec§24.6/private files, ADR138/141/142/239/243 и Implementation
 Plan§§6–7. Прежние domain/client contracts не перепроектировать. Owner VM остаётся
 на runtime80e51c43e31541940f1ccf18b8281adf1a061748; это не PR head. Доступ к VM,
@@ -37,7 +71,7 @@ SUCCESS: оба штатных scripts и clean-source gates, 530 unit, 390 Post
 111 frontend, 27 browser и 6+1 relay cases. Foundation job111695793211 и browser
 job111695792866 действительно checkout этот tested merge.
 
-| Finding | Targeted C0/C8 disposition |
+| Finding | Основание correction: targeted C0/C8 disposition до текущего REVIEW |
 |---|---|
 | C8-M2-ENV04-01 / P2 / E05 | **OPEN, одна оставшаяся доработка.** Staged TG fields больше не входят в disabled runtime, но исключён весь .env.telegram, содержащий также действующие HTTPS ASM_AUTH_ORIGINS и ASM_STORAGE_ENDPOINT. Принятый pre-live recipe сохраняет их именно там; .env из init_local.py содержит только PG/S3 credentials. Поэтому model возвращается к localhost/http defaults, snapshot отказывает EGRESS_RUNNING_ENVIRONMENT_DRIFT до up. |
 | C8-M2-ENV04-02 / E05 | **CLOSED на reviewed head.** Реальные API/worker SQL identities совпадают с isolated postgres/asm_local harness до/после exact deploy/preflight/rollback; отдельная asm_test отвергается. UNKNOWN, command receipt, та же HTTP Console session, fingerprints 31 таблицы и wire counter=1 сохранены. |

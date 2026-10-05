@@ -12,6 +12,134 @@ import pytest
 from scripts import prepare_telegram_egress as egress
 
 
+def test_split_private_inputs_preserve_https_runtime_and_strict_drift(tmp_path, monkeypatch):
+    root = tmp_path / "checkout"
+    root.mkdir(mode=0o700)
+    monkeypatch.setattr(egress, "ROOT", root)
+    credentials = b"PG_RUNTIME_PASSWORD=synthetic-db\nSTORAGE_SECRET_KEY=synthetic-storage\n"
+    operational = {
+        "ASM_AUTH_ORIGINS": '["https://console.fixture.invalid"]',
+        "ASM_STORAGE_ENDPOINT": "https://files.fixture.invalid",
+    }
+    staged = dict(
+        operational,
+        TG_BOT_TOKEN="staged-token",
+        TG_WEBHOOK_SECRET="staged-secret",
+        ASM_TELEGRAM_EXPECTED_BOT_ID="9911",
+        ASM_TELEGRAM_WEBHOOK_URL="https://console.fixture.invalid/webhooks/telegram",
+    )
+    staged_bytes = "".join(f"{k}='{v}'\n" for k, v in staged.items()).encode()
+    egress.write_private(root / ".env", credentials)
+    egress.write_private(tmp_path / "telegram.env", staged_bytes)
+    egress.write_private(tmp_path / "profile.json", egress.encoded(profile()))
+    defaults = dict(
+        operational,
+        ASM_AUTH_ORIGINS='["http://localhost:8000"]',
+        ASM_STORAGE_ENDPOINT="http://storage:9000",
+    )
+    active = dict(
+        operational,
+        ASM_TELEGRAM_ENABLED="false",
+        TG_BOT_TOKEN="",
+        TG_WEBHOOK_SECRET="",
+        ASM_TELEGRAM_EXPECTED_BOT_ID="",
+        ASM_TELEGRAM_WEBHOOK_URL="",
+        ASM_DATABASE_URL="synthetic-db-url",
+        ASM_STORAGE_ACCESS_KEY="synthetic-access",
+        ASM_STORAGE_SECRET_KEY="synthetic-storage",
+    )
+    containers = [
+        {
+            "Id": name,
+            "Image": "image",
+            "Config": {
+                "Labels": {"com.docker.compose.service": name},
+                "Env": [k + "=" + v for k, v in active.items()],
+            },
+            "Mounts": [],
+            "NetworkSettings": {"Networks": {}},
+        }
+        for name in ("api", "worker", "postgres", "storage")
+    ]
+    state_dir = tmp_path / "state"
+    monkeypatch.setattr(egress, "source_check", lambda *_: None)
+    monkeypatch.setattr(egress, "source_image_check", lambda *_: None)
+    monkeypatch.setattr(egress, "image_check", lambda *_: "image")
+    monkeypatch.setattr(egress, "database_identity", lambda *_: {"database": "same"})
+
+    def command(args, **_):
+        if args[:2] == ["docker", "inspect"]:
+            return egress.encoded(containers)
+        if args[-2:] == ["ps", "-q"]:
+            return b"api worker postgres storage"
+        if "config" in args:
+            # External Compose boundary: the two accepted files resolve staged
+            # values; no model is derived from the inspected running containers.
+            assert str(tmp_path / "telegram.env") in args
+            return egress.encoded(
+                {"services": {n: {"environment": staged} for n in ("api", "worker")}}
+            )
+        return b"[]"
+
+    monkeypatch.setattr(egress, "command", command)
+    egress.prepare(
+        argparse.Namespace(
+            accepted_sha="a" * 40,
+            project="fixture",
+            profile=str(tmp_path / "profile.json"),
+            telegram_env=str(tmp_path / "telegram.env"),
+            state_dir=str(state_dir),
+        )
+    )
+    state = json.loads((state_dir / "state.json").read_bytes())
+
+    def model(s, directory):
+        values = dict(active, **defaults)
+        args = egress.compose_prefix(s, directory)
+        overlay = directory / "runtime.json"
+        if str(overlay) in args:
+            payload = json.loads(egress.private_bytes(overlay))
+            assert set(payload) == {"services"} and set(payload["services"]) == {"api", "worker"}
+            for service in payload["services"].values():
+                assert set(service) == {"environment"} and service["environment"] == operational
+            values.update(payload["services"]["api"]["environment"])
+        return {"services": {n: {"environment": values} for n in ("api", "worker")}}
+
+    monkeypatch.setattr(egress, "checked_model", model)
+    egress.snapshot(state, state_dir)  # Reviewed implementation fails here, before any up.
+    assert (root / ".env").read_bytes() == credentials
+    assert (tmp_path / "telegram.env").read_bytes() == staged_bytes
+    egress.verify_runtime(state, state_dir)
+    original_runtime = (state_dir / "runtime.json").read_bytes()
+    staged["TG_BOT_TOKEN"] = "another-staged-token"
+    egress.verify_runtime(state, state_dir)  # Still operator-only, never copied into runtime.
+    for field in operational:
+        previous = staged[field]
+        staged[field] = "changed-config-input"
+        with pytest.raises(egress.EgressError, match="EGRESS_RUNTIME_INPUTS_CHANGED"):
+            egress.verify_runtime(state, state_dir)
+        staged[field] = previous
+    egress.write_private(state_dir / "runtime.json", original_runtime + b" ")
+    with pytest.raises(egress.EgressError, match="EGRESS_RUNTIME_INPUTS_CHANGED"):
+        egress.verify_runtime(state, state_dir)
+    egress.write_private(state_dir / "runtime.json", original_runtime)
+    for field in (
+        *operational,
+        "TG_BOT_TOKEN",
+        "TG_WEBHOOK_SECRET",
+        "ASM_TELEGRAM_EXPECTED_BOT_ID",
+        "ASM_TELEGRAM_WEBHOOK_URL",
+        "ASM_DATABASE_URL",
+        "ASM_STORAGE_ACCESS_KEY",
+        "ASM_STORAGE_SECRET_KEY",
+    ):
+        containers[0]["Config"]["Env"] = [
+            k + "=" + ("drift" if k == field else v) for k, v in active.items()
+        ]
+        with pytest.raises(egress.EgressError, match="EGRESS_RUNNING_ENVIRONMENT_DRIFT"):
+            egress.snapshot(state, state_dir)
+
+
 @pytest.mark.parametrize("alias", [False, True])
 def test_prepare_rejects_canonical_checkout_state_before_any_effect(tmp_path, monkeypatch, alias):
     checkout, outside = tmp_path / "checkout", tmp_path / "outside"
@@ -48,6 +176,7 @@ def test_prepare_canonical_outside_path_and_symlink_alias_guard(tmp_path, monkey
     monkeypatch.setattr(egress, "source_check", lambda *_: None)
     calls = []
     monkeypatch.setattr(egress, "command", lambda *_: b"[]")
+    monkeypatch.setattr(egress, "runtime_overlay", lambda *_: b'{"services":{}}\n')
     monkeypatch.setattr(egress, "image_check", lambda *_: calls.append("image") or "image")
     egress.write_private(outside / "profile.json", egress.encoded(profile()))
     egress.write_private(outside / "telegram.env", b"ASM_TELEGRAM_ENABLED=false\n")

@@ -19,6 +19,27 @@ services:
     environment:
       <<: *fixture-env
       ASM_TELEGRAM_ENABLED: 'false'
+      # Keep the six accepted asm_test wire cases on their original auth setup.
+      # E05 restores the independently created LOCAL HTTPS baseline afterwards.
+      ASM_AUTH_ORIGINS: '["http://localhost:8080","http://127.0.0.1:8080","http://localhost:8000","http://127.0.0.1:8000"]'
+  egress-https:
+    image: ${WEB_IMAGE:?}
+    user: "${ASM_TELEGRAM_EGRESS_UID:?}:${ASM_TELEGRAM_EGRESS_GID:?}"
+    entrypoint: [nginx]
+    command: [-c, /run/https.conf, -g, 'daemon off;']
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 96m
+    tmpfs: [/tmp]
+    volumes:
+      - ${ASM_EGRESS_TEST_DIR:?}/https.conf:/run/https.conf:ro
+      - ${ASM_EGRESS_TEST_DIR:?}/https.pem:/run/https.pem:ro
+      - ${ASM_EGRESS_TEST_DIR:?}/https.key:/run/https.key:ro
+    networks:
+      default:
+        aliases: [console.egress.test, files.egress.test]
   egress-checks:
     image: asm-telegram-egress-checks:test
     user: "${ASM_TELEGRAM_EGRESS_UID:?}:${ASM_TELEGRAM_EGRESS_GID:?}"

@@ -2,7 +2,6 @@
 # Mandatory synthetic lane. No owner inputs, public Telegram calls or Docker socket mounts.
 set -eu
 python3 - <<'PY'
-import argparse
 import ipaddress
 import json
 import os
@@ -58,8 +57,11 @@ def phase_start(name):
 
 def operator(action):
     phase_start('operator_' + action)
+    prepare_args = (['--accepted-sha', source, '--profile', str(directory / 'profile.json'),
+                     '--telegram-env', str(directory / 'telegram.env'), '--project', project]
+                    if action == 'prepare' else [])
     output = run(['python3', 'scripts/prepare_telegram_egress.py', action,
-                  '--state-dir', str(state_dir)], 120).decode().strip()
+                  '--state-dir', str(state_dir), *prepare_args], 120).decode().strip()
     assert output == 'TELEGRAM_EGRESS_' + action.upper() + '_PASS'
     print(output, flush=True)
 
@@ -117,7 +119,22 @@ def await_process(process, *, marker=None, timeout=240):
 def local_database_args():
     model = e.checked_model(state, state_dir)['services']
     return ['-e', 'ASM_DATABASE_URL=' + model['api']['environment']['ASM_DATABASE_URL'],
-            '-e', 'ASM_MIGRATION_DATABASE_URL=' + model['telegram-operator']['environment']['ASM_MIGRATION_DATABASE_URL']]
+            '-e', 'ASM_MIGRATION_DATABASE_URL=' + model['telegram-operator']['environment']['ASM_MIGRATION_DATABASE_URL'],
+            '-e', 'ASM_AUTH_ORIGINS=' + model['api']['environment']['ASM_AUTH_ORIGINS'],
+            '-e', 'ASM_STORAGE_ENDPOINT=' + model['api']['environment']['ASM_STORAGE_ENDPOINT']]
+
+def assert_https_callers(command_prefix):
+    ids = {}
+    for name in ('api', 'worker'):
+        identity = run([*command_prefix, 'ps', '-q', name]).decode().strip()
+        info = json.loads(run(['docker', 'inspect', identity]))[0]
+        values = dict(v.split('=', 1) for v in info['Config']['Env'])
+        assert values['ASM_TELEGRAM_ENABLED'] == 'false'
+        assert all(values[k] == '' for k in ('TG_BOT_TOKEN', 'TG_WEBHOOK_SECRET',
+            'ASM_TELEGRAM_EXPECTED_BOT_ID', 'ASM_TELEGRAM_WEBHOOK_URL'))
+        assert {key: values[key] for key in operational} == operational, 'E05_HTTPS_INPUT_DRIFT'
+        ids[name] = identity
+    return ids
 
 def start_checks(args, *, local=False):
     # Only bounded synthetic pytest/fixture output is inherited. Never print config/env.
@@ -159,20 +176,55 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
                 'realitySettings': {'serverName': 'api.telegram.org', 'fingerprint': 'chrome',
                     'password': public_key, 'shortId': short_id}}}]}
         e.write_private(directory / 'profile.json', e.encoded(profile))
-        staged_inputs = (b'ASM_TELEGRAM_ENABLED=false\nTG_BOT_TOKEN=9911:synthetic-staged-not-active\n'
+        operational = {'ASM_AUTH_ORIGINS': '["https://console.egress.test:8443"]',
+                       'ASM_STORAGE_ENDPOINT': 'https://files.egress.test:8443'}
+        original_env = (root / '.env').read_bytes()
+        assert {row.split('=', 1)[0] for row in original_env.decode().splitlines()} == {
+            'PG_ADMIN_PASSWORD', 'PG_MIGRATION_PASSWORD', 'PG_RUNTIME_PASSWORD',
+            'STORAGE_ROOT_USER', 'STORAGE_ROOT_PASSWORD', 'STORAGE_ACCESS_KEY', 'STORAGE_SECRET_KEY'}
+        prelive_inputs = (b'ASM_TELEGRAM_ENABLED=false\n'
+                          + ''.join(f"{key}='{value}'\n" for key, value in operational.items()).encode())
+        e.write_private(directory / 'telegram.env', prelive_inputs)
+        e.write_private(directory / 'prelive.env', prelive_inputs)
+        # Reproduce the accepted pre-live recipe independently of the generator.
+        # Callers first receive HTTPS values from the second env file with no TG inputs.
+        historical = ['docker', 'compose', '--project-directory', str(root), '--project-name', project,
+            '--env-file', str(root / 'infra/images.lock.env'), '--env-file', str(root / '.env'),
+            '--env-file', str(directory / 'telegram.env'), '-f', str(root / 'compose.yaml'),
+            '--profile', 'telegram-operator']
+        prefix = historical
+        prelive = [str(directory / 'prelive.env') if v == str(directory / 'telegram.env') else v for v in historical]
+        phase_start('independent_https_baseline')
+        run([*historical, 'up', '-d', '--wait', 'api', 'worker', 'scheduler'], 180)
+        independent_ids = assert_https_callers(historical)
+        postgres_id = run([*historical, 'ps', '-q', 'postgres']).decode().strip()
+        postgres_info = json.loads(run(['docker', 'inspect', postgres_id]))[0]
+        assert postgres_info['Config']['Labels']['com.docker.compose.project'] == project
+        assert postgres_info['Config']['Labels']['com.docker.compose.service'] == 'postgres'
+        assert re.fullmatch('[a-f0-9]{64}', postgres_id)
+        assert any(m['Type'] == 'volume' and m['Name'] == project + '_pgdata' for m in postgres_info['Mounts'])
+        # Stage the Telegram fields without recreating those accepted callers.
+        staged_inputs = (prelive_inputs + b'TG_BOT_TOKEN=9911:synthetic-staged-not-active\n'
                          b'TG_WEBHOOK_SECRET=synthetic-staged-webhook-not-active\n'
                          b'ASM_TELEGRAM_EXPECTED_BOT_ID=9911\n'
                          b'ASM_TELEGRAM_WEBHOOK_URL=https://synthetic.invalid/webhook\n')
         e.write_private(directory / 'telegram.env', staged_inputs)
         state_dir = directory / 'state'
         phase_start('private_prepare')
-        e.prepare(argparse.Namespace(accepted_sha=source, profile=str(directory / 'profile.json'),
-            state_dir=str(state_dir), telegram_env=str(directory / 'telegram.env'), project=project))
+        assert not state_dir.exists()
+        operator('prepare')
+        assert independent_ids == assert_https_callers(historical)
+        assert (root / '.env').read_bytes() == original_env
+        assert (directory / 'telegram.env').read_bytes() == staged_inputs
         state = e.verify(state_dir)
         values = e.route_values(state, state_dir)
         assert values['ASM_TELEGRAM_EGRESS_IP'] == relay_ip
         live = e.compose_prefix(state, state_dir)
         base = e.compose_prefix(state, state_dir, overlay=False)
+        prelive_live = [*prelive, '--env-file', str(root / 'infra/telegram-egress/image.lock.env'),
+            '--env-file', str(state_dir / 'route.env'), '-f', str(root / 'infra/telegram-egress/compose.yaml'),
+            '--profile', 'telegram-egress']
+        assert str(state_dir / 'runtime.json') not in prelive_live
         phase_start('resolved_model')
         e.checked_model(state, state_dir)
         environment.update(ASM_EGRESS_TEST_DIR=str(directory), ASM_EGRESS_PEER_IP=peer_ip,
@@ -220,17 +272,58 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         run(['openssl', 'verify', '-x509_strict', '-purpose', 'sslserver',
             '-verify_hostname', 'api.telegram.org', '-CAfile', str(directory / 'ca.pem'),
             str(directory / 'server.pem')])
+        # Separate TEST TLS leaf for a real Secure Console cookie and HTTPS S3
+        # endpoint. Existing Telegram leaf, transport and trust assertions stay intact.
+        run(['openssl', 'req', '-newkey', 'rsa:2048', '-nodes', '-subj', '/CN=console.egress.test',
+            '-keyout', str(directory / 'https.key'), '-out', str(directory / 'https.csr')])
+        e.write_private(directory / 'https-extensions',
+            b'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\n'
+            b'subjectAltName=DNS:console.egress.test,DNS:files.egress.test\nextendedKeyUsage=serverAuth\n'
+            b'subjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\n')
+        run(['openssl', 'x509', '-req', '-in', str(directory / 'https.csr'),
+            '-CA', str(directory / 'ca.pem'), '-CAkey', str(directory / 'ca.key'), '-CAcreateserial',
+            '-out', str(directory / 'https.pem'), '-days', '1', '-extfile', str(directory / 'https-extensions')])
+        for hostname in ('console.egress.test', 'files.egress.test'):
+            run(['openssl', 'verify', '-x509_strict', '-purpose', 'sslserver',
+                '-verify_hostname', hostname, '-CAfile', str(directory / 'ca.pem'), str(directory / 'https.pem')])
+        e.write_private(directory / 'https.conf', b'''
+pid /tmp/nginx.pid;
+error_log stderr warn;
+events { worker_connections 128; }
+http {
+    access_log off;
+    client_body_temp_path /tmp/client_temp;
+    proxy_temp_path /tmp/proxy_temp;
+    fastcgi_temp_path /tmp/fastcgi_temp;
+    uwsgi_temp_path /tmp/uwsgi_temp;
+    scgi_temp_path /tmp/scgi_temp;
+    resolver 127.0.0.11 valid=1s ipv6=off;
+    ssl_protocols TLSv1.3;
+    ssl_certificate /run/https.pem;
+    ssl_certificate_key /run/https.key;
+    server {
+        listen 8443 ssl;
+        server_name console.egress.test;
+        location / {
+            set $upstream http://api:8000;
+            proxy_set_header Host api:8000;
+            proxy_pass $upstream;
+        }
+    }
+    server {
+        listen 8443 ssl;
+        server_name files.egress.test;
+        location / {
+            set $upstream http://storage:9000;
+            proxy_set_header Host $http_host;
+            proxy_pass $upstream;
+        }
+    }
+}
+''')
         phase_start('topology')
         run([*base, 'build', 'telegram-operator'], 180)
         run(['docker', 'tag', project + '-telegram-operator', 'asm-telegram-egress-checks:test'])
-        phase_start('baseline_containers')
-        run([*base, 'up', '-d', '--wait', 'api', 'worker', 'scheduler'], 180)
-        postgres_id = run([*base, 'ps', '-q', 'postgres']).decode().strip()
-        postgres_info = json.loads(run(['docker', 'inspect', postgres_id]))[0]
-        assert postgres_info['Config']['Labels']['com.docker.compose.project'] == project
-        assert postgres_info['Config']['Labels']['com.docker.compose.service'] == 'postgres'
-        assert re.fullmatch('[a-f0-9]{64}', postgres_id)
-        assert any(m['Type'] == 'volume' and m['Name'] == project + '_pgdata' for m in postgres_info['Mounts'])
         compose('config', '--quiet')
         phase_start('test_storage_bootstrap')
         compose('up', '-d', '--wait', 'postgres-test', 'storage-test')
@@ -260,7 +353,10 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         phase_start('durable_rollback')
         # E05 uses the exact base runtime database, not the six cases' asm_test.
         # Keep the relay attached while the isolated LOCAL harness creates UNKNOWN.
-        run([*live, 'up', '-d', '--no-deps', '--force-recreate', '--wait', 'api', 'worker'])
+        # Restore the independently captured pre-staging baseline, not runtime.json.
+        run([*prelive_live, 'up', '-d', '--no-deps', '--force-recreate', '--wait', 'api', 'worker'])
+        assert_https_callers(prelive_live)
+        compose('up', '-d', '--no-deps', '--wait', 'egress-https')
         target = e.snapshot(state, state_dir)
         assert target['postgres']['id'] == postgres_id
         identity = target['api']['database_identity']
@@ -273,7 +369,7 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         await_process(durable, marker=directory / 'durable-before.json', timeout=90)
         # Keep actual UNKNOWN/receipt/session fixtures open while running the exact
         # operator code on real containers. No domain reset, volume deletion or rebind.
-        run([*base, 'up', '-d', '--no-deps', '--force-recreate', '--wait', 'api', 'worker'])
+        run([*prelive, 'up', '-d', '--no-deps', '--force-recreate', '--wait', 'api', 'worker'])
         def assert_runtime_boundary():
             current = e.snapshot(state, state_dir)
             assert current['postgres']['id'] == postgres_id
@@ -284,12 +380,14 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
                 assert actual['ASM_TELEGRAM_ENABLED'] == 'false'
                 assert all(actual[k] == '' for k in ('TG_BOT_TOKEN', 'TG_WEBHOOK_SECRET',
                     'ASM_TELEGRAM_EXPECTED_BOT_ID', 'ASM_TELEGRAM_WEBHOOK_URL')), 'E05_STAGED_INPUT_LEAK'
+                assert {key: actual[key] for key in operational} == operational, 'E05_HTTPS_INPUT_DRIFT'
             assert (directory / 'telegram.env').read_bytes() == staged_inputs
             return current
         runtime_before = assert_runtime_boundary()
         operator('deploy')
         runtime_deployed = assert_runtime_boundary()
         operator('preflight')
+        assert (root / '.env').read_bytes() == original_env
         e.compare_deployment(json.loads((state_dir / 'deployment-before.json').read_text()),
                              e.snapshot(state, state_dir), state)
         e.caller_probe(state, state_dir)
@@ -298,6 +396,7 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         e.caller_probe(state, state_dir)
         operator('rollback')
         runtime_rolled_back = assert_runtime_boundary()
+        assert (root / '.env').read_bytes() == original_env + b'ASM_TELEGRAM_ENABLED=false\n'
         assert (directory / 'telegram.env').read_bytes() == before_env
         compose('run', '--rm', '--no-deps', '-T', *local_database_args(), 'egress-checks', 'python',
                 'tests/test_telegram_egress_postgres.py', '--durable-receipt', 'after')
@@ -311,7 +410,10 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
             'E01': 'source/blob/private-config/offline-pinned-binary PASS',
             'E02': 'resolved opt-in/real all-callers mapping/stop/recreate/auth/DB/S3 PASS',
             'assertions': assertions, 'relay_controls': controls,
-            'C8_01': {'runtime_disabled_empty_TG': True, 'staged_inputs_unchanged': True},
+            'C8_01': {'runtime_disabled_empty_TG': True, 'staged_inputs_unchanged': True,
+                'https_settings_preserved': True, 'independent_baseline_before_prepare': True,
+                'runtime_input_bytes_preserved_except_disable': True,
+                'operational_sha256': e.sha(e.encoded(operational))},
             'C8_02': {'actual_database_identity': identity, 'postgres_id': postgres_id,
                 'callers': {phase: {name: data[name]['database_identity'] for name in ('api', 'worker')}
                     for phase, data in [('before', runtime_before), ('deployed', runtime_deployed),
