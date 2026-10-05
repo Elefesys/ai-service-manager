@@ -2,7 +2,54 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — ENV04: Docker29 mapping и partial-deploy recovery / 2026-10-05
+## Текущий статус — C8: interruption/retry correction / 2026-10-06
+
+**M2 — IN_PROGRESS. M2-ENV-04-TELEGRAM-EGRESS — IN_PROGRESS, C6.**
+Независимый targeted C8 новой Docker29 mapping/recovery boundary: **CHANGES_REQUESTED**.
+Открыты ровно **C8-M2-ENV04-04 и C8-M2-ENV04-05, P2 / E05**; прежние01/02/03
+остаются CLOSED. Единственный активный handoff — M2_HANDOFF, bounded task
+**M2-ENV-04-RECOVERY-RESUME**. Owner VM не изменялась; новые команды не выдаются.
+
+Reviewed C6 head **94a402f3cf7c9d5ad9cd5837cd3d91d738fcf684**, tree
+**2a1b4952514e3ce6c56207478ed330ab0d507a7a**. Accepted main/base
+**22993f558c5e7e933c65e9c999933bd2e3ab41c4** прежний. Tested merge
+**cd3e2f7255ec5815385397264c135a75ab850a97**: ordered parents base + reviewed head,
+same tree. [CI37358453152](https://github.com/Elefesys/ai-service-manager/actions/runs/37358453152)
+SUCCESS: три jobs, оба штатных scripts и clean-source gates;551 unit,390 PG/S3,
+111 frontend,27 browser,6+2 transport/E05. Full C6 receipt:
+[PR24 comment6001161023](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6001161023).
+C0 проверил refs,12 allowed paths и225 source blobs/modes. PR24 Draft/open/not merged.
+
+Native private IPv6/all-callers/flags0 mapping, exact Docker29 reproduction,
+fresh lifecycle и выполненные recovery/transport cases подтверждены.
+Эти результаты сохраняются; новый отказ относится к невыполненным interruption
+boundaries. Для C0-M2-ENV04-04 подтверждено исправление IPv6 mapping; operational finding
+остаётся OPEN до закрытия двух E05 findings и приёмки полного owner recovery.
+
+| Finding | Фактическая причина и ограниченная доработка |
+|---|---|
+| C8-M2-ENV04-04 / P2 / E05 | Schema1 rollback архивирует исходный runtime env, затем сам добавляет enabled=false. При interruption после этой записи или первого recreate повтор останавливается EGRESS_BUNDLE_CHANGED до runtime calls. Нужен guarded retry разрешённого disable-first transition без ослабления остальных hashes и без перезаписи original audit/before. |
+| C8-M2-ENV04-05 / P2 / E05 | После schema2 manifest interruption внутри relay recreate может оставить relay stopped/missing. Повтор recover проходит через legacy attestation и безусловный after['telegram-egress']; KeyError/STOP возникает до repair. Такая же предпосылка блокирует legacy rollback при stopped relay и после его stop до receipt. Нужно проверяемое продолжение ожидаемого промежуточного состояния своего relay. |
+
+C8 воспроизвёл actual unchanged Python helper paths с bounded synthetic Docker/DB/
+source boundaries; это не новый Docker/VM execution. Real CI проверял SIGKILL после
+manifest и успешные command boundaries, а не оба найденных случая. ZIP-byte/all-archive
+verification остаётся отдельным C6 receipt; C0/C8 не выдают его за собственную загрузку.
+Полное disposition, exact lines и scope correction — runbook§0.6.13.
+
+Сохранить schema1/c29 owner state, original deployment-before, private inputs, images,
+HTTPS/emptyTG, DB/S3/Console/UNKNOWN. Не повторять prepare/deploy/snapshot, не стирать
+audit/state, не выполнять rollback/activation автоматически. Temporary GitHub key
+asm-telegram-test-env04 подлежит отзыву после confirmed fetch; SSH key входа прежний.
+После bounded correction — final-head full CI и targeted C8 только04/05/затронутых
+инвариантов; затем C0 owner step. Live A09/A11, owner merge и push/main CI впереди.
+Production/M3 не выдаются. Coordination меняет только четыре документа; его exact
+refs/CI в PR receipt, без SHA-only commit.
+
+<details>
+<summary>История — C6 Docker29 correction REVIEW до targeted C8</summary>
+
+## История — ENV04: Docker29 mapping и partial-deploy recovery / 2026-10-05
 
 **M2 — IN_PROGRESS. M2-ENV-04-TELEGRAM-EGRESS — REVIEW, C6.**
 Новое ограниченное поручение **M2-ENV-04-DOCKER29-MAPPING** закрывает наблюдаемую
@@ -81,6 +128,8 @@ temporary getMe. Discovery/setup/webhook/activation/send ещё не выпол�
 interval проверить перед первой setup-попыткой, затем сохранять те же IDs/dates.
 M2 закрывается только после actual route/live A09/A11, owner merge и отдельного
 successful push/main CI. Production/M3 и новый бюджет не выдаются.
+
+</details>
 
 <details>
 <summary>История — приёмка code и source access до фактического deployment</summary>
@@ -442,7 +491,7 @@ M3 не выдан. Секреты не присылать в чат/PR. Нов�
 | M2-ENV-01-REGISTRY | Восстановить storage provisioning и полный CI | M2.4; pull failure PR22 | C6; C0/C8 | VERIFIED | PR22 merged80e51c4; scoped C8 PASS; отдельный push/main36825583134 SUCCESS, оба scripts/source gates и реальные PG/S3/browser | Сохранять проверенные GHCR pins; registry blocker CLOSED |
 | M2-ENV-02-STORAGE-IMAGES | Два exact official binary в project-owned images | Решение C0 о новой упаковке | C6; C0/C8 | VERIFIED | Build36734267078; anonymous full OCI bytes; scoped C8; final PR36824246755 и actual main36825583134 SUCCESS | Не пересобирать и не менять visibility/pins без причины |
 | M2-ENV-03-TEST-HOST | Один TEST host/.com DNS/HTTPS до Telegram connection | Actual main80e51c4 + host evidence | C6; C0; independent C8 | VERIFIED | PR23 merged22993f5; main37016012805 SUCCESS; C8-HOST PASS; operator host/HTTPS/private403/renewal receipt; известные TEST ограничения сохранены | Закрыто только pre-live host; продолжить M2-LIVE-A09-A11 |
-| M2-ENV-04-TELEGRAM-EGRESS | Opt-in постоянный synthetic TEST route для Telegram callers | ENV03; prior C0 / C8-01–03 PASS; actual partial VM deployment | C6: M2-ENV-04-DOCKER29-MAPPING | REVIEW | C0-M2-ENV04-04: native private IPv6 + guarded recovery; original before preserved; old real failure CI37351449973; final receipt PR24/runbook§0.6.12 | Final-head CI evidence → targeted C8 new mapping/recovery boundary → C0 owner resume; live A09/A11/merge/main CI впереди |
+| M2-ENV-04-TELEGRAM-EGRESS | Opt-in постоянный synthetic TEST route для Telegram callers | ENV03; prior C8-01–03 CLOSED; actual partial VM deployment | C6: M2-ENV-04-RECOVERY-RESUME | IN_PROGRESS | C8-04/05 P2/E05: disable-first retry и stopped/missing relay interruption; mapping/CI evidence сохранено, runbook§0.6.13 | Bounded correction → final-head three-job CI → targeted C8 → отдельный C0 owner step; live A09/A11/merge/main CI впереди |
 
 Таблица M0 перечисляет фактического исполнителя C0, а не подразумевает отдельно запущенных C1–C8. Review M0 был C0 self/second-pass; M1.1 имеет отдельные отчёты C8. Назначения областей остаются в AGENTS/Implementation Plan.
 

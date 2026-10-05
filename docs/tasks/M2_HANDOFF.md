@@ -4,7 +4,116 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный handoff C0 → C6 — M2-ENV-04-DOCKER29-MAPPING
+## Активный handoff C0 → C6 — M2-ENV-04-RECOVERY-RESUME
+
+**IN_PROGRESS; targeted C8 CHANGES_REQUESTED.** Одна bounded correction по двум
+новым P2/E05 **C8-M2-ENV04-04/05**. Native IPv6 mapping не перепроектировать;
+C8-01/02/03 CLOSED. M2 IN_PROGRESS, PR24 Draft/open/not merged, VM/live неизменны.
+
+### Точный старт и источники
+
+Repository **Elefesys/ai-service-manager**, branch **c6/m2-telegram-live → main**,
+существующий [PR24](https://github.com/Elefesys/ai-service-manager/pull/24).
+Accepted base/main **22993f558c5e7e933c65e9c999933bd2e3ab41c4**. Reviewed head
+**94a402f3cf7c9d5ad9cd5837cd3d91d738fcf684**, tree
+**2a1b4952514e3ce6c56207478ed330ab0d507a7a**. Tested merge
+**cd3e2f7255ec5815385397264c135a75ab850a97**, ordered parents base + reviewed head,
+same tree; CI37358453152 SUCCESS, все3 jobs/оба scripts/clean gates.225 Git blobs
+проверены C0; implementation delta от coordination9dd171fc —12 разрешённых paths.
+
+Продолжить от нового полного C0 coordination head в сообщении/PR receipt:
+он меняет только четыре документа. Сверить fresh refs/ancestry и сохранить всю
+историю, включая e58c4a1a и9dd171fc; не reset/force-push/rebase/new PR/merge.
+Прочитать AGENTS, current TASK_REGISTER, этот единственный active handoff,
+runbook§0.6.13 (verdict), §§0.6.11–12 (actual owner state/implementation),
+M2_CONTRACT§10.12, Spec§24.6/private files, ADR138/141/142/239/243 и Plan§§6–7.
+
+### Подтверждённые finding и исправление
+
+**C8-M2-ENV04-04 / P2 / E05 — legacy rollback retry.**
+Owner .env содержит только прежние семь PG/S3 keys, без ASM_TELEGRAM_ENABLED;
+runtime уже false/emptyTG. Schema1 rollback создаёт immutable recovery-v1 с hash
+исходного runtime env, затем легально дописывает enabled=false. Interruption после
+этой записи либо первого caller recreate оставляет before/audit/staged bytes
+неизменными, но повторный schema1 entry через attest_partial_recovery/recovery_archive
+даёт EGRESS_BUNDLE_CHANGED до любых runtime calls. Receipt отсутствует; route остаётся.
+Actual code: helper rollback1097–1105, input_hashes1319–1329, archive1378–1396,
+legacy entry1597–1598 на reviewed head.
+
+Нужен явный проверяемый и возобновляемый disable-first transition: разрешать только
+зафиксированную собственную запись enabled=false и ожидаемые этапы rollback.
+Не игнорировать runtime_env hash, не переснимать before/inputs, не переписывать
+исходный audit, не принимать произвольный drift. Staged TG/HTTPS/PG/S3/other env
+изменения по-прежнему STOP. Повтор завершённой операции имеет проверяемый итог,
+interruption до rollback.json не оставляет невосстановимый промежуток.
+
+**C8-M2-ENV04-05 / P2 / E05 — stopped/missing relay during transition.**
+После publication schema2 manifest команда up --force-recreate relay может успеть
+остановить/удалить старый container, но ещё не запустить новый. Повтор recover:
+attest_partial_recovery → snapshot(old) → compare_deployment → after['telegram-egress']
+(1021) даёт KeyError/STOP до repair. Тот же running-relay prerequisite блокирует
+legacy rollback при исходно stopped relay и после собственного stop до receipt,
+даже если enabled=false был в env заранее.
+
+Нужно отличать проверяемое промежуточное состояние принадлежащего операции relay
+от постороннего drift. Разрешить продолжение recover и explicit rollback из
+ожидаемых stopped/missing/recreated состояний со строгой проверкой known source,
+baseline/audit/transition, image/tag/config, private path/input, callers и actual DB.
+Не заменять обязательные проверки default/get/skip-веткой, не принимать чужой relay
+или повреждённую/неизвестную generation. Отсутствующие app callers/DB либо изменённые
+unrelated containers не становятся нормой. Никакого ложного after/receipt/PASS.
+
+### Проверки и scope
+
+Сначала воспроизвести failures на reviewed code. Добавить real isolated legacy
+rollback entry и interruption/resume для:
+- .env без enabled key → interruption после своей disable-first записи;
+- interruption после caller recreate/remove route;
+- relay stopped/missing внутри force-recreate после manifest → recover retry;
+- legacy rollback при relay outage и interruption после stop до receipt.
+
+Покрыть first attempt, повтор после interruption и завершённый повтор; original
+before/audit и staged inputs сохраняются. Не требовать неизменного container ID там,
+где сама подтверждённая операция обязана recreate, но images/process/env/mounts/
+ordinary gateway/actual DB/unrelated IDs остаются guarded. Подтвердить same caller DB,
+Secure Console session/UNKNOWN/receipt,31 fingerprints и counter1. Negative foreign
+relay/config/input/baseline/DB/image/gateway drift даёт STOP до небезопасной мутации.
+
+Исполнить изменённые boundaries на exact Docker29.8.2/server8af9fe3/Compose5.5.1
+в mandatory lane и штатном runner. Сохранить existing fresh/recovery/mapping/TLS/
+media/UNKNOWN assertions и budgets; не повышать180s ради PASS — отдельный bounded
+fixture при необходимости. Потом оба штатных scripts и clean-source gates на final
+head, все3 jobs SUCCESS. Unit substitutes обозначать честно; real Docker evidence
+не заменять source review или успешным mapping-only case.
+
+Разрешены только scripts/prepare_telegram_egress.py, scripts/test_telegram_egress.sh,
+tests/test_telegram_egress.py, tests/test_telegram_egress_postgres.py и четыре текущих
+документа (TASK_REGISTER, M2_HANDOFF, runbook, M2_CONTRACT§10.12).
+infra/telegram-egress/compose.test.yaml — только при конкретной необходимости
+isolated failure fixture. Native route overlay, docker29_probe.py, workflow,
+scripts/ci.sh, application/frontend/root Compose/pins/dependencies/Dockerfiles/
+migrations/API/auth/tenancy/billing/UNKNOWN семантика сохраняются.
+Иное расширение сначала обосновать C0 конкретным blocker.
+
+### Возврат и owner boundary
+
+Один REVIEW в том же Draft PR: exact base/head/tree/tested merge+parents,
+final CI/jobs, changed paths, воспроизведения04/05 до/после, negative guards,
+actual durable evidence, recovery/rollback commands и оставшиеся ограничения.
+Единственный register/active handoff; не делать commit ради SHA предыдущего docs.
+C0 организует targeted независимый C8 только04/05 и изменённых инвариантов.
+
+Owner VM остаётся c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14/schema1, original before
+PRESENT / after/rollback ABSENT, callers/relay running, Telegram=false/emptyTG.
+Никаких VM source/runtime изменений, prepare/deploy/snapshot/reset/clean/reclone/
+app build/init/migrations/down-v/секретов заново, automatic rollback или live API.
+После C8/C0 отдельный готовый owner шаг. Live A09/A11, owner merge и push/main CI
+не выполнены; production/M3 нет.
+
+<details>
+<summary>История — Docker29 mapping correction и C6 REVIEW до C8-04/05</summary>
+
+## Исторический handoff C0 → C6 — M2-ENV-04-DOCKER29-MAPPING
 
 **Одна ограниченная доработка ENV04, передача C6 REVIEW.** Новая operational находка
 **C0-M2-ENV04-04, P2 / E02 и E05** воспроизведена владельцем на existing TEST VM.
@@ -180,6 +289,8 @@ C0 организует независимый targeted C8 **новой mapping/
 Live A09/A11, owner merge и отдельный push/main CI остаются незавершёнными. До
 первого TEST setup проверить billing interval; после попытки сохранить operation
 identity/IDs/dates, UNKNOWN не превращать в повторную отправку. Production/M3 нет.
+
+</details>
 
 <details>
 <summary>История — source access и первый disabled deployment; исполнено до выявления Docker29 failure</summary>

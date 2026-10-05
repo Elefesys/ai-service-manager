@@ -1116,12 +1116,31 @@ final head/CI документационной приёмки — в PR receipt.
 
 ### 10.12. Operational extension — M2-ENV-04 TEST egress
 
+**Targeted C0/C8 disposition 2026-10-06: CHANGES_REQUESTED, C8-M2-ENV04-04/05,
+P2 / E05.** Reviewed head94a402f3cf7c9d5ad9cd5837cd3d91d738fcf684, final CI37358453152
+SUCCESS. Native strict mapping/full executed cases подтверждены; legacy rollback
+retry после собственной enabled=false записи и recover retry при stopped/missing
+relay внутри recreate блокируются до repair. Полное evidence — runbook§0.6.13,
+bounded correction — единственный active M2_HANDOFF. Прежние01/02/03 CLOSED.
+
+Interruption/resume — часть существующего E05, не новое расширение domain scope.
+Original before/audit сохраняются byte-for-byte. Собственная разрешённая запись
+disable-first должна иметь проверяемый transition и возобновляться без общего
+исключения runtime_env hash. Ожидаемые stopped/missing/recreated состояния своего
+relay не должны требовать successful running topology до repair; source/config/
+image/input/DB/HTTPS/emptyTG/gateway/unrelated guards при этом сохраняются.
+Unknown/foreign relay или state не принимаются. After/receipt/PASS только после
+полного подтверждения итогового состояния; rebaseline/manual state patch запрещены.
+Explicit legacy/schema2 rollback и recover требуют настоящих isolated failure/resume
+cases на exact Docker29, затем final CI и targeted C8 перед owner issuance.
+
 **Operational finding 2026-10-05 — C0-M2-ENV04-04/P2:** на owner Docker29.8.2
 extra_hosts сохраняет mapped IPv6 в model/HostConfig, но Engine Unmap() записывает
 в hosts второй IPv4. Actual AF_INET6/flags=0 у api/worker получает посторонний
-native IPv6. Поэтому actual deployment/preflight не принят; correction C6 REVIEW,
-ограниченная correction C6 — верхний M2_HANDOFF, VM receipt runbook§0.6.11.
-Прежние C8-01/02/03 CLOSED сохраняются; нового C8 PASS пока нет.
+native IPv6. Actual owner deployment/preflight ещё не принят; mapping correction
+подтверждена на reviewed head, interruption/retry correction — верхний M2_HANDOFF.
+VM receipt — runbook§0.6.11; targeted C8 CHANGES_REQUESTED04/05 — §0.6.13.
+Прежние C8-01/02/03 CLOSED сохраняются.
 
 Семантический контракт не ослабляется: AF_UNSPEC/AF_INET/AF_INET6 с исходными
 flags=0 на всех трёх callers возвращают только адреса того же private relay,

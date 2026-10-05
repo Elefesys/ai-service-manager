@@ -103,13 +103,14 @@ synthetic данными. Это не смена ADR137/138/142/143/243: product
 private Object Storage и изоляция окружений остаются принятыми решениями. Подготовка
 production/Pilot не добавляется к существующим A09/A11.
 
-### 0.2. Текущий порядок — Docker29 mapping correction / 2026-10-05
+### 0.2. Текущий порядок — C8 interruption/retry correction / 2026-10-06
 
 Текущая owner VM уже на c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14; prepare/verify
 PASS, deployment частичный, before PRESENT / after ABSENT. Relay/api/worker running,
 Telegram disabled/empty TG. Preflight остановлен несовместимым IPv6 mapping на
-Docker29.8.2. Current gate — §0.6.12 и активный M2_HANDOFF: correction C6 REVIEW,
-затем full CI/targeted C8 и отдельное guarded recovery от C0. Владелец пока не
+Docker29.8.2. Current gate — §0.6.13 и активный M2_HANDOFF: targeted C8
+CHANGES_REQUESTED по04/05, bounded C6 correction, затем full CI/targeted C8 и
+отдельное guarded recovery от C0. Владелец пока не
 выполняет новые VM команды, не повторяет deploy/prepare/snapshot/rollback или
 source-access/provisioning/secret entry. Accepted main22993f558c5e7e933c65e9c999933bd2e3ab41c4
 не изменён; PR24 Draft, M2 IN_PROGRESS, discovery/setup/webhook/live A09/A11 впереди.
@@ -1950,6 +1951,9 @@ full CI и независимого targeted C8 C0 отдельно выдаёт
 
 ### 0.6.12. C6 Docker29 correction — REVIEW и подготовленный recovery
 
+**После targeted C8 этот receipt дополнен §0.6.13: CHANGES_REQUESTED по04/05.**
+Ниже implementation evidence и команды reviewed head; они ещё не разрешены для VM.
+
 **Статус REVIEW, до независимого targeted C8/C0 owner issuance.** §0.6.11 остаётся
 фактическим состоянием VM. C6 не выполнял VM/live commands. Closed C8-01/02/03,
 accepted app/images/HTTPS/staged-input/DB/TLS/deadlines/UNKNOWN границы сохраняются.
@@ -2076,6 +2080,68 @@ api/worker и останавливают relay. Новые/старые private 
 никаких ports наружу. Owner env/profile/staged inputs, volumes, before/after/audit/
 durable receipts не удаляются. Recovery после recorded rollback даёт STOP. Следующая
 активация/discovery/setup/webhook/send — только отдельный C0 шаг после приёмки.
+
+### 0.6.13. Targeted C0/C8 — CHANGES_REQUESTED по interruption/retry / 2026-10-06
+
+**Owner issuance приостановлена; M2/ENV04 IN_PROGRESS.** Независимый targeted C8
+новой mapping/recovery boundary выявил ровно два P2/E05 ниже. Прежние C8-01/02/03
+CLOSED. Native mapping и ранее исполненные cases сохраняют положительное evidence;
+VM остаётся в фактическом состоянии§0.6.11. Команды§0.6.12 пока не выдавать владельцу.
+
+Reviewed head **94a402f3cf7c9d5ad9cd5837cd3d91d738fcf684**, tree
+**2a1b4952514e3ce6c56207478ed330ab0d507a7a**; accepted main/base
+**22993f558c5e7e933c65e9c999933bd2e3ab41c4**.
+Tested merge **cd3e2f7255ec5815385397264c135a75ab850a97**: ordered parents base +
+reviewed head, same tree. [CI37358453152](https://github.com/Elefesys/ai-service-manager/actions/runs/37358453152)
+SUCCESS: foundation111926725973, browser111926725853, docker29-compatibility111926725451.
+Все три actual checkout logs совпали; оба штатных scripts и clean-source gates
+прошли.551 unit,390 PG/S3,111 frontend,27 browser,6 transport +2 E05.
+[C6 full receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6001161023)
+сохранён; его авторские ограничения не скрываются.
+
+C0 независимо сверил refs/tree/ordered parents/12-path allowlist; C0 и независимый
+C8 сверили225 Git blobs и executable modes. C8 прочитал canonical architecture,
+helper/overlays/tests/CI и raw execution logs, затем воспроизвёл новые failures
+unchanged Python helper functions с настоящими private filesystem transitions.
+Внешние Docker/DB/source boundaries локальных probes были synthetic substitutes;
+Docker локально отсутствует. Это не ещё один Docker/VM run. ZIP-byte и225 archived
+blob verification остаются C6 attestation; C0/C8 ZIP bytes повторно не скачивали.
+
+| ID / severity / criterion | Trigger → actual result → impact |
+|---|---|
+| C8-M2-ENV04-04 / P2 / E05 | Schema1 owner .env без enabled key. Legacy entry helper1597–1598 сохраняет исходный env hash в recovery-v1 (1392–1396), rollback1097–1105 сам добавляет enabled=false. Interruption после env write либо первого recreate → повтор EGRESS_BUNDLE_CHANGED в atomic_bundle1302–1304, runtime repair calls=0. Before/audit/staged unchanged, route/relay остаются, rollback.json отсутствует. |
+| C8-M2-ENV04-05 / P2 / E05 | После schema2 manifest interruption внутри relay up1498–1511 оставляет старый relay stopped/missing до running replacement. Повтор recover1485 → attestation1459–1460 → compare_deployment1021 обращается к after['telegram-egress']; KeyError/CLI bounded STOP, repair calls=0, before unchanged, after/recovery receipt ABSENT. Та же предпосылка блокирует legacy rollback при relay outage и после stop до receipt. |
+
+Existing unit phase=relay (tests/test_telegram_egress.py914–920) вызывает interruption
+после успешного command, когда synthetic relay уже running. Real CI делает SIGKILL
+после manifest и затем successful recreate. Эти tests сохраняются, но они не покрывают
+остановку между stop/remove прежнего relay и запуском нового.
+
+**Положительное evidence.** Exact Docker29.8.2/server8af9fe3/Compose5.5.1 old-mapping
+failure реально воспроизведён. Исправленный native endpoint сохраняет api/worker/
+operator, AF_UNSPEC/INET/INET6 flags0 и строгую проверку каждого адреса. Два verified
+TLS listeners того же pinned Xray/fixed upstream, fail-closed обоих семейств, private
+IPAM/internal bridge/default gateway подтверждены tests/CI. Fresh lifecycle и
+выполненный interrupted recovery сохраняют actual caller asm_local DB identity,
+Secure Console session, UNKNOWN/receipt,31 fingerprints и persistent counter1.
+Обычные jobs/scripts/gates, client/config/pins/TLS/retries/deadlines прежние.
+
+**Решение C0.** Полную recovery/rollback readiness не принимать. Единственная
+доработка — M2-ENV-04-RECOVERY-RESUME в верхнем M2_HANDOFF. Сохранить исходные
+before/audit; зафиксировать разрешённую собственную disable-first дельту и ожидаемые
+relay transition states, чтобы повтор продолжал ту же операцию. Общие drift guards
+не ослаблять; unknown/foreign state, inputs/DB/images/gateway остаются STOP.
+Нельзя обойти findings новым baseline, ручной правкой state/env, удалением relay
+checks либо отказом от explicit legacy rollback. Добавить реальные isolated
+failure/resume cases на exact29 и штатном runner, затем full final-head CI и targeted
+C8 только04/05/изменённых инвариантов. Allowlist и требуемые негативные cases — handoff.
+
+Owner source/schema1/state, images, env/profile/TLS, DB/S3/volumes/Console identities
+сохраняются. Нет новых VM команд, повторного prepare/deploy/snapshot, automatic
+rollback, secrets/provisioning заново или Telegram activation/discovery/setup/send.
+Actual deployment/live A09/A11, owner merge и отдельный push/main CI впереди.
+PR Draft/open/not merged; production/M3 не выдаются. Этот coordination меняет только
+четыре документа; exact head/tree/tested merge/CI — PR receipt, без SHA-only commit.
 
 ## 1. Конкретное окружение и предварительные условия
 
