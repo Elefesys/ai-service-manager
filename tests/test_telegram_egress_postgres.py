@@ -520,7 +520,8 @@ class TelegramEgressPostgresChecks:
             signed = await grant(images, ready)
             downloaded = await private_request("GET", signed.url)
             assert downloaded.status_code == 200 and downloaded.content == content
-            assert "X-Amz-Expires=60" in signed.url
+            ttl_is_60 = "X-Amz-Expires=60" in signed.url
+            assert ttl_is_60
             assert (await private_request("GET", signed.url.split("?", 1)[0])).status_code == 403
             assert [row["operation"] for row in case_events(case, "REQUEST")] == [
                 "getFile",

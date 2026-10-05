@@ -29,6 +29,18 @@ last_control = None
 def run(args, timeout=120):
     result = subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout, env=environment)
     if result.returncode:
+        # CI-only Docker lifecycle diagnostics; no config/inspect/stdout dumps.
+        diagnostic = result.stderr.decode(errors='replace')[-4096:]
+        for env_path in (root / '.env', directory / 'telegram.env'):
+            if env_path.exists():
+                for line in env_path.read_text().splitlines():
+                    if '=' in line and not line.startswith('#'):
+                        value = line.split('=', 1)[1].strip().strip('\"\'')
+                        if value:
+                            diagnostic = diagnostic.replace(value, '<redacted>')
+        diagnostic = re.sub(r'(://)[^/\s]*@', r'\1<redacted>@', diagnostic)
+        print('TEST_COMMAND_EXIT=' + str(result.returncode) + ' phase=' + phase, flush=True)
+        print(diagnostic, flush=True)
         raise RuntimeError('TEST_COMMAND_FAILED:' + phase)
     return result.stdout
 
@@ -172,10 +184,17 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
         phase_start('topology')
         run([*base, 'build', 'telegram-operator'], 180)
         run(['docker', 'tag', project + '-telegram-operator', 'asm-telegram-egress-checks:test'])
+        phase_start('baseline_containers')
         run([*base, 'up', '-d', '--wait', 'api', 'worker', 'scheduler'], 180)
         compose('config', '--quiet')
-        compose('up', '-d', '--wait', 'postgres-test', 'storage-test-init')
+        phase_start('test_storage_bootstrap')
+        compose('up', '-d', '--wait', 'postgres-test', 'storage-test')
+        # This one-shot has no selected dependent here. --wait requires running
+        # or healthy, so execute it to completion and preserve its exact exit code.
+        compose('run', '--rm', '--no-deps', '-T', 'storage-test-init')
+        phase_start('test_migration')
         compose('run', '--rm', '--no-deps', '-T', 'egress-checks', 'alembic', 'upgrade', 'head')
+        phase_start('relay_containers')
         compose('up', '-d', '--no-deps', '--wait', 'api', 'worker', 'egress-wire', 'egress-peer', 'telegram-egress')
         deadline = time.monotonic() + 15
         while not (directory / 'wire-ready.json').exists():
