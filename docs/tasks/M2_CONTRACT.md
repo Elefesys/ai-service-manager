@@ -1130,6 +1130,32 @@ state/receipts/env/volumes. E01–E06 проверяются настоящим�
 TLS wire; fixture CA/peer не входят в live config. Самостоятельного live включения
 нет; C0 выдаёт deployment после scoped C8/final CI. ADR239/production/M3 не изменены.
 
+C0 targeted disposition 2026-10-05: C8-02/03 закрыты на implementation
+2536a1aa2b41792fff381c4d222906e2ff9ad23c; остаток C8-01/E05 требует сохранения
+действующих non-TG runtime настроек. Принятый pre-live env состоит из `.env` с PG/S3
+credentials и HTTPS origin/endpoint из `.env.telegram`; позднее тот же файл получил
+staged TG inputs, не применённые к running callers. Исключение всего файла —
+неполная коррекция: непреднамеренная потеря HTTPS значений не принимается.
+
+Минимальный контракт — private runtime-модель сохраняет действующие
+`ASM_AUTH_ORIGINS` и `ASM_STORAGE_ENDPOINT`, не импортирует staged TG activation
+fields, не меняет исходные private input bytes и проходит полное строгое сравнение
+с actual disabled callers до recreate. Разрешён узкий private overlay вне checkout
+для этих двух проверенных values; без общей config framework или ручного переноса
+owner. Staged inputs доступны отдельно explicit one-shot operator; их будущее
+применение к runtime требует отдельного C0 live шага. Rollback сохраняет disable-first
+с mapping, затем снимает route; допустим только enabled=false в runtime source,
+прочие inputs/durable state остаются неизменными.
+
+Actual SQL DB identity api/worker и её сохранность при recreate обязательны;
+durable evidence относится к той же БД. Canonical outside-checkout boundary
+проверяется до effects, requested symlink components не нормализуются в разрешённые
+пути. Domain/API, TLS, timeouts, permissions и UNKNOWN/no-resend прежние. Подробный
+targeted review и один оставшийся task — runbook§0.6.8/активный M2_HANDOFF.
+
+<details>
+<summary>История — первая C6 correction формулировка до targeted C8</summary>
+
 C8 correction E01/E05: deployment читает текущий runtime `.env`, не применяет
 staged `.env.telegram`; staged inputs сохранены для отдельного C0 operator шага.
 Rollback выключает enabled flag именно runtime `.env` до снятия mapping, не меняя
@@ -1138,6 +1164,8 @@ worker и её сохранность при recreate; durable evidence долж
 же БД. Private state canonical outside-checkout проверяется до effects, при этом
 requested symlink components не нормализуются в разрешённые пути. Domain/API,
 timeouts, TLS, permissions и UNKNOWN/no-resend остаются прежними.
+
+</details>
 
 ## 11. M2.4-CONSOLE — текущий ограниченный UI/browser-контракт
 

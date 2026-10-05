@@ -1512,7 +1512,11 @@ media recovery, два real worker crash сценария, durable UNKNOWN и fs
 handoff; затем exact-head full CI и targeted C8 по трём находкам. PR остаётся Draft,
 owner VM/внешний Telegram не меняются, M2 IN_PROGRESS. Это не приёмка ENV04/M2.
 
-### 0.6.7. C6 correction REVIEW — текущая процедура и три P2
+### 0.6.7. История — C6 correction REVIEW до targeted C8
+
+**C0/C8: эта версия не принята для owner deployment.** Одна оставшаяся 01/P2
+и текущая доработка — §0.6.8. Ниже сохранён submitted artifact, не действующая
+инструкция владельцу. Закрытие02/03 не отменяется.
 
 Продолжение от **7a9eca3d2e1509b029d1ef0ba2f2c0d2d590ce7c**, tree
 **1da0e2da06269457e91de1752fe224f93681b8ba**, CI37285033299 SUCCESS. История сохранена.
@@ -1599,6 +1603,80 @@ Private receipt сверяет прежние images/mounts/process/env (кро�
 actual DB identity и unrelated containers. Нет down-v/reset/rebind/drop. PG/S3
 volumes, UNKNOWN/receipt/Console и staged inputs сохраняются. При ошибке не включать
 Telegram: вернуть C0 bounded code, после исправления повторить тот же rollback.
+
+### 0.6.8. C0 + независимый targeted C8 — закрыты02/03, остаток01 / 2026-10-05
+
+**CHANGES_REQUESTED. M2-ENV-04 — IN_PROGRESS.** Это результат реального targeted
+review готовых corrections. Один оставшийся blocker01/P2/E05; не новая задача M2.
+§§0.6.4/0.6.7 — исторические непринимаемые deployment artifacts. Owner на VM
+сейчас ничего не меняет. Единственное активное поручение находится в M2_HANDOFF.
+
+Проверен implementation head **2536a1aa2b41792fff381c4d222906e2ff9ad23c**,
+tree **2efe2c9df60dd9118b24adbfa6e8b76cd98bfebd**. Tested merge
+**8bb3f34e2ee122b033102a40eb53b2696a9bb70e** имеет ordered parents
+**22993f558c5e7e933c65e9c999933bd2e3ab41c4** + указанный implementation head,
+его tree совпадает. [CI37289340867, attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/37289340867)
+SUCCESS: оба штатных scripts и clean-source gates, 530 unit, 390 PostgreSQL/S3,
+111 frontend, 27 browser и 6+1 relay cases. Foundation job111695793211 и browser
+job111695792866 действительно checkout этот tested merge.
+
+| Finding | Targeted C0/C8 disposition |
+|---|---|
+| C8-M2-ENV04-01 / P2 / E05 | **OPEN, одна оставшаяся доработка.** Staged TG fields больше не входят в disabled runtime, но исключён весь .env.telegram, содержащий также действующие HTTPS ASM_AUTH_ORIGINS и ASM_STORAGE_ENDPOINT. Принятый pre-live recipe сохраняет их именно там; .env из init_local.py содержит только PG/S3 credentials. Поэтому model возвращается к localhost/http defaults, snapshot отказывает EGRESS_RUNNING_ENVIRONMENT_DRIFT до up. |
+| C8-M2-ENV04-02 / E05 | **CLOSED на reviewed head.** Реальные API/worker SQL identities совпадают с isolated postgres/asm_local harness до/после exact deploy/preflight/rollback; отдельная asm_test отвергается. UNKNOWN, command receipt, та же HTTP Console session, fingerprints 31 таблицы и wire counter=1 сохранены. |
+| C8-M2-ENV04-03 / E01 | **CLOSED на reviewed head.** Canonical destination проверяется до calls/mkdir/write; direct checkout и .. aliases отклоняются без effects. Symlink/.. не скрывается resolve; approved outside path проходит. Owner/mode/no-symlink guards сохранены. |
+
+**Диагноз01.** В exact `scripts/init_local.py` создаются только семь PG/S3 credential
+keys. Принятая §0.4.5 записывает Console HTTPS `ASM_AUTH_ORIGINS` и files HTTPS
+`ASM_STORAGE_ENDPOINT` в `.env.telegram`, запускает callers с обоими env files и
+проверяет эти non-default значения в actual API. Recorded host/readiness PASS
+подтверждает результат. Private staging procedure сохраняла `.env` неизменным,
+добавляла TG fields в тот же `.env.telegram`, не пересоздавая disabled runtime.
+Current `compose_prefix` (reviewed lines545–561) исключает staged file целиком;
+base defaults возвращаются в модель. `snapshot`677–683, вызванный `deploy`862,
+останавливает операцию до первого up. Clean environment также удаляет shell ASM
+overrides, поэтому экспорт переменных не является решением.
+
+C8 независимо вызвал настоящие исправленные deploy/snapshot с synthetic model/
+inspect, прочитав defaults exact Compose. Telegram=false и четыре TG поля пусты
+в обеих сторонах; различаются только две указанные HTTPS настройки. Получен
+EGRESS_RUNNING_ENVIRONMENT_DRIFT, caller up отсутствует. Это локальная control-flow
+reproduction с заменёнными внешними Docker boundaries, не VM/PG run. Actual private
+bytes owner .env не читались. Дефект доказан для состояния принятой процедуры;
+незаявленное ручное дублирование ключей нельзя считать обязательным prerequisite.
+
+**Принимаемое исправление01:** сохранить уже действующие origin/endpoint в узкой
+private runtime-модели, отделённой от staged TG inputs. Разрешён runtime overlay
+вне checkout с этими двумя проверенными values. Не переписывать исходные private
+файлы, не просить owner переносить поля и не обходить drift guard. Runtime остаётся
+disabled/empty TG; explicit operator читает staged inputs только по отдельной команде
+C0. Это явно исправляет неполное условие correction «runtime только .env», не
+меняет app/domain contracts. Rollback disable-first, сохранность прочих bytes,
+images/mounts/gateway/DB identity и durable data обязательны.
+
+Real Docker regression начинает с принятого распределения env files и actual callers
+с HTTPS values до работы исправленного generator. Тот же exact deploy/preflight/
+rollback обязан сохранить origin/endpoint, пустые TG fields, staged bytes и весь
+уже доказанный E05 state. Проверки непредвиденного drift не удалять. Закрытые02/03
+сохранить; повторный C8 только01/затронутая boundary после full final-head CI.
+
+**Фактическое закрытие02:** actual API/worker выполняют read-only SQL своей connection
+identity; fresh isolated LOCAL harness работает с той же postgres/asm_local, runtime
+и migrator проверяют совпадение. Отдельная настоящая asm_test отвергается. Held
+UNKNOWN/receipt/Console cookie,31 table fingerprints и fsynced wire counter1 проходят
+точные CLI deploy/preflight/rollback. Проверены source и исполненные6+1 runner cases.
+**Фактическое закрытие03:** C8 дополнительно исполнил canonical-path refusal и positive
+outside case локально; direct checkout/.. отклонены до calls/writes, symlink/.. не
+маскируется. Canonical output, owner/mode/no-symlink checks сохраняются.
+
+C8 сверил26 source blobs с fresh Git tree и прочитал оба CI logs. C0 независимо
+проверил refs/ordered parents/tree, восемь correction paths и те же execution logs.
+ZIP artifact C0/C8 повторно не скачивали: C6 byte-verification остаётся его receipt.
+На owner VM не запускались Docker/SSH/Telegram/activation или новые проверки.
+Настоящие Docker/PG/S3 и sockets исполнены GitHub runner; локальные reproductions
+не выданы за них. E02–E04 evidence и TLS/timeouts/UNKNOWN assertions сохраняются.
+PR24 Draft; no merge/VERIFIED, M2 IN_PROGRESS. После исправления C0 выдаст готовый
+owner block; секреты, profile и старые успешные шаги повторять не нужно.
 
 ## 1. Конкретное окружение и предварительные условия
 
