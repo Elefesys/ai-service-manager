@@ -4,7 +4,86 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный handoff C0 → C6 — M2-ENV-04-RECOVERY-RESUME
+## Активный handoff C0 → owner — M2-ENV-04 guarded recovery
+
+C6 correction принята независимой проверкой C0; новая задача на код не выдана.
+**Независимая приёмка C0 — PASS; C8-M2-ENV04-04/05 CLOSED на указанном implementation.**
+Проверку выполнил C0 отдельно от автора C6: source review, CI logs/artifacts и17
+дополнительных локальных fault/retry/drift cases. Отдельный новый агент/чат C8 не
+запускался; это независимый C0 verdict, не заявка на отдельный C8 execution.
+Прежние C8-01/02/03 остаются CLOSED. M2 IN_PROGRESS, ENV04 REVIEW до owner recovery
+и live acceptance; PR24 Draft, main не меняется, merge/production/M3 не выполнялись.
+
+Accepted implementation **0b7e24ee425ebb429bf87dfe382cbd3fab883028**, tree
+**14a4033b849c736235653a5a85ec9e5112bfe727**. Base/main
+**22993f558c5e7e933c65e9c999933bd2e3ab41c4**. CI
+[37385698548 attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/37385698548)
+SUCCESS: foundation112018306287, browser112018306004, docker29-compatibility112018306249.
+Actual checkout всех трёх logs **fdfbe35974fa548b722622132aa0edb3a30c9bf5**;
+ordered parents base → accepted implementation, tree равен implementation.
+Оба штатных scripts и clean-source gates выполнены; дополнительный Docker29 gate PASS.
+581 unit,390 PG/S3,111 frontend,27 browser; на каждом Docker runner6 transport +6
+lifecycles. Новый documentation coordination не заменяет этот tested implementation.
+
+C0 самостоятельно скачал оба ZIP11379768145/11379612211: digest совпал с Actions;
+в каждом source archive225 blobs/modes/inventory совпали с GitHub tree, tested-commit
+совпадает с checkout, worktree-status пуст. Штатный Engine28.0.4/Compose2.38.2;
+exact Engine29.8.2/server8af9fe3/Compose5.5.1. Все fresh/recovery/recover-stopped/
+recover-missing/legacy-disable/legacy-stop выполнены. Before/after durable receipts
+равны целиком,31 tables, actual api/worker DB identity во всех трёх фазах совпадает;
+Secure Console session, UNKNOWN/receipt и wire counter1 сохранены. Held timeout180s
+не повышен. Fixture sequencing исправлено до создания следующего held baseline.
+
+| Finding | Основание закрытия |
+|---|---|
+| C8-04 / P2 / E05 | Immutable exact original/disabled dotenv intent и stage receipts; own disable write не меняет архивируемый baseline/hash. Real legacy-disable/legacy-stop interruptions/retries PASS на двух runners. C0 проверил retry после env/callers/remove/stop/pre-receipt, completed retry без recreate и byte-exact before/audit/staged. |
+| C8-05 / P2 / E05 | Caller/DB preservation отделена от running relay. Stopped relay проходит строгую identity/config/network проверку; missing требует exact generation/stop intent. Real stopped/missing recovery PASS на двух runners; C0 также проверил explicit schema2 rollback из обоих gaps. Foreign relay/config и прочий drift остаются STOP. |
+
+17 C0 checks:9 legacy interruption/retry variants (отсутствующий/preexisting false
+ключ),4 stopped/missing × recover/explicit rollback,4 input/baseline/intent negatives.
+Исполнялся неизменённый helper с настоящими private files/locks/atomic writes;
+Docker/DB/source boundaries в этих17 checks — substitutes, не local Docker evidence.
+Реальная Docker/PG evidence — проверенный Actions run выше. New VM execution нет.
+
+Current operator source **c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14**, schema1,
+original deployment-before PRESENT, after/rollback ABSENT по последнему owner receipt.
+C0-M2-ENV04-04 operational finding остаётся OPEN до успешного owner recover/preflight.
+Следующий шаг: filled checksum-guarded wrapper переводит только clean existing
+checkout на accepted implementation и вызывает штатные recover + preflight.
+Проверить private inputs/TLS/images/disabled-emptyTG/unrelated runtime и original
+before до/после; before не переснимать. Новых app build/migrations/init/reset/down-v,
+prepare/deploy/snapshot, manual hosts, global DNS/IPv6/downgrade или автоматического
+rollback нет. При interruption продолжать только те же refs и guarded helper;
+при unexpected drift STOP. Telegram activation/discovery/setup/webhook/send не входят.
+
+Для source fetch используется прежний отдельный read-only GitHub deploy key, только
+если он ещё разрешён или владелец временно вновь разрешит его. После fetch — отозвать.
+Это не SSH key входа на VM. Credentials/keys/profile не публиковать. Новых платных
+ресурсов нет. Условный CI-resume завершён; успешный implementation CI не повторять.
+
+### Единственное выданное действие
+
+Подготовленный C0 wrapper использует source c29aabd36 → accepted0b7e24ee, immutable
+original before, текущие private env/profile/TLS и cached images. Он выполняет только
+exact `recover --from-sha c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14 --accepted-sha
+0b7e24ee425ebb429bf87dfe382cbd3fab883028` и `preflight` с state-dir
+`/home/asmoperator/.local/state/asm-telegram-egress`. На повторе accepted checkout
+допустим; helper guards определяют, можно ли продолжить ту же операцию.
+Не переводить VM на новый documentation head. Wrapper checksum/точные PowerShell
+команды находятся в C0 выдаче и PR receipt; результат не считать выполненным заранее.
+Ожидаемые markers: TELEGRAM_EGRESS_RECOVER_PASS, TELEGRAM_EGRESS_PREFLIGHT_PASS,
+RECOVERY_ORIGINAL_BASELINE_PRIVATE_IMAGES_PRESERVED_PASS,
+RECOVERY_TELEGRAM_DISABLED_EMPTY_FIELDS_PASS, RECOVERY_COMPLETE_PREFLIGHT_ONLY,
+SSH_EXIT=0. Любой STOP: вернуть только allowlisted markers, без secret dump.
+
+После actual recovery/preflight C0 проверяет receipt и выдаёт отдельный discovery/
+setup/live Console шаг с актуальным TEST billing interval. Live A09/A11, owner merge
+и отдельный mainCI остаются невыполненными. Rollback не выдаётся автоматически.
+
+<details>
+<summary>История — исправление C6 до приёмки C0</summary>
+
+## Исторический handoff C0 → C6 — M2-ENV-04-RECOVERY-RESUME
 
 **REVIEW реализации C6; targeted C8 pending.** Одна bounded correction по двум
 новым P2/E05 **C8-M2-ENV04-04/05**. Native IPv6 mapping не перепроектировать;
@@ -158,6 +237,9 @@ PRESENT / after/rollback ABSENT, callers/relay running, Telegram=false/emptyTG.
 app build/init/migrations/down-v/секретов заново, automatic rollback или live API.
 После C8/C0 отдельный готовый owner шаг. Live A09/A11, owner merge и push/main CI
 не выполнены; production/M3 нет.
+
+
+</details>
 
 <details>
 <summary>История — Docker29 mapping correction и C6 REVIEW до C8-04/05</summary>

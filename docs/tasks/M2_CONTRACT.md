@@ -1116,6 +1116,16 @@ final head/CI документационной приёмки — в PR receipt.
 
 ### 10.12. Operational extension — M2-ENV-04 TEST egress
 
+**Current C0 disposition2026-10-06: PASS на implementation0b7e24ee425ebb429bf87dfe382cbd3fab883028;
+C8-04/05 CLOSED, прежние01/02/03 CLOSED.** Independent C0 source/evidence review +17
+bounded local probes; реальная execution — CI37385698548 all3 SUCCESS на merge
+fdfbe35974fa548b722622132aa0edb3a30c9bf5/tree14a4033b849c736235653a5a85ec9e5112bfe727.
+Нового отдельного C8 agent execution не заявлено. Полный scope/ограничения — runbook§0.6.15
+и current TASK_REGISTER. Issued next owner action только exact-source guarded recovery
++preflight с immutable baseline; Telegram disabled. Operational VM finding остаётся
+OPEN до фактического receipt. Ниже сохранены прежние, superseded dispositions.
+
+
 CI37367018261 attempt2 после восстановления Actions реально исполнил exact Docker29:
 6 transport, fresh/recovery, recover-stopped/recover-missing и legacy-disable PASS.
 Следующий legacy-stop остановился до своего held-state baseline: test controller
