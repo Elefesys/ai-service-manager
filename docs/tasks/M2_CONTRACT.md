@@ -883,9 +883,18 @@ C3-M2-ENV04-05: connect2→5 — **кандидат на REVIEW, не разре
 Connect входит в прежние readonly5/send10/FETCH20s, не добавляется к ним; lease30s
 не меняется. Общий timeout/cancellation без доказанной wire phase не означает
 definitely_unsent. Cold TLS3s подтвердил old-fail/new-pass, но stalled TLS выявил
-незакрытый TCP после outer cancellation; обязательный cleanup gate пока FAIL.
-До отдельного решения C0/C8 принятая VM остаётся на connect2s. Evidence и предложение
-исправления cancellation — TEST runbook§0.6.19; прочие правила этого раздела прежние.
+незакрытый TCP после outer cancellation в R1; failed candidate сохранён в истории.
+R2 владеет raw TCP transport до завершения TLS и при BaseException выполняет
+синхронный nonblocking abort только этого transport, сохраняя исходное исключение.
+Нет drain/TLS shutdown, нового deadline, await/GC или detached cleanup task;
+повторная cancellation не прерывает этот участок. Освобождение socket завершает
+обычный следующий callback asyncio. Shared client и чужие in-flight streams не закрываются.
+Production factory и TEST AsyncHTTPTransport injection проходят один cleanup path.
+Private seams locked HTTPX0.28.1/httpcore1.0.9/AnyIO4.15.1 явно описаны в client.py
+и проверяются real peer EOF/closed FD при выключенном GC, включая repeat cancellation.
+Local R2 gates PASS; C0 findings01/02 остаются OPEN до verdict C0. Actual PG/Docker29,
+final integration CI и scoped C8 впереди. До отдельного решения C0/C8 принятая VM
+остаётся на connect2s. R1 history/R2 evidence — TEST runbook§0.6.19; прочие правила прежние.
 
 JSON responses ≤64 KiB. getFile принимает только opaque canonical FetchPermit.image_file_id;
 file_unique_id/filename/provider metadata не заменяют его. Relative file_path bounded,

@@ -23,7 +23,7 @@ IMAGE = (
     "ghcr.io/xtls/xray-core@sha256:9a17fb7fcda36f80d041fc1f12f1d661d3f7c502572b2a6f2e4432534789a20b"
 )
 SOURCE = {
-    "backend/src/asm/telegram/client.py": "53800d23c718910dd338cadee6ba595510c95ff9",
+    "backend/src/asm/telegram/client.py": "525381357de76ea1c570fd864f8df5e9781a87e2",
     "backend/src/asm/telegram/config.py": "31cba499681270d708cdb55e7c8e44202c07b4b7",
 }
 CALLERS = ("api", "worker", "telegram-operator")

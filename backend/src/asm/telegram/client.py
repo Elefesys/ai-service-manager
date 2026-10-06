@@ -3,12 +3,16 @@
 import asyncio
 import logging
 import re
-from collections.abc import AsyncIterator
+import ssl
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 import httpx
+from anyio._backends._asyncio import SocketStream
+from httpcore import SOCKET_OPTION, AsyncNetworkBackend, AsyncNetworkStream
+from httpcore._backends.anyio import AnyIOStream
 
 from asm.files.models import FetchPermit
 from asm.messaging.errors import Code, MessagingError
@@ -57,6 +61,59 @@ def suppress_transport_logs() -> None:
                 logger.addHandler(logging.NullHandler())
 
 
+class _OwnedTCPStream(AnyIOStream):
+    """Own the raw TCP transport until httpcore has a completed TLS stream.
+
+    Locked seams: httpcore 1.0.9 AnyIOStream._stream and anyio 4.15.1
+    asyncio SocketStream._transport. The application already requires asyncio.
+    TLS failure can precede AsyncHTTPConnection._connection assignment, so pool
+    aclose cannot release this socket. Abort is synchronous/nonblocking: no drain,
+    TLS shutdown, cleanup task, GC or cancellation checkpoint. asyncio disposes
+    its socket on the next loop callback even if cancellation is repeated.
+    """
+
+    def __init__(self, stream: AsyncNetworkStream) -> None:
+        super().__init__(cast(AnyIOStream, stream)._stream)
+        self._tcp_transport = cast(SocketStream, self._stream)._transport
+
+    async def start_tls(
+        self,
+        ssl_context: ssl.SSLContext,
+        server_hostname: str | None = None,
+        timeout: float | None = None,
+    ) -> AsyncNetworkStream:
+        try:
+            return await super().start_tls(ssl_context, server_hostname, timeout)
+        except BaseException:
+            # Only this failed handshake's TCP transport. Successful TLS transfers
+            # ownership back to httpcore unchanged; concurrent requests stay live.
+            self._tcp_transport.abort()
+            raise
+
+
+class _OwnedTCPBackend(AsyncNetworkBackend):
+    def __init__(self, backend: AsyncNetworkBackend) -> None:
+        self._backend = backend
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: Iterable[SOCKET_OPTION] | None = None,
+    ) -> AsyncNetworkStream:
+        return _OwnedTCPStream(
+            await self._backend.connect_tcp(
+                host,
+                port,
+                timeout=timeout,
+                local_address=local_address,
+                socket_options=socket_options,
+            )
+        )
+
+
 class TelegramClient:
     def __init__(
         self,
@@ -87,13 +144,17 @@ class TelegramClient:
         suppress_transport_logs()
         self.settings = settings
         self._origin = origin
+        wire = transport or httpx.AsyncHTTPTransport(
+            retries=0,
+            limits=httpx.Limits(max_connections=4, max_keepalive_connections=4),
+            trust_env=False,
+        )
+        if isinstance(wire, httpx.AsyncHTTPTransport):
+            # HTTPX 0.28.1's per-transport private seam. Wrap both the production
+            # factory and explicit TEST CA/destination transports; never global.
+            wire._pool._network_backend = _OwnedTCPBackend(wire._pool._network_backend)
         self._http = httpx.AsyncClient(
-            transport=transport
-            or httpx.AsyncHTTPTransport(
-                retries=0,
-                limits=httpx.Limits(max_connections=4, max_keepalive_connections=4),
-                trust_env=False,
-            ),
+            transport=wire,
             verify=True,
             trust_env=False,
             follow_redirects=False,

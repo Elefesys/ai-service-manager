@@ -8,6 +8,7 @@ Every case owns a new client/peer; accepted TCP and HTTP calls count all attempt
 """
 
 import asyncio
+import gc
 import json
 import socket
 import ssl
@@ -20,7 +21,7 @@ import httpx
 import pytest
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import OutcomeKind
-from asm.telegram.client import TelegramClient, TelegramError
+from asm.telegram.client import TelegramClient, TelegramError, _OwnedTCPBackend
 from httpcore import AsyncNetworkBackend
 from httpcore._backends.anyio import AnyIOBackend
 from test_m2_3_transport import BOT, config, fetch_permit, permit
@@ -127,6 +128,7 @@ async def tls_peer(material, *, delay=0, mode="valid", certificate="server"):
         failures=[],
         received=asyncio.Event(),
         chunks=0,
+        client_sockets=[],
     )
     context.set_servername_callback(lambda _socket, name, _context: state.sni.append(name))
 
@@ -213,27 +215,53 @@ async def tls_peer(material, *, delay=0, mode="valid", certificate="server"):
         assert state.closed == state.accepted
 
 
-def tls_client(material, peer, *, trusted=True):
+def tls_client(material, peer, *, trusted=True, factory=False, destinations=None, observe_tcp=None):
     context = ssl.create_default_context(cafile=str(material / "ca.pem") if trusted else None)
     assert context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED
+    routing = iter(destinations or [])
 
     class LocalDestination(AsyncNetworkBackend):
         async def connect_tcp(self, host, port, **kwargs):
             assert host == "api.telegram.org" and port == 443
-            return await AnyIOBackend().connect_tcp("127.0.0.1", peer.port, **kwargs)
+            destination = next(routing, peer)
+            stream = await AnyIOBackend().connect_tcp("127.0.0.1", destination.port, **kwargs)
+            destination.client_sockets.append(stream.get_extra_info("socket"))
+            if observe_tcp is not None:
+                observe_tcp(stream)
+            return stream
 
     # Production construction keeps its real limits/retry policy. The TEST-only
     # seam replaces CA and destination; neither deadlines nor wire I/O are mocked.
-    transport = httpx.AsyncHTTPTransport(
-        verify=context,
-        retries=0,
-        trust_env=False,
-        limits=httpx.Limits(max_connections=4, max_keepalive_connections=4),
-    )
-    transport._pool._network_backend = LocalDestination()
-    client = TelegramClient(config(), transport=transport)
+    if factory:
+        client = TelegramClient(config())
+        pool = client._http._transport._pool
+        assert isinstance(pool._network_backend, _OwnedTCPBackend)
+        pool._ssl_context = context
+        pool._network_backend._backend = LocalDestination()
+    else:
+        transport = httpx.AsyncHTTPTransport(
+            verify=context,
+            retries=0,
+            trust_env=False,
+            limits=httpx.Limits(max_connections=4, max_keepalive_connections=4),
+        )
+        transport._pool._network_backend = LocalDestination()
+        client = TelegramClient(config(), transport=transport)
+    # Both TEST injection and default factory MUST retain production cleanup.
+    assert isinstance(client._http._transport._pool._network_backend, _OwnedTCPBackend)
     assert client._origin == "https://api.telegram.org"
     return client
+
+
+@pytest.fixture
+def no_gc_cleanup():
+    enabled = gc.isenabled()
+    gc.disable()
+    try:
+        yield
+    finally:
+        if enabled:
+            gc.enable()
 
 
 async def released(client, peer):
@@ -249,6 +277,7 @@ async def released(client, peer):
             "HTTPX pool empty before client/server teardown"
         )
     assert all(task.done() for task in peer.tasks)
+    assert peer.client_sockets and all(sock.fileno() == -1 for sock in peer.client_sockets)
 
 
 def elapsed_timeout(start, seconds):
@@ -296,6 +325,7 @@ async def test_default_limits_and_no_environment_proxy(monkeypatch):
         assert not client._http.follow_redirects and not client._http._trust_env
         assert client._http._mounts == {}
         pool = client._http._transport._pool
+        assert isinstance(pool._network_backend, _OwnedTCPBackend)
         assert pool._max_connections == pool._max_keepalive_connections == 4
         assert pool._retries == 0
         assert pool._ssl_context.check_hostname
@@ -305,9 +335,12 @@ async def test_default_limits_and_no_environment_proxy(monkeypatch):
 
 
 @pytest.mark.parametrize("mode", ["stall_tls", "stall_response"])
-async def test_stalled_readonly_total_deadline_and_release(connect_tls_material, mode):
+@pytest.mark.parametrize("factory", [False, True])
+async def test_stalled_readonly_total_deadline_and_release(
+    connect_tls_material, mode, factory, no_gc_cleanup
+):
     async with tls_peer(connect_tls_material, mode=mode) as peer:
-        client = tls_client(connect_tls_material, peer)
+        client = tls_client(connect_tls_material, peer, factory=factory)
         try:
             started = time.monotonic()
             with pytest.raises(TelegramError) as error:
@@ -355,9 +388,12 @@ async def test_trickle_does_not_renew_wall_deadline(connect_tls_material, operat
 
 
 @pytest.mark.parametrize("mode", ["stall_tls", "stall_response"])
-async def test_explicit_cancellation_closes_real_socket(connect_tls_material, mode):
+@pytest.mark.parametrize("factory", [False, True])
+async def test_explicit_cancellation_closes_real_socket(
+    connect_tls_material, mode, factory, no_gc_cleanup
+):
     async with tls_peer(connect_tls_material, mode=mode) as peer:
-        client = tls_client(connect_tls_material, peer)
+        client = tls_client(connect_tls_material, peer, factory=factory)
         task = asyncio.create_task(client.send(permit()))
         try:
             await asyncio.wait_for(peer.received.wait(), 2)
@@ -370,6 +406,97 @@ async def test_explicit_cancellation_closes_real_socket(connect_tls_material, mo
         finally:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+            await client.aclose()
+
+
+@pytest.mark.parametrize("factory", [False, True])
+async def test_repeated_cancel_during_owned_abort_preserves_original_and_leaves_no_task(
+    connect_tls_material, factory, no_gc_cleanup, monkeypatch
+):
+    async with tls_peer(connect_tls_material, mode="stall_tls") as peer:
+        baseline = asyncio.all_tasks()
+        aborts = []
+
+        def observe(stream):
+            tcp = stream._stream._transport
+            abort = tcp.abort
+
+            def repeated_cancel():
+                # Per-instance fault injection at the production abort call:
+                # add cancellation requests, then execute the REAL abort.
+                # Without production cleanup this observer is never called.
+                aborts.append(time.monotonic())
+                assert task.cancel("repeat-during-abort")
+                assert task.cancel("repeat-again-during-abort")
+                abort()
+
+            monkeypatch.setattr(tcp, "abort", repeated_cancel)
+
+        client = tls_client(connect_tls_material, peer, factory=factory, observe_tcp=observe)
+        task = asyncio.create_task(client.get_me())
+        try:
+            await asyncio.wait_for(peer.received.wait(), 2)
+            started = time.monotonic()
+            task.cancel("original-cancellation")
+            with pytest.raises(asyncio.CancelledError) as error:
+                await task
+            assert error.value.args == ("original-cancellation",)
+            assert task.cancelling() == 3 and len(aborts) == 1
+            assert time.monotonic() - started < 1
+            await released(client, peer)
+            assert peer.accepted == 1 and peer.requests == []
+            assert asyncio.all_tasks() <= baseline
+            assert not client._http.is_closed
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            await client.aclose()
+
+
+@pytest.mark.parametrize("factory", [False, True])
+async def test_cancel_isolated_from_parallel_request_and_same_client_can_send_next_readonly(
+    connect_tls_material, factory, no_gc_cleanup
+):
+    async with (
+        tls_peer(connect_tls_material, mode="stall_tls") as cancelled,
+        tls_peer(connect_tls_material, delay=1) as healthy,
+    ):
+        baseline = asyncio.all_tasks()
+        client = tls_client(
+            connect_tls_material, healthy, factory=factory, destinations=[cancelled, healthy]
+        )
+        first = asyncio.create_task(client.get_me())
+        second = None
+        try:
+            await asyncio.wait_for(cancelled.received.wait(), 2)
+            second = asyncio.create_task(client.get_me())
+            async with asyncio.timeout(2):
+                while healthy.accepted != 1:
+                    await asyncio.sleep(0.01)
+            first.cancel("only-first-request")
+            with pytest.raises(asyncio.CancelledError) as error:
+                await first
+            assert error.value.args == ("only-first-request",)
+            async with asyncio.timeout(0.5):
+                while cancelled.closed != 1:
+                    await asyncio.sleep(0.01)
+            assert cancelled.client_sockets[0].fileno() == -1
+            assert not second.done() and healthy.closed == 0
+            assert await second == str(BOT)
+            assert not client._http.is_closed
+            assert await client.get_me() == str(BOT)
+            await released(client, cancelled)
+            await released(client, healthy)
+            assert cancelled.accepted == 1 and cancelled.requests == []
+            assert healthy.accepted == 2 and healthy.requests == ["getMe", "getMe"]
+            assert asyncio.all_tasks() <= baseline
+        finally:
+            first.cancel()
+            if second is not None:
+                second.cancel()
+            await asyncio.gather(
+                first, *([] if second is None else [second]), return_exceptions=True
+            )
             await client.aclose()
 
 

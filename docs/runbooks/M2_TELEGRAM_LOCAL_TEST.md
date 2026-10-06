@@ -2460,7 +2460,14 @@ C0 local validation:13 filesystem/orchestration cases,3 dotenv formatting varian
 с LF/CRLF. Docker/source/provider boundaries substituted; actual VM edit/discovery
 ещё не выполнены. Это исправление operator inputs, helper/app/API/DB контракт не менялся.
 
-### 0.6.19. C3-M2-ENV04-05 — connect budget candidate, REVIEW с blockers / 2026-10-06
+### 0.6.19. C3-M2-ENV04-05 — R1 history и R2 REVIEW / 2026-10-06 UTC
+
+**Текущее исполнение: R2 возвращена на REVIEW; findings C0-M2-ENV04-05-01/02
+остаются OPEN до verdict C0.** Local regression612 PASS/0 FAIL; actual integration
+gates/C8 не выполнены. Подробности R2 ниже, после сохранённого failed-candidate receipt.
+Это не разрешение интеграции/rollout и не новая owner/VM-команда.
+
+#### История R1 — сохранённый failed candidate c009c854
 
 Поручение прочитано на coordination
 `62b018ccccffe87e97ebd34985886d472af583b1`, включая
@@ -2542,6 +2549,76 @@ VM не изменялась: implementation0b7e24ee425ebb429bf87dfe382cbd3fab88
 committed, ACK NOT_ATTEMPTED, прежние receipts сохранены. Нет deploy/rebuild/ACK/
 setWebhook/включения Telegram/send. Live A09/A11 не выполнены; M2 IN_PROGRESS,
 ENV04 REVIEW, integration PR24 Draft/open. Candidate не готов к интеграции/rollout.
+
+#### R2 — cancellation-safe cleanup и final pin, 2026-10-06 UTC
+
+Активное поручение прочитано на coordination
+`e4f018af92d344429df4beb224262d0c87e985b3`. Продолжена та же ветка
+`c3/m2-telegram-connect-budget` от full candidate
+`c009c8540146d0a16d44fccf662d6e4d50fc53b1`, без reset/rebase; R1 и исходный
+base9e165dd09f87663665e3dabae4f155e99e2639a6 сохранены в истории.
+Не выполнены push/integration в c6/main, PR merge или действия на VM.
+
+`_OwnedTCPBackend` оборачивает только backend собственного HTTPX transport.
+`_OwnedTCPStream` удерживает raw TCP transport до завершения handshake. Любой
+BaseException из start_tls вызывает nonblocking `asyncio.Transport.abort()` и
+повторно поднимается. Здесь нет await/checkpoint, ожидания flush/peer/close_notify,
+нового таймера, Task или GC. Повторная Task.cancel во время abort не может прервать
+синхронный участок. FD закрывает стандартный следующий callback asyncio; tests
+проверяют и peer EOF, и fileno=-1 **до** client.aclose/server teardown.
+При успешном TLS ownership передаётся прежнему httpcore HTTP connection.
+Общий client, чужие streams, read/write/pool limits, deadlines и retry policy прежние.
+
+Private seams: HTTPX0.28.1 `AsyncHTTPTransport._pool._network_backend`,
+httpcore1.0.9 `AnyIOStream._stream`, AnyIO4.15.1 asyncio `SocketStream._transport`.
+Область — существующий asyncio runtime, не универсальный Trio/backend plugin.
+Сторонний код/site-packages и зависимости не изменены. Factory и разрешённая TEST
+инъекция готового AsyncHTTPTransport оборачиваются одинаково; тестовая подмена
+CA/destination не заменяет production cleanup. Будущий dependency update должен
+повторно проверить эти seams, а не считать private APIs стабильным контрактом.
+
+Окончательный client blob: **525381357de76ea1c570fd864f8df5e9781a87e2**.
+Единственная изменённая строка `scripts/prepare_telegram_egress.py`:
+
+```diff
+-    "backend/src/asm/telegram/client.py": "53800d23c718910dd338cadee6ba595510c95ff9",
++    "backend/src/asm/telegram/client.py": "525381357de76ea1c570fd864f8df5e9781a87e2",
+```
+
+Config blob, IMAGE, source/image/recovery/legacy/drift guards не менялись. Старый
+R1 blob abe2cfc… не допускается. Исторический source fixture в test сжат только
+для компактности; после decode проверяется exact Git blob R1 и base-connect2.
+Эта fixture не является normalization/allowlist в production guard.
+
+| R2 assertion / критерий | Local результат |
+|---|---|
+| `test_stalled_readonly_total_deadline_and_release`, `test_explicit_cancellation_closes_real_socket` | PASS для factory/injected transport и stalled TLS/response; GC выключен. Peer closed и FD=-1 до teardown; outer timeout5s не definitely_unsent, cancellation пробрасывается |
+| `test_repeated_cancel_during_owned_abort_preserves_original_and_leaves_no_task` | PASS оба factory paths; повторные cancel вводятся observer-ом только на одном transport в момент настоящего production abort. Исходный CancelledError/message сохранён, cancelling=3, abort1, завершение<1s, TCP1/HTTP0, нет новых живых tasks; observer не исправляет cleanup |
+| `test_cancel_isolated_from_parallel_request_and_same_client_can_send_next_readonly` | PASS оба paths: закрыт только отменённый TCP; параллельный TLS socket остаётся жив, valid getMe завершается; следующий getMe тем же незакрытым client успешен, pool slots/tasks освобождены, нет повтора отменённого запроса |
+| Cold TLS old2/new5 | Exact base client в изолированном process/source staging: FAIL2.005s, TCP1/TLS0/HTTP0. R2: TLS3.008s, strict readonly3.011s<5s, TCP1/HTTP1. На каждый case новый client, no warmup/retry. Checkout не подменялся |
+| Прежние phase/trickle/cert/redirect/pool cases | PASS: pool2/read5/write5,4 connections; readonly5/send10/image20, TLS3s внутри readonly/send; UNKNOWN/proven-unsent прежние; bad hostname/untrusted CA и redirect отвергаются |
+| Exact source pin | Прежний added-byte test и4 новых variants PASS: final bytes принимаются, base-connect2/R1/extra-byte/CRLF отвергаются; чужой image pin также FAIL как требуется |
+| Cached-image source probe | 4 variants PASS: выполняется настоящий сгенерированный Python/hash probe по реальным files. Docker execution/path **substituted**, не actual image/Docker evidence; старые/изменённые client bytes отвергнуты |
+| Full local non-integration | `uv run --frozen pytest -q -s -m 'not integration'`: **612 PASS,0 FAIL,393 integration deselected**,81.47s. Изменённые fixtures/assertions не заменяли failures пропусками |
+| Static/contracts | `uv run --frozen ruff check backend tests scripts migrations`; `uv run --frozen ruff format --check --diff backend tests scripts migrations`; `uv run --frozen mypy backend/src`; `uv run --frozen python scripts/export_contracts.py --check`: PASS |
+
+Исполнение: Python3.13.15, OpenSSL3.5.8, httpx0.28.1/httpcore1.0.9/anyio4.15.1.
+Существующие timing assertions не ослаблены: timeout −0.2/+1.0s, positive readonly
+строго<5s; peer cleanup observation≤2s отдельно от operation budget. Изменение
+прежних TLS fixtures добавило socket/production-wrapper assertions и GC-off cases;
+в `test_telegram_egress.py` прежние guards/tests сохранены, добавлены только связанные
+source/image regressions. R1 direct-wire/PG/relay assertions сохранены без изменений R2.
+
+Локально Docker по-прежнему отсутствует, shell uid0; guards не обходились. Actual
+PG/S3/direct-wire/relay/exact Docker29, workflow clean-source gates, full CI на final
+reviewed integration SHA и независимый C8 остаются обязательными незакрытыми gates.
+C0 организует runner после review исправленного patch. Финальные head/tree/parents,
+local tested SHA, точные script exits, clean-source evidence и CI IDs при наличии —
+в C3 receipt; отдельные SHA-only documentation commits не создаются.
+
+VM остаётся на0b7e24ee425ebb429bf87dfe382cbd3fab883028/connect2; binding committed,
+ACK NOT_ATTEMPTED, receipts и runtime сохранены. Live Telegram не выполнялся;
+M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11. Findings01/02 закрывает только C0.
 
 ## 1. Конкретное окружение и предварительные условия
 
