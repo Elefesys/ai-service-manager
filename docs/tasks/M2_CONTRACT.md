@@ -874,10 +874,18 @@ RETRY_EXHAUSTED. Delay/due входят в canonical finalized result: lost ACK 
 
 Использовать существующий locked **httpx 0.28.1**: narrow promotion dev→runtime,
 без package refresh/нового bot SDK. AsyncClient с TLS verify, trust_env=false,
-redirects=false, retries=0, pool≤4 connections, connect/pool≤2s и read/write≤5s;
+redirects=false, retries=0, pool≤4 connections, connect≤5s, pool≤2s и read/write≤5s;
 общие wall budgets выше обязательны независимо от chunk activity. Origin фиксирован
 https://api.telegram.org; TEST transport/server внедряется явно в tests, event/owner
 не задаёт endpoint. Никакого dependency на Telegram для прежнего DB/auth health.
+
+C3-M2-ENV04-05: connect2→5 — **кандидат на REVIEW, не разрешение rollout**.
+Connect входит в прежние readonly5/send10/FETCH20s, не добавляется к ним; lease30s
+не меняется. Общий timeout/cancellation без доказанной wire phase не означает
+definitely_unsent. Cold TLS3s подтвердил old-fail/new-pass, но stalled TLS выявил
+незакрытый TCP после outer cancellation; обязательный cleanup gate пока FAIL.
+До отдельного решения C0/C8 принятая VM остаётся на connect2s. Evidence и предложение
+исправления cancellation — TEST runbook§0.6.19; прочие правила этого раздела прежние.
 
 JSON responses ≤64 KiB. getFile принимает только opaque canonical FetchPermit.image_file_id;
 file_unique_id/filename/provider metadata не заменяют его. Relative file_path bounded,

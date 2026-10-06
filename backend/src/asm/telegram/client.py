@@ -98,7 +98,7 @@ class TelegramClient:
             trust_env=False,
             follow_redirects=False,
             limits=httpx.Limits(max_connections=4, max_keepalive_connections=4),
-            timeout=httpx.Timeout(connect=2, pool=2, read=5, write=5),
+            timeout=httpx.Timeout(connect=5, pool=2, read=5, write=5),
             headers={"Accept-Encoding": "identity"},
         )
 
