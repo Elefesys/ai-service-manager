@@ -2,7 +2,72 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — R2 reviewed, actual CI/C8 pending / 2026-10-06 UTC
+## Текущий статус — actual R2 CI FAIL; C3 R3 / 2026-10-06 UTC
+
+**C0 verdict: CHANGES_REQUESTED по новому C0-M2-ENV04-05-03 / P2 (OPEN).**
+C3-M2-ENV04-05 возвращена в **IN_PROGRESS** на ограниченную R3.
+Findings01/02 остаются CLOSED на R2: actual runner failure не относится к cleanup
+или exact source pin. Независимый C8 пока не выдаётся; rollout не принят.
+
+R2 **41f74346b56009bda53fa637ed5adeb3fbb7c507** сохранена в integration candidate
+**ad724e68614c2942b73eaae41e6d8802d1663b84**, tree
+**50f13bafc84b48c3e941764b5297fa9bdb13a273**; ordered parents
+**e4f018af92d344429df4beb224262d0c87e985b3**,
+**41f74346b56009bda53fa637ed5adeb3fbb7c507**.
+PR tested merge **f6c2bd6f574831ced9996c042818240b668f9175** имеет тот же tree и
+ordered parents main22993f558c5e7e933c65e9c999933bd2e3ab41c4 +candidatead724e68.
+Сборка candidate не была merge PR/main или rollout.
+
+[Actual CI37523378682](https://github.com/Elefesys/ai-service-manager/actions/runs/37523378682):
+foundation112474140017 **FAIL**, exact Docker29 112474139579 **FAIL**.
+В обоих одна ошибка:
+`tests/test_telegram_egress_postgres.py::TelegramEgressPostgresChecks::test_readonly_tls_mapping_and_auth_db_s3_survive_relay_failure`,
+R2/integration line446: `assert offline.value.definitely_unsent`.
+Actual `TelegramError(DEPENDENCY_TIMEOUT), definitely_unsent=False`.
+Каждая real relay/PG lane: **5 PASS/1 FAIL** (32.47s /37.70s).
+Browser112474140023 **SUCCESS:27 journeys PASS**, его workflow clean-source PASS.
+Docker29 actual Engine29.8.2/8af9fe3, Compose5.5.1 подтверждены; old mapped-host
+failure воспроизведён. Source/image prepare прошёл; полный relay/recovery receipt
+не создан из-за failure на postgres_wire.
+
+C0 проверил оба ZIP SHA256 и все226 archive file blobs/modes: exact candidate tree,
+recorded tested commit совпадает, recorded worktree-status пуст. Artifact IDs
+foundation11440544000 /Docker29 11441466330. Их workflow clean-source steps
+**SKIPPED**, не PASS: отдельная C0 проверка пустого status не заменяет execution gate.
+Остальные полные backend/PG/direct-wire gates не завершились после ранней relay
+ошибки. Итог browser/run и точные artifact digests — в едином PR receipt.
+
+Диагноз по source control flow: прежняя assertion предполагала connect2 < readonly5.
+Теперь connect5 включён в тот же outer readonly5; в наблюдённой stopped-relay
+попытке общий deadline не даёт доказательства wire phase. Консервативный
+DEPENDENCY_TIMEOUT/false соответствует принятому контракту. Сетевой fast refusal
+может дать доказанный ConnectError раньше deadline; нельзя закреплять результат
+всех offline requests одним флагом. Причина конкретного сетевого молчания/hop не
+устанавливалась и не нужна для исправления ошибочного ожидания теста.
+
+| Finding | Статус C0 | Решение |
+|---|---|---|
+| C0-M2-ENV04-05-01 / P2 | CLOSED | R2 cleanup,32 адресных C0 cases PASS |
+| C0-M2-ENV04-05-02 / P2 | CLOSED | Exact final pin/old-tampered guards PASS; runner prepare прошёл |
+| C0-M2-ENV04-05-03 / P2 | OPEN | Relay offline readonly assertion требует proven-unsent даже после общего deadline; R3 уточняет contract-aware test, без изменения production semantics |
+
+**Единственная активная задача C3-M2-ENV04-05 / IN_PROGRESS:** R3 test-only correction.
+Полный scope/criteria — [M2_HANDOFF](tasks/M2_HANDOFF.md). C8 и VM migration не выданы.
+
+VM сохраняется на **0b7e24ee425ebb429bf87dfe382cbd3fab883028** /
+tree **14a4033b849c736235653a5a85ec9e5112bfe727**, прежние cached images,
+connect2, Telegram disabled/empty. Binding committed; ACK NOT_ATTEMPTED/replay-blocked.
+Private receipts/inputs/runtime и fixed TEST interval2026-10-02→2026-10-09 UTC
+не изменяются. До отдельного C0 поручения после CI/C8 нет owner commands,
+source fetch/rebuild/deploy, ACK/setWebhook/activation/sends.
+M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11; PR24 Draft/open.
+Merge main/production/M3 не выданы; source-key revocation не подтверждён.
+[Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+<details>
+<summary>История — R2 scoped verdict и runner issuance; actual failure выше</summary>
+
+## История — C0 R2 scoped PASS до actual CI failure
 
 **C0 scoped verdict: PASS; C0-M2-ENV04-05-01/02 CLOSED.**
 C3-M2-ENV04-05 остаётся **REVIEW** до actual final integration CI и независимого C8.
@@ -56,6 +121,8 @@ source fetch/rebuild/deploy, ACK/setWebhook/activation/sends.
 M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11; PR24 Draft/open.
 Merge main/production/M3 не выданы; source-key revocation не подтверждён.
 [Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+</details>
 
 <details>
 <summary>История — R1 review и R2 IN_PROGRESS; заменено R2 REVIEW</summary>
