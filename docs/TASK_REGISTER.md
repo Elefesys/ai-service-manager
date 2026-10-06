@@ -2,6 +2,72 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Текущий статус — verified TLS выше connect budget / 2026-10-06
+
+**Actual owner receipt 2026-10-06T18:10:05.409401+00:00, SSH_EXIT=0.**
+Исправленный одноразовый token-free probe: DNS AF_UNSPEC/INET/INET6 PASS (7/0/0 ms),
+TCP caller→relay IPv4 PASS (0 ms), ровно один verified TLS handshake PASS:
+**TLSv1.3, 2523 ms, TLS_PASS_OVER_2S**. Лимит диагностического handshake был15 s;
+в пределах2 s он не завершился, в пределах5 s завершился. Private inputs, все14
+предшествующих receipts, images и существующий disabled runtime сохранены.
+
+Это доказывает работоспособность TLS через выбранный маршрут в данной попытке и
+наблюдённую задержку выше принятого connect=2 s. Не доказывает причину каждой прежней
+ошибки, постоянную доступность Bot API или прохождение HTTP в общем5 s бюджете.
+В этом probe не было HTTP, queue, DB или ACK. Прежний ACK остаётся NOT_ATTEMPTED,
+его intent/result неизменны; retained=false означал неисполненную проверку.
+Binding ранее committed (15:23:30Z), queue audit (15:44:48Z) увидел1 current +3
+unmapped lifecycle events; свежая очередь после него не подтверждена.
+
+Предыдущий probe17:58:12Z не выполнял DNS/TCP/TLS: C0 потерял @contextmanager при
+сборке deadline, получил TypeError до resolver; это C0 artifact defect, не DNS
+failure evidence. Исправленный embedded operator отличается ровно восстановленным
+декоратором. Artifact111424 bytes, SHA256
+`1cd0c50ecdc134778f912a4644b41f159f3d53df865df09759c64be6835049f0`.
+Его once-only receipt сохранён; повторять исправленный или прежние scripts нельзя.
+Подробные actual markers, ограничения local substituted tests и вся цепочка —
+[единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+### Решение C0: узкая правка connect budget для code review
+
+Наблюдаемое противоречие: доступный TLS путь занял2.523 s, тогда как M2_CONTRACT§10.6
+и ENV04 runbook фиксируют connect≤2 s. C0 выдаёт **C3-M2-ENV04-05**: предложить и
+проверить минимальную правку **connect2→5 s** в общем TelegramClient, без нового
+env knob и без отдельного operator-only клиента. Это scope для изменения исходников
+и review; текущий принятый контракт/VM остаются на2 s до приёмки новой реализации.
+
+Pool2 s, read/write5 s, readonly5 s / send10 s / FETCH20 s wall deadlines,
+lease30 s, pool≤4, TLS/hostname/SNI verification, fixed official origin,
+trust_env=false, redirects/retries0 и UNKNOWN/no-resend semantics сохраняются.
+Connect5 s не добавляется к общему deadline; общий deadline по-прежнему отменяет
+операцию. При его срабатывании без доказанной wire phase нельзя объявлять send
+definitely_unsent. Наблюдение2523 ms не обосновывает диагностические15 s в продукте.
+Если целевые tests не проходят в этих границах, вернуть C0 evidence и предложение,
+не повышать общие budgets и не менять маршрут самостоятельно.
+
+Новая VM-команда сейчас не выдана. После reviewed patch и final-head CI требуется
+независимый scoped C8; лишь затем C0 отдельно выдаёт C6 план перехода source/images
+с сохранением recovery/binding/receipts, и owner получает готовый блок. Успех этой
+диагностики не разрешает ACK replay, setWebhook, включение Telegram или live sends.
+
+| Задача | Статус | Следующий результат |
+|---|---|---|
+| C3-M2-ENV04-05 | TODO | Reviewable connect2→5 patch с неизменными wall deadlines и transport/PG evidence |
+
+Scope, base SHA, allowed paths и gates — [активный M2_HANDOFF](tasks/M2_HANDOFF.md).
+
+VM остаётся на **0b7e24ee425ebb429bf87dfe382cbd3fab883028** /
+tree **14a4033b849c736235653a5a85ec9e5112bfe727**, cached images, Telegram disabled/empty.
+Implementation CI37385698548 all3 SUCCESS относится к этому implementation.
+Новая docs-only координация не является новым implementation/CI/live PASS.
+**M2 IN_PROGRESS; ENV04 REVIEW до actual A09/A11; PR24 Draft/open.**
+Прежние C0/C8 closures сохраняют свой scope. Merge/production/M3 не выданы.
+Source deploy-key revocation остаётся неподтверждённым. Fixed COMPED TEST interval
+2026-10-02T00Z→2026-10-09T00Z и committed request не пересчитываются.
+
+<details>
+<summary>История — Owner ID correction; завершена, старую выдачу не выполнять</summary>
+
 ## Текущий статус — Business Owner ID correction / 2026-10-06
 
 **Owner подтвердил перепутанные роли двух Telegram аккаунтов / 2026-10-06 20:02 +07.**
@@ -36,6 +102,9 @@ foundation112173735207 CANCELLED; all3 SUCCESS этому docs head не при�
 Merge/production/M3 не выданы. Отзыв временного source deploy key остаётся неподтверждённым.
 
 Следующее owner действие подробно в активном M2_HANDOFF и runbook§0.6.17.
+
+
+</details>
 
 <details>
 <summary>История — recovery принят, первый discovery выдан до уточнения Owner</summary>
