@@ -874,10 +874,28 @@ RETRY_EXHAUSTED. Delay/due входят в canonical finalized result: lost ACK 
 
 Использовать существующий locked **httpx 0.28.1**: narrow promotion dev→runtime,
 без package refresh/нового bot SDK. AsyncClient с TLS verify, trust_env=false,
-redirects=false, retries=0, pool≤4 connections, connect/pool≤2s и read/write≤5s;
+redirects=false, retries=0, pool≤4 connections, connect≤5s, pool≤2s и read/write≤5s;
 общие wall budgets выше обязательны независимо от chunk activity. Origin фиксирован
 https://api.telegram.org; TEST transport/server внедряется явно в tests, event/owner
 не задаёт endpoint. Никакого dependency на Telegram для прежнего DB/auth health.
+
+C3-M2-ENV04-05: connect2→5 — **кандидат на REVIEW, не разрешение rollout**.
+Connect входит в прежние readonly5/send10/FETCH20s, не добавляется к ним; lease30s
+не меняется. Общий timeout/cancellation без доказанной wire phase не означает
+definitely_unsent. Cold TLS3s подтвердил old-fail/new-pass, но stalled TLS выявил
+незакрытый TCP после outer cancellation в R1; failed candidate сохранён в истории.
+R2 владеет raw TCP transport до завершения TLS и при BaseException выполняет
+синхронный nonblocking abort только этого transport, сохраняя исходное исключение.
+Нет drain/TLS shutdown, нового deadline, await/GC или detached cleanup task;
+повторная cancellation не прерывает этот участок. Освобождение socket завершает
+обычный следующий callback asyncio. Shared client и чужие in-flight streams не закрываются.
+Production factory и TEST AsyncHTTPTransport injection проходят один cleanup path.
+Private seams locked HTTPX0.28.1/httpcore1.0.9/AnyIO4.15.1 явно описаны в client.py
+и проверяются real peer EOF/closed FD при выключенном GC, включая repeat cancellation.
+Local R2 gates PASS; C0 scoped review и32 адресных cases PASS: findings01/02 CLOSED
+на R2. Задача остаётся REVIEW до actual PG/Docker29, final integration CI и
+независимого scoped C8. До отдельного решения C0/C8 принятая VM
+остаётся на connect2s. R1 history/R2 evidence — TEST runbook§0.6.19; прочие правила прежние.
 
 JSON responses ≤64 KiB. getFile принимает только opaque canonical FetchPermit.image_file_id;
 file_unique_id/filename/provider metadata не заменяют его. Relative file_path bounded,

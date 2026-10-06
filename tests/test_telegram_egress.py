@@ -1,9 +1,14 @@
 """E01/E02/E05 config and operator guards; real boundary is a mandatory Docker lane."""
 
 import argparse
+import base64
 import copy
+import hashlib
 import json
 import os
+import subprocess
+import sys
+import zlib
 from pathlib import Path
 from uuid import UUID
 
@@ -472,6 +477,97 @@ def test_canonical_source_rejects_added_byte_without_normalization(tmp_path, mon
     target.write_bytes(target.read_bytes() + b"\n")
     with pytest.raises(egress.EgressError, match="APP_SOURCE_CHANGED"):
         egress.source_check("a" * 40)
+
+
+def previous_or_modified_client(variant, current):
+    if variant == "extra_byte":
+        return current + b"\n"
+    if variant == "crlf":
+        assert b"\r" not in current
+        return current.replace(b"\n", b"\r\n")
+    previous = zlib.decompress(base64.b64decode(_R1_CLIENT))
+    expected = "abe2cfc61297397ffc313d287364741403ccf5bf"
+    if variant == "base_connect2":
+        assert previous.count(b"httpx.Timeout(connect=5,") == 1
+        previous = previous.replace(b"httpx.Timeout(connect=5,", b"httpx.Timeout(connect=2,")
+        expected = "53800d23c718910dd338cadee6ba595510c95ff9"
+    else:
+        assert variant == "failed_candidate"
+    assert (
+        hashlib.sha1(b"blob " + str(len(previous)).encode() + b"\0" + previous).hexdigest()
+        == expected
+    )
+    return previous
+
+
+@pytest.mark.parametrize("variant", ["base_connect2", "failed_candidate", "extra_byte", "crlf"])
+def test_final_source_pin_accepts_exact_bytes_rejects_old_or_modified_client(
+    tmp_path, monkeypatch, variant
+):
+    repository = Path(__file__).resolve().parents[1]
+    for path in egress.SOURCE:
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((repository / path).read_bytes())
+    lock = tmp_path / "infra/telegram-egress/image.lock.env"
+    lock.parent.mkdir(parents=True)
+    lock.write_text("TELEGRAM_EGRESS_IMAGE=" + egress.IMAGE + "\n")
+    monkeypatch.setattr(egress, "ROOT", tmp_path)
+    monkeypatch.setattr(egress, "command", lambda args: b"a" * 40 if "rev-parse" in args else b"")
+    egress.source_check("a" * 40)
+    target = tmp_path / "backend/src/asm/telegram/client.py"
+    exact = target.read_bytes()
+    target.write_bytes(previous_or_modified_client(variant, exact))
+    with pytest.raises(egress.EgressError, match="EGRESS_APP_SOURCE_CHANGED"):
+        egress.source_check("a" * 40)
+    target.write_bytes(exact)
+    egress.source_check("a" * 40)
+    lock.write_text("TELEGRAM_EGRESS_IMAGE=fixture.invalid/foreign@sha256:" + "0" * 64 + "\n")
+    with pytest.raises(egress.EgressError, match="EGRESS_IMAGE_PIN_CHANGED"):
+        egress.source_check("a" * 40)
+
+
+@pytest.mark.parametrize("variant", ["base_connect2", "failed_candidate", "extra_byte", "crlf"])
+def test_cached_image_probe_rejects_incompatible_client_bytes(tmp_path, monkeypatch, variant):
+    # Execute the helper's actual generated Python/hash probe against real files.
+    # Only Docker execution/path is substituted: this is unit evidence, NOT an
+    # actual cached image, Docker29 or relay execution receipt.
+    repository = Path(__file__).resolve().parents[1]
+    for path in egress.SOURCE:
+        target = tmp_path / path.removeprefix("backend/src/")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((repository / path).read_bytes())
+    calls = []
+    image = "sha256:" + "a" * 64
+
+    def execute_probe(args):
+        assert args[:-1] == [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--entrypoint=python",
+            image,
+            "-c",
+        ]
+        calls.append(args)
+        assert args[-1].count("/app/backend/src") == 1
+        probe = args[-1].replace("/app/backend/src", str(tmp_path))
+        result = subprocess.run([sys.executable, "-c", probe], capture_output=True, timeout=5)
+        egress.require(result.returncode == 0, "EGRESS_COMMAND_FAILED")
+        return result.stdout
+
+    monkeypatch.setattr(egress, "command", execute_probe)
+    egress.source_image_check(image)
+    target = tmp_path / "asm/telegram/client.py"
+    target.write_bytes(previous_or_modified_client(variant, target.read_bytes()))
+    with pytest.raises(egress.EgressError, match="EGRESS_COMMAND_FAILED"):
+        egress.source_image_check(image)
+    assert len(calls) == 2
 
 
 @pytest.mark.parametrize(
@@ -1270,3 +1366,59 @@ def test_transition_relay_attests_stopped_container_and_rejects_foreign_identity
             assert module.transition_relay([state], directory, missing=True) == {
                 "status": "missing"
             }
+
+
+# Exact failed-candidate client fixture: c009c8540146d0a16d44fccf662d6e4d50fc53b1,
+# blob abe2cfc61297397ffc313d287364741403ccf5bf. Compressed only to keep this
+# historical source fixture bounded; decode/hash validation precedes every use.
+# No Git/network access is available inside the ordinary checks image.
+_R1_CLIENT = (
+    b"eNrlG11z2zbyXb8CYR+ObGnaTpPeVVd1znGU1lNH8dhyP87j4cAkZLGhSB1B2VFy/u+3C4AkQIKy7Lh5OWfGloDFYrHf2EUc"
+    b"x3mVr7KYxSSfzZIooSl5lZfk4OSIRGnCsvKfJMtJwcoiYdyHD3FSsKiEj3lBIpqmrNjJbzNcXyTXSRY4jjMYJItlXpSE8nUW"
+    b"JXn1Nc2vAeK6+lqwwazIFyTKAUtUJnnGA3oVETV9gIuPSlbQMi8kZExLGqWUc8YrqHpIQpTrJexQo8jWcnhVpGlyFSxpwVk1"
+    b"CWN8mSZlTe28LJcfBnIB5YtglqSMB4s8Zmm93RtWRvMTVixgXQ24YJxTPFnAiiIvauBDWOqTt9XsGCdtq8wt3q3KKF+wX5Is"
+    b"9skZy2I14JMkBnkks4RZsRSMr9KyRoMr24SWLGXXBV0EUZ7NkppNUzV8xsoSMHHLgiwvFjRNPlIUU7UOsGRScCEQlcagFNlq"
+    b"wYokChOgPb/6E2bDG5qugHgOGgTf/uR5NhgMhMjqjQVn3PGHiC0RmzccEPiJ2YyEYZIlZRi6nKUzH3aM2VDx9WsfIXCapetw"
+    b"lXFgzpBc5XlKRuQNTTnzyM6PZJJnTOLDH75assL1ghovYgwEiV4DBHsFOAGI8I850dkUoDpjcMR/1arpAj8/smw0LQQj0rzk"
+    b"4rOn2PBqxZMM5HhY81MSzD6A9mc0DTVGJ/EQWSnm0e6KcMXhlz6c8JBl9CplsWSHGIxoFhZsma61MSCQyWU1v/MrwHYjpKxY"
+    b"fpWXFXbBzxikeAFfKvleNswFL7EqMvKpHsAfRyJAzS3XzlDh800Y+0kBWnDcPttCYTCjWmkMthY0bKqgm5EWaM28CrIeaJ8D"
+    b"FTlEnQFI1Lxm/g5UAjkMGrgEU+VhWdCMox2F4Be521LWr2o3vFyBUZdzBjtHwGGSZOLb+elxQF4nHOklV2yWFwwNEiSzitCK"
+    b"CVUO3Ff4kixKVzHOsA8JFyDRPElj4ZZZwQPyZgXyY3K0YGDm2RyMGdw44eAKQdHBf8KfQCCEDUlGFwzpcR3hOx2fiA8R0AKf"
+    b"vy5Xy5S5yusHx2KbYEEzin/lrq9BmzyvUaFkJpGORkThJNU+1ZDAXo0GvKRFyW+Tcu4qKgKdjMDRseOP3BdstqLrmpWSNBcR"
+    b"ehbgIJZsjmEV2q0NZFnkS3oNBlU5HxsQh63YDUtrnhyeHk2PDg+OyTdk39wZGZGX1cI5zWKItNw8ioaZxvHPEqbGPVmlaTXm"
+    b"eR2feyiUw+JpDW/na99kcBh2wkUD83XzsdbuoYyrgQjnryhn02qG/FfoOzDMtJSS8TKU2YRwOzY4i2tXHKvoDCofaLCsoAlk"
+    b"AGbcwXASTN5Nw4Pj43e/jV83gpBEEKV4fLi7S5dJExTz4trRt6/PDC5Y0CLIBk3VTqRPDdsS12i/SYo8W6DRPYPtp+OzqdMV"
+    b"/sNOgxRuQ4jIklDXqwzJ1ZZ1tNTtUCXXBzyaMzDbZ4p7TgcOGKNA5zkvhY0jQUDaJ2f/+d+DPfi3j8ac5pBoIgx+GQ73nbsN"
+    b"uJa0nG+Y/s+KFesN87OCXiPbN4BgOEFqNxLB+W1exAaI9wABHk1+PTg+eh0eTU7OpybPa6XUpKLnN/boYuYwlaIBluqjCRDW"
+    b"u7Q3ELMoUJjTLFu6E1MZahpG9afWSXQMP0+nJ7Vv6GqVuoKM9vyuD0wgy+UjietYfHEX9IOWLvDRC5/g0HvGlpDH3jBz0usi"
+    b"hTgK7AVDHAl3bgK04G8gTM7WMr8bbI1kBvee/Dasr1Q2mCc/WpksWL4qFcap/OaqFaOXPllCdjh6jjc9GuP3W8gA2OhlC80c"
+    b"ZiEejT45BxFm7TvjDLIe0CPIe5w627trFnlNjhmCX1HJ5YKV81wmlyKhxyuXJYeH6U6WaWqIrrTGxDeQnOwi2l1IPB10WPiF"
+    b"wH2LEUeMeS14w0CCMn/PMswRQpl+yeuM217k7DqtEXm09vnFjVhyoWDgi3jZircmS5Z0neYUvnWybsGuq1UMlA3JDIDwGvKy"
+    b"iY0i97pIIP3T1sJ9+FLL18tibbokSR0mUxa3ri7zgdIgV25usZzGRUB2Bmq0cJ2TdxC/fDWD4pen9HyC98GROqYHe4B4wQFk"
+    b"HYPr+k4QZQUbKHVEObkOKHMJCrjDKpX0NZX0IPG8xYxIBKbmXtJB/1j3jD9XebwGcVytS0aLgq5dz85NkURH81X2HqNefRoK"
+    b"FleEuJq7YjbkyUc2+u7ly2+/8+yU4o7inpTFcolnBQOeQSLvIrRHfiQCox3h5xxfWWh9HsjRyxUX1yKjDuDKIwpqfElMg4yJ"
+    b"agBxpaNSV2NBg0+MMeXDqtETcB5qyNsy93s9PhlPXo8nh3+E55ODXw+Ojg9eHY8t5QV5ayeiPIJ5U4dYtbFBZjXWqm48hKrp"
+    b"0dvxO+B0/85yKwyhAsNnHXzDNmYta8tdTG3RkHc9Io3zLF27D/KEwt2BZ9OKPELf/FoBwRTpLRiV8j+V45X4a9RGoixR4J3z"
+    b"+d4egVtUo83Cx+TvHQ8zaFQIMe3I8pujG3KLP6ZVXFQrLge92bR9z+71Egko10vmmgu0aoQnViatvFY/14UOfoknlzzoLFCs"
+    b"wTT9xd6eT17s7eOvb/HXiyYz9z7n4vVQjW2rEsbrBRN61E0gOmFPCgJzXa1i6ZoqozTTAcxvsbjx6c4zHR+kEoChqX+6EquU"
+    b"RBI7XufmZADwUOQi1a1M6BUEB8T6bNTKSVRJ7jOvg5pOAsIvaukonlt2Nc/z92GSzfJGUBuri0pKvYL5TaI8AoxSQv2WJS6a"
+    b"PMlAmbOIKVnJVKl927LDSrFBKuN4IqZ1VlX2WMMuITYDP8PVEuuuYGerrFR2Ka+9ncuRXH1hX3lJfiB7D7a2nsj9FREwRHYT"
+    b"GN89Pz0WJr4s8htIkgrgDL3O4AqeRJzQQt7UpfYw8D15XU3rFIMFj4b1WfAbJK/2Mw3vOfKdTZEkCG90KE14edGb9G5WI7Oc"
+    b"C+jPJXbHTEc/dWzPETc1OMH+nuWG6qikGeZtsxQvgiyujgJQF9akzLlSnQLtiuf494AqmfbBwe2zhK23BY9Bp2zw3LLg0hwy"
+    b"boO9lqnZTW0bKNG2cWAeW4H9iFxvA9Bs7QpkcL5FjQr1QqTdOKqCNeJ4KktqojxgtamrRYQq36nbHHq7pa83ZA1kTYPQ1ZCZ"
+    b"rkl26kRnq9W9s1z57jUR3VS6pKIXtums7NBoJHYLeibRndgpKb7oaxxdYtDU+fl0sbJ7yi5H7qPO711hdrE2AGrdqw1QTeNq"
+    b"A1CazFi0jlIWovdpQ3pfNDOQ/UfW7T12zcNX/c8tm5NdY5kp/H9lgtUI3ow4fZ6g12yB2gbM7Gsi/TUrnk7R9e20rrDkTUcr"
+    b"jA2wjsMs2mHrD9t6xGY/6P4ucQ98uyXcA2Y0gntg9A5wH3V671d8CZrHBa1I2FZ73iTETR5jdmYekrfwOhe+P2+R6Zmp/1Vu"
+    b"DnOWg6pCqKiM9i6VQJbC6f9t+iPWt2r3mC9aoOIiX4ZmCoyglv5AX06ltEW7TT4urenoaRYr37wUb4uG2jsjobTagyWjNSvB"
+    b"g/o+Ibuax+OfTg/eim6+AtA9wXaOWXkVbWNXe0Il3NzZeDINT8anbw8m8MknjamO+l1hJ2BsWVayGUwWv+3Vq09b67r0YopR"
+    b"2zyKadzXnJbGajXQA14C8gYWv3UB77pDsiMw2t/zNydvDymuWQKatVpjYlClNa9bm8aDW9bWt3Sct61Tdo7htrfK08DYMFh7"
+    b"5c2BJIoeqXvIrI2Ct2JG1mq04tm0epSGU6lDL5JmJd6oJDnOskhuMGHs5u493ZTNhnp2fng4PjvzNVZv8dhg2xLp55RJH1Uq"
+    b"rRaZlSNt25jxqEhES8BaQ7K3vPqqr3eP4vmjnaPVml88/95OxZJCkME7p8kBMQzhtOCOvV0F0ZZiI02ur0wbHHNIZ7AMZT3T"
+    b"GSzhVBlP9niNLkaLcqELYo9K7EJi++SHkdoaPvzjO+Dzhh5Zl8G9sPhj5f7peHr6h+g5bVzblkxP32ojDo19mJjlWcxH4qz9"
+    b"y7wvqlkPuE+ACGWe3X0HPHgsuY0odHKbdP5B12F8BjTYkoLzyS+Td79NulxSE+H49+n4dHJwDCSenR93c7McEsYwWYDnbGVo"
+    b"2pt12SvTH9ZfiB7s5ZfK1UTaabJsYzlty17NdpUrLFK9SVLRvnHwGYiREgnWhWr4blP9CZ+YSWdWx22xDMed7WKWuVBE+Gcj"
+    b"KyW2V2atjgTuawkgWqEUIWSZ9PkLG0zBgtkqTRcUNMUtnIuDnX/TnY97O9+Hwe7O5TeOTyQG8JJWh6rKrZyJt3PyCR8+uxBv"
+    b"cYPAuRMlV20a0QXycaGz286Wnuih3INeszzf2+4ly09j8yGL5D3KSj4OePwbFu2VBOrC876oY2NFr+/u8qgXtI+WH8jLVnHd"
+    b"iEkYZDdEo8F2EeULPOb5ipwydBnVY3l8LPH73zj4Tjwm/memjGAlIsJH3BRfv89S+BjLtzVP+j7oiR//rLGQK1E9Joyq/+nS"
+    b"JbwJsBJEwWhhW4q/gbnf2YsY+le8oLEFlad+QnPPHj1vaFpxmkZpzllfmU8PXMLxKHBv8D9zbxDi"
+)

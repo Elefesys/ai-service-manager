@@ -1247,25 +1247,15 @@ Production/M3, новые платные ресурсы, backup/restore drill н
 
 </details>
 
-## 0.6. TEST egress — C3 candidate требует R2 cleanup / 2026-10-06 UTC
+## 0.6. TEST egress — R2 reviewed C0, runner/C8 pending / 2026-10-06 UTC
 
-Последний owner TLS PASS описан в§0.6.18. Последующий C3 candidate
-c009c8540146d0a16d44fccf662d6e4d50fc53b1 получил **C0 CHANGES_REQUESTED**:
-outer timeout/explicit cancellation при stalled TLS оставляют TCP открытым; strict
-SOURCE pin правильно отвергает изменённый client. C0 повторил4 адресных local
-case:1 PASS/3 FAIL; cold TLS3.017s/HTTP3.030s, без actual Docker/PG/relay/live.
-
-Единственная текущая выдача — **M2_HANDOFF / C3-M2-ENV04-05 R2**: bounded
-cancellation-safe cleanup в client.py + один final client blob в helper, с
-сохранением deadlines/UNKNOWN и strict source/image guards. Source-pin update
-не разрешает новый helper со старыми VM images. Candidate и его
-[§0.6.19](https://github.com/Elefesys/ai-service-manager/blob/c009c8540146d0a16d44fccf662d6e4d50fc53b1/docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md#0619-c3-m2-env04-05--connect-budget-candidate-review-с-blockers--2026-10-06)
-ещё не интегрированы. Full runner/Docker29/C8 остаются обязательными gates.
-
-Исторические owner terminal blocks не являются новой командой. VM остаётся
-на0b7e24ee/connect2, TG disabled; binding committed, ACK NOT_ATTEMPTED.
-Реестр задач — TASK_REGISTER. Прежняя выдача§0.6.18 сохранена как история;
-актуальные scope/allowed paths находятся в активном handoff.
+Последний owner TLS receipt — §0.6.18; R1/R2 author evidence — §0.6.19;
+C0 verdict и actual runner gate — §0.6.20. Findings C0-M2-ENV04-05-01/02
+CLOSED на R2 после32/32 targeted C0 cases. C3-M2-ENV04-05 остаётся REVIEW.
+Активный этап — C0 runner verification в Draft PR24, затем независимый C8.
+Новый source/helper не запускать со старыми VM images/recovery state.
+VM0b7e24ee/connect2, binding/ACK/receipts сохраняются; owner commands не выданы.
+Единственный реестр — TASK_REGISTER, точный final candidate/CI — единый receipt.
 
 ### 0.6.1. Датированный фактический receipt и границы
 
@@ -2528,6 +2518,248 @@ Implementation CI37385698548 all3 SUCCESS относится к этому imple
 Прежние C0/C8 closures сохраняют свой scope. Merge/production/M3 не выданы.
 Source deploy-key revocation остаётся неподтверждённым. Fixed COMPED TEST interval
 2026-10-02T00Z→2026-10-09T00Z и committed request не пересчитываются.
+
+### 0.6.19. C3-M2-ENV04-05 — R1 history и R2 REVIEW / 2026-10-06 UTC
+
+**Текущее исполнение: R2 возвращена на REVIEW; findings C0-M2-ENV04-05-01/02
+остаются OPEN до verdict C0.** Local regression612 PASS/0 FAIL; actual integration
+gates/C8 не выполнены. Подробности R2 ниже, после сохранённого failed-candidate receipt.
+Это не разрешение интеграции/rollout и не новая owner/VM-команда.
+
+#### История R1 — сохранённый failed candidate c009c854
+
+Поручение прочитано на coordination
+`62b018ccccffe87e97ebd34985886d472af583b1`, включая
+[§0.6.18](https://github.com/Elefesys/ai-service-manager/blob/62b018ccccffe87e97ebd34985886d472af583b1/docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md#0618-verified-tls-выше-принятого-connect-budget--2026-10-06).
+Отдельный checkout/ветка `c3/m2-telegram-connect-budget` от
+`9e165dd09f87663665e3dabae4f155e99e2639a6`, tree
+`70c39e1dc2ef44050f743399198f444cb420023e`; восстановленный tree точно совпал.
+Старые owner-команды этого base не являются действующей выдачей.
+Coordination находится на3 docs commits впереди base; они не cherry-picked.
+
+Production diff — ровно `connect=2` → `connect=5` в общем TelegramClient.
+Pool2/read5/write5,4 connections, readonly5/send10/FETCH20 и lease30 неизменны;
+TLS/hostname/SNI, official origin, trust_env=false, redirects/retries0 сохранены.
+Наблюдение owner2523ms/18:10:05.409401Z остаётся отдельным
+[историческим receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006),
+не доказательством HTTP success или причины всех прежних failures.
+
+**Результат кандидата не PASS: две cleanup regressions и strict source pin FAIL.**
+Assertions не ослаблены, skip/xfail нет. TASK_REGISTER и active handoff вне allowlist
+этой задачи, их disposition обновляет C0. Полные SHA/patch/commands передаются в C3
+receipt без последующих SHA-only commits.
+
+| Проверка | Фактическое local evidence / граница |
+|---|---|
+| Cold TLS old-fail/new-pass | На exact base client, временно восстановленном через `git show 9e165dd:backend/src/asm/telegram/client.py`, новый тест падает до HTTP на connect timeout; затем восстановлена ровно однострочная правка. Новый client: TLS3.008s, полный строгий getMe3.013s<5s, TCP1/HTTP1, official Host/SNI. Это настоящий loopback TCP/TLS, без Telegram/relay/MockTransport |
+| Общие deadlines | Trickle каждые0.2s не продлевает readonly5/send10/image20; readonly/send включают TLS3s. Read-stall и send connect/read phase bounds5s, pool wait2s/4 real sockets, wrong hostname/untrusted CA, redirect/no retry проходят |
+| Cleanup blocker | Stalled TLS + readonly outer timeout и explicit cancellation: `TCP_PEER_STILL_OPEN accepted=1 closed=0`, pool уже пуст. Независимый local probe с обычным HTTPX backend и только loopback address routing: timeout5.006s, `DEPENDENCY_TIMEOUT`, `definitely_unsent=False`; peer не закрыт после client.aclose() и диагностического GC. Настоящий socket/resource defect, не только assertion pool |
+| Source guard blocker | Прежний `test_canonical_source_rejects_added_byte_without_normalization` падает `EGRESS_APP_SOURCE_CHANGED`: helper намеренно pin-ит старый client blob. С exact base client этот test PASS. Helper/test не изменены |
+| Полный local non-integration runner | `uv run --frozen pytest -q -s -m 'not integration'`: 593 PASS,3 FAIL,393 deselected; FAIL — две новые cleanup проверки и прежний strict source guard. Integration deselection не PostgreSQL evidence |
+| Static checks | `uv run --frozen ruff check backend tests scripts migrations`, `uv run --frozen ruff format --check --diff backend tests scripts migrations`, `uv run --frozen mypy backend/src`: PASS,51 typed source files |
+| Штатные Docker commands | `sh scripts/ci.sh` и `sh scripts/test_browser.sh`: exit127, `docker: not found`. `sh scripts/test_telegram_egress.sh`: exit1 на прежнем `TEST_RUNNER_CHECKOUT_AND_NONROOT_REQUIRED`; local shell — root, guard не обходился. Actual Docker29/PG/S3/relay и workflow clean-source gates не выполнены |
+
+Новый `tests/test_telegram_connect_budget.py` автоматически собирается существующим
+pytest runner. TEST CA/leaf создаются одноразово тем же OpenSSL strict X.509 способом,
+что в прежнем relay lane; никакого runtime trust/config change. Новый client на case,
+один TCP attempt, задержка на accepted raw socket **до начала TLS handshake**, без
+warmup. Доставка только на loopback заменена через TEST transport, сам HTTPX/httpcore
+TCP/TLS I/O настоящий. Timeout tolerance по monotonic: −0.2/+1.0s, cleanup observation
+≤2s отдельно от product budget; positive cold readonly обязан уложиться **строго<5s**.
+Server teardown не считается успешным client cleanup.
+
+Подготовлены дополнительные **не исполненные локально PG assertions**:
+`test_real_http_accept_lost_response_process_restart_never_second_wire_call` сохраняет
+прежние disconnect/before+after-finalize cases и добавляет trickle до10s, fsynced
+wire1, DISPATCHING/UNKNOWN, настоящий второй process с NO_CLAIM, DEAD/attempt1 и
+runtime pool0/pg_stat_activity без чужой активной business transaction во время HTTP.
+`test_fetch_twenty_second_wall_includes_cold_tls_metadata_and_trickle` использует
+существующий FetchTransfer20s/PG/S3 fixture, две cold TLS3s фазы внутри общего срока,
+READY retry/attempt1 и отсутствие upload intent. Existing real-relay cases не удалены;
+их единственная адаптация — exact timeout assertion connect2→5 вместе с cold regression.
+Ни эти prepared assertions, ни прежний CI37385698548 не означают PASS нового candidate.
+
+**Предложение C0 перед продолжением:** отдельно согласовать cancellation-safe cleanup
+незавершённого TLS без изменения budgets/UNKNOWN и dependencies. Local locked
+httpcore1.0.9 `AnyIOStream.start_tls` закрывает stream в `except Exception`, а
+`asyncio.CancelledError` — BaseException; `AsyncHTTPConnection._connection` ещё не
+создан. Это согласуется с observed leak. Требуется владение raw stream и гарантированное
+закрытие при cancellation; `client.aclose()` после потери pool entry недостаточно.
+Не заменять outer timeout на definitely_unsent, не добавлять retry/warmup/новый env knob.
+
+Второй scope request — после review итоговых client bytes синхронизировать **один**
+strict expected blob в `scripts/prepare_telegram_egress.py`, сохранив точное сравнение.
+Для текущего однострочного candidate конкретный **не применённый** diff:
+
+```diff
+--- a/scripts/prepare_telegram_egress.py
++++ b/scripts/prepare_telegram_egress.py
+@@
+-    "backend/src/asm/telegram/client.py": "53800d23c718910dd338cadee6ba595510c95ff9",
++    "backend/src/asm/telegram/client.py": "abe2cfc61297397ffc313d287364741403ccf5bf",
+```
+
+После correction/review этот blob необходимо вычислить заново; не принимать оба
+варианта и не обходить source guard. Далее C0: actual штатный GitHub runner + exact
+Docker29 lane, checkout/source artifacts и все clean-source gates на final reviewed
+integration SHA, независимый scoped C8; только затем отдельное поручение C6 rollout.
+
+VM не изменялась: implementation0b7e24ee425ebb429bf87dfe382cbd3fab883028, binding
+committed, ACK NOT_ATTEMPTED, прежние receipts сохранены. Нет deploy/rebuild/ACK/
+setWebhook/включения Telegram/send. Live A09/A11 не выполнены; M2 IN_PROGRESS,
+ENV04 REVIEW, integration PR24 Draft/open. Candidate не готов к интеграции/rollout.
+
+#### R2 — cancellation-safe cleanup и final pin, 2026-10-06 UTC
+
+Активное поручение прочитано на coordination
+`e4f018af92d344429df4beb224262d0c87e985b3`. Продолжена та же ветка
+`c3/m2-telegram-connect-budget` от full candidate
+`c009c8540146d0a16d44fccf662d6e4d50fc53b1`, без reset/rebase; R1 и исходный
+base9e165dd09f87663665e3dabae4f155e99e2639a6 сохранены в истории.
+Не выполнены push/integration в c6/main, PR merge или действия на VM.
+
+`_OwnedTCPBackend` оборачивает только backend собственного HTTPX transport.
+`_OwnedTCPStream` удерживает raw TCP transport до завершения handshake. Любой
+BaseException из start_tls вызывает nonblocking `asyncio.Transport.abort()` и
+повторно поднимается. Здесь нет await/checkpoint, ожидания flush/peer/close_notify,
+нового таймера, Task или GC. Повторная Task.cancel во время abort не может прервать
+синхронный участок. FD закрывает стандартный следующий callback asyncio; tests
+проверяют и peer EOF, и fileno=-1 **до** client.aclose/server teardown.
+При успешном TLS ownership передаётся прежнему httpcore HTTP connection.
+Общий client, чужие streams, read/write/pool limits, deadlines и retry policy прежние.
+
+Private seams: HTTPX0.28.1 `AsyncHTTPTransport._pool._network_backend`,
+httpcore1.0.9 `AnyIOStream._stream`, AnyIO4.15.1 asyncio `SocketStream._transport`.
+Область — существующий asyncio runtime, не универсальный Trio/backend plugin.
+Сторонний код/site-packages и зависимости не изменены. Factory и разрешённая TEST
+инъекция готового AsyncHTTPTransport оборачиваются одинаково; тестовая подмена
+CA/destination не заменяет production cleanup. Будущий dependency update должен
+повторно проверить эти seams, а не считать private APIs стабильным контрактом.
+
+Окончательный client blob: **525381357de76ea1c570fd864f8df5e9781a87e2**.
+Единственная изменённая строка `scripts/prepare_telegram_egress.py`:
+
+```diff
+-    "backend/src/asm/telegram/client.py": "53800d23c718910dd338cadee6ba595510c95ff9",
++    "backend/src/asm/telegram/client.py": "525381357de76ea1c570fd864f8df5e9781a87e2",
+```
+
+Config blob, IMAGE, source/image/recovery/legacy/drift guards не менялись. Старый
+R1 blob abe2cfc… не допускается. Исторический source fixture в test сжат только
+для компактности; после decode проверяется exact Git blob R1 и base-connect2.
+Эта fixture не является normalization/allowlist в production guard.
+
+| R2 assertion / критерий | Local результат |
+|---|---|
+| `test_stalled_readonly_total_deadline_and_release`, `test_explicit_cancellation_closes_real_socket` | PASS для factory/injected transport и stalled TLS/response; GC выключен. Peer closed и FD=-1 до teardown; outer timeout5s не definitely_unsent, cancellation пробрасывается |
+| `test_repeated_cancel_during_owned_abort_preserves_original_and_leaves_no_task` | PASS оба factory paths; повторные cancel вводятся observer-ом только на одном transport в момент настоящего production abort. Исходный CancelledError/message сохранён, cancelling=3, abort1, завершение<1s, TCP1/HTTP0, нет новых живых tasks; observer не исправляет cleanup |
+| `test_cancel_isolated_from_parallel_request_and_same_client_can_send_next_readonly` | PASS оба paths: закрыт только отменённый TCP; параллельный TLS socket остаётся жив, valid getMe завершается; следующий getMe тем же незакрытым client успешен, pool slots/tasks освобождены, нет повтора отменённого запроса |
+| Cold TLS old2/new5 | Exact base client в изолированном process/source staging: FAIL2.005s, TCP1/TLS0/HTTP0. R2: TLS3.008s, strict readonly3.011s<5s, TCP1/HTTP1. На каждый case новый client, no warmup/retry. Checkout не подменялся |
+| Прежние phase/trickle/cert/redirect/pool cases | PASS: pool2/read5/write5,4 connections; readonly5/send10/image20, TLS3s внутри readonly/send; UNKNOWN/proven-unsent прежние; bad hostname/untrusted CA и redirect отвергаются |
+| Exact source pin | Прежний added-byte test и4 новых variants PASS: final bytes принимаются, base-connect2/R1/extra-byte/CRLF отвергаются; чужой image pin также FAIL как требуется |
+| Cached-image source probe | 4 variants PASS: выполняется настоящий сгенерированный Python/hash probe по реальным files. Docker execution/path **substituted**, не actual image/Docker evidence; старые/изменённые client bytes отвергнуты |
+| Full local non-integration | `uv run --frozen pytest -q -s -m 'not integration'`: **612 PASS,0 FAIL,393 integration deselected**,81.47s. Изменённые fixtures/assertions не заменяли failures пропусками |
+| Static/contracts | `uv run --frozen ruff check backend tests scripts migrations`; `uv run --frozen ruff format --check --diff backend tests scripts migrations`; `uv run --frozen mypy backend/src`; `uv run --frozen python scripts/export_contracts.py --check`: PASS |
+
+Исполнение: Python3.13.15, OpenSSL3.5.8, httpx0.28.1/httpcore1.0.9/anyio4.15.1.
+Существующие timing assertions не ослаблены: timeout −0.2/+1.0s, positive readonly
+строго<5s; peer cleanup observation≤2s отдельно от operation budget. Изменение
+прежних TLS fixtures добавило socket/production-wrapper assertions и GC-off cases;
+в `test_telegram_egress.py` прежние guards/tests сохранены, добавлены только связанные
+source/image regressions. R1 direct-wire/PG/relay assertions сохранены без изменений R2.
+
+Локально Docker по-прежнему отсутствует, shell uid0; guards не обходились. Actual
+PG/S3/direct-wire/relay/exact Docker29, workflow clean-source gates, full CI на final
+reviewed integration SHA и независимый C8 остаются обязательными незакрытыми gates.
+C0 организует runner после review исправленного patch. Финальные head/tree/parents,
+local tested SHA, точные script exits, clean-source evidence и CI IDs при наличии —
+в C3 receipt; отдельные SHA-only documentation commits не создаются.
+
+VM остаётся на0b7e24ee425ebb429bf87dfe382cbd3fab883028/connect2; binding committed,
+ACK NOT_ATTEMPTED, receipts и runtime сохранены. Live Telegram не выполнялся;
+M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11. Findings01/02 закрывает только C0.
+
+### 0.6.20. C0 scoped R2 verdict и runner handoff / 2026-10-06 UTC
+
+**C0 scoped verdict: PASS; C0-M2-ENV04-05-01/02 CLOSED.**
+C3-M2-ENV04-05 остаётся **REVIEW** до actual final integration CI и независимого C8.
+Закрытие двух конкретных defects не заменяет эти gates и не разрешает rollout.
+
+R2: **41f74346b56009bda53fa637ed5adeb3fbb7c507**, tree
+**9200aed964f22fc073341f2d448a5d82598d39cc**, единственный parent
+**c009c8540146d0a16d44fccf662d6e4d50fc53b1**; исходный base
+**9e165dd09f87663665e3dabae4f155e99e2639a6** сохранён. R2 меняет6 разрешённых
+файлов, cumulative R1+R2 —8. Client blob **525381357de76ea1c570fd864f8df5e9781a87e2**;
+helper меняет только одну строку SOURCE/client pin. Config/IMAGE/dependencies/locks,
+остальные guards и утверждённые budgets/classifications прежние.
+
+C0 повторил **32 адресных case:32 PASS,76.57 s** на Python3.13.15,
+httpx0.28.1/httpcore1.0.9/anyio4.15.1. Cold TLS3.008s, строгий readonly3.012s<5,
+одна попытка. Проверены factory и injected transport, GC-off peer EOF/FD=-1 до
+teardown, outer timeout, explicit/repeated cancellation с исходной отменой,
+изоляция параллельного запроса и повторное использование client, phase/trickle/
+cert/redirect/pool cases, final/old/tampered source и generated cached-image probe.
+Четыре соответствующих code/test blobs сверены с R2 byte-exact; staging основан
+на ранее принятом source. Это scoped local loopback TCP/TLS evidence, не полный
+R2 checkout/full-suite rerun, actual image/Docker/PG/relay или независимый C8.
+Git subprocess и Docker boundary в source/image unit cases substituted;
+сам hash probe исполнялся по реальным bytes.
+
+C3 сообщил на final R2:612 non-integration PASS/0 FAIL,393 deselected,
+Ruff/format/mypy/contracts и source_check(final_SHA) PASS. Эти полные результаты
+пока C3-reported; C0 проверяет actual runner отдельно. Locked private seams wrapper
+допустимы в выданном asyncio scope; при обновлении зависимостей нужны повторные
+regressions. В C0 scoped review новых blocking findings не найдено.
+
+| Finding | Статус C0 | Основание |
+|---|---|---|
+| C0-M2-ENV04-05-01 / P2 | CLOSED на R2 | Только незавершённый TLS TCP transport abort, без await/tasks/GC; исходная отмена, соседний запрос и client сохранены;32-case subset PASS |
+| C0-M2-ENV04-05-02 / P2 | CLOSED на R2 | Exact final blob закреплён одной строкой; final bytes PASS, base/R1/tampered/CRLF и несовместимый image-probe FAIL как требуется; guards сохранены |
+
+### Единственный активный этап — C0 runner verification, затем scoped C8
+
+Repository `Elefesys/ai-service-manager`, integration branch `c6/m2-telegram-live`,
+Draft PR24. C0 собирает candidate от coordination
+**e4f018af92d344429df4beb224262d0c87e985b3** с R2 как вторым parent.
+R1/R2 ancestry сохраняется; текущие C0 coordination records не заменяются старой
+копией из ветки C3. Assembly для CI не переводит задачу в INTEGRATED и не является
+merge PR в main. Final head/tree/ordered parents, tested PR merge и run/job/artifact
+IDs дописываются в единый receipt после исполнения, без SHA-only docs commit.
+
+Code/test files берутся byte-exact из R2; C0 разрешённые coordination edits:
+`docs/TASK_REGISTER.md`, `docs/tasks/M2_HANDOFF.md`,
+`docs/tasks/M2_CONTRACT.md`, `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md`.
+Workflows/Compose/locks/migrations не менять. Применимы AGENTS,
+Spec§§18.2/18.8/18.10, ADR239, M2_CONTRACT§§10.5/10.6/10.12,
+Implementation Plan M2; оригиналы по SOURCE_MANIFEST.
+
+Обязательные actual gates: штатные `sh scripts/ci.sh`,
+`sh scripts/test_browser.sh`, включённая relay lane и exact Docker29 job;
+PG/S3/direct-wire/relay, UNKNOWN после effect/lost response→restart→wire count1,
+нет business transaction на HTTP, source/image/recovery/legacy guards,
+все workflow clean-source gates. Проверить tested merge parents/tree,
+source archives/worktree status и sanitized relay/Docker29 artifacts.
+Никаких skip/xfail/assertion weakening/root guard exception/manual bypass.
+
+После SUCCESS именно final candidate — единственная следующая выдача C0→C8:
+независимый scoped review cumulative R1/R2 и разрешения C0, production cleanup/
+повторной cancellation/изоляции, exact pin, unchanged budgets/TLS/UNKNOWN,
+реальных runner evidence и границ VM migration. Read-only evidence review;
+новые implementation changes только отдельным finding C0.
+C8 возвращает exact reviewed head/tree, findings/PASS и evidence limits.
+Старый C8 verdict/CI37385698548 не переносится на новый implementation.
+После CI+C8 C0 отдельно выдаёт C6 source/image/recovery migration plan; сейчас
+никаких migration/VM действий. Historical owner blocks не выполнять.
+
+VM сохраняется на **0b7e24ee425ebb429bf87dfe382cbd3fab883028** /
+tree **14a4033b849c736235653a5a85ec9e5112bfe727**, прежние cached images,
+connect2, Telegram disabled/empty. Binding committed; ACK NOT_ATTEMPTED/replay-blocked.
+Private receipts/inputs/runtime и fixed TEST interval2026-10-02→2026-10-09 UTC
+не изменяются. До отдельного C0 поручения после CI/C8 нет owner commands,
+source fetch/rebuild/deploy, ACK/setWebhook/activation/sends.
+M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11; PR24 Draft/open.
+Merge main/production/M3 не выданы; source-key revocation не подтверждён.
+[Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
 
 ## 1. Конкретное окружение и предварительные условия
 

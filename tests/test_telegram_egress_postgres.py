@@ -151,7 +151,7 @@ def official_client(directory):
         ),
     )
     assert client._origin == "https://api.telegram.org"
-    assert client._http.timeout == httpx.Timeout(connect=2, pool=2, read=5, write=5)
+    assert client._http.timeout == httpx.Timeout(connect=5, pool=2, read=5, write=5)
     assert not client._http.follow_redirects
     return client
 

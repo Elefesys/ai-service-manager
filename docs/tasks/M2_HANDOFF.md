@@ -4,7 +4,94 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный handoff C0 → C3 — ENV04-05 R2 / 2026-10-06 UTC
+## Активный этап C0 — R2 reviewed, runner gates / 2026-10-06 UTC
+
+**C0 scoped verdict: PASS; C0-M2-ENV04-05-01/02 CLOSED.**
+C3-M2-ENV04-05 остаётся **REVIEW** до actual final integration CI и независимого C8.
+Закрытие двух конкретных defects не заменяет эти gates и не разрешает rollout.
+
+R2: **41f74346b56009bda53fa637ed5adeb3fbb7c507**, tree
+**9200aed964f22fc073341f2d448a5d82598d39cc**, единственный parent
+**c009c8540146d0a16d44fccf662d6e4d50fc53b1**; исходный base
+**9e165dd09f87663665e3dabae4f155e99e2639a6** сохранён. R2 меняет6 разрешённых
+файлов, cumulative R1+R2 —8. Client blob **525381357de76ea1c570fd864f8df5e9781a87e2**;
+helper меняет только одну строку SOURCE/client pin. Config/IMAGE/dependencies/locks,
+остальные guards и утверждённые budgets/classifications прежние.
+
+C0 повторил **32 адресных case:32 PASS,76.57 s** на Python3.13.15,
+httpx0.28.1/httpcore1.0.9/anyio4.15.1. Cold TLS3.008s, строгий readonly3.012s<5,
+одна попытка. Проверены factory и injected transport, GC-off peer EOF/FD=-1 до
+teardown, outer timeout, explicit/repeated cancellation с исходной отменой,
+изоляция параллельного запроса и повторное использование client, phase/trickle/
+cert/redirect/pool cases, final/old/tampered source и generated cached-image probe.
+Четыре соответствующих code/test blobs сверены с R2 byte-exact; staging основан
+на ранее принятом source. Это scoped local loopback TCP/TLS evidence, не полный
+R2 checkout/full-suite rerun, actual image/Docker/PG/relay или независимый C8.
+Git subprocess и Docker boundary в source/image unit cases substituted;
+сам hash probe исполнялся по реальным bytes.
+
+C3 сообщил на final R2:612 non-integration PASS/0 FAIL,393 deselected,
+Ruff/format/mypy/contracts и source_check(final_SHA) PASS. Эти полные результаты
+пока C3-reported; C0 проверяет actual runner отдельно. Locked private seams wrapper
+допустимы в выданном asyncio scope; при обновлении зависимостей нужны повторные
+regressions. В C0 scoped review новых blocking findings не найдено.
+
+| Finding | Статус C0 | Основание |
+|---|---|---|
+| C0-M2-ENV04-05-01 / P2 | CLOSED на R2 | Только незавершённый TLS TCP transport abort, без await/tasks/GC; исходная отмена, соседний запрос и client сохранены;32-case subset PASS |
+| C0-M2-ENV04-05-02 / P2 | CLOSED на R2 | Exact final blob закреплён одной строкой; final bytes PASS, base/R1/tampered/CRLF и несовместимый image-probe FAIL как требуется; guards сохранены |
+
+### Единственный активный этап — C0 runner verification, затем scoped C8
+
+Repository `Elefesys/ai-service-manager`, integration branch `c6/m2-telegram-live`,
+Draft PR24. C0 собирает candidate от coordination
+**e4f018af92d344429df4beb224262d0c87e985b3** с R2 как вторым parent.
+R1/R2 ancestry сохраняется; текущие C0 coordination records не заменяются старой
+копией из ветки C3. Assembly для CI не переводит задачу в INTEGRATED и не является
+merge PR в main. Final head/tree/ordered parents, tested PR merge и run/job/artifact
+IDs дописываются в единый receipt после исполнения, без SHA-only docs commit.
+
+Code/test files берутся byte-exact из R2; C0 разрешённые coordination edits:
+`docs/TASK_REGISTER.md`, `docs/tasks/M2_HANDOFF.md`,
+`docs/tasks/M2_CONTRACT.md`, `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md`.
+Workflows/Compose/locks/migrations не менять. Применимы AGENTS,
+Spec§§18.2/18.8/18.10, ADR239, M2_CONTRACT§§10.5/10.6/10.12,
+Implementation Plan M2; оригиналы по SOURCE_MANIFEST.
+
+Обязательные actual gates: штатные `sh scripts/ci.sh`,
+`sh scripts/test_browser.sh`, включённая relay lane и exact Docker29 job;
+PG/S3/direct-wire/relay, UNKNOWN после effect/lost response→restart→wire count1,
+нет business transaction на HTTP, source/image/recovery/legacy guards,
+все workflow clean-source gates. Проверить tested merge parents/tree,
+source archives/worktree status и sanitized relay/Docker29 artifacts.
+Никаких skip/xfail/assertion weakening/root guard exception/manual bypass.
+
+После SUCCESS именно final candidate — единственная следующая выдача C0→C8:
+независимый scoped review cumulative R1/R2 и разрешения C0, production cleanup/
+повторной cancellation/изоляции, exact pin, unchanged budgets/TLS/UNKNOWN,
+реальных runner evidence и границ VM migration. Read-only evidence review;
+новые implementation changes только отдельным finding C0.
+C8 возвращает exact reviewed head/tree, findings/PASS и evidence limits.
+Старый C8 verdict/CI37385698548 не переносится на новый implementation.
+После CI+C8 C0 отдельно выдаёт C6 source/image/recovery migration plan; сейчас
+никаких migration/VM действий. Historical owner blocks не выполнять.
+
+### Owner boundary
+
+VM сохраняется на **0b7e24ee425ebb429bf87dfe382cbd3fab883028** /
+tree **14a4033b849c736235653a5a85ec9e5112bfe727**, прежние cached images,
+connect2, Telegram disabled/empty. Binding committed; ACK NOT_ATTEMPTED/replay-blocked.
+Private receipts/inputs/runtime и fixed TEST interval2026-10-02→2026-10-09 UTC
+не изменяются. До отдельного C0 поручения после CI/C8 нет owner commands,
+source fetch/rebuild/deploy, ACK/setWebhook/activation/sends.
+M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11; PR24 Draft/open.
+Merge main/production/M3 не выданы; source-key revocation не подтверждён.
+[Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+<details>
+<summary>История — R1 CHANGES_REQUESTED и scope R2; заменено verdict выше</summary>
+
+## История — C0 R1 verdict и разрешение R2
 
 **C0 verdict: CHANGES_REQUESTED. Кандидат не принят к интеграции/rollout.**
 C3-M2-ENV04-05 возвращена в **IN_PROGRESS** на одну ограниченную доработку R2.
@@ -126,6 +213,8 @@ Implementation CI37385698548 SUCCESS остаётся evidence только пр
 **M2 IN_PROGRESS; ENV04 REVIEW до actual A09/A11; PR24 Draft/open.**
 Прежние closures не расширяются. Merge/production/M3 не выданы; source-key revocation
 не подтверждён. [Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+</details>
 
 <details>
 <summary>История — initial connect budget scope до C3 blockers; заменён R2</summary>

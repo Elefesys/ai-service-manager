@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -43,6 +44,13 @@ from test_m2_3_transport import (
     business_connection,
     config,
     update,
+)
+from test_telegram_connect_budget import connect_tls_material as connect_tls_material
+from test_telegram_connect_budget import (
+    elapsed_timeout,
+    released,
+    tls_client,
+    tls_peer,
 )
 from test_tenancy_postgres import BA, UA, A
 from test_tenancy_postgres import db as db
@@ -117,7 +125,9 @@ async def inbound(h, raw=None):
 
 
 @asynccontextmanager
-async def wire_server(tmp_path, *, disconnect_send=False, content=None, inspect=None):
+async def wire_server(
+    tmp_path, *, disconnect_send=False, trickle_send=False, content=None, inspect=None
+):
     ledger = tmp_path / "wire-calls.jsonl"
     seen = []
     failures = []
@@ -147,6 +157,15 @@ async def wire_server(tmp_path, *, disconnect_send=False, content=None, inspect=
                 )
                 if disconnect_send:
                     return
+                if trickle_send:
+                    # The effect is durable in the external ledger. Keep read
+                    # activity below 5s but never finish a response: only the
+                    # unchanged 10s send wall deadline can terminate this call.
+                    writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 1000000\r\n\r\n")
+                    while True:
+                        writer.write(b" ")
+                        await writer.drain()
+                        await asyncio.sleep(0.2)
                 result = {
                     "message_id": 900,
                     "business_connection_id": EXTERNAL,
@@ -176,11 +195,18 @@ async def wire_server(tmp_path, *, disconnect_send=False, content=None, inspect=
                 + raw
             )
             await writer.drain()
+        except ConnectionError:
+            if not trickle_send:
+                failures.append("UNEXPECTED_CONNECTION_LOSS")
         except Exception as error:
             failures.append(type(error).__name__)
         finally:
             writer.close()
-            await writer.wait_closed()
+            try:
+                await writer.wait_closed()
+            except ConnectionError:
+                if not trickle_send:
+                    raise
 
     server = await asyncio.start_server(handle, "127.0.0.1", 0)
     address = f"http://127.0.0.1:{server.sockets[0].getsockname()[1]}"
@@ -205,7 +231,12 @@ async def main():
         if stage == os.environ['M23_CRASH_STAGE']:os._exit(42)
     db=RuntimeDatabase(Settings())
     client=TelegramClient(TelegramSettings(),test_origin=os.environ['M23_TEST_ORIGIN'])
-    try:await Worker(MessagingDatabase(db.engine,barrier=barrier),ControlledAdapter(environment='TEST'),telegram=client).run_once()
+    async def outside_transaction(request):
+        assert db.engine.pool.checkedout()==0
+    client._http.event_hooks['request']=[outside_transaction]
+    try:
+        worked=await Worker(MessagingDatabase(db.engine,barrier=barrier),ControlledAdapter(environment='TEST'),telegram=client).run_once()
+        print('WORKED' if worked else 'NO_CLAIM',flush=True)
     finally:
         await client.aclose();await db.close()
 asyncio.run(main())
@@ -213,8 +244,9 @@ asyncio.run(main())
 
 
 @pytest.mark.parametrize("stage", ["finalize_before_commit", "finalize_after_commit"])
+@pytest.mark.parametrize("loss", ["disconnect", "trickle_deadline"])
 async def test_real_http_accept_lost_response_process_restart_never_second_wire_call(
-    telegram_case, tmp_path, stage
+    telegram_case, tmp_path, stage, loss
 ):
     h = telegram_case
     _, cid = await inbound(h)
@@ -236,7 +268,30 @@ async def test_real_http_accept_lost_response_process_restart_never_second_wire_
         )
         assert observed["code"] == "OBSERVED"
         receipt = await request_manual_text(unit, cid, "Wire exact 🎨", "wire-1")
-    async with wire_server(tmp_path, disconnect_send=True) as server:
+
+    async def no_business_transaction():
+        assert h.runtime.engine.pool.checkedout() == 0
+        # Also observe the child runtime identity from PostgreSQL while the
+        # server has the complete request, before returning any HTTP response.
+        # Use the runtime identity, which can see its own sessions' xact_start;
+        # an unprivileged different role could get NULL and falsely pass.
+        async with h.runtime.engine.connect() as inspection:
+            rows = (
+                await inspection.execute(
+                    text(
+                        "SELECT pid FROM pg_stat_activity WHERE usename=current_user "
+                        "AND pid<>pg_backend_pid() AND xact_start IS NOT NULL"
+                    )
+                )
+            ).all()
+        assert rows == []
+
+    async with wire_server(
+        tmp_path,
+        disconnect_send=loss == "disconnect",
+        trickle_send=loss == "trickle_deadline",
+        inspect=no_business_transaction,
+    ) as server:
         env = {
             **os.environ,
             "M23_TEST_ORIGIN": server.origin,
@@ -247,6 +302,7 @@ async def test_real_http_accept_lost_response_process_restart_never_second_wire_
             "TG_WEBHOOK_SECRET": SECRET,
             "ASM_TELEGRAM_WEBHOOK_URL": "https://test.invalid/webhooks/telegram",
         }
+        started = time.monotonic()
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-c",
@@ -255,17 +311,82 @@ async def test_real_http_accept_lost_response_process_restart_never_second_wire_
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(process.communicate(), 20)
-        assert process.returncode == 42, (stdout.decode(), stderr.decode())
-        assert len(server.ledger.read_text().splitlines()) == 1
-        await expire(h)
-        client = TelegramClient(config(), test_origin=server.origin)
         try:
-            assert not await Worker(h.kernel, h.adapter, telegram=client).run_once()
-            assert (await delivery(h, receipt.message_id))["status"] == "UNKNOWN"
-            assert len(server.ledger.read_text().splitlines()) == 1
-            assert server.seen.count("sendMessage") == 1
+            stdout, stderr = await asyncio.wait_for(process.communicate(), 20)
         finally:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+        assert process.returncode == 42, (stdout.decode(), stderr.decode())
+        if loss == "trickle_deadline":
+            # Includes interpreter/DB preflight startup; wire duration is never
+            # extended by chunk activity and the 30s lease is not exhausted.
+            assert 9.8 <= time.monotonic() - started < 15
+        assert len(server.ledger.read_text().splitlines()) == 1
+        assert (await delivery(h, receipt.message_id))["status"] == (
+            "DISPATCHING" if stage == "finalize_before_commit" else "UNKNOWN"
+        )
+        await expire(h)
+        assert (await delivery(h, receipt.message_id))["status"] == "UNKNOWN"
+        restarted = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "-c",
+            CHILD,
+            env={**env, "M23_CRASH_STAGE": "none"},
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(restarted.communicate(), 15)
+        finally:
+            if restarted.returncode is None:
+                restarted.kill()
+                await restarted.wait()
+        assert restarted.pid != process.pid
+        assert restarted.returncode == 0 and stdout.strip() == b"NO_CLAIM" and stderr == b""
+        assert (await delivery(h, receipt.message_id))["status"] == "UNKNOWN"
+        assert len(server.ledger.read_text().splitlines()) == 1
+        assert server.seen == ["getBusinessConnection", "sendMessage"]
+        jobs = await query(
+            h,
+            "SELECT status,attempt_count FROM platform.messaging_jobs WHERE kind='SEND_MANUAL_TEXT'",
+        )
+        assert len(jobs) == 1 and jobs[0]["status"] == "DEAD" and jobs[0]["attempt_count"] == 1
+
+
+async def test_fetch_twenty_second_wall_includes_cold_tls_metadata_and_trickle(
+    telegram_case, images, connect_tls_material
+):
+    h = telegram_case
+    async with tls_peer(connect_tls_material, delay=3, mode="trickle") as peer:
+        client = tls_client(connect_tls_material, peer)
+        transfer = FetchTransfer(FileDatabase(h.kernel), h.kernel, client, images.storage)
+        try:
+            raw = update(photo=[{"width": 23, "height": 17, "file_id": "opaque-photo"}])
+            del raw["business_message"]["text"]
+            await inbound(h, raw)
+            started = time.monotonic()
+            assert await Worker(h.kernel, h.adapter, files=transfer, telegram=client).run_once()
+            elapsed_timeout(started, 20)
+            assert peer.requests == ["getFile", "connect.jpg"] and peer.accepted == 2
+            assert len(peer.handshakes) == 2 and all(
+                3 <= duration < 5 for duration in peer.handshakes
+            )
+            assert peer.chunks >= 5
+            await released(client, peer)
+            jobs = await query(
+                h,
+                "SELECT status,attempt_count FROM platform.messaging_jobs WHERE kind='FETCH_IMAGE'",
+            )
+            assert len(jobs) == 1 and jobs[0]["status"] == "READY" and jobs[0]["attempt_count"] == 1
+            assert (
+                await query(
+                    h, "SELECT * FROM platform.file_object_uploads WHERE workspace_id=:ws", ws=A
+                )
+                == []
+            )
+        finally:
+            await transfer.close()
             await client.aclose()
 
 
