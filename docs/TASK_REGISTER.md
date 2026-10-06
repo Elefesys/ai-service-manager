@@ -2,6 +2,65 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Текущий статус — C3 candidate CHANGES_REQUESTED / 2026-10-06 UTC
+
+**C0 verdict: CHANGES_REQUESTED. Кандидат не принят к интеграции/rollout.**
+C3-M2-ENV04-05 возвращена в **IN_PROGRESS** на одну ограниченную доработку R2.
+Это продолжение той же задачи, не новый parallel handoff.
+
+Проверен опубликованный candidate **c009c8540146d0a16d44fccf662d6e4d50fc53b1**,
+tree **5ae67b29d020b186a19330531d990f09e3455692**, единственный parent
+**9e165dd09f87663665e3dabae4f155e99e2639a6**. Ровно6 разрешённых файлов;
+production delta пока ровно connect2→5 в TelegramClient. Branch
+`c3/m2-telegram-connect-budget` указывает на этот candidate; PR24 остаётся Draft/open.
+
+C3 сообщил final local593 PASS/3 FAIL,393 integration deselected; Ruff/format/strict
+mypy/contracts PASS. Docker scripts не исполнены: отсутствует Docker, relay script
+остановлен штатным non-root guard. Actual PG/S3/relay/Docker29, workflow gates и C8
+не подтверждены. Привязанных PR workflow runs connector не вернул; CI PASS не заявляется.
+
+C0 отдельно повторил4 адресных case на Python3.13.15 и locked
+httpx0.28.1/httpcore1.0.9/anyio4.15.1: **1 PASS,3 FAIL,14.27 s**.
+Cold TLS3.017 s, strict readonly3.030 s<5, один TCP/HTTP attempt — PASS.
+Оба stalled-TLS cleanup case повторили `TCP_PEER_STILL_OPEN accepted=1 closed=0`
+при пустом pool; source-guard unit test повторил `EGRESS_APP_SOURCE_CHANGED`.
+Четыре candidate code/test blobs сверены byte-exact с GitHub; остальной local staging
+взят из прежнего принятого source. Это адресное local loopback TCP/TLS evidence,
+не полный candidate tree/clean checkout, не повтор всего suite и не Docker/PG/live.
+В source-guard unit test git subprocess substituted; сам guard читает реальные bytes.
+
+| Finding | Статус | Решение C0 |
+|---|---|---|
+| C0-M2-ENV04-05-01 / P2 | OPEN | TCP leak при outer timeout/explicit cancellation во время TLS. Разрешён узкий cancellation-safe cleanup в TelegramClient с сохранением исходной отмены и классификации |
+| C0-M2-ENV04-05-02 / P2 | OPEN | Новый client не совпадает со strict SOURCE pin. Guard работает правильно; разрешена замена только client blob после окончательного cleanup, без ослабления проверки |
+
+У locked httpcore1.0.9 `AnyIOStream.start_tls` закрывает stream в
+`except Exception`; внешний asyncio.CancelledError туда не попадает, а
+`AsyncHTTPConnection._connection` назначается только после TLS. C0 сверил этот
+control flow с installed locked source и upstream tag. Он согласуется с воспроизведённым
+дефектом; одного client.aclose()/пустого pool недостаточно для доказательства cleanup.
+
+**Одна активная задача C3-M2-ENV04-05 / IN_PROGRESS:** R2 cleanup + final strict pin. Полное
+разрешение paths/границы/criteria — [M2_HANDOFF](tasks/M2_HANDOFF.md). Новая VM-команда не выдана.
+
+### Сохранённая owner boundary
+
+Последний actual owner TLS receipt18:10:05.409401Z — TLSv1.3/2523 ms, одна попытка,
+14 prior receipts/private inputs/images/runtime preserved; HTTP/queue/DB/ACK не было.
+VM по-прежнему **0b7e24ee425ebb429bf87dfe382cbd3fab883028** /
+tree14a4033b849c736235653a5a85ec9e5112bfe727, connect2, cached images, TG disabled/empty.
+Binding committed; ACK NOT_ATTEMPTED/replay-blocked; frozen COMPED dates
+2026-10-02→2026-10-09 UTC неизменны. До C0/C8 acceptance — никаких owner commands,
+VM rebuild/deploy/source fetch, ACK/setWebhook/activation/sends. C6 migration source/images
+и recovery state получит отдельную задачу после принятого кода.
+Implementation CI37385698548 SUCCESS остаётся evidence только прежнего implementation.
+**M2 IN_PROGRESS; ENV04 REVIEW до actual A09/A11; PR24 Draft/open.**
+Прежние closures не расширяются. Merge/production/M3 не выданы; source-key revocation
+не подтверждён. [Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+<details>
+<summary>История — выдача connect budget до C3 candidate; заменена R2</summary>
+
 ## Текущий статус — verified TLS выше connect budget / 2026-10-06
 
 **Actual owner receipt 2026-10-06T18:10:05.409401+00:00, SSH_EXIT=0.**
@@ -64,6 +123,9 @@ Implementation CI37385698548 all3 SUCCESS относится к этому imple
 Прежние C0/C8 closures сохраняют свой scope. Merge/production/M3 не выданы.
 Source deploy-key revocation остаётся неподтверждённым. Fixed COMPED TEST interval
 2026-10-02T00Z→2026-10-09T00Z и committed request не пересчитываются.
+
+
+</details>
 
 <details>
 <summary>История — Owner ID correction; завершена, старую выдачу не выполнять</summary>
