@@ -4,7 +4,116 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный handoff C0 → owner — Business Owner ID correction
+## Активный handoff C0 → C3 — connect budget / 2026-10-06
+
+**Actual owner receipt 2026-10-06T18:10:05.409401+00:00, SSH_EXIT=0.**
+Исправленный одноразовый token-free probe: DNS AF_UNSPEC/INET/INET6 PASS (7/0/0 ms),
+TCP caller→relay IPv4 PASS (0 ms), ровно один verified TLS handshake PASS:
+**TLSv1.3, 2523 ms, TLS_PASS_OVER_2S**. Лимит диагностического handshake был15 s;
+в пределах2 s он не завершился, в пределах5 s завершился. Private inputs, все14
+предшествующих receipts, images и существующий disabled runtime сохранены.
+
+Это доказывает работоспособность TLS через выбранный маршрут в данной попытке и
+наблюдённую задержку выше принятого connect=2 s. Не доказывает причину каждой прежней
+ошибки, постоянную доступность Bot API или прохождение HTTP в общем5 s бюджете.
+В этом probe не было HTTP, queue, DB или ACK. Прежний ACK остаётся NOT_ATTEMPTED,
+его intent/result неизменны; retained=false означал неисполненную проверку.
+Binding ранее committed (15:23:30Z), queue audit (15:44:48Z) увидел1 current +3
+unmapped lifecycle events; свежая очередь после него не подтверждена.
+
+Предыдущий probe17:58:12Z не выполнял DNS/TCP/TLS: C0 потерял @contextmanager при
+сборке deadline, получил TypeError до resolver; это C0 artifact defect, не DNS
+failure evidence. Исправленный embedded operator отличается ровно восстановленным
+декоратором. Artifact111424 bytes, SHA256
+`1cd0c50ecdc134778f912a4644b41f159f3d53df865df09759c64be6835049f0`.
+Его once-only receipt сохранён; повторять исправленный или прежние scripts нельзя.
+Подробные actual markers, ограничения local substituted tests и вся цепочка —
+[единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+### Решение C0: узкая правка connect budget для code review
+
+Наблюдаемое противоречие: доступный TLS путь занял2.523 s, тогда как M2_CONTRACT§10.6
+и ENV04 runbook фиксируют connect≤2 s. C0 выдаёт **C3-M2-ENV04-05**: предложить и
+проверить минимальную правку **connect2→5 s** в общем TelegramClient, без нового
+env knob и без отдельного operator-only клиента. Это scope для изменения исходников
+и review; текущий принятый контракт/VM остаются на2 s до приёмки новой реализации.
+
+Pool2 s, read/write5 s, readonly5 s / send10 s / FETCH20 s wall deadlines,
+lease30 s, pool≤4, TLS/hostname/SNI verification, fixed official origin,
+trust_env=false, redirects/retries0 и UNKNOWN/no-resend semantics сохраняются.
+Connect5 s не добавляется к общему deadline; общий deadline по-прежнему отменяет
+операцию. При его срабатывании без доказанной wire phase нельзя объявлять send
+definitely_unsent. Наблюдение2523 ms не обосновывает диагностические15 s в продукте.
+Если целевые tests не проходят в этих границах, вернуть C0 evidence и предложение,
+не повышать общие budgets и не менять маршрут самостоятельно.
+
+Новая VM-команда сейчас не выдана. После reviewed patch и final-head CI требуется
+независимый scoped C8; лишь затем C0 отдельно выдаёт C6 план перехода source/images
+с сохранением recovery/binding/receipts, и owner получает готовый блок. Успех этой
+диагностики не разрешает ACK replay, setWebhook, включение Telegram или live sends.
+
+### Единственное активное поручение — C3-M2-ENV04-05
+
+- **Исполнитель C3; статус TODO** (выдано, выполнение ещё не заявлено). C0 — scope и
+  интеграция; независимый C8 — после готового patch. C6 rollout будет отдельным
+  последующим поручением, сейчас VM не изменяется.
+- Repository `Elefesys/ai-service-manager`; отдельная ветка
+  `c3/m2-telegram-connect-budget` и checkout от полного base
+  **9e165dd09f87663665e3dabae4f155e99e2639a6**. Код этого base равен принятому
+  implementation0b7e24ee; последующие C0 coordination commits не переносить на VM.
+  Не push в c6/m2-telegram-live/main и не включать чужие изменения.
+- Зависимости: accepted ENV04 recovery, binding/диагностическая цепочка и текущий
+  TLS receipt. Канон: originals из SOURCE_MANIFEST, Spec§§18.2/18.8/18.10,
+  ADR239, M2_CONTRACT§§10.5/10.6/10.12, Implementation Plan M2 и runbook§0.6.18.
+  Architecture LOCKED deadlines/isolation/idempotency и TEST-only route сохраняются.
+- Разрешённые production paths: **только**
+  `backend/src/asm/telegram/client.py`. Tests:
+  `tests/test_m2_3_transport.py`, `tests/test_m2_3_wire_postgres.py`,
+  `tests/test_telegram_egress_postgres.py`; при необходимости один новый
+  `tests/test_telegram_connect_budget.py`, собираемый существующим runner.
+  C0 разрешает узкое согласованное изменение M2_CONTRACT§10.6 и актуальную запись
+  в `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` о2→5, без переписывания истории
+  evidence. Если нужен иной path/harness change — сначала конкретный diff C0.
+- Не входят: schema/migrations, domain/API contracts, dependencies/locks, Compose,
+  workflow/CI gates, relay/profile, secrets, source/image lifecycle helper, billing,
+  receipts, VM deploy/rebuild, ACK/webhook/send/production.
+
+**Проверка и критерии REVIEW:**
+1. Через реальный cold TCP/TLS transport с controlled TEST CA и hostname verification
+   воспроизвести handshake >2 s и <5 s (например bounded3 s): старый client обязан
+   fail, новый — завершить строгий valid readonly response внутри прежних5 s.
+   Delay должен быть до завершения TLS, не sleep после HTTP. Новый client на каждый
+   case; pool reuse, warmup и HTTP retries не заменяют проверку. Один attempt.
+2. Реальный stalled TLS/response и chunk trickle не обходят wall deadlines5/10/20 s;
+   bounded measurement tolerance описать, таймауты client не подменять в regression.
+   Проверить pool2, read/write5, verify/SNI, rejects bad certificate/redirect,
+   max connections4 и retries0. Mock-only assertions не заменяют transport evidence.
+3. Сохранить proven-unsent versus uncertain outcome: outer timeout/cancellation после
+   возможного send → UNKNOWN. Actual PostgreSQL + controlled wire: effect/lost response
+   → UNKNOWN → process restart/recovery → wire count1; никаких blind sends.
+   Проверить release resources/cancellation и отсутствие DB transaction во время HTTP.
+4. Existing direct-wire и real relay Docker/PG cases сохраняются; исправить прежнюю
+   assertion connect2 только вместе с новой delayed-handshake regression. Обязательны
+   штатный runner и exact Docker29 lane, checkout/artifacts/clean-source gates,
+   полный CI на final reviewed integration SHA; gates не ослаблять.
+5. Вернуть commit/patch, точные commands/results, old-fail/new-pass evidence,
+   классификацию timeouts/ресурсов и ограничения. Local substituted tests явно
+   отделить от actual Docker/PG/CI/live. C0 review → независимый scoped C8 →
+   отдельное решение rollout. A09/A11 до owner live journey не PASS.
+
+VM остаётся на **0b7e24ee425ebb429bf87dfe382cbd3fab883028** /
+tree **14a4033b849c736235653a5a85ec9e5112bfe727**, cached images, Telegram disabled/empty.
+Implementation CI37385698548 all3 SUCCESS относится к этому implementation.
+Новая docs-only координация не является новым implementation/CI/live PASS.
+**M2 IN_PROGRESS; ENV04 REVIEW до actual A09/A11; PR24 Draft/open.**
+Прежние C0/C8 closures сохраняют свой scope. Merge/production/M3 не выданы.
+Source deploy-key revocation остаётся неподтверждённым. Fixed COMPED TEST interval
+2026-10-02T00Z→2026-10-09T00Z и committed request не пересчитываются.
+
+<details>
+<summary>История — Owner ID correction; завершена, старую выдачу не выполнять</summary>
+
+## Исторический handoff C0 → owner — Business Owner ID correction
 
 **Owner подтвердил перепутанные роли двух Telegram аккаунтов / 2026-10-06 20:02 +07.**
 Первый аккаунт — владелец bot в BotFather; его можно использовать как test Client.
@@ -83,6 +192,9 @@ C0 local validation:13 filesystem/orchestration cases,3 dotenv formatting varian
 5 immutable journal/interruption/tamper cases; full payload hash+compile через stdin
 с LF/CRLF. Docker/source/provider boundaries substituted; actual VM edit/discovery
 ещё не выполнены. Это исправление operator inputs, helper/app/API/DB контракт не менялся.
+
+
+</details>
 
 <details>
 <summary>История — первый discovery завершён UNRESOLVED; старый запуск не повторять</summary>
