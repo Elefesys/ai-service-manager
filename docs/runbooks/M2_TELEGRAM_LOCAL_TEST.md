@@ -1247,13 +1247,12 @@ Production/M3, новые платные ресурсы, backup/restore drill н
 
 </details>
 
-## 0.6. Текущий шаг — постоянный TEST egress после getMe PASS / 2026-10-05
+## 0.6. TEST egress — recovery PASS; текущий шаг discovery / 2026-10-06
 
-**M2-ENV-04-TELEGRAM-EGRESS подготовлен к REVIEW в существующем Draft PR24.** Владелец
-пока не меняет VM и не повторяет старые terminal blocks. Точное поручение, allowlist
-и E01–E06 — единственный активный M2_HANDOFF. Один authoritative статус — TASK_REGISTER.
-Бот подтверждён через temporary route; opt-in implementation имеет synthetic Docker
-evidence, но owner deployment и независимая приёмка C0/C8 ещё не выполнены.
+Актуальное owner действие находится в §0.6.16 и активном M2_HANDOFF; единственный
+реестр статусов — TASK_REGISTER. Owner recovery/preflight принят, Telegram runtime
+остаётся disabled. Предшествующие датированные подразделы сохраняют историю;
+их команды повторно не выполнять. Independent C0 acceptance — §0.6.15.
 
 ### 0.6.1. Датированный фактический receipt и границы
 
@@ -2309,6 +2308,77 @@ mapping/readiness/preservation only, not live Telegram connectivity or A09/A11.
 No VM command has been run by C0 during this review. Any observed owner error gets its
 own dated receipt before further action. Baseline/audit/runtime inputs remain private.
 
+### 0.6.16. Owner recovery receipt и discovery / 2026-10-06
+
+**Owner recovery + preflight PASS; C0-M2-ENV04-04 CLOSED по фактическому owner receipt.**
+Владелец вернул `RECOVERY_RECEIPT_UTC=2026-10-06T07:58:54.204446+00:00`,
+`RECOVERY_COMPLETE_PREFLIGHT_ONLY`, `SSH_EXIT=0`. Source exact
+**0b7e24ee425ebb429bf87dfe382cbd3fab883028**, tree
+**14a4033b849c736235653a5a85ec9e5112bfe727**. `TELEGRAM_EGRESS_RECOVER_PASS` и
+`TELEGRAM_EGRESS_PREFLIGHT_PASS`; исходный baseline, private inputs/TLS и cached images
+сохранены, Telegram runtime disabled с пустыми TG fields. Это owner execution;
+прямого VM доступа у C0 нет. Mapping/recovery finding закрыт, live Telegram ещё не проверен.
+
+Независимый C0 verdict на implementation остаётся PASS; C8-M2-ENV04-01/02/03/04/05
+CLOSED в принятом scope. [Implementation CI37385698548](https://github.com/Elefesys/ai-service-manager/actions/runs/37385698548)
+all3 SUCCESS; подробная проверка source/logs/artifacts — runbook§0.6.15 и единый receipt.
+Documentation head e36a2c75d8ebb7071a6d1f88dab6fb20dfd7d297 также завершил
+[CI37416231966](https://github.com/Elefesys/ai-service-manager/actions/runs/37416231966)
+all3 SUCCESS: foundation112115338673, browser112115338704, docker29-compatibility112115338839.
+Это не основание переводить VM с принятого implementation на новые docs commits.
+
+**M2 IN_PROGRESS; ENV04 REVIEW до live acceptance; PR24 Draft/open, main unchanged.**
+Единственный следующий owner шаг — однократный discovery через восстановленный TEST
+egress, описанный ниже/в runbook§0.6.16. Setup/billing/binding/setWebhook, включение
+api/worker и live A09/A11 выполняются отдельными шагами после его receipt. Успешные
+recovery/preflight и implementation CI не повторять. Merge/production/M3 не выданы.
+Временный GitHub deploy key `asm-telegram-test-env04` требуется отозвать после
+успешного fetch; это отдельный source key, не SSH key входа на VM. Отзыв ещё не подтверждён.
+
+### Единственное выданное действие — discovery
+
+Файл `asm_telegram_discover_0b7e24ee.py`, 17825 bytes, SHA256
+`a09d1016b13143f2b9175a946b11421adf98810bec3cacacf8d12fe02ec2ade0`. Файл и заполненный checksum-guarded PowerShell/SSH блок выдаёт C0 в чате.
+Private secrets/IDs повторно вводить не нужно. Сохранённый staged Telegram flag может
+быть false; временный Compose override меняет только `telegram-operator`: enabled=true
+и image=тот же cached image ID. Полный resolved model сравнивается с исходным;
+любое другое отличие STOP. `.env`, `.env.telegram`, helper, egress state/audit,
+api/worker/scheduler и прочие существующие сервисы сохраняются до/после.
+
+Wrapper держит штатный operation lock, проверяет exact source и recovery receipt,
+вызывает штатные verify/model guards и использует accepted `compose_prefix` с
+operator inputs. Единственная operator команда: `run --rm --no-deps --pull never -T
+telegram-operator python scripts/provision_telegram_test.py --live --discover`.
+Нового source fetch/build/pull/migrations/DB setup, restart, setWebhook или sends нет.
+Local Docker config checks могут создать только штатные ephemeral verification
+containers. Это C0 owner wrapper, не изменение helper/приложения.
+
+`inspect_connection` сверяет ранее независимо подтверждённый Owner, bot и webhook.
+При отсутствии сохранённого external ID и установленного webhook возможен ровно один
+getUpdates: без offset/drop/pagination, с четырьмя allowed_updates; future update
+subscription может измениться, поэтому provider state не объявляется неизменным.
+Затем getBusinessConnection проверяет identity и возвращает actual rights.
+Ноль/несколько candidates, foreign webhook/Owner или false rights — STOP без setup.
+
+Approved synthetic contact `Synthetic Telegram test owner` и interval
+**2026-10-02T00:00:00+00:00 → 2026-10-09T00:00:00+00:00** не пересчитываются:
+wrapper сверяет staged значения и текущий UTC; expiry/drift STOP. Это ещё не DB billing state.
+
+До provider вызова создаётся private attempt receipt
+`/home/asmoperator/.local/state/asm-telegram-discovery-0b7e24ee.json` (mode600,
+вне checkout/egress audit). После успеха он содержит проверенный external ID и rights,
+source/staged/baseline hashes; ID/secret в stdout не выводятся. Existing attempt — STOP,
+автоматического retry/polling нет. Временный override удаляется. После потери SSH или
+STOP продолжать только по новому C0 действию, не удалять attempt receipt для повтора.
+
+Ожидаемые markers: `TELEGRAM_SETUP_DISCOVERED`, `DISCOVERY_PRIVATE_RECEIPT_SAVED_PASS`,
+`DISCOVERY_CONNECTION_ENABLED=true`, `DISCOVERY_CAN_REPLY=true`,
+`DISCOVERY_PRIVATE_STATE_IMAGES_RUNTIME_UNCHANGED_PASS`, `DISCOVERY_COMPLETE_ONLY`,
+`SSH_EXIT=0`. Это discovery, не inbound/private media/manual reply/Client receipt.
+C0 проверил syntax и11 filesystem/orchestration cases (staged false/true, repeat,
+interval/flag/model drift, wrong Owner, false rights, runtime/private drift, unresolved).
+Docker/source/provider boundaries substituted; новый actual VM/live PASS не заявлен.
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker
@@ -2320,11 +2390,11 @@ synthetic Workspace. Это изолированный LOCAL deployment (`asm_lo
 
 Нужны заранее:
 
-- Один точный **принятый runtime SHA из активного handoff**:
-  **80e51c43e31541940f1ccf18b8281adf1a061748**, сохранённый чистый checkout на VM.
-  Current main после PR23 — **22993f558c5e7e933c65e9c999933bd2e3ab41c4**;
-  сравнение показало только три docs. Accepted base и runtime различаются явно
-  по §0.5; приложение ради документации повторно не разворачивать.
+- Точный принятый source SHA из активного handoff после recovery —
+  **0b7e24ee425ebb429bf87dfe382cbd3fab883028**, tree14a4033b849c736235653a5a85ec9e5112bfe727.
+  Cached app images сохранены из принятого host receipt; rebuild не выполнялся.
+  Current main после PR23 — **22993f558c5e7e933c65e9c999933bd2e3ab41c4**.
+  VM не переводить на documentation heads. Предыдущий80e51c43 — история§0.5.
 - Non-root operator account с разрешённым доступом к Docker. Свои
   `console.telegram-test.example.net` и `files.telegram-test.example.net`:
   заменить оба example имени во всех примерах ниже на свои. DNS обоих имён ведёт

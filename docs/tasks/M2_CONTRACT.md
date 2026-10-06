@@ -1121,9 +1121,14 @@ C8-04/05 CLOSED, прежние01/02/03 CLOSED.** Independent C0 source/evidence
 bounded local probes; реальная execution — CI37385698548 all3 SUCCESS на merge
 fdfbe35974fa548b722622132aa0edb3a30c9bf5/tree14a4033b849c736235653a5a85ec9e5112bfe727.
 Нового отдельного C8 agent execution не заявлено. Полный scope/ограничения — runbook§0.6.15
-и current TASK_REGISTER. Issued next owner action только exact-source guarded recovery
-+preflight с immutable baseline; Telegram disabled. Operational VM finding остаётся
-OPEN до фактического receipt. Ниже сохранены прежние, superseded dispositions.
+и current TASK_REGISTER. Owner recovery/preflight на exact0b7e24ee PASS
+2026-10-06T07:58:54.204446+00:00, SSH_EXIT0: original baseline/private inputs/images
+сохранены, actual Telegram runtime disabled/empty. C0-M2-ENV04-04 CLOSED по этому receipt.
+Следующий шаг — только discovery по runbook§0.6.16: временный operator-only enabled=true
+и pin того же cached image ID; persisted inputs и существующий runtime не меняются.
+Проверенный external ID сохраняется private до отдельного atomic setup; installed
+webhook/Owner/rights проверяет существующий provisioner. M2 IN_PROGRESS, live A09/A11
+ещё впереди. Ниже сохранены прежние, superseded dispositions.
 
 
 CI37367018261 attempt2 после восстановления Actions реально исполнил exact Docker29:

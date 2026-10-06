@@ -2,6 +2,36 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Текущий статус — owner recovery PASS; discovery next / 2026-10-06
+
+**Owner recovery + preflight PASS; C0-M2-ENV04-04 CLOSED по фактическому owner receipt.**
+Владелец вернул `RECOVERY_RECEIPT_UTC=2026-10-06T07:58:54.204446+00:00`,
+`RECOVERY_COMPLETE_PREFLIGHT_ONLY`, `SSH_EXIT=0`. Source exact
+**0b7e24ee425ebb429bf87dfe382cbd3fab883028**, tree
+**14a4033b849c736235653a5a85ec9e5112bfe727**. `TELEGRAM_EGRESS_RECOVER_PASS` и
+`TELEGRAM_EGRESS_PREFLIGHT_PASS`; исходный baseline, private inputs/TLS и cached images
+сохранены, Telegram runtime disabled с пустыми TG fields. Это owner execution;
+прямого VM доступа у C0 нет. Mapping/recovery finding закрыт, live Telegram ещё не проверен.
+
+Независимый C0 verdict на implementation остаётся PASS; C8-M2-ENV04-01/02/03/04/05
+CLOSED в принятом scope. [Implementation CI37385698548](https://github.com/Elefesys/ai-service-manager/actions/runs/37385698548)
+all3 SUCCESS; подробная проверка source/logs/artifacts — runbook§0.6.15 и единый receipt.
+Documentation head e36a2c75d8ebb7071a6d1f88dab6fb20dfd7d297 также завершил
+[CI37416231966](https://github.com/Elefesys/ai-service-manager/actions/runs/37416231966)
+all3 SUCCESS: foundation112115338673, browser112115338704, docker29-compatibility112115338839.
+Это не основание переводить VM с принятого implementation на новые docs commits.
+
+**M2 IN_PROGRESS; ENV04 REVIEW до live acceptance; PR24 Draft/open, main unchanged.**
+Единственный следующий owner шаг — однократный discovery через восстановленный TEST
+egress, описанный ниже/в runbook§0.6.16. Setup/billing/binding/setWebhook, включение
+api/worker и live A09/A11 выполняются отдельными шагами после его receipt. Успешные
+recovery/preflight и implementation CI не повторять. Merge/production/M3 не выданы.
+Временный GitHub deploy key `asm-telegram-test-env04` требуется отозвать после
+успешного fetch; это отдельный source key, не SSH key входа на VM. Отзыв ещё не подтверждён.
+
+<details>
+<summary>История — независимая приёмка C0 и выдача recovery до owner receipt</summary>
+
 ## Текущий статус — C0 accepts recovery/resume; owner step / 2026-10-06
 
 **Независимая приёмка C0 — PASS; C8-M2-ENV04-04/05 CLOSED на указанном implementation.**
@@ -57,6 +87,9 @@ rollback нет. При interruption продолжать только те же
 если он ещё разрешён или владелец временно вновь разрешит его. После fetch — отозвать.
 Это не SSH key входа на VM. Credentials/keys/profile не публиковать. Новых платных
 ресурсов нет. Условный CI-resume завершён; успешный implementation CI не повторять.
+
+
+</details>
 
 <details>
 <summary>История — C6 REVIEW до независимой приёмки C0</summary>
