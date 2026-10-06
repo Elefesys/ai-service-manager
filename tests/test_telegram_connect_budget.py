@@ -355,6 +355,46 @@ async def test_stalled_readonly_total_deadline_and_release(
             await client.aclose()
 
 
+@pytest.mark.parametrize("factory", [False, True])
+async def test_real_tcp_refusal_is_proven_unsent_before_readonly_deadline(
+    connect_tls_material, factory
+):
+    # Reserve a real loopback port without listening: the kernel refuses TCP,
+    # with no close/rebind race, mocked exception or changed phase/wall deadline.
+    with socket.socket() as reserved:
+        reserved.bind(("127.0.0.1", 0))
+        peer = SimpleNamespace(port=reserved.getsockname()[1], client_sockets=[])
+        attempts = []
+
+        def destinations():
+            while True:
+                attempts.append(time.monotonic())
+                yield peer
+
+        client = tls_client(
+            connect_tls_material, peer, factory=factory, destinations=destinations()
+        )
+        try:
+            started = time.monotonic()
+            with pytest.raises(TelegramError) as error:
+                await client.get_me()
+            elapsed = time.monotonic() - started
+            assert (error.value.code, error.value.definitely_unsent) == (
+                Code.DEPENDENCY_UNAVAILABLE,
+                True,
+            )
+            assert elapsed < 5, elapsed
+            assert len(attempts) == 1 and peer.client_sockets == []
+            assert client._http._transport._pool.connections == []
+            assert not client._http.is_closed
+            print(
+                f"TCP_REFUSAL_READONLY_PASS factory={factory} elapsed={elapsed:.3f}s "
+                "code=DEPENDENCY_UNAVAILABLE definitely_unsent=True attempts=1"
+            )
+        finally:
+            await client.aclose()
+
+
 @pytest.mark.parametrize("operation,budget", [("readonly", 5), ("send", 10), ("image", 20)])
 async def test_trickle_does_not_renew_wall_deadline(connect_tls_material, operation, budget):
     # For readonly/send, TLS itself takes 3s inside the SAME wall budget.

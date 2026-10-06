@@ -2460,11 +2460,13 @@ C0 local validation:13 filesystem/orchestration cases,3 dotenv formatting varian
 с LF/CRLF. Docker/source/provider boundaries substituted; actual VM edit/discovery
 ещё не выполнены. Это исправление operator inputs, helper/app/API/DB контракт не менялся.
 
-### 0.6.19. C3-M2-ENV04-05 — R1 history и R2 REVIEW / 2026-10-06 UTC
+### 0.6.19. C3-M2-ENV04-05 — R1/R2 history и R3 REVIEW / 2026-10-06 UTC
 
-**Текущее исполнение: R2 возвращена на REVIEW; findings C0-M2-ENV04-05-01/02
-остаются OPEN до verdict C0.** Local regression612 PASS/0 FAIL; actual integration
-gates/C8 не выполнены. Подробности R2 ниже, после сохранённого failed-candidate receipt.
+**Текущее исполнение: R3 возвращена на REVIEW; finding C0-M2-ENV04-05-03/P2
+остаётся OPEN до verdict C0. Findings01/02 CLOSED на R2.** R3 evidence ниже.
+Исторический receipt R2 до verdict C0: findings01/02 ещё OPEN,
+local regression612 PASS/0 FAIL; actual integration gates/C8 тогда не выполнены.
+Подробности R1/R2 сохранены ниже.
 Это не разрешение интеграции/rollout и не новая owner/VM-команда.
 
 #### История R1 — сохранённый failed candidate c009c854
@@ -2619,6 +2621,58 @@ local tested SHA, точные script exits, clean-source evidence и CI IDs п�
 VM остаётся на0b7e24ee425ebb429bf87dfe382cbd3fab883028/connect2; binding committed,
 ACK NOT_ATTEMPTED, receipts и runtime сохранены. Live Telegram не выполнялся;
 M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11. Findings01/02 закрывает только C0.
+
+#### R3 — точная классификация offline readonly, 2026-10-06 UTC
+
+Поручение прочитано на coordination `c50bef85b6c474287d8d26521f51315fa9c695a3`.
+R3 продолжает ту же отдельную ветку от R2
+`41f74346b56009bda53fa637ed5adeb3fbb7c507`, сохраняя её единственным непосредственным
+parent; без reset/rebase. TASK_REGISTER/active handoff ведёт C0.
+
+Actual [CI37523378682](https://github.com/Elefesys/ai-service-manager/actions/runs/37523378682)
+проверял integration candidate `ad724e68614c2942b73eaae41e6d8802d1663b84` через
+merge `f6c2bd6f574831ced9996c042818240b668f9175`. Логи jobs112474140017/foundation
+и112474139579/exact Docker29 подтверждают одинаковый FAIL прежней строки446:
+offline `DEPENDENCY_TIMEOUT/False` против `assert definitely_unsent`;
+каждая relay/PG lane5 PASS/1 FAIL,32.47s/37.70s. Browser112474140023 SUCCESS,
+27 journeys PASS; foundation/Docker29 clean-source steps SKIPPED после failure.
+Это evidence R2/integration failure, не успешная проверка R3.
+
+Причина изменения старой assertion: она предполагала connect2 < readonly5.
+При connect5 внутри outer5 общий timeout не доказывает wire phase. Теперь
+единственный offline `get_me()` допускает ровно пары `DEPENDENCY_TIMEOUT/False`
+и `DEPENDENCY_UNAVAILABLE/True` для доказанного connect-phase отказа. Elapsed и
+пустой provider ledger не превращаются в доказательство definitely_unsent.
+Проверяется elapsed≤6s: прежний outer5 плюс максимум1s scheduling tolerance.
+До/после offline REQUEST count остаётся1 от hold_readonly; SEND_EFFECT отсутствует.
+Сохранены обе семьи mapping/no fallback, TLS CA/hostname, auth/DB/private S3 и
+readonly после recreate. После всех assertions существующий record_pass записывает
+offline elapsed/code/flag; общий deadline и production classifier не менялись.
+
+Добавлен один parametrized real TCP regression
+`test_real_tcp_refusal_is_proven_unsent_before_readonly_deadline`: bound loopback
+port без listen резервируется на весь вызов, исключая close/rebind race; kernel
+отклоняет connect. Обе factory/injected конфигурации используют production wrapper,
+официальный origin и прежние budgets. Ровно один application/TCP attempt;
+точно `DEPENDENCY_UNAVAILABLE/True`, elapsed<5s, нет установленного stream или
+занятого pool slot. Исключения/HTTP transport/timeouts не mocked.
+
+Local команда `uv run --frozen pytest -q -s tests/test_telegram_connect_budget.py
+-k 'real_tcp_refusal or stalled_readonly'`: **6 PASS**,19 deselected,21.45s.
+Fast refusal0.002s/0.001s; существующие4 stalled TLS/response cases подтверждают
+`DEPENDENCY_TIMEOUT/False`,4.8≤elapsed≤6s и peer close/FD=-1 до teardown без GC.
+Старые assertions этих cases не менялись; skip/xfail/collector bypass не добавлены.
+Полный non-integration suite/static/source checks на final R3 SHA и точные команды,
+head/tree/parent публикуются в C3 receipt без SHA-only документационного коммита.
+
+Client blob `525381357de76ea1c570fd864f8df5e9781a87e2`, helper/pins/контракт,
+budgets/retries и production classification byte-exact R2. Direct-wire/relay
+UNKNOWN→restart→wire count1 и остальные guards/assertions не изменены.
+Локального Docker нет: actual PG/S3/relay/exact Docker29, штатные scripts и workflow
+clean-source gates не подтверждены R3. После patch review C0 организует actual
+final integration CI, затем независимый C8. Finding03 остаётся OPEN до verdict C0.
+VM/binding/ACK/receipts прежние; owner/VM-команды, deploy/rebuild, activation,
+setWebhook, live sends и merge не выполнялись. M2 IN_PROGRESS, ENV04 REVIEW.
 
 ## 1. Конкретное окружение и предварительные условия
 

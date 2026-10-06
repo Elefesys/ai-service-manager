@@ -441,10 +441,20 @@ class TelegramEgressPostgresChecks:
             await assert_mapping()
             await both_relay_families(case.directory, available=False)
             assert len(case_events(case, "REQUEST")) == 1
+            assert not case_events(case, "SEND_EFFECT")
+            offline_started = asyncio.get_running_loop().time()
             with pytest.raises(TelegramError) as offline:
                 await client.get_me()
-            assert offline.value.definitely_unsent
+            offline_elapsed = asyncio.get_running_loop().time() - offline_started
+            assert offline_elapsed <= 6, offline_elapsed  # Outer5 + at most1s runner tolerance.
+            # Connect5 is inside outer5. A total timeout proves no wire phase;
+            # only a proven connect failure may be classified definitely_unsent.
+            assert (offline.value.code, offline.value.definitely_unsent) in {
+                (Code.DEPENDENCY_TIMEOUT, False),
+                (Code.DEPENDENCY_UNAVAILABLE, True),
+            }
             assert len(case_events(case, "REQUEST")) == 1
+            assert not case_events(case, "SEND_EFFECT")
             await h.runtime.check()
             assert (await auth.client.get("/health/ready")).json() == {
                 "status": "ok",
@@ -506,6 +516,9 @@ class TelegramEgressPostgresChecks:
                 "E02/E03",
                 "READONLY_TLS_MAPPING_AUTH_DB_PRIVATE_S3",
                 native_ipv4_ipv6_tls_and_fail_closed=True,
+                offline_readonly_elapsed_seconds=round(offline_elapsed, 3),
+                offline_readonly_code=offline.value.code.value,
+                offline_readonly_definitely_unsent=offline.value.definitely_unsent,
                 relay_before=case.relay_id,
                 relay_after=replacement["relay_id"],
             )
