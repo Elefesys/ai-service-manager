@@ -1247,12 +1247,13 @@ Production/M3, новые платные ресурсы, backup/restore drill н
 
 </details>
 
-## 0.6. TEST egress — recovery PASS; текущий шаг discovery / 2026-10-06
+## 0.6. TEST egress — текущий шаг исправление Business Owner ID / 2026-10-06
 
-Актуальное owner действие находится в §0.6.16 и активном M2_HANDOFF; единственный
-реестр статусов — TASK_REGISTER. Owner recovery/preflight принят, Telegram runtime
-остаётся disabled. Предшествующие датированные подразделы сохраняют историю;
-их команды повторно не выполнять. Independent C0 acceptance — §0.6.15.
+Актуальная выдача — §0.6.17 и активный M2_HANDOFF. Owner recovery/preflight принят;
+первый discovery дошёл до Telegram и остановился UNRESOLVED. Владелец подтвердил,
+что staged Owner ID принадлежал BotFather аккаунту, а bot подключён ко второму
+Business аккаунту. Исправляется одно private поле перед единственной новой проверкой.
+Исторические terminal blocks не повторять. Единственный реестр — TASK_REGISTER.
 
 ### 0.6.1. Датированный фактический receipt и границы
 
@@ -2378,6 +2379,86 @@ STOP продолжать только по новому C0 действию, н
 C0 проверил syntax и11 filesystem/orchestration cases (staged false/true, repeat,
 interval/flag/model drift, wrong Owner, false rights, runtime/private drift, unresolved).
 Docker/source/provider boundaries substituted; новый actual VM/live PASS не заявлен.
+
+### 0.6.17. Confirmed Owner input correction / 2026-10-06
+
+**Owner подтвердил перепутанные роли двух Telegram аккаунтов / 2026-10-06 20:02 +07.**
+Первый аккаунт — владелец bot в BotFather; его можно использовать как test Client.
+Второй — Business Owner,
+к которому подключён @saasaimanagerbot. В staged expected Owner оказался numeric ID
+первого аккаунта. Независимый ID второго предоставлен владельцем C0; значение остаётся
+в private operator artifact/config, в публичных docs не публикуется. Скриншот второго
+аккаунта показывает нужный bot, только выбранный test chat, включённые чтение/ответы;
+это UI observation, не actual getBusinessConnection rights receipt.
+
+Actual discovery на **0b7e24ee425ebb429bf87dfe382cbd3fab883028** завершился
+`TELEGRAM_SETUP_DISCOVERY_UNRESOLVED`, `SSH_EXIT=1`, при PASS всех source/recovery,
+operator-only override, TEST interval и runtime/private preservation guards.
+По source control flow успешно выполнены getWebhookInfo/getMe и один getUpdates через
+permanent TEST route; distinct candidates для прежнего expected Owner не равно1.
+Смена confirmed expected Owner исправляет известное input mismatch; наличие свежего
+lifecycle события и actual connection rights ещё предстоит проверить.
+
+Recovery/preflight PASS от2026-10-06T07:58:54.204446+00:00 остаётся действующим;
+C0-M2-ENV04-04 CLOSED, C8-01/02/03/04/05 CLOSED в принятом scope. Original before/audit,
+cached images и runtime Telegram disabled/empty сохраняются. **M2 IN_PROGRESS;
+ENV04 REVIEW до live acceptance; PR24 Draft/open, main22993f55 unchanged.**
+VM использует exact source0b7e24ee/tree14a4033b849c736235653a5a85ec9e5112bfe727;
+новые docs commits на VM не переносить.
+
+Implementation CI37385698548 all3 SUCCESS и его независимая C0 приёмка сохраняются.
+Предыдущий docs-only7eb6250de53a2c1bcf61f852911aa10eecb66cb8:
+[CI37434755147](https://github.com/Elefesys/ai-service-manager/actions/runs/37434755147)
+browser112173734971 и docker29-compatibility112173735337 SUCCESS,
+foundation112173735207 CANCELLED; all3 SUCCESS этому docs head не приписывается.
+Merge/production/M3 не выданы. Отзыв временного source deploy key остаётся неподтверждённым.
+
+### Текущее единственное owner действие — исправить expected Owner и проверить связь один раз
+
+Файл `asm_telegram_owner_fix_0b7e24ee.py`, 24832 bytes,
+SHA256 `13f8a1cb8b02f14f5718c17ddf8427e26b3c0ecfee9369727b5e7223caa91994`; checksum-guarded PowerShell stdin launcher выдаёт C0.
+Разрешена атомарная замена только numeric value поля `ASM_TELEGRAM_EXPECTED_OWNER_ID`
+в существующей private `.env.telegram` на независимо указанный ID второго аккаунта.
+Bot/token/webhook secret, workspace/business IDs, HTTPS, contact и billing dates,
+profile/TLS, runtime env, images и source неизменны. BotFather ownership не меняется;
+Business bot не отключать/переподключать. Actual binding/setup ещё не выполнены;
+непустой staged external connection ID требует STOP и отдельного review.
+
+Wrapper держит прежний operation lock и проверяет exact source/recovery/runtime.
+Original attempt `asm-telegram-discovery-0b7e24ee.json` сохраняется byte-exact.
+Private correction intent `asm-telegram-owner-id-correction-0b7e24ee.json` связывает
+его hash, source/baseline и exact staged before/after hashes; меняется только span
+числового ID, quotes/CRLF/comments/прочие bytes сохраняются. Необъяснимый input drift,
+дубликат key или чужой journal STOP. Intent позволяет распознать interruption до/после
+atomic edit, до provider attempt; replay уже начатого provider attempt запрещён.
+Оба файла лежат mode600 вне checkout и egress audit в `/home/asmoperator/.local/state`.
+Original deployment/recovery archives не редактируются и не переснимаются; старый
+recovery wrapper после intentional staged revision повторно не выдаётся.
+
+После resolved model diff ровно по approved Owner выполняется одна accepted
+`provision_telegram_test.py --live --discover` через прежний operator-only enabled=true
+override и тот же cached image ID, `--no-deps --pull never`. Новый attempt/result —
+`asm-telegram-discovery-owner2-0b7e24ee.json`, mode600. Existing new attempt — STOP;
+старый файл не удаляется/не перезаписывается ради retry. При UNRESOLVED сохраняется
+исправленный ID и безопасный terminal result; автоматического reconnect/polling нет.
+Очередь без offset/drop/pagination; allowed_updates остаётся прежним набором четырёх
+types. Provider subscription может измениться. IDs/provider payload в stdout не выводятся.
+
+Новых build/pull/restarts/migrations, billing/binding/setWebhook, sends, source fetch
+или automatic rollback нет. Contact/interval2026-10-02→2026-10-09 UTC проверяются
+перед изменением и вызовом, не пересчитываются. Первоначальная C0 формулировка Owner
+была неоднозначной; BotFather owner, Telegram Business Owner и Console UUID различены.
+
+Ожидаются `OWNER_ID_CORRECTION_PASS`, `OWNER_ID_PRIOR_ATTEMPT_AND_RECOVERY_PRESERVED_PASS`,
+`TELEGRAM_SETUP_DISCOVERED`, `DISCOVERY_CONNECTION_ENABLED=true`, `DISCOVERY_CAN_REPLY=true`,
+`DISCOVERY_CORRECTED_INPUTS_STATE_IMAGES_RUNTIME_UNCHANGED_PASS`,
+`DISCOVERY_COMPLETE_ONLY`, `SSH_EXIT=0`. Любой STOP вернуть C0, не повторять и не
+удалять receipts. Успех поправки ID отдельно не считается discovery/live A09/A11 PASS.
+
+C0 local validation:13 filesystem/orchestration cases,3 dotenv formatting variants,
+5 immutable journal/interruption/tamper cases; full payload hash+compile через stdin
+с LF/CRLF. Docker/source/provider boundaries substituted; actual VM edit/discovery
+ещё не выполнены. Это исправление operator inputs, helper/app/API/DB контракт не менялся.
 
 ## 1. Конкретное окружение и предварительные условия
 

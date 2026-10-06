@@ -2,6 +2,44 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Текущий статус — Business Owner ID correction / 2026-10-06
+
+**Owner подтвердил перепутанные роли двух Telegram аккаунтов / 2026-10-06 20:02 +07.**
+Первый аккаунт — владелец bot в BotFather; его можно использовать как test Client.
+Второй — Business Owner,
+к которому подключён @saasaimanagerbot. В staged expected Owner оказался numeric ID
+первого аккаунта. Независимый ID второго предоставлен владельцем C0; значение остаётся
+в private operator artifact/config, в публичных docs не публикуется. Скриншот второго
+аккаунта показывает нужный bot, только выбранный test chat, включённые чтение/ответы;
+это UI observation, не actual getBusinessConnection rights receipt.
+
+Actual discovery на **0b7e24ee425ebb429bf87dfe382cbd3fab883028** завершился
+`TELEGRAM_SETUP_DISCOVERY_UNRESOLVED`, `SSH_EXIT=1`, при PASS всех source/recovery,
+operator-only override, TEST interval и runtime/private preservation guards.
+По source control flow успешно выполнены getWebhookInfo/getMe и один getUpdates через
+permanent TEST route; distinct candidates для прежнего expected Owner не равно1.
+Смена confirmed expected Owner исправляет известное input mismatch; наличие свежего
+lifecycle события и actual connection rights ещё предстоит проверить.
+
+Recovery/preflight PASS от2026-10-06T07:58:54.204446+00:00 остаётся действующим;
+C0-M2-ENV04-04 CLOSED, C8-01/02/03/04/05 CLOSED в принятом scope. Original before/audit,
+cached images и runtime Telegram disabled/empty сохраняются. **M2 IN_PROGRESS;
+ENV04 REVIEW до live acceptance; PR24 Draft/open, main22993f55 unchanged.**
+VM использует exact source0b7e24ee/tree14a4033b849c736235653a5a85ec9e5112bfe727;
+новые docs commits на VM не переносить.
+
+Implementation CI37385698548 all3 SUCCESS и его независимая C0 приёмка сохраняются.
+Предыдущий docs-only7eb6250de53a2c1bcf61f852911aa10eecb66cb8:
+[CI37434755147](https://github.com/Elefesys/ai-service-manager/actions/runs/37434755147)
+browser112173734971 и docker29-compatibility112173735337 SUCCESS,
+foundation112173735207 CANCELLED; all3 SUCCESS этому docs head не приписывается.
+Merge/production/M3 не выданы. Отзыв временного source deploy key остаётся неподтверждённым.
+
+Следующее owner действие подробно в активном M2_HANDOFF и runbook§0.6.17.
+
+<details>
+<summary>История — recovery принят, первый discovery выдан до уточнения Owner</summary>
+
 ## Текущий статус — owner recovery PASS; discovery next / 2026-10-06
 
 **Owner recovery + preflight PASS; C0-M2-ENV04-04 CLOSED по фактическому owner receipt.**
@@ -28,6 +66,9 @@ api/worker и live A09/A11 выполняются отдельными шага�
 recovery/preflight и implementation CI не повторять. Merge/production/M3 не выданы.
 Временный GitHub deploy key `asm-telegram-test-env04` требуется отозвать после
 успешного fetch; это отдельный source key, не SSH key входа на VM. Отзыв ещё не подтверждён.
+
+
+</details>
 
 <details>
 <summary>История — независимая приёмка C0 и выдача recovery до owner receipt</summary>
