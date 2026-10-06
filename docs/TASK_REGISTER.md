@@ -2,7 +2,61 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — actual R2 CI FAIL; C3 R3 / 2026-10-06 UTC
+## Текущий статус — R3 REVIEW, actual CI/C8 pending / 2026-10-06 UTC
+
+**C0 scoped R3 verdict: PASS; C0-M2-ENV04-05-03 CLOSED на R3.**
+Findings01/02 остаются CLOSED на R2. C3-M2-ENV04-05 остаётся **REVIEW** до
+actual final integration CI и независимого scoped C8; rollout не принят.
+
+R3 **3f0453904cefc8bd33b8fedd2095eb8c1a6089d8**, tree
+**bd72edd3a9b01bb5053478f96d5089289e8f2b38**, единственный parent
+**41f74346b56009bda53fa637ed5adeb3fbb7c507**. Три разрешённых файла:
+два tests и runbook. Production client/helper/pins/контракт/dependencies/locks
+byte-exact R2; client blob **525381357de76ea1c570fd864f8df5e9781a87e2**.
+R1/R2/R3 ancestry и failed candidate/CI37523378682 сохраняются.
+
+Исправленная offline assertion проверяет ровно две согласованные пары:
+DEPENDENCY_TIMEOUT/False либо DEPENDENCY_UNAVAILABLE/True; elapsed≤6s,
+один application call, до/после REQUEST count1, SEND_EFFECT отсутствует.
+Mapping обоих семейств/no fallback, CA/hostname, auth/DB/private S3 и readonly
+после recreate сохранены. Ошибка не классифицируется по знанию fixture или ledger.
+Новый real TCP refusal удерживает bound loopback port без listen на весь вызов,
+проходит factory/injected production wrapper и проверяет один connect attempt,
+точную UNAVAILABLE/True, elapsed<5s, отсутствие stream/pool connections.
+
+C0 отдельно повторил `uv run --frozen --offline pytest -q -s --tb=short
+tests/test_telegram_connect_budget.py -k 'real_tcp_refusal or stalled_readonly'`:
+**6 PASS,19 deselected,21.39s**, refusal0.001s в обоих factory paths.
+Неизменённые4 stalled TLS/response cases подтвердили TIMEOUT/False,
+bounded5s и peer EOF/FD=-1 до teardown. Все non-doc tracked blobs локального
+staging сверены с R3; четыре docs отличаются, полного R3 Git checkout/clean-source
+C0 этим запуском не заявляет. Это real local TCP/TLS, не actual relay/PG/Docker.
+C3-reported final614 PASS/0 FAIL,393 deselected и static/source/clean checks
+сохраняются как author evidence до actual runner.
+
+| Задача/этап | Статус | Следующее evidence |
+|---|---|---|
+| C3-M2-ENV04-05 | REVIEW | C0 scoped PASS; actual final-head CI, затем C8 |
+| C0 runner verification | IN_PROGRESS | Exact final candidate, все3 jobs и artifacts/clean-source |
+| C8-M2-CONNECT-BUDGET-R3 | TODO | Начинать только после C0-подтверждённого final CI SUCCESS |
+| M2 / ENV04 | IN_PROGRESS / REVIEW | Actual A09/A11; VM migration ещё не выдана |
+
+Один активный этап и conditional C8 scope — [M2_HANDOFF](tasks/M2_HANDOFF.md).
+
+VM сохраняется на **0b7e24ee425ebb429bf87dfe382cbd3fab883028** /
+tree **14a4033b849c736235653a5a85ec9e5112bfe727**, прежние cached images,
+connect2, Telegram disabled/empty. Binding committed; ACK NOT_ATTEMPTED/replay-blocked.
+Private receipts/inputs/runtime и fixed TEST interval2026-10-02→2026-10-09 UTC
+сохраняются. Source/image/recovery migration — отдельное последующее поручение C6
+после CI/C8; старые owner blocks не запускать. Сейчас нет VM fetch/rebuild/deploy,
+ACK/setWebhook/activation/sends. M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11;
+PR24 Draft/open, main merge/production/M3 не выданы. Source-key revocation не подтверждён.
+[Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+<details>
+<summary>История — finding03 OPEN и R3 IN_PROGRESS до R3 review</summary>
+
+## История — R2 actual CI failure и выдача R3
 
 **C0 verdict: CHANGES_REQUESTED по новому C0-M2-ENV04-05-03 / P2 (OPEN).**
 C3-M2-ENV04-05 возвращена в **IN_PROGRESS** на ограниченную R3.
@@ -63,6 +117,8 @@ source fetch/rebuild/deploy, ACK/setWebhook/activation/sends.
 M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11; PR24 Draft/open.
 Merge main/production/M3 не выданы; source-key revocation не подтверждён.
 [Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+</details>
 
 <details>
 <summary>История — R2 scoped verdict и runner issuance; actual failure выше</summary>

@@ -1247,14 +1247,15 @@ Production/M3, новые платные ресурсы, backup/restore drill н
 
 </details>
 
-## 0.6. TEST egress — actual R2 runner FAIL; R3 / 2026-10-06 UTC
+## 0.6. TEST egress — R3 reviewed, actual CI/C8 pending / 2026-10-06 UTC
 
-Актуальный C0 verdict — §0.6.21: CHANGES_REQUESTED по новому finding03/P2.
-Cleanup/source findings01/02 CLOSED; C3-M2-ENV04-05 IN_PROGRESS на test-only R3.
-R1/R2 и их scoped PASS сохранены в§0.6.19–20 как история до actual runner.
+C0 scoped verdict — §0.6.22: R3 PASS, findings01/02/03 CLOSED в описанном scope.
+C3-M2-ENV04-05 остаётся REVIEW до actual final integration CI и независимого C8.
+R1/R2/R3 author evidence — §0.6.19; прежние C0 verdict/failed CI — §0.6.20–21.
 Последний owner TLS receipt — §0.6.18. VM0b7e24ee/connect2, binding/ACK/receipts
-не изменяются, новых owner commands нет. Active handoff — M2_HANDOFF;
-единственный register — TASK_REGISTER; exact CI/архивы — единый PR receipt.
+сохраняются; source/image migration и owner-команды ещё не выданы.
+Exact final SHA/CI/артефакты — единый receipt; status — TASK_REGISTER;
+единственный активный этап и последующий C8 scope — M2_HANDOFF.
 
 ### 0.6.1. Датированный фактический receipt и границы
 
@@ -2518,11 +2519,13 @@ Implementation CI37385698548 all3 SUCCESS относится к этому imple
 Source deploy-key revocation остаётся неподтверждённым. Fixed COMPED TEST interval
 2026-10-02T00Z→2026-10-09T00Z и committed request не пересчитываются.
 
-### 0.6.19. C3-M2-ENV04-05 — R1 history и R2 REVIEW / 2026-10-06 UTC
+### 0.6.19. C3-M2-ENV04-05 — R1/R2 history и R3 REVIEW / 2026-10-06 UTC
 
-**Текущее исполнение: R2 возвращена на REVIEW; findings C0-M2-ENV04-05-01/02
-остаются OPEN до verdict C0.** Local regression612 PASS/0 FAIL; actual integration
-gates/C8 не выполнены. Подробности R2 ниже, после сохранённого failed-candidate receipt.
+**Текущее исполнение: R3 возвращена на REVIEW; finding C0-M2-ENV04-05-03/P2
+остаётся OPEN до verdict C0. Findings01/02 CLOSED на R2.** R3 evidence ниже.
+Исторический receipt R2 до verdict C0: findings01/02 ещё OPEN,
+local regression612 PASS/0 FAIL; actual integration gates/C8 тогда не выполнены.
+Подробности R1/R2 сохранены ниже.
 Это не разрешение интеграции/rollout и не новая owner/VM-команда.
 
 #### История R1 — сохранённый failed candidate c009c854
@@ -2677,6 +2680,59 @@ local tested SHA, точные script exits, clean-source evidence и CI IDs п�
 VM остаётся на0b7e24ee425ebb429bf87dfe382cbd3fab883028/connect2; binding committed,
 ACK NOT_ATTEMPTED, receipts и runtime сохранены. Live Telegram не выполнялся;
 M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11. Findings01/02 закрывает только C0.
+
+#### R3 — точная классификация offline readonly, 2026-10-06 UTC
+
+Поручение прочитано на coordination `c50bef85b6c474287d8d26521f51315fa9c695a3`.
+R3 продолжает ту же отдельную ветку от R2
+`41f74346b56009bda53fa637ed5adeb3fbb7c507`, сохраняя её единственным непосредственным
+parent; без reset/rebase. TASK_REGISTER/active handoff ведёт C0.
+
+Actual [CI37523378682](https://github.com/Elefesys/ai-service-manager/actions/runs/37523378682)
+проверял integration candidate `ad724e68614c2942b73eaae41e6d8802d1663b84` через
+merge `f6c2bd6f574831ced9996c042818240b668f9175`. Логи jobs112474140017/foundation
+и112474139579/exact Docker29 подтверждают одинаковый FAIL прежней строки446:
+offline `DEPENDENCY_TIMEOUT/False` против `assert definitely_unsent`;
+каждая relay/PG lane5 PASS/1 FAIL,32.47s/37.70s. Browser112474140023 SUCCESS,
+27 journeys PASS; foundation/Docker29 clean-source steps SKIPPED после failure.
+Это evidence R2/integration failure, не успешная проверка R3.
+
+Причина изменения старой assertion: она предполагала connect2 < readonly5.
+При connect5 внутри outer5 общий timeout не доказывает wire phase. Теперь
+единственный offline `get_me()` допускает ровно пары `DEPENDENCY_TIMEOUT/False`
+и `DEPENDENCY_UNAVAILABLE/True` для доказанного connect-phase отказа. Elapsed и
+пустой provider ledger не превращаются в доказательство definitely_unsent.
+Проверяется elapsed≤6s: прежний outer5 плюс максимум1s scheduling tolerance.
+До/после offline REQUEST count остаётся1 от hold_readonly; SEND_EFFECT отсутствует.
+Сохранены обе семьи mapping/no fallback, TLS CA/hostname, auth/DB/private S3 и
+readonly после recreate. После всех assertions существующий record_pass записывает
+offline elapsed/code/flag; общий deadline и production classifier не менялись.
+
+Добавлен один parametrized real TCP regression
+`test_real_tcp_refusal_is_proven_unsent_before_readonly_deadline`: bound loopback
+port без listen резервируется на весь вызов, исключая close/rebind race; kernel
+отклоняет connect. Обе factory/injected конфигурации используют production wrapper,
+официальный origin и прежние budgets. Ровно один application/TCP attempt;
+точно `DEPENDENCY_UNAVAILABLE/True`, elapsed<5s, нет установленного stream или
+занятого pool slot. Исключения/HTTP transport/timeouts не mocked.
+
+Local команда `uv run --frozen pytest -q -s tests/test_telegram_connect_budget.py
+-k 'real_tcp_refusal or stalled_readonly'`: **6 PASS**,19 deselected,21.45s.
+Fast refusal0.002s/0.001s; существующие4 stalled TLS/response cases подтверждают
+`DEPENDENCY_TIMEOUT/False`,4.8≤elapsed≤6s и peer close/FD=-1 до teardown без GC.
+Старые assertions этих cases не менялись; skip/xfail/collector bypass не добавлены.
+Полный non-integration suite/static/source checks на final R3 SHA и точные команды,
+head/tree/parent публикуются в C3 receipt без SHA-only документационного коммита.
+
+Client blob `525381357de76ea1c570fd864f8df5e9781a87e2`, helper/pins/контракт,
+budgets/retries и production classification byte-exact R2. Direct-wire/relay
+UNKNOWN→restart→wire count1 и остальные guards/assertions не изменены.
+Локального Docker нет: actual PG/S3/relay/exact Docker29, штатные scripts и workflow
+clean-source gates не подтверждены R3. После patch review C0 организует actual
+final integration CI, затем независимый C8. Finding03 остаётся OPEN до verdict C0.
+VM/binding/ACK/receipts прежние; owner/VM-команды, deploy/rebuild, activation,
+setWebhook, live sends и merge не выполнялись. M2 IN_PROGRESS, ENV04 REVIEW.
+
 
 ### 0.6.20. C0 scoped R2 verdict и runner handoff / 2026-10-06 UTC
 
@@ -2873,6 +2929,93 @@ Private receipts/inputs/runtime и fixed TEST interval2026-10-02→2026-10-09 UT
 source fetch/rebuild/deploy, ACK/setWebhook/activation/sends.
 M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11; PR24 Draft/open.
 Merge main/production/M3 не выданы; source-key revocation не подтверждён.
+[Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+### 0.6.22. C0 R3 scoped verdict и final runner/C8 / 2026-10-06 UTC
+
+**C0 scoped R3 verdict: PASS; C0-M2-ENV04-05-03 CLOSED на R3.**
+Findings01/02 остаются CLOSED на R2. C3-M2-ENV04-05 остаётся **REVIEW** до
+actual final integration CI и независимого scoped C8; rollout не принят.
+
+R3 **3f0453904cefc8bd33b8fedd2095eb8c1a6089d8**, tree
+**bd72edd3a9b01bb5053478f96d5089289e8f2b38**, единственный parent
+**41f74346b56009bda53fa637ed5adeb3fbb7c507**. Три разрешённых файла:
+два tests и runbook. Production client/helper/pins/контракт/dependencies/locks
+byte-exact R2; client blob **525381357de76ea1c570fd864f8df5e9781a87e2**.
+R1/R2/R3 ancestry и failed candidate/CI37523378682 сохраняются.
+
+Исправленная offline assertion проверяет ровно две согласованные пары:
+DEPENDENCY_TIMEOUT/False либо DEPENDENCY_UNAVAILABLE/True; elapsed≤6s,
+один application call, до/после REQUEST count1, SEND_EFFECT отсутствует.
+Mapping обоих семейств/no fallback, CA/hostname, auth/DB/private S3 и readonly
+после recreate сохранены. Ошибка не классифицируется по знанию fixture или ledger.
+Новый real TCP refusal удерживает bound loopback port без listen на весь вызов,
+проходит factory/injected production wrapper и проверяет один connect attempt,
+точную UNAVAILABLE/True, elapsed<5s, отсутствие stream/pool connections.
+
+C0 отдельно повторил `uv run --frozen --offline pytest -q -s --tb=short
+tests/test_telegram_connect_budget.py -k 'real_tcp_refusal or stalled_readonly'`:
+**6 PASS,19 deselected,21.39s**, refusal0.001s в обоих factory paths.
+Неизменённые4 stalled TLS/response cases подтвердили TIMEOUT/False,
+bounded5s и peer EOF/FD=-1 до teardown. Все non-doc tracked blobs локального
+staging сверены с R3; четыре docs отличаются, полного R3 Git checkout/clean-source
+C0 этим запуском не заявляет. Это real local TCP/TLS, не actual relay/PG/Docker.
+C3-reported final614 PASS/0 FAIL,393 deselected и static/source/clean checks
+сохраняются как author evidence до actual runner.
+
+### Текущий этап — C0 actual runner; следующая выдача C8
+
+Repository `Elefesys/ai-service-manager`; integration branch
+`c6/m2-telegram-live`, Draft PR24. C0 собирает final candidate с ordered parents:
+coordination **c50bef85b6c474287d8d26521f51315fa9c695a3** и
+R3 **3f0453904cefc8bd33b8fedd2095eb8c1a6089d8**. Два test blobs — exact R3;
+C0 согласует только TASK_REGISTER/M2_HANDOFF/runbook для слияния evidence и handoff.
+Другие code/config/contract/workflow/lock/migration blobs не менять.
+Candidate assembly не является INTEGRATED/VERIFIED или merge PR/main.
+Final head/tree/ordered parents, tested PR merge, actual run/jobs/artifacts и
+gate results фиксируются в едином receipt после исполнения без SHA-only commit.
+
+Нужны SUCCESS именно final candidate: штатные ci.sh/test_browser.sh,
+real relay и exact Docker29, обычные PG/S3/direct-wire и source/image/recovery/
+legacy cases, все workflow clean-source gates. В обоих relay reports проверить
+offline_readonly_elapsed_seconds≤6 и согласованную code/flag пару, завершённые
+auth/DB/private S3/recreate assertions, durable effect→UNKNOWN→restart→wire count1,
+нет business transaction на HTTP. C0 проверяет exact tested source/ordered parents,
+оба source archives/worktree status, digests и реальные job logs. Local/mocks,
+C3 reports и старый SUCCESS не заменяют actual final-head execution.
+
+**Только после C0-подтверждённого all-gates SUCCESS — единственное следующее
+поручение C8-M2-CONNECT-BUDGET-R3 (независимый scoped review).**
+C8 берёт точный final integration head из receipt, отдельный checkout; исходный
+общий base **9e165dd09f87663665e3dabae4f155e99e2639a6** и chain R1/R2/R3 сохранены.
+Read-only review source/evidence; временные независимые probes вне tracked tree.
+Implementation/CI/config/VM changes не выданы; новый defect вернуть C0 finding.
+
+Проверить cumulative client connect2→5, production TCP/TLS ownership/abort при
+outer и повторной cancellation, отсутствие утечки/GC/task reliance, сохранение
+исходной отмены, параллельного запроса и client reuse; factory/injected path одинаков.
+Проверить strict final source/image pin и неизменные recovery/legacy/drift guards;
+R3 precise error/flag pairs и wire/timing assertions, обе deterministic branches.
+Budgets connect5/pool2/read5/write5, wall5/10/20, lease30, pool4, official origin,
+TLS verify/SNI, trust_env=false, redirects/retries0 и UNKNOWN/no-resend сохраняются.
+Private HTTPX0.28.1/httpcore1.0.9/AnyIO4.15.1 seams ограничены locked asyncio stack.
+Проверить actual normal/Docker29/PG/S3/direct-wire/relay/browser и clean-source
+evidence без переноса старого C8 verdict; ограничения live и migration сохранить.
+
+Возврат C8: exact reviewed head/tree/base, PASS либо findings с severity/file/evidence,
+собственные checks отдельно от прочитанных CI результатов, закрытые и оставшиеся
+границы. C0 final acceptance — после CI+C8, C6 migration получает отдельный scope.
+Канон: AGENTS, Spec§§18.2/18.8/18.10, ADR239, M2_CONTRACT§§10.5/10.6/10.12,
+Implementation Plan M2, originals по SOURCE_MANIFEST.
+
+VM сохраняется на **0b7e24ee425ebb429bf87dfe382cbd3fab883028** /
+tree **14a4033b849c736235653a5a85ec9e5112bfe727**, прежние cached images,
+connect2, Telegram disabled/empty. Binding committed; ACK NOT_ATTEMPTED/replay-blocked.
+Private receipts/inputs/runtime и fixed TEST interval2026-10-02→2026-10-09 UTC
+сохраняются. Source/image/recovery migration — отдельное последующее поручение C6
+после CI/C8; старые owner blocks не запускать. Сейчас нет VM fetch/rebuild/deploy,
+ACK/setWebhook/activation/sends. M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11;
+PR24 Draft/open, main merge/production/M3 не выданы. Source-key revocation не подтверждён.
 [Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
 
 ## 1. Конкретное окружение и предварительные условия
