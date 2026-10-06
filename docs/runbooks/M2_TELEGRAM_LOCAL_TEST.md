@@ -1247,13 +1247,25 @@ Production/M3, новые платные ресурсы, backup/restore drill н
 
 </details>
 
-## 0.6. TEST egress — TLS подтверждён, следующий шаг C3 / 2026-10-06
+## 0.6. TEST egress — C3 candidate требует R2 cleanup / 2026-10-06 UTC
 
-Текущий результат и границы — §0.6.18; единственная активная выдача —
-M2_HANDOFF / C3-M2-ENV04-05. Owner correction/discovery/binding и network diagnostics
-уже завершены. Исторические terminal blocks§0.6.1–0.6.17 не являются новой командой
-владельцу. Accepted VM остаётся на0b7e24ee, runtime disabled; ACK NOT_ATTEMPTED.
-Текущий connect2 s пока сохраняется; кандидат5 s требует code review и CI/C8.
+Последний owner TLS PASS описан в§0.6.18. Последующий C3 candidate
+c009c8540146d0a16d44fccf662d6e4d50fc53b1 получил **C0 CHANGES_REQUESTED**:
+outer timeout/explicit cancellation при stalled TLS оставляют TCP открытым; strict
+SOURCE pin правильно отвергает изменённый client. C0 повторил4 адресных local
+case:1 PASS/3 FAIL; cold TLS3.017s/HTTP3.030s, без actual Docker/PG/relay/live.
+
+Единственная текущая выдача — **M2_HANDOFF / C3-M2-ENV04-05 R2**: bounded
+cancellation-safe cleanup в client.py + один final client blob в helper, с
+сохранением deadlines/UNKNOWN и strict source/image guards. Source-pin update
+не разрешает новый helper со старыми VM images. Candidate и его
+[§0.6.19](https://github.com/Elefesys/ai-service-manager/blob/c009c8540146d0a16d44fccf662d6e4d50fc53b1/docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md#0619-c3-m2-env04-05--connect-budget-candidate-review-с-blockers--2026-10-06)
+ещё не интегрированы. Full runner/Docker29/C8 остаются обязательными gates.
+
+Исторические owner terminal blocks не являются новой командой. VM остаётся
+на0b7e24ee/connect2, TG disabled; binding committed, ACK NOT_ATTEMPTED.
+Реестр задач — TASK_REGISTER. Прежняя выдача§0.6.18 сохранена как история;
+актуальные scope/allowed paths находятся в активном handoff.
 
 ### 0.6.1. Датированный фактический receipt и границы
 
