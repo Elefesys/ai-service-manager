@@ -1250,6 +1250,7 @@ Production/M3, новые платные ресурсы, backup/restore drill н
 ## 0.6. TEST egress — R3 reviewed, actual CI/C8 pending / 2026-10-06 UTC
 
 C0 scoped verdict — §0.6.22: R3 PASS, findings01/02/03 CLOSED в описанном scope.
+Actual first R3 CI и ограниченная C0 foundation job capacity correction — §0.6.23.
 C3-M2-ENV04-05 остаётся REVIEW до actual final integration CI и независимого C8.
 R1/R2/R3 author evidence — §0.6.19; прежние C0 verdict/failed CI — §0.6.20–21.
 Последний owner TLS receipt — §0.6.18. VM0b7e24ee/connect2, binding/ACK/receipts
@@ -3017,6 +3018,44 @@ Private receipts/inputs/runtime и fixed TEST interval2026-10-02→2026-10-09 UT
 ACK/setWebhook/activation/sends. M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11;
 PR24 Draft/open, main merge/production/M3 не выданы. Source-key revocation не подтверждён.
 [Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+### 0.6.23. C0 foundation job capacity / 2026-10-06 UTC
+
+### C0 CI capacity correction — actual run37527283930 / 2026-10-06 UTC
+
+Первый R3 integration candidate **f6ba33a37b8f35070c2a2471f9e1b386297c049f**,
+tree **5a92a9fd51d001fe4fe9ef81b996dbafc7b689b2**, tested merge
+**ecfacbb77fe490cd33ec12237197cdd6809160da**: browser112487381755 SUCCESS/27 cases,
+Docker29 112487380957 SUCCESS/6 relay +6 lifecycle cases/clean-source.
+Foundation112487381312 CANCELLED примерно на25-minute job limit: start20:33:01Z,
+cancellation20:58:16Z. До остановки actual normal runner выполнил все6 relay cases
+и6 lifecycle cases, static checks и **614 non-integration PASS** за90.26s.
+Обычный393-case PG/S3/direct-wire suite начат, не завершён; final smoke/clean-source
+gate не выполнены. Failure assertion в доступном логе не зафиксирована; полный CI
+SUCCESS не заявляется. Это не новый C3 code finding и не разрешение C8/rollout.
+
+Оба relay reports: все12 assertions PASS, одинаковые before/after fingerprints31
+таблицы во всех6 циклах, UNKNOWN/session/receipts/wire1 сохранены. Actual offline:
+normal Docker28.0.4/Compose2.38.2 — TIMEOUT/False за5.005s;
+exact Docker29.8.2/8af9fe3/Compose5.5.1 — TIMEOUT/False за5.006s.
+Artifacts11443883177/11443418323, ZIP hashes/226 source files/modes, tested merge
+и пустой recorded worktree status проверены C0. Foundation workflow clean-source
+SKIPPED; это не заменяется отдельной проверкой status. Полные digests — receipt.
+
+**C0 разрешает и вносит одну инфраструктурную строку:**
+`.github/workflows/ci.yml`, только `jobs.foundation.timeout-minutes:25→35`.
+Measured normal relay stage завершился20:54:17Z, unit stage20:56:08Z: лимит25min
+оставлял менее2min15s для393 PG/S3/direct-wire cases и final smoke. Запас35min
+позволяет исполнить полный последовательный gate. Browser/Docker29 budgets прежние.
+Ни одна command/assertion/collector/dependency не меняется; clean-source и artifact
+steps сохраняются, continue-on-error/skip/xfail не добавляются. Product deadlines
+5/10/20s, phase limits и recovery operation bound180s неизменны.
+Это C0 integration/CI capacity scope, не расширение production R3 или C6 VM scope.
+
+Новый final candidate — один commit поверхf6ba33a3; production/test blobs exact R3.
+Выполняется новый полный трёх-job CI на этом SHA; прежние PASS не переносятся
+на новый head как его результаты. Только после всех actual gates — C8 по выданному
+scoped handoff. Findings01/02/03 CLOSED; C3 REVIEW, M2 IN_PROGRESS/ENV04 REVIEW.
 
 ## 1. Конкретное окружение и предварительные условия
 
