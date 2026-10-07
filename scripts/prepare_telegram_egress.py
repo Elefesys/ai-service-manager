@@ -16,6 +16,7 @@ import stat
 import subprocess
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from pathlib import Path
 from uuid import UUID
@@ -2199,6 +2200,15 @@ def migration_image(image, source, kind):
     return {"id": image, "source_sha": source, "kind": kind, "blobs_sha256": sha(encoded(blobs))}
 
 
+def migration_image_proofs(requests):
+    # Image IDs are immutable. These offline read-only probes are independent;
+    # await every result before returning or permitting a runtime mutation.
+    requests = sorted(set(requests))
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {key: pool.submit(migration_image, *key) for key in requests}
+        return {key: future.result() for key, future in futures.items()}
+
+
 def migration_environment(rows):
     values = {}
     for row in rows or []:
@@ -2432,11 +2442,13 @@ def migration_attest(args, directory):
             json.loads(command(["docker", "image", "inspect", tag]))[0]["Id"] == expected,
             "EGRESS_MIGRATION_OLD_TAG_DRIFT",
         )
-    proofs = {}
-    for name, image in old_images.items():
-        kind = "development" if name == "telegram-operator" else "runtime"
-        if image not in proofs:
-            proofs[image] = migration_image(image, MIGRATION_FROM, kind)
+    proofs = {
+        key[0]: value
+        for key, value in migration_image_proofs(
+            (image, MIGRATION_FROM, "development" if name == "telegram-operator" else "runtime")
+            for name, image in old_images.items()
+        ).items()
+    }
     caller_probe(state, directory)
     database = migration_database(state, directory)
     require(
@@ -2679,13 +2691,14 @@ def migration_prepared(directory):
         and set(ready["after_images"]) == {*MIGRATION_SERVICES, "telegram-operator"},
         "EGRESS_MIGRATION_IMAGE_PLAN_CHANGED",
     )
-    checked = set()
+    migration_image_proofs(
+        (image, source, "development" if name == "telegram-operator" else "runtime")
+        for direction, source in (("before_images", MIGRATION_FROM), ("after_images", plan["to_sha"]))
+        for name, image in ready[direction].items()
+    )
     for direction, source in (("before_images", MIGRATION_FROM), ("after_images", plan["to_sha"])):
         for name, image in ready[direction].items():
             kind = "development" if name == "telegram-operator" else "runtime"
-            if (image, source, kind) not in checked:
-                migration_image(image, source, kind)
-                checked.add((image, source, kind))
             tag = (
                 ready["rollback_tags"][name]
                 if direction == "before_images"

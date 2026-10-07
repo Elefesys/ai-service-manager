@@ -15,6 +15,7 @@ import stat
 import subprocess
 import sys
 import tarfile
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -471,6 +472,30 @@ if __name__ == "__migration_harness__":
     raise SystemExit(0)
 
 import pytest  # noqa: E402 -- host harness uses only stdlib; default collection remains ordinary.
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_parallel_image_proofs_wait_for_all_and_propagate_failure(monkeypatch, fail):
+    barrier = threading.Barrier(4, timeout=5)
+    finished = set()
+    requests = [(str(i), "source", "runtime") for i in range(4)]
+
+    def probe(image, source, kind):
+        barrier.wait()
+        finished.add(image)
+        if fail and image == "0":
+            raise e.EgressError("EGRESS_MIGRATION_TEST_IMAGE_REJECTED")
+        return {"id": image, "source_sha": source, "kind": kind}
+
+    monkeypatch.setattr(e, "migration_image", probe)
+    if fail:
+        with pytest.raises(e.EgressError, match="TEST_IMAGE_REJECTED"):
+            e.migration_image_proofs(requests + requests)
+    else:
+        proofs = e.migration_image_proofs(requests + requests)
+        assert set(proofs) == set(requests)
+        assert all(proofs[key]["id"] == key[0] for key in requests)
+    assert finished == {"0", "1", "2", "3"}
 
 
 def test_migration_environment_order_is_not_identity():
