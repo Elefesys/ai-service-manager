@@ -4107,6 +4107,97 @@ Owner applicability remains unconfirmed: actual cached old images and independen
 
 </details>
 
+### 0.6.31. C6-M2-OWNER-RECEIPT-COMPAT — bounded compatibility candidate
+
+Base/sole parent for this fix: **c015e7ad9796f17243bb205bbf9d239a9f12a2e4**,
+tree **ec28a77ba76248a28b0698fe220071ecf9438fad**. Separate checkout; no reset,
+rebase or force-push. Exactly four allowed files change: receipt basename validation
+in the helper, migration tests/disposable fixture, contract §10.12.1 and this runbook.
+C8-MIG-01 and client01/02/03 stay CLOSED; C0-MIG-OWNER-01 remains OPEN for one
+focused C0/C8 verdict after the completed REVIEW handoff.
+
+Both basename checks now accept only `[a-z0-9-]+(?:\\.intent)?\\.json`. Existing
+receipts retain their actual names and bytes; their full hashes remain in the DAG
+and immutable archive. No source/image/runtime/audit-schema/client/Compose/workflow/
+lock/deadline/domain change. Root hash is still supplied independently, never healed
+from current runtime. The prior owner procedure in §0.6.25 remains a draft, not a
+new authorization. The fifteen names in §0.6.30 are tested with synthetic contents;
+no actual owner receipt or cached image was read.
+
+| C0-MIG-OWNER-01 boundary | New regression / evidence |
+|---|---|
+| Exact historical intent; parent and current/root checks | `test_historical_owner_intent_preserves_complete_receipt_dag`: all15 nodes, legacy links, exact inventory/bytes/modes; both positive assertions fail on base and pass after fix |
+| Every ancestor remains required | `test_owner_receipt_dag_requires_every_original_byte`: tamper/missing for each of15 nodes,30 cases, zero writes/external calls |
+| Strict basename boundary | `test_owner_receipt_rejects_unsafe_parent_names` and `test_owner_receipt_rejects_unsafe_current_names`: traversal, absolute parent key, separators, unexpected/repeated suffix, empty/dotted names |
+| Pins/private/source bindings remain strict | `test_owner_receipt_retains_hash_and_private_guards` and `test_owner_receipt_retains_source_baseline_and_staged_bindings`: independent pin, intent/legacy-edge hashes, symlink/mode/size, source/tree/baseline/staged/preservation |
+| Real migration archive/resume/rollback path | Existing six disposable lanes add the exact historical intent plus a new pinned root; original28 files retained unchanged, total30; full six-node fixture DAG and both extra archive hashes asserted before/after operation |
+
+Red-first own execution on unchanged base helper: Python3.12.14/pytest9.0.2,
+`python -m pytest -q tests/test_telegram_egress_migration.py -k historical_owner_intent`
+→ **2 FAIL**, both `EGRESS_MIGRATION_RECEIPT_PATH`, at distinct original basename
+checks (1956/1977). Those positive assertions remain unchanged on the fix.
+Initial focused green was52 PASS; ten additional current-name/source-binding cases
+bring the new focused coverage to62. Final own scoped execution on Python3.13.15,
+frozen dependencies / pytest9.1.1: **313 PASS in10.69s** (216 migration +97 existing
+egress; includes the62 new cases). Ruff0.16.7 all-scope lint/format PASS,117 files;
+mypy1.20.2 PASS/51 backend files; offline OpenAPI contract check PASS. Canonical11
+originals match SOURCE_MANIFEST. No local Docker executable is installed.
+
+Exact local commands (checkout `m2-owner-receipt-compat`; venv outside source):
+
+```sh
+UV_PROJECT_ENVIRONMENT=/workspace/scratch/9d916d2c3a86/compat-check-env uv sync --frozen --python 3.13 --group dev
+/workspace/scratch/9d916d2c3a86/compat-check-env/bin/python -m pytest -q tests/test_telegram_egress_migration.py tests/test_telegram_egress.py
+/workspace/scratch/9d916d2c3a86/compat-check-env/bin/ruff check backend tests scripts migrations
+/workspace/scratch/9d916d2c3a86/compat-check-env/bin/ruff format --check --diff backend tests scripts migrations
+/workspace/scratch/9d916d2c3a86/compat-check-env/bin/mypy backend/src
+/workspace/scratch/9d916d2c3a86/compat-check-env/bin/python scripts/export_contracts.py --check
+git diff --check
+```
+
+Final exact-SHA evidence is published once in the [single PR24 receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006),
+including head/tree/parent, all9 CI jobs, clean-source gates,8 ZIP digests/modes/source
+archives and six migration/two relay reports. This pre-publication source document
+does not assert CI success in advance. Mandatory actual CI commands remain
+`sh scripts/ci.sh`, `sh scripts/test_browser.sh`, the existing Docker29 compatibility
+lane and `sh scripts/test_telegram_egress_migration.sh intent|image|state` on normal
+and exact Docker29. All prior6+6 assertions/31-table hashes/Console/private originals/
+UNKNOWN wire1 and schema2 rollback bindings remain required, under the same180/600s
+bounds. New `owner_receipt_compat` report data binds the intent/root/DAG hashes and
+preserved original28 plus two additive files; synthetic CI evidence is separate
+from actual owner attestation. C0-CI-AUDIT-01 is C5 scope; no browser retry or test
+relaxation is implied if that incident repeats.
+
+VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing mutation/merge
+were not performed. Cached owner image bytes and independently accepted last-receipt
+pin still require a separate C0 issuance. No old receipt rename/rewrite, ACK replay,
+new baseline or extension of the fixed TEST interval is authorized by this fix.
+
+<details>
+<summary>Archived C0 receipt prefix — verbatim before the compatibility return</summary>
+
+## C0 — C8-MIG-01 CLOSED; owner receipt compatibility fix issued (2026-10-07)
+
+**C0 accepts the independent C8 R2 PASS and closes C8-MIG-01/P2 on exact R2.** C6-R2 and targeted C8 are complete/VERIFIED in their checked scope; client findings01/02/03 remain CLOSED. M2 IN_PROGRESS/ENV04 REVIEW. Actual owner migration remains blocked by the distinct compatibility finding below and pending owner image/receipt attestation.
+
+**Accepted audit fix:** head `f1c7aca724778e41671f2754bb85885507c4f14d`, tree `4f28480ef1458141422a14514473c05f49193fe6`, sole parent/base `34835c260f737abbbe02a689f842b28fad50f323`. Helper blob `00c347cde45e3c1a683330c6ee196815ef0a1e36`; client blob `525381357de76ea1c570fd864f8df5e9781a87e2`. Cross-direction audit/inventory/hash/done→result fix accepted.
+
+**Independent C8 report:** clean separate checkout;154 migration tests PASS, original3 repro unchanged PASS,50 additional probes PASS. Real file guards; Docker/DB/runtime observations fixture. C8 independently verified CI37629816347/all9 jobs/clean-source,8 ZIP digests/228 blobs+modes,6 schema2 migration+2 relay reports. This is C8-reported execution, alongside prior C0 own5 targeted probes and independent CI/artifact verification; the named C8 ZIP was not attached as an accessible file in this handoff. Full R2 evidence retained in runbook§0.6.29.
+
+**NEW C0-MIG-OWNER-01/P2 OPEN:** R2 `migration_receipts` lines1956/1977 allow only `[a-z0-9-]+\.json`. The previously issued owner script retains `asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.intent.json` and pins it in later diagnostics' `prior_receipts_sha256`. C0 inspected that issued script (SHA256 `1cd0c50ecdc134778f912a4644b41f159f3d53df865df09759c64be6835049f0`) and reproduced the filename incompatibility using the exact R2 helper, Python3.12.14 and actual private-file guards: ordinary basename ACCEPTED; exact issued intent basename → EGRESS_MIGRATION_RECEIPT_PATH; correct hashes, unchanged files, zero external calls. Synthetic contents; no current VM receipt/image observation. This is a fail-closed compatibility STOP before runtime effects, not a reopened C8 audit finding or data loss.
+
+**C6-M2-OWNER-RECEIPT-COMPAT issued:** narrow basename compatibility in helper, regressions and actual disposable migration receipt fixture, contract/runbook evidence. Four allowed files; preserve independent root pin, exact inventory/hashes, same-parent/no-symlink/private guards, schema2, source/client pins and180/600s bounds. No renaming/dropping/rewriting old receipts. Reproducer and15 issued DAG basenames are in [runbook§0.6.30](https://github.com/Elefesys/ai-service-manager/blob/c015e7ad9796f17243bb205bbf9d239a9f12a2e4/docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md); [canonical C6 handoff](https://github.com/Elefesys/ai-service-manager/blob/c015e7ad9796f17243bb205bbf9d239a9f12a2e4/docs/tasks/M2_HANDOFF.md). First implementation commit sole parent must be this full coordination SHA.
+
+**Separate browser incident:** docs head `dcf32ca02c4222e3267ed4e794c817345ae71357`, CI37640492805 attempt1:8 jobs SUCCESS, browser26 PASS/1 FAIL at billing.spec.ts:57 (Load more count/enabled vs last-page render). C0 requested one browser-only rerun. Job112868124234:27 PASS/clean-source; attempt2 all9 jobs/clean-source SUCCESS. Original failed job112857823029 preserved. Likely test synchronization race, deterministic UI repro not executed. C0-CI-AUDIT-01/P3 OPEN, separate C5 TODO before merge, not issued/not C6 scope. No test/assertion/budget changes.
+
+**This coordination:** `c015e7ad9796f17243bb205bbf9d239a9f12a2e4`, tree `ec28a77ba76248a28b0698fe220071ecf9438fad`, sole parent `dcf32ca02c4222e3267ed4e794c817345ae71357`. Only4 docs changed;224/228 blobs+modes unchanged. CI37645313754 IN_PROGRESS at publication, no inherited PASS claim. Main `22993f558c5e7e933c65e9c999933bd2e3ab41c4` unchanged; PR24 Draft/open.
+
+**Owner boundary:** last known0b7e24ee/recovery-v2/connect2, Telegram disabled/empty, binding committed, ACK NOT_ATTEMPTED/no automatic replay. Actual cached image bytes and independently accepted last-receipt SHA remain unconfirmed. Fixed TEST interval ends2026-10-09T00Z; no extension/rebaseline/rebuild is implied. No VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing mutation/rollout/main merge issued or performed.
+
+Previous C0 prefix archived verbatim in runbook§0.6.30. Historical receipt tail below preserved unchanged.
+
+</details>
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker

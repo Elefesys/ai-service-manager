@@ -1953,7 +1953,8 @@ def migration_receipts(path, expected, state, directory):
     while pending:
         current, digest = pending.pop()
         require(
-            current.parent == path.parent and re.fullmatch(r"[a-z0-9-]+\.json", current.name),
+            current.parent == path.parent
+            and re.fullmatch(r"[a-z0-9-]+(?:\.intent)?\.json", current.name),
             "EGRESS_MIGRATION_RECEIPT_PATH",
         )
         raw = migration_bytes(current)
@@ -1974,7 +1975,8 @@ def migration_receipts(path, expected, state, directory):
         require(isinstance(parents, dict), "EGRESS_MIGRATION_RECEIPT_PARENTS")
         for name, value in parents.items():
             require(
-                re.fullmatch(r"[a-z0-9-]+\.json", name) is not None, "EGRESS_MIGRATION_RECEIPT_PATH"
+                re.fullmatch(r"[a-z0-9-]+(?:\.intent)?\.json", name) is not None,
+                "EGRESS_MIGRATION_RECEIPT_PATH",
             )
             pending.append((path.parent / name, value))
         if "prior_attempt_sha256" in receipt:

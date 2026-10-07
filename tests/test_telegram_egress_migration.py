@@ -22,6 +22,8 @@ from types import SimpleNamespace
 
 from scripts import prepare_telegram_egress as e
 
+OWNER_ACK_INTENT = "asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.intent.json"
+
 
 def run_disposable(f):
     """Real old helper/images -> completed recovery -> migration, on one held DB."""
@@ -222,6 +224,37 @@ def run_disposable(f):
             )
         ),
     )
+    # Add the historical intent and a new pinned root without rewriting any of
+    # the original 28 private files (including the previous diagnostic receipt).
+    ack_intent = directory / OWNER_ACK_INTENT
+    e.write_private(
+        ack_intent,
+        e.encoded(
+            dict(
+                common,
+                status="OWNER_APPROVED_PREFIX_INTENT",
+                prior_receipts_sha256={binding.name: e.sha(binding.read_bytes())},
+            )
+        ),
+    )
+    previous_receipt = receipt
+    receipt = directory / "asm-telegram-tls-budget-fixed-owner2-0b7e24ee.json"
+    e.write_private(
+        receipt,
+        e.encoded(
+            dict(
+                common,
+                status="DIAGNOSTIC_COMPLETE",
+                preservation_pass=True,
+                staged_sha256=e.sha(corrected),
+                operator_image_id=operator_image,
+                prior_receipts_sha256={
+                    p.name: e.sha(p.read_bytes()) for p in (previous_receipt, ack_intent)
+                },
+            )
+        ),
+    )
+    receipt_pin = e.sha(receipt.read_bytes())
     arguments = [
         "--state-dir",
         str(state_dir),
@@ -280,7 +313,7 @@ def run_disposable(f):
                         "--operator-receipt",
                         str(receipt),
                         "--operator-receipt-sha256",
-                        e.sha(receipt.read_bytes()),
+                        receipt_pin,
                     ]
                     if pin
                     else []
@@ -298,6 +331,17 @@ def run_disposable(f):
     plan = json.loads((bundle / "preparation.json").read_bytes())
     ready = json.loads((bundle / "prepared.json").read_bytes())
     saved = {p: Path(p).read_bytes() for p in plan["files"]}
+    added_files = {str(p): p.read_bytes() for p in (ack_intent, receipt)}
+    assert added_files.items() <= saved.items()
+    assert len(saved.keys() - added_files.keys()) == 28 and len(saved) == 30
+    assert all(
+        (bundle / plan["files"][p]["archive"]).read_bytes() == raw
+        and plan["files"][p]["sha256"] == e.sha(raw)
+        for p, raw in added_files.items()
+    )
+    receipt_dag, receipt_image = e.migration_receipts(receipt, receipt_pin, recovered, state_dir)
+    assert receipt_image == operator_image and len(receipt_dag) == 6
+    assert receipt_dag.items() <= saved.items()
     assert all(
         plan["image_proofs"][v]["source_sha"] == e.MIGRATION_FROM
         for v in ready["before_images"].values()
@@ -427,6 +471,10 @@ e.main()
     assert {p.name: e.sha(p.read_bytes()) for p in bundle.glob("forward-*")} == forward_audit
     assert all(rolled_back[n]["image"] == ready["before_images"][n] for n in e.MIGRATION_SERVICES)
     assert all(Path(p).read_bytes() == raw for p, raw in saved.items())
+    assert e.migration_receipts(receipt, receipt_pin, recovered, state_dir) == (
+        receipt_dag,
+        operator_image,
+    )
     assert (state_dir / "recovery.json").read_bytes() == old_receipt
     # Return to the preserved exact predecessor checkout, not a manufactured v2.
     f["operator"]("preflight")
@@ -452,6 +500,16 @@ e.main()
     ]
     assert len(assertions) == 1 and assertions[0]["result"] == "PASS"
     report = {
+        "owner_receipt_compat": {
+            "intent_name": ack_intent.name,
+            "intent_sha256": e.sha(saved[str(ack_intent)]),
+            "root_name": receipt.name,
+            "root_sha256": receipt_pin,
+            "dag_sha256": {Path(p).name: e.sha(raw) for p, raw in receipt_dag.items()},
+            "original_files_count": 28,
+            "added_files": sorted(Path(p).name for p in added_files),
+            "archived_and_unchanged": True,
+        },
         "rollback_audit_binding": {
             "version": 2,
             "forward_audit_sha256": forward_audit,
@@ -498,6 +556,225 @@ if __name__ == "__migration_harness__":
     raise SystemExit(0)
 
 import pytest  # noqa: E402 -- host harness uses only stdlib; default collection remains ordinary.
+
+OWNER_RECEIPT_NAMES = (
+    "asm-telegram-discovery-0b7e24ee.json",
+    "asm-telegram-owner-id-correction-0b7e24ee.json",
+    "asm-telegram-discovery-owner2-0b7e24ee.json",
+    "asm-telegram-queue-diagnostic-owner2-0b7e24ee.json",
+    "asm-telegram-discovery-fresh-owner2-0b7e24ee.json",
+    "asm-telegram-binding-owner2-0b7e24ee.json",
+    "asm-telegram-connection-diagnostic-owner2-0b7e24ee.json",
+    "asm-telegram-binding-after-diagnostic-owner2-0b7e24ee.json",
+    "asm-telegram-queue-routes-owner2-0b7e24ee.json",
+    OWNER_ACK_INTENT,
+    "asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.json",
+    "asm-telegram-ack-dependency-diagnostic-owner2-0b7e24ee.json",
+    "asm-telegram-egress-segments-owner2-0b7e24ee.json",
+    "asm-telegram-tls-budget-owner2-0b7e24ee.json",
+    "asm-telegram-tls-budget-fixed-owner2-0b7e24ee.json",
+)
+
+
+@pytest.fixture
+def owner_receipt_dag(tmp_path):
+    """Issued names/topology, anonymous bytes; no owner files or runtime access."""
+    directory = tmp_path / "state"
+    directory.mkdir(mode=0o700)
+    e.write_private(directory / "deployment-before.json", b'{"synthetic":"baseline"}\n')
+    staged = tmp_path / "telegram.env"
+    e.write_private(staged, b"synthetic staged input\r\n")
+    common = {
+        "source_sha": e.MIGRATION_FROM,
+        "source_tree": e.MIGRATION_FROM_TREE,
+        "original_before_sha256": e.sha((directory / "deployment-before.json").read_bytes()),
+    }
+    paths = [tmp_path / name for name in OWNER_RECEIPT_NAMES]
+    values = {}
+    for i, path in enumerate(paths):
+        value = dict(common, status="DIAGNOSTIC_COMPLETE")
+        if i == 1:
+            value["prior_attempt_sha256"] = e.sha(paths[0].read_bytes())
+        elif i == 2:
+            value["owner_correction_sha256"] = e.sha(paths[1].read_bytes())
+        elif i > 2:
+            value["prior_receipts_sha256"] = {p.name: e.sha(p.read_bytes()) for p in paths[:i]}
+        if i in (5, 7):
+            value.update(status="BINDING_COMMITTED", preservation_pass=True)
+        if path.name == OWNER_ACK_INTENT:
+            value["status"] = "OWNER_APPROVED_PREFIX_INTENT"
+        if i == 10:
+            value["status"] = "NOT_ATTEMPTED"
+        if i == 14:
+            value.update(
+                preservation_pass=True,
+                staged_sha256=e.sha(staged.read_bytes()),
+                operator_image_id="sha256:" + "1" * 64,
+            )
+        values[path.name] = value
+        e.write_private(path, e.encoded(value))
+    return SimpleNamespace(
+        directory=directory,
+        paths=paths,
+        values=values,
+        last=paths[-1],
+        pin=e.sha(paths[-1].read_bytes()),
+        state={"telegram_env": str(staged)},
+    )
+
+
+def receipt_inventory(directory):
+    return {
+        str(p.relative_to(directory)): (
+            p.lstat().st_mode,
+            p.lstat().st_uid,
+            os.readlink(p) if p.is_symlink() else p.read_bytes() if p.is_file() else None,
+        )
+        for p in directory.rglob("*")
+    }
+
+
+@pytest.mark.parametrize("as_root", [False, True])
+def test_historical_owner_intent_preserves_complete_receipt_dag(
+    owner_receipt_dag, monkeypatch, as_root
+):
+    m = owner_receipt_dag
+    if as_root:
+        # Exercise the current/root basename check independently of parent keys.
+        root = m.last.with_name("asm-telegram-tls-budget-fixed-owner2-0b7e24ee.intent.json")
+        m.last.rename(root)
+        m.paths[-1] = m.last = root
+    original = {str(p): p.read_bytes() for p in m.paths}
+    before = receipt_inventory(m.directory.parent)
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("receipt reader attempted a write or external command")
+
+    monkeypatch.setattr(e, "write_private", forbidden)
+    monkeypatch.setattr(e, "command", forbidden)
+    files, image = e.migration_receipts(m.last, m.pin, m.state, m.directory)
+    assert files == original and len(files) == 15
+    assert str(m.directory.parent / OWNER_ACK_INTENT) in files
+    assert image == "sha256:" + "1" * 64
+    assert receipt_inventory(m.directory.parent) == before
+
+
+@pytest.mark.parametrize("damage", ["tamper", "missing"])
+@pytest.mark.parametrize("name", OWNER_RECEIPT_NAMES)
+def test_owner_receipt_dag_requires_every_original_byte(
+    owner_receipt_dag, monkeypatch, name, damage
+):
+    m = owner_receipt_dag
+    path = m.directory.parent / name
+    if damage == "tamper":
+        path.write_bytes(path.read_bytes() + b"\n")
+    else:
+        path.unlink()
+    assert_receipt_stop(m, monkeypatch, (e.EgressError, FileNotFoundError))
+
+
+def assert_receipt_stop(m, monkeypatch, error=e.EgressError, match=None):
+    before = receipt_inventory(m.directory.parent)
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("invalid receipt caused a write or external command")
+
+    monkeypatch.setattr(e, "write_private", forbidden)
+    monkeypatch.setattr(e, "command", forbidden)
+    with pytest.raises(error, match=match):
+        e.migration_receipts(m.last, m.pin, m.state, m.directory)
+    assert receipt_inventory(m.directory.parent) == before
+    assert not (m.directory / "migration-v3").exists()
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "",
+        "../intent.json",
+        "/intent.json",
+        "sub/intent.json",
+        r"sub\intent.json",
+        "intent..json",
+        "intent.intent.intent.json",
+        "intent.other.json",
+        ".intent.json",
+        "intent.json.bak",
+        "intent.INTENT.json",
+        "intent_.json",
+        "intent.json\n",
+    ],
+)
+def test_owner_receipt_rejects_unsafe_parent_names(owner_receipt_dag, monkeypatch, name):
+    m = owner_receipt_dag
+    last = m.values[m.last.name]
+    last["prior_receipts_sha256"][name] = last["prior_receipts_sha256"].pop(OWNER_ACK_INTENT)
+    e.write_private(m.last, e.encoded(last))
+    m.pin = e.sha(m.last.read_bytes())
+    assert_receipt_stop(m, monkeypatch, match="EGRESS_MIGRATION_RECEIPT_PATH")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "intent..json",
+        "intent.other.json",
+        "intent.intent.intent.json",
+        ".intent.json",
+        "intent.json.bak",
+    ],
+)
+def test_owner_receipt_rejects_unsafe_current_names(owner_receipt_dag, monkeypatch, name):
+    m = owner_receipt_dag
+    path = m.last.with_name(name)
+    m.last.rename(path)
+    m.last = path
+    assert_receipt_stop(m, monkeypatch, match="EGRESS_MIGRATION_RECEIPT_PATH")
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["source_sha", "source_tree", "original_before_sha256", "staged_sha256", "preservation_pass"],
+)
+def test_owner_receipt_retains_source_baseline_and_staged_bindings(
+    owner_receipt_dag, monkeypatch, field
+):
+    m = owner_receipt_dag
+    last = m.values[m.last.name]
+    last[field] = "changed"
+    e.write_private(m.last, e.encoded(last))
+    m.pin = e.sha(m.last.read_bytes())
+    assert_receipt_stop(m, monkeypatch, match="EGRESS_MIGRATION_(RECEIPT_SOURCE|LAST_RECEIPT)")
+
+
+@pytest.mark.parametrize(
+    "damage", ["pin", "hash", "legacy-attempt", "legacy-correction", "mode", "symlink", "size"]
+)
+def test_owner_receipt_retains_hash_and_private_guards(owner_receipt_dag, monkeypatch, damage):
+    m = owner_receipt_dag
+    intent = m.directory.parent / OWNER_ACK_INTENT
+    last = m.values[m.last.name]
+    if damage == "pin":
+        m.pin = "0" * 64
+    elif damage == "mode":
+        intent.chmod(0o644)
+    elif damage == "symlink":
+        other = intent.with_name("same-bytes.json")
+        intent.rename(other)
+        intent.symlink_to(other)
+    elif damage == "size":
+        intent.write_bytes(b" " * 65537)
+    else:
+        if damage == "hash":
+            last["prior_receipts_sha256"][OWNER_ACK_INTENT] = "0" * 64
+        else:
+            key = (
+                "prior_attempt_sha256" if damage == "legacy-attempt" else "owner_correction_sha256"
+            )
+            last[key] = "0" * 64
+        e.write_private(m.last, e.encoded(last))
+        m.pin = e.sha(m.last.read_bytes())
+    assert_receipt_stop(m, monkeypatch)
 
 
 @pytest.mark.parametrize("fail", [False, True])

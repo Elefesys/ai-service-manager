@@ -1144,7 +1144,7 @@ Headf1c7aca724778e41671f2754bb85885507c4f14d/tree4f28480ef1458141422a14514473c05
 independent C8 PASS154 tests/3 original repro/50 additional probes; C0 own prior5
 probes и final CI37629816347/9 jobs подтверждают cross-direction audit fix.
 Новый **C0-MIG-OWNER-01/P2 OPEN** относится только совместимости сохранённого
-receipt basename `.intent.json`: current reader отвергает legacy ACK intent.
+receipt basename `.intent.json`: reviewed R2 reader отвергает legacy ACK intent.
 §10.12.1 schema2 audit, source/client pins и contracts вне basename validation
 сохраняются. C6 issued narrow fix/test fixture, current M2_HANDOFF/runbook§0.6.30.
 Actual owner cached images/independent receipt pin пока не аттестованы.
@@ -1419,6 +1419,18 @@ the archived original. Unexplained changes, missing receipts or foreign sources
 stop before runtime mutation. Full copied Git blobs are checked offline in both
 old images; cached images with different bytes are a STOP, not an automatic rebuild.
 
+C6-M2-OWNER-RECEIPT-COMPAT admits only `[a-z0-9-]+(?:\.intent)?\.json` for
+both current/root basenames and parent keys. This includes the issued
+`asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.intent.json` without renaming,
+rewriting or dropping any retained receipt. The optional `.intent` suffix does not
+permit other dotted names, traversal, separators, absolute parent keys or symlinks.
+Same-parent, private owner/mode/size, independent root pin, complete DAG inventory,
+exact byte hashes, source/tree/baseline/staged and binding checks are unchanged.
+Legacy `prior_attempt_sha256` and `owner_correction_sha256` links remain mandatory
+when present. This is receipt compatibility only; the historical NOT_ATTEMPTED ACK
+does not authorize a new attempt. New finding C0-MIG-OWNER-01 remains OPEN pending
+the focused C0/C8 verdict; implementation evidence is runbook §0.6.31 / PR24 receipt.
+
 `migration-prepare` (600s overall bound) publishes an immutable private archive,
 then builds distinct runtime/development images from `git archive` of the exact
 target. No private inputs enter that context. Exact before/after IDs and retained
@@ -1457,7 +1469,7 @@ Missing, changed or additional forward evidence is STOP; no re-pinning, reconstr
 from current runtime or upgrade of an older unbound rollback intent is permitted.
 Valid partial forward histories remain rollbackable, including result/done and
 state/completion publication gaps; an unpublished completion is not mandatory.
-These R2 changes remain REVIEW under C8-MIG-01/P2 OPEN until targeted C8/C0 verdict.
+These R2 audit changes are accepted: C8-MIG-01/P2 CLOSED by C0 after targeted C8 PASS.
 Each runtime invocation is bounded to 180s, including subprocesses. Telegram stays
 disabled/empty; no discovery/setup/ACK/send/binding/billing operation is invoked.
 
