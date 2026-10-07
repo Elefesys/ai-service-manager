@@ -2540,6 +2540,25 @@ def migration_prepare(args, directory):
     )
 
 
+def migration_build_context(source, directory):
+    import io
+    import tarfile
+
+    with tarfile.open(
+        fileobj=io.BytesIO(command(["git", "-C", str(ROOT), "archive", source]))
+    ) as tar:
+        require(
+            all(member.isfile() or member.isdir() for member in tar.getmembers()),
+            "EGRESS_MIGRATION_BUILD_FILE_TYPE",
+        )
+        tar.extractall(directory, filter="data")
+    # data_filter drops directory modes; private umask otherwise yields root-owned
+    # 0700 COPY trees, unreadable to UID10001. Only tracked source is present here.
+    for path in Path(directory).rglob("*"):
+        if path.is_dir():
+            path.chmod(0o755)
+
+
 def migration_build_images(source, tree):
     require(migration_source(source) == tree, "EGRESS_MIGRATION_BUILD_SOURCE")
     tags, images = {}, {}
@@ -2554,13 +2573,7 @@ def migration_build_images(source, tree):
         if not exists:
             # git archive contains only tracked exact source, never .env/TLS/operator files.
             with tempfile.TemporaryDirectory(prefix="asm-connect5-build-") as temporary:
-                import io
-                import tarfile
-
-                with tarfile.open(
-                    fileobj=io.BytesIO(command(["git", "-C", str(ROOT), "archive", source]))
-                ) as tar:
-                    tar.extractall(temporary, filter="data")
+                migration_build_context(source, temporary)
                 command(
                     [
                         "docker",

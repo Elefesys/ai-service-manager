@@ -6,10 +6,15 @@ the separate migration shell lane, never by an owner command or the old 6+6 lane
 
 import argparse
 import copy
+import hashlib
+import io
 import json
 import os
 import signal
+import stat
 import subprocess
+import sys
+import tarfile
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -402,6 +407,95 @@ if __name__ == "__migration_harness__":
     raise SystemExit(0)
 
 import pytest  # noqa: E402 -- host harness uses only stdlib; default collection remains ordinary.
+
+
+@pytest.mark.parametrize("kind", ["runtime", "development"])
+@pytest.mark.parametrize("drift", [None, "bytes", "extra", "missing"])
+def test_image_probe_executes_git_blob_byte_checks(tmp_path, monkeypatch, kind, drift):
+    real_command = e.command
+    source = "a" * 40
+    # The unit image has no Git executable/metadata. Independently form Git-format
+    # blobs and an archive from its copied source, and execute the actual probe.
+    # The separate disposable lane supplies real Git and Docker, including UID10001.
+    paths = [
+        "backend",
+        "migrations",
+        "pyproject.toml",
+        "uv.lock",
+        "alembic.ini",
+        "tests",
+        "scripts",
+        "contracts",
+        "infra/postgres/ensure_m1_3_prerequisites.sh",
+    ]
+    files = {
+        str(p.relative_to(e.ROOT)): p.read_bytes()
+        for name in paths
+        for p in ([e.ROOT / name] if (e.ROOT / name).is_file() else (e.ROOT / name).rglob("*"))
+        if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc"
+    }
+    archive = io.BytesIO()
+    with tarfile.open(fileobj=archive, mode="w") as tar:
+        directories = {str(p) for name in files for p in Path(name).parents if str(p) != "."}
+        for name in sorted(directories):
+            entry = tarfile.TarInfo(name)
+            entry.type, entry.mode = tarfile.DIRTYPE, 0o775
+            tar.addfile(entry)
+        for name, data in files.items():
+            entry = tarfile.TarInfo(name)
+            entry.size, entry.mode = len(data), 0o664
+            tar.addfile(entry, io.BytesIO(data))
+    blobs = {
+        name: hashlib.sha1(b"blob " + str(len(data)).encode() + bytes([0]) + data).hexdigest()
+        for name, data in files.items()
+    }
+    image = "sha256:" + "1" * 64
+    probes = []
+
+    def command(argv, **kwargs):
+        if argv[0] == "git":
+            if "archive" in argv:
+                return archive.getvalue()
+            assert "ls-tree" in argv
+            selected = argv[argv.index("--") + 1 :]
+            return b"".join(
+                ("100644 blob " + value + "\t" + name).encode() + bytes([0])
+                for name, value in blobs.items()
+                if any(name == p or name.startswith(p + "/") for p in selected)
+            )
+        if argv[:3] == ["docker", "image", "inspect"]:
+            return e.encoded([{"Id": image, "Os": "linux", "Architecture": "amd64"}])
+        assert argv[:6] == ["docker", "run", "--rm", "--network", "none", "--read-only"]
+        assert "--cap-drop=ALL" in argv and "--security-opt=no-new-privileges" in argv
+        assert argv[-3:-1] == ["-B", "-c"]
+        probe = argv[-1].replace(
+            "pathlib.Path('/app')", "pathlib.Path(" + repr(str(tmp_path)) + ")"
+        )
+        probes.append(probe)
+        return real_command([sys.executable, "-B", "-c", probe])
+
+    monkeypatch.setattr(e, "command", command)
+    mask = os.umask(0o077)
+    try:
+        e.migration_build_context(source, tmp_path)
+    finally:
+        os.umask(mask)
+    assert all(stat.S_IMODE(p.stat().st_mode) == 0o755 for p in tmp_path.rglob("*") if p.is_dir())
+    assert stat.S_IMODE((tmp_path / "backend/src/asm/telegram/client.py").stat().st_mode) == 0o644
+    assert not (tmp_path / ".env").exists()
+    target = tmp_path / "backend/src/asm/telegram/client.py"
+    if drift == "bytes":
+        target.write_bytes(target.read_bytes() + b"\n")
+    elif drift == "extra":
+        (target.parent / "foreign.py").write_bytes(b"# foreign\n")
+    elif drift == "missing":
+        target.unlink()
+    if drift:
+        with pytest.raises(e.EgressError, match="EGRESS_COMMAND_FAILED"):
+            e.migration_image(image, source, kind)
+    else:
+        assert e.migration_image(image, source, kind)["source_sha"] == source
+    assert len(probes) == 1
 
 
 @pytest.fixture
