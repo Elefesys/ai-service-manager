@@ -46,7 +46,12 @@ with tempfile.TemporaryDirectory(prefix='asm-connect5-source-') as temp:
         'script_sha256': e.sha(shell_text.encode())}, indent=2) + '\n')
     print('MIGRATION_OWNER_QUOTING_PASS', flush=True)
     old = Path(temp) / 'predecessor'
-    e.command(['git', 'worktree', 'add', '--detach', str(old), e.MIGRATION_FROM])
+    # Public tracked source needs normal Git modes for the non-root runtime COPY.
+    # The containing temp directory and all subsequent private fixtures stay 0700/0600.
+    subprocess.run(['git', 'worktree', 'add', '--detach', str(old), e.MIGRATION_FROM],
+                   capture_output=True, stdin=subprocess.DEVNULL, check=True, timeout=40, umask=0o022)
+    assert (old / 'backend/src/asm/telegram/client.py').stat().st_mode & 0o777 == 0o644
+    assert (old / 'backend').stat().st_mode & 0o777 == 0o755
     try:
         subprocess.run(['python3', 'scripts/init_local.py'], cwd=old, check=True, timeout=30)
         e.write_private(e.ROOT / '.env', (old / '.env').read_bytes(), private_parent=False)

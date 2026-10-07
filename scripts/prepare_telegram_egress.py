@@ -1926,8 +1926,20 @@ def migration_bytes(path):
         parent.st_uid == os.getuid() and not parent.st_mode & 0o022,
         "EGRESS_MIGRATION_PRIVATE_PARENT",
     )
-    with path.open("rb") as stream:
-        raw = stream.read(65537)
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        require(
+            stat.S_ISREG(info.st_mode)
+            and info.st_uid == os.getuid()
+            and stat.S_IMODE(info.st_mode) == 0o600
+            and info.st_size <= 65536,
+            "EGRESS_MIGRATION_PRIVATE_FILE_CHANGED",
+        )
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            raw = stream.read(65537)
+    finally:
+        os.close(fd)
     require(len(raw) <= 65536, "EGRESS_MIGRATION_FILE_LIMIT")
     return raw
 
@@ -2432,6 +2444,28 @@ def migration_saved(directory):
     )
     original = strict_json(private_bytes(bundle / "state-before.json"))
     predecessor = migration_predecessor_checkout(plan["predecessor_checkout"])
+    names = {
+        "preparation.json",
+        "prepared.json",
+        "state-before.json",
+        "intent.json",
+        "images-before.json",
+        "images-after.json",
+        "forward-complete.json",
+        "rollback-intent.json",
+        "rollback-complete.json",
+    }
+    names.update(entry["archive"] for entry in plan["files"].values())
+    names.update(
+        f"{direction}-{name}-{stage}.json"
+        for direction in ("forward", "rollback")
+        for name in MIGRATION_SERVICES
+        for stage in ("intent", "result", "done")
+    )
+    require(
+        all(p.name in names and p.is_file() and not p.is_symlink() for p in bundle.iterdir()),
+        "EGRESS_MIGRATION_FOREIGN_EVIDENCE",
+    )
     for path, entry in plan["files"].items():
         raw = private_bytes(bundle / entry["archive"])
         require(sha(raw) == entry["sha256"], "EGRESS_MIGRATION_ARCHIVE_CHANGED")
