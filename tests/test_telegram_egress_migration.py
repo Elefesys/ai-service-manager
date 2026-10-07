@@ -147,7 +147,20 @@ def run_disposable(f):
     if "egress-checks" in observed:
         assert observed["egress-checks"]["id"] == held["Id"]
         del observed["egress-checks"]
-    assert observed == target, "MIGRATION_RECOVERED_BASELINE_CHANGED_DURING_FIXTURE_SEED"
+    # UNKNOWN seed itself executes the existing real relay-loss/restart scenario.
+    # Admit only its recorded relay ID delta; every other recovered byte/field stays exact.
+    assert [row["action"] for row in f["controls"]] == ["recreate", "stop", "recreate"]
+    assert observed["telegram-egress"]["id"] == f["controls"][-1]["relay_id"]
+    assert observed["telegram-egress"]["id"] != target["telegram-egress"]["id"]
+    for name in target:
+        before_record, after_record = target[name], observed[name]
+        if name == "telegram-egress":
+            before_record = {k: v for k, v in before_record.items() if k != "id"}
+            after_record = {k: v for k, v in after_record.items() if k != "id"}
+        assert after_record == before_record, (
+            "MIGRATION_RECOVERED_BASELINE_CHANGED_DURING_FIXTURE_SEED"
+        )
+    assert observed.keys() == target.keys()
     operator_image = json.loads(
         run(["docker", "image", "inspect", project + "-telegram-operator"])
     )[0]["Id"]
@@ -410,6 +423,7 @@ e.main()
         "before_images": ready["before_images"],
         "after_images": ready["after_images"],
         "image_proofs": plan["image_proofs"],
+        "seed_relay_controls": f["controls"],
         "database_before": before,
         "database_after": after,
         "runtime_before": plan["before"],

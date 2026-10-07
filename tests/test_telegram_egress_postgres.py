@@ -29,7 +29,9 @@ import httpx
 import pytest
 import pytest_asyncio
 from asm.auth.crypto import PASSWORD_HASHER, new_token, token_verifier
+from asm.files.config import StorageSettings
 from asm.files.database import FileDatabase
+from asm.files.storage import S3ObjectStorage
 from asm.files.transfer import FetchTransfer
 from asm.foundation import RuntimeDatabase, Settings
 from asm.messaging.adapter import ControlledAdapter
@@ -734,6 +736,90 @@ async def canonical_fingerprint(connection):
     return fingerprint
 
 
+def migration_storage():
+    # Explicit test CA, never verify=False. Both API and S3 remain on real HTTPS.
+    previous = os.environ.get("AWS_CA_BUNDLE")
+    os.environ["AWS_CA_BUNDLE"] = str(fixture_directory() / "ca.pem")
+    try:
+        return S3ObjectStorage(StorageSettings(environment="LOCAL", bucket="asm-private-local"))
+    finally:
+        if previous is None:
+            os.environ.pop("AWS_CA_BUNDLE", None)
+        else:
+            os.environ["AWS_CA_BUNDLE"] = previous
+
+
+async def seed_migration_private_original(h):
+    content = image_bytes()
+
+    class SyntheticMedia:
+        # Only media acquisition is deterministic fixture input. Canonical ingest,
+        # FileObject/permit/upload/READY transitions, private S3 and HTTPS are real.
+        async def open_image(self, permit):
+            assert permit.provider == "TELEGRAM" and permit.bot_identity == str(BOT)
+            assert permit.image_file_id == "migration-private-original"
+            yield content
+
+    storage = migration_storage()
+    transfer = FetchTransfer(FileDatabase(h.kernel), h.kernel, SyntheticMedia(), storage)
+    try:
+        raw = update(
+            uid=122,
+            message_id=76,
+            photo=[{"width": 23, "height": 17, "file_id": "migration-private-original"}],
+        )
+        del raw["business_message"]["text"]
+        await inbound(h, raw)
+        assert await Worker(h.kernel, h.adapter, files=transfer).run_once()
+        rows = await query(h, "SELECT * FROM app.file_objects WHERE workspace_id=:ws", ws=A)
+        assert len(rows) == 1 and rows[0]["status"] == "READY"
+        row = rows[0]
+        assert row["sha256"] == hashlib.sha256(content).hexdigest()
+        assert row["mime_type"] == "image/png" and row["size_bytes"] == len(content)
+        write_json(
+            fixture_directory() / "migration-private-original.json",
+            {k: str(row[k]) for k in ("id", "conversation_id", "message_id", "storage_key")},
+        )
+    finally:
+        await transfer.close()
+        await storage.close()
+
+
+async def migration_private_snapshot():
+    raw = read_json(fixture_directory() / "migration-private-original.json")
+    row = {k: UUID(raw[k]) for k in ("id", "conversation_id", "message_id")}
+    runtime, storage = RuntimeDatabase(Settings(environment="LOCAL")), migration_storage()
+    try:
+        content = image_bytes()
+        info = await storage.head(raw["storage_key"])
+        assert await storage.get(raw["storage_key"]) == content
+        assert info.size_bytes == len(content) and info.mime_type == "image/png"
+        signed = await grant(SimpleNamespace(runtime=runtime, storage=storage), row)
+        async with httpx.AsyncClient(
+            verify=tls_context(fixture_directory()), timeout=5, trust_env=False
+        ) as client:
+            # No bearer URL appears in failure messages or evidence.
+            try:
+                response = await client.get(signed.url)
+                anonymous = await client.get(signed.url.split("?", 1)[0])
+            except httpx.HTTPError:
+                pytest.fail("MIGRATION_PRIVATE_HTTPS_UNAVAILABLE", pytrace=False)
+            assert response.status_code == 200 and response.content == content
+            assert response.headers["cache-control"] == "private, no-store"
+            assert anonymous.status_code == 403
+        return {
+            "file_id": raw["id"],
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "size_bytes": len(content),
+            "mime_type": info.mime_type,
+            "authenticated_https_get": 200,
+            "anonymous_get": 403,
+        }
+    finally:
+        await storage.close()
+        await runtime.close()
+
+
 @pytest_asyncio.fixture
 async def durable_local():
     """Dedicated fresh LOCAL fixture; frozen asm_test fixtures are never overridden."""
@@ -906,9 +992,27 @@ async def durable_local():
             )
             assert anonymous.status_code == 403
             await assert_durable_console(h)
+            if lifecycle == "migration":
+                await seed_migration_private_original(h)
             yield h
     finally:
         if seeded_local:
+            if lifecycle == "migration":
+                storage = migration_storage()
+                try:
+                    rows = await query(
+                        h,
+                        "SELECT storage_key FROM platform.file_object_uploads WHERE workspace_id=:ws",
+                        ws=A,
+                    )
+                    for row in rows:
+                        await storage._io(
+                            lambda key=row["storage_key"]: storage._client.delete_object(
+                                Bucket=storage._settings.bucket, Key=key
+                            )
+                        )
+                finally:
+                    await storage.close()
             # Only this attested disposable fixture's canonical rows are removed,
             # after the held before/after assertions, never by deploy or rollback.
             async with migrator.begin() as connection:
@@ -1001,13 +1105,17 @@ async def durable_snapshot():
                 .all()
             )
             assert states == ["UNKNOWN"]
-            return {
+            result = {
                 "identity": identity,
                 "tables": fingerprint,
                 "sha256": hashlib.sha256(
                     json.dumps(fingerprint, sort_keys=True, separators=(",", ":")).encode()
                 ).hexdigest(),
             }
+        if os.environ["ASM_EGRESS_LIFECYCLE"] == "migration":
+            assert fingerprint["app.file_objects"]["count"] == 1
+            result["private_original"] = await migration_private_snapshot()
+        return result
     finally:
         await engine.dispose()
 
