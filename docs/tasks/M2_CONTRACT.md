@@ -1139,6 +1139,18 @@ final head/CI документационной приёмки — в PR receipt.
 
 ### 10.12. Operational extension — M2-ENV-04 TEST egress
 
+**Current C0 disposition2026-10-07: R2 source/CI review PASS; targeted C8 pending.**
+Implementationf1c7aca724778e41671f2754bb85885507c4f14d/tree4f28480ef1458141422a14514473c05f49193fe6
+исправляет cross-direction audit binding. CI37629816347 all9 jobs/clean-source
+SUCCESS; C0 повторил3 исходных negative repro и2 controls —5 targeted PASS.
+C8-MIG-01/P2 остаётся OPEN до targeted verdict. §10.12.1 schema2 и поведение
+не меняются этим coordination. C6 implementation завершён; активный этап — C8-R2.
+Evidence/ограничения — current M2_HANDOFF/runbook§0.6.29. Owner applicability ещё
+не аттестована; M2 IN_PROGRESS/ENV04 REVIEW, VM/ACK/activation/sends/merge не выданы.
+
+<details>
+<summary>История — C8 finding и выдача C6-R2</summary>
+
 **Current C0/C8 disposition2026-10-07: CHANGES_REQUESTED; C8-MIG-01/P2 OPEN.**
 На implementation3f65be7a60a1271247d04f23cbe0b151f82d65a1 C8 выявил и C0 воспроизвёл
 непроверенный forward audit при rollback. Выдана узкая C6-R2: до effects проверить
@@ -1148,6 +1160,8 @@ final head/CI документационной приёмки — в PR receipt.
 изменения domain/TLS/deadlines/UNKNOWN. Findings01/02/03 остаются CLOSED.
 Migration REVIEW до final CI/targeted C8; VM execution не выдана. Подробности и
 reproducer — current M2_HANDOFF/runbook§0.6.27; M2 IN_PROGRESS/ENV04 REVIEW.
+
+</details>
 
 <details>
 <summary>История — C0 disposition до нового C8 finding</summary>
@@ -1365,7 +1379,7 @@ timeouts, TLS, permissions и UNKNOWN/no-resend остаются прежним�
 
 </details>
 
-#### 10.12.1. Explicit connect2 → connect5 migration (C8-MIG-01 OPEN; C6-R2 issued)
+#### 10.12.1. Explicit connect2 → connect5 migration (C0 R2 PASS; targeted C8 pending)
 
 `M2-ENV-04-CONNECT5-MIGRATION` introduces a separate operation, not a relaxation of
 `recover`. Its only predecessor is completed recovery-v2 at

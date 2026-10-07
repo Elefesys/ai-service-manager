@@ -3714,6 +3714,119 @@ Owner applicability remains separate: actual cached old image bytes and independ
 </details>
 
 
+### 0.6.29. C0 R2 audit-fix review и targeted C8 / 2026-10-07 UTC
+
+**C0 scoped R2 review — PASS; новых blockers не выявлено.** C6 передал готовый
+результат; ожидание статуса REVIEW является передачей на приёмку, не незавершённой
+реализацией. **C8-MIG-01/P2 остаётся OPEN до targeted C8/C0 verdict.** Migration
+остаётся REVIEW; прежние client findings01/02/03 CLOSED. Owner execution не выдана.
+
+R2 implementation head **f1c7aca724778e41671f2754bb85885507c4f14d**, tree
+**4f28480ef1458141422a14514473c05f49193fe6**, sole parent coordination/base
+**34835c260f737abbbe02a689f842b28fad50f323**. Это единственный fix commit.
+Helper blob **00c347cde45e3c1a683330c6ee196815ef0a1e36**; client blob
+**525381357de76ea1c570fd864f8df5e9781a87e2** прежний. Изменены четыре разрешённых
+файла: helper, migration tests, contract§10.12.1, runbook§0.6.28. Workflow/runners/
+Compose/locks/domain/DB schema/180s и600s bounds не изменены; ancestry сохранена.
+
+Исправление проверяет оба направления audit, done→result и исторические
+completion source/state/database/intent bindings. Immutable rollback-intent schema2
+закрепляет exact forward inventory/byte hashes и проверенный historical runtime.
+Resume/retry не переснимают pin; missing/changed/additional evidence и старый
+unbound rollback intent дают STOP. Historical forward IDs не приравниваются
+к новым rollback IDs; допустимые partial/result-done/state-completion gaps сохранены.
+
+**Собственная проверка C0:** source/contract/test delta; прежние три repro на R2
+теперь дают ожидаемый отказ без новых effects: COMPLETED_DRIFT,
+SERVICE_RESULT_REQUIRED, INVALID_JSON. Ещё два controls PASS: valid partial
+rollback (один нужный recreate) и CANONICAL_DATA_DRIFT до effects. Итого5 targeted
+PASS, Python3.12.14, exact helper blob; реальные файловые guards/private I/O,
+Docker/DB/prepared observations заменены repository fixture. C0 не запускал
+новые локальные Docker/PG/browser/full suites; исходный extracted source сверён
+по blobs/modes, это не заявление о новом полном Git checkout.
+
+[Final CI37629816347](https://github.com/Elefesys/ai-service-manager/actions/runs/37629816347)
+— все9 jobs и clean-source gates SUCCESS; logs768 unit/393 integration/111 frontend/
+27 browser PASS. Tested merge **ebf1ec21f59eb8f887c779c3e55bf878eb15add5**, тот же
+tree; ordered parents main **22993f558c5e7e933c65e9c999933bd2e3ab41c4** +R2 head.
+C0 скачал все8 ZIP, сверил GitHub digests и228 Git blobs/modes каждого source
+archive, tested commit/PAX и пустой worktree status. Общий source.tar.gz SHA256
+`e78b0a27ea62bcd6e574e43de8e9ae73dee67ef2f077169d826a86664765b394`.
+Все6 migration reports: schema2,7 закреплённых forward hashes равны final receipts,
+rollback-intent hash совпадает, unchanged-after-resume/retry true. Fingerprints31
+таблицы/private original200/403/Console/UNKNOWN/wire1/28 original files сохранены;
+held104.530–168.047s≤180s. Оба прежних6+6 reports PASS, readonly TIMEOUT/False5.005s.
+Полные job/artifact IDs и hashes сохранены в C6 receipt archive runbook§0.6.29.
+
+C6-reported local251 scoped PASS и исходные5 failing regressions сохраняются как
+author evidence; собственный дополнительный execution C0 описан отдельно выше.
+Предыдущий docs CI37626628260 на34835 CANCELLED; final R2 all9 SUCCESS относится
+к новому полному code candidate. Текущий C0 coordination меняет только четыре
+документа, остальные224/228 blobs/modes exact R2; его CI учитывается отдельно.
+Targeted C8 проверяет exact **f1c7aca724778e41671f2754bb85885507c4f14d**.
+
+| Задача | Статус | Следующее действие |
+|---|---|---|
+| C6-M2-CONNECT5-MIGRATION-R2 | REVIEW | Исполнение завершено, C0 source/CI PASS |
+| C8-MIG-01 | OPEN | Targeted C8 R2, затем closure C0 |
+| C8-M2-CONNECT5-MIGRATION-R2 | TODO, выдано | Единственное активное поручение |
+| M2 / ENV04 | IN_PROGRESS / REVIEW | Owner migration и actual A09/A11 впереди |
+
+Состояние owner VM здесь не проверялось: последнее exact0b7e24ee/recovery-v2/
+connect2/TG disabled-empty, binding committed, ACK NOT_ATTEMPTED. Cached owner
+images и independently pinned receipt DAG ещё требуют отдельной аттестации;
+disposable CI не подтверждает их соответствие. Fixed TEST interval
+2026-10-02T00Z→2026-10-09T00Z не пересчитывается. PR24 Draft/open; main прежний.
+VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing/merge не выданы.
+
+
+C0 применил прежний standalone `mig01_probe.py` к exact R2 helper, заменив
+expected vulnerable success на обязательный STOP/0 новых effects; два controls
+оставлены прежними. Команда: `python c0_targeted_probe.py`, Python3.12.14,5 PASS.
+Исторический rollback-complete в negative retry сохраняется как ранее созданный
+audit; текущий вызов завершается EgressError, нового success/PASS не публикует.
+Отдельно разобраны JSON всех6 schema2 reports:7 forward pins совпадают с final
+receipts_sha256 и rollback-intent hash, unchanged-after-resume/retry true.
+
+<details>
+<summary>Архив C6-R2 receipt prefix — дословно до C0 targeted review</summary>
+
+## C6 → C0 — C6-M2-CONNECT5-MIGRATION-R2 — REVIEW (2026-10-07)
+
+**C8-MIG-01/P2 remains OPEN** pending targeted C8/C0 verdict. Client findings01/02/03 CLOSED. PR24 Draft; repository/disposable scope.
+
+**Exact refs:** coordination/base `34835c260f737abbbe02a689f842b28fad50f323`, tree `d6f065344f021fa9b78b635260b739b93327524e`, sole parent `e332989485dccba52c090c855f93a536b462c91b`. First/final fix head `f1c7aca724778e41671f2754bb85885507c4f14d`, tree `4f28480ef1458141422a14514473c05f49193fe6`, sole parent coordination. No reset/rebase/force-push. Actual tested merge `ebf1ec21f59eb8f887c779c3e55bf878eb15add5`: same tree, ordered parents main `22993f558c5e7e933c65e9c999933bd2e3ab41c4` + final head.
+
+**Four changed files:** `scripts/prepare_telegram_egress.py`, `tests/test_telegram_egress_migration.py`, `docs/tasks/M2_CONTRACT.md` (§10.12.1), `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` (§0.6.28). Client blob `525381357de76ea1c570fd864f8df5e9781a87e2` unchanged. Workflow/runners/Compose/locks/domain/DB schema and budgets unchanged; TASK_REGISTER/HANDOFF untouched; all 11 canonical source hashes PASS.
+
+**Audit change:** validate both historical directions before rollback effects and before success: strict shapes/order, done→result, source/state/database/intent bindings and historical completion. New immutable `rollback-intent.json` schema2 has exactly `version`, `stage`, `intent_sha256`, `forward_audit_sha256` (exact filename/byte-hash inventory), `forward_runtime` (validated snapshot before rollback). Resume/retry retain inventory; forward results bind historical snapshot, rollback results actual runtime. Missing/changed/additional evidence or older unbound intents STOP; no re-pinning/reconstruction. Valid partial forward, result/done and state/completion gaps remain rollbackable; repeated rollback does not recreate completed services. Original/private/audit bytes remain intact.
+
+**Regression → finding:** `test_forward_complete_tamper_requires_stop` covers original bad DB hash before effects; `test_completed_rollback_keeps_forward_result` covers missing/corrupt results for api AND worker. Matrix covers before/interrupted/completed rollback; both directions' done/result, source/state/DB/intent consistency, exact bytes/inventory, snapshot and inter-effect/pre-PASS drift. 12 partial boundaries, missing/stopped pending callers, repeated resume/retry, byte preservation PASS. Full named mapping: [runbook §0.6.28](https://github.com/Elefesys/ai-service-manager/blob/f1c7aca724778e41671f2754bb85885507c4f14d/docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md#0628-c6-m2-connect5-migration-r2--audit-binding-review).
+
+**Own local execution:** Python3.12.14, pytest9.0.2, Ruff0.16.7 in separate scratch venv. Before fix: 5 selected expected STOP tests FAIL (three original repro + worker analogues). Final head: `python -m pytest -q tests/test_telegram_egress_migration.py tests/test_telegram_egress.py` → 251 PASS/9.21s (154+97); `ruff check` and `ruff format --check` on both changed Python files PASS; `git diff --check`/AST/clean checkout PASS. One local asyncio_mode config warning; all scoped cases synchronous. Units execute helper/private I/O; Docker/DB observations substituted.
+
+**Actual final CI:** [run37629816347](https://github.com/Elefesys/ai-service-manager/actions/runs/37629816347), attempt1, all 9 jobs and clean-source gates SUCCESS. 768 unit +393 integration +111 frontend +27 browser PASS; lint/format/contracts/smoke PASS.
+
+| Job | Job ID | Artifact ID | ZIP SHA256 | Held s |
+|---|---:|---:|---|---:|
+|foundation|112821325574|11486882927|`7217f45c83b48696aad516744305ea1abda5756d8689f721deede5b0b3038f8c`|—|
+|browser|112821325497|—|—|—|
+|docker29-compatibility|112821325120|11487625781|`0fbe8e2b0fd24f0136bb26f1028215944333a8b29d46746abeca28b79c18c206`|—|
+|normal intent|112821325727|11485953289|`9ebb5be3fc1d91708756382f0df5b56be206a1e0d4a9c2a5b90950f9915a4112`|104.530|
+|normal image|112821325699|11486122195|`3b338a7ac2e15f784bbe36f6c75368b56abc5a1f3d11b8e7fece987690943248`|167.678|
+|normal state|112821325715|11485409614|`08427ed85b36a2e87f8c9853556034e112e656e4c334dae07d8a5bca21e3e57d`|107.859|
+|docker29 intent|112821325857|11485549529|`066064cfb985a46da8529d3a98a1e50cc7a38ea86824e53afd04f6cb2eb0e906`|168.047|
+|docker29 image|112821325798|11486535142|`45ed85b90634b66a6baa9d31089035f33ca43011270c97712c38f612127b246e`|164.711|
+|docker29 state|112821325554|11485953286|`edcefba2dab0bd6f7d89834721acac842a122fe1eaa2cda915707b18c670b4f7`|107.274|
+
+Commands: unchanged `sh scripts/ci.sh`, `sh scripts/test_browser.sh`, both default `sh scripts/test_telegram_egress.sh` old6+6 lanes; `sh scripts/test_telegram_egress_migration.sh intent`, `sh scripts/test_telegram_egress_migration.sh image`, `sh scripts/test_telegram_egress_migration.sh state` on normal and exact Engine29.8.2/8af9fe3, Compose5.5.1. Six real SIGKILL/resume/rollback/completed retries exercised schema2. Held 104.530–168.047s; 180/600s budgets unchanged. Both old connect probes: DEPENDENCY_TIMEOUT/False at 5.005s.
+
+**Artifacts:** all 8 downloaded; ZIP digests, tested SHA, empty worktree status and 228 Git blobs/modes checked against final tree. Common source.tar.gz SHA256 `e78b0a27ea62bcd6e574e43de8e9ae73dee67ef2f077169d826a86664765b394`. Every migration report's `rollback_audit_binding` version2 has 7 forward file hashes equal final `receipts_sha256`, matching rollback-intent hash, unchanged-after-resume/retry true. Equal31-table before/after fingerprints, binding/COMPED/Console/private original200/403, UNKNOWN/wire1 and 28 preserved files verified.
+
+**Limits/next:** REVIEW only; C0 review → targeted C8/C0 closure. Owner runbook§0.6.25 remains a draft; cached owner images and independently pinned receipt DAG are not yet attested. No VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing/merge performed. Prior queue snapshot not refreshed. C0 prefix archived verbatim in runbook§0.6.28; retained evidence follows unchanged.
+
+</details>
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker

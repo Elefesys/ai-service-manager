@@ -4,6 +4,123 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
+## Текущий статус — C6-R2 завершён; C0 review PASS, targeted C8 / 2026-10-07 UTC
+
+**C0 scoped R2 review — PASS; новых blockers не выявлено.** C6 передал готовый
+результат; ожидание статуса REVIEW является передачей на приёмку, не незавершённой
+реализацией. **C8-MIG-01/P2 остаётся OPEN до targeted C8/C0 verdict.** Migration
+остаётся REVIEW; прежние client findings01/02/03 CLOSED. Owner execution не выдана.
+
+R2 implementation head **f1c7aca724778e41671f2754bb85885507c4f14d**, tree
+**4f28480ef1458141422a14514473c05f49193fe6**, sole parent coordination/base
+**34835c260f737abbbe02a689f842b28fad50f323**. Это единственный fix commit.
+Helper blob **00c347cde45e3c1a683330c6ee196815ef0a1e36**; client blob
+**525381357de76ea1c570fd864f8df5e9781a87e2** прежний. Изменены четыре разрешённых
+файла: helper, migration tests, contract§10.12.1, runbook§0.6.28. Workflow/runners/
+Compose/locks/domain/DB schema/180s и600s bounds не изменены; ancestry сохранена.
+
+Исправление проверяет оба направления audit, done→result и исторические
+completion source/state/database/intent bindings. Immutable rollback-intent schema2
+закрепляет exact forward inventory/byte hashes и проверенный historical runtime.
+Resume/retry не переснимают pin; missing/changed/additional evidence и старый
+unbound rollback intent дают STOP. Historical forward IDs не приравниваются
+к новым rollback IDs; допустимые partial/result-done/state-completion gaps сохранены.
+
+**Собственная проверка C0:** source/contract/test delta; прежние три repro на R2
+теперь дают ожидаемый отказ без новых effects: COMPLETED_DRIFT,
+SERVICE_RESULT_REQUIRED, INVALID_JSON. Ещё два controls PASS: valid partial
+rollback (один нужный recreate) и CANONICAL_DATA_DRIFT до effects. Итого5 targeted
+PASS, Python3.12.14, exact helper blob; реальные файловые guards/private I/O,
+Docker/DB/prepared observations заменены repository fixture. C0 не запускал
+новые локальные Docker/PG/browser/full suites; исходный extracted source сверён
+по blobs/modes, это не заявление о новом полном Git checkout.
+
+[Final CI37629816347](https://github.com/Elefesys/ai-service-manager/actions/runs/37629816347)
+— все9 jobs и clean-source gates SUCCESS; logs768 unit/393 integration/111 frontend/
+27 browser PASS. Tested merge **ebf1ec21f59eb8f887c779c3e55bf878eb15add5**, тот же
+tree; ordered parents main **22993f558c5e7e933c65e9c999933bd2e3ab41c4** +R2 head.
+C0 скачал все8 ZIP, сверил GitHub digests и228 Git blobs/modes каждого source
+archive, tested commit/PAX и пустой worktree status. Общий source.tar.gz SHA256
+`e78b0a27ea62bcd6e574e43de8e9ae73dee67ef2f077169d826a86664765b394`.
+Все6 migration reports: schema2,7 закреплённых forward hashes равны final receipts,
+rollback-intent hash совпадает, unchanged-after-resume/retry true. Fingerprints31
+таблицы/private original200/403/Console/UNKNOWN/wire1/28 original files сохранены;
+held104.530–168.047s≤180s. Оба прежних6+6 reports PASS, readonly TIMEOUT/False5.005s.
+Полные job/artifact IDs и hashes сохранены в C6 receipt archive runbook§0.6.29.
+
+C6-reported local251 scoped PASS и исходные5 failing regressions сохраняются как
+author evidence; собственный дополнительный execution C0 описан отдельно выше.
+Предыдущий docs CI37626628260 на34835 CANCELLED; final R2 all9 SUCCESS относится
+к новому полному code candidate. Текущий C0 coordination меняет только четыре
+документа, остальные224/228 blobs/modes exact R2; его CI учитывается отдельно.
+Targeted C8 проверяет exact **f1c7aca724778e41671f2754bb85885507c4f14d**.
+
+| Задача | Статус | Следующее действие |
+|---|---|---|
+| C6-M2-CONNECT5-MIGRATION-R2 | REVIEW | Исполнение завершено, C0 source/CI PASS |
+| C8-MIG-01 | OPEN | Targeted C8 R2, затем closure C0 |
+| C8-M2-CONNECT5-MIGRATION-R2 | TODO, выдано | Единственное активное поручение |
+| M2 / ENV04 | IN_PROGRESS / REVIEW | Owner migration и actual A09/A11 впереди |
+
+Состояние owner VM здесь не проверялось: последнее exact0b7e24ee/recovery-v2/
+connect2/TG disabled-empty, binding committed, ACK NOT_ATTEMPTED. Cached owner
+images и independently pinned receipt DAG ещё требуют отдельной аттестации;
+disposable CI не подтверждает их соответствие. Fixed TEST interval
+2026-10-02T00Z→2026-10-09T00Z не пересчитывается. PR24 Draft/open; main прежний.
+VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing/merge не выданы.
+
+### Единственное активное поручение C0 → C8 — C8-M2-CONNECT5-MIGRATION-R2
+
+Выполнить **targeted review C8-MIG-01/P2** на исправленном R2, включая новые
+audit-binding regressions. Полный предыдущий migration review сохраняется;
+повторять реализацию или прежние green suites без конкретного нового риска не нужно.
+
+Repository `Elefesys/ai-service-manager`, branch `c6/m2-telegram-live`, Draft PR24.
+Exact review target **f1c7aca724778e41671f2754bb85885507c4f14d**,
+tree **4f28480ef1458141422a14514473c05f49193fe6**. Diff base/sole parent
+**34835c260f737abbbe02a689f842b28fad50f323**; прежний reviewed code3f65be7a сохраняется
+в ancestry. Читать поручение из текущего docs coordination, тестировать отдельный
+exact R2 checkout. Новый docs-only tip не подменяет review target.
+
+Прочитать AGENTS, применимый канон, current disposition, contract§10.12.1 и
+runbook§0.6.27–29. Scope: четыре изменённых C6 файла, связанные migration
+direction_audit/audit/results/observed/switch/manifest guards и их regressions.
+
+Проверить и вернуть отдельный verdict по C8-MIG-01:
+
+1. Повторить три исходных repro (и worker аналог): повреждённый forward completion
+   блокирует первый rollback до effects; missing/corrupt forward result блокирует
+   resume/completed retry при сохранённых done. Отдельно проверить семантические
+   source/state/database/intent bindings и отсутствие нового PASS при отказе.
+2. Rollback-intent schema2 закрепляет точные inventory/byte hashes и historical
+   snapshot. Между interruption/resume/retry изменение bytes, удаление, добавление
+   или подмена evidence отвергается; pin не переснимается. Проверяются оба направления,
+   включая прежние forward records после смены runtime на rollback images.
+3. Valid partial forward→rollback, result/done/state/completion gaps, missing/stopped
+   только pending caller, interrupted rollback и completed retry остаются рабочими.
+   Не должно быть повторных effects, нового baseline, потери audit или ослабления
+   прежних source/image/private/runtime/DB guards и180/600s bounds.
+4. Самостоятельно сверить final CI37629816347 и соответствие evidence exact R2:
+   tested merge ebf1ec21f59eb8f887c779c3e55bf878eb15add5/tree/ordered parents,
+   все9 jobs/clean-source,8 ZIP digests/228 blobs+modes,6 migration schema2 reports
+   и прежние relay reports. Свои probes отделить от прочитанного CI execution.
+
+Собственные targeted probes выполняй в disposable окружении; если прежний test
+harness адаптируется к новой schema, сохранить смысл assertions и указать адаптацию.
+Нет требования повторно запускать все9 green jobs. При отсутствии Docker указать
+ограничение; fixture observations не выдавать за actual PG/Docker/VM evidence.
+
+Вернуть PASS либо CHANGES_REQUESTED, exact tested head/tree/clean status,
+команды/results и ограничения, targeted disposition C8-MIG-01. Новую находку
+оформлять с severity/location/reproducer; исправления integration branch не делать.
+Предыдущие client findings01/02/03 без нового evidence не переоткрывать.
+M2/ENV04 VERIFIED не объявлять; owner image/receipt attestation остаётся будущим
+отдельным шагом. VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing/
+main merge/production не выполнять.
+
+<details>
+<summary>История — C8-MIG-01 и завершённое поручение C6-R2</summary>
+
 ## Текущий статус — C8-MIG-01 OPEN; ограниченная доработка C6 / 2026-10-07 UTC
 
 **C8-M2-CONNECT5-MIGRATION — CHANGES_REQUESTED. C0 принимает C8-MIG-01/P2.**
@@ -137,6 +254,8 @@ execution. Finding остаётся OPEN до targeted C8/C0 verdict; самос
 или M2 VERIFIED не объявлять. Затем C0 review и targeted C8 именно этого исправления.
 VM/SSH/live/ACK/activation/sends/merge не выполнять; owner images/receipt attestation
 остаётся отдельным будущим шагом.
+
+</details>
 
 <details>
 <summary>История — C0 source/CI PASS и завершённая выдача C8 migration review</summary>
