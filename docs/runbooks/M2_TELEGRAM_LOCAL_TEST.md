@@ -3624,6 +3624,96 @@ PR24 Draft/open; main unchanged. No owner VM/SSH/live Telegram/queue/ACK/activat
 
 </details>
 
+### 0.6.28. C6-M2-CONNECT5-MIGRATION-R2 — audit binding REVIEW
+
+Scope: only C8-MIG-01/P2. Coordination `34835c260f737abbbe02a689f842b28fad50f323`
+(tree `d6f065344f021fa9b78b635260b739b93327524e`) is the immediate parent of
+the first fix commit; reviewed implementation3f65 and both C0 coordination commits
+remain in ancestry. Final head/tree, exact CI IDs/digests and final results belong
+in the single PR24 receipt, without a SHA-only follow-up commit. Finding stays OPEN
+until targeted C8/C0 verdict; client findings01/02/03 remain CLOSED.
+
+The helper now validates both historical directions before rollback effects and
+before success publication. Stage order, exact result shape, done→result, source/
+state/database/intent bindings and historical completion snapshots are mandatory.
+Rollback intent schema2 fixes the exact forward filename/SHA256 inventory and the
+validated forward runtime snapshot. Resumed or completed rollback compares forward
+results to that frozen history, while rollback results still match actual runtime.
+No damaged record is regenerated, no expected hash is refreshed on retry, and an
+older rollback intent without this binding fails closed. The original v2 baseline,
+forward records and operator/private files remain unchanged. Owner has no issued
+migration operation yet; an existing incompatible bundle is a C0 STOP, not an
+invitation to remove or upgrade its audit.
+
+Regression mapping (all in `tests/test_telegram_egress_migration.py`):
+
+| C8-MIG-01 requirement | Tests / assertions |
+|---|---|
+| Three exact repro + worker analogues | `test_forward_complete_tamper_requires_stop`; `test_completed_rollback_keeps_forward_result` for missing/corrupt api/worker results |
+| Drift before first effect, interrupted and completed retry | `test_forward_result_drift_stops_rollback_at_every_phase`; no new effects, state/audit writes |
+| Both directions' done/result and completion bindings | `test_done_requires_result_in_both_directions`; `test_completion_requires_exact_database_state_and_intent`; `test_audit_stage_binding_and_order_before_effects` |
+| Immutable inventory, exact bytes and historical snapshot | `test_rollback_intent_pins_exact_forward_inventory` includes parse-equivalent changed bytes, removal, new completion and unknown file; `test_rollback_intent_schema_and_historical_binding`; `test_rollback_requires_exact_original_intent` |
+| Partial forward and interrupted rollback remain valid | `test_valid_partial_forward_rollback_preserves_pinned_audit` at12 boundaries, three retries; `test_interrupted_rollback_results_keep_both_directions`; `test_pending_forward_caller_can_be_rolled_back` |
+| Drift between effects / before PASS | `test_rollback_checks_forward_audit_after_each_effect`; `test_rollback_rechecks_forward_audit_before_success` |
+
+Own pre-fix reproduction: five selected assertions failed on the reviewed helper
+(the three original api cases plus worker missing/corrupt). After the fix, local
+Python3.12.14/pytest9.0.2 executed251 scoped tests PASS (154 migration +97 existing
+egress guards); Ruff0.16.7 lint/format PASS. Only external Docker/DB observations are
+substituted in these unit fixtures; real private file I/O/helper state transitions
+execute. Local environment lacks pytest-asyncio, producing one config warning;
+these synchronous scoped tests do not require it. This is not local Docker evidence.
+
+Exact commands from the candidate checkout, using the separate scratch test venv:
+
+```sh
+python -m pytest -q tests/test_telegram_egress_migration.py tests/test_telegram_egress.py
+ruff check scripts/prepare_telegram_egress.py tests/test_telegram_egress_migration.py
+ruff format --check scripts/prepare_telegram_egress.py tests/test_telegram_egress_migration.py
+git diff --check
+```
+
+Final-head CI must execute unchanged `sh scripts/ci.sh`, `sh scripts/test_browser.sh`,
+both old6+6 lanes and the six normal/exact Docker29 migration scenarios. Existing
+actual SIGKILL/resume/rollback/retry cases now exercise schema2; their reports add
+`rollback_audit_binding` with the seven exact forward hashes, immutable rollback
+intent hash and equality after resume/completed retry. No extra Docker invocation,
+deadline increase, runner/workflow change or weakened existing assertion is needed.
+All nine jobs and clean-source gates must be SUCCESS before the final REVIEW receipt.
+
+Owner runbook remains §0.6.25. VM/SSH/live Telegram/queue/ACK/activation/setWebhook/
+sends/billing/merge were not performed. Exact cached owner images and independent
+receipt-DAG attestation remain a separate future issuance. The prior queue snapshot
+is not refreshed; no owner readiness or finding closure is claimed here.
+
+<details>
+<summary>Archived C0 receipt prefix — verbatim before the R2 return</summary>
+
+## C0 — CHANGES_REQUESTED: C8-MIG-01/P2 OPEN; scoped C6-R2 issued (2026-10-07)
+
+**C0 accepts and independently reproduces C8-MIG-01.** Migration remains REVIEW; owner execution blocked pending fix/final CI/targeted C8. Prior C0 source/CI PASS is superseded for this audit-preservation risk. Accepted client findings01/02/03 stay CLOSED; M2 IN_PROGRESS/ENV04 REVIEW.
+
+**Reviewed code:** head `3f65be7a60a1271247d04f23cbe0b151f82d65a1`, tree `5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797`; diff base `fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00`. Helper blob `c5d91d930eb164d116b25564592f038ae425b83d`.
+
+**Finding.** prepare_telegram_egress.py2810–2818 selects only the active direction's service result;2890–2912 checks only that direction's completion. Corrupt forward-complete.database_sha256 is ignored before rollback, which recreates both callers and writes preservation:PASS. After completed rollback, missing/corrupt forward-api-result permits successful retry. No DB loss or Telegram resend demonstrated.
+
+**Own C0 reproduction:** Python3.12.14, exact helper blob verified, real migration/audit/private file guards; repository fixture simulates Docker/DB/prepared observations. Three reproduced violations: corrupted forward completion permits2 simulated recreates; deleted and malformed forward result each permits successful completed retry/0 new effects. Controls: valid partial forward rollback PASS (only api switched back); changed DB observation rejected EGRESS_MIGRATION_CANONICAL_DATA_DRIFT before effects. No local Docker/PG/VM/network execution. Repro details/snippets: runbook§0.6.27.
+
+**C8-reported evidence:** clean exact checkout;144 repository scoped PASS;22 supplemental PASS/3 FAIL, all one finding. Independently reviewed9 jobs/8 ZIP digests/228 blobs+modes/6 migration+2 relay reports. C0 did not read the separate C8 evidence.zip; own reproduction confirms the report.
+
+**CI remains evidence, not finding closure:** implementation37607152590 all9 SUCCESS. Previous documentation CI37621480704 on `e332989485dccba52c090c855f93a536b462c91b` now all9 jobs/clean-source SUCCESS, freshly verified by C0. Neither contains the new cross-direction audit regressions.
+
+**Only active task: C6-M2-CONNECT5-MIGRATION-R2.** [Full handoff](https://github.com/Elefesys/ai-service-manager/blob/34835c260f737abbbe02a689f842b28fad50f323/docs/tasks/M2_HANDOFF.md). Check existing forward audit before rollback effects; pin its inventory/hashes in immutable rollback intent and recheck at resume/completed retry; every done requires its retained result in both directions. Preserve legitimate partial rollback, prior audit bytes, no repeated effects and all strict guards/bounds. Allowed files: helper, migration/egress unit tests, contract§10.12.1 and runbook only. No client/workflow/runner/Compose/lock/domain changes. Final actual9-job CI and targeted C8/C0 closure required; finding remains OPEN.
+
+**Start C6 from coordination `34835c260f737abbbe02a689f842b28fad50f323`**, tree `d6f065344f021fa9b78b635260b739b93327524e`, sole parent `e332989485dccba52c090c855f93a536b462c91b`; retain it as first fix commit parent. Exactly4 docs changed,224/228 other blobs/modes unchanged; no reset/rebase/force-push. [Coordination CI37626628260](https://github.com/Elefesys/ai-service-manager/actions/runs/37626628260) IN_PROGRESS when recorded, separate from prior verified runs.
+
+Previous C0 prefix archived verbatim in [runbook§0.6.27](https://github.com/Elefesys/ai-service-manager/blob/34835c260f737abbbe02a689f842b28fad50f323/docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md); C6 full evidence remains in§0.6.26. Historical tail below preserved unchanged.
+
+Owner applicability remains separate: actual cached old image bytes and independently pinned receipt DAG still unconfirmed; disposable CI rebuilt old images. Last owner state exact0b7e24ee/recovery-v2/connect2/TG disabled-empty; binding committed, ACK NOT_ATTEMPTED/no replay. Fixed TEST interval2026-10-02T00Z→2026-10-09T00Z unchanged. PR24 Draft/open; no owner VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing writes/main merge/production/M3 issued or executed.
+
+</details>
+
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker

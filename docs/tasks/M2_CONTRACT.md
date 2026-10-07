@@ -1412,6 +1412,20 @@ is again the operational source; the candidate checkout remains the read-only
 controller for rollback retry. Its old-source preflight must also succeed. Forward
 and rollback audit remain; a subsequent forward call after rollback stops and
 requires a new C0 decision. No automatic rollback, rebaseline or cleanup is implied.
+R2 validates the complete existing audit in **both** directions before any rollback
+effect and before reporting success: exact stage/result shapes, service order,
+intent/source/state/database bindings, and done requiring its preserved result.
+Completion must agree with the direction's historical service results and unchanged
+unrelated baseline, not with container IDs created by a later opposite transition.
+The immutable `rollback-intent.json` is schema version 2, with exactly `version`,
+`stage`, `intent_sha256`, `forward_audit_sha256` (filename to SHA256 of exact bytes),
+and `forward_runtime` (the validated snapshot at rollback entry). Resume and completed
+retry require the same forward inventory/bytes and historical result binding.
+Missing, changed or additional forward evidence is STOP; no re-pinning, reconstruction
+from current runtime or upgrade of an older unbound rollback intent is permitted.
+Valid partial forward histories remain rollbackable, including result/done and
+state/completion publication gaps; an unpublished completion is not mandatory.
+These R2 changes remain REVIEW under C8-MIG-01/P2 OPEN until targeted C8/C0 verdict.
 Each runtime invocation is bounded to 180s, including subprocesses. Telegram stays
 disabled/empty; no discovery/setup/ACK/send/binding/billing operation is invoked.
 

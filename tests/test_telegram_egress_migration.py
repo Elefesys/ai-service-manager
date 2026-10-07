@@ -408,15 +408,23 @@ e.main()
     invoke("migrate")
     assert e.migration_runtime(recovered, state_dir) == forward
     completed = (bundle / "forward-complete.json").read_bytes()
+    forward_audit = {p.name: e.sha(p.read_bytes()) for p in bundle.glob("forward-*")}
     assert all(forward[n]["image"] == ready["after_images"][n] for n in e.MIGRATION_SERVICES)
     assert e.verify(state_dir)["version"] == 3
     interrupted("migration-rollback", reverse=True)
+    rollback_intent = (bundle / "rollback-intent.json").read_bytes()
+    rollback_binding = json.loads(rollback_intent)
+    assert rollback_binding["version"] == 2
+    assert rollback_binding["forward_audit_sha256"] == forward_audit
+    assert rollback_binding["forward_runtime"] == forward
     invoke("migration-rollback")
     rolled_back = e.migration_runtime(recovered, state_dir)
     invoke("migration-rollback")
     assert e.migration_runtime(recovered, state_dir) == rolled_back
     assert (state_dir / "state.json").read_bytes() == recovered_bytes
     assert (bundle / "forward-complete.json").read_bytes() == completed
+    assert (bundle / "rollback-intent.json").read_bytes() == rollback_intent
+    assert {p.name: e.sha(p.read_bytes()) for p in bundle.glob("forward-*")} == forward_audit
     assert all(rolled_back[n]["image"] == ready["before_images"][n] for n in e.MIGRATION_SERVICES)
     assert all(Path(p).read_bytes() == raw for p, raw in saved.items())
     assert (state_dir / "recovery.json").read_bytes() == old_receipt
@@ -444,6 +452,12 @@ e.main()
     ]
     assert len(assertions) == 1 and assertions[0]["result"] == "PASS"
     report = {
+        "rollback_audit_binding": {
+            "version": 2,
+            "forward_audit_sha256": forward_audit,
+            "rollback_intent_sha256": e.sha(rollback_intent),
+            "unchanged_after_resume_and_completed_retry": True,
+        },
         "source_sha": source,
         "source_tree": plan["to_tree"],
         "from_sha": e.MIGRATION_FROM,
@@ -705,6 +719,373 @@ def test_migration_complete_retry_and_explicit_rollback(migration_machine):
     assert len(m.effects) == 4
     with pytest.raises(e.EgressError, match="ROLLBACK_ALREADY_STARTED"):
         e.migration_switch(m.args, m.directory)
+
+
+def test_forward_complete_tamper_requires_stop(migration_machine):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    path = m.bundle / "forward-complete.json"
+    receipt = json.loads(path.read_bytes())
+    receipt["database_sha256"] = "0" * 64
+    e.write_private(path, e.encoded(receipt))
+    effects = list(m.effects)
+    with pytest.raises(e.EgressError):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == effects
+    assert not (m.bundle / "rollback-intent.json").exists()
+    assert not (m.bundle / "rollback-complete.json").exists()
+
+
+@pytest.mark.parametrize("service", ["api", "worker"])
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_completed_rollback_keeps_forward_result(migration_machine, service, corrupt):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    e.migration_switch(m.args, m.directory, reverse=True)
+    path = m.bundle / ("forward-" + service + "-result.json")
+    if corrupt:
+        e.write_private(path, b"not-json\n")
+    else:
+        path.unlink()
+    effects = list(m.effects)
+    with pytest.raises(e.EgressError):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == effects
+
+
+def interrupt_migration(m, monkeypatch, boundary, *, reverse=False):
+    """Actual helper and private I/O; only external runtime is the machine fixture."""
+    write, command = e.write_private, e.command
+    direction = "rollback" if reverse else "forward"
+    stop = {
+        "intent": "rollback-intent.json" if reverse else "intent.json",
+        "state": "state.json",
+        "complete-before": direction + "-complete.json",
+        "complete": direction + "-complete.json",
+    }.get(boundary, direction + "-" + boundary + ".json")
+
+    def interrupted_write(path, raw, **kwargs):
+        if path.name == stop and boundary == "complete-before":
+            raise InterruptedError("before publication")
+        write(path, raw, **kwargs)
+        if path.name == stop:
+            raise InterruptedError("after publication")
+
+    def interrupted_command(argv, **kwargs):
+        value = command(argv, **kwargs)
+        if boundary == argv[-1] + "-image":
+            raise InterruptedError("after recreate")
+        return value
+
+    with monkeypatch.context() as patch:
+        patch.setattr(e, "write_private", interrupted_write)
+        patch.setattr(e, "command", interrupted_command)
+        with pytest.raises(InterruptedError):
+            e.migration_switch(m.args, m.directory, reverse=reverse)
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    [
+        "intent",
+        "api-intent",
+        "api-image",
+        "api-result",
+        "api-done",
+        "worker-intent",
+        "worker-image",
+        "worker-result",
+        "worker-done",
+        "state",
+        "complete-before",
+        "complete",
+    ],
+)
+def test_valid_partial_forward_rollback_preserves_pinned_audit(
+    migration_machine, monkeypatch, boundary
+):
+    m = migration_machine
+    interrupt_migration(m, monkeypatch, boundary)
+    forward = {p.name: p.read_bytes() for p in m.bundle.glob("forward-*")}
+    effects = list(m.effects)
+    interrupt_migration(m, monkeypatch, "api-done", reverse=True)
+    rollback_intent = (m.bundle / "rollback-intent.json").read_bytes()
+    record = json.loads(rollback_intent)
+    assert record["version"] == 2
+    assert record["forward_audit_sha256"] == {name: e.sha(raw) for name, raw in forward.items()}
+    for _ in range(3):
+        e.migration_switch(m.args, m.directory, reverse=True)
+        assert (m.bundle / "rollback-intent.json").read_bytes() == rollback_intent
+        assert {p.name: p.read_bytes() for p in m.bundle.glob("forward-*")} == forward
+    assert m.effects == effects + [("before", name) for _, name in effects]
+    assert (m.directory / "state.json").read_bytes() == e.encoded(m.old)
+    with pytest.raises(e.EgressError, match="ROLLBACK_ALREADY_STARTED"):
+        e.migration_switch(m.args, m.directory)
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    [
+        "api-result",
+        "api-done",
+        "worker-image",
+        "worker-result",
+        "worker-done",
+        "complete-before",
+        "complete",
+    ],
+)
+def test_interrupted_rollback_results_keep_both_directions(
+    migration_machine, monkeypatch, boundary
+):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    forward = {p.name: p.read_bytes() for p in m.bundle.glob("forward-*")}
+    interrupt_migration(m, monkeypatch, boundary, reverse=True)
+    e.migration_switch(m.args, m.directory, reverse=True)
+    e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == [
+        ("after", "api"),
+        ("after", "worker"),
+        ("before", "api"),
+        ("before", "worker"),
+    ]
+    assert {p.name: p.read_bytes() for p in m.bundle.glob("forward-*")} == forward
+
+
+@pytest.mark.parametrize("phase", ["before", "interrupted", "completed"])
+@pytest.mark.parametrize("service", ["api", "worker"])
+@pytest.mark.parametrize("drift", ["missing", "corrupt", "intent", "shape", "database"])
+def test_forward_result_drift_stops_rollback_at_every_phase(
+    migration_machine, monkeypatch, phase, service, drift
+):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    if phase == "interrupted":
+        interrupt_migration(m, monkeypatch, "api-image", reverse=True)
+    elif phase == "completed":
+        e.migration_switch(m.args, m.directory, reverse=True)
+    path = m.bundle / ("forward-" + service + "-result.json")
+    record = json.loads(path.read_bytes())
+    if drift == "missing":
+        path.unlink()
+    elif drift == "corrupt":
+        e.write_private(path, b"not-json\n")
+    else:
+        if drift == "intent":
+            record["intent_sha256"] = "0" * 64
+        elif drift == "shape":
+            record["runtime"]["foreign"] = True
+        else:
+            record["runtime"]["database_identity"] = {"database": "wrong"}
+        e.write_private(path, e.encoded(record))
+    effects, state = list(m.effects), (m.directory / "state.json").read_bytes()
+    files = {p.name: p.read_bytes() for p in m.bundle.iterdir()}
+    with pytest.raises(e.EgressError):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == effects and (m.directory / "state.json").read_bytes() == state
+    assert {p.name: p.read_bytes() for p in m.bundle.iterdir()} == files
+
+
+@pytest.mark.parametrize("direction", ["forward", "rollback"])
+@pytest.mark.parametrize(
+    "field", ["database_sha256", "state_sha256", "intent_sha256", "source_sha", "after", "foreign"]
+)
+def test_completion_requires_exact_database_state_and_intent(migration_machine, direction, field):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    if direction == "rollback":
+        e.migration_switch(m.args, m.directory, reverse=True)
+    path = m.bundle / (direction + "-complete.json")
+    value = json.loads(path.read_bytes())
+    value[field] = "0" * 64
+    e.write_private(path, e.encoded(value))
+    effects = list(m.effects)
+    with pytest.raises(e.EgressError, match="COMPLETED_DRIFT"):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == effects
+    if direction == "forward":
+        assert not (m.bundle / "rollback-intent.json").exists()
+
+
+@pytest.mark.parametrize("service", ["api", "worker"])
+@pytest.mark.parametrize("direction", ["forward", "rollback"])
+def test_done_requires_result_in_both_directions(migration_machine, service, direction):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    if direction == "rollback":
+        e.migration_switch(m.args, m.directory, reverse=True)
+    (m.bundle / (direction + "-" + service + "-result.json")).unlink()
+    effects = list(m.effects)
+    with pytest.raises(e.EgressError, match="SERVICE_RESULT_REQUIRED"):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == effects
+
+
+@pytest.mark.parametrize("phase", ["interrupted", "completed"])
+@pytest.mark.parametrize("drift", ["bytes", "remove", "unexpected", "add-completion"])
+def test_rollback_intent_pins_exact_forward_inventory(migration_machine, monkeypatch, phase, drift):
+    m = migration_machine
+    interrupt_migration(m, monkeypatch, "complete-before")
+    forward_runtime = copy.deepcopy(m.runtime)
+    new = (m.directory / "state.json").read_bytes()
+    if phase == "interrupted":
+        interrupt_migration(m, monkeypatch, "intent", reverse=True)
+    else:
+        e.migration_switch(m.args, m.directory, reverse=True)
+    pin = (m.bundle / "rollback-intent.json").read_bytes()
+    intent_hash = json.loads(pin)["intent_sha256"]
+    if drift == "bytes":
+        path = m.bundle / "forward-api-result.json"
+        e.write_private(path, path.read_bytes() + b"\n")  # same parsed value, different bytes
+    elif drift == "remove":
+        # Semantically valid shorter partial history must still violate the frozen inventory.
+        for suffix in ("done", "result", "intent"):
+            (m.bundle / ("forward-worker-" + suffix + ".json")).unlink()
+    elif drift == "unexpected":
+        e.write_private(m.bundle / "forward-foreign.json", e.encoded({}))
+    else:
+        e.write_private(
+            m.bundle / "forward-complete.json",
+            e.encoded(
+                {
+                    "intent_sha256": intent_hash,
+                    "source_sha": m.plan["to_sha"],
+                    "state_sha256": e.sha(new),
+                    "after": forward_runtime,
+                    "database_sha256": e.sha(e.encoded(m.database)),
+                    "preservation": "PASS",
+                }
+            ),
+        )
+    effects = list(m.effects)
+    with pytest.raises(e.EgressError):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == effects and (m.bundle / "rollback-intent.json").read_bytes() == pin
+
+
+@pytest.mark.parametrize("service", ["api", "worker"])
+def test_rollback_checks_forward_audit_after_each_effect(migration_machine, monkeypatch, service):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    command = e.command
+
+    def tamper(argv, **kwargs):
+        result = command(argv, **kwargs)
+        if argv[-1] == service:
+            path = m.bundle / "forward-api-result.json"
+            e.write_private(path, path.read_bytes() + b"\n")
+        return result
+
+    monkeypatch.setattr(e, "command", tamper)
+    with pytest.raises(e.EgressError, match="ROLLBACK_AUDIT_CHANGED"):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert len(m.effects) == (3 if service == "api" else 4)
+    assert not (m.bundle / "rollback-complete.json").exists()
+
+
+@pytest.mark.parametrize("completed", [False, True])
+def test_rollback_rechecks_forward_audit_before_success(migration_machine, monkeypatch, completed):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    if completed:
+        e.migration_switch(m.args, m.directory, reverse=True)
+
+    def tamper(*_):
+        path = m.bundle / "forward-worker-result.json"
+        e.write_private(path, path.read_bytes() + b"\n")
+
+    monkeypatch.setattr(e, "caller_probe", tamper)
+    with pytest.raises(e.EgressError, match="ROLLBACK_AUDIT_CHANGED"):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert len(m.effects) == 4
+    assert (m.bundle / "rollback-complete.json").exists() == completed
+
+
+@pytest.mark.parametrize("completed", [False, True])
+@pytest.mark.parametrize(
+    "field", ["version", "from_tree", "to_tree", "before", "prepared_sha256", "preparation_sha256"]
+)
+def test_rollback_requires_exact_original_intent(migration_machine, completed, field):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    if completed:
+        e.migration_switch(m.args, m.directory, reverse=True)
+    path = m.bundle / "intent.json"
+    value = json.loads(path.read_bytes())
+    value[field] = "foreign"
+    e.write_private(path, e.encoded(value))
+    effects = list(m.effects)
+    with pytest.raises(e.EgressError, match="INTENT_CHANGED"):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == effects
+
+
+@pytest.mark.parametrize(
+    "drift", ["legacy", "intent", "inventory", "snapshot-shape", "snapshot-id"]
+)
+def test_rollback_intent_schema_and_historical_binding(migration_machine, monkeypatch, drift):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    interrupt_migration(m, monkeypatch, "api-image", reverse=True)
+    path = m.bundle / "rollback-intent.json"
+    value = json.loads(path.read_bytes())
+    if drift == "legacy":
+        value = {k: value[k] for k in ("stage", "intent_sha256")}
+    elif drift == "intent":
+        value["intent_sha256"] = "0" * 64
+    elif drift == "inventory":
+        value["forward_audit_sha256"] = {}
+    elif drift == "snapshot-shape":
+        del value["forward_runtime"]["api"]["image"]
+    else:
+        value["forward_runtime"]["api"]["id"] = "foreign"
+    e.write_private(path, e.encoded(value))
+    effects = list(m.effects)
+    with pytest.raises(e.EgressError):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == effects
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_pending_forward_caller_can_be_rolled_back(migration_machine, monkeypatch, missing):
+    m = migration_machine
+    interrupt_migration(m, monkeypatch, "api-intent")
+    if missing:
+        del m.runtime["api"]
+    else:
+        m.runtime["api"]["running"] = False
+        del m.runtime["api"]["database_identity"]
+    e.migration_switch(m.args, m.directory, reverse=True)
+    e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == [("before", "api")]
+
+
+@pytest.mark.parametrize("direction", ["forward", "rollback"])
+@pytest.mark.parametrize("damage", ["stage-binding", "stage-order", "result-without-intent"])
+def test_audit_stage_binding_and_order_before_effects(
+    migration_machine, monkeypatch, direction, damage
+):
+    m = migration_machine
+    if direction == "rollback":
+        e.migration_switch(m.args, m.directory)
+        interrupt_migration(m, monkeypatch, "api-result", reverse=True)
+    else:
+        interrupt_migration(m, monkeypatch, "api-result")
+    if damage == "stage-binding":
+        path = m.bundle / (direction + "-api-intent.json")
+        e.write_private(
+            path, e.encoded({"stage": direction + "-api-intent", "intent_sha256": "0" * 64})
+        )
+    elif damage == "stage-order":
+        intent = json.loads((m.bundle / "intent.json").read_bytes())
+        e.migration_stage(m.bundle, direction + "-worker-intent", intent, publish=True)
+    else:
+        (m.bundle / (direction + "-api-intent.json")).unlink()
+    effects = list(m.effects)
+    with pytest.raises(e.EgressError):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == effects
 
 
 @pytest.mark.parametrize("service", ["api", "worker"])

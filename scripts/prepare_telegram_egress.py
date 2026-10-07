@@ -2724,7 +2724,7 @@ def migration_prepared(directory):
     return bundle, plan, original, ready
 
 
-def migration_manifest(directory, state):
+def migration_manifest(directory, state, *, allow_rollback=False):
     bundle = directory / "migration-v3"
     intent_raw = private_bytes(bundle / "intent.json")
     intent = strict_json(intent_raw)
@@ -2755,7 +2755,8 @@ def migration_manifest(directory, state):
             "EGRESS_MIGRATION_IMAGE_OVERLAY_CHANGED",
         )
     require(
-        not (bundle / "rollback-complete.json").exists(), "EGRESS_MIGRATION_ALREADY_ROLLED_BACK"
+        allow_rollback or not (bundle / "rollback-complete.json").exists(),
+        "EGRESS_MIGRATION_ALREADY_ROLLED_BACK",
     )
     return intent
 
@@ -2771,14 +2772,17 @@ def migration_stage(bundle, name, intent, *, publish=False):
     return False
 
 
-def migration_observed(bundle, intent):
+def migration_observed(bundle, intent, *, rolling_back=False, forward_only=False):
     allowed, pending = {}, []
-    rolling_back = migration_stage(bundle, "rollback-intent", intent)
     for name in MIGRATION_SERVICES:
         forward = migration_stage(bundle, "forward-" + name + "-intent", intent)
-        reverted = migration_stage(bundle, "rollback-" + name + "-intent", intent)
+        reverted = not forward_only and migration_stage(
+            bundle, "rollback-" + name + "-intent", intent
+        )
         forward_done = migration_stage(bundle, "forward-" + name + "-done", intent)
-        reverted_done = migration_stage(bundle, "rollback-" + name + "-done", intent)
+        reverted_done = not forward_only and migration_stage(
+            bundle, "rollback-" + name + "-done", intent
+        )
         require(
             (not forward_done or forward)
             and (not reverted or rolling_back)
@@ -2797,7 +2801,133 @@ def migration_observed(bundle, intent):
     return allowed, pending
 
 
-def migration_results(bundle, intent, actual):
+def migration_direction_audit(bundle, intent, direction, state, database):
+    """Validate historical records without comparing them to later container IDs."""
+    names = {
+        f"{direction}-{name}-{stage}.json"
+        for name in MIGRATION_SERVICES
+        for stage in ("intent", "result", "done")
+    } | {direction + "-complete.json"}
+    files = {
+        p.name: private_bytes(p)
+        for p in bundle.glob(direction + "-*")
+        if p.name != "rollback-intent.json"
+    }
+    require(files.keys() <= names, "EGRESS_MIGRATION_FOREIGN_EVIDENCE")
+    side = "after" if direction == "forward" else "before"
+    after = dict(intent["before"])
+    prior_done = True
+    for name in MIGRATION_SERVICES:
+        stage = direction + "-" + name
+        started = stage + "-intent.json" in files
+        done = stage + "-done.json" in files
+        result = files.get(stage + "-result.json")
+        require(
+            (not started or prior_done) and (result is None or started) and (not done or started),
+            "EGRESS_MIGRATION_STAGE_ORDER",
+        )
+        for suffix in ("intent", "done"):
+            key = stage + "-" + suffix
+            if key + ".json" in files:
+                require(
+                    files[key + ".json"]
+                    == encoded({"intent_sha256": sha(encoded(intent)), "stage": key}),
+                    "EGRESS_MIGRATION_STAGE_CHANGED",
+                )
+        require(not done or result is not None, "EGRESS_MIGRATION_SERVICE_RESULT_REQUIRED")
+        if result is not None:
+            record = strict_json(result)
+            require(
+                isinstance(record, dict)
+                and set(record) == {"intent_sha256", "runtime"}
+                and record["intent_sha256"] == sha(encoded(intent)),
+                "EGRESS_MIGRATION_SERVICE_RESULT_CHANGED",
+            )
+            runtime, previous = record["runtime"], intent["before"][name]
+            require(
+                isinstance(runtime, dict)
+                and runtime.keys() == previous.keys()
+                and isinstance(runtime["id"], str)
+                and bool(runtime["id"])
+                and runtime["running"] is True
+                and isinstance(runtime["networks"], dict)
+                and runtime["networks"].keys() == previous["networks"].keys()
+                and all(
+                    isinstance(value, dict) and value.keys() == previous["networks"][network].keys()
+                    for network, value in runtime["networks"].items()
+                ),
+                "EGRESS_MIGRATION_SERVICE_RESULT_CHANGED",
+            )
+            observed = dict(intent["before"], **{name: runtime})
+            images = {
+                n: {intent[(side if n == name else "before") + "_images"][n]}
+                for n in MIGRATION_SERVICES
+            }
+            migration_compare(intent["before"], observed, images, completed=True)
+            after[name] = runtime
+        prior_done = done
+    completion = files.get(direction + "-complete.json")
+    if completion is not None:
+        require(prior_done, "EGRESS_MIGRATION_STAGE_ORDER")
+        require(
+            strict_json(completion)
+            == {
+                "intent_sha256": sha(encoded(intent)),
+                "source_sha": intent["to_sha" if direction == "forward" else "from_sha"],
+                "state_sha256": sha(encoded(state)),
+                "after": after,
+                "database_sha256": sha(encoded(database)),
+                "preservation": "PASS",
+            },
+            "EGRESS_MIGRATION_COMPLETED_DRIFT",
+        )
+    return {name: sha(raw) for name, raw in files.items()}
+
+
+def migration_audit(bundle, intent, old, new, database):
+    forward = migration_direction_audit(bundle, intent, "forward", new, database)
+    rollback = migration_direction_audit(bundle, intent, "rollback", old, database)
+    path = bundle / "rollback-intent.json"
+    if not path.exists() and not path.is_symlink():
+        require(not rollback, "EGRESS_MIGRATION_STAGE_ORDER")
+        return forward, None
+    record = strict_json(private_bytes(path))
+    require(
+        isinstance(record, dict)
+        and set(record)
+        == {"version", "stage", "intent_sha256", "forward_audit_sha256", "forward_runtime"}
+        and record["version"] == 2
+        and record["stage"] == "rollback-intent"
+        and record["intent_sha256"] == sha(encoded(intent))
+        and record["forward_audit_sha256"] == forward
+        and isinstance(record["forward_runtime"], dict),
+        "EGRESS_MIGRATION_ROLLBACK_AUDIT_CHANGED",
+    )
+    allowed, pending = migration_observed(bundle, intent, forward_only=True)
+    history = record["forward_runtime"]
+    for name in MIGRATION_SERVICES:
+        if name not in history:
+            continue
+        row, previous = history[name], intent["before"][name]
+        require(
+            isinstance(row, dict)
+            and type(row.get("running")) is bool
+            and row.keys() == previous.keys() - (set() if row["running"] else {"database_identity"})
+            and isinstance(row["id"], str)
+            and bool(row["id"])
+            and isinstance(row["networks"], dict)
+            and row["networks"].keys() <= previous["networks"].keys()
+            and all(
+                isinstance(value, dict) and value.keys() == previous["networks"][network].keys()
+                for network, value in row["networks"].items()
+            ),
+            "EGRESS_MIGRATION_ROLLBACK_AUDIT_CHANGED",
+        )
+    migration_compare(intent["before"], history, allowed, pending=pending)
+    return forward, record
+
+
+def migration_results(bundle, intent, actual, *, historical=None):
     for name in MIGRATION_SERVICES:
         reverse = migration_stage(bundle, "rollback-" + name + "-intent", intent)
         forward = migration_stage(bundle, "forward-" + name + "-intent", intent)
@@ -2807,16 +2937,20 @@ def migration_results(bundle, intent, actual):
                 "EGRESS_MIGRATION_UNJOURNALED_CALLER_CHANGE",
             )
             continue
-        stage = ("rollback-" if reverse else "forward-") + name
-        path = bundle / (stage + "-result.json")
-        if migration_stage(bundle, stage + "-done", intent):
-            require(path.is_file(), "EGRESS_MIGRATION_SERVICE_RESULT_REQUIRED")
-        if path.exists() or path.is_symlink():
-            require(
-                strict_json(private_bytes(path))
-                == {"intent_sha256": sha(encoded(intent)), "runtime": actual.get(name)},
-                "EGRESS_MIGRATION_SERVICE_RESULT_CHANGED",
-            )
+        for direction in ("forward", "rollback"):
+            stage = direction + "-" + name
+            path = bundle / (stage + "-result.json")
+            if migration_stage(bundle, stage + "-done", intent):
+                require(path.is_file(), "EGRESS_MIGRATION_SERVICE_RESULT_REQUIRED")
+            if path.exists() or path.is_symlink():
+                observed = (
+                    historical if direction == "forward" and historical is not None else actual
+                )
+                require(
+                    strict_json(private_bytes(path))
+                    == {"intent_sha256": sha(encoded(intent)), "runtime": observed.get(name)},
+                    "EGRESS_MIGRATION_SERVICE_RESULT_CHANGED",
+                )
 
 
 def migration_arguments(args, plan):
@@ -2871,28 +3005,47 @@ def migration_switch(args, directory, *, reverse=False, readonly=False):
         write_private(intent_path, encoded(intent))
     intent = strict_json(private_bytes(intent_path))
     require(
-        intent["preparation_sha256"] == sha(encoded(plan))
-        and intent["prepared_sha256"] == sha(encoded(ready))
-        and intent["before_images"] == ready["before_images"]
-        and intent["after_images"] == ready["after_images"]
-        and intent["to_sha"] == plan["to_sha"]
-        and intent["from_sha"] == MIGRATION_FROM,
+        intent
+        == {
+            "version": 1,
+            "from_sha": MIGRATION_FROM,
+            "from_tree": MIGRATION_FROM_TREE,
+            "to_sha": plan["to_sha"],
+            "to_tree": plan["to_tree"],
+            "preparation_sha256": sha(encoded(plan)),
+            "prepared_sha256": sha(encoded(ready)),
+            "before": plan["before"],
+            "before_images": ready["before_images"],
+            "after_images": ready["after_images"],
+        },
         "EGRESS_MIGRATION_INTENT_CHANGED",
     )
     new = dict(
         old, version=3, source_sha=plan["to_sha"], migration_intent_sha256=sha(encoded(intent))
     )
-    migration_manifest(directory, new) if not (bundle / "rollback-complete.json").exists() else None
     current = private_bytes(directory / "state.json")
     require(current in {encoded(old), encoded(new)}, "EGRESS_MIGRATION_MANIFEST_DRIFT")
-    rollback_started = migration_stage(bundle, "rollback-intent", intent)
+    forward_audit, rollback = migration_audit(bundle, intent, old, new, database)
+    rollback_started = rollback is not None
     require(reverse or not rollback_started, "EGRESS_MIGRATION_ROLLBACK_ALREADY_STARTED")
+    migration_manifest(directory, new, allow_rollback=reverse)
+    if not rollback_started:
+        require(
+            ("forward-complete.json" not in forward_audit or current == encoded(new))
+            and (
+                current != encoded(new)
+                or all("forward-" + n + "-done.json" in forward_audit for n in MIGRATION_SERVICES)
+            ),
+            "EGRESS_MIGRATION_MANIFEST_DRIFT",
+        )
     direction, side = ("rollback", "before") if reverse else ("forward", "after")
     completion = bundle / (direction + "-complete.json")
     actual = migration_runtime(old, directory)
-    allowed, pending = migration_observed(bundle, intent)
+    allowed, pending = migration_observed(bundle, intent, rolling_back=rollback_started)
     migration_compare(intent["before"], actual, allowed, pending=pending)
-    migration_results(bundle, intent, actual)
+    migration_results(
+        bundle, intent, actual, historical=rollback["forward_runtime"] if rollback else None
+    )
     if completion.exists():
         receipt = strict_json(private_bytes(completion))
         require(
@@ -2909,18 +3062,29 @@ def migration_switch(args, directory, *, reverse=False, readonly=False):
             "EGRESS_MIGRATION_COMPLETED_DRIFT",
         )
         caller_probe(old if reverse else new, directory)
+        migration_audit(bundle, intent, old, new, database)
         return
     require(not readonly, "EGRESS_MIGRATION_NOT_COMPLETE")
     if reverse and not rollback_started:
-        migration_stage(bundle, "rollback-intent", intent, publish=True)
+        rollback = {
+            "version": 2,
+            "stage": "rollback-intent",
+            "intent_sha256": sha(encoded(intent)),
+            "forward_audit_sha256": forward_audit,
+            "forward_runtime": actual,
+        }
+        write_private(bundle / "rollback-intent.json", encoded(rollback))
     prefix = [*compose_prefix(old, directory), "-f", str(bundle / ("images-" + side + ".json"))]
     for name in MIGRATION_SERVICES:
         expected = intent[side + "_images"][name]
         # `actual` is the entry snapshot or the full post-recreate snapshot of
         # the preceding service. Only our private journal writes intervene.
-        allowed, pending = migration_observed(bundle, intent)
+        _, rollback = migration_audit(bundle, intent, old, new, database)
+        allowed, pending = migration_observed(bundle, intent, rolling_back=rollback is not None)
         migration_compare(intent["before"], actual, allowed, pending=pending)
-        migration_results(bundle, intent, actual)
+        migration_results(
+            bundle, intent, actual, historical=rollback["forward_runtime"] if rollback else None
+        )
         if migration_stage(bundle, direction + "-" + name + "-done", intent):
             require(
                 name in actual and actual[name]["image"] == expected and actual[name]["running"],
@@ -2969,6 +3133,10 @@ def migration_switch(args, directory, *, reverse=False, readonly=False):
     require(
         migration_database(old if reverse else new, directory) == database,
         "EGRESS_MIGRATION_CANONICAL_DATA_DRIFT",
+    )
+    _, rollback = migration_audit(bundle, intent, old, new, database)
+    migration_results(
+        bundle, intent, actual, historical=rollback["forward_runtime"] if rollback else None
     )
     desired = encoded(old if reverse else new)
     if current != desired:
