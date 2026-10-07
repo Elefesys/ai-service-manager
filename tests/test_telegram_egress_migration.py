@@ -233,6 +233,26 @@ def run_disposable(f):
     ]
     helper = str(e.ROOT / "scripts/prepare_telegram_egress.py")
     timings, interruptions, negatives = {}, [], []
+    original_inspects = {
+        name: json.loads(run(["docker", "inspect", target[name]["id"]]))[0]
+        for name in e.MIGRATION_SERVICES
+    }
+
+    def config_diagnostic():
+        # Synthetic disposable fixture only: print field names, never values.
+        current = e.migration_runtime(recovered, state_dir)
+        for name, previous in original_inspects.items():
+            if name not in current:
+                continue
+            observed = json.loads(run(["docker", "inspect", current[name]["id"]]))[0]
+            for section in ("Config", "HostConfig"):
+                keys = sorted(set(previous[section]) | set(observed[section]))
+                changed = [k for k in keys if previous[section].get(k) != observed[section].get(k)]
+                print("MIGRATION_CONFIG_FIELDS=" + name + ":" + section + ":" + ",".join(changed), flush=True)
+            before_env = dict(x.split("=", 1) for x in previous["Config"]["Env"])
+            after_env = dict(x.split("=", 1) for x in observed["Config"]["Env"])
+            print("MIGRATION_ENV_MAPPING_EQUAL=" + name + ":" + str(before_env == after_env), flush=True)
+            print("MIGRATION_MOUNTS_EQUAL=" + name + ":" + str(previous["Mounts"] == observed["Mounts"]), flush=True)
 
     def invoke(action, *, pin=False):
         started = time.monotonic()
@@ -318,6 +338,7 @@ e.main()
             code = result.stdout.decode().strip()
             if code.startswith("EGRESS_") and len(code) < 150:
                 print(code, flush=True)
+            config_diagnostic()
         assert result.returncode == -signal.SIGKILL, "MIGRATION_EXPECTED_REAL_SIGKILL"
         evidence = json.loads(marker.read_bytes())
         assert evidence == {
