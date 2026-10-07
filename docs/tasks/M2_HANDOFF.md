@@ -4,6 +4,153 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
+## Текущий статус — C8-MIG-01 CLOSED; совместимость owner receipt DAG / 2026-10-07 UTC
+
+**C0 принимает независимый C8 PASS и закрывает C8-MIG-01/P2 на R2.**
+Exact implementation **f1c7aca724778e41671f2754bb85885507c4f14d**, tree
+**4f28480ef1458141422a14514473c05f49193fe6**, sole parent/base
+**34835c260f737abbbe02a689f842b28fad50f323**. Helper blob
+**00c347cde45e3c1a683330c6ee196815ef0a1e36**, client blob
+**525381357de76ea1c570fd864f8df5e9781a87e2**. C6-R2 и targeted C8 завершены;
+их проверенный scope VERIFIED. Прежние client findings01/02/03 CLOSED.
+
+Независимый C8 сообщает отдельный чистый checkout,154 migration tests PASS,
+три исходных repro без изменения assertions PASS и50 дополнительных probes PASS.
+Файловые guards настоящие, Docker/DB/runtime observations — fixture. Это execution
+C8, не повторный execution C0. Названный C8 evidence ZIP в этой передаче не
+предоставлен как доступный файл; C0 принимает переданный verdict с указанными
+границами и своим прежним5-probe/source/CI evidence. CI37629816347 — все9 jobs и
+clean-source SUCCESS; C0 ранее независимо сверил8 ZIP digests/228 blobs+modes,
+6 schema2 migration reports и2 relay reports. Эти results относятся exact R2.
+
+**Новый отдельный finding C0-MIG-OWNER-01/P2 — OPEN.** При подготовке owner
+attestation C0 сопоставил reader с ранее выданным owner script. В сохранённой
+цепочке предусмотрен `asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.intent.json`.
+Обе проверки basename в `migration_receipts` (R2 lines1956 и1977) допускают
+только `[a-z0-9-]+\.json` и отклоняют этот законный исторический узел с
+`EGRESS_MIGRATION_RECEIPT_PATH`. Обычный `.json` control принимается; вариант
+с exact issued `.intent.json` отклоняется при тех же остальных условиях и
+правильных hashes. C0 воспроизвёл это на exact helper с настоящими private files,
+Python3.12.14, без Docker/DB/SSH/network и без изменения fixture files reader-ом.
+Это STOP до runtime effects, не потеря данных и не повтор Telegram send.
+Actual содержимое owner VM и images по-прежнему не наблюдалось.
+
+Finding не переоткрывает исправленный cross-direction audit. Требуется узкая
+совместимость имён сохранённого DAG, без переименования/перезаписи старых receipts,
+исключения intent из inventory или переснятия hashes. Exact полный basename,
+same-parent, no-symlink, private mode/owner, byte hashes и independent root pin
+сохраняются. Поручение C6 и воспроизводимый probe — M2_HANDOFF/runbook§0.6.30.
+
+**Отдельный CI incident:** docs-only head
+**dcf32ca02c4222e3267ed4e794c817345ae71357** / tree
+**499342f9a26a74640b079d2fa277767d89f65834**, parent exact R2, изменил только4 docs;
+остальные224/228 blobs+modes прежние. CI37640492805 attempt1:8 jobs SUCCESS,
+browser26 PASS/1 FAIL на `frontend/e2e/billing.spec.ts:57` (пагинация Audit,
+ожидание enabled для исчезнувшей кнопки последней страницы). C0 запросил ровно
+один rerun browser job112857823029. Job112868124234:27 PASS/clean-source SUCCESS;
+attempt2 completed SUCCESS, все9 jobs/clean-source SUCCESS. Исторический failure
+не удалён. Лог и статический код согласуются с гонкой между response headers,
+завершением render и проверкой count/enabled; детерминированный UI repro ещё
+не выполнялся. **C0-CI-AUDIT-01/P3 OPEN, C5 TODO (не выдано)** — разобрать
+синхронизацию теста до merge. Ни тест, ни timeout/assertions не изменены.
+
+| Задача / finding | Статус | Следующее действие |
+|---|---|---|
+| C6-M2-CONNECT5-MIGRATION-R2 / targeted C8-R2 | VERIFIED в проверенном scope | Завершено, полный review не повторять |
+| C8-MIG-01/P2 | CLOSED | Cross-direction audit подтверждён C0+C8 |
+| C0-MIG-OWNER-01/P2 | OPEN | Совместимость существующего `.intent.json` receipt |
+| C6-M2-OWNER-RECEIPT-COMPAT | TODO, выдано | Единственное активное implementation поручение |
+| C0-CI-AUDIT-01/P3 | OPEN, C5 TODO | Отдельный browser test incident, не scope C6 |
+| Owner migration execution | BLOCKED | Receipt compatibility, затем actual image/DAG attestation |
+| M2 / ENV04 | IN_PROGRESS / REVIEW | Actual owner migration и A09/A11 впереди |
+
+Последнее owner evidence остаётся exact0b7e24ee/recovery-v2/connect2/TG disabled-empty,
+binding committed, ACK NOT_ATTEMPTED. Independent last-receipt SHA pin и соответствие
+cached images predecessor ещё не получены. CI images строились заново и не являются
+owner attestation. Fixed TEST interval2026-10-02T00Z→2026-10-09T00Z не меняется;
+source-key revocation не подтверждена. PR24 Draft/open, main прежний.
+Новый C0 coordination меняет только4 документа; его CI учитывается отдельно от
+двух указанных green runs. VM/SSH/live Telegram/queue/ACK/activation/setWebhook/
+sends/billing mutation/main merge в этой передаче не выполнялись и не выданы.
+
+### Единственное активное поручение C0 → C6 — C6-M2-OWNER-RECEIPT-COMPAT
+
+Исправить **C0-MIG-OWNER-01/P2**: accepted R2 reader не принимает исторический
+ACK intent basename `.intent.json`. C8-MIG-01/P2 и client01/02/03 CLOSED;
+не начинать их реализацию или полный review заново.
+
+Repository `Elefesys/ai-service-manager`, integration branch `c6/m2-telegram-live`,
+Draft PR24. Base — **полный SHA этого C0 coordination**, закреплённый в едином
+PR24 receipt и сообщении выдачи; первый implementation commit должен иметь его
+единственным непосредственным parent. Separate clean checkout/working branch;
+публикация integration tip только fast-forward/CAS, без reset/rebase/force.
+Code baseline **f1c7aca724778e41671f2754bb85885507c4f14d**,
+tree **4f28480ef1458141422a14514473c05f49193fe6**; preceding docs head
+**dcf32ca02c4222e3267ed4e794c817345ae71357**. Coordination не меняет code/tests.
+
+Прочитать AGENTS, применимый канон, current register, contract§10.12.1 и
+runbook§0.6.25/28/30. Разрешённые файлы — ровно четыре:
+
+- `scripts/prepare_telegram_egress.py` — только receipt basename validation/helper.
+- `tests/test_telegram_egress_migration.py` — focused regression и disposable receipt fixture.
+- `docs/tasks/M2_CONTRACT.md` — совместимость известного legacy receipt имени.
+- `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` — фактическое evidence и ограничения.
+
+Проблема и scope:
+
+1. `migration_receipts` проверяет root/current и parent keys выражением
+   `[a-z0-9-]+\.json`. Ранее выданный owner script добавляет
+   `asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.intent.json` в evidence;
+   последующие diagnostics, включая TLS-budget-fixed, закрепляют его hash в
+   `prior_receipts_sha256`. На exact R2 получается RECEIPT_PATH до effects.
+   Источник, безопасные excerpts и standalone filesystem repro — runbook§0.6.30.
+2. Разрешить **строго известную форму `.intent.json`** наряду с прежней `.json`
+   в обеих проверках basename (единый validator допустим). Не расширять до
+   произвольного имени/path; slash/backslash, `..`, absolute path, пустые/неожиданные
+   suffixes и symlink остаются запрещены. Не переименовывать существующий intent,
+   не исключать его из DAG и не ослаблять same-parent, mode/owner/size, root pin,
+   source/tree/baseline/staged/binding и exact byte-hash проверки.
+3. Red-first positive test с точным историческим basename и правильным root pin
+   должен падать на base и проходить на fix. Проверить чтение как parent key и как
+   visited current node; сохранение всех bytes/inventory. Отрицательные cases:
+   tamper/missing node, hash mismatch, traversal/absolute/unexpected suffix,
+   symlink/private-mode drift; отказ до side effects без нового baseline/PASS.
+4. Усилить существующую disposable migration fixture: включить действительно
+   закреплённый `.intent.json` node в ancestor DAG последнего receipt, так чтобы
+   normal/exact Docker29 lanes прошли настоящий migration-attest/prepare/switch/
+   resume/rollback с этим узлом. Сохранить все прежние private originals; новое
+   fixture evidence не должно заменять исходные28 файлов. Synthetic fixture
+   не выдавать за actual owner contents или image attestation.
+5. Проверить совместимость topology всех15 известных basename-ов из§0.6.30,
+   включая legacy `prior_attempt_sha256`/`owner_correction_sha256`, используя
+   обезличенную fixture. Не читать/публиковать private owner receipts и tokens.
+
+Client/helper source pin, workflow/job deadlines,180/600s bounds, Compose/locks,
+schema2 rollback audit и production behavior вне basename validation не менять.
+Новый C0-CI-AUDIT-01/P3 относится C5; frontend/browser assertion правки в этот
+patch не включать. При повторе CI failure сохранить log и назвать конкретный
+blocker, не маскировать его retries/skip/xfail или увеличением timeout.
+
+Validation: focused receipt/file-guard regressions, полный migration+egress scoped
+suite, Ruff/format/mypy/contracts; затем один final exact-SHA CI с9 jobs и всеми
+clean-source gates. Сохранить6 migration и2 relay reports, original28files,
+31-table fingerprints/Console/private originals/UNKNOWN wire1, checked source
+archives/Git modes. Успешные старые suites повторять только как обязательные
+gates final candidate, не запускать промежуточные полные циклы ради REVIEW.
+Если Docker локально отсутствует — указать, пользоваться actual CI, guard не обходить.
+
+Вернуть exact head/tree/sole parent, changed files, red→green proof, CI run/job
+IDs/artifact hashes и отдельно own execution/read CI evidence. Статус REVIEW
+означает завершённый handoff для одного focused C0/C8 verdict по новому finding;
+не продолжать бесконечное ожидание/перепроверку после готовой передачи.
+После closure C0 выдаст read-only actual owner image/receipt attestation с
+independently accepted root hash. При несовпадении cached image bytes — STOP,
+не rebuild/rebaseline. VM/SSH/Telegram/network probes/queue/ACK/activation/
+setWebhook/sends/billing mutation/main merge/rollout сейчас не выполнять.
+
+<details>
+<summary>История — C0 R2 PASS и завершённое поручение targeted C8</summary>
+
 ## Текущий статус — C6-R2 завершён; C0 review PASS, targeted C8 / 2026-10-07 UTC
 
 **C0 scoped R2 review — PASS; новых blockers не выявлено.** C6 передал готовый
@@ -117,6 +264,8 @@ harness адаптируется к новой schema, сохранить смы
 M2/ENV04 VERIFIED не объявлять; owner image/receipt attestation остаётся будущим
 отдельным шагом. VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing/
 main merge/production не выполнять.
+
+</details>
 
 <details>
 <summary>История — C8-MIG-01 и завершённое поручение C6-R2</summary>

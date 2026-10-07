@@ -3827,6 +3827,286 @@ Commands: unchanged `sh scripts/ci.sh`, `sh scripts/test_browser.sh`, both defau
 
 </details>
 
+### 0.6.30. C8-MIG-01 closure и C0-MIG-OWNER-01 receipt compatibility / 2026-10-07 UTC
+
+**C0 принимает независимый C8 PASS и закрывает C8-MIG-01/P2 на R2.**
+Exact implementation **f1c7aca724778e41671f2754bb85885507c4f14d**, tree
+**4f28480ef1458141422a14514473c05f49193fe6**, sole parent/base
+**34835c260f737abbbe02a689f842b28fad50f323**. Helper blob
+**00c347cde45e3c1a683330c6ee196815ef0a1e36**, client blob
+**525381357de76ea1c570fd864f8df5e9781a87e2**. C6-R2 и targeted C8 завершены;
+их проверенный scope VERIFIED. Прежние client findings01/02/03 CLOSED.
+
+Независимый C8 сообщает отдельный чистый checkout,154 migration tests PASS,
+три исходных repro без изменения assertions PASS и50 дополнительных probes PASS.
+Файловые guards настоящие, Docker/DB/runtime observations — fixture. Это execution
+C8, не повторный execution C0. Названный C8 evidence ZIP в этой передаче не
+предоставлен как доступный файл; C0 принимает переданный verdict с указанными
+границами и своим прежним5-probe/source/CI evidence. CI37629816347 — все9 jobs и
+clean-source SUCCESS; C0 ранее независимо сверил8 ZIP digests/228 blobs+modes,
+6 schema2 migration reports и2 relay reports. Эти results относятся exact R2.
+
+**Новый отдельный finding C0-MIG-OWNER-01/P2 — OPEN.** При подготовке owner
+attestation C0 сопоставил reader с ранее выданным owner script. В сохранённой
+цепочке предусмотрен `asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.intent.json`.
+Обе проверки basename в `migration_receipts` (R2 lines1956 и1977) допускают
+только `[a-z0-9-]+\.json` и отклоняют этот законный исторический узел с
+`EGRESS_MIGRATION_RECEIPT_PATH`. Обычный `.json` control принимается; вариант
+с exact issued `.intent.json` отклоняется при тех же остальных условиях и
+правильных hashes. C0 воспроизвёл это на exact helper с настоящими private files,
+Python3.12.14, без Docker/DB/SSH/network и без изменения fixture files reader-ом.
+Это STOP до runtime effects, не потеря данных и не повтор Telegram send.
+Actual содержимое owner VM и images по-прежнему не наблюдалось.
+
+Finding не переоткрывает исправленный cross-direction audit. Требуется узкая
+совместимость имён сохранённого DAG, без переименования/перезаписи старых receipts,
+исключения intent из inventory или переснятия hashes. Exact полный basename,
+same-parent, no-symlink, private mode/owner, byte hashes и independent root pin
+сохраняются. Поручение C6 и воспроизводимый probe — M2_HANDOFF/runbook§0.6.30.
+
+**Отдельный CI incident:** docs-only head
+**dcf32ca02c4222e3267ed4e794c817345ae71357** / tree
+**499342f9a26a74640b079d2fa277767d89f65834**, parent exact R2, изменил только4 docs;
+остальные224/228 blobs+modes прежние. CI37640492805 attempt1:8 jobs SUCCESS,
+browser26 PASS/1 FAIL на `frontend/e2e/billing.spec.ts:57` (пагинация Audit,
+ожидание enabled для исчезнувшей кнопки последней страницы). C0 запросил ровно
+один rerun browser job112857823029. Job112868124234:27 PASS/clean-source SUCCESS;
+attempt2 completed SUCCESS, все9 jobs/clean-source SUCCESS. Исторический failure
+не удалён. Лог и статический код согласуются с гонкой между response headers,
+завершением render и проверкой count/enabled; детерминированный UI repro ещё
+не выполнялся. **C0-CI-AUDIT-01/P3 OPEN, C5 TODO (не выдано)** — разобрать
+синхронизацию теста до merge. Ни тест, ни timeout/assertions не изменены.
+
+| Задача / finding | Статус | Следующее действие |
+|---|---|---|
+| C6-M2-CONNECT5-MIGRATION-R2 / targeted C8-R2 | VERIFIED в проверенном scope | Завершено, полный review не повторять |
+| C8-MIG-01/P2 | CLOSED | Cross-direction audit подтверждён C0+C8 |
+| C0-MIG-OWNER-01/P2 | OPEN | Совместимость существующего `.intent.json` receipt |
+| C6-M2-OWNER-RECEIPT-COMPAT | TODO, выдано | Единственное активное implementation поручение |
+| C0-CI-AUDIT-01/P3 | OPEN, C5 TODO | Отдельный browser test incident, не scope C6 |
+| Owner migration execution | BLOCKED | Receipt compatibility, затем actual image/DAG attestation |
+| M2 / ENV04 | IN_PROGRESS / REVIEW | Actual owner migration и A09/A11 впереди |
+
+Последнее owner evidence остаётся exact0b7e24ee/recovery-v2/connect2/TG disabled-empty,
+binding committed, ACK NOT_ATTEMPTED. Independent last-receipt SHA pin и соответствие
+cached images predecessor ещё не получены. CI images строились заново и не являются
+owner attestation. Fixed TEST interval2026-10-02T00Z→2026-10-09T00Z не меняется;
+source-key revocation не подтверждена. PR24 Draft/open, main прежний.
+Новый C0 coordination меняет только4 документа; его CI учитывается отдельно от
+двух указанных green runs. VM/SSH/live Telegram/queue/ACK/activation/setWebhook/
+sends/billing mutation/main merge в этой передаче не выполнялись и не выданы.
+
+
+#### Issued owner format evidence (no live VM inspection)
+
+C0 inspected the previously issued local owner script
+`asm_telegram_tls_budget_fixed_0b7e24ee.py`, SHA256
+`1cd0c50ecdc134778f912a4644b41f159f3d53df865df09759c64be6835049f0`.
+The prior owner log reports successful completion at2026-10-06T18:10:05.409401Z.
+Relevant non-sensitive statements in that script:
+
+```python
+ACK_INTENT = STATE.parent / 'asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.intent.json'
+# not_attempted_ack_evidence validates both saved objects, then preserves both:
+evidence[ACK_INTENT], evidence[ACK_RECEIPT] = intent_raw, result_raw
+# Later diagnostic receipts preserve every predecessor under its actual basename:
+'prior_receipts_sha256': {p.name: digest(raw) for p, raw in evidence.items()}
+```
+
+The last operation has14 predecessors plus its own receipt (15 nodes total).
+These are issued basenames, not a claim that current VM bytes/hashes were read:
+
+```text
+asm-telegram-discovery-0b7e24ee.json
+asm-telegram-owner-id-correction-0b7e24ee.json
+asm-telegram-discovery-owner2-0b7e24ee.json
+asm-telegram-queue-diagnostic-owner2-0b7e24ee.json
+asm-telegram-discovery-fresh-owner2-0b7e24ee.json
+asm-telegram-binding-owner2-0b7e24ee.json
+asm-telegram-connection-diagnostic-owner2-0b7e24ee.json
+asm-telegram-binding-after-diagnostic-owner2-0b7e24ee.json
+asm-telegram-queue-routes-owner2-0b7e24ee.json
+asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.intent.json
+asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.json
+asm-telegram-ack-dependency-diagnostic-owner2-0b7e24ee.json
+asm-telegram-egress-segments-owner2-0b7e24ee.json
+asm-telegram-tls-budget-owner2-0b7e24ee.json
+asm-telegram-tls-budget-fixed-owner2-0b7e24ee.json
+```
+
+The persisted ACK state is NOT_ATTEMPTED. Its intent is retained audit evidence,
+not authorization to ACK now. The compatibility fix must include and verify the
+intent exactly; ignoring it or renaming old files would break the pinned chain.
+
+#### C0 filesystem reproduction on exact accepted R2
+
+C0 executed `python c0_owner_receipt_probe.py`, Python3.12.14. Real private file
+guards/read/hash/JSON code, synthetic non-secret contents, no mocks of that reader,
+no external calls. The ordinary suffix is accepted; the exact issued intent suffix
+fails solely on path validation, before any file/runtime effects. Files before/after
+equal. This proves the reader incompatibility; it is not owner attestation.
+
+The portable form below was derived only by pointing the helper at the current
+checkout and removing the local result-file write. Save the script outside a clean
+exactf1c7aca checkout and run it with that checkout as cwd. The exact helper blob
+assertion intentionally pins the defective base. C6's regression must instead
+require acceptance of the valid historical name and fail on that base.
+
+```python
+"""Exercise the exact R2 receipt reader against the issued owner filename.
+
+Synthetic private receipts, real file guards; no Docker, DB, SSH, or network.
+"""
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import sys
+import tempfile
+
+sys.dont_write_bytecode = True
+ROOT = Path.cwd()
+HELPER = ROOT / "scripts/prepare_telegram_egress.py"
+raw = HELPER.read_bytes()
+blob = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+assert blob == "00c347cde45e3c1a683330c6ee196815ef0a1e36"
+spec = importlib.util.spec_from_file_location("owner_receipt_probe_helper", HELPER)
+e = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(e)
+
+
+def write(path, value):
+    data = json.dumps(value, sort_keys=True).encode()
+    path.write_bytes(data)
+    path.chmod(0o600)
+    return data
+
+
+results = []
+with tempfile.TemporaryDirectory(prefix="owner-receipt-probe-") as temporary:
+    directory = Path(temporary)
+    directory.chmod(0o700)
+    baseline = write(directory / "deployment-before.json", {"synthetic": "baseline"})
+    staged = write(directory / "staged.json", {"synthetic": "staged"})
+    common = {
+        "source_sha": e.MIGRATION_FROM,
+        "source_tree": e.MIGRATION_FROM_TREE,
+        "original_before_sha256": e.sha(baseline),
+    }
+    binding = directory / "asm-telegram-binding-after-diagnostic-owner2-0b7e24ee.json"
+    write(binding, dict(common, status="BINDING_COMMITTED", preservation_pass=True))
+    last = directory / "asm-telegram-tls-budget-fixed-owner2-0b7e24ee.json"
+
+    for name, expected in (
+        ("asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.json", "ACCEPTED"),
+        ("asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.intent.json", "EGRESS_MIGRATION_RECEIPT_PATH"),
+    ):
+        parent = directory / name
+        write(parent, dict(common, status="OWNER_APPROVED_PREFIX_INTENT"))
+        body = dict(
+            common,
+            status="DIAGNOSTIC_COMPLETE",
+            preservation_pass=True,
+            staged_sha256=e.sha(staged),
+            operator_image_id="sha256:" + "1" * 64,
+            prior_receipts_sha256={
+                binding.name: e.sha(binding.read_bytes()),
+                parent.name: e.sha(parent.read_bytes()),
+            },
+        )
+        last_bytes = write(last, body)
+        before = {p.name: p.read_bytes() for p in directory.iterdir()}
+        try:
+            files, image = e.migration_receipts(
+                last, e.sha(last_bytes), {"telegram_env": str(directory / "staged.json")}, directory
+            )
+            assert len(files) == 3
+            assert image == body["operator_image_id"]
+            outcome = "ACCEPTED"
+        except e.EgressError as error:
+            outcome = str(error)
+        assert outcome == expected, (name, outcome)
+        assert before == {p.name: p.read_bytes() for p in directory.iterdir()}
+        results.append({"parent_name": name, "outcome": outcome, "files_unchanged": True})
+
+report = {
+    "head": "f1c7aca724778e41671f2754bb85885507c4f14d",
+    "helper_blob": blob,
+    "python": sys.version.split()[0],
+    "results": results,
+    "external_calls": 0,
+    "limitations": "Synthetic contents; actual owner filename from previously issued script. No live receipt/image attestation.",
+}
+print(json.dumps(report, indent=2))
+```
+
+Observed C0 result:
+
+```json
+{
+  "head": "f1c7aca724778e41671f2754bb85885507c4f14d",
+  "helper_blob": "00c347cde45e3c1a683330c6ee196815ef0a1e36",
+  "python": "3.12.14",
+  "results": [
+    {
+      "parent_name": "asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.json",
+      "outcome": "ACCEPTED",
+      "files_unchanged": true
+    },
+    {
+      "parent_name": "asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.intent.json",
+      "outcome": "EGRESS_MIGRATION_RECEIPT_PATH",
+      "files_unchanged": true
+    }
+  ],
+  "external_calls": 0,
+  "limitations": "Synthetic contents; actual owner filename from previously issued script. No live receipt/image attestation."
+}
+```
+
+#### Distinct browser CI incident, preserved
+
+Docs-only CI37640492805 attempt1 browser job112857823029 failed after26 passes:
+at `frontend/e2e/billing.spec.ts:57`, `toBeEnabled` waited for5s while the last
+page's Load more button changed from disabled to absent. `waitForResponse` at
+line56 precedes the UI's completed body/render update; `BillingPanel.tsx` removes
+that button when next_cursor is null. This is consistent with a test race; no
+deterministic delayed-response UI reproduction was performed by C0 this turn.
+
+C0 requested one rerun of that job only, no source changes. Browser job112868124234
+passed27 tests in3.1min plus clean-source; run attempt2 completed SUCCESS with all9
+jobs/clean-source gates. The first failure remains evidence. C0-CI-AUDIT-01/P3 is
+OPEN for separate C5 follow-up before merge; no timeout/retry/assertion weakening
+is authorized or included in the current C6 receipt-compatibility task.
+
+<details>
+<summary>Архив предыдущего C0 receipt prefix — дословно до C8 closure</summary>
+
+## C0 — R2 source/CI review PASS; targeted C8-MIG-01 review issued (2026-10-07)
+
+**C6 implementation is complete and handed off. C0 scoped R2 verdict: PASS; no new blockers found. C8-MIG-01/P2 remains OPEN pending targeted C8/C0 verdict.** Migration REVIEW; previous client findings01/02/03 CLOSED; M2 IN_PROGRESS/ENV04 REVIEW. REVIEW is the acceptance handoff, not unfinished C6 implementation.
+
+**Exact R2:** head `f1c7aca724778e41671f2754bb85885507c4f14d`, tree `4f28480ef1458141422a14514473c05f49193fe6`, sole parent/base `34835c260f737abbbe02a689f842b28fad50f323`. One fix commit, no reset/rebase. Four allowed files: helper, migration tests, contract§10.12.1, runbook§0.6.28. Helper blob `00c347cde45e3c1a683330c6ee196815ef0a1e36`; client blob `525381357de76ea1c570fd864f8df5e9781a87e2` unchanged. Workflow/runners/Compose/locks/domain/DB schema/180s+600s budgets unchanged.
+
+**Fix reviewed:** both audit directions and done→result; historical completion source/state/database/intent binding; schema2 rollback intent pins exact forward inventory/byte hashes and validated historical runtime. Resume/completed retry reject missing/changed/added audit and unbound old intents, without re-pinning. Valid partial/result-done/state-completion gaps retained; no repeated completed recreates.
+
+**Own C0 execution:** repeated3 prior defect repro on exact R2 helper: expected COMPLETED_DRIFT/SERVICE_RESULT_REQUIRED/INVALID_JSON, zero new simulated effects. Controls: valid partial rollback PASS (one needed recreate), DB observation drift STOP before effects. Total5 targeted PASS, Python3.12.14, actual private file/audit guards with repository fixtures for Docker/DB/prepared observations. No new local Docker/PG/browser/full-suite execution or claim of a fresh full Git checkout. Historical completion files remain prior evidence; failed retry does not publish a new PASS.
+
+**Actual [CI37629816347](https://github.com/Elefesys/ai-service-manager/actions/runs/37629816347): all9 jobs and clean-source gates SUCCESS.** Logs verified768 unit/393 integration/111 frontend/27 browser. Tested merge `ebf1ec21f59eb8f887c779c3e55bf878eb15add5`, same tree; ordered parents main `22993f558c5e7e933c65e9c999933bd2e3ab41c4` +R2. C0 downloaded all8 ZIP and checked digests/every228 Git blobs+modes/PAX/tested SHA/empty status. Common source.tar.gz SHA256 `e78b0a27ea62bcd6e574e43de8e9ae73dee67ef2f077169d826a86664765b394`. All6 migration schema2 reports:7 forward hashes equal final receipt hashes, matching rollback-intent hash, unchanged-after-resume/retry=true; equal31-table fingerprints, binding/COMPED/Console/private original200/403, UNKNOWN/wire1 and28 preserved files. Held104.530–168.047s≤180s. Both old6+6 reports PASS; TIMEOUT/False5.005s. C6 local251 tests remain author evidence separately.
+
+**Coordination:** `dcf32ca02c4222e3267ed4e794c817345ae71357`, tree `499342f9a26a74640b079d2fa277767d89f65834`, sole parent R2. Exactly4 docs changed; other224/228 blobs/modes unchanged. [Coordination CI37640492805](https://github.com/Elefesys/ai-service-manager/actions/runs/37640492805) IN_PROGRESS when recorded; separate from final implementation SUCCESS. Previous docs CI37626628260 was CANCELLED; R2 final candidate completed all9 jobs.
+
+**Only active task: C8-M2-CONNECT5-MIGRATION-R2.** [Targeted handoff](https://github.com/Elefesys/ai-service-manager/blob/dcf32ca02c4222e3267ed4e794c817345ae71357/docs/tasks/M2_HANDOFF.md). Review exactf1c7aca7, read current handoff from docs coordination. Repeat original repro plus audit inventory/history/partial rollback risks; distinguish own probes from CI evidence. No need to rerun all green jobs without a new risk. C8 has not yet executed the R2 review.
+
+Complete C6-R2 prefix (all job/artifact IDs/digests, named regression mapping and limits) archived verbatim in [runbook§0.6.29](https://github.com/Elefesys/ai-service-manager/blob/dcf32ca02c4222e3267ed4e794c817345ae71357/docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md). Historical tail below unchanged.
+
+Owner applicability remains unconfirmed: actual cached old images and independently pinned receipt DAG require separate attestation after C8. Last VM exact0b7e24ee/recovery-v2/connect2/TG disabled-empty; binding committed; ACK NOT_ATTEMPTED/no automatic replay. Fixed TEST interval2026-10-02T00Z→2026-10-09T00Z unchanged. PR24 Draft/open, main unchanged. No owner VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing/main merge/production issued or executed.
+
+
+
+</details>
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker

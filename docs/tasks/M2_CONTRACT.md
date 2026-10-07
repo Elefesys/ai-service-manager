@@ -1139,6 +1139,22 @@ final head/CI документационной приёмки — в PR receipt.
 
 ### 10.12. Operational extension — M2-ENV-04 TEST egress
 
+**Current C0 disposition2026-10-07: C8-MIG-01/P2 CLOSED на exact R2.**
+Headf1c7aca724778e41671f2754bb85885507c4f14d/tree4f28480ef1458141422a14514473c05f49193fe6:
+independent C8 PASS154 tests/3 original repro/50 additional probes; C0 own prior5
+probes и final CI37629816347/9 jobs подтверждают cross-direction audit fix.
+Новый **C0-MIG-OWNER-01/P2 OPEN** относится только совместимости сохранённого
+receipt basename `.intent.json`: current reader отвергает legacy ACK intent.
+§10.12.1 schema2 audit, source/client pins и contracts вне basename validation
+сохраняются. C6 issued narrow fix/test fixture, current M2_HANDOFF/runbook§0.6.30.
+Actual owner cached images/independent receipt pin пока не аттестованы.
+M2 IN_PROGRESS/ENV04 REVIEW; owner execution blocked. Docs CI37640492805
+attempt2 SUCCESS после одного browser rerun; original Audit paging failure
+сохранён как C0-CI-AUDIT-01/P3, separate C5 TODO, не scope C6.
+
+<details>
+<summary>История — R2 source/CI PASS до targeted C8 verdict</summary>
+
 **Current C0 disposition2026-10-07: R2 source/CI review PASS; targeted C8 pending.**
 Implementationf1c7aca724778e41671f2754bb85885507c4f14d/tree4f28480ef1458141422a14514473c05f49193fe6
 исправляет cross-direction audit binding. CI37629816347 all9 jobs/clean-source
@@ -1147,6 +1163,8 @@ C8-MIG-01/P2 остаётся OPEN до targeted verdict. §10.12.1 schema2 и �
 не меняются этим coordination. C6 implementation завершён; активный этап — C8-R2.
 Evidence/ограничения — current M2_HANDOFF/runbook§0.6.29. Owner applicability ещё
 не аттестована; M2 IN_PROGRESS/ENV04 REVIEW, VM/ACK/activation/sends/merge не выданы.
+
+</details>
 
 <details>
 <summary>История — C8 finding и выдача C6-R2</summary>
@@ -1379,7 +1397,7 @@ timeouts, TLS, permissions и UNKNOWN/no-resend остаются прежним�
 
 </details>
 
-#### 10.12.1. Explicit connect2 → connect5 migration (C0 R2 PASS; targeted C8 pending)
+#### 10.12.1. Explicit connect2 → connect5 migration (audit fix CLOSED; owner receipt compatibility OPEN)
 
 `M2-ENV-04-CONNECT5-MIGRATION` introduces a separate operation, not a relaxation of
 `recover`. Its only predecessor is completed recovery-v2 at
