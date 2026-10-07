@@ -107,18 +107,47 @@ def run_disposable(f):
             }
         ),
     )
-    run([*f["base"], "stop", "worker"])
+    # Keep its exact recovered network endpoints while the synthetic fixture
+    # seeds UNKNOWN; a stop would release dynamic addresses to the held one-off.
+    run(["docker", "pause", target["worker"]["id"]])
     durable = f["start_checks"](
         ["python", "tests/test_telegram_egress_postgres.py", "--durable-receipt", "before"],
         local=True,
     )
     f["await_process"](durable, marker=directory / "durable-before.json", timeout=90)
     held_started = time.monotonic()
-    # Restart the same disabled caller, preserving the completed recovery receipt.
-    run(["docker", "start", target["worker"]["id"]])
+    run(["docker", "unpause", target["worker"]["id"]])
     before = json.loads((directory / "durable-before.json").read_bytes())
     assert len(before["database"]["tables"]) == 31 and before["wire_counter"] == 1
-    assert old.snapshot(recovered, state_dir) == target
+    held_ids = (
+        run(
+            [
+                "docker",
+                "ps",
+                "-q",
+                "--filter",
+                "label=com.docker.compose.project=" + project,
+                "--filter",
+                "label=com.docker.compose.service=egress-checks",
+            ]
+        )
+        .decode()
+        .split()
+    )
+    assert len(held_ids) == 1
+    held = json.loads(run(["docker", "inspect", held_ids[0]]))[0]
+    assert held["Config"]["Labels"]["com.docker.compose.oneoff"] == "True"
+    assert (
+        held["Image"]
+        == json.loads(run(["docker", "image", "inspect", "asm-connect5-development:" + source]))[0][
+            "Id"
+        ]
+    )
+    observed = old.snapshot(recovered, state_dir)
+    if "egress-checks" in observed:
+        assert observed["egress-checks"]["id"] == held["Id"]
+        del observed["egress-checks"]
+    assert observed == target, "MIGRATION_RECOVERED_BASELINE_CHANGED_DURING_FIXTURE_SEED"
     operator_image = json.loads(
         run(["docker", "image", "inspect", project + "-telegram-operator"])
     )[0]["Id"]

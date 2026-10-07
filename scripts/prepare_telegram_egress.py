@@ -2238,6 +2238,7 @@ def migration_runtime(state, directory):
                 ),
                 "EGRESS_MIGRATION_TELEGRAM_NOT_EMPTY",
             )
+        if name in MIGRATION_SERVICES:
             require(
                 all(
                     env.get(k) == str(v) for k, v in model["services"][name]["environment"].items()
@@ -2404,6 +2405,17 @@ def migration_attest(args, directory):
     old_images = {name: runtime[name]["image"] for name in MIGRATION_SERVICES}
     old_images["telegram-operator"] = operator_image
     model = checked_model(state, directory)
+    observed = runtime_snapshot(
+        state,
+        directory,
+        model,
+        lambda image: require(image in old_images.values(), "EGRESS_MIGRATION_OLD_IMAGE_CHANGED"),
+    )
+    # Use the predecessor's original unrelated-service settings (including HTTPS),
+    # not fresh .env defaults. Exclude only actually labeled disposable one-offs.
+    observed = {n: v for n, v in observed.items() if n in runtime}
+    require(set(observed) == set(old_after), "EGRESS_MIGRATION_PREDECESSOR_CONTAINERS_CHANGED")
+    compare_deployment(old_after, observed, state)
     for name, expected in old_images.items():
         tag = model["services"][name].get("image", state["project"] + "-" + name)
         require(

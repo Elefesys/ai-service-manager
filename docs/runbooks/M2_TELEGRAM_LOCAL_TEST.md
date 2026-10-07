@@ -3314,6 +3314,56 @@ empty worktree status. All original foundation/browser/Docker29 commands and cle
 gates still run on the final candidate. No local Docker result or owner/live result
 is implied by focused unit tests or by this runbook.
 
+<details>
+<summary>Historical C0 coordination receipt prefix, preserved before C6 migration REVIEW (2026-10-07 07:46:03Z)</summary>
+
+## C0 — C8 PASS принят; C6 connect5 migration preparation выдана / 2026-10-07 UTC
+
+**C3-M2-ENV04-05 VERIFIED в code/runner scope; C8-M2-CONNECT-BUDGET-R3 VERIFIED.**
+C0 findings01/02 CLOSED на R2,03 CLOSED на R3. M2 IN_PROGRESS; ENV04 REVIEW до actual A09/A11.
+
+### Принятый implementation и независимый verdict
+
+Head **14f794b650c935c47ab1e78474fda0d1df0a7277**, tree **72b824d85091076a025998a71e564deab805b1cf**, sole parent **f6ba33a37b8f35070c2a2471f9e1b386297c049f**.
+C3 R3 **3f0453904cefc8bd33b8fedd2095eb8c1a6089d8**; исходный base **9e165dd09f87663665e3dabae4f155e99e2639a6**. R1/R2/R3 ancestry сохранена.
+Client blob **525381357de76ea1c570fd864f8df5e9781a87e2**.
+
+C0 принимает переданный владельцем независимый C8 PASS: **122 scoped tests/77.49s +2 штатных AutoBackend probes PASS**, clean checkout до/после, новых findings нет. Cancellation/repeated cancellation, no-GC socket cleanup, parallel isolation/client reuse, budgets/TLS/classification и strict source/image pin проверены C8. C8 не запускал local Docker/PG/S3/browser; эти результаты подтверждены final CI. Собственные C8 проверки отделены от C0 execution.
+
+[Accepted CI37531243359](https://github.com/Elefesys/ai-service-manager/actions/runs/37531243359) — **all3 SUCCESS** на accepted head:
+foundation112500874202 — 614 unit +393 integration, smoke PASS;
+browser112500873790 — 27 journeys PASS;
+docker29-compatibility112500874064 — exact Engine29.8.2/8af9fe3, Compose5.5.1.
+На normal Docker28.0.4/Compose2.38.2 и exact Docker29 исполнены все6 relay +6 lifecycle cases; все3 workflow clean-source gates PASS.
+Tested merge **e0735be7e3bde206dee35d813f53f6c4b6a17179**, тот же tree; ordered parents main **22993f558c5e7e933c65e9c999933bd2e3ab41c4** + accepted head.
+C0 и независимо C8 сверили digests обоих archives,226 file blobs/modes, tested source/tree/parents и empty status.
+Artifacts: foundation **11445453916**, SHA256 `eec9f1f5a005378467a03afb9004336b4185e878b97ad145d261e01bca35d198`; Docker29 **11445178285**, SHA256 `5effc5734732747f92f27e55876c14f2b84eec84835c8eb9a81c4daa71106329`.
+Оба reports: TIMEOUT/False за5.006s,12 assertions PASS, шесть равных before/after31-table fingerprints, UNKNOWN/Console/receipts/wire1 сохранены.
+C0 workflow change только foundation25→35; другие job limits/commands/assertions, product deadlines и recovery180s прежние.
+
+### Coordination и единственное активное поручение C6
+
+Coordination head **fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00**, tree **49fcbc2fbc92501314eb193a8ca2bfdeb5011535**, sole parent **14f794b650c935c47ab1e78474fda0d1df0a7277**.
+Изменены только TASK_REGISTER, M2_HANDOFF, M2_CONTRACT dispositions и runbook§0.6.24. Все остальные **222/226 file blobs/modes**, включая client/helper/tests/workflow/locks, exact accepted base; remote tree и локальные document hashes сверены.
+[Coordination CI37588932214](https://github.com/Elefesys/ai-service-manager/actions/runs/37588932214) — **IN_PROGRESS** на момент записи. Это отдельный run для documentation commit; accepted SUCCESS выше не переименован в его результат.
+
+**M2-ENV-04-CONNECT5-MIGRATION — IN_PROGRESS, поручение выдано C6.**
+[Единственный active handoff](https://github.com/Elefesys/ai-service-manager/blob/fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00/docs/tasks/M2_HANDOFF.md).
+C6 продолжает PR24/branch c6/m2-telegram-live в отдельном checkout от coordination head, сохраняет его parent, без reset/rebase/force-push.
+Выданы repository implementation, scoped tests и отдельные migration CI jobs на normal/exact Docker29. Требуется explicit completed-v2 source/image/state transition: exact predecessor attestation, новые pinned app/operator images, immutable intent, interruption/resume, completed retry без recreate и explicit rollback. Прежние gates/limits/guards и original baseline/receipts сохраняются.
+Default recover допускает v2 только на том же source_sha и прежнюю v1→v2 from LEGACY_SHA; ручной state patch или ослабление pin запрещены.
+Возврат C6 — REVIEW с exact final head/tree/parents, actual всех старых+новых jobs/artifacts и подготовленным owner draft. Далее C0 review и scoped C8 нового migration path, затем отдельная owner execution выдача.
+
+### Owner/live boundary и сохранённая история
+
+Последний owner receipt остаётся **0b7e24ee425ebb429bf87dfe382cbd3fab883028** / tree **14a4033b849c736235653a5a85ec9e5112bfe727**, recovery-v2, cached images/connect2/TG disabled-empty.
+Binding committed, ACK NOT_ATTEMPTED/replay-blocked; private inputs/old receipts/DB сохраняются. Frozen TEST interval2026-10-02T00Z→2026-10-09T00Z не пересчитывается; source-key revocation не подтверждён.
+VM/SSH/source fetch/rebuild/deploy/restart, Telegram HTTP/queue/ACK, activation/setWebhook/sends, billing/binding writes, main merge/production/M3 этим preparatory поручением не выданы. PR24 Draft/open, main22993f55 прежний.
+
+Полный прежний C0 prefix receipt, включая first-R3 cancelled CI и точные hashes его archives, сохранён byte-for-byte в архивном block [runbook§0.6.24](https://github.com/Elefesys/ai-service-manager/blob/fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00/docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md). Исторический tail этого единого receipt ниже сохранён без изменений.
+
+</details>
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker
