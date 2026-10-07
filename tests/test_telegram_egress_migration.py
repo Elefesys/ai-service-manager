@@ -473,6 +473,20 @@ if __name__ == "__migration_harness__":
 import pytest  # noqa: E402 -- host harness uses only stdlib; default collection remains ordinary.
 
 
+def test_migration_environment_order_is_not_identity():
+    rows = ["ASM_TELEGRAM_ENABLED=false", "TG_BOT_TOKEN=", "VALUE=a=b"]
+    digest = e.sha(e.encoded(e.migration_environment(rows)))
+    assert e.sha(e.encoded(e.migration_environment(list(reversed(rows))))) == digest
+    for changed in (rows[:-1], rows + ["EXTRA="], rows[:-1] + ["VALUE=changed"]):
+        assert e.sha(e.encoded(e.migration_environment(changed))) != digest
+
+
+@pytest.mark.parametrize("rows", [["A=1", "A=1"], ["A=1", "A=2"], ["A"], ["=value"]])
+def test_migration_environment_rejects_ambiguous_entries(rows):
+    with pytest.raises(e.EgressError, match="EGRESS_MIGRATION_ENVIRONMENT_"):
+        e.migration_environment(rows)
+
+
 @pytest.mark.parametrize("kind", ["runtime", "development"])
 @pytest.mark.parametrize("drift", [None, "bytes", "extra", "missing"])
 def test_image_probe_executes_git_blob_byte_checks(tmp_path, monkeypatch, kind, drift):

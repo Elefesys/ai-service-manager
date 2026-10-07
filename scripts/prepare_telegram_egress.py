@@ -2199,6 +2199,16 @@ def migration_image(image, source, kind):
     return {"id": image, "source_sha": source, "kind": kind, "blobs_sha256": sha(encoded(blobs))}
 
 
+def migration_environment(rows):
+    values = {}
+    for row in rows or []:
+        require(isinstance(row, str) and "=" in row, "EGRESS_MIGRATION_ENVIRONMENT_FORMAT")
+        key, value = row.split("=", 1)
+        require(key and key not in values, "EGRESS_MIGRATION_ENVIRONMENT_DUPLICATE")
+        values[key] = value
+    return values
+
+
 def migration_runtime(state, directory):
     model = checked_model(state, directory)
     ids = (
@@ -2222,7 +2232,7 @@ def migration_runtime(state, directory):
             continue
         name = labels["com.docker.compose.service"]
         require(name not in records, "EGRESS_MIGRATION_MULTIPLE_CONTAINERS")
-        env = dict(row.split("=", 1) for row in config.get("Env", []) if "=" in row)
+        env = migration_environment(config.get("Env"))
         running = item["State"]["Running"]
         if name in {*MIGRATION_SERVICES, "scheduler"}:
             require(
@@ -2252,7 +2262,7 @@ def migration_runtime(state, directory):
             "config_sha256": sha(
                 encoded(
                     {
-                        k: config.get(k)
+                        k: env if k == "Env" else config.get(k)
                         for k in (
                             "Cmd",
                             "Entrypoint",
