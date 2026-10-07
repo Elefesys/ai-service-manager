@@ -879,7 +879,9 @@ redirects=false, retries=0, pool≤4 connections, connect≤5s, pool≤2s и rea
 https://api.telegram.org; TEST transport/server внедряется явно в tests, event/owner
 не задаёт endpoint. Никакого dependency на Telegram для прежнего DB/auth health.
 
-C3-M2-ENV04-05: connect2→5 — **кандидат на REVIEW, не разрешение rollout**.
+C3-M2-ENV04-05: connect2→5 — **VERIFIED в code/runner scope на
+14f794b650c935c47ab1e78474fda0d1df0a7277** после C0/actual CI37531243359 и
+независимого C8 PASS. Owner migration выполняется отдельным этапом.
 Connect входит в прежние readonly5/send10/FETCH20s, не добавляется к ним; lease30s
 не меняется. Общий timeout/cancellation без доказанной wire phase не означает
 definitely_unsent. Cold TLS3s подтвердил old-fail/new-pass, но stalled TLS выявил
@@ -892,10 +894,13 @@ R2 владеет raw TCP transport до завершения TLS и при Base
 Production factory и TEST AsyncHTTPTransport injection проходят один cleanup path.
 Private seams locked HTTPX0.28.1/httpcore1.0.9/AnyIO4.15.1 явно описаны в client.py
 и проверяются real peer EOF/closed FD при выключенном GC, включая repeat cancellation.
-Local R2 gates PASS; C0 scoped review и32 адресных cases PASS: findings01/02 CLOSED
-на R2. Задача остаётся REVIEW до actual PG/Docker29, final integration CI и
-независимого scoped C8. До отдельного решения C0/C8 принятая VM
-остаётся на connect2s. R1 history/R2 evidence — TEST runbook§0.6.19; прочие правила прежние.
+Findings01/02 CLOSED на R2,03 CLOSED на R3. Final CI:614 unit/393 integration,
+27 browser,6 relay+6 lifecycle на normal/exact Docker29, все clean-source gates PASS.
+C8 сообщил122 scoped tests/77.49s и2 независимые AutoBackend probes PASS, без findings;
+его local checks отделены от прочитанного CI evidence. C0 принял отчёт на том же
+head/tree. Owner VM пока остаётся на0b7e24ee/connect2: отдельная задача
+M2-ENV-04-CONNECT5-MIGRATION готовит exact source/image/state переход, без запуска
+на VM в этом поручении. R1/R2/R3 history — runbook§0.6.19–0.6.24.
 
 JSON responses ≤64 KiB. getFile принимает только opaque canonical FetchPermit.image_file_id;
 file_unique_id/filename/provider metadata не заменяют его. Relative file_path bounded,
@@ -1134,7 +1139,23 @@ final head/CI документационной приёмки — в PR receipt.
 
 ### 10.12. Operational extension — M2-ENV-04 TEST egress
 
-**Current C0 disposition2026-10-06: PASS на implementation0b7e24ee425ebb429bf87dfe382cbd3fab883028;
+**Current C0 disposition2026-10-07:** accepted connect5 implementation
+**14f794b650c935c47ab1e78474fda0d1df0a7277** / tree
+**72b824d85091076a025998a71e564deab805b1cf**, actual final CI37531243359 all gates SUCCESS
+и независимый C8-M2-CONNECT-BUDGET-R3 PASS. C0 принял code/runner scope; M2 IN_PROGRESS,
+ENV04 REVIEW до actual A09/A11. C3 findings01/02/03 CLOSED.
+Owner VM последним receipt остаётся на exact0b7e24ee/recovery-v2/connect2,
+Telegram disabled/empty, binding committed, ACK NOT_ATTEMPTED.
+Отдельное active поручение **M2-ENV-04-CONNECT5-MIGRATION** разрешает C6 подготовить
+и проверить новый source/image/state transition в disposable CI. Ordinary strict
+source/image/recovery guards сохраняются; old source принимается только узким
+exact predecessor attestation. Original baseline/recovery receipts, binding,
+fixed TEST interval и canonical data не переписываются.
+VM execution, real Telegram/queue/ACK, activation/setWebhook/send и merge сейчас
+не выданы. Детальный scope — current M2_HANDOFF; приёмка — runbook§0.6.24 и единый receipt.
+Ниже сохранены исторические dispositions, а не дополнительные активные поручения.
+
+**Историческая C0 disposition2026-10-06: PASS на implementation0b7e24ee425ebb429bf87dfe382cbd3fab883028;
 C8-04/05 CLOSED, прежние01/02/03 CLOSED.** Independent C0 source/evidence review +17
 bounded local probes; реальная execution — CI37385698548 all3 SUCCESS на merge
 fdfbe35974fa548b722622132aa0edb3a30c9bf5/tree14a4033b849c736235653a5a85ec9e5112bfe727.

@@ -2,7 +2,93 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — R3 REVIEW, actual CI/C8 pending / 2026-10-06 UTC
+## Текущий статус — C3/C8 VERIFIED; C6 migration preparation / 2026-10-07 UTC
+
+### Приёмка C0 после независимого C8
+
+Accepted implementation head **14f794b650c935c47ab1e78474fda0d1df0a7277**, tree
+**72b824d85091076a025998a71e564deab805b1cf**, parent **f6ba33a37b8f35070c2a2471f9e1b386297c049f**.
+C3 R3 **3f0453904cefc8bd33b8fedd2095eb8c1a6089d8** и ancestry R1/R2 сохранены;
+общий implementation base **9e165dd09f87663665e3dabae4f155e99e2639a6**.
+Client blob **525381357de76ea1c570fd864f8df5e9781a87e2**.
+
+C0 принимает переданный владельцем независимый отчёт **C8-M2-CONNECT-BUDGET-R3 — PASS**:
+122 scoped tests PASS/77.49s и две отдельные пробы штатного AutoBackend PASS;
+checkout до/после чистый. C8 проверил cancellation/repeated cancellation,
+закрытие socket без GC, parallel isolation/client reuse, budgets/TLS/classification
+и strict source/image pin. Новых findings нет; 01/02/03 не переоткрываются.
+Это собственные проверки C8 по его отчёту, а не дополнительные запуски C0.
+Docker/PG/S3/browser C8 локально не запускал; соответствующее evidence — final CI.
+
+[CI37531243359](https://github.com/Elefesys/ai-service-manager/actions/runs/37531243359)
+на этом head — все три jobs и workflow clean-source gates SUCCESS:
+foundation112500874202 — 614 unit +393 integration PASS, smoke PASS;
+browser112500873790 — 27 journeys PASS;
+docker29-compatibility112500874064 — exact Engine29.8.2/8af9fe3, Compose5.5.1.
+Оба runner исполнили 6 relay +6 lifecycle cases. Actual tested merge
+**e0735be7e3bde206dee35d813f53f6c4b6a17179** имеет тот же tree и ordered parents
+main **22993f558c5e7e933c65e9c999933bd2e3ab41c4** + accepted head.
+C0 ранее сверил оба source archives/digests/226 file blobs/modes/status;
+C8 независимо повторил эту сверку. В обоих relay reports TIMEOUT/False за5.006s;
+все шесть before/after fingerprints31 таблицы равны, UNKNOWN/Console/receipts/wire1
+и real interruption/legacy/drift guards сохранены.
+Artifacts: foundation11445453916 SHA256
+`eec9f1f5a005378467a03afb9004336b4185e878b97ad145d261e01bca35d198`;
+Docker29 11445178285 SHA256
+`5effc5734732747f92f27e55876c14f2b84eec84835c8eb9a81c4daa71106329`.
+Единственная дополнительная workflow-правка C0 — foundation25→35;
+остальные job limits, commands/assertions, product deadlines и recovery180s прежние.
+
+**C3-M2-ENV04-05 — VERIFIED в code/runner scope, включён в integration branch PR24.**
+C0 findings01/02/03 CLOSED; C8 task и C0 runner verification — VERIFIED.
+Это приёмка проверенного implementation, без main merge или live acceptance.
+Coordination commit этого поручения изменяет только четыре документа;
+его production/test/workflow bytes совпадают с accepted head. Его собственный CI
+фиксируется отдельно: SUCCESS37531243359 относится только к accepted head.
+
+| Задача/этап | Статус | Scope / следующий результат |
+|---|---|---|
+| C3-M2-ENV04-05 | VERIFIED | Accepted connect5 implementation в PR24; rollout не исполнен |
+| C0 runner verification | VERIFIED | CI37531243359, все3 jobs/source artifacts/clean-source |
+| C8-M2-CONNECT-BUDGET-R3 | VERIFIED | Независимый PASS;122 cases +2 AutoBackend probes; новых findings нет |
+| M2-ENV-04-CONNECT5-MIGRATION | IN_PROGRESS | Выдана C6 подготовка/реализация/disposable CI; возврат REVIEW |
+| M2 / ENV04 | IN_PROGRESS / REVIEW | Owner migration и actual A09/A11 ещё впереди |
+
+Единственное активное поручение C6, разрешённые файлы/CI extension и критерии —
+[M2_HANDOFF](tasks/M2_HANDOFF.md). C0 coordination commit меняет только документы;
+C6 сохраняет его parent и начинает от byte-identical accepted implementation.
+### Состояние owner VM и граница этапа
+
+Последний owner receipt: VM source **0b7e24ee425ebb429bf87dfe382cbd3fab883028**,
+tree **14a4033b849c736235653a5a85ec9e5112bfe727**, завершённый `recovery-v2`,
+прежние cached images/connect2, Telegram disabled и TG runtime fields empty.
+Это последняя подтверждённая запись, не новая проверка VM.
+Original deployment-before и recovery-v1 audit/recovery receipts сохраняются.
+Binding уже committed2026-10-06T15:23:30.786130Z; повторное billing/setup не выдано.
+ACK NOT_ATTEMPTED; прежняя попытка оборвалась на getWebhookInfo до ACK.
+Автоматический replay не разрешён; после будущей миграции нужен свежий queue audit,
+а не предположение о сохранности прежних четырёх событий.
+
+Fixed TEST interval **2026-10-02T00:00:00Z → 2026-10-09T00:00:00Z** и committed
+request не пересчитывать. Если интервал истёк до live-продолжения — STOP и отдельное
+решение C0 о новом тестовом доступе, без изменения уже committed request.
+Source-key revocation `asm-telegram-test-env04` не подтверждён; read-only source
+access/его отзыв проверяются при будущем owner issuance, приватные ключи не передавать.
+
+**M2 IN_PROGRESS; ENV04 REVIEW до actual A09/A11; PR24 Draft/open.**
+Этим поручением выданы repository implementation и disposable CI проверки.
+SSH/VM fetch/build/deploy/restart, real Telegram HTTP/queue/ACK, activation,
+setWebhook, sends, billing/binding mutation, main merge, production и M3 не выданы.
+Старые owner-command blocks не запускать. После migration REVIEW: C0 review,
+actual final CI и scoped C8 изменённого migration path; затем отдельная выдача
+owner migration, fresh readonly readiness/queue review и live A09/A11.
+
+[Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+<details>
+<summary>История — завершённый этап R3 review / actual CI / C8 issuance</summary>
+
+## История — R3 review и CI до завершения независимого C8
 
 **C0 scoped R3 verdict: PASS; C0-M2-ENV04-05-03 CLOSED на R3.**
 Findings01/02 остаются CLOSED на R2. C3-M2-ENV04-05 остаётся **REVIEW** до
@@ -88,6 +174,8 @@ Private receipts/inputs/runtime и fixed TEST interval2026-10-02→2026-10-09 UT
 ACK/setWebhook/activation/sends. M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11;
 PR24 Draft/open, main merge/production/M3 не выданы. Source-key revocation не подтверждён.
 [Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+</details>
 
 <details>
 <summary>История — finding03 OPEN и R3 IN_PROGRESS до R3 review</summary>

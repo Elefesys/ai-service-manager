@@ -4,7 +4,216 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
-## Активный этап C0 — R3 reviewed, actual CI → C8 / 2026-10-06 UTC
+## Единственное активное поручение — M2-ENV-04-CONNECT5-MIGRATION / 2026-10-07 UTC
+
+### Приёмка C0 после независимого C8
+
+Accepted implementation head **14f794b650c935c47ab1e78474fda0d1df0a7277**, tree
+**72b824d85091076a025998a71e564deab805b1cf**, parent **f6ba33a37b8f35070c2a2471f9e1b386297c049f**.
+C3 R3 **3f0453904cefc8bd33b8fedd2095eb8c1a6089d8** и ancestry R1/R2 сохранены;
+общий implementation base **9e165dd09f87663665e3dabae4f155e99e2639a6**.
+Client blob **525381357de76ea1c570fd864f8df5e9781a87e2**.
+
+C0 принимает переданный владельцем независимый отчёт **C8-M2-CONNECT-BUDGET-R3 — PASS**:
+122 scoped tests PASS/77.49s и две отдельные пробы штатного AutoBackend PASS;
+checkout до/после чистый. C8 проверил cancellation/repeated cancellation,
+закрытие socket без GC, parallel isolation/client reuse, budgets/TLS/classification
+и strict source/image pin. Новых findings нет; 01/02/03 не переоткрываются.
+Это собственные проверки C8 по его отчёту, а не дополнительные запуски C0.
+Docker/PG/S3/browser C8 локально не запускал; соответствующее evidence — final CI.
+
+[CI37531243359](https://github.com/Elefesys/ai-service-manager/actions/runs/37531243359)
+на этом head — все три jobs и workflow clean-source gates SUCCESS:
+foundation112500874202 — 614 unit +393 integration PASS, smoke PASS;
+browser112500873790 — 27 journeys PASS;
+docker29-compatibility112500874064 — exact Engine29.8.2/8af9fe3, Compose5.5.1.
+Оба runner исполнили 6 relay +6 lifecycle cases. Actual tested merge
+**e0735be7e3bde206dee35d813f53f6c4b6a17179** имеет тот же tree и ordered parents
+main **22993f558c5e7e933c65e9c999933bd2e3ab41c4** + accepted head.
+C0 ранее сверил оба source archives/digests/226 file blobs/modes/status;
+C8 независимо повторил эту сверку. В обоих relay reports TIMEOUT/False за5.006s;
+все шесть before/after fingerprints31 таблицы равны, UNKNOWN/Console/receipts/wire1
+и real interruption/legacy/drift guards сохранены.
+Artifacts: foundation11445453916 SHA256
+`eec9f1f5a005378467a03afb9004336b4185e878b97ad145d261e01bca35d198`;
+Docker29 11445178285 SHA256
+`5effc5734732747f92f27e55876c14f2b84eec84835c8eb9a81c4daa71106329`.
+Единственная дополнительная workflow-правка C0 — foundation25→35;
+остальные job limits, commands/assertions, product deadlines и recovery180s прежние.
+
+**C3-M2-ENV04-05 — VERIFIED в code/runner scope, включён в integration branch PR24.**
+C0 findings01/02/03 CLOSED; C8 task и C0 runner verification — VERIFIED.
+Это приёмка проверенного implementation, без main merge или live acceptance.
+Coordination commit этого поручения изменяет только четыре документа;
+его production/test/workflow bytes совпадают с accepted head. Его собственный CI
+фиксируется отдельно: SUCCESS37531243359 относится только к accepted head.
+
+### Единственное активное поручение C0 → C6 — M2-ENV-04-CONNECT5-MIGRATION
+
+**Подготовить, реализовать и проверить ограниченную миграцию завершённого recovery-v2
+с connect2 на принятый connect5. Возврат — REVIEW; на owner VM пока не выполнять.**
+
+Repository `Elefesys/ai-service-manager`, существующие branch `c6/m2-telegram-live`
+и Draft [PR24](https://github.com/Elefesys/ai-service-manager/pull/24), target main.
+Accepted implementation base: **14f794b650c935c47ab1e78474fda0d1df0a7277**.
+Начать в отдельном checkout от текущего C0 coordination commit, несущего этот
+active block: полный SHA/tree/parent находятся в едином receipt и C0 prompt.
+Сохранить coordination commit непосредственным parent первого implementation commit;
+fast-forward, без reset/rebase/force-push. Не ждать дополнительного сообщения C0,
+если refs совпадают и task scope не изменился. При чужом drift — вернуть факты C0.
+
+Destination owner source — будущий exact migration candidate, прошедший C0/CI/C8,
+потомок accepted base с тем же client blob. Не подменять его заранее кодом старого
+head или неизвестным tip. SHA и image IDs финализировать в receipt после проверки,
+без пустого/SHA-only commit. C6 не получает owner credentials и не трогает VM.
+
+**Почему требуется новый путь.** На accepted base `recovery_archive` принимает
+state v2 только если `state.source_sha == accepted_sha`; `attest_partial_recovery`
+разрешает `from_sha == LEGACY_SHA` для прежней v1→v2 recovery.
+Существующая owner v2 на0b7e24ee не является новой v1 или повтором того же target.
+Нужна отдельная явная migration operation; не переписывать source_sha/state.json
+вручную и не ослаблять обычный recover/source/image pin ради прохождения guard.
+
+#### Разрешённые файлы
+
+- `scripts/prepare_telegram_egress.py`: отдельная migration/attest/resume/explicit
+  rollback процедура и строго ограниченные дополнительные версии state/receipt.
+- `tests/test_telegram_egress.py`: migration, strict predecessor/target, image,
+  interruption/idempotency/foreign-state regressions; прежние guards сохраняются.
+- `tests/test_telegram_egress_postgres.py`: новый migration lifecycle и повторное
+  использование durable/Console/private S3/UNKNOWN evidence без ослабления прежних cases.
+- `tests/test_telegram_egress_migration.py` (новый, при необходимости):
+  выделенные migration fixtures/probes; нельзя менять default collection прежних suites.
+- `scripts/test_telegram_egress.sh`: только безопасное переиспользование harness
+  или явный отдельный migration selector; default path сохраняет все прежние6+6 cases.
+- `scripts/test_telegram_egress_migration.sh` (новый, при необходимости):
+  самостоятельный bounded disposable runner с прежними checkout/non-root/secret guards.
+- `.github/workflows/ci.yml`: только добавить отдельные migration jobs/matrix
+  на штатном runner и exact Docker29.8.2/Compose5.5.1, с pinned actions,
+  bounded timeout≤25min на job, strict exit status/pipefail, собственными logs,
+  source archive, tested SHA, worktree status и clean-source gate.
+  Разрешено разделить новые cases на shards ради этого bound. Прежние три jobs,
+  их команды/collectors/лимиты35/25/25 и gates остаются прежними; новых bypass,
+  continue-on-error, skip/xfail, weakened assertion или переноса PASS со старого SHA нет.
+- `docs/tasks/M2_CONTRACT.md`: только §10.12 — явный operational migration contract;
+  channel/HTTP/billing/domain semantics не менять.
+- `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md`: отдельный раздел migration,
+  exact commands/fixtures/evidence/limitations и подготовленный owner draft.
+
+TASK_REGISTER и active M2_HANDOFF ведёт C0. Прочие files, backend client/provisioner,
+Dockerfiles/compose/locks/dependencies, DB migrations/schema, UI, provider profile,
+upstream/TLS/DNS topology и image pins не выданы. Нужную дополнительную правку
+сначала обосновать C0; это не разрешение обходить существующие проверки.
+
+#### Обязательное поведение migration
+
+1. Read-only attest exact predecessor0b7e24ee/tree14a4033b, завершённой recovery-v2
+   цепочки, старых image IDs/bytes, original baseline, audit и disabled/empty runtime.
+   Проверять owner/mode/no-symlink, local Docker context, operation lock, source/
+   private inputs/HTTPS/DB/networks/unrelated containers. Неподдерживаемый predecessor,
+   dirty checkout, чужой или изменённый state/config/image — STOP до runtime mutation.
+   Допуск old source/image существует только внутри этого явного predecessor attestation;
+   обычные prepare/recover/final image checks остаются strict connect5.
+2. До переключения подготовить нужные новые app/operator images из exact clean source,
+   со frozen locks/base pins и без private inputs в build context. Новые distinct tags/
+   image IDs; старые IDs и их достижимость для rollback сохранить. Не retag текущий
+   baseline до attestation и журнала. Разрешённый app delta ограничен api/worker и, если требуется для
+   согласованного backend image, scheduler; disposable operator использует новый
+   проверенный image. Для каждого affected service задать exact before/after map.
+   Frontend/PG/storage/ingress и relay/profile сохраняют прежние images/config/runtime;
+   их rebuild/recreate не входит в миграцию клиента. Build preparation — отдельный
+   bounded этап.
+3. Создать immutable private migration intent/архив с hashes исходной v2 цепочки,
+   exact from/to source/tree и image IDs, разрешёнными runtime deltas и стадиями.
+   Original deployment-before, recovery-v1, recovery.json и прежние operator receipts
+   byte-for-byte сохраняются. Новый baseline не заменяет original; state transition
+   явно версионируется и документируется. Запрещены ручной state patch/rebaseline,
+   удаление evidence, fallback на текущий hash и общий обход drift guards.
+4. Переключить только согласованные disabled app/operator images и связанное runtime
+   evidence/state. В каждый момент Telegram disabled/empty; staged secrets остаются
+   private и неизменны. Сохранить LOCAL/HTTPS settings, native dual-family strict
+   routing/no fallback, canonical DB/volumes, binding/COMPED, Console sessions,
+   private images/FileObjects и UNKNOWN/no-resend. Никаких Telegram API calls,
+   queue consumption/ACK, setup или billing writes в migration.
+5. Resume после реального interruption разрешён только по exact immutable intent
+   и наблюдаемой допустимой стадии. Конкурентный/чужой intent, другое source/image
+   или непредусмотренный drift — STOP. Completed retry проверяет итог и не повторяет
+   recreate/effects. Отдельный explicit rollback возвращает прежние source/images/
+   согласованное v2 состояние с Telegram disabled и сохраняет новые audit receipts;
+   ambiguous failure не вызывает слепой повтор или auto rollback.
+6. PASS/after receipt публикуется только после проверки фактических source/image/
+   runtime и целостности данных. Runtime migration/resume/rollback операции bounded
+   ≤180s; прежние recovery bounds не увеличивать. Вывод — только безопасные markers/
+   hashes/результаты без secret-bearing config, raw provider IDs, URLs или payloads.
+
+#### Проверки и условия REVIEW
+
+- Unit/negative cases: exact predecessor and target; old/tampered/wrong image rejection;
+  all strict private/source/config/network/HTTPS/DB guards; operation lock,
+  crash stages, repeated resume, completed retry without recreate и explicit rollback.
+- Настоящий disposable fixture завершённой recovery-v2 на exact0b7e24ee bytes/images,
+  с сохранённой исходной v1 audit цепочкой и последующими private operator receipts.
+  Не заменять исходную v2 recovery обычным fresh prepare или mock image/source check.
+- Real migration → preflight, interruption/resume на границах intent/image switch/
+  state-after receipt, повтор завершённого вызова и explicit rollback/retry.
+  Факты interruption подтверждаются actual process/container boundary; fixture
+  shortcuts не считаются evidence поведения executable helper.
+- Actual normal runner И exact Docker29: before/after canonical fingerprints31 tables,
+  неизменные committed binding/billing и Console session/private original; UNKNOWN
+  durable Message, attempt1/wire count1 до/после migration/restart/rollback.
+  Использовать synthetic local wire/PG/private S3: ни реального Telegram, ни VM.
+  Bad/faulted migration не создаёт SEND_EFFECT и не повторяет business operation.
+- Прежние unit/integration/browser/relay/recovery/legacy cases исполняются на final
+  candidate. Новые jobs возвращают отдельные execution reports и clean-source artifacts;
+  все существующие и новые final jobs должны SUCCESS. Checkout/parent/tree/archives/
+  modes/digests проверяемы; локальные mocks не заменяют actual Docker/PG/S3.
+- Regression connect budget/client bytes без изменений: connect5/pool2/read5/write5,
+  wall5/10/20, lease30/pool4, TLS verify/SNI, trust_env=false, redirects/retries0,
+  UNKNOWN/proven-unsent и private-seam locked dependencies сохраняются.
+- Подготовить короткий reviewable owner runbook, включая read-only inventory, exact
+  source/image preparation, migration/preflight/explicit resume/rollback и STOP cases.
+  Проверить shell/PowerShell/SSH quoting на disposable harness; не повторять прежнюю
+  ошибку `python3 -c` без сохранённых кавычек. На VM этот draft сейчас не исполнять.
+
+Вернуть C0: REVIEW, полный base/head/tree/parent и changed-file list; состояние/
+command contract и image map; точные команды, actual CI run/job IDs, source/archive
+digests, выполненные scenarios/timings и ограничения; migration/rollback owner draft.
+C0 проверит candidate и выдаст независимый scoped C8 нового migration path.
+После C0/CI/C8 — отдельная owner execution выдача, затем свежие network/connection/
+queue observations и A09/A11. Новая миграция не объявляет старую queue snapshot актуальной.
+
+### Состояние owner VM и граница этапа
+
+Последний owner receipt: VM source **0b7e24ee425ebb429bf87dfe382cbd3fab883028**,
+tree **14a4033b849c736235653a5a85ec9e5112bfe727**, завершённый `recovery-v2`,
+прежние cached images/connect2, Telegram disabled и TG runtime fields empty.
+Это последняя подтверждённая запись, не новая проверка VM.
+Original deployment-before и recovery-v1 audit/recovery receipts сохраняются.
+Binding уже committed2026-10-06T15:23:30.786130Z; повторное billing/setup не выдано.
+ACK NOT_ATTEMPTED; прежняя попытка оборвалась на getWebhookInfo до ACK.
+Автоматический replay не разрешён; после будущей миграции нужен свежий queue audit,
+а не предположение о сохранности прежних четырёх событий.
+
+Fixed TEST interval **2026-10-02T00:00:00Z → 2026-10-09T00:00:00Z** и committed
+request не пересчитывать. Если интервал истёк до live-продолжения — STOP и отдельное
+решение C0 о новом тестовом доступе, без изменения уже committed request.
+Source-key revocation `asm-telegram-test-env04` не подтверждён; read-only source
+access/его отзыв проверяются при будущем owner issuance, приватные ключи не передавать.
+
+**M2 IN_PROGRESS; ENV04 REVIEW до actual A09/A11; PR24 Draft/open.**
+Этим поручением выданы repository implementation и disposable CI проверки.
+SSH/VM fetch/build/deploy/restart, real Telegram HTTP/queue/ACK, activation,
+setWebhook, sends, billing/binding mutation, main merge, production и M3 не выданы.
+Старые owner-command blocks не запускать. После migration REVIEW: C0 review,
+actual final CI и scoped C8 изменённого migration path; затем отдельная выдача
+owner migration, fresh readonly readiness/queue review и live A09/A11.
+
+[Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+<details>
+<summary>История — завершённый этап R3 review / actual CI / C8 issuance</summary>
+
+## История — R3 review и CI до завершения независимого C8
 
 **C0 scoped R3 verdict: PASS; C0-M2-ENV04-05-03 CLOSED на R3.**
 Findings01/02 остаются CLOSED на R2. C3-M2-ENV04-05 остаётся **REVIEW** до
@@ -130,6 +339,8 @@ Private receipts/inputs/runtime и fixed TEST interval2026-10-02→2026-10-09 UT
 ACK/setWebhook/activation/sends. M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11;
 PR24 Draft/open, main merge/production/M3 не выданы. Source-key revocation не подтверждён.
 [Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+</details>
 
 <details>
 <summary>История — finding03 OPEN и R3 IN_PROGRESS до R3 review</summary>
