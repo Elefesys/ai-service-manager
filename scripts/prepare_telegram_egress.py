@@ -2301,8 +2301,11 @@ def migration_runtime(state, directory):
                 for k, v in item["NetworkSettings"]["Networks"].items()
             },
         }
-        if name in {"api", "worker"} and running:
-            records[name]["database_identity"] = database_identity(item["Id"])
+    callers = {name: row["id"] for name, row in records.items() if name in MIGRATION_SERVICES and row["running"]}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        identities = {name: pool.submit(database_identity, ident) for name, ident in callers.items()}
+        for name, result in identities.items():
+            records[name]["database_identity"] = result.result()
     require(
         {"postgres", "storage", "telegram-egress"} <= records.keys(),
         "EGRESS_MIGRATION_REQUIRED_RUNTIME",
@@ -2564,14 +2567,15 @@ def migration_prepare(args, directory):
         private_bytes(directory / "state.json") == private_bytes(bundle / "state-before.json"),
         "EGRESS_MIGRATION_PREPARATION_ALREADY_ACTIVE",
     )
+    actual = migration_runtime(state, directory)
     migration_compare(
         plan["before"],
-        migration_runtime(state, directory),
+        actual,
         {n: {v} for n, v in plan["before_images"].items()},
         completed=True,
     )
     require(
-        migration_runtime(state, directory) == plan["before"],
+        actual == plan["before"],
         "EGRESS_MIGRATION_PREPARATION_RUNTIME_CHANGED",
     )
     prepared = bundle / "prepared.json"
@@ -2903,7 +2907,8 @@ def migration_switch(args, directory, *, reverse=False, readonly=False):
     prefix = [*compose_prefix(old, directory), "-f", str(bundle / ("images-" + side + ".json"))]
     for name in MIGRATION_SERVICES:
         expected = intent[side + "_images"][name]
-        actual = migration_runtime(old, directory)
+        # `actual` is the entry snapshot or the full post-recreate snapshot of
+        # the preceding service. Only our private journal writes intervene.
         allowed, pending = migration_observed(bundle, intent)
         migration_compare(intent["before"], actual, allowed, pending=pending)
         migration_results(bundle, intent, actual)
@@ -2944,7 +2949,6 @@ def migration_switch(args, directory, *, reverse=False, readonly=False):
         else:
             write_private(result, raw)
         migration_stage(bundle, direction + "-" + name + "-done", intent, publish=True)
-    actual = migration_runtime(old, directory)
     migration_compare(
         intent["before"],
         actual,

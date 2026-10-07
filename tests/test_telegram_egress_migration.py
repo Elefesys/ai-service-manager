@@ -695,6 +695,24 @@ def test_migration_complete_retry_and_explicit_rollback(migration_machine):
         e.migration_switch(m.args, m.directory)
 
 
+@pytest.mark.parametrize("service", ["api", "worker"])
+def test_migration_rechecks_full_runtime_after_each_recreate(migration_machine, monkeypatch, service):
+    m = migration_machine
+    command = e.command
+
+    def recreate(argv, **kwargs):
+        result = command(argv, **kwargs)
+        if argv[-1] == service:
+            m.runtime["storage"]["id"] = "foreign-recreate"
+        return result
+
+    monkeypatch.setattr(e, "command", recreate)
+    with pytest.raises(e.EgressError, match="EGRESS_MIGRATION_UNRELATED_DRIFT"):
+        e.migration_switch(m.args, m.directory)
+    assert len(m.effects) == (1 if service == "api" else 2)
+    assert not (m.bundle / "forward-complete.json").exists()
+
+
 @pytest.mark.parametrize("boundary", ["intent", "api-intent", "api-image", "state", "receipt"])
 @pytest.mark.parametrize("reverse", [False, True])
 def test_migration_interruption_resume_never_repeats_completed_effects(
