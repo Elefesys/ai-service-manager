@@ -2301,9 +2301,15 @@ def migration_runtime(state, directory):
                 for k, v in item["NetworkSettings"]["Networks"].items()
             },
         }
-    callers = {name: row["id"] for name, row in records.items() if name in MIGRATION_SERVICES and row["running"]}
+    callers = {
+        name: row["id"]
+        for name, row in records.items()
+        if name in MIGRATION_SERVICES and row["running"]
+    }
     with ThreadPoolExecutor(max_workers=2) as pool:
-        identities = {name: pool.submit(database_identity, ident) for name, ident in callers.items()}
+        identities = {
+            name: pool.submit(database_identity, ident) for name, ident in callers.items()
+        }
         for name, result in identities.items():
             records[name]["database_identity"] = result.result()
     require(
@@ -2697,7 +2703,10 @@ def migration_prepared(directory):
     )
     migration_image_proofs(
         (image, source, "development" if name == "telegram-operator" else "runtime")
-        for direction, source in (("before_images", MIGRATION_FROM), ("after_images", plan["to_sha"]))
+        for direction, source in (
+            ("before_images", MIGRATION_FROM),
+            ("after_images", plan["to_sha"]),
+        )
         for name, image in ready[direction].items()
     )
     for direction, source in (("before_images", MIGRATION_FROM), ("after_images", plan["to_sha"])):

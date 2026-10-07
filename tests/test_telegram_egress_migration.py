@@ -249,11 +249,23 @@ def run_disposable(f):
             for section in ("Config", "HostConfig"):
                 keys = sorted(set(previous[section]) | set(observed[section]))
                 changed = [k for k in keys if previous[section].get(k) != observed[section].get(k)]
-                print("MIGRATION_CONFIG_FIELDS=" + name + ":" + section + ":" + ",".join(changed), flush=True)
+                print(
+                    "MIGRATION_CONFIG_FIELDS=" + name + ":" + section + ":" + ",".join(changed),
+                    flush=True,
+                )
             before_env = dict(x.split("=", 1) for x in previous["Config"]["Env"])
             after_env = dict(x.split("=", 1) for x in observed["Config"]["Env"])
-            print("MIGRATION_ENV_MAPPING_EQUAL=" + name + ":" + str(before_env == after_env), flush=True)
-            print("MIGRATION_MOUNTS_EQUAL=" + name + ":" + str(previous["Mounts"] == observed["Mounts"]), flush=True)
+            print(
+                "MIGRATION_ENV_MAPPING_EQUAL=" + name + ":" + str(before_env == after_env),
+                flush=True,
+            )
+            print(
+                "MIGRATION_MOUNTS_EQUAL="
+                + name
+                + ":"
+                + str(previous["Mounts"] == observed["Mounts"]),
+                flush=True,
+            )
 
     def invoke(action, *, pin=False):
         started = time.monotonic()
@@ -696,7 +708,9 @@ def test_migration_complete_retry_and_explicit_rollback(migration_machine):
 
 
 @pytest.mark.parametrize("service", ["api", "worker"])
-def test_migration_rechecks_full_runtime_after_each_recreate(migration_machine, monkeypatch, service):
+def test_migration_rechecks_full_runtime_after_each_recreate(
+    migration_machine, monkeypatch, service
+):
     m = migration_machine
     command = e.command
 
