@@ -1336,6 +1336,64 @@ timeouts, TLS, permissions и UNKNOWN/no-resend остаются прежним�
 
 </details>
 
+#### 10.12.1. Explicit connect2 → connect5 migration (C6 candidate, C0/C8 review required)
+
+`M2-ENV-04-CONNECT5-MIGRATION` introduces a separate operation, not a relaxation of
+`recover`. Its only predecessor is completed recovery-v2 at
+`0b7e24ee425ebb429bf87dfe382cbd3fab883028` / tree
+`14a4033b849c736235653a5a85ec9e5112bfe727`. The target is an exact clean descendant
+of accepted base `14f794b650c935c47ab1e78474fda0d1df0a7277`, retaining client blob
+`525381357de76ea1c570fd864f8df5e9781a87e2` and the frozen dependency/image pins.
+The predecessor checkout remains intact; the candidate has a separate checkout,
+an identical private runtime `.env`, and the same canonical outside-checkout state.
+Both checkouts and their private `.env*` inventories are attested and archived.
+
+`migration-attest` is read-only. It verifies the original v1 audit, completed v2
+receipt and caller IDs/images, disabled/empty runtime, HTTPS/config/profile/routes,
+actual caller DB identity and 31 canonical table fingerprints. The caller supplies
+an independently pinned last operator receipt SHA256; its complete predecessor
+receipt DAG must include the committed binding. A changed staged Owner ID is
+accepted only through the exact C0 correction journal and byte reconstruction of
+the archived original. Unexplained changes, missing receipts or foreign sources
+stop before runtime mutation. Full copied Git blobs are checked offline in both
+old images; cached images with different bytes are a STOP, not an automatic rebuild.
+
+`migration-prepare` (600s overall bound) publishes an immutable private archive,
+then builds distinct runtime/development images from `git archive` of the exact
+target. No private inputs enter that context. Exact before/after IDs and retained
+rollback tags are journaled. API and worker change to the new runtime image;
+disposable operator uses the new development image. Scheduler, frontend, ingress,
+PG/storage, relay, their mounts and config remain unchanged. In particular, the
+original scheduler ID remains compatible with the predecessor's strict baseline.
+
+`migrate` / `migration-resume` publish an immutable intent before any recreate,
+with exact sources/trees, archive/image-plan hashes and allowed per-service deltas.
+Each service has intent/result/done records. Only an issued, unfinished service
+intent can admit its stopped/missing boundary; source/config/image/data drift is
+never interpreted as an outage. Read-only repeatable-read fingerprints must remain
+equal before PASS. The final state is v3, binding the intent hash and target SHA,
+while continuing to reference the original recovery-v2 route generation.
+Original deployment-before, recovery-v1, recovery.json, previous receipts and
+private inputs are never replaced by a new baseline.
+
+`migration-preflight` and a completed retry re-attest the result without recreating
+containers. `migration-rollback` is explicit, independently resumable, and restores
+the old image IDs and exact archived v2 state. The preserved predecessor checkout
+is again the operational source; the candidate checkout remains the read-only
+controller for rollback retry. Its old-source preflight must also succeed. Forward
+and rollback audit remain; a subsequent forward call after rollback stops and
+requires a new C0 decision. No automatic rollback, rebaseline or cleanup is implied.
+Each runtime invocation is bounded to 180s, including subprocesses. Telegram stays
+disabled/empty; no discovery/setup/ACK/send/binding/billing operation is invoked.
+
+New disposable normal + exact Docker29 jobs separately exercise real completed
+predecessor recovery, SIGKILL at intent/image/state boundaries in both directions,
+drift rejection, completed retry, old-source rollback preflight, held UNKNOWN/wire1,
+Secure Console/private S3 and equal 31-table fingerprints. The held fixture remains
+180s. Existing three jobs and their 6+6 cases remain mandatory. These facts require
+final-head CI evidence and C0/scoped C8 review; this contract does not confer VERIFIED
+or owner execution permission. Commands and owner draft: runbook §0.6.25.
+
 ## 11. M2.4-CONSOLE — текущий ограниченный UI/browser-контракт
 
 Принят C0 для последовательной выдачи C5 от integrated API/base

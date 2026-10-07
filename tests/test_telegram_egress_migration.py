@@ -1,0 +1,659 @@
+"""Migration regressions and the explicit disposable harness extension.
+
+Default pytest collects only unit tests here. run_disposable is invoked solely by
+the separate migration shell lane, never by an owner command or the old 6+6 lane.
+"""
+
+import argparse
+import copy
+import json
+import os
+import signal
+import subprocess
+import time
+from pathlib import Path
+from types import SimpleNamespace
+
+from scripts import prepare_telegram_egress as e
+
+
+def run_disposable(f):
+    """Real old helper/images -> completed recovery -> migration, on one held DB."""
+    old, run = f["e"], f["run"]
+    directory, project = f["directory"], f["project"]
+    source, fault = f["migration"]["source"], f["migration"]["fault"]
+    assert source == e.command(["git", "-C", str(e.ROOT), "rev-parse", "HEAD"]).decode().strip()
+    assert f["source"] == e.MIGRATION_FROM
+    phase = f["phase_start"]
+    fresh, fresh_dir = f["state"], f["state_dir"]
+    phase("migration_exact_predecessor_recovery")
+    run([*f["prelive"], "up", "-d", "--no-deps", "--force-recreate", "--wait", "api", "worker"])
+    f["compose"]("up", "-d", "--no-deps", "--wait", "egress-https")
+    f["compose"]("rm", "-f", "-s", "telegram-egress")
+    run(["docker", "network", "rm", f["values"]["ASM_TELEGRAM_EGRESS_NETWORK6"]])
+    original_before = old.encoded(old.snapshot(fresh, fresh_dir))
+    legacy = {k: v for k, v in fresh.items() if k != "subnet6"}
+    legacy.update(version=1, source_sha=old.LEGACY_SHA)
+    state_dir = directory / "completed-predecessor"
+    state_dir.mkdir(mode=0o700)
+    legacy_config = old.encoded(old.minimal_config(f["profile"], f["relay_ip"]))
+    legacy["config_sha256"] = old.sha(legacy_config)
+    for name, raw in {
+        "config.json": legacy_config,
+        "runtime.json": (fresh_dir / "runtime.json").read_bytes(),
+        "route.env": old.route_env(old.route_values(legacy, state_dir)),
+        "state.json": old.encoded(legacy),
+        "deployment-before.json": original_before,
+    }.items():
+        old.write_private(state_dir / name, raw)
+    old.write_private(directory / "legacy-compose.yaml", old.LEGACY_OVERLAY)
+    legacy_prefix = [
+        *old.compose_prefix(legacy, state_dir, overlay=False),
+        "-f",
+        str(directory / "legacy-compose.yaml"),
+        "--profile",
+        "telegram-egress",
+    ]
+    for services in (("telegram-egress",), ("api", "worker")):
+        run(
+            [
+                *legacy_prefix,
+                "up",
+                "-d",
+                "--no-deps",
+                "--pull",
+                "never",
+                "--force-recreate",
+                "--wait",
+                *services,
+            ]
+        )
+    f["state_dir"] = state_dir
+    f["operator"]("recover")
+    recovered = old.verify(state_dir)
+    f.update(
+        state=recovered,
+        values=old.route_values(recovered, state_dir),
+        live=old.compose_prefix(recovered, state_dir),
+        base=old.compose_prefix(recovered, state_dir, overlay=False),
+        lifecycle="migration",
+    )
+    f["prefix"] = [
+        *f["live"],
+        "-f",
+        str(f["root"] / "infra/telegram-egress/compose.test.yaml"),
+        "--profile",
+        "test",
+    ]
+    f["operator"]("preflight")
+    recovered_bytes = (state_dir / "state.json").read_bytes()
+    old_receipt = (state_dir / "recovery.json").read_bytes()
+    target = old.snapshot(recovered, state_dir)
+    identity = target["api"]["database_identity"]
+    assert identity == target["worker"]["database_identity"]
+    e.write_private(
+        directory / "durable-target.json",
+        e.encoded(
+            {
+                "project": project,
+                "postgres_id": f["postgres_id"],
+                "database_identity": identity,
+                "callers": {n: target[n]["database_identity"] for n in ("api", "worker")},
+            }
+        ),
+    )
+    run([*f["base"], "stop", "worker"])
+    durable = f["start_checks"](
+        ["python", "tests/test_telegram_egress_postgres.py", "--durable-receipt", "before"],
+        local=True,
+    )
+    f["await_process"](durable, marker=directory / "durable-before.json", timeout=90)
+    held_started = time.monotonic()
+    # Restart the same disabled caller, preserving the completed recovery receipt.
+    run(["docker", "start", target["worker"]["id"]])
+    before = json.loads((directory / "durable-before.json").read_bytes())
+    assert len(before["database"]["tables"]) == 31 and before["wire_counter"] == 1
+    assert old.snapshot(recovered, state_dir) == target
+    operator_image = json.loads(
+        run(["docker", "image", "inspect", project + "-telegram-operator"])
+    )[0]["Id"]
+    common = {
+        "source_sha": e.MIGRATION_FROM,
+        "source_tree": e.MIGRATION_FROM_TREE,
+        "original_before_sha256": e.sha(original_before),
+    }
+    discovery = directory / "asm-telegram-discovery-0b7e24ee.json"
+    e.write_private(
+        discovery,
+        e.encoded(dict(common, status="STARTED", staged_sha256=e.sha(f["staged_inputs"]))),
+    )
+    corrected = f["staged_inputs"].replace(b"OWNER_ID='101'", b"OWNER_ID='202'")
+    journal = directory / "asm-telegram-owner-id-correction-0b7e24ee.json"
+    e.write_private(
+        journal,
+        e.encoded(
+            dict(
+                common,
+                version=1,
+                previous_owner_id="101",
+                approved_owner_id="202",
+                prior_attempt_sha256=e.sha(discovery.read_bytes()),
+                staged_before_sha256=e.sha(f["staged_inputs"]),
+                staged_after_sha256=e.sha(corrected),
+            )
+        ),
+    )
+    e.write_private(directory / "telegram.env", corrected)
+    f["staged_inputs"] = corrected
+    binding = directory / "asm-telegram-binding-fixture.json"
+    e.write_private(
+        binding,
+        e.encoded(
+            dict(
+                common,
+                status="BINDING_COMMITTED",
+                preservation_pass=True,
+                staged_sha256=e.sha(corrected),
+                operator_image_id=operator_image,
+                canonical_database_sha256=before["database"]["sha256"],
+                prior_receipts_sha256={p.name: e.sha(p.read_bytes()) for p in (discovery, journal)},
+            )
+        ),
+    )
+    receipt = directory / "asm-telegram-diagnostic-fixture.json"
+    e.write_private(
+        receipt,
+        e.encoded(
+            dict(
+                common,
+                status="DIAGNOSTIC_COMPLETE",
+                preservation_pass=True,
+                staged_sha256=e.sha(corrected),
+                operator_image_id=operator_image,
+                prior_receipts_sha256={binding.name: e.sha(binding.read_bytes())},
+            )
+        ),
+    )
+    arguments = [
+        "--state-dir",
+        str(state_dir),
+        "--accepted-sha",
+        source,
+        "--from-sha",
+        e.MIGRATION_FROM,
+        "--predecessor-checkout",
+        str(f["root"]),
+    ]
+    helper = str(e.ROOT / "scripts/prepare_telegram_egress.py")
+    timings, interruptions, negatives = {}, [], []
+
+    def invoke(action, *, pin=False):
+        started = time.monotonic()
+        output = run(
+            [
+                "python3",
+                helper,
+                action,
+                *arguments,
+                *(
+                    [
+                        "--operator-receipt",
+                        str(receipt),
+                        "--operator-receipt-sha256",
+                        e.sha(receipt.read_bytes()),
+                    ]
+                    if pin
+                    else []
+                ),
+            ],
+            180,
+        )
+        assert output.strip() == ("TELEGRAM_EGRESS_" + action.upper() + "_PASS").encode()
+        timings.setdefault(action, []).append(round(time.monotonic() - started, 3))
+        assert timings[action][-1] <= 180
+        print(output.decode().strip(), flush=True)
+
+    invoke("migration-prepare", pin=True)
+    bundle = state_dir / "migration-v3"
+    plan = json.loads((bundle / "preparation.json").read_bytes())
+    ready = json.loads((bundle / "prepared.json").read_bytes())
+    saved = {p: Path(p).read_bytes() for p in plan["files"]}
+    assert all(
+        plan["image_proofs"][v]["source_sha"] == e.MIGRATION_FROM
+        for v in ready["before_images"].values()
+    )
+
+    def interrupted(action, reverse=False):
+        marker = directory / ("migration-interruption-" + action + ".json")
+        # Only wrap actual fsync/real Docker-command boundaries. This executes the
+        # candidate helper main(), without stubbing any source/image/DB check.
+        injector = r"""
+import importlib.util,os,signal,sys
+from pathlib import Path
+path,fault,marker,reverse=sys.argv[1:5]
+spec=importlib.util.spec_from_file_location('migration_candidate',path)
+e=importlib.util.module_from_spec(spec);spec.loader.exec_module(e)
+sys.argv=[path,*sys.argv[5:]]
+save,execute=e.write_private,e.command
+def crash():
+    save(Path(marker),e.encoded({'boundary':fault,'direction':reverse,'sigkill':True}))
+    os.kill(os.getpid(),signal.SIGKILL)
+def write(path,raw,**kwargs):
+    save(path,raw,**kwargs)
+    intent='rollback-intent.json' if reverse=='rollback' else 'intent.json'
+    if fault=='intent' and path.name==intent or fault=='state' and path.name=='state.json': crash()
+def command(argv,**kwargs):
+    value=execute(argv,**kwargs)
+    if fault=='image' and 'up' in argv and argv[-1]=='api': crash()
+    return value
+e.write_private,e.command=write,command
+e.main()
+"""
+        started = time.monotonic()
+        result = subprocess.run(
+            [
+                "python3",
+                "-c",
+                injector,
+                helper,
+                fault,
+                str(marker),
+                "rollback" if reverse else "forward",
+                action,
+                *arguments,
+            ],
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            timeout=180,
+            env=f["environment"],
+        )
+        if result.returncode != -signal.SIGKILL:
+            code = result.stdout.decode().strip()
+            if code.startswith("EGRESS_") and len(code) < 150:
+                print(code, flush=True)
+        assert result.returncode == -signal.SIGKILL, "MIGRATION_EXPECTED_REAL_SIGKILL"
+        evidence = json.loads(marker.read_bytes())
+        assert evidence == {
+            "boundary": fault,
+            "direction": "rollback" if reverse else "forward",
+            "sigkill": True,
+        }
+        evidence["seconds"] = round(time.monotonic() - started, 3)
+        interruptions.append(evidence)
+        print("MIGRATION_REAL_INTERRUPTION_" + fault.upper(), flush=True)
+
+    interrupted("migrate")
+    actual_before_negative = e.migration_runtime(recovered, state_dir)
+    if fault == "intent":
+        path = state_dir / "deployment-before.json"
+        original = path.read_bytes()
+        e.write_private(path, original + b"\n")
+
+        def restore():
+            e.write_private(path, original)
+    elif fault == "image":
+        tag = ready["tags"]["development"]
+        run(["docker", "tag", operator_image, tag])
+
+        def restore():
+            run(["docker", "tag", ready["after_images"]["telegram-operator"], tag])
+    else:
+        path = state_dir / "state.json"
+        original = path.read_bytes()
+        changed = json.loads(original)
+        changed["source_sha"] = "f" * 40
+        e.write_private(path, e.encoded(changed))
+
+        def restore():
+            e.write_private(path, original)
+
+    try:
+        rejected = subprocess.run(
+            ["python3", helper, "migration-resume", *arguments],
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            timeout=180,
+            env=f["environment"],
+        )
+        assert rejected.returncode == 1 and rejected.stdout.startswith(b"EGRESS_MIGRATION_")
+        negatives.append(rejected.stdout.decode().strip())
+        assert e.migration_runtime(recovered, state_dir) == actual_before_negative
+        assert not (bundle / "forward-complete.json").exists()
+    finally:
+        restore()
+    invoke("migration-resume")
+    forward = e.migration_runtime(recovered, state_dir)
+    invoke("migration-preflight")
+    invoke("migrate")
+    assert e.migration_runtime(recovered, state_dir) == forward
+    completed = (bundle / "forward-complete.json").read_bytes()
+    assert all(forward[n]["image"] == ready["after_images"][n] for n in e.MIGRATION_SERVICES)
+    assert e.verify(state_dir)["version"] == 3
+    interrupted("migration-rollback", reverse=True)
+    invoke("migration-rollback")
+    rolled_back = e.migration_runtime(recovered, state_dir)
+    invoke("migration-rollback")
+    assert e.migration_runtime(recovered, state_dir) == rolled_back
+    assert (state_dir / "state.json").read_bytes() == recovered_bytes
+    assert (bundle / "forward-complete.json").read_bytes() == completed
+    assert all(rolled_back[n]["image"] == ready["before_images"][n] for n in e.MIGRATION_SERVICES)
+    assert all(Path(p).read_bytes() == raw for p, raw in saved.items())
+    assert (state_dir / "recovery.json").read_bytes() == old_receipt
+    # Return to the preserved exact predecessor checkout, not a manufactured v2.
+    f["operator"]("preflight")
+    f["compose"](
+        "run",
+        "--rm",
+        "--no-deps",
+        "-T",
+        *f["local_database_args"](),
+        "egress-checks",
+        "python",
+        "tests/test_telegram_egress_postgres.py",
+        "--durable-receipt",
+        "after",
+    )
+    f["await_process"](durable, timeout=30)
+    held_seconds = time.monotonic() - held_started
+    assert held_seconds < 180, "MIGRATION_HELD_FIXTURE_DEADLINE"
+    after = json.loads((directory / "durable-after.json").read_bytes())
+    assert before == after and after["wire_counter"] == 1
+    assertions = [
+        json.loads(row) for row in (directory / "assertions.jsonl").read_text().splitlines()
+    ]
+    assert len(assertions) == 1 and assertions[0]["result"] == "PASS"
+    report = {
+        "source_sha": source,
+        "source_tree": plan["to_tree"],
+        "from_sha": e.MIGRATION_FROM,
+        "from_tree": e.MIGRATION_FROM_TREE,
+        "fault": fault,
+        "timings": timings,
+        "held_seconds": round(held_seconds, 3),
+        "interruptions": interruptions,
+        "negatives": negatives,
+        "assertions": assertions,
+        "before_images": ready["before_images"],
+        "after_images": ready["after_images"],
+        "image_proofs": plan["image_proofs"],
+        "database_before": before,
+        "database_after": after,
+        "runtime_before": plan["before"],
+        "runtime_forward": forward,
+        "runtime_rollback": rolled_back,
+        "completed_retry_without_recreate": True,
+        "old_source_preflight_after_rollback": True,
+        "preserved_files_sha256": {
+            Path(p).name + "-" + str(i): e.sha(raw)
+            for i, (p, raw) in enumerate(sorted(saved.items()))
+        },
+        "receipts_sha256": {p.name: e.sha(p.read_bytes()) for p in bundle.glob("*.json")},
+        "docker": json.loads(run(["docker", "version", "--format", "{{json .}}"])),
+        "compose": run(["docker", "compose", "version", "--short"]).decode().strip(),
+    }
+    reports = e.ROOT / "reports"
+    reports.mkdir(exist_ok=True)
+    (reports / ("migration-" + fault + ".json")).write_text(json.dumps(report, indent=2) + "\n")
+    print("TELEGRAM_EGRESS_MIGRATION_" + fault.upper() + "_PASS", flush=True)
+
+
+if __name__ == "__migration_harness__":
+    run_disposable(globals()["fixture"])
+    raise SystemExit(0)
+
+import pytest  # noqa: E402 -- host harness uses only stdlib; default collection remains ordinary.
+
+
+@pytest.fixture
+def migration_machine(tmp_path, monkeypatch):
+    directory = tmp_path / "state"
+    directory.mkdir(mode=0o700)
+    bundle = directory / "migration-v3"
+    bundle.mkdir(mode=0o700)
+    old = {"version": 2, "source_sha": e.MIGRATION_FROM, "generation": "recovery-v2"}
+    before_images = {n: "sha256:" + "1" * 64 for n in (*e.MIGRATION_SERVICES, "telegram-operator")}
+    after_images = {n: "sha256:" + "2" * 64 for n in before_images}
+    database = {"identity": {"database": "asm_local"}, "tables": {"sealed": "original"}}
+    runtime = {
+        n: {
+            "id": n + "-original",
+            "image": before_images.get(n, "unchanged"),
+            "running": True,
+            "config_sha256": "config",
+            "host_sha256": "host",
+            "mounts": [],
+            "networks": {"default": {"Gateway": "g", "IPv6Gateway": "g6", "IPAMConfig": None}},
+            **({"database_identity": database["identity"]} if n in e.MIGRATION_SERVICES else {}),
+        }
+        for n in (*e.MIGRATION_SERVICES, "scheduler", "postgres", "storage", "telegram-egress")
+    }
+    plan = {
+        "version": 1,
+        "from_sha": e.MIGRATION_FROM,
+        "from_tree": e.MIGRATION_FROM_TREE,
+        "to_sha": "f" * 40,
+        "to_tree": "e" * 40,
+        "before": copy.deepcopy(runtime),
+        "before_images": before_images,
+        "database": copy.deepcopy(database),
+    }
+    ready = {"before_images": before_images, "after_images": after_images}
+    for name, value in {
+        "state-before.json": old,
+        "preparation.json": plan,
+        "prepared.json": ready,
+    }.items():
+        e.write_private(bundle / name, e.encoded(value))
+    e.write_private(directory / "state.json", e.encoded(old))
+    args = argparse.Namespace(accepted_sha=plan["to_sha"], from_sha=e.MIGRATION_FROM)
+    effects = []
+    monkeypatch.setattr(e, "migration_prepared", lambda _: (bundle, plan, old, ready))
+    monkeypatch.setattr(e, "migration_saved", lambda _: (bundle, plan, old))
+    monkeypatch.setattr(e, "migration_runtime", lambda *_: copy.deepcopy(runtime))
+    monkeypatch.setattr(e, "migration_database", lambda *_: copy.deepcopy(database))
+    monkeypatch.setattr(e, "compose_prefix", lambda *_: ["docker", "compose"])
+    monkeypatch.setattr(e, "caller_probe", lambda *_: None)
+
+    def command(argv, **kwargs):
+        assert "up" in argv and argv[-1] in e.MIGRATION_SERVICES
+        side = "before" if "images-before.json" in argv[3] else "after"
+        name = argv[-1]
+        effects.append((side, name))
+        runtime[name] = copy.deepcopy(plan["before"][name])
+        runtime[name].update(id=name + str(len(effects)), image=ready[side + "_images"][name])
+        return b""
+
+    monkeypatch.setattr(e, "command", command)
+    return SimpleNamespace(
+        directory=directory,
+        bundle=bundle,
+        old=old,
+        args=args,
+        effects=effects,
+        runtime=runtime,
+        database=database,
+        plan=plan,
+        ready=ready,
+    )
+
+
+def test_migration_complete_retry_and_explicit_rollback(migration_machine):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    assert len(m.effects) == 2
+    completed = (m.bundle / "forward-complete.json").read_bytes()
+    final = copy.deepcopy(m.runtime)
+    for readonly in (True, False, True):
+        e.migration_switch(m.args, m.directory, readonly=readonly)
+        assert m.runtime == final and len(m.effects) == 2
+        assert (m.bundle / "forward-complete.json").read_bytes() == completed
+    e.migration_switch(m.args, m.directory, reverse=True)
+    assert len(m.effects) == 4
+    assert (m.directory / "state.json").read_bytes() == e.encoded(m.old)
+    assert (m.bundle / "forward-complete.json").read_bytes() == completed
+    assert m.runtime["scheduler"] == m.plan["before"]["scheduler"]
+    e.migration_switch(m.args, m.directory, reverse=True)
+    assert len(m.effects) == 4
+    with pytest.raises(e.EgressError, match="ROLLBACK_ALREADY_STARTED"):
+        e.migration_switch(m.args, m.directory)
+
+
+@pytest.mark.parametrize("boundary", ["intent", "api-intent", "api-image", "state", "receipt"])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_migration_interruption_resume_never_repeats_completed_effects(
+    migration_machine, monkeypatch, boundary, reverse
+):
+    m = migration_machine
+    if reverse:
+        e.migration_switch(m.args, m.directory)
+    saved_write, saved_command = e.write_private, e.command
+    direction = "rollback" if reverse else "forward"
+    stop = {
+        "intent": "rollback-intent.json" if reverse else "intent.json",
+        "api-intent": direction + "-api-intent.json",
+        "state": "state.json",
+        "receipt": direction + "-complete.json",
+    }.get(boundary)
+
+    def write(path, raw, **kwargs):
+        if path.name == stop and boundary == "receipt":
+            raise InterruptedError("interrupted")
+        saved_write(path, raw, **kwargs)
+        if path.name == stop:
+            raise InterruptedError("interrupted")
+
+    def command(argv, **kwargs):
+        result = saved_command(argv, **kwargs)
+        if boundary == "api-image" and argv[-1] == "api":
+            raise InterruptedError("interrupted")
+        return result
+
+    monkeypatch.setattr(e, "write_private", write)
+    monkeypatch.setattr(e, "command", command)
+    with pytest.raises(InterruptedError):
+        e.migration_switch(m.args, m.directory, reverse=reverse)
+    monkeypatch.setattr(e, "write_private", saved_write)
+    monkeypatch.setattr(e, "command", saved_command)
+    e.migration_switch(m.args, m.directory, reverse=reverse)
+    e.migration_switch(m.args, m.directory, reverse=reverse)
+    assert m.effects == (
+        [("after", "api"), ("after", "worker")]
+        + ([("before", "api"), ("before", "worker")] if reverse else [])
+    )
+
+
+@pytest.mark.parametrize(
+    "drift",
+    [
+        "database",
+        "image",
+        "config",
+        "mount",
+        "network",
+        "unrelated",
+        "missing",
+        "stopped",
+        "state",
+        "target",
+    ],
+)
+def test_migration_drift_stops_before_any_effect(migration_machine, drift):
+    m = migration_machine
+    if drift == "database":
+        m.database["tables"]["sealed"] = "changed"
+    elif drift == "target":
+        m.args.accepted_sha = "a" * 40
+    elif drift == "state":
+        e.write_private(m.directory / "state.json", e.encoded(dict(m.old, version=1)))
+    elif drift == "image":
+        m.runtime["api"]["image"] = "foreign"
+    elif drift == "config":
+        m.runtime["api"]["host_sha256"] = "changed"
+    elif drift == "mount":
+        m.runtime["api"]["mounts"] = ["foreign"]
+    elif drift == "network":
+        m.runtime["api"]["networks"]["default"]["Gateway"] = "foreign"
+    elif drift == "unrelated":
+        m.runtime["storage"]["id"] = "foreign"
+    elif drift == "missing":
+        del m.runtime["api"]
+    else:
+        m.runtime["api"]["running"] = False
+    with pytest.raises(e.EgressError):
+        e.migration_switch(m.args, m.directory)
+    assert not m.effects and not (m.bundle / "forward-complete.json").exists()
+
+
+@pytest.mark.parametrize(
+    "path", ["intent.json", "images-after.json", "forward-api-done.json", "forward-complete.json"]
+)
+def test_completed_migration_rejects_changed_evidence(migration_machine, path):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    raw = json.loads((m.bundle / path).read_bytes())
+    raw["foreign"] = True
+    e.write_private(m.bundle / path, e.encoded(raw))
+    with pytest.raises(e.EgressError):
+        e.migration_switch(m.args, m.directory)
+    assert len(m.effects) == 2
+
+
+@pytest.mark.parametrize("delta", [{"version": 1}, {"source_sha": "f" * 40}, {"generation": "."}])
+def test_only_exact_completed_recovery_is_a_migration_predecessor(tmp_path, monkeypatch, delta):
+    directory = tmp_path / "state"
+    directory.mkdir(mode=0o700)
+    state = {
+        "version": 2,
+        "source_sha": e.MIGRATION_FROM,
+        "generation": "recovery-v2",
+        "uid": os.getuid(),
+        "gid": os.getgid(),
+        **delta,
+    }
+    e.write_private(directory / "state.json", e.encoded(state))
+    monkeypatch.setattr(e, "migration_source", lambda _: "e" * 40)
+    with pytest.raises(e.EgressError, match="MIGRATION_PREDECESSOR"):
+        e.migration_attest(
+            argparse.Namespace(from_sha=e.MIGRATION_FROM, accepted_sha="f" * 40), directory
+        )
+
+
+def test_owner_id_change_requires_exact_pinned_delta(tmp_path, monkeypatch):
+    directory = tmp_path / "state"
+    directory.mkdir(mode=0o700)
+    (directory / "recovery-v1").mkdir(mode=0o700)
+    original = b"ASM_TELEGRAM_EXPECTED_OWNER_ID='101' # preserve comment\r\nOTHER=unchanged\r\n"
+    corrected = original.replace(b"101", b"202")
+    staged = tmp_path / "telegram.env"
+    e.write_private(staged, corrected)
+    before = {"runtime_env": "a", "profile": "b", "staged_env": e.sha(original)}
+    e.write_private(directory / "recovery-v1/inputs.json", e.encoded(before))
+    monkeypatch.setattr(
+        e, "input_hashes", lambda _: dict(before, staged_env=e.sha(staged.read_bytes()))
+    )
+    journal = {
+        "previous_owner_id": "101",
+        "approved_owner_id": "202",
+        "staged_before_sha256": e.sha(original),
+        "staged_after_sha256": e.sha(corrected),
+    }
+    receipts = {"asm-telegram-owner-id-correction-0b7e24ee.json": e.encoded(journal)}
+    assert e.migration_inputs({"telegram_env": str(staged)}, directory, receipts)[
+        "staged_env"
+    ] == e.sha(corrected)
+    for changed in (corrected + b"\n", corrected.replace(b"OTHER=unchanged", b"OTHER=changed")):
+        e.write_private(staged, changed)
+        with pytest.raises(e.EgressError, match="OWNER_DELTA"):
+            e.migration_inputs({"telegram_env": str(staged)}, directory, receipts)
+
+
+def test_migration_deadline_clamps_every_subprocess(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        e.subprocess,
+        "run",
+        lambda *a, **kw: calls.append(kw["timeout"]) or SimpleNamespace(returncode=0, stdout=b""),
+    )
+    with e.migration_budget(0.5):
+        e.command(["git", "status"], timeout=40)
+    assert len(calls) == 1 and 0 < calls[0] <= 0.5

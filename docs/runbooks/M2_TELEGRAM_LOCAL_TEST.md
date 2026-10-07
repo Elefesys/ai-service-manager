@@ -3194,6 +3194,126 @@ Normal relay finished20:54:17Z and unit suite20:56:08Z, leaving under2m15s for39
 
 </details>
 
+### 0.6.25. Connect5 migration — candidate protocol and owner draft
+
+Scope: repository implementation and disposable CI only. The following owner draft
+is **not an execution authorization**. C0 must first accept the exact candidate,
+all nine CI jobs and a new scoped C8 verdict. Findings01/02/03 and prior recovery
+acceptance remain closed; they do not verify this new path. Exact final head/tree,
+tested merge/parents, job/artifact IDs and digests belong in the single PR24 receipt
+`https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006`.
+
+The source migration preserves the existing owner checkout at exact
+`0b7e24ee425ebb429bf87dfe382cbd3fab883028` and its private files. Prepare a **separate**
+clean candidate checkout at the C0-issued final SHA, with its private `.env` copied
+byte-for-byte from the predecessor (0600, same operator owner; no symlink). All
+profile/staged/state paths still refer to the existing canonical private files.
+Do not copy private files into Git or build context. No reset/rebase or overwrite of
+the old checkout is part of this operation. The active runtime source is recorded
+in state and attested image bytes; the two control checkouts remain immutable.
+
+Before issuance C0 must supply the exact current last operator receipt **and its
+independently accepted SHA256**. Do not derive the expected pin from whatever file
+happens to exist. The chain must include BINDING_COMMITTED and the Owner ID correction
+journal, if present. Read-only inventory checks the completed recovery receipt,
+original baseline/audit, all private inputs, exact old app/operator images, HTTPS,
+local Unix Docker context, actual DB and unrelated containers. A cached old operator
+image whose copied Git files differ from exact0b7 is a blocker for C0, not permission
+to rebuild or change its receipt. No discovery or live Telegram probe is needed.
+
+Save the following as an operator-owned 0600 POSIX script outside both checkouts.
+C0 substitutes the four placeholders in a concrete issuance; paths must obey the
+helper's safe-path rules. Run one requested action at a time, under the helper's
+nonblocking operation lock. These commands print only fixed markers/errors.
+
+```sh
+#!/bin/sh
+set -eu
+umask 077
+candidate='/home/asmoperator/C0_CANDIDATE_CHECKOUT'
+target='C0_EXACT_FINAL_CANDIDATE_SHA'
+receipt='/home/asmoperator/.local/state/C0_LAST_OPERATOR_RECEIPT.json'
+receipt_sha='C0_INDEPENDENTLY_ACCEPTED_RECEIPT_SHA256'
+predecessor='/home/asmoperator/asm-telegram-test'
+state='/home/asmoperator/.local/state/asm-telegram-egress'
+from='0b7e24ee425ebb429bf87dfe382cbd3fab883028'
+action=${1:?C0-issued action required}
+case "$action" in
+  migration-attest|migration-prepare|migrate|migration-preflight|migration-resume|migration-rollback) ;;
+  *) exit 2 ;;
+esac
+cd "$candidate"
+exec python3 scripts/prepare_telegram_egress.py "$action" \
+  --state-dir "$state" --accepted-sha "$target" --from-sha "$from" \
+  --predecessor-checkout "$predecessor" \
+  --operator-receipt "$receipt" --operator-receipt-sha256 "$receipt_sha"
+```
+
+Order after a future scoped issuance: `migration-attest`, then
+`migration-prepare` (600s including clean-source builds), then `migrate`, then
+`migration-preflight` (each ≤180s). Preparation writes only private migration audit
+and distinct images/tags; it does not recreate runtime. An interrupted preparation
+may repeat after its archived inputs agree. An interrupted runtime operation uses
+`migration-resume` with the same target/state/intent; never delete the journal or
+manually edit `state.source_sha`. A completed `migrate` rechecks without recreating.
+
+The immutable `migration-v3` bundle contains original byte archives, preparation,
+old/new image IDs and rollback reachability, the source/tree intent, per-service
+intent/result/done records and the final receipt. API/worker change; operator runs
+from the new development image. Scheduler keeps its original ID/image, as do the
+other unrelated services. State v3 retains recovery-v2 routes and binds the target
+and intent hash. PASS requires equal actual DB identity and 31-table fingerprints;
+Console/binding/private originals/UNKNOWN and original audit must remain intact.
+
+Explicit rollback, only when issued: run `migration-rollback` from the candidate
+controller. It restores the old images and exact old v2 state, preserving both new
+audit and original receipts. Retry this same command after interruption or completion;
+no automatic rollback occurs. Then use the preserved predecessor checkout for the
+original read-only preflight:
+
+```sh
+cd /home/asmoperator/asm-telegram-test
+python3 scripts/prepare_telegram_egress.py preflight \
+  --state-dir /home/asmoperator/.local/state/asm-telegram-egress
+```
+
+After rollback, a forward migration stops on the retained rollback intent. C0 must
+decide a new operation; do not remove the completed bundle. Foreign/dirty source,
+missing/tampered receipt/archive/input, any unexpected image/tag/container/config/
+network/DB change, nonlocal Docker, enabled/nonempty runtime or a deadline is STOP.
+Keep evidence, do not send/ACK/rebind, and return the fixed error to C0.
+
+For a future PowerShell/SSH issuance, transmit a saved literal script as stdin or
+upload that script, rather than nesting `python3 -c` inside remote quoting. The
+disposable lane checks PowerShell literal stdin → a local SSH argv shim → `sh -s`
+with exact SHA/action/path round trips. It never invokes SSH or contacts an owner.
+The final remote command is one argument (`sh -s -- migration-resume`, or the
+C0-issued saved script path followed by its one approved action),
+and PowerShell `$LASTEXITCODE` must be checked. Credentials/host selection and the
+actual owner transport remain a separate C0 issuance, not part of these tests.
+
+Disposable commands (dedicated fresh GitHub runner only):
+
+```sh
+sh scripts/test_telegram_egress_migration.sh intent
+sh scripts/test_telegram_egress_migration.sh image
+sh scripts/test_telegram_egress_migration.sh state
+```
+
+Each command runs on its own runner/shard, on normal Docker and exact
+Engine29.8.2/server8af9fe3/Compose5.5.1. It builds exact old bytes, completes old
+v1→v2 recovery with the old executable helper, holds a real committed binding,
+COMPED/Console session/private image and UNKNOWN/wire1, and SIGKILLs the real
+candidate at the selected forward and rollback boundary. Resume, completed retry,
+real drift negatives and old-source rollback preflight run while the fixture stays
+held ≤180s. No fake old-source/image check substitutes for that fixture.
+`migration-*.json` records source/tree, old/new image maps, preserved hashes,
+runtime identities, interruptions, timings and equal before/after fingerprints.
+Separate artifacts include logs, quoting proof, tested commit, source archive and
+empty worktree status. All original foundation/browser/Docker29 commands and clean
+gates still run on the final candidate. No local Docker result or owner/live result
+is implied by focused unit tests or by this runbook.
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker

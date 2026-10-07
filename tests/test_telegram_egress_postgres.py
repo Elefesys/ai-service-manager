@@ -757,6 +757,7 @@ async def durable_local():
         "recover-missing",
         "legacy-disable",
         "legacy-stop",
+        "migration",
     }
     catalog_file = fixture_directory() / "durable-catalog.json"
     try:
@@ -771,7 +772,7 @@ async def durable_local():
             await connection.execute(text("SET TRANSACTION READ ONLY"))
             empty = await canonical_fingerprint(connection)
             assert empty["platform.alembic_version"]["count"] == 1
-            if lifecycle == "fresh":
+            if lifecycle in {"fresh", "migration"}:
                 assert not catalog_file.exists(), "E05_FRESH_CATALOG_RECEIPT_MUST_BE_ABSENT"
                 assert all(
                     row["count"] == 0
@@ -956,7 +957,7 @@ async def durable_local():
                     if name not in {*catalog, "platform.alembic_version"}
                 ), "E05_FIXTURE_CLEANUP_INCOMPLETE"
                 assert cleaned["platform.alembic_version"]["count"] == 1
-            if lifecycle == "fresh":
+            if lifecycle in {"fresh", "migration"}:
                 write_json(
                     catalog_file,
                     {"database_identity": target["database_identity"], "fingerprint": cleaned},

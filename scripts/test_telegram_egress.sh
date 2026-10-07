@@ -1,13 +1,16 @@
 #!/bin/sh
 # Mandatory synthetic lane. No owner inputs, public Telegram calls or Docker socket mounts.
 set -eu
-python3 - <<'PY'
+python3 - "$@" <<'PY'
+import importlib.util
 import ipaddress
 import json
 import os
 import re
+import runpy
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -18,6 +21,19 @@ from scripts import prepare_telegram_egress as e
 os.umask(0o077)
 root = Path.cwd()
 assert root == e.ROOT and os.getuid() != 0, 'TEST_RUNNER_CHECKOUT_AND_NONROOT_REQUIRED'
+migration = None
+if sys.argv[1:]:
+    assert len(sys.argv) == 4 and sys.argv[1] == '--migration', 'EXPLICIT_MIGRATION_SELECTOR_REQUIRED'
+    assert os.environ.get('GITHUB_ACTIONS') == 'true', 'DISPOSABLE_RUNNER_REQUIRED'
+    migration = {'root': root, 'fault': sys.argv[3], 'source': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip()}
+    assert migration['fault'] in {'intent', 'image', 'state'}
+    root = Path(sys.argv[2]).resolve()
+    assert root != migration['root'] and root.name == 'predecessor'
+    spec = importlib.util.spec_from_file_location('exact_predecessor_egress', root / 'scripts/prepare_telegram_egress.py')
+    e = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(e)
+    os.chdir(root)
+    assert subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip() == '0b7e24ee425ebb429bf87dfe382cbd3fab883028'
 phase = 'identity'
 project = 'asm-telegram-egress-test'
 processes = []
@@ -41,7 +57,7 @@ def run(args, timeout=120):
         diagnostic = re.sub(r'(://)[^/\s]*@', r'\1<redacted>@', diagnostic)
         print('TEST_COMMAND_EXIT=' + str(result.returncode) + ' phase=' + phase, flush=True)
         print(diagnostic, flush=True)
-        if args[:2] == ['python3', 'scripts/prepare_telegram_egress.py']:
+        if args[:1] == ['python3'] and len(args) > 1 and Path(args[1]).name == 'prepare_telegram_egress.py':
             code = result.stdout.decode(errors='replace').strip()
             if re.fullmatch('EGRESS_[A-Za-z0-9_]{1,120}', code):
                 print(code, flush=True)
@@ -294,6 +310,8 @@ with tempfile.TemporaryDirectory(prefix='asm-telegram-egress-') as temporary:
                          b'TG_WEBHOOK_SECRET=synthetic-staged-webhook-not-active\n'
                          b'ASM_TELEGRAM_EXPECTED_BOT_ID=9911\n'
                          b'ASM_TELEGRAM_WEBHOOK_URL=https://synthetic.invalid/webhook\n')
+        if migration is not None:
+            staged_inputs += b"ASM_TELEGRAM_EXPECTED_OWNER_ID='101' # synthetic predecessor\r\n"
         e.write_private(directory / 'telegram.env', staged_inputs)
         state_dir = directory / 'state'
         phase_start('private_prepare')
@@ -411,6 +429,10 @@ http {
         phase_start('topology')
         run([*base, 'build', 'telegram-operator'], 180)
         run(['docker', 'tag', project + '-telegram-operator', 'asm-telegram-egress-checks:test'])
+        if migration is not None:
+            # Old app/operator images stay exact. Only synthetic test services use
+            # the candidate development image containing the new held fixture.
+            run(['docker', 'tag', 'asm-connect5-development:' + migration['source'], 'asm-telegram-egress-checks:test'])
         compose('config', '--quiet')
         phase_start('test_storage_bootstrap')
         compose('up', '-d', '--wait', 'postgres-test', 'storage-test')
@@ -465,6 +487,10 @@ http {
         finally:
             e.write_private(config_path, config_bytes)
         assert e.transition_relay([state], state_dir) == transition_guard
+        if migration is not None:
+            runpy.run_path(str(migration['root'] / 'tests/test_telegram_egress_migration.py'),
+                           init_globals={'fixture': globals()}, run_name='__migration_harness__')
+            raise AssertionError('MIGRATION_HARNESS_MUST_COMPLETE_EXPLICITLY')
         phase_start('postgres_wire')
         checks = start_checks(['pytest', '-q', '-o', 'python_classes=TelegramEgressPostgresChecks',
                                'tests/test_telegram_egress_postgres.py'])

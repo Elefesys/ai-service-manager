@@ -130,3 +130,71 @@ jobs:
           path: reports/
           retention-days: 7
           if-no-files-found: error
+  connect5-migration:
+    # Independent disposable shards preserve the existing three verification jobs.
+    name: connect5-migration (${{ matrix.docker }}, ${{ matrix.boundary }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        docker: [normal, docker29]
+        boundary: [intent, image, state]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install exact official Engine and Compose for the reported boundary
+        if: matrix.docker == 'docker29'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_ACTIONS" = true
+          curl --fail --silent --show-error --location --max-time 60 https://download.docker.com/linux/ubuntu/gpg -o "$RUNNER_TEMP/asm-docker.asc"
+          test "$(gpg --show-keys --with-colons "$RUNNER_TEMP/asm-docker.asc" | awk -F: '$1=="fpr" {print $10; exit}')" = 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+          sudo install -m 0644 "$RUNNER_TEMP/asm-docker.asc" /etc/apt/keyrings/asm-docker.asc
+          printf '%s\n' 'deb [arch=amd64 signed-by=/etc/apt/keyrings/asm-docker.asc] https://download.docker.com/linux/ubuntu noble stable' > "$RUNNER_TEMP/asm-docker.list"
+          sudo apt-get update -o Dir::Etc::sourcelist="$RUNNER_TEMP/asm-docker.list" -o Dir::Etc::sourceparts=-
+          sudo apt-get install -y --no-install-recommends --allow-downgrades -o Dir::Etc::sourcelist="$RUNNER_TEMP/asm-docker.list" -o Dir::Etc::sourceparts=- docker-ce=5:29.8.2-1~ubuntu.24.04~noble docker-ce-cli=5:29.8.2-1~ubuntu.24.04~noble
+          curl --fail --silent --show-error --location --max-time 120 https://github.com/docker/compose/releases/download/v5.5.1/docker-compose-linux-x86_64 -o "$RUNNER_TEMP/asm-compose"
+          printf '%s  %s\n' db1889184726840f75c4f9c001048430d4f25b3be3cb084d3ddd762bc0aed576 "$RUNNER_TEMP/asm-compose" | sha256sum --check --strict
+          install -d -m 0700 "$HOME/.docker/cli-plugins"
+          install -m 0755 "$RUNNER_TEMP/asm-compose" "$HOME/.docker/cli-plugins/docker-compose"
+          sudo systemctl restart docker
+          test "$(docker version --format '{{.Server.Version}}/{{.Server.GitCommit}}')" = 29.8.2/8af9fe3
+          test "$(docker compose version --short | sed 's/^v//')" = 5.5.1
+          mkdir -p reports
+          docker version --format '{{json .}}' > reports/docker29-version.json
+          dpkg-query -W docker-ce docker-ce-cli containerd.io > reports/docker29-packages.txt
+      - name: Verify completed recovery migration, real interruption and rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          docker version --format '{{json .}}' > reports/migration-docker-version.json
+          docker compose version --short > reports/migration-compose-version.txt
+          sh scripts/test_telegram_egress_migration.sh '${{ matrix.boundary }}' 2>&1 | tee reports/migration.log
+      - name: Require unchanged tracked and untracked source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Record migration source
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          git rev-parse HEAD > reports/tested-commit.txt
+          git status --porcelain --untracked-files=all > reports/worktree-status.txt
+          git archive --format=tar.gz HEAD > reports/source.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: connect5-migration-${{ matrix.docker }}-${{ matrix.boundary }}-${{ github.run_id }}
+          path: reports/
+          retention-days: 7
+          if-no-files-found: error

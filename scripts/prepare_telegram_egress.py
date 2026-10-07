@@ -15,6 +15,7 @@ import re
 import stat
 import subprocess
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from uuid import UUID
@@ -33,6 +34,13 @@ SAFE_PATH = re.compile(r"/[A-Za-z0-9_./-]+")
 
 LEGACY_SHA = "c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14"
 LEGACY_OVERLAY_BLOB = "5a6158a648d553fe80a917f6ebca8867c20bbfe6"
+MIGRATION_FROM = "0b7e24ee425ebb429bf87dfe382cbd3fab883028"
+MIGRATION_FROM_TREE = "14a4033b849c736235653a5a85ec9e5112bfe727"
+MIGRATION_BASE = "14f794b650c935c47ab1e78474fda0d1df0a7277"
+# Scheduler never uses Telegram HTTP. Keep its original ID/image so even rollback
+# remains compatible with the predecessor's strict unrelated-container baseline.
+MIGRATION_SERVICES = ("api", "worker")
+MIGRATION_DEADLINE = None
 # Exact accepted schema1 overlay, retained only to verify/recover the known partial state.
 LEGACY_OVERLAY = b'# Opt-in only. Use the private route.env produced by prepare_telegram_egress.py.\n# Preserve the existing default gateway; Telegram alone resolves to this relay.\nx-egress-hosts: &egress-hosts\n  - api.telegram.org=${ASM_TELEGRAM_EGRESS_IP:?Prepare private egress state}\n  - api.telegram.org=::ffff:${ASM_TELEGRAM_EGRESS_IP:?Prepare private egress state}\nx-egress-networks: &egress-networks\n  default:\n    gw_priority: 1\n  telegram-egress: {}\nservices:\n  api:\n    extra_hosts: *egress-hosts\n    networks: *egress-networks\n  worker:\n    extra_hosts: *egress-hosts\n    networks: *egress-networks\n  telegram-operator:\n    extra_hosts: *egress-hosts\n    networks: *egress-networks\n  telegram-egress:\n    profiles: [telegram-egress]\n    image: ${TELEGRAM_EGRESS_IMAGE:?Missing telegram-egress/image.lock.env}\n    platform: linux/amd64\n    user: "${ASM_TELEGRAM_EGRESS_UID:?}:${ASM_TELEGRAM_EGRESS_GID:?}"\n    command: [run, -config, /run/telegram-egress/config.json]\n    read_only: true\n    # Shadow the publisher\'s writable anonymous VOLUME declarations.\n    tmpfs:\n      - /usr/local/etc/xray:ro,noexec,nosuid,size=64k\n      - /var/log/xray:ro,noexec,nosuid,size=64k\n    cap_drop: [ALL]\n    security_opt: [no-new-privileges:true]\n    sysctls:\n      net.ipv4.ip_unprivileged_port_start: "0"\n    pids_limit: 64\n    mem_limit: 96m\n    cpus: 0.5\n    ulimits:\n      nofile: {soft: 512, hard: 512}\n    restart: unless-stopped\n    stop_grace_period: 10s\n    logging: {driver: none}\n    volumes:\n      - type: bind\n        source: ${ASM_TELEGRAM_EGRESS_CONFIG:?Prepare private egress state}\n        target: /run/telegram-egress/config.json\n        read_only: true\n        bind: {create_host_path: false}\n    networks:\n      telegram-egress:\n        ipv4_address: ${ASM_TELEGRAM_EGRESS_IP:?}\nnetworks:\n  telegram-egress:\n    name: ${ASM_TELEGRAM_EGRESS_NETWORK:?}\n    driver: bridge\n    enable_ipv6: false\n    labels:\n      asm.scope: synthetic-telegram-test\n    ipam:\n      config:\n        - subnet: ${ASM_TELEGRAM_EGRESS_SUBNET:?}\n          gateway: ${ASM_TELEGRAM_EGRESS_GATEWAY:?}\n          # Reserve the lower half for fixed endpoints, even while relay is stopped.\n          ip_range: ${ASM_TELEGRAM_EGRESS_DYNAMIC_RANGE:?}\n'
 
@@ -365,6 +373,10 @@ def select_subnet(networks, routes, previous=None, own_name=None):
 
 
 def command(args, *, timeout=40, environment=None):
+    if MIGRATION_DEADLINE is not None:
+        remaining = MIGRATION_DEADLINE - time.monotonic()
+        require(remaining > 0, "EGRESS_MIGRATION_DEADLINE")
+        timeout = min(timeout, remaining)
     result = subprocess.run(
         args, stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout, env=environment
     )
@@ -450,7 +462,7 @@ def route_values(state, directory):
         "ASM_TELEGRAM_EGRESS_GID": str(state["gid"]),
     }
 
-    if state.get("version") == 2:
+    if state.get("version") in {2, 3}:
         block = ipaddress.ip_network(state["subnet6"])
         result.update(
             {
@@ -622,13 +634,28 @@ def verify(directory, *, legacy=False, accepted_sha=None, saved_state=None):
         else strict_json(private_bytes(directory / "state.json"))
     )
     require(
-        state.get("version") == (1 if legacy else 2) and state.get("image") == IMAGE,
+        state.get("version") in ({1} if legacy else {2, 3}) and state.get("image") == IMAGE,
         "EGRESS_STATE_VERSION",
     )
     if legacy:
         require(state["source_sha"] == LEGACY_SHA, "EGRESS_LEGACY_SOURCE")
     require(state["uid"] == os.getuid() and state["gid"] == os.getgid(), "EGRESS_STATE_OWNER")
     source_check(accepted_sha if legacy else state["source_sha"])
+    if state.get("version") == 3:
+        migration_manifest(directory, state)
+        bundle, _, _, _ = migration_prepared(directory)
+        completed = strict_json(private_bytes(bundle / "forward-complete.json"))
+        require(
+            completed["state_sha256"] == sha(encoded(state))
+            and completed["intent_sha256"] == state["migration_intent_sha256"]
+            and not (bundle / "rollback-intent.json").exists(),
+            "EGRESS_MIGRATION_COMPLETED_STATE_REQUIRED",
+        )
+    return verify_state_contents(state, directory, legacy=legacy)
+
+
+def verify_state_contents(state, directory, *, legacy=False):
+    """Configuration checks shared with the separately attested exact predecessor."""
     raw = private_bytes(state["profile"])
     require(sha(raw) == state["profile_sha256"], "EGRESS_PROFILE_CHANGED")
     values = route_values(state, directory)
@@ -709,6 +736,9 @@ def compose_prefix(state, directory, *, overlay=True, operator_inputs=False):
             "--profile",
             "telegram-egress",
         ]
+    if state.get("version") == 3:
+        migration_manifest(directory, state)
+        args += ["-f", str(directory / "migration-v3/images-after.json")]
     return args + ["--profile", "telegram-operator"]
 
 
@@ -816,6 +846,10 @@ def checked_model(state, directory):
 
 def snapshot(state, directory, *, disabled=True):
     model = checked_model(state, directory)
+    return runtime_snapshot(state, directory, model, source_image_check, disabled=disabled)
+
+
+def runtime_snapshot(state, directory, model, check_image, *, disabled=True):
     ids = (
         command([*compose_prefix(state, directory), "ps", "-q"], environment=clean_environment())
         .decode()
@@ -832,7 +866,7 @@ def snapshot(state, directory, *, disabled=True):
                 "EGRESS_RUNNING_TELEGRAM_MUST_BE_DISABLED",
             )
         if name in {"api", "worker"}:
-            source_image_check(container["Image"])
+            check_image(container["Image"])
             require(
                 all(
                     values.get(k) == str(v)
@@ -1032,7 +1066,7 @@ def compare_deployment(before, after, state):
         "EGRESS_RUNNING_RELAY_IDENTITY",
     )
 
-    if state.get("version") == 2:
+    if state.get("version") in {2, 3}:
         require(
             relay["networks"][state["project"] + "_telegram-egress-v6"]["GlobalIPv6Address"]
             == str(ipaddress.ip_network(state["subnet6"])[2]),
@@ -1115,7 +1149,7 @@ def transition_relay(states, directory, *, missing=False):
     expected = {
         values["ASM_TELEGRAM_EGRESS_NETWORK"]: {"IPv4Address": values["ASM_TELEGRAM_EGRESS_IP"]}
     }
-    if actual_state.get("version") == 2:
+    if actual_state.get("version") in {2, 3}:
         expected[values["ASM_TELEGRAM_EGRESS_NETWORK6"]] = {
             "IPv6Address": values["ASM_TELEGRAM_EGRESS_IPV6"]
         }
@@ -1839,6 +1873,1026 @@ def recover(args):
         write_private(directory / "recovery.json", receipt)
 
 
+@contextmanager
+def migration_budget(seconds):
+    global MIGRATION_DEADLINE
+    require(MIGRATION_DEADLINE is None, "EGRESS_MIGRATION_NESTED_OPERATION")
+    MIGRATION_DEADLINE = time.monotonic() + seconds
+    try:
+        yield
+        require(time.monotonic() < MIGRATION_DEADLINE, "EGRESS_MIGRATION_DEADLINE")
+    finally:
+        MIGRATION_DEADLINE = None
+
+
+def migration_source(target):
+    source_check(target)
+    command(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", MIGRATION_BASE, target])
+    require(
+        command(["git", "-C", str(ROOT), "rev-parse", MIGRATION_FROM + "^{tree}"]).decode().strip()
+        == MIGRATION_FROM_TREE,
+        "EGRESS_MIGRATION_PREDECESSOR_TREE",
+    )
+    for name in (
+        "compose.yaml",
+        "infra/Dockerfile.backend",
+        "infra/images.lock.env",
+        "infra/telegram-egress/compose.yaml",
+        "pyproject.toml",
+        "uv.lock",
+    ):
+        require(
+            command(["git", "-C", str(ROOT), "show", MIGRATION_FROM + ":" + name])
+            == (ROOT / name).read_bytes(),
+            "EGRESS_MIGRATION_FROZEN_SOURCE",
+        )
+    require(
+        not os.environ.get("DOCKER_HOST") and not os.environ.get("DOCKER_CONTEXT"),
+        "EGRESS_MIGRATION_AMBIENT_DOCKER",
+    )
+    context = json.loads(command(["docker", "context", "inspect"]))
+    require(
+        len(context) == 1
+        and context[0]["Endpoints"]["docker"]["Host"] == "unix:///var/run/docker.sock",
+        "EGRESS_MIGRATION_NONLOCAL_DOCKER",
+    )
+    return command(["git", "-C", str(ROOT), "rev-parse", target + "^{tree}"]).decode().strip()
+
+
+def migration_bytes(path):
+    path = checked_path(path)
+    parent = path.parent.stat()
+    require(
+        parent.st_uid == os.getuid() and not parent.st_mode & 0o022,
+        "EGRESS_MIGRATION_PRIVATE_PARENT",
+    )
+    with path.open("rb") as stream:
+        raw = stream.read(65537)
+    require(len(raw) <= 65536, "EGRESS_MIGRATION_FILE_LIMIT")
+    return raw
+
+
+def migration_receipts(path, expected, state, directory):
+    """An explicitly pinned last operator receipt seals its complete predecessor DAG."""
+    require(re.fullmatch(r"[0-9a-f]{64}", expected or ""), "EGRESS_MIGRATION_RECEIPT_PIN")
+    path = checked_path(path)
+    pending, files = [(path, expected)], {}
+    while pending:
+        current, digest = pending.pop()
+        require(
+            current.parent == path.parent and re.fullmatch(r"[a-z0-9-]+\.json", current.name),
+            "EGRESS_MIGRATION_RECEIPT_PATH",
+        )
+        raw = migration_bytes(current)
+        require(sha(raw) == digest, "EGRESS_MIGRATION_RECEIPT_CHANGED")
+        if str(current) in files:
+            continue
+        require(len(files) < 32, "EGRESS_MIGRATION_RECEIPT_LIMIT")
+        files[str(current)] = raw
+        receipt = strict_json(raw)
+        require(
+            receipt.get("source_sha") == MIGRATION_FROM
+            and receipt.get("source_tree") == MIGRATION_FROM_TREE
+            and receipt.get("original_before_sha256")
+            == sha(private_bytes(directory / "deployment-before.json")),
+            "EGRESS_MIGRATION_RECEIPT_SOURCE",
+        )
+        parents = receipt.get("prior_receipts_sha256", {})
+        require(isinstance(parents, dict), "EGRESS_MIGRATION_RECEIPT_PARENTS")
+        for name, value in parents.items():
+            require(
+                re.fullmatch(r"[a-z0-9-]+\.json", name) is not None, "EGRESS_MIGRATION_RECEIPT_PATH"
+            )
+            pending.append((path.parent / name, value))
+        if "prior_attempt_sha256" in receipt:
+            pending.append(
+                (
+                    path.parent / "asm-telegram-discovery-0b7e24ee.json",
+                    receipt["prior_attempt_sha256"],
+                )
+            )
+        if "owner_correction_sha256" in receipt:
+            pending.append(
+                (
+                    path.parent / "asm-telegram-owner-id-correction-0b7e24ee.json",
+                    receipt["owner_correction_sha256"],
+                )
+            )
+    last = strict_json(files[str(path)])
+    require(
+        last.get("preservation_pass") is True
+        and last.get("status") in {"DIAGNOSTIC_COMPLETE", "BINDING_COMMITTED"}
+        and last.get("staged_sha256") == sha(migration_bytes(state["telegram_env"])),
+        "EGRESS_MIGRATION_LAST_RECEIPT",
+    )
+    require(
+        any(
+            strict_json(raw).get("status") == "BINDING_COMMITTED"
+            and strict_json(raw).get("preservation_pass") is True
+            for raw in files.values()
+        ),
+        "EGRESS_MIGRATION_BINDING_RECEIPT_REQUIRED",
+    )
+    return files, last["operator_image_id"]
+
+
+def migration_inputs(state, directory, receipts):
+    expected = strict_json(private_bytes(directory / "recovery-v1/inputs.json"))
+    current = input_hashes(state)
+    require(
+        all(current[k] == expected[k] for k in ("runtime_env", "profile")),
+        "EGRESS_MIGRATION_ORIGINAL_INPUT_DRIFT",
+    )
+    if current["staged_env"] != expected["staged_env"]:
+        journals = [
+            strict_json(raw)
+            for name, raw in receipts.items()
+            if Path(name).name == "asm-telegram-owner-id-correction-0b7e24ee.json"
+        ]
+        require(len(journals) == 1, "EGRESS_MIGRATION_STAGED_CHANGE_UNEXPLAINED")
+        journal = journals[0]
+        raw = migration_bytes(state["telegram_env"])
+        key = rb"(?m)^[ \t]*(?:export[ \t]+)?ASM_TELEGRAM_EXPECTED_OWNER_ID[ \t]*="
+        require(len(re.findall(key, raw)) == 1, "EGRESS_MIGRATION_OWNER_KEY_COUNT")
+        match = re.search(
+            key + rb"[ \t]*(?P<q>['\"]?)(?P<v>[1-9][0-9]{0,18})(?P=q)[ \t]*(?:#[^\r\n]*)?\r?$", raw
+        )
+        require(match is not None, "EGRESS_MIGRATION_OWNER_VALUE")
+        previous, approved = journal.get("previous_owner_id"), journal.get("approved_owner_id")
+        require(
+            isinstance(previous, str)
+            and re.fullmatch(r"[1-9][0-9]{0,18}", previous)
+            and match.group("v").decode() == approved
+            and previous != approved,
+            "EGRESS_MIGRATION_OWNER_JOURNAL",
+        )
+        original = raw[: match.start("v")] + previous.encode() + raw[match.end("v") :]
+        require(
+            sha(original) == expected["staged_env"] == journal.get("staged_before_sha256")
+            and sha(raw) == journal.get("staged_after_sha256"),
+            "EGRESS_MIGRATION_OWNER_DELTA",
+        )
+    return current
+
+
+def migration_predecessor_checkout(path):
+    require(path, "EGRESS_MIGRATION_PREDECESSOR_CHECKOUT_REQUIRED")
+    root = Path(path).absolute()
+    require(SAFE_PATH.fullmatch(str(root)), "EGRESS_UNSAFE_PATH")
+    require(all(not p.is_symlink() for p in (root, *root.parents)), "EGRESS_SYMLINK")
+    info = root.stat()
+    require(
+        root != ROOT
+        and info.st_uid == os.getuid()
+        and stat.S_ISDIR(info.st_mode)
+        and not info.st_mode & 0o022,
+        "EGRESS_MIGRATION_SEPARATE_SOURCE_REQUIRED",
+    )
+    require(
+        command(["git", "-C", str(root), "rev-parse", "--show-toplevel"]).decode().strip()
+        == str(root)
+        and command(["git", "-C", str(root), "rev-parse", "HEAD"]).decode().strip()
+        == MIGRATION_FROM
+        and command(["git", "-C", str(root), "rev-parse", "HEAD^{tree}"]).decode().strip()
+        == MIGRATION_FROM_TREE
+        and not command(
+            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"]
+        ).strip(),
+        "EGRESS_MIGRATION_PREDECESSOR_SOURCE_CHANGED",
+    )
+    require(
+        migration_bytes(root / ".env") == migration_bytes(ROOT / ".env"),
+        "EGRESS_MIGRATION_RUNTIME_INPUT_COPY_CHANGED",
+    )
+    return root
+
+
+def migration_catalog(directory, state, receipts, predecessor):
+    files = dict(receipts)
+    for path in directory.rglob("*"):
+        relative = path.relative_to(directory)
+        if relative.parts[0] == "migration-v3" or relative == Path("operation.lock"):
+            continue
+        if path.is_dir():
+            checked_path(path, directory=True)
+        else:
+            files[str(path)] = migration_bytes(path)
+    for root in (ROOT, predecessor):
+        tracked = set(command(["git", "-C", str(root), "ls-files", "-z"]).decode().split("\0"))
+        for parent in root.glob(".env*"):
+            if parent.name in tracked:
+                continue
+            for path in [parent] if not parent.is_dir() else [parent, *parent.rglob("*")]:
+                if path.is_dir():
+                    checked_path(path, directory=True)
+                else:
+                    files[str(path)] = migration_bytes(path)
+    for path in (state["telegram_env"], state["profile"]):
+        files[str(path)] = migration_bytes(path)
+    require(len(files) <= 100, "EGRESS_MIGRATION_CATALOG_LIMIT")
+    return files
+
+
+def migration_database(state, directory):
+    """Read-only canonical multiset; no business command or raw rows leave the container."""
+    probe = r"""
+import hashlib,json,os,re
+from sqlalchemy import create_engine,text
+engine=create_engine(os.environ['ASM_MIGRATION_DATABASE_URL'],hide_parameters=True,connect_args={'connect_timeout':4})
+with engine.connect() as c:
+    c.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY'))
+    c.execute(text('SET LOCAL statement_timeout=4000'))
+    identity=dict(c.execute(text("SELECT current_database() AS database, (SELECT oid::bigint FROM pg_database WHERE datname=current_database()) AS database_oid, inet_server_addr()::text AS server_address, inet_server_port() AS server_port, pg_postmaster_start_time()::text AS postmaster_started")).mappings().one())
+    tables=c.execute(text("SELECT n.nspname,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('app','platform') AND c.relkind='r' ORDER BY n.nspname,c.relname")).all()
+    assert len(tables)==31
+    fingerprints={}
+    for ns,name in tables:
+        assert re.fullmatch('[a-z_][a-z_0-9]*',ns) and re.fullmatch('[a-z_][a-z_0-9]*',name)
+        rows=c.execute(text(f'SELECT to_jsonb(t) FROM "{ns}"."{name}" AS t')).scalars().all()
+        values=sorted(json.dumps(row,sort_keys=True,separators=(',',':')) for row in rows)
+        fingerprints[ns+'.'+name]={'count':len(rows),'sha256':hashlib.sha256('\n'.join(values).encode()).hexdigest()}
+    print(json.dumps({'identity':identity,'tables':fingerprints},sort_keys=True))
+engine.dispose()
+"""
+    result = strict_json(
+        command(
+            [
+                *compose_prefix(state, directory),
+                "run",
+                "--rm",
+                "--no-deps",
+                "--pull",
+                "never",
+                "-T",
+                "--entrypoint",
+                "python",
+                "telegram-operator",
+                "-B",
+                "-c",
+                probe,
+            ],
+            environment=clean_environment(),
+        )
+    )
+    require(len(result["tables"]) == 31, "EGRESS_MIGRATION_DATABASE_TABLES")
+    return result
+
+
+def migration_image(image, source, kind):
+    require(re.fullmatch(r"sha256:[0-9a-f]{64}", image), "EGRESS_MIGRATION_IMAGE_ID")
+    paths = ["backend", "migrations", "pyproject.toml", "uv.lock", "alembic.ini"]
+    if kind == "development":
+        paths += ["tests", "scripts", "contracts", "infra/postgres/ensure_m1_3_prerequisites.sh"]
+    raw = command(["git", "-C", str(ROOT), "ls-tree", "-rz", source, "--", *paths])
+    blobs = {}
+    for row in raw.split(b"\0"):
+        if row:
+            meta, path = row.split(b"\t", 1)
+            mode, form, digest = meta.decode().split()
+            require(form == "blob" and mode in {"100644", "100755"}, "EGRESS_MIGRATION_SOURCE_TYPE")
+            blobs[path.decode()] = digest
+    require(len(blobs) > 50, "EGRESS_MIGRATION_SOURCE_INVENTORY")
+    probe = (
+        "import hashlib,pathlib; expected=" + repr(blobs) + "; root=pathlib.Path('/app'); "
+        "actual={str(p.relative_to(root)) for name in "
+        + repr(paths)
+        + " for p in ([root/name] if (root/name).is_file() else (root/name).rglob('*')) "
+        "if p.is_file() and '__pycache__' not in p.parts and p.suffix!='.pyc'}; "
+        "assert actual==set(expected); "
+        "data={p:(root/p).read_bytes() for p in expected}; "
+        "assert all(hashlib.sha1(b'blob '+str(len(v)).encode()+b'\\0'+v).hexdigest()==expected[p] for p,v in data.items())"
+    )
+    command(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--entrypoint=python",
+            image,
+            "-B",
+            "-c",
+            probe,
+        ]
+    )
+    info = json.loads(command(["docker", "image", "inspect", image]))[0]
+    require(
+        info["Id"] == image and info["Os"] == "linux" and info["Architecture"] == "amd64",
+        "EGRESS_MIGRATION_IMAGE_IDENTITY",
+    )
+    return {"id": image, "source_sha": source, "kind": kind, "blobs_sha256": sha(encoded(blobs))}
+
+
+def migration_runtime(state, directory):
+    model = checked_model(state, directory)
+    ids = (
+        command(
+            [
+                "docker",
+                "ps",
+                "-aq",
+                "--filter",
+                "label=com.docker.compose.project=" + state["project"],
+            ]
+        )
+        .decode()
+        .split()
+    )
+    records = {}
+    for item in json.loads(command(["docker", "inspect", *ids])) if ids else []:
+        config, host = item["Config"], item["HostConfig"]
+        labels = config["Labels"]
+        if labels.get("com.docker.compose.oneoff") == "True":
+            continue
+        name = labels["com.docker.compose.service"]
+        require(name not in records, "EGRESS_MIGRATION_MULTIPLE_CONTAINERS")
+        env = dict(row.split("=", 1) for row in config.get("Env", []) if "=" in row)
+        running = item["State"]["Running"]
+        if name in {*MIGRATION_SERVICES, "scheduler"}:
+            require(
+                env.get("ASM_TELEGRAM_ENABLED") == "false"
+                and all(
+                    env.get(k) == ""
+                    for k in (
+                        "TG_BOT_TOKEN",
+                        "TG_WEBHOOK_SECRET",
+                        "ASM_TELEGRAM_EXPECTED_BOT_ID",
+                        "ASM_TELEGRAM_WEBHOOK_URL",
+                    )
+                ),
+                "EGRESS_MIGRATION_TELEGRAM_NOT_EMPTY",
+            )
+            require(
+                all(
+                    env.get(k) == str(v) for k, v in model["services"][name]["environment"].items()
+                ),
+                "EGRESS_MIGRATION_ENVIRONMENT_DRIFT",
+            )
+        records[name] = {
+            "id": item["Id"],
+            "image": item["Image"],
+            "running": running,
+            "config_sha256": sha(
+                encoded(
+                    {
+                        k: config.get(k)
+                        for k in (
+                            "Cmd",
+                            "Entrypoint",
+                            "User",
+                            "WorkingDir",
+                            "Env",
+                            "Healthcheck",
+                            "ExposedPorts",
+                        )
+                    }
+                )
+            ),
+            "host_sha256": sha(encoded(host)),
+            "mounts": sorted(item["Mounts"], key=encoded),
+            "networks": {
+                k: {
+                    x: v.get(x)
+                    for x in (
+                        "IPAddress",
+                        "Gateway",
+                        "GlobalIPv6Address",
+                        "IPv6Gateway",
+                        "IPAMConfig",
+                    )
+                }
+                for k, v in item["NetworkSettings"]["Networks"].items()
+            },
+        }
+        if name in {"api", "worker"} and running:
+            records[name]["database_identity"] = database_identity(item["Id"])
+    require(
+        {"postgres", "storage", "telegram-egress"} <= records.keys(),
+        "EGRESS_MIGRATION_REQUIRED_RUNTIME",
+    )
+    return records
+
+
+def migration_compare(before, actual, images, *, pending=(), completed=False):
+    require(set(actual) <= set(before), "EGRESS_MIGRATION_FOREIGN_CONTAINER")
+    for name, previous in before.items():
+        if name not in MIGRATION_SERVICES:
+            require(actual.get(name) == previous, "EGRESS_MIGRATION_UNRELATED_DRIFT")
+            continue
+        if name not in actual:
+            require(name in pending and not completed, "EGRESS_MIGRATION_MISSING_WITHOUT_INTENT")
+            continue
+        current = actual[name]
+        require(current["image"] in images[name], "EGRESS_MIGRATION_APP_IMAGE_DRIFT")
+        for key in ("config_sha256", "host_sha256", "mounts"):
+            require(current[key] == previous[key], "EGRESS_MIGRATION_APP_CONFIG_DRIFT")
+        require(
+            current["running"] or name in pending and not completed,
+            "EGRESS_MIGRATION_STOPPED_WITHOUT_INTENT",
+        )
+        if current["running"]:
+            require(
+                set(current["networks"]) == set(previous["networks"]),
+                "EGRESS_MIGRATION_NETWORK_DRIFT",
+            )
+            for network, value in current["networks"].items():
+                for field in ("Gateway", "IPv6Gateway", "IPAMConfig"):
+                    require(
+                        value[field] == previous["networks"][network][field],
+                        "EGRESS_MIGRATION_NETWORK_DRIFT",
+                    )
+            if name in {"api", "worker"}:
+                require(
+                    current["database_identity"] == previous["database_identity"],
+                    "EGRESS_MIGRATION_DATABASE_DRIFT",
+                )
+
+
+def migration_attest(args, directory):
+    tree = migration_source(args.accepted_sha)
+    require(args.from_sha == MIGRATION_FROM, "EGRESS_MIGRATION_FROM")
+    state_raw = private_bytes(directory / "state.json")
+    state = strict_json(state_raw)
+    require(
+        state.get("version") == 2
+        and state.get("generation") == "recovery-v2"
+        and state.get("source_sha") == MIGRATION_FROM
+        and state.get("uid") == os.getuid()
+        and state.get("gid") == os.getgid(),
+        "EGRESS_MIGRATION_PREDECESSOR",
+    )
+    predecessor = migration_predecessor_checkout(args.predecessor_checkout)
+    require(not directory.is_relative_to(predecessor), "EGRESS_PRIVATE_STATE_OUTSIDE_CHECKOUT")
+    require(
+        not (directory / "rollback-intent").exists() and not (directory / "rollback.json").exists(),
+        "EGRESS_MIGRATION_ROLLED_BACK_PREDECESSOR",
+    )
+    require(
+        private_bytes(directory / "recovery-v2/state.json") == state_raw,
+        "EGRESS_MIGRATION_RECOVERY_STATE",
+    )
+    before = private_bytes(directory / "deployment-before.json")
+    after = private_bytes(directory / "deployment-after.json")
+    legacy_raw = private_bytes(directory / "recovery-v1/state.json")
+    legacy = strict_json(legacy_raw)
+    require(
+        legacy.get("version") == 1
+        and legacy.get("source_sha") == LEGACY_SHA
+        and sha(legacy_raw) == state["legacy_state_sha256"]
+        and sha(before) == state["recovery_before_sha256"]
+        and private_bytes(directory / "recovery-v1/deployment-before.json") == before,
+        "EGRESS_MIGRATION_ORIGINAL_BASELINE",
+    )
+    for name in ("config.json", "runtime.json", "route.env"):
+        require(
+            private_bytes(directory / name) == private_bytes(directory / "recovery-v1" / name),
+            "EGRESS_MIGRATION_ORIGINAL_GENERATION",
+        )
+    require(
+        strict_json(private_bytes(directory / "recovery-v1/transition.json"))
+        == {"from_sha": LEGACY_SHA, "accepted_sha": MIGRATION_FROM},
+        "EGRESS_MIGRATION_RECOVERY_TRANSITION",
+    )
+    receipt = strict_json(private_bytes(directory / "recovery.json"))
+    require(
+        receipt
+        == {
+            "from_sha": LEGACY_SHA,
+            "source_sha": MIGRATION_FROM,
+            "original_before_sha256": sha(before),
+            "after_sha256": sha(after),
+            "legacy_state_sha256": sha(legacy_raw),
+            "mapping_readiness_preservation": "PASS",
+        },
+        "EGRESS_MIGRATION_RECOVERY_RECEIPT",
+    )
+    verify_state_contents(state, directory)
+    require(
+        transition_relay([state], directory)["status"] == "running",
+        "EGRESS_MIGRATION_RELAY_NOT_RUNNING",
+    )
+    receipts, operator_image = migration_receipts(
+        args.operator_receipt, args.operator_receipt_sha256, state, directory
+    )
+    migration_inputs(state, directory, receipts)
+    runtime = migration_runtime(state, directory)
+    require(set(MIGRATION_SERVICES) <= runtime.keys(), "EGRESS_MIGRATION_CALLERS_REQUIRED")
+    old_after = strict_json(after)
+    for name in MIGRATION_SERVICES:
+        require(
+            runtime[name]["running"]
+            and runtime[name]["id"] == old_after[name]["id"]
+            and runtime[name]["image"] == old_after[name]["image"],
+            "EGRESS_MIGRATION_RECOVERED_RUNTIME_CHANGED",
+        )
+    old_images = {name: runtime[name]["image"] for name in MIGRATION_SERVICES}
+    old_images["telegram-operator"] = operator_image
+    model = checked_model(state, directory)
+    for name, expected in old_images.items():
+        tag = model["services"][name].get("image", state["project"] + "-" + name)
+        require(
+            json.loads(command(["docker", "image", "inspect", tag]))[0]["Id"] == expected,
+            "EGRESS_MIGRATION_OLD_TAG_DRIFT",
+        )
+    proofs = {}
+    for name, image in old_images.items():
+        kind = "development" if name == "telegram-operator" else "runtime"
+        if image not in proofs:
+            proofs[image] = migration_image(image, MIGRATION_FROM, kind)
+    caller_probe(state, directory)
+    database = migration_database(state, directory)
+    require(
+        all(database["identity"] == runtime[n]["database_identity"] for n in ("api", "worker")),
+        "EGRESS_MIGRATION_ACTUAL_DATABASE_REQUIRED",
+    )
+    return (
+        state,
+        runtime,
+        old_images,
+        migration_catalog(directory, state, receipts, predecessor),
+        tree,
+        proofs,
+        database,
+    )
+
+
+def migration_saved(directory):
+    bundle = checked_path(directory / "migration-v3", directory=True)
+    plan = strict_json(private_bytes(bundle / "preparation.json"))
+    require(
+        plan.get("version") == 1
+        and plan.get("from_sha") == MIGRATION_FROM
+        and plan.get("from_tree") == MIGRATION_FROM_TREE
+        and plan.get("to_tree") == migration_source(plan["to_sha"]),
+        "EGRESS_MIGRATION_PREPARATION_SOURCE",
+    )
+    original = strict_json(private_bytes(bundle / "state-before.json"))
+    predecessor = migration_predecessor_checkout(plan["predecessor_checkout"])
+    for path, entry in plan["files"].items():
+        raw = private_bytes(bundle / entry["archive"])
+        require(sha(raw) == entry["sha256"], "EGRESS_MIGRATION_ARCHIVE_CHANGED")
+        if path != str(directory / "state.json"):
+            require(migration_bytes(path) == raw, "EGRESS_MIGRATION_PRESERVED_FILE_CHANGED")
+    require(
+        sha(private_bytes(bundle / "state-before.json"))
+        == plan["files"][str(directory / "state.json")]["sha256"],
+        "EGRESS_MIGRATION_ARCHIVED_STATE_CHANGED",
+    )
+    receipts, _ = migration_receipts(
+        plan["operator_receipt"], plan["operator_receipt_sha256"], original, directory
+    )
+    require(
+        set(migration_catalog(directory, original, receipts, predecessor)) == set(plan["files"]),
+        "EGRESS_MIGRATION_FILE_INVENTORY_CHANGED",
+    )
+    migration_inputs(original, directory, receipts)
+    verify_state_contents(original, directory)
+    require(
+        transition_relay([original], directory)["status"] == "running",
+        "EGRESS_MIGRATION_RELAY_NOT_RUNNING",
+    )
+    return bundle, plan, original
+
+
+def migration_prepare(args, directory):
+    bundle = directory / "migration-v3"
+    if not bundle.exists():
+        state, runtime, old_images, files, tree, proofs, database = migration_attest(
+            args, directory
+        )
+        inventory, archive = {}, {}
+        for index, (path, raw) in enumerate(sorted(files.items())):
+            name = f"original-{index:03d}.bin"
+            inventory[path] = {"archive": name, "sha256": sha(raw)}
+            archive[name] = raw
+        plan = {
+            "version": 1,
+            "from_sha": MIGRATION_FROM,
+            "from_tree": MIGRATION_FROM_TREE,
+            "to_sha": args.accepted_sha,
+            "to_tree": tree,
+            "files": inventory,
+            "before": runtime,
+            "before_images": old_images,
+            "image_proofs": proofs,
+            "database": database,
+            "predecessor_checkout": str(Path(args.predecessor_checkout).absolute()),
+            "operator_receipt": str(checked_path(args.operator_receipt)),
+            "operator_receipt_sha256": args.operator_receipt_sha256,
+        }
+        archive.update({"preparation.json": encoded(plan), "state-before.json": encoded(state)})
+        atomic_bundle(bundle, archive)
+    bundle, plan, state = migration_saved(directory)
+    migration_arguments(args, plan)
+    require(
+        plan["to_sha"] == args.accepted_sha and args.from_sha == MIGRATION_FROM,
+        "EGRESS_MIGRATION_PREPARATION_TARGET",
+    )
+    require(
+        private_bytes(directory / "state.json") == private_bytes(bundle / "state-before.json"),
+        "EGRESS_MIGRATION_PREPARATION_ALREADY_ACTIVE",
+    )
+    migration_compare(
+        plan["before"],
+        migration_runtime(state, directory),
+        {n: {v} for n, v in plan["before_images"].items()},
+        completed=True,
+    )
+    require(
+        migration_runtime(state, directory) == plan["before"],
+        "EGRESS_MIGRATION_PREPARATION_RUNTIME_CHANGED",
+    )
+    prepared = bundle / "prepared.json"
+    if prepared.exists():
+        migration_prepared(directory)
+        return
+    tags, images = migration_build_images(args.accepted_sha, plan["to_tree"])
+    mapping = {n: images["runtime"] for n in MIGRATION_SERVICES}
+    mapping["telegram-operator"] = images["development"]
+    require(
+        all(mapping[n] != old for n, old in plan["before_images"].items()),
+        "EGRESS_MIGRATION_IMAGE_NOT_DISTINCT",
+    )
+    keep = {}
+    for name, image in plan["before_images"].items():
+        tag = "asm-connect5-rollback:" + image.removeprefix("sha256:")
+        found = command(["docker", "image", "ls", "-q", "--no-trunc", tag]).decode().strip()
+        require(not found or found == image, "EGRESS_MIGRATION_ROLLBACK_TAG_DRIFT")
+        if not found:
+            command(["docker", "tag", image, tag])
+        keep[name] = tag
+    migration_saved(directory)
+    write_private(
+        prepared,
+        encoded(
+            {
+                "before_images": plan["before_images"],
+                "after_images": mapping,
+                "tags": tags,
+                "rollback_tags": keep,
+                "preparation_sha256": sha(encoded(plan)),
+            }
+        ),
+    )
+
+
+def migration_build_images(source, tree):
+    require(migration_source(source) == tree, "EGRESS_MIGRATION_BUILD_SOURCE")
+    tags, images = {}, {}
+    pins = dict(
+        line.split("=", 1)
+        for line in (ROOT / "infra/images.lock.env").read_text().splitlines()
+        if line and not line.startswith("#")
+    )
+    for kind in ("runtime", "development"):
+        tag = "asm-connect5-" + kind + ":" + source
+        exists = command(["docker", "image", "ls", "-q", "--no-trunc", tag]).decode().strip()
+        if not exists:
+            # git archive contains only tracked exact source, never .env/TLS/operator files.
+            with tempfile.TemporaryDirectory(prefix="asm-connect5-build-") as temporary:
+                import io
+                import tarfile
+
+                with tarfile.open(
+                    fileobj=io.BytesIO(command(["git", "-C", str(ROOT), "archive", source]))
+                ) as tar:
+                    tar.extractall(temporary, filter="data")
+                command(
+                    [
+                        "docker",
+                        "build",
+                        "--pull",
+                        "--network=default",
+                        "--target",
+                        kind,
+                        "--build-arg",
+                        "PYTHON_IMAGE=" + pins["PYTHON_IMAGE"],
+                        "--build-arg",
+                        "UV_IMAGE=" + pins["UV_IMAGE"],
+                        "--label",
+                        "asm.connect5.source=" + source,
+                        "--label",
+                        "asm.connect5.tree=" + tree,
+                        "--label",
+                        "asm.connect5.kind=" + kind,
+                        "-f",
+                        temporary + "/infra/Dockerfile.backend",
+                        "-t",
+                        tag,
+                        temporary,
+                    ],
+                    timeout=480,
+                )
+        info = json.loads(command(["docker", "image", "inspect", tag]))[0]
+        labels = info["Config"].get("Labels", {}) or {}
+        require(
+            all(
+                labels.get("asm.connect5." + k) == v
+                for k, v in {"source": source, "tree": tree, "kind": kind}.items()
+            ),
+            "EGRESS_MIGRATION_TARGET_TAG_DRIFT",
+        )
+        migration_image(info["Id"], source, kind)
+        tags[kind], images[kind] = tag, info["Id"]
+    return tags, images
+
+
+def migration_prepared(directory):
+    bundle, plan, original = migration_saved(directory)
+    ready = strict_json(private_bytes(bundle / "prepared.json"))
+    require(
+        ready["preparation_sha256"] == sha(encoded(plan))
+        and ready["before_images"] == plan["before_images"]
+        and set(ready["after_images"]) == {*MIGRATION_SERVICES, "telegram-operator"},
+        "EGRESS_MIGRATION_IMAGE_PLAN_CHANGED",
+    )
+    checked = set()
+    for direction, source in (("before_images", MIGRATION_FROM), ("after_images", plan["to_sha"])):
+        for name, image in ready[direction].items():
+            kind = "development" if name == "telegram-operator" else "runtime"
+            if (image, source, kind) not in checked:
+                migration_image(image, source, kind)
+                checked.add((image, source, kind))
+            tag = (
+                ready["rollback_tags"][name]
+                if direction == "before_images"
+                else ready["tags"][kind]
+            )
+            require(
+                json.loads(command(["docker", "image", "inspect", tag]))[0]["Id"] == image,
+                "EGRESS_MIGRATION_IMAGE_TAG_CHANGED",
+            )
+    return bundle, plan, original, ready
+
+
+def migration_manifest(directory, state):
+    bundle = directory / "migration-v3"
+    intent_raw = private_bytes(bundle / "intent.json")
+    intent = strict_json(intent_raw)
+    old = strict_json(private_bytes(bundle / "state-before.json"))
+    plan = strict_json(private_bytes(bundle / "preparation.json"))
+    ready = strict_json(private_bytes(bundle / "prepared.json"))
+    expected = dict(
+        old, version=3, source_sha=intent["to_sha"], migration_intent_sha256=sha(intent_raw)
+    )
+    require(
+        state == expected
+        and intent["from_sha"] == MIGRATION_FROM
+        and intent["from_tree"] == MIGRATION_FROM_TREE
+        and intent["to_sha"] == plan["to_sha"]
+        and intent["to_tree"] == plan["to_tree"]
+        and intent["preparation_sha256"] == sha(encoded(plan))
+        and intent["prepared_sha256"] == sha(encoded(ready))
+        and intent["before_images"] == ready["before_images"] == plan["before_images"]
+        and intent["after_images"] == ready["after_images"],
+        "EGRESS_MIGRATION_STATE_BINDING",
+    )
+    for side in ("before", "after"):
+        require(
+            private_bytes(bundle / ("images-" + side + ".json"))
+            == encoded(
+                {"services": {n: {"image": v} for n, v in intent[side + "_images"].items()}}
+            ),
+            "EGRESS_MIGRATION_IMAGE_OVERLAY_CHANGED",
+        )
+    require(
+        not (bundle / "rollback-complete.json").exists(), "EGRESS_MIGRATION_ALREADY_ROLLED_BACK"
+    )
+    return intent
+
+
+def migration_stage(bundle, name, intent, *, publish=False):
+    path = bundle / (name + ".json")
+    expected = encoded({"intent_sha256": sha(encoded(intent)), "stage": name})
+    if path.exists() or path.is_symlink():
+        require(private_bytes(path) == expected, "EGRESS_MIGRATION_STAGE_CHANGED")
+        return True
+    if publish:
+        write_private(path, expected)
+    return False
+
+
+def migration_observed(bundle, intent):
+    allowed, pending = {}, []
+    rolling_back = migration_stage(bundle, "rollback-intent", intent)
+    for name in MIGRATION_SERVICES:
+        forward = migration_stage(bundle, "forward-" + name + "-intent", intent)
+        reverted = migration_stage(bundle, "rollback-" + name + "-intent", intent)
+        forward_done = migration_stage(bundle, "forward-" + name + "-done", intent)
+        reverted_done = migration_stage(bundle, "rollback-" + name + "-done", intent)
+        require(
+            (not forward_done or forward)
+            and (not reverted or rolling_back)
+            and (not reverted_done or reverted),
+            "EGRESS_MIGRATION_STAGE_ORDER",
+        )
+        allowed[name] = {intent["before_images"][name]}
+        if forward:
+            allowed[name].add(intent["after_images"][name])
+        if reverted_done:
+            allowed[name] = {intent["before_images"][name]}
+        elif forward_done and not reverted:
+            allowed[name] = {intent["after_images"][name]}
+        if forward and not forward_done or reverted and not reverted_done:
+            pending.append(name)
+    return allowed, pending
+
+
+def migration_results(bundle, intent, actual):
+    for name in MIGRATION_SERVICES:
+        reverse = migration_stage(bundle, "rollback-" + name + "-intent", intent)
+        forward = migration_stage(bundle, "forward-" + name + "-intent", intent)
+        if not forward and not reverse:
+            require(
+                actual.get(name) == intent["before"][name],
+                "EGRESS_MIGRATION_UNJOURNALED_CALLER_CHANGE",
+            )
+            continue
+        stage = ("rollback-" if reverse else "forward-") + name
+        path = bundle / (stage + "-result.json")
+        if migration_stage(bundle, stage + "-done", intent):
+            require(path.is_file(), "EGRESS_MIGRATION_SERVICE_RESULT_REQUIRED")
+        if path.exists() or path.is_symlink():
+            require(
+                strict_json(private_bytes(path))
+                == {"intent_sha256": sha(encoded(intent)), "runtime": actual.get(name)},
+                "EGRESS_MIGRATION_SERVICE_RESULT_CHANGED",
+            )
+
+
+def migration_arguments(args, plan):
+    for name in ("operator_receipt", "operator_receipt_sha256", "predecessor_checkout"):
+        requested = getattr(args, name, None)
+        if requested is not None:
+            require(requested == plan[name], "EGRESS_MIGRATION_REQUEST_CHANGED")
+
+
+def migration_switch(args, directory, *, reverse=False, readonly=False):
+    bundle, plan, old, ready = migration_prepared(directory)
+    migration_arguments(args, plan)
+    require(
+        args.accepted_sha == plan["to_sha"] and args.from_sha == MIGRATION_FROM,
+        "EGRESS_MIGRATION_REQUEST_CHANGED",
+    )
+    database = migration_database(old, directory)
+    require(database == plan["database"], "EGRESS_MIGRATION_CANONICAL_DATA_DRIFT")
+    intent_path = bundle / "intent.json"
+    if not intent_path.exists():
+        require(not reverse and not readonly, "EGRESS_MIGRATION_INTENT_REQUIRED")
+        actual = migration_runtime(old, directory)
+        require(
+            actual == plan["before"] and private_bytes(directory / "state.json") == encoded(old),
+            "EGRESS_MIGRATION_PREPARATION_RUNTIME_CHANGED",
+        )
+        migration_compare(
+            plan["before"],
+            actual,
+            {n: {v} for n, v in ready["before_images"].items()},
+            completed=True,
+        )
+        intent = {
+            "version": 1,
+            "from_sha": MIGRATION_FROM,
+            "from_tree": MIGRATION_FROM_TREE,
+            "to_sha": plan["to_sha"],
+            "to_tree": plan["to_tree"],
+            "preparation_sha256": sha(encoded(plan)),
+            "prepared_sha256": sha(encoded(ready)),
+            "before": actual,
+            "before_images": ready["before_images"],
+            "after_images": ready["after_images"],
+        }
+        for side in ("before", "after"):
+            write_private(
+                bundle / ("images-" + side + ".json"),
+                encoded(
+                    {"services": {n: {"image": v} for n, v in intent[side + "_images"].items()}}
+                ),
+            )
+        write_private(intent_path, encoded(intent))
+    intent = strict_json(private_bytes(intent_path))
+    require(
+        intent["preparation_sha256"] == sha(encoded(plan))
+        and intent["prepared_sha256"] == sha(encoded(ready))
+        and intent["before_images"] == ready["before_images"]
+        and intent["after_images"] == ready["after_images"]
+        and intent["to_sha"] == plan["to_sha"]
+        and intent["from_sha"] == MIGRATION_FROM,
+        "EGRESS_MIGRATION_INTENT_CHANGED",
+    )
+    new = dict(
+        old, version=3, source_sha=plan["to_sha"], migration_intent_sha256=sha(encoded(intent))
+    )
+    migration_manifest(directory, new) if not (bundle / "rollback-complete.json").exists() else None
+    current = private_bytes(directory / "state.json")
+    require(current in {encoded(old), encoded(new)}, "EGRESS_MIGRATION_MANIFEST_DRIFT")
+    rollback_started = migration_stage(bundle, "rollback-intent", intent)
+    require(reverse or not rollback_started, "EGRESS_MIGRATION_ROLLBACK_ALREADY_STARTED")
+    direction, side = ("rollback", "before") if reverse else ("forward", "after")
+    completion = bundle / (direction + "-complete.json")
+    actual = migration_runtime(old, directory)
+    allowed, pending = migration_observed(bundle, intent)
+    migration_compare(intent["before"], actual, allowed, pending=pending)
+    migration_results(bundle, intent, actual)
+    if completion.exists():
+        receipt = strict_json(private_bytes(completion))
+        require(
+            receipt
+            == {
+                "intent_sha256": sha(encoded(intent)),
+                "source_sha": intent[side == "after" and "to_sha" or "from_sha"],
+                "state_sha256": sha(encoded(old if reverse else new)),
+                "after": actual,
+                "database_sha256": sha(encoded(database)),
+                "preservation": "PASS",
+            }
+            and current == encoded(old if reverse else new),
+            "EGRESS_MIGRATION_COMPLETED_DRIFT",
+        )
+        caller_probe(old if reverse else new, directory)
+        return
+    require(not readonly, "EGRESS_MIGRATION_NOT_COMPLETE")
+    if reverse and not rollback_started:
+        migration_stage(bundle, "rollback-intent", intent, publish=True)
+    prefix = [*compose_prefix(old, directory), "-f", str(bundle / ("images-" + side + ".json"))]
+    for name in MIGRATION_SERVICES:
+        expected = intent[side + "_images"][name]
+        actual = migration_runtime(old, directory)
+        allowed, pending = migration_observed(bundle, intent)
+        migration_compare(intent["before"], actual, allowed, pending=pending)
+        migration_results(bundle, intent, actual)
+        if migration_stage(bundle, direction + "-" + name + "-done", intent):
+            require(
+                name in actual and actual[name]["image"] == expected and actual[name]["running"],
+                "EGRESS_MIGRATION_FINISHED_SERVICE_DRIFT",
+            )
+            continue
+        migration_stage(bundle, direction + "-" + name + "-intent", intent, publish=True)
+        if name not in actual or actual[name]["image"] != expected or not actual[name]["running"]:
+            command(
+                [
+                    *prefix,
+                    "up",
+                    "-d",
+                    "--no-deps",
+                    "--pull",
+                    "never",
+                    "--force-recreate",
+                    "--wait",
+                    "--wait-timeout",
+                    "35",
+                    name,
+                ],
+                timeout=50,
+                environment=clean_environment(),
+            )
+        actual = migration_runtime(old, directory)
+        require(
+            actual[name]["image"] == expected and actual[name]["running"],
+            "EGRESS_MIGRATION_SWITCH_FAILED",
+        )
+        result = bundle / (direction + "-" + name + "-result.json")
+        raw = encoded({"intent_sha256": sha(encoded(intent)), "runtime": actual[name]})
+        if result.exists():
+            require(private_bytes(result) == raw, "EGRESS_MIGRATION_SERVICE_RESULT_CHANGED")
+        else:
+            write_private(result, raw)
+        migration_stage(bundle, direction + "-" + name + "-done", intent, publish=True)
+    actual = migration_runtime(old, directory)
+    migration_compare(
+        intent["before"],
+        actual,
+        {n: {intent[side + "_images"][n]} for n in MIGRATION_SERVICES},
+        completed=True,
+    )
+    caller_probe(old if reverse else new, directory)
+    migration_saved(directory)
+    require(
+        migration_database(old if reverse else new, directory) == database,
+        "EGRESS_MIGRATION_CANONICAL_DATA_DRIFT",
+    )
+    desired = encoded(old if reverse else new)
+    if current != desired:
+        write_private(directory / "state.json", desired)
+    write_private(
+        completion,
+        encoded(
+            {
+                "intent_sha256": sha(encoded(intent)),
+                "source_sha": intent["from_sha" if reverse else "to_sha"],
+                "state_sha256": sha(desired),
+                "after": actual,
+                "database_sha256": sha(encoded(database)),
+                "preservation": "PASS",
+            }
+        ),
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -1852,6 +2906,12 @@ def main():
             "compose",
             "rollback",
             "recover",
+            "migration-attest",
+            "migration-prepare",
+            "migrate",
+            "migration-resume",
+            "migration-preflight",
+            "migration-rollback",
         ),
     )
     parser.add_argument("--state-dir", required=True)
@@ -1860,6 +2920,9 @@ def main():
     parser.add_argument("--project", default="asm-telegram-test")
     parser.add_argument("--accepted-sha")
     parser.add_argument("--from-sha")
+    parser.add_argument("--operator-receipt")
+    parser.add_argument("--operator-receipt-sha256")
+    parser.add_argument("--predecessor-checkout")
     args, compose_args = parser.parse_known_args()
     os.umask(0o077)
     try:
@@ -1873,7 +2936,29 @@ def main():
         else:
             directory = state_directory(args.state_dir)
             with operation_lock(directory):
-                if args.action == "recover":
+                if args.action.startswith("migration-") or args.action == "migrate":
+                    require(
+                        args.accepted_sha and args.from_sha,
+                        "EGRESS_MIGRATION_EXACT_SOURCES_REQUIRED",
+                    )
+                    with migration_budget(600 if args.action == "migration-prepare" else 180):
+                        if args.action == "migration-attest":
+                            migration_attest(args, directory)
+                        elif args.action == "migration-prepare":
+                            migration_prepare(args, directory)
+                        else:
+                            if args.action == "migration-resume":
+                                require(
+                                    (directory / "migration-v3/intent.json").is_file(),
+                                    "EGRESS_MIGRATION_INTENT_REQUIRED",
+                                )
+                            migration_switch(
+                                args,
+                                directory,
+                                reverse=args.action == "migration-rollback",
+                                readonly=args.action == "migration-preflight",
+                            )
+                elif args.action == "recover":
                     recover(args)
                 else:
                     if args.action == "rollback":
@@ -1889,6 +2974,11 @@ def main():
                     else:
                         state = verify(directory)
                     model = checked_model(state, directory)
+                    require(
+                        state.get("version") != 3
+                        or args.action in {"verify", "compose", "preflight"},
+                        "EGRESS_MIGRATION_EXPLICIT_OPERATION_REQUIRED",
+                    )
                     if args.action == "snapshot":
                         require(
                             all(
@@ -1911,9 +3001,16 @@ def main():
                     elif args.action == "deploy":
                         deploy(state, directory)
                     elif args.action == "preflight":
-                        before = strict_json(private_bytes(directory / "deployment-before.json"))
-                        compare_deployment(before, snapshot(state, directory), state)
-                        caller_probe(state, directory)
+                        if state.get("version") == 3:
+                            args.accepted_sha, args.from_sha = state["source_sha"], MIGRATION_FROM
+                            with migration_budget(180):
+                                migration_switch(args, directory, readonly=True)
+                        else:
+                            before = strict_json(
+                                private_bytes(directory / "deployment-before.json")
+                            )
+                            compare_deployment(before, snapshot(state, directory), state)
+                            caller_probe(state, directory)
                     elif args.action == "compose":
                         extra = compose_args
                         if extra[:1] == ["--"]:
