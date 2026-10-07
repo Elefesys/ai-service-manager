@@ -4116,7 +4116,7 @@ in the helper, migration tests/disposable fixture, contract §10.12.1 and this r
 C8-MIG-01 and client01/02/03 stay CLOSED; C0-MIG-OWNER-01 remains OPEN for one
 focused C0/C8 verdict after the completed REVIEW handoff.
 
-Both basename checks now accept only `[a-z0-9-]+(?:\\.intent)?\\.json`. Existing
+Both basename checks now accept only `[a-z0-9-]+(?:\.intent)?\.json`. Existing
 receipts retain their actual names and bytes; their full hashes remain in the DAG
 and immutable archive. No source/image/runtime/audit-schema/client/Compose/workflow/
 lock/deadline/domain change. Root hash is still supplied independently, never healed
