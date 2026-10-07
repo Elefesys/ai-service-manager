@@ -829,7 +829,8 @@ async def durable_local():
     migrator = create_async_engine(os.environ["ASM_MIGRATION_DATABASE_URL"], hide_parameters=True)
     kernel = MessagingDatabase(runtime.engine)
     h = SimpleNamespace(runtime=runtime, migrator=migrator, kernel=kernel)
-    h.worker = Worker(kernel, ControlledAdapter(environment="TEST"))
+    h.adapter = ControlledAdapter(environment="TEST")
+    h.worker = Worker(kernel, h.adapter)
     h.ingress = TelegramIngress(kernel, str(BOT))
     password = SecretStr(new_token())
     session_hashes = []
