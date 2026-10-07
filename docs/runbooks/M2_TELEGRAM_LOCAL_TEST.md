@@ -3364,6 +3364,136 @@ VM/SSH/source fetch/rebuild/deploy/restart, Telegram HTTP/queue/ACK, activation/
 
 </details>
 
+### 0.6.26. C0 migration review и scoped C8 issuance / 2026-10-07 UTC
+
+**C0-M2-ENV-04-CONNECT5-MIGRATION — PASS в repository/CI scope.**
+Новых блокирующих findings при source/evidence review не обнаружено. Это допуск
+к независимому C8; migration task остаётся REVIEW до его verdict. Findings01/02/03
+по connect5 client остаются CLOSED; новый migration path прежним C8 не покрыт.
+
+Проверенный implementation head **3f65be7a60a1271247d04f23cbe0b151f82d65a1**,
+tree **5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797**, sole parent
+**374bee801baaf8a70955750be57577d5875b82bf**. Accepted base
+**14f794b650c935c47ab1e78474fda0d1df0a7277**; coordination
+**fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00** сохранён sole parent первого
+implementation commit **5ea00119ddcee8508435246116a8a2d4b8970b0b**.
+История линейная. Client blob **525381357de76ea1c570fd864f8df5e9781a87e2** прежний.
+От coordination изменены ровно восемь разрешённых C6 файлов; domain/client/locks/
+Compose/canonical originals и три прежних CI jobs не изменены.
+
+[CI37607152590](https://github.com/Elefesys/ai-service-manager/actions/runs/37607152590)
+— все **9 jobs и clean-source gates SUCCESS**. Tested merge
+**88656774720f22a778b5421abc2ae820e4a9d285** имеет тот же tree; ordered parents:
+main **22993f558c5e7e933c65e9c999933bd2e3ab41c4**, затем implementation head.
+Logs подтверждают 661 unit, 393 integration, 111 frontend и 27 browser PASS.
+Прежние 6 relay +6 lifecycle cases прошли на обоих Docker runners; шесть новых
+migration shards покрывают intent/image/state interruption в обоих направлениях.
+
+**Собственная проверка C0:** прочитаны code/contract/runbook delta; свежие refs,
+jobs/logs; скачаны все восемь ZIP, проверены их SHA256 против GitHub digests.
+В каждом архиве 228 Git blobs/modes, PAX source commit, tested-commit и пустой
+worktree-status сверены с exact tree. Общий source.tar.gz SHA256
+`03b4283d916f8a1d73a7417b4b9919ddbf0195a84a0f294542a6365bd3bfe8f9`.
+C0 отдельно разобрал все шесть migration JSON: равные fingerprints31 таблицы и
+DB identity, UNKNOWN/wire1, Console session, private original HTTPS200/anonymous403,
+28 сохранённых файлов, before/after image maps, неизменный unrelated runtime,
+SIGKILL/resume/explicit rollback и completed retry без recreate. Held durations
+90.163–175.735s, все ≤180s. Оба прежних relay reports: TIMEOUT/False за5.005/5.006s,
+все12 assertions PASS. Это независимая сверка actual CI evidence; новые локальные
+Docker/PG/S3/browser/unit suites C0 не запускал и отдельный C8 не подменял.
+
+Текущий C0 coordination меняет только четыре документа. Его code/test/workflow
+bytes равны проверенному implementation; новый SHA не является tested target
+CI37607152590. C8 проверяет exact **3f65be7a60a1271247d04f23cbe0b151f82d65a1**;
+актуальное поручение читает из этого документационного descendant. Новый
+coordination CI учитывается отдельно и не заменяет уже проверенное evidence.
+
+| Задача | Статус | Следующий результат |
+|---|---|---|
+| C3-M2-ENV04-05 / C8-M2-CONNECT-BUDGET-R3 | VERIFIED | Принятый client scope, findings01/02/03 CLOSED |
+| M2-ENV-04-CONNECT5-MIGRATION | REVIEW | C0 source/CI PASS; требуется независимый C8 |
+| C8-M2-CONNECT5-MIGRATION | TODO, выдано | Scoped verdict на exact3f65be7a |
+| M2 / ENV04 | IN_PROGRESS / REVIEW | Owner migration и actual A09/A11 ещё не выполнены |
+
+**Owner applicability не подтверждена этим CI.** Последний owner receipt:
+exact0b7e24ee425ebb429bf87dfe382cbd3fab883028/tree14a4033b849c736235653a5a85ec9e5112bfe727,
+completed recovery-v2, cached connect2 images, TG disabled/empty, binding committed,
+ACK NOT_ATTEMPTED. После C8 C0 выдаёт сначала read-only attestation реальной
+receipt DAG и старых image bytes. Несовпадение cached operator с exact predecessor
+— STOP для C0, без rebuild, правки старого receipt или нового baseline.
+Независимый pin последнего owner receipt и реальные image IDs ещё нужны.
+Fixed TEST interval2026-10-02T00Z→2026-10-09T00Z и committed request не меняются;
+source-key revocation asm-telegram-test-env04 пока не подтверждён.
+
+PR24 Draft/open, main прежний. Owner VM/SSH, live Telegram/queue/ACK/activation/
+setWebhook/sends/billing mutation/merge не выданы этим review. После scoped C8:
+отдельная owner выдача, migration/preflight, свежий readonly network/connection/
+queue review и только затем actual A09/A11. Старый queue snapshot не актуализирован.
+
+
+| Migration shard | Held seconds | C0 report check |
+|---|---:|---|
+| docker29-image | 175.735 | PASS |
+| docker29-intent | 134.864 | PASS |
+| docker29-state | 99.993 | PASS |
+| normal-image | 162.278 | PASS |
+| normal-intent | 90.163 | PASS |
+| normal-state | 164.84 | PASS |
+
+Поручение C8 — current M2_HANDOFF. C0 проверил source/evidence, отдельный reviewer
+ещё не исполнил это поручение. Green CI не разрешает owner rollout автоматически.
+
+<details>
+<summary>Архив C6 receipt prefix — сохранён дословно перед C0 verdict</summary>
+
+## C6 — M2-ENV-04-CONNECT5-MIGRATION — REVIEW (2026-10-07)
+
+Repository/disposable scope; PR24 Draft. Next: C0 + new scoped C8. Findings01/02/03 CLOSED.
+
+**Exact refs.** Accepted base `14f794b650c935c47ab1e78474fda0d1df0a7277`; coordination `fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00`, tree `49fcbc2fbc92501314eb193a8ca2bfdeb5011535`, sole parent accepted base. First implementation `5ea00119ddcee8508435246116a8a2d4b8970b0b` has sole parent coordination. Final head `3f65be7a60a1271247d04f23cbe0b151f82d65a1`, tree `5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797`, sole parent `374bee801baaf8a70955750be57577d5875b82bf`. No reset/rebase/force-push. Tested PR merge `88656774720f22a778b5421abc2ae820e4a9d285`: same tree; ordered parents main `22993f558c5e7e933c65e9c999933bd2e3ab41c4` + final head.
+
+**Eight changed files from coordination:** `scripts/prepare_telegram_egress.py`, `scripts/test_telegram_egress.sh`, `scripts/test_telegram_egress_migration.sh`, `tests/test_telegram_egress_postgres.py`, `tests/test_telegram_egress_migration.py`, `.github/workflows/ci.yml` (additive jobs only), `docs/tasks/M2_CONTRACT.md` (§10.12), `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` (§0.6.25). Canonical sources, locks/compose/client unchanged; client blob `525381357de76ea1c570fd864f8df5e9781a87e2`. TASK_REGISTER/HANDOFF unchanged.
+
+**Contract.** Exact predecessor `0b7e24ee425ebb429bf87dfe382cbd3fab883028` / tree `14a4033b849c736235653a5a85ec9e5112bfe727`, completed recovery-v2/connect2. Explicit private `migration-v3` immutable intent/archive pins from/to source/tree, original v2/audit/input hashes, independently pinned last operator receipt and before/after image map. Distinct runtime/development builds: exact tracked source/frozen pins, no private inputs; old images retained. Only api/worker recreated; disposable operator uses new development image. Scheduler/frontend/PG/S3/ingress/relay remain unchanged. State v3 binds target and intent; Telegram remains disabled/empty, private inputs and canonical data preserved. Strict guards retained; Env maps preserve all keys/values, reject duplicates. Runtime checked before/after effects.
+
+`migration-attest → migration-prepare → migrate → migration-preflight`; interruption uses `migration-resume`; completed retry re-attests without recreate. Explicit `migration-rollback` resumes independently, restores old images and byte-exact v2 state, retains all audit, then old-source preflight PASS. No auto rollback/rebaseline. Runtime≤180s; preparation≤600s; held fixture180s; new jobs≤25min unchanged.
+
+**Final CI:** [run37607152590](https://github.com/Elefesys/ai-service-manager/actions/runs/37607152590), attempt1, all9 SUCCESS and all clean-source gates SUCCESS.
+661 unit +393 integration +111 frontend +27 browser PASS; lint/format/contracts/smoke PASS. Old connect probes: DEPENDENCY_TIMEOUT/False, 5.005/5.006s.
+
+| Job | ID | Held migration s |
+|---|---:|---:|
+| foundation |112745314005|—|
+| browser |112745313998|—|
+| docker29-compatibility |112745313656|—|
+| normal intent |112745314166|90.163|
+| normal image |112745314141|162.278|
+| normal state |112745314164|164.840|
+| Docker29 intent |112745313885|134.864|
+| Docker29 image |112745314143|175.735|
+| Docker29 state |112745313917|99.993|
+
+Actual commands: `sh scripts/ci.sh`; `sh scripts/test_browser.sh`; default `sh scripts/test_telegram_egress.sh` (both old6+6); `sh scripts/test_telegram_egress_migration.sh intent`, `image`, `state` on normal and exact Engine29.8.2/8af9fe3 + Compose5.5.1. Old-source recovery; real SIGKILL forward/rollback at all3 boundaries, resume/retry/drift STOP verified. Equal31-table fingerprints, binding/COMPED/Console, authenticated private original200/anonymous403, UNKNOWN/attempt1/wire1; hashes of28 preserved files unchanged. Local Python3.12 syntax/stdlib probes only; full tests ran in CI.
+
+**Artifacts:** ZIP SHA256 below. All8 downloaded and independently checked: tested merge, empty status, every228 Git blobs/modes equal final tree. Common source.tar.gz SHA256 `03b4283d916f8a1d73a7417b4b9919ddbf0195a84a0f294542a6365bd3bfe8f9`. Disposable image IDs/proofs and hashes: `migration-{fault}.json` (`before_images`, `after_images`, `image_proofs`); owner IDs pending.
+
+| Artifact | ID | ZIP SHA256 |
+|---|---:|---|
+|docker29-image|11476000216|`a0903f5c3eafb625e248f646bd752364f5756b0469c910720af3f44a773479f1`|
+|docker29-intent|11475995076|`046237671f2fcc60af2f1c2a6b89055893420eea0e557faa51e15d1a4e0a0b6e`|
+|normal-state|11475597739|`6005354d16f299d5fbf6a29b9829db483d09947ba2310adb4a5a8f30f1d07d10`|
+|normal-image|11475159251|`c802d360b4327d872b47f9d79c6fdae0fb0fbb6ba64e0deec3c21102b593ac75`|
+|docker29-state|11475148980|`283d2d24ad5789bd7181c95fa7aa3548d892a62f8cd9783232c07bfa0fb71050`|
+|normal-intent|11474739648|`909865e9c30ca8351f083d447eb202f5d471ff1f5a1737d9e24951226f791f68`|
+|docker29-compatibility|11476210989|`e6614c337273620b0d7a6f919e73fa6637f452a4ee0965cd1b5df7afff8b29ae`|
+|foundation|11477965466|`1d115c4497da087addd72f165f0038ca795f422d05fe3e0d72a8c04011e60a1d`|
+
+Prior failed runs remain evidence: 37600133325 fixture adapter; 37600915991/37601699017 Env order; 37602453024/37603467061 held180s exhaustion; 37604597954 all migration PASS but formatter gate failed. Fixed with semantic Env comparison, bounded concurrent read-only probes and exact formatter output; deadlines/assertions preserved.
+
+**Owner draft:** [runbook §0.6.25](https://github.com/Elefesys/ai-service-manager/blob/3f65be7a60a1271247d04f23cbe0b151f82d65a1/docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md#0625-connect5-migration--candidate-protocol-and-owner-draft) has inventory, exact CLI flags, separate old/candidate checkouts, prepare/resume/rollback/STOP instructions. C0 must issue paths and independent last-receipt SHA pin. POSIX/PowerShell literal stdin/local SSH-argv shim PASS, network_calls0; actual SSH transport untested. No VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing mutation/merge performed. Old queue snapshot is not refreshed. C0 prefix archived verbatim in runbook; retained evidence unchanged below.
+
+</details>
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker

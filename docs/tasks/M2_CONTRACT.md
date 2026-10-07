@@ -1139,6 +1139,18 @@ final head/CI документационной приёмки — в PR receipt.
 
 ### 10.12. Operational extension — M2-ENV-04 TEST egress
 
+**Current C0 disposition2026-10-07: migration source/CI review PASS.**
+Implementation3f65be7a60a1271247d04f23cbe0b151f82d65a1/tree5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797
+проверен на CI37607152590: все9 jobs/clean-source SUCCESS. Новых C0 blockers нет;
+migration остаётся REVIEW, выдан независимый C8-M2-CONNECT5-MIGRATION. §10.12.1
+не меняется; прежние connect5 findings01/02/03 CLOSED. Owner applicability/images/
+receipt DAG ещё требуют отдельного read-only attestation после C8; это не live PASS.
+Exact scope/evidence/ограничения — current M2_HANDOFF и runbook§0.6.26.
+M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11; VM/ACK/activation/sends/merge не выданы.
+
+<details>
+<summary>История — C0 acceptance connect5 и выдача C6 migration</summary>
+
 **Current C0 disposition2026-10-07:** accepted connect5 implementation
 **14f794b650c935c47ab1e78474fda0d1df0a7277** / tree
 **72b824d85091076a025998a71e564deab805b1cf**, actual final CI37531243359 all gates SUCCESS
@@ -1154,6 +1166,8 @@ fixed TEST interval и canonical data не переписываются.
 VM execution, real Telegram/queue/ACK, activation/setWebhook/send и merge сейчас
 не выданы. Детальный scope — current M2_HANDOFF; приёмка — runbook§0.6.24 и единый receipt.
 Ниже сохранены исторические dispositions, а не дополнительные активные поручения.
+
+</details>
 
 **Историческая C0 disposition2026-10-06: PASS на implementation0b7e24ee425ebb429bf87dfe382cbd3fab883028;
 C8-04/05 CLOSED, прежние01/02/03 CLOSED.** Independent C0 source/evidence review +17
@@ -1336,7 +1350,7 @@ timeouts, TLS, permissions и UNKNOWN/no-resend остаются прежним�
 
 </details>
 
-#### 10.12.1. Explicit connect2 → connect5 migration (C6 candidate, C0/C8 review required)
+#### 10.12.1. Explicit connect2 → connect5 migration (C0 review PASS; scoped C8 pending)
 
 `M2-ENV-04-CONNECT5-MIGRATION` introduces a separate operation, not a relaxation of
 `recover`. Its only predecessor is completed recovery-v2 at

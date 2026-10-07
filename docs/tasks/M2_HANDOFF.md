@@ -4,6 +4,132 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
+## Текущий статус — C0 migration review PASS; независимый C8 выдан / 2026-10-07 UTC
+
+**C0-M2-ENV-04-CONNECT5-MIGRATION — PASS в repository/CI scope.**
+Новых блокирующих findings при source/evidence review не обнаружено. Это допуск
+к независимому C8; migration task остаётся REVIEW до его verdict. Findings01/02/03
+по connect5 client остаются CLOSED; новый migration path прежним C8 не покрыт.
+
+Проверенный implementation head **3f65be7a60a1271247d04f23cbe0b151f82d65a1**,
+tree **5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797**, sole parent
+**374bee801baaf8a70955750be57577d5875b82bf**. Accepted base
+**14f794b650c935c47ab1e78474fda0d1df0a7277**; coordination
+**fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00** сохранён sole parent первого
+implementation commit **5ea00119ddcee8508435246116a8a2d4b8970b0b**.
+История линейная. Client blob **525381357de76ea1c570fd864f8df5e9781a87e2** прежний.
+От coordination изменены ровно восемь разрешённых C6 файлов; domain/client/locks/
+Compose/canonical originals и три прежних CI jobs не изменены.
+
+[CI37607152590](https://github.com/Elefesys/ai-service-manager/actions/runs/37607152590)
+— все **9 jobs и clean-source gates SUCCESS**. Tested merge
+**88656774720f22a778b5421abc2ae820e4a9d285** имеет тот же tree; ordered parents:
+main **22993f558c5e7e933c65e9c999933bd2e3ab41c4**, затем implementation head.
+Logs подтверждают 661 unit, 393 integration, 111 frontend и 27 browser PASS.
+Прежние 6 relay +6 lifecycle cases прошли на обоих Docker runners; шесть новых
+migration shards покрывают intent/image/state interruption в обоих направлениях.
+
+**Собственная проверка C0:** прочитаны code/contract/runbook delta; свежие refs,
+jobs/logs; скачаны все восемь ZIP, проверены их SHA256 против GitHub digests.
+В каждом архиве 228 Git blobs/modes, PAX source commit, tested-commit и пустой
+worktree-status сверены с exact tree. Общий source.tar.gz SHA256
+`03b4283d916f8a1d73a7417b4b9919ddbf0195a84a0f294542a6365bd3bfe8f9`.
+C0 отдельно разобрал все шесть migration JSON: равные fingerprints31 таблицы и
+DB identity, UNKNOWN/wire1, Console session, private original HTTPS200/anonymous403,
+28 сохранённых файлов, before/after image maps, неизменный unrelated runtime,
+SIGKILL/resume/explicit rollback и completed retry без recreate. Held durations
+90.163–175.735s, все ≤180s. Оба прежних relay reports: TIMEOUT/False за5.005/5.006s,
+все12 assertions PASS. Это независимая сверка actual CI evidence; новые локальные
+Docker/PG/S3/browser/unit suites C0 не запускал и отдельный C8 не подменял.
+
+Текущий C0 coordination меняет только четыре документа. Его code/test/workflow
+bytes равны проверенному implementation; новый SHA не является tested target
+CI37607152590. C8 проверяет exact **3f65be7a60a1271247d04f23cbe0b151f82d65a1**;
+актуальное поручение читает из этого документационного descendant. Новый
+coordination CI учитывается отдельно и не заменяет уже проверенное evidence.
+
+| Задача | Статус | Следующий результат |
+|---|---|---|
+| C3-M2-ENV04-05 / C8-M2-CONNECT-BUDGET-R3 | VERIFIED | Принятый client scope, findings01/02/03 CLOSED |
+| M2-ENV-04-CONNECT5-MIGRATION | REVIEW | C0 source/CI PASS; требуется независимый C8 |
+| C8-M2-CONNECT5-MIGRATION | TODO, выдано | Scoped verdict на exact3f65be7a |
+| M2 / ENV04 | IN_PROGRESS / REVIEW | Owner migration и actual A09/A11 ещё не выполнены |
+
+**Owner applicability не подтверждена этим CI.** Последний owner receipt:
+exact0b7e24ee425ebb429bf87dfe382cbd3fab883028/tree14a4033b849c736235653a5a85ec9e5112bfe727,
+completed recovery-v2, cached connect2 images, TG disabled/empty, binding committed,
+ACK NOT_ATTEMPTED. После C8 C0 выдаёт сначала read-only attestation реальной
+receipt DAG и старых image bytes. Несовпадение cached operator с exact predecessor
+— STOP для C0, без rebuild, правки старого receipt или нового baseline.
+Независимый pin последнего owner receipt и реальные image IDs ещё нужны.
+Fixed TEST interval2026-10-02T00Z→2026-10-09T00Z и committed request не меняются;
+source-key revocation asm-telegram-test-env04 пока не подтверждён.
+
+PR24 Draft/open, main прежний. Owner VM/SSH, live Telegram/queue/ACK/activation/
+setWebhook/sends/billing mutation/merge не выданы этим review. После scoped C8:
+отдельная owner выдача, migration/preflight, свежий readonly network/connection/
+queue review и только затем actual A09/A11. Старый queue snapshot не актуализирован.
+
+### Единственное активное поручение C0 → C8 — C8-M2-CONNECT5-MIGRATION
+
+Провести независимый scoped review нового migration path. Исполнение C6 завершено
+и передано REVIEW; повторная реализация или повтор green CI без новой причины
+не требуются. Предыдущий C8-M2-CONNECT-BUDGET-R3 остаётся принятым в своём scope.
+
+Repository `Elefesys/ai-service-manager`, integration branch `c6/m2-telegram-live`,
+Draft PR24. Review target **3f65be7a60a1271247d04f23cbe0b151f82d65a1**,
+tree **5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797**. Diff base — coordination
+**fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00**; accepted client base
+**14f794b650c935c47ab1e78474fda0d1df0a7277**. Проверять отдельный exact checkout;
+не подменять target текущим docs-only tip. Прочитать AGENTS, применимые Spec/ADR/
+Roadmap/Implementation Plan, §10.12 контракта, runbook§0.6.25–26 и единый PR receipt.
+
+Scope — восемь файлов C6: helper, два egress runners, migration tests,
+test_telegram_egress_postgres.py, additive workflow jobs, contract§10.12 и runbook.
+Собственные временные scoped probes разрешены в отдельном disposable окружении;
+без изменения integration branch, production semantics, guards или CI gates.
+Если нужен fix — вернуть finding и minimal reproducer C0, не чинить чужой scope.
+
+Проверить:
+
+1. Exact completed recovery-v2 predecessor, owner-ID correction и pinned receipt
+   DAG с committed binding; исходный baseline/private originals не подменяются.
+   Old/new source/image bytes, отдельные checkouts, owner/mode/no-symlink,
+   local Docker context, lock, canonical outside-checkout state и secret-free build.
+   Особо проверить отказ при несовпадении реально cached old image с predecessor.
+2. Immutable preparation/intent/per-service result/done и state-v3 binding;
+   interruption до/после recreate и publication, repeated resume, completed retry
+   без нового recreate; остановку при unexpected/missing/foreign state/image/runtime.
+   Explicit rollback из частично выполненных стадий и после completion, сохранность
+   новых и старых audit receipts, строгий запрет forward после начала rollback.
+3. Только api/worker image transition и новый disposable operator; Telegram
+   disabled/empty, scheduler/frontend/PG/S3/ingress/relay/config/mounts прежние.
+   Фактическая DB identity и fingerprints31 таблицы, binding/COMPED/Console/private
+   originals/UNKNOWN/wire1. Runtime bounds≤180s, prepare≤600s, job limits прежние.
+4. Отсутствие регрессий strict ordinary recover/source/image guards, connect5/
+   deadlines/TLS/no retries/UNKNOWN; предыдущие client findings не переоткрывать
+   без конкретного нового evidence. Проверить default old6+6 cases и честность
+   новых fixture shortcuts, actual fault injection и negative assertions.
+5. Самостоятельно сверить CI37607152590: девять jobs/clean-source, tested merge
+   88656774720f22a778b5421abc2ae820e4a9d285/parents/tree, digests восьми archives,
+   228 blobs/modes; шесть migration reports на normal/exact Docker29.8.2,
+   Compose5.5.1. Проверить owner draft/quoting evidence и ограничения фактического
+   SSH/owner image applicability. Своё выполнение отделить от прочитанного CI.
+
+Не требуется заново запускать все 9 green jobs только ради повторения. Выполнить
+собственные targeted проверки конкретных рисков и указать их scope/команды/results;
+при доступном disposable Docker можно проверить выбранный риск actual execution.
+Отсутствие локального Docker честно указать; mocks не выдавать за PG/S3/live.
+VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing и merge не выданы.
+
+Вернуть **PASS** либо **CHANGES_REQUESTED**, exact tested head/tree/clean status,
+собственные команды/results, отдельно CI evidence и ограничения. Findings:
+ID/severity/file/location, observable impact, reproducer и минимальное исправление.
+Не переводить M2/ENV04 в VERIFIED; owner migration/A09/A11 ещё впереди.
+
+<details>
+<summary>История — C3/C8 acceptance и завершённое поручение C6 migration</summary>
+
 ## Единственное активное поручение — M2-ENV-04-CONNECT5-MIGRATION / 2026-10-07 UTC
 
 ### Приёмка C0 после независимого C8
@@ -209,6 +335,8 @@ actual final CI и scoped C8 изменённого migration path; затем �
 owner migration, fresh readonly readiness/queue review и live A09/A11.
 
 [Единый receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+
+</details>
 
 <details>
 <summary>История — завершённый этап R3 review / actual CI / C8 issuance</summary>
