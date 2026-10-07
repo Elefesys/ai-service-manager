@@ -1139,6 +1139,19 @@ final head/CI документационной приёмки — в PR receipt.
 
 ### 10.12. Operational extension — M2-ENV-04 TEST egress
 
+**Current C0/C8 disposition2026-10-07: CHANGES_REQUESTED; C8-MIG-01/P2 OPEN.**
+На implementation3f65be7a60a1271247d04f23cbe0b151f82d65a1 C8 выявил и C0 воспроизвёл
+непроверенный forward audit при rollback. Выдана узкая C6-R2: до effects проверить
+существующий forward audit, закрепить inventory/hashes в rollback intent и проверять
+на resume/retry; done требует result в обоих направлениях. Valid partial rollback
+сохраняется. Это устранение нарушения прежнего audit-preservation contract, без
+изменения domain/TLS/deadlines/UNKNOWN. Findings01/02/03 остаются CLOSED.
+Migration REVIEW до final CI/targeted C8; VM execution не выдана. Подробности и
+reproducer — current M2_HANDOFF/runbook§0.6.27; M2 IN_PROGRESS/ENV04 REVIEW.
+
+<details>
+<summary>История — C0 disposition до нового C8 finding</summary>
+
 **Current C0 disposition2026-10-07: migration source/CI review PASS.**
 Implementation3f65be7a60a1271247d04f23cbe0b151f82d65a1/tree5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797
 проверен на CI37607152590: все9 jobs/clean-source SUCCESS. Новых C0 blockers нет;
@@ -1147,6 +1160,8 @@ migration остаётся REVIEW, выдан независимый C8-M2-CONNE
 receipt DAG ещё требуют отдельного read-only attestation после C8; это не live PASS.
 Exact scope/evidence/ограничения — current M2_HANDOFF и runbook§0.6.26.
 M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11; VM/ACK/activation/sends/merge не выданы.
+
+</details>
 
 <details>
 <summary>История — C0 acceptance connect5 и выдача C6 migration</summary>
@@ -1350,7 +1365,7 @@ timeouts, TLS, permissions и UNKNOWN/no-resend остаются прежним�
 
 </details>
 
-#### 10.12.1. Explicit connect2 → connect5 migration (C0 review PASS; scoped C8 pending)
+#### 10.12.1. Explicit connect2 → connect5 migration (C8-MIG-01 OPEN; C6-R2 issued)
 
 `M2-ENV-04-CONNECT5-MIGRATION` introduces a separate operation, not a relaxation of
 `recover`. Its only predecessor is completed recovery-v2 at

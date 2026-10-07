@@ -2,6 +2,71 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Текущий статус — C8-MIG-01 OPEN; ограниченная доработка C6 / 2026-10-07 UTC
+
+**C8-M2-CONNECT5-MIGRATION — CHANGES_REQUESTED. C0 принимает C8-MIG-01/P2.**
+Migration остаётся REVIEW; owner migration не выдаётся до исправления, final CI
+и targeted C8. Прежний C0 source/CI PASS дополнен новым подтверждённым blocker:
+успешные CI scenarios остаются действительным evidence, но не закрывают audit drift.
+Connect5 client findings01/02/03 и прежняя recovery acceptance не переоткрываются.
+
+Проверенный code head **3f65be7a60a1271247d04f23cbe0b151f82d65a1**, tree
+**5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797**, diff base
+**fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00**. Текущий до этой coordination
+docs-only head **e332989485dccba52c090c855f93a536b462c91b**, tree
+**424edb39f7f2cbd183269f4c7dee924fb4ddb90d**; остальные224/228 blobs/modes равны
+reviewed implementation. Helper blob **c5d91d930eb164d116b25564592f038ae425b83d**.
+
+| Finding | Причина и наблюдаемый результат | Исправление / gate |
+|---|---|---|
+| C8-MIG-01 / P2 / OPEN | migration_results выбирает только текущее направление (lines2810–2818); migration_switch проверяет completion только выбранного направления (2890–2912). Изменённый forward-complete.database_sha256 допускает rollback двух images и новый preservation:PASS. После rollback удалённый/повреждённый forward-api-result не мешает повторному success. | Проверять существующий forward audit до первого rollback effect, закреплять inventory/hashes в immutable rollback intent, проверять на resume/retry; каждый done требует сохранённый result независимо от направления. Valid partial rollback сохраняется. |
+
+**Собственный C0 reproducer:** Python3.12.14, exact helper blob выше; настоящие
+migration_switch/migration_results/migration_manifest/migration_stage и private
+file I/O. Docker/DB/prepared observations заменены repository fixture, без network.
+Все три дефектных варианта воспроизведены: первый допускает2 simulated recreates,
+оба completed retry возвращают success/0 new effects при нарушенном forward audit.
+Два control cases: valid partial forward→rollback PASS/один rollback recreate;
+actual-database observation drift → EGRESS_MIGRATION_CANONICAL_DATA_DRIFT до effects.
+Это не actual Docker/PG execution и не доказательство потери БД или Telegram resend.
+Проблема — ложное подтверждение целостности журнала и ненадёжное основание recovery.
+
+По переданному владельцем C8 report:144 repository scoped PASS; дополнительные
+22 PASS/3 FAIL воспроизводят один finding. C8 проверил чистый exact checkout и
+самостоятельно сверил9 jobs,8 archives/228 blobs/modes,6 migration и2 relay reports.
+Это C8-reported execution; C0 не заявляет прочтение отдельного C8 evidence.zip.
+C0 собственный reproducer изложен в runbook§0.6.27.
+
+Implementation CI37607152590 остаётся SUCCESS; отдельный docs CI37621480704 наe332
+теперь также **all9 jobs/clean-source SUCCESS**, что C0 проверил свежим API read.
+Ни один из них не содержит новых audit-tamper regressions и не закрывает C8-MIG-01.
+Новый coordination commit меняет только четыре документа; его CI учитывается
+отдельно. После code fix нужен actual final-head CI и targeted C8 по finding.
+
+| Задача | Статус | Следующее действие |
+|---|---|---|
+| C8-MIG-01 | OPEN | Ограниченное исправление C6, затем targeted C8/C0 closure |
+| M2-ENV-04-CONNECT5-MIGRATION | REVIEW | CHANGES_REQUESTED по одному P2 |
+| C6-M2-CONNECT5-MIGRATION-R2 | TODO, выдано | Единственное active поручение в M2_HANDOFF |
+| C8-M2-CONNECT5-MIGRATION | REVIEW | Первый review завершён; повтор после исправления |
+| C3 client scope / findings01/02/03 | VERIFIED / CLOSED | Без новой code delta и без переоткрытия |
+| M2 / ENV04 | IN_PROGRESS / REVIEW | Actual owner migration/A09/A11 ещё впереди |
+
+Последняя подтверждённая VM остаётся exact0b7e24ee/recovery-v2/connect2,
+TG disabled/empty, binding committed, ACK NOT_ATTEMPTED. Никакой automatic replay.
+Соответствие cached owner images exact predecessor и independently pinned receipt
+DAG ещё не аттестовано; CI построил disposable old images заново. Этот отдельный
+owner prerequisite не закрывается исправлением C8-MIG-01. Fixed TEST interval
+2026-10-02T00Z→2026-10-09T00Z и committed request не изменяются.
+PR24 Draft/open; VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing/
+main merge/production/M3 этим поручением не выданы.
+
+Единственное активное поручение C6-R2 — [M2_HANDOFF](tasks/M2_HANDOFF.md).
+Finding/reproducer и точные пределы evidence — runbook§0.6.27 и единый PR24 receipt.
+
+<details>
+<summary>История — C0 source/CI PASS и завершённая выдача C8 migration review</summary>
+
 ## Текущий статус — C0 migration review PASS; независимый C8 выдан / 2026-10-07 UTC
 
 **C0-M2-ENV-04-CONNECT5-MIGRATION — PASS в repository/CI scope.**
@@ -70,6 +135,8 @@ queue review и только затем actual A09/A11. Старый queue snaps
 
 Единственное активное поручение — [C8-M2-CONNECT5-MIGRATION](tasks/M2_HANDOFF.md).
 Полные job/artifact IDs и сохранённый C6 receipt — runbook§0.6.26 и единый PR24 receipt.
+
+</details>
 
 <details>
 <summary>История — C3/C8 acceptance и завершённое поручение C6 migration</summary>

@@ -4,6 +4,143 @@
 Единственный источник статусов: [TASK_REGISTER](../TASK_REGISTER.md).
 Ниже одно активное поручение; свёрнутые разделы — историческое evidence.
 
+## Текущий статус — C8-MIG-01 OPEN; ограниченная доработка C6 / 2026-10-07 UTC
+
+**C8-M2-CONNECT5-MIGRATION — CHANGES_REQUESTED. C0 принимает C8-MIG-01/P2.**
+Migration остаётся REVIEW; owner migration не выдаётся до исправления, final CI
+и targeted C8. Прежний C0 source/CI PASS дополнен новым подтверждённым blocker:
+успешные CI scenarios остаются действительным evidence, но не закрывают audit drift.
+Connect5 client findings01/02/03 и прежняя recovery acceptance не переоткрываются.
+
+Проверенный code head **3f65be7a60a1271247d04f23cbe0b151f82d65a1**, tree
+**5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797**, diff base
+**fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00**. Текущий до этой coordination
+docs-only head **e332989485dccba52c090c855f93a536b462c91b**, tree
+**424edb39f7f2cbd183269f4c7dee924fb4ddb90d**; остальные224/228 blobs/modes равны
+reviewed implementation. Helper blob **c5d91d930eb164d116b25564592f038ae425b83d**.
+
+| Finding | Причина и наблюдаемый результат | Исправление / gate |
+|---|---|---|
+| C8-MIG-01 / P2 / OPEN | migration_results выбирает только текущее направление (lines2810–2818); migration_switch проверяет completion только выбранного направления (2890–2912). Изменённый forward-complete.database_sha256 допускает rollback двух images и новый preservation:PASS. После rollback удалённый/повреждённый forward-api-result не мешает повторному success. | Проверять существующий forward audit до первого rollback effect, закреплять inventory/hashes в immutable rollback intent, проверять на resume/retry; каждый done требует сохранённый result независимо от направления. Valid partial rollback сохраняется. |
+
+**Собственный C0 reproducer:** Python3.12.14, exact helper blob выше; настоящие
+migration_switch/migration_results/migration_manifest/migration_stage и private
+file I/O. Docker/DB/prepared observations заменены repository fixture, без network.
+Все три дефектных варианта воспроизведены: первый допускает2 simulated recreates,
+оба completed retry возвращают success/0 new effects при нарушенном forward audit.
+Два control cases: valid partial forward→rollback PASS/один rollback recreate;
+actual-database observation drift → EGRESS_MIGRATION_CANONICAL_DATA_DRIFT до effects.
+Это не actual Docker/PG execution и не доказательство потери БД или Telegram resend.
+Проблема — ложное подтверждение целостности журнала и ненадёжное основание recovery.
+
+По переданному владельцем C8 report:144 repository scoped PASS; дополнительные
+22 PASS/3 FAIL воспроизводят один finding. C8 проверил чистый exact checkout и
+самостоятельно сверил9 jobs,8 archives/228 blobs/modes,6 migration и2 relay reports.
+Это C8-reported execution; C0 не заявляет прочтение отдельного C8 evidence.zip.
+C0 собственный reproducer изложен в runbook§0.6.27.
+
+Implementation CI37607152590 остаётся SUCCESS; отдельный docs CI37621480704 наe332
+теперь также **all9 jobs/clean-source SUCCESS**, что C0 проверил свежим API read.
+Ни один из них не содержит новых audit-tamper regressions и не закрывает C8-MIG-01.
+Новый coordination commit меняет только четыре документа; его CI учитывается
+отдельно. После code fix нужен actual final-head CI и targeted C8 по finding.
+
+| Задача | Статус | Следующее действие |
+|---|---|---|
+| C8-MIG-01 | OPEN | Ограниченное исправление C6, затем targeted C8/C0 closure |
+| M2-ENV-04-CONNECT5-MIGRATION | REVIEW | CHANGES_REQUESTED по одному P2 |
+| C6-M2-CONNECT5-MIGRATION-R2 | TODO, выдано | Единственное active поручение в M2_HANDOFF |
+| C8-M2-CONNECT5-MIGRATION | REVIEW | Первый review завершён; повтор после исправления |
+| C3 client scope / findings01/02/03 | VERIFIED / CLOSED | Без новой code delta и без переоткрытия |
+| M2 / ENV04 | IN_PROGRESS / REVIEW | Actual owner migration/A09/A11 ещё впереди |
+
+Последняя подтверждённая VM остаётся exact0b7e24ee/recovery-v2/connect2,
+TG disabled/empty, binding committed, ACK NOT_ATTEMPTED. Никакой automatic replay.
+Соответствие cached owner images exact predecessor и independently pinned receipt
+DAG ещё не аттестовано; CI построил disposable old images заново. Этот отдельный
+owner prerequisite не закрывается исправлением C8-MIG-01. Fixed TEST interval
+2026-10-02T00Z→2026-10-09T00Z и committed request не изменяются.
+PR24 Draft/open; VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing/
+main merge/production/M3 этим поручением не выданы.
+
+### Единственное активное поручение C0 → C6 — C6-M2-CONNECT5-MIGRATION-R2
+
+Исправить **только C8-MIG-01/P2**. Первый migration implementation завершён;
+переписывать его или начинать подготовку заново не требуется.
+
+Repository `Elefesys/ai-service-manager`; продолжать branch `c6/m2-telegram-live`
+и Draft PR24. Reviewed implementation3f65be7a60a1271247d04f23cbe0b151f82d65a1
+сохраняется в ancestry. Начать отдельный checkout от нового C0 coordination commit,
+несущего этот active block; полный SHA/tree опубликованы в едином PR24 receipt.
+Его непосредственный parent — e332989485dccba52c090c855f93a536b462c91b.
+Сохранить новый coordination непосредственным parent первого fix commit;
+fast-forward, без reset/rebase/force-push. При чужом drift вернуть факты C0.
+Прочитать AGENTS, применимый канон, finding/current disposition выше,
+contract§10.12.1 и runbook§0.6.25–27. Предыдущие поручения ниже исторические.
+
+**Разрешённые файлы:**
+
+- `scripts/prepare_telegram_egress.py`: только audit validation/binding для
+  migration forward/rollback/resume/retry; strict state/intent schema в этом scope.
+- `tests/test_telegram_egress_migration.py`: targeted regressions finding и valid
+  partial/interrupted/completed rollback, при необходимости явные disposable probes.
+- `tests/test_telegram_egress.py`: только необходимые strict-guard regressions.
+- `docs/tasks/M2_CONTRACT.md`: только §10.12.1 — уточнение audit invariant и результата.
+- `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md`: отдельный R2 evidence/limits/reproducer.
+
+Не изменять client/provisioner, domain/DB schema, Compose/images/locks, workflow,
+runners, old relay/lifecycle assertions или бюджеты180/600s. TASK_REGISTER/HANDOFF
+ведёт C0. Дополнительную необходимость за пределами этих пяти файлов сначала
+обосновать C0; guards не обходить, skip/xfail/continue-on-error не добавлять.
+
+**Требуемое поведение:**
+
+1. До первого rollback recreate проверить все существующие forward stage/result/
+   completion records: strict shape, intent binding, source/state/database hashes
+   и допустимый порядок. Повреждённый forward-complete.database_sha256 → STOP до
+   любых новых runtime effects, без rollback-complete/PASS.
+2. В immutable rollback intent закрепить проверенный forward audit inventory и
+   hashes его точных bytes. Каждый resume/retry, включая уже completed rollback,
+   проверяет тот же inventory; missing/changed/unexpected forward evidence → STOP.
+   Не переписывать intent при retry и не брать новые expected hashes из текущих
+   повреждённых файлов. Не восстанавливать утраченный audit из текущего runtime.
+3. Done→result invariant действует для обеих сторон, даже когда runtime уже
+   откатился. Forward record проверяется как исторический факт against forward
+   binding/snapshot, а не как требование равенства новым rollback container IDs.
+   Сохранить все прежние audit bytes и проверить их до success publication.
+4. Valid partial rollback остаётся доступен: до первого recreate, после первого
+   caller switch, в result/done publication gap, после второго switch, до/после
+   state и completion publication. Отсутствие ещё не созданного forward-complete
+   при допустимой незавершённой операции не считается само по себе повреждением.
+   При этом завершённый stage не допускается без своего обязательного result.
+5. Interrupted rollback/resume и completed retry не повторяют уже завершённые
+   recreates/effects; forward после rollback-intent запрещён. Сохранить source,
+   private file, exact image, DB identity/fingerprints и unrelated-runtime guards,
+   TG disabled/empty, UNKNOWN/no-resend и прежние180s/600s bounds.
+
+**Обязательные regressions:** три точных C8/C0 repro; аналогичные проверки для
+api и worker; audit drift перед первым rollback и после его прерывания/completion;
+missing result при done в любой стороне; valid partial forward rollback, repeated
+resume, idempotent completed retry, original audit bytes unchanged. Отдельно
+проверить forward/rollback database-state/intent hash consistency, чтобы fix не
+свёлся только к наличию файла или только к хешированию уже испорченного содержимого.
+
+На final code SHA — scoped tests/static checks и все9 actual CI jobs, прежние6+6
+cases и6 migration scenarios на normal/exact Docker29, clean-source artifacts.
+Новый state/audit format должен пройти настоящие interruption/resume/rollback
+scenarios. Не расширять deadlines ради зелёного CI. Ранее green tests не повторять
+до появления изменённого candidate или конкретной причины.
+
+Вернуть REVIEW: head/tree/parent, changed files, exact commands/results и CI IDs,
+audit schema/invariant diff, regression→finding mapping, пределы собственного
+execution. Finding остаётся OPEN до targeted C8/C0 verdict; самостоятельно CLOSED
+или M2 VERIFIED не объявлять. Затем C0 review и targeted C8 именно этого исправления.
+VM/SSH/live/ACK/activation/sends/merge не выполнять; owner images/receipt attestation
+остаётся отдельным будущим шагом.
+
+<details>
+<summary>История — C0 source/CI PASS и завершённая выдача C8 migration review</summary>
+
 ## Текущий статус — C0 migration review PASS; независимый C8 выдан / 2026-10-07 UTC
 
 **C0-M2-ENV-04-CONNECT5-MIGRATION — PASS в repository/CI scope.**
@@ -126,6 +263,8 @@ VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing и merge не
 собственные команды/results, отдельно CI evidence и ограничения. Findings:
 ID/severity/file/location, observable impact, reproducer и минимальное исправление.
 Не переводить M2/ENV04 в VERIFIED; owner migration/A09/A11 ещё впереди.
+
+</details>
 
 <details>
 <summary>История — C3/C8 acceptance и завершённое поручение C6 migration</summary>

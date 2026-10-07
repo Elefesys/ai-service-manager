@@ -3494,6 +3494,136 @@ Prior failed runs remain evidence: 37600133325 fixture adapter; 37600915991/3760
 
 </details>
 
+### 0.6.27. C8-MIG-01 — rollback audit drift, C0 confirmation and C6-R2 / 2026-10-07 UTC
+
+**C8-M2-CONNECT5-MIGRATION — CHANGES_REQUESTED. C0 принимает C8-MIG-01/P2.**
+Migration остаётся REVIEW; owner migration не выдаётся до исправления, final CI
+и targeted C8. Прежний C0 source/CI PASS дополнен новым подтверждённым blocker:
+успешные CI scenarios остаются действительным evidence, но не закрывают audit drift.
+Connect5 client findings01/02/03 и прежняя recovery acceptance не переоткрываются.
+
+Проверенный code head **3f65be7a60a1271247d04f23cbe0b151f82d65a1**, tree
+**5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797**, diff base
+**fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00**. Текущий до этой coordination
+docs-only head **e332989485dccba52c090c855f93a536b462c91b**, tree
+**424edb39f7f2cbd183269f4c7dee924fb4ddb90d**; остальные224/228 blobs/modes равны
+reviewed implementation. Helper blob **c5d91d930eb164d116b25564592f038ae425b83d**.
+
+| Finding | Причина и наблюдаемый результат | Исправление / gate |
+|---|---|---|
+| C8-MIG-01 / P2 / OPEN | migration_results выбирает только текущее направление (lines2810–2818); migration_switch проверяет completion только выбранного направления (2890–2912). Изменённый forward-complete.database_sha256 допускает rollback двух images и новый preservation:PASS. После rollback удалённый/повреждённый forward-api-result не мешает повторному success. | Проверять существующий forward audit до первого rollback effect, закреплять inventory/hashes в immutable rollback intent, проверять на resume/retry; каждый done требует сохранённый result независимо от направления. Valid partial rollback сохраняется. |
+
+**Собственный C0 reproducer:** Python3.12.14, exact helper blob выше; настоящие
+migration_switch/migration_results/migration_manifest/migration_stage и private
+file I/O. Docker/DB/prepared observations заменены repository fixture, без network.
+Все три дефектных варианта воспроизведены: первый допускает2 simulated recreates,
+оба completed retry возвращают success/0 new effects при нарушенном forward audit.
+Два control cases: valid partial forward→rollback PASS/один rollback recreate;
+actual-database observation drift → EGRESS_MIGRATION_CANONICAL_DATA_DRIFT до effects.
+Это не actual Docker/PG execution и не доказательство потери БД или Telegram resend.
+Проблема — ложное подтверждение целостности журнала и ненадёжное основание recovery.
+
+По переданному владельцем C8 report:144 repository scoped PASS; дополнительные
+22 PASS/3 FAIL воспроизводят один finding. C8 проверил чистый exact checkout и
+самостоятельно сверил9 jobs,8 archives/228 blobs/modes,6 migration и2 relay reports.
+Это C8-reported execution; C0 не заявляет прочтение отдельного C8 evidence.zip.
+C0 собственный reproducer изложен в runbook§0.6.27.
+
+Implementation CI37607152590 остаётся SUCCESS; отдельный docs CI37621480704 наe332
+теперь также **all9 jobs/clean-source SUCCESS**, что C0 проверил свежим API read.
+Ни один из них не содержит новых audit-tamper regressions и не закрывает C8-MIG-01.
+Новый coordination commit меняет только четыре документа; его CI учитывается
+отдельно. После code fix нужен actual final-head CI и targeted C8 по finding.
+
+| Задача | Статус | Следующее действие |
+|---|---|---|
+| C8-MIG-01 | OPEN | Ограниченное исправление C6, затем targeted C8/C0 closure |
+| M2-ENV-04-CONNECT5-MIGRATION | REVIEW | CHANGES_REQUESTED по одному P2 |
+| C6-M2-CONNECT5-MIGRATION-R2 | TODO, выдано | Единственное active поручение в M2_HANDOFF |
+| C8-M2-CONNECT5-MIGRATION | REVIEW | Первый review завершён; повтор после исправления |
+| C3 client scope / findings01/02/03 | VERIFIED / CLOSED | Без новой code delta и без переоткрытия |
+| M2 / ENV04 | IN_PROGRESS / REVIEW | Actual owner migration/A09/A11 ещё впереди |
+
+Последняя подтверждённая VM остаётся exact0b7e24ee/recovery-v2/connect2,
+TG disabled/empty, binding committed, ACK NOT_ATTEMPTED. Никакой automatic replay.
+Соответствие cached owner images exact predecessor и independently pinned receipt
+DAG ещё не аттестовано; CI построил disposable old images заново. Этот отдельный
+owner prerequisite не закрывается исправлением C8-MIG-01. Fixed TEST interval
+2026-10-02T00Z→2026-10-09T00Z и committed request не изменяются.
+PR24 Draft/open; VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing/
+main merge/production/M3 этим поручением не выданы.
+
+Минимальные repository regressions на существующей migration_machine fixture:
+
+```python
+def test_forward_complete_tamper_requires_stop(migration_machine):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    path = m.bundle / "forward-complete.json"
+    receipt = json.loads(path.read_bytes())
+    receipt["database_sha256"] = "0" * 64
+    e.write_private(path, e.encoded(receipt))
+    effects = list(m.effects)
+    with pytest.raises(e.EgressError):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == effects
+    assert not (m.bundle / "rollback-complete.json").exists()
+
+
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_completed_rollback_keeps_forward_result(migration_machine, corrupt):
+    m = migration_machine
+    e.migration_switch(m.args, m.directory)
+    e.migration_switch(m.args, m.directory, reverse=True)
+    path = m.bundle / "forward-api-result.json"
+    if corrupt:
+        e.write_private(path, b"not-json\n")
+    else:
+        path.unlink()
+    effects = list(m.effects)
+    with pytest.raises(e.EgressError):
+        e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == effects
+```
+
+На reviewed helper эти три negative assertions FAIL: ожидаемого EgressError нет.
+C0 воспроизвёл эквивалентные операции отдельной Python stdlib probe, исполняя
+исходную repository fixture с подставленными external observations и настоящие
+file/audit guards. SHA Git blob helper c5d91d930eb164d116b25564592f038ae425b83d
+проверен перед execution. Команда C0: `python mig01_probe.py`, Python3.12.14.
+Результат: три C8_MIG_01_REPRODUCED, VALID_PARTIAL_ROLLBACK_PASS,
+EXPECTED_STOP на DB observation drift. Exit0 у reproducer означает успешное
+воспроизведение дефекта, а не passing acceptance. Никакого Docker/PG/VM/network.
+
+Логика причины: после rollback-intent per-service result selector переключается
+на rollback-*; forward completion вообще не читается при direction=rollback.
+Allowlist migration_saved допускает имена новых audit files, но не закрепляет их
+содержимое. Новый fix должен связывать оба направления и сохранить valid partial
+recovery; ослабление проверки для испорченного журнала недопустимо.
+
+<details>
+<summary>Архив предыдущего C0 receipt prefix — дословно, до C8-MIG-01</summary>
+
+## C0 — M2-ENV-04-CONNECT5-MIGRATION: source/CI PASS; scoped C8 issued (2026-10-07)
+
+**C0 verdict: PASS in repository/CI scope; no new blocking findings.** Migration remains REVIEW pending independent **C8-M2-CONNECT5-MIGRATION**. Existing client findings01/02/03 CLOSED. M2 IN_PROGRESS; ENV04 REVIEW until actual A09/A11.
+
+**Exact reviewed implementation:** head `3f65be7a60a1271247d04f23cbe0b151f82d65a1`, tree `5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797`, sole parent `374bee801baaf8a70955750be57577d5875b82bf`. Accepted client base `14f794b650c935c47ab1e78474fda0d1df0a7277`; coordination `fbe13a24c8407ab94c1c4a997d4a3b50d7e41f00` remains sole parent of first implementation5ea00119ddcee8508435246116a8a2d4b8970b0b. Linear history retained; exactly8 allowed C6 files changed. Client blob `525381357de76ea1c570fd864f8df5e9781a87e2`; client/locks/Compose/canonical originals and prior3 CI jobs unchanged.
+
+**Actual [CI37607152590](https://github.com/Elefesys/ai-service-manager/actions/runs/37607152590): all9 jobs and clean-source gates SUCCESS.** Tested merge `88656774720f22a778b5421abc2ae820e4a9d285`, same implementation tree; ordered parents main `22993f558c5e7e933c65e9c999933bd2e3ab41c4` + reviewed head. Logs confirm661 unit/393 integration/111 frontend/27 browser. Foundation112745314005; browser112745313998; Docker29compat112745313656. Migration normal intent/image/state:112745314166/112745314141/112745314164; Docker29:112745313885/112745314143/112745313917.
+
+**C0 independent verification:** source/contract/runbook review, fresh refs/jobs/logs; all8 ZIP downloads/digests, every228 Git blobs/modes, tested merge/PAX/status checked. Common source.tar.gz SHA256 `03b4283d916f8a1d73a7417b4b9919ddbf0195a84a0f294542a6365bd3bfe8f9`. All6 migration JSON independently parsed: equal31-table fingerprints/actual DB identity, binding/COMPED/Console/private original200/anonymous403, UNKNOWN/wire1,28 preserved files, exact image maps/unrelated runtime, SIGKILL forward+rollback/resume, completed retry without recreate. Held normal90.163/162.278/164.840s; Docker29 134.864/175.735/99.993s; all≤180s. Prior6+6 cases on both runners retain TIMEOUT/False at5.005/5.006s. No new local Docker/PG/S3/browser/unit execution by C0; CI execution is distinguished from C0 evidence review.
+
+**Coordination:** [`e332989485dccba52c090c855f93a536b462c91b`](https://github.com/Elefesys/ai-service-manager/commit/e332989485dccba52c090c855f93a536b462c91b), tree `424edb39f7f2cbd183269f4c7dee924fb4ddb90d`, sole parent reviewed implementation. Exactly four documents updated; other224/228 blobs/modes unchanged. [Coordination CI37621480704](https://github.com/Elefesys/ai-service-manager/actions/runs/37621480704) IN_PROGRESS when recorded; its result is separate. CI37607152590 is not attributed to this new SHA. C8 reviews exact3f65be7a, reads its [active handoff](https://github.com/Elefesys/ai-service-manager/blob/e332989485dccba52c090c855f93a536b462c91b/docs/tasks/M2_HANDOFF.md) from coordination. C8 has not yet executed this new review.
+
+**Evidence preservation:** complete previous C6 receipt prefix, including all8 artifact IDs/SHA256, prior failed runs and owner draft limits, archived verbatim in [runbook§0.6.26](https://github.com/Elefesys/ai-service-manager/blob/e332989485dccba52c090c855f93a536b462c91b/docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md#0626-c0-migration-review-и-scoped-c8-issuance--2026-10-07-utc). Historical receipt tail below unchanged. Owner protocol remains §0.6.25; accepted client/recovery evidence retained.
+
+**Owner applicability remains unconfirmed.** Last owner state: exact0b7e24ee/tree14a4033b, completed recovery-v2, cached connect2 images, TG disabled/empty; binding committed; ACK NOT_ATTEMPTED/no automatic replay. After C8, C0 first issues read-only attestation of actual old images and pinned receipt DAG; independently accepted last receipt SHA and owner image IDs are still needed. Old-image byte mismatch is STOP, not permission to rebuild/rebaseline/alter receipts. Fixed TEST interval2026-10-02T00Z→2026-10-09T00Z unchanged; source-key revocation unconfirmed.
+
+PR24 Draft/open; main unchanged. No owner VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing writes/merge executed or issued by this review. Next: independent scoped C8 verdict, separate owner issuance, migration/preflight, fresh readonly readiness/queue observations, then actual A09/A11.
+
+</details>
+
 ## 1. Конкретное окружение и предварительные условия
 
 После выполнения §0.2 выбран один вариант: **доступный оператору Linux host с Docker
