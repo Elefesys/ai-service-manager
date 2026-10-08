@@ -1452,9 +1452,10 @@ def test_initial_attest_never_infers_historical_choice(provenance_machine):
             m.args.predecessor_operator_sha = e.HISTORICAL_OPERATOR
         result = e.migration_attest(m.args, m.directory)
         assert result[5]["telegram-operator"]["source_sha"] == m.operator_source
-        m.args.predecessor_operator_sha = "b" * 40
-        with pytest.raises(e.EgressError, match="EGRESS_MIGRATION_OPERATOR_SOURCE"):
-            e.migration_attest(m.args, m.directory)
+        for invalid_source in ("", "b" * 40):
+            m.args.predecessor_operator_sha = invalid_source
+            with pytest.raises(e.EgressError, match="EGRESS_MIGRATION_OPERATOR_SOURCE"):
+                e.migration_attest(m.args, m.directory)
         assert not m.effects and receipt_inventory(m.directory) == before
     finally:
         archive.rename(m.bundle)

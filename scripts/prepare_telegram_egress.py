@@ -2469,8 +2469,9 @@ def migration_attest(args, directory):
         require(args.accepted_sha == saved["to_sha"], "EGRESS_MIGRATION_REQUEST_CHANGED")
         operator_source = migration_plan_operator(saved)
     else:
+        requested = getattr(args, "predecessor_operator_sha", None)
         operator_source = migration_operator_source(
-            getattr(args, "predecessor_operator_sha", None) or MIGRATION_FROM
+            MIGRATION_FROM if requested is None else requested
         )
     state_raw = private_bytes(directory / "state.json")
     state = strict_json(state_raw)
