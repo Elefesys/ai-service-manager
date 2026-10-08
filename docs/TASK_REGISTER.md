@@ -2,59 +2,48 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C6-M2-HISTORICAL-OPERATOR-COMPAT / REVIEW — 2026-10-08
+## Текущий статус — historical operator принят; Audit pagination / REVIEW — 2026-10-08 UTC
 
-Активное поручение: [C0 → C6, comment6064359633](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6064359633).
-Exact base и sole first parent: `31eb33605f22b9a9508436adabcf9d81b1960982`,
-tree `7b6e0760839c8dd5f7eab89eefc81dea5e889a9e`. Ветка `c6/m2-telegram-live`,
-Draft PR24 → main; изолированный checkout, без reset/rebase/force-push.
+C0 принимает [C8 scoped PASS](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6066209663)
+на exact head **8be37ca97a7ac5d8dfe095e191c7799caaa2043d** / tree
+**c6655b3310cb4f2f4fe302997452162a7cf683d4**. **C0-MIG-OWNER-02/P2 CLOSED**
+в проверенном code/CI scope. [C6 receipt6065993676](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6065993676):
+CI37817339030 attempt1 —9/9 jobs и9 unchanged-source gates SUCCESS;
+900 unit,393 integration,111 frontend,27 browser. C8 самостоятельно выполнил
+286 scoped tests и19 provenance probes, сверил8 ZIP/source228 blobs+modes,
+6 migration и2 relay reports. Local Docker/DB observations C8 — fixtures;
+actual Docker/PG evidence — прочитанный CI. Owner execution этим не подтверждён.
 
-По [closure C0](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6060286080)
-C0-MIG-OWNER-01/P2 CLOSED: C6-M2-OWNER-RECEIPT-COMPAT и адресный C8 VERIFIED
-в проверенном code/CI scope. CI37650771009 attempt2 — все9 jobs/clean-source
-SUCCESS; это прочитанное предыдущее evidence, не новый запуск C6. C8-MIG-01 и
-client01/02/03 остаются CLOSED. Новая отдельная задача не переоткрывает их.
-
-Owner evidence, принятое C0: original root
-`asm-telegram-tls-budget-fixed-owner2-0b7e24ee.json`, SHA256
-`5b11de6166045065c02d070d8822eb0487f86860ab223b21222ab84164ae1e46`, DAG15;
-отдельный offline capture UTC2026-10-08T16:18:33.831044+00:00 подтвердил
-исторический operator source80e, exact128 files/no drift и сохранность private
-originals/runtime. Operational predecessor/recovery остаётся exact0b7.
-Это owner execution, переданное C0; C6 не подключался к VM. Actual31-table
-migration fingerprint ещё не пройден; copied-Git-byte proof не аттестует отдельно
-все image dependencies/layers и не разрешает rollout.
+C5 patch от31eb (reported local commit d204f38794844a83d4d24a9178edd39c89890beb)
+меняет только `frontend/e2e/billing.spec.ts`: server cursor ведёт пагинацию;
+следующий шаг ждёт rows/render/loading/конец истории. Управляемая задержка
+обрабатывает настоящий HTTP response; sleeps/retries/skip/budgets не добавлены.
+C0 сверил patch SHA256 `70f9a48cac54646abe51e014f234d58b3279786cae0b5d1611a8488bdb2a506f`,
+reconstructed C5 tree `ba718b0ceb540e355985f3ba07f9901bd6b0430e` и final test blob
+`b275fd38aa055fc5e175b3441c3e62d080498f95`; exact patch применён к8be без конфликтов.
+Собственный `npm run typecheck` C0 — PASS. C5 сообщил HTTP-fixture probes2/2+4/4
+и30 component tests; архив этих probes C0 не получен и их execution не присваивается.
+Actual browser/API/PostgreSQL проверка нового теста требуется на общем candidate.
 
 | Задача / finding | Статус | Следующее действие |
 |---|---|---|
-| C6-M2-OWNER-RECEIPT-COMPAT / targeted C8 | VERIFIED в проверенном scope | Завершено C0 на exact31eb |
-| C0-MIG-OWNER-01/P2; C8-MIG-01/P2; client01/02/03 | CLOSED | Старые проверки не переоткрывать без признака регрессии |
-| C6-M2-HISTORICAL-OPERATOR-COMPAT | REVIEW | Final-SHA CI evidence в C6 receipt; затем C0 и scoped C8 новой delta |
-| C0-MIG-OWNER-02/P2 | OPEN | Совместимость provenance старого operator, verdict только C0/C8 |
-| C0-CI-AUDIT-01/P3 | OPEN, C5 TODO | Отдельная browser task перед merge |
-| Owner migration execution | BLOCKED | Новая delta ещё не принята и не выдана владельцу |
+| C6-M2-HISTORICAL-OPERATOR-COMPAT / scoped C8 | VERIFIED в проверенном scope | Принято C0 на8be; повторный полный review не нужен |
+| C0-MIG-OWNER-02/P2 | CLOSED | Explicit historical operator provenance подтверждена |
+| C0-MIG-OWNER-01; C8-MIG-01; client01/02/03 | CLOSED | Новых признаков регрессии нет |
+| C5-M2-AUDIT-PAGINATION / C0-CI-AUDIT-01/P3 | REVIEW / OPEN до actual CI | Один итоговый candidate и штатный browser gate |
+| Owner migration execution | BLOCKED до отдельной выдачи C0 | После final CI — actual owner attestation с сохранённым pin |
 | M2 / ENV04 | IN_PROGRESS / REVIEW | PR24 Draft/open; main не меняется |
 
-Candidate сохраняет default exact0b7 и добавляет явный historical80e только для
-старого telegram-operator. Immutable preparation version2 использует существующие
-image_proofs по ролям, точные source/tree/kind/ID/inventory digests; повторные
-операции сверяют сохранённые и фактические proofs. Original receipt/recovery IDs
-остаются якорем. Version1 читается только как прежний exact0b7 после полной проверки.
-Прежний receipt DAG, schema2 audit, done→result, private paths, TLS/budgets/retries/
-UNKNOWN, client pins и180/600s bounds сохранены. Контракт§10.12.1/runbook§0.6.32.
-
-Собственный локальный адресный набор: `uv run --frozen pytest -q tests/test_telegram_egress_migration.py`
-→ **286 PASS /20.62s**, Python3.13.16. Файлы/receipts/archive и probe-код настоящие;
-Git/Docker/DB observations unit fixtures синтетические. Новый historical manifest
-отдельно сверен с actual GitHub tree:128/132, четыре additions, только ci.sh changed.
-Docker локально отсутствует. Final CI и его digests публикуются в связанном C6
-receipt после выполнения; этот commit не объявляет неизвестный CI успешным.
-
+Owner operational source/recovery остаётся exact0b7. Accepted root
+`asm-telegram-tls-budget-fixed-owner2-0b7e24ee.json`, SHA256
+`5b11de6166045065c02d070d8822eb0487f86860ab223b21222ab84164ae1e46`, DAG15.
+Offline capture2026-10-08T16:18:33.831044+00:00 подтвердил historical80e operator:
+128/128 copied Git bytes, no drift. Actual owner31-table migration fingerprint
+ещё не пройден; image layers/dependencies отдельно не аттестованы.
 VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/binding/billing/merge
-не выполнялись и этим поручением не разрешены. TEST interval до2026-10-09T00:00Z
-не продлён; owner root/image/state не изменяются. ACK остаётся NOT_ATTEMPTED.
+не выполнялись. ACK NOT_ATTEMPTED; TEST interval до2026-10-09T00:00Z не продлён.
 
-Единственное активное поручение и scope: [M2_HANDOFF](tasks/M2_HANDOFF.md).
+Текущий этап и границы: [M2_HANDOFF](tasks/M2_HANDOFF.md).
 
 <details>
 <summary>История — завершённое OWNER-RECEIPT-COMPAT и статус до C0 closure</summary>
