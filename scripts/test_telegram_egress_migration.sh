@@ -58,11 +58,34 @@ with tempfile.TemporaryDirectory(prefix='asm-connect5-source-') as temp:
         e.command(['docker', 'compose', '--project-directory', str(old),
             '--env-file', str(old / 'infra/images.lock.env'), '--env-file', str(old / '.env'),
             '-f', str(old / 'compose.yaml'), 'build', '--pull', 'api'], timeout=480)
+        historical_args = []
+        if fault == 'image':
+            # Reproduce the owner's 128-file operator from its actual tracked
+            # archive, before receipts and before the 180s held interval. The
+            # operational helper/state and API/worker remain exact0b7.
+            origin = e.migration_operator_source(e.HISTORICAL_OPERATOR)
+            historical = Path(temp) / 'historical-operator'
+            historical.mkdir()
+            e.migration_build_context(origin, historical)
+            pins = dict(line.split('=', 1) for line in
+                        (historical / 'infra/images.lock.env').read_text().splitlines()
+                        if line and not line.startswith('#'))
+            tag = 'asm-connect5-historical-operator:' + origin
+            e.command(['docker', 'build', '--pull', '--network=default', '--target', 'development',
+                       '--build-arg', 'PYTHON_IMAGE=' + pins['PYTHON_IMAGE'],
+                       '--build-arg', 'UV_IMAGE=' + pins['UV_IMAGE'],
+                       '-f', str(historical / 'infra/Dockerfile.backend'), '-t', tag,
+                       str(historical)], timeout=480)
+            image = json.loads(e.command(['docker', 'image', 'inspect', tag]))[0]['Id']
+            proof = e.migration_image(image, origin, 'development')
+            assert proof['source_tree'] == e.HISTORICAL_OPERATOR_TREE
+            assert proof['blobs_sha256'] == e.HISTORICAL_OPERATOR_MANIFEST
+            historical_args = [origin, image]
         # Warm the separately bounded build before the 180s held data fixture.
         # The production preparation subsequently attests and reuses these exact tags.
         with e.migration_budget(600):
             e.migration_build_images(source, tree)
-        result = subprocess.run(['sh', 'scripts/test_telegram_egress.sh', '--migration', str(old), fault],
+        result = subprocess.run(['sh', 'scripts/test_telegram_egress.sh', '--migration', str(old), fault, *historical_args],
                                 stdin=subprocess.DEVNULL, timeout=720)
         assert result.returncode == 0, 'MIGRATION_DISPOSABLE_ASSERTIONS_FAILED'
         assert not e.command(['git', '-C', str(old), 'status', '--porcelain', '--untracked-files=all']).strip()

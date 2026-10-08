@@ -37,6 +37,9 @@ LEGACY_SHA = "c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14"
 LEGACY_OVERLAY_BLOB = "5a6158a648d553fe80a917f6ebca8867c20bbfe6"
 MIGRATION_FROM = "0b7e24ee425ebb429bf87dfe382cbd3fab883028"
 MIGRATION_FROM_TREE = "14a4033b849c736235653a5a85ec9e5112bfe727"
+HISTORICAL_OPERATOR = "80e51c43e31541940f1ccf18b8281adf1a061748"
+HISTORICAL_OPERATOR_TREE = "88ed308b4c56114aa977dcf91204964d9b7348e5"
+HISTORICAL_OPERATOR_MANIFEST = "b88bc4ceadff581a170fdb81543b631eef6e8624d57504a049a5ac2645105195"
 MIGRATION_BASE = "14f794b650c935c47ab1e78474fda0d1df0a7277"
 # Scheduler never uses Telegram HTTP. Keep its original ID/image so even rollback
 # remains compatible with the predecessor's strict unrelated-container baseline.
@@ -2153,8 +2156,8 @@ engine.dispose()
     return result
 
 
-def migration_image(image, source, kind):
-    require(re.fullmatch(r"sha256:[0-9a-f]{64}", image), "EGRESS_MIGRATION_IMAGE_ID")
+def migration_inventory(source, kind):
+    require(kind in {"runtime", "development"}, "EGRESS_MIGRATION_IMAGE_KIND")
     paths = ["backend", "migrations", "pyproject.toml", "uv.lock", "alembic.ini"]
     if kind == "development":
         paths += ["tests", "scripts", "contracts", "infra/postgres/ensure_m1_3_prerequisites.sh"]
@@ -2167,6 +2170,83 @@ def migration_image(image, source, kind):
             require(form == "blob" and mode in {"100644", "100755"}, "EGRESS_MIGRATION_SOURCE_TYPE")
             blobs[path.decode()] = digest
     require(len(blobs) > 50, "EGRESS_MIGRATION_SOURCE_INVENTORY")
+    return paths, blobs
+
+
+def migration_operator_source(source):
+    require(source in {MIGRATION_FROM, HISTORICAL_OPERATOR}, "EGRESS_MIGRATION_OPERATOR_SOURCE")
+    if source == HISTORICAL_OPERATOR:
+        require(
+            command(["git", "-C", str(ROOT), "rev-parse", source + "^{tree}"]).decode().strip()
+            == HISTORICAL_OPERATOR_TREE,
+            "EGRESS_MIGRATION_OPERATOR_TREE",
+        )
+        _, historical = migration_inventory(source, "development")
+        _, operational = migration_inventory(MIGRATION_FROM, "development")
+        require(
+            len(historical) == 128 and sha(encoded(historical)) == HISTORICAL_OPERATOR_MANIFEST,
+            "EGRESS_MIGRATION_OPERATOR_MANIFEST",
+        )
+        require(
+            operational.keys() - historical.keys()
+            == {
+                "scripts/prepare_telegram_egress.py",
+                "scripts/test_telegram_egress.sh",
+                "tests/test_telegram_egress.py",
+                "tests/test_telegram_egress_postgres.py",
+            }
+            and not historical.keys() - operational.keys()
+            and {p for p in historical if historical[p] != operational[p]} == {"scripts/ci.sh"},
+            "EGRESS_MIGRATION_OPERATOR_SOURCE_DELTA",
+        )
+        # Compare modes and blobs of every application/migration/dependency and
+        # build/provisioning input. Only the operator's copied-source provenance
+        # differs; the operational checkout, recovery state and receipt DAG do not.
+        frozen = [
+            "backend",
+            "migrations",
+            "pyproject.toml",
+            "uv.lock",
+            "alembic.ini",
+            "scripts/provision_telegram_test.py",
+            "infra/Dockerfile.backend",
+            "infra/images.lock.env",
+            "compose.yaml",
+        ]
+        require(
+            command(["git", "-C", str(ROOT), "ls-tree", "-rz", source, "--", *frozen])
+            == command(["git", "-C", str(ROOT), "ls-tree", "-rz", MIGRATION_FROM, "--", *frozen]),
+            "EGRESS_MIGRATION_OPERATOR_FROZEN_SOURCE",
+        )
+    return source
+
+
+def migration_image_request(name, image, source, operator_source):
+    require(name in CALLERS, "EGRESS_MIGRATION_IMAGE_ROLE")
+    return (
+        image,
+        operator_source if name == "telegram-operator" else source,
+        "development" if name == "telegram-operator" else "runtime",
+    )
+
+
+def migration_image_expected(image, source, kind):
+    require(re.fullmatch(r"sha256:[0-9a-f]{64}", image), "EGRESS_MIGRATION_IMAGE_ID")
+    _, blobs = migration_inventory(source, kind)
+    return {
+        "id": image,
+        "source_sha": source,
+        "source_tree": command(["git", "-C", str(ROOT), "rev-parse", source + "^{tree}"])
+        .decode()
+        .strip(),
+        "kind": kind,
+        "blobs_sha256": sha(encoded(blobs)),
+    }
+
+
+def migration_image(image, source, kind):
+    expected = migration_image_expected(image, source, kind)
+    paths, blobs = migration_inventory(source, kind)
     probe = (
         "import hashlib,pathlib; expected=" + repr(blobs) + "; root=pathlib.Path('/app'); "
         "actual={str(p.relative_to(root)) for name in "
@@ -2199,7 +2279,7 @@ def migration_image(image, source, kind):
         info["Id"] == image and info["Os"] == "linux" and info["Architecture"] == "amd64",
         "EGRESS_MIGRATION_IMAGE_IDENTITY",
     )
-    return {"id": image, "source_sha": source, "kind": kind, "blobs_sha256": sha(encoded(blobs))}
+    return expected
 
 
 def migration_image_proofs(requests):
@@ -2209,6 +2289,30 @@ def migration_image_proofs(requests):
     with ThreadPoolExecutor(max_workers=4) as pool:
         futures = {key: pool.submit(migration_image, *key) for key in requests}
         return {key: future.result() for key, future in futures.items()}
+
+
+def migration_plan_operator(plan):
+    require(plan.get("version") in {1, 2}, "EGRESS_MIGRATION_PREPARATION_SOURCE")
+    if plan["version"] == 1:
+        # Old preparations had exactly one interpretation. Never infer historical
+        # provenance from an absent field or from the contents of a cached image.
+        require("predecessor_operator_sha" not in plan, "EGRESS_MIGRATION_OPERATOR_LEGACY")
+        return MIGRATION_FROM
+    return migration_operator_source(plan.get("predecessor_operator_sha"))
+
+
+def migration_plan_proofs(plan, *, actual=None):
+    operator_source = migration_plan_operator(plan)
+    require(set(plan["before_images"]) == set(CALLERS), "EGRESS_MIGRATION_IMAGE_ROLE")
+    expected = {}
+    for name, image in plan["before_images"].items():
+        request = migration_image_request(name, image, MIGRATION_FROM, operator_source)
+        proof = migration_image_expected(*request) if actual is None else actual[request]
+        if plan["version"] == 1:
+            proof = {k: v for k, v in proof.items() if k != "source_tree"}
+        expected[image if plan["version"] == 1 else name] = proof
+    require(plan["image_proofs"] == expected, "EGRESS_MIGRATION_IMAGE_PROOF_CHANGED")
+    return operator_source
 
 
 def migration_environment(rows):
@@ -2359,6 +2463,15 @@ def migration_compare(before, actual, images, *, pending=(), completed=False):
 def migration_attest(args, directory):
     tree = migration_source(args.accepted_sha)
     require(args.from_sha == MIGRATION_FROM, "EGRESS_MIGRATION_FROM")
+    if (directory / "migration-v3").exists():
+        _, saved, _ = migration_saved(directory)
+        migration_arguments(args, saved)
+        require(args.accepted_sha == saved["to_sha"], "EGRESS_MIGRATION_REQUEST_CHANGED")
+        operator_source = migration_plan_operator(saved)
+    else:
+        operator_source = migration_operator_source(
+            getattr(args, "predecessor_operator_sha", None) or MIGRATION_FROM
+        )
     state_raw = private_bytes(directory / "state.json")
     state = strict_json(state_raw)
     require(
@@ -2453,13 +2566,12 @@ def migration_attest(args, directory):
             json.loads(command(["docker", "image", "inspect", tag]))[0]["Id"] == expected,
             "EGRESS_MIGRATION_OLD_TAG_DRIFT",
         )
-    proofs = {
-        key[0]: value
-        for key, value in migration_image_proofs(
-            (image, MIGRATION_FROM, "development" if name == "telegram-operator" else "runtime")
-            for name, image in old_images.items()
-        ).items()
+    requests = {
+        name: migration_image_request(name, image, MIGRATION_FROM, operator_source)
+        for name, image in old_images.items()
     }
+    actual_proofs = migration_image_proofs(requests.values())
+    proofs = {name: actual_proofs[request] for name, request in requests.items()}
     caller_probe(state, directory)
     database = migration_database(state, directory)
     require(
@@ -2481,7 +2593,7 @@ def migration_saved(directory):
     bundle = checked_path(directory / "migration-v3", directory=True)
     plan = strict_json(private_bytes(bundle / "preparation.json"))
     require(
-        plan.get("version") == 1
+        plan.get("version") in {1, 2}
         and plan.get("from_sha") == MIGRATION_FROM
         and plan.get("from_tree") == MIGRATION_FROM_TREE
         and plan.get("to_tree") == migration_source(plan["to_sha"]),
@@ -2521,8 +2633,20 @@ def migration_saved(directory):
         == plan["files"][str(directory / "state.json")]["sha256"],
         "EGRESS_MIGRATION_ARCHIVED_STATE_CHANGED",
     )
-    receipts, _ = migration_receipts(
+    receipts, operator_image = migration_receipts(
         plan["operator_receipt"], plan["operator_receipt_sha256"], original, directory
+    )
+    migration_plan_proofs(plan)
+    recovered = strict_json(private_bytes(directory / "deployment-after.json"))
+    require(
+        plan["before_images"]["telegram-operator"] == operator_image
+        and all(
+            plan["before_images"][name] == recovered[name]["image"]
+            and plan["before"][name]["image"] == recovered[name]["image"]
+            and plan["before"][name]["id"] == recovered[name]["id"]
+            for name in MIGRATION_SERVICES
+        ),
+        "EGRESS_MIGRATION_ORIGINAL_IMAGE_BINDING",
     )
     require(
         set(migration_catalog(directory, original, receipts, predecessor)) == set(plan["files"]),
@@ -2549,7 +2673,7 @@ def migration_prepare(args, directory):
             inventory[path] = {"archive": name, "sha256": sha(raw)}
             archive[name] = raw
         plan = {
-            "version": 1,
+            "version": 2,
             "from_sha": MIGRATION_FROM,
             "from_tree": MIGRATION_FROM_TREE,
             "to_sha": args.accepted_sha,
@@ -2558,6 +2682,7 @@ def migration_prepare(args, directory):
             "before": runtime,
             "before_images": old_images,
             "image_proofs": proofs,
+            "predecessor_operator_sha": proofs["telegram-operator"]["source_sha"],
             "database": database,
             "predecessor_checkout": str(Path(args.predecessor_checkout).absolute()),
             "operator_receipt": str(checked_path(args.operator_receipt)),
@@ -2590,6 +2715,14 @@ def migration_prepare(args, directory):
     if prepared.exists():
         migration_prepared(directory)
         return
+    operator_source = migration_plan_operator(plan)
+    migration_plan_proofs(
+        plan,
+        actual=migration_image_proofs(
+            migration_image_request(name, image, MIGRATION_FROM, operator_source)
+            for name, image in plan["before_images"].items()
+        ),
+    )
     tags, images = migration_build_images(args.accepted_sha, plan["to_tree"])
     mapping = {n: images["runtime"] for n in MIGRATION_SERVICES}
     mapping["telegram-operator"] = images["development"]
@@ -2615,6 +2748,20 @@ def migration_prepare(args, directory):
                 "tags": tags,
                 "rollback_tags": keep,
                 "preparation_sha256": sha(encoded(plan)),
+                **(
+                    {
+                        "image_proofs": {
+                            name: migration_image_expected(
+                                *migration_image_request(
+                                    name, image, plan["to_sha"], plan["to_sha"]
+                                )
+                            )
+                            for name, image in mapping.items()
+                        }
+                    }
+                    if plan["version"] == 2
+                    else {}
+                ),
             }
         ),
     )
@@ -2703,14 +2850,22 @@ def migration_prepared(directory):
         and set(ready["after_images"]) == {*MIGRATION_SERVICES, "telegram-operator"},
         "EGRESS_MIGRATION_IMAGE_PLAN_CHANGED",
     )
-    migration_image_proofs(
-        (image, source, "development" if name == "telegram-operator" else "runtime")
-        for direction, source in (
-            ("before_images", MIGRATION_FROM),
-            ("after_images", plan["to_sha"]),
+    operator_source = migration_plan_operator(plan)
+    before_requests = {
+        name: migration_image_request(name, image, MIGRATION_FROM, operator_source)
+        for name, image in ready["before_images"].items()
+    }
+    after_requests = {
+        name: migration_image_request(name, image, plan["to_sha"], plan["to_sha"])
+        for name, image in ready["after_images"].items()
+    }
+    actual = migration_image_proofs([*before_requests.values(), *after_requests.values()])
+    migration_plan_proofs(plan, actual=actual)
+    if plan["version"] == 2:
+        require(
+            ready.get("image_proofs") == {name: actual[r] for name, r in after_requests.items()},
+            "EGRESS_MIGRATION_IMAGE_PROOF_CHANGED",
         )
-        for name, image in ready[direction].items()
-    )
     for direction, source in (("before_images", MIGRATION_FROM), ("after_images", plan["to_sha"])):
         for name, image in ready[direction].items():
             kind = "development" if name == "telegram-operator" else "runtime"
@@ -2960,6 +3115,9 @@ def migration_arguments(args, plan):
         requested = getattr(args, name, None)
         if requested is not None:
             require(requested == plan[name], "EGRESS_MIGRATION_REQUEST_CHANGED")
+    requested = getattr(args, "predecessor_operator_sha", None)
+    if requested is not None:
+        require(requested == migration_plan_operator(plan), "EGRESS_MIGRATION_REQUEST_CHANGED")
 
 
 def migration_switch(args, directory, *, reverse=False, readonly=False):
@@ -3188,6 +3346,7 @@ def main():
     parser.add_argument("--operator-receipt")
     parser.add_argument("--operator-receipt-sha256")
     parser.add_argument("--predecessor-checkout")
+    parser.add_argument("--predecessor-operator-sha")
     args, compose_args = parser.parse_known_args()
     os.umask(0o077)
     try:

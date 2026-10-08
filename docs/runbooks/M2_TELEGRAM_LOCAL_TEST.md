@@ -3202,6 +3202,9 @@ all nine CI jobs and a new scoped C8 verdict. Findings01/02/03 and prior recover
 acceptance remain closed; they do not verify this new path. Exact final head/tree,
 tested merge/parents, job/artifact IDs and digests belong in the single PR24 receipt
 `https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006`.
+Historical operator provenance is now a separate candidate in §0.6.32. The default
+in this draft remains exact0b7; a future C0 issuance must explicitly select80e for
+that operator, after the new C0/scoped C8 review. No owner action is issued here.
 
 The source migration preserves the existing owner checkout at exact
 `0b7e24ee425ebb429bf87dfe382cbd3fab883028` and its private files. Prepare a **separate**
@@ -3218,8 +3221,9 @@ happens to exist. The chain must include BINDING_COMMITTED and the Owner ID corr
 journal, if present. Read-only inventory checks the completed recovery receipt,
 original baseline/audit, all private inputs, exact old app/operator images, HTTPS,
 local Unix Docker context, actual DB and unrelated containers. A cached old operator
-image whose copied Git files differ from exact0b7 is a blocker for C0, not permission
-to rebuild or change its receipt. No discovery or live Telegram probe is needed.
+image whose copied Git files differ from the explicitly accepted source is a STOP,
+not permission to rebuild or change its receipt. Omitted operator selection still
+requires exact0b7. No discovery or live Telegram probe is needed.
 
 Save the following as an operator-owned 0600 POSIX script outside both checkouts.
 C0 substitutes the four placeholders in a concrete issuance; paths must obey the
@@ -4109,6 +4113,13 @@ Owner applicability remains unconfirmed: actual cached old images and independen
 
 ### 0.6.31. C6-M2-OWNER-RECEIPT-COMPAT — bounded compatibility candidate
 
+**Subsequent C0 closure, 2026-10-08:** C0-MIG-OWNER-01/P2 CLOSED after targeted
+C8 PASS on exact31eb3360 and CI37650771009 attempt2/all9 jobs SUCCESS. The original
+implementation/evidence below is retained historically. Root pin and old operator
+copied bytes were then accepted by C0 from separate owner captures (see §0.6.32);
+the older statements below about pending pin/image attestation are superseded by
+that limited evidence, not by owner migration or rollout acceptance.
+
 Base/sole parent for this fix: **c015e7ad9796f17243bb205bbf9d239a9f12a2e4**,
 tree **ec28a77ba76248a28b0698fe220071ecf9438fad**. Separate checkout; no reset,
 rebase or force-push. Exactly four allowed files change: receipt basename validation
@@ -4172,6 +4183,95 @@ VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/billing mutation/merg
 were not performed. Cached owner image bytes and independently accepted last-receipt
 pin still require a separate C0 issuance. No old receipt rename/rewrite, ACK replay,
 new baseline or extension of the fixed TEST interval is authorized by this fix.
+
+### 0.6.32. C6-M2-HISTORICAL-OPERATOR-COMPAT — repository/disposable candidate
+
+Authority: [C0 handoff6064359633](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6064359633).
+Base/sole first parent `31eb33605f22b9a9508436adabcf9d81b1960982`, tree
+`7b6e0760839c8dd5f7eab89eefc81dea5e889a9e`; continue Draft PR24 with fast-forward/CAS.
+C0-MIG-OWNER-02/P2 remains OPEN for C0 and independent scoped C8. C0-MIG-OWNER-01,
+C8-MIG-01 and client01/02/03 remain CLOSED. M2 IN_PROGRESS; ENV04 REVIEW.
+
+C0 accepted the original DAG15/root pin and the owner's separate offline image
+capture at UTC2026-10-08T16:18:33.831044+00:00, SSH_EXIT0: expected128/actual128,
+missing0/extra0/changed0, full copied Git bytes PASS and private originals/runtime
+unchanged. C6 read this evidence; C6 did not access the owner host or image.
+
+| Meaning | Exact pin |
+|---|---|
+| Operational predecessor/state/recovery | `0b7e24ee425ebb429bf87dfe382cbd3fab883028` / tree `14a4033b849c736235653a5a85ec9e5112bfe727` |
+| Historical operator source only | `80e51c43e31541940f1ccf18b8281adf1a061748` / tree `88ed308b4c56114aa977dcf91204964d9b7348e5` |
+| Copied128-path map, sorted JSON/indent2/newline SHA256 | `b88bc4ceadff581a170fdb81543b631eef6e8624d57504a049a5ac2645105195` |
+| Observed historical ci.sh blob | `80538b34ac594b4b9098ce85f2d592a86f2867ae` |
+| Accepted original root | `asm-telegram-tls-budget-fixed-owner2-0b7e24ee.json` |
+| Root SHA256, independently pinned by C0 | `5b11de6166045065c02d070d8822eb0487f86860ab223b21222ab84164ae1e46` |
+
+The root's recorded image ID anchors the image plan; the helper contains no owner
+image-ID constant. Full original DAG/source_sha and IDs are retained. This evidence
+does not establish the pending actual31-table migration fingerprint or independently
+attest dependencies/layers outside the copied-Git-byte boundary.
+
+On a **future separately issued** initial `migration-attest` / `migration-prepare`,
+omitting `--predecessor-operator-sha` means exact0b7. The only historical selection is:
+
+```text
+--predecessor-operator-sha 80e51c43e31541940f1ccf18b8281adf1a061748
+```
+
+All other sources stop. Historical source/tree/128-file map and unchanged
+backend/migrations/dependencies/provisioner/build inputs must pass independently;
+actual image files must match exactly. Four additions in0b7 and only the changed
+common ci.sh blob are allowed. Old API/worker remain exact0b7; all new images must
+match the exact target. No automatic fallback, label-only attestation, ignored
+mismatches, image rebuild/repair or replacement of owner originals is introduced.
+
+Preparation version2 stores the explicit selected source plus role-keyed
+`image_proofs`: ID/source SHA/tree/kind/full blob-map digest for api, worker and
+telegram-operator. `prepared.json` stores target proofs. Saved old image IDs must
+match the independent root and original recovered callers. Before builds and each
+forward/preflight/resume/rollback/retry, proofs are compared with expected Git
+inventories and real read-only image probes. Local rehashing after source/proof
+substitution cannot change actual image bytes. Repeated calls omit the selector
+and use its saved value; an explicit different selector stops before new effects.
+Old version1 preparation is accepted only in its exact0b7 interpretation after full
+proof/actual image verification; absent choice never implies80e. No parallel DAG
+or automatic conversion of old preparation is performed. Schema2 cross-direction
+and done→result guards, private modes/paths, original hashes and bounds remain.
+
+Only the existing `boundary=image` normal/Docker29 shard builds a historical
+operator from a clean tracked `git archive80e`, before fixture receipts and the
+180s held interval. The source is never built from0b7 then relabeled or patched.
+Operational predecessor/helper/state remain0b7. Egress test services use the target
+development test-driver image, so tests absent in80e are not added to the operator.
+Intent/state shards retain0b7. Report `predecessor_operator` ties exact source/tree,
+manifest/image ID, original root's image, saved proof and preparation/prepared
+hashes to actual assertions; the report checks byte preservation through SIGKILL,
+resume, completed preflight/retry and rollback/retry. The historical shard also
+actually rejects the image against default0b7 inventory before the held interval.
+
+Own local validation: frozen Python3.13.16, `uv run --frozen pytest -q tests/test_telegram_egress_migration.py`
+→ **286 PASS in20.62s** (216 retained +70 new). Initial run had266 PASS/2 failures
+in the new partial rollback expectation: the unchanged worker correctly required
+no recreate. The new expectation was corrected to require only the affected API
+rollback and exact untouched worker; no production/audit guard was relaxed.
+Ruff check/format for both changed Python files, shell and embedded-Python syntax,
+`git diff --check` pass. Unit tests use real private files/archives/receipt validators
+and execute the actual inventory probe against synthetic copied files; Git/Docker/
+DB observations are fixtures. Actual GitHub trees were separately read and verified:
+128 vs132 copied paths, exact pinned digest, four additions and only ci.sh changed.
+Docker is absent locally; no local real Docker/DB/live result is claimed.
+
+Final head/tree, exact final nine-job CI and source/artifact/report digests are
+recorded after execution in the C6 implementation receipt/linked continuation of
+[receipt6002169006](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6002169006).
+This source commit does not predict CI results. Base37650771009 is not rerun.
+CI remains the same9 jobs/clean-source gates, prior6+6 relay cases,6 migration
+shards,28+2 originals,31-table/Console/private/UNKNOWN-wire1 preservation. No workflow,
+Dockerfile/Compose, locks, DB migrations, product/client code or timeout change.
+
+VM/SSH/live Telegram/queue/ACK/activation/setWebhook/sends/binding/billing/merge
+are neither performed nor issued. TEST interval ends2026-10-09T00:00Z unchanged;
+ACK remains NOT_ATTEMPTED. The owner root/state/source/image remain untouched.
 
 <details>
 <summary>Archived C0 receipt prefix — verbatim before the compatibility return</summary>

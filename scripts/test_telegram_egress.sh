@@ -23,10 +23,17 @@ root = Path.cwd()
 assert root == e.ROOT and os.getuid() != 0, 'TEST_RUNNER_CHECKOUT_AND_NONROOT_REQUIRED'
 migration = None
 if sys.argv[1:]:
-    assert len(sys.argv) == 4 and sys.argv[1] == '--migration', 'EXPLICIT_MIGRATION_SELECTOR_REQUIRED'
+    assert len(sys.argv) in {4, 6} and sys.argv[1] == '--migration', 'EXPLICIT_MIGRATION_SELECTOR_REQUIRED'
     assert os.environ.get('GITHUB_ACTIONS') == 'true', 'DISPOSABLE_RUNNER_REQUIRED'
     migration = {'root': root, 'fault': sys.argv[3], 'source': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip()}
     assert migration['fault'] in {'intent', 'image', 'state'}
+    migration['operator_source'] = e.MIGRATION_FROM
+    if migration['fault'] == 'image':
+        assert len(sys.argv) == 6 and sys.argv[4] == e.HISTORICAL_OPERATOR
+        assert re.fullmatch(r'sha256:[0-9a-f]{64}', sys.argv[5])
+        migration.update(operator_source=sys.argv[4], operator_image=sys.argv[5])
+    else:
+        assert len(sys.argv) == 4
     root = Path(sys.argv[2]).resolve()
     assert root != migration['root'] and root.name == 'predecessor'
     spec = importlib.util.spec_from_file_location('exact_predecessor_egress', root / 'scripts/prepare_telegram_egress.py')
@@ -427,7 +434,10 @@ http {
 }
 ''')
         phase_start('topology')
-        run([*base, 'build', 'telegram-operator'], 180)
+        if migration is not None and migration['fault'] == 'image':
+            run(['docker', 'tag', migration['operator_image'], project + '-telegram-operator'])
+        else:
+            run([*base, 'build', 'telegram-operator'], 180)
         run(['docker', 'tag', project + '-telegram-operator', 'asm-telegram-egress-checks:test'])
         if migration is not None:
             # Old app/operator images stay exact. Only synthetic test services use

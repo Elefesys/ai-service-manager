@@ -99,6 +99,24 @@ def run_disposable(f):
     target = old.snapshot(recovered, state_dir)
     identity = target["api"]["database_identity"]
     assert identity == target["worker"]["database_identity"]
+    operator_image = json.loads(
+        run(["docker", "image", "inspect", project + "-telegram-operator"])
+    )[0]["Id"]
+    operator_source = f["migration"]["operator_source"]
+    operator_proof = e.migration_image(operator_image, operator_source, "development")
+    if fault == "image":
+        assert operator_image == f["migration"]["operator_image"]
+        assert operator_source == e.HISTORICAL_OPERATOR
+        assert operator_proof["source_tree"] == e.HISTORICAL_OPERATOR_TREE
+        assert operator_proof["blobs_sha256"] == e.HISTORICAL_OPERATOR_MANIFEST
+        try:
+            e.migration_image(operator_image, e.MIGRATION_FROM, "development")
+        except e.EgressError as error:
+            assert str(error) == "EGRESS_COMMAND_FAILED"
+        else:
+            raise AssertionError("HISTORICAL_OPERATOR_MUST_FAIL_DEFAULT_INVENTORY")
+    else:
+        assert operator_source == e.MIGRATION_FROM
     e.write_private(
         directory / "durable-target.json",
         e.encoded(
@@ -164,9 +182,6 @@ def run_disposable(f):
             "MIGRATION_RECOVERED_BASELINE_CHANGED_DURING_FIXTURE_SEED"
         )
     assert observed.keys() == target.keys()
-    operator_image = json.loads(
-        run(["docker", "image", "inspect", project + "-telegram-operator"])
-    )[0]["Id"]
     common = {
         "source_sha": e.MIGRATION_FROM,
         "source_tree": e.MIGRATION_FROM_TREE,
@@ -314,6 +329,11 @@ def run_disposable(f):
                         str(receipt),
                         "--operator-receipt-sha256",
                         receipt_pin,
+                        *(
+                            ["--predecessor-operator-sha", operator_source]
+                            if fault == "image"
+                            else []
+                        ),
                     ]
                     if pin
                     else []
@@ -342,10 +362,20 @@ def run_disposable(f):
     receipt_dag, receipt_image = e.migration_receipts(receipt, receipt_pin, recovered, state_dir)
     assert receipt_image == operator_image and len(receipt_dag) == 6
     assert receipt_dag.items() <= saved.items()
+    assert plan["predecessor_operator_sha"] == operator_source
+    assert plan["image_proofs"]["telegram-operator"] == operator_proof
     assert all(
-        plan["image_proofs"][v]["source_sha"] == e.MIGRATION_FROM
-        for v in ready["before_images"].values()
+        plan["image_proofs"][n]["source_sha"] == e.MIGRATION_FROM for n in e.MIGRATION_SERVICES
     )
+    assert all(
+        plan["image_proofs"][n]["id"] == image for n, image in ready["before_images"].items()
+    )
+    assert all(
+        p["source_sha"] == source and p["source_tree"] == plan["to_tree"]
+        for p in ready["image_proofs"].values()
+    )
+    preparation_bytes = (bundle / "preparation.json").read_bytes()
+    prepared_bytes = (bundle / "prepared.json").read_bytes()
 
     def interrupted(action, reverse=False):
         marker = directory / ("migration-interruption-" + action + ".json")
@@ -476,6 +506,9 @@ e.main()
         operator_image,
     )
     assert (state_dir / "recovery.json").read_bytes() == old_receipt
+    assert (bundle / "preparation.json").read_bytes() == preparation_bytes
+    assert (bundle / "prepared.json").read_bytes() == prepared_bytes
+    assert e.migration_image(operator_image, operator_source, "development") == operator_proof
     # Return to the preserved exact predecessor checkout, not a manufactured v2.
     f["operator"]("preflight")
     f["compose"](
@@ -500,6 +533,18 @@ e.main()
     ]
     assert len(assertions) == 1 and assertions[0]["result"] == "PASS"
     report = {
+        "predecessor_operator": {
+            "explicit_historical_choice": fault == "image",
+            "default_inventory_rejected_historical_image": fault == "image",
+            "source_sha": operator_source,
+            "source_tree": operator_proof["source_tree"],
+            "image_id": operator_image,
+            "copied_blob_map_sha256": operator_proof["blobs_sha256"],
+            "saved_proof": plan["image_proofs"]["telegram-operator"],
+            "preparation_sha256": e.sha(preparation_bytes),
+            "prepared_sha256": e.sha(prepared_bytes),
+            "unchanged_through_resume_preflight_and_rollback_retry": True,
+        },
         "owner_receipt_compat": {
             "intent_name": ack_intent.name,
             "intent_sha256": e.sha(saved[str(ack_intent)]),
@@ -860,6 +905,8 @@ def test_image_probe_executes_git_blob_byte_checks(tmp_path, monkeypatch, kind, 
 
     def command(argv, **kwargs):
         if argv[0] == "git":
+            if "rev-parse" in argv:
+                return b"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\n"
             if "archive" in argv:
                 return archive.getvalue()
             assert "ls-tree" in argv
@@ -906,6 +953,7 @@ def test_image_probe_executes_git_blob_byte_checks(tmp_path, monkeypatch, kind, 
 
 @pytest.fixture
 def migration_machine(tmp_path, monkeypatch):
+    originals = {name: getattr(e, name) for name in ("migration_saved", "migration_prepared")}
     directory = tmp_path / "state"
     directory.mkdir(mode=0o700)
     bundle = directory / "migration-v3"
@@ -913,6 +961,8 @@ def migration_machine(tmp_path, monkeypatch):
     old = {"version": 2, "source_sha": e.MIGRATION_FROM, "generation": "recovery-v2"}
     before_images = {n: "sha256:" + "1" * 64 for n in (*e.MIGRATION_SERVICES, "telegram-operator")}
     after_images = {n: "sha256:" + "2" * 64 for n in before_images}
+    before_images["telegram-operator"] = "sha256:" + "3" * 64
+    after_images["telegram-operator"] = "sha256:" + "4" * 64
     database = {"identity": {"database": "asm_local"}, "tables": {"sealed": "original"}}
     runtime = {
         n: {
@@ -974,6 +1024,7 @@ def migration_machine(tmp_path, monkeypatch):
         database=database,
         plan=plan,
         ready=ready,
+        originals=originals,
     )
 
 
@@ -996,6 +1047,486 @@ def test_migration_complete_retry_and_explicit_rollback(migration_machine):
     assert len(m.effects) == 4
     with pytest.raises(e.EgressError, match="ROLLBACK_ALREADY_STARTED"):
         e.migration_switch(m.args, m.directory)
+
+
+@pytest.fixture(params=[e.MIGRATION_FROM, e.HISTORICAL_OPERATOR])
+def provenance_machine(migration_machine, tmp_path, monkeypatch, request):
+    """Real preparation/archive/receipts/probes; Git and Docker are external fixtures.
+
+    The synthetic 128-file historical image has an independently fixed fixture
+    digest. CI separately asserts the production constant against the real archive.
+    No production validator is stubbed for source/proof/receipt/image inventory.
+    """
+    m = migration_machine
+    real_command, machine_command = subprocess.run, e.command
+    m.operator_source = request.param
+    target = m.args.accepted_sha
+    roots = [tmp_path / "candidate", tmp_path / "predecessor"]
+    for root in roots:
+        root.mkdir(mode=0o700)
+        e.write_private(root / ".env", b"SYNTHETIC=private\n")
+    monkeypatch.setattr(e, "ROOT", roots[0])
+    m.trees = {
+        e.MIGRATION_FROM: e.MIGRATION_FROM_TREE,
+        e.HISTORICAL_OPERATOR: e.HISTORICAL_OPERATOR_TREE,
+        target: m.plan["to_tree"],
+    }
+    historical = {f"backend/file{i}.py": f"value={i}\n".encode() for i in range(60)}
+    historical.update({f"tests/file{i}.py": b"# synthetic\n" for i in range(61)})
+    historical.update(
+        {
+            p: b"# original\n"
+            for p in (
+                "migrations/revision.py",
+                "pyproject.toml",
+                "uv.lock",
+                "alembic.ini",
+                "scripts/ci.sh",
+                "scripts/provision_telegram_test.py",
+                "infra/postgres/ensure_m1_3_prerequisites.sh",
+            )
+        }
+    )
+    assert len(historical) == 128
+
+    def blob(data):
+        return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+
+    monkeypatch.setattr(
+        e,
+        "HISTORICAL_OPERATOR_MANIFEST",
+        e.sha(e.encoded({p: blob(v) for p, v in historical.items()})),
+    )
+    historical.update(
+        {
+            p: b"# frozen build input\n"
+            for p in ("infra/Dockerfile.backend", "infra/images.lock.env", "compose.yaml")
+        }
+    )
+    operational = dict(historical)
+    operational.update(
+        {
+            p: b"# operational addition\n"
+            for p in (
+                "scripts/prepare_telegram_egress.py",
+                "scripts/test_telegram_egress.sh",
+                "tests/test_telegram_egress.py",
+                "tests/test_telegram_egress_postgres.py",
+            )
+        }
+    )
+    operational["scripts/ci.sh"] = b"# operational CI\n"
+    candidate = dict(operational, **{"backend/file0.py": b"# target client\n"})
+    m.sources = {
+        e.HISTORICAL_OPERATOR: historical,
+        e.MIGRATION_FROM: operational,
+        target: candidate,
+    }
+    m.image_roots, m.tags, m.probes, m.builds = {}, {}, [], []
+    m.inspect_drift = {}
+
+    def command(argv, **kwargs):
+        if argv[0] == "git":
+            if "rev-parse" in argv:
+                return m.trees[argv[-1].removesuffix("^{tree}")].encode()
+            if "ls-files" in argv:
+                return b""
+            assert "ls-tree" in argv
+            source = argv[argv.index("--") - 1]
+            selected = argv[argv.index("--") + 1 :]
+            return b"".join(
+                ("100644 blob " + blob(data) + "\t" + path + "\0").encode()
+                for path, data in sorted(m.sources[source].items())
+                if any(path == p or path.startswith(p + "/") for p in selected)
+            )
+        if argv[:3] == ["docker", "image", "inspect"]:
+            identity = m.tags.get(argv[3], argv[3])
+            assert identity in m.image_roots
+            return e.encoded(
+                [{"Id": identity, "Os": "linux", "Architecture": "amd64", **m.inspect_drift}]
+            )
+        if argv[:3] == ["docker", "image", "ls"]:
+            return m.tags.get(argv[-1], "").encode()
+        if argv[:2] == ["docker", "tag"]:
+            m.tags[argv[3]] = argv[2]
+            return b""
+        if argv[:2] == ["docker", "run"]:
+            assert argv[2:6] == ["--rm", "--network", "none", "--read-only"]
+            image = argv[-4]
+            assert image in m.image_roots and argv[-3:-1] == ["-B", "-c"]
+            probe = argv[-1].replace(
+                "pathlib.Path('/app')", "pathlib.Path(" + repr(str(m.image_roots[image])) + ")"
+            )
+            m.probes.append(image)
+            result = real_command(
+                [sys.executable, "-B", "-c", probe], capture_output=True, timeout=10
+            )
+            e.require(result.returncode == 0, "EGRESS_COMMAND_FAILED")
+            return result.stdout
+        return machine_command(argv, **kwargs)
+
+    monkeypatch.setattr(e, "command", command)
+    for side, source in (("before", e.MIGRATION_FROM), ("after", target)):
+        for name, identity in m.ready[side + "_images"].items():
+            if identity in m.image_roots:
+                continue
+            origin = (
+                m.operator_source if side == "before" and name == "telegram-operator" else source
+            )
+            kind = "development" if name == "telegram-operator" else "runtime"
+            _, inventory = e.migration_inventory(origin, kind)
+            folder = tmp_path / ("image-" + identity[-1])
+            folder.mkdir()
+            for path in inventory:
+                dest = folder / path
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(m.sources[origin][path])
+            m.image_roots[identity] = folder
+            m.tags[side + "-" + kind] = identity
+    for name, function in m.originals.items():
+        monkeypatch.setattr(e, name, function)
+    monkeypatch.setattr(e, "migration_source", lambda value: m.trees[value])
+    monkeypatch.setattr(e, "migration_predecessor_checkout", lambda _: roots[1])
+    monkeypatch.setattr(e, "verify_state_contents", lambda *_: None)
+    monkeypatch.setattr(e, "transition_relay", lambda *_: {"status": "running"})
+    monkeypatch.setattr(
+        e,
+        "checked_model",
+        lambda *_: {
+            "services": {
+                n: {"image": "before-" + ("development" if n == "telegram-operator" else "runtime")}
+                for n in e.CALLERS
+            }
+        },
+    )
+    monkeypatch.setattr(e, "runtime_snapshot", lambda *_: copy.deepcopy(m.runtime))
+    monkeypatch.setattr(
+        e,
+        "compare_deployment",
+        lambda before, after, _: e.require(before == after, "FIXTURE_RUNTIME"),
+    )
+
+    def build(source, tree):
+        assert (source, tree) == (target, m.trees[target])
+        m.builds.append(source)
+        images = {kind: m.tags["after-" + kind] for kind in ("runtime", "development")}
+        for kind, image in images.items():
+            e.migration_image(image, source, kind)
+        return {k: "after-" + k for k in images}, images
+
+    monkeypatch.setattr(e, "migration_build_images", build)
+    for path in m.bundle.iterdir():
+        path.unlink()
+    m.bundle.rmdir()
+    staged, profile = tmp_path / "telegram.env", tmp_path / "profile.json"
+    e.write_private(staged, b"# staged private fixture\n")
+    e.write_private(profile, b"{}\n")
+    legacy = {"version": 1, "source_sha": e.LEGACY_SHA}
+    before = e.encoded(m.runtime)
+    m.old.update(
+        uid=os.getuid(),
+        gid=os.getgid(),
+        project="synthetic",
+        telegram_env=str(staged),
+        profile=str(profile),
+        legacy_state_sha256=e.sha(e.encoded(legacy)),
+        recovery_before_sha256=e.sha(before),
+    )
+    for name in ("recovery-v1", "recovery-v2"):
+        (m.directory / name).mkdir(mode=0o700)
+    originals = {
+        "state.json": e.encoded(m.old),
+        "deployment-before.json": before,
+        "deployment-after.json": before,
+        "recovery-v1/state.json": e.encoded(legacy),
+        "recovery-v2/state.json": e.encoded(m.old),
+        "recovery-v1/deployment-before.json": before,
+        "recovery-v1/inputs.json": e.encoded(e.input_hashes(m.old)),
+        "recovery-v1/transition.json": e.encoded(
+            {"from_sha": e.LEGACY_SHA, "accepted_sha": e.MIGRATION_FROM}
+        ),
+        "recovery.json": e.encoded(
+            {
+                "from_sha": e.LEGACY_SHA,
+                "source_sha": e.MIGRATION_FROM,
+                "original_before_sha256": e.sha(before),
+                "after_sha256": e.sha(before),
+                "legacy_state_sha256": m.old["legacy_state_sha256"],
+                "mapping_readiness_preservation": "PASS",
+            }
+        ),
+    }
+    for name in ("config.json", "runtime.json", "route.env"):
+        originals[name] = originals["recovery-v1/" + name] = b"{}\n"
+    for name, data in originals.items():
+        e.write_private(m.directory / name, data)
+    common = {
+        "source_sha": e.MIGRATION_FROM,
+        "source_tree": e.MIGRATION_FROM_TREE,
+        "original_before_sha256": e.sha(before),
+    }
+    intent = tmp_path / OWNER_ACK_INTENT
+    receipt = tmp_path / "asm-telegram-binding-fixture.json"
+    e.write_private(intent, e.encoded(dict(common, status="NOT_ATTEMPTED")))
+    e.write_private(
+        receipt,
+        e.encoded(
+            dict(
+                common,
+                status="BINDING_COMMITTED",
+                preservation_pass=True,
+                staged_sha256=e.sha(staged.read_bytes()),
+                operator_image_id=m.ready["before_images"]["telegram-operator"],
+                prior_receipts_sha256={intent.name: e.sha(intent.read_bytes())},
+            )
+        ),
+    )
+    m.args.predecessor_checkout = str(roots[1])
+    m.args.operator_receipt = str(receipt)
+    m.args.operator_receipt_sha256 = e.sha(receipt.read_bytes())
+    m.args.predecessor_operator_sha = (
+        m.operator_source if m.operator_source == e.HISTORICAL_OPERATOR else None
+    )
+    m.receipt = receipt
+    e.migration_prepare(m.args, m.directory)
+    m.plan.clear()
+    m.plan.update(json.loads((m.bundle / "preparation.json").read_bytes()))
+    m.ready.clear()
+    m.ready.update(json.loads((m.bundle / "prepared.json").read_bytes()))
+    m.args.predecessor_operator_sha = None  # Every repeat must recover the saved choice.
+    m.saved = {p: Path(p).read_bytes() for p in m.plan["files"]}
+    return m
+
+
+def test_operator_provenance_prepare_default_and_explicit_choice(provenance_machine):
+    m = provenance_machine
+    assert m.plan["version"] == 2 and len(m.builds) == 1
+    assert m.plan["predecessor_operator_sha"] == m.operator_source
+    proof = m.plan["image_proofs"]["telegram-operator"]
+    assert (
+        proof["source_sha"] == m.operator_source
+        and proof["source_tree"] == m.trees[m.operator_source]
+    )
+    assert all(
+        m.plan["image_proofs"][n]["source_sha"] == e.MIGRATION_FROM for n in e.MIGRATION_SERVICES
+    )
+    if m.operator_source == e.HISTORICAL_OPERATOR:
+        with pytest.raises(e.EgressError, match="EGRESS_COMMAND_FAILED"):
+            e.migration_image(proof["id"], e.MIGRATION_FROM, "development")
+        assert proof["blobs_sha256"] == e.HISTORICAL_OPERATOR_MANIFEST
+    e.migration_attest(m.args, m.directory)
+    e.migration_prepare(m.args, m.directory)
+    assert len(m.builds) == 1 and not m.effects
+    assert all(Path(p).read_bytes() == raw for p, raw in m.saved.items())
+
+
+@pytest.mark.parametrize("boundary", ["api-image", "state"])
+def test_saved_provenance_survives_interrupted_both_directions(
+    provenance_machine, monkeypatch, boundary
+):
+    m = provenance_machine
+    preparation = (m.bundle / "preparation.json").read_bytes()
+    for reverse in (False, True):
+        interrupt_migration(m, monkeypatch, boundary, reverse=reverse)
+        e.migration_switch(m.args, m.directory, reverse=reverse)
+        e.migration_switch(m.args, m.directory, reverse=reverse)
+        if not reverse:
+            e.migration_switch(m.args, m.directory, readonly=True)
+    assert len(m.effects) == 4 and (m.bundle / "preparation.json").read_bytes() == preparation
+    assert all(Path(p).read_bytes() == raw for p, raw in m.saved.items())
+
+
+def test_saved_provenance_allows_partial_rollback(provenance_machine, monkeypatch):
+    m = provenance_machine
+    interrupt_migration(m, monkeypatch, "api-image")
+    e.migration_switch(m.args, m.directory, reverse=True)
+    e.migration_switch(m.args, m.directory, reverse=True)
+    assert m.effects == [("after", "api"), ("before", "api")]
+    assert m.runtime["worker"] == m.plan["before"]["worker"]
+    assert all(Path(p).read_bytes() == raw for p, raw in m.saved.items())
+
+
+@pytest.mark.parametrize(
+    "drift",
+    [
+        "source",
+        "tree",
+        "kind",
+        "id",
+        "manifest",
+        "role",
+        "request",
+        "missing",
+        "extra",
+        "changed",
+        "inspect",
+        "coherent-choice",
+        "coherent-id",
+        "target-proof",
+        "legacy-choice",
+    ],
+)
+def test_provenance_drift_stops_before_effects(provenance_machine, drift):
+    m = provenance_machine
+    proof = m.plan["image_proofs"]["telegram-operator"]
+    if drift in {"source", "tree", "kind", "id", "manifest"}:
+        field = {"source": "source_sha", "tree": "source_tree", "manifest": "blobs_sha256"}.get(
+            drift, drift
+        )
+        proof[field] = "foreign"
+    elif drift == "role":
+        m.plan["image_proofs"]["api"] = dict(proof)
+    elif drift == "request":
+        m.args.predecessor_operator_sha = "b" * 40
+    elif drift in {"missing", "extra", "changed"}:
+        folder = m.image_roots[proof["id"]]
+        path = folder / "tests/file0.py"
+        if drift == "missing":
+            path.unlink()
+        elif drift == "extra":
+            (folder / "tests/extra.py").write_bytes(b"extra")
+        else:
+            path.write_bytes(path.read_bytes() + b"\n")
+    elif drift == "inspect":
+        m.inspect_drift["Id"] = "sha256:" + "9" * 64
+    elif drift == "coherent-choice":
+        other = (
+            e.MIGRATION_FROM
+            if m.operator_source == e.HISTORICAL_OPERATOR
+            else e.HISTORICAL_OPERATOR
+        )
+        m.plan["predecessor_operator_sha"] = other
+        m.plan["image_proofs"]["telegram-operator"] = e.migration_image_expected(
+            proof["id"], other, "development"
+        )
+    elif drift == "coherent-id":
+        other = m.ready["after_images"]["telegram-operator"]
+        m.plan["before_images"]["telegram-operator"] = other
+        proof["id"] = other
+        m.ready["before_images"]["telegram-operator"] = other
+    elif drift == "target-proof":
+        m.ready["image_proofs"]["telegram-operator"]["source_sha"] = e.MIGRATION_FROM
+    else:
+        del m.plan["predecessor_operator_sha"]
+    # An attacker can recompute local hashes; they still cannot change the
+    # independently pinned root image or the image's actual copied Git bytes.
+    m.ready["preparation_sha256"] = e.sha(e.encoded(m.plan))
+    e.write_private(m.bundle / "preparation.json", e.encoded(m.plan))
+    e.write_private(m.bundle / "prepared.json", e.encoded(m.ready))
+    inventory = receipt_inventory(m.directory)
+    with pytest.raises(e.EgressError):
+        e.migration_switch(m.args, m.directory)
+    assert not m.effects and receipt_inventory(m.directory) == inventory
+
+
+def test_legacy_preparation_is_only_exact_operational_source(provenance_machine):
+    m = provenance_machine
+    m.plan["version"] = 1
+    m.plan.pop("predecessor_operator_sha")
+    m.plan["image_proofs"] = {
+        p["id"]: {k: v for k, v in p.items() if k != "source_tree"}
+        for p in m.plan["image_proofs"].values()
+    }
+    m.ready.pop("image_proofs")
+    m.ready["preparation_sha256"] = e.sha(e.encoded(m.plan))
+    e.write_private(m.bundle / "preparation.json", e.encoded(m.plan))
+    e.write_private(m.bundle / "prepared.json", e.encoded(m.ready))
+    if m.operator_source == e.HISTORICAL_OPERATOR:
+        with pytest.raises(e.EgressError, match="IMAGE_PROOF_CHANGED"):
+            e.migration_prepared(m.directory)
+    else:
+        e.migration_switch(m.args, m.directory)
+        e.migration_switch(m.args, m.directory, reverse=True)
+        assert len(m.effects) == 4
+
+
+def test_initial_attest_never_infers_historical_choice(provenance_machine):
+    m = provenance_machine
+    archive = m.directory.parent / "saved-preparation"
+    m.bundle.rename(archive)
+    before = receipt_inventory(m.directory)
+    try:
+        if m.operator_source == e.HISTORICAL_OPERATOR:
+            with pytest.raises(e.EgressError, match="EGRESS_COMMAND_FAILED"):
+                e.migration_attest(m.args, m.directory)
+            m.args.predecessor_operator_sha = e.HISTORICAL_OPERATOR
+        result = e.migration_attest(m.args, m.directory)
+        assert result[5]["telegram-operator"]["source_sha"] == m.operator_source
+        m.args.predecessor_operator_sha = "b" * 40
+        with pytest.raises(e.EgressError, match="EGRESS_MIGRATION_OPERATOR_SOURCE"):
+            e.migration_attest(m.args, m.directory)
+        assert not m.effects and receipt_inventory(m.directory) == before
+    finally:
+        archive.rename(m.bundle)
+
+
+@pytest.mark.parametrize("phase", ["partial-forward", "forward", "partial-rollback", "rollback"])
+@pytest.mark.parametrize("drift", ["request", "coherent-choice"])
+def test_repeat_provenance_drift_never_adds_effects(provenance_machine, monkeypatch, phase, drift):
+    m = provenance_machine
+    if phase == "partial-forward":
+        interrupt_migration(m, monkeypatch, "api-image")
+    else:
+        e.migration_switch(m.args, m.directory)
+    if phase == "partial-rollback":
+        interrupt_migration(m, monkeypatch, "api-image", reverse=True)
+    elif phase == "rollback":
+        e.migration_switch(m.args, m.directory, reverse=True)
+    other = (
+        e.MIGRATION_FROM if m.operator_source == e.HISTORICAL_OPERATOR else e.HISTORICAL_OPERATOR
+    )
+    if drift == "request":
+        m.args.predecessor_operator_sha = other
+    else:
+        plan = json.loads((m.bundle / "preparation.json").read_bytes())
+        plan["predecessor_operator_sha"] = other
+        image = plan["before_images"]["telegram-operator"]
+        plan["image_proofs"]["telegram-operator"] = e.migration_image_expected(
+            image, other, "development"
+        )
+        ready = json.loads((m.bundle / "prepared.json").read_bytes())
+        ready["preparation_sha256"] = e.sha(e.encoded(plan))
+        intent = json.loads((m.bundle / "intent.json").read_bytes())
+        intent.update(
+            preparation_sha256=ready["preparation_sha256"], prepared_sha256=e.sha(e.encoded(ready))
+        )
+        for name, value in (
+            ("preparation.json", plan),
+            ("prepared.json", ready),
+            ("intent.json", intent),
+        ):
+            e.write_private(m.bundle / name, e.encoded(value))
+    effects, before = list(m.effects), receipt_inventory(m.directory)
+    with pytest.raises(e.EgressError, match="EGRESS_(COMMAND_FAILED|MIGRATION_REQUEST_CHANGED)"):
+        e.migration_switch(
+            m.args, m.directory, reverse=phase.endswith("rollback"), readonly=phase == "forward"
+        )
+    assert m.effects == effects and receipt_inventory(m.directory) == before
+
+
+@pytest.mark.parametrize("drift", ["source", "tree", "manifest", "count", "delta", "frozen"])
+def test_historical_source_pins_are_independent_of_saved_proofs(
+    provenance_machine, monkeypatch, drift
+):
+    m = provenance_machine
+    source = e.HISTORICAL_OPERATOR
+    if drift == "source":
+        source = "a" * 40
+    elif drift == "tree":
+        m.trees[source] = "a" * 40
+    elif drift == "manifest":
+        m.sources[source]["tests/file0.py"] = b"foreign\n"
+    elif drift == "count":
+        del m.sources[source]["tests/file0.py"]
+        _, inventory = e.migration_inventory(source, "development")
+        monkeypatch.setattr(e, "HISTORICAL_OPERATOR_MANIFEST", e.sha(e.encoded(inventory)))
+    elif drift == "delta":
+        m.sources[e.MIGRATION_FROM]["scripts/foreign.sh"] = b"foreign\n"
+    else:
+        m.sources[source]["infra/Dockerfile.backend"] = b"foreign\n"
+    with pytest.raises(e.EgressError, match="EGRESS_MIGRATION_OPERATOR_"):
+        e.migration_operator_source(source)
+    assert not m.effects
 
 
 def test_forward_complete_tamper_requires_stop(migration_machine):

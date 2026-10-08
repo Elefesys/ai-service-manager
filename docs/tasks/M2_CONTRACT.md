@@ -1397,7 +1397,7 @@ timeouts, TLS, permissions и UNKNOWN/no-resend остаются прежним�
 
 </details>
 
-#### 10.12.1. Explicit connect2 → connect5 migration (audit fix CLOSED; owner receipt compatibility OPEN)
+#### 10.12.1. Explicit connect2 → connect5 migration (historical operator candidate REVIEW)
 
 `M2-ENV-04-CONNECT5-MIGRATION` introduces a separate operation, not a relaxation of
 `recover`. Its only predecessor is completed recovery-v2 at
@@ -1428,8 +1428,36 @@ Same-parent, private owner/mode/size, independent root pin, complete DAG invento
 exact byte hashes, source/tree/baseline/staged and binding checks are unchanged.
 Legacy `prior_attempt_sha256` and `owner_correction_sha256` links remain mandatory
 when present. This is receipt compatibility only; the historical NOT_ATTEMPTED ACK
-does not authorize a new attempt. New finding C0-MIG-OWNER-01 remains OPEN pending
-the focused C0/C8 verdict; implementation evidence is runbook §0.6.31 / PR24 receipt.
+does not authorize a new attempt. C0 accepted the focused C8 PASS and CLOSED
+C0-MIG-OWNER-01 on exact31eb3360; implementation evidence is runbook §0.6.31 and
+[C0 closure/owner chronology](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6060286080).
+
+The separate C0-MIG-OWNER-02 candidate admits an explicit old **operator-only**
+source choice. Omitted `--predecessor-operator-sha` still means exact0b7 on first
+attestation. The only other accepted value is
+`80e51c43e31541940f1ccf18b8281adf1a061748`, tree
+`88ed308b4c56114aa977dcf91204964d9b7348e5`, with the exact128 copied-file manifest
+`b88bc4ceadff581a170fdb81543b631eef6e8624d57504a049a5ac2645105195`.
+Historical source/tree, complete inventory/blob hashes, the four known additions
+and only changed common path `scripts/ci.sh`, and unchanged application, migrations,
+dependencies, provisioner and build inputs are mandatory. Missing/extra/changed
+bytes stop; no fallback, arbitrary SHA or expected provenance derived from images.
+Operational predecessor/recovery/receipts and old API/worker stay exact0b7;
+new runtime/development images stay exact target. The original receipt's verified
+operator ID and original recovered caller IDs/images anchor the preparation.
+
+New preparation version2 keeps `predecessor_operator_sha` and the existing
+`image_proofs` keyed by the three caller roles. Each proof contains exact image ID,
+source SHA/tree, kind and copied-blob-map SHA256. `prepared.json` also records the
+target role proofs. Before build effects and each switch/preflight/resume/retry,
+the stored proofs must equal the expected Git inventory and actual image probes.
+Hashes bind these records into the existing intent/audit; there is no second DAG.
+A repeat uses the saved choice; an explicit different choice stops. Recomputing
+local hashes after changing only source/proof cannot substitute actual image bytes
+or the original receipt image. Version1 preparation has only its previous exact0b7
+interpretation and must pass full original-proof/image validation; absent fields
+never infer historical provenance. Original state, DAG bytes and image IDs remain
+unchanged. Cross-direction audit schema2 and all done/result guards stay required.
 
 `migration-prepare` (600s overall bound) publishes an immutable private archive,
 then builds distinct runtime/development images from `git archive` of the exact
@@ -1480,6 +1508,12 @@ Secure Console/private S3 and equal 31-table fingerprints. The held fixture rema
 180s. Existing three jobs and their 6+6 cases remain mandatory. These facts require
 final-head CI evidence and C0/scoped C8 review; this contract does not confer VERIFIED
 or owner execution permission. Commands and owner draft: runbook §0.6.25.
+For C6-M2-HISTORICAL-OPERATOR-COMPAT, only boundary=image (normal and Docker29)
+builds the old operator from tracked archive80e before receipts and the held interval.
+Intent/state shards retain exact0b7. Synthetic egress services run from the target
+test-driver image, never injected into the old operator. The same nine jobs remain;
+reports assert source/tree/manifest/image ID and saved proof preservation. The
+candidate's evidence and limits are in §0.6.32; C0-MIG-OWNER-02 remains OPEN.
 
 ## 11. M2.4-CONSOLE — текущий ограниченный UI/browser-контракт
 
