@@ -874,10 +874,33 @@ RETRY_EXHAUSTED. Delay/due входят в canonical finalized result: lost ACK 
 
 Использовать существующий locked **httpx 0.28.1**: narrow promotion dev→runtime,
 без package refresh/нового bot SDK. AsyncClient с TLS verify, trust_env=false,
-redirects=false, retries=0, pool≤4 connections, connect/pool≤2s и read/write≤5s;
+redirects=false, retries=0, pool≤4 connections, connect≤5s, pool≤2s и read/write≤5s;
 общие wall budgets выше обязательны независимо от chunk activity. Origin фиксирован
 https://api.telegram.org; TEST transport/server внедряется явно в tests, event/owner
 не задаёт endpoint. Никакого dependency на Telegram для прежнего DB/auth health.
+
+C3-M2-ENV04-05: connect2→5 — **VERIFIED в code/runner scope на
+14f794b650c935c47ab1e78474fda0d1df0a7277** после C0/actual CI37531243359 и
+независимого C8 PASS. Owner migration выполняется отдельным этапом.
+Connect входит в прежние readonly5/send10/FETCH20s, не добавляется к ним; lease30s
+не меняется. Общий timeout/cancellation без доказанной wire phase не означает
+definitely_unsent. Cold TLS3s подтвердил old-fail/new-pass, но stalled TLS выявил
+незакрытый TCP после outer cancellation в R1; failed candidate сохранён в истории.
+R2 владеет raw TCP transport до завершения TLS и при BaseException выполняет
+синхронный nonblocking abort только этого transport, сохраняя исходное исключение.
+Нет drain/TLS shutdown, нового deadline, await/GC или detached cleanup task;
+повторная cancellation не прерывает этот участок. Освобождение socket завершает
+обычный следующий callback asyncio. Shared client и чужие in-flight streams не закрываются.
+Production factory и TEST AsyncHTTPTransport injection проходят один cleanup path.
+Private seams locked HTTPX0.28.1/httpcore1.0.9/AnyIO4.15.1 явно описаны в client.py
+и проверяются real peer EOF/closed FD при выключенном GC, включая repeat cancellation.
+Findings01/02 CLOSED на R2,03 CLOSED на R3. Final CI:614 unit/393 integration,
+27 browser,6 relay+6 lifecycle на normal/exact Docker29, все clean-source gates PASS.
+C8 сообщил122 scoped tests/77.49s и2 независимые AutoBackend probes PASS, без findings;
+его local checks отделены от прочитанного CI evidence. C0 принял отчёт на том же
+head/tree. Owner VM пока остаётся на0b7e24ee/connect2: отдельная задача
+M2-ENV-04-CONNECT5-MIGRATION готовит exact source/image/state переход, без запуска
+на VM в этом поручении. R1/R2/R3 history — runbook§0.6.19–0.6.24.
 
 JSON responses ≤64 KiB. getFile принимает только opaque canonical FetchPermit.image_file_id;
 file_unique_id/filename/provider metadata не заменяют его. Relative file_path bounded,
@@ -1113,6 +1136,384 @@ worker/owner × subscription/mode/window, подтверждённое ожид�
 observer/pg_blocking_pids, release после DB deadline и отказ без effect/partial intent.
 Независимый targeted C8 и exact implementation CI приведены в активном handoff;
 final head/CI документационной приёмки — в PR receipt. Принятый scope §10 сохраняется.
+
+### 10.12. Operational extension — M2-ENV-04 TEST egress
+
+**Current C0 disposition2026-10-07: C8-MIG-01/P2 CLOSED на exact R2.**
+Headf1c7aca724778e41671f2754bb85885507c4f14d/tree4f28480ef1458141422a14514473c05f49193fe6:
+independent C8 PASS154 tests/3 original repro/50 additional probes; C0 own prior5
+probes и final CI37629816347/9 jobs подтверждают cross-direction audit fix.
+Новый **C0-MIG-OWNER-01/P2 OPEN** относится только совместимости сохранённого
+receipt basename `.intent.json`: reviewed R2 reader отвергает legacy ACK intent.
+§10.12.1 schema2 audit, source/client pins и contracts вне basename validation
+сохраняются. C6 issued narrow fix/test fixture, current M2_HANDOFF/runbook§0.6.30.
+Actual owner cached images/independent receipt pin пока не аттестованы.
+M2 IN_PROGRESS/ENV04 REVIEW; owner execution blocked. Docs CI37640492805
+attempt2 SUCCESS после одного browser rerun; original Audit paging failure
+сохранён как C0-CI-AUDIT-01/P3, separate C5 TODO, не scope C6.
+
+<details>
+<summary>История — R2 source/CI PASS до targeted C8 verdict</summary>
+
+**Current C0 disposition2026-10-07: R2 source/CI review PASS; targeted C8 pending.**
+Implementationf1c7aca724778e41671f2754bb85885507c4f14d/tree4f28480ef1458141422a14514473c05f49193fe6
+исправляет cross-direction audit binding. CI37629816347 all9 jobs/clean-source
+SUCCESS; C0 повторил3 исходных negative repro и2 controls —5 targeted PASS.
+C8-MIG-01/P2 остаётся OPEN до targeted verdict. §10.12.1 schema2 и поведение
+не меняются этим coordination. C6 implementation завершён; активный этап — C8-R2.
+Evidence/ограничения — current M2_HANDOFF/runbook§0.6.29. Owner applicability ещё
+не аттестована; M2 IN_PROGRESS/ENV04 REVIEW, VM/ACK/activation/sends/merge не выданы.
+
+</details>
+
+<details>
+<summary>История — C8 finding и выдача C6-R2</summary>
+
+**Current C0/C8 disposition2026-10-07: CHANGES_REQUESTED; C8-MIG-01/P2 OPEN.**
+На implementation3f65be7a60a1271247d04f23cbe0b151f82d65a1 C8 выявил и C0 воспроизвёл
+непроверенный forward audit при rollback. Выдана узкая C6-R2: до effects проверить
+существующий forward audit, закрепить inventory/hashes в rollback intent и проверять
+на resume/retry; done требует result в обоих направлениях. Valid partial rollback
+сохраняется. Это устранение нарушения прежнего audit-preservation contract, без
+изменения domain/TLS/deadlines/UNKNOWN. Findings01/02/03 остаются CLOSED.
+Migration REVIEW до final CI/targeted C8; VM execution не выдана. Подробности и
+reproducer — current M2_HANDOFF/runbook§0.6.27; M2 IN_PROGRESS/ENV04 REVIEW.
+
+</details>
+
+<details>
+<summary>История — C0 disposition до нового C8 finding</summary>
+
+**Current C0 disposition2026-10-07: migration source/CI review PASS.**
+Implementation3f65be7a60a1271247d04f23cbe0b151f82d65a1/tree5e4d0c741a2dcf9967c9c1502bc97ca6a78c9797
+проверен на CI37607152590: все9 jobs/clean-source SUCCESS. Новых C0 blockers нет;
+migration остаётся REVIEW, выдан независимый C8-M2-CONNECT5-MIGRATION. §10.12.1
+не меняется; прежние connect5 findings01/02/03 CLOSED. Owner applicability/images/
+receipt DAG ещё требуют отдельного read-only attestation после C8; это не live PASS.
+Exact scope/evidence/ограничения — current M2_HANDOFF и runbook§0.6.26.
+M2 IN_PROGRESS, ENV04 REVIEW до actual A09/A11; VM/ACK/activation/sends/merge не выданы.
+
+</details>
+
+<details>
+<summary>История — C0 acceptance connect5 и выдача C6 migration</summary>
+
+**Current C0 disposition2026-10-07:** accepted connect5 implementation
+**14f794b650c935c47ab1e78474fda0d1df0a7277** / tree
+**72b824d85091076a025998a71e564deab805b1cf**, actual final CI37531243359 all gates SUCCESS
+и независимый C8-M2-CONNECT-BUDGET-R3 PASS. C0 принял code/runner scope; M2 IN_PROGRESS,
+ENV04 REVIEW до actual A09/A11. C3 findings01/02/03 CLOSED.
+Owner VM последним receipt остаётся на exact0b7e24ee/recovery-v2/connect2,
+Telegram disabled/empty, binding committed, ACK NOT_ATTEMPTED.
+Отдельное active поручение **M2-ENV-04-CONNECT5-MIGRATION** разрешает C6 подготовить
+и проверить новый source/image/state transition в disposable CI. Ordinary strict
+source/image/recovery guards сохраняются; old source принимается только узким
+exact predecessor attestation. Original baseline/recovery receipts, binding,
+fixed TEST interval и canonical data не переписываются.
+VM execution, real Telegram/queue/ACK, activation/setWebhook/send и merge сейчас
+не выданы. Детальный scope — current M2_HANDOFF; приёмка — runbook§0.6.24 и единый receipt.
+Ниже сохранены исторические dispositions, а не дополнительные активные поручения.
+
+</details>
+
+**Историческая C0 disposition2026-10-06: PASS на implementation0b7e24ee425ebb429bf87dfe382cbd3fab883028;
+C8-04/05 CLOSED, прежние01/02/03 CLOSED.** Independent C0 source/evidence review +17
+bounded local probes; реальная execution — CI37385698548 all3 SUCCESS на merge
+fdfbe35974fa548b722622132aa0edb3a30c9bf5/tree14a4033b849c736235653a5a85ec9e5112bfe727.
+Нового отдельного C8 agent execution не заявлено. Полный scope/ограничения — runbook§0.6.15
+и current TASK_REGISTER. Owner recovery/preflight на exact0b7e24ee PASS
+2026-10-06T07:58:54.204446+00:00, SSH_EXIT0: original baseline/private inputs/images
+сохранены, actual Telegram runtime disabled/empty. C0-M2-ENV04-04 CLOSED по этому receipt.
+Следующий шаг — только discovery по runbook§0.6.16: временный operator-only enabled=true
+и pin того же cached image ID; persisted inputs и существующий runtime не меняются.
+Проверенный external ID сохраняется private до отдельного atomic setup; installed
+webhook/Owner/rights проверяет существующий provisioner. M2 IN_PROGRESS, live A09/A11
+ещё впереди. Ниже сохранены прежние, superseded dispositions.
+
+
+CI37367018261 attempt2 после восстановления Actions реально исполнил exact Docker29:
+6 transport, fresh/recovery, recover-stopped/recover-missing и legacy-disable PASS.
+Следующий legacy-stop остановился до своего held-state baseline: test controller
+ожидал dual-family relay, но предыдущий legacy rollback оставил stopped IPv4-only
+container. Узкая коррекция harness перед каждым независимым fixture восстанавливает
+только disposable seed relay из fresh model и проверяет оба private endpoints до
+создания UNKNOWN/session. Original before/audit предыдущих cases и DB rows не
+перезаписываются; sealed-catalog guard,180s и все assertions сохранены.
+Это fixture sequencing defect, не runner incident; legacy-stop PASS и полный
+final-head CI после коррекции ещё ожидаются в едином PR24 receipt.
+
+
+**C6 correction REVIEW, 2026-10-06.** Для04/05 добавлены immutable rollback intent
+с exact before/disabled dotenv bytes и stage receipts; audit hashes не заменяются
+текущим hash после own write. Completed rollback retry проверяет original operation
+before/after и не повторяет recreate. Recovery intent привязан к exact generation;
+stopped relay проверяется включая image/tag/config/process/network, missing допускается
+только в подтверждённом recreate/stop переходе. Остальные guards и deadlines прежние.
+Новые real isolated cases и final-head результаты — runbook§0.6.14/PR24 receipt;
+приёмка04/05 остаётся targeted независимому C8/C0. Ниже сохранён исходный verdict.
+
+**Targeted C0/C8 disposition 2026-10-06: CHANGES_REQUESTED, C8-M2-ENV04-04/05,
+P2 / E05.** Reviewed head94a402f3cf7c9d5ad9cd5837cd3d91d738fcf684, final CI37358453152
+SUCCESS. Native strict mapping/full executed cases подтверждены; legacy rollback
+retry после собственной enabled=false записи и recover retry при stopped/missing
+relay внутри recreate блокируются до repair. Полное evidence — runbook§0.6.13,
+bounded correction — единственный active M2_HANDOFF. Прежние01/02/03 CLOSED.
+
+Interruption/resume — часть существующего E05, не новое расширение domain scope.
+Original before/audit сохраняются byte-for-byte. Собственная разрешённая запись
+disable-first должна иметь проверяемый transition и возобновляться без общего
+исключения runtime_env hash. Ожидаемые stopped/missing/recreated состояния своего
+relay не должны требовать successful running topology до repair; source/config/
+image/input/DB/HTTPS/emptyTG/gateway/unrelated guards при этом сохраняются.
+Unknown/foreign relay или state не принимаются. After/receipt/PASS только после
+полного подтверждения итогового состояния; rebaseline/manual state patch запрещены.
+Explicit legacy/schema2 rollback и recover требуют настоящих isolated failure/resume
+cases на exact Docker29, затем final CI и targeted C8 перед owner issuance.
+
+**Operational finding 2026-10-05 — C0-M2-ENV04-04/P2:** на owner Docker29.8.2
+extra_hosts сохраняет mapped IPv6 в model/HostConfig, но Engine Unmap() записывает
+в hosts второй IPv4. Actual AF_INET6/flags=0 у api/worker получает посторонний
+native IPv6. Actual owner deployment/preflight ещё не принят; mapping correction
+подтверждена на reviewed head, interruption/retry correction — верхний M2_HANDOFF.
+VM receipt — runbook§0.6.11; targeted C8 CHANGES_REQUESTED04/05 — §0.6.13.
+Прежние C8-01/02/03 CLOSED сохраняются.
+
+Семантический контракт не ослабляется: AF_UNSPEC/AF_INET/AF_INET6 с исходными
+flags=0 на всех трёх callers возвращают только адреса того же private relay,
+без public/DNS fallback. Разрешён bounded private IPv6 endpoint/IPAM этого relay
+в opt-in overlay, если требуется совместимость; он не меняет official TLS/Host/
+SNI, fixed upstream, client/config blobs, deadlines/retries, permissions/media
+или UNKNOWN. Нельзя исключить AF_INET6, подменить его AI_V4MAPPED/AI_ADDRCONFIG
+или изменить global host networking/daemon ради PASS.
+
+Existing partial deployment — отдельное проверяемое начальное состояние:
+schema1/source c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14, before PRESENT / after ABSENT,
+relay running и disabled/emptyTG callers уже пересозданы. Guarded helper recovery
+сохраняет первоначальный before byte-for-byte, сравнивает с ним actual state и
+явно проверяет source/schema/generated-state transition. Reset/rebaseline и
+неявное принятие старого source_sha запрещены. Новый receipt/PASS — только после
+mapping/readiness/preservation; interruption не оставляет ложный commit receipt.
+Fresh deploy и explicit disable-first rollback сохраняются. Targeted C8 проверяет
+новую mapping/recovery boundary после real Docker29/full CI; owner VM changes —
+только отдельным шагом C0. Domain/API/production/M3 scope прежний.
+
+C6 correction реализует второй native ULA listener того же pinned Xray, тот же
+fixed upstream/selected outbound. Internal IPv6-only bridge имеет непересекающийся
+/64 ULA, static ::2 и отдельный dynamic /65; existing default gateway сохраняется.
+Model/HostConfig/hosts и resolver flags=0 проверяются на api/worker/operator. Нет
+mapped-address substitution, host sysctl/DNS patch или caller TLS/config change.
+
+Generated schema2 проверяет оба private endpoints. Явный recover разрешён только
+из schema1/source c29aabd36f4e81ee2d4b835bd921fa2de1ae5b14 и original partial before.
+Private immutable recovery-v1 хранит прежние bytes и hashes inputs; recovery-v2 —
+новую generation. Atomic manifest + exclusive operation lock сохраняют resumability.
+Оригинальный before не переписывается, accepted after/receipt появляются лишь после
+полного сравнения, mapping и readiness. Completed retry не пересоздаёт callers.
+Изменение baseline/input/schema/source/image/DB/gateway даёт STOP, не новый baseline.
+Rollback явный: disabled with route → remove caller route → stop relay. Оба bounded
+private bridges и stopped relay сохраняются без application endpoints для audit;
+owner inputs, volumes и durable receipts не удаляются. Legacy partial rollback требует
+тех же explicit from/accepted SHA и guards. Recovery после recorded rollback запрещён.
+Повторные synthetic E05 lifecycles сохраняют SEALED catalog первого fixture;
+исходный empty-DB guard выполняется до него. Между cases проверяется полный exact
+fingerprint31 таблицы после scoped cleanup, без исключения неизвестных rows/сброса
+immutable catalog. Каждый held before/after относится к той же actual caller DB.
+
+C6 real foundation evidence CI37356534441: оба lifecycles и все E05 preservation
+assertions PASS; recovery157s при180s. Это не заменяет обязательный exact Docker29
+final-head gate после исправления isolated DNS fixture; owner VM не менялась.
+Exact-source execution receipt и команды — runbook§0.6.12/PR24; это не новый C8 verdict.
+
+C0 разрешил отдельный opt-in overlay на принятом Xray26.9.9 digest (runbook§0.6),
+без изменения §§10.1–10.11/domain/API/app. Callers ровно api/worker/telegram-operator;
+official api.telegram.org сохраняет TLS/SNI и фиксируется на устойчивом private IP
+для A/AAAA, включая stop/recreate. Relay opaque TCP, non-root/read-only/default deny,
+один выбранный VLESS/TCP/REALITY/Vision connection, без direct/DNS target fallback,
+sniffing, TLS termination, HTTP retries или TG/DB/S3 credentials. Scheduler прежний.
+Timeout/retry/permission/media/private-S3/UNKNOWN semantics неизменны; relay health
+не является auth/DB readiness или разрешением send. Подготовка проверяет exact Git
+blobs, private files, image/config и непересекающийся IPAM; runtime остаётся disabled.
+Rollback сначала выключает Telegram с mapping, затем снимает route, сохраняя durable
+state/receipts/env/volumes. E01–E06 проверяются настоящими Docker/PG/S3 и controlled
+TLS wire; fixture CA/peer не входят в live config. Самостоятельного live включения
+нет; C0 выдаёт deployment после scoped C8/final CI. ADR239/production/M3 не изменены.
+
+C0 final targeted disposition 2026-10-05: **C8-01 CLOSED/PASS** на implementation
+d57ae07f10cd603910876068da444829b326bdab, CI37297119410 SUCCESS; прежние02/03 CLOSED.
+Принятый two-field private runtime overlay сохраняет HTTPS origin/endpoint из
+исходных inputs отдельно от staged TG. Independent pre-live baseline, strict drift,
+actual DB/Secure session/UNKNOWN preservation проверены real runner и targeted C8.
+Изложения прежнего open finding ниже — история причины, не незакрытая текущая задача.
+Contract/domain scope не меняется. Этот code-acceptance receipt исторический;
+current gate — runbook§0.6.11/верхний M2_HANDOFF. Source и partial VM deployment уже
+подтверждены; IPv6 mapping/recovery correction, live A09/A11 и merge/main CI впереди,
+M2 остаётся IN_PROGRESS.
+
+C0 targeted disposition 2026-10-05: C8-02/03 закрыты на implementation
+2536a1aa2b41792fff381c4d222906e2ff9ad23c; остаток C8-01/E05 требует сохранения
+действующих non-TG runtime настроек. Принятый pre-live env состоит из `.env` с PG/S3
+credentials и HTTPS origin/endpoint из `.env.telegram`; позднее тот же файл получил
+staged TG inputs, не применённые к running callers. Исключение всего файла —
+неполная коррекция: непреднамеренная потеря HTTPS значений не принимается.
+
+Минимальный контракт — private runtime-модель сохраняет действующие
+`ASM_AUTH_ORIGINS` и `ASM_STORAGE_ENDPOINT`, не импортирует staged TG activation
+fields, не меняет исходные private input bytes и проходит полное строгое сравнение
+с actual disabled callers до recreate. Разрешён узкий private overlay вне checkout
+для этих двух проверенных values; без общей config framework или ручного переноса
+owner. Staged inputs доступны отдельно explicit one-shot operator; их будущее
+применение к runtime требует отдельного C0 live шага. Rollback сохраняет disable-first
+с mapping, затем снимает route; допустим только enabled=false в runtime source,
+прочие inputs/durable state остаются неизменными.
+
+Реализация остатка01 передана C6 на REVIEW: prepare создаёт private runtime.json600
+в canonical state700 вне checkout, только services.api/worker.environment с этими
+двумя keys. Values разрешаются из accepted env files штатным Compose config без
+source/eval; JSON экранирует повторную Compose interpolation. Hash и повторная
+деривация проверяются перед resolved model. Snapshot строго сравнивает модель
+с actual callers, без исключений для HTTPS/TG/DB/S3. Runtime overlay сохраняется
+при снятии route, исходные private files не переписываются. Regression начинает
+с независимого двухфайлового HTTPS baseline до generator. Console evidence использует
+настоящий TLS/Secure cookie; E02–E04 transport и closed02/03 guards не ослаблены.
+Это не targeted C8 PASS; final execution receipt и готовая процедура — runbook§0.6.9/PR24.
+
+Actual SQL DB identity api/worker и её сохранность при recreate обязательны;
+durable evidence относится к той же БД. Canonical outside-checkout boundary
+проверяется до effects, requested symlink components не нормализуются в разрешённые
+пути. Domain/API, TLS, timeouts, permissions и UNKNOWN/no-resend прежние. Подробный
+targeted verdict — runbook§0.6.8; текущий correction REVIEW — §0.6.9/активный M2_HANDOFF.
+
+<details>
+<summary>История — первая C6 correction формулировка до targeted C8</summary>
+
+C8 correction E01/E05: deployment читает текущий runtime `.env`, не применяет
+staged `.env.telegram`; staged inputs сохранены для отдельного C0 operator шага.
+Rollback выключает enabled flag именно runtime `.env` до снятия mapping, не меняя
+остальные values или staged file. Snapshot проверяет actual SQL DB identity api и
+worker и её сохранность при recreate; durable evidence должно относиться к этой
+же БД. Private state canonical outside-checkout проверяется до effects, при этом
+requested symlink components не нормализуются в разрешённые пути. Domain/API,
+timeouts, TLS, permissions и UNKNOWN/no-resend остаются прежними.
+
+</details>
+
+#### 10.12.1. Explicit connect2 → connect5 migration (historical operator candidate REVIEW)
+
+`M2-ENV-04-CONNECT5-MIGRATION` introduces a separate operation, not a relaxation of
+`recover`. Its only predecessor is completed recovery-v2 at
+`0b7e24ee425ebb429bf87dfe382cbd3fab883028` / tree
+`14a4033b849c736235653a5a85ec9e5112bfe727`. The target is an exact clean descendant
+of accepted base `14f794b650c935c47ab1e78474fda0d1df0a7277`, retaining client blob
+`525381357de76ea1c570fd864f8df5e9781a87e2` and the frozen dependency/image pins.
+The predecessor checkout remains intact; the candidate has a separate checkout,
+an identical private runtime `.env`, and the same canonical outside-checkout state.
+Both checkouts and their private `.env*` inventories are attested and archived.
+
+`migration-attest` is read-only. It verifies the original v1 audit, completed v2
+receipt and caller IDs/images, disabled/empty runtime, HTTPS/config/profile/routes,
+actual caller DB identity and 31 canonical table fingerprints. The caller supplies
+an independently pinned last operator receipt SHA256; its complete predecessor
+receipt DAG must include the committed binding. A changed staged Owner ID is
+accepted only through the exact C0 correction journal and byte reconstruction of
+the archived original. Unexplained changes, missing receipts or foreign sources
+stop before runtime mutation. Full copied Git blobs are checked offline in both
+old images; cached images with different bytes are a STOP, not an automatic rebuild.
+
+C6-M2-OWNER-RECEIPT-COMPAT admits only `[a-z0-9-]+(?:\.intent)?\.json` for
+both current/root basenames and parent keys. This includes the issued
+`asm-telegram-ack-old-lifecycle-owner2-0b7e24ee.intent.json` without renaming,
+rewriting or dropping any retained receipt. The optional `.intent` suffix does not
+permit other dotted names, traversal, separators, absolute parent keys or symlinks.
+Same-parent, private owner/mode/size, independent root pin, complete DAG inventory,
+exact byte hashes, source/tree/baseline/staged and binding checks are unchanged.
+Legacy `prior_attempt_sha256` and `owner_correction_sha256` links remain mandatory
+when present. This is receipt compatibility only; the historical NOT_ATTEMPTED ACK
+does not authorize a new attempt. C0 accepted the focused C8 PASS and CLOSED
+C0-MIG-OWNER-01 on exact31eb3360; implementation evidence is runbook §0.6.31 and
+[C0 closure/owner chronology](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6060286080).
+
+The separate C0-MIG-OWNER-02 candidate admits an explicit old **operator-only**
+source choice. Omitted `--predecessor-operator-sha` still means exact0b7 on first
+attestation. The only other accepted value is
+`80e51c43e31541940f1ccf18b8281adf1a061748`, tree
+`88ed308b4c56114aa977dcf91204964d9b7348e5`, with the exact128 copied-file manifest
+`b88bc4ceadff581a170fdb81543b631eef6e8624d57504a049a5ac2645105195`.
+Historical source/tree, complete inventory/blob hashes, the four known additions
+and only changed common path `scripts/ci.sh`, and unchanged application, migrations,
+dependencies, provisioner and build inputs are mandatory. Missing/extra/changed
+bytes stop; no fallback, arbitrary SHA or expected provenance derived from images.
+Operational predecessor/recovery/receipts and old API/worker stay exact0b7;
+new runtime/development images stay exact target. The original receipt's verified
+operator ID and original recovered caller IDs/images anchor the preparation.
+
+New preparation version2 keeps `predecessor_operator_sha` and the existing
+`image_proofs` keyed by the three caller roles. Each proof contains exact image ID,
+source SHA/tree, kind and copied-blob-map SHA256. `prepared.json` also records the
+target role proofs. Before build effects and each switch/preflight/resume/retry,
+the stored proofs must equal the expected Git inventory and actual image probes.
+Hashes bind these records into the existing intent/audit; there is no second DAG.
+A repeat uses the saved choice; an explicit different choice stops. Recomputing
+local hashes after changing only source/proof cannot substitute actual image bytes
+or the original receipt image. Version1 preparation has only its previous exact0b7
+interpretation and must pass full original-proof/image validation; absent fields
+never infer historical provenance. Original state, DAG bytes and image IDs remain
+unchanged. Cross-direction audit schema2 and all done/result guards stay required.
+
+`migration-prepare` (600s overall bound) publishes an immutable private archive,
+then builds distinct runtime/development images from `git archive` of the exact
+target. No private inputs enter that context. Exact before/after IDs and retained
+rollback tags are journaled. API and worker change to the new runtime image;
+disposable operator uses the new development image. Scheduler, frontend, ingress,
+PG/storage, relay, their mounts and config remain unchanged. In particular, the
+original scheduler ID remains compatible with the predecessor's strict baseline.
+
+`migrate` / `migration-resume` publish an immutable intent before any recreate,
+with exact sources/trees, archive/image-plan hashes and allowed per-service deltas.
+Each service has intent/result/done records. Only an issued, unfinished service
+intent can admit its stopped/missing boundary; source/config/image/data drift is
+never interpreted as an outage. Read-only repeatable-read fingerprints must remain
+equal before PASS. The final state is v3, binding the intent hash and target SHA,
+while continuing to reference the original recovery-v2 route generation.
+Original deployment-before, recovery-v1, recovery.json, previous receipts and
+private inputs are never replaced by a new baseline.
+
+`migration-preflight` and a completed retry re-attest the result without recreating
+containers. `migration-rollback` is explicit, independently resumable, and restores
+the old image IDs and exact archived v2 state. The preserved predecessor checkout
+is again the operational source; the candidate checkout remains the read-only
+controller for rollback retry. Its old-source preflight must also succeed. Forward
+and rollback audit remain; a subsequent forward call after rollback stops and
+requires a new C0 decision. No automatic rollback, rebaseline or cleanup is implied.
+R2 validates the complete existing audit in **both** directions before any rollback
+effect and before reporting success: exact stage/result shapes, service order,
+intent/source/state/database bindings, and done requiring its preserved result.
+Completion must agree with the direction's historical service results and unchanged
+unrelated baseline, not with container IDs created by a later opposite transition.
+The immutable `rollback-intent.json` is schema version 2, with exactly `version`,
+`stage`, `intent_sha256`, `forward_audit_sha256` (filename to SHA256 of exact bytes),
+and `forward_runtime` (the validated snapshot at rollback entry). Resume and completed
+retry require the same forward inventory/bytes and historical result binding.
+Missing, changed or additional forward evidence is STOP; no re-pinning, reconstruction
+from current runtime or upgrade of an older unbound rollback intent is permitted.
+Valid partial forward histories remain rollbackable, including result/done and
+state/completion publication gaps; an unpublished completion is not mandatory.
+These R2 audit changes are accepted: C8-MIG-01/P2 CLOSED by C0 after targeted C8 PASS.
+Each runtime invocation is bounded to 180s, including subprocesses. Telegram stays
+disabled/empty; no discovery/setup/ACK/send/binding/billing operation is invoked.
+
+New disposable normal + exact Docker29 jobs separately exercise real completed
+predecessor recovery, SIGKILL at intent/image/state boundaries in both directions,
+drift rejection, completed retry, old-source rollback preflight, held UNKNOWN/wire1,
+Secure Console/private S3 and equal 31-table fingerprints. The held fixture remains
+180s. Existing three jobs and their 6+6 cases remain mandatory. These facts require
+final-head CI evidence and C0/scoped C8 review; this contract does not confer VERIFIED
+or owner execution permission. Commands and owner draft: runbook §0.6.25.
+For C6-M2-HISTORICAL-OPERATOR-COMPAT, only boundary=image (normal and Docker29)
+builds the old operator from tracked archive80e before receipts and the held interval.
+Intent/state shards retain exact0b7. Synthetic egress services run from the target
+test-driver image, never injected into the old operator. The same nine jobs remain;
+reports assert source/tree/manifest/image ID and saved proof preservation. The
+candidate's evidence and limits are in §0.6.32; C0-MIG-OWNER-02 remains OPEN.
 
 ## 11. M2.4-CONSOLE — текущий ограниченный UI/browser-контракт
 

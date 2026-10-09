@@ -1,11 +1,11 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { requireSafeResult, safeDiagnostic, type SafeResult } from './safe-diagnostic';
-import { parseBilling, parseAuditPage, type Billing } from '../src/billing-api';
+import { parseBilling, parseAuditPage, type AuditItem, type Billing } from '../src/billing-api';
 
 const passwordPath = process.env.ASM_BROWSER_PASSWORD_FILE;
 const fixturePath = process.env.ASM_BROWSER_FIXTURE_FILE;
@@ -36,6 +36,15 @@ async function save(page:Page,name:string) {
 async function audit(request:APIRequestContext,preset:string) {
   const r=await http(()=>request.get(path(preset,'audit-events?limit=10'))); expect(r.status()).toBe(200); return parseAuditPage(await json(r));
 }
+async function auditRendered(region:Locator,items:AuditItem[],cursor:string|null) {
+  await expect(region.locator('ol > li')).toHaveCount(items.length);
+  await expect(region.locator('ol > li time')).toHaveText(items.map(item=>item.occurred_at));
+  await expect(region.getByText('Загружаем историю…')).toHaveCount(0);
+  await expect(region.getByRole('button',{name:'Обновить историю',exact:true})).toBeEnabled();
+  const more=region.getByRole('button',{name:'Загрузить ещё',exact:true});
+  if(cursor===null){await expect(more).toHaveCount(0);await expect(region.getByText('Конец истории.')).toBeVisible();}
+  else {await expect(more).toBeEnabled();await expect(region.getByText('Конец истории.')).toHaveCount(0);}
+}
 
 test('@narrow owner UPDATE/NOOP, zero, fresh GET/reload, real Audit pagination and keyboard',async({page})=>{
   await signIn(page,'happy'); await expect(page.getByText('Лимит: 0')).toBeVisible();
@@ -52,10 +61,54 @@ test('@narrow owner UPDATE/NOOP, zero, fresh GET/reload, real Audit pagination a
   expect((await page.getByTestId('current-contact').textContent())===actual.account.contact_display_name).toBe(true);
   const region=page.getByRole('region',{name:'Audit',exact:true}); expect((await region.textContent())?.includes(actual.account.contact_display_name)).toBe(false);
   const first=await audit(page.request,'happy'); expect(first.items.length).toBe(10); expect(first.next_cursor!==null).toBe(true);
-  const pagingResponse=page.waitForResponse(r=>r.url().includes('/audit-events?limit=10&cursor='));
-  await page.getByRole('button',{name:'Загрузить ещё'}).click(); const loaded=await pagingResponse; expect(new URL(loaded.url()).searchParams.get('cursor')===first.next_cursor).toBe(true);
-  while(await page.getByRole('button',{name:'Загрузить ещё'}).count()){await expect(page.getByRole('button',{name:'Загрузить ещё'})).toBeEnabled(); await page.getByRole('button',{name:'Загрузить ещё'}).click(); await expect(region.getByText('Загружаем историю…')).toHaveCount(0);}
-  await expect(region.getByText('Конец истории.')).toBeVisible(); await page.getByRole('button',{name:'Обновить историю'}).click(); await expect(region.locator('ol > li')).toHaveCount(10);
+  await test.step('Audit pages settle after headers, including removal of the last-page button',async()=>{
+    await auditRendered(region,first.items,first.next_cursor);
+    // C0-CI-AUDIT-01: headers/body arrival does not imply the consumer has
+    // rendered the page. Hold only its JSON processing; keep the real response.
+    let decoded=0, release=()=>{};
+    let processing=Promise.resolve();
+    await page.exposeFunction('pauseAuditPage',async()=>{decoded++;await processing;});
+    await page.evaluate(auditPath=>{
+      const json=Response.prototype.json;
+      Response.prototype.json=async function(){
+        const body:unknown=await json.call(this);
+        const url=new URL(this.url);
+        if(url.pathname===auditPath&&url.searchParams.has('cursor'))
+          await (window as unknown as {pauseAuditPage:()=>Promise<void>}).pauseAuditPage();
+        return body;
+      };
+    },path('happy','audit-events'));
+    const items=[...first.items]; let cursor=first.next_cursor, pages=0;
+    try {
+      while(cursor!==null){
+        processing=new Promise<void>(resolve=>{release=resolve;});
+        const pagingResponse=page.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname===path('happy','audit-events'));
+        await region.getByRole('button',{name:'Загрузить ещё',exact:true}).click();
+        const loaded=await pagingResponse; expect(loaded.status()).toBe(200);
+        const query=new URL(loaded.url()).searchParams;
+        expect(query.getAll('limit')).toEqual(['10']); expect(query.getAll('cursor').length===1&&query.get('cursor')===cursor).toBe(true);
+        const next=parseAuditPage(requireSafeResult(await safeDiagnostic('BILLING_BODY_FAILED',()=>loaded.json())));
+        await expect.poll(()=>decoded).toBe(++pages);
+        // This is the stale DOM that admitted the old count()/enabled loop.
+        await expect(region.getByText('Загружаем историю…')).toBeVisible();
+        await expect(region.getByRole('button',{name:'Загрузить ещё',exact:true})).toBeDisabled();
+        await expect(region.locator('ol > li')).toHaveCount(items.length);
+        release();
+        items.push(...next.items); expect(new Set(items.map(item=>item.audit_event_id)).size).toBe(items.length);
+        await auditRendered(region,items,next.next_cursor);
+        cursor=next.next_cursor;
+      }
+    } finally {release();}
+    await expect(region.getByText('Конец истории.')).toBeVisible();
+    const refreshed=page.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname===path('happy','audit-events'));
+    await region.getByRole('button',{name:'Обновить историю',exact:true}).click();
+    const response=await refreshed; expect(response.status()).toBe(200);
+    expect(new URL(response.url()).searchParams.toString()).toBe('limit=10');
+    const current=parseAuditPage(requireSafeResult(await safeDiagnostic('BILLING_BODY_FAILED',()=>response.json())));
+    expect(current).toEqual(first);
+    await auditRendered(region,current.items,current.next_cursor);
+    await expect(region.locator('ol > li')).toHaveCount(10);
+  });
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   expect(await page.evaluate(()=>({local:localStorage.length,session:sessionStorage.length,cookie:document.cookie}))).toEqual({local:0,session:0,cookie:''});
 });

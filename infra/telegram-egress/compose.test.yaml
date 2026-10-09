@@ -1,0 +1,92 @@
+# Synthetic CI only. The real relay config is unchanged; the peer and TLS
+# recipient use fixed private addresses. No owner profile or credentials.
+x-fixture-env: &fixture-env
+  ASM_ENVIRONMENT: TEST
+  ASM_STORAGE_ENVIRONMENT: TEST
+  ASM_STORAGE_ENDPOINT: http://storage-test:9000
+  ASM_STORAGE_BUCKET: asm-private-test
+  ASM_STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?}
+  ASM_STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?}
+  ASM_DATABASE_URL: postgresql+psycopg://asm_runtime:${PG_RUNTIME_PASSWORD:?}@postgres-test:5432/asm_test
+  ASM_MIGRATION_DATABASE_URL: postgresql+psycopg://asm_migrator:${PG_MIGRATION_PASSWORD:?}@postgres-test:5432/asm_test
+  ASM_ADMIN_DATABASE_URL: postgresql+psycopg://asm_admin:${PG_ADMIN_PASSWORD:?}@postgres-test:5432/asm_test
+  ASM_EGRESS_TEST_DIR: /run/egress-test
+  ASM_EGRESS_RELAY_IP: ${ASM_TELEGRAM_EGRESS_IP:?}
+  ASM_EGRESS_RELAY_IPV6: ${ASM_TELEGRAM_EGRESS_IPV6:?}
+  ASM_EGRESS_PEER_IP: ${ASM_EGRESS_PEER_IP:?}
+  ASM_EGRESS_WIRE_IP: ${ASM_EGRESS_WIRE_IP:?}
+services:
+  api:
+    environment:
+      <<: *fixture-env
+      ASM_TELEGRAM_ENABLED: 'false'
+      # Keep the six accepted asm_test wire cases on their original auth setup.
+      # E05 restores the independently created LOCAL HTTPS baseline afterwards.
+      ASM_AUTH_ORIGINS: '["http://localhost:8080","http://127.0.0.1:8080","http://localhost:8000","http://127.0.0.1:8000"]'
+  egress-https:
+    image: ${WEB_IMAGE:?}
+    user: "${ASM_TELEGRAM_EGRESS_UID:?}:${ASM_TELEGRAM_EGRESS_GID:?}"
+    entrypoint: [nginx]
+    command: [-c, /run/https.conf, -g, 'daemon off;']
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 96m
+    tmpfs: [/tmp]
+    volumes:
+      - ${ASM_EGRESS_TEST_DIR:?}/https.conf:/run/https.conf:ro
+      - ${ASM_EGRESS_TEST_DIR:?}/https.pem:/run/https.pem:ro
+      - ${ASM_EGRESS_TEST_DIR:?}/https.key:/run/https.key:ro
+    networks:
+      default:
+        aliases: [console.egress.test, files.egress.test]
+  egress-checks:
+    image: asm-telegram-egress-checks:test
+    user: "${ASM_TELEGRAM_EGRESS_UID:?}:${ASM_TELEGRAM_EGRESS_GID:?}"
+    environment: *fixture-env
+    volumes:
+      - ${ASM_EGRESS_TEST_DIR:?}:/run/egress-test
+    extra_hosts:
+      - api.telegram.org=${ASM_TELEGRAM_EGRESS_IP:?}
+      - api.telegram.org=${ASM_TELEGRAM_EGRESS_IPV6:?}
+    networks:
+      default: {gw_priority: 1}
+      telegram-egress: {}
+      telegram-egress-v6: {}
+  egress-wire:
+    image: asm-telegram-egress-checks:test
+    user: "${ASM_TELEGRAM_EGRESS_UID:?}:${ASM_TELEGRAM_EGRESS_GID:?}"
+    environment: *fixture-env
+    command: [python, tests/test_telegram_egress_postgres.py, --serve]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    sysctls: {net.ipv4.ip_unprivileged_port_start: '0'}
+    pids_limit: 64
+    mem_limit: 256m
+    volumes:
+      - ${ASM_EGRESS_TEST_DIR:?}:/run/egress-test
+    networks:
+      telegram-egress:
+        ipv4_address: ${ASM_EGRESS_WIRE_IP:?}
+  egress-peer:
+    image: ${TELEGRAM_EGRESS_IMAGE:?}
+    platform: linux/amd64
+    user: "${ASM_TELEGRAM_EGRESS_UID:?}:${ASM_TELEGRAM_EGRESS_GID:?}"
+    command: [run, -config, /run/peer.json]
+    read_only: true
+    tmpfs:
+      - /usr/local/etc/xray:ro,noexec,nosuid,size=64k
+      - /var/log/xray:ro,noexec,nosuid,size=64k
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 96m
+    cpus: 0.5
+    logging: {driver: none}
+    volumes:
+      - ${ASM_EGRESS_TEST_DIR:?}/peer.json:/run/peer.json:ro
+    networks:
+      telegram-egress:
+        ipv4_address: ${ASM_EGRESS_PEER_IP:?}
