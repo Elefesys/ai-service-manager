@@ -1,3 +1,33 @@
+# M2 — завершено; история поручений
+
+Ответственный за интеграцию: C0. Текущие статусы:
+[TASK_REGISTER](../TASK_REGISTER.md). Следующий этап:
+[M3_HANDOFF](M3_HANDOFF.md).
+
+## Закрытый handoff / 2026-10-09
+
+**M2 INTEGRATED / VERIFIED в принятом LOCAL/TEST scope.**
+[PR #24](https://github.com/Elefesys/ai-service-manager/pull/24) слит владельцем;
+main `ca64f98b0c8d12d4de922ed0ed7d34e48822ac00`,
+[push/main CI 37863489865](https://github.com/Elefesys/ai-service-manager/actions/runs/37863489865)
+SUCCESS — 9/9 jobs и все clean-source gates.
+[Итоговый receipt C0](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6066209663)
+фиксирует scope/evidence, закрытые findings, actual owner execution и live A09/A11.
+
+Владелец подтвердил видимые text/photo, ручной ответ из Console и получение
+этого ответа Client ровно один раз. Приёмка не означает готовность production/AI.
+Текущих implementation/owner поручений M2 здесь нет. Старые source access,
+migration, activation, webhook, ACK и live send blocks не запускать заново.
+Существующий TEST/COMPED interval закончился 2026-10-09T00:00Z; подготовка нового
+smoke относится к будущей конкретной задаче C0, а не продлению старого receipt.
+
+Текущий M3 план задаёт следующий scope; все нижеследующие инструкции сохраняются
+только как история прежних snapshots. Последняя опубликованная приёмка C0
+выше заменяет исторические REVIEW/OPEN/BLOCKED.
+
+<details>
+<summary>Архив M2: история реализации, операторских процедур и критериев</summary>
+
 # M2 — Telegram, изображения и ручная переписка
 
 Дата подготовки: 2026-09-20. Ответственный за выдачу задач и интеграцию: C0.
@@ -5114,3 +5144,5 @@ injection секретов, тестовый HTTPS endpoint/webhook и буду�
 
 Ниже — принятая последовательность и общая матрица M2. Указанный далее initial
 snapshot PR #16 исторический; актуальный base первой задачи находится выше.
+
+</details>
