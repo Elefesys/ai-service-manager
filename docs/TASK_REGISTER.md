@@ -2,6 +2,58 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Текущий статус — M2 закрыт; план M3 на review C0 / 2026-10-09
+
+**M2 — INTEGRATED / VERIFIED в принятом LOCAL/TEST scope.**
+Это перенос уже опубликованного решения C0, не новая приёмка от автора плана.
+[PR #24](https://github.com/Elefesys/ai-service-manager/pull/24) MERGED;
+main `ca64f98b0c8d12d4de922ed0ed7d34e48822ac00`,
+tree `5aa2b7764797919758a1d89a01c34fb94788540e`.
+[Push/main CI 37863489865](https://github.com/Elefesys/ai-service-manager/actions/runs/37863489865)
+SUCCESS: 9/9 jobs, все clean-source gates.
+[Финальный receipt C0](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6066209663)
+содержит фактическую приёмку owner migration/activation/webhook и live A09/A11:
+text/photo в Console, ручной ответ, отдельное подтверждение Client о ровно одной копии.
+Это owner-operated evidence; дополнительные live observations/DB counters не выдумываются.
+
+C0 закрыл прежние client01/02/03, C8-MIG-01, C0-MIG-OWNER-01/02 и
+C0-CI-AUDIT-01 в указанном receipt scope. Старые REVIEW/OPEN/BLOCKED ниже —
+история. M0/M1 и принятые части M2 не переоткрываются.
+[M2_HANDOFF](tasks/M2_HANDOFF.md) закрыт. Текущий следующий handoff:
+[M3_HANDOFF](tasks/M3_HANDOFF.md).
+
+**M3 — TODO.** Пользователь запросил переход к M3; подготовлен план последовательных
+задач для review C0. Runtime/DDL/API/UI M3 этим docs PR не реализованы и не приняты.
+C0 проверяет план, назначает первый ограниченный scope и actual accepted base.
+Новый технический контракт ведётся в одном M3_CONTRACT.md по мере выдачи частей.
+
+| Задача | Статус | Evidence / следующий шаг |
+|---|---|---|
+| M0/M1 | VERIFIED в прежнем scope | Сохранённая приёмка; без повторного старта |
+| M2 / ENV04 / live A09–A11 | INTEGRATED / VERIFIED LOCAL/TEST | PR24 + отдельный main CI + финальный C0 receipt выше |
+| M3.1-CONTRACT | TODO | C0 с C3/C2: минимальный контракт текущего среза и границы control/guards |
+| M3.1-TURNS | TODO | После контракта: grouping, State, durable deadlines/restart и версии |
+| M3.1-CONTROL | TODO | После TURNS: takeover/resume, generation, owner/API/native event semantics |
+| M3.1-GUARDS | TODO | После CONTROL: admission/stale worker/in-flight через рабочие DB/worker paths |
+| M3.2-ESCALATION | TODO | Отдельный owner wait lifecycle на существующих durable jobs |
+| M3.2-CONSOLE | TODO | После принятого API: mode/actions/wait/in-flight UI и browser journeys |
+| M3-ACCEPTANCE | TODO | Scoped C8, применимый owner smoke, final actual main CI; затем отдельная выдача M4 |
+
+TEST/COMPED на существующем стенде завершился 2026-10-09T00:00Z.
+Новые live sends/продление не выданы этой документацией. Это отдельная подготовка
+C0 перед новым smoke; она не блокирует LOCAL/TEST разработку M3.
+Git merge не обновляет VM. Исторические immutable receipts/DB fingerprints после
+законных live сообщений не переисполняются как проверка неизменности текущей БД.
+
+Статус нового docs PR и его CI фиксируется в PR metadata; отдельный commit только
+ради собственного SHA/статуса не нужен. История ниже сохраняется целиком для
+provenance, но не является очередью текущих операторских действий.
+
+## История M0–M2 — прежние snapshots и поручения
+
+<details>
+<summary>Архив прежнего реестра до закрытия M2; текущий статус находится выше</summary>
+
 ## Текущий статус — historical operator принят; Audit pagination / REVIEW — 2026-10-08 UTC
 
 C0 принимает [C8 scoped PASS](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6066209663)
@@ -2615,3 +2667,5 @@ C0 проверил фактический merge PR #10: `049b212f135f09c025d2f8
 `C0-M1.2-E2E-01` — CLOSED / INTEGRATED / VERIFIED в границах этого исправления. M1.2 сохраняет приёмку; исторический исходный base M1.3 остаётся `28c289ce6f77e33676cfa416585cc0e20c0be4e3`. Новый main не является разрешением DDL или доказательством M1.3.
 
 R2 C1 ещё не получена. Сообщение Codex «не удалось создать продолжение» не доказывает контекстный лимит, исчерпание quota или safety block. C0 заменяет способ передачи: новая cloud-задача с PR #9 как контекстом; один временный текстовый файл `docs/tasks/C1_M1_3_R2_RESUME.txt` допускается только для переноса полного поручения и удаляется из итогового tracked tree. Архитектурные решения D-01…D-13 не меняются; итоговая дельта от reviewed `f4fb513…` — только реестр, C0 disposition и контракт R2. Без merge/rebase/force-push, нового конкурирующего PR или изменения кода. Runtime M1.3 остаётся NOT AUTHORIZED; контракт R2 ждёт C0/C2 review.
+
+</details>
