@@ -634,16 +634,52 @@ async def test_migration_capabilities_are_narrow_and_sequence_is_logged_cache_on
         assert seq == ("p", 1, False, False)
 
 
+# Executed only by an explicit disposable TEST/LOCAL migrator subprocess. The
+# exact nonzero exit occurs AFTER Alembic has returned from its committed DDL;
+# the orchestrator cannot confuse an arbitrary migration failure with this cut.
+COMMIT_ACK_LOSS_EXIT = 86
+COMMIT_ACK_LOSS_MARKER = "M3_UPGRADE_COMMITTED_RESULT_LOST"
+COMMIT_ACK_LOSS = """
+import os
+from alembic import command
+from alembic.config import Config
+assert os.environ['ASM_ENVIRONMENT'] in ('LOCAL','TEST')
+command.upgrade(Config('alembic.ini'), '0008')
+print('M3_UPGRADE_COMMITTED_RESULT_LOST', flush=True)
+os._exit(86)
+"""
+
+
 async def test_upgrade_commit_ack_loss_observes_revision_before_runtime_choice(messaging):
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import NullPool
+
     h = messaging
     await _migrate("downgrade", "0007")
     with pytest.raises(Exception):
         await h.runtime.check()
-    # A separate migrator process has committed. Its caller loses the result;
-    # source choice comes from a new physical read, not the prior process exit.
-    await _migrate("upgrade", "head")
-    async with h.migrator.connect() as c:
-        await assert_head(c, "0008")
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-c",
+        COMMIT_ACK_LOSS,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        output, errors = await asyncio.wait_for(process.communicate(), 30)
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
+    assert process.returncode == COMMIT_ACK_LOSS_EXIT, (output, errors)
+    assert output.strip() == COMMIT_ACK_LOSS_MARKER.encode(), (output, errors)
+    # No pre-existing pool/transaction or successful child exit is authoritative.
+    fresh = create_async_engine(os.environ["ASM_MIGRATION_DATABASE_URL"], poolclass=NullPool)
+    try:
+        async with fresh.connect() as c:
+            await assert_head(c, "0008")
+    finally:
+        await fresh.dispose()
     await h.runtime.check()
 
 
@@ -695,6 +731,26 @@ async def schema_controller(action, state_path):
         path.chmod(0o600)
 
     try:
+        if action == "observe":
+            # This controller is a NEW process with a NEW physical connection.
+            async with migrator.connect() as c:
+                observed = (
+                    await c.execute(text("SELECT version_num FROM platform.alembic_version"))
+                ).scalar_one()
+                identity_row = (await c.execute(text("SELECT current_user,pg_backend_pid()"))).one()
+                assert identity_row[0] == "asm_migrator"
+            print(
+                json.dumps(
+                    {
+                        "revision": observed,
+                        "reader_pid": os.getpid(),
+                        "backend_pid": identity_row[1],
+                        "role": identity_row[0],
+                    }
+                ),
+                flush=True,
+            )
+            return
         if action == "seed":
             assert not state
             async with migrator.begin() as c:
@@ -885,6 +941,26 @@ async def schema_controller(action, state_path):
                 )
             finally:
                 await storage.close()
+            if action == "check8":
+                state["committed_upgrade_retained"] = {
+                    "projection": "EXACT_M2_COLUMNS",
+                    "private_s3_sha256": state["object"]["sha256"],
+                    "pending": await sql(
+                        "SELECT status FROM app.outbox_events WHERE message_id=:id",
+                        id=state["pending"]["message_id"],
+                    ),
+                    "unknown": await sql(
+                        "SELECT status FROM app.outbox_events WHERE message_id=:id",
+                        id=state["unknown"]["message_id"],
+                    ),
+                    "command_receipts": await sql(
+                        "SELECT count(*) FROM platform.messaging_command_receipts"
+                    ),
+                }
+                assert state["committed_upgrade_retained"]["pending"] == "PENDING"
+                assert state["committed_upgrade_retained"]["unknown"] == "UNKNOWN"
+                assert state["committed_upgrade_retained"]["command_receipts"] == 2
+                await save()
             if action == "fresh":
                 runtime = RuntimeDatabase(Settings())
                 try:
@@ -941,6 +1017,24 @@ async def schema_controller(action, state_path):
                             id=state["unknown"]["message_id"],
                         )
                     ) == "UNKNOWN"
+                    assert h.adapter.calls == h.adapter.effects == 1
+                    assert (
+                        await sql(
+                            "SELECT status FROM app.outbox_events WHERE message_id=:id",
+                            id=state["pending"]["message_id"],
+                        )
+                        == "SENT"
+                    )
+                    assert (
+                        await sql("SELECT count(*) FROM platform.messaging_command_receipts") == 2
+                    )
+                    state["forward_delivery"] = {
+                        "calls": h.adapter.calls,
+                        "effects": h.adapter.effects,
+                        "pending": "SENT",
+                        "unknown": "UNKNOWN",
+                        "command_receipts": 2,
+                    }
                     state["full8_populated"] = None
                     async with migrator.connect() as c:
                         state["full8_populated"] = await fingerprints(c)
@@ -950,6 +1044,7 @@ async def schema_controller(action, state_path):
             elif action == "refuse":
                 async with migrator.begin() as c:
                     before, objects = await fingerprints(c), await definitions(c)
+                    assert before == state["full8_populated"]
                     with pytest.raises(DBAPIError) as caught:
                         async with c.begin_nested():
 
@@ -971,4 +1066,7 @@ async def schema_controller(action, state_path):
 
 if __name__ == "__main__":
     assert len(sys.argv) == 4 and sys.argv[1] == "--schema-phase"
-    asyncio.run(schema_controller(sys.argv[2], sys.argv[3]))
+    if sys.argv[2] == "upgrade-lost-result":
+        exec(COMMIT_ACK_LOSS)
+    else:
+        asyncio.run(schema_controller(sys.argv[2], sys.argv[3]))

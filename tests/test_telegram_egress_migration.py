@@ -596,6 +596,33 @@ e.main()
     print("TELEGRAM_EGRESS_MIGRATION_" + fault.upper() + "_PASS", flush=True)
 
 
+def schema_recovery_source(result, observe, report, candidate):
+    """An expected post-commit failure is not a successful migration result."""
+    detail = {
+        "injection": "after_commit_before_success_exit",
+        "exit_code": result.returncode,
+        "marker": "M3_UPGRADE_COMMITTED_RESULT_LOST"
+        if result.stdout.strip() == b"M3_UPGRADE_COMMITTED_RESULT_LOST"
+        else "UNEXPECTED",
+        "observed": "NOT_READ",
+    }
+    report["upgrade_ack_loss"] = detail
+    if result.returncode != 86 or result.stdout.strip() != b"M3_UPGRADE_COMMITTED_RESULT_LOST":
+        detail["result"] = "UNEXPECTED_MIGRATOR_RESULT"
+        raise AssertionError("M3_EXPECTED_POST_COMMIT_FAILURE")
+    detail["result"] = "CONTROLLED_FAILURE_OBSERVED"
+    try:
+        observation = observe()
+    except Exception:
+        detail["observed"] = "UNREADABLE"
+        raise
+    detail["observed"] = observation
+    if observation.get("revision") != "0008":
+        raise AssertionError("M3_RECOVERY_REVISION_UNCONFIRMED")
+    detail["recovery_source"] = candidate
+    return candidate
+
+
 def run_schema_phase(request):
     """New disposable LOCAL volume, exact H/I images, drained schema cutover."""
     import tempfile
@@ -829,26 +856,70 @@ asyncio.run(main())
             migrate(candidate, "downgrade", "0007")
             controller("check7")
             probe(historical, True)
-            migrate(candidate, "upgrade", "0008")
-            controller("check8")
+            # A separate migrator really commits 0008, then exits unsuccessfully.
+            # Observe its failure; NEVER infer the revision from that exit alone.
+            lost = subprocess.run(
+                [
+                    *prefix,
+                    images[candidate]["development"],
+                    "python",
+                    "tests/test_m3_1_migrations.py",
+                    "--schema-phase",
+                    "upgrade-lost-result",
+                    "/state/receipt.json",
+                ],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                timeout=30,
+            )
+
+            def observe_revision():
+                return json.loads(
+                    e.command(
+                        [
+                            *prefix,
+                            images[candidate]["development"],
+                            "python",
+                            "tests/test_m3_1_migrations.py",
+                            "--schema-phase",
+                            "observe",
+                            "/state/receipt.json",
+                        ],
+                        timeout=30,
+                    )
+                )
+
+            recovery_source = schema_recovery_source(lost, observe_revision, report, candidate)
+            controller("check8")  # projection/private S3/pending/UNKNOWN still exact
+            probe(historical, False)  # committed0008 explicitly rejects H
+            probe(recovery_source, True)
+            report["upgrade_ack_loss"]["historical_readiness"] = "REJECTED"
+            report["upgrade_ack_loss"]["candidate_readiness"] = "PASS"
             # Exercise I runtime/worker on the correctly paired schema before
             # permanent callers start, so duplicate-first admission is deterministic.
             controller("fresh")
-            report["cutover_callers"] = callers(candidate)
+            report["cutover_callers"] = callers(recovery_source)
+            report["upgrade_ack_loss"]["forward_callers"] = report["cutover_callers"]
             drain()
             controller("refuse")
-            report["restarted_callers"] = callers(candidate)
-            probe(candidate, True)
+            report["restarted_callers"] = callers(recovery_source)
+            report["upgrade_ack_loss"]["restarted_callers"] = report["restarted_callers"]
+            probe(recovery_source, True)
             drain()
             controller("refuse")
             report["database"] = json.loads((state / "receipt.json").read_text())
             assert report["database"]["populated_refusal"] == "PASS"
             # No raw signed URL or fixture content is published.
             report["database"]["object"].pop("key")
+        except BaseException as error:
+            report["failure"] = type(error).__name__
+            raise
+        finally:
+            # Record the observed failure/revision/recovery before destroying
+            # disposable evidence, including a refusal/unreadable revision.
             reports = e.ROOT / "reports"
             reports.mkdir(exist_ok=True)
             (reports / "m3-schema-phase.json").write_text(json.dumps(report, indent=2) + "\n")
-        finally:
             e.command(
                 [*compose, "down", "--volumes", "--remove-orphans", "--timeout", "2"], timeout=90
             )
@@ -2418,3 +2489,50 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
     assert "'--schema-upgrade', H, source" in coordinator
     assert "run_name='__schema_harness__'" in shell
     assert "754f1c883e5a94a7fc9e729af2605424f949ba33" in coordinator
+
+
+@pytest.mark.parametrize("revision", [None, "0007", "0009", "unknown"])
+def test_ack_loss_unknown_revision_never_selects_runtime(revision):
+    from types import SimpleNamespace
+
+    report = {}
+    lost = SimpleNamespace(returncode=86, stdout=b"M3_UPGRADE_COMMITTED_RESULT_LOST\n")
+    with pytest.raises(AssertionError, match="REVISION_UNCONFIRMED"):
+        schema_recovery_source(lost, lambda: {"revision": revision}, report, "candidate")
+    assert "recovery_source" not in report["upgrade_ack_loss"]
+
+
+def test_ack_loss_unreadable_revision_never_selects_runtime():
+    from types import SimpleNamespace
+
+    def unreadable():
+        raise OSError("disposable database unavailable")
+
+    report = {}
+    with pytest.raises(OSError):
+        schema_recovery_source(
+            SimpleNamespace(returncode=86, stdout=b"M3_UPGRADE_COMMITTED_RESULT_LOST"),
+            unreadable,
+            report,
+            "candidate",
+        )
+    assert report["upgrade_ack_loss"]["observed"] == "UNREADABLE"
+    assert "recovery_source" not in report["upgrade_ack_loss"]
+
+
+@pytest.mark.parametrize(
+    "status,marker", [(0, b"M3_UPGRADE_COMMITTED_RESULT_LOST"), (1, b""), (86, b"unexpected")]
+)
+def test_ack_loss_does_not_accept_unexpected_migrator_result(status, marker):
+    from types import SimpleNamespace
+
+    def must_not_observe():
+        pytest.fail("unexpected failure must not enter forward recovery")
+
+    report = {}
+    with pytest.raises(AssertionError, match="EXPECTED_POST_COMMIT_FAILURE"):
+        schema_recovery_source(
+            SimpleNamespace(returncode=status, stdout=marker), must_not_observe, report, "candidate"
+        )
+    assert report["upgrade_ack_loss"]["observed"] == "NOT_READ"
+    assert "recovery_source" not in report["upgrade_ack_loss"]

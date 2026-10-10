@@ -1170,3 +1170,422 @@ async def test_each_manual_acceptance_and_terminal_fact_increments_once(messagin
     assert (
         await query(h, "SELECT version FROM app.messages WHERE id=:id", id=accepted.message_id)
     )[0]["version"] == 1
+
+
+async def maintenance_fixture(h, kind):
+    """Real admitted A with PREPARED upload/PENDING outbox, plus independent B."""
+    _, first = await receive(
+        h, chat_id="maintenance-a", image_file_id="photo-a" if kind == "FETCH_IMAGE" else None
+    )
+    a = (await turns(h))[0]
+    if kind == "FETCH_IMAGE":
+        ja = (
+            await query(
+                h,
+                "SELECT j.id FROM platform.messaging_jobs j JOIN app.file_objects f ON (f.workspace_id,f.id)=(j.workspace_id,j.file_id) WHERE f.message_id=:id",
+                id=first.message_id,
+            )
+        )[0]["id"]
+    else:
+        sent = await command(h, a["conversation_id"], "pending a", "maintenance-a")
+        ja = (
+            await query(
+                h,
+                "SELECT j.id FROM platform.messaging_jobs j JOIN app.outbox_events o ON (o.workspace_id,o.id)=(j.workspace_id,j.outbox_id) WHERE o.message_id=:id",
+                id=sent.message_id,
+            )
+        )[0]["id"]
+    ca = await claim_exact(h, ja)
+    if kind == "FETCH_IMAGE":
+        permit = await FileDatabase(h.kernel).prepare_upload(ca, MANIFEST)
+        assert (
+            await query(
+                h,
+                "SELECT status FROM platform.file_object_uploads WHERE id=:id",
+                id=permit.intent_id,
+            )
+        ) == [{"status": "PREPARED"}]
+    await receive(h, chat_id="maintenance-b")
+    b = next(t for t in await turns(h) if t["id"] != a["id"])
+    sent = await command(h, b["conversation_id"], "pending b", "maintenance-b")
+    jb = (
+        await query(
+            h,
+            "SELECT j.id FROM platform.messaging_jobs j JOIN app.outbox_events o ON (o.workspace_id,o.id)=(j.workspace_id,j.outbox_id) WHERE o.message_id=:id",
+            id=sent.message_id,
+        )
+    )[0]["id"]
+    await query(
+        h,
+        "UPDATE platform.messaging_jobs SET available_at=clock_timestamp()+interval '1 hour' WHERE status='READY' AND id<>:id RETURNING id",
+        id=jb,
+    )
+    return a, ja, jb
+
+
+async def maintenance_snapshot(h):
+    # Entire rows include attempts/first_started/due/lease/token, versions and
+    # every material/context/upload/receipt outcome, not a hand-picked subset.
+    return {
+        table: await rows(h, table)
+        for table in (
+            "platform.messaging_jobs",
+            "platform.file_object_uploads",
+            "app.file_objects",
+            "app.outbox_events",
+            "app.conversations",
+            "app.conversation_turns",
+            "app.conversation_turn_messages",
+            "platform.turn_consumer_receipts",
+            "app.messages",
+            "platform.inbox_events",
+            "platform.messaging_command_receipts",
+            "app.audit_events",
+        )
+    }
+
+
+async def assert_preflight_locks_released(h, job, *, conversation=False):
+    async with h.migrator.begin() as observer:
+        j = (
+            (
+                await observer.execute(
+                    text("SELECT * FROM platform.messaging_jobs WHERE id=:id FOR UPDATE NOWAIT"),
+                    {"id": job},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        if j["kind"] == "FETCH_IMAGE":
+            f = (
+                (
+                    await observer.execute(
+                        text("SELECT * FROM app.file_objects WHERE id=:id FOR UPDATE NOWAIT"),
+                        {"id": j["file_id"]},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            uploads = (
+                await observer.execute(
+                    text(
+                        "SELECT id FROM platform.file_object_uploads WHERE file_id=:id AND status='PREPARED' FOR UPDATE NOWAIT"
+                    ),
+                    {"id": j["file_id"]},
+                )
+            ).all()
+            assert len(uploads) == 1
+            if conversation:
+                await observer.execute(
+                    text("SELECT id FROM app.conversations WHERE id=:id FOR NO KEY UPDATE NOWAIT"),
+                    {"id": f["conversation_id"]},
+                )
+        else:
+            await observer.execute(
+                text("SELECT id FROM app.outbox_events WHERE id=:id FOR UPDATE NOWAIT"),
+                {"id": j["outbox_id"]},
+            )
+
+
+@pytest.mark.parametrize("kind", ["FETCH_IMAGE", "SEND_MANUAL_TEXT"])
+@pytest.mark.parametrize("operation", ["claim", "recover"])
+async def test_busy_savepoint_releases_preflight_locks_with_outer_transaction_open(
+    messaging, kind, operation
+):
+    h = messaging
+    a, ja, jb = await maintenance_fixture(h, kind)
+    if operation == "recover":
+        await claim_exact(h, jb)
+        await query(
+            h,
+            "UPDATE platform.messaging_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=:id RETURNING id",
+            id=jb,
+        )
+    await query(
+        h,
+        "UPDATE platform.messaging_jobs SET status=:status,attempt_count=5,first_started_at=clock_timestamp()-interval '1 minute',available_at=clock_timestamp()-interval '2 seconds',lease_until=CASE WHEN :status='RUNNING' THEN clock_timestamp()-interval '2 seconds' END,claim_token=CASE WHEN :status='RUNNING' THEN claim_token END,worker_id=CASE WHEN :status='RUNNING' THEN worker_id END WHERE id=:id RETURNING id",
+        id=ja,
+        status="READY" if operation == "claim" else "RUNNING",
+    )
+    before = await maintenance_snapshot(h)
+    # FETCH gets file+PREPARED upload+conversation, then meets the Turn blocker.
+    # SEND gets outbox, then meets the conversation blocker.
+    table, ident = (
+        ("app.conversation_turns", a["id"])
+        if kind == "FETCH_IMAGE"
+        else ("app.conversations", a["conversation_id"])
+    )
+    async with h.migrator.begin() as blocker:
+        await blocker.execute(
+            text(f"SELECT id FROM {table} WHERE id=:id FOR NO KEY UPDATE"), {"id": ident}
+        )
+        async with h.kernel._transaction() as outer:
+            assert (await outer.execute(text("SELECT current_user"))).scalar_one() == "asm_runtime"
+            xid = (await outer.execute(text("SELECT pg_current_xact_id()::text"))).scalar_one()
+            sql = (
+                "SELECT platform.messaging_claim('savepoint-proof',NULL,NULL,NULL)"
+                if operation == "claim"
+                else "SELECT platform.messaging_recover_expired(NULL,NULL,NULL)"
+            )
+            result = await call(outer, sql, {})
+            assert result["step"] == "BUSY" and result["id"] == str(ja)
+            assert outer.in_transaction()
+            assert (
+                await outer.execute(text("SELECT pg_current_xact_id()::text"))
+            ).scalar_one() == xid
+            assert await maintenance_snapshot(h) == before
+            # The outer physical transaction is STILL OPEN during these locks.
+            await assert_preflight_locks_released(h, ja, conversation=kind == "FETCH_IMAGE")
+            assert (
+                await outer.execute(
+                    text("SELECT coalesce(current_setting('asm.actor_kind',true),'')")
+                )
+            ).scalar_one() == ""
+        if operation == "claim":
+            selected = await h.kernel.claim_job("after-savepoint")
+            assert selected.job_id == jb
+        else:
+            assert await h.kernel.recover_expired() == 1
+            assert (
+                await query(
+                    h,
+                    "SELECT status,attempt_count FROM platform.messaging_jobs WHERE id=:id",
+                    id=jb,
+                )
+            ) == [{"status": "READY", "attempt_count": 1}]
+    restarted = MessagingDatabase(h.runtime.engine)
+    if operation == "claim":
+        assert await restarted.claim_job("after-unlock") is None
+    else:
+        assert await restarted.recover_expired() == 1
+    terminal = (
+        await query(
+            h,
+            "SELECT status,error_code,attempt_count FROM platform.messaging_jobs WHERE id=:id",
+            id=ja,
+        )
+    )[0]
+    assert terminal == {"status": "DEAD", "error_code": "RETRY_EXHAUSTED", "attempt_count": 5}
+
+
+@pytest.mark.parametrize(
+    "kind,block_turn", [("FETCH_IMAGE", False), ("FETCH_IMAGE", True), ("SEND_MANUAL_TEXT", False)]
+)
+async def test_recovery_age_horizon_keeps_late_terminal_preflight_nowait(
+    messaging, kind, block_turn
+):
+    h = messaging
+    a, ja, jb = await maintenance_fixture(h, kind)
+    await claim_exact(h, jb)
+    await query(
+        h,
+        "UPDATE platform.messaging_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=:id RETURNING id",
+        id=jb,
+    )
+    signature = "platform.turn_preflight(platform.messaging_jobs,boolean,boolean)"
+    original = (
+        await query(
+            h, "SELECT pg_get_functiondef(CAST(:sig AS regprocedure)) AS sql", sig=signature
+        )
+    )[0]["sql"]
+    # Fixture-only instrumentation after the first real nonterminal preflight.
+    # An observed advisory-lock waiter is the barrier; pg_sleep_until below
+    # waits for the saved DB horizon, never guesses the stage by sleeping.
+    key = 731810
+    instrumented = original.replace(
+        "        IF conv IS NOT NULL THEN",
+        f"""        IF j.id='{ja}'::uuid AND p_nowait AND NOT p_terminal THEN
+          PERFORM pg_advisory_xact_lock({key});
+        END IF;
+        IF conv IS NOT NULL THEN""",
+    )
+    assert instrumented != original
+    async with h.migrator.begin() as c:
+        await c.execute(text(instrumented))
+    task = None
+    try:
+        async with h.migrator.begin() as barrier, h.migrator.begin() as blocker:
+            await barrier.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": key})
+            table, ident = (
+                ("app.conversation_turns", a["id"])
+                if block_turn
+                else ("app.conversations", a["conversation_id"])
+            )
+            await blocker.execute(
+                text(f"SELECT id FROM {table} WHERE id=:id FOR NO KEY UPDATE"), {"id": ident}
+            )
+            before = await maintenance_snapshot(h)
+            async with h.kernel._transaction() as outer:
+                pid = (await outer.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+                armed = (
+                    await query(
+                        h,
+                        "UPDATE platform.messaging_jobs SET lease_until=clock_timestamp()-interval '2 seconds',first_started_at=clock_timestamp()-interval '15 minutes'+interval '1 second' WHERE id=:id RETURNING *,first_started_at+interval '15 minutes' AS horizon",
+                        id=ja,
+                    )
+                )[0]
+                horizon = armed.pop("horizon")
+                before["platform.messaging_jobs"] = [
+                    armed if j["id"] == ja else j for j in before["platform.messaging_jobs"]
+                ]
+                task = asyncio.create_task(
+                    call(outer, "SELECT platform.messaging_recover_expired(NULL,NULL,NULL)", {})
+                )
+                async with asyncio.timeout(2):
+                    while not await query(
+                        h,
+                        "SELECT pid FROM pg_locks WHERE pid=:pid AND locktype='advisory' AND NOT granted AND objid=:key",
+                        pid=pid,
+                        key=key,
+                    ):
+                        assert not task.done(), "nonterminal preflight barrier was not reached"
+                        await asyncio.sleep(0.01)  # observed barrier polling, no operation retry
+                await query(
+                    h,
+                    "SELECT pg_sleep_until(:horizon),clock_timestamp()>=:horizon AS crossed",
+                    horizon=horizon,
+                )
+                assert (
+                    await query(h, "SELECT clock_timestamp()>=:horizon AS crossed", horizon=horizon)
+                )[0]["crossed"]
+                await barrier.commit()
+                result = await task
+                assert result["step"] == "BUSY" and result["id"] == str(ja)
+                assert outer.in_transaction()
+                assert await maintenance_snapshot(h) == before
+                await assert_preflight_locks_released(h, ja, conversation=block_turn)
+            assert await h.kernel.recover_expired() == 1  # B progresses; A remains unchanged
+            assert (await query(h, "SELECT * FROM platform.messaging_jobs WHERE id=:id", id=ja))[
+                0
+            ] == next(j for j in before["platform.messaging_jobs"] if j["id"] == ja)
+        assert await MessagingDatabase(h.runtime.engine).recover_expired() == 1
+        assert (
+            await query(
+                h,
+                "SELECT status,error_code,attempt_count FROM platform.messaging_jobs WHERE id=:id",
+                id=ja,
+            )
+        ) == [{"status": "DEAD", "error_code": "RETRY_EXHAUSTED", "attempt_count": 1}]
+        assert (await context(h, a["conversation_id"]))["version"] == next(
+            c for c in before["app.conversations"] if c["id"] == a["conversation_id"]
+        )["version"] + 1
+        assert not h.ledger.exists()
+    finally:
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        async with h.migrator.begin() as c:
+            await c.execute(text(original))
+
+
+async def test_recovery_continues_after_100_busy_with_cutoff_and_restart(messaging, monkeypatch):
+    import asm.messaging.database as database_module
+
+    h = messaging
+    await receive(h, chat_id="prefix-a")
+    a = (await turns(h))[0]
+    for n in range(101):
+        await command(h, a["conversation_id"], "blocked", f"recover-prefix-{n}")
+    await receive(h, chat_id="prefix-b")
+    b = next(t for t in await turns(h) if t["id"] != a["id"])
+    for key in ("available-b", "new-before-cursor", "new-after-cutoff"):
+        await command(h, b["conversation_id"], key, key)
+    jobs = await query(
+        h,
+        "SELECT j.id,m.text FROM platform.messaging_jobs j JOIN app.outbox_events o ON (o.workspace_id,o.id)=(j.workspace_id,j.outbox_id) JOIN app.messages m ON (m.workspace_id,m.id)=(o.workspace_id,o.message_id) WHERE j.kind='SEND_MANUAL_TEXT'",
+    )
+    available = next(j["id"] for j in jobs if j["text"] == "available-b")
+    before_cursor = next(j["id"] for j in jobs if j["text"] == "new-before-cursor")
+    after_cutoff = next(j["id"] for j in jobs if j["text"] == "new-after-cutoff")
+    await query(
+        h,
+        "UPDATE platform.messaging_jobs SET status='RUNNING',attempt_count=CASE WHEN id IN (:b,:c,:d) THEN 1 ELSE 5 END,first_started_at=clock_timestamp()-interval '1 minute',claim_token=gen_random_uuid(),worker_id='recovery-fixture',lease_until=CASE WHEN id IN (:c,:d) THEN clock_timestamp()+interval '1 hour' WHEN id=:b THEN clock_timestamp()-interval '30 minutes' ELSE clock_timestamp()-interval '1 hour' END WHERE kind='SEND_MANUAL_TEXT' RETURNING id",
+        b=available,
+        c=before_cursor,
+        d=after_cutoff,
+    )
+    initial = await rows(h, "platform.messaging_jobs")
+    observed = []
+    original_call = database_module.call
+
+    async def observe_call(connection, statement, parameters):
+        result = await original_call(connection, statement, parameters)
+        if "platform.messaging_recover_expired" in statement:
+            observed.append(result)
+        return result
+
+    monkeypatch.setattr(database_module, "call", observe_call)
+    async with h.migrator.begin() as blocker:
+        await blocker.execute(
+            text("SELECT id FROM app.conversations WHERE id=:id FOR NO KEY UPDATE"),
+            {"id": a["conversation_id"]},
+        )
+        assert await h.kernel.recover_expired() == 0
+        assert len(observed) == 100 and {r["step"] for r in observed} == {"BUSY"}
+        cutoff = observed[0]["scan_until"]
+        assert len({r["id"] for r in observed}) == 100
+        await query(
+            h,
+            "UPDATE platform.messaging_jobs SET lease_until=CASE WHEN id=:c THEN clock_timestamp()-interval '2 hours' ELSE clock_timestamp() END WHERE id IN (:c,:d) RETURNING id",
+            c=before_cursor,
+            d=after_cutoff,
+        )
+        added = await query(
+            h,
+            "SELECT * FROM platform.messaging_jobs WHERE id IN (:c,:d) ORDER BY id",
+            c=before_cursor,
+            d=after_cutoff,
+        )
+        assert await h.kernel.recover_expired() == 1
+        assert observed[-1]["step"] == "END" and h.kernel._recovery_scan is None
+        first_pass = observed[:]
+        assert len(first_pass) == 103 and {r["scan_until"] for r in first_pass} == {cutoff}
+        assert len({r["id"] for r in first_pass[:-1]}) == 102
+        assert first_pass[-2]["id"] == str(available) and first_pass[-2]["step"] == "RECOVERED"
+        assert (
+            await query(
+                h,
+                "SELECT * FROM platform.messaging_jobs WHERE id IN (:c,:d) ORDER BY id",
+                c=before_cursor,
+                d=after_cutoff,
+            )
+            == added
+        )
+        # A new pass sees both additions; >100 still bounds this pass too.
+        observed.clear()
+        assert await h.kernel.recover_expired() == 1
+        assert await h.kernel.recover_expired() == 1
+        assert observed[-1]["step"] == "END"
+        assert len({r["id"] for r in observed[:-1]}) == len(observed) - 1 == 103
+        assert {r["id"] for r in observed if r["step"] == "RECOVERED"} == {
+            str(before_cursor),
+            str(after_cutoff),
+        }
+        current = await rows(h, "platform.messaging_jobs")
+        blocked_ids = {j["id"] for j in jobs if j["text"] == "blocked"}
+        assert [j for j in current if j["id"] in blocked_ids] == [
+            j for j in initial if j["id"] in blocked_ids
+        ]
+    restarted = MessagingDatabase(h.runtime.engine)
+    assert await restarted.recover_expired() == 100
+    assert await restarted.recover_expired() == 1
+    assert await restarted.recover_expired() == 0
+    current = await rows(h, "platform.messaging_jobs")
+    for j in current:
+        old = next(v for v in initial if v["id"] == j["id"])
+        if j["id"] in blocked_ids:
+            assert (j["status"], j["error_code"], j["attempt_count"], j["first_started_at"]) == (
+                "DEAD",
+                "RETRY_EXHAUSTED",
+                5,
+                old["first_started_at"],
+            )
+        elif j["id"] in {available, before_cursor, after_cutoff}:
+            assert (j["status"], j["attempt_count"], j["first_started_at"]) == (
+                "READY",
+                1,
+                old["first_started_at"],
+            )
+    assert not h.ledger.exists()

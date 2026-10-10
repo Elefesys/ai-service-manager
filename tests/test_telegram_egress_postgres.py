@@ -22,7 +22,6 @@ import socket
 import ssl
 import stat
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -50,7 +49,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 from test_auth_postgres import LOGIN, login
 from test_auth_postgres import auth as auth
-from test_m2_1_postgres import cleanup, delivery, due, expire, query
+from test_m2_1_postgres import cleanup, delivery, due, expire, finish_text_turns, query, receive
 from test_m2_1_postgres import messaging as messaging
 from test_m2_2_storage_postgres import grant, image_bytes, plan
 from test_m2_2_storage_postgres import images as images
@@ -708,30 +707,63 @@ def durable_target():
 
 
 async def stabilize_turns(h):
-    """Finish real bounded Turn transitions before the held same-schema receipt.
+    # The shared helper imports through the existing tests-directory path in
+    # both pytest and the direct Python E05 entrypoint. Empty queues alone are
+    # insufficient: require the exact current OBSERVED receipt before intent.
+    await finish_text_turns(h)
 
-    No job filters or fake completion: the ordinary worker claims/executions
-    must quiesce before manual send is created and its crash point is tested.
-    """
-    async with asyncio.timeout(30):
-        for _ in range(100):
-            pending = await query(
-                h,
-                "SELECT min(available_at) AS due FROM platform.messaging_jobs WHERE status='READY'",
-            )
-            due_at = pending[0]["due"]
-            if due_at is None:
-                assert not await query(
-                    h, "SELECT id FROM platform.messaging_jobs WHERE status='RUNNING'"
-                )
-                return
-            remaining = (due_at - datetime.now(UTC)).total_seconds()
-            if remaining > 0:
-                await asyncio.sleep(remaining)
-            claim = await h.kernel.claim_job("egress-turn-stabilization")
-            assert claim is not None and claim.kind == "PROCESS_TURN"
-            await h.worker.execute(claim)
-    raise AssertionError("E05_TURN_STABILIZATION_LIMIT")
+
+@pytest.mark.parametrize("damage", ["failed", "missing", "stale", "noncurrent", "extra"])
+async def test_egress_turn_success_gate_rejects_actual_invalid_state(messaging, damage):
+    from asm.conversations.turns import consume
+    from test_m2_1_postgres import command
+    from test_m3_1_turns_postgres import claim_exact, seal, snapshot, turns, wait_due
+    from test_m3_1_turns_postgres import receive as receive_turn
+
+    h = messaging
+    await receive(h)
+    turn = (await turns(h))[0]
+    if damage == "failed":
+        # A real admitted failure, not a fabricated terminal success/status.
+        await wait_due(h, turn["id"])
+        claim = await h.kernel.claim_job("egress-negative")
+        assert claim.kind == "PROCESS_TURN"
+        await h.kernel.retry(claim, Code.INVALID_INPUT, False)
+        assert (await query(h, "SELECT state FROM app.conversation_turns")) == [{"state": "FAILED"}]
+        assert (
+            await query(h, "SELECT status FROM platform.messaging_jobs WHERE kind='PROCESS_TURN'")
+        ) == [{"status": "DEAD"}]
+    elif damage == "stale":
+        await seal(h, turn["id"])
+        claim, value = await snapshot(h, turn["id"])
+        await command(h, turn["conversation_id"], "context change", "stale-gate")
+        send = (
+            await query(h, "SELECT id FROM platform.messaging_jobs WHERE kind='SEND_MANUAL_TEXT'")
+        )[0]["id"]
+        await h.worker.execute(await claim_exact(h, send))
+        result = await h.kernel.finish_turn(claim, consume(value))
+        assert result.code == "STALE"
+        assert (
+            await query(h, "SELECT result->>'code' AS code FROM platform.turn_consumer_receipts")
+        ) == [{"code": "STALE"}]
+    else:
+        await stabilize_turns(h)  # real Worker success is a prerequisite
+        if damage == "missing":
+            await query(h, "DELETE FROM platform.turn_consumer_receipts RETURNING job_id")
+        elif damage == "noncurrent":
+            await query(h, "UPDATE app.conversation_turns SET revision=revision+1 RETURNING id")
+        else:
+            await receive_turn(h, chat_id="extra")
+            extra = (await turns(h))[-1]
+            await seal(h, extra["id"])
+            claim, value = await snapshot(h, extra["id"])
+            await h.kernel.finish_turn(claim, consume(value))
+            assert len(await query(h, "SELECT job_id FROM platform.turn_consumer_receipts")) == 2
+    assert not await query(
+        h, "SELECT id FROM platform.messaging_jobs WHERE status IN ('READY','RUNNING')"
+    )
+    with pytest.raises(AssertionError):
+        await stabilize_turns(h)
 
 
 async def canonical_fingerprint(connection):

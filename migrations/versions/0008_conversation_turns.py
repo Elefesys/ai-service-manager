@@ -353,6 +353,7 @@ PRIVATE_FUNCTIONS = (
     "platform.turn_material()",
     "platform.turn_preflight(platform.messaging_jobs,boolean,boolean)",
     "platform.turn_supersede(platform.messaging_jobs)",
+    "platform.messaging_reschedule(uuid,text,boolean,integer,boolean)",
     "platform.turn_snapshot(uuid,uuid)",
 )
 
@@ -724,7 +725,7 @@ def _maintenance() -> None:
           RETURN true;
         END IF; RETURN false;
       END $$""")
-    op.execute("""CREATE OR REPLACE FUNCTION platform.messaging_reschedule(p_job uuid,p_error text,p_retry boolean,p_delay integer) RETURNS jsonb
+    op.execute("""CREATE FUNCTION platform.messaging_reschedule(p_job uuid,p_error text,p_retry boolean,p_delay integer,p_nowait boolean) RETURNS jsonb
       LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
       DECLARE j platform.messaging_jobs%ROWTYPE; retry boolean; final_error text; delivery text; due timestamptz;
       BEGIN
@@ -735,7 +736,13 @@ def _maintenance() -> None:
         IF p_delay IS NOT NULL THEN due:=greatest(due,clock_timestamp()+make_interval(secs=>p_delay)); END IF;
         retry:=p_retry AND j.attempt_count<5 AND clock_timestamp()<j.first_started_at+interval '15 minutes'
           AND (p_delay IS NULL OR due<j.first_started_at+interval '15 minutes');
-        PERFORM platform.turn_preflight(j,false,NOT retry);
+        IF p_nowait THEN
+          BEGIN
+            PERFORM platform.turn_preflight(j,true,NOT retry);
+          EXCEPTION WHEN lock_not_available THEN RAISE EXCEPTION 'preflight busy' USING ERRCODE='P3001'; END;
+        ELSE
+          PERFORM platform.turn_preflight(j,false,NOT retry);
+        END IF;
         IF current_setting('asm.actor_kind',true)='worker_job' THEN PERFORM platform.messaging_guard(j.id,j.claim_token); END IF;
         IF platform.turn_supersede(j) THEN RETURN jsonb_build_object('code','SUPERSEDED','status','SUCCEEDED','job_id',j.id,'outbox_id',NULL); END IF;
         final_error:=CASE WHEN p_retry AND NOT retry THEN 'RETRY_EXHAUSTED' ELSE p_error END;
@@ -760,6 +767,12 @@ def _maintenance() -> None:
           completed_at=CASE WHEN retry THEN NULL ELSE clock_timestamp() END,version=version+1 WHERE id=j.id;
         RETURN jsonb_build_object('code',CASE WHEN retry THEN 'RETRY_SCHEDULED' ELSE final_error END,'status',coalesce(delivery,CASE WHEN retry THEN 'READY' ELSE 'DEAD' END),'job_id',j.id,'outbox_id',j.outbox_id);
       END $$""")
+    # Both legacy entrypoints delegate to the same retry implementation. Only
+    # maintenance carries NOWAIT through the final clock/terminal decision;
+    # admitted worker execution retains its ordinary bounded lock wait.
+    op.execute("""CREATE OR REPLACE FUNCTION platform.messaging_reschedule(p_job uuid,p_error text,p_retry boolean,p_delay integer) RETURNS jsonb
+      LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+      SELECT platform.messaging_reschedule(p_job,p_error,p_retry,p_delay,false) $$""")
     # Old batch operations must not remain as callable overloads.
     op.execute("DROP FUNCTION platform.messaging_claim(text)")
     op.execute("DROP FUNCTION platform.messaging_recover_expired(integer)")
@@ -782,7 +795,7 @@ def _maintenance() -> None:
           IF platform.turn_supersede(j) THEN
             RETURN jsonb_build_object('step','TERMINALIZED','scan_until',cutoff,'at',pos,'id',j.id);
           ELSIF exhausted THEN
-            PERFORM platform.messaging_reschedule(j.id,'RETRY_EXHAUSTED',false);
+            PERFORM platform.messaging_reschedule(j.id,'RETRY_EXHAUSTED',false,NULL,true);
             RETURN jsonb_build_object('step','TERMINALIZED','scan_until',cutoff,'at',pos,'id',j.id);
           END IF;
           IF j.kind='PROCESS_TURN' THEN
@@ -825,7 +838,7 @@ def _maintenance() -> None:
           ELSIF state='DISPATCHING' THEN
             UPDATE app.outbox_events SET status='UNKNOWN',error_code='UNKNOWN_EXTERNAL_RESULT',completed_at=clock_timestamp(),version=version+1 WHERE workspace_id=j.workspace_id AND id=j.outbox_id;
             UPDATE platform.messaging_jobs SET status='DEAD',error_code='UNKNOWN_EXTERNAL_RESULT',claim_token=NULL,lease_until=NULL,worker_id=NULL,completed_at=clock_timestamp(),version=version+1 WHERE id=j.id;
-          ELSE PERFORM platform.messaging_reschedule(j.id,'DEPENDENCY_TIMEOUT',true);
+          ELSE PERFORM platform.messaging_reschedule(j.id,'DEPENDENCY_TIMEOUT',true,NULL,true);
           END IF;
           RETURN jsonb_build_object('step','RECOVERED','scan_until',cutoff,'at',pos,'id',j.id);
         EXCEPTION WHEN SQLSTATE 'P3001' THEN
