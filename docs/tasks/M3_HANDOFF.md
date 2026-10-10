@@ -5,7 +5,230 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущая выдача C0 — CONTRACT-R2 и schema/source review
+## 0. Текущая выдача C0 — C3-M3.1-TURNS
+
+Дата выдачи и приёмки CONTRACT: 2026-10-10.
+Repository: `Elefesys/ai-service-manager`. Продолжать существующие
+Draft [PR26](https://github.com/Elefesys/ai-service-manager/pull/26) и ветку
+`c3/m3-1-turns` в отдельном checkout C3; integration target — main.
+Это одна implementation-задача, а не начало CONTROL/GUARDS или всего M3.
+
+### 0.1. Принятый контракт, основания и точный старт
+
+**C0 принимает CONTRACT-R2** на
+`4f9d32e9d67308da8062dc12aeb4839e06c850cb`,
+tree `25c4bf9f4039141f4ce8c03c1edfb18196deb790`,
+blob `5e87375852331523491a47926b9c5bd49946c157`.
+Единственный parent R2: `b99e119757d52ee8bd00a51093f63bada5f95823`.
+Accepted main/implementation base остаётся
+`754f1c883e5a94a7fc9e729af2605424f949ba33`; main ещё не содержит M3.
+
+Основания: [final C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6094572773),
+[C1 scoped PASS](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6094967481),
+[C2 CONTRACT/DB PASS](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6095018013).
+Оба review относятся exact R2; остаточных findings не заявлено.
+[CI38030244030 attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38030244030)
+—9/9 SUCCESS и9/9 clean-source gates. Прочитанный C0 foundation checkout:
+`5403d868ffbcefa9489d83bcc8d674da394b2984`, parents accepted main + R2,
+tree равен R2. C0 ранее сверил own-path/parent/tree/blob, unchanged §§6/9,
+единственное дополнение barrier §8 и exact31 inventory.
+
+**C2-M3-CONTRACT-01–04/P2 CLOSED в contract-review scope.**
+Их assertions полностью сохраняются как implementation gates; текущий0007
+не объявляется реализующим новые механизмы. M3 runtime/DDL ещё не VERIFIED.
+Принятый [pairing design C0/C6](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6094458702)
+входит в R2. Выбраны D2с/G10с/M15с/N32, cap25с, HUMAN/gen1.
+
+Этот содержательный C0 handoff добавляется одним commit поверх R2, меняя только
+TASK_REGISTER и M3_HANDOFF. Полный **continuation SHA и tree опубликованы в PR26
+в текущем C0-поручении**; C3 сначала fast-forward к этому exact SHA и сверяет
+его parent=R2, два разрешённых C0 paths и неизменный contract blob. Не начинать
+от случайного branch tip, не reset/rebase/force, не создавать второй PR.
+Номер собственного SHA не вписывается дополнительным status-only commit.
+Вступление M3_CONTRACT отражает момент передачи R2: перечисленные там pending
+review/code gates заменены этим verdict и явной выдачей TURNS; reviewed bytes
+контракта сохраняются для exact evidence.
+
+Прочитать AGENTS, текущий TASK_REGISTER, весь [M3_CONTRACT](M3_CONTRACT.md),
+оба final review, M2_CONTRACT §§2–5/9–10, действующие SQL0005–0007,
+messaging/files/Telegram/worker и egress paths по §10. Канон — Spec §§4.10,
+5.1–5.14,14.11,18.5–18.8,18.14,24.7,25.7; ADR022–026,121–128,180,197–198,
+217,267,272; MVP GJ-G/GJ-J, Roadmap M3, Implementation Plan M3.1/M3.2.
+Не воспроизводить закрытые M2 operator-поручения.
+
+### 0.2. Результат и единственный исполнитель
+
+**C3 реализует M3.1-TURNS**, включая Python, новую0008 и только перечисленную
+совместимость. C2 проверит DDL/RLS/locks/upgrade готового candidate; C1 — затронутые
+callers/versions/API; C6/C8 получают отдельные scoped задания C0 по готовому diff.
+Параллельного authoring C2/C6 в этих файлах сейчас не выдано.
+
+Ожидаемый результат: fresh CONTROLLED/Telegram text/photo группируются в durable
+Turn, deadlines/readiness/revision переживают restart, stale работа безопасна;
+внутренний детерминированный TEST consumer сохраняет один canonical result
+через реальный DB/worker path и не производит внешнего эффекта.
+Existing/new conversations HUMAN/gen1; takeover/resume/control API в этом срезе нет.
+
+Реализовать принятые §§2–7/10/11, в частности:
+
+1. Trusted nullable Inbox ingress pair без backfill, immutable origin/membership
+   и SHARE-before-mark barrier ОБОИХ producers с post-barrier READ COMMITTED/
+   VOLATILE origin selection. Legacy/conflicting namespace priority не меняет
+   M2 winner/error/fingerprint. Все Inbox status writers используют допустимый
+   NO KEY UPDATE, включая inherited reschedule/recovery.
+2. Три таблицы Turn/member/private consumer receipt с canonical composite refs,
+   FORCE RLS/RESTRICT/narrow privileges, partial single-COLLECTING UNIQUE.
+   Existing Conversation.version — единый context counter; control_generation,
+   Turn.revision, Message/File/connection versions не смешивать.
+3. PROCESS_TURN GROUP/MEDIA/TEST_CONSUME, durable available_at/deadlines,
+   revision fencing, COMPLETE/PARTIAL/WAIT_EXPIRED и поздний file outcome.
+   TEST snapshot использует private file refs/statuses, не bytes/signed URLs.
+4. Single-candidate claim/recovery transactions по §5.2: SKIP LOCKED + полный
+   NOWAIT preflight/savepoint rollback, bounded cursor/scan_until, continuation
+   после100 candidates, освобождение всех locks на BUSY, первичная ошибка как cause.
+   Public claim_job/recover_expired и прежние kind/result contracts сохраняются.
+   Полный graph §5.3 охватывает implicit/deferred FK, оба reschedule overloads,
+   retry/exhaustion, begin/finish rejection, file failure/success и recovery UNKNOWN.
+   Supporting UNIQUE не включает mutable identity fields, усиливающие row locks.
+5. Один material increment за каждый факт из §6 во ВСЕХ writers; replay/rollback0.
+   SUPERSEDED проверяется до retry/FAILED во всех Turn terminal paths.
+   Private immutable receipt привязан к typed canonical job и winning claim;
+   отдельный узкий read-only terminal replay после lost ACK не ослабляет
+   live claim/XID mutation admission. Saved replay читает один committed snapshot.
+6. Schema/source разделение из §10 реализуется вместе с0008: candidate не может
+   пройти за счёт одного frozen historical H. Минимальная runbook дельта объясняет
+   границу synthetic historical0007 и LOCAL schema phase, не выдаёт VM updater.
+
+### 0.3. Точная write allowlist и ограничения
+
+C0 разрешает **ровно следующие26 repository paths**, только для целей ниже.
+Чтение references разрешено. Новые пути, контрактные изменения или невместимость
+выбранного механизма возвращаются C0 с конкретным diff/причиной до расширения.
+
+| Разрешённые exact paths | Ограниченный scope |
+|---|---|
+| `backend/src/asm/conversations/__init__.py`; `backend/src/asm/conversations/turns.py` | Используемый Turn/TEST consumer domain; без будущих пустых модулей |
+| `backend/src/asm/messaging/database.py`; `backend/src/asm/messaging/worker.py`; `backend/src/asm/messaging/results.py`; `backend/src/asm/messaging/models.py`; `backend/src/asm/messaging/errors.py` | PROCESS_TURN, private scan/replay и typed worker integration; прежние public shapes/authority сохраняются |
+| `migrations/versions/0008_conversation_turns.py` | Единственная новая revision0008, predecessor0007; все новые SQL/constraints/grants и replacements прежних functions здесь |
+| `tests/test_m3_1_turns.py`; `tests/test_m3_1_turns_postgres.py`; `tests/test_m3_1_migrations.py` | Новые адресные behavior/concurrency/migration tests; последний также schema-phase seed/verification entrypoint |
+| `backend/src/asm/foundation.py`; `tests/test_foundation.py` | Только exact runtime0008/mismatch, сохранив tenancy.v1 revision0003 и прочие capability checks |
+| `backend/src/asm/telegram/provisioning.py`; `tests/test_m2_3_setup.py` | Exact binding head0008/wrong-head отказ до обоих initializer, без смены product/billing/binding policy |
+| `tests/test_m2_1_postgres.py` | Scoped child-first cleanup receipt/jobs/member/Turn refs, без CASCADE/disable constraints |
+| `tests/test_postgres.py`; `tests/test_m2_1_schema_postgres.py`; `tests/test_m2_2_migrations.py`; `tests/test_m2_3_schema_postgres.py` | Exact inventories/cycles/permissions и revision-appropriate historical scan fixtures; исходные assertions сохраняются |
+| `scripts/test_telegram_egress_migration.sh` | Frozen-H dispatch, обязательная schema phase в двух state shards, отдельные reports/source/clean proofs |
+| `scripts/test_telegram_egress.sh` | Explicit schema selector/source-image pairing, default candidate0008 и отдельный LOCAL upgrade |
+| `scripts/prepare_telegram_egress.py` | Historical-only0007 guard initial/saved paths; exact revision/name sets; прежние receipts/provenance/recovery сохранены |
+| `tests/test_telegram_egress_migration.py` | Candidate helper negative/regressions, bounded schema orchestration/report assertions |
+| `tests/test_telegram_egress_postgres.py` | Exact inventory/current fixture stabilization/child-first cleanup; H fixture frozen |
+| `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` | Только historical/schema boundary и ссылка на принятый M3 contract; старые receipts/pins/history не переписывать |
+
+Migrations0001–0007, reviewed M3_CONTRACT, canonical architecture/manifest,
+TASK_REGISTER/M3_HANDOFF (владение C0), .github/workflows, compose/egress overlays,
+Dockerfile/locks, TelegramClient/config/transport, frontend/OpenAPI и публичные
+owner routes/DTO вне write scope. Shared revision scripts не менять отдельно.
+Новые env/API/brokers, backfill истории, CONTROL/GUARDS/ESCALATION/CONSOLE, AI/M4,
+native/edit/delete reinterpretation, платные вызовы и production rollout не входят.
+
+### 0.4. Миграция и source/schema gates
+
+C0 подтверждает назначенный C2 резерв: filename0008_conversation_turns.py,
+revision0008/down_revision0007, одна линейная цепочка. При другом actual head
+сначала вернуть расхождение C0; applied migrations не редактировать.
+DDL выполняется migration identity; runtime не получает DDL/BYPASSRLS/owner.
+Upgrade на чистой и принятой0007 сохраняет M2 данные/versions/receipts/UNKNOWN/files;
+legacy ingress NULL, без исторических Turns/consumer jobs/IGNORED replay.
+
+Закреплённые pins из §10:
+P=`0b7e24ee425ebb429bf87dfe382cbd3fab883028`;
+O=`80e51c43e31541940f1ccf18b8281adf1a061748`;
+H=`754f1c883e5a94a7fc9e729af2605424f949ba33`.
+I — будущий actual implementation/tested source, не текущий docs continuation.
+В reports различать PR head, tested checkout/parents/tree и image source SHA/ID;
+совпадение tree не заменяет source/image byte proof.
+
+- Historical H harness/fixtures неизменны: P0007→H0007 и прежний rollback,
+  explicit operator P/O, все6 normal/Docker29 intent/image/state shards.
+  До cleanup сохранить отдельные historical reports/source archive/proofs.
+- Default candidate E01–E05 исполняет изменённый I на paired0008; schema phase
+  обязательна в обоих state shards, с отдельными project/state/LOCAL DB.
+  Тестовый controller/migrator I на0007 не означает runtime/consumer I на0007.
+- До cutover drain API/worker/**scheduler**, закрыть old fixture pools/transactions.
+  После commit/lost ACK сначала actual revision;0008 обслуживает только I/0008.
+  Старый runtime разрешён только после доказанного чистого downgrade до0007.
+- Expected revision/name set фиксирован фазой/source: exact31/exact34.
+  Historical JSON/hash/receipt формат неизменен; same-schema полные fingerprints,
+  cross-schema fixed-H M2 column projection и отдельная проверка metadata/defaults.
+  Populated refusal каждого blocker происходит до destructive DDL, без удаления
+  M3/marked rows ради чистого cycle; schema/data/functions/grants сохраняются.
+- Candidate helper initial и saved resume/preflight/rollback отвергают несовместимое
+  pairing до build/recreate/journal; STOP не меняет private bytes/data/container IDs.
+  I coverage обязателен, H PASS его не подменяет. Historical0005/0006/0007 fixtures
+  используют capabilities именно своей revision, без permissive readiness fallback.
+
+LOCAL/TEST drain не меняет production EXPAND→compatible code→migrate→CONTRACT.
+Достаточность существующих budgets доказывается actual исполнением; нельзя
+исправлять failure ростом timeout/retry, skip или ослаблением assertions/gates.
+
+### 0.5. Проверки, критерии и evidence
+
+Разрешены необходимые локальные unit/реальные PostgreSQL/private-S3/worker проверки
+в disposable LOCAL/TEST, Docker штатного test harness и штатный CI от обычного push.
+Не использовать рабочие DB/S3/VM или живой Telegram. Не менять сами workflows/
+Compose/budgets. Тесты нужны на поведение/инварианты, а не на совпадение реализации
+с собственной копией алгоритма. HTTP/wait/consumer compute вне business transaction.
+
+Обязательны все адресные assertions принятого Contract §11 и final C1/C2 reviews:
+
+| Gate этого среза | Минимальное реальное доказательство |
+|---|---|
+| A01 / grouping | D/G/M/N и точные границы; text/photo/caption/album; duplicate/conflict/late/out-of-order; sealed membership/deadlines неизменны |
+| A02 / readiness/restart | Restart до/после membership/seal/file/receipt commit; COMPLETE/PARTIAL/WAIT_EXPIRED/late terminal; два workers/один committed receipt |
+| Finding01 implementation | Оба producers: меньший uncommitted I1, committed I2, commit/rollback I1; fresh/legacy/conflicting namespace; origin immutable; non-READ-COMMITTED rejection и FK/worker deadlock negatives |
+| Finding02 implementation | Exhausted FETCH/SEND A с blocked conversation пропускается ради B, включая same connection; >100 prefix/continuation/unlock/restart; concurrent recovery; BUSY release ВСЕХ locks без effects; SUPERSEDED в каждом terminal path, первичная ошибка сохранена |
+| Finding03 implementation | Receipt+SUCCEEDED/lost ACK/expiry exact replay; forged/NULL/foreign/mismatched/losing token/direct SELECT-DML rejection; A expired→B committed→late A rejected; uncommitted miss и concurrent snapshot/terminal race |
+| A03, только context часть | Все writers §6 дают ровно1, replay/read/refresh/retry/rollback0; Telegram/CONTROLLED эквивалентны; stale context/generation → STALE, другая Turn revision → SUPERSEDED; без action authority |
+| A11 / isolation/migration | Clean head и0007 upgrade; legacy PENDING без Message + duplicate-first; fresh Turn; composite FK/RLS/client-scope/capability negatives; чистый cycle и populated refusal; pending manual/UNKNOWN/files/receipts/versions сохранены |
+| Finding04 implementation | Historical6 shards отдельно от candidate I coverage; LOCAL upgrade в2 state shards; API/worker/scheduler/fixture exact pairing и rejected mixed pairs; actual image/source proofs, exact names/projections/receipt guards |
+| M2 regression / штатный CI | Manual new/replay/conflict/revocation и пять API unchanged; private files/grants, send/UNKNOWN/no-resend; прежние wire/lifecycle/historical assertions, все9 jobs/clean-source gates |
+
+Не заявлять полный A03 admission, A04–A10/A12 или M3 VERIFIED: это последующие
+срезы. Закрытие contract findings не отменяет ни одного implementation assertion.
+DB гонки — детерминированные barriers/наблюдаемые условия, без sleep/retry как
+исправления. Test clock не становится runtime backdating API.
+При failure сохранить первичную команду/ошибку и причину; не делать серию reruns
+ради зелёного результата. Исправления в выданном scope доводить до законченного
+candidate и штатных gates; недостаток окружения/новый scope честно вернуть C0
+с exact evidence, не выдавая mock/неисполненный сценарий за PASS.
+
+### 0.6. Возврат и следующий gate
+
+Один законченный implementation candidate в том же Draft PR; логические code
+commits допустимы, status-only commits/PR на каждый подпункт не нужны.
+Перед публикацией сверить main/base/branch и сохранность C0 continuation;
+не перетирать конкурентные changes и не force-push.
+
+Вернуть в одном PR comment:
+- full implementation head/parent/tree, accepted base и C0 continuation;
+  полный changed-path список и diff к continuation, соответствие26-path allowlist;
+- migration revision/predecessor, exact schema/permissions/ABI deltas,
+  неизменность принятого contract blob и P/O/H pins;
+- таблицу assertions выше → exact command/scenario/result/SHA, отдельно unit,
+  actual PostgreSQL/private S3/worker, historical H и candidate I/schema evidence;
+- final CI run/attempt/jobs/clean-source и tested checkout/parents/tree;
+  actual image IDs/source manifests и отдельные reports для H/P и I;
+- ограничения/OPEN issues, причины изменений тестовых fixtures, достаточность
+  budgets, отсутствие VM/live/deploy/merge. Никаких выдуманных результатов.
+
+После готового candidate C0 выполняет intake и выдаёт scoped implementation review
+C2, затронутому C1, при необходимости C6, затем независимый C8 по concurrency/
+isolation/recovery/upgrade. Только после evidence C0 принимает TURNS и разрешает
+пользователю merge; actual main/CI проверяется отдельно. CONTROL выдается от
+принятого интегрированного TURNS SHA. Сейчас merge и VM/Telegram действий нет.
+
+<details>
+<summary>История CONTRACT-R2 и read-only C6; завершено, текущая выдача — §0 выше</summary>
+
+## История C0 — завершённая выдача CONTRACT-R2
 
 Дата выдачи: 2026-10-10. Repository: `Elefesys/ai-service-manager`.
 Accepted main/base: `754f1c883e5a94a7fc9e729af2605424f949ba33`;
@@ -15,7 +238,7 @@ Accepted main/base: `754f1c883e5a94a7fc9e729af2605424f949ba33`;
 Полный текущий continuation SHA после передачи C0 публикуется в PR metadata;
 он не подменяет accepted main. Не reset/rebase, не force-push, не новый PR.
 
-### 0.1. Решение C0 по первому candidate
+### R2.1. Решение C0 по первому candidate
 
 [C1 review — PASS](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6093584212) принят в scope versions/commands/API.
 [C2 review — CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6093660636) принят: findings01–04/P2 остаются OPEN до scoped delta review.
@@ -31,7 +254,7 @@ M=15с после logical seal при абсолютном cap25с, N=32. Это
 Три таблицы остаются минимальной основой. C2 подтвердил revision0008, predecessor0007;
 применённые0001–0007 immutable. Frozen tenancy.v1 revision0003 не меняется.
 
-### 0.2. C3-M3.1-CONTRACT-R2 — один документ, четыре finding
+### R2.2. C3-M3.1-CONTRACT-R2 — один документ, четыре finding
 
 Цель: подготовить один согласованный candidate с конкретными исполнимыми механизмами.
 C3 продолжает свой отдельный checkout/ветку от опубликованного C0 continuation SHA.
@@ -92,7 +315,7 @@ paths с причиной, фактические static checks и состоя�
 PG/live результатов. Все четыре finding остаются OPEN до review. Новых tests/suites
 ради редакции не создавать; штатные gates не менять и не перезапускать без причины.
 
-### 0.3. C6-M3-SCHEMA-SOURCE-PAIRING — ограниченное read-only согласование
+### R2.3. C6-M3-SCHEMA-SOURCE-PAIRING — ограниченное read-only согласование
 
 Это dependency CONTRACT/finding04, не deployment и не переоткрытие M2.
 Exact code для анализа: `5706350eaf01d72b4398f14f20c77649a4f0d6e2`
@@ -129,6 +352,8 @@ source SHA; будущий implementation SHA не выдумывать, его 
 schema/source delta, C1 — только затронутую versions/API/commands delta. Затем C0
 принимает контракт и отдельно выдаёт TURNS на исходном accepted main с текущим
 reviewed continuation. Независимый C8 реализации остаётся последующим gate.
+
+</details>
 
 ## 1. Исходная точка и результат для владельца
 
@@ -327,7 +552,7 @@ Pending manual sends/UNKNOWN/receipts/private media сохраняют своё 
 
 ## 5. Матрица результата M3
 
-Матрица предлагается C0 до реализации. Для каждой применимой строки указывать
+Матрица принята C0; scope текущего среза указан в §0. Для каждой применимой строки указывать
 конкретные assertions/scenario и SHA/run; количество тестов не является целью.
 Если нужен дополнительный критерий, сначала объяснить риск/канонический источник.
 
