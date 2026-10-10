@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import os
+import sys
 from uuid import uuid4
 
 import pytest
@@ -12,7 +14,7 @@ from asm.messaging.errors import Code, MessagingError
 from asm.messaging.worker import Worker
 from asm.telegram.database import TelegramReceipt
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError, SQLAlchemyError
+from sqlalchemy.exc import DBAPIError
 from test_m2_1_models import event
 from test_m2_1_postgres import CA, CA2, command, ingest, query
 from test_m2_1_postgres import messaging as messaging
@@ -24,6 +26,69 @@ from test_tenancy_postgres import db as db
 from test_tenancy_postgres import seeded as seeded
 
 pytestmark = pytest.mark.integration
+
+
+TURN_CHILD = r"""
+import asyncio,json,os,sys
+from pathlib import Path
+from uuid import UUID
+from asm.foundation import RuntimeDatabase,Settings
+from asm.files.database import FileDatabase
+from asm.messaging.adapter import ControlledAdapter
+from asm.messaging.database import MessagingDatabase
+from asm.messaging.results import parse_claim
+from asm.messaging.worker import Worker
+async def main():
+    async def crash(stage):
+        if stage == os.environ['M3_TEST_STAGE']: os._exit(42)
+    settings=Settings()
+    assert settings.environment=='TEST'
+    db=RuntimeDatabase(settings)
+    kernel=MessagingDatabase(db.engine,barrier=crash)
+    claim=parse_claim(json.loads(os.environ['M3_TEST_CLAIM']))
+    try:
+        await db.check()
+        if os.environ.get('M3_TEST_INTENT'):
+            await FileDatabase(kernel).finish_fetch(claim.job_id,claim.claim_token,UUID(os.environ['M3_TEST_INTENT']))
+        elif os.environ.get('M3_TEST_REPLAY')=='1':
+            await kernel.replay_turn(claim.job_id,claim.claim_token)
+        else:
+            assert claim.kind in ('PROCESS_INBOX','PROCESS_TURN')
+            await Worker(kernel,ControlledAdapter(environment='TEST',ledger=Path(os.environ['M3_TEST_LEDGER']))).execute(claim)
+        print('M3_CHILD_PASS',flush=True)
+    finally: await db.close()
+try: asyncio.run(main())
+except Exception as error:
+    print('M3_CHILD_FAILURE_'+type(error).__name__,file=sys.stderr,flush=True)
+    sys.exit(1)
+"""
+
+
+async def child_process(h, claim, point, *, intent=None, replay=False):
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-c",
+        TURN_CHILD,
+        env={
+            **os.environ,
+            "M3_TEST_CLAIM": claim.model_dump_json(),
+            "M3_TEST_STAGE": point,
+            "M3_TEST_INTENT": str(intent) if intent else "",
+            "M3_TEST_REPLAY": "1" if replay else "0",
+            "M3_TEST_LEDGER": str(h.ledger),
+        },
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), 15)
+    finally:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
+    assert process.returncode == (0 if point == "none" else 42), (stdout, stderr)
+    assert stdout.strip() == (b"M3_CHILD_PASS" if point == "none" else b"") and not stderr
+    return process.pid
 
 
 async def rows(h, table):
@@ -112,6 +177,7 @@ async def snapshot(h, turn):
 
 async def test_text_dedupe_conflict_grouping_snapshot_and_effect_free_receipt(messaging):
     h = messaging
+    audit_before = await rows(h, "app.audit_events")
     first, message = await receive(h, event_id="first", message_id="one", text=" exact é\n ")
     initial = (await turns(h))[0]
     second, _ = await receive(h, event_id="second", message_id="two")
@@ -150,7 +216,8 @@ async def test_text_dedupe_conflict_grouping_snapshot_and_effect_free_receipt(me
         "control_generation": 1,
     }
     assert len(await rows(h, "platform.turn_consumer_receipts")) == 1
-    assert not await rows(h, "app.outbox_events") and not await rows(h, "app.audit_events")
+    assert not await rows(h, "app.outbox_events")
+    assert await rows(h, "app.audit_events") == audit_before
     assert not h.ledger.exists()
     origins = await rows(h, "app.conversation_turn_messages")
     assert {m["origin_inbox_id"] for m in origins} == {first.inbox_id, second.inbox_id}
@@ -324,39 +391,38 @@ async def test_context_or_generation_change_is_stale_without_action_authority(me
 )
 async def test_restart_atomic_membership_and_consumer_commit_ack(messaging, point):
     h = messaging
-    fired = False
-
-    async def crash(name):
-        nonlocal fired
-        if name == point and not fired:
-            fired = True
-            raise SQLAlchemyError("simulated process boundary")
-
-    h.kernel = MessagingDatabase(h.runtime.engine, barrier=crash)
     rec = await ingest(h)
     first = await claim_exact(h, rec.job_id)
     if point.startswith("process"):
-        with pytest.raises(SQLAlchemyError):
-            await h.kernel.process_inbox(first)
+        dead = await child_process(h, first, point)
         assert len(await turns(h)) == (point == "process_after_commit")
         h.kernel = MessagingDatabase(h.runtime.engine)
         if point == "process_before_commit":
-            await h.kernel.process_inbox(first)
+            assert await child_process(h, first, "none") != dead
         assert len(await turns(h)) == 1
+        turn = (await turns(h))[0]
+        if turn["state"] == "COLLECTING":
+            await wait_due(h, turn["id"])
+            group = await turn_claim(h, turn["id"], "GROUP")
+            assert await child_process(h, group, "none") != dead
+        consumer = await turn_claim(h, turn["id"], "TEST_CONSUME")
+        assert await child_process(h, consumer, "none") != dead
+        assert len(await rows(h, "platform.turn_consumer_receipts")) == 1
     else:
         await h.kernel.process_inbox(first)
         turn = (await turns(h))[0]
         await seal(h, turn["id"])
         claim, value = await snapshot(h, turn["id"])
-        with pytest.raises(SQLAlchemyError):
-            await h.kernel.finish_turn(claim, consume(value))
+        dead = await child_process(h, claim, point)
         h.kernel = MessagingDatabase(h.runtime.engine)
         if point == "turn_finalize_before_commit":
             with pytest.raises(MessagingError) as miss:
                 await h.kernel.replay_turn(claim.job_id, claim.claim_token)
             assert miss.value.code == Code.STALE_CLAIM
-            result = await h.kernel.finish_turn(claim, consume(value))
+            assert await child_process(h, claim, "none") != dead
+            result = await h.kernel.replay_turn(claim.job_id, claim.claim_token)
         else:
+            assert await child_process(h, claim, "none", replay=True) != dead
             result = await h.kernel.replay_turn(claim.job_id, claim.claim_token)
         assert (
             result.code == "OBSERVED" and len(await rows(h, "platform.turn_consumer_receipts")) == 1
@@ -394,6 +460,7 @@ async def test_receipt_live_fencing_reclaim_wrong_tokens_and_direct_access(messa
     async with h.runtime.engine.begin() as c:
         for sql in (
             "SELECT * FROM platform.turn_consumer_receipts",
+            "INSERT INTO platform.turn_consumer_receipts DEFAULT VALUES",
             "UPDATE platform.turn_consumer_receipts SET result='{}'",
             "DELETE FROM platform.turn_consumer_receipts",
         ):
@@ -410,6 +477,27 @@ async def test_receipt_live_fencing_reclaim_wrong_tokens_and_direct_access(messa
                     )
             assert denied.value.orig.sqlstate == "P2001"
     assert len(await rows(h, "platform.turn_consumer_receipts")) == 1
+    # A real foreign workspace's winning capability cannot be combined with
+    # this job (or vice versa); a real non-consumer job has no terminal replay.
+    foreign_inbox, _ = await receive(h, bot_identity="bot-b", external_connection_id="conn-b")
+    foreign = next(t for t in await turns(h) if t["workspace_id"] == B)
+    await seal(h, foreign["id"])
+    foreign_claim, foreign_input = await snapshot(h, foreign["id"])
+    foreign_result = await h.kernel.finish_turn(foreign_claim, consume(foreign_input))
+    for job, token in (
+        (new.job_id, foreign_claim.claim_token),
+        (foreign_claim.job_id, new.claim_token),
+        (foreign_inbox.job_id, foreign_claim.claim_token),
+    ):
+        with pytest.raises(MessagingError) as denied:
+            await h.kernel.replay_turn(job, token)
+        assert denied.value.code == Code.STALE_CLAIM
+    assert await h.kernel.replay_turn(new.job_id, new.claim_token) == result
+    assert (
+        await h.kernel.replay_turn(foreign_claim.job_id, foreign_claim.claim_token)
+        == foreign_result
+    )
+    assert len(await rows(h, "platform.turn_consumer_receipts")) == 2
 
 
 @pytest.mark.parametrize("path", ["claim", "retry", "recover", "execute", "finalize"])
@@ -432,7 +520,13 @@ async def test_superseded_precedes_exhaustion_and_does_not_fail_current_turn(mes
         )
         assert await h.kernel.claim_job("superseded") is None
     elif path == "retry":
-        result = await h.kernel.retry(claim, Code.RETRY_EXHAUSTED, False)
+        await query(
+            h,
+            "UPDATE platform.messaging_jobs SET attempt_count=5 WHERE id=:id RETURNING id",
+            id=claim.job_id,
+        )
+        # Exhaustion is DB-derived; RETRY_EXHAUSTED is never a caller error input.
+        result = await h.kernel.retry(claim, Code.DEPENDENCY_UNAVAILABLE, True)
         assert result["code"] == "SUPERSEDED"
     elif path == "recover":
         await query(
@@ -460,11 +554,15 @@ async def test_superseded_precedes_exhaustion_and_does_not_fail_current_turn(mes
 
 @pytest.mark.parametrize("provider", ["CONTROLLED", "TELEGRAM"])
 @pytest.mark.parametrize("commit_first", [True, False])
-async def test_ingress_share_barrier_earliest_committed_origin(provider, commit_first, telegram):
+@pytest.mark.parametrize("conflicting", [False, True])
+async def test_ingress_share_barrier_earliest_committed_origin(
+    provider, commit_first, conflicting, telegram
+):
     h = telegram
     # Telegram fixture retains the independent CONTROLLED connection as well.
-    first_event = event(event_id="barrier-1", message_id="same")
-    second_event = event(event_id="barrier-2", message_id="same")
+    first_event = event(event_id="barrier-1", message_id="same", text="origin text")
+    winning_text = "different projection" if conflicting else "origin text"
+    second_event = event(event_id="barrier-2", message_id="same", text=winning_text)
     async with h.runtime.engine.connect() as first:
         tx = await first.begin()
         if provider == "CONTROLLED":
@@ -477,6 +575,7 @@ async def test_ingress_share_barrier_earliest_committed_origin(provider, commit_
             second = await ingest(h, second_event)
         else:
             first_projection = projection(update="9101", message="5101")
+            first_projection["event"]["text"] = "origin text"
             saved = (
                 await first.execute(
                     text(
@@ -489,9 +588,11 @@ async def test_ingress_share_barrier_earliest_committed_origin(provider, commit_
                     },
                 )
             ).scalar_one()
-            second = TelegramReceipt.model_validate(
-                await ingress(h, projection(update="9102", message="5101"))
+            second_projection = projection(update="9102", message="5101")
+            second_projection["event"].update(
+                text=winning_text, occurred_at=first_projection["event"]["occurred_at"]
             )
+            second = TelegramReceipt.model_validate(await ingress(h, second_projection))
         claim = await claim_exact(h, second.job_id)
         task = asyncio.create_task(h.kernel.process_inbox(claim))
         blocker = (await first.execute(text("SELECT pg_backend_pid()"))).scalar_one()
@@ -529,6 +630,19 @@ async def test_ingress_share_barrier_earliest_committed_origin(provider, commit_
         saved["inbox_id"] if commit_first else str(second.inbox_id)
     )
     assert (await context(h, member["conversation_id"]))["version"] == 2
+    assert (await query(h, "SELECT text FROM app.messages WHERE id=:id", id=processed.message_id))[
+        0
+    ]["text"] == winning_text
+    sealed_membership = await rows(h, "app.conversation_turn_messages")
+    deadlines = await turns(h)
+    if commit_first:
+        from uuid import UUID
+
+        late = await h.kernel.process_inbox(await claim_exact(h, UUID(saved["job_id"])))
+        assert late.code == ("MESSAGE_ID_CONFLICT" if conflicting else "DUPLICATE")
+        assert await rows(h, "app.conversation_turn_messages") == sealed_membership
+        assert await turns(h) == deadlines
+        assert (await context(h, member["conversation_id"]))["version"] == 2
 
 
 @pytest.mark.parametrize("isolation", ["REPEATABLE READ", "SERIALIZABLE"])
@@ -643,7 +757,16 @@ async def test_exhausted_blocked_conversation_releases_all_locks_and_allows_b(
         )
     )[0] == {"status": "DEAD", "error_code": "RETRY_EXHAUSTED"}
     assert (await context(h, a["conversation_id"]))["version"] == version["version"] + 1
-    assert await h.kernel.claim_job("finish-a") is None
+    followup = await h.kernel.claim_job("finish-a")
+    if kind == "FETCH_IMAGE":
+        # Its first terminal file outcome seals the elapsed A window and
+        # enqueues the required PARTIAL consumer at the new Turn revision.
+        assert followup is not None and followup.kind == "PROCESS_TURN"
+        assert followup.turn_id == a["id"] and followup.step == "TEST_CONSUME"
+        await Worker(h.kernel, h.adapter).execute(followup)
+        assert await h.kernel.claim_job("finish-a") is None
+    else:
+        assert followup is None
     assert (await context(h, a["conversation_id"]))["version"] == version["version"] + 1
 
 
@@ -732,7 +855,7 @@ async def test_concurrent_recovery_skips_busy_and_unknown_is_single_context_fact
     jb = (
         await query(
             h,
-            "SELECT j.id FROM platform.messaging_jobs j JOIN app.outbox_events x ON (x.workspace_id,x.id)=(j.workspace_id,x.outbox_id) WHERE x.message_id=:id",
+            "SELECT j.id FROM platform.messaging_jobs j JOIN app.outbox_events x ON (x.workspace_id,x.id)=(j.workspace_id,j.outbox_id) WHERE x.message_id=:id",
             id=sb.message_id,
         )
     )[0]["id"]
@@ -856,7 +979,12 @@ async def test_turn_exhaustion_is_terminal_and_file_failure_adds_only_context(me
     turn = (await turns(h))[0]
     await wait_due(h, turn["id"])
     group = await turn_claim(h, turn["id"], "GROUP")
-    await h.kernel.retry(group, Code.RETRY_EXHAUSTED, False)
+    await query(
+        h,
+        "UPDATE platform.messaging_jobs SET attempt_count=5 WHERE id=:id RETURNING id",
+        id=group.job_id,
+    )
+    await h.kernel.retry(group, Code.DEPENDENCY_UNAVAILABLE, True)
     failed = (await turns(h))[0]
     assert failed["state"] == "FAILED" and failed["error_code"] == "RETRY_EXHAUSTED"
     job = (await query(h, "SELECT id FROM platform.messaging_jobs WHERE kind='FETCH_IMAGE'"))[0][
@@ -895,7 +1023,8 @@ async def test_continuous_ingress_reaches_real_hard_cap_without_extending_it(mes
     assert next(t for t in await turns(h) if t["id"] == initial["id"]) == closed
 
 
-async def test_file_commit_rollback_has_no_partial_context_revision_or_new_jobs(messaging):
+@pytest.mark.parametrize("point", ["fetch_finalize_before_commit", "fetch_finalize_after_commit"])
+async def test_file_commit_restart_has_atomic_context_revision_and_new_jobs(messaging, point):
     h = messaging
     await receive(h, image_file_id="rollback-photo")
     turn = (await turns(h))[0]
@@ -908,20 +1037,49 @@ async def test_file_commit_rollback_has_no_partial_context_revision_or_new_jobs(
     before_turn, before_context = (await turns(h))[0], await context(h, turn["conversation_id"])
     jobs_before = await rows(h, "platform.messaging_jobs")
 
-    async def crash(name):
-        if name == "fetch_finalize_before_commit":
-            raise SQLAlchemyError("file commit boundary")
-
-    failing = FileDatabase(MessagingDatabase(h.runtime.engine, barrier=crash))
-    with pytest.raises(SQLAlchemyError, match="file commit boundary"):
-        await failing.finish_fetch(fetch.job_id, fetch.claim_token, permit.intent_id)
-    assert (await turns(h))[0] == before_turn
-    assert await context(h, turn["conversation_id"]) == before_context
-    assert await rows(h, "platform.messaging_jobs") == jobs_before
-    assert (await rows(h, "app.file_objects"))[0]["status"] == "PENDING"
-    await files.finish_fetch(fetch.job_id, fetch.claim_token, permit.intent_id)
+    dead = await child_process(h, fetch, point, intent=permit.intent_id)
+    if point == "fetch_finalize_before_commit":
+        assert (await turns(h))[0] == before_turn
+        assert await context(h, turn["conversation_id"]) == before_context
+        assert await rows(h, "platform.messaging_jobs") == jobs_before
+        assert (await rows(h, "app.file_objects"))[0]["status"] == "PENDING"
+    else:
+        assert (await rows(h, "app.file_objects"))[0]["status"] == "READY"
+    assert await child_process(h, fetch, "none", intent=permit.intent_id) != dead
+    restarted = FileDatabase(MessagingDatabase(h.runtime.engine))
+    result = await restarted.finish_fetch(fetch.job_id, fetch.claim_token, permit.intent_id)
+    assert result.code == "ALREADY_FINALIZED"
     assert (await context(h, turn["conversation_id"]))["version"] == before_context["version"] + 1
     assert (await turns(h))[0]["revision"] == before_turn["revision"] + 1
+
+
+@pytest.mark.parametrize("point", ["turn_before_commit", "turn_after_commit"])
+async def test_seal_restart_keeps_persisted_deadlines_and_one_consumer(messaging, point):
+    h = messaging
+    await receive(h)
+    initial = (await turns(h))[0]
+    await wait_due(h, initial["id"])
+    claim = await turn_claim(h, initial["id"], "GROUP")
+
+    dead = await child_process(h, claim, point)
+    h.kernel = MessagingDatabase(h.runtime.engine)
+    if point == "turn_before_commit":
+        assert (await turns(h))[0] == initial
+        assert await child_process(h, claim, "none") != dead
+    else:
+        with pytest.raises(MessagingError) as stale:
+            await h.kernel.process_turn(claim)
+        assert stale.value.code == Code.STALE_CLAIM
+    sealed = (await turns(h))[0]
+    assert sealed["state"] == "READY"
+    assert sealed["hard_at"] == initial["hard_at"] and sealed["quiet_at"] == initial["quiet_at"]
+    assert sealed["seal_time"] == min(initial["quiet_at"], initial["hard_at"])
+    consumer = await turn_claim(h, initial["id"], "TEST_CONSUME")
+    assert await child_process(h, consumer, "none") != dead
+    assert len(await rows(h, "platform.turn_consumer_receipts")) == 1
+    assert (await turns(h))[0] == sealed
+    assert (await context(h, initial["conversation_id"]))["version"] == 2
+    assert not h.ledger.exists()
 
 
 async def test_failed_media_is_partial_without_wait_expired_or_reopen(messaging):

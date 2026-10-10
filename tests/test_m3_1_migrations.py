@@ -14,6 +14,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from asm.foundation import RuntimeDatabase, Settings
 from asm.messaging.database import MessagingDatabase
+from asm.telegram.database import TelegramReceipt
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_m2_1_models import event
@@ -21,6 +22,8 @@ from test_m2_1_postgres import command, ingest, query
 from test_m2_1_postgres import messaging as messaging
 from test_m2_1_schema_postgres import HistoricalScanDatabase, _migrate
 from test_m2_2_db_postgres import ready
+from test_m2_3_db_postgres import ingress, projection
+from test_m2_3_db_postgres import telegram as telegram
 from test_m3_1_turns_postgres import claim_exact, receive, seal, snapshot, turns
 from test_tenancy_postgres import db as db
 from test_tenancy_postgres import seeded as seeded
@@ -513,20 +516,36 @@ async def test_0007_0008_clean_cycle_preserves_all_rows_functions_grants_and_ver
 
 
 @pytest.mark.parametrize("conflicting", [False, True])
+@pytest.mark.parametrize("provider", ["CONTROLLED", "TELEGRAM"])
 async def test_legacy_pending_and_duplicate_first_preserve_fence_and_payload_winner(
-    messaging, conflicting
+    telegram, conflicting, provider
 ):
-    h = messaging
+    h = telegram
+    first_projection = projection(update="9011", message="5011")
+    first_projection["event"]["text"] = "old"
     try:
         await _migrate("downgrade", "0007")
-        legacy = await ingest(h, event(event_id="legacy", message_id="same", text="old"))
+        if provider == "CONTROLLED":
+            legacy = await ingest(h, event(event_id="legacy", message_id="same", text="old"))
+        else:
+            legacy = TelegramReceipt.model_validate(await ingress(h, first_projection))
     finally:
         await _migrate("upgrade", "head")
     assert not await turns(h)
-    duplicate = await ingest(
-        h,
-        event(event_id="fresh-duplicate", message_id="same", text="new" if conflicting else "old"),
-    )
+    if provider == "CONTROLLED":
+        duplicate = await ingest(
+            h,
+            event(
+                event_id="fresh-duplicate", message_id="same", text="new" if conflicting else "old"
+            ),
+        )
+    else:
+        fresh_projection = projection(update="9012", message="5011")
+        fresh_projection["event"].update(
+            text="new" if conflicting else "old",
+            occurred_at=first_projection["event"]["occurred_at"],
+        )
+        duplicate = TelegramReceipt.model_validate(await ingress(h, fresh_projection))
     # Post-cutover duplicate wins the M2 projection while the legacy namespace
     # still wins the M3 origin fence, including a conflicting old projection.
     message = await h.kernel.process_inbox(await claim_exact(h, duplicate.job_id))
@@ -538,7 +557,13 @@ async def test_legacy_pending_and_duplicate_first_preserve_fence_and_payload_win
         {"text": "new" if conflicting else "old", "version": 1}
     ]
     assert (await query(h, "SELECT version FROM app.conversations")) == [{"version": 2}]
-    await receive(h, event_id="fresh", message_id="fresh")
+    if provider == "CONTROLLED":
+        await receive(h, event_id="fresh", message_id="fresh")
+    else:
+        fresh = TelegramReceipt.model_validate(
+            await ingress(h, projection(update="9013", message="5013"))
+        )
+        await h.kernel.process_inbox(await claim_exact(h, fresh.job_id))
     assert len(await turns(h)) == 1
 
 
