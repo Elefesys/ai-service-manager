@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — M2 закрыт; план M3 на review C0 / 2026-10-09
+## Текущий статус — M3.1-CONTRACT на доработке C3 / 2026-10-10
 
 **M2 — INTEGRATED / VERIFIED в принятом LOCAL/TEST scope.**
 Это перенос уже опубликованного решения C0, не новая приёмка от автора плана.
@@ -22,17 +22,43 @@ C0-CI-AUDIT-01 в указанном receipt scope. Старые REVIEW/OPEN/BLO
 [M2_HANDOFF](tasks/M2_HANDOFF.md) закрыт. Текущий следующий handoff:
 [M3_HANDOFF](tasks/M3_HANDOFF.md).
 
-**M3 — TODO.** Пользователь запросил переход к M3; подготовлен план последовательных
-задач для review C0. Runtime/DDL/API/UI M3 этим docs PR не реализованы и не приняты.
-C0 проверяет план, назначает первый ограниченный scope и actual accepted base.
-Новый технический контракт ведётся в одном M3_CONTRACT.md по мере выдачи частей.
+**M3 — IN_PROGRESS; M3.1-CONTRACT — REVIEW / CHANGES_REQUESTED.**
+План принят в [PR25](https://github.com/Elefesys/ai-service-manager/pull/25).
+Accepted implementation base: `754f1c883e5a94a7fc9e729af2605424f949ba33`;
+[push/main CI37965195898](https://github.com/Elefesys/ai-service-manager/actions/runs/37965195898)
+— 9/9 SUCCESS. Main, M2 runtime и каноническая архитектура остаются принятыми.
+
+C3 представил один [M3_CONTRACT](tasks/M3_CONTRACT.md) в [Draft PR26](https://github.com/Elefesys/ai-service-manager/pull/26).
+Reviewed candidate: `5706350eaf01d72b4398f14f20c77649a4f0d6e2`.
+[C1 — PASS](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6093584212) по versions/commands/API;
+[C2 — CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6093660636), четыре P2-пробела контракта.
+C0 принимает оба заключения в их scope; полный контракт и TURNS ещё не разрешены.
+Это статические findings будущей реализации, не переоткрытие принятого M2.
+
+Текущая выдача — [M3_HANDOFF §0](tasks/M3_HANDOFF.md): C3 CONTRACT-R2 только в
+M3_CONTRACT.md и отдельное read-only C6 согласование schema/source pairing для
+finding04. Изменения контракта сводятся в один кандидат; затем scoped C2/C1 delta
+review и отдельная приёмка C0. Резервирование новой revision0008 после0007
+подтверждено C2, но DDL не выдан. Реестр/handoff ведёт C0 в том же PR.
+
+| Finding | Важность / статус | Необходимая правка контракта |
+|---|---|---|
+| C2-M3-CONTRACT-01 | P2 / OPEN | Стабилизация origin до ingress mark для обоих producers; concurrent fresh duplicates |
+| C2-M3-CONTRACT-02 | P2 / OPEN | Полный claim/exhaustion/retry/recovery lock protocol и продвижение независимой conversation |
+| C2-M3-CONTRACT-03 | P2 / OPEN | Private binding TEST receipt к canonical job/winning claim и безопасный terminal replay |
+| C2-M3-CONTRACT-04 | P2 / OPEN | Exact source/schema pairing historical0007 и отдельного нового0008 LOCAL/TEST пути |
+
+CI кандидата38019736763 attempt2 — SUCCESS после одного повтора упавшего job.
+Первичный docs-only CI failure сохранён в PR, root cause не установлен; finding04
+его не объясняет. Зелёный CI документа не является evidence реализации M3.
 
 | Задача | Статус | Evidence / следующий шаг |
 |---|---|---|
 | M0/M1 | VERIFIED в прежнем scope | Сохранённая приёмка; без повторного старта |
 | M2 / ENV04 / live A09–A11 | INTEGRATED / VERIFIED LOCAL/TEST | PR24 + отдельный main CI + финальный C0 receipt выше |
-| M3.1-CONTRACT | TODO | C0 с C3/C2: минимальный контракт текущего среза и границы control/guards |
-| M3.1-TURNS | TODO | После контракта: grouping, State, durable deadlines/restart и версии |
+| M3.1-CONTRACT | REVIEW | C1 PASS; C2/C0 CHANGES_REQUESTED; C3 готовит один CONTRACT-R2 по findings01–04 |
+| C6-M3-SCHEMA-SOURCE-PAIRING (часть CONTRACT) | TODO, поручение выдано | Read-only предложение C6 для finding04; выбор точного compatibility scope C0 до кода |
+| M3.1-TURNS | TODO | Только после принятого CONTRACT-R2, согласованного compatibility scope и отдельной выдачи C0 |
 | M3.1-CONTROL | TODO | После TURNS: takeover/resume, generation, owner/API/native event semantics |
 | M3.1-GUARDS | TODO | После CONTROL: admission/stale worker/in-flight через рабочие DB/worker paths |
 | M3.2-ESCALATION | TODO | Отдельный owner wait lifecycle на существующих durable jobs |
@@ -45,7 +71,7 @@ C0 перед новым smoke; она не блокирует LOCAL/TEST раз
 Git merge не обновляет VM. Исторические immutable receipts/DB fingerprints после
 законных live сообщений не переисполняются как проверка неизменности текущей БД.
 
-Статус нового docs PR и его CI фиксируется в PR metadata; отдельный commit только
+Текущий head PR и его CI фиксируются в PR metadata; отдельный commit только
 ради собственного SHA/статуса не нужен. История ниже сохраняется целиком для
 provenance, но не является очередью текущих операторских действий.
 

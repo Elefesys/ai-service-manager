@@ -2,8 +2,133 @@
 
 Дата подготовки: 2026-10-09. Ответственный за выдачу и приёмку: C0.
 Статусы задач — только [TASK_REGISTER](../TASK_REGISTER.md).
-Это предлагаемый план исполнения на review C0; реализация M3 ещё не выдана/принята.
+План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
+
+## 0. Текущая выдача C0 — CONTRACT-R2 и schema/source review
+
+Дата выдачи: 2026-10-10. Repository: `Elefesys/ai-service-manager`.
+Accepted main/base: `754f1c883e5a94a7fc9e729af2605424f949ba33`;
+[его push/main CI37965195898](https://github.com/Elefesys/ai-service-manager/actions/runs/37965195898) — 9/9 SUCCESS.
+Один действующий Draft PR: [#26](https://github.com/Elefesys/ai-service-manager/pull/26),
+ветка `c3/m3-1-turns`. Reviewed candidate: `5706350eaf01d72b4398f14f20c77649a4f0d6e2`.
+Полный текущий continuation SHA после передачи C0 публикуется в PR metadata;
+он не подменяет accepted main. Не reset/rebase, не force-push, не новый PR.
+
+### 0.1. Решение C0 по первому candidate
+
+[C1 review — PASS](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6093584212) принят в scope versions/commands/API.
+[C2 review — CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6093660636) принят: findings01–04/P2 остаются OPEN до scoped delta review.
+C0 сверил соответствующие SQL/worker/fixture/source-switch paths; это обоснованные
+пробелы проектируемого контракта, а не подтверждённые execution defects M3 или M2.
+Никакой M3 runtime/DDL этим решением не разрешается; PR26 остаётся Draft.
+
+Сохраняются HUMAN-by-default, takeover только при новом принятом manual intent,
+раздельные context/control/Turn/connection versions и честный in-flight/UNKNOWN.
+C0 выбирает предложенную policy v1 для первого LOCAL/TEST среза: D=2с, G=10с,
+M=15с после logical seal при абсолютном cap25с, N=32. Это реализационные параметры;
+они не отменяют требование исправить concurrency/recovery и принять весь контракт.
+Три таблицы остаются минимальной основой. C2 подтвердил revision0008, predecessor0007;
+применённые0001–0007 immutable. Frozen tenancy.v1 revision0003 не меняется.
+
+### 0.2. C3-M3.1-CONTRACT-R2 — один документ, четыре finding
+
+Цель: подготовить один согласованный candidate с конкретными исполнимыми механизмами.
+C3 продолжает свой отдельный checkout/ветку от опубликованного C0 continuation SHA.
+**Единственный разрешённый C3 write path: `docs/tasks/M3_CONTRACT.md`.**
+Реестр/handoff изменены C0 в этой содержательной передаче и остаются за C0.
+Runtime/DDL/tests, canonical architecture, workflows и VM не входят.
+Прочитать AGENTS, актуальный верхний TASK_REGISTER, этот §0, весь контракт,
+оба review и cited current SQL/Python paths; старые M2 поручения не повторять.
+
+1. **Finding01 — origin barrier уже в TURNS.** Описать barrier в ОБОИХ ingest paths
+   до выдачи ingress time/sequence, lifetime lock до commit и выбор origin после
+   стабилизации writers. Допустимый исходный вариант: canonical connection FOR SHARE
+   до ingress mark; PROCESS_INBOX сохраняет FOR UPDATE до origin/membership.
+   Сверить implicit FK locks, trigger timing и SQL snapshots; иной вариант требует
+   явного доказательства того же инварианта. Future conversation/Resume fence
+   добавляется поверх принятого порядка в CONTROL, а не заменяет барьер TURNS.
+   Fingerprint, exact duplicate/conflict/legacy policy сохраняются. Новый scenario:
+   fresh I1 с меньшим не committed sequence, fresh I2/worker, поздний commit I1;
+   origin/deadlines не зависят от случайного materializing job и потом неизменны.
+2. **Finding02 — полный claim/recovery protocol.** Дать выбранный ограниченный
+   алгоритм для messaging_claim/exhaustion, обоих reschedule overloads/retry,
+   begin/finish_send rejection, files success/failure и recover_expired/UNKNOWN.
+   Указать lock modes/order, implicit FK locks, transaction boundaries, skip bound
+   и освобождение locks при пропуске domain-blocked candidate. Объяснить, как B
+   продвигается при exhausted A без потери terminalization A, увеличения timeout
+   или retry и без бесконечного выбора того же кандидата. Для batch запретить блокирующий
+   захват новых conversations в противоположном порядке. Job/domain/context
+   outcome атомарны; актуальность Turn revision проверяется и в exhaustion/recovery.
+   Сохранить первичную ошибку. Assertions: B-progress за заблокированной exhausted A,
+   concurrent recovery batches, SUPERSEDED в каждом terminal entrypoint и ровно
+   один context increment в FAILED/UNKNOWN/file terminal, replay/rollback=0.
+3. **Finding03 — ACK-loss capability.** В той же третьей private receipt table
+   определить immutable связь с canonical TEST_CONSUME job и winning claim плюс
+   нужные supporting key/FK. Описать отдельный узкий read-only terminal replay:
+   exact saved result может читаться после lease expiry без новой mutation;
+   чужой/неизвестный/проигравший token отвергается. Никакого runtime общего SELECT,
+   caller-Workspace bypass или ослабления live claim/XID admission для записи.
+   Assertions: committed result + lost ACK, valid terminal replay, forged token,
+   expired A → reclaimed B committed → late A rejected.
+4. **Finding04 — source/schema pairing.** После заключения C6 из §0.3 и решения C0
+   заменить недостаточное обещание «только inventory31→34» точной таблицей пар:
+   caller/test image, app/operator/worker source, schema, allowable switch/rollback,
+   обслуживаемые assertions и exact affected paths. Historical source migration
+   0007→0007 сохраняется как отдельная гарантия; новый LOCAL/TEST upgrade0007→0008
+   не переиспользует требование неизменного cross-schema fingerprint или обещание
+   старого image rollback после populated cutover. Runtime0008 на schema0007
+   запрещён. До выбора решения §10 остаётся явным OPEN gate, не разрешением к коду.
+
+C3 может готовить01–03, пока C6 анализирует04; предварительные отдельные commits
+на каждый finding не нужны. Финальный R2 вернуть после включения принятого pairing
+решения, одним содержательным candidate. Если решение C6 ещё не принято — назвать
+зависимость и не объявлять04 CLOSED/CONTRACT accepted. Чужие выводы не выдавать за
+собственные согласования; полный C1 PASS старого SHA не переносить автоматически.
+
+Ожидаемый возврат: PR/head/parent и diff к reviewed candidate, единственный собственный
+changed path, таблица01–04 → разделы/механизм/assertions, список exact compatibility
+paths с причиной, фактические static checks и состояние штатного CI без выдуманных
+PG/live результатов. Все четыре finding остаются OPEN до review. Новых tests/suites
+ради редакции не создавать; штатные gates не менять и не перезапускать без причины.
+
+### 0.3. C6-M3-SCHEMA-SOURCE-PAIRING — ограниченное read-only согласование
+
+Это dependency CONTRACT/finding04, не deployment и не переоткрытие M2.
+Exact code для анализа: `5706350eaf01d72b4398f14f20c77649a4f0d6e2`
+(его runtime равен accepted main). Отдельный detached checkout при локальной работе.
+**Разрешённых write paths нет.** Результат — review/предложение в PR26 для C0/C3.
+Не запускать suites/Actions/Docker, VM/SSH/Telegram/probes, не менять source pins,
+receipts, runtime, schema, CI или ветки. C6 пока не реализует compatibility fix.
+
+C0 задаёт границу решения: historical connect5 source-migration на0007 сохраняет
+свои assertions/receipts; upgrade0007→0008 получает отдельный LOCAL/TEST проверяемый
+путь с drain/exact readiness/forward-fix и populated downgrade refusal. Конкретные
+точные source pins и минимальную реализацию этого разделения предлагает C6;
+C0 утверждает их до code allowlist. Подмена coverage текущего candidate запуском
+только замороженного M2 source недопустима: назвать, какие assertions проверят
+сам изменяемый candidate helper/harness и отказ несовместимого pairing.
+
+Обязательные исходники: scripts/test_telegram_egress_migration.sh,
+scripts/test_telegram_egress.sh, scripts/prepare_telegram_egress.py,
+tests/test_telegram_egress_migration.py, tests/test_telegram_egress_postgres.py,
+backend/src/asm/foundation.py, применимые workflow/compose/fixture paths и runbook.
+Прочитать finding04 и Contract §§7/10/11, M2_CONTRACT; references разрешено читать,
+но наличие path в списке не даёт write permission.
+
+Вернуть один минимальный вариант с таблицей phase → code/image → schema → fixture
+→ valid forward/recovery/rollback → assertions. В частности проверить candidate
+held LOCAL fixture против predecessor0007, asm_test отдельно от LOCAL DB,
+readiness в forward/rollback, source manifests/clean-source gates, сохранение
+historical fingerprints и текущие migration invariants. Указать полные существующие
+source SHA; будущий implementation SHA не выдумывать, его проверка отдельный gate.
+Назвать точную необходимую allowlist, включая оба shell paths, если они меняются,
+и отвергаемые mixed pairs. Production rollout/новый VM updater сюда не включать.
+
+После C6 предложения C0 принимает scope, C3 завершает04 в R2; C2 проверяет DB и
+schema/source delta, C1 — только затронутую versions/API/commands delta. Затем C0
+принимает контракт и отдельно выдаёт TURNS на исходном accepted main с текущим
+reviewed continuation. Независимый C8 реализации остаётся последующим gate.
 
 ## 1. Исходная точка и результат для владельца
 
@@ -270,8 +395,8 @@ Merge сохраняется за пользователем после конк
 Унаследованные обязательные CI gates не отключаются этим планом; соразмерность
 новых проверок определяет конкретный риск. Никакого deployment от одного факта merge.
 
-**Первое поручение:** C0 принимает/уточняет этот план и выдаёт
-M3.1-CONTRACT + ограниченный M3.1-TURNS. Сначала прочитать текущие messaging/
+**Порядок первого поручения (актуальная выдача — §0):** CONTRACT принимается до
+отдельного допуска к ограниченному M3.1-TURNS. Сначала прочитать текущие messaging/
 telegram modules, migration0005/0007 и M2_CONTRACT; сверить модель событий и
 перечень совместимых изменений. Зафиксировать решения §§4.1/4.2/4.6 и границу
 последующего CONTROL/GUARDS. Не выдавать C5, AI или изменение VM раньше зависимостей.
