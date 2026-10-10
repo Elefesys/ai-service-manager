@@ -17,6 +17,7 @@ import ipaddress
 import json
 import os
 import re
+import runpy
 import socket
 import ssl
 import stat
@@ -48,7 +49,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 from test_auth_postgres import LOGIN, login
 from test_auth_postgres import auth as auth
-from test_m2_1_postgres import cleanup, delivery, due, expire, query
+from test_m2_1_postgres import cleanup, delivery, due, expire, finish_text_turns, query, receive
 from test_m2_1_postgres import messaging as messaging
 from test_m2_2_storage_postgres import grant, image_bytes, plan
 from test_m2_2_storage_postgres import images as images
@@ -335,6 +336,7 @@ async def worker_process(stage):
 
 async def unknown_scenario(case, h, stage):
     _, conversation_id = await inbound(h)
+    await stabilize_turns(h)
     async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
         prepared = await unit.messaging_prepare_text(
             conversation_id, "Wire exact 🎨", "egress-send"
@@ -704,6 +706,79 @@ def durable_target():
     return target
 
 
+async def stabilize_turns(h):
+    # The shared helper imports through the existing tests-directory path in
+    # both pytest and the direct Python E05 entrypoint. Empty queues alone are
+    # insufficient: require the exact current OBSERVED receipt before intent.
+    await finish_text_turns(h)
+
+
+class TestEgressTurnSuccessGate:
+    # Ordinary TEST PostgreSQL suite only. The explicit wire and held LOCAL
+    # collectors select their own classes in this same dual-entrypoint module.
+    @pytest.mark.parametrize("damage", ["failed", "missing", "stale", "noncurrent", "extra"])
+    async def test_egress_turn_success_gate_rejects_actual_invalid_state(self, messaging, damage):
+        from asm.conversations.turns import consume
+        from test_m2_1_postgres import command
+        from test_m3_1_turns_postgres import claim_exact, seal, snapshot, turns, wait_due
+        from test_m3_1_turns_postgres import receive as receive_turn
+
+        h = messaging
+        await receive(h)
+        turn = (await turns(h))[0]
+        if damage == "failed":
+            # A real admitted failure, not a fabricated terminal success/status.
+            await wait_due(h, turn["id"])
+            claim = await h.kernel.claim_job("egress-negative")
+            assert claim.kind == "PROCESS_TURN"
+            await h.kernel.retry(claim, Code.INVALID_INPUT, False)
+            assert (await query(h, "SELECT state FROM app.conversation_turns")) == [
+                {"state": "FAILED"}
+            ]
+            assert (
+                await query(
+                    h, "SELECT status FROM platform.messaging_jobs WHERE kind='PROCESS_TURN'"
+                )
+            ) == [{"status": "DEAD"}]
+        elif damage == "stale":
+            await seal(h, turn["id"])
+            claim, value = await snapshot(h, turn["id"])
+            await command(h, turn["conversation_id"], "context change", "stale-gate")
+            send = (
+                await query(
+                    h, "SELECT id FROM platform.messaging_jobs WHERE kind='SEND_MANUAL_TEXT'"
+                )
+            )[0]["id"]
+            await h.worker.execute(await claim_exact(h, send))
+            result = await h.kernel.finish_turn(claim, consume(value))
+            assert result.code == "STALE"
+            assert (
+                await query(
+                    h, "SELECT result->>'code' AS code FROM platform.turn_consumer_receipts"
+                )
+            ) == [{"code": "STALE"}]
+        else:
+            await stabilize_turns(h)  # real Worker success is a prerequisite
+            if damage == "missing":
+                await query(h, "DELETE FROM platform.turn_consumer_receipts RETURNING job_id")
+            elif damage == "noncurrent":
+                await query(h, "UPDATE app.conversation_turns SET revision=revision+1 RETURNING id")
+            else:
+                await receive_turn(h, chat_id="extra")
+                extra = (await turns(h))[-1]
+                await seal(h, extra["id"])
+                claim, value = await snapshot(h, extra["id"])
+                await h.kernel.finish_turn(claim, consume(value))
+                assert (
+                    len(await query(h, "SELECT job_id FROM platform.turn_consumer_receipts")) == 2
+                )
+        assert not await query(
+            h, "SELECT id FROM platform.messaging_jobs WHERE status IN ('READY','RUNNING')"
+        )
+        with pytest.raises(AssertionError):
+            await stabilize_turns(h)
+
+
 async def canonical_fingerprint(connection):
     tables = (
         await connection.execute(
@@ -713,6 +788,16 @@ async def canonical_fingerprint(connection):
             )
         )
     ).all()
+    # The held after command runs this file directly, without pytest's root
+    # pythonpath. Load the exact checked-out guard in both entrypoints.
+    schema_inventory = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/prepare_telegram_egress.py")
+    )["schema_inventory"]
+
+    assert (
+        await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
+    ).scalar_one() == "0008"
+    schema_inventory("0008", (namespace + "." + table for namespace, table in tables))
     fingerprint = {}
     for namespace, table in tables:
         assert re.fullmatch(r"[a-z_][a-z_0-9]*", namespace)
@@ -868,7 +953,7 @@ async def durable_local():
                 ), "E05_FRESH_EMPTY_LOCAL_DATABASE_REQUIRED"
             else:
                 # The first case's sealed billing catalog is immutable by contract.
-                # Require its complete attested cleanup fingerprint (all 31 tables),
+                # Require its complete attested cleanup fingerprint (all 34 tables),
                 # not a relaxed empty-DB check or a destructive catalog reset.
                 previous = read_json(catalog_file)
                 assert previous["database_identity"] == target["database_identity"]

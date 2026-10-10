@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — M2 закрыт; план M3 на review C0 / 2026-10-09
+## Текущий статус — CONTRACT принят; C3-M3.1-TURNS выдан / 2026-10-10
 
 **M2 — INTEGRATED / VERIFIED в принятом LOCAL/TEST scope.**
 Это перенос уже опубликованного решения C0, не новая приёмка от автора плана.
@@ -22,32 +22,92 @@ C0-CI-AUDIT-01 в указанном receipt scope. Старые REVIEW/OPEN/BLO
 [M2_HANDOFF](tasks/M2_HANDOFF.md) закрыт. Текущий следующий handoff:
 [M3_HANDOFF](tasks/M3_HANDOFF.md).
 
-**M3 — TODO.** Пользователь запросил переход к M3; подготовлен план последовательных
-задач для review C0. Runtime/DDL/API/UI M3 этим docs PR не реализованы и не приняты.
-C0 проверяет план, назначает первый ограниченный scope и actual accepted base.
-Новый технический контракт ведётся в одном M3_CONTRACT.md по мере выдачи частей.
+**M3 — IN_PROGRESS. M3.1-CONTRACT — VERIFIED в scope согласования документа;
+C3-M3.1-TURNS — IN_PROGRESS, implementation-поручение выдано.**
+Статус CONTRACT не означает реализацию M3, merge PR или проверенный0008 DDL.
+
+План принят в [PR25](https://github.com/Elefesys/ai-service-manager/pull/25).
+Accepted main/implementation base:
+`754f1c883e5a94a7fc9e729af2605424f949ba33`;
+[push/main CI37965195898](https://github.com/Elefesys/ai-service-manager/actions/runs/37965195898)
+—9/9 SUCCESS. Main и принятый M2 остаются прежними; [PR26](https://github.com/Elefesys/ai-service-manager/pull/26)
+открыт как Draft, merge ещё не разрешён.
+
+**C0 принимает CONTRACT-R2** [C3](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6094572773)
+на exact `4f9d32e9d67308da8062dc12aeb4839e06c850cb`,
+tree `25c4bf9f4039141f4ce8c03c1edfb18196deb790`,
+contract blob `5e87375852331523491a47926b9c5bd49946c157`;
+parent `b99e119757d52ee8bd00a51093f63bada5f95823`.
+[C1 R2 PASS](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6094967481)
+подтверждает affected versions/commands/API/callers.
+[C2 R2 PASS](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6095018013)
+подтверждает CONTRACT/DB; остаточных/new findings в дельте нет.
+C0 принимает оба заключения в их scope; приёмка реализации ещё впереди.
+
+| Finding | Важность / статус C0 | Основание закрытия и сохраняемый implementation gate |
+|---|---|---|
+| C2-M3-CONTRACT-01 | P2 / CLOSED, contract-review | R2 §§2/5.3/8/11 + C2 PASS: origin barrier обоих producers, post-lock snapshot и FK-safe Inbox writers; реальные concurrency assertions обязательны |
+| C2-M3-CONTRACT-02 | P2 / CLOSED, contract-review | R2 §§5/6/11 + C2/C1 PASS: single-candidate transactions, NOWAIT rollback/scan continuation, полный terminal/lock protocol; B-progress/material-once ещё проверяются в коде |
+| C2-M3-CONTRACT-03 | P2 / CLOSED, contract-review | R2 §§4/5.4/11 + C2/C1 PASS: immutable job/winning-claim binding и private terminal replay; ACK-loss/privilege/race assertions остаются gate |
+| C2-M3-CONTRACT-04 | P2 / CLOSED, contract-review | Принятый C0/C6 design включён в R2 §§7/10/11, C2/C1 PASS: historical0007/candidate0008/LOCAL upgrade разделены; actual source/image/schema execution ещё требуется |
+
+[CI38030244030 attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38030244030)
+на R2 —9/9 SUCCESS и9/9 clean-source gates.
+C0 прочитал foundation checkout `5403d868ffbcefa9489d83bcc8d674da394b2984`:
+parents accepted main + R2, tree точно совпадает с candidate.
+Ранее проверены точные path/parent/tree/blob, unchanged §§6/9, только barrier delta §8
+и exact31 unique names. Эти static/CI evidence принимают документ и прежний runtime,
+не доказывают будущие M3 SQL/worker/upgrade механизмы.
+Первичный docs-only failure38019736763/attempt1 сохранён в PR; root cause неизвестна,
+finding04 не объявляется её причиной. Дополнительного rerun при этой приёмке нет.
+
+Текущая полная выдача — **[M3_HANDOFF §0: C3-M3.1-TURNS](tasks/M3_HANDOFF.md)**.
+C3 продолжает PR26 после fast-forward к полному C0 continuation SHA из PR metadata;
+C0 commit поверх R2 меняет только этот реестр и handoff. Reviewed contract bytes
+сохранены: его вступление — snapshot до данного verdict; прежний запрет кода
+заменён явной ограниченной выдачей §0, без изменения принятой семантики.
+
+Разрешены26 exact paths, один законченный TURNS candidate с новой
+`0008_conversation_turns.py` (revision0008/predecessor0007), три таблицы,
+durable PROCESS_TURN/TEST receipt и необходимая source/schema совместимость.
+C2 резерв подтвердил; C0 теперь разрешает C3 написать и проверять этот DDL
+в disposable LOCAL/TEST. Applied0001–0007 immutable; runtime/DDL acceptance
+после фактического evidence и профильных reviews.
+D2/G10/M15/N32/cap25с, HUMAN/gen1, пять M2 API, manual/UNKNOWN/receipt invariants
+сохраняются. CONTROL/GUARDS/ESCALATION/CONSOLE/M4 не выданы.
+
+[C6 read-only предложение](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6093950520)
+и [решение C0](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6094458702)
+приняты как часть CONTRACT: frozen P/O/H0007, actual I0008 и отдельный LOCAL
+schema phase с drain API/worker/scheduler/pools. Future I ещё не существует;
+H PASS не заменяет I coverage. Existing workflows/Compose/pins/budgets не меняются.
 
 | Задача | Статус | Evidence / следующий шаг |
 |---|---|---|
 | M0/M1 | VERIFIED в прежнем scope | Сохранённая приёмка; без повторного старта |
 | M2 / ENV04 / live A09–A11 | INTEGRATED / VERIFIED LOCAL/TEST | PR24 + отдельный main CI + финальный C0 receipt выше |
-| M3.1-CONTRACT | TODO | C0 с C3/C2: минимальный контракт текущего среза и границы control/guards |
-| M3.1-TURNS | TODO | После контракта: grouping, State, durable deadlines/restart и версии |
-| M3.1-CONTROL | TODO | После TURNS: takeover/resume, generation, owner/API/native event semantics |
+| M3.1-CONTRACT | VERIFIED, contract-only | Exact R2, scoped C1/C2 PASS, C0 acceptance; implementation evidence не заявляется |
+| C6-M3-SCHEMA-SOURCE-PAIRING (часть CONTRACT) | VERIFIED, read-only design scope | Вариант принят C0 и включён в R2; реализация assigned C3 в TURNS |
+| M3.1-TURNS | IN_PROGRESS, выдано C3 | Handoff §0:26 paths,0008, реальные PG/worker/S3/schema assertions; готового implementation candidate пока нет |
+| M3.1-CONTROL | TODO | После интегрированного TURNS: takeover/resume, generation, owner/API/native semantics |
 | M3.1-GUARDS | TODO | После CONTROL: admission/stale worker/in-flight через рабочие DB/worker paths |
 | M3.2-ESCALATION | TODO | Отдельный owner wait lifecycle на существующих durable jobs |
 | M3.2-CONSOLE | TODO | После принятого API: mode/actions/wait/in-flight UI и browser journeys |
 | M3-ACCEPTANCE | TODO | Scoped C8, применимый owner smoke, final actual main CI; затем отдельная выдача M4 |
 
 TEST/COMPED на существующем стенде завершился 2026-10-09T00:00Z.
-Новые live sends/продление не выданы этой документацией. Это отдельная подготовка
-C0 перед новым smoke; она не блокирует LOCAL/TEST разработку M3.
-Git merge не обновляет VM. Исторические immutable receipts/DB fingerprints после
-законных live сообщений не переисполняются как проверка неизменности текущей БД.
+VM/SSH/Telegram, реальные DB/S3, binding/ACK/deploy/activation/sends/продление
+этим поручением не разрешаются. LOCAL/TEST разработка и synthetic проверки
+не требуют действий владельца. Production expand/migrate/contract остаётся каноном.
+Git merge не обновляет VM; закрытые owner receipts/fingerprints не переисполняются.
 
-Статус нового docs PR и его CI фиксируется в PR metadata; отдельный commit только
-ради собственного SHA/статуса не нужен. История ниже сохраняется целиком для
-provenance, но не является очередью текущих операторских действий.
+После готового TURNS C0 выдаёт scoped C2/C1, при необходимости C6, и независимый
+C8 по actual implementation, затем решает приёмку/merge. CONTROL — от принятого
+интегрированного SHA после actual main CI. Полный M3 остаётся IN_PROGRESS.
+
+Текущий continuation/head/CI фиксируются в PR metadata; отдельного commit только
+ради собственного SHA/статуса нет. История ниже сохранена целиком для provenance,
+но не является очередью текущих операторских действий.
 
 ## История M0–M2 — прежние snapshots и поручения
 

@@ -596,6 +596,342 @@ e.main()
     print("TELEGRAM_EGRESS_MIGRATION_" + fault.upper() + "_PASS", flush=True)
 
 
+def schema_recovery_source(result, observe, report, candidate):
+    """An expected post-commit failure is not a successful migration result."""
+    detail = {
+        "injection": "after_commit_before_success_exit",
+        "exit_code": result.returncode,
+        "marker": "M3_UPGRADE_COMMITTED_RESULT_LOST"
+        if result.stdout.strip() == b"M3_UPGRADE_COMMITTED_RESULT_LOST"
+        else "UNEXPECTED",
+        "observed": "NOT_READ",
+    }
+    report["upgrade_ack_loss"] = detail
+    if result.returncode != 86 or result.stdout.strip() != b"M3_UPGRADE_COMMITTED_RESULT_LOST":
+        detail["result"] = "UNEXPECTED_MIGRATOR_RESULT"
+        raise AssertionError("M3_EXPECTED_POST_COMMIT_FAILURE")
+    detail["result"] = "CONTROLLED_FAILURE_OBSERVED"
+    try:
+        observation = observe()
+    except Exception:
+        detail["observed"] = "UNREADABLE"
+        raise
+    detail["observed"] = observation
+    if observation.get("revision") != "0008":
+        raise AssertionError("M3_RECOVERY_REVISION_UNCONFIRMED")
+    detail["recovery_source"] = candidate
+    return candidate
+
+
+def run_schema_phase(request):
+    """New disposable LOCAL volume, exact H/I images, drained schema cutover."""
+    import tempfile
+
+    historical = "754f1c883e5a94a7fc9e729af2605424f949ba33"
+    candidate = e.command(["git", "rev-parse", "HEAD"]).decode().strip()
+    assert request == {"historical": historical, "candidate": candidate}
+    assert os.getuid() != 0 and os.environ.get("GITHUB_ACTIONS") == "true"
+    e.source_check(candidate)
+    assert not e.command(["docker", "ps", "-aq"]).strip()
+    assert not e.command(["docker", "volume", "ls", "-q"]).strip()
+    project = "asm-m3-schema-phase"
+    report = {"coordinator": candidate, "historical": historical, "images": {}, "checks": []}
+    pins = dict(
+        line.split("=", 1)
+        for line in (e.ROOT / "infra/images.lock.env").read_text().splitlines()
+        if line and not line.startswith("#")
+    )
+    with tempfile.TemporaryDirectory(prefix="asm-m3-schema-") as temporary:
+        directory = Path(temporary)
+        sources, images = {}, {}
+        # Only exact tracked archives enter build contexts. The historical-only
+        # production migration_build_images helper is deliberately not called for I.
+        with e.migration_budget(600):
+            for source in (historical, candidate):
+                archive = directory / source
+                archive.mkdir()
+                e.migration_build_context(source, archive)
+                sources[source] = archive
+                images[source] = {}
+                for kind in ("runtime", "development"):
+                    tag = "asm-m3-schema-" + kind + ":" + source
+                    reuse = "asm-connect5-" + kind + ":" + source
+                    existing = (
+                        e.command(["docker", "image", "ls", "-q", "--no-trunc", reuse])
+                        .decode()
+                        .strip()
+                    )
+                    if existing:
+                        e.migration_image(existing, source, kind)
+                        e.command(["docker", "tag", existing, tag])
+                    else:
+                        e.command(
+                            [
+                                "docker",
+                                "build",
+                                "--pull",
+                                "--network=default",
+                                "--target",
+                                kind,
+                                "--build-arg",
+                                "PYTHON_IMAGE=" + pins["PYTHON_IMAGE"],
+                                "--build-arg",
+                                "UV_IMAGE=" + pins["UV_IMAGE"],
+                                "-f",
+                                str(archive / "infra/Dockerfile.backend"),
+                                "-t",
+                                tag,
+                                str(archive),
+                            ],
+                            timeout=480,
+                        )
+                    image_id = json.loads(e.command(["docker", "image", "inspect", tag]))[0]["Id"]
+                    images[source][kind] = image_id
+                    report["images"][source + ":" + kind] = e.migration_image(
+                        image_id, source, kind
+                    )
+        # init_local emits only a fixed diagnostic, never credentials. All private
+        # runtime files are outside both source archives and the repository.
+        subprocess.run(
+            [sys.executable, str(e.ROOT / "scripts/init_local.py")],
+            cwd=directory,
+            check=True,
+            timeout=30,
+        )
+        compose = [
+            "docker",
+            "compose",
+            "--project-directory",
+            str(sources[candidate]),
+            "--project-name",
+            project,
+            "--env-file",
+            str(e.ROOT / "infra/images.lock.env"),
+            "--env-file",
+            str(directory / ".env"),
+            "-f",
+            str(sources[candidate] / "compose.yaml"),
+            "--profile",
+            "telegram-operator",
+        ]
+        model = json.loads(e.command([*compose, "config", "--format", "json"]))
+        variables = dict(model["services"]["api"]["environment"])
+        variables.update(model["services"]["migrate"]["environment"])
+        assert variables["ASM_TELEGRAM_ENABLED"] == "false" and variables["TG_BOT_TOKEN"] == ""
+        envfile = directory / "controller.env"
+        e.write_private(
+            envfile, "".join(k + "=" + str(v) + "\n" for k, v in sorted(variables.items())).encode()
+        )
+        state = directory / "state"
+        state.mkdir(mode=0o700)
+        prefix = [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            project + "_default",
+            "--env-file",
+            str(envfile),
+            "--user",
+            f"{os.getuid()}:{os.getgid()}",
+            "--mount",
+            f"type=bind,source={state},target=/state",
+        ]
+
+        def controller(action):
+            output = e.command(
+                [
+                    *prefix,
+                    images[candidate]["development"],
+                    "python",
+                    "tests/test_m3_1_migrations.py",
+                    "--schema-phase",
+                    action,
+                    "/state/receipt.json",
+                ],
+                timeout=120,
+            )
+            assert output.decode().strip() == "M3_SCHEMA_" + action.upper() + "_PASS"
+            report["checks"].append(action)
+
+        def migrate(source, direction, revision):
+            e.command(
+                [*prefix, images[source]["development"], "alembic", direction, revision], timeout=30
+            )
+
+        def probe(source, expected):
+            code = """import asyncio
+from asm.foundation import RuntimeDatabase,Settings
+async def main():
+ d=RuntimeDatabase(Settings())
+ try:
+  try: await d.check()
+  except Exception:
+   assert not EXPECTED
+  else: assert EXPECTED
+ finally: await d.close()
+asyncio.run(main())
+""".replace("EXPECTED", repr(expected))
+            e.command([*prefix, images[source]["runtime"], "python", "-c", code], timeout=30)
+
+        def callers(source):
+            e.command(["docker", "tag", images[source]["runtime"], "asm-backend:local"])
+            e.command(
+                [
+                    *compose,
+                    "up",
+                    "-d",
+                    "--no-deps",
+                    "--pull",
+                    "never",
+                    "--force-recreate",
+                    "--wait",
+                    "api",
+                    "worker",
+                    "scheduler",
+                ],
+                timeout=120,
+            )
+            result = {}
+            for service in ("api", "worker", "scheduler"):
+                ident = e.command([*compose, "ps", "-q", service]).decode().strip()
+                info = json.loads(e.command(["docker", "inspect", ident]))[0]
+                assert info["Image"] == images[source]["runtime"] and info["State"]["Running"]
+                result[service] = {"id": ident, "image": info["Image"], "source": source}
+            return result
+
+        def drain():
+            e.command(
+                [*compose, "stop", "--timeout", "10", "api", "worker", "scheduler"], timeout=60
+            )
+            for service in ("api", "worker", "scheduler"):
+                ident = e.command([*compose, "ps", "-aq", service]).decode().strip()
+                assert not json.loads(e.command(["docker", "inspect", ident]))[0]["State"][
+                    "Running"
+                ]
+
+        try:
+            e.command([*compose, "up", "-d", "--wait", "postgres", "storage"], timeout=120)
+            e.command([*compose, "run", "--rm", "--no-deps", "-T", "storage-init"], timeout=120)
+            migrate(historical, "upgrade", "0007")
+            report["baseline_callers"] = callers(historical)
+            probe(historical, True)
+            probe(candidate, False)
+            drain()
+            controller("seed")  # migration identity only, all historical pools terminate here
+            # Reject the actual changed helper's direct migration commands before
+            # any source/image switch or migration journal on this candidate.
+            guard = directory / "guard"
+            guard.mkdir(mode=0o700)
+            e.write_private(guard / "operation.lock", b"")
+            before = {p.name: p.read_bytes() for p in guard.iterdir()}
+            for action in ("migration-attest", "migration-prepare"):
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(e.ROOT / "scripts/prepare_telegram_egress.py"),
+                        action,
+                        "--state-dir",
+                        str(guard),
+                        "--accepted-sha",
+                        candidate,
+                        "--from-sha",
+                        e.MIGRATION_FROM,
+                    ],
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                    timeout=30,
+                )
+                assert (
+                    result.returncode == 1
+                    and b"EGRESS_MIGRATION_HISTORICAL_SCHEMA_ONLY" in result.stdout
+                )
+                assert {p.name: p.read_bytes() for p in guard.iterdir()} == before
+            report["checks"].append("candidate_direct_cli_pairing_refusal")
+            migrate(candidate, "upgrade", "0008")
+            controller("check8")  # independent committed revision read after migrator exits
+            probe(candidate, True)
+            probe(historical, False)
+            # Separate empty-M3 case: preserve all seeded M2 rows, restore exact H.
+            migrate(candidate, "downgrade", "0007")
+            controller("check7")
+            probe(historical, True)
+            # A separate migrator really commits 0008, then exits unsuccessfully.
+            # Observe its failure; NEVER infer the revision from that exit alone.
+            lost = subprocess.run(
+                [
+                    *prefix,
+                    images[candidate]["development"],
+                    "python",
+                    "tests/test_m3_1_migrations.py",
+                    "--schema-phase",
+                    "upgrade-lost-result",
+                    "/state/receipt.json",
+                ],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                timeout=30,
+            )
+
+            def observe_revision():
+                return json.loads(
+                    e.command(
+                        [
+                            *prefix,
+                            images[candidate]["development"],
+                            "python",
+                            "tests/test_m3_1_migrations.py",
+                            "--schema-phase",
+                            "observe",
+                            "/state/receipt.json",
+                        ],
+                        timeout=30,
+                    )
+                )
+
+            recovery_source = schema_recovery_source(lost, observe_revision, report, candidate)
+            controller("check8")  # projection/private S3/pending/UNKNOWN still exact
+            probe(historical, False)  # committed0008 explicitly rejects H
+            probe(recovery_source, True)
+            report["upgrade_ack_loss"]["historical_readiness"] = "REJECTED"
+            report["upgrade_ack_loss"]["candidate_readiness"] = "PASS"
+            # Exercise I runtime/worker on the correctly paired schema before
+            # permanent callers start, so duplicate-first admission is deterministic.
+            controller("fresh")
+            report["cutover_callers"] = callers(recovery_source)
+            report["upgrade_ack_loss"]["forward_callers"] = report["cutover_callers"]
+            drain()
+            controller("refuse")
+            report["restarted_callers"] = callers(recovery_source)
+            report["upgrade_ack_loss"]["restarted_callers"] = report["restarted_callers"]
+            probe(recovery_source, True)
+            drain()
+            controller("refuse")
+            report["database"] = json.loads((state / "receipt.json").read_text())
+            assert report["database"]["populated_refusal"] == "PASS"
+            # No raw signed URL or fixture content is published.
+            report["database"]["object"].pop("key")
+        except BaseException as error:
+            report["failure"] = type(error).__name__
+            raise
+        finally:
+            # Record the observed failure/revision/recovery before destroying
+            # disposable evidence, including a refusal/unreadable revision.
+            reports = e.ROOT / "reports"
+            reports.mkdir(exist_ok=True)
+            (reports / "m3-schema-phase.json").write_text(json.dumps(report, indent=2) + "\n")
+            e.command(
+                [*compose, "down", "--volumes", "--remove-orphans", "--timeout", "2"], timeout=90
+            )
+    e.source_check(candidate)
+    print("TELEGRAM_EGRESS_SCHEMA_PHASE_PASS", flush=True)
+
+
+if __name__ == "__schema_harness__":
+    run_schema_phase(globals()["schema_request"])
+    raise SystemExit(0)
+
+
 if __name__ == "__migration_harness__":
     run_disposable(globals()["fixture"])
     raise SystemExit(0)
@@ -2076,3 +2412,127 @@ def test_migration_deadline_clamps_every_subprocess(monkeypatch):
     with e.migration_budget(0.5):
         e.command(["git", "status"], timeout=40)
     assert len(calls) == 1 and 0 < calls[0] <= 0.5
+
+
+@pytest.mark.parametrize(
+    "revision,versions",
+    [
+        ("0008", 8),
+        ("9999", 7),
+        ("0007", 8),
+        ("0007", 6),
+    ],
+)
+@pytest.mark.parametrize("saved", [False, True])
+def test_candidate_historical_guard_rejects_mixed_schema_before_effects(
+    tmp_path, monkeypatch, revision, versions, saved
+):
+    source = "e" * 40
+    directory = tmp_path / "private"
+    directory.mkdir(mode=0o700)
+    bundle = directory / "migration-v3"
+    bundle.mkdir(mode=0o700)
+    e.write_private(
+        bundle / "preparation.json",
+        e.encoded(
+            {
+                "version": 2,
+                "from_sha": e.MIGRATION_FROM,
+                "from_tree": e.MIGRATION_FROM_TREE,
+                "to_sha": source,
+                "to_tree": "a" * 40,
+            }
+        ),
+    )
+    before = receipt_inventory(directory)
+    reads = []
+
+    def command(args, **kwargs):
+        reads.append(args)
+        assert args[0] == "git", "schema refusal must precede Docker/build/recreate"
+        if "show" in args:
+            return f'DATABASE_SCHEMA_REVISION = "{revision}"\n'.encode()
+        if "ls-tree" in args:
+            return "\n".join(
+                f"migrations/versions/{i:04d}_revision.py" for i in range(1, versions + 1)
+            ).encode()
+        pytest.fail("schema refusal must precede other migration work")
+
+    monkeypatch.setattr(e, "source_check", lambda value: value == source)
+    monkeypatch.setattr(e, "command", command)
+    with pytest.raises(e.EgressError, match="EGRESS_MIGRATION_HISTORICAL_SCHEMA_ONLY"):
+        e.migration_saved(directory) if saved else e.migration_source(source)
+    assert reads and receipt_inventory(directory) == before
+    assert not (bundle / "intent.json").exists()
+
+
+@pytest.mark.parametrize("revision", ["0007", "0008"])
+@pytest.mark.parametrize("damage", ["missing", "extra", "same-count", "wrong-revision"])
+def test_revision_qualified_inventory_rejects_names_not_only_counts(revision, damage):
+    names = set(e.SCHEMA_TABLES[revision])
+    e.schema_inventory(revision, names)
+    if damage == "wrong-revision":
+        revision = "0008" if revision == "0007" else "0007"
+    else:
+        if damage in {"missing", "same-count"}:
+            names.remove("platform.inbox_events")
+        if damage in {"extra", "same-count"}:
+            names.add("platform.substituted_inbox_events")
+    with pytest.raises(e.EgressError, match="EGRESS_MIGRATION_DATABASE_TABLES"):
+        e.schema_inventory(revision, names)
+
+
+def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
+    coordinator = (e.ROOT / "scripts/test_telegram_egress_migration.sh").read_text()
+    shell = (e.ROOT / "scripts/test_telegram_egress.sh").read_text()
+    assert "if fault == 'state':" in coordinator
+    assert "'--schema-upgrade', H, source" in coordinator
+    assert "run_name='__schema_harness__'" in shell
+    assert "754f1c883e5a94a7fc9e729af2605424f949ba33" in coordinator
+
+
+@pytest.mark.parametrize("revision", [None, "0007", "0009", "unknown"])
+def test_ack_loss_unknown_revision_never_selects_runtime(revision):
+    from types import SimpleNamespace
+
+    report = {}
+    lost = SimpleNamespace(returncode=86, stdout=b"M3_UPGRADE_COMMITTED_RESULT_LOST\n")
+    with pytest.raises(AssertionError, match="REVISION_UNCONFIRMED"):
+        schema_recovery_source(lost, lambda: {"revision": revision}, report, "candidate")
+    assert "recovery_source" not in report["upgrade_ack_loss"]
+
+
+def test_ack_loss_unreadable_revision_never_selects_runtime():
+    from types import SimpleNamespace
+
+    def unreadable():
+        raise OSError("disposable database unavailable")
+
+    report = {}
+    with pytest.raises(OSError):
+        schema_recovery_source(
+            SimpleNamespace(returncode=86, stdout=b"M3_UPGRADE_COMMITTED_RESULT_LOST"),
+            unreadable,
+            report,
+            "candidate",
+        )
+    assert report["upgrade_ack_loss"]["observed"] == "UNREADABLE"
+    assert "recovery_source" not in report["upgrade_ack_loss"]
+
+
+@pytest.mark.parametrize(
+    "status,marker", [(0, b"M3_UPGRADE_COMMITTED_RESULT_LOST"), (1, b""), (86, b"unexpected")]
+)
+def test_ack_loss_does_not_accept_unexpected_migrator_result(status, marker):
+    from types import SimpleNamespace
+
+    def must_not_observe():
+        pytest.fail("unexpected failure must not enter forward recovery")
+
+    report = {}
+    with pytest.raises(AssertionError, match="EXPECTED_POST_COMMIT_FAILURE"):
+        schema_recovery_source(
+            SimpleNamespace(returncode=status, stdout=marker), must_not_observe, report, "candidate"
+        )
+    assert report["upgrade_ack_loss"]["observed"] == "NOT_READ"
+    assert "recovery_source" not in report["upgrade_ack_loss"]

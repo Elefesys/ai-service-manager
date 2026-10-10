@@ -13,7 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_m2_1_postgres import command, query
 from test_m2_1_postgres import messaging as messaging
-from test_m2_1_schema_postgres import _migrate
+from test_m2_1_schema_postgres import HistoricalScanDatabase, _migrate
 from test_m2_1_schema_postgres import migrator as migrator
 from test_m2_2_db_postgres import ready
 from test_m2_3_db_postgres import BOT, EXTERNAL, OWNER, ingress, observed, projection, receive
@@ -402,7 +402,7 @@ async def test_downgrade_refuses_55000_before_first_destructive_statement(telegr
         assert caught.value.orig.sqlstate == "55000"
         assert (
             await c.execute(text("SELECT version_num FROM platform.alembic_version"))
-        ).scalar_one() == "0007"
+        ).scalar_one() == "0008"  # Direct 0007 refusal preserves the current head too.
         assert (
             await c.execute(text("SELECT count(*) FROM platform.telegram_connection_state"))
         ).scalar_one() == 1
@@ -411,6 +411,8 @@ async def test_downgrade_refuses_55000_before_first_destructive_statement(telegr
 
 async def test_0006_exact_data_file_winner_unknown_and_billing_survive_full_cycle(messaging):
     h = messaging
+    # The cycle below belongs to 0006 -> 0007, using those revisions' scan ABI.
+    h.kernel = HistoricalScanDatabase(h.runtime.engine)
     tables = (
         "app.channel_connections",
         "app.conversations",
@@ -467,15 +469,15 @@ async def test_0006_exact_data_file_winner_unknown_and_billing_survive_full_cycl
                 h, "SELECT status FROM app.outbox_events WHERE message_id=:id", id=send.message_id
             )
         )[0]["status"] == "UNKNOWN"
-        await _migrate("upgrade", "head")
-        await _migrate("upgrade", "head")
+        await _migrate("upgrade", "0007")
+        await _migrate("upgrade", "0007")
         assert await snapshot() == before
         assert (await query(h, "SELECT last_client_inbound_at FROM app.conversations")) == [
             {"last_client_inbound_at": None}
         ]
         await _migrate("downgrade", "0006")
         assert await snapshot() == before
-        await _migrate("upgrade", "head")
+        await _migrate("upgrade", "0007")
         assert await snapshot() == before
     finally:
         await _migrate("upgrade", "head")

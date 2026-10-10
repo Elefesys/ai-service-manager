@@ -4753,3 +4753,29 @@ drop_pending_updates, getUpdates с offset или `down -v` как cleanup. Во
 подавляются массовым drop. Удаление disposable dataset — отдельное явное действие
 в FK-порядке; downgrade0007 с Telegram rows отказывает до destructive изменений.
 Этот runbook не создаёт production backup/restore или завершённый Console A11.
+
+### 6.1. Граница historical0007 и M3 LOCAL schema lane
+
+Срез M3.1 следует принятому [M3_CONTRACT §10](../tasks/M3_CONTRACT.md#10-exact-sourceschema-pairing-и-будущий-compatibility-scope).
+Исторические source/image receipts M2 относятся своей0007 и сохраняются дословно.
+Шесть migration shards исполняют неизменённый H
+`754f1c883e5a94a7fc9e729af2605424f949ba33` отдельно от текущего candidate I;
+его архивы/proofs находятся в `reports/historical/`. `source_sha=H` не означает
+проверку runtime I. Candidate helper отказывает historical `migration-*` на0008
+до build/recreate/journal; он не является средством schema migration.
+
+Default egress lane использует только I/0008: API, worker, scheduler, operator и
+fixture проверяются по actual image ID и полному source inventory. Перед held
+fingerprint Turn jobs завершаются штатным worker. Отдельный обязательный
+`--schema-upgrade H I` запускается в обоих state shards на новом disposable LOCAL
+project/volume, после historical cleanup. Controller под migration identity
+фиксирует legacy0007, останавливает API/worker/scheduler и закрывает свои pools,
+проводит0008 и независимо читает committed revision. Cross-schema сравнение
+использует фиксированные H columns; expected names — exact31/exact34, не count.
+Пустой M3 cycle возвращает exact0007; populated refusal сохраняет данные и DDL,
+после него допустим только I/0008. Результаты — `reports/m3-schema-phase.json` и
+`reports/candidate-egress-source.json`, отдельно от historical evidence.
+
+Это описание изолированного CI harness. Оно не разрешает VM-команды, schema
+upgrade рабочего окружения, Telegram activation, ACK или повтор UNKNOWN send;
+прежние owner receipts, binding и live-статус этим срезом не изменяются.

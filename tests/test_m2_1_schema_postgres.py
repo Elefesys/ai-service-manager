@@ -8,6 +8,8 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from asm.messaging.database import MessagingDatabase, call
+from asm.messaging.results import JobClaim
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
@@ -33,6 +35,30 @@ READABLE = {
     "app.conversations",
     "app.messages",
 }
+
+
+class HistoricalScanDatabase(MessagingDatabase):
+    """Explicit 0005--0007 test caller, never a runtime compatibility fallback."""
+
+    async def claim_job(self, worker_id):
+        async with self._transaction() as connection:
+            assert await call(
+                connection, "SELECT version_num FROM platform.alembic_version", {}
+            ) in {"0005", "0006", "0007"}
+            value = await call(
+                connection, "SELECT platform.messaging_claim(:worker)", {"worker": worker_id}
+            )
+        return JobClaim.model_validate(value) if value is not None else None
+
+    async def recover_expired(self, limit=100):
+        async with self._transaction() as connection:
+            assert await call(
+                connection, "SELECT version_num FROM platform.alembic_version", {}
+            ) in {"0005", "0006", "0007"}
+            value = await call(
+                connection, "SELECT platform.messaging_recover_expired(:limit)", {"limit": limit}
+            )
+        return value["recovered"]
 
 
 @pytest_asyncio.fixture

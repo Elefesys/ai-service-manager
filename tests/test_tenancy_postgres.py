@@ -484,6 +484,8 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "clients",
             "client_identities",
             "conversations",
+            "conversation_turns",
+            "conversation_turn_messages",
             "file_objects",
             "messages",
             "outbox_events",
@@ -650,10 +652,29 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                 )
             }
         )
-        assert {row["proname"] for row in functions} == legacy_functions | set(m1_3_profiles) | set(
-            m2_profiles
+        # Enumerate the exact M3 capabilities without broadening any M1/M2 grant.
+        m3_profiles = {
+            "turn_require_isolation": (False, False),
+            "turn_immutable": (False, False),
+            "turn_ingress": (True, False),
+            "turn_member_check": (True, False),
+            "turn_members_consistent": (True, False),
+            "turn_enqueue": (True, False),
+            "turn_seal": (True, False),
+            "turn_group_message": (True, False),
+            "turn_material": (True, False),
+            "turn_preflight": (True, False),
+            "turn_supersede": (True, False),
+            "turn_snapshot": (True, False),
+            "turn_execute": (True, True),
+            "turn_consumer_finalize": (True, True),
+            "turn_consumer_replay": (True, True),
+        }
+        assert {row["proname"] for row in functions} == (
+            legacy_functions | set(m1_3_profiles) | set(m2_profiles) | set(m3_profiles)
         )
         m1_3_profiles.update(m2_profiles)
+        m1_3_profiles.update(m3_profiles)
         legacy_rows = [row for row in functions if row["proname"] in legacy_functions]
         assert all(
             row["prosecdef"] and row["rolname"] == "asm_migrator" and not row["public_execute"]

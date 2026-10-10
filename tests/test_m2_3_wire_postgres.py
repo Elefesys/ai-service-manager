@@ -29,7 +29,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from test_auth_postgres import auth as auth
 from test_auth_postgres import headers, login
-from test_m2_1_postgres import cleanup, delivery, expire, query
+from test_m2_1_postgres import cleanup, delivery, expire, finish_text_turns, query
 from test_m2_1_postgres import messaging as messaging
 from test_m2_2_storage_postgres import image_bytes
 from test_m2_2_storage_postgres import images as images
@@ -250,6 +250,7 @@ async def test_real_http_accept_lost_response_process_restart_never_second_wire_
 ):
     h = telegram_case
     _, cid = await inbound(h)
+    await finish_text_turns(h)
     async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
         prepared = await unit.messaging_prepare_text(cid, "Wire exact 🎨", "wire-1")
         probe = prepared["probe"]
