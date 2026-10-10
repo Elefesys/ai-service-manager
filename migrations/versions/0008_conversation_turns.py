@@ -256,6 +256,79 @@ ORIGINAL = {
       END $$""",
 }
 
+# Exact inherited 0006 body also restores the added terminal prelock hook.
+ORIGINAL[
+    "files_finish_fetch"
+] = r"""CREATE OR REPLACE FUNCTION platform.files_finish_fetch(p_job uuid,p_claim uuid,p_intent uuid) RETURNS jsonb
+      LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+      DECLARE j platform.messaging_jobs%ROWTYPE; f app.file_objects%ROWTYPE; u platform.file_object_uploads%ROWTYPE; result_code text;
+      BEGIN
+        IF coalesce(current_setting('asm.actor_kind',true),'')<>'' THEN RAISE EXCEPTION 'ACCESS_DENIED' USING ERRCODE='P2001'; END IF;
+        -- Consistent lock order with reschedule/prepare avoids job/file/intent deadlocks.
+        SELECT * INTO j FROM platform.messaging_jobs WHERE id=p_job FOR UPDATE;
+        IF NOT FOUND OR j.kind<>'FETCH_IMAGE' THEN RAISE EXCEPTION 'STALE_CLAIM' USING ERRCODE='P2001'; END IF;
+        SELECT * INTO STRICT f FROM app.file_objects WHERE workspace_id=j.workspace_id AND id=j.file_id FOR UPDATE;
+        SELECT * INTO u FROM platform.file_object_uploads WHERE workspace_id=j.workspace_id AND id=p_intent AND job_id=j.id AND file_id=f.id AND claim_token=p_claim FOR UPDATE;
+        IF NOT FOUND THEN RAISE EXCEPTION 'STALE_CLAIM' USING ERRCODE='P2001'; END IF;
+        IF f.status='READY' AND f.winner_intent_id=u.id AND u.status='WINNER' AND j.status='SUCCEEDED' THEN
+          result_code:='ALREADY_FINALIZED';
+        ELSE
+          PERFORM platform.messaging_admit(p_job,p_claim);
+          PERFORM platform.messaging_guard(p_job,p_claim);
+          IF f.status<>'PENDING' OR u.status<>'PREPARED' THEN RAISE EXCEPTION 'STALE_CLAIM' USING ERRCODE='P2001'; END IF;
+          UPDATE platform.file_object_uploads SET status='WINNER',version=version+1 WHERE workspace_id=j.workspace_id AND id=u.id;
+          UPDATE app.file_objects SET status='READY',winner_intent_id=u.id,storage_key=u.storage_key,mime_type=u.mime_type,
+            size_bytes=u.size_bytes,sha256=u.sha256,width=u.width,height=u.height,completed_at=clock_timestamp(),version=version+1
+            WHERE workspace_id=j.workspace_id AND id=f.id;
+          UPDATE platform.messaging_jobs SET status='SUCCEEDED',error_code=NULL,claim_token=NULL,lease_until=NULL,worker_id=NULL,
+            completed_at=clock_timestamp(),version=version+1 WHERE id=j.id;
+          result_code:='FINALIZED';
+        END IF;
+        RETURN jsonb_build_object('code',result_code,'status','READY','job_id',j.id,'file_id',f.id,'intent_id',u.id);
+      END $$"""
+
+ORIGINAL[
+    "messaging_finish_send"
+] = r"""CREATE OR REPLACE FUNCTION platform.messaging_finish_send(p_job uuid,p_claim uuid,p_attempt uuid,p_outcome text,p_provider_message text,p_error text,p_retry_after_seconds integer) RETURNS jsonb
+      LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
+      DECLARE j platform.messaging_jobs%ROWTYPE; box app.outbox_events%ROWTYPE; result jsonb; state text;
+      BEGIN
+        IF p_retry_after_seconds IS NOT NULL AND (p_retry_after_seconds NOT BETWEEN 1 AND 86400 OR p_outcome IS DISTINCT FROM 'NOT_SENT_RETRYABLE') THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
+        IF p_outcome IS NULL OR p_outcome NOT IN ('SUCCESS','NOT_SENT_RETRYABLE','NOT_SENT_PERMANENT','UNKNOWN') OR p_attempt IS NULL OR p_claim IS NULL OR
+          (p_outcome='SUCCESS' AND (NOT platform.messaging_valid_id(p_provider_message,256,1024) OR p_error IS NOT NULL)) OR
+          (p_outcome<>'SUCCESS' AND (p_provider_message IS NOT NULL OR p_error IS NULL OR p_error NOT IN ('NOT_ALLOWED','DEPENDENCY_TIMEOUT','DEPENDENCY_UNAVAILABLE','UNKNOWN_EXTERNAL_RESULT','INVALID_INPUT'))) OR
+          (p_outcome='UNKNOWN' AND p_error<>'UNKNOWN_EXTERNAL_RESULT') OR
+          (p_outcome<>'UNKNOWN' AND p_error='UNKNOWN_EXTERNAL_RESULT') OR
+          (p_outcome='NOT_SENT_RETRYABLE' AND p_error NOT IN ('DEPENDENCY_TIMEOUT','DEPENDENCY_UNAVAILABLE')) THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
+        IF coalesce(current_setting('asm.actor_kind',true),'')<>'' THEN RAISE EXCEPTION 'ACCESS_DENIED' USING ERRCODE='P2001'; END IF;
+        -- Lock protects exact canonical recognition against concurrent next-attempt start.
+        -- This path changes neither authority GUC nor saved state.
+        SELECT * INTO j FROM platform.messaging_jobs WHERE id=p_job FOR UPDATE;
+        IF NOT FOUND OR j.kind<>'SEND_MANUAL_TEXT' THEN RAISE EXCEPTION 'STALE_CLAIM' USING ERRCODE='P2001'; END IF;
+        SELECT * INTO STRICT box FROM app.outbox_events WHERE workspace_id=j.workspace_id AND id=j.outbox_id FOR UPDATE;
+        IF j.last_attempt_id=p_attempt AND j.last_claim_token=p_claim AND j.last_outcome=p_outcome AND
+           j.last_provider_message_id IS NOT DISTINCT FROM p_provider_message AND j.last_error_code IS NOT DISTINCT FROM p_error AND j.last_retry_after_seconds IS NOT DISTINCT FROM p_retry_after_seconds AND box.attempt_id=p_attempt THEN
+          RETURN jsonb_build_object('code','ALREADY_FINALIZED','status',box.status,'job_id',j.id,'outbox_id',box.id,'attempt_id',p_attempt) || CASE WHEN p_retry_after_seconds IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('retry_after_seconds',p_retry_after_seconds,'available_at',(SELECT last_retry_due FROM platform.messaging_jobs WHERE id=j.id)) END;
+        END IF;
+        PERFORM platform.messaging_admit(p_job,p_claim);
+        j:=platform.messaging_guard(p_job,p_claim);
+        IF box.status<>'DISPATCHING' OR box.attempt_id IS DISTINCT FROM p_attempt THEN RAISE EXCEPTION 'STALE_CLAIM' USING ERRCODE='P2001'; END IF;
+        IF p_outcome='SUCCESS' THEN
+          state:='SENT';
+          UPDATE app.outbox_events SET status=state,provider_message_id=p_provider_message,error_code=NULL,completed_at=clock_timestamp(),version=version+1 WHERE workspace_id=j.workspace_id AND id=box.id;
+          UPDATE platform.messaging_jobs SET status='SUCCEEDED',claim_token=NULL,lease_until=NULL,worker_id=NULL,error_code=NULL,completed_at=clock_timestamp(),version=version+1 WHERE id=j.id;
+        ELSIF p_outcome='UNKNOWN' THEN
+          state:='UNKNOWN';
+          UPDATE app.outbox_events SET status=state,error_code='UNKNOWN_EXTERNAL_RESULT',completed_at=clock_timestamp(),version=version+1 WHERE workspace_id=j.workspace_id AND id=box.id;
+          UPDATE platform.messaging_jobs SET status='DEAD',claim_token=NULL,lease_until=NULL,worker_id=NULL,error_code='UNKNOWN_EXTERNAL_RESULT',completed_at=clock_timestamp(),version=version+1 WHERE id=j.id;
+        ELSE
+          result:=platform.messaging_reschedule(j.id,p_error,p_outcome='NOT_SENT_RETRYABLE',p_retry_after_seconds);
+          state:=result->>'status';
+        END IF;
+        UPDATE platform.messaging_jobs SET last_attempt_id=p_attempt,last_claim_token=p_claim,last_outcome=p_outcome,last_provider_message_id=p_provider_message,last_error_code=p_error,last_retry_after_seconds=p_retry_after_seconds,last_retry_due=CASE WHEN p_retry_after_seconds IS NOT NULL THEN available_at END WHERE id=j.id;
+        RETURN jsonb_build_object('code','FINALIZED','status',state,'job_id',j.id,'outbox_id',box.id,'attempt_id',p_attempt) || CASE WHEN p_retry_after_seconds IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('retry_after_seconds',p_retry_after_seconds,'available_at',(SELECT last_retry_due FROM platform.messaging_jobs WHERE id=j.id)) END;
+      END $$"""
+
 TABLES = (
     "app.conversation_turns",
     "app.conversation_turn_messages",
@@ -663,6 +736,7 @@ def _maintenance() -> None:
         retry:=p_retry AND j.attempt_count<5 AND clock_timestamp()<j.first_started_at+interval '15 minutes'
           AND (p_delay IS NULL OR due<j.first_started_at+interval '15 minutes');
         PERFORM platform.turn_preflight(j,false,NOT retry);
+        IF current_setting('asm.actor_kind',true)='worker_job' THEN PERFORM platform.messaging_guard(j.id,j.claim_token); END IF;
         IF platform.turn_supersede(j) THEN RETURN jsonb_build_object('code','SUPERSEDED','status','SUCCEEDED','job_id',j.id,'outbox_id',NULL); END IF;
         final_error:=CASE WHEN p_retry AND NOT retry THEN 'RETRY_EXHAUSTED' ELSE p_error END;
         IF j.kind='FETCH_IMAGE' THEN
@@ -873,6 +947,20 @@ def _consumer() -> None:
 
 
 def _extend_kernel() -> None:
+    _replace(
+        "messaging_finish_send",
+        (
+            "        IF p_outcome='SUCCESS' THEN\n",
+            "        IF p_outcome IN ('SUCCESS','UNKNOWN') THEN\n          PERFORM platform.turn_preflight(j,false,true);\n          PERFORM platform.messaging_guard(p_job,p_claim);\n        END IF;\n        IF p_outcome='SUCCESS' THEN\n",
+        ),
+    )
+    _replace(
+        "files_finish_fetch",
+        (
+            "          UPDATE platform.file_object_uploads SET status='WINNER'",
+            "          PERFORM platform.turn_preflight(j,false,true);\n          PERFORM platform.messaging_guard(p_job,p_claim);\n          UPDATE platform.file_object_uploads SET status='WINNER'",
+        ),
+    )
     for name in ("messaging_guard", "messaging_admit", "messaging_ingest", "telegram_ingest"):
         changes = [
             ("      BEGIN\n", "      BEGIN\n        PERFORM platform.turn_require_isolation();\n")

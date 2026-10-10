@@ -50,10 +50,18 @@ with tempfile.TemporaryDirectory(prefix='asm-frozen-h-') as temp:
         }, indent=2) + '\n')
         assert result.returncode == 0, 'FROZEN_HISTORICAL_ASSERTIONS_FAILED'
         assert not e.command(['docker', 'ps', '-aq']).strip(), 'HISTORICAL_CONTAINERS_REMAIN'
-        # Only the already-attested disposable historical project volumes.
-        volumes = e.command(['docker', 'volume', 'ls', '-q', '--filter',
-                             'label=com.docker.compose.project=asm-telegram-egress-test']).decode().split()
+        # The daemon had no volumes/containers before this frozen lane. Remove
+        # its exact remaining inventory, including anonymous image VOLUMEs that
+        # have no Compose project label. No prune and no pre-existing volumes.
+        volumes = e.command(['docker', 'volume', 'ls', '-q']).decode().split()
         if volumes:
+            inventory = json.loads(e.command(['docker', 'volume', 'inspect', *volumes]))
+            assert {v['Name'] for v in inventory} == set(volumes)
+            assert all(v['Driver'] == 'local' and not v.get('Options') for v in inventory)
+            (reports / 'disposable-volume-cleanup.json').write_text(json.dumps({
+                'initial_inventory': [], 'containers_after_historical': [],
+                'removed': [{'name': v['Name'], 'labels': v.get('Labels')} for v in inventory],
+            }, indent=2) + '\n')
             e.command(['docker', 'volume', 'rm', *volumes])
         assert not e.command(['docker', 'volume', 'ls', '-q']).strip(), 'HISTORICAL_VOLUMES_REMAIN'
     finally:

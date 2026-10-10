@@ -868,3 +868,147 @@ async def test_turn_exhaustion_is_terminal_and_file_failure_adds_only_context(me
     assert (await turns(h))[0] == failed
     assert (await context(h, turn["conversation_id"]))["version"] == version["version"] + 1
     assert (await rows(h, "app.file_objects"))[0]["status"] == "FAILED"
+
+
+async def test_continuous_ingress_reaches_real_hard_cap_without_extending_it(messaging):
+    from datetime import UTC, datetime
+
+    h = messaging
+    await receive(h, event_id="hard-0", message_id="hard-0")
+    initial = (await turns(h))[0]
+    # Real elapsed policy time, with arrivals less than D apart. No synthetic
+    # deadline or mark is changed for this G/cap evidence.
+    for index, seconds in enumerate((1.5, 3, 4.5, 6, 7.5, 9), 1):
+        delay = seconds - (datetime.now(UTC) - initial["first_ingress_at"]).total_seconds()
+        assert delay > 0
+        await asyncio.sleep(delay)
+        await receive(h, event_id=f"hard-{index}", message_id=f"hard-{index}")
+    collecting = (await turns(h))[0]
+    assert collecting["id"] == initial["id"] and collecting["member_count"] == 7
+    assert collecting["quiet_at"] == collecting["hard_at"] == initial["hard_at"]
+    await seal(h, initial["id"])
+    closed = (await turns(h))[0]
+    assert closed["seal_time"] == initial["hard_at"] and closed["state"] == "READY"
+    assert (closed["media_deadline_at"] - closed["first_ingress_at"]).total_seconds() == 25
+    await receive(h, event_id="after-hard", message_id="after-hard")
+    assert len(await turns(h)) == 2
+    assert next(t for t in await turns(h) if t["id"] == initial["id"]) == closed
+
+
+async def test_file_commit_rollback_has_no_partial_context_revision_or_new_jobs(messaging):
+    h = messaging
+    await receive(h, image_file_id="rollback-photo")
+    turn = (await turns(h))[0]
+    fetch_id = (await query(h, "SELECT id FROM platform.messaging_jobs WHERE kind='FETCH_IMAGE'"))[
+        0
+    ]["id"]
+    fetch = await claim_exact(h, fetch_id)
+    files = FileDatabase(h.kernel)
+    permit = await files.prepare_upload(fetch, MANIFEST)
+    before_turn, before_context = (await turns(h))[0], await context(h, turn["conversation_id"])
+    jobs_before = await rows(h, "platform.messaging_jobs")
+
+    async def crash(name):
+        if name == "fetch_finalize_before_commit":
+            raise SQLAlchemyError("file commit boundary")
+
+    failing = FileDatabase(MessagingDatabase(h.runtime.engine, barrier=crash))
+    with pytest.raises(SQLAlchemyError, match="file commit boundary"):
+        await failing.finish_fetch(fetch.job_id, fetch.claim_token, permit.intent_id)
+    assert (await turns(h))[0] == before_turn
+    assert await context(h, turn["conversation_id"]) == before_context
+    assert await rows(h, "platform.messaging_jobs") == jobs_before
+    assert (await rows(h, "app.file_objects"))[0]["status"] == "PENDING"
+    await files.finish_fetch(fetch.job_id, fetch.claim_token, permit.intent_id)
+    assert (await context(h, turn["conversation_id"]))["version"] == before_context["version"] + 1
+    assert (await turns(h))[0]["revision"] == before_turn["revision"] + 1
+
+
+async def test_failed_media_is_partial_without_wait_expired_or_reopen(messaging):
+    h = messaging
+    await receive(h, image_file_id="failed-photo")
+    turn = (await turns(h))[0]
+    fetch_id = (await query(h, "SELECT id FROM platform.messaging_jobs WHERE kind='FETCH_IMAGE'"))[
+        0
+    ]["id"]
+    fetch = await claim_exact(h, fetch_id)
+    initial = await context(h, turn["conversation_id"])
+    await h.kernel.retry(fetch, Code.DEPENDENCY_UNAVAILABLE, True)
+    assert await context(h, turn["conversation_id"]) == initial
+    assert (await turns(h))[0] == turn
+    fetched_again = await claim_exact(h, fetch_id)
+    await h.kernel.retry(fetched_again, Code.INVALID_INPUT, False)
+    assert (await context(h, turn["conversation_id"]))["version"] == initial["version"] + 1
+    await seal(h, turn["id"])
+    claim, value = await snapshot(h, turn["id"])
+    assert value.readiness == "PARTIAL" and value.members[0].file.status == "FAILED"
+    assert not value.members[0].file.wait_expired
+    assert (await h.kernel.finish_turn(claim, consume(value))).result.wait_expired_count == 0
+
+
+@pytest.mark.parametrize("ending", ["SENT", "UNKNOWN", "FAILED", "REVOKED", "RETRY"])
+async def test_each_manual_acceptance_and_terminal_fact_increments_once(messaging, ending):
+    from asm.messaging.models import OutcomeKind, SendOutcome
+    from test_tenancy_postgres import UA
+
+    h = messaging
+    await receive(h)
+    turn = (await turns(h))[0]
+    conv = turn["conversation_id"]
+    before = (await context(h, conv))["version"]
+    accepted = await command(h, conv, "one material fact", "material")
+    replay = await command(h, conv, "one material fact", "material")
+    assert (
+        accepted.message_id == replay.message_id
+        and (await context(h, conv))["version"] == before + 1
+    )
+    job = (
+        await query(
+            h,
+            "SELECT j.id FROM platform.messaging_jobs j JOIN app.outbox_events b ON (b.workspace_id,b.id)=(j.workspace_id,j.outbox_id) WHERE b.message_id=:id",
+            id=accepted.message_id,
+        )
+    )[0]["id"]
+    claim = await claim_exact(h, job)
+    if ending == "REVOKED":
+        await query(
+            h,
+            "UPDATE platform.workspace_memberships SET status='REVOKED' WHERE workspace_id=:ws AND user_account_id=:owner RETURNING workspace_id",
+            ws=A,
+            owner=UA,
+        )
+        rejected = await h.kernel.begin_send(claim)
+        assert rejected.code == "NOT_ALLOWED"
+    else:
+        permit = await h.kernel.begin_send(claim)
+        assert (await context(h, conv))["version"] == before + 1
+        if ending == "SENT":
+            outcome = SendOutcome(OutcomeKind.SUCCESS, provider_message_id="delivered")
+        elif ending == "UNKNOWN":
+            outcome = SendOutcome(OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT)
+        elif ending == "FAILED":
+            outcome = SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.INVALID_INPUT)
+        else:
+            outcome = SendOutcome(
+                OutcomeKind.NOT_SENT_RETRYABLE, error_code=Code.DEPENDENCY_UNAVAILABLE
+            )
+        saved = await h.kernel.finish_send(
+            claim.job_id, claim.claim_token, permit.attempt_id, outcome
+        )
+        repeated = await h.kernel.finish_send(
+            claim.job_id, claim.claim_token, permit.attempt_id, outcome
+        )
+        assert repeated.code == "ALREADY_FINALIZED" and repeated.status == saved.status
+        assert repeated.job_id == saved.job_id and repeated.attempt_id == saved.attempt_id
+        if ending == "RETRY":
+            assert (await context(h, conv))["version"] == before + 1
+            await query(
+                h,
+                "UPDATE platform.messaging_jobs SET attempt_count=5,available_at=clock_timestamp() WHERE id=:id RETURNING id",
+                id=job,
+            )
+            assert await h.kernel.claim_job("manual-exhaustion") is None
+    assert (await context(h, conv))["version"] == before + 2
+    assert (
+        await query(h, "SELECT version FROM app.messages WHERE id=:id", id=accepted.message_id)
+    )[0]["version"] == 1

@@ -17,6 +17,7 @@ import ipaddress
 import json
 import os
 import re
+import runpy
 import socket
 import ssl
 import stat
@@ -742,7 +743,11 @@ async def canonical_fingerprint(connection):
             )
         )
     ).all()
-    from scripts.prepare_telegram_egress import schema_inventory
+    # The held after command runs this file directly, without pytest's root
+    # pythonpath. Load the exact checked-out guard in both entrypoints.
+    schema_inventory = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/prepare_telegram_egress.py")
+    )["schema_inventory"]
 
     assert (
         await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
@@ -903,7 +908,7 @@ async def durable_local():
                 ), "E05_FRESH_EMPTY_LOCAL_DATABASE_REQUIRED"
             else:
                 # The first case's sealed billing catalog is immutable by contract.
-                # Require its complete attested cleanup fingerprint (all 31 tables),
+                # Require its complete attested cleanup fingerprint (all 34 tables),
                 # not a relaxed empty-DB check or a destructive catalog reset.
                 previous = read_json(catalog_file)
                 assert previous["database_identity"] == target["database_identity"]

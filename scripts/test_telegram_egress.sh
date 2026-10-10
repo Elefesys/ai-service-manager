@@ -74,6 +74,10 @@ def run(args, timeout=120):
             code = result.stdout.decode(errors='replace').strip()
             if re.fullmatch('EGRESS_[A-Za-z0-9_]{1,120}', code):
                 print(code, flush=True)
+        if args[-2:] == ['--durable-receipt', 'after']:
+            code = result.stdout.decode(errors='replace').strip()
+            if re.fullmatch('E05_DURABLE_RECEIPT_FAILURE_[A-Za-z0-9_]{1,80}', code):
+                print(code, flush=True)
         raise RuntimeError('TEST_COMMAND_FAILED:' + phase)
     return result.stdout
 
@@ -462,7 +466,9 @@ http {
             reports.mkdir(exist_ok=True)
             (reports / 'candidate-egress-source.json').write_text(json.dumps({
                 'source_sha': source, 'expected_revision': '0008', 'images': proofs,
-                'parents': run(['git', 'show', '-s', '--format=%P', source]).decode().strip().split(),
+                # Raw commit headers preserve parents even in Actions' shallow
+                # checkout; revision walking would incorrectly report no parents.
+                'parents': [line[7:] for line in run(['git', 'cat-file', 'commit', source]).decode().split('\n\n', 1)[0].splitlines() if line.startswith('parent ')],
             }, indent=2) + '\n')
         compose('config', '--quiet')
         phase_start('test_storage_bootstrap')
