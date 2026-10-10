@@ -732,6 +732,15 @@ VM, binding, ACK, Telegram activation/sends и immutable receipts этой ра�
 `8c6b13542bf661bb9b5a4994c5d0576407779372`. Его единственный parent — T.
 Ветка `c3/m3-1-control`, этот же Draft PR сохраняется для будущей реализации.
 
+R1 по [выдаче C0](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6100251718)
+исправляет только§12 reviewed candidate `cf043901186f7f5178332e64a056d336cce0dc0f`.
+Учтены [C1](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6100160198),
+[C2](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6100147266) и
+[C6](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6100099472).
+Три P2 остаются OPEN до re-review/verdict C0; авторские исправления — FIXED FOR REVIEW.
+Принятые C0 policy choice, Audit API design и C6 compatibility design отражены§12.12;
+это не принятие всего CONTROL и не evidence его реализации.
+
 Вступление и §§1–11 сохранены побайтно как принятый TURNS prefix, blob
 `5e87375852331523491a47926b9c5bd49946c157`; их исторические PENDING/OPEN и «будущий I»
 не являются текущими статусами. По реестру C0 TURNS принят на main в LOCAL/TEST,
@@ -819,14 +828,15 @@ transport/security validation и строгий синтаксис, затем �
 
 ### 12.3. Authority, product и порядок решений
 
-Предлагается **сохранить один существующий продуктовый gate** для нового Resume:
+**C0 согласовал один существующий продуктовый gate** для нового Resume:
 реальный EntitlementService `evaluate_product(..., messaging.manual_send)` и
 DB `messaging_manual_send_allowed`. Это консервативное условие доступности уже
 подключённого messaging-продукта, **не выдача права AI-send по manual permission**.
 CONTROL не добавляет catalog/entitlement/TEST interval и не меняет пять keys GET
 billing. Будущие GUARDS/M4 обязаны отдельно определить и проверять автоматическую
-capability; один Resume/его receipt её не заменяют. Такое повторное использование
-gate — явное предложение C1/C0 (§12.12), не неявное расширение frozen R4.
+capability; один Resume/его receipt её не заменяют. Policy choice принят C0;
+temporal evaluation исправлена ниже и ещё требует C1 re-review (§12.12).
+Frozen R4 read semantics этим решением не расширяются.
 
 | Проверка | GET control | Новый Takeover | Новый Resume | Новый public manual intent |
 |---|---|---|---|---|
@@ -862,16 +872,66 @@ Telegram state. INACTIVE connection/Business не активируются эт�
    затем Business SHARE → connection SHARE; для Resume billing
    locks в прежнем порядке, затем Conversation NO KEY UPDATE. Takeover billing
    rows не берёт. Повторно проверить immutable relation под этим lock.
-4. После **всех потенциальных ожиданий** новый coherently locked DB-time billing
-   snapshot → EntitlementService (Resume), затем DB policy validation с тем же
-   precedence. Structural/availability/product denial имеет приоритет перед CAS;
-   затем expected_generation и expected_context_version, затем overflow.
+4. После final prepare и **всех потенциальных ожиданий** authority/connection/
+   billing/Conversation locks — отдельный `POST_LOCK_PRODUCT_SNAPSHOT` → прежний
+   EntitlementService (Resume), затем SQL повтор policy с тем же precedence:
+   structural error → availability/product denial → expected_generation и
+   expected_context_version → overflow. Старый `billing_snapshot()` здесь не годится.
 5. Один atomic transition, receipt и Audit. Reply только после commit. Никакой
    сети, нового job/Outbox или независимого commit внутри control command.
 
-Resume service вызывает narrow prepare capability для locks/replay, затем реальный
-EntitlementService, затем execute в **том же** unit. Execute повторяет canonical
-receipt/authority/CAS/DB-time policy; caller `allow=true` не принимает. SQL capability
+Новая fixed query `POST_LOCK_PRODUCT_SNAPSHOT` в `billing/queries.py` выполняется
+**одним statement** на том же guarded tenant connection. Однострочный MATERIALIZED
+CTE однократно захватывает DB clock после locks; все flags и полный snapshot
+вычисляются из этого единственного `evaluated_at` в одном statement snapshot:
+
+```sql
+WITH evaluation AS MATERIALIZED (
+  SELECT pg_catalog.clock_timestamp() AS evaluated_at
+)
+SELECT evaluated_at,
+  COALESCE((SELECT jsonb_agg(to_jsonb(a))
+    FROM platform.workspace_billing_accounts a WHERE a.workspace_id=:workspace), '[]'::jsonb)
+    AS accounts,
+  COALESCE((SELECT jsonb_agg(to_jsonb(m) || jsonb_build_object(
+    'is_active', m.effective_from <= evaluated_at AND
+       (m.effective_until IS NULL OR evaluated_at < m.effective_until)))
+    FROM platform.workspace_service_modes m WHERE m.workspace_id=:workspace), '[]'::jsonb)
+    AS modes,
+  COALESCE((SELECT jsonb_agg(to_jsonb(s) || jsonb_build_object(
+    'is_current', s.effective_from <= evaluated_at AND evaluated_at < s.effective_until,
+    'revision_state', (SELECT to_jsonb(r) || jsonb_build_object(
+      'plan', (SELECT to_jsonb(p) FROM platform.saas_plans p WHERE p.plan_id=r.plan_id),
+      'entitlements', COALESCE((SELECT jsonb_agg(to_jsonb(e))
+        FROM platform.plan_entitlements e WHERE e.plan_revision_id=r.plan_revision_id), '[]'::jsonb))
+      FROM platform.saas_plan_revisions r WHERE r.plan_revision_id=s.plan_revision_id)))
+    FROM platform.workspace_subscriptions s WHERE s.workspace_id=:workspace), '[]'::jsonb)
+    AS history
+FROM evaluation
+```
+
+В проекции сохраняются **все** account/mode/history rows и pinned revisions,
+catalog/entitlements, включая inactive/future history для structural validation;
+нельзя фильтром спрятать invalid/overlapping state. Не допускаются application clock,
+замена только evaluated_at при старых flags, несколько независимых SELECT или
+повторные clock captures. Frozen public R4 GET, existing `SNAPSHOT` с
+`CURRENT_TIMESTAMP`, `billing_snapshot()` и EntitlementService **не меняются**.
+
+Отдельный `TenantUnitOfWork.post_lock_product_snapshot() -> RowMapping` выполняет
+эту fixed query с server-derived Workspace. Он сохраняет task/active-unit/physical-XID
+guards, live owner admission и owner/worker mutual exclusion, не принимает ws или
+`allow=true`. Это guarded read method, **не новая SQL capability**; новых tables,
+grants или product keys нет. SQL locks уже взяты, projection не добавляет обратных
+lock edges. Один и тот же полный snapshot подаётся неизменному
+`EntitlementService.evaluate_product(..., messaging.manual_send)` в новом Resume
+и final public manual обоих providers (§12.5).
+
+Resume service вызывает narrow prepare capability для locks/replay, затем этот
+method и реальный EntitlementService, затем execute в **том же** unit. Prepare для
+NEW собирает и удерживает locks; availability/product/CAS verdict следует после
+post-lock evaluation, иначе scheduled activation во время ожидания теряется.
+Exact replay выходит до projection/новых gates. Execute повторяет canonical
+receipt/authority/DB-time policy, затем CAS; caller `allow=true` не принимает. SQL capability
 не позволяет обходить policy вызовом без Python. Unknown commit восстанавливается
 тем же actor/ws/conversation/body/key после восстановления auth/CSRF; новый key не
 recovery. Owner revocation и команда сериализуются на прежних authority rows:
@@ -909,7 +969,17 @@ asm:m3:conversation_control:v1\n
 `\n` — один LF; после последнего decimal нет LF. Key, correlation, receipt ID,
 время и текущие counters не входят. Python/DB используют одинаковые vectors.
 Сохраняются original actor/correlation, request fields/hash, before/after mode/gen,
-context, accepted_at, exact result и typed Audit binding. Accepted_at — DB clock
+context, accepted_at, exact result и typed Audit binding. Receipt column
+`actor_user_account_id` — saved actor; `context_version` — saved accepted context,
+равный `expected_context_version`; `expected_generation` хранит request
+`expected_control_generation`. `audit_event_type` генерируется из operation:
+TAKEOVER→CONVERSATION_TAKEN_OVER, RESUME→CONVERSATION_RESUMED.
+Exact receipt key `(workspace_id,audit_event_id,conversation_id,accepted_generation,
+audit_event_type,actor_user_account_id,context_version)` ссылается на Audit
+`(workspace_id,audit_event_id,conversation_object_id,conversation_control_generation,
+event_type,actor_user_account_id,object_version)` (§12.7). Membership FK сам по себе
+равенство actors не доказывает. Все семь CONTROL components обязательны/non-null.
+Accepted_at — DB clock
 после lock/CAS, не CURRENT_TIMESTAMP до ожидания. Denied/stale/conflicting command
 не сохраняет success receipt, Audit, generation/fence или частичный transition.
 
@@ -945,7 +1015,8 @@ prepare/replay → release → readonly refresh≤5s → новая auth unit и
 Для нового intent final chain становится:
 `authority → M2 key lock → Business SHARE → connection SHARE → Telegram state
 (если применим) → billing locks (public path) → Conversation NO KEY UPDATE →
-повтор temporal product/channel checks → HUMAN/gen+1/fence=NULL → новый Message
+POST_LOCK_PRODUCT_SNAPSHOT/EntitlementService → повтор SQL temporal product/channel
+checks в прежнем provider scope → HUMAN/gen+1/fence=NULL → новый Message
 → прежний context trigger+1 → Outbox/Audit/receipt/Job → commit`.
 
 Предлагаемый `conversation_manual_prelock(uuid,text,text)` — узкая owner-only capability
@@ -954,13 +1025,20 @@ connection/state/billing locks в указанном порядке и посл�
 не пишет mode и не выдаёт send permission. Args — conversation, exact text, key; она сначала повторяет canonical
 `messaging_prepare_text`, поэтому сама не получает Conversation до M2 namespace
 lock. В public service вызывается после prepare/replay (и Telegram observation)
-до последнего `product_gate`; billing snapshot тогда
-проверяет время уже после ожидания Conversation. Ранее взятые locks повторно не
+до последнего `product_gate`; тот использует **новый** guarded
+`post_lock_product_snapshot()`, не прежний `billing_snapshot()` с transaction-start
+time. Это обязательно для public CONTROLLED **и** TELEGRAM: single DB clock и все
+interval flags захватываются только после final prelock (§12.3). До него final NEW
+path не решает temporal product gate по старому snapshot; replay exits сохранены.
+Ранее взятые locks повторно не
 добавляют обратных edges. Первой prepare перед HTTP Conversation lock не нужен.
 Сама final SQL команда также prelock-ит Conversation перед mutation и повторяет
-Telegram window/product checks после этого ожидания. Старый внутренний CONTROLLED
-kernel сохраняет свой LOCAL/TEST product scope из M2; public path его не использует
-для обхода EntitlementService.
+Telegram window/product checks после этого ожидания. В actual0007
+`messaging_request_text` эти SQL product checks есть **только в TELEGRAM branch**;
+public CONTROLLED должен проходить новый post-lock Python gate. Старый внутренний
+CONTROLLED kernel сохраняет свой LOCAL/TEST product scope из M2: дополнительный
+SQL product gate ему не вводится. Public path его не использует для обхода
+EntitlementService. Frozen R4 GET projection не участвует в новом final admission.
 
 В0009 заменяется **только тело** `messaging_request_text(uuid,text,text)`:
 после его прежнего exact receipt-first и всех new-intent gates private
@@ -1089,9 +1167,10 @@ PK `(workspace_id,id)` с uuidv7; namespace/key UNIQUE; UNIQUE
 `(workspace_id,conversation_id,accepted_generation)` и `(workspace_id,audit_event_id)`.
 Поля request/result описаны§12.4; additionally saved `activation_fence_seq` private
 (Resume positive, Takeover NULL). CHECK: target соответствует operation,
-accepted_generation=expected_generation+1, context=expected_context,
+accepted_generation=expected_generation+1, context_version=expected_context_version,
 previous_generation=expected_generation, hash32bytes, конечное время, строгий
-result равен immutable columns. Generated operation event_type связывает Audit.
+result равен immutable columns. Saved/expected context — positive bigint;
+generated `audit_event_type` по operation связывает Audit (§12.4).
 
 Supporting UNIQUE `(workspace_id,id,client_id)` у Conversation позволяет receipt
 FK `(workspace_id,conversation_id,client_id)` без same-Workspace/different-Client
@@ -1109,10 +1188,32 @@ mode enums, generations — canonical decimal strings, new=old+1; target HUMAN/A
 определяется event_type. Нет body/key/chat/provider/claim или public fence.
 Generated nullable `conversation_object_id` обеспечивает typed tenant FK; generated
 nullable `conversation_control_generation` из строгого payload нужен для exact
-receipt→Audit FK. Supporting Audit UNIQUE
-`(workspace_id,audit_event_id,conversation_object_id,conversation_control_generation,event_type)`;
-receipt FK включает тот же conversation/accepted generation/generated event type.
-Зафиксированы нужный объект, переход и единственный Audit, не произвольный UUID.
+receipt→Audit FK. Минимальный supporting Audit UNIQUE и точная связь:
+
+```sql
+-- app.audit_events: supporting UNIQUE
+UNIQUE (workspace_id, audit_event_id, conversation_object_id,
+        conversation_control_generation, event_type, actor_user_account_id,
+        object_version)
+
+-- platform.conversation_control_receipts
+CONSTRAINT conversation_control_receipts_audit_fk
+FOREIGN KEY (workspace_id, audit_event_id, conversation_id, accepted_generation,
+             audit_event_type, actor_user_account_id, context_version)
+REFERENCES app.audit_events
+  (workspace_id, audit_event_id, conversation_object_id,
+   conversation_control_generation, event_type, actor_user_account_id,
+   object_version) ON DELETE RESTRICT
+```
+
+Все receipt components — NOT NULL; CONTROL Audit discriminator CHECK явно требует
+non-null `conversation_object_id`, `conversation_control_generation`,
+`actor_user_account_id` и positive `object_version`.
+Так исключён MATCH SIMPLE NULL bypass. Зафиксированы **тот же saved actor и context**,
+объект, accepted generation/event и единственный Audit; result/transition CHECKs
+и typed Client/Conversation refs сохраняются. Это не FK к mutable текущей generation
+и не новый generic consistency helper. Nullable generated поля прежних billing/
+Message branches сохраняют прежний смысл; их constraints не ослабляются.
 
 Старые billing/Message discriminators, payload/actor/mandatory FK и Audit pagination
 остаются exact. Общий Audit GET читает новые события: необходимы два строгих backend
@@ -1121,23 +1222,26 @@ DTO variants/generated OpenAPI и два frontend parser/type/label variants
 regression. Это только совместимость существующего Audit screen; CONTROL UI не
 выдана. Нельзя фильтровать новые события из общего Audit или fallback-ить в billing label.
 
-Предлагаемый exact SQL ABI (new functions в platform, search_path=pg_catalog,pg_temp):
+Предлагаемый exact SQL ABI: **ровно восемь** new functions в platform. Для каждой
+строки без исключений owner=`asm_migrator`, exact `search_path=pg_catalog,pg_temp`
+(catalog proconfig `["search_path=pg_catalog, pg_temp"]`), PUBLIC EXECUTE запрещён.
 
-| Signature | Authority / использование |
-|---|---|
-| `conversation_control_read(uuid) RETURNS jsonb` | EXECUTE runtime; live owner/read, один state snapshot |
-| `conversation_control_prepare(uuid,uuid,text,text,bigint,bigint) RETURNS jsonb` | EXECUTE runtime; args conversation, expected_client, operation, key, expected_generation, expected_context; REPLAY либо NEW и все locks, без mutation |
-| `conversation_control_execute(uuid,uuid,text,text,bigint,bigint) RETURNS jsonb` | EXECUTE runtime; тот же canonical admission/locks, saved replay или atomic transition; DB повторяет product/CAS |
-| `conversation_manual_prelock(uuid,text,text) RETURNS void` | EXECUTE runtime; final owner public manual phase, только locks, не mode mutation/allow flag |
-| `conversation_control_fingerprint(uuid,uuid,uuid,uuid,text,bigint,bigint) RETURNS bytea` | Private; ws/actor/conversation/client/op/expected counters, DB codec |
-| `conversation_control_locked(uuid,uuid,text,text,bigint,bigint) RETURNS jsonb` | Private; единая authority/key/Business/connection/billing/Conversation lock+replay процедура prepare/execute, не две расходящиеся implementations |
-| `conversation_manual_takeover(uuid,uuid) RETURNS void` | Private; ws/conversation, canonical M2 new intent only; HUMAN/gen+1/clear fence, без context bump |
-| `conversation_turn_activation_matches(uuid,uuid) RETURNS boolean` | Private; ws/Turn, predicate§12.6 для SQL/tests; не public action capability |
+| Signature | SECURITY profile | asm_runtime EXECUTE | Authority / использование |
+|---|---|---|---|
+| `conversation_control_read(uuid) RETURNS jsonb` | DEFINER | Да | Live owner/read, один state snapshot |
+| `conversation_control_prepare(uuid,uuid,text,text,bigint,bigint) RETURNS jsonb` | DEFINER | Да | Args conversation, expected_client, operation, key, expected_generation, expected_context; REPLAY либо NEW и все locks, без mutation |
+| `conversation_control_execute(uuid,uuid,text,text,bigint,bigint) RETURNS jsonb` | DEFINER | Да | Тот же canonical admission/locks, saved replay или atomic transition; DB повторяет product/CAS |
+| `conversation_manual_prelock(uuid,text,text) RETURNS void` | DEFINER | Да | Final owner public manual phase, только locks, не mode mutation/allow flag |
+| `conversation_control_fingerprint(uuid,uuid,uuid,uuid,text,bigint,bigint) RETURNS bytea` | INVOKER | Нет | Private pure DB codec без table access; ws/actor/conversation/client/op/expected counters |
+| `conversation_control_locked(uuid,uuid,text,text,bigint,bigint) RETURNS jsonb` | DEFINER | Нет | Private единая authority/key/Business/connection/billing/Conversation lock+replay процедура prepare/execute, не две расходящиеся implementations |
+| `conversation_manual_takeover(uuid,uuid) RETURNS void` | DEFINER | Нет | Private ws/conversation, canonical M2 new intent only; HUMAN/gen+1/clear fence, без context bump |
+| `conversation_turn_activation_matches(uuid,uuid) RETURNS boolean` | DEFINER | Нет | Private ws/Turn, predicate§12.6 для SQL/tests; не public action capability |
 
 Все mutating/capture functions VOLATILE/READ COMMITTED; общий guard
 `turn_require_isolation`, task/XID и owner/worker mutual exclusion сохраняются.
-Новые SECURITY DEFINER functions принадлежат asm_migrator; REVOKE PUBLIC, grant
-только четыре перечисленные owner capabilities. Private helpers/sequence/
+REVOKE PUBLIC для всех восьми, grant только четыре owner capabilities.
+Отдельный guarded fixed-query `post_lock_product_snapshot()` (§12.3) **не девятая
+SQL function** и не расширение worker context. Private helpers/sequence/
 receipt internals недоступны runtime; frozen tenancy permissions не расширяются.
 Prepare не превращает prior transaction в token authority: execute обязан сам
 проверить canonical state, даже если prepare вообще не вызывался. Идемпотентность
@@ -1170,7 +1274,9 @@ Billing order точный existing: account → service mode → subscriptions 
 Conversation lock нельзя впервые получать connection/authority/state/billing/file/
 existing-job locks. Повторные проверки уже held rows не оправдывают новый обратный
 edge. Control commands не берут Turn locks: старые результаты устаревают через
-монотонную generation. Maintenance сохраняет single-candidate subtransaction,
+монотонную generation. Новый post-lock snapshot выполняется после последнего
+Conversation lock, без дополнительных locks и без прежнего CURRENT_TIMESTAMP;
+SQL execute повторяет policy по DB clock до CAS. Maintenance сохраняет single-candidate subtransaction,
 NOWAIT до **окончательного** retry-age решения, узкий P3001 catch и rollback BUSY;
 новый control writer не добавляет туда blocking FK. Constraints и deferred checks
 проверяются отдельными concurrency tests до C2 implementation acceptance.
@@ -1224,7 +1330,7 @@ implementation checkout/0009, не настоящий docs-only SHA. I из ис
 | Recovery choice | Никакого старта по одному return code или «upgrade уже вызывали» | Observed9→только exactC/9; observed8 после подтверждённого rollback/clean cycle→только T/8; unknown/unreadable/несколько heads→STOP. T/9 и C/8 запрещены |
 | Forward/restart и populated refusal | Только R_C/D_C, exact pinned source/tree/manifest; все API/worker/scheduler | Preserved M2+TURNS projection, private S3 hash, pending manual/UNKNOWN/receipt replay; fresh control/fence scenarios; новые IDs при restart; refusal до DDL по каждому blocker |
 
-Новый explicit selector C: `--control-schema-upgrade T C`, entrypoint
+Новый explicit selector C: `--control-schema-upgrade T C <private-budget-request>`, entrypoint
 `run_control_schema_phase` в candidate migration harness. Он не расширяет старый
 `schema_recovery_source` до «8 или9»: отдельный CONTROL guard требует конкретную9
 и exactC. Existing `--schema-upgrade H T` исполняется только frozenT shell; C не
@@ -1251,26 +1357,61 @@ head и tested virtual merge/parents/tree, role/DB/volume identity, fresh observ
 revision, fail exit/marker, source/image IDs/manifest, before/retained projections,
 recovery/restarted caller IDs, private S3 bytes/hash, exact receipt/fingerprint state.
 Unknown/unreadable negative probes отдельно маркируются как unit или actual PG,
-не подменяют настоящий commit/lost-result сценарий.
+не подменяют настоящий commit/lost-result сценарий. Outer failure retention начинается
+до source/archive/build/reuse/probe, а не лишь внутри runtime try: ранний отказ также
+оставляет source/phase, exit/reason и elapsed ledger. T reports копируются до удаления
+detached checkout; cleanup относится только к owned processes/projects/volumes.
 
 Inventories статически заданы по фазе: exact names0007 из§10,0008=34,0009=35.
-Cross0008→0009 сравнивает **фиксированный T column inventory всех34 таблиц**,
-включая весь M2 и Turn/member/job/consumer receipt, не динамическое пересечение
-из actual схемы. Alembic8→9 и новые NULL fields/empty control receipt проверяются
-отдельно. Default same-schema C fingerprint включает все35 таблиц и все их columns.
+**Фиксированный T column inventory содержит все34 qualified tables** и все старые
+columns, включая весь M2 и Turn/member/job/consumer receipt. При forward0008→0009
+данные сравниваются по33 data tables; `platform.alembic_version` проверяется отдельно
+как exact8→9, как и новые NULL fields/empty control receipt. Никакого dynamic
+intersection из actual схемы. Default same-schema C fingerprint включает все35
+таблиц и все их columns.
 Same-count substituted/missing/extra names — отказ. Только clean reverse cycle
-требует снова полного34-table fingerprint; новые данные ради него не удаляются.
+требует снова полного34-table fingerprint + exact restored definitions/grants;
+новые данные ради него не удаляются.
 
 Цена proposal ограничена одним дополнительным schema phase только в двух existing
 state jobs: прежние H proof и T proof не повторяются внутри C phase; T image, уже
 полученный для retained phase, повторно не строится при подтверждённых bytes.
-Существующие budgets **не растут**: nine jobs, state25min, historical held180s,
-prepare/build600s, отдельные command/cleanup bounds; transport5/10/20s, lease30s,
-DB2/5s, retries5/15min остаются. Coordinator ограничивает совокупную подготовку
-schema images прежними600s, включая reuse verification; nested build не начинает
-дополнительные600s. Это design bounded work, **не измеренный PASS по wall time**.
-C6 должен подтвердить исполнимость в implementation CI; если retained proof + новый
-phase не помещаются, вернуть C0 фактический timing/failure и конкретный scope diff.
+Существующие budgets **не растут**: nine jobs, state25min с setup/upload/cleanup,
+foundation35min, historical held180s, совокупный prepare/build600s. Прежние command
+bounds сохраняются: build480s, controller/start120s, migration/probe30s, drain60s,
+teardown90s, normal command40s; transport5/10/20s, lease30s, DB2/5s, retries5/15min.
+
+Actual helper `migration_budget` — **process-local**; detached T не наследует его
+deadline. Принят консервативный protocol C6 без patch T: C coordinator ведёт один
+monotonic ledger600s и вычитает **весь supervised retained-T shell interval**,
+включая его prepare/runtime/cleanup, а также все уже выполненные schema-image
+archive/preparation/build/reuse verification intervals. Пересекающиеся интервалы
+не считаются дважды, ни один ранее выполненный подготовительный этап не теряется.
+T запускается под watchdog с оставшимся временем этого ledger; после него C получает
+**только остаток**. Нулевой/отрицательный остаток — STOP с report, не fresh600.
+
+Для передачи между процессами C coordinator создаёт в своём private temp directory
+одноразовый budget request (0600, exact T/C/phase, charged seconds и absolute
+monotonic deadline остатка на этом runner). Новый CONTROL selector принимает его
+как обязательный internal budget operand в дополнение к T/C и передаёт в
+`schema_request` нового `run_control_schema_phase`. Это test-only channel в уже
+предложенных coordinator/shell/harness paths, не env/product parameter и не изменение
+frozen T selector. Child проверяет owner/формат/source/phase и допустимый остаток,
+вычитает время handoff по тому же monotonic clock, затем вызывает существующий
+`migration_budget(remaining)` только вокруг C prepare/build/reuse. Нельзя создавать
+новые600s, nested/reset budget или менять helper global implementation. Суммарный
+ledger и фактическое окончание preparation проверяются и сохраняются coordinator;
+отдельный общий state deadline продолжает действовать после preparation.
+
+Supervisor обязан bounded завершить child **и его process group** при deadline/
+failure, дождаться их остановки, сохранить reports и выполнить owned cleanup в
+прежних bounds. Detached worktree и чужие ресурсы не служат обходом cleanup. Failure
+retention охватывает в том числе source/build/probe до runtime try; outer finally
+копирует T reports до удаления checkout. Stage timings и charged ledger публикуются
+для retainedT/newC/cleanup. Это design bounded work, **не измеренный PASS по wall time**.
+C6 design PASS принят; исполнимость actual implementation CI ещё не доказана.
+Если retained proof + новый phase не помещаются, вернуть C0 фактический timing/
+failure и конкретный scope diff.
 Нельзя убрать phase, повысить timeout, пересобрать patchedT или заменить PG mocks.
 
 ### 12.9. Native/edit/delete: явная невыданная часть A08
@@ -1307,19 +1448,21 @@ edit/delete, native semantic Message/context+1 требуют следующег
 
 ### 12.10. Предлагаемый exact implementation scope, ещё не write permission
 
-Current write path — **только этот append**. Ниже finished proposal для C0; после
+Current write path — **только§12 в этом M3_CONTRACT.md**; R1 исправляет proposal,
+не immutable prefix. Ниже finished proposal для C0; после
 C1/C2 review C0 отдельно выдаёт exact список. Нельзя считать таблицу разрешением
 работать сейчас. Paths сгруппированы только там, где причина одна; glob-allowlist нет.
 
 | Exact future paths | Необходимая дельта / symbols |
 |---|---|
 | `migrations/versions/0009_conversation_control.py` | Одна новая revision, fields/receipt/Audit/RLS/SQL capabilities§12.6–7 и safe downgrade; copied exact0008 definitions для restore |
-| `backend/src/asm/conversations/control.py` | Новый используемый `ControlPermission`, `ControlError`, `OwnerControlService`, fingerprint/prepare/execute/read orchestration; import existing EntitlementService |
+| `backend/src/asm/conversations/control.py` | Новый используемый `ControlPermission`, `ControlError`, `OwnerControlService`, fingerprint/prepare/execute/read orchestration; Resume после prepare/replay/locks получает отдельный post-lock snapshot и вызывает unchanged EntitlementService |
 | `backend/src/asm/conversations/http_models.py` | Четыре strict DTO§12.2, PositiveVersion и закрытые control error variants |
 | `backend/src/asm/conversations/http.py` | `install_control`, три routes, existing AuthBoundary/cookie/CSRF и explicit errors |
 | `backend/src/asm/foundation.py` | `create_app` installs routes; `DATABASE_SCHEMA_REVISION=0009`; exact mismatch guard для API/worker/scheduler |
-| `backend/src/asm/tenancy/database.py` | Четыре typed owner methods по SQL ABI§12.7, task/XID guard и узкий mapping новых control SQLSTATE; никаких worker/fake-owner extensions |
-| `backend/src/asm/messaging/http_service.py` | `OwnerMessagingService.send` вызывает final manual prelock до последнего product_gate; refresh и оба replay probes сохраняются |
+| `backend/src/asm/tenancy/database.py` | Четыре typed owner methods по SQL ABI§12.7 плюс отдельный guarded fixed-query `post_lock_product_snapshot() -> RowMapping`§12.3, task/XID/owner/worker guards и узкий mapping новых control SQLSTATE; existing billing_snapshot неизменен |
+| `backend/src/asm/billing/queries.py` | Только отдельный `POST_LOCK_PRODUCT_SNAPSHOT`§12.3: одна MATERIALIZED clock capture и полный coherent snapshot; frozen SNAPSHOT/R4 GET не менять |
+| `backend/src/asm/messaging/http_service.py` | `OwnerMessagingService.send` вызывает final manual prelock, затем product_gate использует новый post-lock snapshot для public CONTROLLED/TELEGRAM; unchanged EntitlementService, refresh и оба replay probes сохраняются |
 | `backend/src/asm/billing/models.py` | Два strict Audit variants и discriminator union; старые models/R4 semantics неизменны |
 | `contracts/openapi.json` | Только generated export: новые routes/DTO/errors/Audit; five M2 routes и frozen tenancy snapshot сохранены |
 | `frontend/src/billing-api.ts`; `frontend/src/BillingPanel.tsx` | Только два Audit parser/type/label variants; никаких control buttons, polling, messaging UI или маршрутов |
@@ -1331,15 +1474,21 @@ C1/C2 review C0 отдельно выдаёт exact список. Нельзя �
 | `tests/test_m3_1_turns_postgres.py`; `tests/test_m3_1_migrations.py` | Сохранить TURNS assertions; явно отделить historical0008 fixture/teardown от current0009 и адаптировать только generation ожидания нового manual; frozenT archive не редактируется |
 | `tests/test_m2_1_postgres.py` | Existing shared fixture cleanup: child-first control receipts/Audit перед Conversations, без CASCADE/constraints disable |
 | `tests/test_postgres.py`; `tests/test_m2_1_schema_postgres.py`; `tests/test_m2_3_schema_postgres.py` | Exact current table/grant/function inventories/проверка отказа на current head; прежние historical targets/scan ABI сохраняются |
+| `tests/test_tenancy_postgres.py` | Только `test_runtime_roles_policies_functions_and_platform_surface`: добавить ровно8 profiles§12.7 к exact legacy/M1/M2/M3 union; весь pg_proc query app/platform, exact-set equality, owner/search_path/PUBLIC/runtime EXECUTE и все прежние profiles сохранить |
 | `tests/test_m2_2_migrations.py` | Только при необходимости current-head restoration fixture; старый0005→0006/7 cycle и assertions не заменяются новым phase |
 | `tests/test_foundation.py`; `backend/src/asm/telegram/provisioning.py`; `tests/test_m2_3_setup.py` | Exact0009 readiness/binding guard; fresh-only provisioning, billing catalog/interval и owner/bot binding policy без изменения |
-| `scripts/test_telegram_egress_migration.sh` | C coordinator: frozenH + сохранённый frozenT schema phase + mandatory newC phase в обоих state shards; separate archives/reports/cleanup |
-| `scripts/test_telegram_egress.sh` | Explicit CONTROL schema selector; default exactC/0009 и35-table expectation, без ослабления старых gates |
+| `scripts/test_telegram_egress_migration.sh` | C coordinator: frozenH + сохранённый frozenT schema phase + mandatory newC phase в обоих state shards; separate archives/reports/cleanup, единый ledger600 и supervised child termination§12.8 |
+| `scripts/test_telegram_egress.sh` | Explicit CONTROL schema selector с private remaining-budget request§12.8; default exactC/0009 и35-table expectation, без ослабления старых gates |
 | `scripts/prepare_telegram_egress.py` | Только добавить exact0009 inventory к schema validation; historical `migration_source`/saved-plan gate остаётся0007-only, pins/source/recovery guards неизменны |
-| `tests/test_telegram_egress_migration.py` | `run_control_schema_phase`/strict observed9 recovery, phase/source mismatch tests, old historical/saved-plan refusal и reports до teardown |
+| `tests/test_telegram_egress_migration.py` | `run_control_schema_phase`/strict observed9 recovery, remaining-budget admission, phase/source mismatch tests, old historical/saved-plan refusal и reports при раннем failure/до teardown |
 | `tests/test_telegram_egress_postgres.py` | Exact35 inventory, child-first cleanup, strict current E05; сохраняются6 wire+6 lifecycle, no-resend и DB/S3/HTTP assertions |
 | `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` | Только ссылка на отдельные frozen0007/TURNS0008/CONTROL0009 LOCAL gates; historical evidence/pins/owner instructions не менять |
 | `docs/tasks/M3_CONTRACT.md` | Только согласованные implementation уточнения§12; неизменный TURNS prefix, без SHA-only commits |
+
+Относительно cf043901 future allowlist дополнен **ровно двумя existing paths**:
+`backend/src/asm/billing/queries.py` и `tests/test_tenancy_postgres.py`. Сейчас они
+не меняются. В inventory запрещены subset/count-only/prefix exclusions, skip или
+ослабление grants: восемь profiles проверяются наряду со всем прежним exact набором.
 
 Новые SQLSTATE предлагаются локально: P2401 с exact перечисленными control codes;
 не менять общую M1 exception policy. `_messaging_execute` сохраняет прежний P2001/
@@ -1370,7 +1519,9 @@ implementation source. Названия cases ниже — proposed test IDs, н
 | `control_transition_matrix` | HUMAN/AI × Takeover/Resume/new-key same mode; +1gen/+0context; exact Audit+receipt, no jobs/fence except Resume | A07, control-частьA03 |
 | `control_two_tabs_and_replay` | Два actual HTTP clients/DB transactions после одного GET; same/different keys, body/actor changes, stale gen либо context; один commit, сохранённый результат против свежего state | A07 |
 | `control_authority_and_scope` | Реальные cookie/Origin/CSRF revoke/role/session races до authority lock и во время ожидания; другой Workspace и same-Workspace mismatch Client/Conversation; никаких partial writes/receipt disclosure | A07/изоляция |
-| `control_product_and_channel_matrix` | Suspended/expired/missing/false/invalid state; stopped adapter/closed window/disabled connection; Takeover/read не вызывают HTTP/billing, Resume policy строго по§12.3; DB clock проходит expiry во время подтверждённого lock wait | A07/границаproduct |
+| `control_product_and_channel_matrix` | Suspended/expired/missing/false/invalid state; stopped adapter/closed window/disabled connection; Takeover/read не вызывают HTTP/billing, Resume policy и structural→availability/product→CAS precedence строго по§12.3 | A07/границаproduct |
+| `post_lock_product_boundaries` ×Resume/public manual CONTROLLED/TELEGRAM | Подтверждённый Conversation NO KEY UPDATE wait без material mutation: subscription и service-mode expiry **и scheduled activation**, обе стороны half-open boundaries; один post-lock clock/полный snapshot, re-auth/policy, denied/replay без control/context/Audit writes | C1-M3-CONTROL-01/A07 |
+| `frozen_r4_snapshot_compatibility` | Existing SNAPSHOT/billing_snapshot и public GET сохраняют transaction-start evaluated_at и согласованные прежние flags/history/errors/пять TEST keys; новый gate не меняет R4 | C1-M3-CONTROL-01/R4 |
 | `control_commit_loss_and_overflow` | Fault до update/между Audit и receipt/на commit; committed ACK loss→same result, rollback→нет всех writes; gen/context BIGINT/sequence exhaustion без wrap, replay всё ещё доступен | A07/A11 |
 | `manual_atomic_control_and_replay` | Actual M2 request path: HUMAN/AI, новый/replay/pre0009 receipt; fault после takeover/Message/Audit/Outbox/Job и deferred FK; gen+1/context+1 только новый commit, exact old bytes | A07/contextA03/M2 |
 | `manual_refresh_interleaving` | Observe network barrier вне обеих business units; concurrent Resume, rights observation CAS/revoke/expiry/product failure; final accepted order определяет HUMAN, denied/replay не меняют control | A07/M2 |
@@ -1380,13 +1531,40 @@ implementation source. Названия cases ниже — proposed test IDs, н
 | `test_consumer_stale_after_control` | Pure consumer snapshot → Takeover/Resume → finalize: same revision STALE, superseded revision SUPERSEDED; old committed OBSERVED/token replay byte-identical, no external call/new backlog job | control-частьA03; не полныйA05 |
 | `control_lock_graph_and_maintenance` | Реальные ingest/process/file/manual/owner/consumer/expired job races, PREPARED uploads, open outer savepoint; blockedA не лишает B progress; прежние age boundary/100+ cursor/2s/5s tests сохраняются | A02/A11/reliability |
 | `control_capability_and_audit` | Runtime direct SELECT/DML/sequence/private helper rejected; forged GUC/task/XID/actor/ws/key; FK same-client/generation/Audit substitution; mixed old/new Audit API/frontend и exact decimal>2^53 | A07/A11 |
+| `control_receipt_audit_actor_fk` | Raw PG: одинаковые ws/Audit/Conversation/gen/event/context, **другой валидный member actor** в receipt; прочие constraints удовлетворены, отказ23503 именно conversation_control_receipts_audit_fk, без partial transition | C2-M3-CONTROL-01/A07 |
+| `control_receipt_audit_context_fk` | Отдельный raw PG case: тот же actor и остальные keys, **иной locally valid saved context** receipt относительно Audit.object_version; coherent request/result, отказ23503 того же FK, rollback всех writes | C2-M3-CONTROL-01/A07 |
+| Existing exact function inventory | Весь pg_proc app/platform = прежние profiles + ровно8§12.7; каждый owner/search_path/PUBLIC/security/runtime EXECUTE проверен, private вызов runtime отвергнут | C1-M3-CONTROL-02/security |
 | `control_migration_preservation` | populatedT/M2 seed + clean0008→9→8 definitions/grants; old pending Inbox/Turn/consumer/manual/UNKNOWN/private image, each new-data downgrade blocker; no backfill/jobs/receipt rewrite | A11 |
 | `control_schema_commit_loss_normal_docker29` | Два actual state shards§12.8: separate exit86 after commit, fresh reader, incompatible runtime rejected, exact source/image forward/restart, pending/UNKNOWN/privateS3 and original receipts retained | A11/source-schema |
+| `control_schema_budget_and_failure_retention` | Реальные stage timings: весь frozenT shell + все schema prepare/verify ≤600s, C только remaining; invalid/exhausted handoff отказ, bounded process-group stop/owned cleanup и reports при source/build/probe failure до runtime try; T reports до worktree removal, state≤25min/foundation≤35min/all9 gates | CONTROL-COMPAT-01 implementation condition |
 | Existing direct wire/real relay/browser | Same production transport: accepted wire effect + lost response → restart UNKNOWN, count1; HTTP без business transaction;6+6, auth/private signed GET/Secure cookies/browser regression неизменны | Сохранность M2/TURNS, не новый live evidence |
 
 Fixtures используют настоящий command/worker path, deterministic barriers и
 наблюдаемые DB locks, не вероятностный sleep/retry. Fault injection остаётся в
-TEST, не runtime toggle. Любую адаптацию старого теста объяснять отдельно: новый
+TEST, не runtime toggle. Temporal cases удерживают только Conversation NO KEY UPDATE
+в независимом blocker transaction; он **не меняет** context/generation/billing.
+Подтвердить ожидающий PID/pg_locks до границы и освобождение после неё; ожидание
+укладывается в прежние DB2/5s, без backdating или увеличения timeout. Для expiry
+начало command transaction ещё активно, post-lock clock уже за effective_until;
+для activation начало раньше effective_from, post-lock clock уже внутри interval.
+Проверить также before/at границы: начало включительно, конец исключительно.
+Subscription и service mode параметризуются независимо; прочие product/channel
+условия valid. Для TELEGRAM refresh закончен до final wait и HTTP вне transaction;
+CONTROLLED идёт через public HTTP service, не internal kernel. Отдельные replay и
+revocation/policy cases подтверждают прежний порядок, отказ и отсутствие writes;
+replay не обращается к новой snapshot projection.
+
+Два FK negatives выполняются отдельно с привилегированной TEST fixture после
+проверки всех локальных CHECKs и прочих refs: оба actor состоят в нужном Workspace,
+оба context положительны; в context case receipt expected/result/context согласованы
+между собой, отличается только Audit.object_version. Иначе unrelated constraint
+не докажет finding. Проверять SQLSTATE23503 **и имя** нового FK, сохранность исходного
+control state и отсутствие частичного receipt/Audit/transition после rollback,
+включая fault/deferred failure позже valid insert. Production positive atomic
+command и exact replay обязаны оставаться valid. Это план actual PG, не выполненный
+exploit или новое runtime evidence.
+
+Любую адаптацию старого теста объяснять отдельно: новый
 manual законно меняет generation; новый head/inventory9 не меняет смысл historical
 8/7 tests; teardown идёт по новым FK; expected semantic outcomes и time limits не
 ослабляются. Не добавлять skip/xfail, фильтрацию очереди, backdating deadlines,
@@ -1400,29 +1578,48 @@ native частьA08, EscalationA09, ConsoleA10 и итоговыйA12 оста�
 
 ### 12.12. Решения для согласования и возврат
 
-Один законченный proposal передаётся C1 (API/Audit/product), C2 (DB/locks/receipt/
-migration) и C0; C6 адресно проверяет source/schema design при необходимости.
-Согласованию подлежат конкретные предложения, не незаполненные алгоритмы:
+Один finished R1 передаётся C0 для точечного re-review C1/C2 на exact head. Ниже
+отражена [выдача C0 R1](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6100251718),
+а не отдельный реестр статусов. Три finding **OPEN до verdict C0**; авторский статус
+исправлений — FIXED FOR REVIEW:
 
-- **CONTROL-POLICY-01 / OPEN до C1/C0:** принять выбранный existing
-  `messaging.manual_send` gate для нового Resume только как CONTROL availability,
-  независимость Takeover от billing/channel и отсутствие reply-window/refresh
-  gate у Resume. Альтернатива — отдельный product key потребует своего catalog/
-  provisioning scope; его здесь не вводим и не разрешаем default-allow.
-- **CONTROL-DB-01 / OPEN до C2/C0:** принять захват origin tuple до sequence,
-  legacy generation1/NULL provenance без backfill, lock graph и отдельный immutable
-  receipt/Audit FK. Необходимость иного lock/ABI/column вернуть явной дельтой этого
-  proposal; production DDL до решения не создаётся.
-- **CONTROL-COMPAT-01 / OPEN до C0/C6:** принять два отдельных retainedT/newC
-  schema phases в существующих state jobs и shared image preparation bound;
-  исполнимость wall time подтверждается только actual implementation runner.
-- **CONTROL-AUDIT-01 / OPEN до C1/C0:** принять два strict typed Audit variants
-  и ровно parser/label frontend delta как обязательную совместимость общего API,
-  сохранив единственный MESSAGE_SEND_REQUESTED для atomic manual takeover.
+| Finding / P2 | Исправление R1 и будущая проверка |
+|---|---|
+| C1-M3-CONTROL-01 | §§12.3/12.5/12.7/12.10/12.11: отдельный single-statement POST_LOCK_PRODUCT_SNAPSHOT с MATERIALIZED clock_timestamp, guarded method и final Resume/public manual callers; expiry **и activation** на подтверждённом lock wait, unchanged R4 GET |
+| C1-M3-CONTROL-02 | §§12.7/12.10/12.11: добавлен exact inventory path, восемь однозначных security profiles, полный pg_proc query и exact equality со всеми прежними profiles |
+| C2-M3-CONTROL-01 | §§12.4/12.7/12.11: seven-column Audit UNIQUE/receipt FK связывает saved actor/context; два самостоятельных raw constraint negatives с valid прочими constraints, positive atomic/replay и rollback |
 
-Это design acceptance points, не reopened TURNS findings и не новые задания
-пользователю. Native account/provenance остаётся отдельно NOT VERIFIED; никакого
-аккаунта, token, TEST продления или VM действия сейчас не требуется. После этих
-reviews C0 принимает или корректирует§12 и выдаёт implementation **в этом PR** с
-exact paths/0009. До этого запрещены runtime/DDL/tests/OpenAPI/frontend/infra edits.
-Следующие C8/приёмка/merge/main CI не подменяются авторским review или документом.
+Решения C0 по design acceptance points:
+
+- **CONTROL-POLICY-01 / OPEN** до clock-path re-review. Сам выбор existing
+  `messaging.manual_send` как консервативного availability gate Resume **согласован**;
+  Takeover/read не зависят от billing/channel, Resume требует active Business/
+  connection, но не can_reply/window/refresh. Это не AI-send permission.
+- **CONTROL-DB-01 / OPEN** до receipt-binding re-review. Сохраняются origin до
+  sequence, legacy generation1/NULL без backfill, lock graph и immutable result;
+  R1 усиливает только selected Audit key без generic consistency helper.
+- **CONTROL-AUDIT-01 / ACCEPTED, CLOSED в C1 API/DTO/UI compatibility design scope**:
+  два typed variants/parser/label и единственный MESSAGE_SEND_REQUESTED для manual.
+  Этот PASS **не закрывает** независимый DB finding C2.
+- **CONTROL-COMPAT-01 / ACCEPTED, CLOSED в C6 design scope на cf043901**. Matrix
+  frozen P/O/H0007 → detached T0008 retained7→8 → futureC0009 new8→9 сохранена.
+  §§12.8/12.11 конкретизируют принятый conservative whole-T/remaining600 protocol,
+  full34 inventory/33 forward data tables, bounded cleanup/failure reports.
+  Actual timings prepare≤600s/state≤25min/foundation≤35min и all9 gates ещё
+  **PLANNED**. Нынешний docs head не является C/9; runtime укладываемость не PASS.
+
+C0 сверяет эти уточнения; substantive source/phase/guard/budget delta требует
+адресного C6 review до реализации. R1 сохраняет семантику принятого compatibility
+design; helper budget implementation, pins/workflows/timeouts сейчас не меняются.
+В receipt R1 обязательны exact head/parent/tree, diff от cf043901, whole-file hashes
+и immutable77343-byte prefix proof, actual document checks и **новый** automatic
+CI run/attempt/event head/tested merge/parents/tree/status. Старый CI38067015295
+проверяет cf043901, не эту R1. Docs CI не доказывает будущие CONTROL/0009 cases.
+
+Это не reopened TURNS/M2 findings и не новые задания пользователю. Native
+account/provenance остаётся отдельно NOT VERIFIED; GUARDS/UI отдельно. Никакого
+аккаунта, token, TEST продления или VM действия сейчас не требуется. После
+re-reviews C0 принимает или корректирует§12 и выдаёт implementation **в этом PR**
+с exact paths/резервом0009→0008. До этого запрещены runtime/DDL/tests/OpenAPI/
+frontend/infra edits. Следующие C8/приёмка/merge/main CI не подменяются авторским
+review или документом.
