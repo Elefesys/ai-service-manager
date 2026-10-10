@@ -21,7 +21,7 @@ class InboxReceipt(Result):
 
 class JobClaim(Result):
     job_id: UUID
-    kind: Literal["PROCESS_INBOX", "SEND_MANUAL_TEXT", "FETCH_IMAGE"]
+    kind: Literal["PROCESS_INBOX", "SEND_MANUAL_TEXT", "FETCH_IMAGE", "PROCESS_TURN"]
     workspace_id: UUID
     connection_id: UUID
     inbox_id: UUID | None
@@ -31,6 +31,29 @@ class JobClaim(Result):
     lease_until: datetime
     correlation_id: UUID
     attempt_count: int
+
+
+class TurnJobClaim(JobClaim):
+    kind: Literal["PROCESS_TURN"]
+    turn_id: UUID
+    turn_revision: int = Field(gt=0)
+    step: Literal["GROUP", "MEDIA", "TEST_CONSUME"]
+
+
+def parse_claim(value: object) -> JobClaim:
+    if isinstance(value, dict) and value.get("kind") == "PROCESS_TURN":
+        return TurnJobClaim.model_validate(value)
+    return JobClaim.model_validate(value)
+
+
+class ScanStep(Result):
+    """Private SQL scan envelope; never exposed through owner APIs."""
+
+    step: Literal["CLAIMED", "TERMINALIZED", "RECOVERED", "BUSY", "END"]
+    scan_until: datetime
+    at: datetime | None = None
+    id: UUID | None = None
+    claim: dict[str, object] | None = Field(default=None, repr=False)
 
 
 class InboxProcessingResult(Result):

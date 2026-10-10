@@ -7,7 +7,7 @@ from sqlalchemy import text
 from test_m2_1_models import event
 from test_m2_1_postgres import CA2, command, ingest, query
 from test_m2_1_postgres import messaging as messaging
-from test_m2_1_schema_postgres import _migrate
+from test_m2_1_schema_postgres import HistoricalScanDatabase, _migrate
 from test_tenancy_postgres import UA, A, raw_context
 from test_tenancy_postgres import db as db
 from test_tenancy_postgres import seeded as seeded
@@ -17,6 +17,9 @@ pytestmark = pytest.mark.integration
 
 async def test_0005_exact_data_backfill_repeat_and_test_downgrade_reupgrade(messaging):
     h = messaging
+    # Exercise the original scan ABI on the original schema. 0008 has a separate
+    # preservation/cycle gate; this historical test retains its exact 0007 target.
+    h.kernel = HistoricalScanDatabase(h.runtime.engine)
     tables = (
         "app.messages",
         "app.conversations",
@@ -163,11 +166,11 @@ async def test_0005_exact_data_backfill_repeat_and_test_downgrade_reupgrade(mess
         image_ids = {first.message_id, second.message_id}
         before = await snapshot()
         assert before["app.messages"] and before["platform.billing_contact_command_receipts"]
-        await _migrate("upgrade", "head")
+        await _migrate("upgrade", "0007")
         assert await snapshot() == before
         await assert_backfill(image_ids, correlation)
         file_ids = await query(h, "SELECT id,message_id FROM app.file_objects ORDER BY id")
-        await _migrate("upgrade", "head")
+        await _migrate("upgrade", "0007")
         assert await snapshot() == before
         assert await query(h, "SELECT id,message_id FROM app.file_objects ORDER BY id") == file_ids
         await _migrate("downgrade", "0005")
@@ -188,7 +191,7 @@ async def test_0005_exact_data_backfill_repeat_and_test_downgrade_reupgrade(mess
                 )
             ).scalar_one()
             assert any(row["message_id"] == str(send.message_id) for row in rows)
-        await _migrate("upgrade", "head")
+        await _migrate("upgrade", "0007")
         assert await snapshot() == before
         await assert_backfill(image_ids, correlation)
         # Existing accepted event retains exactly the same Inbox identity after both cycles.

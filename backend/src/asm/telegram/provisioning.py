@@ -120,7 +120,7 @@ async def commit_binding(
                 raise ProvisioningError("TELEGRAM_SETUP_TARGET_INVALID")
             if (
                 await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
-            ).scalar_one() != "0007":
+            ).scalar_one() != "0008":
                 raise ProvisioningError("TELEGRAM_SETUP_SCHEMA_INVALID")
             billing = (
                 await connection.execute(

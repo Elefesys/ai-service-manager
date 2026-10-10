@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from asm.conversations.turns import ConsumerReceipt, ConsumerResult, TurnProgress, TurnSnapshot
 from asm.messaging.adapter import Barrier, TrustedSource
 from asm.messaging.errors import Code, MessagingError, database_error
 from asm.messaging.models import NormalizedEventV1, SendOutcome, identifier
@@ -22,8 +23,10 @@ from asm.messaging.results import (
     InboxProcessingResult,
     InboxReceipt,
     JobClaim,
+    ScanStep,
     SendPermit,
     TerminalRejection,
+    parse_claim,
 )
 from asm.tenancy.database import _active as _owner_active
 
@@ -160,6 +163,8 @@ class MessagingDatabase:
             raise MessagingError(Code.ACCESS_DENIED)
         self._engine = engine
         self._barrier = barrier
+        self._claim_scan: dict[str, ScanStep] = {}
+        self._recovery_scan: ScanStep | None = None
 
     async def checkpoint(self, name: str) -> None:
         if self._barrier is not None:
@@ -176,6 +181,8 @@ class MessagingDatabase:
             if await call(connection, "SELECT current_user", {}) != "asm_runtime":
                 raise MessagingError(Code.ACCESS_DENIED)
             await physical_transaction(connection)
+            if await call(connection, "SHOW transaction_isolation", {}) != "read committed":
+                raise MessagingError(Code.TRANSACTION_STATE)
             await connection.execute(text("SET LOCAL statement_timeout = '5s'"))
             await connection.execute(text("SET LOCAL lock_timeout = '2s'"))
             yield connection
@@ -215,12 +222,44 @@ class MessagingDatabase:
 
     async def claim_job(self, worker_id: str) -> JobClaim | None:
         identifier(worker_id)
-        async with self._transaction() as connection:
-            result = await call(
-                connection, "SELECT platform.messaging_claim(:worker)", {"worker": worker_id}
-            )
-            claim = JobClaim.model_validate(result) if result is not None else None
-        return claim
+        scan = self._claim_scan.get(worker_id)
+        for _ in range(100):
+            async with self._transaction() as connection:
+                result = ScanStep.model_validate(
+                    await call(
+                        connection,
+                        "SELECT platform.messaging_claim(:worker, :until, :at, :id)",
+                        {"worker": worker_id, **self._scan_parameters(scan)},
+                    )
+                )
+            # Only advance after a confirmed commit. A failed commit is not idle success.
+            if result.step == "END":
+                self._claim_scan.pop(worker_id, None)
+                return None
+            self._check_scan_position(result)
+            scan = result
+            self._claim_scan[worker_id] = scan
+            if len(self._claim_scan) > 128:
+                self._claim_scan.pop(next(iter(self._claim_scan)))
+            if result.step == "CLAIMED":
+                # A successful public call starts a fresh page next time. Only
+                # the bounded BUSY/terminal prefix needs continuation between calls.
+                self._claim_scan.pop(worker_id, None)
+                return parse_claim(result.claim)
+        return None
+
+    @staticmethod
+    def _scan_parameters(scan: ScanStep | None) -> dict[str, object]:
+        return {
+            "until": scan.scan_until if scan else None,
+            "at": scan.at if scan else None,
+            "id": scan.id if scan else None,
+        }
+
+    @staticmethod
+    def _check_scan_position(scan: ScanStep) -> None:
+        if scan.at is None or scan.id is None:
+            raise MessagingError(Code.INVALID_INPUT)
 
     @asynccontextmanager
     async def admit_job(self, job_id: UUID, claim_token: UUID) -> AsyncIterator[WorkerUnitOfWork]:
@@ -228,7 +267,7 @@ class MessagingDatabase:
         require_uuid(claim_token)
         async with self._transaction() as connection:
             # Caller-supplied workspace/entity/kind fields are never used for admission.
-            claim = JobClaim.model_validate(
+            claim = parse_claim(
                 await call(
                     connection,
                     "SELECT platform.messaging_admit(:job, :token)",
@@ -320,11 +359,76 @@ class MessagingDatabase:
     async def recover_expired(self, limit: int = 100) -> int:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise MessagingError(Code.INVALID_INPUT)
-        async with self._transaction() as connection:
-            result = await call(
-                connection, "SELECT platform.messaging_recover_expired(:limit)", {"limit": limit}
+        recovered = 0
+        for _ in range(100):
+            async with self._transaction() as connection:
+                result = ScanStep.model_validate(
+                    await call(
+                        connection,
+                        "SELECT platform.messaging_recover_expired(:until, :at, :id)",
+                        self._scan_parameters(self._recovery_scan),
+                    )
+                )
+            if result.step == "END":
+                self._recovery_scan = None
+                break
+            self._check_scan_position(result)
+            self._recovery_scan = result
+            if result.step == "RECOVERED":
+                recovered += 1
+            if recovered == limit:
+                break
+        return recovered
+
+    async def process_turn(self, claim: JobClaim) -> TurnSnapshot | TurnProgress:
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit._execute("SELECT platform.turn_execute(:job, :token)")
+            result = (
+                TurnSnapshot.model_validate(raw)
+                if raw["code"] == "SNAPSHOT"
+                else TurnProgress.model_validate(raw)
             )
-        return int(result["recovered"])
+            await self.checkpoint("turn_before_commit")
+        await self.checkpoint("turn_after_commit")
+        return result
+
+    async def finish_turn(
+        self, claim: JobClaim, result: ConsumerResult
+    ) -> ConsumerReceipt | TurnProgress:
+        require_uuid(claim.job_id)
+        require_uuid(claim.claim_token)
+        if type(result) is not ConsumerResult:
+            raise MessagingError(Code.INVALID_INPUT)
+        async with self._transaction() as connection:
+            raw = await call(
+                connection,
+                "SELECT platform.turn_consumer_finalize(:job, :token, CAST(:result AS jsonb))",
+                {
+                    "job": claim.job_id,
+                    "token": claim.claim_token,
+                    "result": result.model_dump_json(),
+                },
+            )
+            receipt = (
+                TurnProgress.model_validate(raw)
+                if raw["code"] == "SUPERSEDED"
+                else ConsumerReceipt.model_validate(raw)
+            )
+            await self.checkpoint("turn_finalize_before_commit")
+        await self.checkpoint("turn_finalize_after_commit")
+        return receipt
+
+    async def replay_turn(self, job_id: UUID, claim_token: UUID) -> ConsumerReceipt:
+        require_uuid(job_id)
+        require_uuid(claim_token)
+        async with self._transaction() as connection:
+            return ConsumerReceipt.model_validate(
+                await call(
+                    connection,
+                    "SELECT platform.turn_consumer_replay(:job, :token)",
+                    {"job": job_id, "token": claim_token},
+                )
+            )
 
     async def retry(self, claim: JobClaim, code: Code, retryable: bool = True) -> dict[str, object]:
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:

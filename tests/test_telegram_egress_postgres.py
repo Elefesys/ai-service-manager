@@ -21,6 +21,7 @@ import socket
 import ssl
 import stat
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -335,6 +336,7 @@ async def worker_process(stage):
 
 async def unknown_scenario(case, h, stage):
     _, conversation_id = await inbound(h)
+    await stabilize_turns(h)
     async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
         prepared = await unit.messaging_prepare_text(
             conversation_id, "Wire exact 🎨", "egress-send"
@@ -704,6 +706,33 @@ def durable_target():
     return target
 
 
+async def stabilize_turns(h):
+    """Finish real bounded Turn transitions before the held same-schema receipt.
+
+    No job filters or fake completion: the ordinary worker claims/executions
+    must quiesce before manual send is created and its crash point is tested.
+    """
+    async with asyncio.timeout(30):
+        for _ in range(100):
+            pending = await query(
+                h,
+                "SELECT min(available_at) AS due FROM platform.messaging_jobs WHERE status='READY'",
+            )
+            due_at = pending[0]["due"]
+            if due_at is None:
+                assert not await query(
+                    h, "SELECT id FROM platform.messaging_jobs WHERE status='RUNNING'"
+                )
+                return
+            remaining = (due_at - datetime.now(UTC)).total_seconds()
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+            claim = await h.kernel.claim_job("egress-turn-stabilization")
+            assert claim is not None and claim.kind == "PROCESS_TURN"
+            await h.worker.execute(claim)
+    raise AssertionError("E05_TURN_STABILIZATION_LIMIT")
+
+
 async def canonical_fingerprint(connection):
     tables = (
         await connection.execute(
@@ -713,6 +742,12 @@ async def canonical_fingerprint(connection):
             )
         )
     ).all()
+    from scripts.prepare_telegram_egress import schema_inventory
+
+    assert (
+        await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
+    ).scalar_one() == "0008"
+    schema_inventory("0008", (namespace + "." + table for namespace, table in tables))
     fingerprint = {}
     for namespace, table in tables:
         assert re.fullmatch(r"[a-z_][a-z_0-9]*", namespace)

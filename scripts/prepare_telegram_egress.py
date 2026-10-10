@@ -1889,8 +1889,75 @@ def migration_budget(seconds):
         MIGRATION_DEADLINE = None
 
 
+# Revision-qualified exact names. Counts alone do not establish schema pairing.
+SCHEMA_TABLES = {
+    "0007": frozenset(
+        (
+            "app.audit_events",
+            "app.business_members",
+            "app.businesses",
+            "app.channel_connections",
+            "app.client_identities",
+            "app.clients",
+            "app.conversations",
+            "app.file_objects",
+            "app.locations",
+            "app.messages",
+            "app.outbox_events",
+            "platform.alembic_version",
+            "platform.auth_credentials",
+            "platform.auth_sessions",
+            "platform.billing_contact_command_receipts",
+            "platform.channel_routes",
+            "platform.file_object_uploads",
+            "platform.inbox_events",
+            "platform.messaging_command_receipts",
+            "platform.messaging_jobs",
+            "platform.plan_entitlements",
+            "platform.saas_plan_revisions",
+            "platform.saas_plans",
+            "platform.telegram_connection_state",
+            "platform.telegram_update_receipts",
+            "platform.user_accounts",
+            "platform.workspace_billing_accounts",
+            "platform.workspace_memberships",
+            "platform.workspace_service_modes",
+            "platform.workspace_subscriptions",
+            "platform.workspaces",
+        )
+    ),
+}
+SCHEMA_TABLES["0008"] = SCHEMA_TABLES["0007"] | {
+    "app.conversation_turns",
+    "app.conversation_turn_messages",
+    "platform.turn_consumer_receipts",
+}
+
+
+def schema_inventory(revision, names):
+    require(
+        revision in SCHEMA_TABLES and set(names) == SCHEMA_TABLES[revision],
+        "EGRESS_MIGRATION_DATABASE_TABLES",
+    )
+
+
 def migration_source(target):
     source_check(target)
+    # This is a source/image switch helper, not a DDL migrator. The shared
+    # initial/saved-plan guard must reject I/0008 before any Docker effect.
+    runtime = command(["git", "-C", str(ROOT), "show", target + ":backend/src/asm/foundation.py"])
+    heads = re.findall(rb'^DATABASE_SCHEMA_REVISION = "([0-9]{4})"$', runtime, re.MULTILINE)
+    require(heads == [b"0007"], "EGRESS_MIGRATION_HISTORICAL_SCHEMA_ONLY")
+    versions = (
+        command(["git", "-C", str(ROOT), "ls-tree", "--name-only", target, "migrations/versions/"])
+        .decode()
+        .splitlines()
+    )
+    require(
+        {Path(name).name[:4] for name in versions if name.endswith(".py")}
+        == {"0001", "0002", "0003", "0004", "0005", "0006", "0007"},
+        "EGRESS_MIGRATION_HISTORICAL_SCHEMA_ONLY",
+    )
     command(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", MIGRATION_BASE, target])
     require(
         command(["git", "-C", str(ROOT), "rev-parse", MIGRATION_FROM + "^{tree}"]).decode().strip()
@@ -2122,7 +2189,8 @@ with engine.connect() as c:
     c.execute(text('SET LOCAL statement_timeout=4000'))
     identity=dict(c.execute(text("SELECT current_database() AS database, (SELECT oid::bigint FROM pg_database WHERE datname=current_database()) AS database_oid, inet_server_addr()::text AS server_address, inet_server_port() AS server_port, pg_postmaster_start_time()::text AS postmaster_started")).mappings().one())
     tables=c.execute(text("SELECT n.nspname,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('app','platform') AND c.relkind='r' ORDER BY n.nspname,c.relname")).all()
-    assert len(tables)==31
+    assert c.execute(text('SELECT version_num FROM platform.alembic_version')).scalar_one() == '0007'
+    assert {ns+'.'+name for ns,name in tables} == set(EXACT_HISTORICAL_TABLES)
     fingerprints={}
     for ns,name in tables:
         assert re.fullmatch('[a-z_][a-z_0-9]*',ns) and re.fullmatch('[a-z_][a-z_0-9]*',name)
@@ -2132,6 +2200,7 @@ with engine.connect() as c:
     print(json.dumps({'identity':identity,'tables':fingerprints},sort_keys=True))
 engine.dispose()
 """
+    probe = probe.replace("EXACT_HISTORICAL_TABLES", repr(sorted(SCHEMA_TABLES["0007"])))
     result = strict_json(
         command(
             [
@@ -2152,7 +2221,7 @@ engine.dispose()
             environment=clean_environment(),
         )
     )
-    require(len(result["tables"]) == 31, "EGRESS_MIGRATION_DATABASE_TABLES")
+    schema_inventory("0007", result["tables"])
     return result
 
 

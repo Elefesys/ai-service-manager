@@ -22,6 +22,12 @@ os.umask(0o077)
 root = Path.cwd()
 assert root == e.ROOT and os.getuid() != 0, 'TEST_RUNNER_CHECKOUT_AND_NONROOT_REQUIRED'
 migration = None
+if sys.argv[1:2] == ['--schema-upgrade']:
+    assert len(sys.argv) == 4 and os.environ.get('GITHUB_ACTIONS') == 'true', 'EXPLICIT_SCHEMA_RUNNER_REQUIRED'
+    runpy.run_path(str(root / 'tests/test_telegram_egress_migration.py'),
+                   init_globals={'schema_request': {'historical': sys.argv[2], 'candidate': sys.argv[3]}},
+                   run_name='__schema_harness__')
+    raise AssertionError('SCHEMA_HARNESS_MUST_COMPLETE_EXPLICITLY')
 if sys.argv[1:]:
     assert len(sys.argv) in {4, 6} and sys.argv[1] == '--migration', 'EXPLICIT_MIGRATION_SELECTOR_REQUIRED'
     assert os.environ.get('GITHUB_ACTIONS') == 'true', 'DISPOSABLE_RUNNER_REQUIRED'
@@ -443,6 +449,21 @@ http {
             # Old app/operator images stay exact. Only synthetic test services use
             # the candidate development image containing the new held fixture.
             run(['docker', 'tag', 'asm-connect5-development:' + migration['source'], 'asm-telegram-egress-checks:test'])
+        if migration is None:
+            # Exact bytes of all current callers and the development fixture.
+            proofs = {}
+            for service in ('api', 'worker', 'scheduler'):
+                ident = run([*base, 'ps', '-q', service]).decode().strip()
+                info = json.loads(run(['docker', 'inspect', ident]))[0]
+                proofs[service] = e.migration_image(info['Image'], source, 'runtime')
+            dev = json.loads(run(['docker', 'image', 'inspect', 'asm-telegram-egress-checks:test']))[0]['Id']
+            proofs['fixture'] = e.migration_image(dev, source, 'development')
+            reports = root / 'reports'
+            reports.mkdir(exist_ok=True)
+            (reports / 'candidate-egress-source.json').write_text(json.dumps({
+                'source_sha': source, 'expected_revision': '0008', 'images': proofs,
+                'parents': run(['git', 'show', '-s', '--format=%P', source]).decode().strip().split(),
+            }, indent=2) + '\n')
         compose('config', '--quiet')
         phase_start('test_storage_bootstrap')
         compose('up', '-d', '--wait', 'postgres-test', 'storage-test')

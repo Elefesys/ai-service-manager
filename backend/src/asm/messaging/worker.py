@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from asm.conversations.turns import ConsumerResult, TurnSnapshot, consume
 from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
@@ -42,25 +43,71 @@ class Worker:
             await self.database.finish_send(
                 permit.job_id, permit.claim_token, permit.attempt_id, outcome
             )
-        except SQLAlchemyError:
+        except SQLAlchemyError as primary:
             # Includes a lost commit ACK: the narrow DB function first reads
             # the canonical attempt/result. Never downgrade saved success and
             # never call the adapter from this recovery path. One bounded DB retry.
-            await self.database.finish_send(
-                permit.job_id, permit.claim_token, permit.attempt_id, outcome
-            )
+            try:
+                await self.database.finish_send(
+                    permit.job_id, permit.claim_token, permit.attempt_id, outcome
+                )
+            except (SQLAlchemyError, MessagingError) as secondary:
+                raise secondary from primary
+
+    async def _retry_error(self, claim: JobClaim, primary: Exception) -> None:
+        try:
+            await self.database.retry(claim, Code.DEPENDENCY_UNAVAILABLE)
+        except (SQLAlchemyError, MessagingError) as secondary:
+            raise secondary from primary
+
+    async def _finish_turn(self, claim: JobClaim, result: ConsumerResult) -> None:
+        try:
+            await self.database.finish_turn(claim, result)
+        except SQLAlchemyError as primary:
+            try:
+                await self.database.replay_turn(claim.job_id, claim.claim_token)
+                return
+            except MessagingError as miss:
+                if miss.code != Code.STALE_CLAIM:
+                    raise miss from primary
+            except SQLAlchemyError as secondary:
+                raise secondary from primary
+            # No committed receipt. A second mutation must still pass fresh live
+            # claim/XID admission; an expired/reclaimed token cannot finalize.
+            try:
+                await self.database.finish_turn(claim, result)
+            except (SQLAlchemyError, MessagingError) as secondary:
+                raise secondary from primary
 
     async def execute(self, claim: JobClaim) -> None:
         if claim.kind == "PROCESS_INBOX":
             try:
                 await self.database.process_inbox(claim)
-            except SQLAlchemyError:
-                await self.database.retry(claim, Code.DEPENDENCY_UNAVAILABLE)
+            except SQLAlchemyError as error:
+                await self._retry_error(claim, error)
             except MessagingError as error:
                 if error.code == Code.DEPENDENCY_UNAVAILABLE:
-                    await self.database.retry(claim, error.code)
+                    await self._retry_error(claim, error)
                 else:
                     raise
+            return
+
+        if claim.kind == "PROCESS_TURN":
+            try:
+                snapshot = await self.database.process_turn(claim)
+            except SQLAlchemyError as error:
+                await self._retry_error(claim, error)
+                return
+            except MessagingError as error:
+                if error.code == Code.DEPENDENCY_UNAVAILABLE:
+                    await self._retry_error(claim, error)
+                    return
+                raise
+            if isinstance(snapshot, TurnSnapshot):
+                await self.database.checkpoint("turn_before_consume")
+                result = consume(snapshot)
+                await self.database.checkpoint("turn_after_consume")
+                await self._finish_turn(claim, result)
             return
 
         if claim.kind == "FETCH_IMAGE":

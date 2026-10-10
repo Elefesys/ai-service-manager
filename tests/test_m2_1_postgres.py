@@ -80,7 +80,17 @@ async def cleanup(migrator):
         )
         # M2.2 adds a typed upload/job/file FK chain. Keep explicit scoped
         # deletion in one transaction; the READY winner FK is deferred.
-        for table in ("platform.file_object_uploads", *TABLES[:2], "app.file_objects", *TABLES[2:]):
+        # M3 receipts reference jobs; memberships reference both origin Inbox
+        # and files. Delete each child explicitly before its immutable parent.
+        for table in (
+            "platform.turn_consumer_receipts",
+            "platform.file_object_uploads",
+            *TABLES[:2],
+            "app.conversation_turn_messages",
+            "app.conversation_turns",
+            "app.file_objects",
+            *TABLES[2:],
+        ):
             suffix = (
                 " AND event_type='MESSAGE_SEND_REQUESTED'" if table == "app.audit_events" else ""
             )

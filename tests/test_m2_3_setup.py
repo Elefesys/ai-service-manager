@@ -249,7 +249,8 @@ async def test_billing_and_binding_use_one_short_reviewed_capability_transaction
             if sql == "SELECT current_user":
                 return Result("asm_migrator")
             if sql == "SELECT version_num FROM platform.alembic_version":
-                return Result("0007")
+                # The current operator is paired only with the accepted 0008 head.
+                return Result("0008")
             assert sql.startswith("SELECT platform.initialize_")
             assert params["workspace"] == WS
             if "initialize_local_messaging_billing" in sql:
@@ -309,6 +310,42 @@ def test_clis_default_to_no_network_and_never_echo_accidental_token(
     output = capsys.readouterr()
     assert "canary-token-secret" not in output.err + output.out
     assert "TELEGRAM_" in output.err
+
+
+@pytest.mark.parametrize("head", ["0007", "0009", "unknown"])
+async def test_binding_wrong_head_rejected_before_either_initializer(monkeypatch, head):
+    from types import SimpleNamespace
+
+    statements = []
+
+    class Unit:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def execute(self, statement, params=None):
+            sql = str(statement)
+            statements.append(sql)
+            assert sql in {
+                "SELECT current_user",
+                "SELECT version_num FROM platform.alembic_version",
+            }
+            value = "asm_migrator" if sql == "SELECT current_user" else head
+            return SimpleNamespace(scalar_one=lambda: value)
+
+    class Engine:
+        def begin(self):
+            return Unit()
+
+        async def dispose(self):
+            pass
+
+    monkeypatch.setattr(setup, "create_async_engine", lambda *a, **k: Engine())
+    with pytest.raises(setup.ProvisioningError, match="TELEGRAM_SETUP_SCHEMA_INVALID"):
+        await setup.commit_binding(request(), URL, BOT, Observed().observation(BOT))
+    assert statements == ["SELECT current_user", "SELECT version_num FROM platform.alembic_version"]
 
 
 def smoke_settings(**changes):
