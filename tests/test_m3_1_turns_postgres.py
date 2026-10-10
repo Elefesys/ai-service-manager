@@ -1426,6 +1426,9 @@ async def test_recovery_age_horizon_keeps_late_terminal_preflight_nowait(
                         id=ja,
                     )
                 )[0]
+                # SQLAlchemy RowMapping is immutable; keep a separate snapshot
+                # copy before extracting the fixture-only horizon projection.
+                armed = dict(armed)
                 horizon = armed.pop("horizon")
                 before["platform.messaging_jobs"] = [
                     armed if j["id"] == ja else j for j in before["platform.messaging_jobs"]
@@ -1450,8 +1453,11 @@ async def test_recovery_age_horizon_keeps_late_terminal_preflight_nowait(
                 assert (
                     await query(h, "SELECT clock_timestamp()>=:horizon AS crossed", horizon=horizon)
                 )[0]["crossed"]
+                assert not task.done(), "first preflight must still be held at the barrier"
                 await barrier.commit()
-                result = await task
+                # A NOWAIT BUSY must arrive before the unchanged 2s lock_timeout;
+                # a converted blocking timeout is not acceptable evidence.
+                result = await asyncio.wait_for(task, 1)
                 assert result["step"] == "BUSY" and result["id"] == str(ja)
                 assert outer.in_transaction()
                 assert await maintenance_snapshot(h) == before
