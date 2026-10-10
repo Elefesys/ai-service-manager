@@ -287,9 +287,32 @@ async def test_actual_process_death_intent_put_ready_and_restart(files, stage):
             await h.storage.head(before["storage_key"])
     else:
         assert await h.storage.get(before["storage_key"]) == h.original
-    await expire(h)
-    worked = await h.worker.run_once()
-    assert worked == (stage != "fetch_finalize_after_commit")
+    # Expire only this FETCH lease. The old expire() fixture also backdates
+    # every READY job, which would violate a Turn's still-future GROUP deadline.
+    await query(
+        h,
+        "UPDATE platform.messaging_jobs SET lease_until=clock_timestamp()-interval '1 second' "
+        "WHERE kind='FETCH_IMAGE' AND status='RUNNING' RETURNING id",
+    )
+    await h.kernel.recover_expired()
+    await query(
+        h,
+        "UPDATE platform.messaging_jobs SET available_at=clock_timestamp()-interval '1 second' "
+        "WHERE kind='FETCH_IMAGE' AND status='READY' RETURNING id",
+    )
+    # Recovery can interleave the now-due GROUP and TEST_CONSUME jobs with the
+    # original FETCH_IMAGE. Execute ordinary claims; count actual fetches only.
+    fetches = 0
+    for _ in range(8):
+        claim = await h.kernel.claim_job("file-process-restart")
+        if claim is None:
+            break
+        assert claim.kind in {"FETCH_IMAGE", "PROCESS_TURN"}
+        fetches += claim.kind == "FETCH_IMAGE"
+        await h.worker.execute(claim)
+    else:
+        raise AssertionError("FILE_RESTART_DRAIN_LIMIT")
+    assert fetches == (0 if stage == "fetch_finalize_after_commit" else 1)
     row = await file_state(h)
     assert row["status"] == "READY"
     assert await h.storage.get(row["storage_key"]) == h.original

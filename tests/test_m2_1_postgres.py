@@ -5,6 +5,7 @@ import json
 import os
 import sys
 from dataclasses import replace
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -138,6 +139,69 @@ async def conversation(h):
     async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
         rows = await OwnerRepository(unit).conversations()
         return UUID(rows[0]["conversation_id"])
+
+
+async def finish_text_turns(h):
+    """Settle real text Turns before a test isolates manual-send process death."""
+    async with asyncio.timeout(30):
+        for _ in range(100):
+            pending = await query(
+                h,
+                "SELECT min(available_at) AS due FROM platform.messaging_jobs WHERE status='READY'",
+            )
+            due_at = pending[0]["due"]
+            if due_at is None:
+                running = await query(
+                    h, "SELECT id FROM platform.messaging_jobs WHERE status='RUNNING'"
+                )
+                assert not running, running
+                # An empty queue can also mean Worker.execute exhausted a SQL
+                # error into DEAD. These fixtures each create one text Turn;
+                # require its canonical successful result before manual intent.
+                turns = await query(
+                    h,
+                    "SELECT workspace_id,id,revision,state,readiness,error_code "
+                    "FROM app.conversation_turns",
+                )
+                jobs = await query(
+                    h,
+                    "SELECT id,turn_id,turn_revision,step,status,turn_outcome,error_code "
+                    "FROM platform.messaging_jobs WHERE kind='PROCESS_TURN'",
+                )
+                assert len(turns) == 1, turns
+                turn = turns[0]
+                assert (turn["state"], turn["readiness"]) == ("READY", "COMPLETE"), turns
+                assert all(job["status"] == "SUCCEEDED" for job in jobs), jobs
+                current = [
+                    job
+                    for job in jobs
+                    if job["turn_id"] == turn["id"]
+                    and job["turn_revision"] == turn["revision"]
+                    and job["step"] == "TEST_CONSUME"
+                ]
+                assert len(current) == 1 and current[0]["turn_outcome"] == "OBSERVED", jobs
+                receipts = await query(
+                    h,
+                    "SELECT workspace_id,turn_id,turn_revision,job_id,result->>'code' AS code "
+                    "FROM platform.turn_consumer_receipts",
+                )
+                assert receipts == [
+                    {
+                        "workspace_id": turn["workspace_id"],
+                        "turn_id": turn["id"],
+                        "turn_revision": turn["revision"],
+                        "job_id": current[0]["id"],
+                        "code": "OBSERVED",
+                    }
+                ], receipts
+                return
+            remaining = (due_at - datetime.now(UTC)).total_seconds()
+            if remaining > 0:
+                await asyncio.sleep(remaining)
+            claim = await h.kernel.claim_job("manual-fixture-turns")
+            assert claim is not None and claim.kind == "PROCESS_TURN"
+            await h.worker.execute(claim)
+    raise AssertionError("TEXT_TURN_STABILIZATION_LIMIT")
 
 
 async def command(h, cid, value="Reply", key="manual-1", actor=UA, workspace=A):
@@ -296,7 +360,18 @@ async def test_manual_fingerprints_replay_concurrent_atomic_intent(messaging, va
         == n["app.audit_events"]
         == 1
     )
-    assert n["app.messages"] == n["platform.messaging_jobs"] == 2
+    assert n["app.messages"] == 2
+    assert n["platform.messaging_jobs"] == 3
+    assert await query(
+        h,
+        "SELECT kind,count(*) AS total FROM platform.messaging_jobs "
+        "WHERE workspace_id=:ws GROUP BY kind ORDER BY kind",
+        ws=A,
+    ) == [
+        {"kind": "PROCESS_INBOX", "total": 1},
+        {"kind": "PROCESS_TURN", "total": 1},
+        {"kind": "SEND_MANUAL_TEXT", "total": 1},
+    ]
     with pytest.raises(MessagingError, match="IDEMPOTENCY_KEY_CONFLICT"):
         await command(h, cid, "different")
     assert await counts(h) == n
@@ -661,6 +736,7 @@ async def test_actual_process_crash_restart_durable_effect_ledger(
 ):
     h = messaging
     cid = await conversation(h)
+    await finish_text_turns(h)
     receipt = await command(h, cid)
     child = await asyncio.create_subprocess_exec(
         sys.executable,
