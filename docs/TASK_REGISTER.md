@@ -2,7 +2,131 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — CONTRACT принят; C3-M3.1-TURNS выдан / 2026-10-10
+## Текущий статус — CONTROL-контракт принят; реализация выдана / 2026-10-10 UTC
+
+**M3.1-TURNS — INTEGRATED / VERIFIED в LOCAL/TEST scope. M3 — IN_PROGRESS.**
+[PR26](https://github.com/Elefesys/ai-service-manager/pull/26) слит пользователем
+2026-10-10T15:12:11Z. Actual accepted main:
+**`ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad`**, tree
+`11ad506a859db155973f965bcdd0cebc7bc0d5ed`.
+Ordered parents: accepted H `754f1c883e5a94a7fc9e729af2605424f949ba33` +
+reviewed head `cd277b195396e76d914364903f42e1e52f21e1ff`;
+tree точно равен reviewed head/tested I
+`9694adf33e6fa0d5342083ac7fd26f9e25c1e6f5`.
+
+[Push/main CI38062653562 attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38062653562)
+— **9/9 SUCCESS и9/9 clean-source gates SUCCESS**; завершён15:34:05Z.
+C0 прочитал foundation114243888408 и browser114243888385 logs:
+actual main checkout,937 unit/462 integration/111 frontend/27 browser PASS,
+full migration cycle/contracts/wheel cmp/HTTP smoke. Wheel SHA256
+`ea9159a98d39b5d65baf1cedd1b50abef869c5392e58278f4f055975484c687d`.
+Собственных новых PG/Docker/live запусков C0 на post-merge этапе нет.
+
+Основания: [C0 acceptance](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6098927722),
+[C8 PASS](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6098859899),
+[C2 R1 PASS](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6098377195),
+[C6 R1 PASS](https://github.com/Elefesys/ai-service-manager/pull/26#issuecomment-6098346591).
+C1 PASS6097008758 — b301 в его scope; Python/API/material rules неизменны,
+R1 SQL ordinary/capability delta проверена C2/C8 на final head.
+Приняты A01/A02/context-часть A03/A11. Полные CONTROL/GUARDS/native/UI/M3 acceptance
+этим evidence не покрыты. Независимый C8 не нашёл новых findings.
+
+| Finding | Статус C0 / evidence |
+|---|---|
+| C2-M3-TURNS-01 / P2 | CLOSED: final maintenance NOWAIT/age horizon,3 actual PG cases, обычные wrappers/limits сохранены |
+| C2-M3-TURNS-02 / P2 | CLOSED:4 open-outer-tx/savepoint cases, PREPARED upload, recovery101/cutoff/restart |
+| C2-M3-TURNS-03 / P2 | CLOSED: strict canonical E05 gate и5 actual PG negatives, C2 PASS |
+| C6-M3-TURNS-02 / P2 | CLOSED: тот же E05 fix, отдельный C6 direct LOCAL/default PASS |
+| C6-M3-TURNS-01 / P2 | CLOSED: оба state shards committed0008/exit86/fresh read/exact I recovery и retention |
+| C2-M3-CONTRACT-01–04 / P2 | CLOSED в document scope; соответствующие TURNS implementation gates теперь приняты отдельно |
+
+Contract R2 и неизменный TURNS prefix:
+blob `5e87375852331523491a47926b9c5bd49946c157`.
+Applied0001–0008 immutable. **C0 выдал0009_conversation_control.py**,
+revision0009/predecessor0008, только для следующей LOCAL/TEST implementation.
+
+**CONTROL-CONTRACT R1 принят C0; M3.1-CONTROL — IN_PROGRESS, фаза IMPLEMENTATION.**
+Текущая полная выдача: **[C3-M3.1-CONTROL, M3_HANDOFF§0](tasks/M3_HANDOFF.md)**,
+в том же Draft [PR27](https://github.com/Elefesys/ai-service-manager/pull/27),
+ветка `c3/m3-1-control`. C3 — единственный implementation автор; новой ветки/PR нет.
+
+Принятый exact R1: `ffc0a66e2916f300e9f2f779084322a6a9b5447d`, parent
+`cf043901186f7f5178332e64a056d336cce0dc0f`, tree
+`8cfc7edd0778c0d1ec053c70a24596f32281c0ad`. Contract blob
+`aa3729960a43cf09d729a3514671d44c0b9685a4`,170371bytes, SHA256
+`12cfeb72a4c101c557a710522d0e553dbada06d2ade307649187086e85b6a3df`.
+Старый77343-byte prefix/§§1–11 сохранён. Основания:
+[C0 R1 intake](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6100794824),
+[C1 R1 PASS](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6101167262),
+[C2 R1 PASS](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6101177021).
+Оба review на exactR1 без остаточных/new findings. Прежний
+[C6 design PASS на cf043901](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6100099472)
+сохранён; actual timing/runtime приёмка ещё впереди.
+
+| Finding / решение | Статус C0 и обязательство реализации |
+|---|---|
+| C1-M3-CONTROL-01 / P2 | CLOSED, contract scope: single-clock/full post-lock snapshot и final callers; actual expiry+activation barriers для Resume/обоих public manual providers и frozen R4 regression обязательны |
+| C1-M3-CONTROL-02 / P2 | CLOSED, contract scope: exact8 security profiles и tenancy inventory path; полный pg_proc union/privilege negatives обязательны |
+| C2-M3-CONTROL-01 / P2 | CLOSED, contract scope: saved actor/context в seven-column receipt→Audit FK; два независимых valid-fixture named-FK negatives, positive/replay/rollback обязательны |
+| CONTROL-POLICY-01 | ACCEPTED/CLOSED в design scope по C1 R1; существующий messaging.manual_send — availability Resume, не AI send capability; реализация clock/policy ещё не проверена |
+| CONTROL-DB-01 | ACCEPTED/CLOSED в design scope по C2 R1; receipt/locks/origin/migration приняты как контракт, будущие0009 PG assertions не PASS |
+| CONTROL-AUDIT-01 | ACCEPTED/CLOSED в прежнем C1 API/DTO/UI compatibility design scope; actual mixed Audit и FK evidence ещё требуются |
+| CONTROL-COMPAT-01 | ACCEPTED/CLOSED в C6 design scope; frozenH→retainedT→newC, whole-T/remaining600 и failure retention приняты, actual wall time/0009 recovery не проверены |
+
+[R1 CI38073531311 attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38073531311)
+—9/9 jobs и9/9 clean-source SUCCESS, завершён2026-10-10T18:22:38Z.
+Tested merge `13f67b02f9ec67353f308f4f82f6002d06df734c`, ordered parents T+R1,
+tree=R1; foundation/browser logs:937 unit/462 integration/111 frontend/27 browser PASS.
+Это документ/retained0008 runtime; CONTROL/0009/22 scenarios/новые timings
+**NOT EXECUTED на момент выдачи**, не VERIFIED. Runtime приёмка будет на новом SHA.
+
+C0 preparation от R1 меняет только этот реестр и handoff; contract/runtime и все
+другие blobs/modes сохраняются. Full continuation SHA/tree — в поручении/metadata
+PR27. C3 начинает от него и проверяет parent=R1, затем реализует exact36-path scope
+(28 existing+8new)§0.3: commands/API/Audit, atomic manual, ingress fence,0009 и gates.
+Согласованы additive entrypoint/generated OpenAPI и narrow frontend Audit parsing/
+labels; CONTROL UI не выдан. Неизменные0001–0008/канон/tenancy.v1/pins/CI budgets
+и TURNS/M2 assertions сохраняются. Других параллельных авторов нет.
+
+Текущий handoff/решение C0 сменяет исторические proposal/OPEN/contract-only
+формулировки§12; технические правила R1 приняты, их status-only редактура не нужна.
+После finished candidate — адресные implementation C1/C2/C6, независимый C8,
+приёмка C0, только затем пользовательский merge и actual main CI.
+
+Native account observability — **NOT VERIFIED**; automatic native takeover и
+material edit/delete/provenance не выданы. Явный Console Takeover API и atomic manual
+остаются основанием CONTROL. GUARDS/full action-send admission/in-flight,
+Escalation, Console UI и M4 — следующие задачи; M3 в целом IN_PROGRESS.
+
+| Задача | Статус | Evidence / следующий шаг |
+|---|---|---|
+| M0/M1 | VERIFIED в прежнем scope | Не переоткрываются |
+| M2 / ENV04 | INTEGRATED / VERIFIED LOCAL/TEST | [Final receipt6066209663](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6066209663), main ca64f98b / CI37863489865; прежний owner evidence сохранён |
+| M3.1-CONTRACT | VERIFIED, TURNS и CONTROL document scope | TURNS R2 и CONTROL R1 приняты C0; runtime приёмка отдельна |
+| C6-M3-SCHEMA-SOURCE-PAIRING (TURNS) | VERIFIED в выданном scope | Frozen historical0007 и actual candidate0008 gates реализованы/проверены |
+| M3.1-TURNS | INTEGRATED / VERIFIED LOCAL/TEST | Actual PR26 merge + push/main CI; A01/A02/contextA03/A11 |
+| M3.1-CONTROL | IN_PROGRESS, IMPLEMENTATION выдана C3 | PR27, handoff§0, exact36 paths/0009; implementation ещё не принята |
+| M3.1-GUARDS | TODO | После принятого CONTROL: actual action/send admission, stale worker/in-flight |
+| Native account/provenance gate (часть M3/A08) | TODO / NOT VERIFIED evidence | Отдельная выдача C0 до account probe/native implementation |
+| M3.2-ESCALATION | TODO | После control/guards; owner-wait lifecycle |
+| M3.2-CONSOLE | TODO | После принятого owner/control API; C5 сейчас не выдан |
+| M3-ACCEPTANCE | TODO | ПолныеA04–A10/A12 и остальные части milestone ещё впереди |
+
+Необходимые actual DB/API/privateS3/Docker тесты разрешены только в disposable
+LOCAL/TEST штатного harness. M2 live evidence сохраняется в принятом receipt;
+это не новое подтверждение0008/0009 на VM. VM/SSH/live Telegram/рабочие DB-S3/
+binding/ACK/activation/TEST продление/deploy/merge не выданы. Production rollout
+остаётся Expand/Migrate/Contract, ADR217; git merge не обновляет VM.
+
+История failed PR runs, включая docs-only38019736763 с неустановленной причиной,
+сохранена в PR26; новые PASS её не переписывают. Текущий implementation head/CI
+фиксируется в PR27 metadata, не цепочкой SHA-only commits. История ниже не является
+очередью действующих операторских задач.
+
+<details>
+<summary>История выдачи TURNS до реализации; актуальные статусы находятся выше</summary>
+
+## История — CONTRACT принят и TURNS выдан / 2026-10-10
 
 **M2 — INTEGRATED / VERIFIED в принятом LOCAL/TEST scope.**
 Это перенос уже опубликованного решения C0, не новая приёмка от автора плана.
@@ -108,6 +232,8 @@ C8 по actual implementation, затем решает приёмку/merge. CON
 Текущий continuation/head/CI фиксируются в PR metadata; отдельного commit только
 ради собственного SHA/статуса нет. История ниже сохранена целиком для provenance,
 но не является очередью текущих операторских действий.
+
+</details>
 
 ## История M0–M2 — прежние snapshots и поручения
 
