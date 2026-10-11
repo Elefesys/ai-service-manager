@@ -206,6 +206,14 @@ async def test_post_lock_product_boundaries_with_actual_conversation_wait(
     )
     column = "effective_until" if boundary == "expiry" else "effective_from"
     before = await counts_control(h)
+    # Login uses a separate AuthStore pool. Open the initially unused Workspace
+    # pool through the real cookie/OWNER read before arming the short DB edge;
+    # this case measures a product boundary crossed during a Conversation wait.
+    ready = await h.client.get(route(cid))
+    assert ready.status_code == 200, ready.json()
+    assert await counts_control(h) == before
+    assert h.auth.service.tenancy._engine.pool.checkedout() == 0
+    assert h.auth.service.store.engine.pool.checkedout() == 0
     async with h.migrator.connect() as c:
         transaction = await c.begin()
         await c.execute(
@@ -226,7 +234,7 @@ async def test_post_lock_product_boundaries_with_actual_conversation_wait(
             post(h, cid, "resume", expected=expected) if caller == "resume" else manual(h, cid)
         )
         try:
-            await wait_blocked(c, pid)
+            await wait_blocked(c, pid, pending=task)
             blocked_at = (await c.execute(text("SELECT clock_timestamp()"))).scalar_one()
             assert blocked_at < edge and not task.done()
             # Database wall time crosses the half-open bound. No data mutation,

@@ -127,7 +127,7 @@ async def incoming(h, provider="CONTROLLED", number=1, *, process=True, message=
     return cid, rec, result
 
 
-async def wait_blocked(connection, blocker):
+async def wait_blocked(connection, blocker, *, pending=None):
     # Observe through the already-open blocker connection: pool acquisition or
     # DNS for a separate observer must not consume this real-lock wait budget.
     async with asyncio.timeout(1.5):
@@ -151,6 +151,10 @@ async def wait_blocked(connection, blocker):
                 # blocker proves the wait without widening production grants.
                 assert all(row["granted"] is False and row["pid"] != blocker for row in rows)
                 return rows
+            if pending is not None:
+                # Report an early rejection/completion instead of hiding it behind
+                # an observer timeout; no successful response substitutes for a wait.
+                assert not pending.done(), pending.result()
             await asyncio.sleep(0)
 
 
