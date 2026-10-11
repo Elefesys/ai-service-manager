@@ -957,27 +957,118 @@ def retained_exception_observer(config):
     root = Path(config["owner_directory"])
     module = config["module"]
     active = False
-    sequence = 0
+    finished = False
+    journal_ok = False
+    records = []
+    errors = []
+    overflow = False
+    binding = {
+        key: config[key] for key in ("source", "phase", "token", "module_blob", "helper_blob")
+    }
+    binding["version"] = 1
+    entered = None
 
-    def save(name, value):
-        fd, temporary = tempfile.mkstemp(dir=root, prefix=".observer-")
+    def encoded(value):
+        return (json.dumps(value, sort_keys=True) + "\n").encode()
+
+    def diagnostic(name, step):
+        nonlocal overflow
+        if len(errors) < 16:
+            errors.append({"file": name, "step": step, "reason": "CONTROL_RETAINED_JOURNAL_IO"})
+        else:
+            overflow = True
+
+    def save(name, raw):
+        temporary = None
+        step = "deadline"
         try:
+            end = config["deadline"]
+            budget = root / "cleanup-budget.json"
+            if budget.exists():
+                end = min(end, json.loads(budget.read_text())["deadline"])
+            if time.monotonic() >= end:
+                raise OSError("deadline")
+            step = "write"
+            fd, temporary = tempfile.mkstemp(dir=root, prefix=".observer-")
             with os.fdopen(fd, "wb") as stream:
-                stream.write((json.dumps(value, sort_keys=True) + "\n").encode())
+                stream.write(raw)
                 stream.flush()
+                step = "fsync_file"
                 os.fsync(stream.fileno())
+            step = "publish"
             os.replace(temporary, root / name)
+            step = "fsync_directory"
             directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 os.fsync(directory)
             finally:
                 os.close(directory)
+            return True
+        except (OSError, ValueError, KeyError, TypeError):
+            diagnostic(name, step)
+            return False
         finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
+            if temporary is not None:
+                try:
+                    if os.path.exists(temporary):
+                        os.unlink(temporary)
+                except OSError:
+                    diagnostic(name, "unlink")
+
+    def slot(name, value):
+        raw = encoded(value)
+        return {
+            "name": name,
+            "raw": raw,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "attempts": 0,
+            "durable": False,
+        }
+
+    def flush(final=False):
+        # Retry only these immutable bytes, never the latest exception. Every
+        # slot has at most three attempts, under the original600/cleanup90.
+        for item in ([entered] if entered is not None else []) + records:
+            while not item["durable"] and item["attempts"] < 3:
+                item["attempts"] += 1
+                item["durable"] = save(item["name"], item["raw"])
+                if not final:
+                    break
+        ready = (
+            entered is not None
+            and entered["durable"]
+            and all(item["durable"] for item in records)
+            and not overflow
+        )
+        for _ in range(3 if final else 1):
+            health = {
+                "binding": binding,
+                "completed": final,
+                "entered_sha256": entered["sha256"] if entered else None,
+                "event_hashes": [item["sha256"] for item in records],
+                "published": [item["durable"] for item in records],
+                "attempts": [item["attempts"] for item in records],
+                "errors": list(errors),
+                "overflow": overflow,
+                "state": "CONFIRMED"
+                if ready and records
+                else "NO_FAILURE"
+                if ready
+                else "UNCONFIRMED",
+            }
+            if save("trace-health.json", encoded(health)):
+                return ready and final
+        return False
+
+    def finish():
+        nonlocal finished, journal_ok
+        if not finished:
+            finished = True
+            journal_ok = flush(final=True) if active else False
+        return journal_ok
 
     def observe(frame, event, arg):
-        nonlocal active, sequence
+        nonlocal active, entered, overflow
         if frame.f_code.co_filename != module or frame.f_code.co_name != "run_schema_phase":
             return None
         if event == "call":
@@ -986,11 +1077,28 @@ def retained_exception_observer(config):
             assert blob == config["module_blob"], "CONTROL_RETAINED_FUNCTION_SOURCE"
             info = root.stat()
             assert info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700
+            assert not active, "CONTROL_RETAINED_FUNCTION_REENTRY"
             active = True
-            save("trace-entered.json", {"source": config["source"], "module_blob": blob})
+            entered = slot(
+                "trace-entered.json",
+                {
+                    "source": config["source"],
+                    "module_blob": blob,
+                    "binding": binding,
+                    "at": time.monotonic(),
+                    "pid": os.getpid(),
+                },
+            )
+            flush()
         if event == "exception" and active:
+            # This sequence/first-event identity is process memory, independent
+            # of publication. No exists() or later collect can choose first.
+            sequence = len(records) + 1
+            if sequence > 32:
+                overflow = True
+                return observe
             error = arg[1]
-            kind = type(error).__name__
+            kind = re.sub(r"[^A-Za-z0-9_]", "_", type(error).__name__)[:80]
             reason = str(error)
             if not re.fullmatch(r"(?:CONTROL|EGRESS|FROZEN|SCHEMA)_[A-Z0-9_]{1,100}", reason):
                 reason = (
@@ -1002,10 +1110,16 @@ def retained_exception_observer(config):
             try:
                 if (root / "retained-operation.json").exists():
                     operation = json.loads((root / "retained-operation.json").read_text())
-            except (OSError, ValueError):
+                    assert (
+                        operation["source"] == binding["source"]
+                        and operation["token"] == binding["token"]
+                    )
+            except (OSError, ValueError, KeyError, TypeError, AssertionError):
                 # A damaged operation journal does not replace the original
                 # exception; its unproved stage must fail the closing gate.
                 operation = {"stage": "retained_operation_unreadable"}
+                diagnostic("retained-operation.json", "read")
+                overflow = True
             stage = operation.get("stage", "retained_function")
             # In this pinned function, reports is assigned only in finally,
             # before mkdir/write_text and before the wrapped down command.
@@ -1024,28 +1138,53 @@ def retained_exception_observer(config):
                 and kind == "EgressError"
             ):
                 detail.update(operation["result"], observed_type=kind)
-            primary = root / "trace-primary.json"
-            sequence += 1
-            try:
-                save(
+            records.append(
+                slot(
                     "trace-primary.json"
-                    if not primary.exists()
+                    if sequence == 1
                     else f"trace-secondary-{sequence:04d}.json",
-                    detail,
+                    {"binding": binding, "sequence": sequence, "detail": detail},
                 )
-            except OSError:
-                # Do not replace the exception being observed. Missing journal
-                # is a STOP at the coordinator, never a successful retention.
-                print("CONTROL_RETAINED_TRACE_WRITE_FAILED", flush=True)
+            )
+            flush()
+        if event == "return" and active:
+            finish()
         return observe
 
+    observe.finish = finish
     return observe
+
+
+def write_retained_launcher(directory):
+    """One launcher for actual frozen shells and the separate-process unit seam."""
+    import inspect
+
+    launcher = (
+        "#!"
+        + sys.executable
+        + "\nimport json,sys,os\n"
+        + inspect.getsource(retained_exception_observer)
+        + "\nfrom pathlib import Path\n"
+        + "config=json.loads(Path("
+        + repr(str(directory / "retained.json"))
+        + ").read_text())\n"
+        + "assert sys.argv[1:3]==['-','--schema-upgrade'], 'CONTROL_RETAINED_LAUNCHER'\n"
+        + "sys.argv=sys.argv[1:]\nsys.path[0]=os.getcwd()\n"
+        + "observer=retained_exception_observer(config)\nsys.settrace(observer)\n"
+        + "try: exec(compile(sys.stdin.buffer.read(),'<stdin>','exec'),{'__name__':'__main__'})\n"
+        + "finally:\n sys.settrace(None)\n"
+        # Independent process outcome closes the last-fsync ACK gap: a visible
+        # health file alone never proves its final directory fsync succeeded.
+        + " if not observer.finish(): raise SystemExit(78) from None\n"
+    )
+    path = directory / "python3"
+    path.write_text(launcher)
+    path.chmod(0o700)
+    return path
 
 
 def enable_retained_checkpoint(owner, checkout, deadline, fault=None):
     """Private C launcher and bind backing; frozen shell/function/images unchanged."""
-    import inspect
-
     assert owner.admitted and owner.source == CONTROL_T, "CONTROL_RETAINED_OWNER"
     assert fault in (None, "timeout", "export"), "CONTROL_RETAINED_FAULT"
     checkout = Path(checkout)
@@ -1069,24 +1208,7 @@ def enable_retained_checkpoint(owner, checkout, deadline, fault=None):
         "fault": fault,
     }
     e.write_private(owner.directory / "retained.json", e.encoded(config))
-    launcher = (
-        "#!"
-        + sys.executable
-        + "\nimport json,sys,os\n"
-        + inspect.getsource(retained_exception_observer)
-        + "\nfrom pathlib import Path\n"
-        + "config=json.loads(Path("
-        + repr(str(owner.directory / "retained.json"))
-        + ").read_text())\n"
-        + "assert sys.argv[1:3]==['-','--schema-upgrade'], 'CONTROL_RETAINED_LAUNCHER'\n"
-        + "sys.argv=sys.argv[1:]\nsys.path[0]=os.getcwd()\n"
-        + "sys.settrace(retained_exception_observer(config))\n"
-        + "try: exec(compile(sys.stdin.buffer.read(),'<stdin>','exec'),{'__name__':'__main__'})\n"
-        + "finally: sys.settrace(None)\n"
-    )
-    path = owner.directory / "python3"
-    path.write_text(launcher)
-    path.chmod(0o700)
+    write_retained_launcher(owner.directory)
 
 
 class RetainedCheckpoint:
@@ -1099,6 +1221,8 @@ class RetainedCheckpoint:
         assert (
             self.config["token"] == self.owner["token"]
             and self.config["source"] == self.owner["source"] == CONTROL_T
+            and self.config["phase"] == self.owner["phase"]
+            and self.config["owner_directory"] == str(self.directory)
         ), "CONTROL_RETAINED_BINDING"
         self.root = self.directory / "checkpoint"
         self.state = self.root / "state"
@@ -1562,22 +1686,188 @@ class RetainedCheckpoint:
             self.mirror()
         return result
 
-    def collect(self, report):
-        primary = self.directory / "trace-primary.json"
-        if primary.exists():
-            detail = e.strict_json(e.private_bytes(primary))
-            if report.get("primary_failure") != detail and "primary_failure" in report:
-                report.setdefault("secondary_failures", []).append(report["primary_failure"])
-            report["primary_failure"] = detail
-            report["failure"] = detail["type"]
-            report["private_state_retained"] = True
-        secondary = [
-            e.strict_json(e.private_bytes(p))
-            for p in sorted(self.directory.glob("trace-secondary-*.json"))
-        ]
-        for detail in secondary:
+    def collect_journal(self, report):
+        """Prove sequence1 across IPC or STOP; later events cannot repair it."""
+        binding = {
+            key: self.config[key]
+            for key in ("source", "phase", "token", "module_blob", "helper_blob")
+        }
+        binding["version"] = 1
+        diagnostics = []
+        details = []
+        health = {}
+        journal_errors = []
+        primary = None
+        stop = self.directory / "trace-collection-stop.json"
+
+        def secondary(detail):
             if detail not in report.setdefault("secondary_failures", []):
                 report["secondary_failures"].append(detail)
+
+        def problem(error):
+            diagnostics.append({"stage": "retained_journal", **schema_failure(error)})
+
+        try:
+            if (
+                report.get("retained_journal", {}).get("state") == "STOP"
+                or stop.exists()
+                or stop.is_symlink()
+            ):
+                problem(e.EgressError("CONTROL_RETAINED_JOURNAL_STOP_LATCHED"))
+            health = e.strict_json(e.private_bytes(self.directory / "trace-health.json"))
+            assert set(health) == {
+                "binding",
+                "completed",
+                "entered_sha256",
+                "event_hashes",
+                "published",
+                "attempts",
+                "errors",
+                "overflow",
+                "state",
+            }
+            assert health["binding"] == binding, "CONTROL_RETAINED_JOURNAL_BINDING"
+            assert health["completed"] is True and health["overflow"] is False, (
+                "CONTROL_RETAINED_JOURNAL_INCOMPLETE"
+            )
+            hashes = health["event_hashes"]
+            assert isinstance(hashes, list) and len(hashes) <= 32
+            assert all(isinstance(h, str) and re.fullmatch("[0-9a-f]{64}", h) for h in hashes)
+            assert len(health["published"]) == len(hashes) and all(
+                type(value) is bool for value in health["published"]
+            )
+            assert len(health["attempts"]) == len(hashes) and all(
+                type(n) is int and 1 <= n <= 3 for n in health["attempts"]
+            )
+            assert health["state"] in {"CONFIRMED", "NO_FAILURE", "UNCONFIRMED"}
+            assert isinstance(health["errors"], list) and len(health["errors"]) <= 16
+            for item in health["errors"]:
+                assert set(item) == {"file", "step", "reason"}
+                assert re.fullmatch(
+                    r"trace-(?:entered|primary|health|secondary-[0-9]{4})\.json|retained-operation\.json",
+                    item["file"],
+                )
+                assert item["step"] in {
+                    "deadline",
+                    "write",
+                    "fsync_file",
+                    "publish",
+                    "fsync_directory",
+                    "unlink",
+                    "read",
+                }
+                assert item["reason"] == "CONTROL_RETAINED_JOURNAL_IO"
+            journal_errors = health["errors"]
+            entered_raw = e.private_bytes(self.directory / "trace-entered.json")
+            assert e.sha(entered_raw) == health["entered_sha256"]
+            entered = e.strict_json(entered_raw)
+            assert entered["binding"] == binding and entered["source"] == CONTROL_T
+            assert entered["module_blob"] == self.config["module_blob"]
+            assert type(entered["pid"]) is int and entered["pid"] > 0
+            last = entered["at"]
+            assert type(last) in (float, int) and 0 < last < self.config["deadline"]
+            for number, digest in enumerate(hashes, 1):
+                name = "trace-primary.json" if number == 1 else f"trace-secondary-{number:04d}.json"
+                try:
+                    raw = e.private_bytes(self.directory / name)
+                    assert e.sha(raw) == digest, "CONTROL_RETAINED_JOURNAL_HASH"
+                    record = e.strict_json(raw)
+                    assert set(record) == {"binding", "sequence", "detail"}
+                    assert record["binding"] == binding and type(record["sequence"]) is int
+                    assert record["sequence"] == number, "CONTROL_RETAINED_JOURNAL_ORDER"
+                    detail = record["detail"]
+                    assert {"type", "reason", "stage", "source", "at"} <= set(detail)
+                    assert set(detail) <= {
+                        "type",
+                        "reason",
+                        "stage",
+                        "source",
+                        "at",
+                        "exit_code",
+                        "observed_type",
+                    }
+                    assert detail["source"] == CONTROL_T
+                    assert re.fullmatch(r"[A-Za-z0-9_]{1,80}", detail["type"])
+                    assert re.fullmatch(
+                        r"(?:CONTROL|EGRESS|FROZEN|SCHEMA)_[A-Z0-9_]{1,100}", detail["reason"]
+                    )
+                    assert re.fullmatch(r"[a-z0-9_]{1,80}", detail["stage"])
+                    assert (
+                        type(detail["at"]) in (float, int)
+                        and last <= detail["at"] < self.config["deadline"]
+                    )
+                    assert "exit_code" not in detail or type(detail["exit_code"]) is int
+                    assert "observed_type" not in detail or detail["observed_type"] == "EgressError"
+                    last = detail["at"]
+                    if number == 1:
+                        primary = detail
+                    else:
+                        details.append(detail)
+                except Exception as error:
+                    problem(error)
+            assert all(health["published"]) and health["state"] == (
+                "CONFIRMED" if hashes else "NO_FAILURE"
+            ), "CONTROL_RETAINED_JOURNAL_UNPUBLISHED"
+            # The real launcher reserves78 for failed durability/publication,
+            # including an apparently complete health file visible after failed
+            # final fsync. Missing/killed/other shell exits cannot acknowledge it.
+            exit_code = report.get("retained_shell_exit", report.get("shell_exit"))
+            assert type(exit_code) is int and exit_code in (0, 1), (
+                "CONTROL_RETAINED_JOURNAL_CHILD_UNCONFIRMED"
+            )
+            assert hashes or exit_code == 0, "CONTROL_RETAINED_JOURNAL_FAILURE_MISSING"
+        except Exception as error:
+            problem(error)
+        for detail in details:
+            secondary(detail)
+        if diagnostics:
+            # Persist STOP for a fresh collector/re-entry too. Failure to write
+            # the latch remains an explicit diagnostic, never authorizes PASS.
+            report["private_state_retained"] = True
+            report["result"] = "STOP"
+            unconfirmed = {
+                "type": "UNCONFIRMED",
+                "reason": "CONTROL_RETAINED_JOURNAL_UNCONFIRMED",
+                "stage": "retained_journal",
+                "source": CONTROL_T,
+            }
+            if "primary_failure" in report and report["primary_failure"] != unconfirmed:
+                secondary(report["primary_failure"])
+            report["primary_failure"] = unconfirmed
+            report["failure"] = "UNCONFIRMED"
+            report["retained_journal"] = {
+                "state": "STOP",
+                "primary": "UNCONFIRMED",
+                "binding": binding,
+                "diagnostics": journal_errors,
+            }
+            try:
+                if not stop.exists():
+                    e.write_private(stop, e.encoded({"binding": binding, "state": "STOP"}))
+            except Exception as error:
+                problem(error)
+            for detail in diagnostics:
+                secondary(detail)
+            raise e.EgressError("CONTROL_RETAINED_JOURNAL_UNCONFIRMED")
+        report["retained_journal"] = {
+            "state": "RECOVERED" if health["errors"] else "HEALTHY",
+            "primary": "CONFIRMED" if primary else "NONE",
+            "binding": binding,
+            "event_hashes": health["event_hashes"],
+            "attempts": health["attempts"],
+            "diagnostics": health["errors"],
+            "observer_pid": entered["pid"],
+        }
+        if primary is not None:
+            if report.get("primary_failure") != primary and "primary_failure" in report:
+                secondary(report["primary_failure"])
+            report["primary_failure"] = primary
+            report["failure"] = primary["type"]
+            report["private_state_retained"] = True
+
+    def collect(self, report):
+        # Retention evidence is independent of journal health: even STOP must
+        # leave checkpoint/cleanup proof visible to the coordinator.
         evidence = {
             "source": CONTROL_T,
             "phase": self.owner["phase"],
@@ -1616,6 +1906,7 @@ class RetainedCheckpoint:
                 detail = {"stage": "retained_down", **event["diagnostic"]}
                 if detail not in report.setdefault("secondary_failures", []):
                     report["secondary_failures"].append(detail)
+        self.collect_journal(report)
 
 
 def schema_failure(error):
@@ -5782,11 +6073,7 @@ def test_control_compose_overlay_owns_resources_without_changing_source(tmp_path
     assert executed[0][-4:] == ["-f", str(owner.directory / "compose-ownership.json"), "up", "-d"]
 
 
-@pytest.mark.parametrize(
-    "fault",
-    ["down-success", "down", "cleanup", "cleanup-still-live", "capture", "export", "report"],
-)
-def test_retained_full_function_keeps_checkpoint_and_primary(tmp_path, monkeypatch, fault):
+def retained_full_function_fixture(tmp_path, monkeypatch, fault):
     import ast
     import inspect
     from contextlib import nullcontext
@@ -5971,16 +6258,28 @@ def test_retained_full_function_keeps_checkpoint_and_primary(tmp_path, monkeypat
             return original_write(path, *args, **kwargs)
 
         monkeypatch.setattr(Path, "write_text", report_failure)
+    return owner, checkpoint, namespace, live, receipt, foreign, temporary_paths
+
+
+@pytest.mark.parametrize(
+    "fault",
+    ["down-success", "down", "cleanup", "cleanup-still-live", "capture", "export", "report"],
+)
+def test_retained_full_function_keeps_checkpoint_and_primary(tmp_path, monkeypatch, fault):
+    owner, checkpoint, namespace, live, receipt, foreign, temporary_paths = (
+        retained_full_function_fixture(tmp_path, monkeypatch, fault)
+    )
     outer = schema_envelope(
         {"historical": CONTROL_T, "candidate": CONTROL_T}, "UNIT_FULL_RETAINED_T"
     )
     outer["cleanup"] = {"state": "ADMITTED"}
     ledger = tmp_path / "outer-ledger.json"
     previous_trace = sys.gettrace()
+    observer = retained_exception_observer(checkpoint.config)
     with pytest.raises((subprocess.TimeoutExpired, e.EgressError, OSError)):
         with schema_cleanup_scope(owner, outer, ledger):
             try:
-                sys.settrace(retained_exception_observer(checkpoint.config))
+                sys.settrace(observer)
                 namespace["run_schema_phase"](
                     {
                         "historical": "754f1c883e5a94a7fc9e729af2605424f949ba33",
@@ -5989,6 +6288,9 @@ def test_retained_full_function_keeps_checkpoint_and_primary(tmp_path, monkeypat
                 )
             finally:
                 sys.settrace(previous_trace)
+                # Same-process daemon seam supplies the launcher's exit ACK.
+                # Separate-child tests below exercise that boundary without it.
+                outer["retained_shell_exit"] = 1 if observer.finish() else 78
                 assert temporary_paths and not temporary_paths[0].exists()
                 assert (checkpoint.state / "receipt.json").read_bytes() == receipt
                 if live["controller"]:
@@ -6023,3 +6325,296 @@ def test_retained_full_function_keeps_checkpoint_and_primary(tmp_path, monkeypat
             detail["stage"] == "retained_report" and detail["type"] == "OSError"
             for detail in saved["secondary_failures"]
         )
+
+
+def inject_retained_journal_io(monkeypatch, fault):
+    """Scoped filesystem faults only; no replacement observer/collector logic."""
+    original_replace, original_sync, original_open = os.replace, os.fsync, os.fdopen
+    attempts, failed = [], []
+    pending = {"name": None}
+
+    def replace(source, target):
+        name = Path(target).name
+        pending["name"] = None
+        if name == "trace-primary.json" and Path(source).name.startswith(".observer-"):
+            attempts.append(Path(source).read_bytes())
+            if fault == "permanent" or (fault == "transient" and not failed):
+                failed.append(True)
+                raise OSError("private-journal-error-never-serialized")
+        result = original_replace(source, target)
+        pending["name"] = name
+        return result
+
+    def sync(fd):
+        info = os.fstat(fd)
+        if stat.S_ISDIR(info.st_mode):
+            name, pending["name"] = pending["name"], None
+            if (fault == "directory-once" and name == "trace-primary.json" and not failed) or (
+                fault == "health-durability" and name == "trace-health.json"
+            ):
+                failed.append(True)
+                raise OSError("private-journal-error-never-serialized")
+        elif fault == "file-once" and not failed:
+            path = Path(os.readlink(f"/proc/self/fd/{fd}"))
+            if path.name.startswith(".observer-") and b'"sequence": 1' in path.read_bytes():
+                failed.append(True)
+                raise OSError("private-journal-error-never-serialized")
+        return original_sync(fd)
+
+    @contextmanager
+    def opened(fd, mode="r", *args, **kwargs):
+        with original_open(fd, mode, *args, **kwargs) as stream:
+            if fault != "write-once" or mode != "wb":
+                yield stream
+                return
+
+            def write(raw):
+                target = Path(os.readlink(f"/proc/self/fd/{fd}"))
+                if target.name.startswith(".observer-") and b'"sequence": 1' in raw and not failed:
+                    failed.append(True)
+                    raise OSError("private-journal-error-never-serialized")
+                return stream.write(raw)
+
+            yield SimpleNamespace(write=write, flush=stream.flush, fileno=stream.fileno)
+
+    monkeypatch.setattr(os, "replace", replace)
+    monkeypatch.setattr(os, "fsync", sync)
+    monkeypatch.setattr(os, "fdopen", opened)
+    return attempts, failed
+
+
+@pytest.mark.parametrize("fault", ["down", "report"])
+@pytest.mark.parametrize(
+    "journal_fault", ["transient", "write-once", "file-once", "directory-once"]
+)
+def test_retained_full_function_first_event_retry(tmp_path, monkeypatch, fault, journal_fault):
+    attempts, failed = inject_retained_journal_io(monkeypatch, journal_fault)
+    # All original assertions still execute: full unchanged T, real receipt/
+    # tempdir, checkpoint byte identity, cleanup, primary and secondary.
+    test_retained_full_function_keeps_checkpoint_and_primary(tmp_path, monkeypatch, fault)
+    assert failed and 1 <= len(attempts) <= 3 and len(set(attempts)) == 1
+    record = json.loads(attempts[0])
+    assert record["sequence"] == 1 and record["detail"]["type"] == "TimeoutExpired"
+    saved = json.loads((tmp_path / "outer-ledger.json").read_text())
+    health = saved["retained_journal"]
+    assert health["state"] == "RECOVERED" and health["primary"] == "CONFIRMED"
+    assert health["event_hashes"][0] == e.sha(attempts[0])
+    assert health["attempts"][0] == 2 and health["diagnostics"]
+    assert any(d["stage"] == "retained_" + fault for d in saved["secondary_failures"])
+    primary = copy.deepcopy(saved["primary_failure"])
+    RetainedCheckpoint(tmp_path / "owner").collect(saved)
+    assert saved["primary_failure"] == primary
+    assert "private-journal-error-never-serialized" not in json.dumps(saved)
+
+
+def damage_retained_journal(directory, fault, monkeypatch):
+    name = "trace-health.json" if fault.startswith("health-") else "trace-primary.json"
+    path = directory / name
+    original = path.read_bytes() if path.exists() else None
+    if fault.endswith("missing"):
+        path.unlink()
+    elif fault.endswith("unreadable"):
+        read = e.private_bytes
+
+        def unreadable(target):
+            if Path(target) == path:
+                raise PermissionError("private-journal-read-error-never-serialized")
+            return read(target)
+
+        monkeypatch.setattr(e, "private_bytes", unreadable)
+    elif fault.endswith("corrupt"):
+        e.write_private(path, b"not-json\n")
+    elif fault in {"wrong-sequence", "wrong-owner", "wrong-source", "wrong-phase"}:
+        record = json.loads(original)
+        if fault == "wrong-sequence":
+            record["sequence"] = 2
+        else:
+            key = {"wrong-owner": "token", "wrong-source": "source", "wrong-phase": "phase"}[fault]
+            record["binding"][key] = "f" * 40
+        e.write_private(path, e.encoded(record))
+        health = e.strict_json(e.private_bytes(directory / "trace-health.json"))
+        health["event_hashes"][0] = e.sha(e.private_bytes(path))
+        e.write_private(directory / "trace-health.json", e.encoded(health))
+    return path, original
+
+
+@pytest.mark.parametrize("fault", ["down", "report"])
+@pytest.mark.parametrize("journal_fault", ["permanent", "missing", "unreadable", "corrupt"])
+def test_retained_full_function_journal_stop_keeps_cleanup(
+    tmp_path, monkeypatch, fault, journal_fault
+):
+    owner, checkpoint, namespace, live, receipt, foreign, temporary_paths = (
+        retained_full_function_fixture(tmp_path, monkeypatch, fault)
+    )
+    attempts, _ = inject_retained_journal_io(monkeypatch, journal_fault)
+    report = schema_envelope({"candidate": CONTROL_T}, "UNIT_FULL_RETAINED_JOURNAL")
+    report["cleanup"] = {"state": "ADMITTED"}
+    path = tmp_path / "outer-ledger.json"
+    observer = retained_exception_observer(checkpoint.config)
+    previous_trace = sys.gettrace()
+    with pytest.raises((subprocess.TimeoutExpired, e.EgressError, OSError)):
+        with schema_cleanup_scope(owner, report, path):
+            try:
+                sys.settrace(observer)
+                namespace["run_schema_phase"](
+                    {
+                        "historical": "754f1c883e5a94a7fc9e729af2605424f949ba33",
+                        "candidate": CONTROL_T,
+                    }
+                )
+            finally:
+                sys.settrace(previous_trace)
+                report["retained_shell_exit"] = 1 if observer.finish() else 78
+                if journal_fault != "permanent":
+                    damage_retained_journal(owner.directory, journal_fault, monkeypatch)
+    assert attempts and len(attempts) <= 3 and len(set(attempts)) == 1
+    if journal_fault == "permanent":
+        assert len(attempts) == 3 and report["retained_shell_exit"] == 78
+    assert not live["controller"] and report["cleanup"]["state"] == "PASS"
+    assert temporary_paths and not temporary_paths[0].exists()
+    assert (checkpoint.state / "receipt.json").read_bytes() == receipt
+    proof = report["retained_checkpoint"]
+    assert (checkpoint.root / proof["capture"]["snapshot"] / "receipt.json").read_bytes() == receipt
+    assert proof["files"]["receipt.json"]["sha256"] == e.sha(receipt)
+    assert report["result"] == "STOP" and report["retained_journal"]["primary"] == "UNCONFIRMED"
+    assert report["primary_failure"]["type"] == "UNCONFIRMED"
+    assert any(d["stage"] == "retained_" + fault for d in report["secondary_failures"])
+    assert foreign.read_bytes() == b"foreign unchanged"
+    assert "private-journal" not in path.read_text()
+    for target in (report, {"retained_shell_exit": 1}):
+        with pytest.raises(e.EgressError, match="CONTROL_RETAINED_JOURNAL_UNCONFIRMED"):
+            RetainedCheckpoint(owner.directory).collect(target)
+        assert target["primary_failure"]["type"] == "UNCONFIRMED"
+        assert target["retained_journal"]["state"] == "STOP"
+
+
+@pytest.mark.parametrize(
+    "journal_fault",
+    [
+        "transient",
+        "permanent",
+        "health-durability",
+        "missing",
+        "unreadable",
+        "corrupt",
+        "health-missing",
+        "health-unreadable",
+        "health-corrupt",
+        "wrong-sequence",
+        "wrong-owner",
+        "wrong-source",
+        "wrong-phase",
+    ],
+)
+def test_retained_journal_separate_child_then_parent_collection(
+    tmp_path, monkeypatch, journal_fault
+):
+    # Only fixture/source/image/daemon seams live in the child. It runs the
+    # production C launcher/observer and the entire unchanged T function. The
+    # parent never receives its exception/object memory and collects only IPC.
+    bootstrap = """
+import importlib.util,runpy,sys
+from pathlib import Path
+from types import SimpleNamespace
+import pytest
+spec=importlib.util.spec_from_file_location('retained_child_candidate',sys.argv[1])
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+patch=pytest.MonkeyPatch()
+fixture=m.retained_full_function_fixture(Path(sys.argv[2]),patch,'down')
+owner,checkpoint,namespace,*_=fixture
+launcher=m.write_retained_launcher(owner.directory)
+m.inject_retained_journal_io(patch,sys.argv[3])
+sys.modules['unit_frozen_case']=SimpleNamespace(run=namespace['run_schema_phase'])
+sys.argv=[str(launcher),'-','--schema-upgrade']
+runpy.run_path(str(launcher),run_name='__main__')
+"""
+    program = (
+        "from unit_frozen_case import run\n"
+        "run({'historical':'754f1c883e5a94a7fc9e729af2605424f949ba33',"
+        "'candidate':'" + CONTROL_T + "'})\n"
+    )
+    child = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            bootstrap,
+            str(Path(__file__).resolve()),
+            str(tmp_path),
+            journal_fault,
+        ],
+        input=program.encode(),
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert child.returncode == (78 if journal_fault in {"permanent", "health-durability"} else 1)
+    directory = tmp_path / "owner"
+    checkpoint = RetainedCheckpoint(directory)
+    entered = e.strict_json(e.private_bytes(directory / "trace-entered.json"))
+    assert entered["pid"] != os.getpid()
+    cleanup = e.strict_json(e.private_bytes(directory / "down-cleanup.json"))
+    assert cleanup["state"] == "PASS"  # unit daemon seam, not actual PG evidence
+    raw = e.private_bytes(checkpoint.state / "receipt.json")
+    capture = e.strict_json(e.private_bytes(directory / "retained-capture.json"))
+    assert e.private_bytes(checkpoint.root / capture["snapshot"] / "receipt.json") == raw
+    report = {"retained_shell_exit": child.returncode, "cleanup": cleanup}
+    healthy = {"transient", "permanent", "health-durability"}
+    originals = {p.name: p.read_bytes() for p in directory.glob("trace-*.json")}
+    with monkeypatch.context() as read_fault:
+        if journal_fault not in healthy:
+            damage_retained_journal(directory, journal_fault, read_fault)
+        if journal_fault == "transient":
+            checkpoint.collect(report)
+            assert report["primary_failure"]["type"] == "TimeoutExpired"
+            assert report["primary_failure"]["stage"] == "controller_seed"
+            assert report["retained_journal"]["state"] == "RECOVERED"
+            assert report["retained_journal"]["observer_pid"] == entered["pid"]
+            assert any(d["stage"] == "retained_down" for d in report["secondary_failures"])
+        else:
+            with pytest.raises(e.EgressError, match="CONTROL_RETAINED_JOURNAL_UNCONFIRMED"):
+                checkpoint.collect(report)
+            assert report["primary_failure"]["type"] == "UNCONFIRMED"
+            assert report["retained_journal"]["state"] == report["result"] == "STOP"
+    assert not report["retained_checkpoint"]["original_exists"]
+    assert report["retained_checkpoint"]["files"]["receipt.json"]["sha256"] == e.sha(raw)
+    assert (tmp_path / "foreign").read_bytes() == b"foreign unchanged"
+    assert "private-journal" not in json.dumps(report)
+    if journal_fault != "transient":
+        # Restoration or later publications cannot erase a recorded STOP, even
+        # for a fresh collector/ledger. No first event is inferred from slot2.
+        for name, data in originals.items():
+            e.write_private(directory / name, data)
+        for target in (report, {"retained_shell_exit": 1, "cleanup": cleanup}):
+            with pytest.raises(e.EgressError, match="CONTROL_RETAINED_JOURNAL_UNCONFIRMED"):
+                RetainedCheckpoint(directory).collect(target)
+            assert target["primary_failure"]["type"] == "UNCONFIRMED"
+            assert target["cleanup"]["state"] == "PASS"
+            assert e.private_bytes(checkpoint.state / "receipt.json") == raw
+
+
+@pytest.mark.parametrize("outcome", ["success", "failed-shell", "missing-health"])
+def test_retained_journal_no_failure_requires_success_ack(tmp_path, monkeypatch, outcome):
+    _, checkpoint, _, _, _, _, _ = retained_full_function_fixture(tmp_path, monkeypatch, "down")
+    # Protocol-only unit frame: no claim to execute a successful full T here.
+    # Both actual state lanes retain the complete positive frozen T execution.
+    frame = SimpleNamespace(
+        f_code=SimpleNamespace(co_filename=checkpoint.config["module"], co_name="run_schema_phase"),
+        f_locals={},
+    )
+    observer = retained_exception_observer(checkpoint.config)
+    observer(frame, "call", None)
+    observer(frame, "return", None)
+    assert observer.finish()
+    assert not (checkpoint.directory / "trace-primary.json").exists()
+    report = {"retained_shell_exit": 1 if outcome == "failed-shell" else 0}
+    if outcome == "missing-health":
+        (checkpoint.directory / "trace-health.json").unlink()
+    if outcome == "success":
+        checkpoint.collect(report)
+        assert report["retained_journal"]["primary"] == "NONE"
+        assert report["retained_journal"]["state"] == "HEALTHY"
+        assert "primary_failure" not in report and "failure" not in report
+    else:
+        with pytest.raises(e.EgressError, match="CONTROL_RETAINED_JOURNAL_UNCONFIRMED"):
+            checkpoint.collect(report)
+        assert report["primary_failure"]["type"] == "UNCONFIRMED"

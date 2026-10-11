@@ -4946,3 +4946,56 @@ owned cleanup failure и продолжающий жить controller, capture/e
 Private raw checkpoint не загружается в artifacts. На disposable runner он сохраняется
 при negative/failure до уничтожения runner; доступ к рабочим VM/DB/S3 не требуется.
 Точные final-source CI, assertions, timings и artifact digests — в едином PR receipt.
+
+#### 6.2.3. CONTROL R3: first-event journal и неподтверждённая primary
+
+C0/C6 подтвердили IMPL-04 на R2 head6363f9c: если первая публикация
+`trace-primary.json` падает один раз, проверка наличия файла позволяла finally
+записать secondary как primary. Независимо воспроизведены down/report branches.
+R2 CI38164556626 остаётся SUCCESS9/9 для прежних путей, но не покрывал этот fault.
+Private backing/checkpoint и daemon cleanup R2 сохраняются; IMPL-01/03/04 остаются
+OPEN до verdict C0, IMPL-02 CLOSED. Исторические receipts выше не переименовываются.
+
+В C observer первое событие получает sequence1 независимо от файловой системы;
+перед публикацией фиксируются неизменяемые serialized bytes и SHA256. Retries
+публикуют только эти bytes, не последнее exception. Каждый entered/event slot
+имеет максимум три попытки без sleep, в исходных whole-T600/cleanup90 deadlines.
+Bounded health содержит completed, hashes/order, publication attempts, безопасные
+I/O diagnostics и binding source/module/helper/phase/owner token. Лимиты32 events
+и16 diagnostics не расширяют прежние wall budgets; overflow означает STOP.
+
+Private C launcher использует тот же observer и возвращает отдельный exit78,
+если final journal publication/durability не подтверждена. Поэтому видимый после
+неудачного fsync health file не считается достаточным ACK. Collector требует
+завершённый journal, точные private modes/hashes/bindings/sequence/timestamps
+и допустимый launcher outcome. Успешный T без exception имеет NO_FAILURE,
+пустой event list и exit0; отсутствие failure evidence при exit1 не является
+такой успешной ветвью. Ни frozen T function/helper/source/image, ни их selector
+не изменены; launcher остаётся runtime-generated private C harness.
+
+Восстановленная публикация даёт original primary + отдельные secondary и
+RECOVERED journal diagnostics. Permanent/missing/unreadable/corrupt evidence,
+неверная sequence/owner/source/phase либо неизвестный child outcome дают
+`CONTROL_RETAINED_JOURNAL_UNCONFIRMED`, primary UNCONFIRMED, result STOP.
+Private STOP latch сохраняет отказ при повторном collect/re-entry; later event
+или восстановленный файл не подменяет уже недоказанную первую причину.
+Checkpoint capture/export и owned cleanup выполняются независимо от journal:
+в STOP report остаются exact retention evidence и правдивый cleanup outcome.
+Raw receipt/env/argv/traceback не экспортируются для доказательства primary.
+
+Адресная local проверка R3:39 PASS — семь прежних full-T cases, восемь transient
+write/publication/file-fsync/directory-fsync down/report cases, восемь permanent/
+missing/unreadable/corrupt full-T cases,13 separate-child IPC cases и три protocol
+success/missing-evidence cases. В child исполняются production C launcher/observer
+и полное unchanged T body; parent читает только files/exit, без общей exception
+memory. Daemon/source/image seams явно unit; это не actual Docker/PG evidence.
+Старые семь assertions сохранены; fixture выделена для повторного использования,
+а same-process seam дополнена новым launcher ACK. STOP не отменяет byte/hash,
+foreign-preservation и cleanup assertions. Local Docker отсутствует.
+
+Штатный final-source CI обязан повторить все9 jobs/clean-source, четыре actual
+full-T timeout/export и шесть R1 daemon negatives, positive H/T/C, PG1→0 до DB
+teardown, private S3/UNKNOWN/wire1 и прежние timings/budgets. Нового дорогостоящего
+Docker journal-fault phase нет: journal IPC проверяется адресными child-process
+tests в существующем non-integration runner. Final SHA/run/artifact digests и
+фактический verdict публикуются в едином PR27 receipt; review остаётся за C0/C6.
