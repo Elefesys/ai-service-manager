@@ -953,7 +953,7 @@ async def durable_local():
                 ), "E05_FRESH_EMPTY_LOCAL_DATABASE_REQUIRED"
             else:
                 # The first case's sealed billing catalog is immutable by contract.
-                # Require its complete attested cleanup fingerprint (all 34 tables),
+                # Require its complete attested cleanup fingerprint (all 35 tables),
                 # not a relaxed empty-DB check or a destructive catalog reset.
                 previous = read_json(catalog_file)
                 assert previous["database_identity"] == target["database_identity"]

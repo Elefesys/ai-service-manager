@@ -22,7 +22,7 @@ from test_m2_1_schema_postgres import _migrate
 from test_m2_2_db_postgres import ready
 from test_m2_3_db_postgres import telegram as telegram
 from test_m3_1_control_postgres import control as control
-from test_m3_1_control_postgres import execute, incoming
+from test_m3_1_control_postgres import execute, incoming, process_receipt
 from test_m3_1_migrations import names
 from test_tenancy_postgres import db as db
 from test_tenancy_postgres import seeded as seeded
@@ -630,7 +630,9 @@ async def test_control_clean_populated_t_cycle_all_columns_definitions_and_recei
         await h.runtime.engine.dispose()
 
 
-@pytest.mark.parametrize("blocker", ["capture", "human_generation", "ai_fence", "receipt"])
+@pytest.mark.parametrize(
+    "blocker", ["capture", "human_generation", "ai_fence", "receipt", "audit_only", "turn_only"]
+)
 async def test_control_populated_refusal_preserves_full_35_table_snapshot(control, blocker):
     h = control
     if blocker == "capture":
@@ -655,10 +657,83 @@ async def test_control_populated_refusal_preserves_full_35_table_snapshot(contro
                 "UPDATE app.conversations SET control_mode='AI',control_generation=2,activation_fence_seq=nextval('platform.turn_ingress_seq') WHERE id=:id RETURNING id",
                 id=cid,
             )
+        elif blocker == "turn_only":
+            # An independently valid terminal Turn is sufficient to refuse even
+            # with no fresh Inbox capture, transition, CONTROL receipt or Audit.
+            await query(
+                h,
+                "INSERT INTO app.conversation_turns SELECT (jsonb_populate_record(NULL::app.conversation_turns,to_jsonb(t)||jsonb_build_object('id',gen_random_uuid(),'state','FAILED','error_code','INVALID_INPUT','member_count',0,'ingress_control_mode','HUMAN'))).* FROM app.conversation_turns t WHERE t.conversation_id=:cid RETURNING id",
+                cid=cid,
+            )
         else:
             await execute(h, cid)
+            if blocker == "audit_only":
+                await query(
+                    h,
+                    "DELETE FROM platform.conversation_control_receipts WHERE conversation_id=:id RETURNING id",
+                    id=cid,
+                )
+                await query(
+                    h,
+                    "UPDATE app.conversations SET control_generation=1 WHERE id=:id RETURNING id",
+                    id=cid,
+                )
     async with h.migrator.begin() as c:
         await assert_refusal(c)
+
+
+@pytest.mark.parametrize("provider", ["CONTROLLED", "TELEGRAM"])
+@pytest.mark.parametrize("old_mode", ["LEGACY_NULL", "HUMAN", "AI"])
+async def test_late_old_origin_cannot_close_or_join_current_generation(control, provider, old_mode):
+    h = control
+    try:
+        if old_mode == "LEGACY_NULL":
+            await _migrate("downgrade", "0008")
+        cid, _, _ = await incoming(h, provider)
+        if old_mode == "AI":
+            await execute(h, cid, "RESUME", "old-ai")
+        old = await incoming(h, provider, 2, process=False)
+        older = await h.kernel.claim_job("hold-old-origin")
+        old_job = old["job_id"] if isinstance(old, dict) else old.job_id
+        assert str(older.job_id) == str(old_job) and older.kind == "PROCESS_INBOX"
+        if old_mode == "LEGACY_NULL":
+            await _migrate("upgrade", "0009")
+        accepted = await execute(h, cid, "RESUME", "new-ai")
+        fresh = await incoming(h, provider, 3, process=False)
+        new_message = await process_receipt(h, fresh)
+        newer = (
+            await query(
+                h,
+                "SELECT t.* FROM app.conversation_turns t JOIN app.conversation_turn_messages m ON (m.workspace_id,m.turn_id)=(t.workspace_id,t.id) WHERE m.message_id=:id",
+                id=new_message.message_id,
+            )
+        )[0]
+        assert newer["ingress_control_mode"] == "AI"
+        assert newer["control_generation"] == int(accepted["result"]["accepted_generation"])
+        assert newer["state"] == "COLLECTING" and newer["member_count"] == 1
+        late_message = await h.kernel.process_inbox(older)
+        late = (
+            await query(
+                h,
+                "SELECT t.* FROM app.conversation_turns t JOIN app.conversation_turn_messages m ON (m.workspace_id,m.turn_id)=(t.workspace_id,t.id) WHERE m.message_id=:id",
+                id=late_message.message_id,
+            )
+        )[0]
+        assert late["id"] != newer["id"] and late["state"] == "READY" and late["member_count"] == 1
+        assert late["control_generation"] == (2 if old_mode == "AI" else 1)
+        assert late["ingress_control_mode"] == (None if old_mode == "LEGACY_NULL" else old_mode)
+        assert (
+            await query(h, "SELECT * FROM app.conversation_turns WHERE id=:id", id=newer["id"])
+        )[0] == newer
+        assert (
+            await query(
+                h,
+                "SELECT platform.conversation_turn_activation_matches(workspace_id,id) AS eligible FROM app.conversation_turns WHERE id=:id",
+                id=late["id"],
+            )
+        )[0]["eligible"] is False
+    finally:
+        await _migrate("upgrade", "head")
 
 
 COMMIT_ACK_LOSS_EXIT = 86
@@ -792,14 +867,25 @@ async def schema_controller(action, state_path):
             return (await c.execute(text(statement), args)).scalar_one()
 
     async def claim():
+        position = None
         async with asyncio.timeout(30):
             while True:
                 scan = await sql(
-                    "SELECT platform.messaging_claim('control-schema-seed',NULL,NULL,NULL)"
+                    "SELECT platform.messaging_claim('control-schema-seed',:until,:at,:id)",
+                    until=position["scan_until"] if position else None,
+                    at=position["at"] if position else None,
+                    id=position["id"] if position else None,
                 )
                 if scan["step"] == "CLAIMED":
                     return scan["claim"]
+                if scan["step"] in {"TERMINALIZED", "BUSY"}:
+                    # READY media supersedes the original GROUP job. Traverse
+                    # the retained four-argument queue ABI, including its scan
+                    # position, instead of treating maintenance as END/error.
+                    position = scan
+                    continue
                 assert scan["step"] == "END", scan
+                position = None
                 due = await sql(
                     "SELECT min(available_at) FROM platform.messaging_jobs WHERE status='READY'"
                 )
@@ -1108,7 +1194,26 @@ async def schema_controller(action, state_path):
 
 if __name__ == "__main__":
     assert len(sys.argv) == 4 and sys.argv[1] == "--control-schema-phase"
-    if sys.argv[2] == "upgrade-lost-result":
-        exec(COMMIT_ACK_LOSS)
-    else:
-        asyncio.run(schema_controller(sys.argv[2], sys.argv[3]))
+    try:
+        if sys.argv[2] == "upgrade-lost-result":
+            exec(COMMIT_ACK_LOSS)
+        else:
+            asyncio.run(schema_controller(sys.argv[2], sys.argv[3]))
+    except BaseException as error:
+        import traceback
+
+        # Error locations/types only: no SQL parameters, cookies, claim tokens,
+        # object keys or environment values enter the retained public report.
+        detail = {
+            "action": sys.argv[2],
+            "type": type(error).__name__,
+            "sqlstate": getattr(getattr(error, "orig", None), "sqlstate", None),
+            "frames": [
+                {"file": Path(frame.filename).name, "line": frame.lineno, "function": frame.name}
+                for frame in traceback.extract_tb(error.__traceback__)
+            ],
+        }
+        failed = Path(sys.argv[3]).with_name("controller-failure.json")
+        failed.write_text(json.dumps(detail, sort_keys=True) + "\n")
+        failed.chmod(0o600)
+        raise

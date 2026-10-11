@@ -979,19 +979,46 @@ def supervised_schema_child(args, *, cwd, timeout):
     """No detached runner; timeout kills the owned process group and waits."""
     assert timeout > 0, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
     process = subprocess.Popen(args, cwd=cwd, stdin=subprocess.DEVNULL, start_new_session=True)
+
+    def stop_group():
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(process.pid, sig)
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                if sig == signal.SIGKILL:
+                    raise
+        # The shell may exit on TERM while a descendant ignores it. KILL the
+        # group even after its leader exits, then observe all members stopped.
+        deadline = time.monotonic() + 5
+        while True:
+            live = []
+            for path in Path("/proc").glob("[0-9]*/stat"):
+                try:
+                    fields = path.read_text().rpartition(")")[2].split()
+                except FileNotFoundError:
+                    continue
+                if int(fields[2]) == process.pid and fields[0] != "Z":
+                    live.append(path.parent.name)
+            if not live:
+                return
+            assert time.monotonic() < deadline, "CONTROL_CHILD_GROUP_NOT_STOPPED"
+            time.sleep(0.02)
+
     try:
-        return process.wait(timeout=timeout)
-    except BaseException:
+        result = process.wait(timeout=timeout)
+    except BaseException as error:
         try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait(timeout=5)
+            stop_group()
+        except BaseException as cleanup:
+            error.add_note("CONTROL_CHILD_CLEANUP_FAILED: " + type(cleanup).__name__)
         raise
+    if result:
+        stop_group()
+    return result
 
 
 def cleanup_schema_daemon(project, report):
@@ -1336,18 +1363,24 @@ def run_control_schema_phase(request):
 
             def controller(action):
                 report["stage"] = "controller_" + action
-                output = run(
-                    [
-                        *prefix,
-                        images[candidate]["development"],
-                        "python",
-                        "tests/test_m3_1_control_migrations.py",
-                        "--control-schema-phase",
-                        action,
-                        "/state/receipt.json",
-                    ],
-                    timeout=120,
-                )
+                try:
+                    output = run(
+                        [
+                            *prefix,
+                            images[candidate]["development"],
+                            "python",
+                            "tests/test_m3_1_control_migrations.py",
+                            "--control-schema-phase",
+                            action,
+                            "/state/receipt.json",
+                        ],
+                        timeout=120,
+                    )
+                except BaseException:
+                    failure = state / "controller-failure.json"
+                    if failure.exists():
+                        report["controller_failure"] = json.loads(e.private_bytes(failure))
+                    raise
                 assert output.decode().strip() == "CONTROL_SCHEMA_" + action.upper() + "_PASS"
                 report["checks"].append(action)
 
@@ -3301,6 +3334,35 @@ def test_schema_supervisor_reaps_child_on_timeout(tmp_path):
             [sys.executable, "-c", "import time; time.sleep(60)"], cwd=tmp_path, timeout=0.1
         )
     assert time.monotonic() - started < 2
+
+
+@pytest.mark.parametrize("failure", ["timeout", "exit"])
+def test_schema_supervisor_stops_term_ignoring_descendant_after_leader_exit(tmp_path, failure):
+    script = """
+import os,signal,sys,time
+from pathlib import Path
+if os.fork()==0:
+ signal.signal(signal.SIGTERM,signal.SIG_IGN)
+ Path('descendant').write_text(str(os.getpid()))
+ time.sleep(60)
+else:
+ while not Path('descendant').exists(): time.sleep(.01)
+ if sys.argv[1]=='exit': sys.exit(7)
+ time.sleep(60)
+"""
+    started = time.monotonic()
+    args = [sys.executable, "-c", script, failure]
+    if failure == "timeout":
+        with pytest.raises(subprocess.TimeoutExpired):
+            supervised_schema_child(args, cwd=tmp_path, timeout=1)
+    else:
+        assert supervised_schema_child(args, cwd=tmp_path, timeout=1) == 7
+    pid = int((tmp_path / "descendant").read_text())
+    path = Path(f"/proc/{pid}/stat")
+    # A zombie has already terminated and retains no descriptors or execution;
+    # its orphan reaping belongs to the runner init, not this unrelated parent.
+    assert not path.exists() or path.read_text().rpartition(")")[2].split()[0] == "Z"
+    assert time.monotonic() - started < 7
 
 
 def test_schema_probe_programs_are_executable_python_without_hidden_indentation():

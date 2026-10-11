@@ -4782,7 +4782,7 @@ upgrade рабочего окружения, Telegram activation, ACK или п�
 
 ### 6.2. Отдельная CONTROL0009 LOCAL phase
 
-Для CONTROL действует [M3_CONTRACT §12.8](../tasks/M3_CONTRACT.md#128-upgradedowngrade-и-sourceschema00080009).
+Для CONTROL действует [M3_CONTRACT](../tasks/M3_CONTRACT.md), §12.8.
 §6.1 выше сохраняет историческое описание TURNS. Текущий default lane принимает
 только exact candidate C/0009 и полный inventory35. Шесть historical shards
 по-прежнему исполняют H/0007 без изменений. В обоих state shards после H идут
@@ -4818,3 +4818,13 @@ SHA; local unit guards и этот текст не заменяют PostgreSQL/S
 `sh scripts/test_telegram_egress_migration.sh state` в disposable GitHub runner.
 Historical `migration_source`/saved-plan guard остаётся0007-only. Это не команда
 для VM или рабочего DB/S3 и не разрешение rollout, ACK, activation или sends.
+
+Seed0008 использует прежний four-argument claim ABI, включая cursor после
+`TERMINALIZED`/`BUSY`: завершение photo может supersede старый GROUP job.
+UNKNOWN в этом migration seed создаётся SQL-finalize без adapter effect;
+wire-effect/lost-response/count1 доказывает отдельный сохранённый transport lane.
+При controller failure отчёт сохраняет только action, exception type, SQLSTATE
+и места traceback, без параметров SQL/claim tokens/секретов. Supervisor завершает
+всю свою process group даже после выхода shell: потомок, игнорирующий TERM,
+не должен пережить watchdog. Early failure не даёт разрешения начинать C runtime
+на0008 или удалять данные ради успешного reverse cycle.

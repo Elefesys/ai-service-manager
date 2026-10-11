@@ -382,7 +382,7 @@ async def test_mixed_audit_api_keeps_exact_large_decimal_control_versions(api):
         )
     )[0]
     contact = await h.client.patch(
-        f"/api/v1/workspaces/{A}/billing/contact",
+        f"/api/v1/workspaces/{A}/billing-account",
         json={"contact_display_name": "Changed", "expected_version": str(account["version"])},
         headers={**headers(h.client, h.csrf), "Idempotency-Key": "contact"},
     )
@@ -459,7 +459,8 @@ async def test_control_read_reports_dispatching_and_unknown_without_recalling_in
     assert (await post(h, cid, "takeover", "stop")).status_code == 200
     generation = (await state(h, cid))["control_generation"]
     await h.kernel.finish_send(
-        claim,
+        claim.job_id,
+        claim.claim_token,
         permit.attempt_id,
         SendOutcome(OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT),
     )

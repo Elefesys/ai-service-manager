@@ -306,7 +306,7 @@ async def test_control_receipt_named_audit_fk_rejects_locally_coherent_substitut
 
 
 @asynccontextmanager
-async def fail_insert(h, table, *, deferred=False):
+async def fail_insert(h, table, *, deferred=False, operation="INSERT"):
     """Privileged TEST-only fault at a real write/commit, removed before inventories."""
     assert h.runtime.engine.url.database == "asm_test"
     async with h.migrator.begin() as c:
@@ -315,11 +315,13 @@ async def fail_insert(h, table, *, deferred=False):
                 "CREATE FUNCTION platform._control_test_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'CONTROL_TEST_FAULT' USING ERRCODE='23514'; END $$"
             )
         )
+        assert operation in {"INSERT", "UPDATE"}
         prefix = "CREATE CONSTRAINT TRIGGER" if deferred else "CREATE TRIGGER"
         delay = " DEFERRABLE INITIALLY DEFERRED" if deferred else ""
+        when = "BEFORE" if operation == "UPDATE" else "AFTER"
         await c.execute(
             text(
-                f"{prefix} control_test_fault AFTER INSERT ON {table}{delay} FOR EACH ROW EXECUTE FUNCTION platform._control_test_fault()"
+                f"{prefix} control_test_fault {when} {operation} ON {table}{delay} FOR EACH ROW EXECUTE FUNCTION platform._control_test_fault()"
             )
         )
     try:
@@ -333,6 +335,7 @@ async def fail_insert(h, table, *, deferred=False):
 @pytest.mark.parametrize(
     "table,deferred",
     [
+        ("app.conversations", False),
         ("app.audit_events", False),
         ("platform.conversation_control_receipts", False),
         ("platform.conversation_control_receipts", True),
@@ -342,7 +345,12 @@ async def test_control_atomic_write_and_late_commit_failure(control, table, defe
     h = control
     cid, _, _ = await incoming(h)
     before = await counts_control(h)
-    async with fail_insert(h, table, deferred=deferred):
+    async with fail_insert(
+        h,
+        table,
+        deferred=deferred,
+        operation="UPDATE" if table == "app.conversations" else "INSERT",
+    ):
         with pytest.raises(TenancyError, match="INVALID_STATE"):
             await execute(h, cid, "RESUME")
     assert await counts_control(h) == before
@@ -350,21 +358,22 @@ async def test_control_atomic_write_and_late_commit_failure(control, table, defe
 
 
 @pytest.mark.parametrize(
-    "table",
+    "table,deferred",
     [
-        "app.messages",
-        "app.outbox_events",
-        "app.audit_events",
-        "platform.messaging_command_receipts",
-        "platform.messaging_jobs",
+        ("app.messages", False),
+        ("app.outbox_events", False),
+        ("app.audit_events", False),
+        ("platform.messaging_command_receipts", False),
+        ("platform.messaging_jobs", False),
+        ("platform.messaging_command_receipts", True),
     ],
 )
-async def test_manual_atomic_takeover_rolls_back_at_each_m2_write(control, table):
+async def test_manual_atomic_takeover_rolls_back_at_each_m2_write(control, table, deferred):
     h = control
     cid, _, _ = await incoming(h)
     await execute(h, cid, "RESUME")
     before = await counts_control(h)
-    async with fail_insert(h, table):
+    async with fail_insert(h, table, deferred=deferred):
         with pytest.raises(TenancyError, match="INVALID_STATE"):
             await command(h, cid, " exact manual ", "manual")
     assert await counts_control(h) == before
@@ -939,3 +948,65 @@ async def test_control_lock_and_outer_savepoint_leave_other_workspace_queue_prog
     selected = await h.kernel.claim_job("unblocked-a")
     assert selected is not None and selected.workspace_id == A
     assert (await h.kernel.process_turn(selected)).code == "GROUPED"
+
+
+async def test_control_saved_key_binds_actor_and_valid_same_workspace_client(control):
+    h = control
+    cid, _, _ = await incoming(h)
+    expected = body(await state(h, cid))
+    accepted = await execute(h, cid, "RESUME", "actor-bound", expected)
+    await query(
+        h,
+        "UPDATE platform.workspace_memberships SET role='OWNER' WHERE workspace_id=:ws AND user_account_id=:actor RETURNING workspace_id",
+        ws=A,
+        actor=PROVIDER,
+    )
+    other = (
+        await query(h, "INSERT INTO app.clients(workspace_id) VALUES(:ws) RETURNING id", ws=A)
+    )[0]["id"]
+    before = await counts_control(h)
+    with pytest.raises(ControlError, match="IDEMPOTENCY_KEY_CONFLICT"):
+        await execute(h, cid, "RESUME", "actor-bound", expected, actor=PROVIDER)
+    for key, code in (("actor-bound", "IDEMPOTENCY_KEY_CONFLICT"), ("other-client", "NOT_FOUND")):
+        with pytest.raises(ControlError, match=code):
+            await execute(
+                h,
+                cid,
+                "RESUME",
+                key,
+                expected.model_copy(update={"expected_client_id": str(other)}),
+            )
+    assert await counts_control(h) == before
+    assert (await execute(h, cid, "RESUME", "actor-bound", expected))["result"] == accepted[
+        "result"
+    ]
+
+
+async def test_control_preserves_committed_observed_receipt_and_token_replay(control):
+    from test_m2_1_postgres import finish_text_turns
+
+    h = control
+    cid, _, _ = await incoming(h)
+    await finish_text_turns(h)
+    original = await query(h, "SELECT to_jsonb(r) AS row FROM platform.turn_consumer_receipts r")
+    job = (
+        await query(
+            h,
+            "SELECT job_id AS id,winning_claim_token AS claim_token FROM platform.turn_consumer_receipts",
+        )
+    )[0]
+    first = await h.kernel.replay_turn(job["id"], job["claim_token"])
+    assert first.code == "OBSERVED"
+    jobs = await query(h, "SELECT to_jsonb(j) AS row FROM platform.messaging_jobs j ORDER BY id")
+    for operation in ("TAKEOVER", "RESUME"):
+        await execute(h, cid, operation, operation.lower())
+        assert await h.kernel.replay_turn(job["id"], job["claim_token"]) == first
+        assert (
+            await query(h, "SELECT to_jsonb(r) AS row FROM platform.turn_consumer_receipts r")
+            == original
+        )
+    assert (
+        await query(h, "SELECT to_jsonb(j) AS row FROM platform.messaging_jobs j ORDER BY id")
+        == jobs
+    )
+    assert not h.ledger.exists()
