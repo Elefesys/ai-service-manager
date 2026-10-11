@@ -5,72 +5,125 @@ test "$#" -eq 1
 python3 - "$1" <<'PY'
 import json
 import os
+import re
 import runpy
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from scripts import prepare_telegram_egress as e
 
 H = '754f1c883e5a94a7fc9e729af2605424f949ba33'
 H_TREE = 'b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f'
-os.umask(0o077)
-assert os.getuid() != 0 and Path.cwd() == e.ROOT, 'MIGRATION_DISPOSABLE_CHECKOUT_REQUIRED'
-assert os.environ.get('GITHUB_ACTIONS') == 'true', 'MIGRATION_DISPOSABLE_RUNNER_REQUIRED'
-fault = sys.argv[1]
-assert fault in {'intent', 'image', 'state'}, 'MIGRATION_KNOWN_SHARD_REQUIRED'
-source = e.command(['git', 'rev-parse', 'HEAD']).decode().strip()
-e.source_check(source)
-assert not (e.ROOT / '.env').exists(), 'MIGRATION_FRESH_RUNNER_REQUIRED'
-assert not e.command(['docker', 'ps', '-aq']).strip(), 'MIGRATION_EMPTY_DISPOSABLE_DAEMON_REQUIRED'
-assert not e.command(['docker', 'volume', 'ls', '-q']).strip(), 'MIGRATION_EMPTY_DISPOSABLE_VOLUMES_REQUIRED'
-e.command(['git', 'merge-base', '--is-ancestor', H, source])
-assert e.command(['git', 'rev-parse', H + '^{tree}']).decode().strip() == H_TREE
-reports = e.ROOT / 'reports' / 'historical'
-reports.mkdir(parents=True, exist_ok=True)
-(reports / 'source-H.tar.gz').write_bytes(e.command(['git', 'archive', '--format=tar.gz', H]))
-(reports / 'source-P.tar.gz').write_bytes(e.command(['git', 'archive', '--format=tar.gz', e.MIGRATION_FROM]))
-with tempfile.TemporaryDirectory(prefix='asm-frozen-h-') as temp:
-    historical = Path(temp) / 'historical'
-    subprocess.run(['git', 'worktree', 'add', '--detach', str(historical), H],
-                   check=True, capture_output=True, timeout=40, umask=0o022)
+# Retention begins before the first source/daemon admission. H remains outside
+# the separate whole-T/remaining600 preparation budget; this records whole job stages.
+started = time.monotonic()
+requested = os.environ.get('GITHUB_SHA', 'NOT_PROVIDED')
+if not re.fullmatch('[0-9a-f]{40}', requested):
+    requested = 'NOT_PROVIDED'
+admission = {'requested_source': requested, 'observed_source': 'NOT_OBSERVED',
+             'phase': 'HISTORICAL_CONTROL_COORDINATOR', 'stage': 'admission',
+             'budget_state': 'NOT_VALIDATED', 'cleanup': 'NOT_ADMITTED'}
+report = e.ROOT / 'reports/migration-coordinator-admission.json'
+def retain(primary=None):
+    admission['elapsed_seconds'] = time.monotonic() - started
     try:
-        result = subprocess.run(['sh', 'scripts/test_telegram_egress_migration.sh', fault],
-                                cwd=historical, stdin=subprocess.DEVNULL)
-        # H publishes its image/data/receipt proof before its teardown. Preserve
-        # that report verbatim; source_sha=H must never be relabelled as I.
-        if (historical / 'reports').exists():
-            shutil.copytree(historical / 'reports', reports, dirs_exist_ok=True)
-        clean = e.command(['git', '-C', str(historical), 'status', '--porcelain', '--untracked-files=all'])
-        assert not clean, 'HISTORICAL_SOURCE_CHANGED'
-        (reports / 'source-pairing.json').write_text(json.dumps({
-            'coordinator': source, 'historical_executor': H, 'historical_tree': H_TREE,
-            'historical_clean': True, 'predecessor': e.MIGRATION_FROM,
-            'exit_code': result.returncode, 'shard': fault,
-        }, indent=2) + '\n')
-        assert result.returncode == 0, 'FROZEN_HISTORICAL_ASSERTIONS_FAILED'
-        assert not e.command(['docker', 'ps', '-aq']).strip(), 'HISTORICAL_CONTAINERS_REMAIN'
-        # The daemon had no volumes/containers before this frozen lane. Remove
-        # its exact remaining inventory, including anonymous image VOLUMEs that
-        # have no Compose project label. No prune and no pre-existing volumes.
-        volumes = e.command(['docker', 'volume', 'ls', '-q']).decode().split()
-        if volumes:
-            inventory = json.loads(e.command(['docker', 'volume', 'inspect', *volumes]))
-            assert {v['Name'] for v in inventory} == set(volumes)
-            assert all(v['Driver'] == 'local' and not v.get('Options') for v in inventory)
-            (reports / 'disposable-volume-cleanup.json').write_text(json.dumps({
-                'initial_inventory': [], 'containers_after_historical': [],
-                'removed': [{'name': v['Name'], 'labels': v.get('Labels')} for v in inventory],
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps(admission, indent=2) + '\n')
+    except BaseException:
+        if primary is None:
+            raise
+        primary.add_note('CONTROL_OUTER_REPORT_FAILED')
+        print('CONTROL_OUTER_REPORT_FAILED', flush=True)
+primary = None
+retain()
+try:
+    os.umask(0o077)
+    assert os.getuid() != 0 and Path.cwd() == e.ROOT, 'MIGRATION_DISPOSABLE_CHECKOUT_REQUIRED'
+    assert os.environ.get('GITHUB_ACTIONS') == 'true', 'MIGRATION_DISPOSABLE_RUNNER_REQUIRED'
+    fault = sys.argv[1]
+    assert fault in {'intent', 'image', 'state'}, 'MIGRATION_KNOWN_SHARD_REQUIRED'
+    admission['stage'] = 'observe_source'
+    source = e.command(['git', 'rev-parse', 'HEAD']).decode().strip()
+    admission['observed_source'] = source
+    admission['stage'] = 'source_check'
+    e.source_check(source)
+    assert not (e.ROOT / '.env').exists(), 'MIGRATION_FRESH_RUNNER_REQUIRED'
+    assert not e.command(['docker', 'ps', '-aq']).strip(), 'MIGRATION_EMPTY_DISPOSABLE_DAEMON_REQUIRED'
+    assert not e.command(['docker', 'volume', 'ls', '-q']).strip(), 'MIGRATION_EMPTY_DISPOSABLE_VOLUMES_REQUIRED'
+    admission['stage'] = 'historical_archive'
+    e.command(['git', 'merge-base', '--is-ancestor', H, source])
+    assert e.command(['git', 'rev-parse', H + '^{tree}']).decode().strip() == H_TREE
+    reports = e.ROOT / 'reports' / 'historical'
+    reports.mkdir(parents=True, exist_ok=True)
+    (reports / 'source-H.tar.gz').write_bytes(e.command(['git', 'archive', '--format=tar.gz', H]))
+    (reports / 'source-P.tar.gz').write_bytes(e.command(['git', 'archive', '--format=tar.gz', e.MIGRATION_FROM]))
+    with tempfile.TemporaryDirectory(prefix='asm-frozen-h-') as temp:
+        historical = Path(temp) / 'historical'
+        subprocess.run(['git', 'worktree', 'add', '--detach', str(historical), H],
+                       check=True, capture_output=True, timeout=40, umask=0o022)
+        try:
+            result = subprocess.run(['sh', 'scripts/test_telegram_egress_migration.sh', fault],
+                                    cwd=historical, stdin=subprocess.DEVNULL)
+            # H publishes its image/data/receipt proof before its teardown. Preserve
+            # that report verbatim; source_sha=H must never be relabelled as I.
+            if (historical / 'reports').exists():
+                shutil.copytree(historical / 'reports', reports, dirs_exist_ok=True)
+            clean = e.command(['git', '-C', str(historical), 'status', '--porcelain', '--untracked-files=all'])
+            assert not clean, 'HISTORICAL_SOURCE_CHANGED'
+            (reports / 'source-pairing.json').write_text(json.dumps({
+                'coordinator': source, 'historical_executor': H, 'historical_tree': H_TREE,
+                'historical_clean': True, 'predecessor': e.MIGRATION_FROM,
+                'exit_code': result.returncode, 'shard': fault,
             }, indent=2) + '\n')
-            e.command(['docker', 'volume', 'rm', *volumes])
-        assert not e.command(['docker', 'volume', 'ls', '-q']).strip(), 'HISTORICAL_VOLUMES_REMAIN'
-    finally:
-        e.command(['git', 'worktree', 'remove', str(historical)])
-if fault == 'state':
-    runpy.run_path(str(e.ROOT / 'tests/test_telegram_egress_migration.py'),
-                   init_globals={'control_coordinator_request': {'historical': H, 'candidate': source}},
-                   run_name='__control_coordinator__')
-assert not e.command(['git', 'status', '--porcelain', '--untracked-files=all']).strip()
-print('TELEGRAM_EGRESS_MIGRATION_DISPOSABLE_PASS', flush=True)
+            assert result.returncode == 0, 'FROZEN_HISTORICAL_ASSERTIONS_FAILED'
+            assert not e.command(['docker', 'ps', '-aq']).strip(), 'HISTORICAL_CONTAINERS_REMAIN'
+            # The daemon had no volumes/containers before this frozen lane. Remove
+            # its exact remaining inventory, including anonymous image VOLUMEs that
+            # have no Compose project label. No prune and no pre-existing volumes.
+            volumes = e.command(['docker', 'volume', 'ls', '-q']).decode().split()
+            if volumes:
+                inventory = json.loads(e.command(['docker', 'volume', 'inspect', *volumes]))
+                assert {v['Name'] for v in inventory} == set(volumes)
+                assert all(v['Driver'] == 'local' and not v.get('Options') for v in inventory)
+                (reports / 'disposable-volume-cleanup.json').write_text(json.dumps({
+                    'initial_inventory': [], 'containers_after_historical': [],
+                    'removed': [{'name': v['Name'], 'labels': v.get('Labels')} for v in inventory],
+                }, indent=2) + '\n')
+                e.command(['docker', 'volume', 'rm', *volumes])
+            assert not e.command(['docker', 'volume', 'ls', '-q']).strip(), 'HISTORICAL_VOLUMES_REMAIN'
+        finally:
+            e.command(['git', 'worktree', 'remove', str(historical)])
+    if fault == 'state':
+        admission['stage'] = 'control_coordinator'
+        try:
+            runpy.run_path(str(e.ROOT / 'tests/test_telegram_egress_migration.py'),
+                           init_globals={'control_coordinator_request': {'historical': H, 'candidate': source}},
+                           run_name='__control_coordinator__')
+        except SystemExit as completed:
+            assert completed.code == 0, 'CONTROL_COORDINATOR_EXIT'
+        admission['stage'] = 'actual_cleanup_negatives'
+        try:
+            runpy.run_path(str(e.ROOT / 'tests/test_telegram_egress_migration.py'),
+                           init_globals={'control_cleanup_request': {'historical': H, 'candidate': source}},
+                           run_name='__control_cleanup_negatives__')
+        except SystemExit as completed:
+            assert completed.code == 0, 'CONTROL_CLEANUP_NEGATIVE_EXIT'
+        negative = json.loads((e.ROOT / 'reports/control-cleanup-negatives.json').read_text())
+        assert negative['candidate'] == source and negative['result'] == 'PASS' and negative['count'] == 3
+        admission['actual_cleanup_negatives'] = negative['results']
+    assert not e.command(['git', 'status', '--porcelain', '--untracked-files=all']).strip()
+    print('TELEGRAM_EGRESS_MIGRATION_DISPOSABLE_PASS', flush=True)
+except BaseException as error:
+    primary = error
+    reason = str(error)
+    if not re.fullmatch('(?:CONTROL|EGRESS|FROZEN|HISTORICAL|MIGRATION)_[A-Z0-9_]{1,100}', reason):
+        reason = 'CONTROL_' + type(error).__name__.upper()
+    admission['failure'] = {'type': type(error).__name__, 'reason': reason, 'stage': admission['stage']}
+    raise
+finally:
+    retain(primary)
+
 PY

@@ -4836,3 +4836,57 @@ wire-effect/lost-response/count1 доказывает отдельный сох�
 reader обязан родиться позже migrator на том же boot. Прежний процесс,
 отсутствующая identity или другой boot отвергаются; DB identity/source/schema
 guards сохраняются. Сам этот failed run не закрывает Docker29 gate.
+
+#### 6.2.1. CONTROL R1: failure retention и daemon ownership
+
+После профильного review CI38127269913 остаётся evidence успешных путей прежнего
+candidate. Он не подтверждает исправление findings C6-M3-CONTROL-IMPL-01/02.
+Для R1 оба existing state shards дополнительно обязаны получить три отдельных
+`CONTROL_CLEANUP_NEGATIVE_PASS`: `retained-t-watchdog`,
+`new-c-command-timeout`, `new-c-cli-exit`. Итог записывается в
+`reports/control-cleanup-negatives.json`; отсутствие любого case — отказ lane.
+
+Coordinator сохраняет admission envelope до первого source/daemon/archive check.
+Он различает requested source и independently observed source/NOT_OBSERVED;
+ошибка оставляет stage, bounded diagnostic code, elapsed и cleanup state.
+Child записывает validated T/C bindings и absolute/charged/remaining budget сразу
+после одноразового consume, до source check. Invalid/unreadable/expired/replayed
+request не получает статуса validated и не создаёт новый600. Prepare/archive/
+build/reuse/probe failure сохраняет уже проверенные bindings и прошедшее время.
+Полный T interval и C preparation по-прежнему оплачиваются одним ledger600.
+
+Private Docker CLI wrapper действует только внутри schema phase. Frozen T/helper
+и image/source bytes не меняются. До каждого plain run/create сохраняется intent
+с уникальными name/ownership token/CID-file и host CLI birth identity; те же
+ownership labels получают Compose services/volumes/networks через private overlay.
+После потерянного CLI результата CID восстанавливается только по совпадающим
+name/token и actual inspect. Нет blanket adoption по принципу empty-before→owned.
+Неподтверждённое создание — STOP с сохранённым private checkpoint, а не PASS.
+
+Cleanup имеет один сохранённый absolute90s deadline для child и coordinator
+без обнуления при повторном входе: завершение exact owned controllers, подтверждение
+удаления IDs, затем owned services/volumes/network refs. Frozen T получает эту
+же очистку при своём Compose down до удаления private state; coordinator выполняет
+проверку и после watchdog/CLI failure. Foreign resources сохраняются и вызывают
+отдельный отказ после owned cleanup. Первичная ошибка остаётся первичной при
+secondary cleanup/report failure. Reports копируются до удаления checkout/state;
+неуспешная очистка не разрешает уничтожить state под живым контейнером.
+
+Actual negative cases используют disposable PostgreSQL и pinned runtime image
+соответствующего T/C. Controller держит реальное idle-in-transaction соединение
+и игнорирует TERM. После host watchdog/helper timeout/CLI exit проверяются живой
+controller CID, connection count1 и отсутствие живого исходного host CLI. Затем
+cleanup должен дать connection count0 **при ещё работающем PostgreSQL**, отсутствие
+owned running/stopped containers и owned volumes/networks. Отдельно созданный после
+admission foreign container/volume/network сохраняет exact inspect hashes. Только
+после сохранения этого evidence fixture удаляет собственные exact foreign IDs.
+Это controlled negative Docker/PG evidence; Telegram и рабочие ресурсы не участвуют.
+
+Unit seams отдельно проверяют ранние source mismatch/dirty/git/command и budget
+отказы, archive/build/reuse/probe failures, pre-CID ownership и secondary failure
+retention. Они не заменяют три actual cases. Reports:
+`migration-coordinator-admission.json`, `control-schema-ledger.json`,
+`control-schema-phase.json`, `control-cleanup-<case>.json` и summary выше.
+Точные final SHA, run/job IDs, результаты и timings публикуются в едином PR receipt;
+findings закрывает C0 после адресного C6 re-review. Existing H/T/C, private S3,
+UNKNOWN/wire1, state25min/foundation35min и все прочие bounds/gates сохраняются.
