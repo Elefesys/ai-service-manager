@@ -142,6 +142,12 @@ class TenantUnitOfWork:
                 and reason in ("BILLING_STATE_MISSING", "BILLING_STATE_INVALID", "REVISION_INVALID")
             ):
                 raise BillingUnavailable(cast(StateReason, reason)) from None
+            if getattr(error.orig, "sqlstate", "") == "P2401":
+                from asm.conversations.control import ControlCode, ControlError
+
+                primary = getattr(diagnostic, "message_primary", None)
+                if primary in {code.value for code in ControlCode}:
+                    raise ControlError(ControlCode(primary)) from None
             bounded = database_error(error)
             if bounded is not None:
                 raise bounded from None
@@ -259,6 +265,88 @@ class TenantUnitOfWork:
             (await self._execute(SNAPSHOT, {"workspace": self.context.workspace_id}))
             .mappings()
             .one()
+        )
+
+    async def post_lock_product_snapshot(self) -> RowMapping:
+        """One DB clock and complete state after the final owner command locks."""
+        from asm.billing.queries import POST_LOCK_PRODUCT_SNAPSHOT
+        from asm.messaging.database import physical_transaction, worker_active
+        from asm.messaging.errors import Code, MessagingError
+
+        self._assert_active()
+        if worker_active():
+            raise MessagingError(Code.TRANSACTION_STATE)
+        try:
+            await physical_transaction(self._connection)
+            if await self.messaging_membership_role() != MembershipRole.OWNER:
+                raise MessagingError(Code.ACCESS_DENIED)
+            return (
+                (
+                    await self._execute(
+                        POST_LOCK_PRODUCT_SNAPSHOT, {"workspace": self.context.workspace_id}
+                    )
+                )
+                .mappings()
+                .one()
+            )
+        except BaseException:
+            self._failed = True
+            raise
+
+    async def conversation_control_read(self, conversation_id: UUID) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.conversation_control_read(:conversation)",
+            {"conversation": conversation_id},
+        )
+
+    async def conversation_control_prepare(
+        self,
+        conversation_id: UUID,
+        client_id: UUID,
+        operation: str,
+        key: str,
+        generation: int,
+        context_version: int,
+    ) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.conversation_control_prepare(:conversation,:client,:operation,:key,:generation,:context)",
+            {
+                "conversation": conversation_id,
+                "client": client_id,
+                "operation": operation,
+                "key": key,
+                "generation": generation,
+                "context": context_version,
+            },
+        )
+
+    async def conversation_control_execute(
+        self,
+        conversation_id: UUID,
+        client_id: UUID,
+        operation: str,
+        key: str,
+        generation: int,
+        context_version: int,
+    ) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.conversation_control_execute(:conversation,:client,:operation,:key,:generation,:context)",
+            {
+                "conversation": conversation_id,
+                "client": client_id,
+                "operation": operation,
+                "key": key,
+                "generation": generation,
+                "context": context_version,
+            },
+        )
+
+    async def conversation_manual_prelock(
+        self, conversation_id: UUID, value: str, key: str
+    ) -> None:
+        await self._messaging_execute(
+            "SELECT platform.conversation_manual_prelock(:conversation,:value,:key)",
+            {"conversation": conversation_id, "value": value, "key": key},
         )
 
     async def billing_contact(self, version: int, name: str, key: str) -> RowMapping:

@@ -123,10 +123,9 @@ async def prepare(
 
 
 async def product_gate(unit: TenantUnitOfWork) -> None:
-    # Locks precede the same validator/precedence used by the frozen R4 GET.
-    await unit.messaging_lock_billing()
+    # The final prelock holds authority/channel/billing/Conversation in that order.
     decision = EntitlementService().evaluate_product(
-        unit.context.workspace_id, dict(await unit.billing_snapshot()), MANUAL_SEND_KEY
+        unit.context.workspace_id, dict(await unit.post_lock_product_snapshot()), MANUAL_SEND_KEY
     )
     if decision.type != "ENABLED":
         raise MessagingError(Code.NOT_ALLOWED)
@@ -152,6 +151,7 @@ class OwnerMessagingService:
             elif first.provider == "CONTROLLED":
                 if self.environment not in ("LOCAL", "TEST"):
                     raise MessagingError(Code.NOT_ALLOWED)
+                await unit.conversation_manual_prelock(conversation, value, key)
                 await product_gate(unit)
                 result = await request_manual_text(unit, conversation, value, key)
             else:
@@ -195,6 +195,7 @@ class OwnerMessagingService:
                         else Code.DEPENDENCY_UNAVAILABLE
                     )
                 else:
+                    await unit.conversation_manual_prelock(conversation, value, key)
                     try:
                         await product_gate(unit)
                     except (MessagingError, BillingUnavailable) as error:

@@ -84,6 +84,7 @@ async def cleanup(migrator):
         # M3 receipts reference jobs; memberships reference both origin Inbox
         # and files. Delete each child explicitly before its immutable parent.
         for table in (
+            "platform.conversation_control_receipts",
             "platform.turn_consumer_receipts",
             "platform.file_object_uploads",
             *TABLES[:2],
@@ -93,7 +94,9 @@ async def cleanup(migrator):
             *TABLES[2:],
         ):
             suffix = (
-                " AND event_type='MESSAGE_SEND_REQUESTED'" if table == "app.audit_events" else ""
+                " AND event_type IN ('MESSAGE_SEND_REQUESTED','CONVERSATION_TAKEN_OVER','CONVERSATION_RESUMED')"
+                if table == "app.audit_events"
+                else ""
             )
             await c.execute(
                 text(f"DELETE FROM {table} WHERE workspace_id IN (:a,:b)" + suffix),

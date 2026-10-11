@@ -796,8 +796,8 @@ async def canonical_fingerprint(connection):
 
     assert (
         await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
-    ).scalar_one() == "0008"
-    schema_inventory("0008", (namespace + "." + table for namespace, table in tables))
+    ).scalar_one() == "0009"
+    schema_inventory("0009", (namespace + "." + table for namespace, table in tables))
     fingerprint = {}
     for namespace, table in tables:
         assert re.fullmatch(r"[a-z_][a-z_0-9]*", namespace)

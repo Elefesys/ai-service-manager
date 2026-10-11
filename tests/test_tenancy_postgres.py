@@ -669,6 +669,14 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "turn_execute": (True, True),
             "turn_consumer_finalize": (True, True),
             "turn_consumer_replay": (True, True),
+            "conversation_control_read": (True, True),
+            "conversation_control_prepare": (True, True),
+            "conversation_control_execute": (True, True),
+            "conversation_manual_prelock": (True, True),
+            "conversation_control_fingerprint": (False, False),
+            "conversation_control_locked": (True, False),
+            "conversation_manual_takeover": (True, False),
+            "conversation_turn_activation_matches": (True, False),
         }
         assert {row["proname"] for row in functions} == (
             legacy_functions | set(m1_3_profiles) | set(m2_profiles) | set(m3_profiles)

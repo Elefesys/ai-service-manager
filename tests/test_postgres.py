@@ -117,6 +117,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "channel_routes",
             "client_identities",
             "clients",
+            "conversation_control_receipts",
             "conversation_turn_messages",
             "conversation_turns",
             "conversations",

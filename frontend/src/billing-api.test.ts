@@ -3,6 +3,22 @@ import { billingApi, normalizeContact, parseAuditPage, parseBilling, parseBillin
 import { billing, event, fail, ok, receipt, stamp, ws } from './billing-fixtures.test-helper';
 
 describe('R4 generated OpenAPI consumer', () => {
+  it('accepts exact CONTROL variants in mixed Audit and rejects incoherent counters/relations', () => {
+    const takeover = {...event(4),object_type:'CONVERSATION',object_version:'9',event_type:'CONVERSATION_TAKEN_OVER',payload:{previous_mode:'AI',control_mode:'HUMAN',previous_generation:'9007199254740992',control_generation:'9007199254740993'}};
+    const resume = {...takeover,audit_event_id:event(5).audit_event_id,event_type:'CONVERSATION_RESUMED',payload:{...takeover.payload,control_mode:'AI'}};
+    const message = {...event(3),object_type:'MESSAGE',event_type:'MESSAGE_SEND_REQUESTED',payload:{content_type:'TEXT'}};
+    const mixed = [resume,takeover,message,event()];
+    expect(parseAuditPage({items:mixed,next_cursor:'next'})).toEqual({items:mixed,next_cursor:'next'});
+    for (const item of [
+      {...takeover,object_type:'MESSAGE'}, {...resume,actor_user_account_id:null}, {...resume,actor_kind:'LOCAL_PROVISIONER'},
+      {...takeover,object_version:9}, {...takeover,payload:{...takeover.payload,control_mode:'AI'}},
+      ...['0','01','+2','2\n','9223372036854775808',2,true,null].map(control_generation => ({...takeover,payload:{...takeover.payload,control_generation}})),
+      {...takeover,payload:{...takeover.payload,control_generation:'9007199254740994'}},
+      {...takeover,payload:{...takeover.payload,previous_mode:null}},
+      {...takeover,payload:{...takeover.payload,activation_fence_seq:'11'}},
+      {...takeover,payload:{control_mode:'HUMAN',previous_generation:'1',control_generation:'2'}},
+    ]) expect(() => parseAuditPage({items:[item],next_cursor:null})).toThrow('INVALID_RESPONSE');
+  });
   it('preserves zero, max bigint, non-v4/v7 UUIDs and microseconds exactly', () => {
     const b = billing('Name', '9223372036854775807'); b.decisions[1] = { ...b.decisions[1], type: 'LIMIT', limit: '9223372036854775807', reason: null };
     expect(parseBilling(b)).toEqual(b); expect(parseBilling(b).evaluated_at).toBe(stamp); expect(parseContactResult(receipt())).toEqual(receipt());

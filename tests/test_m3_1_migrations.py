@@ -440,7 +440,11 @@ async def assert_head(c, revision):
     assert (
         await c.execute(text("SELECT version_num FROM platform.alembic_version"))
     ).scalar_one() == revision
-    assert await names(c) == (set(H_COLUMNS) if revision == "0007" else I_TABLES)
+    assert revision in ("0007", "0008", "0009")
+    expected = set(H_COLUMNS) if revision == "0007" else I_TABLES
+    if revision == "0009":
+        expected = expected | {"platform.conversation_control_receipts"}
+    assert await names(c) == expected
     if revision == "0007":
         for table, expected in H_COLUMNS.items():
             actual = tuple(
@@ -480,8 +484,8 @@ async def test_0007_0008_clean_cycle_preserves_all_rows_functions_grants_and_ver
             projection = await fingerprints(c, projection=True)
             original = await definitions(c)
         await h.runtime.engine.dispose()
-        await _migrate("upgrade", "head")
-        await _migrate("upgrade", "head")
+        await _migrate("upgrade", "0008")
+        await _migrate("upgrade", "0008")
         async with h.migrator.connect() as c:
             await assert_head(c, "0008")
             assert await fingerprints(c, projection=True) == projection
@@ -594,7 +598,8 @@ async def test_populated_refusal_is_before_destructive_ddl_and_preserves_exact_s
 
                 await c.run_sync(downgrade)
         assert caught.value.orig.sqlstate == "55000"
-        await assert_head(c, "0008")
+        # Direct 0008 refusal must leave the current 0009 marker and all rows intact.
+        await assert_head(c, "0009")
         assert await fingerprints(c) == before and await definitions(c) == objects
     # No M3 row is deleted to force a cycle; only the ordinary end-of-test
     # child-first tenant cleanup follows after refusal has been proved.
@@ -680,6 +685,10 @@ async def test_upgrade_commit_ack_loss_observes_revision_before_runtime_choice(m
             await assert_head(c, "0008")
     finally:
         await fresh.dispose()
+    # Retained TURNS commit loss is still observed at 0008; current C refuses it.
+    with pytest.raises(Exception):
+        await h.runtime.check()
+    await _migrate("upgrade", "head")
     await h.runtime.check()
 
 

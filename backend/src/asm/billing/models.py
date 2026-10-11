@@ -206,8 +206,55 @@ class MessageSendAudit(StrictModel):
     payload: MessageSendPayload
 
 
+class ControlPayload(StrictModel):
+    previous_mode: Literal["HUMAN", "AI"]
+    control_mode: Literal["HUMAN", "AI"]
+    previous_generation: PositiveDecimal
+    control_generation: PositiveDecimal
+
+    @model_validator(mode="after")
+    def generation(self) -> Self:
+        if int(self.control_generation) != int(self.previous_generation) + 1:
+            raise ValueError("Invalid control generation")
+        return self
+
+
+class TakeoverPayload(ControlPayload):
+    control_mode: Literal["HUMAN"]
+
+
+class ResumePayload(ControlPayload):
+    control_mode: Literal["AI"]
+
+
+class ControlAuditBase(StrictModel):
+    audit_event_id: CanonicalUUID
+    occurred_at: Timestamp
+    correlation_id: CanonicalUUID
+    object_type: Literal["CONVERSATION"]
+    object_id: CanonicalUUID
+    object_version: PositiveDecimal
+    actor_kind: Literal["USER_ACCOUNT"]
+    actor_user_account_id: CanonicalUUID
+
+
+class ConversationTakenOverAudit(ControlAuditBase):
+    event_type: Literal["CONVERSATION_TAKEN_OVER"]
+    payload: TakeoverPayload
+
+
+class ConversationResumedAudit(ControlAuditBase):
+    event_type: Literal["CONVERSATION_RESUMED"]
+    payload: ResumePayload
+
+
 AuditItem = Annotated[
-    ProvisionAudit | ContactAudit | MessageSendAudit, Field(discriminator="event_type")
+    ProvisionAudit
+    | ContactAudit
+    | MessageSendAudit
+    | ConversationTakenOverAudit
+    | ConversationResumedAudit,
+    Field(discriminator="event_type"),
 ]
 
 
