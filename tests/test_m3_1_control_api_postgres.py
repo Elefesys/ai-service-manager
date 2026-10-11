@@ -1,6 +1,7 @@
 """CONTROL HTTP → cookie admission → real PostgreSQL, including lock-time clocks."""
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -294,7 +295,10 @@ async def test_frozen_r4_clock_and_full_post_lock_snapshot_remain_distinct(api):
 )
 async def test_control_product_channel_precedence_and_takeover_independence(api, change):
     h = api
-    cid, _, _ = await incoming(h, "TELEGRAM")
+    # A delayed provider event establishes its old inbound timestamp through
+    # PROCESS_INBOX; never rewrite a committed Conversation clock for the case.
+    at = datetime.now(UTC) - timedelta(days=2) if change == "closed_window" else None
+    cid, _, _ = await incoming(h, "TELEGRAM", at=at)
     expected = body(await state(h, cid)).model_dump()
     statements = {
         "suspended": "UPDATE platform.workspace_service_modes SET mode='SUSPENDED',reason_code='TEST_SUSPENDED' WHERE workspace_id=:ws RETURNING workspace_id",
@@ -302,9 +306,11 @@ async def test_control_product_channel_precedence_and_takeover_independence(api,
         "missing": "DELETE FROM platform.workspace_service_modes WHERE workspace_id=:ws RETURNING workspace_id",
         "inactive_connection": "UPDATE app.channel_connections SET status='INACTIVE' WHERE id=:connection RETURNING id",
         "inactive_business": "UPDATE app.businesses SET status='ARCHIVED' WHERE workspace_id=:ws RETURNING id",
-        "closed_window": "UPDATE app.conversations SET last_client_inbound_at=clock_timestamp()-interval '2 days' WHERE workspace_id=:ws RETURNING workspace_id",
     }
-    await query(h, statements[change], ws=A, connection=h.telegram_connection)
+    if change != "closed_window":
+        await query(h, statements[change], ws=A, connection=h.telegram_connection)
+    else:
+        assert (await state(h, cid))["last_client_inbound_at"] == at
     before = await counts_control(h)
     # A stale expected generation cannot hide the structural/product verdict.
     stale = {**expected, "expected_control_generation": "99"}

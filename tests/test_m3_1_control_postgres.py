@@ -101,14 +101,20 @@ async def process_receipt(h, receipt):
             await h.worker.execute(claim)
 
 
-async def incoming(h, provider="CONTROLLED", number=1, *, process=True, message=None):
+async def incoming(h, provider="CONTROLLED", number=1, *, process=True, message=None, at=None):
     if provider == "CONTROLLED":
         rec = await ingest(
-            h, event(event_id=f"control-{number}", message_id=str(message or number))
+            h,
+            event(
+                event_id=f"control-{number}",
+                message_id=str(message or number),
+                **({"occurred_at": at} if at else {}),
+            ),
         )
     else:
         rec = await ingress(
-            h, projection(update=str(10000 + number), message=str(message or 20000 + number))
+            h,
+            projection(update=str(10000 + number), message=str(message or 20000 + number), at=at),
         )
     if not process:
         return rec

@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from asm.messaging.errors import Code
+from asm.messaging.models import OutcomeKind, SendOutcome
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -587,13 +589,16 @@ async def test_control_clean_populated_t_cycle_all_columns_definitions_and_recei
         unknown = await command(h, image["conversation_id"], "old exact", "t-unknown")
         claim = await h.kernel.claim_job("t-unknown")
         assert claim.kind == "SEND_MANUAL_TEXT"
-        await h.kernel.begin_send(claim)
-        await query(
-            h,
-            "UPDATE platform.messaging_jobs SET lease_until=clock_timestamp()-interval '1 second' WHERE id=:id RETURNING id",
-            id=claim.job_id,
+        permit = await h.kernel.begin_send(claim)
+        # Seed durable UNKNOWN through the ordinary finalize capability without
+        # changing a lease deadline. Actual effect/recovery/count1 is a wire case.
+        outcome = await h.kernel.finish_send(
+            claim.job_id,
+            claim.claim_token,
+            permit.attempt_id,
+            SendOutcome(OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT),
         )
-        assert await h.kernel.recover_expired() == 1
+        assert outcome.status == "UNKNOWN"
         pending = await command(h, image["conversation_id"], "old exact", "t-pending")
         await ingest(h, event(event_id="old-pending", message_id="old-pending"))
         async with h.migrator.connect() as c:
@@ -748,7 +753,9 @@ if len(sys.argv)==4 and sys.argv[1]=='--control-schema-phase':
  from pathlib import Path
  import json
  path=Path(sys.argv[3]); saved=json.loads(path.read_text())
- saved['lost_result_process']={'pid':os.getpid(),'namespace':os.readlink('/proc/self/ns/pid')}
+ saved['lost_result_process']={'pid':os.getpid(),'namespace':os.readlink('/proc/self/ns/pid'),
+  'start_ticks':int(Path('/proc/self/stat').read_text().rpartition(')')[2].split()[19]),
+  'boot_id':Path('/proc/sys/kernel/random/boot_id').read_text().strip()}
  path.write_text(json.dumps(saved,sort_keys=True,indent=2)+'\\n'); path.chmod(0o600)
 print('CONTROL_UPGRADE_COMMITTED_RESULT_LOST', flush=True)
 os._exit(86)
@@ -774,6 +781,10 @@ async def fresh_observation(url):
                 "revision": "0009",
                 "reader_pid": os.getpid(),
                 "reader_namespace": os.readlink("/proc/self/ns/pid"),
+                "reader_start_ticks": int(
+                    Path("/proc/self/stat").read_text().rpartition(")")[2].split()[19]
+                ),
+                "reader_boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
             }
     finally:
         await fresh.dispose()

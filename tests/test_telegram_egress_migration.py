@@ -1201,12 +1201,23 @@ def control_schema_recovery_source(result, observe, report, historical, candidat
     assert observation["database"] == "asm_local"
     assert type(observation["reader_pid"]) is int and observation["reader_pid"] > 0
     assert type(observation["backend_pid"]) is int and observation["backend_pid"] > 0
-    if "lost_result_process" in report:
-        lost = report["lost_result_process"]
-        assert (observation["reader_namespace"], observation["reader_pid"]) != (
-            lost["namespace"],
-            lost["pid"],
-        ), "CONTROL_FRESH_PROCESS_REQUIRED"
+    lost = report.get("lost_result_process")
+    assert isinstance(lost, dict) and set(lost) == {
+        "namespace",
+        "pid",
+        "start_ticks",
+        "boot_id",
+    }, "CONTROL_PROCESS_IDENTITY_REQUIRED"
+    assert type(lost["pid"]) is int and lost["pid"] > 0
+    assert type(lost["start_ticks"]) is int and lost["start_ticks"] > 0
+    assert type(observation["reader_start_ticks"]) is int
+    assert observation["reader_boot_id"] == lost["boot_id"] and lost["boot_id"], (
+        "CONTROL_RECOVERY_HOST_BOOT"
+    )
+    # Docker can reuse a released PID namespace inode; PID1 alone is not a
+    # process identity. Kernel start ticks prove this reader was created later
+    # on the same boot, including that reuse case, and reject the prior process.
+    assert observation["reader_start_ticks"] > lost["start_ticks"], "CONTROL_FRESH_PROCESS_REQUIRED"
     for key, value in report["seed_identity"].items():
         assert observation[key] == value, "CONTROL_RECOVERY_DATABASE_IDENTITY"
     detail["recovery_source"] = candidate
@@ -3304,9 +3315,20 @@ def test_control_recovery_requires_exact_database_and_controlled_failure():
         database_oid=10,
         reader_pid=2,
         backend_pid=3,
+        reader_namespace="pid:[123]",
+        reader_start_ticks=200,
+        reader_boot_id="test-boot",
     )
     result = SimpleNamespace(returncode=86, stdout=b"CONTROL_UPGRADE_COMMITTED_RESULT_LOST\n")
-    report = {"seed_identity": {"database": "asm_local", "database_oid": 10}}
+    report = {
+        "seed_identity": {"database": "asm_local", "database_oid": 10},
+        "lost_result_process": {
+            "pid": 1,
+            "namespace": "pid:[122]",
+            "start_ticks": 100,
+            "boot_id": "test-boot",
+        },
+    }
     assert (
         control_schema_recovery_source(result, lambda: observed, report, CONTROL_T, "c" * 40)
         == "c" * 40
@@ -3325,6 +3347,33 @@ def test_control_recovery_requires_exact_database_and_controlled_failure():
         control_schema_recovery_source(
             result, lambda: observed | {"database_oid": 11}, report, CONTROL_T, "c" * 40
         )
+    # A recycled namespace/PID pair is still a new process only with a later
+    # kernel birth time; no missing metadata or same-process fallback is allowed.
+    recycled = observed | {"reader_namespace": "pid:[122]", "reader_pid": 1}
+    assert (
+        control_schema_recovery_source(result, lambda: recycled, report, CONTROL_T, "c" * 40)
+        == "c" * 40
+    )
+    for birth in (100, 99):
+        with pytest.raises(AssertionError, match="FRESH_PROCESS"):
+            control_schema_recovery_source(
+                result,
+                lambda: recycled | {"reader_start_ticks": birth},
+                report,
+                CONTROL_T,
+                "c" * 40,
+            )
+    with pytest.raises(AssertionError, match="HOST_BOOT"):
+        control_schema_recovery_source(
+            result,
+            lambda: recycled | {"reader_boot_id": "different-boot"},
+            report,
+            CONTROL_T,
+            "c" * 40,
+        )
+    del report["lost_result_process"]
+    with pytest.raises(AssertionError, match="IDENTITY_REQUIRED"):
+        control_schema_recovery_source(result, lambda: recycled, report, CONTROL_T, "c" * 40)
 
 
 def test_schema_supervisor_reaps_child_on_timeout(tmp_path):

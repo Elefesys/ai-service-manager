@@ -4828,3 +4828,11 @@ wire-effect/lost-response/count1 доказывает отдельный сох�
 всю свою process group даже после выхода shell: потомок, игнорирующий TERM,
 не должен пережить watchdog. Early failure не даёт разрешения начинать C runtime
 на0008 или удалять данные ради успешного reverse cycle.
+
+В actual Docker29 state run38117786794/attempt1 fresh observer подтвердил0009
+после marker/exit86, но Linux повторно использовал PID namespace inode; оба
+последовательных `docker run --rm` имели PID1. Поэтому fresh-process proof
+фиксирует также kernel start ticks (`/proc/self/stat`) и host boot ID:
+reader обязан родиться позже migrator на том же boot. Прежний процесс,
+отсутствующая identity или другой boot отвергаются; DB identity/source/schema
+guards сохраняются. Сам этот failed run не закрывает Docker29 gate.
