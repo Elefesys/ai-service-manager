@@ -1260,6 +1260,13 @@ class RetainedCheckpoint:
                 "CONTROL_RETAINED_CAPTURE_CHANGED"
             )
         assert self.files() == files, "CONTROL_RETAINED_CAPTURE_CHANGED"
+        # write_private fsyncs each snapshot file and its immediate directory.
+        # Persist the snapshot directory entry too, before publishing its name.
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
         capture = {
             "state": "CAPTURED",
             "source": CONTROL_T,
@@ -2290,6 +2297,7 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
                 timeout=min(40, deadline - time.monotonic()),
             )
     for fault in ("timeout", "export"):
+        ledger["stage"] = "full_retained_" + fault
         report = schema_envelope(request, "FULL_RETAINED_T_" + fault.upper())
         report.update(
             evidence="ACTUAL_FULL_T_DOCKER_POSTGRES",
