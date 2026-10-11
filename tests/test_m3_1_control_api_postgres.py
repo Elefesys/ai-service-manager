@@ -205,13 +205,6 @@ async def test_post_lock_product_boundaries_with_actual_conversation_wait(
         else "platform.workspace_service_modes"
     )
     column = "effective_until" if boundary == "expiry" else "effective_from"
-    edge = (
-        await query(
-            h,
-            f"UPDATE {table} SET {column}=clock_timestamp()+interval '1.1 seconds' WHERE workspace_id=:ws RETURNING {column} AS edge",
-            ws=A,
-        )
-    )[0]["edge"]
     before = await counts_control(h)
     async with h.migrator.connect() as c:
         transaction = await c.begin()
@@ -219,11 +212,21 @@ async def test_post_lock_product_boundaries_with_actual_conversation_wait(
             text("SELECT id FROM app.conversations WHERE id=:id FOR NO KEY UPDATE"), {"id": cid}
         )
         pid = (await c.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+        # Finish fixture setup before starting the unchanged 1.1-second edge.
+        # The product update commits on its own connection before the request;
+        # only the Conversation blocker remains held while policy is evaluated.
+        edge = (
+            await query(
+                h,
+                f"UPDATE {table} SET {column}=clock_timestamp()+interval '1.1 seconds' WHERE workspace_id=:ws RETURNING {column} AS edge",
+                ws=A,
+            )
+        )[0]["edge"]
         task = asyncio.create_task(
             post(h, cid, "resume", expected=expected) if caller == "resume" else manual(h, cid)
         )
         try:
-            await wait_blocked(h, pid)
+            await wait_blocked(c, pid)
             blocked_at = (await c.execute(text("SELECT clock_timestamp()"))).scalar_one()
             assert blocked_at < edge and not task.done()
             # Database wall time crosses the half-open bound. No data mutation,
@@ -433,7 +436,7 @@ async def test_control_revocation_committed_while_authority_waits(api, revocatio
         pid = (await c.execute(text("SELECT pg_backend_pid()"))).scalar_one()
         task = asyncio.create_task(post(h, cid, expected=expected))
         try:
-            await wait_blocked(h, pid)
+            await wait_blocked(c, pid)
             await tx.commit()
             result = await task
             assert result.status_code == (403 if revocation == "membership" else 401), result.json()

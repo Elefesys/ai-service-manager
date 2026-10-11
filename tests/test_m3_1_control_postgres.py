@@ -127,18 +127,27 @@ async def incoming(h, provider="CONTROLLED", number=1, *, process=True, message=
     return cid, rec, result
 
 
-async def wait_blocked(h, blocker):
+async def wait_blocked(connection, blocker):
+    # Observe through the already-open blocker connection: pool acquisition or
+    # DNS for a separate observer must not consume this real-lock wait budget.
     async with asyncio.timeout(1.5):
         while True:
-            rows = await query(
-                h,
-                "SELECT pid,locktype,mode,granted FROM pg_locks "
-                "WHERE NOT granted AND :blocker=ANY(pg_blocking_pids(pid))",
-                blocker=blocker,
+            rows = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT pid,locktype,mode,granted FROM pg_locks "
+                            "WHERE NOT granted AND :blocker=ANY(pg_blocking_pids(pid))"
+                        ),
+                        {"blocker": blocker},
+                    )
+                )
+                .mappings()
+                .all()
             )
             if rows:
                 # Cross-role pg_stat_activity hides wait_event_type from the
-                # unprivileged migrator. A non-granted lock plus this exact
+                # unprivileged test roles. A non-granted lock plus this exact
                 # blocker proves the wait without widening production grants.
                 assert all(row["granted"] is False and row["pid"] != blocker for row in rows)
                 return rows
@@ -551,7 +560,7 @@ async def test_ingress_capture_serializes_resume_and_rollbacks(control, provider
         blocker = (await c.execute(text("SELECT pg_backend_pid()"))).scalar_one()
         task = asyncio.create_task(execute(h, cid, "RESUME", "after-ingress", before))
         try:
-            await wait_blocked(h, blocker)
+            await wait_blocked(c, blocker)
             assert not task.done()
             await (tx.commit() if commit_ingress else tx.rollback())
             await task
@@ -697,7 +706,7 @@ async def test_resume_held_transaction_forces_later_ingress_capture(control, pro
         pid = (await c.execute(text("SELECT pg_backend_pid()"))).scalar_one()
         pending = asyncio.create_task(incoming(h, provider, 123, process=False))
         try:
-            await wait_blocked(h, pid)
+            await wait_blocked(c, pid)
             assert not pending.done()
             await tx.commit()
             receipt = await pending
