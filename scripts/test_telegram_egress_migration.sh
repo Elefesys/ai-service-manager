@@ -104,6 +104,11 @@ try:
                            run_name='__control_coordinator__')
         except SystemExit as completed:
             assert completed.code == 0, 'CONTROL_COORDINATOR_EXIT'
+        full = json.loads((e.ROOT / 'reports/control-full-retained-negatives.json').read_text())
+        assert full['candidate'] == source and full['result'] == 'PASS' and full['count'] == 2
+        assert full['results'] == ['timeout', 'export']
+        assert full['deadline'] == full['started_at'] + 600 and full['charged_seconds'] < 600
+        admission['full_retained_negatives'] = full
         admission['stage'] = 'actual_cleanup_negatives'
         try:
             runpy.run_path(str(e.ROOT / 'tests/test_telegram_egress_migration.py'),

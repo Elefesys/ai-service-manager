@@ -4890,3 +4890,59 @@ retention. Они не заменяют три actual cases. Reports:
 Точные final SHA, run/job IDs, результаты и timings публикуются в едином PR receipt;
 findings закрывает C0 после адресного C6 re-review. Existing H/T/C, private S3,
 UNKNOWN/wire1, state25min/foundation35min и все прочие bounds/gates сохраняются.
+
+#### 6.2.2. CONTROL R2: полный frozen-T failure lifecycle
+
+C0 принял R1 CI38153796957 (9/9 jobs и 9/9 clean-source) и закрыл IMPL-02.
+IMPL-01 и новый IMPL-03 остаются OPEN до verdict C0 после C6 re-review.
+Три R1 negative cases выше проверяли daemon cleanup; `retained-t-watchdog`
+исполнял frozen helper, но не полный `run_schema_phase`/finally/TemporaryDirectory.
+Поэтому прежние результаты не доказывали сохранность T receipt при таком failure.
+
+R2 добавляет C-owned private backing для точного `/state` bind каждого T controller.
+До Docker create проверяются source/helper blobs, owner token, private directory
+identity, связь state с controller.env и сетью данной phase. В Docker mount меняется
+только owned bind source; successful command побайтно зеркалирует state в исходный
+T-каталог для неизменённых чтений T. Actual controller пишет вне удаляемого T
+TemporaryDirectory. Receipt и private env остаются под owner/0700/0600 guards;
+в reports публикуются только безопасные identity/status/hash evidence.
+
+Scoped private Python launcher наблюдает исключения только exact frozen T function
+frame. Он фиксирует bounded primary до T finally, затем secondary отдельно.
+Function/helper/source/image bytes не меняются; traceback, raw argv и private payload
+не служат источником reason и не экспортируются. Down сначала сохраняет точный
+private snapshot и безопасный manifest, затем закрывает exact owned controllers,
+проверяет PG count0 до остановки DB и очищает остальные owned resources. Сбой capture,
+export, report или cleanup сохраняет backing/checkpoint; наличие owner-T само по себе
+не считается доказательством retention. Если связь/сохранность не доказана — STOP.
+
+В каждом existing state lane обязательны два новых full-T cases:
+`CONTROL_FULL_RETAINED_NEGATIVE_PASS timeout` и `... export`.
+В обоих целиком исполняется unchanged T function, включая настоящий seed controller,
+private receipt, finally и удаление временного T-каталога. После штатного seed
+controlled test process в том же проверенном T development image удерживает реальное
+PG-соединение и игнорирует TERM. В первом case срабатывает прежний controller timeout120;
+во втором host CLI завершается с контролируемым exit7, а первый safe export прерывается
+после durable capture. Подтверждаются live CID/image/bind, PG1, exact receipt hashes,
+primary/secondary, private state после T teardown и последующий PG0 до DB teardown.
+Host Docker child получает parent-death signal, а supervisor проверяет отсутствие
+живых host children. Заранее созданные fixture foreign IDs остаются неизменными;
+owned cleanup отказывает при их наличии. Только после сохранения proof fixture
+удаляет свои exact foreign IDs.
+
+Positive T и оба full-T negatives используют один исходный whole-T/all-prepare600
+ledger. Повторно используются уже проверенные H/T images; rebuild для negatives
+не допускается. Capture/export/cleanup/re-entry оплачиваются одним persisted90
+на phase, без нового deadline при повторном входе. State25min/foundation35min,
+прежние command/transport/DB bounds, шесть R1 actual cases в двух lanes и все
+H/T/C migration/recovery/private-S3/UNKNOWN proofs сохраняются.
+
+Unit cases отдельно исполняют всё unchanged тело T через stdlib seams с настоящими
+TemporaryDirectory и уникальными private receipt bytes: down success/failure,
+owned cleanup failure и продолжающий жить controller, capture/export/report failure.
+Это **unit evidence**, не Docker/PG. Actual итог должен содержать
+`control-full-retained-negatives.json`, `control-full-retained-timeout.json` и
+`control-full-retained-export.json`; shell требует оба case и общий charged interval<600.
+Private raw checkpoint не загружается в artifacts. На disposable runner он сохраняется
+при negative/failure до уничтожения runner; доступ к рабочим VM/DB/S3 не требуется.
+Точные final-source CI, assertions, timings и artifact digests — в едином PR receipt.
