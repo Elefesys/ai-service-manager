@@ -1006,10 +1006,16 @@ def retained_exception_observer(config):
                 # A damaged operation journal does not replace the original
                 # exception; its unproved stage must fail the closing gate.
                 operation = {"stage": "retained_operation_unreadable"}
+            stage = operation.get("stage", "retained_function")
+            # In this pinned function, reports is assigned only in finally,
+            # before mkdir/write_text and before the wrapped down command.
+            # Attribute a report failure to that phase, not its last CLI call.
+            if "reports" in frame.f_locals and stage != "retained_down":
+                stage = "retained_report"
             detail = {
                 "type": kind,
                 "reason": reason,
-                "stage": operation.get("stage", "retained_function"),
+                "stage": stage,
                 "source": config["source"],
                 "at": time.monotonic(),
             }
@@ -6012,3 +6018,8 @@ def test_retained_full_function_keeps_checkpoint_and_primary(tmp_path, monkeypat
         assert private not in ledger.read_text()
     if fault != "down-success":
         assert saved["secondary_failures"]
+    if fault == "report":
+        assert any(
+            detail["stage"] == "retained_report" and detail["type"] == "OSError"
+            for detail in saved["secondary_failures"]
+        )
