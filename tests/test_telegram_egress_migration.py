@@ -1075,7 +1075,7 @@ class SchemaOwnership:
         if budget_path.exists():
             budget = e.strict_json(e.private_bytes(budget_path))
             assert (
-                budget["token"] == self.token and budget["deadline"] - budget["started_at"] == 90
+                budget["token"] == self.token and budget["deadline"] == budget["started_at"] + 90
             ), "CONTROL_CLEANUP_BUDGET"
         else:
             budget = {"token": self.token, "started_at": began, "deadline": began + 90}
@@ -4758,14 +4758,21 @@ def test_control_cleanup_reuses_one_absolute_90s_deadline(tmp_path, monkeypatch)
     owner = SchemaOwnership(tmp_path / "owner", "project", CONTROL_PHASE, "c" * 40)
     owner.directory.mkdir(mode=0o700)
     owner.admitted = True
-    clock, calls = [time.monotonic()], []
+    # Crossing a binary exponent boundary makes (start +90) -start differ
+    # from90 by one ULP, while JSON preserves both original float values.
+    clock, calls = [450.432197629], []
     monkeypatch.setattr(time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(e, "command", lambda *a, **k: calls.append(a[0]) or b"")
     first = {}
     owner.cleanup(first)
     assert first["state"] == "PASS"
     saved = (owner.directory / "cleanup-budget.json").read_bytes()
-    clock[0] += 91
+    assert first["deadline"] - first["cleanup_started_at"] != 90
+    clock[0] += 1
+    resumed = {}
+    owner.cleanup(resumed)
+    assert resumed["state"] == "PASS" and resumed["deadline"] == first["deadline"]
+    clock[0] += 90
     before = len(calls)
     second = {}
     with pytest.raises(AssertionError, match="CLEANUP_DEADLINE"):
