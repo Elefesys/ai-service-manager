@@ -636,12 +636,32 @@ async def test_control_clean_populated_t_cycle_all_columns_definitions_and_recei
 
 
 @pytest.mark.parametrize(
-    "blocker", ["capture", "human_generation", "ai_fence", "receipt", "audit_only", "turn_only"]
+    "blocker",
+    [
+        "capture",
+        "human_generation",
+        "ai_fence",
+        "receipt",
+        "audit_only",
+        "turn_only",
+        "turn_origin",
+    ],
 )
 async def test_control_populated_refusal_preserves_full_35_table_snapshot(control, blocker):
     h = control
     if blocker == "capture":
         await incoming(h, process=False)
+    elif blocker == "turn_origin":
+        # The normal committed Turn necessarily retains its matching immutable
+        # Inbox origin. Prove refusal with that complete, valid production graph.
+        cid, _, _ = await incoming(h)
+        assert (
+            await query(
+                h,
+                "SELECT count(*) AS n FROM app.conversation_turns WHERE conversation_id=:cid AND ingress_control_mode='HUMAN' AND member_count=1",
+                cid=cid,
+            )
+        )[0]["n"] == 1
     else:
         # Create a valid pre-CONTROL conversation, so generation/fence blockers
         # are tested independently of fresh ingress metadata.
@@ -663,13 +683,31 @@ async def test_control_populated_refusal_preserves_full_35_table_snapshot(contro
                 id=cid,
             )
         elif blocker == "turn_only":
-            # An independently valid terminal Turn is sufficient to refuse even
-            # with no fresh Inbox capture, transition, CONTROL receipt or Audit.
-            await query(
-                h,
-                "INSERT INTO app.conversation_turns SELECT (jsonb_populate_record(NULL::app.conversation_turns,to_jsonb(t)||jsonb_build_object('id',gen_random_uuid(),'state','FAILED','error_code','INVALID_INPUT','member_count',0,'ingress_control_mode','HUMAN'))).* FROM app.conversation_turns t WHERE t.conversation_id=:cid RETURNING id",
-                cid=cid,
-            )
+            # Isolate the Turn predicate during row assembly, before the retained
+            # initially-deferred membership constraint is due. A committed empty
+            # Turn is correctly forbidden; never disable or defer that guard
+            # beyond its normal behavior, and never commit this transient seed.
+            async with h.migrator.connect() as c:
+                tx = await c.begin()
+                try:
+                    await c.execute(
+                        text(
+                            "INSERT INTO app.conversation_turns SELECT (jsonb_populate_record(NULL::app.conversation_turns,to_jsonb(t)||jsonb_build_object('id',gen_random_uuid(),'state','FAILED','error_code','INVALID_INPUT','member_count',0,'ingress_control_mode','HUMAN'))).* FROM app.conversation_turns t WHERE t.conversation_id=:cid RETURNING id"
+                        ),
+                        {"cid": cid},
+                    )
+                    await assert_refusal(c)
+                    # The first downgrade statement refused with55000 while all
+                    # 35 tables/definitions stayed exact. The original membership
+                    # guard still rejects this incomplete assembly with23514.
+                    with pytest.raises(DBAPIError) as caught:
+                        async with c.begin_nested():
+                            await c.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+                    assert caught.value.orig.sqlstate == "23514"
+                    assert "inconsistent turn membership" in str(caught.value.orig)
+                finally:
+                    await tx.rollback()
+            return
         else:
             await execute(h, cid)
             if blocker == "audit_only":
