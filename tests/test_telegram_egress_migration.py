@@ -927,8 +927,624 @@ asyncio.run(main())
     print("TELEGRAM_EGRESS_SCHEMA_PHASE_PASS", flush=True)
 
 
+CONTROL_T = "ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad"
+CONTROL_PHASE = "CONTROL_SCHEMA_0008_0009"
+
+
+def consume_control_budget(path, historical, candidate):
+    """One private handoff, absolute monotonic deadline, no inherited/global reset."""
+    raw = e.private_bytes(path)
+    info = path.stat()
+    assert info.st_nlink == 1, "CONTROL_BUDGET_SINGLE_LINK"
+    value = e.strict_json(raw)
+    assert set(value) == {
+        "version",
+        "phase",
+        "historical",
+        "candidate",
+        "uid",
+        "started_at",
+        "issued_at",
+        "charged_seconds",
+        "deadline",
+    }, "CONTROL_BUDGET_FORMAT"
+    assert value["version"] == 1 and type(value["version"]) is int
+    assert value["phase"] == CONTROL_PHASE and value["historical"] == historical == CONTROL_T
+    assert (
+        value["candidate"] == candidate
+        and type(value["uid"]) is int
+        and value["uid"] == os.getuid()
+    )
+    for key in ("started_at", "issued_at", "charged_seconds", "deadline"):
+        assert type(value[key]) in (int, float) and 0 < value[key] < float("inf"), (
+            "CONTROL_BUDGET_CLOCK"
+        )
+    assert abs(value["deadline"] - value["started_at"] - 600) < 0.001, "CONTROL_BUDGET_TOTAL"
+    assert abs(value["issued_at"] - value["started_at"] - value["charged_seconds"]) < 0.001, (
+        "CONTROL_BUDGET_CHARGED"
+    )
+    now = time.monotonic()
+    assert value["issued_at"] <= now < value["deadline"], "CONTROL_BUDGET_EXHAUSTED"
+    # Preserve the absolute bound across process startup and handoff delay.
+    assert (path.stat().st_dev, path.stat().st_ino) == (info.st_dev, info.st_ino)
+    path.unlink()
+    return {
+        **value,
+        "handoff_seconds": now - value["issued_at"],
+        "remaining_seconds": value["deadline"] - now,
+    }
+
+
+def supervised_schema_child(args, *, cwd, timeout):
+    """No detached runner; timeout kills the owned process group and waits."""
+    assert timeout > 0, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+    process = subprocess.Popen(args, cwd=cwd, stdin=subprocess.DEVNULL, start_new_session=True)
+    try:
+        return process.wait(timeout=timeout)
+    except BaseException:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait(timeout=5)
+        raise
+
+
+def cleanup_schema_daemon(project, report):
+    """Only the schema phase's own project, on an initially empty runner daemon."""
+    containers = (
+        e.command(
+            ["docker", "ps", "-aq", "--filter", "label=com.docker.compose.project=" + project]
+        )
+        .decode()
+        .split()
+    )
+    report["owned_containers"] = containers
+    if containers:
+        e.command(["docker", "rm", "-f", "-v", *containers], timeout=90)
+    assert not e.command(["docker", "ps", "-aq"]).strip(), "CONTROL_UNOWNED_CONTAINER_REMAINS"
+    volumes = e.command(["docker", "volume", "ls", "-q"]).decode().split()
+    # Initial empty inventory is checked before each schema phase, so anonymous
+    # image volumes are also owned. Refuse foreign labels/options/drivers.
+    if volumes:
+        inventory = json.loads(e.command(["docker", "volume", "inspect", *volumes]))
+        assert all(
+            v["Driver"] == "local"
+            and not v.get("Options")
+            and (v.get("Labels") or {}).get("com.docker.compose.project", project) == project
+            for v in inventory
+        )
+        e.command(["docker", "volume", "rm", *volumes], timeout=90)
+    report["removed_volumes"] = volumes
+    assert not e.command(["docker", "volume", "ls", "-q"]).strip()
+
+
+def run_control_coordinator(request):
+    """Retained frozen T shell is charged once, including its runtime/teardown."""
+    import shutil
+    import tempfile
+
+    historical, candidate = request["historical"], request["candidate"]
+    assert historical == "754f1c883e5a94a7fc9e729af2605424f949ba33"
+    assert os.getuid() != 0 and os.environ.get("GITHUB_ACTIONS") == "true"
+    e.source_check(candidate)
+    assert not e.command(["docker", "ps", "-aq"]).strip()
+    assert not e.command(["docker", "volume", "ls", "-q"]).strip()
+    reports = e.ROOT / "reports"
+    retained = reports / "retained-turns"
+    retained.mkdir(parents=True, exist_ok=True)
+    ledger = {
+        "historical": historical,
+        "retained": CONTROL_T,
+        "candidate": candidate,
+        "budget_seconds": 600,
+    }
+    started = time.monotonic()
+    deadline = started + 600
+    try:
+        with tempfile.TemporaryDirectory(prefix="asm-frozen-t-") as temp:
+            directory = Path(temp)
+            checkout = directory / "turns"
+            added = False
+            try:
+                # Source/export/worktree preparation is inside the same ledger.
+                with e.migration_budget(deadline - time.monotonic()):
+                    e.command(["git", "merge-base", "--is-ancestor", CONTROL_T, candidate])
+                    (retained / "source-T.tar.gz").write_bytes(
+                        e.command(["git", "archive", "--format=tar.gz", CONTROL_T])
+                    )
+                    e.command(["git", "worktree", "add", "--detach", str(checkout), CONTROL_T])
+                    added = True
+                before = time.monotonic()
+                ledger["retained_shell_started_at"] = before
+                result = supervised_schema_child(
+                    [
+                        "sh",
+                        "scripts/test_telegram_egress.sh",
+                        "--schema-upgrade",
+                        historical,
+                        CONTROL_T,
+                    ],
+                    cwd=checkout,
+                    timeout=deadline - time.monotonic(),
+                )
+                ledger["retained_shell_exit"] = result
+                assert result == 0, "FROZEN_TURNS_SCHEMA_FAILED"
+            finally:
+                # Preserve early failure and original T reports BEFORE removing T.
+                ledger["retained_shell_seconds"] = time.monotonic() - ledger.get(
+                    "retained_shell_started_at", started
+                )
+                if (checkout / "reports").exists():
+                    shutil.copytree(checkout / "reports", retained, dirs_exist_ok=True)
+                if added:
+                    ledger["retained_clean"] = not bool(
+                        e.command(
+                            [
+                                "git",
+                                "-C",
+                                str(checkout),
+                                "status",
+                                "--porcelain",
+                                "--untracked-files=all",
+                            ]
+                        ).strip()
+                    )
+                try:
+                    cleanup_schema_daemon(
+                        "asm-m3-schema-phase", ledger.setdefault("retained_cleanup", {})
+                    )
+                finally:
+                    if added:
+                        e.command(["git", "worktree", "remove", str(checkout)])
+                (retained / "source-pairing.json").write_text(json.dumps(ledger, indent=2) + "\n")
+            assert ledger["retained_clean"], "FROZEN_TURNS_SOURCE_CHANGED"
+            issued = time.monotonic()
+            assert issued < deadline, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            value = {
+                "version": 1,
+                "phase": CONTROL_PHASE,
+                "historical": CONTROL_T,
+                "candidate": candidate,
+                "uid": os.getuid(),
+                "started_at": started,
+                "issued_at": issued,
+                "charged_seconds": issued - started,
+                "deadline": deadline,
+            }
+            handoff = directory / "control-budget.json"
+            e.write_private(handoff, e.encoded(value))
+            ledger["handoff"] = value
+            # C supervises its prepare subprocesses using the remaining budget;
+            # the outer bound additionally contains its unchanged runtime stages.
+            result = supervised_schema_child(
+                [
+                    "sh",
+                    "scripts/test_telegram_egress.sh",
+                    "--control-schema-upgrade",
+                    CONTROL_T,
+                    candidate,
+                    str(handoff),
+                ],
+                cwd=e.ROOT,
+                timeout=(deadline - time.monotonic()) + 480,
+            )
+            ledger["control_exit"] = result
+            assert result == 0 and not handoff.exists(), "CONTROL_SCHEMA_PHASE_FAILED"
+            e.source_check(candidate)
+            print("CONTROL_SCHEMA_COORDINATOR_PASS", flush=True)
+    except BaseException as error:
+        ledger["failure"] = type(error).__name__
+        raise
+    finally:
+        try:
+            cleanup_schema_daemon(
+                "asm-control-schema-phase", ledger.setdefault("control_cleanup", {})
+            )
+        finally:
+            ledger["total_schema_seconds"] = time.monotonic() - started
+            (reports / "control-schema-ledger.json").write_text(json.dumps(ledger, indent=2) + "\n")
+
+
+def control_schema_recovery_source(result, observe, report, historical, candidate):
+    detail = {
+        "injection": "after_commit_before_success_exit",
+        "exit_code": result.returncode,
+        "observed": "NOT_READ",
+    }
+    report["upgrade_ack_loss"] = detail
+    assert historical == CONTROL_T
+    if result.returncode != 86 or result.stdout.strip() != b"CONTROL_UPGRADE_COMMITTED_RESULT_LOST":
+        detail["result"] = "UNEXPECTED_MIGRATOR_RESULT"
+        raise AssertionError("CONTROL_EXPECTED_POST_COMMIT_FAILURE")
+    detail.update(
+        result="CONTROLLED_FAILURE_OBSERVED", marker="CONTROL_UPGRADE_COMMITTED_RESULT_LOST"
+    )
+    try:
+        observation = observe()
+    except Exception:
+        detail["observed"] = "UNREADABLE"
+        raise
+    detail["observed"] = observation
+    assert observation["revision"] == "0009" and observation["role"] == "asm_migrator"
+    assert observation["database"] == "asm_local"
+    assert type(observation["reader_pid"]) is int and observation["reader_pid"] > 0
+    assert type(observation["backend_pid"]) is int and observation["backend_pid"] > 0
+    if "lost_result_process" in report:
+        lost = report["lost_result_process"]
+        assert (observation["reader_namespace"], observation["reader_pid"]) != (
+            lost["namespace"],
+            lost["pid"],
+        ), "CONTROL_FRESH_PROCESS_REQUIRED"
+    for key, value in report["seed_identity"].items():
+        assert observation[key] == value, "CONTROL_RECOVERY_DATABASE_IDENTITY"
+    detail["recovery_source"] = candidate
+    return candidate
+
+
+def run_control_schema_phase(request):
+    """New disposable LOCAL volume, exact T/C images, drained CONTROL cutover."""
+    import tempfile
+
+    report = {"images": {}, "checks": [], "stage_timings": [], "stage": "admission"}
+
+    def run(args, **kwargs):
+        began = time.monotonic()
+        outcome = "FAILED"
+        try:
+            result = e.command(args, **kwargs)
+            outcome = "PASS"
+            return result
+        finally:
+            report["stage_timings"].append(
+                {"stage": report["stage"], "seconds": time.monotonic() - began, "outcome": outcome}
+            )
+
+    started = time.monotonic()
+    report_path = e.ROOT / "reports/control-schema-phase.json"
+    report_path.parent.mkdir(exist_ok=True)
+    try:
+        historical = "ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad"
+        candidate = run(["git", "rev-parse", "HEAD"]).decode().strip()
+        assert set(request) == {"historical", "candidate", "budget_file"}
+        assert request["historical"] == historical and request["candidate"] == candidate
+        budget = consume_control_budget(Path(request["budget_file"]), historical, candidate)
+        assert os.getuid() != 0 and os.environ.get("GITHUB_ACTIONS") == "true"
+        e.source_check(candidate)
+        assert not run(["docker", "ps", "-aq"]).strip()
+        assert not run(["docker", "volume", "ls", "-q"]).strip()
+        project = "asm-control-schema-phase"
+        report.update(coordinator=candidate, historical=historical)
+        pins = dict(
+            line.split("=", 1)
+            for line in (e.ROOT / "infra/images.lock.env").read_text().splitlines()
+            if line and not line.startswith("#")
+        )
+        with tempfile.TemporaryDirectory(prefix="asm-control-schema-") as temporary:
+            directory = Path(temporary)
+            sources, images = {}, {}
+            # Only exact tracked archives enter build contexts. The historical-only
+            # production migration_build_images helper is deliberately not called for I.
+            report["stage"] = "prepare_images"
+            prepare_started = time.monotonic()
+            remaining = budget["deadline"] - prepare_started
+            assert remaining > 0, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            with e.migration_budget(remaining):
+                for source in (historical, candidate):
+                    archive = directory / source
+                    archive.mkdir()
+                    e.migration_build_context(source, archive)
+                    sources[source] = archive
+                    images[source] = {}
+                    for kind in ("runtime", "development"):
+                        tag = "asm-control-schema-" + kind + ":" + source
+                        reuse = "asm-m3-schema-" + kind + ":" + source
+                        existing = (
+                            run(["docker", "image", "ls", "-q", "--no-trunc", reuse])
+                            .decode()
+                            .strip()
+                        )
+                        if existing:
+                            e.migration_image(existing, source, kind)
+                            run(["docker", "tag", existing, tag])
+                        else:
+                            run(
+                                [
+                                    "docker",
+                                    "build",
+                                    "--pull",
+                                    "--network=default",
+                                    "--target",
+                                    kind,
+                                    "--build-arg",
+                                    "PYTHON_IMAGE=" + pins["PYTHON_IMAGE"],
+                                    "--build-arg",
+                                    "UV_IMAGE=" + pins["UV_IMAGE"],
+                                    "-f",
+                                    str(archive / "infra/Dockerfile.backend"),
+                                    "-t",
+                                    tag,
+                                    str(archive),
+                                ],
+                                timeout=480,
+                            )
+                        image_id = json.loads(run(["docker", "image", "inspect", tag]))[0]["Id"]
+                        images[source][kind] = image_id
+                        report["images"][source + ":" + kind] = e.migration_image(
+                            image_id, source, kind
+                        )
+            prepared_at = time.monotonic()
+            report["prepare_budget"] = {
+                **budget,
+                "candidate_prepare_seconds": prepared_at - prepare_started,
+                "charged_total_seconds": 600 - (budget["deadline"] - prepared_at),
+                "remaining_seconds": budget["deadline"] - prepared_at,
+            }
+            assert prepared_at < budget["deadline"], "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            # init_local emits only a fixed diagnostic, never credentials. All private
+            # runtime files are outside both source archives and the repository.
+            subprocess.run(
+                [sys.executable, str(e.ROOT / "scripts/init_local.py")],
+                cwd=directory,
+                check=True,
+                timeout=30,
+            )
+            compose = [
+                "docker",
+                "compose",
+                "--project-directory",
+                str(sources[candidate]),
+                "--project-name",
+                project,
+                "--env-file",
+                str(e.ROOT / "infra/images.lock.env"),
+                "--env-file",
+                str(directory / ".env"),
+                "-f",
+                str(sources[candidate] / "compose.yaml"),
+                "--profile",
+                "telegram-operator",
+            ]
+            model = json.loads(run([*compose, "config", "--format", "json"]))
+            variables = dict(model["services"]["api"]["environment"])
+            variables.update(model["services"]["migrate"]["environment"])
+            assert variables["ASM_TELEGRAM_ENABLED"] == "false" and variables["TG_BOT_TOKEN"] == ""
+            envfile = directory / "controller.env"
+            e.write_private(
+                envfile,
+                "".join(k + "=" + str(v) + "\n" for k, v in sorted(variables.items())).encode(),
+            )
+            state = directory / "state"
+            state.mkdir(mode=0o700)
+            prefix = [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                project + "_default",
+                "--env-file",
+                str(envfile),
+                "--user",
+                f"{os.getuid()}:{os.getgid()}",
+                "--mount",
+                f"type=bind,source={state},target=/state",
+            ]
+
+            def controller(action):
+                report["stage"] = "controller_" + action
+                output = run(
+                    [
+                        *prefix,
+                        images[candidate]["development"],
+                        "python",
+                        "tests/test_m3_1_control_migrations.py",
+                        "--control-schema-phase",
+                        action,
+                        "/state/receipt.json",
+                    ],
+                    timeout=120,
+                )
+                assert output.decode().strip() == "CONTROL_SCHEMA_" + action.upper() + "_PASS"
+                report["checks"].append(action)
+
+            def migrate(source, direction, revision):
+                report["stage"] = direction + "_" + revision
+                run(
+                    [*prefix, images[source]["development"], "alembic", direction, revision],
+                    timeout=30,
+                )
+
+            def probe(source, expected):
+                report["stage"] = "probe_" + source[:8] + "_" + str(expected)
+                code = "import asyncio\nfrom asm.foundation import RuntimeDatabase,Settings\nasync def main():\n d=RuntimeDatabase(Settings())\n try:\n  try: await d.check()\n  except Exception:\n   assert not EXPECTED\n  else: assert EXPECTED\n finally: await d.close()\nasyncio.run(main())\n".replace(
+                    "EXPECTED", repr(expected)
+                )
+                run([*prefix, images[source]["runtime"], "python", "-c", code], timeout=30)
+
+            def callers(source):
+                report["stage"] = "callers_" + source[:8]
+                run(["docker", "tag", images[source]["runtime"], "asm-backend:local"])
+                run(
+                    [
+                        *compose,
+                        "up",
+                        "-d",
+                        "--no-deps",
+                        "--pull",
+                        "never",
+                        "--force-recreate",
+                        "--wait",
+                        "api",
+                        "worker",
+                        "scheduler",
+                    ],
+                    timeout=120,
+                )
+                result = {}
+                for service in ("api", "worker", "scheduler"):
+                    ident = run([*compose, "ps", "-q", service]).decode().strip()
+                    info = json.loads(run(["docker", "inspect", ident]))[0]
+                    assert info["Image"] == images[source]["runtime"] and info["State"]["Running"]
+                    result[service] = {"id": ident, "image": info["Image"], "source": source}
+                return result
+
+            def drain():
+                report["stage"] = "drain"
+                run([*compose, "stop", "--timeout", "10", "api", "worker", "scheduler"], timeout=60)
+                for service in ("api", "worker", "scheduler"):
+                    ident = run([*compose, "ps", "-aq", service]).decode().strip()
+                    assert not json.loads(run(["docker", "inspect", ident]))[0]["State"]["Running"]
+
+            try:
+                report["stage"] = "infrastructure"
+                run([*compose, "up", "-d", "--wait", "postgres", "storage"], timeout=120)
+                run([*compose, "run", "--rm", "--no-deps", "-T", "storage-init"], timeout=120)
+                migrate(historical, "upgrade", "0008")
+                report["baseline_callers"] = callers(historical)
+                probe(historical, True)
+                probe(candidate, False)
+                drain()
+                controller("seed8")  # migration identity only; T runtime is drained.
+                report["seed_identity"] = json.loads((state / "receipt.json").read_text())[
+                    "identity"
+                ]
+                # Reject the actual changed helper's direct migration commands before
+                # any source/image switch or migration journal on this candidate.
+                guard = directory / "guard"
+                guard.mkdir(mode=0o700)
+                e.write_private(guard / "operation.lock", b"")
+                before = {p.name: p.read_bytes() for p in guard.iterdir()}
+                for action in ("migration-attest", "migration-prepare"):
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(e.ROOT / "scripts/prepare_telegram_egress.py"),
+                            action,
+                            "--state-dir",
+                            str(guard),
+                            "--accepted-sha",
+                            candidate,
+                            "--from-sha",
+                            e.MIGRATION_FROM,
+                        ],
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        timeout=30,
+                    )
+                    assert (
+                        result.returncode == 1
+                        and b"EGRESS_MIGRATION_HISTORICAL_SCHEMA_ONLY" in result.stdout
+                    )
+                    assert {p.name: p.read_bytes() for p in guard.iterdir()} == before
+                report["checks"].append("candidate_direct_cli_pairing_refusal")
+                migrate(candidate, "upgrade", "0009")
+                controller("check9")  # independent committed revision read after migrator exits
+                probe(candidate, True)
+                probe(historical, False)
+                # CONTROL-clean populated-T case: preserve all 34 tables and exact T definitions.
+                migrate(candidate, "downgrade", "0008")
+                controller("check8")
+                probe(historical, True)
+                # A separate migrator really commits 0009, then exits unsuccessfully.
+                # Observe its failure; NEVER infer the revision from that exit alone.
+                report["stage"] = "committed_upgrade_ack_loss"
+                lost = subprocess.run(
+                    [
+                        *prefix,
+                        images[candidate]["development"],
+                        "python",
+                        "tests/test_m3_1_control_migrations.py",
+                        "--control-schema-phase",
+                        "upgrade-lost-result",
+                        "/state/receipt.json",
+                    ],
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                    timeout=30,
+                )
+
+                def observe_revision():
+                    return json.loads(
+                        run(
+                            [
+                                *prefix,
+                                images[candidate]["development"],
+                                "python",
+                                "tests/test_m3_1_control_migrations.py",
+                                "--control-schema-phase",
+                                "observe",
+                                "/state/receipt.json",
+                            ],
+                            timeout=30,
+                        )
+                    )
+
+                saved_loss = json.loads((state / "receipt.json").read_text())["lost_result_process"]
+                report["lost_result_process"] = saved_loss
+                recovery_source = control_schema_recovery_source(
+                    lost, observe_revision, report, historical, candidate
+                )
+                controller("check9")  # projection/private S3/pending/UNKNOWN still exact
+                probe(historical, False)  # committed0009 explicitly rejects T
+                probe(recovery_source, True)
+                report["upgrade_ack_loss"]["historical_readiness"] = "REJECTED"
+                report["upgrade_ack_loss"]["candidate_readiness"] = "PASS"
+                # Exercise C runtime/worker on the correctly paired schema before
+                # permanent callers start, so duplicate-first admission is deterministic.
+                controller("fresh")
+                report["cutover_callers"] = callers(recovery_source)
+                report["upgrade_ack_loss"]["forward_callers"] = report["cutover_callers"]
+                drain()
+                controller("refuse")
+                report["restarted_callers"] = callers(recovery_source)
+                report["upgrade_ack_loss"]["restarted_callers"] = report["restarted_callers"]
+                probe(recovery_source, True)
+                drain()
+                controller("refuse")
+                report["database"] = json.loads((state / "receipt.json").read_text())
+                assert report["database"]["populated_refusal"] == "PASS"
+                # No raw signed URL or fixture content is published.
+                report["database"]["object"].pop("key")
+            except BaseException as error:
+                report["failure"] = type(error).__name__
+                raise
+            finally:
+                # Record the observed failure/revision/recovery before destroying
+                # disposable evidence, including a refusal/unreadable revision.
+                reports = e.ROOT / "reports"
+                reports.mkdir(exist_ok=True)
+                (reports / "control-schema-phase.json").write_text(
+                    json.dumps(report, indent=2) + "\n"
+                )
+                report["stage"] = "teardown"
+                run(
+                    [*compose, "down", "--volumes", "--remove-orphans", "--timeout", "2"],
+                    timeout=90,
+                )
+        e.source_check(candidate)
+        print("TELEGRAM_EGRESS_CONTROL_SCHEMA_PHASE_PASS", flush=True)
+    except BaseException as error:
+        report.setdefault("failure", type(error).__name__)
+        raise
+    finally:
+        report["total_seconds"] = time.monotonic() - started
+        report_path.write_text(json.dumps(report, indent=2) + "\n")
+
+
+if __name__ == "__control_coordinator__":
+    run_control_coordinator(globals()["control_coordinator_request"])
+    raise SystemExit(0)
+
+
 if __name__ == "__schema_harness__":
-    run_schema_phase(globals()["schema_request"])
+    if "control_schema_request" in globals():
+        run_control_schema_phase(globals()["control_schema_request"])
+    else:
+        run_schema_phase(globals()["schema_request"])
     raise SystemExit(0)
 
 
@@ -2486,7 +3102,38 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
     coordinator = (e.ROOT / "scripts/test_telegram_egress_migration.sh").read_text()
     shell = (e.ROOT / "scripts/test_telegram_egress.sh").read_text()
     assert "if fault == 'state':" in coordinator
-    assert "'--schema-upgrade', H, source" in coordinator
+    # T is now the immutable retained executor; C gets its own private handoff.
+    assert "run_name='__control_coordinator__'" in coordinator
+    import ast
+    import inspect
+
+    dispatcher = ast.parse(inspect.getsource(run_control_coordinator))
+    calls = [
+        node
+        for node in ast.walk(dispatcher)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "supervised_schema_child"
+    ]
+    argv = [
+        [
+            item.value if isinstance(item, ast.Constant) else ast.unparse(item)
+            for item in call.args[0].elts
+        ]
+        for call in sorted(calls, key=lambda call: call.lineno)
+    ]
+    assert argv == [
+        ["sh", "scripts/test_telegram_egress.sh", "--schema-upgrade", "historical", "CONTROL_T"],
+        [
+            "sh",
+            "scripts/test_telegram_egress.sh",
+            "--control-schema-upgrade",
+            "CONTROL_T",
+            "candidate",
+            "str(handoff)",
+        ],
+    ]
+    assert '"budget_file": sys.argv[4]' in shell or "'budget_file': sys.argv[4]" in shell
     assert "run_name='__schema_harness__'" in shell
     assert "754f1c883e5a94a7fc9e729af2605424f949ba33" in coordinator
 
@@ -2536,3 +3183,137 @@ def test_ack_loss_does_not_accept_unexpected_migrator_result(status, marker):
         )
     assert report["upgrade_ack_loss"]["observed"] == "NOT_READ"
     assert "recovery_source" not in report["upgrade_ack_loss"]
+
+
+def control_budget_file(tmp_path, **changes):
+    now = time.monotonic()
+    value = dict(
+        version=1,
+        phase=CONTROL_PHASE,
+        historical=CONTROL_T,
+        candidate="c" * 40,
+        uid=os.getuid(),
+        started_at=now - 30,
+        issued_at=now,
+        charged_seconds=30,
+        deadline=now + 570,
+    )
+    value.update(changes)
+    path = tmp_path / "control-budget.json"
+    tmp_path.chmod(0o700)
+    e.write_private(path, e.encoded(value))
+    return path
+
+
+def test_control_remaining_budget_is_absolute_private_and_consumed_once(tmp_path):
+    path = control_budget_file(tmp_path)
+    budget = consume_control_budget(path, CONTROL_T, "c" * 40)
+    assert 0 < budget["remaining_seconds"] <= 570
+    assert budget["charged_seconds"] == 30 and not path.exists()
+    with pytest.raises(FileNotFoundError):
+        consume_control_budget(path, CONTROL_T, "c" * 40)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"phase": "TURNS"},
+        {"historical": "a" * 40},
+        {"candidate": "b" * 40},
+        {"uid": -1},
+        {"version": True},
+        {"charged_seconds": 1},
+        {"deadline": 0},
+        {"started_at": 1},
+        {"unexpected": 1},
+    ],
+)
+def test_control_budget_wrong_phase_source_clock_or_owner_refuses(tmp_path, change):
+    path = control_budget_file(tmp_path, **change)
+    with pytest.raises(AssertionError):
+        consume_control_budget(path, CONTROL_T, "c" * 40)
+
+
+def test_control_budget_exhaustion_and_file_guards(tmp_path):
+    now = time.monotonic()
+    path = control_budget_file(
+        tmp_path, started_at=now - 601, issued_at=now - 2, charged_seconds=599, deadline=now - 1
+    )
+    with pytest.raises(AssertionError, match="EXHAUSTED"):
+        consume_control_budget(path, CONTROL_T, "c" * 40)
+    path.unlink()
+    path = control_budget_file(tmp_path)
+    path.chmod(0o644)
+    with pytest.raises(e.EgressError, match="PRIVATE_MODE"):
+        consume_control_budget(path, CONTROL_T, "c" * 40)
+    path.chmod(0o600)
+    os.link(path, tmp_path / "duplicate")
+    with pytest.raises(AssertionError, match="SINGLE_LINK"):
+        consume_control_budget(path, CONTROL_T, "c" * 40)
+
+
+@pytest.mark.parametrize("revision", ["0007", "0008", "0010", None])
+def test_control_recovery_never_selects_candidate_for_unconfirmed_schema(revision):
+    result = SimpleNamespace(returncode=86, stdout=b"CONTROL_UPGRADE_COMMITTED_RESULT_LOST\n")
+    report = {"seed_identity": {"database": "asm_local", "database_oid": 10}}
+    with pytest.raises(AssertionError):
+        control_schema_recovery_source(
+            result, lambda: {"revision": revision}, report, CONTROL_T, "c" * 40
+        )
+    assert "recovery_source" not in report["upgrade_ack_loss"]
+
+
+def test_control_recovery_requires_exact_database_and_controlled_failure():
+    observed = dict(
+        revision="0009",
+        role="asm_migrator",
+        database="asm_local",
+        database_oid=10,
+        reader_pid=2,
+        backend_pid=3,
+    )
+    result = SimpleNamespace(returncode=86, stdout=b"CONTROL_UPGRADE_COMMITTED_RESULT_LOST\n")
+    report = {"seed_identity": {"database": "asm_local", "database_oid": 10}}
+    assert (
+        control_schema_recovery_source(result, lambda: observed, report, CONTROL_T, "c" * 40)
+        == "c" * 40
+    )
+    # A successful exit or unrelated failure is not this post-commit cut.
+    for code in (0, 1, 87):
+        with pytest.raises(AssertionError, match="POST_COMMIT"):
+            control_schema_recovery_source(
+                SimpleNamespace(returncode=code, stdout=result.stdout),
+                lambda: observed,
+                report,
+                CONTROL_T,
+                "c" * 40,
+            )
+    with pytest.raises(AssertionError, match="DATABASE_IDENTITY"):
+        control_schema_recovery_source(
+            result, lambda: observed | {"database_oid": 11}, report, CONTROL_T, "c" * 40
+        )
+
+
+def test_schema_supervisor_reaps_child_on_timeout(tmp_path):
+    started = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        supervised_schema_child(
+            [sys.executable, "-c", "import time; time.sleep(60)"], cwd=tmp_path, timeout=0.1
+        )
+    assert time.monotonic() - started < 2
+
+
+def test_schema_probe_programs_are_executable_python_without_hidden_indentation():
+    import ast
+    import inspect
+
+    for phase in (run_schema_phase, run_control_schema_phase):
+        tree = ast.parse(inspect.getsource(phase))
+        assignment = next(
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "code" for t in n.targets)
+        )
+        value = ast.literal_eval(assignment.value.func.value).replace("EXPECTED", "True")
+        compile(value, "<isolated schema readiness probe>", "exec")

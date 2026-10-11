@@ -5,6 +5,7 @@ test "$#" -eq 1
 python3 - "$1" <<'PY'
 import json
 import os
+import runpy
 import shutil
 import subprocess
 import sys
@@ -67,8 +68,9 @@ with tempfile.TemporaryDirectory(prefix='asm-frozen-h-') as temp:
     finally:
         e.command(['git', 'worktree', 'remove', str(historical)])
 if fault == 'state':
-    subprocess.run(['sh', 'scripts/test_telegram_egress.sh', '--schema-upgrade', H, source],
-                   stdin=subprocess.DEVNULL, check=True)
+    runpy.run_path(str(e.ROOT / 'tests/test_telegram_egress_migration.py'),
+                   init_globals={'control_coordinator_request': {'historical': H, 'candidate': source}},
+                   run_name='__control_coordinator__')
 assert not e.command(['git', 'status', '--porcelain', '--untracked-files=all']).strip()
 print('TELEGRAM_EGRESS_MIGRATION_DISPOSABLE_PASS', flush=True)
 PY

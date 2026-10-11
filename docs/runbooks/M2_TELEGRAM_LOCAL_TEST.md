@@ -4779,3 +4779,42 @@ project/volume, после historical cleanup. Controller под migration ident
 Это описание изолированного CI harness. Оно не разрешает VM-команды, schema
 upgrade рабочего окружения, Telegram activation, ACK или повтор UNKNOWN send;
 прежние owner receipts, binding и live-статус этим срезом не изменяются.
+
+### 6.2. Отдельная CONTROL0009 LOCAL phase
+
+Для CONTROL действует [M3_CONTRACT §12.8](../tasks/M3_CONTRACT.md#128-upgradedowngrade-и-sourceschema00080009).
+§6.1 выше сохраняет историческое описание TURNS. Текущий default lane принимает
+только exact candidate C/0009 и полный inventory35. Шесть historical shards
+по-прежнему исполняют H/0007 без изменений. В обоих state shards после H идут
+две самостоятельные фазы на разных fresh disposable volumes:
+
+1. Detached, неизменяемый T `ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad`
+   исполняет свой `--schema-upgrade H T`. Его архив и оригинальные отчёты
+   сохраняются в `reports/retained-turns/` до удаления checkout.
+2. C исполняет `--control-schema-upgrade T C <private-budget-request>`.
+   Request создаёт только coordinator, mode0600, для exact источников/фазы,
+   текущего uid и абсолютного monotonic deadline; после проверки он потребляется
+   один раз. Весь retained-T shell, включая prepare/runtime/cleanup, и C archive/
+   build/reuse verification оплачиваются одним prepare ledger600s. C получает
+   остаток, а не новые600s. Timeout останавливает owned process group с wait;
+   cleanup ограничен initially-empty disposable daemon и ресурсами этой фазы.
+
+C migration-role controller сохраняет populated TURNS, старые Inbox/consumer/
+manual receipts, PENDING/UNKNOWN и private S3 bytes. Forward8→9 сравнивает все33
+старые data tables по фиксированным T columns; marker8→9 и nullable metadata/
+пустой CONTROL receipt проверяются отдельно. Clean9→8 восстанавливает все34
+tables, definitions и grants. Populated CONTROL downgrade отказывает55000 до DDL.
+Отдельный migrator коммитит0009 и выходит86 до успешного результата; новый процесс
+читает revision и DB identity, после чего только C/9 допускается к forward/restart.
+T/9 и C/8 обязаны отказать. API/worker/scheduler получают один exact runtime image.
+
+Новые отчёты: `reports/control-schema-phase.json` (images, stage timings,
+retained rows/private S3/commit-loss/restart/refusal) и
+`reports/control-schema-ledger.json` (T/C budget handoff, exits и owned cleanup).
+Ранний source/build/probe failure тоже сохраняется. Результат считается evidence
+только после фактического исполнения штатных normal/Docker29 jobs на проверяемом
+SHA; local unit guards и этот текст не заменяют PostgreSQL/S3 execution.
+Штатные команды остаются `sh scripts/ci.sh`, `sh scripts/test_browser.sh` и
+`sh scripts/test_telegram_egress_migration.sh state` в disposable GitHub runner.
+Historical `migration_source`/saved-plan guard остаётся0007-only. Это не команда
+для VM или рабочего DB/S3 и не разрешение rollout, ACK, activation или sends.

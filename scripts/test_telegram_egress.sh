@@ -22,6 +22,12 @@ os.umask(0o077)
 root = Path.cwd()
 assert root == e.ROOT and os.getuid() != 0, 'TEST_RUNNER_CHECKOUT_AND_NONROOT_REQUIRED'
 migration = None
+if sys.argv[1:2] == ['--control-schema-upgrade']:
+    assert len(sys.argv) == 5 and os.environ.get('GITHUB_ACTIONS') == 'true', 'EXPLICIT_CONTROL_SCHEMA_RUNNER_REQUIRED'
+    runpy.run_path(str(root / 'tests/test_telegram_egress_migration.py'),
+                   init_globals={'control_schema_request': {'historical': sys.argv[2], 'candidate': sys.argv[3], 'budget_file': sys.argv[4]}},
+                   run_name='__schema_harness__')
+    raise AssertionError('CONTROL_SCHEMA_HARNESS_MUST_COMPLETE_EXPLICITLY')
 if sys.argv[1:2] == ['--schema-upgrade']:
     assert len(sys.argv) == 4 and os.environ.get('GITHUB_ACTIONS') == 'true', 'EXPLICIT_SCHEMA_RUNNER_REQUIRED'
     runpy.run_path(str(root / 'tests/test_telegram_egress_migration.py'),

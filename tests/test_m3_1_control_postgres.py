@@ -126,11 +126,15 @@ async def wait_blocked(h, blocker):
         while True:
             rows = await query(
                 h,
-                "SELECT pid,wait_event_type FROM pg_stat_activity WHERE :blocker=ANY(pg_blocking_pids(pid))",
+                "SELECT pid,locktype,mode,granted FROM pg_locks "
+                "WHERE NOT granted AND :blocker=ANY(pg_blocking_pids(pid))",
                 blocker=blocker,
             )
             if rows:
-                assert all(row["wait_event_type"] == "Lock" for row in rows)
+                # Cross-role pg_stat_activity hides wait_event_type from the
+                # unprivileged migrator. A non-granted lock plus this exact
+                # blocker proves the wait without widening production grants.
+                assert all(row["granted"] is False and row["pid"] != blocker for row in rows)
                 return rows
             await asyncio.sleep(0)
 
@@ -339,7 +343,7 @@ async def test_control_atomic_write_and_late_commit_failure(control, table, defe
     cid, _, _ = await incoming(h)
     before = await counts_control(h)
     async with fail_insert(h, table, deferred=deferred):
-        with pytest.raises(DBAPIError, match="CONTROL_TEST_FAULT"):
+        with pytest.raises(TenancyError, match="INVALID_STATE"):
             await execute(h, cid, "RESUME")
     assert await counts_control(h) == before
     assert (await execute(h, cid, "RESUME"))["code"] == "ACCEPTED"
@@ -361,7 +365,7 @@ async def test_manual_atomic_takeover_rolls_back_at_each_m2_write(control, table
     await execute(h, cid, "RESUME")
     before = await counts_control(h)
     async with fail_insert(h, table):
-        with pytest.raises(DBAPIError, match="CONTROL_TEST_FAULT"):
+        with pytest.raises(TenancyError, match="INVALID_STATE"):
             await command(h, cid, " exact manual ", "manual")
     assert await counts_control(h) == before
     old = await state(h, cid)
@@ -652,3 +656,286 @@ async def test_test_consumer_stale_after_control_without_revision_mutation(contr
         before["platform.messaging_jobs"]
     )
     assert not h.ledger.exists()
+
+
+@pytest.mark.parametrize("provider", ["CONTROLLED", "TELEGRAM"])
+async def test_resume_held_transaction_forces_later_ingress_capture(control, provider):
+    h = control
+    cid, _, _ = await incoming(h, provider)
+    expected = body(await state(h, cid))
+    async with h.runtime.engine.connect() as c:
+        tx = await c.begin()
+        await raw_context(c)
+        accepted = (
+            await c.execute(
+                text(
+                    "SELECT platform.conversation_control_execute(:cid,:client,'RESUME','held-resume',:gen,:version)"
+                ),
+                {
+                    "cid": cid,
+                    "client": UUID(expected.expected_client_id),
+                    "gen": int(expected.expected_control_generation),
+                    "version": int(expected.expected_context_version),
+                },
+            )
+        ).scalar_one()
+        pid = (await c.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+        pending = asyncio.create_task(incoming(h, provider, 123, process=False))
+        try:
+            await wait_blocked(h, pid)
+            assert not pending.done()
+            await tx.commit()
+            receipt = await pending
+        finally:
+            if tx.is_active:
+                await tx.rollback()
+            if not pending.done():
+                pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
+    ident = UUID(receipt["inbox_id"]) if isinstance(receipt, dict) else receipt.inbox_id
+    captured = (await query(h, "SELECT * FROM platform.inbox_events WHERE id=:id", id=ident))[0]
+    current = await state(h, cid)
+    assert captured["turn_control_generation"] == int(accepted["result"]["accepted_generation"])
+    assert captured["turn_control_mode"] == "AI"
+    assert (
+        captured["turn_activation_fence_seq"]
+        == current["activation_fence_seq"]
+        < captured["turn_ingress_seq"]
+    )
+
+
+@pytest.mark.parametrize("provider", ["CONTROLLED", "TELEGRAM"])
+@pytest.mark.parametrize("conflict", [False, True])
+async def test_post_resume_duplicate_first_keeps_earliest_committed_origin(
+    control, provider, conflict
+):
+    h = control
+    cid, _, _ = await incoming(h, provider, 1)
+    before = await incoming(h, provider, 2, process=False, message="222")
+    await execute(h, cid, "RESUME")
+    if provider == "CONTROLLED":
+        after = await ingest(
+            h,
+            event(
+                event_id="after-duplicate",
+                message_id="222",
+                text="different" if conflict else "hello",
+            ),
+        )
+    else:
+        original = (
+            await query(
+                h,
+                "SELECT normalized_event FROM platform.inbox_events WHERE id=:id",
+                id=UUID(before["inbox_id"]),
+            )
+        )[0]["normalized_event"]
+        value = projection(update="19999", message="222")
+        value["event"]["occurred_at"] = original["occurred_at"]
+        value["event"]["text"] = "different" if conflict else original["text"]
+        after = await ingress(h, value)
+    # Keep the earlier job claimed and unexecuted, not rescheduled/backdated.
+    older = await h.kernel.claim_job("earliest-origin")
+    target = UUID(before["job_id"]) if isinstance(before, dict) else before.job_id
+    assert older.job_id == target
+    projected = await process_receipt(h, after)
+    member = (
+        await query(
+            h,
+            "SELECT t.control_generation,t.ingress_control_mode,m.origin_inbox_id FROM app.conversation_turn_messages m JOIN app.conversation_turns t ON (t.workspace_id,t.id)=(m.workspace_id,m.turn_id) WHERE m.message_id=:id",
+            id=projected.message_id,
+        )
+    )[0]
+    ident = UUID(before["inbox_id"]) if isinstance(before, dict) else before.inbox_id
+    assert member == {
+        "control_generation": 1,
+        "ingress_control_mode": "HUMAN",
+        "origin_inbox_id": ident,
+    }
+    result = await h.kernel.process_inbox(older)
+    assert result.code == ("MESSAGE_ID_CONFLICT" if conflict else "DUPLICATE")
+    assert len(await query(h, "SELECT message_id FROM app.conversation_turn_messages")) == 2
+
+
+async def test_capture_is_immutable_and_forged_metadata_is_rejected(control):
+    h = control
+    cid, receipt, _ = await incoming(h)
+    async with h.migrator.begin() as c:
+        for statement, code in (
+            ("UPDATE platform.inbox_events SET turn_control_generation=2 WHERE id=:id", "23514"),
+            (
+                "INSERT INTO platform.inbox_events SELECT (jsonb_populate_record(NULL::platform.inbox_events,to_jsonb(i)||jsonb_build_object('id',gen_random_uuid(),'turn_ingress_at',NULL,'turn_ingress_seq',NULL,'turn_control_generation',77,'turn_control_mode','HUMAN'))).* FROM platform.inbox_events i WHERE id=:id",
+                "P2001",
+            ),
+            (
+                "UPDATE app.conversation_turns SET ingress_control_mode=NULL WHERE conversation_id=:cid",
+                "23514",
+            ),
+        ):
+            with pytest.raises(DBAPIError) as caught:
+                async with c.begin_nested():
+                    await c.execute(text(statement), {"id": receipt.inbox_id, "cid": cid})
+            assert caught.value.orig.sqlstate == code
+
+
+@pytest.mark.parametrize("isolation", ["REPEATABLE READ", "SERIALIZABLE"])
+async def test_control_sql_rejects_non_read_committed_and_forged_xid(control, isolation):
+    h = control
+    cid, _, _ = await incoming(h)
+    before = await counts_control(h)
+    async with h.runtime.engine.connect() as conn:
+        conn = await conn.execution_options(isolation_level=isolation)
+        async with conn.begin():
+            await raw_context(conn)
+            with pytest.raises(DBAPIError) as caught:
+                async with conn.begin_nested():
+                    await conn.execute(
+                        text("SELECT platform.conversation_control_read(:cid)"), {"cid": cid}
+                    )
+            assert caught.value.orig.sqlstate == "P2001"
+            assert caught.value.orig.diag.message_primary == "TRANSACTION_STATE"
+    async with h.runtime.engine.begin() as conn:
+        await raw_context(conn)
+        await conn.execute(text("SELECT set_config('asm.context_xid','0',true)"))
+        with pytest.raises(DBAPIError) as caught:
+            async with conn.begin_nested():
+                await conn.execute(
+                    text("SELECT platform.conversation_control_read(:cid)"), {"cid": cid}
+                )
+        assert (
+            caught.value.orig.sqlstate == "P2401"
+            and caught.value.orig.diag.message_primary == "ACCESS_DENIED"
+        )
+    assert await counts_control(h) == before
+
+
+async def test_post_lock_snapshot_rejects_physical_commit_and_worker_context(control):
+    from asm.messaging.errors import MessagingError
+
+    h = control
+    cid, _, _ = await incoming(h)
+    with pytest.raises((TenancyError, MessagingError)):
+        async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
+            await unit._connection.commit()
+            await unit.post_lock_product_snapshot()
+    receipt = await incoming(h, number=101, process=False)
+    claim = await h.kernel.claim_job("worker-exclusion")
+    assert claim.job_id == receipt.job_id
+    async with h.kernel.admit_job(claim.job_id, claim.claim_token):
+        with pytest.raises(TenancyError, match="TRANSACTION_STATE"):
+            async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()):
+                raise AssertionError("worker cannot acquire owner unit")
+
+
+@pytest.mark.parametrize("outcome", ["READY", "FAILED"])
+async def test_delayed_prepared_media_keeps_capture_and_new_generation_deadlines(control, outcome):
+    from asm.files.database import FileDatabase
+    from asm.messaging.errors import Code
+    from test_m2_2_db_postgres import MANIFEST
+
+    h = control
+    receipt = await ingest(
+        h,
+        event(
+            event_id="photo-before", message_id="photo-before", image_file_id="private-reference"
+        ),
+    )
+    result = await process_receipt(h, receipt)
+    cid = (
+        await query(
+            h, "SELECT conversation_id FROM app.messages WHERE id=:id", id=result.message_id
+        )
+    )[0]["conversation_id"]
+    fetch = await h.kernel.claim_job("prepared-photo")
+    assert fetch.kind == "FETCH_IMAGE"
+    files = FileDatabase(h.kernel)
+    permit = await files.prepare_upload(fetch, MANIFEST)
+    origin = (
+        await query(h, "SELECT * FROM platform.inbox_events WHERE id=:id", id=receipt.inbox_id)
+    )[0]
+    await execute(h, cid, "RESUME", "after-prepared-upload")
+    await incoming(h, number=501)
+    groups = await query(h, "SELECT * FROM app.conversation_turns ORDER BY control_generation")
+    assert len(groups) == 2 and groups[0]["state"] == "WAITING_MEDIA"
+    old, new = groups
+    if outcome == "READY":
+        assert (
+            await files.finish_fetch(fetch.job_id, fetch.claim_token, permit.intent_id)
+        ).status == "READY"
+    else:
+        await h.kernel.retry(fetch, Code.INVALID_INPUT, False)
+    assert (await query(h, "SELECT * FROM app.conversation_turns WHERE id=:id", id=new["id"]))[
+        0
+    ] == new
+    updated = (await query(h, "SELECT * FROM app.conversation_turns WHERE id=:id", id=old["id"]))[0]
+    assert updated["control_generation"] == old["control_generation"] == 1
+    assert updated["ingress_control_mode"] == old["ingress_control_mode"] == "HUMAN"
+    assert updated["activation_fence_seq"] is old["activation_fence_seq"] is None
+    assert updated["member_count"] == old["member_count"] == 1
+    after_origin = (
+        await query(h, "SELECT * FROM platform.inbox_events WHERE id=:id", id=receipt.inbox_id)
+    )[0]
+    assert after_origin == origin
+    assert (await state(h, cid))["control_mode"] == "AI"
+    assert (await query(h, "SELECT status FROM app.file_objects WHERE id=:id", id=fetch.file_id))[
+        0
+    ]["status"] == outcome
+
+
+async def test_control_lock_and_outer_savepoint_leave_other_workspace_queue_progress(control):
+    h = control
+    cid, _, _ = await incoming(h)
+    expected = body(await state(h, cid))
+    due = (
+        await query(
+            h, "SELECT min(available_at) AS due FROM platform.messaging_jobs WHERE status='READY'"
+        )
+    )[0]["due"]
+    await asyncio.sleep(max(0, (due - datetime.now(UTC)).total_seconds()))
+    before = await query(
+        h,
+        "SELECT to_jsonb(j) AS row FROM platform.messaging_jobs j WHERE workspace_id=:ws AND status='READY' ORDER BY id",
+        ws=A,
+    )
+    second = await ingest(
+        h,
+        event(
+            bot_identity="bot-b",
+            external_connection_id="conn-b",
+            event_id="other-workspace",
+            message_id="other-workspace",
+        ),
+    )
+    async with h.runtime.engine.begin() as c:
+        await raw_context(c)
+        async with c.begin_nested():
+            result = (
+                await c.execute(
+                    text(
+                        "SELECT platform.conversation_control_execute(:cid,:client,'TAKEOVER','savepoint-control',:generation,:version)"
+                    ),
+                    {
+                        "cid": cid,
+                        "client": UUID(expected.expected_client_id),
+                        "generation": int(expected.expected_control_generation),
+                        "version": int(expected.expected_context_version),
+                    },
+                )
+            ).scalar_one()
+            assert result["code"] == "ACCEPTED"
+        # Savepoint release retains Conversation; the existing NOWAIT Turn scan
+        # rolls back its candidate locks and reaches B on the unchanged queue.
+        selected = await h.kernel.claim_job("healthy-b")
+        assert selected is not None and selected.job_id == second.job_id
+        assert (await h.kernel.process_inbox(selected)).code == "PROCESSED"
+        assert (
+            await query(
+                h,
+                "SELECT to_jsonb(j) AS row FROM platform.messaging_jobs j WHERE workspace_id=:ws AND status='READY' ORDER BY id",
+                ws=A,
+            )
+            == before
+        )
+    selected = await h.kernel.claim_job("unblocked-a")
+    assert selected is not None and selected.workspace_id == A
+    assert (await h.kernel.process_turn(selected)).code == "GROUPED"
