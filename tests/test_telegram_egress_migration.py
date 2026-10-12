@@ -10,6 +10,8 @@ import hashlib
 import io
 import json
 import os
+import re
+import shutil
 import signal
 import stat
 import subprocess
@@ -17,8 +19,10 @@ import sys
 import tarfile
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 from scripts import prepare_telegram_egress as e
 
@@ -927,8 +931,2815 @@ asyncio.run(main())
     print("TELEGRAM_EGRESS_SCHEMA_PHASE_PASS", flush=True)
 
 
+CONTROL_T = "ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad"
+CONTROL_PHASE = "CONTROL_SCHEMA_0008_0009"
+SCHEMA_OWNER_LABEL = "io.asm.schema-owner"
+RETAINED_MODULE_BLOB = "571bc4e48fc8c7de8e89f0cfe01c06949d7e84c1"
+RETAINED_HELPER_BLOB = "f6cda8841f50eab0347a365079af6ed76632d988"
+
+
+def retained_exception_observer(config):
+    """Observe the exact frozen frame; never replace its code/helper/globals.
+
+    This stdlib-only function is also embedded verbatim in the private python3
+    launcher. It runs in the frozen process, before its finally can mask an
+    exception. No traceback/argv/payload is serialized.
+    """
+    import hashlib
+    import json
+    import os
+    import re
+    import stat
+    import tempfile
+    import time
+    from pathlib import Path
+
+    root = Path(config["owner_directory"])
+    module = config["module"]
+    active = False
+    finished = False
+    journal_ok = False
+    records = []
+    errors = []
+    overflow = False
+    binding = {
+        key: config[key] for key in ("source", "phase", "token", "module_blob", "helper_blob")
+    }
+    binding["version"] = 1
+    entered = None
+
+    def encoded(value):
+        return (json.dumps(value, sort_keys=True) + "\n").encode()
+
+    def diagnostic(name, step):
+        nonlocal overflow
+        if len(errors) < 16:
+            errors.append({"file": name, "step": step, "reason": "CONTROL_RETAINED_JOURNAL_IO"})
+        else:
+            overflow = True
+
+    def save(name, raw):
+        temporary = None
+        step = "deadline"
+        try:
+            end = config["deadline"]
+            budget = root / "cleanup-budget.json"
+            if budget.exists():
+                end = min(end, json.loads(budget.read_text())["deadline"])
+            if time.monotonic() >= end:
+                raise OSError("deadline")
+            step = "write"
+            fd, temporary = tempfile.mkstemp(dir=root, prefix=".observer-")
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(raw)
+                stream.flush()
+                step = "fsync_file"
+                os.fsync(stream.fileno())
+            step = "publish"
+            os.replace(temporary, root / name)
+            step = "fsync_directory"
+            directory = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+            return True
+        except (OSError, ValueError, KeyError, TypeError):
+            diagnostic(name, step)
+            return False
+        finally:
+            if temporary is not None:
+                try:
+                    if os.path.exists(temporary):
+                        os.unlink(temporary)
+                except OSError:
+                    diagnostic(name, "unlink")
+
+    def slot(name, value):
+        raw = encoded(value)
+        return {
+            "name": name,
+            "raw": raw,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "attempts": 0,
+            "durable": False,
+        }
+
+    def flush(final=False):
+        # Retry only these immutable bytes, never the latest exception. Every
+        # slot has at most three attempts, under the original600/cleanup90.
+        for item in ([entered] if entered is not None else []) + records:
+            while not item["durable"] and item["attempts"] < 3:
+                item["attempts"] += 1
+                item["durable"] = save(item["name"], item["raw"])
+                if not final:
+                    break
+        ready = (
+            entered is not None
+            and entered["durable"]
+            and all(item["durable"] for item in records)
+            and not overflow
+        )
+        for _ in range(3 if final else 1):
+            health = {
+                "binding": binding,
+                "completed": final,
+                "entered_sha256": entered["sha256"] if entered else None,
+                "event_hashes": [item["sha256"] for item in records],
+                "published": [item["durable"] for item in records],
+                "attempts": [item["attempts"] for item in records],
+                "errors": list(errors),
+                "overflow": overflow,
+                "state": "CONFIRMED"
+                if ready and records
+                else "NO_FAILURE"
+                if ready
+                else "UNCONFIRMED",
+            }
+            if save("trace-health.json", encoded(health)):
+                return ready and final
+        return False
+
+    def finish():
+        nonlocal finished, journal_ok
+        if not finished:
+            finished = True
+            journal_ok = flush(final=True) if active else False
+        return journal_ok
+
+    def observe(frame, event, arg):
+        nonlocal active, entered, overflow
+        if frame.f_code.co_filename != module or frame.f_code.co_name != "run_schema_phase":
+            return None
+        if event == "call":
+            raw = Path(module).read_bytes()
+            blob = hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+            assert blob == config["module_blob"], "CONTROL_RETAINED_FUNCTION_SOURCE"
+            info = root.stat()
+            assert info.st_uid == os.getuid() and stat.S_IMODE(info.st_mode) == 0o700
+            assert not active, "CONTROL_RETAINED_FUNCTION_REENTRY"
+            active = True
+            entered = slot(
+                "trace-entered.json",
+                {
+                    "source": config["source"],
+                    "module_blob": blob,
+                    "binding": binding,
+                    "at": time.monotonic(),
+                    "pid": os.getpid(),
+                },
+            )
+            flush()
+        if event == "exception" and active:
+            # This sequence/first-event identity is process memory, independent
+            # of publication. No exists() or later collect can choose first.
+            sequence = len(records) + 1
+            if sequence > 32:
+                overflow = True
+                return observe
+            error = arg[1]
+            kind = re.sub(r"[^A-Za-z0-9_]", "_", type(error).__name__)[:80]
+            reason = str(error)
+            if not re.fullmatch(r"(?:CONTROL|EGRESS|FROZEN|SCHEMA)_[A-Z0-9_]{1,100}", reason):
+                reason = (
+                    "CONTROL_COMMAND_TIMEOUT"
+                    if kind == "TimeoutExpired"
+                    else "CONTROL_" + kind.upper()[:80]
+                )
+            operation = {}
+            try:
+                if (root / "retained-operation.json").exists():
+                    operation = json.loads((root / "retained-operation.json").read_text())
+                    assert (
+                        operation["source"] == binding["source"]
+                        and operation["token"] == binding["token"]
+                    )
+            except (OSError, ValueError, KeyError, TypeError, AssertionError):
+                # A damaged operation journal does not replace the original
+                # exception; its unproved stage must fail the closing gate.
+                operation = {"stage": "retained_operation_unreadable"}
+                diagnostic("retained-operation.json", "read")
+                overflow = True
+            stage = operation.get("stage", "retained_function")
+            # In this pinned function, reports is assigned only in finally,
+            # before mkdir/write_text and before the wrapped down command.
+            # Attribute a report failure to that phase, not its last CLI call.
+            if "reports" in frame.f_locals and stage != "retained_down":
+                stage = "retained_report"
+            detail = {
+                "type": kind,
+                "reason": reason,
+                "stage": stage,
+                "source": config["source"],
+                "at": time.monotonic(),
+            }
+            if (
+                operation.get("result", {}).get("reason") == "CONTROL_COMMAND_EXIT"
+                and kind == "EgressError"
+            ):
+                detail.update(operation["result"], observed_type=kind)
+            records.append(
+                slot(
+                    "trace-primary.json"
+                    if sequence == 1
+                    else f"trace-secondary-{sequence:04d}.json",
+                    {"binding": binding, "sequence": sequence, "detail": detail},
+                )
+            )
+            flush()
+        if event == "return" and active:
+            finish()
+        return observe
+
+    observe.finish = finish
+    return observe
+
+
+def write_retained_launcher(directory):
+    """One launcher for actual frozen shells and the separate-process unit seam."""
+    import inspect
+
+    launcher = (
+        "#!"
+        + sys.executable
+        + "\nimport json,sys,os\n"
+        + inspect.getsource(retained_exception_observer)
+        + "\nfrom pathlib import Path\n"
+        + "config=json.loads(Path("
+        + repr(str(directory / "retained.json"))
+        + ").read_text())\n"
+        + "assert sys.argv[1:3]==['-','--schema-upgrade'], 'CONTROL_RETAINED_LAUNCHER'\n"
+        + "sys.argv=sys.argv[1:]\nsys.path[0]=os.getcwd()\n"
+        + "observer=retained_exception_observer(config)\nsys.settrace(observer)\n"
+        + "try: exec(compile(sys.stdin.buffer.read(),'<stdin>','exec'),{'__name__':'__main__'})\n"
+        + "finally:\n sys.settrace(None)\n"
+        # Independent process outcome closes the last-fsync ACK gap: a visible
+        # health file alone never proves its final directory fsync succeeded.
+        + " if not observer.finish(): raise SystemExit(78) from None\n"
+    )
+    path = directory / "python3"
+    path.write_text(launcher)
+    path.chmod(0o700)
+    return path
+
+
+def enable_retained_checkpoint(owner, checkout, deadline, fault=None):
+    """Private C launcher and bind backing; frozen shell/function/images unchanged."""
+    assert owner.admitted and owner.source == CONTROL_T, "CONTROL_RETAINED_OWNER"
+    assert fault in (None, "timeout", "export"), "CONTROL_RETAINED_FAULT"
+    checkout = Path(checkout)
+    for name, blob in (
+        ("tests/test_telegram_egress_migration.py", RETAINED_MODULE_BLOB),
+        ("scripts/prepare_telegram_egress.py", RETAINED_HELPER_BLOB),
+    ):
+        raw = (checkout / name).read_bytes()
+        assert hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest() == blob, (
+            "CONTROL_RETAINED_SOURCE"
+        )
+    config = {
+        "token": owner.token,
+        "source": CONTROL_T,
+        "phase": owner.phase,
+        "owner_directory": str(owner.directory),
+        "module": str(checkout / "tests/test_telegram_egress_migration.py"),
+        "module_blob": RETAINED_MODULE_BLOB,
+        "helper_blob": RETAINED_HELPER_BLOB,
+        "deadline": deadline,
+        "fault": fault,
+    }
+    e.write_private(owner.directory / "retained.json", e.encoded(config))
+    write_retained_launcher(owner.directory)
+
+
+class RetainedCheckpoint:
+    """An owned, durable bind source outside frozen TemporaryDirectory teardown."""
+
+    def __init__(self, directory):
+        self.directory = e.checked_path(directory, directory=True)
+        self.config = e.strict_json(e.private_bytes(self.directory / "retained.json"))
+        self.owner = e.strict_json(e.private_bytes(self.directory / "ownership.json"))
+        assert (
+            self.config["token"] == self.owner["token"]
+            and self.config["source"] == self.owner["source"] == CONTROL_T
+            and self.config["phase"] == self.owner["phase"]
+            and self.config["owner_directory"] == str(self.directory)
+        ), "CONTROL_RETAINED_BINDING"
+        self.root = self.directory / "checkpoint"
+        self.state = self.root / "state"
+
+    @staticmethod
+    def identity(path):
+        path = e.checked_path(path, directory=True)
+        info = path.stat()
+        return {
+            "device": info.st_dev,
+            "inode": info.st_ino,
+            "uid": info.st_uid,
+            "mode": stat.S_IMODE(info.st_mode),
+            "path_sha256": e.sha(str(path).encode()),
+        }
+
+    def bound(self):
+        assert time.monotonic() < self.config["deadline"], "CONTROL_RETAINED_PREPARE_DEADLINE"
+        budget = self.directory / "cleanup-budget.json"
+        if budget.exists():
+            assert time.monotonic() < e.strict_json(e.private_bytes(budget))["deadline"], (
+                "CONTROL_CLEANUP_DEADLINE"
+            )
+
+    def event(self, name, **details):
+        self.bound()
+        events = self.directory / "retained-events"
+        events.mkdir(mode=0o700, exist_ok=True)
+        value = {
+            "event": name,
+            "at": time.monotonic(),
+            "source": CONTROL_T,
+            "token": self.owner["token"],
+            **details,
+        }
+        e.write_private(events / (uuid4().hex + ".json"), e.encoded(value))
+        return value
+
+    def files(self):
+        self.bound()
+        result = {}
+        if not self.state.exists():
+            return result
+        assert len(list(self.state.iterdir())) <= 16, "CONTROL_RETAINED_STATE_LIMIT"
+        for path in sorted(self.state.iterdir()):
+            assert re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", path.name), "CONTROL_RETAINED_FILE_NAME"
+            before = path.stat()
+            raw = e.private_bytes(path)
+            after = path.stat()
+            assert (before.st_ino, before.st_size, before.st_mtime_ns) == (
+                after.st_ino,
+                after.st_size,
+                after.st_mtime_ns,
+            ), "CONTROL_RETAINED_FILE_CHANGED"
+            result[path.name] = {
+                "bytes": len(raw),
+                "sha256": e.sha(raw),
+                "mode": stat.S_IMODE(after.st_mode),
+            }
+        return result
+
+    def bind(self, args):
+        mounts = [
+            i + 1
+            for i, arg in enumerate(args[:-1])
+            if arg == "--mount" and "target=/state" in args[i + 1].split(",")
+        ]
+        if not mounts:
+            return args, None
+        assert len(mounts) == 1 and "--env-file" in args and "--network" in args, (
+            "CONTROL_RETAINED_MOUNT"
+        )
+        assert args[args.index("--network") + 1] == self.owner["project"] + "_default", (
+            "CONTROL_RETAINED_NETWORK"
+        )
+        index = mounts[0]
+        pairs = args[index].split(",")
+        mount = dict(part.split("=", 1) for part in pairs)
+        assert (
+            len(pairs) == len(mount) == 3
+            and mount["type"] == "bind"
+            and mount["target"] == "/state"
+        ), "CONTROL_RETAINED_MOUNT"
+        original = e.checked_path(mount["source"], directory=True)
+        envfile = e.checked_path(args[args.index("--env-file") + 1])
+        assert original.name == "state" and envfile == original.parent / "controller.env", (
+            "CONTROL_RETAINED_STATE_RELATION"
+        )
+        e.checked_path(original.parent, directory=True)
+        binding_path = self.directory / "retained-binding.json"
+        if not binding_path.exists():
+            self.root.mkdir(mode=0o700)
+            self.state.mkdir(mode=0o700)
+            assert not list(original.iterdir()), "CONTROL_RETAINED_INITIAL_STATE"
+            for name in ("controller.env", ".env"):
+                e.write_private(self.root / name, e.private_bytes(original.parent / name))
+            binding = {
+                "token": self.owner["token"],
+                "source": CONTROL_T,
+                "original": str(original),
+                "original_identity": self.identity(original),
+                "state_identity": self.identity(self.state),
+                "controller_env_sha256": e.sha(e.private_bytes(envfile)),
+            }
+            e.write_private(binding_path, e.encoded(binding))
+            self.event(
+                "BOUND_BEFORE_CREATE",
+                original_identity=binding["original_identity"],
+                state_identity=binding["state_identity"],
+            )
+        binding = e.strict_json(e.private_bytes(binding_path))
+        assert binding["original_identity"] == self.identity(original) and binding[
+            "state_identity"
+        ] == self.identity(self.state), "CONTROL_RETAINED_STATE_IDENTITY"
+        assert binding["controller_env_sha256"] == e.sha(e.private_bytes(envfile)), (
+            "CONTROL_RETAINED_ENV_CHANGED"
+        )
+        args = list(args)
+        args[index] = f"type=bind,source={self.state},target=/state"
+        stage = (
+            "controller_" + args[args.index("--schema-phase") + 1]
+            if "--schema-phase" in args
+            else "migrate"
+            if "alembic" in args
+            else "probe"
+        )
+        assert re.fullmatch(r"(?:controller_[a-z0-9-]{1,40}|migrate|probe)", stage), (
+            "CONTROL_RETAINED_STAGE"
+        )
+        operation = {
+            "source": CONTROL_T,
+            "token": self.owner["token"],
+            "stage": stage,
+            "at": time.monotonic(),
+        }
+        e.write_private(self.directory / "retained-operation.json", e.encoded(operation))
+        return args, binding["state_identity"]
+
+    def mirror(self):
+        binding = e.strict_json(e.private_bytes(self.directory / "retained-binding.json"))
+        original = Path(binding["original"])
+        assert self.identity(original) == binding["original_identity"], (
+            "CONTROL_RETAINED_MIRROR_IDENTITY"
+        )
+        for name, proof in self.files().items():
+            raw = e.private_bytes(self.state / name)
+            assert e.sha(raw) == proof["sha256"], "CONTROL_RETAINED_FILE_CHANGED"
+            e.write_private(original / name, raw)
+            assert e.sha(e.private_bytes(original / name)) == proof["sha256"], (
+                "CONTROL_RETAINED_MIRROR_CHANGED"
+            )
+
+    def capture(self):
+        if not (self.directory / "retained-binding.json").exists():
+            return None
+        self.bound()
+        files = self.files()
+        snapshot = self.root / ("snapshot-" + uuid4().hex)
+        snapshot.mkdir(mode=0o700)
+        for name, proof in files.items():
+            raw = e.private_bytes(self.state / name)
+            assert e.sha(raw) == proof["sha256"], "CONTROL_RETAINED_FILE_CHANGED"
+            e.write_private(snapshot / name, raw)
+            assert e.sha(e.private_bytes(snapshot / name)) == proof["sha256"], (
+                "CONTROL_RETAINED_CAPTURE_CHANGED"
+            )
+        assert self.files() == files, "CONTROL_RETAINED_CAPTURE_CHANGED"
+        # write_private fsyncs each snapshot file and its immediate directory.
+        # Persist the snapshot directory entry too, before publishing its name.
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+        capture = {
+            "state": "CAPTURED",
+            "source": CONTROL_T,
+            "token": self.owner["token"],
+            "snapshot": snapshot.name,
+            "state_identity": self.identity(self.state),
+            "files": files,
+            "at": time.monotonic(),
+        }
+        e.write_private(self.directory / "retained-capture.json", e.encoded(capture))
+        self.event("CHECKPOINT_CAPTURED", files=files, snapshot=snapshot.name)
+        if (
+            self.config["fault"] == "export"
+            and not (self.directory / "export-fault-used.json").exists()
+        ):
+            e.write_private(
+                self.directory / "export-fault-used.json", e.encoded({"at": time.monotonic()})
+            )
+            raise e.EgressError("CONTROL_RETAINED_EXPORT_FAILED")
+        e.write_private(self.directory / "retained-export.json", e.encoded(capture))
+        self.event("SAFE_EXPORT_SAVED", snapshot=snapshot.name)
+        return capture
+
+    def daemon(self, args, timeout=40):
+        self.bound()
+        limit = self.config["deadline"]
+        budget = self.directory / "cleanup-budget.json"
+        if budget.exists():
+            limit = min(limit, e.strict_json(e.private_bytes(budget))["deadline"])
+        return e.command(
+            [self.owner["docker"], *args], timeout=min(timeout, limit - time.monotonic())
+        )
+
+    def connections(self, db, timeout=5):
+        return int(
+            self.daemon(
+                [
+                    "exec",
+                    db,
+                    "psql",
+                    "-U",
+                    "asm_admin",
+                    "-d",
+                    "asm_local",
+                    "-Atqc",
+                    "SELECT count(*) FROM pg_stat_activity WHERE application_name='retained_"
+                    + self.owner["token"]
+                    + "'",
+                ],
+                timeout,
+            )
+        )
+
+    def foreign(self, image):
+        ids = {}
+        path = self.directory / "foreign.json"
+        # Save each exact identity before the next create; partial setup also
+        # remains recoverable without daemon-wide adoption or prune.
+        for kind in ("volume", "network", "container"):
+            if kind == "container":
+                args = [
+                    "create",
+                    "--network",
+                    ids["network"],
+                    "--mount",
+                    "type=volume,source=" + ids["volume"] + ",target=/sentinel",
+                    "--label",
+                    "io.asm.foreign-sentinel=" + self.owner["token"],
+                    image,
+                    "python",
+                    "-c",
+                    "pass",
+                ]
+            else:
+                args = [kind, "create", "asm-foreign-" + self.owner["token"]]
+            ids[kind] = self.daemon(args).decode().strip()
+            e.write_private(path, e.encoded(ids))
+        proof = self.foreign_proof()
+        e.write_private(self.directory / "foreign-before.json", e.encoded(proof))
+
+    def foreign_proof(self):
+        ids = e.strict_json(e.private_bytes(self.directory / "foreign.json"))
+        return {
+            kind: e.sha(self.daemon([*command, ids[kind]]))
+            for kind, command in {
+                "container": ["inspect"],
+                "volume": ["volume", "inspect"],
+                "network": ["network", "inspect"],
+            }.items()
+        }
+
+    def remove_foreign_fixture(self):
+        ids = e.strict_json(e.private_bytes(self.directory / "foreign.json"))
+        assert self.foreign_proof() == e.strict_json(
+            e.private_bytes(self.directory / "foreign-before.json")
+        ), "CONTROL_FOREIGN_CHANGED"
+        for kind, command in (
+            ("container", ["rm", "-v"]),
+            ("volume", ["volume", "rm"]),
+            ("network", ["network", "rm"]),
+        ):
+            self.daemon([*command, ids[kind]])
+
+    def observe_live(self):
+        """Before killing the controller, prove its real bind/image/PG identity."""
+        ids = (
+            self.daemon(
+                [
+                    "ps",
+                    "-aq",
+                    "--no-trunc",
+                    "--filter",
+                    "label=" + SCHEMA_OWNER_LABEL + "=" + self.owner["token"],
+                ]
+            )
+            .decode()
+            .split()
+        )
+        infos = json.loads(self.daemon(["inspect", *ids]))
+        db = [
+            i
+            for i in infos
+            if (i["Config"].get("Labels") or {}).get("com.docker.compose.service") == "postgres"
+        ]
+        controllers = [
+            i
+            for i in infos
+            if i["State"]["Running"]
+            and any(
+                m["Type"] == "bind"
+                and m["Destination"] == "/state"
+                and m["Source"] == str(self.state)
+                for m in i.get("Mounts", [])
+            )
+        ]
+        assert len(db) == len(controllers) == 1, "CONTROL_RETAINED_DAEMON_REQUIRED"
+        info = controllers[0]
+        intent = e.strict_json(
+            e.private_bytes(self.directory / ("run-" + info["Name"].lstrip("/") + ".json"))
+        )
+        cid = (self.directory / ("run-" + intent["name"] + ".cid")).read_text().strip()
+        assert cid == info["Id"] and intent["retained_bind"] == self.identity(self.state), (
+            "CONTROL_RETAINED_DAEMON_IDENTITY"
+        )
+        count = self.connections(db[0]["Id"])
+        assert count == 1, "CONTROL_RETAINED_CONNECTION_REQUIRED"
+        marker = e.strict_json(e.private_bytes(self.state / "connected.json"))
+        proof = {
+            "controller_cid": cid,
+            "database_cid": db[0]["Id"],
+            "image": info["Image"],
+            "phase": self.owner["phase"],
+            "source": CONTROL_T,
+            "helper_blob": RETAINED_HELPER_BLOB,
+            "module_blob": RETAINED_MODULE_BLOB,
+            "state_identity": self.identity(self.state),
+            "backend_pid": marker["backend_pid"],
+            "connections_before_cleanup": count,
+            "controller_running": True,
+            "at": time.monotonic(),
+        }
+        e.write_private(self.directory / "retained-live.json", e.encoded(proof))
+        self.event("LIVE_CONTROLLER_PROVED", **proof)
+        return proof
+
+    def disconnected(self, deadline):
+        proof = e.strict_json(e.private_bytes(self.directory / "retained-live.json"))
+        previous = self.directory / "down-cleanup.json"
+        if previous.exists():
+            down = e.strict_json(e.private_bytes(previous))
+            if (
+                down.get("connections_after_controller_stop") == 0
+                and down.get("owned_remaining") == []
+            ):
+                assert (
+                    proof["database_cid"]
+                    not in self.daemon(["ps", "-aq", "--no-trunc"]).decode().split()
+                ), "CONTROL_DATABASE_REAPPEARED"
+                return 0
+        end = min(deadline, time.monotonic() + 3)
+        while True:
+            assert time.monotonic() < end, "CONTROL_CONNECTION_REMAINS"
+            count = self.connections(proof["database_cid"], min(5, end - time.monotonic()))
+            if count == 0:
+                self.event(
+                    "PG_ZERO_BEFORE_DB_STOP", database_cid=proof["database_cid"], connections=0
+                )
+                return 0
+            time.sleep(0.02)
+
+    def host_children(self):
+        results = []
+        for path in self.directory.glob("host-child-*.json"):
+            detail = e.strict_json(e.private_bytes(path))
+            try:
+                fields = Path(f"/proc/{detail['pid']}/stat").read_text().rpartition(")")[2].split()
+                live = fields[0] != "Z" and int(fields[19]) == detail["start_ticks"]
+            except FileNotFoundError:
+                live = False
+            assert not live, "CONTROL_HOST_CLI_REMAINS"
+            results.append({**detail, "live": live})
+        assert results, "CONTROL_HOST_CHILD_PROOF_REQUIRED"
+        return results
+
+    def seed_fault(self, args):
+        assert args[-5:] == [
+            "python",
+            "tests/test_m3_1_migrations.py",
+            "--schema-phase",
+            "seed",
+            "/state/receipt.json",
+        ], "CONTROL_RETAINED_SEED_COMMAND"
+        # Execute the exact T controller first. Only after its real seed/receipt
+        # completes does this disposable test process hold a PostgreSQL session.
+        code = (
+            "import os,sys,runpy,signal,time,json,hashlib,psycopg\nfrom pathlib import Path\n"
+            "p=Path('tests/test_m3_1_migrations.py');raw=p.read_bytes()\n"
+            "assert hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\\0'+raw).hexdigest()=='21592a4dc2ad737f4d7a1f201125ebe1f18bcbe5'\n"
+            "sys.argv=[str(p),'--schema-phase','seed','/state/receipt.json']\n"
+            "sys.path[0]=str(p.parent.resolve())\n"
+            "try: runpy.run_path(str(p),run_name='__main__')\n"
+            "except SystemExit as done: assert done.code in (None,0)\n"
+            "receipt=Path('/state/receipt.json');assert receipt.is_file()\n"
+            "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+            "c=psycopg.connect(os.environ['ASM_MIGRATION_DATABASE_URL'].replace('postgresql+psycopg://','postgresql://',1),connect_timeout=3,application_name='retained_"
+            + self.owner["token"]
+            + "')\n"
+            "pid=c.execute('select pg_backend_pid()').fetchone()[0]\n"
+            "p=Path('/state/connected.json');p.write_text(json.dumps({'backend_pid':pid}));p.chmod(0o600)\n"
+            "while True: time.sleep(1)\n"
+        )
+        return [*args[:-5], "python", "-c", code]
+
+    def run_bound(self, args):
+        fault = (
+            self.config["fault"]
+            and "--schema-phase" in args
+            and args[args.index("--schema-phase") + 1] == "seed"
+        )
+        if fault:
+            self.foreign(args[-6])
+            args = self.seed_fault(args)
+
+        def die_with_wrapper():
+            # subprocess.run(timeout) in unchanged T kills this wrapper. A
+            # direct Docker CLI must not keep its stdout pipe/host PID alive.
+            import ctypes
+
+            parent = os.getppid()
+            assert ctypes.CDLL(None).prctl(1, signal.SIGKILL, 0, 0, 0) == 0
+            if os.getppid() != parent:
+                os.kill(os.getpid(), signal.SIGKILL)
+
+        child = subprocess.Popen(
+            [self.owner["docker"], *args], stdin=subprocess.DEVNULL, preexec_fn=die_with_wrapper
+        )
+        fields = Path(f"/proc/{child.pid}/stat").read_text().rpartition(")")[2].split()
+        e.write_private(
+            self.directory / ("host-child-" + uuid4().hex + ".json"),
+            e.encoded({"pid": child.pid, "start_ticks": int(fields[19])}),
+        )
+        try:
+            if fault and self.config["fault"] == "export":
+                end = min(self.config["deadline"], time.monotonic() + 120)
+                while not (self.state / "connected.json").exists():
+                    assert child.poll() is None, "CONTROL_RETAINED_SEED_FAILED"
+                    assert time.monotonic() < end, "CONTROL_RETAINED_SEED_DEADLINE"
+                    time.sleep(0.02)
+                self.observe_live()
+                child.kill()
+                child.wait(timeout=5)
+                result = 7  # Exact controlled host failure, not the controller exit.
+            else:
+                result = child.wait(timeout=max(0.001, self.config["deadline"] - time.monotonic()))
+        finally:
+            if child.poll() is None:
+                child.kill()
+                child.wait(timeout=5)
+        operation = e.strict_json(e.private_bytes(self.directory / "retained-operation.json"))
+        operation["result"] = (
+            {"type": "CalledProcessError", "reason": "CONTROL_COMMAND_EXIT", "exit_code": result}
+            if result
+            else {"reason": "PASS"}
+        )
+        e.write_private(self.directory / "retained-operation.json", e.encoded(operation))
+        if result == 0:
+            self.mirror()
+        return result
+
+    def collect_journal(self, report):
+        """Prove sequence1 across IPC or STOP; later events cannot repair it."""
+        binding = {
+            key: self.config[key]
+            for key in ("source", "phase", "token", "module_blob", "helper_blob")
+        }
+        binding["version"] = 1
+        diagnostics = []
+        details = []
+        health = {}
+        journal_errors = []
+        primary = None
+        stop = self.directory / "trace-collection-stop.json"
+
+        def secondary(detail):
+            if detail not in report.setdefault("secondary_failures", []):
+                report["secondary_failures"].append(detail)
+
+        def problem(error):
+            diagnostics.append({"stage": "retained_journal", **schema_failure(error)})
+
+        try:
+            if (
+                report.get("retained_journal", {}).get("state") == "STOP"
+                or stop.exists()
+                or stop.is_symlink()
+            ):
+                problem(e.EgressError("CONTROL_RETAINED_JOURNAL_STOP_LATCHED"))
+            health = e.strict_json(e.private_bytes(self.directory / "trace-health.json"))
+            assert set(health) == {
+                "binding",
+                "completed",
+                "entered_sha256",
+                "event_hashes",
+                "published",
+                "attempts",
+                "errors",
+                "overflow",
+                "state",
+            }
+            assert health["binding"] == binding, "CONTROL_RETAINED_JOURNAL_BINDING"
+            assert health["completed"] is True and health["overflow"] is False, (
+                "CONTROL_RETAINED_JOURNAL_INCOMPLETE"
+            )
+            hashes = health["event_hashes"]
+            assert isinstance(hashes, list) and len(hashes) <= 32
+            assert all(isinstance(h, str) and re.fullmatch("[0-9a-f]{64}", h) for h in hashes)
+            assert len(health["published"]) == len(hashes) and all(
+                type(value) is bool for value in health["published"]
+            )
+            assert len(health["attempts"]) == len(hashes) and all(
+                type(n) is int and 1 <= n <= 3 for n in health["attempts"]
+            )
+            assert health["state"] in {"CONFIRMED", "NO_FAILURE", "UNCONFIRMED"}
+            assert isinstance(health["errors"], list) and len(health["errors"]) <= 16
+            for item in health["errors"]:
+                assert set(item) == {"file", "step", "reason"}
+                assert re.fullmatch(
+                    r"trace-(?:entered|primary|health|secondary-[0-9]{4})\.json|retained-operation\.json",
+                    item["file"],
+                )
+                assert item["step"] in {
+                    "deadline",
+                    "write",
+                    "fsync_file",
+                    "publish",
+                    "fsync_directory",
+                    "unlink",
+                    "read",
+                }
+                assert item["reason"] == "CONTROL_RETAINED_JOURNAL_IO"
+            journal_errors = health["errors"]
+            entered_raw = e.private_bytes(self.directory / "trace-entered.json")
+            assert e.sha(entered_raw) == health["entered_sha256"]
+            entered = e.strict_json(entered_raw)
+            assert entered["binding"] == binding and entered["source"] == CONTROL_T
+            assert entered["module_blob"] == self.config["module_blob"]
+            assert type(entered["pid"]) is int and entered["pid"] > 0
+            last = entered["at"]
+            assert type(last) in (float, int) and 0 < last < self.config["deadline"]
+            for number, digest in enumerate(hashes, 1):
+                name = "trace-primary.json" if number == 1 else f"trace-secondary-{number:04d}.json"
+                try:
+                    raw = e.private_bytes(self.directory / name)
+                    assert e.sha(raw) == digest, "CONTROL_RETAINED_JOURNAL_HASH"
+                    record = e.strict_json(raw)
+                    assert set(record) == {"binding", "sequence", "detail"}
+                    assert record["binding"] == binding and type(record["sequence"]) is int
+                    assert record["sequence"] == number, "CONTROL_RETAINED_JOURNAL_ORDER"
+                    detail = record["detail"]
+                    assert {"type", "reason", "stage", "source", "at"} <= set(detail)
+                    assert set(detail) <= {
+                        "type",
+                        "reason",
+                        "stage",
+                        "source",
+                        "at",
+                        "exit_code",
+                        "observed_type",
+                    }
+                    assert detail["source"] == CONTROL_T
+                    assert re.fullmatch(r"[A-Za-z0-9_]{1,80}", detail["type"])
+                    assert re.fullmatch(
+                        r"(?:CONTROL|EGRESS|FROZEN|SCHEMA)_[A-Z0-9_]{1,100}", detail["reason"]
+                    )
+                    assert re.fullmatch(r"[a-z0-9_]{1,80}", detail["stage"])
+                    assert (
+                        type(detail["at"]) in (float, int)
+                        and last <= detail["at"] < self.config["deadline"]
+                    )
+                    assert "exit_code" not in detail or type(detail["exit_code"]) is int
+                    assert "observed_type" not in detail or detail["observed_type"] == "EgressError"
+                    last = detail["at"]
+                    if number == 1:
+                        primary = detail
+                    else:
+                        details.append(detail)
+                except Exception as error:
+                    problem(error)
+            assert all(health["published"]) and health["state"] == (
+                "CONFIRMED" if hashes else "NO_FAILURE"
+            ), "CONTROL_RETAINED_JOURNAL_UNPUBLISHED"
+            # The real launcher reserves78 for failed durability/publication,
+            # including an apparently complete health file visible after failed
+            # final fsync. Missing/killed/other shell exits cannot acknowledge it.
+            exit_code = report.get("retained_shell_exit", report.get("shell_exit"))
+            assert type(exit_code) is int and exit_code in (0, 1), (
+                "CONTROL_RETAINED_JOURNAL_CHILD_UNCONFIRMED"
+            )
+            assert hashes or exit_code == 0, "CONTROL_RETAINED_JOURNAL_FAILURE_MISSING"
+        except Exception as error:
+            problem(error)
+        for detail in details:
+            secondary(detail)
+        if diagnostics:
+            # Persist STOP for a fresh collector/re-entry too. Failure to write
+            # the latch remains an explicit diagnostic, never authorizes PASS.
+            report["private_state_retained"] = True
+            report["result"] = "STOP"
+            unconfirmed = {
+                "type": "UNCONFIRMED",
+                "reason": "CONTROL_RETAINED_JOURNAL_UNCONFIRMED",
+                "stage": "retained_journal",
+                "source": CONTROL_T,
+            }
+            if "primary_failure" in report and report["primary_failure"] != unconfirmed:
+                secondary(report["primary_failure"])
+            report["primary_failure"] = unconfirmed
+            report["failure"] = "UNCONFIRMED"
+            report["retained_journal"] = {
+                "state": "STOP",
+                "primary": "UNCONFIRMED",
+                "binding": binding,
+                "diagnostics": journal_errors,
+            }
+            try:
+                if not stop.exists():
+                    e.write_private(stop, e.encoded({"binding": binding, "state": "STOP"}))
+            except Exception as error:
+                problem(error)
+            for detail in diagnostics:
+                secondary(detail)
+            raise e.EgressError("CONTROL_RETAINED_JOURNAL_UNCONFIRMED")
+        report["retained_journal"] = {
+            "state": "RECOVERED" if health["errors"] else "HEALTHY",
+            "primary": "CONFIRMED" if primary else "NONE",
+            "binding": binding,
+            "event_hashes": health["event_hashes"],
+            "attempts": health["attempts"],
+            "diagnostics": health["errors"],
+            "observer_pid": entered["pid"],
+        }
+        if primary is not None:
+            if report.get("primary_failure") != primary and "primary_failure" in report:
+                secondary(report["primary_failure"])
+            report["primary_failure"] = primary
+            report["failure"] = primary["type"]
+            report["private_state_retained"] = True
+
+    def collect(self, report):
+        # Retention evidence is independent of journal health: even STOP must
+        # leave checkpoint/cleanup proof visible to the coordinator.
+        evidence = {
+            "source": CONTROL_T,
+            "phase": self.owner["phase"],
+            "token": self.owner["token"],
+            "state": "NOT_BOUND",
+            "events": [],
+        }
+        binding = self.directory / "retained-binding.json"
+        if binding.exists():
+            value = e.strict_json(e.private_bytes(binding))
+            evidence.update(
+                state="PRIVATE_STATE_RETAINED",
+                original_identity=value["original_identity"],
+                state_identity=self.identity(self.state),
+                files=self.files(),
+                original_exists=Path(value["original"]).exists(),
+            )
+            for key in ("capture", "export"):
+                path = self.directory / ("retained-" + key + ".json")
+                if path.exists():
+                    evidence[key] = e.strict_json(e.private_bytes(path))
+            evidence["events"] = sorted(
+                (
+                    e.strict_json(e.private_bytes(p))
+                    for p in (self.directory / "retained-events").glob("*.json")
+                ),
+                key=lambda row: row["at"],
+            )
+        report["retained_checkpoint"] = evidence
+        for key in ("live",):
+            path = self.directory / ("retained-" + key + ".json")
+            if path.exists():
+                evidence[key] = e.strict_json(e.private_bytes(path))
+        for event in evidence["events"]:
+            if event.get("diagnostic"):
+                detail = {"stage": "retained_down", **event["diagnostic"]}
+                if detail not in report.setdefault("secondary_failures", []):
+                    report["secondary_failures"].append(detail)
+        self.collect_journal(report)
+
+
+def schema_failure(error):
+    """Reports never retain exception text containing argv, paths or credentials."""
+    reason = str(error)
+    if not re.fullmatch(r"(?:CONTROL|EGRESS|FROZEN|SCHEMA)_[A-Z0-9_]{1,100}", reason):
+        reason = (
+            "CONTROL_COMMAND_TIMEOUT"
+            if isinstance(error, subprocess.TimeoutExpired)
+            else "CONTROL_COMMAND_EXIT"
+            if isinstance(error, subprocess.CalledProcessError)
+            else "CONTROL_CANCELLED"
+            if isinstance(error, (KeyboardInterrupt, SystemExit))
+            else "CONTROL_" + type(error).__name__.upper()
+        )
+    result = {"type": type(error).__name__, "reason": reason}
+    if isinstance(error, subprocess.CalledProcessError):
+        result["exit_code"] = error.returncode
+    return result
+
+
+def schema_envelope(request, phase):
+    def source(key):
+        value = request.get(key)
+        return (
+            value if isinstance(value, str) and re.fullmatch("[0-9a-f]{40}", value) else "INVALID"
+        )
+
+    return {
+        "phase": phase,
+        "stage": "admission",
+        "requested_source": source("candidate"),
+        "requested_historical": source("historical"),
+        "observed_source": "NOT_OBSERVED",
+        "started_at": time.monotonic(),
+        "budget_state": "NOT_VALIDATED",
+        "cleanup": {"state": "NOT_ADMITTED"},
+    }
+
+
+def schema_record_failure(report, error):
+    report.setdefault("failure", type(error).__name__)
+    report.setdefault("primary_failure", {**schema_failure(error), "stage": report["stage"]})
+
+
+def schema_publish(report, path, primary=None):
+    report["elapsed_seconds"] = time.monotonic() - report["started_at"]
+    budget = report.get("prepare_budget")
+    if budget:
+        # Preserve validated bindings even if source/archive/build/probe never succeeds.
+        report["budget_at_report"] = {
+            "deadline": budget["deadline"],
+            "charged_seconds": time.monotonic() - budget["started_at"],
+            "remaining_seconds": budget["deadline"] - time.monotonic(),
+        }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2) + "\n")
+    except BaseException as error:
+        report.setdefault("secondary_failures", []).append(
+            {"stage": "report", **schema_failure(error)}
+        )
+        if primary is None:
+            raise
+        primary.add_note("CONTROL_REPORT_WRITE_FAILED")
+        print("CONTROL_REPORT_WRITE_FAILED", flush=True)
+
+
+class SchemaOwnership:
+    """Private per-phase Docker CLI wrapper, never a daemon-wide adoption rule.
+
+    A nonce is placed on every run/create and Compose resource. Before the CLI
+    can contact Docker, run/create has a durable name/CID-file intent. Thus a
+    killed CLI need not return a CID for the phase to find its own container.
+    Frozen T executes unchanged bytes through this scoped executable.
+    """
+
+    def __init__(self, directory, project, phase, source):
+        self.directory = Path(directory)
+        self.project, self.phase, self.source = project, phase, source
+        self.token = uuid4().hex
+        self.docker = shutil.which("docker")
+        self.admitted = False
+
+    def admit(self):
+        assert self.docker and Path(self.docker).is_absolute(), "CONTROL_DOCKER_REQUIRED"
+        assert not e.command([self.docker, "ps", "-aq"]).strip(), "CONTROL_INITIAL_CONTAINERS"
+        assert not e.command([self.docker, "volume", "ls", "-q"]).strip(), "CONTROL_INITIAL_VOLUMES"
+        self.directory.mkdir(mode=0o700)
+        self.admitted = True
+        value = {
+            "project": self.project,
+            "phase": self.phase,
+            "source": self.source,
+            "token": self.token,
+            "docker": self.docker,
+            "uid": os.getuid(),
+        }
+        e.write_private(self.directory / "ownership.json", e.encoded(value))
+        wrapper = (
+            "#!"
+            + sys.executable
+            + "\nimport runpy,sys\n"
+            + "sys.path.insert(0,"
+            + repr(str(e.ROOT))
+            + ")\n"
+            + "runpy.run_path("
+            + repr(str(e.ROOT / "tests/test_telegram_egress_migration.py"))
+            + ",run_name='__schema_docker__',init_globals={'ownership_file':"
+            + repr(str(self.directory / "ownership.json"))
+            + ",'docker_args':sys.argv[1:]})\n"
+        )
+        path = self.directory / "docker"
+        path.write_text(wrapper)
+        path.chmod(0o700)
+
+    def environment(self):
+        assert self.admitted, "CONTROL_OWNERSHIP_NOT_ADMITTED"
+        return {**os.environ, "PATH": str(self.directory) + os.pathsep + os.environ["PATH"]}
+
+    @classmethod
+    def inherited(cls, project, source):
+        executable = shutil.which("docker")
+        assert executable, "CONTROL_OWNERSHIP_REQUIRED"
+        directory = Path(executable).parent
+        value = e.strict_json(e.private_bytes(directory / "ownership.json"))
+        assert value["project"] == project and value["source"] == source, (
+            "CONTROL_OWNERSHIP_BINDING"
+        )
+        assert value["uid"] == os.getuid(), "CONTROL_OWNERSHIP_UID"
+        owner = cls(directory, project, value["phase"], source)
+        owner.token, owner.docker, owner.admitted = value["token"], value["docker"], True
+        return owner
+
+    def cleanup_budget(self):
+        assert self.admitted, "CONTROL_CLEANUP_NOT_ADMITTED"
+        began = time.monotonic()
+        budget_path = self.directory / "cleanup-budget.json"
+        if budget_path.exists():
+            budget = e.strict_json(e.private_bytes(budget_path))
+            assert (
+                budget["token"] == self.token and budget["deadline"] == budget["started_at"] + 90
+            ), "CONTROL_CLEANUP_BUDGET"
+        else:
+            budget = {"token": self.token, "started_at": began, "deadline": began + 90}
+            e.write_private(budget_path, e.encoded(budget))
+        return budget
+
+    def cleanup(self, report, observe_disconnected=None):
+        began = time.monotonic()
+        budget = self.cleanup_budget()
+        deadline = budget["deadline"]
+        report.update(
+            state="RUNNING",
+            token=self.token,
+            project=self.project,
+            phase=self.phase,
+            source=self.source,
+            containers=[],
+            volumes=[],
+            networks=[],
+            intents=[],
+            deadline=deadline,
+            cleanup_started_at=budget["started_at"],
+        )
+        previous = self.directory / "down-cleanup.json"
+        if previous.exists():
+            report["before_frozen_teardown"] = e.strict_json(e.private_bytes(previous))
+
+        def run(args, timeout=40):
+            remaining = deadline - time.monotonic()
+            assert remaining > 0, "CONTROL_CLEANUP_DEADLINE"
+            return e.command([self.docker, *args], timeout=min(timeout, remaining))
+
+        def inventory(kind):
+            return (
+                run([*kind, "--filter", "label=" + SCHEMA_OWNER_LABEL + "=" + self.token])
+                .decode()
+                .split()
+            )
+
+        try:
+            intents = {}
+            for path in self.directory.glob("run-*.json"):
+                intent = e.strict_json(e.private_bytes(path))
+                assert intent["token"] == self.token, "CONTROL_INTENT_OWNER"
+                intents[intent["name"]] = intent
+                cidfile = path.with_suffix(".cid")
+                if cidfile.exists():
+                    cid = cidfile.read_text().strip()
+                    assert re.fullmatch("[0-9a-f]{64}", cid), "CONTROL_CID_FORMAT"
+                    intent["cid"] = cid
+                report["intents"].append(intent)
+            ids = inventory(["ps", "-aq", "--no-trunc"])
+            infos = json.loads(run(["inspect", *ids])) if ids else []
+            volumes = set(inventory(["volume", "ls", "-q"]))
+            networks = set(inventory(["network", "ls", "-q", "--no-trunc"]))
+            controllers, services = [], []
+            for info in infos:
+                labels = info["Config"].get("Labels") or {}
+                assert labels.get(SCHEMA_OWNER_LABEL) == self.token, "CONTROL_CONTAINER_OWNER"
+                name = info["Name"].lstrip("/")
+                if name in intents:
+                    intent = intents[name]
+                    assert intent.get("cid", info["Id"]) == info["Id"], "CONTROL_CID_CHANGED"
+                    if "retained_bind" in intent:
+                        checkpoint = RetainedCheckpoint(self.directory)
+                        assert checkpoint.identity(checkpoint.state) == intent["retained_bind"], (
+                            "CONTROL_RETAINED_BIND_IDENTITY"
+                        )
+                        assert any(
+                            m["Type"] == "bind"
+                            and m["Destination"] == "/state"
+                            and m["Source"] == str(checkpoint.state)
+                            for m in info.get("Mounts", [])
+                        ), "CONTROL_RETAINED_DAEMON_BIND"
+                    intent["cid"] = info["Id"]
+                    controllers.append(info["Id"])
+                else:
+                    assert labels.get("com.docker.compose.project") == self.project, (
+                        "CONTROL_COMPOSE_OWNER"
+                    )
+                    services.append(info["Id"])
+                report["containers"].append(
+                    {
+                        "id": info["Id"],
+                        "name": name,
+                        "running": info["State"]["Running"],
+                        "token": self.token,
+                    }
+                )
+                for mount in info.get("Mounts", []):
+                    if mount["Type"] == "volume":
+                        # Anonymous image VOLUMEs are owned by this exact CID,
+                        # never merely because the initial daemon was empty.
+                        meta = json.loads(run(["volume", "inspect", mount["Name"]]))[0]
+                        if (meta.get("Labels") or {}).get(SCHEMA_OWNER_LABEL) == self.token or (
+                            not meta.get("Labels")
+                            and meta.get("Driver") == "local"
+                            and not meta.get("Options")
+                            and re.fullmatch("[0-9a-f]{64}", mount["Name"])
+                            and mount["Destination"] in (info["Config"].get("Volumes") or {})
+                        ):
+                            volumes.add(mount["Name"])
+            report["volumes"], report["networks"] = sorted(volumes), sorted(networks)
+            unconfirmed = [intent["name"] for intent in intents.values() if "cid" not in intent]
+            report["unconfirmed_creations"] = unconfirmed
+
+            def remove(containers):
+                if not containers:
+                    return
+                # stop sends TERM, Docker kills a TERM-ignoring process after2s.
+                # If its CLI fails, exact-ID force removal still runs in this90s bound.
+                try:
+                    run(["stop", "--time", "2", *containers], timeout=15)
+                except Exception as error:
+                    report.setdefault("stop_diagnostics", []).append(schema_failure(error))
+                still_present = set(run(["ps", "-aq", "--no-trunc"]).decode().split())
+                retained = [ident for ident in containers if ident in still_present]
+                if retained:
+                    try:
+                        run(["rm", "-f", "-v", *retained], timeout=40)
+                    except e.EgressError as error:
+                        # Docker --rm can finish between list and remove. Read
+                        # canonical absence; never repeat the destructive call.
+                        current = set(run(["ps", "-aq", "--no-trunc"]).decode().split())
+                        if set(retained) & current:
+                            raise
+                        report.setdefault("remove_ack_readback", []).append(schema_failure(error))
+                assert not set(containers) & set(
+                    run(["ps", "-aq", "--no-trunc"]).decode().split()
+                ), "CONTROL_CONTAINER_NOT_REMOVED"
+
+            remove(controllers)
+            if observe_disconnected is not None:
+                report["connections_after_controller_stop"] = observe_disconnected(deadline)
+                assert report["connections_after_controller_stop"] == 0, (
+                    "CONTROL_CONNECTION_REMAINS"
+                )
+            remove(services)
+            # --rm may already have removed anonymous volumes; inspect current
+            # names but intersect only the identities proved above.
+            existing_volumes = set(run(["volume", "ls", "-q"]).decode().split())
+            for name in sorted(volumes & existing_volumes):
+                run(["volume", "rm", name])
+            existing_networks = set(run(["network", "ls", "-q", "--no-trunc"]).decode().split())
+            for ident in sorted(networks & existing_networks):
+                run(["network", "rm", ident])
+            assert not inventory(["ps", "-aq", "--no-trunc"]), "CONTROL_OWNED_CONTAINER_REMAINS"
+            assert not inventory(["volume", "ls", "-q"]), "CONTROL_OWNED_VOLUME_REMAINS"
+            assert not inventory(["network", "ls", "-q", "--no-trunc"]), (
+                "CONTROL_OWNED_NETWORK_REMAINS"
+            )
+            remaining_containers = run(["ps", "-aq", "--no-trunc"]).decode().split()
+            remaining_volumes = run(["volume", "ls", "-q"]).decode().split()
+            report.update(
+                owned_remaining=[],
+                foreign_containers=remaining_containers,
+                foreign_volumes=remaining_volumes,
+                state="OWNED_REMOVED",
+            )
+            # A CLI lost before both CID-file and label observation is not proof
+            # of non-creation. Keep the private intents, report STOP, never PASS.
+            if unconfirmed:
+                report["state"] = "CREATION_UNCONFIRMED"
+                raise AssertionError("CONTROL_CREATION_UNCONFIRMED")
+            # A foreign sentinel is preserved AND still makes the phase fail.
+            assert not remaining_containers and not remaining_volumes, (
+                "CONTROL_FOREIGN_RESOURCE_REMAINS"
+            )
+            report["state"] = "PASS"
+        except BaseException as error:
+            report["diagnostic"] = schema_failure(error)
+            raise
+        finally:
+            report["seconds"] = time.monotonic() - began
+            report["whole_cleanup_seconds"] = time.monotonic() - budget["started_at"]
+
+
+def schema_docker_cli(path, args):
+    """Only the disposable phase inherits this wrapper; no frozen file changes."""
+    path = Path(path)
+    value = e.strict_json(e.private_bytes(path))
+    assert value["uid"] == os.getuid(), "CONTROL_OWNERSHIP_UID"
+    docker, token, project = value["docker"], value["token"], value["project"]
+    label = SCHEMA_OWNER_LABEL + "=" + token
+    checkpoint = (
+        RetainedCheckpoint(path.parent) if (path.parent / "retained.json").exists() else None
+    )
+    binding = None
+    if args[:1] in (["run"], ["create"]):
+        assert not any(
+            a == "--name" or a.startswith("--name=") or a.startswith("--cidfile") for a in args
+        ), "CONTROL_CONTAINER_ID_OVERRIDE"
+        name = "asm-schema-" + token + "-" + uuid4().hex[:12]
+        intent = path.parent / ("run-" + name + ".json")
+        birth = Path("/proc/self/stat").read_text().rpartition(")")[2].split()[19]
+        if checkpoint is not None:
+            args, binding = checkpoint.bind(args)
+        e.write_private(
+            intent,
+            e.encoded(
+                {
+                    "name": name,
+                    "token": token,
+                    "phase": value["phase"],
+                    "cli_pid": os.getpid(),
+                    "cli_pgid": os.getpgrp(),
+                    "cli_start_ticks": int(birth),
+                    **({"retained_bind": binding} if binding else {}),
+                }
+            ),
+        )
+        args = [
+            args[0],
+            "--label",
+            label,
+            "--name",
+            name,
+            "--cidfile",
+            str(intent.with_suffix(".cid")),
+            *args[1:],
+        ]
+    elif args[:2] in (["volume", "create"], ["network", "create"]):
+        args = [*args[:2], "--label", label, *args[2:]]
+    elif args[:1] == ["compose"]:
+        commands = {"config", "up", "run", "ps", "stop", "down"}
+        index = next((i for i, a in enumerate(args) if a in commands), None)
+        assert index is not None, "CONTROL_COMPOSE_COMMAND"
+        prefix = args[:index]
+        assert (
+            "--project-name" in prefix and prefix[prefix.index("--project-name") + 1] == project
+        ), "CONTROL_COMPOSE_PROJECT"
+        overlay = path.parent / "compose-ownership.json"
+        if not overlay.exists():
+            result = subprocess.run(
+                [docker, *prefix, "config", "--format", "json"],
+                capture_output=True,
+                check=True,
+                timeout=40,
+            )
+            model = json.loads(result.stdout)
+            labels = {SCHEMA_OWNER_LABEL: token}
+            document = {}
+            for group in ("services", "volumes", "networks"):
+                document[group] = {}
+                for name, item in model.get(group, {}).items():
+                    assert not item.get("external"), "CONTROL_EXTERNAL_COMPOSE_RESOURCE"
+                    document[group][name] = {"labels": labels}
+            e.write_private(overlay, e.encoded(document))
+        if args[index] == "down":
+            # Frozen T destroys its private state immediately after this call.
+            # Complete exact owned cleanup here too, before that unchanged
+            # finally can run; never let compose --remove-orphans touch foreign.
+            owner = SchemaOwnership.inherited(project, value["source"])
+            detail = {}
+            try:
+                if checkpoint is not None:
+                    owner.cleanup_budget()
+                    e.write_private(
+                        path.parent / "retained-operation.json",
+                        e.encoded({"stage": "retained_down", "source": CONTROL_T, "token": token}),
+                    )
+                    if (
+                        checkpoint.config["fault"]
+                        and (checkpoint.state / "connected.json").exists()
+                    ):
+                        checkpoint.observe_live()
+                    checkpoint.capture()
+                    checkpoint.event("OWNED_CLEANUP_BEGIN")
+                if (
+                    checkpoint is not None
+                    and (checkpoint.directory / "retained-live.json").exists()
+                ):
+                    owner.cleanup(detail, checkpoint.disconnected)
+                else:
+                    owner.cleanup(detail)
+            finally:
+                primary = sys.exception()
+                try:
+                    e.write_private(path.parent / "down-cleanup.json", e.encoded(detail))
+                except BaseException:
+                    if primary is None:
+                        raise
+                    primary.add_note("CONTROL_DOWN_REPORT_FAILED")
+                if checkpoint is not None:
+                    try:
+                        checkpoint.event(
+                            "OWNED_CLEANUP_RESULT",
+                            state=detail.get("state", "NOT_STARTED"),
+                            diagnostic=schema_failure(primary) if primary else None,
+                        )
+                    except BaseException:
+                        if primary is None:
+                            raise
+                        primary.add_note("CONTROL_RETAINED_EVENT_FAILED")
+        args = [*prefix, "-f", str(overlay), *args[index:]]
+    if checkpoint is not None and binding is not None:
+        raise SystemExit(checkpoint.run_bound(args))
+    os.execv(docker, [docker, *args])
+
+
+@contextmanager
+def schema_private_workspace(report, prefix):
+    import tempfile
+
+    directory = Path(tempfile.mkdtemp(prefix=prefix))
+    try:
+        yield directory
+    finally:
+        primary = sys.exception()
+        if report["cleanup"]["state"] not in {"NOT_ADMITTED", "PASS", "OWNED_REMOVED"}:
+            report["private_state_retained"] = True
+        else:
+            try:
+                shutil.rmtree(directory)
+            except BaseException as error:
+                report["private_state_retained"] = True
+                report.setdefault("secondary_failures", []).append(
+                    {"stage": "private_state_cleanup", **schema_failure(error)}
+                )
+                if primary is None:
+                    raise
+                primary.add_note("CONTROL_PRIVATE_STATE_CLEANUP_FAILED")
+
+
+@contextmanager
+def schema_cleanup_scope(owner, report, path, observe_disconnected=None):
+    primary = None
+    try:
+        yield
+    except BaseException as error:
+        primary = error
+        schema_record_failure(report, error)
+        raise
+    finally:
+        secondary = None
+        directory = getattr(owner, "directory", None)
+        checkpoint = (
+            RetainedCheckpoint(directory)
+            if directory and (directory / "retained.json").exists()
+            else None
+        )
+        if checkpoint is not None:
+            try:
+                owner.cleanup_budget()
+                checkpoint.capture()
+                checkpoint.collect(report)
+            except BaseException as error:
+                report["private_state_retained"] = True
+                report.setdefault("secondary_failures", []).append(
+                    {"stage": "retained_checkpoint", **schema_failure(error)}
+                )
+                if primary is None:
+                    secondary = error
+                    schema_record_failure(report, error)
+        try:
+            schema_publish(report, path, primary)
+        except BaseException as error:
+            secondary = error
+            schema_record_failure(report, error)
+        try:
+            if observe_disconnected is None:
+                owner.cleanup(report["cleanup"])
+            else:
+                owner.cleanup(report["cleanup"], observe_disconnected)
+        except BaseException as error:
+            if primary is None and secondary is None:
+                secondary = error
+                schema_record_failure(report, error)
+            report.setdefault("secondary_failures", []).append(
+                {"stage": "cleanup", **schema_failure(error)}
+            )
+            if primary is not None:
+                primary.add_note("CONTROL_OWNED_CLEANUP_FAILED")
+        finally:
+            if checkpoint is not None:
+                try:
+                    checkpoint.collect(report)
+                except BaseException as error:
+                    report["private_state_retained"] = True
+                    report.setdefault("secondary_failures", []).append(
+                        {"stage": "retained_evidence", **schema_failure(error)}
+                    )
+                    if primary is None and secondary is None:
+                        secondary = error
+            schema_publish(report, path, primary or secondary)
+        if primary is None and secondary is not None:
+            raise secondary
+
+
+def consume_control_budget(path, historical, candidate):
+    """One private handoff, absolute monotonic deadline, no inherited/global reset."""
+    raw = e.private_bytes(path)
+    info = path.stat()
+    assert info.st_nlink == 1, "CONTROL_BUDGET_SINGLE_LINK"
+    value = e.strict_json(raw)
+    assert set(value) == {
+        "version",
+        "phase",
+        "historical",
+        "candidate",
+        "uid",
+        "started_at",
+        "issued_at",
+        "charged_seconds",
+        "deadline",
+    }, "CONTROL_BUDGET_FORMAT"
+    assert value["version"] == 1 and type(value["version"]) is int, "CONTROL_BUDGET_VERSION"
+    assert value["phase"] == CONTROL_PHASE and value["historical"] == historical == CONTROL_T, (
+        "CONTROL_BUDGET_PHASE_SOURCE"
+    )
+    assert (
+        value["candidate"] == candidate
+        and type(value["uid"]) is int
+        and value["uid"] == os.getuid()
+    ), "CONTROL_BUDGET_CANDIDATE_OWNER"
+    for key in ("started_at", "issued_at", "charged_seconds", "deadline"):
+        assert type(value[key]) in (int, float) and 0 < value[key] < float("inf"), (
+            "CONTROL_BUDGET_CLOCK"
+        )
+    assert abs(value["deadline"] - value["started_at"] - 600) < 0.001, "CONTROL_BUDGET_TOTAL"
+    assert abs(value["issued_at"] - value["started_at"] - value["charged_seconds"]) < 0.001, (
+        "CONTROL_BUDGET_CHARGED"
+    )
+    now = time.monotonic()
+    assert value["issued_at"] <= now < value["deadline"], "CONTROL_BUDGET_EXHAUSTED"
+    # Preserve the absolute bound across process startup and handoff delay.
+    assert (path.stat().st_dev, path.stat().st_ino) == (info.st_dev, info.st_ino), (
+        "CONTROL_BUDGET_FILE_CHANGED"
+    )
+    path.unlink()
+    return {
+        **value,
+        "handoff_seconds": now - value["issued_at"],
+        "remaining_seconds": value["deadline"] - now,
+    }
+
+
+def supervised_schema_child(args, *, cwd, timeout, environment=None):
+    """No detached runner; timeout kills the owned process group and waits."""
+    assert timeout > 0, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+    process = subprocess.Popen(
+        args, cwd=cwd, stdin=subprocess.DEVNULL, start_new_session=True, env=environment
+    )
+
+    def stop_group():
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(process.pid, sig)
+            except ProcessLookupError:
+                pass
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                if sig == signal.SIGKILL:
+                    raise
+        # The shell may exit on TERM while a descendant ignores it. KILL the
+        # group even after its leader exits, then observe all members stopped.
+        deadline = time.monotonic() + 5
+        while True:
+            live = []
+            for path in Path("/proc").glob("[0-9]*/stat"):
+                try:
+                    fields = path.read_text().rpartition(")")[2].split()
+                except FileNotFoundError:
+                    continue
+                if int(fields[2]) == process.pid and fields[0] != "Z":
+                    live.append(path.parent.name)
+            if not live:
+                return
+            assert time.monotonic() < deadline, "CONTROL_CHILD_GROUP_NOT_STOPPED"
+            time.sleep(0.02)
+
+    try:
+        result = process.wait(timeout=timeout)
+    except BaseException as error:
+        try:
+            stop_group()
+        except BaseException as cleanup:
+            error.add_note("CONTROL_CHILD_CLEANUP_FAILED: " + type(cleanup).__name__)
+        raise
+    if result:
+        try:
+            stop_group()
+        except BaseException as cleanup:
+            error = subprocess.CalledProcessError(result, args)
+            error.add_note("CONTROL_CHILD_CLEANUP_FAILED: " + type(cleanup).__name__)
+            raise error from cleanup
+    return result
+
+
+@contextmanager
+def schema_coordinator_workspace(ledger):
+    import tempfile
+
+    directory = Path(tempfile.mkdtemp(prefix="asm-frozen-t-"))
+    try:
+        yield directory
+    finally:
+        primary = sys.exception()
+        # Keep a private checkpoint if evidence export or daemon cleanup failed.
+        # Never destroy a bind-mounted state under a still-running owned process.
+        if (
+            ledger.get("private_state_retained")
+            or ledger.get("retained_reports_failed")
+            or ledger["cleanup"]["state"]
+            not in {
+                "NOT_ADMITTED",
+                "PASS",
+                "OWNED_REMOVED",
+            }
+        ):
+            ledger["private_state_retained"] = True
+        else:
+            try:
+                checkout = directory / "turns"
+                if (checkout / ".git").exists():
+                    e.command(["git", "worktree", "remove", str(checkout)])
+                shutil.rmtree(directory)
+            except BaseException as error:
+                ledger["private_state_retained"] = True
+                ledger.setdefault("secondary_failures", []).append(
+                    {"stage": "workspace_cleanup", **schema_failure(error)}
+                )
+                if primary is None:
+                    raise
+                primary.add_note("CONTROL_WORKSPACE_CLEANUP_FAILED")
+
+
+def run_retained_full_negatives(directory, checkout, request, ledger):
+    """Entire immutable T function/finally, charged to the original600 clock."""
+    deadline = ledger["deadline"]
+    positive = json.loads((checkout / "reports/m3-schema-phase.json").read_text())
+    historical = request["historical"]
+    candidate = request["candidate"]
+    results = []
+    for source in (historical, CONTROL_T):
+        for kind in ("runtime", "development"):
+            image = positive["images"][source + ":" + kind]["id"]
+            # The unchanged T image probes will independently recheck all bytes.
+            # These aliases ensure neither negative can fall back to rebuilding.
+            e.command(
+                ["docker", "tag", image, "asm-connect5-" + kind + ":" + source],
+                timeout=min(40, deadline - time.monotonic()),
+            )
+    for fault in ("timeout", "export"):
+        ledger["stage"] = "full_retained_" + fault
+        report = schema_envelope(request, "FULL_RETAINED_T_" + fault.upper())
+        report.update(
+            evidence="ACTUAL_FULL_T_DOCKER_POSTGRES",
+            whole_prepare_started_at=ledger["started_at"],
+            deadline=deadline,
+            budget_seconds=600,
+            executor_source=CONTROL_T,
+        )
+        path = e.ROOT / "reports" / ("control-full-retained-" + fault + ".json")
+        owner = SchemaOwnership(
+            directory / ("owner-T-" + fault), "asm-m3-schema-phase", report["phase"], CONTROL_T
+        )
+        checkpoint = None
+        failure = None
+        schema_publish(report, path)
+        try:
+            owner.admit()
+            report["cleanup"] = {"state": "ADMITTED"}
+            enable_retained_checkpoint(owner, checkout, deadline, fault)
+            checkpoint = RetainedCheckpoint(owner.directory)
+            # A failed case must retain its private backing even if an assertion
+            # prevents the positive coordinator handoff from being reached.
+            ledger["private_state_retained"] = True
+            with schema_cleanup_scope(owner, report, path, checkpoint.disconnected):
+                report["stage"] = "full_retained_shell"
+                result = supervised_schema_child(
+                    [
+                        "sh",
+                        "scripts/test_telegram_egress.sh",
+                        "--schema-upgrade",
+                        historical,
+                        CONTROL_T,
+                    ],
+                    cwd=checkout,
+                    timeout=deadline - time.monotonic(),
+                    environment=owner.environment(),
+                )
+                report["shell_exit"] = result
+                checkpoint.collect(report)
+                report["partial_T_report"] = json.loads(
+                    (checkout / "reports/m3-schema-phase.json").read_text()
+                )
+                report["trace_entered"] = e.strict_json(
+                    e.private_bytes(owner.directory / "trace-entered.json")
+                )
+                proof = report["retained_checkpoint"]
+                assert result != 0 and not proof["original_exists"], (
+                    "CONTROL_FULL_T_FAILURE_REQUIRED"
+                )
+                assert "database" not in report["partial_T_report"], (
+                    "CONTROL_FULL_T_FAILURE_AFTER_FINAL_READ"
+                )
+                assert proof["files"]["receipt.json"]["bytes"] > 0, (
+                    "CONTROL_FULL_T_RECEIPT_REQUIRED"
+                )
+                detail = report["primary_failure"]
+                expected = (
+                    "CONTROL_COMMAND_TIMEOUT" if fault == "timeout" else "CONTROL_COMMAND_EXIT"
+                )
+                assert (
+                    detail["reason"] == expected
+                    and detail["stage"] == "controller_seed"
+                    and detail["source"] == CONTROL_T
+                ), "CONTROL_PRIMARY_FAILURE_CHANGED"
+                assert (
+                    proof["live"]["image"] == positive["images"][CONTROL_T + ":development"]["id"]
+                ), "CONTROL_RETAINED_IMAGE_CHANGED"
+                checkpoint.event(
+                    "FROZEN_TEMP_REMOVED_STATE_RETAINED",
+                    files=proof["files"],
+                    state_identity=proof["state_identity"],
+                )
+                if fault == "export":
+                    assert detail["exit_code"] == 7
+                    assert not (owner.directory / "retained-export.json").exists(), (
+                        "CONTROL_EXPORT_FAILURE_REQUIRED"
+                    )
+                    report["live_after_T_teardown"] = checkpoint.observe_live()
+                    assert report["live_after_T_teardown"]["connections_before_cleanup"] == 1
+                    assert (
+                        checkpoint.root / proof["capture"]["snapshot"] / "receipt.json"
+                    ).read_bytes() == e.private_bytes(checkpoint.state / "receipt.json"), (
+                        "CONTROL_RETAINED_BYTES_CHANGED"
+                    )
+                report["host_children"] = checkpoint.host_children()
+                raise e.EgressError(expected)
+        except e.EgressError as error:
+            failure = error
+            expected = "CONTROL_COMMAND_TIMEOUT" if fault == "timeout" else "CONTROL_COMMAND_EXIT"
+            assert str(error) == expected, "CONTROL_UNEXPECTED_FULL_T_FAILURE"
+            assert report["cleanup"]["state"] == "OWNED_REMOVED", (
+                "CONTROL_RETAINED_CLEANUP_REQUIRED"
+            )
+            assert report["cleanup"]["diagnostic"]["reason"] == "CONTROL_FOREIGN_RESOURCE_REMAINS"
+            before = report["cleanup"].get("before_frozen_teardown", {})
+            # In timeout, down already removed the owned DB. Re-entry records
+            # absence rather than opening a new connection to a deleted service.
+            cleanup = before if fault == "timeout" else report["cleanup"]
+            assert cleanup["connections_after_controller_stop"] == 0
+            assert report["cleanup"]["owned_remaining"] == []
+            assert report["cleanup"]["deadline"] == cleanup["deadline"]
+            assert report["cleanup"]["whole_cleanup_seconds"] < 90
+            proof = report["retained_checkpoint"]
+            assert proof["capture"]["files"] == proof["export"]["files"] == proof["files"]
+            events = proof["events"]
+            captures = [v["at"] for v in events if v["event"] == "CHECKPOINT_CAPTURED"]
+            zero = [v["at"] for v in events if v["event"] == "PG_ZERO_BEFORE_DB_STOP"]
+            removed = [
+                v["at"] for v in events if v["event"] == "FROZEN_TEMP_REMOVED_STATE_RETAINED"
+            ]
+            assert report["primary_failure"]["at"] < min(captures) < min(removed), (
+                "CONTROL_RETAINED_EVENT_ORDER"
+            )
+            assert len(zero) == 1
+            assert (zero[0] < removed[0]) if fault == "timeout" else (removed[0] < zero[0])
+            report["foreign_before"] = e.strict_json(
+                e.private_bytes(owner.directory / "foreign-before.json")
+            )
+            report["foreign_after"] = checkpoint.foreign_proof()
+            assert report["foreign_before"] == report["foreign_after"], "CONTROL_FOREIGN_CHANGED"
+            report["host_children"] = checkpoint.host_children()
+            report["source_clean"] = not bool(
+                e.command(
+                    ["git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=all"]
+                ).strip()
+            )
+            assert report["source_clean"], "FROZEN_TURNS_SOURCE_CHANGED"
+            report["result"] = "PASS"
+            report["charged_seconds"] = time.monotonic() - ledger["started_at"]
+            assert time.monotonic() < deadline, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            results.append(fault)
+            print("CONTROL_FULL_RETAINED_NEGATIVE_PASS " + fault, flush=True)
+        except BaseException as error:
+            failure = error
+            schema_record_failure(report, error)
+            raise
+        finally:
+            schema_publish(report, path, failure or sys.exception())
+            if checkpoint is not None and report.get("result") == "PASS":
+                # Only the fixture's exact foreign identities, after unchanged
+                # evidence is saved. The owned cleanup deliberately refused them.
+                checkpoint.remove_foreign_fixture()
+    assert results == ["timeout", "export"]
+    assert not e.command(["docker", "ps", "-aq"]).strip()
+    assert not e.command(["docker", "volume", "ls", "-q"]).strip()
+    summary = {
+        "candidate": candidate,
+        "source": CONTROL_T,
+        "result": "PASS",
+        "count": 2,
+        "results": results,
+        "deadline": deadline,
+        "started_at": ledger["started_at"],
+        "charged_seconds": time.monotonic() - ledger["started_at"],
+    }
+    (e.ROOT / "reports/control-full-retained-negatives.json").write_text(
+        json.dumps(summary, indent=2) + "\n"
+    )
+    ledger["full_retained_negatives"] = summary
+
+
+def run_control_coordinator(request):
+    """Retained frozen T shell is charged once, including runtime and cleanup."""
+    ledger = schema_envelope(request, "CONTROL_COORDINATOR")
+    started = ledger["started_at"]
+    deadline = started + 600
+    ledger.update(budget_seconds=600, deadline=deadline, retained=CONTROL_T)
+    reports = e.ROOT / "reports"
+    path = reports / "control-schema-ledger.json"
+    retained = reports / "retained-turns"
+    primary = None
+    schema_publish(ledger, path)
+    try:
+        historical, candidate = request["historical"], request["candidate"]
+        assert historical == "754f1c883e5a94a7fc9e729af2605424f949ba33", "CONTROL_HISTORICAL_SOURCE"
+        assert (
+            Path.cwd() == e.ROOT and os.getuid() != 0 and os.environ.get("GITHUB_ACTIONS") == "true"
+        ), "CONTROL_DISPOSABLE_RUNNER"
+        ledger["observed_source"] = e.command(["git", "rev-parse", "HEAD"]).decode().strip()
+        ledger["stage"] = "source_check"
+        e.source_check(candidate)
+        ledger.update(
+            historical=historical, candidate=candidate, budget_state="COORDINATOR_VALIDATED"
+        )
+        retained.mkdir(parents=True, exist_ok=True)
+        with schema_coordinator_workspace(ledger) as temp:
+            directory = Path(temp)
+            checkout = directory / "turns"
+            added = False
+            owner = SchemaOwnership(
+                directory / "owner-T", "asm-m3-schema-phase", "RETAINED_T", CONTROL_T
+            )
+            ledger["stage"] = "retained_admission"
+            owner.admit()
+            ledger["cleanup"] = {"state": "ADMITTED"}
+            # Includes report-copy and worktree-removal failures in the same
+            # primary/secondary discipline as command failures.
+            with schema_cleanup_scope(owner, ledger, path):
+                try:
+                    ledger["stage"] = "retained_archive"
+                    with e.migration_budget(deadline - time.monotonic()):
+                        e.command(["git", "merge-base", "--is-ancestor", CONTROL_T, candidate])
+                        (retained / "source-T.tar.gz").write_bytes(
+                            e.command(["git", "archive", "--format=tar.gz", CONTROL_T])
+                        )
+                        e.command(["git", "worktree", "add", "--detach", str(checkout), CONTROL_T])
+                        added = True
+                    enable_retained_checkpoint(owner, checkout, deadline)
+                    ledger["stage"] = "retained_shell"
+                    ledger["retained_shell_started_at"] = time.monotonic()
+                    result = supervised_schema_child(
+                        [
+                            "sh",
+                            "scripts/test_telegram_egress.sh",
+                            "--schema-upgrade",
+                            historical,
+                            CONTROL_T,
+                        ],
+                        cwd=checkout,
+                        timeout=deadline - time.monotonic(),
+                        environment=owner.environment(),
+                    )
+                    ledger["retained_shell_exit"] = result
+                    assert result == 0, "FROZEN_TURNS_SCHEMA_FAILED"
+                finally:
+                    failure = sys.exception()
+                    if (owner.directory / "retained.json").exists():
+                        try:
+                            RetainedCheckpoint(owner.directory).collect(ledger)
+                        except BaseException as error:
+                            ledger["private_state_retained"] = True
+                            ledger.setdefault("secondary_failures", []).append(
+                                {"stage": "retained_evidence", **schema_failure(error)}
+                            )
+                            if failure is None:
+                                raise
+                            failure.add_note("CONTROL_RETAINED_EVIDENCE_FAILED")
+                    ledger["retained_shell_seconds"] = time.monotonic() - ledger.get(
+                        "retained_shell_started_at", started
+                    )
+                    try:
+                        if (checkout / "reports").exists():
+                            shutil.copytree(checkout / "reports", retained, dirs_exist_ok=True)
+                        if added:
+                            ledger["retained_clean"] = not bool(
+                                e.command(
+                                    [
+                                        "git",
+                                        "-C",
+                                        str(checkout),
+                                        "status",
+                                        "--porcelain",
+                                        "--untracked-files=all",
+                                    ]
+                                ).strip()
+                            )
+                        schema_publish(ledger, retained / "source-pairing.json", failure)
+                    except BaseException as error:
+                        ledger["retained_reports_failed"] = True
+                        if failure is None:
+                            raise
+                        ledger.setdefault("secondary_failures", []).append(
+                            {"stage": "retained_reports", **schema_failure(error)}
+                        )
+                        failure.add_note("CONTROL_RETAINED_REPORT_FAILED")
+            # Owned cleanup and copied reports precede checkout removal. If any
+            # preceding stage failed, retain the checkout instead of hiding it.
+            ledger["retained_cleanup"] = ledger["cleanup"]
+            run_retained_full_negatives(directory, checkout, request, ledger)
+            if added:
+                e.command(["git", "worktree", "remove", str(checkout)])
+            assert ledger["retained_clean"], "FROZEN_TURNS_SOURCE_CHANGED"
+            issued = time.monotonic()
+            assert issued < deadline, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            value = {
+                "version": 1,
+                "phase": CONTROL_PHASE,
+                "historical": CONTROL_T,
+                "candidate": candidate,
+                "uid": os.getuid(),
+                "started_at": started,
+                "issued_at": issued,
+                "charged_seconds": issued - started,
+                "deadline": deadline,
+            }
+            handoff = directory / "control-budget.json"
+            e.write_private(handoff, e.encoded(value))
+            ledger["handoff"] = value
+            ledger["stage"] = "control_admission"
+            owner = SchemaOwnership(
+                directory / "owner-C", "asm-control-schema-phase", CONTROL_PHASE, candidate
+            )
+            owner.admit()
+            ledger["cleanup"] = {"state": "ADMITTED"}
+            with schema_cleanup_scope(owner, ledger, path):
+                ledger["stage"] = "control_shell"
+                result = supervised_schema_child(
+                    [
+                        "sh",
+                        "scripts/test_telegram_egress.sh",
+                        "--control-schema-upgrade",
+                        CONTROL_T,
+                        candidate,
+                        str(handoff),
+                    ],
+                    cwd=e.ROOT,
+                    timeout=(deadline - time.monotonic()) + 480,
+                    environment=owner.environment(),
+                )
+                ledger["control_exit"] = result
+                assert result == 0 and not handoff.exists(), "CONTROL_SCHEMA_PHASE_FAILED"
+                e.source_check(candidate)
+            ledger["control_cleanup"] = ledger["cleanup"]
+            # Preserve successful child ownership evidence before removing the
+            # private wrapper/intent directory too.
+            schema_publish(ledger, path)
+            print("CONTROL_SCHEMA_COORDINATOR_PASS", flush=True)
+    except BaseException as error:
+        primary = error
+        schema_record_failure(ledger, error)
+        raise
+    finally:
+        ledger["total_schema_seconds"] = time.monotonic() - started
+        ledger["charged_pre_handoff_seconds"] = ledger.get("handoff", {}).get(
+            "charged_seconds", ledger["total_schema_seconds"]
+        )
+        schema_publish(ledger, path, primary)
+
+
+def control_schema_recovery_source(result, observe, report, historical, candidate):
+    detail = {
+        "injection": "after_commit_before_success_exit",
+        "exit_code": result.returncode,
+        "observed": "NOT_READ",
+    }
+    report["upgrade_ack_loss"] = detail
+    assert historical == CONTROL_T
+    if result.returncode != 86 or result.stdout.strip() != b"CONTROL_UPGRADE_COMMITTED_RESULT_LOST":
+        detail["result"] = "UNEXPECTED_MIGRATOR_RESULT"
+        raise AssertionError("CONTROL_EXPECTED_POST_COMMIT_FAILURE")
+    detail.update(
+        result="CONTROLLED_FAILURE_OBSERVED", marker="CONTROL_UPGRADE_COMMITTED_RESULT_LOST"
+    )
+    try:
+        observation = observe()
+    except Exception:
+        detail["observed"] = "UNREADABLE"
+        raise
+    detail["observed"] = observation
+    assert observation["revision"] == "0009" and observation["role"] == "asm_migrator"
+    assert observation["database"] == "asm_local"
+    assert type(observation["reader_pid"]) is int and observation["reader_pid"] > 0
+    assert type(observation["backend_pid"]) is int and observation["backend_pid"] > 0
+    lost = report.get("lost_result_process")
+    assert isinstance(lost, dict) and set(lost) == {
+        "namespace",
+        "pid",
+        "start_ticks",
+        "boot_id",
+    }, "CONTROL_PROCESS_IDENTITY_REQUIRED"
+    assert type(lost["pid"]) is int and lost["pid"] > 0
+    assert type(lost["start_ticks"]) is int and lost["start_ticks"] > 0
+    assert type(observation["reader_start_ticks"]) is int
+    assert observation["reader_boot_id"] == lost["boot_id"] and lost["boot_id"], (
+        "CONTROL_RECOVERY_HOST_BOOT"
+    )
+    # Docker can reuse a released PID namespace inode; PID1 alone is not a
+    # process identity. Kernel start ticks prove this reader was created later
+    # on the same boot, including that reuse case, and reject the prior process.
+    assert observation["reader_start_ticks"] > lost["start_ticks"], "CONTROL_FRESH_PROCESS_REQUIRED"
+    for key, value in report["seed_identity"].items():
+        assert observation[key] == value, "CONTROL_RECOVERY_DATABASE_IDENTITY"
+    detail["recovery_source"] = candidate
+    return candidate
+
+
+def run_control_schema_phase(request):
+    """New disposable LOCAL volume, exact T/C images, drained CONTROL cutover."""
+    report = schema_envelope(request, CONTROL_PHASE)
+    report.update(images={}, checks=[], stage_timings=[])
+    primary = None
+
+    def run(args, **kwargs):
+        began = time.monotonic()
+        outcome = "FAILED"
+        try:
+            result = e.command(args, **kwargs)
+            outcome = "PASS"
+            return result
+        finally:
+            report["stage_timings"].append(
+                {"stage": report["stage"], "seconds": time.monotonic() - began, "outcome": outcome}
+            )
+
+    started = report["started_at"]
+    report_path = e.ROOT / "reports/control-schema-phase.json"
+    schema_publish(report, report_path)
+    try:
+        historical = "ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad"
+        report["stage"] = "observe_source"
+        candidate = run(["git", "rev-parse", "HEAD"]).decode().strip()
+        report["observed_source"] = candidate
+        assert set(request) == {"historical", "candidate", "budget_file"}, "CONTROL_REQUEST_FORMAT"
+        assert request["historical"] == historical and request["candidate"] == candidate, (
+            "CONTROL_REQUEST_SOURCE"
+        )
+        report["stage"] = "consume_budget"
+        budget = consume_control_budget(Path(request["budget_file"]), historical, candidate)
+        report.update(
+            coordinator=candidate,
+            historical=historical,
+            budget_state="VALIDATED_CONSUMED",
+            prepare_budget=dict(budget),
+        )
+        schema_publish(report, report_path)
+        assert (
+            Path.cwd() == e.ROOT and os.getuid() != 0 and os.environ.get("GITHUB_ACTIONS") == "true"
+        ), "CONTROL_DISPOSABLE_RUNNER"
+        report["stage"] = "source_check"
+        e.source_check(candidate)
+        report["stage"] = "daemon_admission"
+        assert not run(["docker", "ps", "-aq"]).strip()
+        assert not run(["docker", "volume", "ls", "-q"]).strip()
+        project = "asm-control-schema-phase"
+        owner = SchemaOwnership.inherited(project, candidate)
+        report["cleanup"] = {"state": "ADMITTED"}
+        pins = dict(
+            line.split("=", 1)
+            for line in (e.ROOT / "infra/images.lock.env").read_text().splitlines()
+            if line and not line.startswith("#")
+        )
+        with (
+            schema_private_workspace(report, "asm-control-schema-") as temporary,
+            schema_cleanup_scope(owner, report, report_path),
+        ):
+            directory = Path(temporary)
+            sources, images = {}, {}
+            # Only exact tracked archives enter build contexts. The historical-only
+            # production migration_build_images helper is deliberately not called for I.
+            report["stage"] = "prepare_images"
+            prepare_started = time.monotonic()
+            remaining = budget["deadline"] - prepare_started
+            assert remaining > 0, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            with e.migration_budget(remaining):
+                for source in (historical, candidate):
+                    archive = directory / source
+                    archive.mkdir()
+                    report["stage"] = "archive_" + source[:8]
+                    e.migration_build_context(source, archive)
+                    sources[source] = archive
+                    images[source] = {}
+                    for kind in ("runtime", "development"):
+                        tag = "asm-control-schema-" + kind + ":" + source
+                        reuse = "asm-m3-schema-" + kind + ":" + source
+                        existing = (
+                            run(["docker", "image", "ls", "-q", "--no-trunc", reuse])
+                            .decode()
+                            .strip()
+                        )
+                        if existing:
+                            report["stage"] = "reuse_" + source[:8] + "_" + kind
+                            e.migration_image(existing, source, kind)
+                            run(["docker", "tag", existing, tag])
+                        else:
+                            report["stage"] = "build_" + source[:8] + "_" + kind
+                            run(
+                                [
+                                    "docker",
+                                    "build",
+                                    "--pull",
+                                    "--network=default",
+                                    "--target",
+                                    kind,
+                                    "--build-arg",
+                                    "PYTHON_IMAGE=" + pins["PYTHON_IMAGE"],
+                                    "--build-arg",
+                                    "UV_IMAGE=" + pins["UV_IMAGE"],
+                                    "-f",
+                                    str(archive / "infra/Dockerfile.backend"),
+                                    "-t",
+                                    tag,
+                                    str(archive),
+                                ],
+                                timeout=480,
+                            )
+                        image_id = json.loads(run(["docker", "image", "inspect", tag]))[0]["Id"]
+                        images[source][kind] = image_id
+                        report["stage"] = "image_probe_" + source[:8] + "_" + kind
+                        report["images"][source + ":" + kind] = e.migration_image(
+                            image_id, source, kind
+                        )
+            prepared_at = time.monotonic()
+            report["prepare_budget"] = {
+                **budget,
+                "candidate_prepare_seconds": prepared_at - prepare_started,
+                "charged_total_seconds": 600 - (budget["deadline"] - prepared_at),
+                "remaining_seconds": budget["deadline"] - prepared_at,
+            }
+            assert prepared_at < budget["deadline"], "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            # init_local emits only a fixed diagnostic, never credentials. All private
+            # runtime files are outside both source archives and the repository.
+            report["stage"] = "runtime_configuration"
+            subprocess.run(
+                [sys.executable, str(e.ROOT / "scripts/init_local.py")],
+                cwd=directory,
+                check=True,
+                timeout=30,
+            )
+            compose = [
+                "docker",
+                "compose",
+                "--project-directory",
+                str(sources[candidate]),
+                "--project-name",
+                project,
+                "--env-file",
+                str(e.ROOT / "infra/images.lock.env"),
+                "--env-file",
+                str(directory / ".env"),
+                "-f",
+                str(sources[candidate] / "compose.yaml"),
+                "--profile",
+                "telegram-operator",
+            ]
+            model = json.loads(run([*compose, "config", "--format", "json"]))
+            variables = dict(model["services"]["api"]["environment"])
+            variables.update(model["services"]["migrate"]["environment"])
+            assert variables["ASM_TELEGRAM_ENABLED"] == "false" and variables["TG_BOT_TOKEN"] == ""
+            envfile = directory / "controller.env"
+            e.write_private(
+                envfile,
+                "".join(k + "=" + str(v) + "\n" for k, v in sorted(variables.items())).encode(),
+            )
+            state = directory / "state"
+            state.mkdir(mode=0o700)
+            prefix = [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                project + "_default",
+                "--env-file",
+                str(envfile),
+                "--user",
+                f"{os.getuid()}:{os.getgid()}",
+                "--mount",
+                f"type=bind,source={state},target=/state",
+            ]
+
+            def controller(action):
+                report["stage"] = "controller_" + action
+                try:
+                    output = run(
+                        [
+                            *prefix,
+                            images[candidate]["development"],
+                            "python",
+                            "tests/test_m3_1_control_migrations.py",
+                            "--control-schema-phase",
+                            action,
+                            "/state/receipt.json",
+                        ],
+                        timeout=120,
+                    )
+                except BaseException:
+                    failure = state / "controller-failure.json"
+                    if failure.exists():
+                        report["controller_failure"] = json.loads(e.private_bytes(failure))
+                    raise
+                assert output.decode().strip() == "CONTROL_SCHEMA_" + action.upper() + "_PASS"
+                report["checks"].append(action)
+
+            def migrate(source, direction, revision):
+                report["stage"] = direction + "_" + revision
+                run(
+                    [*prefix, images[source]["development"], "alembic", direction, revision],
+                    timeout=30,
+                )
+
+            def probe(source, expected):
+                report["stage"] = "probe_" + source[:8] + "_" + str(expected)
+                code = "import asyncio\nfrom asm.foundation import RuntimeDatabase,Settings\nasync def main():\n d=RuntimeDatabase(Settings())\n try:\n  try: await d.check()\n  except Exception:\n   assert not EXPECTED\n  else: assert EXPECTED\n finally: await d.close()\nasyncio.run(main())\n".replace(
+                    "EXPECTED", repr(expected)
+                )
+                run([*prefix, images[source]["runtime"], "python", "-c", code], timeout=30)
+
+            def callers(source):
+                report["stage"] = "callers_" + source[:8]
+                run(["docker", "tag", images[source]["runtime"], "asm-backend:local"])
+                run(
+                    [
+                        *compose,
+                        "up",
+                        "-d",
+                        "--no-deps",
+                        "--pull",
+                        "never",
+                        "--force-recreate",
+                        "--wait",
+                        "api",
+                        "worker",
+                        "scheduler",
+                    ],
+                    timeout=120,
+                )
+                result = {}
+                for service in ("api", "worker", "scheduler"):
+                    ident = run([*compose, "ps", "-q", service]).decode().strip()
+                    info = json.loads(run(["docker", "inspect", ident]))[0]
+                    assert info["Image"] == images[source]["runtime"] and info["State"]["Running"]
+                    result[service] = {"id": ident, "image": info["Image"], "source": source}
+                return result
+
+            def drain():
+                report["stage"] = "drain"
+                run([*compose, "stop", "--timeout", "10", "api", "worker", "scheduler"], timeout=60)
+                for service in ("api", "worker", "scheduler"):
+                    ident = run([*compose, "ps", "-aq", service]).decode().strip()
+                    assert not json.loads(run(["docker", "inspect", ident]))[0]["State"]["Running"]
+
+            try:
+                report["stage"] = "infrastructure"
+                run([*compose, "up", "-d", "--wait", "postgres", "storage"], timeout=120)
+                run([*compose, "run", "--rm", "--no-deps", "-T", "storage-init"], timeout=120)
+                migrate(historical, "upgrade", "0008")
+                report["baseline_callers"] = callers(historical)
+                probe(historical, True)
+                probe(candidate, False)
+                drain()
+                controller("seed8")  # migration identity only; T runtime is drained.
+                report["seed_identity"] = json.loads((state / "receipt.json").read_text())[
+                    "identity"
+                ]
+                # Reject the actual changed helper's direct migration commands before
+                # any source/image switch or migration journal on this candidate.
+                guard = directory / "guard"
+                guard.mkdir(mode=0o700)
+                e.write_private(guard / "operation.lock", b"")
+                before = {p.name: p.read_bytes() for p in guard.iterdir()}
+                for action in ("migration-attest", "migration-prepare"):
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(e.ROOT / "scripts/prepare_telegram_egress.py"),
+                            action,
+                            "--state-dir",
+                            str(guard),
+                            "--accepted-sha",
+                            candidate,
+                            "--from-sha",
+                            e.MIGRATION_FROM,
+                        ],
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        timeout=30,
+                    )
+                    assert (
+                        result.returncode == 1
+                        and b"EGRESS_MIGRATION_HISTORICAL_SCHEMA_ONLY" in result.stdout
+                    )
+                    assert {p.name: p.read_bytes() for p in guard.iterdir()} == before
+                report["checks"].append("candidate_direct_cli_pairing_refusal")
+                migrate(candidate, "upgrade", "0009")
+                controller("check9")  # independent committed revision read after migrator exits
+                probe(candidate, True)
+                probe(historical, False)
+                # CONTROL-clean populated-T case: preserve all 34 tables and exact T definitions.
+                migrate(candidate, "downgrade", "0008")
+                controller("check8")
+                probe(historical, True)
+                # A separate migrator really commits 0009, then exits unsuccessfully.
+                # Observe its failure; NEVER infer the revision from that exit alone.
+                report["stage"] = "committed_upgrade_ack_loss"
+                lost = subprocess.run(
+                    [
+                        *prefix,
+                        images[candidate]["development"],
+                        "python",
+                        "tests/test_m3_1_control_migrations.py",
+                        "--control-schema-phase",
+                        "upgrade-lost-result",
+                        "/state/receipt.json",
+                    ],
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                    timeout=30,
+                )
+
+                def observe_revision():
+                    return json.loads(
+                        run(
+                            [
+                                *prefix,
+                                images[candidate]["development"],
+                                "python",
+                                "tests/test_m3_1_control_migrations.py",
+                                "--control-schema-phase",
+                                "observe",
+                                "/state/receipt.json",
+                            ],
+                            timeout=30,
+                        )
+                    )
+
+                saved_loss = json.loads((state / "receipt.json").read_text())["lost_result_process"]
+                report["lost_result_process"] = saved_loss
+                recovery_source = control_schema_recovery_source(
+                    lost, observe_revision, report, historical, candidate
+                )
+                controller("check9")  # projection/private S3/pending/UNKNOWN still exact
+                probe(historical, False)  # committed0009 explicitly rejects T
+                probe(recovery_source, True)
+                report["upgrade_ack_loss"]["historical_readiness"] = "REJECTED"
+                report["upgrade_ack_loss"]["candidate_readiness"] = "PASS"
+                # Exercise C runtime/worker on the correctly paired schema before
+                # permanent callers start, so duplicate-first admission is deterministic.
+                controller("fresh")
+                report["cutover_callers"] = callers(recovery_source)
+                report["upgrade_ack_loss"]["forward_callers"] = report["cutover_callers"]
+                drain()
+                controller("refuse")
+                report["restarted_callers"] = callers(recovery_source)
+                report["upgrade_ack_loss"]["restarted_callers"] = report["restarted_callers"]
+                probe(recovery_source, True)
+                drain()
+                controller("refuse")
+                report["database"] = json.loads((state / "receipt.json").read_text())
+                assert report["database"]["populated_refusal"] == "PASS"
+                # No raw signed URL or fixture content is published.
+                report["database"]["object"].pop("key")
+            except BaseException as error:
+                schema_record_failure(report, error)
+                raise
+            finally:
+                schema_publish(report, report_path, sys.exception())
+        e.source_check(candidate)
+        print("TELEGRAM_EGRESS_CONTROL_SCHEMA_PHASE_PASS", flush=True)
+    except BaseException as error:
+        primary = error
+        schema_record_failure(report, error)
+        raise
+    finally:
+        report["total_seconds"] = time.monotonic() - started
+        schema_publish(report, report_path, primary)
+
+
+def run_schema_cleanup_negatives(request):
+    """Actual daemon/PG negatives; mandatory only in the two existing state lanes."""
+    import tempfile
+
+    candidate = request["candidate"]
+    assert os.getuid() != 0 and os.environ.get("GITHUB_ACTIONS") == "true"
+    e.source_check(candidate)
+    positive = json.loads((e.ROOT / "reports/control-schema-phase.json").read_text())
+    assert positive["coordinator"] == candidate and positive["historical"] == CONTROL_T
+    assert positive["cleanup"]["state"] == "PASS"
+    pins = dict(
+        line.split("=", 1)
+        for line in (e.ROOT / "infra/images.lock.env").read_text().splitlines()
+        if line and not line.startswith("#")
+    )
+    results = []
+    for fault in ("retained-t-watchdog", "new-c-command-timeout", "new-c-cli-exit"):
+        report = schema_envelope(request, "NEGATIVE_" + fault.upper().replace("-", "_"))
+        path = e.ROOT / "reports" / ("control-cleanup-" + fault + ".json")
+        report["evidence"] = "ACTUAL_DOCKER_POSTGRES"
+        schema_publish(report, path)
+        with tempfile.TemporaryDirectory(prefix="asm-schema-negative-") as temporary:
+            directory = Path(temporary)
+            project = "asm-control-negative-" + uuid4().hex[:12]
+            source = CONTROL_T if fault.startswith("retained") else candidate
+            owner = SchemaOwnership(directory / "owner", project, report["phase"], source)
+            owner.admit()
+            report["cleanup"] = {"state": "ADMITTED"}
+            environment = owner.environment()
+            foreign = {}
+            checkout = e.ROOT
+            added = False
+            db = None
+            application = "cleanup_" + owner.token
+
+            def run(args, timeout=40):
+                return e.command(args, timeout=timeout, environment=environment)
+
+            def real(args, timeout=40):
+                return e.command([owner.docker, *args], timeout=timeout)
+
+            def connections(timeout=5):
+                return int(
+                    real(
+                        [
+                            "exec",
+                            db,
+                            "psql",
+                            "-U",
+                            "postgres",
+                            "-d",
+                            "asm_cleanup",
+                            "-Atqc",
+                            "SELECT count(*) FROM pg_stat_activity WHERE application_name='"
+                            + application
+                            + "'",
+                        ],
+                        timeout=timeout,
+                    )
+                )
+
+            def disconnected(cleanup_deadline):
+                end = min(time.monotonic() + 3, cleanup_deadline)
+                while True:
+                    remaining = end - time.monotonic()
+                    assert remaining > 0, "CONTROL_CONNECTION_REMAINS"
+                    count = connections(timeout=min(5, remaining))
+                    if count == 0:
+                        return count
+                    assert time.monotonic() < end, "CONTROL_CONNECTION_REMAINS"
+                    time.sleep(0.02)
+
+            def foreign_proof():
+                return {
+                    kind: e.sha(real([*command, foreign[kind]]))
+                    for kind, command in {
+                        "container": ["inspect"],
+                        "volume": ["volume", "inspect"],
+                        "network": ["network", "inspect"],
+                    }.items()
+                }
+
+            try:
+                try:
+                    with schema_cleanup_scope(owner, report, path, disconnected):
+                        report["stage"] = "negative_infrastructure"
+                        compose_file = directory / "compose.json"
+                        compose_file.write_text(
+                            json.dumps(
+                                {
+                                    "services": {
+                                        "postgres": {
+                                            "image": pins["DB_IMAGE"],
+                                            "environment": {
+                                                "POSTGRES_HOST_AUTH_METHOD": "trust",
+                                                "POSTGRES_DB": "asm_cleanup",
+                                            },
+                                            "volumes": ["pgdata:/var/lib/postgresql"],
+                                            "healthcheck": {
+                                                "test": [
+                                                    "CMD",
+                                                    "pg_isready",
+                                                    "-h",
+                                                    "127.0.0.1",
+                                                    "-U",
+                                                    "postgres",
+                                                    "-d",
+                                                    "asm_cleanup",
+                                                ],
+                                                "interval": "1s",
+                                                "timeout": "2s",
+                                                "retries": 20,
+                                            },
+                                        }
+                                    },
+                                    "volumes": {"pgdata": {}},
+                                }
+                            )
+                        )
+                        compose = [
+                            "docker",
+                            "compose",
+                            "--project-directory",
+                            str(directory),
+                            "--project-name",
+                            project,
+                            "-f",
+                            str(compose_file),
+                        ]
+                        run([*compose, "up", "-d", "--pull", "never", "--wait"], timeout=30)
+                        db = run([*compose, "ps", "-q", "postgres"]).decode().strip()
+                        report["database_container"] = db
+                        report["observed_source"] = candidate
+                        image = positive["images"][source + ":runtime"]["id"]
+                        report.update(executor_source=source, runtime_image=image)
+                        # Explicit test-fixture creation after initial-empty admission.
+                        # It bypasses the owner wrapper, so cleanup must preserve it.
+                        foreign["volume"] = (
+                            real(["volume", "create", "asm-foreign-" + owner.token])
+                            .decode()
+                            .strip()
+                        )
+                        foreign["network"] = (
+                            real(["network", "create", "asm-foreign-" + owner.token])
+                            .decode()
+                            .strip()
+                        )
+                        foreign["container"] = (
+                            real(
+                                [
+                                    "create",
+                                    "--network",
+                                    foreign["network"],
+                                    "--mount",
+                                    "type=volume,source=" + foreign["volume"] + ",target=/sentinel",
+                                    "--label",
+                                    "io.asm.foreign-sentinel=" + owner.token,
+                                    image,
+                                    "python",
+                                    "-c",
+                                    "pass",
+                                ]
+                            )
+                            .decode()
+                            .strip()
+                        )
+                        report["foreign_ids"] = dict(foreign)
+                        report["foreign_before"] = foreign_proof()
+                        if source == CONTROL_T:
+                            checkout = directory / "frozen-T"
+                            e.command(
+                                ["git", "worktree", "add", "--detach", str(checkout), CONTROL_T]
+                            )
+                            added = True
+                        report["helper_blob"] = (
+                            e.command(
+                                ["git", "rev-parse", source + ":scripts/prepare_telegram_egress.py"]
+                            )
+                            .decode()
+                            .strip()
+                        )
+                        state = directory / "state"
+                        state.mkdir(mode=0o700)
+                        # A real connection/idle transaction survives the killed host
+                        # Docker CLI. PID1 ignores TERM until bounded Docker cleanup.
+                        code = (
+                            "import os,signal,time,psycopg\nfrom pathlib import Path\n"
+                            "signal.signal(signal.SIGTERM,signal.SIG_IGN)\n"
+                            "c=psycopg.connect('host=postgres dbname=asm_cleanup user=postgres application_name="
+                            + application
+                            + "',connect_timeout=3)\n"
+                            "pid=c.execute('select pg_backend_pid()').fetchone()[0]\n"
+                            "Path('/state/connected').write_text(str(pid))\n"
+                            "while True: time.sleep(1)\n"
+                        )
+                        command = [
+                            "docker",
+                            "run",
+                            "--rm",
+                            "--network",
+                            project + "_default",
+                            "--user",
+                            f"{os.getuid()}:{os.getgid()}",
+                            "--mount",
+                            f"type=bind,source={state},target=/state",
+                            image,
+                            "python",
+                            "-c",
+                            code,
+                        ]
+                        report["stage"] = fault
+                        failure = None
+                        try:
+                            if fault == "new-c-command-timeout":
+                                # Exact helper.command cancellation boundary: its
+                                # subprocess.run kills the CLI, not the daemon PID1.
+                                run(command, timeout=3)
+                                raise AssertionError("CONTROL_EXPECTED_COMMAND_TIMEOUT")
+                            else:
+                                if fault == "new-c-cli-exit":
+                                    command.insert(3, "-d")
+                                child = (
+                                    "import sys,time\nfrom pathlib import Path\n"
+                                    "from scripts import prepare_telegram_egress as e\n"
+                                    "e.command(" + repr(command) + ",timeout=40)\n"
+                                )
+                                if fault == "new-c-cli-exit":
+                                    child += (
+                                        "end=time.monotonic()+3\n"
+                                        "while not Path("
+                                        + repr(str(state / "connected"))
+                                        + ").exists():\n"
+                                        " assert time.monotonic()<end;time.sleep(.02)\n"
+                                        "sys.exit(7)\n"
+                                    )
+                                result = supervised_schema_child(
+                                    [sys.executable, "-c", child],
+                                    cwd=checkout,
+                                    timeout=5,
+                                    environment=environment,
+                                )
+                                assert result == 7 and fault == "new-c-cli-exit", (
+                                    "CONTROL_EXPECTED_CLI_EXIT"
+                                )
+                                raise subprocess.CalledProcessError(result, ["owned-controller"])
+                        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+                            failure = error
+                            report["expected_failure"] = schema_failure(error)
+                            assert (state / "connected").exists(), (
+                                "CONTROL_NEGATIVE_NEVER_CONNECTED"
+                            )
+                            report["backend_pid"] = int((state / "connected").read_text())
+                            report["connections_before_cleanup"] = connections()
+                            assert report["connections_before_cleanup"] == 1, (
+                                "CONTROL_NEGATIVE_CONNECTION_REQUIRED"
+                            )
+                            infos = json.loads(
+                                real(
+                                    [
+                                        "inspect",
+                                        *real(
+                                            [
+                                                "ps",
+                                                "-q",
+                                                "--filter",
+                                                "label=" + SCHEMA_OWNER_LABEL + "=" + owner.token,
+                                            ]
+                                        )
+                                        .decode()
+                                        .split(),
+                                    ]
+                                )
+                            )
+                            controllers = [i for i in infos if i["Id"] != db]
+                            assert len(controllers) == 1 and controllers[0]["State"]["Running"], (
+                                "CONTROL_NEGATIVE_DAEMON_SURVIVOR_REQUIRED"
+                            )
+                            report["controller_cid"] = controllers[0]["Id"]
+                            report["controller_running_after_host_failure"] = True
+                            ignored = int(
+                                real(
+                                    [
+                                        "exec",
+                                        report["controller_cid"],
+                                        "python",
+                                        "-c",
+                                        "from pathlib import Path;print(next(s.split()[1] for s in Path('/proc/1/status').read_text().splitlines() if s.startswith('SigIgn:')))",
+                                    ]
+                                ).strip(),
+                                16,
+                            )
+                            assert ignored & (1 << (signal.SIGTERM - 1)), (
+                                "CONTROL_TERM_MUST_BE_IGNORED"
+                            )
+                            report["term_ignored"] = True
+                            report["host_cli_processes"] = []
+                            for intent_path in owner.directory.glob("run-*.json"):
+                                intent = json.loads(intent_path.read_text())
+                                proc = Path(f"/proc/{intent['cli_pid']}/stat")
+                                try:
+                                    stat_fields = proc.read_text().rpartition(")")[2].split()
+                                    live = (
+                                        stat_fields[0] != "Z"
+                                        and int(stat_fields[19]) == intent["cli_start_ticks"]
+                                    )
+                                except FileNotFoundError:
+                                    live = False
+                                assert not live, "CONTROL_HOST_CLI_REMAINS"
+                                report["host_cli_processes"].append(
+                                    {
+                                        "pid": intent["cli_pid"],
+                                        "start_ticks": intent["cli_start_ticks"],
+                                        "live": live,
+                                    }
+                                )
+                            raise
+                        finally:
+                            if failure is not None:
+                                schema_publish(report, path, failure)
+                except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as error:
+                    assert schema_failure(error) == report["expected_failure"], (
+                        "CONTROL_PRIMARY_FAILURE_CHANGED"
+                    )
+                    assert report["cleanup"]["state"] == "OWNED_REMOVED"
+                    assert (
+                        report["cleanup"]["diagnostic"]["reason"]
+                        == "CONTROL_FOREIGN_RESOURCE_REMAINS"
+                    )
+                    assert report["cleanup"]["connections_after_controller_stop"] == 0
+                    assert report["cleanup"]["owned_remaining"] == []
+                    report["foreign_after"] = foreign_proof()
+                    assert report["foreign_before"] == report["foreign_after"]
+                    assert report["cleanup"]["seconds"] < 90
+                    report["result"] = "PASS"
+                    results.append(fault)
+                    print("CONTROL_CLEANUP_NEGATIVE_PASS " + fault, flush=True)
+                finally:
+                    # Publish proof before removing these explicitly-created
+                    # foreign fixture identities, never via phase ownership.
+                    schema_publish(report, path, sys.exception())
+                    if foreign.get("container"):
+                        real(["rm", "-v", foreign["container"]])
+                    if foreign.get("volume"):
+                        real(["volume", "rm", foreign["volume"]])
+                    if foreign.get("network"):
+                        real(["network", "rm", foreign["network"]])
+                    if added:
+                        assert not e.command(
+                            [
+                                "git",
+                                "-C",
+                                str(checkout),
+                                "status",
+                                "--porcelain",
+                                "--untracked-files=all",
+                            ]
+                        ).strip()
+                        e.command(["git", "worktree", "remove", str(checkout)])
+            finally:
+                schema_publish(report, path, sys.exception())
+    assert results == ["retained-t-watchdog", "new-c-command-timeout", "new-c-cli-exit"]
+    assert not e.command(["docker", "ps", "-aq"]).strip()
+    assert not e.command(["docker", "volume", "ls", "-q"]).strip()
+    e.source_check(candidate)
+    (e.ROOT / "reports/control-cleanup-negatives.json").write_text(
+        json.dumps(
+            {
+                "candidate": candidate,
+                "evidence": "ACTUAL_DOCKER_POSTGRES",
+                "results": results,
+                "result": "PASS",
+                "count": len(results),
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+
+
+if __name__ == "__schema_docker__":
+    schema_docker_cli(globals()["ownership_file"], globals()["docker_args"])
+    raise SystemExit(0)
+
+
+if __name__ == "__control_cleanup_negatives__":
+    run_schema_cleanup_negatives(globals()["control_cleanup_request"])
+    raise SystemExit(0)
+
+
+if __name__ == "__control_coordinator__":
+    run_control_coordinator(globals()["control_coordinator_request"])
+    raise SystemExit(0)
+
+
 if __name__ == "__schema_harness__":
-    run_schema_phase(globals()["schema_request"])
+    if "control_schema_request" in globals():
+        run_control_schema_phase(globals()["control_schema_request"])
+    else:
+        run_schema_phase(globals()["schema_request"])
     raise SystemExit(0)
 
 
@@ -2486,7 +5297,40 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
     coordinator = (e.ROOT / "scripts/test_telegram_egress_migration.sh").read_text()
     shell = (e.ROOT / "scripts/test_telegram_egress.sh").read_text()
     assert "if fault == 'state':" in coordinator
-    assert "'--schema-upgrade', H, source" in coordinator
+    # T is now the immutable retained executor; C gets its own private handoff.
+    assert "run_name='__control_coordinator__'" in coordinator
+    assert "run_name='__control_cleanup_negatives__'" in coordinator
+    assert "negative['count'] == 3" in coordinator
+    import ast
+    import inspect
+
+    dispatcher = ast.parse(inspect.getsource(run_control_coordinator))
+    calls = [
+        node
+        for node in ast.walk(dispatcher)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "supervised_schema_child"
+    ]
+    argv = [
+        [
+            item.value if isinstance(item, ast.Constant) else ast.unparse(item)
+            for item in call.args[0].elts
+        ]
+        for call in sorted(calls, key=lambda call: call.lineno)
+    ]
+    assert argv == [
+        ["sh", "scripts/test_telegram_egress.sh", "--schema-upgrade", "historical", "CONTROL_T"],
+        [
+            "sh",
+            "scripts/test_telegram_egress.sh",
+            "--control-schema-upgrade",
+            "CONTROL_T",
+            "candidate",
+            "str(handoff)",
+        ],
+    ]
+    assert '"budget_file": sys.argv[4]' in shell or "'budget_file': sys.argv[4]" in shell
     assert "run_name='__schema_harness__'" in shell
     assert "754f1c883e5a94a7fc9e729af2605424f949ba33" in coordinator
 
@@ -2536,3 +5380,1241 @@ def test_ack_loss_does_not_accept_unexpected_migrator_result(status, marker):
         )
     assert report["upgrade_ack_loss"]["observed"] == "NOT_READ"
     assert "recovery_source" not in report["upgrade_ack_loss"]
+
+
+def control_budget_file(tmp_path, **changes):
+    now = time.monotonic()
+    value = dict(
+        version=1,
+        phase=CONTROL_PHASE,
+        historical=CONTROL_T,
+        candidate="c" * 40,
+        uid=os.getuid(),
+        started_at=now - 30,
+        issued_at=now,
+        charged_seconds=30,
+        deadline=now + 570,
+    )
+    value.update(changes)
+    path = tmp_path / "control-budget.json"
+    tmp_path.chmod(0o700)
+    e.write_private(path, e.encoded(value))
+    return path
+
+
+def test_control_remaining_budget_is_absolute_private_and_consumed_once(tmp_path):
+    path = control_budget_file(tmp_path)
+    budget = consume_control_budget(path, CONTROL_T, "c" * 40)
+    assert 0 < budget["remaining_seconds"] <= 570
+    assert budget["charged_seconds"] == 30 and not path.exists()
+    with pytest.raises(FileNotFoundError):
+        consume_control_budget(path, CONTROL_T, "c" * 40)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"phase": "TURNS"},
+        {"historical": "a" * 40},
+        {"candidate": "b" * 40},
+        {"uid": -1},
+        {"version": True},
+        {"charged_seconds": 1},
+        {"deadline": 0},
+        {"started_at": 1},
+        {"unexpected": 1},
+    ],
+)
+def test_control_budget_wrong_phase_source_clock_or_owner_refuses(tmp_path, change):
+    path = control_budget_file(tmp_path, **change)
+    with pytest.raises(AssertionError):
+        consume_control_budget(path, CONTROL_T, "c" * 40)
+
+
+def test_control_budget_exhaustion_and_file_guards(tmp_path):
+    now = time.monotonic()
+    path = control_budget_file(
+        tmp_path, started_at=now - 601, issued_at=now - 2, charged_seconds=599, deadline=now - 1
+    )
+    with pytest.raises(AssertionError, match="EXHAUSTED"):
+        consume_control_budget(path, CONTROL_T, "c" * 40)
+    path.unlink()
+    path = control_budget_file(tmp_path)
+    path.chmod(0o644)
+    with pytest.raises(e.EgressError, match="PRIVATE_MODE"):
+        consume_control_budget(path, CONTROL_T, "c" * 40)
+    path.chmod(0o600)
+    os.link(path, tmp_path / "duplicate")
+    with pytest.raises(AssertionError, match="SINGLE_LINK"):
+        consume_control_budget(path, CONTROL_T, "c" * 40)
+
+
+@pytest.mark.parametrize("revision", ["0007", "0008", "0010", None])
+def test_control_recovery_never_selects_candidate_for_unconfirmed_schema(revision):
+    result = SimpleNamespace(returncode=86, stdout=b"CONTROL_UPGRADE_COMMITTED_RESULT_LOST\n")
+    report = {"seed_identity": {"database": "asm_local", "database_oid": 10}}
+    with pytest.raises(AssertionError):
+        control_schema_recovery_source(
+            result, lambda: {"revision": revision}, report, CONTROL_T, "c" * 40
+        )
+    assert "recovery_source" not in report["upgrade_ack_loss"]
+
+
+def test_control_recovery_requires_exact_database_and_controlled_failure():
+    observed = dict(
+        revision="0009",
+        role="asm_migrator",
+        database="asm_local",
+        database_oid=10,
+        reader_pid=2,
+        backend_pid=3,
+        reader_namespace="pid:[123]",
+        reader_start_ticks=200,
+        reader_boot_id="test-boot",
+    )
+    result = SimpleNamespace(returncode=86, stdout=b"CONTROL_UPGRADE_COMMITTED_RESULT_LOST\n")
+    report = {
+        "seed_identity": {"database": "asm_local", "database_oid": 10},
+        "lost_result_process": {
+            "pid": 1,
+            "namespace": "pid:[122]",
+            "start_ticks": 100,
+            "boot_id": "test-boot",
+        },
+    }
+    assert (
+        control_schema_recovery_source(result, lambda: observed, report, CONTROL_T, "c" * 40)
+        == "c" * 40
+    )
+    # A successful exit or unrelated failure is not this post-commit cut.
+    for code in (0, 1, 87):
+        with pytest.raises(AssertionError, match="POST_COMMIT"):
+            control_schema_recovery_source(
+                SimpleNamespace(returncode=code, stdout=result.stdout),
+                lambda: observed,
+                report,
+                CONTROL_T,
+                "c" * 40,
+            )
+    with pytest.raises(AssertionError, match="DATABASE_IDENTITY"):
+        control_schema_recovery_source(
+            result, lambda: observed | {"database_oid": 11}, report, CONTROL_T, "c" * 40
+        )
+    # A recycled namespace/PID pair is still a new process only with a later
+    # kernel birth time; no missing metadata or same-process fallback is allowed.
+    recycled = observed | {"reader_namespace": "pid:[122]", "reader_pid": 1}
+    assert (
+        control_schema_recovery_source(result, lambda: recycled, report, CONTROL_T, "c" * 40)
+        == "c" * 40
+    )
+    for birth in (100, 99):
+        with pytest.raises(AssertionError, match="FRESH_PROCESS"):
+            control_schema_recovery_source(
+                result,
+                lambda: recycled | {"reader_start_ticks": birth},
+                report,
+                CONTROL_T,
+                "c" * 40,
+            )
+    with pytest.raises(AssertionError, match="HOST_BOOT"):
+        control_schema_recovery_source(
+            result,
+            lambda: recycled | {"reader_boot_id": "different-boot"},
+            report,
+            CONTROL_T,
+            "c" * 40,
+        )
+    del report["lost_result_process"]
+    with pytest.raises(AssertionError, match="IDENTITY_REQUIRED"):
+        control_schema_recovery_source(result, lambda: recycled, report, CONTROL_T, "c" * 40)
+
+
+def test_schema_supervisor_reaps_child_on_timeout(tmp_path):
+    started = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        supervised_schema_child(
+            [sys.executable, "-c", "import time; time.sleep(60)"], cwd=tmp_path, timeout=0.1
+        )
+    assert time.monotonic() - started < 2
+
+
+@pytest.mark.parametrize("failure", ["timeout", "exit"])
+def test_schema_supervisor_stops_term_ignoring_descendant_after_leader_exit(tmp_path, failure):
+    script = """
+import os,signal,sys,time
+from pathlib import Path
+if os.fork()==0:
+ signal.signal(signal.SIGTERM,signal.SIG_IGN)
+ Path('descendant').write_text(str(os.getpid()))
+ time.sleep(60)
+else:
+ while not Path('descendant').exists(): time.sleep(.01)
+ if sys.argv[1]=='exit': sys.exit(7)
+ time.sleep(60)
+"""
+    started = time.monotonic()
+    args = [sys.executable, "-c", script, failure]
+    if failure == "timeout":
+        with pytest.raises(subprocess.TimeoutExpired):
+            supervised_schema_child(args, cwd=tmp_path, timeout=1)
+    else:
+        assert supervised_schema_child(args, cwd=tmp_path, timeout=1) == 7
+    pid = int((tmp_path / "descendant").read_text())
+    path = Path(f"/proc/{pid}/stat")
+    # A zombie has already terminated and retains no descriptors or execution;
+    # its orphan reaping belongs to the runner init, not this unrelated parent.
+    assert not path.exists() or path.read_text().rpartition(")")[2].split()[0] == "Z"
+    assert time.monotonic() - started < 7
+
+
+def test_schema_probe_programs_are_executable_python_without_hidden_indentation():
+    import ast
+    import inspect
+
+    for phase in (run_schema_phase, run_control_schema_phase):
+        tree = ast.parse(inspect.getsource(phase))
+        assignment = next(
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "code" for t in n.targets)
+        )
+        value = ast.literal_eval(assignment.value.func.value).replace("EXPECTED", "True")
+        compile(value, "<isolated schema readiness probe>", "exec")
+
+
+@pytest.mark.parametrize("entry", ["coordinator", "child"])
+@pytest.mark.parametrize("fault", ["mismatch", "dirty", "git", "command"])
+def test_control_initial_failure_retains_source_budget_and_primary(
+    tmp_path, monkeypatch, entry, fault
+):
+    root = tmp_path / "checkout"
+    root.mkdir()
+    foreign = tmp_path / "foreign"
+    foreign.write_bytes(b"untouched foreign state")
+    calls = []
+    candidate = "c" * 40
+    monkeypatch.setattr(e, "ROOT", root)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(os, "getuid", lambda: 1001)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    request = {"historical": CONTROL_T, "candidate": candidate}
+    if entry == "child":
+        directory = tmp_path / "handoff"
+        directory.mkdir(mode=0o700)
+        # File guards are tested separately with the actual uid. This seam only
+        # substitutes uid lookup, keeping real one-use consume/accounting.
+        monkeypatch.setattr(os, "getuid", lambda: directory.stat().st_uid)
+        path = control_budget_file(directory)
+        request["budget_file"] = str(path)
+        monkeypatch.setattr(e, "checked_path", lambda p, **kw: Path(p))
+        monkeypatch.setattr(os, "getuid", lambda: directory.stat().st_uid or 1001)
+        value = json.loads(path.read_text())
+        value["uid"] = os.getuid()
+        path.write_text(json.dumps(value))
+        monkeypatch.setattr(e, "private_bytes", lambda p: Path(p).read_bytes())
+    else:
+        request["historical"] = "754f1c883e5a94a7fc9e729af2605424f949ba33"
+
+    def command(args, **kwargs):
+        calls.append(args)
+        assert args[0] == "git", "early refusal must never reach Docker"
+        if fault == "git":
+            raise subprocess.CalledProcessError(7, ["git", "credential-looking-secret"])
+        return (candidate + "\n").encode()
+
+    codes = {
+        "mismatch": "EGRESS_CHECKOUT_MISMATCH",
+        "dirty": "EGRESS_DIRTY_SOURCE",
+        "command": "EGRESS_COMMAND_FAILED",
+    }
+    monkeypatch.setattr(e, "command", command)
+
+    def reject(_):
+        raise e.EgressError(codes[fault])
+
+    monkeypatch.setattr(e, "source_check", reject)
+    with pytest.raises((e.EgressError, subprocess.CalledProcessError)):
+        (run_control_coordinator if entry == "coordinator" else run_control_schema_phase)(request)
+    filename = (
+        "control-schema-ledger.json" if entry == "coordinator" else "control-schema-phase.json"
+    )
+    report = json.loads((root / "reports" / filename).read_text())
+    assert report["requested_source"] == candidate
+    assert report["observed_source"] == ("NOT_OBSERVED" if fault == "git" else candidate)
+    assert report["primary_failure"]["reason"] == (
+        "CONTROL_COMMAND_EXIT" if fault == "git" else codes[fault]
+    )
+    assert report["elapsed_seconds"] >= 0 and report["cleanup"]["state"] == "NOT_ADMITTED"
+    assert foreign.read_bytes() == b"untouched foreign state"
+    assert "credential-looking-secret" not in json.dumps(report)
+    if entry == "child" and fault != "git":
+        assert report["historical"] == CONTROL_T and report["coordinator"] == candidate
+        assert report["prepare_budget"]["charged_seconds"] == 30
+        assert report["prepare_budget"]["deadline"] - report["prepare_budget"]["started_at"] == 600
+        assert report["budget_at_report"]["charged_seconds"] >= 30
+        assert report["budget_state"] == "VALIDATED_CONSUMED" and not path.exists()
+    else:
+        assert "prepare_budget" not in report
+
+
+@pytest.mark.parametrize("fault", ["malformed", "invalid", "expired", "unreadable", "consumed"])
+def test_control_rejected_handoff_report_never_claims_unvalidated_budget(
+    tmp_path, monkeypatch, fault
+):
+    candidate = "c" * 40
+    root = tmp_path / "checkout"
+    root.mkdir()
+    handoff = tmp_path / "handoff"
+    handoff.mkdir(mode=0o700)
+    path = control_budget_file(handoff)
+    if fault == "malformed":
+        path.write_text("{not json")
+    elif fault == "invalid":
+        value = json.loads(path.read_text())
+        value["candidate"] = "b" * 40
+        path.write_text(json.dumps(value))
+    elif fault == "expired":
+        value = json.loads(path.read_text())
+        now = time.monotonic()
+        value.update(started_at=now - 601, issued_at=now - 2, charged_seconds=599, deadline=now - 1)
+        path.write_text(json.dumps(value))
+    elif fault == "unreadable":
+        path.chmod(0o644)
+    else:
+        consume_control_budget(path, CONTROL_T, candidate)
+    calls = []
+    monkeypatch.setattr(e, "ROOT", root)
+    monkeypatch.chdir(root)
+
+    def command(args, **kwargs):
+        calls.append(args)
+        assert args == ["git", "rev-parse", "HEAD"]
+        return candidate.encode()
+
+    monkeypatch.setattr(e, "command", command)
+    monkeypatch.setattr(
+        e, "source_check", lambda _: pytest.fail("budget refusal must precede source admission")
+    )
+    with pytest.raises((e.EgressError, AssertionError, FileNotFoundError)):
+        run_control_schema_phase(
+            {"historical": CONTROL_T, "candidate": candidate, "budget_file": str(path)}
+        )
+    report = json.loads((root / "reports/control-schema-phase.json").read_text())
+    assert len(calls) == 1 and report["primary_failure"]["stage"] == "consume_budget"
+    assert report["budget_state"] == "NOT_VALIDATED" and "prepare_budget" not in report
+    assert report["requested_source"] == report["observed_source"] == candidate
+    assert report["elapsed_seconds"] >= 0 and report["cleanup"]["state"] == "NOT_ADMITTED"
+    assert "coordinator" not in report and "historical" not in report
+
+
+@pytest.mark.parametrize("fault", ["archive", "build", "reuse", "probe"])
+def test_control_prepare_failure_keeps_consumed_budget_before_any_runtime(
+    tmp_path, monkeypatch, fault
+):
+    root = tmp_path / "checkout"
+    (root / "infra").mkdir(parents=True)
+    (root / "infra/images.lock.env").write_text("PYTHON_IMAGE=synthetic\nUV_IMAGE=synthetic\n")
+    handoff = tmp_path / "handoff"
+    handoff.mkdir(mode=0o700)
+    path = control_budget_file(handoff)
+    budget = consume_control_budget(path, CONTROL_T, "c" * 40)
+    monkeypatch.setattr(sys.modules[__name__], "consume_control_budget", lambda *a: budget)
+    monkeypatch.setattr(e, "ROOT", root)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(os, "getuid", lambda: 1001)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(e, "source_check", lambda _: None)
+    calls, cleanup = [], []
+
+    def close(report):
+        cleanup.append(True)
+        report["state"] = "PASS"
+
+    monkeypatch.setattr(SchemaOwnership, "inherited", lambda *a: SimpleNamespace(cleanup=close))
+
+    def command(args, **kwargs):
+        calls.append(args)
+        if args == ["git", "rev-parse", "HEAD"]:
+            return b"c" * 40
+        if args[:2] in (["docker", "ps"], ["docker", "volume"]):
+            return b""
+        if args[:3] == ["docker", "image", "ls"]:
+            return b"sha256:synthetic" if fault == "reuse" else b""
+        if args[:2] == ["docker", "build"]:
+            if fault == "build":
+                raise e.EgressError("EGRESS_COMMAND_FAILED")
+            return b""
+        if args[:3] == ["docker", "image", "inspect"]:
+            return b'[{"Id":"sha256:synthetic"}]'
+        pytest.fail("no runtime/compose/controller after prepare fault: " + args[0])
+
+    monkeypatch.setattr(e, "command", command)
+
+    def archive(*args):
+        if fault == "archive":
+            raise e.EgressError("EGRESS_COMMAND_FAILED")
+
+    monkeypatch.setattr(e, "migration_build_context", archive)
+
+    def probe(*args):
+        assert fault in {"reuse", "probe"}
+        raise e.EgressError("EGRESS_MIGRATION_IMAGE_IDENTITY")
+
+    monkeypatch.setattr(e, "migration_image", probe)
+    with pytest.raises(e.EgressError):
+        run_control_schema_phase(
+            {"historical": CONTROL_T, "candidate": "c" * 40, "budget_file": str(path)}
+        )
+    report = json.loads((root / "reports/control-schema-phase.json").read_text())
+    expected = "image_probe" if fault == "probe" else fault
+    assert report["primary_failure"]["stage"].startswith(expected + "_")
+    assert report["budget_state"] == "VALIDATED_CONSUMED" and report["prepare_budget"] == budget
+    assert report["budget_at_report"]["charged_seconds"] >= 30
+    assert report["budget_at_report"]["remaining_seconds"] <= budget["remaining_seconds"]
+    assert cleanup == [True] and report["cleanup"]["state"] == "PASS"
+    assert not report["checks"] and all("compose" not in c for c in calls)
+
+
+@pytest.mark.parametrize("primary_present", [False, True])
+@pytest.mark.parametrize("report_failure", [False, True])
+def test_control_secondary_cleanup_and_report_errors_preserve_primary(
+    tmp_path, monkeypatch, capsys, primary_present, report_failure
+):
+    report = schema_envelope({"candidate": "c" * 40}, CONTROL_PHASE)
+    primary = e.EgressError("EGRESS_CHECKOUT_MISMATCH")
+    calls = []
+
+    def cleanup(detail):
+        calls.append("cleanup")
+        raise e.EgressError("CONTROL_FOREIGN_RESOURCE_REMAINS")
+
+    owner = SimpleNamespace(cleanup=cleanup)
+    if report_failure:
+        monkeypatch.setattr(
+            Path, "write_text", lambda *a, **k: (_ for _ in ()).throw(OSError("secret report path"))
+        )
+    with pytest.raises((e.EgressError, OSError)) as caught:
+        with schema_cleanup_scope(owner, report, tmp_path / "report.json"):
+            if primary_present:
+                raise primary
+    assert calls == ["cleanup"]
+    if primary_present:
+        assert (
+            caught.value is primary
+            and report["primary_failure"]["reason"] == "EGRESS_CHECKOUT_MISMATCH"
+        )
+    else:
+        assert report["failure"] in {"OSError", "EgressError"}
+    assert any(d["stage"] == "cleanup" for d in report["secondary_failures"])
+    assert "secret report path" not in json.dumps(report) + capsys.readouterr().out
+
+
+def test_control_ownership_refuses_nonempty_daemon_without_cleanup(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/docker")
+
+    def command(args, **kwargs):
+        calls.append(args)
+        return b"foreign-sentinel\n"
+
+    monkeypatch.setattr(e, "command", command)
+    owner = SchemaOwnership(tmp_path / "private", "project", CONTROL_PHASE, "c" * 40)
+    with pytest.raises(AssertionError, match="INITIAL_CONTAINERS"):
+        owner.admit()
+    with pytest.raises(AssertionError, match="NOT_ADMITTED"):
+        owner.cleanup({})
+    assert not owner.admitted and not owner.directory.exists()
+    assert calls == [["/usr/bin/docker", "ps", "-aq"]]
+
+
+def test_control_cli_records_precreation_name_and_cid_intent(tmp_path, monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(e, "command", lambda *a, **k: b"")
+    owner = SchemaOwnership(tmp_path / "owner", "project", CONTROL_PHASE, "c" * 40)
+    owner.admit()
+    observed = []
+
+    def execute(binary, args):
+        intent = next(owner.directory.glob("run-*.json"))
+        value = json.loads(intent.read_text())
+        assert value["token"] == owner.token
+        assert args[args.index("--name") + 1] == value["name"]
+        assert args[args.index("--cidfile") + 1] == str(intent.with_suffix(".cid"))
+        assert not intent.with_suffix(".cid").exists()
+        assert SCHEMA_OWNER_LABEL + "=" + owner.token in args
+        observed.append(binary)
+
+    monkeypatch.setattr(os, "execv", execute)
+    schema_docker_cli(owner.directory / "ownership.json", ["run", "--rm", "image", "python"])
+    assert observed == ["/usr/bin/docker"]
+
+
+@pytest.mark.parametrize("missing_cid", [False, True])
+@pytest.mark.parametrize("foreign", [False, True])
+def test_control_cleanup_owns_created_container_even_if_cli_lost_cid(
+    tmp_path, monkeypatch, missing_cid, foreign
+):
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/docker")
+    owner = SchemaOwnership(tmp_path / "owner", "project", CONTROL_PHASE, "c" * 40)
+    owner.directory.mkdir(mode=0o700)
+    owner.admitted = True
+    own, database, sentinel = "a" * 64, "b" * 64, "f" * 64
+    name = "plain-controller"
+    intent = owner.directory / "run-controller.json"
+    e.write_private(intent, e.encoded({"name": name, "token": owner.token, "phase": CONTROL_PHASE}))
+    if not missing_cid:
+        intent.with_suffix(".cid").write_text(own)
+    label = {SCHEMA_OWNER_LABEL: owner.token}
+    rows = {
+        own: {
+            "Id": own,
+            "Name": "/" + name,
+            "Config": {"Labels": label, "Volumes": {}},
+            "State": {"Running": True},
+            "Mounts": [],
+        },
+        database: {
+            "Id": database,
+            "Name": "/project-postgres-1",
+            "Config": {"Labels": {**label, "com.docker.compose.project": "project"}},
+            "State": {"Running": True},
+            "Mounts": [{"Type": "volume", "Name": "owned-volume", "Destination": "/data"}],
+        },
+    }
+    volumes, networks = {"owned-volume"}, {"owned-network"}
+    operations = []
+
+    def command(argv, **kwargs):
+        args = argv[1:]
+        operations.append(args)
+        assert 0 < kwargs["timeout"] <= 90
+        if args[:2] == ["ps", "-aq"]:
+            ids = list(rows)
+            if "--filter" not in args and foreign:
+                ids.append(sentinel)
+            return "\n".join(ids).encode()
+        if args[0] == "inspect":
+            return json.dumps([rows[i] for i in args[1:]]).encode()
+        if args[:2] == ["volume", "inspect"]:
+            return json.dumps([{"Labels": label}]).encode()
+        if args[:2] == ["volume", "ls"]:
+            return "\n".join(
+                volumes | ({"foreign-volume"} if foreign and "--filter" not in args else set())
+            ).encode()
+        if args[:2] == ["network", "ls"]:
+            return "\n".join(networks).encode()
+        if args[0] == "stop":
+            for ident in args[3:]:
+                rows[ident]["State"]["Running"] = False
+            return b""
+        if args[:3] == ["rm", "-f", "-v"]:
+            for ident in args[3:]:
+                assert ident != sentinel
+                del rows[ident]
+            return b""
+        if args[:2] == ["volume", "rm"]:
+            volumes.remove(args[2])
+            return b""
+        if args[:2] == ["network", "rm"]:
+            networks.remove(args[2])
+            return b""
+        pytest.fail("unexpected cleanup command")
+
+    monkeypatch.setattr(e, "command", command)
+
+    def disconnected(deadline):
+        assert deadline > time.monotonic()
+        assert own not in rows and database in rows
+        return 0
+
+    report = {}
+    if foreign:
+        with pytest.raises(AssertionError, match="FOREIGN_RESOURCE_REMAINS"):
+            owner.cleanup(report, disconnected)
+        assert report["foreign_containers"] == [sentinel] and report["foreign_volumes"] == [
+            "foreign-volume"
+        ]
+    else:
+        owner.cleanup(report, disconnected)
+        assert report["state"] == "PASS"
+    assert not rows and not volumes and not networks
+    assert report["intents"][0]["cid"] == own
+    assert not report["unconfirmed_creations"] and report["owned_remaining"] == []
+    assert report["connections_after_controller_stop"] == 0
+    assert not any(sentinel in a or "foreign-volume" in a for a in operations)
+
+
+def test_control_unconfirmed_creation_is_stop_even_on_empty_daemon(tmp_path, monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/docker")
+    owner = SchemaOwnership(tmp_path / "owner", "project", CONTROL_PHASE, "c" * 40)
+    owner.directory.mkdir(mode=0o700)
+    owner.admitted = True
+    e.write_private(
+        owner.directory / "run-before-ack.json",
+        e.encoded({"name": "pending-name", "token": owner.token, "phase": CONTROL_PHASE}),
+    )
+    monkeypatch.setattr(e, "command", lambda *a, **k: b"")
+    report = {}
+    with pytest.raises(AssertionError, match="CREATION_UNCONFIRMED"):
+        owner.cleanup(report)
+    assert report["state"] == "CREATION_UNCONFIRMED"
+    assert report["unconfirmed_creations"] == ["pending-name"]
+
+
+def test_control_coordinator_archive_failure_retains_ledger_and_cleans_only_admitted_owner(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "checkout"
+    root.mkdir()
+    monkeypatch.setattr(e, "ROOT", root)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(os, "getuid", lambda: 1001)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(e, "source_check", lambda _: None)
+    admitted, cleaned, commands = [], [], []
+    monkeypatch.setattr(SchemaOwnership, "admit", lambda self: admitted.append(self.token))
+
+    def cleanup(self, report):
+        assert self.token in admitted
+        cleaned.append(self.token)
+        report["state"] = "PASS"
+
+    monkeypatch.setattr(SchemaOwnership, "cleanup", cleanup)
+
+    def command(args, **kwargs):
+        commands.append(args)
+        assert args[0] == "git"
+        if args[1:3] == ["rev-parse", "HEAD"]:
+            return b"c" * 40
+        if args[1] == "merge-base":
+            return b""
+        assert args[1] == "archive"
+        raise e.EgressError("EGRESS_COMMAND_FAILED")
+
+    monkeypatch.setattr(e, "command", command)
+    with pytest.raises(e.EgressError, match="COMMAND_FAILED"):
+        run_control_coordinator(
+            {"historical": "754f1c883e5a94a7fc9e729af2605424f949ba33", "candidate": "c" * 40}
+        )
+    report = json.loads((root / "reports/control-schema-ledger.json").read_text())
+    assert report["primary_failure"]["stage"] == "retained_archive"
+    assert report["primary_failure"]["reason"] == "EGRESS_COMMAND_FAILED"
+    assert report["deadline"] - report["started_at"] == 600 and report["elapsed_seconds"] >= 0
+    assert len(admitted) == 1 and cleaned == admitted
+    assert report["requested_source"] == report["observed_source"] == "c" * 40
+    assert (root / "reports/retained-turns/source-pairing.json").exists()
+    assert not any("worktree" in c or "docker" in c for c in commands)
+
+
+def test_control_cleanup_reuses_one_absolute_90s_deadline(tmp_path, monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/docker")
+    owner = SchemaOwnership(tmp_path / "owner", "project", CONTROL_PHASE, "c" * 40)
+    owner.directory.mkdir(mode=0o700)
+    owner.admitted = True
+    # Crossing a binary exponent boundary makes (start +90) -start differ
+    # from90 by one ULP, while JSON preserves both original float values.
+    clock, calls = [450.432197629], []
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(e, "command", lambda *a, **k: calls.append(a[0]) or b"")
+    first = {}
+    owner.cleanup(first)
+    assert first["state"] == "PASS"
+    saved = (owner.directory / "cleanup-budget.json").read_bytes()
+    assert first["deadline"] - first["cleanup_started_at"] != 90
+    clock[0] += 1
+    resumed = {}
+    owner.cleanup(resumed)
+    assert resumed["state"] == "PASS" and resumed["deadline"] == first["deadline"]
+    clock[0] += 90
+    before = len(calls)
+    second = {}
+    with pytest.raises(AssertionError, match="CLEANUP_DEADLINE"):
+        owner.cleanup(second)
+    assert len(calls) == before and second["deadline"] == first["deadline"]
+    assert (owner.directory / "cleanup-budget.json").read_bytes() == saved
+
+
+def test_control_compose_overlay_owns_resources_without_changing_source(tmp_path, monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(e, "command", lambda *a, **k: b"")
+    owner = SchemaOwnership(tmp_path / "owner", "project", CONTROL_PHASE, "c" * 40)
+    owner.admit()
+    compose = tmp_path / "frozen-compose.json"
+    original = b'{"services":{"postgres":{"image":"pinned"}},"volumes":{"data":{}},"networks":{"default":{}}}'
+    compose.write_bytes(original)
+
+    def model(args, **kwargs):
+        assert args == [
+            "/usr/bin/docker",
+            "compose",
+            "--project-name",
+            "project",
+            "-f",
+            str(compose),
+            "config",
+            "--format",
+            "json",
+        ]
+        assert kwargs["timeout"] == 40
+        return SimpleNamespace(stdout=original)
+
+    monkeypatch.setattr(subprocess, "run", model)
+    executed = []
+    monkeypatch.setattr(os, "execv", lambda binary, args: executed.append(args))
+    schema_docker_cli(
+        owner.directory / "ownership.json",
+        ["compose", "--project-name", "project", "-f", str(compose), "up", "-d"],
+    )
+    overlay = json.loads((owner.directory / "compose-ownership.json").read_text())
+    for group, name in (("services", "postgres"), ("volumes", "data"), ("networks", "default")):
+        assert overlay[group][name]["labels"] == {SCHEMA_OWNER_LABEL: owner.token}
+    assert compose.read_bytes() == original
+    assert executed[0][-4:] == ["-f", str(owner.directory / "compose-ownership.json"), "up", "-d"]
+
+
+def retained_full_function_fixture(tmp_path, monkeypatch, fault):
+    import ast
+    import inspect
+    from contextlib import nullcontext
+
+    checkout = tmp_path / "frozen-T"
+    # Development images have no Git/history. This entire retained function is
+    # still byte-identical to T lines626--927; pin those original bytes, then
+    # compile its full AST without modifying a node. Only surrounding source/
+    # image/daemon admission is a unit seam. Actual lanes pin the full T blob.
+    raw = inspect.getsource(run_schema_phase).encode()
+    assert e.sha(raw) == "8227f4dceafb76e946cd51731d47e9ea000670bf7011e0b57b6acfe3d27d97f5"
+    module = checkout / "tests/test_telegram_egress_migration.py"
+    module.parent.mkdir(parents=True)
+    module.write_bytes(raw)
+    pins = checkout / "infra/images.lock.env"
+    pins.parent.mkdir()
+    pins.write_text("PYTHON_IMAGE=unit\nUV_IMAGE=unit\n")
+    node = next(
+        n
+        for n in ast.parse(module.read_text()).body
+        if isinstance(n, ast.FunctionDef) and n.name == "run_schema_phase"
+    )
+    original_ast = ast.dump(node, include_attributes=True)
+    executable = compile(ast.Module(body=[node], type_ignores=[]), str(module), "exec")
+    assert ast.dump(node, include_attributes=True) == original_ast
+    monkeypatch.setattr(shutil, "which", lambda _: str(tmp_path / "owner/docker"))
+    owner = SchemaOwnership(tmp_path / "owner", "asm-m3-schema-phase", "RETAINED_T", CONTROL_T)
+    owner.directory.mkdir(mode=0o700)
+    owner.docker, owner.admitted = "/unit/docker", True
+    e.write_private(
+        owner.directory / "ownership.json",
+        e.encoded(
+            {
+                "project": owner.project,
+                "phase": owner.phase,
+                "source": owner.source,
+                "token": owner.token,
+                "docker": owner.docker,
+                "uid": os.getuid(),
+            }
+        ),
+    )
+    e.write_private(
+        owner.directory / "retained.json",
+        e.encoded(
+            {
+                "token": owner.token,
+                "source": CONTROL_T,
+                "phase": owner.phase,
+                "owner_directory": str(owner.directory),
+                "module": str(module),
+                "module_blob": hashlib.sha1(
+                    b"blob " + str(len(raw)).encode() + b"\0" + raw
+                ).hexdigest(),
+                "helper_blob": RETAINED_HELPER_BLOB,
+                "deadline": time.monotonic() + 600,
+                "fault": "export" if fault == "export" else None,
+            }
+        ),
+    )
+    checkpoint = RetainedCheckpoint(owner.directory)
+    e.write_private(owner.directory / "compose-ownership.json", b"{}\n")
+    monkeypatch.setattr(os, "execv", lambda *args: None)
+    receipt = e.encoded(
+        {
+            "unique_private_receipt": uuid4().hex,
+            "private_payload": "private-fixture-not-for-reports",
+        }
+    )
+    foreign = tmp_path / "foreign"
+    foreign.write_bytes(b"foreign unchanged")
+    live = {"controller": False, "callers": True, "cleanup_calls": 0}
+    temporary_paths = []
+
+    def cleanup(self, report, observe_disconnected=None):
+        live["cleanup_calls"] += 1
+        budget = self.cleanup_budget()
+        if fault == "cleanup-still-live" or (fault == "cleanup" and live["cleanup_calls"] == 1):
+            report["state"] = "INJECTED_FAILURE"
+            raise e.EgressError("CONTROL_INJECTED_OWNED_CLEANUP")
+        live["controller"] = False
+        report.update(state="PASS", owned_remaining=[], deadline=budget["deadline"])
+
+    monkeypatch.setattr(SchemaOwnership, "cleanup", cleanup)
+    if fault == "capture":
+        original_capture = RetainedCheckpoint.capture
+        capture_calls = []
+
+        def fail_capture(self):
+            capture_calls.append(True)
+            if len(capture_calls) == 1:
+                raise OSError("private-capture-error-never-serialized")
+            return original_capture(self)
+
+        monkeypatch.setattr(RetainedCheckpoint, "capture", fail_capture)
+
+    def init(args, *, cwd, **kwargs):
+        assert Path(args[1]).name == "init_local.py"
+        temporary_paths.append(Path(cwd))
+        e.write_private(Path(cwd) / ".env", b"PRIVATE=fixture-secret\n")
+        return SimpleNamespace(returncode=0)
+
+    def command(args, **kwargs):
+        if args == ["git", "rev-parse", "HEAD"]:
+            return CONTROL_T.encode()
+        assert args[0] == "docker"
+        if args[1:3] in (["ps", "-aq"], ["volume", "ls"]):
+            return b""
+        if args[1:3] == ["image", "ls"]:
+            return b"sha256:" + b"1" * 64
+        if args[1:3] == ["image", "inspect"]:
+            return json.dumps([{"Id": "sha256:" + "1" * 64}]).encode()
+        if args[1] == "tag":
+            return b""
+        if args[1] == "inspect":
+            return json.dumps(
+                [{"Image": "sha256:" + "1" * 64, "State": {"Running": live["callers"]}}]
+            ).encode()
+        if args[1] == "compose":
+            if "config" in args:
+                return json.dumps(
+                    {
+                        "services": {
+                            "api": {
+                                "environment": {"ASM_TELEGRAM_ENABLED": "false", "TG_BOT_TOKEN": ""}
+                            },
+                            "migrate": {"environment": {}},
+                        }
+                    }
+                ).encode()
+            if "ps" in args:
+                return b"fake-caller"
+            if "stop" in args:
+                live["callers"] = False
+            if "down" in args:
+                assert (checkpoint.state / "receipt.json").read_bytes() == receipt
+                schema_docker_cli(owner.directory / "ownership.json", args[1:])
+                if fault == "down":
+                    raise e.EgressError("EGRESS_COMMAND_FAILED")
+            return b""
+        assert args[1] == "run"
+        remapped, identity = checkpoint.bind(args[1:])
+        assert identity == checkpoint.identity(checkpoint.state)
+        assert "source=" + str(checkpoint.state) in remapped[remapped.index("--mount") + 1]
+        if "--schema-phase" in args and args[args.index("--schema-phase") + 1] == "seed":
+            e.write_private(checkpoint.state / "receipt.json", receipt)
+            live["controller"] = True
+            raise subprocess.TimeoutExpired(["private-command-never-serialized"], 120)
+        checkpoint.mirror()
+        return b""
+
+    frozen = SimpleNamespace(
+        ROOT=checkout,
+        command=command,
+        source_check=lambda _: None,
+        migration_budget=lambda _: nullcontext(),
+        migration_build_context=lambda *args: None,
+        migration_image=lambda image, source, kind: {
+            "image_id": image,
+            "source": source,
+            "kind": kind,
+        },
+        write_private=e.write_private,
+    )
+    namespace = {
+        "e": frozen,
+        "os": SimpleNamespace(
+            getuid=lambda: 1001, getgid=os.getgid, environ={"GITHUB_ACTIONS": "true"}
+        ),
+        "subprocess": SimpleNamespace(run=init),
+        "Path": Path,
+        "json": json,
+        "sys": sys,
+    }
+    exec(executable, namespace)
+    if fault == "report":
+        original_write = Path.write_text
+
+        def report_failure(path, *args, **kwargs):
+            if path.name == "m3-schema-phase.json":
+                raise OSError("private-report-error-never-serialized")
+            return original_write(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", report_failure)
+    return owner, checkpoint, namespace, live, receipt, foreign, temporary_paths
+
+
+@pytest.mark.parametrize(
+    "fault",
+    ["down-success", "down", "cleanup", "cleanup-still-live", "capture", "export", "report"],
+)
+def test_retained_full_function_keeps_checkpoint_and_primary(tmp_path, monkeypatch, fault):
+    owner, checkpoint, namespace, live, receipt, foreign, temporary_paths = (
+        retained_full_function_fixture(tmp_path, monkeypatch, fault)
+    )
+    outer = schema_envelope(
+        {"historical": CONTROL_T, "candidate": CONTROL_T}, "UNIT_FULL_RETAINED_T"
+    )
+    outer["cleanup"] = {"state": "ADMITTED"}
+    ledger = tmp_path / "outer-ledger.json"
+    previous_trace = sys.gettrace()
+    observer = retained_exception_observer(checkpoint.config)
+    with pytest.raises((subprocess.TimeoutExpired, e.EgressError, OSError)):
+        with schema_cleanup_scope(owner, outer, ledger):
+            try:
+                sys.settrace(observer)
+                namespace["run_schema_phase"](
+                    {
+                        "historical": "754f1c883e5a94a7fc9e729af2605424f949ba33",
+                        "candidate": CONTROL_T,
+                    }
+                )
+            finally:
+                sys.settrace(previous_trace)
+                # Same-process daemon seam supplies the launcher's exit ACK.
+                # Separate-child tests below exercise that boundary without it.
+                outer["retained_shell_exit"] = 1 if observer.finish() else 78
+                assert temporary_paths and not temporary_paths[0].exists()
+                assert (checkpoint.state / "receipt.json").read_bytes() == receipt
+                if live["controller"]:
+                    assert fault in {"cleanup", "cleanup-still-live", "capture", "export", "report"}
+                    assert checkpoint.state.is_relative_to(owner.directory)
+    saved = json.loads(ledger.read_text())
+    assert saved["primary_failure"]["type"] == "TimeoutExpired"
+    assert saved["primary_failure"]["reason"] == "CONTROL_COMMAND_TIMEOUT"
+    assert saved["primary_failure"]["stage"] == "controller_seed"
+    assert saved["private_state_retained"]
+    assert live["controller"] == (fault == "cleanup-still-live")
+    assert saved["cleanup"]["state"] == (
+        "INJECTED_FAILURE" if fault == "cleanup-still-live" else "PASS"
+    )
+    proof = saved["retained_checkpoint"]
+    assert proof["files"]["receipt.json"]["sha256"] == e.sha(receipt)
+    assert not proof["original_exists"]
+    assert (checkpoint.root / proof["capture"]["snapshot"] / "receipt.json").read_bytes() == receipt
+    assert foreign.read_bytes() == b"foreign unchanged"
+    for private in (
+        "private-fixture-not-for-reports",
+        "private-command-never-serialized",
+        "private-report-error-never-serialized",
+        "private-capture-error-never-serialized",
+        "fixture-secret",
+    ):
+        assert private not in ledger.read_text()
+    if fault != "down-success":
+        assert saved["secondary_failures"]
+    if fault == "report":
+        assert any(
+            detail["stage"] == "retained_report" and detail["type"] == "OSError"
+            for detail in saved["secondary_failures"]
+        )
+
+
+def inject_retained_journal_io(monkeypatch, fault):
+    """Scoped filesystem faults only; no replacement observer/collector logic."""
+    original_replace, original_sync, original_open = os.replace, os.fsync, os.fdopen
+    attempts, failed = [], []
+    pending = {"name": None}
+
+    def replace(source, target):
+        name = Path(target).name
+        pending["name"] = None
+        if name == "trace-primary.json" and Path(source).name.startswith(".observer-"):
+            attempts.append(Path(source).read_bytes())
+            if fault == "permanent" or (fault == "transient" and not failed):
+                failed.append(True)
+                raise OSError("private-journal-error-never-serialized")
+        result = original_replace(source, target)
+        pending["name"] = name
+        return result
+
+    def sync(fd):
+        info = os.fstat(fd)
+        if stat.S_ISDIR(info.st_mode):
+            name, pending["name"] = pending["name"], None
+            if (fault == "directory-once" and name == "trace-primary.json" and not failed) or (
+                fault == "health-durability" and name == "trace-health.json"
+            ):
+                failed.append(True)
+                raise OSError("private-journal-error-never-serialized")
+        elif fault == "file-once" and not failed:
+            path = Path(os.readlink(f"/proc/self/fd/{fd}"))
+            if path.name.startswith(".observer-") and b'"sequence": 1' in path.read_bytes():
+                failed.append(True)
+                raise OSError("private-journal-error-never-serialized")
+        return original_sync(fd)
+
+    @contextmanager
+    def opened(fd, mode="r", *args, **kwargs):
+        with original_open(fd, mode, *args, **kwargs) as stream:
+            if fault != "write-once" or mode != "wb":
+                yield stream
+                return
+
+            def write(raw):
+                target = Path(os.readlink(f"/proc/self/fd/{fd}"))
+                if target.name.startswith(".observer-") and b'"sequence": 1' in raw and not failed:
+                    failed.append(True)
+                    raise OSError("private-journal-error-never-serialized")
+                return stream.write(raw)
+
+            yield SimpleNamespace(write=write, flush=stream.flush, fileno=stream.fileno)
+
+    monkeypatch.setattr(os, "replace", replace)
+    monkeypatch.setattr(os, "fsync", sync)
+    monkeypatch.setattr(os, "fdopen", opened)
+    return attempts, failed
+
+
+@pytest.mark.parametrize("fault", ["down", "report"])
+@pytest.mark.parametrize(
+    "journal_fault", ["transient", "write-once", "file-once", "directory-once"]
+)
+def test_retained_full_function_first_event_retry(tmp_path, monkeypatch, fault, journal_fault):
+    attempts, failed = inject_retained_journal_io(monkeypatch, journal_fault)
+    # All original assertions still execute: full unchanged T, real receipt/
+    # tempdir, checkpoint byte identity, cleanup, primary and secondary.
+    test_retained_full_function_keeps_checkpoint_and_primary(tmp_path, monkeypatch, fault)
+    assert failed and 1 <= len(attempts) <= 3 and len(set(attempts)) == 1
+    record = json.loads(attempts[0])
+    assert record["sequence"] == 1 and record["detail"]["type"] == "TimeoutExpired"
+    saved = json.loads((tmp_path / "outer-ledger.json").read_text())
+    health = saved["retained_journal"]
+    assert health["state"] == "RECOVERED" and health["primary"] == "CONFIRMED"
+    assert health["event_hashes"][0] == e.sha(attempts[0])
+    assert health["attempts"][0] == 2 and health["diagnostics"]
+    assert any(d["stage"] == "retained_" + fault for d in saved["secondary_failures"])
+    primary = copy.deepcopy(saved["primary_failure"])
+    RetainedCheckpoint(tmp_path / "owner").collect(saved)
+    assert saved["primary_failure"] == primary
+    assert "private-journal-error-never-serialized" not in json.dumps(saved)
+
+
+def damage_retained_journal(directory, fault, monkeypatch):
+    name = "trace-health.json" if fault.startswith("health-") else "trace-primary.json"
+    path = directory / name
+    original = path.read_bytes() if path.exists() else None
+    if fault.endswith("missing"):
+        path.unlink()
+    elif fault.endswith("unreadable"):
+        read = e.private_bytes
+
+        def unreadable(target):
+            if Path(target) == path:
+                raise PermissionError("private-journal-read-error-never-serialized")
+            return read(target)
+
+        monkeypatch.setattr(e, "private_bytes", unreadable)
+    elif fault.endswith("corrupt"):
+        e.write_private(path, b"not-json\n")
+    elif fault in {"wrong-sequence", "wrong-owner", "wrong-source", "wrong-phase"}:
+        record = json.loads(original)
+        if fault == "wrong-sequence":
+            record["sequence"] = 2
+        else:
+            key = {"wrong-owner": "token", "wrong-source": "source", "wrong-phase": "phase"}[fault]
+            record["binding"][key] = "f" * 40
+        e.write_private(path, e.encoded(record))
+        health = e.strict_json(e.private_bytes(directory / "trace-health.json"))
+        health["event_hashes"][0] = e.sha(e.private_bytes(path))
+        e.write_private(directory / "trace-health.json", e.encoded(health))
+    return path, original
+
+
+@pytest.mark.parametrize("fault", ["down", "report"])
+@pytest.mark.parametrize("journal_fault", ["permanent", "missing", "unreadable", "corrupt"])
+def test_retained_full_function_journal_stop_keeps_cleanup(
+    tmp_path, monkeypatch, fault, journal_fault
+):
+    owner, checkpoint, namespace, live, receipt, foreign, temporary_paths = (
+        retained_full_function_fixture(tmp_path, monkeypatch, fault)
+    )
+    attempts, _ = inject_retained_journal_io(monkeypatch, journal_fault)
+    report = schema_envelope({"candidate": CONTROL_T}, "UNIT_FULL_RETAINED_JOURNAL")
+    report["cleanup"] = {"state": "ADMITTED"}
+    path = tmp_path / "outer-ledger.json"
+    observer = retained_exception_observer(checkpoint.config)
+    previous_trace = sys.gettrace()
+    with pytest.raises((subprocess.TimeoutExpired, e.EgressError, OSError)):
+        with schema_cleanup_scope(owner, report, path):
+            try:
+                sys.settrace(observer)
+                namespace["run_schema_phase"](
+                    {
+                        "historical": "754f1c883e5a94a7fc9e729af2605424f949ba33",
+                        "candidate": CONTROL_T,
+                    }
+                )
+            finally:
+                sys.settrace(previous_trace)
+                report["retained_shell_exit"] = 1 if observer.finish() else 78
+                if journal_fault != "permanent":
+                    damage_retained_journal(owner.directory, journal_fault, monkeypatch)
+    assert attempts and len(attempts) <= 3 and len(set(attempts)) == 1
+    if journal_fault == "permanent":
+        assert len(attempts) == 3 and report["retained_shell_exit"] == 78
+    assert not live["controller"] and report["cleanup"]["state"] == "PASS"
+    assert temporary_paths and not temporary_paths[0].exists()
+    assert (checkpoint.state / "receipt.json").read_bytes() == receipt
+    proof = report["retained_checkpoint"]
+    assert (checkpoint.root / proof["capture"]["snapshot"] / "receipt.json").read_bytes() == receipt
+    assert proof["files"]["receipt.json"]["sha256"] == e.sha(receipt)
+    assert report["result"] == "STOP" and report["retained_journal"]["primary"] == "UNCONFIRMED"
+    assert report["primary_failure"]["type"] == "UNCONFIRMED"
+    assert any(d["stage"] == "retained_" + fault for d in report["secondary_failures"])
+    assert foreign.read_bytes() == b"foreign unchanged"
+    assert "private-journal" not in path.read_text()
+    for target in (report, {"retained_shell_exit": 1}):
+        with pytest.raises(e.EgressError, match="CONTROL_RETAINED_JOURNAL_UNCONFIRMED"):
+            RetainedCheckpoint(owner.directory).collect(target)
+        assert target["primary_failure"]["type"] == "UNCONFIRMED"
+        assert target["retained_journal"]["state"] == "STOP"
+
+
+@pytest.mark.parametrize(
+    "journal_fault",
+    [
+        "transient",
+        "permanent",
+        "health-durability",
+        "missing",
+        "unreadable",
+        "corrupt",
+        "health-missing",
+        "health-unreadable",
+        "health-corrupt",
+        "wrong-sequence",
+        "wrong-owner",
+        "wrong-source",
+        "wrong-phase",
+    ],
+)
+def test_retained_journal_separate_child_then_parent_collection(
+    tmp_path, monkeypatch, journal_fault
+):
+    # Only fixture/source/image/daemon seams live in the child. It runs the
+    # production C launcher/observer and the entire unchanged T function. The
+    # parent never receives its exception/object memory and collects only IPC.
+    bootstrap = """
+import importlib.util,runpy,sys
+from pathlib import Path
+from types import SimpleNamespace
+import pytest
+spec=importlib.util.spec_from_file_location('retained_child_candidate',sys.argv[1])
+m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+patch=pytest.MonkeyPatch()
+fixture=m.retained_full_function_fixture(Path(sys.argv[2]),patch,'down')
+owner,checkpoint,namespace,*_=fixture
+launcher=m.write_retained_launcher(owner.directory)
+m.inject_retained_journal_io(patch,sys.argv[3])
+sys.modules['unit_frozen_case']=SimpleNamespace(run=namespace['run_schema_phase'])
+sys.argv=[str(launcher),'-','--schema-upgrade']
+runpy.run_path(str(launcher),run_name='__main__')
+"""
+    program = (
+        "from unit_frozen_case import run\n"
+        "run({'historical':'754f1c883e5a94a7fc9e729af2605424f949ba33',"
+        "'candidate':'" + CONTROL_T + "'})\n"
+    )
+    child = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            bootstrap,
+            str(Path(__file__).resolve()),
+            str(tmp_path),
+            journal_fault,
+        ],
+        input=program.encode(),
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    assert child.returncode == (78 if journal_fault in {"permanent", "health-durability"} else 1)
+    directory = tmp_path / "owner"
+    checkpoint = RetainedCheckpoint(directory)
+    entered = e.strict_json(e.private_bytes(directory / "trace-entered.json"))
+    assert entered["pid"] != os.getpid()
+    cleanup = e.strict_json(e.private_bytes(directory / "down-cleanup.json"))
+    assert cleanup["state"] == "PASS"  # unit daemon seam, not actual PG evidence
+    raw = e.private_bytes(checkpoint.state / "receipt.json")
+    capture = e.strict_json(e.private_bytes(directory / "retained-capture.json"))
+    assert e.private_bytes(checkpoint.root / capture["snapshot"] / "receipt.json") == raw
+    report = {"retained_shell_exit": child.returncode, "cleanup": cleanup}
+    healthy = {"transient", "permanent", "health-durability"}
+    originals = {p.name: p.read_bytes() for p in directory.glob("trace-*.json")}
+    with monkeypatch.context() as read_fault:
+        if journal_fault not in healthy:
+            damage_retained_journal(directory, journal_fault, read_fault)
+        if journal_fault == "transient":
+            checkpoint.collect(report)
+            assert report["primary_failure"]["type"] == "TimeoutExpired"
+            assert report["primary_failure"]["stage"] == "controller_seed"
+            assert report["retained_journal"]["state"] == "RECOVERED"
+            assert report["retained_journal"]["observer_pid"] == entered["pid"]
+            assert any(d["stage"] == "retained_down" for d in report["secondary_failures"])
+        else:
+            with pytest.raises(e.EgressError, match="CONTROL_RETAINED_JOURNAL_UNCONFIRMED"):
+                checkpoint.collect(report)
+            assert report["primary_failure"]["type"] == "UNCONFIRMED"
+            assert report["retained_journal"]["state"] == report["result"] == "STOP"
+    assert not report["retained_checkpoint"]["original_exists"]
+    assert report["retained_checkpoint"]["files"]["receipt.json"]["sha256"] == e.sha(raw)
+    assert (tmp_path / "foreign").read_bytes() == b"foreign unchanged"
+    assert "private-journal" not in json.dumps(report)
+    if journal_fault != "transient":
+        # Restoration or later publications cannot erase a recorded STOP, even
+        # for a fresh collector/ledger. No first event is inferred from slot2.
+        for name, data in originals.items():
+            e.write_private(directory / name, data)
+        for target in (report, {"retained_shell_exit": 1, "cleanup": cleanup}):
+            with pytest.raises(e.EgressError, match="CONTROL_RETAINED_JOURNAL_UNCONFIRMED"):
+                RetainedCheckpoint(directory).collect(target)
+            assert target["primary_failure"]["type"] == "UNCONFIRMED"
+            assert target["cleanup"]["state"] == "PASS"
+            assert e.private_bytes(checkpoint.state / "receipt.json") == raw
+
+
+@pytest.mark.parametrize("outcome", ["success", "failed-shell", "missing-health"])
+def test_retained_journal_no_failure_requires_success_ack(tmp_path, monkeypatch, outcome):
+    _, checkpoint, _, _, _, _, _ = retained_full_function_fixture(tmp_path, monkeypatch, "down")
+    # Protocol-only unit frame: no claim to execute a successful full T here.
+    # Both actual state lanes retain the complete positive frozen T execution.
+    frame = SimpleNamespace(
+        f_code=SimpleNamespace(co_filename=checkpoint.config["module"], co_name="run_schema_phase"),
+        f_locals={},
+    )
+    observer = retained_exception_observer(checkpoint.config)
+    observer(frame, "call", None)
+    observer(frame, "return", None)
+    assert observer.finish()
+    assert not (checkpoint.directory / "trace-primary.json").exists()
+    report = {"retained_shell_exit": 1 if outcome == "failed-shell" else 0}
+    if outcome == "missing-health":
+        (checkpoint.directory / "trace-health.json").unlink()
+    if outcome == "success":
+        checkpoint.collect(report)
+        assert report["retained_journal"]["primary"] == "NONE"
+        assert report["retained_journal"]["state"] == "HEALTHY"
+        assert "primary_failure" not in report and "failure" not in report
+    else:
+        with pytest.raises(e.EgressError, match="CONTROL_RETAINED_JOURNAL_UNCONFIRMED"):
+            checkpoint.collect(report)
+        assert report["primary_failure"]["type"] == "UNCONFIRMED"

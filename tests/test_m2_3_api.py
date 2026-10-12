@@ -176,10 +176,12 @@ class Unit:
             },
         }
 
-    async def messaging_lock_billing(self):
-        self.auth.trace.append("billing-lock")
+    async def conversation_manual_prelock(self, conversation, value, key):
+        assert self.auth.active and conversation == CONVERSATION
+        self.auth.trace.append("manual-prelock")
 
-    async def billing_snapshot(self):
+    async def post_lock_product_snapshot(self):
+        assert self.auth.active and self.auth.trace[-1] == "manual-prelock"
         self.auth.trace.append("billing")
         return self.auth.billing
 
@@ -253,6 +255,13 @@ async def test_telegram_uses_two_auth_units_with_network_outside_and_replay_befo
     result = await service.send("cookie", WS, CONVERSATION, "exact", "key")
     assert result.code == "ACCEPTED" and auth.trace.count("begin") == 2
     assert auth.trace.index("commit") < auth.trace.index("network") < auth.trace.index("observe")
+    assert auth.trace.index("observe") < auth.trace.index("manual-prelock")
+    assert (
+        auth.trace.index("manual-prelock")
+        < auth.trace.index("billing")
+        < auth.trace.index("request")
+    )
+    assert auth.trace.count("billing") == 1
     auth.billing = {"accounts": [], "modes": [], "history": []}
     auth.trace.clear()
     replay = await service.send("cookie", WS, CONVERSATION, "exact", "key")
@@ -305,6 +314,12 @@ async def test_controlled_one_unit_uses_real_policy_and_never_provider():
     )
     assert result.code == "ACCEPTED" and auth.trace.count("begin") == 1
     assert "billing" in auth.trace and "network" not in auth.trace
+    assert (
+        auth.trace.index("manual-prelock")
+        < auth.trace.index("billing")
+        < auth.trace.index("request")
+    )
+    assert auth.trace.count("billing") == 1
     auth.receipt = None
     auth.billing["modes"][0].update(mode="SUSPENDED", reason_code="TEST_SUSPENDED")
     with pytest.raises(MessagingError, match="NOT_ALLOWED"):

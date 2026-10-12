@@ -4779,3 +4779,223 @@ project/volume, после historical cleanup. Controller под migration ident
 Это описание изолированного CI harness. Оно не разрешает VM-команды, schema
 upgrade рабочего окружения, Telegram activation, ACK или повтор UNKNOWN send;
 прежние owner receipts, binding и live-статус этим срезом не изменяются.
+
+### 6.2. Отдельная CONTROL0009 LOCAL phase
+
+Для CONTROL действует [M3_CONTRACT](../tasks/M3_CONTRACT.md), §12.8.
+§6.1 выше сохраняет историческое описание TURNS. Текущий default lane принимает
+только exact candidate C/0009 и полный inventory35. Шесть historical shards
+по-прежнему исполняют H/0007 без изменений. В обоих state shards после H идут
+две самостоятельные фазы на разных fresh disposable volumes:
+
+1. Detached, неизменяемый T `ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad`
+   исполняет свой `--schema-upgrade H T`. Его архив и оригинальные отчёты
+   сохраняются в `reports/retained-turns/` до удаления checkout.
+2. C исполняет `--control-schema-upgrade T C <private-budget-request>`.
+   Request создаёт только coordinator, mode0600, для exact источников/фазы,
+   текущего uid и абсолютного monotonic deadline; после проверки он потребляется
+   один раз. Весь retained-T shell, включая prepare/runtime/cleanup, и C archive/
+   build/reuse verification оплачиваются одним prepare ledger600s. C получает
+   остаток, а не новые600s. Timeout останавливает owned process group с wait;
+   cleanup ограничен initially-empty disposable daemon и ресурсами этой фазы.
+
+C migration-role controller сохраняет populated TURNS, старые Inbox/consumer/
+manual receipts, PENDING/UNKNOWN и private S3 bytes. Forward8→9 сравнивает все33
+старые data tables по фиксированным T columns; marker8→9 и nullable metadata/
+пустой CONTROL receipt проверяются отдельно. Clean9→8 восстанавливает все34
+tables, definitions и grants. Populated CONTROL downgrade отказывает55000 до DDL.
+Отдельный migrator коммитит0009 и выходит86 до успешного результата; новый процесс
+читает revision и DB identity, после чего только C/9 допускается к forward/restart.
+T/9 и C/8 обязаны отказать. API/worker/scheduler получают один exact runtime image.
+
+Новые отчёты: `reports/control-schema-phase.json` (images, stage timings,
+retained rows/private S3/commit-loss/restart/refusal) и
+`reports/control-schema-ledger.json` (T/C budget handoff, exits и owned cleanup).
+Ранний source/build/probe failure тоже сохраняется. Результат считается evidence
+только после фактического исполнения штатных normal/Docker29 jobs на проверяемом
+SHA; local unit guards и этот текст не заменяют PostgreSQL/S3 execution.
+Штатные команды остаются `sh scripts/ci.sh`, `sh scripts/test_browser.sh` и
+`sh scripts/test_telegram_egress_migration.sh state` в disposable GitHub runner.
+Historical `migration_source`/saved-plan guard остаётся0007-only. Это не команда
+для VM или рабочего DB/S3 и не разрешение rollout, ACK, activation или sends.
+
+Seed0008 использует прежний four-argument claim ABI, включая cursor после
+`TERMINALIZED`/`BUSY`: завершение photo может supersede старый GROUP job.
+UNKNOWN в этом migration seed создаётся SQL-finalize без adapter effect;
+wire-effect/lost-response/count1 доказывает отдельный сохранённый transport lane.
+При controller failure отчёт сохраняет только action, exception type, SQLSTATE
+и места traceback, без параметров SQL/claim tokens/секретов. Supervisor завершает
+всю свою process group даже после выхода shell: потомок, игнорирующий TERM,
+не должен пережить watchdog. Early failure не даёт разрешения начинать C runtime
+на0008 или удалять данные ради успешного reverse cycle.
+
+В actual Docker29 state run38117786794/attempt1 fresh observer подтвердил0009
+после marker/exit86, но Linux повторно использовал PID namespace inode; оба
+последовательных `docker run --rm` имели PID1. Поэтому fresh-process proof
+фиксирует также kernel start ticks (`/proc/self/stat`) и host boot ID:
+reader обязан родиться позже migrator на том же boot. Прежний процесс,
+отсутствующая identity или другой boot отвергаются; DB identity/source/schema
+guards сохраняются. Сам этот failed run не закрывает Docker29 gate.
+
+#### 6.2.1. CONTROL R1: failure retention и daemon ownership
+
+После профильного review CI38127269913 остаётся evidence успешных путей прежнего
+candidate. Он не подтверждает исправление findings C6-M3-CONTROL-IMPL-01/02.
+Для R1 оба existing state shards дополнительно обязаны получить три отдельных
+`CONTROL_CLEANUP_NEGATIVE_PASS`: `retained-t-watchdog`,
+`new-c-command-timeout`, `new-c-cli-exit`. Итог записывается в
+`reports/control-cleanup-negatives.json`; отсутствие любого case — отказ lane.
+
+Coordinator сохраняет admission envelope до первого source/daemon/archive check.
+Он различает requested source и independently observed source/NOT_OBSERVED;
+ошибка оставляет stage, bounded diagnostic code, elapsed и cleanup state.
+Child записывает validated T/C bindings и absolute/charged/remaining budget сразу
+после одноразового consume, до source check. Invalid/unreadable/expired/replayed
+request не получает статуса validated и не создаёт новый600. Prepare/archive/
+build/reuse/probe failure сохраняет уже проверенные bindings и прошедшее время.
+Полный T interval и C preparation по-прежнему оплачиваются одним ledger600.
+
+Private Docker CLI wrapper действует только внутри schema phase. Frozen T/helper
+и image/source bytes не меняются. До каждого plain run/create сохраняется intent
+с уникальными name/ownership token/CID-file и host CLI birth identity; те же
+ownership labels получают Compose services/volumes/networks через private overlay.
+После потерянного CLI результата CID восстанавливается только по совпадающим
+name/token и actual inspect. Нет blanket adoption по принципу empty-before→owned.
+Неподтверждённое создание — STOP с сохранённым private checkpoint, а не PASS.
+
+Cleanup имеет один сохранённый absolute90s deadline для child и coordinator
+без обнуления при повторном входе: завершение exact owned controllers, подтверждение
+удаления IDs, затем owned services/volumes/network refs. Frozen T получает эту
+же очистку при своём Compose down до удаления private state; coordinator выполняет
+проверку и после watchdog/CLI failure. Foreign resources сохраняются и вызывают
+отдельный отказ после owned cleanup. Первичная ошибка остаётся первичной при
+secondary cleanup/report failure. Reports копируются до удаления checkout/state;
+неуспешная очистка не разрешает уничтожить state под живым контейнером.
+
+Actual negative cases используют disposable PostgreSQL и pinned runtime image
+соответствующего T/C. Controller держит реальное idle-in-transaction соединение
+и игнорирует TERM. После host watchdog/helper timeout/CLI exit проверяются живой
+controller CID, connection count1 и отсутствие живого исходного host CLI. Затем
+cleanup должен дать connection count0 **при ещё работающем PostgreSQL**, отсутствие
+owned running/stopped containers и owned volumes/networks. Отдельно созданный после
+admission foreign container/volume/network сохраняет exact inspect hashes. Только
+после сохранения этого evidence fixture удаляет собственные exact foreign IDs.
+Это controlled negative Docker/PG evidence; Telegram и рабочие ресурсы не участвуют.
+
+Unit seams отдельно проверяют ранние source mismatch/dirty/git/command и budget
+отказы, archive/build/reuse/probe failures, pre-CID ownership и secondary failure
+retention. Они не заменяют три actual cases. Reports:
+`migration-coordinator-admission.json`, `control-schema-ledger.json`,
+`control-schema-phase.json`, `control-cleanup-<case>.json` и summary выше.
+Точные final SHA, run/job IDs, результаты и timings публикуются в едином PR receipt;
+findings закрывает C0 после адресного C6 re-review. Existing H/T/C, private S3,
+UNKNOWN/wire1, state25min/foundation35min и все прочие bounds/gates сохраняются.
+
+#### 6.2.2. CONTROL R2: полный frozen-T failure lifecycle
+
+C0 принял R1 CI38153796957 (9/9 jobs и 9/9 clean-source) и закрыл IMPL-02.
+IMPL-01 и новый IMPL-03 остаются OPEN до verdict C0 после C6 re-review.
+Три R1 negative cases выше проверяли daemon cleanup; `retained-t-watchdog`
+исполнял frozen helper, но не полный `run_schema_phase`/finally/TemporaryDirectory.
+Поэтому прежние результаты не доказывали сохранность T receipt при таком failure.
+
+R2 добавляет C-owned private backing для точного `/state` bind каждого T controller.
+До Docker create проверяются source/helper blobs, owner token, private directory
+identity, связь state с controller.env и сетью данной phase. В Docker mount меняется
+только owned bind source; successful command побайтно зеркалирует state в исходный
+T-каталог для неизменённых чтений T. Actual controller пишет вне удаляемого T
+TemporaryDirectory. Receipt и private env остаются под owner/0700/0600 guards;
+в reports публикуются только безопасные identity/status/hash evidence.
+
+Scoped private Python launcher наблюдает исключения только exact frozen T function
+frame. Он фиксирует bounded primary до T finally, затем secondary отдельно.
+Function/helper/source/image bytes не меняются; traceback, raw argv и private payload
+не служат источником reason и не экспортируются. Down сначала сохраняет точный
+private snapshot и безопасный manifest, затем закрывает exact owned controllers,
+проверяет PG count0 до остановки DB и очищает остальные owned resources. Сбой capture,
+export, report или cleanup сохраняет backing/checkpoint; наличие owner-T само по себе
+не считается доказательством retention. Если связь/сохранность не доказана — STOP.
+
+В каждом existing state lane обязательны два новых full-T cases:
+`CONTROL_FULL_RETAINED_NEGATIVE_PASS timeout` и `... export`.
+В обоих целиком исполняется unchanged T function, включая настоящий seed controller,
+private receipt, finally и удаление временного T-каталога. После штатного seed
+controlled test process в том же проверенном T development image удерживает реальное
+PG-соединение и игнорирует TERM. В первом case срабатывает прежний controller timeout120;
+во втором host CLI завершается с контролируемым exit7, а первый safe export прерывается
+после durable capture. Подтверждаются live CID/image/bind, PG1, exact receipt hashes,
+primary/secondary, private state после T teardown и последующий PG0 до DB teardown.
+Host Docker child получает parent-death signal, а supervisor проверяет отсутствие
+живых host children. Заранее созданные fixture foreign IDs остаются неизменными;
+owned cleanup отказывает при их наличии. Только после сохранения proof fixture
+удаляет свои exact foreign IDs.
+
+Positive T и оба full-T negatives используют один исходный whole-T/all-prepare600
+ledger. Повторно используются уже проверенные H/T images; rebuild для negatives
+не допускается. Capture/export/cleanup/re-entry оплачиваются одним persisted90
+на phase, без нового deadline при повторном входе. State25min/foundation35min,
+прежние command/transport/DB bounds, шесть R1 actual cases в двух lanes и все
+H/T/C migration/recovery/private-S3/UNKNOWN proofs сохраняются.
+
+Unit cases отдельно исполняют всё unchanged тело T через stdlib seams с настоящими
+TemporaryDirectory и уникальными private receipt bytes: down success/failure,
+owned cleanup failure и продолжающий жить controller, capture/export/report failure.
+Это **unit evidence**, не Docker/PG. Actual итог должен содержать
+`control-full-retained-negatives.json`, `control-full-retained-timeout.json` и
+`control-full-retained-export.json`; shell требует оба case и общий charged interval<600.
+Private raw checkpoint не загружается в artifacts. На disposable runner он сохраняется
+при negative/failure до уничтожения runner; доступ к рабочим VM/DB/S3 не требуется.
+Точные final-source CI, assertions, timings и artifact digests — в едином PR receipt.
+
+#### 6.2.3. CONTROL R3: first-event journal и неподтверждённая primary
+
+C0/C6 подтвердили IMPL-04 на R2 head6363f9c: если первая публикация
+`trace-primary.json` падает один раз, проверка наличия файла позволяла finally
+записать secondary как primary. Независимо воспроизведены down/report branches.
+R2 CI38164556626 остаётся SUCCESS9/9 для прежних путей, но не покрывал этот fault.
+Private backing/checkpoint и daemon cleanup R2 сохраняются; IMPL-01/03/04 остаются
+OPEN до verdict C0, IMPL-02 CLOSED. Исторические receipts выше не переименовываются.
+
+В C observer первое событие получает sequence1 независимо от файловой системы;
+перед публикацией фиксируются неизменяемые serialized bytes и SHA256. Retries
+публикуют только эти bytes, не последнее exception. Каждый entered/event slot
+имеет максимум три попытки без sleep, в исходных whole-T600/cleanup90 deadlines.
+Bounded health содержит completed, hashes/order, publication attempts, безопасные
+I/O diagnostics и binding source/module/helper/phase/owner token. Лимиты32 events
+и16 diagnostics не расширяют прежние wall budgets; overflow означает STOP.
+
+Private C launcher использует тот же observer и возвращает отдельный exit78,
+если final journal publication/durability не подтверждена. Поэтому видимый после
+неудачного fsync health file не считается достаточным ACK. Collector требует
+завершённый journal, точные private modes/hashes/bindings/sequence/timestamps
+и допустимый launcher outcome. Успешный T без exception имеет NO_FAILURE,
+пустой event list и exit0; отсутствие failure evidence при exit1 не является
+такой успешной ветвью. Ни frozen T function/helper/source/image, ни их selector
+не изменены; launcher остаётся runtime-generated private C harness.
+
+Восстановленная публикация даёт original primary + отдельные secondary и
+RECOVERED journal diagnostics. Permanent/missing/unreadable/corrupt evidence,
+неверная sequence/owner/source/phase либо неизвестный child outcome дают
+`CONTROL_RETAINED_JOURNAL_UNCONFIRMED`, primary UNCONFIRMED, result STOP.
+Private STOP latch сохраняет отказ при повторном collect/re-entry; later event
+или восстановленный файл не подменяет уже недоказанную первую причину.
+Checkpoint capture/export и owned cleanup выполняются независимо от journal:
+в STOP report остаются exact retention evidence и правдивый cleanup outcome.
+Raw receipt/env/argv/traceback не экспортируются для доказательства primary.
+
+Адресная local проверка R3:39 PASS — семь прежних full-T cases, восемь transient
+write/publication/file-fsync/directory-fsync down/report cases, восемь permanent/
+missing/unreadable/corrupt full-T cases,13 separate-child IPC cases и три protocol
+success/missing-evidence cases. В child исполняются production C launcher/observer
+и полное unchanged T body; parent читает только files/exit, без общей exception
+memory. Daemon/source/image seams явно unit; это не actual Docker/PG evidence.
+Старые семь assertions сохранены; fixture выделена для повторного использования,
+а same-process seam дополнена новым launcher ACK. STOP не отменяет byte/hash,
+foreign-preservation и cleanup assertions. Local Docker отсутствует.
+
+Штатный final-source CI обязан повторить все9 jobs/clean-source, четыре actual
+full-T timeout/export и шесть R1 daemon negatives, positive H/T/C, PG1→0 до DB
+teardown, private S3/UNKNOWN/wire1 и прежние timings/budgets. Нового дорогостоящего
+Docker journal-fault phase нет: journal IPC проверяется адресными child-process
+tests в существующем non-integration runner. Final SHA/run/artifact digests и
+фактический verdict публикуются в едином PR27 receipt; review остаётся за C0/C6.

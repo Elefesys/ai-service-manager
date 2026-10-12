@@ -13,6 +13,7 @@ from asm.messaging.database import MessagingDatabase, call, worker_active
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.worker import Worker
 from asm.telegram.database import TelegramReceipt
+from asm.tenancy import AuthenticatedAccount
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_m2_1_models import event
@@ -21,7 +22,7 @@ from test_m2_1_postgres import messaging as messaging
 from test_m2_2_db_postgres import MANIFEST
 from test_m2_3_db_postgres import BOT, ingress, projection
 from test_m2_3_db_postgres import telegram as telegram
-from test_tenancy_postgres import A, B
+from test_tenancy_postgres import UA, A, B
 from test_tenancy_postgres import db as db
 from test_tenancy_postgres import seeded as seeded
 
@@ -366,13 +367,25 @@ async def test_context_or_generation_change_is_stale_without_action_authority(me
         replay = await command(h, turn["conversation_id"], "exact manual", "stale")
         assert replay.message_id == send.message_id
     else:
-        # Future control behavior is not exposed: only the migrator test can
-        # exercise the generation fence while all modes remain HUMAN.
-        await query(
-            h,
-            "UPDATE app.conversations SET control_generation=control_generation+1 WHERE id=:id RETURNING id",
-            id=turn["conversation_id"],
-        )
+        # CONTROL now exposes the generation-only transition. Keep the original
+        # stale-consumer assertions, using its actual owner command capability.
+        current = (
+            await query(
+                h,
+                "SELECT client_id,control_generation,version FROM app.conversations WHERE id=:id",
+                id=turn["conversation_id"],
+            )
+        )[0]
+        async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
+            result = await unit.conversation_control_execute(
+                turn["conversation_id"],
+                current["client_id"],
+                "TAKEOVER",
+                "turn-stale",
+                current["control_generation"],
+                current["version"],
+            )
+            assert result["code"] == "ACCEPTED"
     before = await context(h, turn["conversation_id"])
     result = await h.kernel.finish_turn(claim, consume(value))
     assert result.code == "STALE" and await context(h, turn["conversation_id"]) == before

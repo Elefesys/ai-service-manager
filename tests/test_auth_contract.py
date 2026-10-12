@@ -45,9 +45,15 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         "POST /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/messages",
         "POST /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/messages/{message_id}/files/{file_id}/read-grant",
     ]
+    # CONTROL is additive; the frozen auth.v1 and five M2 routes stay exact.
+    control_endpoints = [
+        "GET /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/control",
+        "POST /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/takeover",
+        "POST /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/resume",
+    ]
     assert len(contract["endpoints"]) == 7
     assert actual_endpoints == sorted(
-        contract["endpoints"] + billing_endpoints + messaging_endpoints
+        contract["endpoints"] + billing_endpoints + messaging_endpoints + control_endpoints
     )
     assert contract["schema_revision"] == "0003" and contract["down_revision"] == "0002"
     assert contract["environments"] == ["LOCAL", "TEST"]

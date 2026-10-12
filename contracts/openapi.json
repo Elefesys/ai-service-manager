@@ -9,6 +9,8 @@
               "discriminator": {
                 "mapping": {
                   "BILLING_ACCOUNT_CONTACT_UPDATED": "#/components/schemas/ContactAudit",
+                  "CONVERSATION_RESUMED": "#/components/schemas/ConversationResumedAudit",
+                  "CONVERSATION_TAKEN_OVER": "#/components/schemas/ConversationTakenOverAudit",
                   "MESSAGE_SEND_REQUESTED": "#/components/schemas/MessageSendAudit",
                   "WORKSPACE_BILLING_PROVISIONED": "#/components/schemas/ProvisionAudit"
                 },
@@ -23,6 +25,12 @@
                 },
                 {
                   "$ref": "#/components/schemas/MessageSendAudit"
+                },
+                {
+                  "$ref": "#/components/schemas/ConversationTakenOverAudit"
+                },
+                {
+                  "$ref": "#/components/schemas/ConversationResumedAudit"
                 }
               ]
             },
@@ -602,6 +610,249 @@
         "title": "ContactResult",
         "type": "object"
       },
+      "ControlAcceptedResult": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "accepted_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Accepted Generation",
+            "type": "string"
+          },
+          "accepted_mode": {
+            "enum": [
+              "HUMAN",
+              "AI"
+            ],
+            "title": "Accepted Mode",
+            "type": "string"
+          },
+          "audit_event_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Audit Event Id",
+            "type": "string"
+          },
+          "client_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "context_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Context Version",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "TAKEOVER",
+              "RESUME"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "previous_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Previous Generation",
+            "type": "string"
+          },
+          "previous_mode": {
+            "enum": [
+              "HUMAN",
+              "AI"
+            ],
+            "title": "Previous Mode",
+            "type": "string"
+          },
+          "receipt_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "conversation_id",
+          "client_id",
+          "receipt_id",
+          "audit_event_id",
+          "operation",
+          "previous_mode",
+          "accepted_mode",
+          "previous_generation",
+          "accepted_generation",
+          "context_version",
+          "accepted_at"
+        ],
+        "title": "ControlAcceptedResult",
+        "type": "object"
+      },
+      "ControlCommandResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "enum": [
+              "ACCEPTED",
+              "REPLAY"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ControlAcceptedResult"
+          }
+        },
+        "required": [
+          "outcome",
+          "result"
+        ],
+        "title": "ControlCommandResponse",
+        "type": "object"
+      },
+      "ControlErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "SESSION_REQUIRED",
+                  "ORIGIN_DENIED",
+                  "CSRF_REJECTED",
+                  "ACCESS_DENIED",
+                  "BODY_TOO_LARGE",
+                  "UNSUPPORTED_MEDIA_TYPE",
+                  "INVALID_REQUEST",
+                  "RATE_LIMITED",
+                  "UNAVAILABLE",
+                  "INTERNAL_ERROR",
+                  "NOT_FOUND",
+                  "STALE_STATE",
+                  "IDEMPOTENCY_KEY_CONFLICT"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "NOT_ALLOWED",
+                  "CONTROL_VERSION_EXHAUSTED"
+                ],
+                "type": "string"
+              }
+            ],
+            "title": "Code"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ControlErrorDetail",
+        "type": "object"
+      },
+      "ControlErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ControlErrorDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ControlErrorResponse",
+        "type": "object"
+      },
+      "ControlStateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "context_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Context Version",
+            "type": "string"
+          },
+          "control_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Control Generation",
+            "type": "string"
+          },
+          "control_mode": {
+            "enum": [
+              "HUMAN",
+              "AI"
+            ],
+            "title": "Control Mode",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "manual_delivery": {
+            "$ref": "#/components/schemas/ManualDeliveryState"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "conversation_id",
+          "client_id",
+          "control_mode",
+          "control_generation",
+          "context_version",
+          "observed_at",
+          "manual_delivery"
+        ],
+        "title": "ControlStateResponse",
+        "type": "object"
+      },
       "ConversationResponse": {
         "additionalProperties": false,
         "properties": {
@@ -666,6 +917,154 @@
           "reply_window_expires_at"
         ],
         "title": "ConversationResponse",
+        "type": "object"
+      },
+      "ConversationResumedAudit": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_kind": {
+            "const": "USER_ACCOUNT",
+            "title": "Actor Kind",
+            "type": "string"
+          },
+          "actor_user_account_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Actor User Account Id",
+            "type": "string"
+          },
+          "audit_event_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Audit Event Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "CONVERSATION_RESUMED",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "object_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Object Id",
+            "type": "string"
+          },
+          "object_type": {
+            "const": "CONVERSATION",
+            "title": "Object Type",
+            "type": "string"
+          },
+          "object_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Object Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/ResumePayload"
+          }
+        },
+        "required": [
+          "audit_event_id",
+          "occurred_at",
+          "correlation_id",
+          "object_type",
+          "object_id",
+          "object_version",
+          "actor_kind",
+          "actor_user_account_id",
+          "event_type",
+          "payload"
+        ],
+        "title": "ConversationResumedAudit",
+        "type": "object"
+      },
+      "ConversationTakenOverAudit": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_kind": {
+            "const": "USER_ACCOUNT",
+            "title": "Actor Kind",
+            "type": "string"
+          },
+          "actor_user_account_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Actor User Account Id",
+            "type": "string"
+          },
+          "audit_event_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Audit Event Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "CONVERSATION_TAKEN_OVER",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "object_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Object Id",
+            "type": "string"
+          },
+          "object_type": {
+            "const": "CONVERSATION",
+            "title": "Object Type",
+            "type": "string"
+          },
+          "object_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Object Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TakeoverPayload"
+          }
+        },
+        "required": [
+          "audit_event_id",
+          "occurred_at",
+          "correlation_id",
+          "object_type",
+          "object_id",
+          "object_version",
+          "actor_kind",
+          "actor_user_account_id",
+          "event_type",
+          "payload"
+        ],
+        "title": "ConversationTakenOverAudit",
         "type": "object"
       },
       "ConversationsPage": {
@@ -1040,6 +1439,25 @@
           "password"
         ],
         "title": "LoginRequest",
+        "type": "object"
+      },
+      "ManualDeliveryState": {
+        "additionalProperties": false,
+        "properties": {
+          "has_dispatching": {
+            "title": "Has Dispatching",
+            "type": "boolean"
+          },
+          "has_unknown": {
+            "title": "Has Unknown",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "has_dispatching",
+          "has_unknown"
+        ],
+        "title": "ManualDeliveryState",
         "type": "object"
       },
       "MembershipResponse": {
@@ -1487,6 +1905,46 @@
         "title": "ReadGrantResponse",
         "type": "object"
       },
+      "ResumePayload": {
+        "additionalProperties": false,
+        "properties": {
+          "control_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Control Generation",
+            "type": "string"
+          },
+          "control_mode": {
+            "const": "AI",
+            "title": "Control Mode",
+            "type": "string"
+          },
+          "previous_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Previous Generation",
+            "type": "string"
+          },
+          "previous_mode": {
+            "enum": [
+              "HUMAN",
+              "AI"
+            ],
+            "title": "Previous Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "previous_mode",
+          "control_mode",
+          "previous_generation",
+          "control_generation"
+        ],
+        "title": "ResumePayload",
+        "type": "object"
+      },
       "SendResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1655,6 +2113,46 @@
           }
         },
         "title": "SystemInfo",
+        "type": "object"
+      },
+      "TakeoverPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "control_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Control Generation",
+            "type": "string"
+          },
+          "control_mode": {
+            "const": "HUMAN",
+            "title": "Control Mode",
+            "type": "string"
+          },
+          "previous_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Previous Generation",
+            "type": "string"
+          },
+          "previous_mode": {
+            "enum": [
+              "HUMAN",
+              "AI"
+            ],
+            "title": "Previous Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "previous_mode",
+          "control_mode",
+          "previous_generation",
+          "control_generation"
+        ],
+        "title": "TakeoverPayload",
         "type": "object"
       },
       "WebhookAcknowledgement": {
@@ -3327,6 +3825,160 @@
         ]
       }
     },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/control": {
+      "get": {
+        "description": "Live OWNER messaging:read. One current state snapshot, with bounded manual delivery flags; no channel refresh.",
+        "operationId": "read_api_v1_workspaces__workspace_id__conversations__conversation_id__control_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ControlErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BillingStateError"
+                    }
+                  ],
+                  "title": "Response 503 Read Api V1 Workspaces  Workspace Id  Conversations  Conversation Id  Control Get"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Read",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/messages": {
       "get": {
         "description": "Live OWNER messaging:read. Creation order with current file and delivery status; provider occurred_at is separate.",
@@ -3860,6 +4512,414 @@
         "summary": "Read Grant",
         "tags": [
           "messaging"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/resume": {
+      "post": {
+        "description": "Live OWNER conversations:control, active Business/connection and messaging.manual_send product availability. Activates only future ingress; no channel refresh, send or backlog processing. Recover ambiguous commit with the same key/body.",
+        "operationId": "resume_api_v1_workspaces__workspace_id__conversations__conversation_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expected_client_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Expected Client Id",
+                    "type": "string"
+                  },
+                  "expected_context_version": {
+                    "description": "Canonical decimal string, 1..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Context Version",
+                    "type": "string"
+                  },
+                  "expected_control_generation": {
+                    "description": "Canonical decimal string, 1..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Control Generation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expected_client_id",
+                  "expected_control_generation",
+                  "expected_context_version"
+                ],
+                "title": "ControlCommandRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlCommandResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ControlErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BillingStateError"
+                    }
+                  ],
+                  "title": "Response 503 Resume Api V1 Workspaces  Workspace Id  Conversations  Conversation Id  Resume Post"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Resume",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/takeover": {
+      "post": {
+        "description": "Live OWNER conversations:control, expected client/generation/context and exact Idempotency-Key. Stop automation locally, independently of product/channel availability. Replay is the saved acceptance, not current state.",
+        "operationId": "takeover_api_v1_workspaces__workspace_id__conversations__conversation_id__takeover_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "expected_client_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Expected Client Id",
+                    "type": "string"
+                  },
+                  "expected_context_version": {
+                    "description": "Canonical decimal string, 1..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Context Version",
+                    "type": "string"
+                  },
+                  "expected_control_generation": {
+                    "description": "Canonical decimal string, 1..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Control Generation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "expected_client_id",
+                  "expected_control_generation",
+                  "expected_context_version"
+                ],
+                "title": "ControlCommandRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlCommandResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ControlErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BillingStateError"
+                    }
+                  ],
+                  "title": "Response 503 Takeover Api V1 Workspaces  Workspace Id  Conversations  Conversation Id  Takeover Post"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Takeover",
+        "tags": [
+          "conversations"
         ]
       }
     },

@@ -32,7 +32,7 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0008"
+DATABASE_SCHEMA_REVISION = "0009"
 
 
 class Settings(AuthSettings):
@@ -137,6 +137,7 @@ def create_app(
     telegram: "TelegramClient | None" = None,
     object_storage: "ObjectStorage | None" = None,
 ) -> FastAPI:
+    from asm.conversations.http import install_control
     from asm.files.config import StorageSettings
     from asm.files.storage import S3ObjectStorage
     from asm.messaging.database import MessagingDatabase
@@ -207,6 +208,7 @@ def create_app(
         storage=storage,
         telegram=TelegramRefresher(telegram_client) if telegram_client is not None else None,
     )
+    install_control(app, auth, config)
     install_webhook(
         app,
         telegram_settings,
