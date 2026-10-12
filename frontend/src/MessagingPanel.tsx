@@ -217,7 +217,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         {view.messages.busy && <p role="status">Загружаем сообщения…</p>}{view.messages.error && <p role="alert">{view.messages.error}</p>}
         {view.messages.items?.length === 0 && <p>Сообщений пока нет.</p>}
         <ol className="message-list">{view.messages.items?.map(m => <li key={m.message_id} data-testid={`message-${m.message_id}`}><article>
-          <strong>{m.direction === 'INBOUND' ? 'Входящее' : 'Ручной ответ'}</strong><time dateTime={m.occurred_at}>{m.occurred_at}</time>
+          <strong>{m.direction === 'INBOUND' ? 'Входящее' : 'Исходящее'}</strong><time dateTime={m.occurred_at}>{m.occurred_at}</time>
           {m.text !== null && <p className="message-text">{m.text}</p>}
           {m.delivery && <p className="delivery" role="status">{deliveryState[m.delivery.status]}{m.delivery.error_code && ` · ${m.delivery.error_code}`}</p>}
           {m.file && <div className="message-image">

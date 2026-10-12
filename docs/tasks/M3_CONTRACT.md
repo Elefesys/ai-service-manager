@@ -2144,3 +2144,83 @@ gate NOT VERIFIED; M3 остаётся IN_PROGRESS. VM/Telegram/live/deploy/merg
 tested merge/parents/tree указываются в единственном PR receipt и **не являются
 GUARDS execution evidence**. После receipt C3 удерживает head до решения C0;
 самостоятельно задачи C1/C2/C6 не выдаёт и implementation не начинает.
+
+### 13.11. Implementation GUARDS — C3, 2026-10-12
+
+Выдача C0 implementation6123042372 сняла прежний HOLD после R1/C6 acceptance.
+Продолжение — `c3/m3-1-guards`, Draft PR28, sole start parent
+`4caf1d64ce6073cc8064b088f9a0a9cdf245ad20`; frozen C/main —
+`c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5`. Принятые226090bytes выше сохранены
+как неизменный prefix. Это описание реализации и подготовленных проверок;
+actual final-source CI и verdict привязываются только в едином
+[C3 receipt6119496506](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6119496506).
+До завершения runtime gates задача IN_PROGRESS, не VERIFIED.
+
+`0010_conversation_guards.py` (0010→0009) добавляет одну private FORCE RLS
+receipt table, nullable profile/rejection, typed kind/step и relation constraints.
+Шесть новых SQL profiles соответствуют §13.6; public EXECUTE только у четырёх
+runtime capabilities, private check/fingerprint runtime не вызываются.
+Existing SQL replacements используют зафиксированные0009 bodies; unused
+reverse восстанавливает их без правки applied0001–0009. Runtime/readiness и
+TEST provisioning требуют exact0010. Legacy Resume replay не пишет profile.
+
+`conversations/guards.py` содержит закрытые внутренние DTO и effects-free
+`consume_guarded`, возвращающий exact `CONTROLLED GUARDS TEST`.
+`messaging/database.py` добавляет четыре typed worker entrypoints; никакого
+owner context для consumer/send не создаётся. `worker.py` маршрутизирует
+GUARDED_TEXT и SEND_GUARDED_TEXT отдельно от effects-free TEST_CONSUME/manual
+admission; не вызывает Telegram probe для automated path. BEGIN/COMMIT и
+adapter I/O разделены. Result acceptance, DB fingerprint, canonical replay,
+post-wait checks и durable dispatch принадлежат PostgreSQL. Existing controlled
+adapter считает каждый CALL/EFFECT; transport дедупликации не добавлено.
+
+Матрица §13.8 реализована следующими проверками (короткие имена ниже — suffix
+`test_` в `tests/test_m3_1_guards_postgres.py`, если path не указан):
+
+| Строка §13.8 | Исполнимые проверки / ожидаемые assertions |
+|---|---|
+| 1 fresh positive | `fresh_owner_resume_normal_ingress_worker_atomic_intent_and_final_send`: owner API → fresh Inbox → normal queue/worker, один accepted intent, own context+1, SENT/CALL1/EFFECT1, нет manual receipt/Audit, pool checkedout0 на adapter |
+| 2 legacy routing | `legacy_capability_rejects_genuine_guarded_claim_before_any_mutation`: current/Takeover, INVALID_INPUT и full facts unchanged; intended path ACCEPTED/STALE |
+| 3 Takeover wait | `takeover_wins_observed_conversation_wait`: actual PG blockers, accept STALE без intent, begin FAILED/STALE без attempt/CALL |
+| 4 generation/backlog | `new_material_or_generation_rejects_old_snapshot[resume]`, `telegram_resume_and_fresh_ingress_never_plan_or_probe_automated_send`, migration legacy NULL/replay/no-backfill; retained CONTROL capture tests |
+| 5 new material/relations | `new_material_or_generation_rejects_old_snapshot`, `late_same_turn_file_revision_cannot_replace_accepted_intent`, `private_receipts_and_same_workspace_relation_forgery_are_rejected`: inbound/manual/file hooks, late revision ALREADY_ACCEPTED, exact same-kind FK23503 |
+| 6 live authority/time | `post_wait_live_authority_and_db_clock`: owner revoke, expiry, activation, inactive channel; observed locks и DB clock, обе accept/begin boundaries |
+| 7 claims/concurrency | `claim_expiry_reclaim_and_guarded_exhaustion_leave_ready_turn`, `canonical_refs_bad_digest_token_and_concurrent_exact_replay`: old token rejects, canonical refs, два accept возвращают один immutable receipt, changed text conflict |
+| 8 atomicity/accept ACK | `acceptance_rolls_back_every_write_and_final_update` шесть boundaries + `acceptance_and_finalize_ack_loss_read_canonical_success`; full facts rollback, DB-authoritative fingerprint и canonical receipt |
+| 9 durable begin | `dispatch_linearizes_before_effect_and_takeover_does_not_veto_finalize`: Takeover до/после adapter effect после committed begin; factual SENT, CALL1/EFFECT1 |
+| 10 start ACK/process | `guarded_process_death_unknown_no_resend_after_restart_and_resume[start_after_commit-0]`: existing M2 child exit42, durable start, UNKNOWN/CALL0/EFFECT0 после recovery |
+| 11 possible effect/process | тот же existing process family `[after_effect-1]`: UNKNOWN/CALL1/EFFECT1 после restart/Takeover/Resume; второй call отсутствует |
+| 12 retry/finalize | `proven_not_sent_rechecks_guard_and_exhausts_without_turn_failure`, lost finalize ACK: каждый новый begin rechecks, старый attempt допустим, пять claims max, READY Turn не FAILED, canonical SENT сохранён |
+| 13 retained/manual/history | `tests/test_m3_1_control_api_postgres.py` mixed read + `frontend/src/MessagingPanel.test.tsx` mixed10rows/all5statuses; только manual flags считают manual, composer/recovery и public shape прежние |
+| 14 schema/source | `tests/test_m3_1_guards_migrations.py`: fixed C35/G36, populated repeat/reverse definitions/data, legacy NULL, used refusal, fresh actual-schema observer/lost commit ACK; tenancy exact SQL profiles и existing schema inventory tests |
+
+C6 plan воплощён в существующих двух state lanes: H wrapper один раз;
+H→T direct frozen T; T→C direct selector из byte-identical frozen C checkout;
+C→G selector из G. C runtime/development images переиспользуются только после
+attestation. G controller расположен в разрешённом guards migration test.
+Сохраняются retained T full/negative и C six-daemon proofs; C tail negatives
+исполняются в C checkout и сохраняются в `reports/retained-control/`.
+
+Один coordinator600 начинается после H до T preparation. Whole T/negatives,
+whole C including capture/cleanup/report, pre-G и G image preparation используют
+исходный absolute deadline. Retained C supervisor получает remaining600 без
+terminal+480; terminal G сохраняет прежний runtime bound. Cleanup90, state25min,
+foundation35min, exact Docker29, all9/source9 unchanged. G reports:
+`reports/guards-schema-phase.json`, `reports/control-schema-ledger.json`;
+retained C report сохраняет C source, не объявляется G evidence.
+Actual укладываемость проверяется runner; новый лимит не введён.
+
+Адаптации старых проверок ограничены принятым поведением: latest readiness/setup
+0009→0010 (0009 теперь negative); latest inventory35→36 с отдельными frozen T/C
+sets; cleanup удаляет новый child receipt до родителей; retained CONTROL tests
+явно исполняют0009 cycle; mixed history отделяет manual status flags. Static
+coordinator assertion теперь требует явные T/C/G executors и C negative tail.
+OpenAPI, auth/owner DTO, manual fingerprints/Audit, source pins и guards не менялись.
+
+Локально: Ruff/format/mypy, generated OpenAPI consistency и frontend typecheck
+PASS; frontend114 PASS; полный non-integration1082 PASS/0 FAIL (110.40s).
+Docker отсутствует: local actual PG/S3/browser/Docker29 NOT RUN. Эти локальные
+результаты не доказывают runtime строки таблицы; actual результаты и точный
+head/tree/merge/ordered parents/run/jobs/artifact digests публикуются в receipt.
+Секреты/live Telegram/VM/рабочие DB/S3 не использовались. C0 intake и независимый
+C8 ещё обязательны; scope exclusions §§13.8–13.10 сохранены.

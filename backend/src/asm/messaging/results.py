@@ -21,7 +21,9 @@ class InboxReceipt(Result):
 
 class JobClaim(Result):
     job_id: UUID
-    kind: Literal["PROCESS_INBOX", "SEND_MANUAL_TEXT", "FETCH_IMAGE", "PROCESS_TURN"]
+    kind: Literal[
+        "PROCESS_INBOX", "SEND_MANUAL_TEXT", "SEND_GUARDED_TEXT", "FETCH_IMAGE", "PROCESS_TURN"
+    ]
     workspace_id: UUID
     connection_id: UUID
     inbox_id: UUID | None
@@ -37,7 +39,7 @@ class TurnJobClaim(JobClaim):
     kind: Literal["PROCESS_TURN"]
     turn_id: UUID
     turn_revision: int = Field(gt=0)
-    step: Literal["GROUP", "MEDIA", "TEST_CONSUME"]
+    step: Literal["GROUP", "MEDIA", "TEST_CONSUME", "GUARDED_TEXT"]
 
 
 def parse_claim(value: object) -> JobClaim:

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -14,6 +15,12 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from asm.conversations.guards import (
+    GuardedTurnSnapshot,
+    GuardProgress,
+    GuardReceipt,
+    GuardTextResult,
+)
 from asm.conversations.turns import ConsumerReceipt, ConsumerResult, TurnProgress, TurnSnapshot
 from asm.messaging.adapter import Barrier, TrustedSource
 from asm.messaging.errors import Code, MessagingError, database_error
@@ -158,11 +165,16 @@ class WorkerUnitOfWork:
 
 
 class MessagingDatabase:
-    def __init__(self, engine: AsyncEngine, *, barrier: Barrier | None = None) -> None:
+    def __init__(
+        self, engine: AsyncEngine, *, barrier: Barrier | None = None, environment: str | None = None
+    ) -> None:
         if engine.url.drivername != "postgresql+psycopg" or engine.url.username != "asm_runtime":
             raise MessagingError(Code.ACCESS_DENIED)
         self._engine = engine
         self._barrier = barrier
+        self._guards_enabled = (
+            environment if environment is not None else os.environ.get("ASM_ENVIRONMENT")
+        ) in {"LOCAL", "TEST"} and engine.url.database in {"asm_local", "asm_test"}
         self._claim_scan: dict[str, ScanStep] = {}
         self._recovery_scan: ScanStep | None = None
 
@@ -429,6 +441,86 @@ class MessagingDatabase:
                     {"job": job_id, "token": claim_token},
                 )
             )
+
+    def _require_guards(self) -> None:
+        if not self._guards_enabled:
+            raise MessagingError(Code.NOT_ALLOWED)
+
+    async def prepare_guarded_turn(self, claim: JobClaim) -> GuardedTurnSnapshot | GuardProgress:
+        self._require_guards()
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit._execute("SELECT platform.guard_turn_prepare(:job, :token)")
+            result = (
+                GuardedTurnSnapshot.model_validate(raw)
+                if raw["code"] == "SNAPSHOT"
+                else GuardProgress.model_validate(raw)
+            )
+            await self.checkpoint("guard_prepare_before_commit")
+        await self.checkpoint("guard_prepare_after_commit")
+        return result
+
+    async def accept_guarded_text(
+        self, claim: JobClaim, snapshot_digest: str, exact_text: str
+    ) -> GuardReceipt | GuardProgress:
+        self._require_guards()
+        for value in (claim.job_id, claim.claim_token):
+            require_uuid(value)
+        result = GuardTextResult(snapshot_digest=snapshot_digest, text=exact_text)
+        async with self._transaction() as connection:
+            raw = await call(
+                connection,
+                "SELECT platform.guard_turn_accept(:job, :token, :digest, :body)",
+                {
+                    "job": claim.job_id,
+                    "token": claim.claim_token,
+                    "digest": result.snapshot_digest,
+                    "body": result.text,
+                },
+            )
+            receipt = (
+                GuardProgress.model_validate(raw)
+                if raw["code"] == "ALREADY_ACCEPTED"
+                else GuardReceipt.model_validate(raw)
+            )
+            await self.checkpoint("guard_accept_before_commit")
+        await self.checkpoint("guard_accept_after_commit")
+        return receipt
+
+    async def replay_guarded_text(
+        self, job_id: UUID, winning_token: UUID, snapshot_digest: str, exact_text: str
+    ) -> GuardReceipt:
+        self._require_guards()
+        for value in (job_id, winning_token):
+            require_uuid(value)
+        result = GuardTextResult(snapshot_digest=snapshot_digest, text=exact_text)
+        async with self._transaction() as connection:
+            return GuardReceipt.model_validate(
+                await call(
+                    connection,
+                    "SELECT platform.guard_turn_replay(:job, :token, :digest, :body)",
+                    {
+                        "job": job_id,
+                        "token": winning_token,
+                        "digest": result.snapshot_digest,
+                        "body": result.text,
+                    },
+                )
+            )
+
+    async def begin_guarded_send(self, claim: JobClaim) -> SendPermit | TerminalRejection:
+        self._require_guards()
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit._execute("SELECT platform.guard_send_begin(:job, :token)")
+            result = (
+                SendPermit.model_validate(raw)
+                if raw["code"] == "PERMITTED"
+                else TerminalRejection.model_validate(raw)
+            )
+            if isinstance(result, SendPermit) and result.provider != "CONTROLLED":
+                raise MessagingError(Code.NOT_ALLOWED)
+            await self.checkpoint("start_before_commit")
+        await self.checkpoint("start_after_commit")
+        return result
 
     async def retry(self, claim: JobClaim, code: Code, retryable: bool = True) -> dict[str, object]:
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:

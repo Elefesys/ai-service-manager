@@ -32,7 +32,7 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0009"
+DATABASE_SCHEMA_REVISION = "0010"
 
 
 class Settings(AuthSettings):
@@ -244,7 +244,7 @@ async def serve(role: Literal["worker", "scheduler"]) -> None:
         telegram_settings = TelegramSettings(ASM_ENVIRONMENT=settings.environment)
         telegram = TelegramClient(telegram_settings) if telegram_settings.enabled else None
         await db.check()
-        kernel = MessagingDatabase(db.engine)
+        kernel = MessagingDatabase(db.engine, environment=settings.environment)
         storage_settings = StorageSettings()
         if storage_settings.environment != settings.environment:
             raise RuntimeError("Storage environment mismatch")

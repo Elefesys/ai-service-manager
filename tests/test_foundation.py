@@ -73,5 +73,5 @@ def test_runtime_database_head_is_independent_from_frozen_tenancy_contract():
     from asm.tenancy import SCHEMA_REVISION
 
     assert SCHEMA_REVISION == "0003"
-    # M3.1 CONTROL adds 0009; the frozen tenancy.v1 head above stays 0003.
-    assert DATABASE_SCHEMA_REVISION == "0009"
+    # M3.1 GUARDS adds 0010; the frozen tenancy.v1 head above stays 0003.
+    assert DATABASE_SCHEMA_REVISION == "0010"

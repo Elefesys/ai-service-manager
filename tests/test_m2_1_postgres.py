@@ -83,6 +83,14 @@ async def cleanup(migrator):
         # deletion in one transaction; the READY winner FK is deferred.
         # M3 receipts reference jobs; memberships reference both origin Inbox
         # and files. Delete each child explicitly before its immutable parent.
+        # Revision-qualified cleanup also serves retained T/C migration cycles.
+        if (
+            await c.execute(text("SELECT to_regclass('platform.turn_guard_receipts')"))
+        ).scalar_one() is not None:
+            await c.execute(
+                text("DELETE FROM platform.turn_guard_receipts WHERE workspace_id IN (:a,:b)"),
+                {"a": A, "b": B},
+            )
         for table in (
             "platform.conversation_control_receipts",
             "platform.turn_consumer_receipts",
