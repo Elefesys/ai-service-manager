@@ -1633,8 +1633,12 @@ review или документом.
 работы: `67326f7e2e0865e1b84f5e4fc7c67d5044e48ba7`. §§1–12 сохранены byte-for-byte;
 исторические OPEN там не заменяют текущий [реестр](../TASK_REGISTER.md).
 Сейчас изменяется только этот файл; revision следующей миграции не назначена.
+R1 по [решению C0](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6121132463)
+продолжает head `d4f9bdec7ec801e61165e142b16e98f6d2322e0b`: разрешена адресная
+правка существующего §13. C1/C2 reviews приняты, две TEST policy LOCKED;
+общий contract и implementation ещё не приняты, findings остаются OPEN (§13.10).
 
-Прочитаны actual0005/0007/0008/0009, `OwnerControlService`, `Worker`,
+Прочитаны actual0005/0006/0007/0008/0009, `OwnerControlService`, `Worker`,
 `MessagingDatabase`/`WorkerUnitOfWork`, `TurnSnapshot`/`consume`, manual commands,
 results/policy и соответствующие tests. Канонические основания: Spec
 §§5.1–5.14,18.5–18.8,18.14,25.7; ADR024–026/121–128/180/197–198/217/267;
@@ -1651,14 +1655,16 @@ MVP GJ-G/GJ-J; Roadmap M3; Implementation Plan M3.1; IMPL-001.
 `Worker.execute/run_once/run`, PostgreSQL claim и Outbox, а не через отдельно
 вызываемую тестом функцию admission. `TURN_TEST_V1` остаётся effects-free.
 
-Предлагаются три ограниченных изменения относительно принятого CONTROL:
+Для этого среза C0 зафиксировал следующие ограниченные policy относительно
+принятого CONTROL (GUARDS-POLICY-01/02, §13.10):
 
 1. **Новый Resume в LOCAL/TEST для CONTROLLED** сохраняет внутренний профиль
    `CONTROLLED_GUARDS_V1` в своём receipt. Старые receipts получают NULL, без
    backfill. Replay Resume возвращает прежний результат и профиль не добавляет.
    Telegram Resume по-прежнему не включает автоматический consumer. Сам Resume
    не создаёт Jobs; только последующий fresh ingress может привести к новому шагу.
-   Это явное расширение внутренней семантики CONTROL, требующее решения C1/C0.
+   Это явное расширение внутренней семантики CONTROL, принятое C0 только для
+   LOCAL/TEST + CONTROLLED среза.
 2. Допуск этого TEST-профиля требует **live OWNER, принявшего соответствующий
    Resume**, active Workspace/Business/Connection и текущей product availability
    по existing `messaging.manual_send`. Последняя — лишь availability check;
@@ -1669,10 +1675,11 @@ MVP GJ-G/GJ-J; Roadmap M3; Implementation Plan M3.1; IMPL-001.
 3. **Не более одного принятого automated text intent на Turn**, независимо от
    последующих revision. Новый material context может подавить ещё не начатую
    отправку, но не создаёт автоматически замену уже принятого intent. Следующий
-   fresh Turn имеет свой ключ. Это консервативный предел данного TEST consumer;
-   выбор one-per-Turn против one-per-revision вынесен на C1/C0, не скрыт в retry.
+   fresh Turn имеет свой ключ. C0 принял one-per-Turn для deterministic TEST
+   consumer; общая production AI/M4 replacement policy этим не определяется.
 
-Эти предложения не включаются до принятия §13. Профиль ограничен одновременно
+Исполнение этих policy требует принятия всего §13 и отдельной выдачи implementation.
+Профиль ограничен одновременно
 server environment LOCAL/TEST, разрешённой LOCAL/TEST БД и canonical provider
 CONTROLLED; Python и SQL проверяют это независимо. Пользовательский JSON, GUC,
 job payload, произвольный connection UUID и флаг `origin` профиль не назначают.
@@ -1726,7 +1733,9 @@ non-empty TEXT. Claim token не входит в business fingerprint, но от
 Поздний file terminal может создать шаг новой revision; если intent этого Turn
 уже принят, шаг заканчивается `ALREADY_ACCEPTED` со ссылкой на него без consumer,
 нового receipt/Message/Outbox/send Job. Нет переоткрытия старого intent.
-Производитель только планирует работу; это не окончательный permission check.
+Производитель только планирует по activation/profile; это не окончательный
+permission check. `turn_enqueue` не получает authority/billing locks из material
+hook: эта цепочка принадлежит последующему guarded admission.
 
 Предлагаемый private Python ABI в `MessagingDatabase`:
 
@@ -1812,18 +1821,23 @@ CAS, rights refresh вне transaction, post-wait права и строгий
 над stale context/control/origin, затем проверяются product и остальные gates.
 Неверный/истёкший/reclaimed token отвергается без изменения текущей работы;
 terminal winning replay проверяется отдельно до требования live lease.
+Если concurrent finalizer commit завершился во время admission wait, выполняется
+existing canonical re-read с теми же winning token/digest/text, без нового permit.
 STALE/SUPERSEDED/NOT_ALLOWED допускают только собственный terminal Job и receipt
 результата; **нет domain mutation**, нового Message/Outbox/Audit или follow-up Job.
 ALREADY_ACCEPTED завершает только текущий шаг и возвращает прежнюю идентичность.
 Replay не создаёт ни одной row и не делает старый результат исполнимым заново.
 Prepare без ещё сохранённого input может завершить только свой Job с progress,
-без result receipt; потеря его ACK не разрешает computation/send повторно.
+без result receipt; потеря его ACK сама по себе не разрешает computation/send
+повторно. Committed terminal Job даёт STALE_CLAIM; после rollback возможен только
+existing bounded retry/reclaim с повторным live admission.
 Exhaustion нового GUARDS step завершает только этот Job, не переводит уже READY
 Turn в FAILED. Старые GROUP/MEDIA/TEST_CONSUME exhaustion rules сохраняются.
 
 Acceptance одной transaction создаёт immutable result receipt + OUTBOUND TEXT
 Message + PENDING Outbox `SEND_GUARDED_TEXT` + один send Job, затем terminalizes
-consumer Job. Ошибка любого write/commit откатывает всё. Existing
+consumer Job. Ошибка любого write, включая последний consumer Job terminal
+UPDATE, или commit откатывает всё. Existing
 `turn_manual_material` на деле обрабатывает **любой** OUTBOUND Message: его
 однократный context+1 сохраняется и для automated Message. После insert читается
 и сохраняется `intent_context_version=input_context_version+1`; generation не
@@ -1839,16 +1853,18 @@ claim до выдачи permit. **Durable commit DISPATCHING — linearization p
 | Порядок | Обязательный результат |
 |---|---|
 | Takeover/manual acceptance победил до result admission | STALE, без intent и вызова adapter |
-| Intent принят, Takeover/new context победил до dispatch | Outbox FAILED с existing `NOT_ALLOWED`, Job DEAD; private причина STALE/SUPERSEDED/NOT_ALLOWED; attempt не начинается, CALL=0 |
+| Intent принят, Takeover/new context победил до dispatch | Outbox FAILED с existing `NOT_ALLOWED`, Job DEAD; private причина STALE/SUPERSEDED/NOT_ALLOWED; новый attempt/CALL не начинается. До первого begin CALL=0; при повторном begin счётчик прежних calls не увеличивается |
 | DISPATCHING commit победил, затем Takeover, в том числе до фактического I/O | Permit может быть использован один раз исходным worker; mode switch не доказывает отмену. Финальный outcome принимается независимо от нового поколения |
 | Успех / definite non-retryable failure | Existing Outbox SENT/FAILED и Job SUCCEEDED/DEAD; terminal material hook context+1 ровно один раз |
 | Proven NOT_SENT, retryable | Existing PENDING/READY, прежние backoff/5 claims/15min; **каждый** новый begin снова проверяет GUARDS, поэтому Takeover пресекает retry |
 | Возможный effect, timeout/cancellation/response loss | UNKNOWN/DEAD; не CANCELLED, не READY, без второго вызова |
-| Dispatch commit потерял ACK | Нет полученного permit — worker не делает I/O. Canonical read показывает PENDING либо DISPATCHING/terminal; DISPATCHING не выдаёт новый permit, recovery остаётся консервативным UNKNOWN |
+| Dispatch commit потерял ACK | Нет полученного permit — worker не делает I/O. При состоявшемся commit/start_after_commit — recovery UNKNOWN/CALL=0; DISPATCHING не выдаёт новый permit. Если canonical read доказал rollback/PENDING, разрешён только обычный retry/reclaim с новым guarded admission |
 | Finalize commit потерял ACK | Canonical exact attempt/claim/outcome replay до live lease checks; сохранённый SENT не понижается в UNKNOWN |
 
 Отдельного automated retry engine нет. `messaging_finish_send`, reschedule,
 recovery и terminal preflight расширяются ровно на новый typed send kind.
+При отказе повторного begin после proven NOT_SENT прежний `attempt_id` может
+оставаться: запрещён новый attempt/transport, а не наличие уже сохранённого ID.
 Сохраняются last_attempt/last_claim/last_outcome, late SUCCESS после уже записанного
 UNKNOWN отвергается, restart не исполняет DISPATCHING повторно. При stale pending
 intent private rejection фиксируется в одном новом nullable Job поле
@@ -1858,15 +1874,25 @@ enums не расширяются. Outbox FAILED сам является termina
 
 Для будущего Console достаточно origin, Turn/revision, accepted generation,
 input/intent context, intent/attempt IDs и truthful delivery status из сохранённых
-rows. Не обещать отмену in-flight после Takeover. HTTP DTO/UI здесь не расширяются.
+rows. Не обещать отмену in-flight после Takeover. Public DTO/history/delivery fields
+не меняются; новая UI-функция или CONTROL screen/buttons здесь не появляются.
 Существующие `manual_delivery.has_dispatching/has_unknown` должны фильтровать
 `kind='SEND_MANUAL_TEXT'`: сейчас SQL считает все Outbox, что было эквивалентно
 manual-only схеме. Это необходимая compatibility correction при втором kind;
 нельзя молча показать automated pending как ручную отправку.
+Existing history SQL возвращает OUTBOUND любого Outbox kind; MessageResponse
+не содержит origin, а `MessagingPanel` сейчас подписывает все такие rows как
+«Ручной ответ». В будущей implementation эта единственная подпись заменяется
+на нейтральную **«Исходящее»** для любого OUTBOUND. Manual и automated rows не
+скрываются, их PENDING/DISPATCHING/SENT/FAILED/UNKNOWN остаются честными;
+existing manual composer и receipt recovery сохраняются. Это узкая compatibility
+правка двух frontend paths (§13.9), не новый origin DTO/API/OpenAPI или экран.
 
 ### 13.6. Минимальная schema и security profiles — proposal C2
 
 Нужна **одна новая migration после0009**, номер/filename назначают C0/C2 до кода.
+Рекомендация C2 — `0010_conversation_guards.py`, revision0010/down_revision0009;
+это **не резерв номера и не разрешение DDL**. C0 назначит их вместе с implementation.
 Причина: текущие Outbox/Jobs CHECK и command receipts разрешают только manual
 send; записать automated intent в них как manual означало бы выдумать owner
 команду и `MESSAGE_SEND_REQUESTED`. Applied0001–0009 не редактируются.
@@ -1885,19 +1911,37 @@ send; записать automated intent в них как manual означало
 `request_fingerprint`, `result_text`, `outcome`, `accepted_at`, nullable
 `intent_context_version/message_id/outbox_id/send_job_id`. Outcome —
 ACCEPTED/STALE/SUPERSEDED/NOT_ALLOWED; last four refs/version non-NULL ровно для
-ACCEPTED, intent context = input context+1. Result text нужен для exact replay
+ACCEPTED, для остальных outcomes все четыре NULL; intent context = input context+1
+с проверкой bigint overflow. Result text нужен для exact replay
 и DB fingerprint, не является второй mutable копией Message.
 
 PK `(workspace_id,job_id)`; partial UNIQUE `(workspace_id,turn_id)` WHERE
-outcome=ACCEPTED; accepted Message/Outbox/send Job также unique. Typed composite
-FK связывают consumer Job с exact kind/step/Turn/revision/connection, Turn с
-Conversation/Connection, Conversation с Client, Resume с conversation/client/
-generation, Message с conversation/connection/OUTBOUND/TEXT, Outbox с этим
-Message/connection, send Job с этим Outbox и новым kind. Нужные constants можно
-задать GENERATED/checked literal columns; только необходимые parent UNIQUE,
-никаких FK по UUID без Workspace. Insert capability дополнительно сравнивает
-DB input, fence/profile и exact Message text; nullable CHECK пишутся с явными
-IS NOT NULL/IS TRUE, не допускают SQL NULL bypass. Все receipt fields immutable.
+outcome=ACCEPTED. UNIQUE `(workspace_id,outbox_id)` в receipt вместе с existing
+one-Outbox-per-Message/one-send-Job-per-Outbox обеспечивает уникальность accepted
+Message/Outbox/send Job; отдельные дубли этих UNIQUE и новый action UUID не нужны.
+Captured revision связывается с immutable consumer Job. FK не ссылаются на
+mutable current Turn revision либо Conversation context/generation как замену
+admission; актуальность проверяется по §13.4.
+
+Точная relation chain (`ws` = `workspace_id`, constants — non-NULL literals):
+
+| Связь | Columns / supporting parent key |
+|---|---|
+| Receipt → consumer Job | `(ws,job_id,connection_id,PROCESS_TURN,turn_id,turn_revision,GUARDED_TEXT)` → existing `messaging_jobs_turn_receipt_key` |
+| Receipt → Turn | `(ws,turn_id,connection_id,conversation_id)` → existing four-column Turn UNIQUE |
+| Receipt → Conversation/Client | `(ws,conversation_id,client_id)` → existing `conversations_control_client_key` |
+| Receipt → Resume | `(ws,resume_receipt_id,conversation_id,client_id,input_control_generation)` → proposed five-column Resume UNIQUE выше; operation/profile/fence подтверждает trusted insert/current helper |
+| Receipt → Message | `(ws,message_id,connection_id,conversation_id,OUTBOUND,TEXT)` → existing `messages_file_source_key` из0006 |
+| Receipt → Outbox | `(ws,outbox_id,message_id)` → existing Outbox UNIQUE; connection связан через typed Message/Outbox FK |
+| Receipt → send Job | `(ws,send_job_id,outbox_id,SEND_GUARDED_TEXT)` → **новый** supporting Job UNIQUE `(workspace_id,id,outbox_id,kind)` |
+| Send Job → Outbox kind | `(ws,outbox_id,connection_id,kind)` → **новый** supporting Outbox UNIQUE `(workspace_id,id,connection_id,kind)`; typed FK требует совпадающий manual/guarded kind, независимых CHECK двух rows недостаточно |
+
+Existing parent keys переиспользуются, не дублируются. Common refs NOT NULL;
+нужные constants — GENERATED либо checked non-NULL literals, nullable CHECK —
+явные IS NULL/IS NOT NULL/IS TRUE. Insert capability дополнительно сравнивает
+DB input, fence/profile и exact Message text. Все receipt fields immutable;
+для full-row UPDATE protection используется existing `turn_immutable()`, без
+нового trigger helper. RLS/constraints не заменяются наличием workspace UUID.
 
 Runtime не имеет прямых SELECT/DML новой table; owner asm_migrator, ENABLE/FORCE
 RLS и только migrator policy. Proposed inventory: 36 таблиц вместо35, exact set
@@ -1918,9 +1962,22 @@ Message origin и backfill всей истории для этого доказ�
 У всех шести `search_path=pg_catalog,pg_temp`, PUBLIC EXECUTE revoked; no GUC
 как authority, no dynamic user SQL. Existing function signatures/security modes
 сохраняются. Изменяются определения только перечисленных caller families:
-CONTROL execute (profile)/read (manual filter), turn enqueue, claim/admit parsing,
-send finish/reschedule и maintenance preflight/recover, чтобы новый send kind
-не оказался в PROCESS_TURN fallback. `turn_execute`/TEST_CONSUME ABI неизменны.
+CONTROL execute (profile)/read (manual filter), `turn_enqueue`, exact claim/admit
+parsing, `messaging_retry`, send finish/reschedule, relevant legacy и scan
+entrypoints `messaging_claim`/`messaging_recover_expired`, `turn_preflight`/exhaustion.
+В claim/retry/finish/reschedule/recover/preflight новый `SEND_GUARDED_TEXT` явно
+входит в send branch, а не PROCESS_TURN fallback; GUARDS exhaustion завершает
+только Job (§13.4).
+
+**Отдельный обязательный replacement тела existing
+`platform.turn_execute(uuid,uuid)` в новой migration:** сразу после canonical
+Job guard разрешены только GROUP/MEDIA/TEST_CONSUME. Для GUARDED_TEXT — existing
+`INVALID_INPUT` (SQLSTATE P2001) **до** preflight/supersede/seal/terminal mutation,
+в том числе после Takeover. Одного нового Worker router недостаточно: legacy SQL
+capability остаётся runtime-executable. Signature, SECURITY/grants, старые
+outcomes и TEST_CONSUME codec/result сохраняются; applied0008 не редактируется.
+Это замена existing body, не седьмая новая функция.
+
 Exact pg_proc inventory tests сравнивают все прежние profiles плюс эти шесть;
 новый helper или grant вне этого списка требует C2/C0 согласования.
 
@@ -1979,16 +2036,18 @@ transport dedupe. Моки не заменяют PostgreSQL, process restart и�
 | Сценарий / критерий | Actual caller / граница | Обязательный observable / tests |
 |---|---|---|
 | Fresh Resume + fresh controlled text, M3-A03/A04 | OwnerControlService → ingress → штатный worker/новый step → send Job | Один receipt/Message/Outbox/send Job, CALL=1/EFFECT=1; normal queue, не прямой insert send fixture; новый guards PG test |
+| GUARDED_TEXT через legacy Turn capability, A03/A04 | Genuine normal-produced guarded Job/current claim через `MessagingDatabase.process_turn` и `platform.turn_execute`; повторный вариант после Takeover | INVALID_INPUT до mutation: Turn/Jobs/receipts unchanged, никакого GROUPED/seal/enqueue. Тот же claim через новый штатный guarded path даёт intended result (current AI → ACCEPTED; после Takeover → STALE); один узкий actual-PG routing case |
 | Takeover до accept и отдельно до begin, A04 | Два PG connections, подтверждённый Conversation wait; owner API выигрывает commit | STALE без intent либо существующий pending→FAILED; CALL=0, нет новых Audit/Jobs; новый parametrized guards PG test |
 | AI→HUMAN→AI, legacy/HUMAN/старый AI backlog, A05/A11 | Old snapshot/claim после нового Resume + свежий producer | Старые отказы, fresh origin проходит; profileNULL не запускается; reuse capture tests CONTROL + новый guards/migration test |
 | Новый inbound/file terminal/manual, revised Turn, A03 | Pause consumer/dispatch, existing material callers | STALE или SUPERSEDED; own Message +1 не делает intent stale; чужой Client/Turn/ref отвергается; новый guards PG test |
 | OWNER revoke, product expiry/activation, inactive channel, A04/A05 | Guard boundary после **наблюдённого** lock wait | Post-wait решение, expiry equality deny, CALL=0 при отказе; existing billing boundary fixtures, новый guards PG test |
 | Expired/reclaimed claim и два worker, A05 | Normal claim/reclaim → prepare/accept/begin | Старый token без mutation, новый token допускается только при current state; concurrency same intent = один accepted result; exact terminal replay без lease/новых rows |
-| Rollback и lost acceptance ACK, A03/A11 | Failure на receipt/Message/Outbox/send Job/commit, затем fresh reader | Всё либо ничего; canonical acceptance replay; changed text conflict; собственный context+1 ровно один раз; новый guards PG test |
+| Rollback и lost acceptance ACK, A03/A11 | Failure на receipt/Message/Outbox/send Job INSERT, последнем consumer Job terminal UPDATE и commit, затем fresh reader | Всё либо ничего; canonical acceptance replay; changed text conflict; собственный context+1 ровно один раз; новый guards PG test |
 | Dispatch commit до Takeover и commit→I/O окно, A06 | Реальный begin, barrier перед adapter, Takeover, release | SENT/FAILED/UNKNOWN по факту, без повторного authority veto finalize; future UI refs сохраняют старое generation; новый guards PG test |
+| Lost dispatch ACK / start_after_commit, A06 | Existing process test boundary после durable start, до permit/I/O; fresh reader и recovery | UNKNOWN/CALL=0, новый permit не выдаётся; guarded-kind reuse existing M2 case, отдельно от after-effect case |
 | Possible effect + response loss + process restart, A06 | Existing counted controlled transport и отдельный worker process, затем scheduler/recovery | UNKNOWN, CALL=1/EFFECT=1 после restart/Takeover/Resume; новый guarded-kind вариант existing process test, не MockTransport |
-| Safe NOT_SENT, exhaustion и lost finalize ACK, A06 | Existing send finish/retry/recover через новый kind | Прежние bounds; Takeover блокирует новый begin; saved SENT не становится UNKNOWN; узкое расширение M2 kernel regression |
-| HUMAN manual/inbound/file reconciliation, A04/A11 | Existing owner API и worker; mixed manual/automated Outbox | Прежние receipts/fingerprints/Audit/UNKNOWN; manual flags считают только manual; новые assertions рядом с CONTROL read test |
+| Safe NOT_SENT, exhaustion и lost finalize ACK, A06 | Existing send finish/retry/recover через новый kind | Прежние bounds; Takeover блокирует новый begin без нового attempt/CALL, старый attempt_id допустим; saved SENT не становится UNKNOWN; узкое расширение M2 kernel regression |
+| HUMAN manual/inbound/file reconciliation и existing history, A04/A11 | Existing owner API/worker с mixed manual/automated Outbox; существующий `MessagingPanel` | Прежние receipts/fingerprints/Audit/UNKNOWN; manual flags считают только manual. Узкий frontend test показывает все mixed outbound rows/statuses с «Исходящее», без ложной подписи «Ручной ответ», сохраняет manual composer/receipt recovery; новые CONTROL read assertions сохранены |
 | C/0009↔G, clean/repeat/populated/refusal, A11 | Actual migration role + exact source readiness/35-table projection | Old rows/receipts unchanged, NULL profile/no Jobs; used schema refuses before DDL; exact36 inventory/SQL grants; новая migration suite |
 
 Существующее evidence, которое сохраняется, но не переименовывается в GUARDS:
@@ -2003,18 +2062,24 @@ transport dedupe. Моки не заменяют PostgreSQL, process restart и�
   `test_lost_finalize_ack_reads_canonical_success_and_replays_exact_outcome`,
   cancellation/NOT_SENT/recovery и finish after owner revoke. Добавленный guarded
   case должен пройти normal producer/worker admission, а не скопировать raw Outbox.
+  В existing process family отдельно сохраняются `start_after_commit` →
+  UNKNOWN/CALL=0 и `after_effect`/response loss → UNKNOWN/CALL=1/EFFECT=1;
+  это разные обязательные границы, не новая fault family/harness.
 - `tests/test_m2_3_wire_postgres.py::test_real_http_accept_lost_response_process_restart_never_second_wire_call`
   остаётся отдельным actual Telegram-compatible wire/PG UNKNOWN proof. Он не
   доказывает automated Telegram admission, который здесь запрещён.
 
 M3-A03 покрывается для уже material inbound/manual/file/delivery/control facts.
 Native-owner, material edit/delete/provenance пока не реализованы: их частьA03/A08
-NOT VERIFIED. ConsoleA10, EscalationA09/M3.2 и итоговыйA12 — отдельные выдачи.
+NOT VERIFIED. ConsoleA10, EscalationA09/M3.2 и итоговыйA12 — отдельные выдачи;
+нейтральная existing-history подпись не является реализацией Console CONTROL UI.
 
 ### 13.9. Один будущий план и предложенный allowlist
 
-Ниже **запрос write scope перед implementation**, не текущее разрешение. Порядок:
-C0 intake → C1 policy/C2 DB review → C0 назначает revision/точные paths → один
+Ниже **запрос write scope перед implementation**, не текущее разрешение. C1/C2
+reviews приняты; далее C0 проверяет точную R1 и закрытие двух findings, без
+повторного полного C1/C2 review. Затем конкретный C6 source/schema compatibility
+review при прежних budgets → C0 назначает revision/точные paths → один
 новый migration + integrated worker path → компактные tests и retained regression
 → штатные gates на final integration SHA → независимый C8 → решение C0.
 
@@ -2027,13 +2092,21 @@ C0 intake → C1 policy/C2 DB review → C0 назначает revision/точн
 | `tests/test_m3_1_guards.py`, `tests/test_m3_1_guards_postgres.py`, `tests/test_m3_1_guards_migrations.py` (новые) | Private DTO/codec; §13.8 actual command/worker/PG cases; C/0009 cycle/refusal, source/schema readiness |
 | `tests/test_m2_1_postgres.py`, `tests/test_m3_1_control_postgres.py` | Только fixture cleanup в FK порядке, нормальный drain нового step, reuse process/ACK/recovery cases; исходные manual assertions сохранены |
 | `tests/test_m3_1_control_api_postgres.py` | Дополнительный mixed-kind manual_delivery negative, прежняя public shape/Audit |
+| `frontend/src/MessagingPanel.tsx`, `frontend/src/MessagingPanel.test.tsx` | Только OUTBOUND label «Исходящее» и узкая existing-history regression: без «Ручной ответ», mixed rows/statuses/manual composer/receipt recovery сохранены; без нового origin DTO или CONTROL UI |
 | `tests/test_foundation.py`, `tests/test_m2_3_setup.py`, `tests/test_tenancy_postgres.py`, `tests/test_m2_3_schema_postgres.py` | Exact latest revision/table/function inventories и downgrade-refusal head assertions; historical0007/0008/0009 expectations остаются revision-qualified |
 | `tests/test_m3_1_migrations.py`, `tests/test_m3_1_control_migrations.py` | Только latest-head fixture/cycle plumbing; frozen T/C definitions/data projections не заменяются сравнением intersection |
+| `tests/test_postgres.py` | Exact inventory: старые35 + новая guard receipt table |
+| `tests/test_m1_3_c0_acceptance.py` | Explicit TRUNCATE child guard receipt вместе с CONTROL receipt, даже при пустом child; без CASCADE и изменения старых assertions |
+| `tests/test_telegram_egress_postgres.py` | Latest G/schema pairing; frozen C сохраняет exact0009 projection/inventory, без intersection |
 | `scripts/prepare_telegram_egress.py`, `scripts/test_telegram_egress.sh`, `scripts/test_telegram_egress_migration.sh`, `tests/test_telegram_egress.py`, `tests/test_telegram_egress_migration.py` | Только необходимая exact inventory и frozen C→G phase/source pairing§13.7 после адресного C6/C0 согласования; не lifecycle/pin/recovery redesign |
 | `docs/tasks/M3_CONTRACT.md`, `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` | Принятое дополнение/evidence и точная LOCAL/TEST source/schema инструкция после кода; register/handoff остаются у C0 |
 
-Другие runtime modules, owner API/tenancy API, HTTP/OpenAPI snapshots/frontend,
-dependencies/locks, Compose/workflows, applied migrations, imported canon не
+Дополнение R1 к proposed allowlist — ровно эти пять paths: два frontend label/test
+и три inventory/fixture/schema tests. Сейчас ни один из них не является write scope;
+`tests/test_m1_3_postgres.py` и Audit columns не добавляются заодно.
+Другие runtime modules, owner API/tenancy API, HTTP/OpenAPI snapshots, frontend
+за пределами двух названных label/test paths, dependencies/locks,
+Compose/workflows, applied migrations, imported canon не
 планируются к изменению. Если inventory/fixture требует дополнительный path,
 предъявить конкретный diff и причину C0 до записи; не расширять список молча.
 Каждую адаптацию старого теста объяснить новой typed kind/schema, сохранив прежний
@@ -2042,12 +2115,22 @@ dependencies/locks, Compose/workflows, applied migrations, imported canon не
 
 ### 13.10. Конкретные вопросы review и статус доказательств
 
+По [C0 R1 decision](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6121132463),
+принявшему [C1 review](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6120487284)
+и [C2 review](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6120992738):
+
 | Решение | Предлагаемый выбор / оставшийся вопрос |
 |---|---|
-| GUARDS-POLICY-01 — C1/C0, OPEN | Новый controlled Resume profile и live автор Resume; existing manual_send используется только как availability. Принять эту ограниченную TEST policy либо назвать конкретную требуемую замену до кода; production AI capability не выдаётся |
-| GUARDS-POLICY-02 — C1/C0, OPEN | One accepted text per Turn; stale pending intent terminal без автоматической замены, поздний media revision не создаёт второй ответ. Это снижает риск дубля ценой пропуска TEST ответа при новой информации |
-| GUARDS-DB-01 — C2/C0, OPEN | Одна receipt table + nullable profile/guard_rejection и existing Jobs/Outbox; проверить composite FK/implicit lock graph, post-intent context и exact SQL profiles, затем назначить revision |
-| GUARDS-COMPAT-01 — C0/C6 при необходимости, OPEN | Frozen C/0009 → G phase в existing state lanes и exact inventories; укладываемость в прежние budgets пока не измерена. Разрешение harness diff только после этого адресного review |
+| GUARDS-POLICY-01 — LOCKED C0 | Только LOCAL/TEST + CONTROLLED: новый Resume profile и live автор Resume; existing manual_send только availability, отдельный trusted automated path. Production AI/M4 permission не выдаётся |
+| GUARDS-POLICY-02 — LOCKED C0 | Только deterministic TEST consumer: один accepted intent на Turn, stale pending без automatic replacement; поздний media revision не создаёт второй ответ. Допустим пропуск TEST ответа при новой информации; это не общая production AI policy |
+| C1-M3-GUARDS-01 / P3 — OPEN до verdict C0 | R1 §§13.5/13.8/13.9: existing OUTBOUND label «Исходящее», public shape/statuses/manual flow сохранены, два точных future frontend paths; фактическая implementation ещё не выдана |
+| C2-M3-GUARDS-01 / P2 — OPEN до verdict C0 | R1 §§13.6/13.8: existing turn_execute body allowlist до preflight/mutation, genuine guarded claim negative и intended new path; шесть новых profiles, applied0008 неизменна |
+| GUARDS-DB-01 — OPEN до R1 acceptance | C2 поддержал одну receipt table; §13.6 уточняет exact typed FK chain/parent-key reuse и новый Job→Outbox kind FK. Номер миграции остаётся рекомендацией C2 до назначения C0 |
+| GUARDS-COMPAT-01 — OPEN | После сведённого R1 C0 выдаёт конкретный C6 source/schema review: frozen C/0009 → G phase/exact inventories при прежних budgets. Укладываемость пока не измерена; общий audit/harness redesign не выдан |
+
+Это исправления документационного proposal по static source traces, а не finding
+исполненного GUARDS runtime или принятого CONTROL. Общий contract не объявляется
+принятым; runtime строки §13.8 остаются PLANNED. Закрытие findings выполняет C0.
 
 Контракт сознательно не обещает exactly-once внешнего эффекта: durable intent,
 canonical result и UNKNOWN/no-resend сохраняют прежнюю честную границу M2.
