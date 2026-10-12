@@ -2224,3 +2224,21 @@ Docker отсутствует: local actual PG/S3/browser/Docker29 NOT RUN. Эт
 head/tree/merge/ordered parents/run/jobs/artifact digests публикуются в receipt.
 Секреты/live Telegram/VM/рабочие DB/S3 не использовались. C0 intake и независимый
 C8 ещё обязательны; scope exclusions §§13.8–13.10 сохранены.
+
+Первый implementation run38248730093 / head77155722c34a671af011caa90407f64c3f9a4a9e:
+8 jobs PASS, foundation остановлен на3 старых unit queue cases до PG suite.
+Причина — eager database-name lookup в общем constructor при TEST environment;
+старые doubles намеренно описывают только прежний driver/role contract.
+Проверка имени БД перенесена в `_require_guards`, то есть применяется ко всем
+четырём новым entrypoints до transaction, вместе с server-environment gate.
+DB-side current_database/provider/authority checks сохранены; старые tests/fixtures
+не изменены. Адресный TEST-environment rerun:25 PASS. Это содержательная правка
+admission boundary; полный новый source CI требуется после неё.
+
+В первом actual normal/exact Docker29 C→G phase обе проверки PASS: guarded
+CALL1/EFFECT1, C35 projection/private-S3 unchanged, unused reverse/used refusal,
+post-commit exit86 → independent actual0010 observer → G callers/restart.
+Prepare charge normal419.586215s / Docker29427.785057s < исходных600;
+whole retained C113.157986s /113.469536s включён, G prepare8.112129s /8.133850s.
+Retained T/C/daemon negatives и clean8 сохранены. Это evidence первого tree,
+не переносится автоматически на исправленный final head; новые IDs в receipt.

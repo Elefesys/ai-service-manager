@@ -5046,3 +5046,13 @@ merge ordered parents/main+head/tree equality, all9+clean9, source/image/schema
 и artifact IDs/digests привязываются в едином
 [C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6119496506).
 Docs/source preparation CI0009 не является GUARDS runtime evidence.
+
+Первый implementation CI38248730093 (7715572…):8 jobs PASS; foundation3 unit
+FAIL при ASM_ENVIRONMENT=TEST, до597 PG cases. Ошибка constructor исправляется
+переносом database-name gate в четыре новые GUARDS entrypoints; прежний kernel
+constructor/queue doubles остаются совместимы. Старые assertions не менялись.
+Для локального non-integration использовать также
+`ASM_ENVIRONMENT=TEST pytest -q -m 'not integration'`, как у checks container.
+Первый C→G normal/Docker29 actual PASS дал prepare charge419.586/427.785s из600,
+G counted send1/1 и C preservation/private S3/reverse/refusal/ACK recovery PASS.
+Это исторический first-candidate evidence; исправленный head требует своего CI.

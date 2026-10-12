@@ -174,7 +174,7 @@ class MessagingDatabase:
         self._barrier = barrier
         self._guards_enabled = (
             environment if environment is not None else os.environ.get("ASM_ENVIRONMENT")
-        ) in {"LOCAL", "TEST"} and engine.url.database in {"asm_local", "asm_test"}
+        ) in {"LOCAL", "TEST"}
         self._claim_scan: dict[str, ScanStep] = {}
         self._recovery_scan: ScanStep | None = None
 
@@ -443,7 +443,9 @@ class MessagingDatabase:
             )
 
     def _require_guards(self) -> None:
-        if not self._guards_enabled:
+        # The private capability owns its database-name gate. The shared kernel
+        # constructor retains its existing driver/role contract for every caller.
+        if not self._guards_enabled or self._engine.url.database not in {"asm_local", "asm_test"}:
             raise MessagingError(Code.NOT_ALLOWED)
 
     async def prepare_guarded_turn(self, claim: JobClaim) -> GuardedTurnSnapshot | GuardProgress:
