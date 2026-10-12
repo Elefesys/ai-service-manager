@@ -628,7 +628,7 @@ async def test_automated_outbox_does_not_set_manual_delivery_flags_and_history_r
     )
     assert message["direction"] == "OUTBOUND" and message["delivery"]["status"] == "UNKNOWN"
     # Existing manual intent still takes HUMAN and sets only its own manual flag.
-    assert (await manual(h, cid)).status_code == 200
+    assert (await manual(h, cid)).status_code == 202
     claim = await next_kind(h, "SEND_MANUAL_TEXT")
     await h.kernel.begin_send(claim)
     response = await h.client.get(route(cid))

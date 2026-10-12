@@ -5065,3 +5065,14 @@ G counted send1/1 и C preservation/private S3/reverse/refusal/ACK recovery PASS
 Production deadlines/clocks и guards неизменны. Оба свежих G reports PASS:
 charge369.394445/368.402980s <600, C35/G36/private S3/ACK/refusal/guarded1/1
 и retained T/C proofs. Final candidate должен пройти свой полный CI.
+
+Третий CI38253408056 (756714f…): unit1082 PASS, PG591 PASS/6 FAIL; foundation
+CANCELLED на прежнем35min,8 остальных jobs/clean8 PASS. Новые test scenarios
+исправлены по actual API/role/queue contract: fresh manual acceptance202;
+runtime owner prepare/execute для observed Takeover wait; обычный Inbox/file
+caller с отдельным material context increment; existing crash family с worker
+loop до прежнего exit42 вместо предположения, что send — первый Job в очереди.
+Production/старые helpers/CHILD, counters, deadlines и source guards сохранены.
+Оба G artifacts11749449642/11749900999 PASS: charge421.186321/419.969723s из600,
+whole C112.615779/111.796138s включён. Это evidence третьего head; исправленный
+setup требует нового full CI в тех же пределах, без rerun-to-green.

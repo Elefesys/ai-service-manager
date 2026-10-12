@@ -2256,3 +2256,19 @@ suite38 PASS. Новая полная source проверка обязатель
 Вторые G phases actual PASS: charge369.394445s normal /368.402980s Docker29;
 whole retained C93.381538s /92.315675s включён; данные/identities/retained proofs
 подтверждены чтением artifacts11748991093/11748866348. Это evidence второго tree.
+
+Третий run38253408056 / head756714f78327f80118d962d4b9311e74165fa906:
+unit1082 PASS (185.25s); actual PG591 PASS/6 FAIL (847.68s), затем foundation
+CANCELLED на прежнем35min. Остальные8 jobs/clean8 PASS. Разобраны ошибки именно
+новых scenarios: fresh manual API принимает202, а не200; owner Takeover нельзя
+исполнять из migrator через runtime-only raw_context; file/crash setup не может
+предполагать отсутствие retained effects-free Jobs. Исправление сохраняет все
+outcome/counter/assertions и production: Takeover prepare/execute берёт lock
+через настоящую runtime capability; file case проходит обычный Inbox/claim и
+проверяет отдельный context increment после finish_fetch; existing M2 crash
+child выполняет обычный worker loop до прежнего barrier/exit42, не меняя очередь.
+Старые M2 helpers/CHILD и runtime/DDL/budgets не менялись. Это содержательный
+test-setup fix; новый CI обязателен, лимит foundation35 не расширен.
+Третьи G phases PASS: charge421.186321s normal /419.969723s Docker29; whole C
+112.615779s /111.796138s включён. Artifacts11749449642/11749900999 проверены;
+этот частичный PASS не объявляется завершённой GUARDS приёмкой.

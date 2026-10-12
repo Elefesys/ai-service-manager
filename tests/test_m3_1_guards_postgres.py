@@ -167,38 +167,39 @@ async def test_takeover_wins_observed_conversation_wait(control, boundary):
         async def action():
             return await h.kernel.begin_guarded_send(claim)
 
-    async with h.migrator.connect() as blocker:
+    from test_tenancy_postgres import raw_context
+
+    row = await state(h, cid)
+    args = {
+        "id": cid,
+        "client": row["client_id"],
+        "gen": row["control_generation"],
+        "version": row["version"],
+    }
+    async with h.runtime.engine.connect() as blocker:
         tx = await blocker.begin()
-        await blocker.execute(
-            text("SELECT id FROM app.conversations WHERE id=:id FOR NO KEY UPDATE"), {"id": cid}
-        )
+        await raw_context(blocker, A, UA)
+        # The genuine owner capability owns the serialization lock. Runtime
+        # never needs direct UPDATE privilege or a migrator impersonation.
+        prepared_control = (
+            await blocker.execute(
+                text(
+                    "SELECT platform.conversation_control_prepare(:id,:client,'TAKEOVER','wait-stop',:gen,:version)"
+                ),
+                args,
+            )
+        ).scalar_one()
+        assert prepared_control["code"] == "NEW"
         pid = (await blocker.execute(text("SELECT pg_backend_pid()"))).scalar_one()
         pending = asyncio.create_task(action())
         try:
             await wait_blocked(blocker, pid, pending=pending)
             # Execute the real owner command on this already-held serialization row.
-            from test_tenancy_postgres import raw_context
-
-            await raw_context(blocker, A, UA)
-            row = (
-                (
-                    await blocker.execute(
-                        text("SELECT * FROM app.conversations WHERE id=:id"), {"id": cid}
-                    )
-                )
-                .mappings()
-                .one()
-            )
             await blocker.execute(
                 text(
                     "SELECT platform.conversation_control_execute(:id,:client,'TAKEOVER','wait-stop',:gen,:version)"
                 ),
-                {
-                    "id": cid,
-                    "client": row["client_id"],
-                    "gen": row["control_generation"],
-                    "version": row["version"],
-                },
+                args,
             )
             await tx.commit()
             result = await pending
@@ -241,9 +242,22 @@ async def test_new_material_or_generation_rejects_old_snapshot(control, material
         await execute(h, cid, "RESUME", "again")
     else:
         # Existing material file caller and revision hook, not a raw version bump.
-        from test_m2_2_db_postgres import ready
+        from asm.files.database import FileDatabase
+        from test_m2_2_db_postgres import MANIFEST
 
-        await ready(h, event_id="material-photo", message_id="material-photo")
+        rec = await ingest(
+            h,
+            event(event_id="material-photo", message_id="material-photo", image_file_id="image"),
+        )
+        await process_receipt(h, rec)
+        fetch = await next_kind(h, "FETCH_IMAGE")
+        before_file = await state(h, cid)
+        files = FileDatabase(h.kernel)
+        permit = await files.prepare_upload(fetch, MANIFEST)
+        assert (
+            await files.finish_fetch(fetch.job_id, fetch.claim_token, permit.intent_id)
+        ).status == "READY"
+        assert (await state(h, cid))["version"] > before_file["version"]
     r = await h.kernel.accept_guarded_text(claim, snap.snapshot_digest, GUARD_TEXT)
     assert r.code in {"STALE", "SUPERSEDED"}
     assert r.message_id is None and h.adapter.calls == 0
@@ -521,10 +535,18 @@ async def test_guarded_process_death_unknown_no_resend_after_restart_and_resume(
     cid, claim = await fresh(h)
     await h.worker.execute(claim)
     r = (await query(h, "SELECT * FROM platform.turn_guard_receipts"))[0]
+    # Reuse the existing crash family/barriers while allowing the normal queue
+    # to drain retained effects-free work before it reaches the guarded send.
+    once = "await Worker(kernel, adapter).run_once()"
+    assert CHILD.count(once) == 1
+    child_program = CHILD.replace(
+        once,
+        "worker = Worker(kernel, adapter)\n        while await worker.run_once():\n            pass",
+    )
     child = await asyncio.create_subprocess_exec(
         sys.executable,
         "-c",
-        CHILD,
+        child_program,
         env={**os.environ, "M2_CRASH_STAGE": stage, "M2_LEDGER": str(h.ledger)},
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
