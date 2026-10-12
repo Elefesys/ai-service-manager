@@ -2,6 +2,88 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Текущий статус — CONTROL закрыт; GUARDS-CONTRACT выдан / 2026-10-12 UTC
+
+**M3.1-CONTROL — INTEGRATED / VERIFIED в принятом LOCAL/TEST scope. M3 — IN_PROGRESS.**
+Пользователь слил [PR27](https://github.com/Elefesys/ai-service-manager/pull/27)
+2026-10-12T05:53:30Z. Accepted main:
+**`c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5`**, tree
+`d7f0dbd35a637877b57d721cbb6a39c6ef59eae4`.
+Ordered parents: T `ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad` +
+reviewed head `634ea9b3b1af91124abd1b60873cc6fa723b5361`;
+tree равен reviewed head и tested merge `040eb6ccf6ebc8f6563a0e69bc098590014fe8cf`.
+
+[Push/main CI38209943421 attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38209943421)
+завершён 2026-10-12T06:22:09Z: **9/9 SUCCESS + clean-source9/9**.
+C0 прочитал foundation114681644478/browser114681644109 logs: actual main,
+1056 non-integration/555 PostgreSQL integration/113 frontend/27 browser PASS,
+Ruff/mypy/E01–E05/wheel reproducibility/HTTP smoke.
+[Post-merge receipt C0](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6118563610)
+сводит [C8 PASS](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6118524230),
+сохранённые C1/C2 PASS и C6 findings. Новых local runtime tests C0 не запускал.
+
+| Finding | Решение C0 |
+|---|---|
+| C6-M3-CONTROL-IMPL-01/02/03/04 | CLOSED: исходные defects исправлены и подтверждены в принятой границе |
+| C6-M3-CONTROL-IMPL-05 | OPEN; исправление DEFERRED, неблокирующий P3 только для текущего LOCAL/TEST по решению C0 |
+
+IMPL-05 — реальное ограничение fresh collection восстановленного private journal,
+если перед этим не удалась публикация STOP. Это не выполненный fix; C6 P2 и
+CHANGES_REQUESTED по прежнему расширенному gate сохранены в его review.
+[Решение C0](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6118079467):
+штатный STOP run остаётся неуспешным, automatic resume/reuse его journal не поддержан.
+Вернуться к finding до такого расширения, применения harness как эксплуатационного
+recovery либо при доказанном влиянии на обычный CI/product path. GUARDS не включает
+его исправление и не расширяет отдельный протокол журналирования.
+
+CONTROL принимает A07 и согласованные context/fence/A11 части. Native intervention
+по-прежнему NOT VERIFIED; GUARDS/action-send admission/in-flight, Escalation,
+Console CONTROL UI и M4 этим merge не выполнены. Deployment/VM/live не выполнялись.
+
+### Активная выдача
+
+**C3-M3.1-GUARDS-CONTRACT — IN_PROGRESS**, начальная фаза M3.1-GUARDS.
+Полное поручение: [M3_HANDOFF §0](tasks/M3_HANDOFF.md). Ветка `c3/m3-1-guards`,
+отдельный checkout; C3 — единственный автор дополнения. C0 preparation commit
+имеет единственный parent = accepted main выше, меняет ровно этот реестр и handoff;
+его полный SHA опубликован в поручении C0. C3 начинает от подготовленного head.
+До содержательного contract candidate PR не открывается: C3 откроет один Draft PR
+после завершения дополнения; тот же PR затем используется для согласованной реализации.
+
+**Сейчас разрешён один write path: `docs/tasks/M3_CONTRACT.md`.**
+Append §13 после неизменных170371 bytes; blob принятого полного prefix
+`aa3729960a43cf09d729a3514671d44c0b9685a4`, SHA256
+`12cfeb72a4c101c557a710522d0e553dbada06d2ade307649187086e85b6a3df`.
+Runtime/DDL/tests/guards/budgets и applied0001–0009 сейчас не меняются.
+Номер новой миграции не выдан; сначала обоснование минимальной дельты.
+
+Цель: конкретный минимальный контракт admission автоматического результата/действия/
+send, который сериализуется с Takeover, отвергает устаревший worker и сохраняет
+правдивый результат уже начатой отправки. Опора на existing Jobs/Outbox/CONTROL;
+M4 executor/provider и будущие business domains не проектируются здесь целиком.
+Проверки соразмерны обычным product/recovery сценариям; новая chaos/security
+программа и IMPL-05 follow-up не являются условием этой фазы.
+
+| Задача | Статус | Evidence / следующий шаг |
+|---|---|---|
+| M0/M1; M2/ENV04 | Прежние VERIFIED / LOCAL-TEST границы сохранены | Старые receipts не переоткрываются |
+| M3.1-CONTRACT | VERIFIED в TURNS/CONTROL document scope | Новое GUARDS дополнение ещё не принято |
+| M3.1-TURNS | INTEGRATED / VERIFIED LOCAL/TEST | PR26; main T/CI38062653562 |
+| M3.1-CONTROL | INTEGRATED / VERIFIED LOCAL/TEST | PR27; main c6a55b6/CI38209943421 |
+| M3.1-GUARDS | IN_PROGRESS, только CONTRACT | C3; handoff§0, затем адресный C1/C2 review и решение C0 до кода |
+| Native account/provenance | TODO / NOT VERIFIED evidence | Отдельный scope C0 до account probe/реализации |
+| M3.2-ESCALATION | TODO | После control/guards |
+| M3.2-CONSOLE | TODO | Принятые API предыдущих частей; C5 пока не выдан |
+| M3-ACCEPTANCE | TODO | Полный milestone ещё не закрыт |
+
+Реестр и handoff обновлены вместе с новой содержательной выдачей; текущий source/CI
+указываются в PR/comment metadata без цепочки status-only commits.
+Merge сохраняется за пользователем после приёмки C0. Canon/LOCKED решения, базовые
+auth/tenancy/data protections и существующие CI gates не ослабляются.
+
+<details>
+<summary>История CONTROL до post-merge приёмки; текущий статус и выдача выше</summary>
+
 ## Текущий статус — CONTROL-контракт принят; реализация выдана / 2026-10-10 UTC
 
 **M3.1-TURNS — INTEGRATED / VERIFIED в LOCAL/TEST scope. M3 — IN_PROGRESS.**
@@ -2853,5 +2935,7 @@ C0 проверил фактический merge PR #10: `049b212f135f09c025d2f8
 `C0-M1.2-E2E-01` — CLOSED / INTEGRATED / VERIFIED в границах этого исправления. M1.2 сохраняет приёмку; исторический исходный base M1.3 остаётся `28c289ce6f77e33676cfa416585cc0e20c0be4e3`. Новый main не является разрешением DDL или доказательством M1.3.
 
 R2 C1 ещё не получена. Сообщение Codex «не удалось создать продолжение» не доказывает контекстный лимит, исчерпание quota или safety block. C0 заменяет способ передачи: новая cloud-задача с PR #9 как контекстом; один временный текстовый файл `docs/tasks/C1_M1_3_R2_RESUME.txt` допускается только для переноса полного поручения и удаляется из итогового tracked tree. Архитектурные решения D-01…D-13 не меняются; итоговая дельта от reviewed `f4fb513…` — только реестр, C0 disposition и контракт R2. Без merge/rebase/force-push, нового конкурирующего PR или изменения кода. Runtime M1.3 остаётся NOT AUTHORIZED; контракт R2 ждёт C0/C2 review.
+
+</details>
 
 </details>
