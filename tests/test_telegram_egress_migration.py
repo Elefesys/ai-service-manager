@@ -6173,6 +6173,10 @@ def test_schema_probe_programs_are_executable_python_without_hidden_indentation(
 def test_control_initial_failure_retains_source_budget_and_primary(
     tmp_path, monkeypatch, entry, fault
 ):
+    # Reproduce the runner's fractional clock edge: subtracting the two stored
+    # floats yields 600.0000000000001, although deadline is exactly start+600.
+    # This early-refusal unit seam does no waiting or external command work.
+    monkeypatch.setattr(time, "monotonic", lambda: 905.198142485)
     root = tmp_path / "checkout"
     root.mkdir()
     foreign = tmp_path / "foreign"
@@ -6236,7 +6240,7 @@ def test_control_initial_failure_retains_source_budget_and_primary(
     if entry == "child" and fault != "git":
         assert report["historical"] == CONTROL_T and report["coordinator"] == candidate
         assert report["prepare_budget"]["charged_seconds"] == 30
-        assert report["prepare_budget"]["deadline"] - report["prepare_budget"]["started_at"] == 600
+        assert report["prepare_budget"]["deadline"] == report["prepare_budget"]["started_at"] + 600
         assert report["budget_at_report"]["charged_seconds"] >= 30
         assert report["budget_state"] == "VALIDATED_CONSUMED" and not path.exists()
     else:
@@ -6585,7 +6589,7 @@ def test_control_coordinator_archive_failure_retains_ledger_and_cleans_only_admi
     report = json.loads((root / "reports/control-schema-ledger.json").read_text())
     assert report["primary_failure"]["stage"] == "retained_archive"
     assert report["primary_failure"]["reason"] == "EGRESS_COMMAND_FAILED"
-    assert report["deadline"] - report["started_at"] == 600 and report["elapsed_seconds"] >= 0
+    assert report["deadline"] == report["started_at"] + 600 and report["elapsed_seconds"] >= 0
     assert len(admitted) == 1 and cleaned == admitted
     assert report["requested_source"] == report["observed_source"] == "c" * 40
     assert (root / "reports/retained-turns/source-pairing.json").exists()

@@ -2242,3 +2242,17 @@ Prepare charge normal419.586215s / Docker29427.785057s < исходных600;
 whole retained C113.157986s /113.469536s включён, G prepare8.112129s /8.133850s.
 Retained T/C/daemon negatives и clean8 сохранены. Это evidence первого tree,
 не переносится автоматически на исправленный final head; новые IDs в receipt.
+
+Второй run38251039019 / heada8eff5f161c1bb5ad7b99216a7333ead35d02f17:
+constructor regression закрыта;8 jobs PASS, foundation1081 unit PASS/1 FAIL
+до597 PG cases. Retained early-failure unit сравнивал float subtraction с600:
+`1475.198142485 - 875.198142485 == 600.0000000000001`, хотя сохранённое
+`deadline == started_at + 600` точно TRUE. Исправлены два одинаковых unit
+assertions на эту исходную exact identity, без tolerance/расширения bounds;
+существующий early-refusal seam фиксирует наблюдённый fractional clock для
+детерминированного воспроизведения. Runtime/harness clocks, deadlines, cleanup,
+source guards и actual Docker cases не менялись. Адресный budget/early-failure
+suite38 PASS. Новая полная source проверка обязательна, ручного rerun-to-green нет.
+Вторые G phases actual PASS: charge369.394445s normal /368.402980s Docker29;
+whole retained C93.381538s /92.315675s включён; данные/identities/retained proofs
+подтверждены чтением artifacts11748991093/11748866348. Это evidence второго tree.

@@ -5056,3 +5056,12 @@ constructor/queue doubles остаются совместимы. Старые as
 Первый C→G normal/Docker29 actual PASS дал prepare charge419.586/427.785s из600,
 G counted send1/1 и C preservation/private S3/reverse/refusal/ACK recovery PASS.
 Это исторический first-candidate evidence; исправленный head требует своего CI.
+
+Второй CI38251039019 (a8eff5f…):8 jobs PASS; foundation1081 unit PASS/1 FAIL
+до PG. Причина — binary-float cancellation в retained unit assertion, не
+превышение600: сохранённое deadline=start+600, но обратное вычитание дало
+600.0000000000001. Unit проверяет исходное exact addition (не approximate
+сравнение); обнаруженный clock воспроизводится в том же early-refusal seam.
+Production deadlines/clocks и guards неизменны. Оба свежих G reports PASS:
+charge369.394445/368.402980s <600, C35/G36/private S3/ACK/refusal/guarded1/1
+и retained T/C proofs. Final candidate должен пройти свой полный CI.
