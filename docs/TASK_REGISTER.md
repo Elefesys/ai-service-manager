@@ -2,6 +2,89 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Текущий статус — GUARDS принят; CONSOLE-CONTROL выдан / 2026-10-13 UTC
+
+**M3.1-TURNS/CONTROL/GUARDS — INTEGRATED / VERIFIED в принятых LOCAL/TEST
+границах. Весь M3 — IN_PROGRESS.** Пользователь поручил продолжить реализацию;
+C0 выдаёт C5 первый UI-срез M3.2 на существующем CONTROL API.
+
+Accepted main: `4b63d9ad59fee3631b4314211aaae40884488c98`, tree
+`0db9939107435dec730c8963af5e686fa0f818ce`, schema0010.
+[GUARDS post-merge C0](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6137086496);
+[main CI38338767227](https://github.com/Elefesys/ai-service-manager/actions/runs/38338767227)
+**9/9 SUCCESS + clean9/9; 1082 unit/597 PG/114 frontend/27 browser**.
+C1/C2/C6/C8 GUARDS reviews завершены и приняты; их findings не переоткрываются.
+
+### Активное поручение
+
+**C5-M3.2-CONSOLE-CONTROL — IN_PROGRESS, implementation разрешена.**
+Ветка `c5/m3-2-console-control`, отдельный checkout. Точный старт — C0
+preparation commit с sole parent=accepted main, меняющий только этот реестр и
+[M3_HANDOFF](tasks/M3_HANDOFF.md). Полный SHA/tree — в GitHub выдаче C0.
+C5 продолжает подготовленную ветку и открывает новый Draft PR после реального
+UI diff; отдельного contract-only/coordination-only PR не требуется.
+
+Полная выдача — **[M3_HANDOFF §0](tasks/M3_HANDOFF.md)**:
+mode/Takeover/Resume, current-state read, pending intent/replay, in-flight/UNKNOWN
+и сохранённый manual flow. Exact scope **14 paths** плюс два C0 preparation docs
+в full PR; C5 не редактирует эти два coordination docs. Backend/API/schema,
+applied migrations0001–0010, M3_CONTRACT и весь canon frozen.
+Contract238882bytes/blob `1763a5379926e4ae3e47483faf91b006e5bc4f30` неизменен.
+
+C0 уточняет порядок внутри M3.2: UI принятого CONTROL можно реализовать сейчас,
+поскольку его API уже проверен; Escalation пока не имеет своего API.
+**CONSOLE-CONTROL → ESCALATION backend/API → Console ожидания/Escalation →
+оставшиеся native/provenance gates и M3-ACCEPTANCE.**
+Это небольшие срезы прежних milestones, не новые этапы. Один implementation
+writer/PR за раз; C3 и остальные роли сейчас не получают параллельной выдачи.
+M3-A10 по этой задаче — только control/in-flight; owner-wait UI остаётся TODO.
+
+### Очередь и решения
+
+| Задача / решение | Статус | Следующий шаг |
+|---|---|---|
+| M0/M1/M2 и прежние LOCAL/TEST verdicts | Принятые VERIFIED границы сохранены | Не переоткрывать без конкретного дефекта |
+| M3.1-CONTRACT | VERIFIED в принятом TURNS/CONTROL/GUARDS scope | Escalation design относится к следующей выдаче |
+| M3.1-TURNS | INTEGRATED / VERIFIED LOCAL/TEST | PR26/T |
+| M3.1-CONTROL | INTEGRATED / VERIFIED LOCAL/TEST | PR27/C |
+| M3.1-GUARDS | INTEGRATED / VERIFIED LOCAL/TEST | PR28/main0010, ссылка выше |
+| C5-M3.2-CONSOLE-CONTROL | IN_PROGRESS | C5 реализация от C0 start; UI-C01–07 |
+| M3.2-ESCALATION | TODO | Следующий backend/API-срез C3 после control UI |
+| M3.2-CONSOLE, owner-wait/Escalation часть | TODO | После принятого Escalation API |
+| Native-owner/edit-delete provenance | TODO / NOT VERIFIED | Отдельное account evidence и решение C0 до соответствующего кода/приёмки |
+| M3-ACCEPTANCE | TODO | Все применимые M3-A01–12, scoped C8 и main evidence |
+| C6-CI-FOUNDATION-SPLIT | BLOCKED; решение DEFERRED до завершения M3 | PR29 закрыт без merge, ветка/evidence сохранены |
+| C6-CI-SPLIT-01 | CLOSED только на experimental head4dc2c32 | В main не интегрирован |
+| C6-CI-SPLIT-02 | OPEN; investigation/fix DEFERRED | Вернуться к оптимизации после всего M3 |
+| IMPL-05 | OPEN; fix DEFERRED | Прежний nonblocking P3 только LOCAL/TEST по C0 |
+
+[Решение по оптимизации](https://github.com/Elefesys/ai-service-manager/pull/29#issuecomment-6139376486):
+обе попытки не дали полного successful CI,17:13 не является доказанным ускорением.
+Из experimental branch в эту реализацию ничего не переносить. Прежние 9 jobs,
+foundation40/browser25 и остальные budgets/pins сохранены; новых CI экспериментов нет.
+
+Migration queue: **0010 уже применена и immutable. Новая revision сейчас
+не резервируется и не разрешается.** Для будущей Escalation схему/API/DDL queue
+назначит C0 отдельной выдачей после проверки потребности.
+GUARDS-POLICY-01/02, GUARDS-DB-01/COMPAT-01 приняты; IMPL-01/02/03/04 CLOSED.
+Исторический P2 verdict IMPL-05 не переписан; fix не выдан за выполненный.
+
+### Приёмка текущего среза
+
+C5 возвращает один exact-source candidate/receipt: REVIEW либо конкретный BLOCKED.
+Нужны сохранённые старые frontend/browser scenarios, адресные UI-C01–07 и actual
+full CI9/9 + clean9/9. C0 intake → независимый C8 по новому UI → решение C0 →
+merge пользователем → main CI. Новый общий backend/DB/security audit не требуется.
+Финальные SHA/run/status публикуются в receipt и C0 metadata; status-only commits
+не создавать. Следующая содержательная выдача обновит этот реестр.
+
+Native/live/production, M4/LLM, внешние owner notifications и клиентские follow-ups
+не включаются. Цель — работающий MVP и корректные owner/tenant/Client/idempotency
+границы без нового framework. VM/рабочие DB-S3/deploy/merge не выдаются C5.
+
+<details>
+<summary>История завершённых выдач до CONSOLE-CONTROL; активный статус выше</summary>
+
 ## Текущий статус — GUARDS contract принят; реализация выдана / 2026-10-12 UTC
 
 **M3.1-CONTROL — INTEGRATED / VERIFIED LOCAL/TEST. M3.1-GUARDS и M3 —
@@ -3038,6 +3121,8 @@ C0 проверил фактический merge PR #10: `049b212f135f09c025d2f8
 `C0-M1.2-E2E-01` — CLOSED / INTEGRATED / VERIFIED в границах этого исправления. M1.2 сохраняет приёмку; исторический исходный base M1.3 остаётся `28c289ce6f77e33676cfa416585cc0e20c0be4e3`. Новый main не является разрешением DDL или доказательством M1.3.
 
 R2 C1 ещё не получена. Сообщение Codex «не удалось создать продолжение» не доказывает контекстный лимит, исчерпание quota или safety block. C0 заменяет способ передачи: новая cloud-задача с PR #9 как контекстом; один временный текстовый файл `docs/tasks/C1_M1_3_R2_RESUME.txt` допускается только для переноса полного поручения и удаляется из итогового tracked tree. Архитектурные решения D-01…D-13 не меняются; итоговая дельта от reviewed `f4fb513…` — только реестр, C0 disposition и контракт R2. Без merge/rebase/force-push, нового конкурирующего PR или изменения кода. Runtime M1.3 остаётся NOT AUTHORIZED; контракт R2 ждёт C0/C2 review.
+
+</details>
 
 </details>
 
