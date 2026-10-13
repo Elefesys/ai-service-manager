@@ -6016,7 +6016,8 @@ def test_control_budget_wrong_phase_source_clock_or_owner_refuses(tmp_path, chan
         consume_control_budget(path, CONTROL_T, "c" * 40)
 
 
-def test_control_budget_exhaustion_and_file_guards(tmp_path):
+def test_control_budget_exhaustion_and_file_guards(tmp_path, monkeypatch):
+    monkeypatch.setattr(time, "monotonic", lambda: 1000.0)
     now = time.monotonic()
     path = control_budget_file(
         tmp_path, started_at=now - 601, issued_at=now - 2, charged_seconds=599, deadline=now - 1
@@ -7263,7 +7264,8 @@ def test_guards_recovery_uses_actual_revision_and_fresh_process_identity(revisio
 @pytest.mark.parametrize(
     "damage", [None, "phase", "historical", "candidate", "deadline", "charged_seconds"]
 )
-def test_guards_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage):
+def test_guards_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage, monkeypatch):
+    monkeypatch.setattr(time, "monotonic", lambda: 1000.0)
     path = tmp_path / "budget.json"
     issued = time.monotonic()
     value = dict(
