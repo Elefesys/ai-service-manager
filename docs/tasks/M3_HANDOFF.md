@@ -5,6 +5,160 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
+## 0. Текущая выдача C0 — C3-M3.2-ESCALATION-CONTRACT
+
+Дата: 2026-10-13 UTC. **CONTROL UI интегрирован и проверен; следующий срез —
+Escalation backend/API в рамках прежнего M3.2.** C3 сначала дополняет единый
+контракт минимальным §14. После адресного согласования схема/API реализуются
+в этой же ветке и PR отдельным разрешением C0. Это не новый milestone.
+
+### 0.1. Принятая база и точный старт
+
+| Поле | Значение |
+|---|---|
+| Repository | `Elefesys/ai-service-manager` |
+| Accepted main / schema | `c502d5fd258aef15bb5549e1529df8d038a4fb9b` / `0010` |
+| Accepted tree | `9ed2c0cd679d1577b93998c5a429c90e4b810588` |
+| Branch | `c3/m3-2-escalation`, отдельный checkout |
+| C0 preparation/start | Sole parent = accepted main; полный SHA/tree в GitHub выдаче C0 |
+| C0 preparation files | Только `docs/TASK_REGISTER.md` и этот handoff |
+| Единственный write path C3 сейчас | `docs/tasks/M3_CONTRACT.md`, только новый §14 в конце |
+
+[C0 post-merge PR30](https://github.com/Elefesys/ai-service-manager/pull/30#issuecomment-6142120541):
+CONTROL UI **INTEGRATED / VERIFIED LOCAL/TEST**.
+[Main CI38374030362](https://github.com/Elefesys/ai-service-manager/actions/runs/38374030362),
+attempt1: **9/9 SUCCESS + clean9/9; 1089 unit/597 PG/192 frontend/33 browser**.
+Tree actual merge точно совпадает с принятым candidate.
+
+C3 продолжает подготовленную C0 ветку от указанного в выдаче start. Не использовать
+слитые TURNS/CONTROL/GUARDS или отложенную CI ветку. Baseline M3_CONTRACT:
+**238882 bytes**, blob `1763a5379926e4ae3e47483faf91b006e5bc4f30`.
+Этот полный prefix должен остаться побайтно прежним. Два preparation docs C3
+не редактирует. Новая migration сейчас не назначена; applied0001–0010 immutable.
+
+### 0.2. Что должен получить владелец
+
+Отдельный запрос участия владельца с понятной причиной, ответственным, сохранённым
+контекстом и исходом. Владелец позже увидит его в очереди Console и даст решение;
+повторный запрос не размножает ожидания, устаревший ответ не применяется к другому
+состоянию. Сроки и внутренние напоминания переживают restart.
+
+Здесь проектируется **минимальный backend/API** для M3-A09 и будущей owner-wait
+части M3-A10. Сейчас нет UI реализации, нового AI/LLM, ApprovalRequest или
+полного Notification Engine. CONTROL UI уже работает и его API не переоткрывается.
+
+### 0.3. Источники и неизменные решения
+
+Сначала AGENTS, IMPL-001, Spec §§1.7/5.10–5.14/14.11/16/18.5–18.8/24.7;
+ADR-023–026/121–128/139/197–198/267; MVP GJ-G/GJ-J, Roadmap M3,
+Implementation Plan M3.1/M3.2 и OPEN-082/083/085. Затем M3_CONTRACT §§8/9/12/13,
+этот handoff §§4.5/5 и actual conversations/control/guards/turns,
+messaging Jobs/worker/scheduler, tenancy/auth, Audit, migrations0008–0010,
+OpenAPI и owner read/command patterns. Canon/original snapshots не редактировать.
+
+Принято:
+- Escalation — отдельный lifecycle ожидания, не Conversation.control_mode.
+  Resolve/cancel/expiry не снимают HUMAN и не выполняют неявный Resume.
+- Relevant context/generation и current authority проверяются в короткой
+  serialized/CAS транзакции; прежний receipt не выдаётся за current state.
+  Новая несовместимая информация/withdrawal отменяет устаревшее ожидание;
+  поздний owner answer не применяется к другой версии/Client.
+- Workspace и canonical Client/Conversation/Turn binding обязательны.
+  LLM не назначает авторитетные business facts/actor и не выполняет решение.
+- Durable Jobs используют PostgreSQL. Internal reminders ограничены,
+  дедуплицированы и видимы через будущий Console API; клиентских follow-ups,
+  внешних owner notifications и нового notification framework в этом срезе нет.
+- OPEN-082 о реальных сроках/quiet hours/контактах мастера остаётся OPEN.
+  Для LOCAL/TEST допустима явно ограниченная synthetic policy, без обещаний
+  клиенту или выдуманных production сроков. OPEN-083 safe default сохранён.
+- Принятый M3_CONTRACT§13.5/actual0010: `manual_delivery` flags считают
+  **только SEND_MANUAL_TEXT**. Все OUTBOUND kinds/statuses видны в истории.
+  Неточная фраза прежней выдачи C0 исправлена ниже согласно PR30 receipt.
+
+### 0.4. Содержание одного минимального §14
+
+C3 предлагает один конкретный рекомендуемый вариант, отмечая ещё не принятые
+реализационные решения как **PROPOSED/OPEN**, а не выдумывая LOCKED-ответы.
+
+1. **Исполняемое происхождение запроса.** Какой существующий callable producer/
+   service/worker создаёт Escalation и как его authority/relevance доказываются.
+   В M3 ещё нет Agent M4: отделить реальный reusable domain path от конечного
+   synthetic LOCAL/TEST trigger. Не предлагать unused service, публичный
+   произвольный worker principal или создание canonical rows migrator-ом
+   вместо тестирования runtime. Существующий GUARDS TEST consumer не менять
+   молча; необходимую совместимую дельту назвать явно.
+2. **Модель и state transitions.** Минимальные reason/assignee/context fingerprint,
+   request/version/dedupe identity, статусы и create/resolve/cancel/expire.
+   Определить meaning owner answer и сохранённого outcome: ответ сам не является
+   отправкой клиенту, Approval денежного действия или переключением в AI.
+   Описать effect на waiting projection, context/control counters и будущую
+   работу; не возрождать stale Turn/output. Назвать фактическую cancellation
+   boundary для текущих material events, не реализуя native/edit/delete раньше
+   отдельного provenance gate.
+3. **Сроки и Jobs.** Сохраняемые due/expiry и bounded reminder policy, deterministic
+   test clock, reclaim/restart/dedupe и terminal cleanup. Resolve против expiry,
+   cancel против reminder и stale claim должны иметь однозначный исход;
+   проверять trusted time/relevance при выполнении команды, даже если scheduler
+   ещё не обработал срок. Не busy-loop и не sleeps как гарантия correctness.
+4. **Owner API для следующего C5.** Минимальные list/detail/actions, если нужны:
+   точные routes/DTO/errors/permission, expected version/Client/context,
+   cookie/Origin/CSRF, exact key/body replay, conflict/stale, bounded pagination.
+   Разделить receipt и current projection. Обосновать read/resolve/cancel при
+   недоступном канале/billing; не перенести send permission на локальный owner
+   decision автоматически. Не ломать действующие CONTROL/manual/auth routes.
+5. **DB/transaction design.** Только необходимые таблицы/constraints/FK/RLS,
+   owner/runtime capabilities, Audit и receipt binding. Объяснить минимальную
+   новую durable state и возможность reuse Jobs без generic ledger. Указать
+   общий lock order с CONTROL/manual/GUARDS, атомарность, replay после ACK loss,
+   concurrent duplicate/resolve/stale/expiry и независимость conversations.
+   Схема/число таблиц/SQL signatures остаются proposal для C2; не писать DDL.
+6. **Совместимость и компактная реализация.** Proposed переход от0010 к новой
+   revision, clean/repeat/populated/refusal/rollback и exact source/schema gates.
+   Сохранить прежние receipts/data/UNKNOWN и9 CI jobs/budgets/pins.
+   Дать конкретный будущий allowlist с причиной для каждого path, без разрешения
+   менять их сейчас. Если объём действительно велик, предложить минимальное
+   деление внутри того же M3.2 по работающему результату.
+7. **Достаточные проверки.** Таблица contract→service/API/actual PG/worker
+   assertions для M3-A09: создание/dedupe, resolve/cancel/expire/late answer,
+   context/control/owner changes, same-key ACK loss, две конкурирующие команды,
+   restart/reminder once, tenant/Client isolation и compatibility. Отдельно
+   предусмотреть future C5 owner-wait UI; mocks не называть PG evidence.
+   Не повторять неизменные M2/CONTROL suites и не вводить новую security program.
+
+Если канон не отвечает на прикладной выбор, сформулировать конкретный OPEN-вопрос,
+влияние и рекомендуемый MVP ответ C0. Не закрывать OPEN-082/083/085 целиком
+для удобства реализации и не изменять принятую архитектуру по умолчанию.
+
+### 0.5. Проверки, возврат и следующий gate
+
+Сейчас проверяются source binding, один разрешённый implementation path,
+побайтное сохранение всего старого M3_CONTRACT и preparation docs,
+`git diff --check`, внутреннее соответствие §14 actual source/канону.
+Продуктовые PG/browser/Docker suites заново для одного proposal локально не нужны.
+После содержательного дополнения открыть **один Draft PR в main**; штатный CI
+сохранить, не запускать отдельный PR/CI на одной подготовке и не rerun зелёный
+SHA ради статистики. Документационный CI не доказывает будущую Escalation.
+
+Один C3 receipt в этом PR: head/parent/tree/base/start, path/numstat/prefix proof,
+основные предложения и конкретные OPEN решения, future implementation allowlist,
+фактические проверки/CI run/status, ограничения и следующий шаг.
+Статус результата REVIEW либо конкретный BLOCKED; затем HOLD exact head.
+
+C0 проведёт intake; C1 проверит новый API/owner semantics, C2 — минимальную схему,
+транзакции и migration proposal. Их review ограничен §14 и используемыми зависимостями.
+C6 подключается только при конкретной дельте существующего migration/CI controller,
+без отдельного общего аудита. После принятых решений C0 назначит revision/exact paths
+и выдаст реализацию **в том же PR**. C5 ждёт принятого backend/API SHA; C8 —
+готового implementation candidate. Сейчас поручение получает только C3.
+
+Не менять backend/API/DDL/frontend/workflows/runners/deps/canon/реестр.
+VM/live Telegram/рабочие DB-S3/deploy/merge и M4 вне выдачи.
+M3-A08 native/provenance и весь M3 остаются NOT VERIFIED/IN_PROGRESS по своему scope.
+IMPL-05 OPEN/fix DEFERRED и CI optimization DEFERRED до завершения M3 сохранены.
+
+<details>
+<summary>Завершённая выдача CONSOLE-CONTROL; не активное поручение</summary>
+
 ## 0. Текущая выдача C0 — C5-M3.2-CONSOLE-CONTROL, реализация
 
 Дата: 2026-10-13 UTC. **Пользователь поручил продолжить реализацию M3.**
@@ -137,8 +291,9 @@ messaging-api и browser worker, Compose/Docker/workflows/штатные scripts
    Все параметры версий остаются decimal strings/BigInt, не Number.
 
 6. **Начатая и неизвестная отправка.** Показать оба признака
-   manual_delivery.has_dispatching/has_unknown с нейтральной семантикой отправки:
-   actual0010 read охватывает связанные Outbox, не только ручные сообщения.
+   manual_delivery.has_dispatching/has_unknown. По принятому M3_CONTRACT§13.5
+   actual0010 read фильтрует kind=SEND_MANUAL_TEXT; статусы всех OUTBOUND видны
+   в истории. Формулировка C0 уточнена при post-merge приёмке PR30.
    Takeover останавливает дальнейшую автоматику, но не отзывает уже начатый
    внешний запрос; UNKNOWN не становится CANCELLED и не даёт кнопку повторного
    send. История сообщений остаётся источником отдельных delivery outcomes.
@@ -216,6 +371,8 @@ C5-M3.2-CONSOLE-CONTROL и весь M3 сейчас IN_PROGRESS; работа е
 GUARDS INTEGRATED/VERIFIED LOCAL/TEST, IMPL-05 OPEN/fix DEFERRED сохранены.
 VM/live Telegram/рабочие DB-S3/deploy/merge вне этой выдачи. После принятия этого
 среза C0 выдаст C3 ограниченный ESCALATION backend/API; M4 пока не начинается.
+
+</details>
 
 <details>
 <summary>Завершённые TURNS/CONTROL/GUARDS поручения; не активная выдача</summary>
