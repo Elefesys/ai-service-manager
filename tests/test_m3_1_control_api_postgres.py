@@ -17,7 +17,7 @@ from asm.messaging.http import install_messaging
 from asm.messaging.http_service import ConnectionObservation
 from asm.tenancy import TenancyError, current_workspace_context
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import text
 from test_auth_postgres import auth as auth
 from test_auth_postgres import cookie, headers, login
@@ -343,31 +343,137 @@ async def test_control_product_channel_precedence_and_takeover_independence(api,
     assert h.refresher.calls == h.adapter.calls == 0
 
 
+async def wait_refresh_entered(refresher, send):
+    """Require a held refresh; an early HTTP result is a failure, not the barrier."""
+    entered = asyncio.create_task(refresher.entered.wait())
+    try:
+        await asyncio.wait((entered, send), return_when=asyncio.FIRST_COMPLETED)
+        if send.done():
+            response = send.result()  # Preserve an early request exception and traceback.
+            try:
+                payload = response.json()
+            except ValueError:
+                payload = None
+            error = payload.get("error") if isinstance(payload, dict) else None
+            code = error.get("code") if isinstance(error, dict) else None
+            pytest.fail(
+                f"manual completed before held refresh: HTTP {response.status_code}, "
+                f"error={code}, entered={refresher.entered.is_set()}"
+            )
+        assert entered.result() is True and not refresher.release.is_set()
+    finally:
+        if not entered.done():
+            entered.cancel()
+        await asyncio.gather(entered, return_exceptions=True)
+
+
+@pytest.mark.parametrize("status,code", [(202, None), (503, "UNAVAILABLE")])
+async def test_refresh_entry_wait_rejects_early_http_result(status, code):
+    # Orchestration only: no claim of PostgreSQL admission evidence here.
+    refresher = SimpleNamespace(entered=asyncio.Event(), release=asyncio.Event())
+
+    async def completed():
+        return Response(status, json={"error": {"code": code}} if code else {"outcome": "ACCEPTED"})
+
+    send = asyncio.create_task(completed())
+    await asyncio.wait((send,))  # Completed, but its result has not been consumed.
+    tasks = asyncio.all_tasks()
+    try:
+        async with asyncio.timeout(0.5):
+            with pytest.raises(pytest.fail.Exception, match=f"HTTP {status}, error={code}"):
+                await wait_refresh_entered(refresher, send)
+        assert not refresher.entered.is_set()
+        assert asyncio.all_tasks() == tasks
+    finally:
+        await asyncio.gather(send, return_exceptions=True)
+    assert (await send).status_code == status
+
+
+async def test_refresh_entry_wait_preserves_early_exception():
+    refresher = SimpleNamespace(entered=asyncio.Event(), release=asyncio.Event())
+    failure = RuntimeError("synthetic request failure before refresh")
+
+    async def failed():
+        raise failure
+
+    send = asyncio.create_task(failed())
+    await asyncio.wait((send,))
+    tasks = asyncio.all_tasks()
+    try:
+        async with asyncio.timeout(0.5):
+            with pytest.raises(RuntimeError) as caught:
+                await wait_refresh_entered(refresher, send)
+        assert caught.value is failure and not refresher.entered.is_set()
+        assert asyncio.all_tasks() == tasks
+    finally:
+        await asyncio.gather(send, return_exceptions=True)
+    assert send.exception() is failure
+
+
+async def test_refresh_entry_wait_cancellation_reaps_event_waiter():
+    refresher = SimpleNamespace(entered=asyncio.Event(), release=asyncio.Event())
+    started = asyncio.Event()
+
+    async def pending():
+        started.set()
+        await refresher.release.wait()
+
+    send = asyncio.create_task(pending())
+    await started.wait()
+    tasks = asyncio.all_tasks()
+    # A cancelled supervisor owns only its event waiter; the caller owns send.
+    try:
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.01):
+                await wait_refresh_entered(refresher, send)
+        assert not send.done() and not refresher.entered.is_set()
+        assert asyncio.all_tasks() == tasks
+    finally:
+        send.cancel()
+        await asyncio.gather(send, return_exceptions=True)
+    assert send.cancelled()
+
+
 @pytest.mark.parametrize("deny", [False, True])
 async def test_manual_refresh_interleaving_commits_only_final_admitted_order(api, deny):
     h = api
     cid, _, _ = await incoming(h, "TELEGRAM")
     h.refresher.release.clear()
     send = asyncio.create_task(manual(h, cid))
+    deadline = asyncio.timeout(3)
+    phase = "refresh entry"
     try:
-        async with asyncio.timeout(3):
-            await h.refresher.entered.wait()
+        async with deadline:
+            await wait_refresh_entered(h.refresher, send)
+            phase = "Resume commit while refresh is held"
             assert (await post(h, cid, "resume")).status_code == 200
             ai = await state(h, cid)
             assert ai["control_mode"] == "AI"
             if deny:
+                phase = "SUSPENDED commit while refresh is held"
                 await query(
                     h,
                     "UPDATE platform.workspace_service_modes SET mode='SUSPENDED',reason_code='TEST_SUSPENDED' WHERE workspace_id=:ws RETURNING workspace_id",
                     ws=A,
                 )
+            assert not send.done() and not h.refresher.release.is_set()
             h.refresher.release.set()
+            phase = "final manual admission after refresh release"
             result = await send
+    except TimeoutError:
+        if not deadline.expired():
+            raise
+        pytest.fail(
+            f"manual/refresh interleaving exceeded 3s during {phase}; "
+            f"entered={h.refresher.entered.is_set()}, "
+            f"send_done={send.done()}, send_cancelled={send.cancelled()}"
+        )
     finally:
         h.refresher.release.set()
         if not send.done():
             send.cancel()
-            await asyncio.gather(send, return_exceptions=True)
+        # Always retrieve completion, including an early response/exception.
+        await asyncio.gather(send, return_exceptions=True)
     final = await state(h, cid)
     if deny:
         assert result.status_code == 409 and final == ai
