@@ -2758,6 +2758,214 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
     ledger["full_retained_negatives"] = summary
 
 
+@contextmanager
+def observe_control_cleanup_commands(command, module, path, binding):
+    """Observe original command frames; never wrap/replace a frozen C function.
+
+    Embedded verbatim at the retained invocation boundary. Only allowlisted
+    identities/error classes are exported; argv, environment and output are not.
+    Observation adds tracing/IO overhead, so this is instrumented C evidence.
+    Journal failures must not replace the executor's return/primary/secondary.
+    """
+    import json
+    import os
+    import re
+    import subprocess
+    import sys
+    import time
+    from pathlib import Path
+
+    stream = None
+    errors = 0
+    sequence = 0
+    try:
+        stream = os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w")
+    except OSError:
+        errors += 1
+
+    def emit(record):
+        nonlocal errors
+        try:
+            if stream is not None:
+                stream.write(json.dumps(record, sort_keys=True) + "\n")
+                stream.flush()
+        except (OSError, ValueError):
+            errors += 1
+
+    def identity(args):
+        result = {"program": "REDACTED", "operation": []}
+        if not args or Path(args[0]).name != "docker":
+            return result
+        result["program"] = "docker"
+        if len(args) < 2:
+            return result
+        op = args[1]
+        if op in {"stop", "ps", "rm", "inspect", "run", "create", "exec", "compose"}:
+            result["operation"] = [op]
+        elif op in {"volume", "network", "image"} and len(args) > 2:
+            if args[2] in {"ls", "inspect", "rm", "create"}:
+                result["operation"] = [op, args[2]]
+        # Never scan run/create/exec payloads or arbitrary -c arguments for IDs.
+        positions = args[2:] if op in {"stop", "rm", "inspect"} else []
+        if op == "exec":
+            positions = args[2:3]
+            if len(args) > 3 and args[3] in {"psql", "python"}:
+                result["operation"].append(args[3])
+        result["container_ids"] = [v for v in positions if re.fullmatch("[0-9a-f]{64}", v)]
+        return result
+
+    def stderr_detail(raw):
+        raw = raw if isinstance(raw, bytes) else b""
+        sample = raw[:4096].lower()
+        kind = "REDACTED_UNCLASSIFIED_STDERR" if raw else "EMPTY"
+        if b"removal of container" in sample and b"already in progress" in sample:
+            kind = "DOCKER_REMOVAL_IN_PROGRESS"
+        elif b"no such container" in sample:
+            kind = "DOCKER_NO_SUCH_CONTAINER"
+        elif b"is not running" in sample:
+            kind = "DOCKER_CONTAINER_NOT_RUNNING"
+        elif b"psql: error:" in sample:
+            kind = "PG_OBSERVATION_FAILED"
+        return {"class": kind, "bytes": len(raw), "classification_truncated": len(raw) > 4096}
+
+    def trace(frame, event, arg):
+        nonlocal sequence, errors
+        if event != "call" or frame.f_code is not command.__code__:
+            return None
+        try:
+            sequence += 1
+            if sequence > 10000:
+                errors += 1
+                return None
+            began = time.monotonic()
+            record = {"sequence": sequence, "at": began, **identity(frame.f_locals["args"])}
+            sites = []
+            caller = frame.f_back
+            while caller is not None:
+                if caller.f_code.co_filename == module:
+                    sites.append({"function": caller.f_code.co_name, "line": caller.f_lineno})
+                    fault = caller.f_locals.get("fault")
+                    if fault in {"retained-t-watchdog", "new-c-command-timeout", "new-c-cli-exit"}:
+                        record["case"] = fault
+                caller = caller.f_back
+            record["callsite"] = sites
+            record["stage"] = (
+                "cleanup" if any(v["function"] == "cleanup" for v in sites) else "fixture"
+            )
+            emit({"event": "command_start", **record})
+            frame.f_trace_lines = False
+            exception = None
+            partial_stderr = b""
+
+            def completed(frame, event, arg):
+                nonlocal exception, partial_stderr, errors
+                try:
+                    if event == "exception":
+                        error = arg[1]
+                        name = type(error).__name__
+                        exception = (
+                            name
+                            if name
+                            in {
+                                "EgressError",
+                                "TimeoutExpired",
+                                "FileNotFoundError",
+                                "PermissionError",
+                            }
+                            else "OTHER_EXCEPTION"
+                        )
+                        if isinstance(error, subprocess.TimeoutExpired):
+                            partial_stderr = error.stderr
+                    elif event == "return":
+                        result = frame.f_locals.get("result")
+                        emit(
+                            {
+                                "event": "command_end",
+                                **record,
+                                "seconds": time.monotonic() - began,
+                                "timeout": frame.f_locals["timeout"],
+                                "exit_code": result.returncode if result is not None else None,
+                                "exception": exception,
+                                "stderr": stderr_detail(
+                                    result.stderr if result is not None else partial_stderr
+                                ),
+                            }
+                        )
+                except Exception:
+                    errors += 1
+                return completed
+
+            return completed
+        except Exception:
+            errors += 1
+            return None
+
+    previous = sys.gettrace()
+    emit({"event": "observer_start", "evidence": "INSTRUMENTED_IMMUTABLE_C", **binding})
+    try:
+        # The standalone retained process has no other tracer to displace.
+        if previous is None:
+            sys.settrace(trace)
+        else:
+            errors += 1
+        yield
+    finally:
+        sys.settrace(previous)
+        emit(
+            {
+                "event": "observer_end",
+                "commands": sequence,
+                "errors": errors,
+                "complete": errors == 0,
+            }
+        )
+        if stream is not None:
+            try:
+                stream.close()
+            except OSError:
+                pass
+
+
+def control_cleanup_observer_script(report, source):
+    """Current observer and original C runpy invocation, with separate bindings."""
+    import inspect
+
+    observer = inspect.getsource(observe_control_cleanup_commands)
+
+    def blob(raw):
+        return hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+
+    binding = {
+        "observer": {
+            "source": source,
+            "module_blob": blob(Path(__file__).read_bytes()),
+            "function_sha256": hashlib.sha256(observer.encode()).hexdigest(),
+        },
+        "executor": {
+            "source": GUARDS_C,
+            "module_blob": "012eaa4ba0b9eb926bfc9d0fe06e25490a592cce",
+            "helper_blob": "8fa26f3c203b9b3dbcb44c5ceb88a9dfda64ea77",
+        },
+    }
+    return (
+        "import runpy,hashlib\nfrom pathlib import Path\nfrom contextlib import contextmanager\n"
+        "from scripts import prepare_telegram_egress as e\n"
+        + observer
+        + "\nbinding="
+        + repr(binding)
+        + "\n"
+        + "module='tests/test_telegram_egress_migration.py'\n"
+        + "assert e.ROOT.resolve()==Path.cwd().resolve(), 'CONTROL_OBSERVER_HELPER_ROOT'\n"
+        + "for path,key in [(Path(module),'module_blob'),(Path(e.__file__),'helper_blob')]:\n"
+        + " raw=path.read_bytes()\n"
+        + " assert hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\\0'+raw).hexdigest()==binding['executor'][key], 'CONTROL_OBSERVER_EXECUTOR_BYTES'\n"
+        + "with observe_control_cleanup_commands(e.command,module,"
+        + repr(str(report))
+        + ",binding):\n"
+        + " runpy.run_path(module, init_globals={'control_cleanup_request': {'historical': '754f1c883e5a94a7fc9e729af2605424f949ba33', 'candidate': 'c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5'}}, run_name='__control_cleanup_negatives__')\n"
+    )
+
+
 def run_control_coordinator(request):
     """Retained frozen T shell is charged once, including runtime and cleanup."""
     ledger = schema_envelope(request, "CONTROL_COORDINATOR")
@@ -2977,14 +3185,16 @@ def run_control_coordinator(request):
                 assert result == 0 and not handoff_g.exists(), "GUARDS_SCHEMA_PHASE_FAILED"
                 e.source_check(candidate)
             ledger["guards_cleanup"] = ledger["cleanup"]
-            # Retain all six existing daemon assertions in the unchanged C
-            # executor. Its report is kept as C evidence, never relabelled G.
+            # Original C bytes/assertions and unchanged invocation request.
+            # The separate current observer journal labels execution instrumented.
             ledger["stage"] = "retained_control_cleanup_negatives"
             result = supervised_schema_child(
                 [
                     sys.executable,
                     "-c",
-                    "import runpy; runpy.run_path('tests/test_telegram_egress_migration.py', init_globals={'control_cleanup_request': {'historical': '754f1c883e5a94a7fc9e729af2605424f949ba33', 'candidate': 'c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5'}}, run_name='__control_cleanup_negatives__')",
+                    control_cleanup_observer_script(
+                        reports / "retained-control-cleanup-observer.jsonl", candidate
+                    ),
                 ],
                 cwd=control,
                 timeout=480,
@@ -4331,6 +4541,64 @@ OWNER_RECEIPT_NAMES = (
     "asm-telegram-tls-budget-owner2-0b7e24ee.json",
     "asm-telegram-tls-budget-fixed-owner2-0b7e24ee.json",
 )
+
+
+@pytest.mark.parametrize("outcome", ["success", "exit", "timeout"])
+def test_control_cleanup_observer_preserves_real_subprocess_outcome(tmp_path, outcome):
+    """Local subprocess semantics only; this is not daemon/PG evidence."""
+    path = tmp_path / "commands.jsonl"
+    marker = "PRIVATE_ARG_ENV_STDERR"
+    program = (
+        "import sys,time; sys.stdout.buffer.write(b'original stdout'); sys.stdout.flush(); "
+        f"sys.stderr.write('removal of container is already in progress {marker}'); sys.stderr.flush(); "
+        + {"success": "pass", "exit": "sys.exit(7)", "timeout": "time.sleep(10)"}[outcome]
+    )
+    original = e.command.__code__
+    previous = sys.gettrace()
+    with observe_control_cleanup_commands(e.command, __file__, path, {}):
+        if outcome == "success":
+            assert (
+                e.command([sys.executable, "-c", program], environment={"SECRET": marker})
+                == b"original stdout"
+            )
+        else:
+            error = e.EgressError if outcome == "exit" else subprocess.TimeoutExpired
+            with pytest.raises(error) as raised:
+                e.command(
+                    [sys.executable, "-c", program], timeout=1, environment={"SECRET": marker}
+                )
+            if outcome == "exit":
+                assert str(raised.value) == "EGRESS_COMMAND_FAILED"
+            else:
+                assert raised.value.stdout == b"original stdout"
+                assert raised.value.timeout == 1
+    assert e.command.__code__ is original and sys.gettrace() is previous
+    raw = path.read_text()
+    assert marker not in raw and program not in raw and "original stdout" not in raw
+    start, command_start, command_end, end = [json.loads(line) for line in raw.splitlines()]
+    assert start["evidence"] == "INSTRUMENTED_IMMUTABLE_C"
+    assert command_start["sequence"] == command_end["sequence"] == 1
+    assert command_end["exit_code"] == {"success": 0, "exit": 7, "timeout": None}[outcome]
+    assert (
+        command_end["exception"]
+        == {"success": None, "exit": "EgressError", "timeout": "TimeoutExpired"}[outcome]
+    )
+    assert command_end["stderr"]["class"] == "DOCKER_REMOVAL_IN_PROGRESS"
+    assert command_end["seconds"] > 0
+    assert end == {"event": "observer_end", "commands": 1, "errors": 0, "complete": True}
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_control_cleanup_observer_unwritable_journal_preserves_primary(tmp_path):
+    original = subprocess.TimeoutExpired(["private"], 3)
+    previous = sys.gettrace()
+    with pytest.raises(subprocess.TimeoutExpired) as raised:
+        with observe_control_cleanup_commands(
+            e.command, __file__, tmp_path / "missing" / "journal", {}
+        ):
+            assert e.command([sys.executable, "-c", "print('original')"]) == b"original\n"
+            raise original
+    assert raised.value is original and sys.gettrace() is previous
 
 
 @pytest.fixture
@@ -5905,8 +6173,28 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
     ]
     assert len(argv) == 4
     assert argv[3][:2] == ["sys.executable", "-c"]
-    assert "run_name='__control_cleanup_negatives__'" in argv[3][2]
-    assert GUARDS_C in argv[3][2]
+    assert (
+        argv[3][2]
+        == "control_cleanup_observer_script(reports / 'retained-control-cleanup-observer.jsonl', candidate)"
+    )
+    observed = control_cleanup_observer_script(Path("/unused-journal.jsonl"), "unit-observer")
+    bootstrap = ast.parse(observed)
+    retained = [
+        node
+        for node in ast.walk(bootstrap)
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == "runpy.run_path"
+    ]
+    assert len(retained) == 1 and ast.unparse(retained[0].args[0]) == "module"
+    assert "module='tests/test_telegram_egress_migration.py'" in observed
+    assert {k.arg: ast.literal_eval(k.value) for k in retained[0].keywords} == {
+        "init_globals": {
+            "control_cleanup_request": {
+                "historical": "754f1c883e5a94a7fc9e729af2605424f949ba33",
+                "candidate": GUARDS_C,
+            }
+        },
+        "run_name": "__control_cleanup_negatives__",
+    }
     ordered = sorted(calls, key=lambda call: call.lineno)
     assert ast.unparse(next(k.value for k in ordered[1].keywords if k.arg == "cwd")) == "control"
     assert (
@@ -5914,6 +6202,7 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
         == "deadline - time.monotonic()"
     )
     assert ast.unparse(next(k.value for k in ordered[3].keywords if k.arg == "cwd")) == "control"
+    assert ast.literal_eval(next(k.value for k in ordered[3].keywords if k.arg == "timeout")) == 480
     assert "--guards-schema-upgrade" in shell
     assert '"budget_file": sys.argv[4]' in shell or "'budget_file': sys.argv[4]" in shell
     assert "run_name='__schema_harness__'" in shell
