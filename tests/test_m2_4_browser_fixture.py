@@ -90,9 +90,9 @@ async def test_provision_rejects_target_before_engine_or_identity_write(
         ("happy", "sql"),
         (None, "control-stats"),
         ("../../arbitrary", "control-stats"),
-        ("ctrl_happy", "downgrade"),
+        ("ctrl_stale", "downgrade"),
         ("ctrl_recovery", "disable"),
-        ("ctrl_unknown", "restrict"),
+        ("ctrl_stale", "restrict"),
     ],
 )
 async def test_finite_negative_actions_are_checked_before_database(
@@ -240,12 +240,10 @@ def test_seed_is_finite_multipage_and_uses_valid_exact_normalized_events(harness
 def test_control_presets_use_existing_canonical_seed_and_finite_mutation_scope(harness):
     presets = {p for p in harness.fixture.PRESETS if p.startswith("ctrl_")}
     assert presets == {
-        "ctrl_happy",
         "ctrl_stale",
         "ctrl_recovery",
         "ctrl_read",
         "ctrl_revoked",
-        "ctrl_unknown",
         "ctrl_inactive",
         "ctrl_restricted",
     }

@@ -43,24 +43,32 @@ Escalation, native-owner switch, M4, новых зависимостей или 
 | Критерий | Tests / assertions |
 |---|---|
 | UI-C01 | conversation-control-api.test: strict DTO/error/identity, bigint strings, exact GET/POST; ConversationControl.test: read-only mount/refresh/role |
-| UI-C02 | conversation-control.spec `@narrow CONTROL HUMAN…`: keyboard Resume, Takeover, manual HUMAN, generation/context deltas и PG receipt/Audit/Message/Outbox/Job counters |
+| UI-C02 | messaging.spec `@narrow CONTROLLED incoming…`: keyboard Resume, Takeover, manual HUMAN, generation/context deltas и PG receipt/Audit/Message/Outbox/Job counters |
 | UI-C03 | `two actual tabs…`: STALE без auto retry, fresh explicit takeover, delayed real main GET после перехода в AI alternate; component deferred GET/POST и away/back |
 | UI-C04 | `committed control response loss…`: real route.fetch/commit→abort, тот же route/body/key после login/CSRF recovery, REPLAY без новых counters; `valid200 plus failed GET…`: один UI POST, только read recovery |
 | UI-C05 | component matrix actor/Workspace/conversation/Client/session и late success/401/403; actual revoke/foreign Workspace journey и общий owner boundary |
-| UI-C06 | component flags DISPATCHING+UNKNOWN; actual controlled UNKNOWN→Takeover→replacement worker, один CALL/EFFECT; старый Resume receipt→current HUMAN в actual recovery journey |
+| UI-C06 | component flags DISPATCHING+UNKNOWN; messaging.spec `canonical UNKNOWN survives…`: actual UNKNOWN→Takeover→replacement worker, один CALL/EFFECT; старый Resume receipt→current HUMAN в actual recovery journey |
 | UI-C07 | Весь прежний frontend/browser suite; MessagingPanel integration блокирует пересечение manual/control; основной journey также narrow/keyboard и без overflow |
 
 Actual DISPATCHING дополнительно остаётся в принятом
 `test_control_read_reports_dispatching_and_unknown_without_recalling_intents`
 (tests/test_m3_1_control_api_postgres.py). Новый in-flight harness не добавлен.
 
-Восемь новых именованных `ctrl_*` presets используют прежний canonical runtime
+Шесть новых именованных `ctrl_*` presets используют прежний canonical runtime
 seed. Inventory дополнен Client IDs из canonical relation. `control-stats`
 добавляет только SELECT counts control receipts/Audit; старый `stats` неизменен.
 Прежние finite downgrade/disable/restrict разрешены лишь дополнительным
 соответствующим presets. Canonical control/Message/Audit rows не создаются
 provisioner-ом. Старые unit assertions сохранены и дополнены проверкой read-only
 SQL/counter bindings. Worker, Compose и штатные runners неизменны.
+
+CONTROL transitions/manual и UNKNOWN дополняют прежние messaging journeys.
+Это сохраняет порядок общей TEST очереди: исходный happy journey сначала
+проверяет canonical PENDING/FAILED image, затем вызывает worker drain.
+Отдельный CONTROL worker раньше этого journey поглощал PENDING FETCH;
+первый browser run подтвердил падение старого PENDING assertion.
+Исправлен состав сценариев, все старые assertions сохранены. Новые pure-control
+journeys не вызывают worker; runtime/seed не менялись ради порядка тестов.
 
 Команды:
 

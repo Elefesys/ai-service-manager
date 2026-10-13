@@ -34,12 +34,10 @@ PRESETS = (
     "late",
     "revoked",
     "permanent",
-    "ctrl_happy",
     "ctrl_stale",
     "ctrl_recovery",
     "ctrl_read",
     "ctrl_revoked",
-    "ctrl_unknown",
     "ctrl_inactive",
     "ctrl_restricted",
 )

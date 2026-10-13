@@ -1,4 +1,6 @@
 // UI-C01–07: actual owner HTTP/PostgreSQL commands; CONTROLLED is not live Telegram.
+// Worker journeys extend messaging.spec so its seeded PENDING image is observed
+// before any shared worker drain. This file only executes CONTROL commands.
 import { expect, test, type APIRequestContext, type APIResponse, type Page, type Route } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
@@ -8,8 +10,8 @@ import { randomUUID } from 'node:crypto';
 import { requireSafeResult, safeDiagnostic } from './safe-diagnostic';
 import { ControlBody, ControlOperation, ControlReceipt, ControlState, parseControlReceipt, parseControlState } from '../src/conversation-control-api';
 
-const envPath=process.env.ASM_BROWSER_ENV_FILE,fixturePath=process.env.ASM_BROWSER_FIXTURE_FILE,inventoryPath=process.env.ASM_BROWSER_MESSAGING_FILE,passwordPath=process.env.ASM_BROWSER_PASSWORD_FILE,counterDir=process.env.ASM_BROWSER_COUNTER_DIR;
-if(!envPath||!fixturePath||!inventoryPath||!passwordPath||!counterDir)throw new Error('E2E_SAFE_FAILURE:CONTROL_PRIVATE_FILES_REQUIRED');
+const envPath=process.env.ASM_BROWSER_ENV_FILE,fixturePath=process.env.ASM_BROWSER_FIXTURE_FILE,inventoryPath=process.env.ASM_BROWSER_MESSAGING_FILE,passwordPath=process.env.ASM_BROWSER_PASSWORD_FILE;
+if(!envPath||!fixturePath||!inventoryPath||!passwordPath)throw new Error('E2E_SAFE_FAILURE:CONTROL_PRIVATE_FILES_REQUIRED');
 function privateJson(path:string){try{return JSON.parse(readFileSync(path,'utf8'));}catch{throw new Error('E2E_SAFE_FAILURE:CONTROL_FIXTURE_OUTPUT');}}
 const fixtures:Record<string,{workspace_id:string;login:string}>=privateJson(fixturePath).messaging_fixtures;
 const inventory:Record<string,{conversation_id:string;client_id:string;alternate_conversation_id:string;alternate_client_id:string}>=privateJson(inventoryPath);
@@ -24,16 +26,15 @@ const proceed=async(route:Route)=>requireSafeResult(await safeDiagnostic('MESSAG
 async function csrf(request:APIRequestContext){const r=await http(()=>request.get('/api/v1/auth/session'));expect(r.status()).toBe(200);return (await json(r)).csrf_token as string;}
 async function state(request:APIRequestContext,preset:string,alternate=false){const r=await http(()=>request.get(path(preset,'control',alternate)));expect(r.status()).toBe(200);return parseControlState(await json(r),context(preset,alternate));}
 async function command(request:APIRequestContext,preset:string,operation:ControlOperation,value:ControlBody,key:string=randomUUID(),token?:string,alternate=false){return http(()=>request.post(path(preset,operation==='RESUME'?'resume':'takeover',alternate),{headers:{Origin:origin,'X-CSRF-Token':token!,'Idempotency-Key':key},data:value}));}
-async function helper(preset:string,action='control-stats',runtime=false):Promise<Record<string,number>>{
+async function helper(preset:string,action='control-stats'):Promise<Record<string,number>>{
   const args=['compose','--env-file',envPath!,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`];
-  if(runtime)args.push('-v',`${counterDir}:/run/m2-browser-counters:rw`);
-  args.push(runtime?'browser-runtime':'browser-provision','python',runtime?'scripts/m2_4_browser_worker.py':'scripts/m2_4_browser_fixture.py','--preset',preset,'--action',action);
+  args.push('browser-provision','python','scripts/m2_4_browser_fixture.py','--preset',preset,'--action',action);
   const r=requireSafeResult(await safeDiagnostic('MESSAGING_FIXTURE_FAILED',()=>promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:65536})));
   try{return JSON.parse(r.stdout);}catch{throw new Error('E2E_SAFE_FAILURE:CONTROL_FIXTURE_OUTPUT');}
 }
-function counts(before:Record<string,number>,after:Record<string,number>,controls:number,manual=0){
+function counts(before:Record<string,number>,after:Record<string,number>,controls:number){
   for(const key of ['control_receipts','control_audit_events'])expect(after[key]-before[key]).toBe(controls);
-  for(const key of ['messages','receipts','audit_events','outbox_events','jobs'])expect(after[key]-before[key]).toBe(manual);
+  for(const key of ['messages','receipts','audit_events','outbox_events','jobs'])expect(after[key]-before[key]).toBe(0);
 }
 async function choose(page:Page,preset:string,alternate=false){
   if(await page.getByLabel('Workspace',{exact:true}).inputValue()!==fixtures[preset].workspace_id)await page.getByLabel('Workspace',{exact:true}).selectOption(fixtures[preset].workspace_id);
@@ -43,30 +44,16 @@ async function choose(page:Page,preset:string,alternate=false){
 }
 async function login(page:Page,preset:string){await page.getByLabel('Логин').fill(fixtures[preset].login);await page.getByLabel('Пароль').fill(password);await page.getByRole('button',{name:'Войти',exact:true}).click();await choose(page,preset);}
 async function signIn(page:Page,preset:string){await page.goto('/');await login(page,preset);}
-async function clickControl(page:Page,preset:string,operation:ControlOperation,keyboard=false){
+async function clickControl(page:Page,preset:string,operation:ControlOperation){
   const route=operation==='RESUME'?'resume':'takeover';
   const pending=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===path(preset,route));
   const button=region(page).getByRole('button',{name:operation==='RESUME'?'Разрешить автоматику':'Забрать управление',exact:true});
-  if(keyboard){await region(page).getByRole('button',{name:'Забрать управление'}).focus();await page.keyboard.press('Tab');await expect(button).toBeFocused();await page.keyboard.press('Enter');}else await button.click();
+  await button.click();
   const r=await pending;expect(r.status()).toBe(200);
   const original=requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',async()=>JSON.parse(r.request().postData()!))) as ControlBody;
   const receipt=parseControlReceipt(requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>r.json())),context(preset),operation,original);
   await expect(region(page).getByRole('button',{name:'Забрать управление',exact:true})).toBeEnabled();return receipt;
 }
-
-test('@narrow CONTROL HUMAN -> keyboard Resume -> AI -> Takeover -> HUMAN; manual stays HUMAN',async({page})=>{
-  const preset='ctrl_happy';await signIn(page,preset);const before=await helper(preset),initial=await state(page.request,preset);
-  let posts=0;page.on('request',r=>{if(r.method()==='POST'&&/\/(resume|takeover)$/.test(new URL(r.url()).pathname))posts++;});
-  await region(page).getByRole('button',{name:'Обновить режим'}).click();await expect(region(page).getByText('Управление у мастера',{exact:true})).toBeVisible();expect(posts).toBe(0);
-  await clickControl(page,preset,'RESUME',true);await expect(region(page).getByText('Автоматика разрешена',{exact:true})).toBeVisible();
-  await clickControl(page,preset,'TAKEOVER');await expect(region(page).getByText('Управление у мастера',{exact:true})).toBeVisible();
-  const value=await state(page.request,preset);expect(BigInt(value.control_generation)-BigInt(initial.control_generation)).toBe(2n);
-  await page.getByLabel('Ручной текстовый ответ').fill(`  Control manual e\u0301 🎨 ${randomUUID()}\n`);
-  await page.getByRole('button',{name:'Проверить и отправить',exact:true}).click();await expect(page.getByRole('button',{name:'Проверить и отправить',exact:true})).toBeEnabled();
-  await expect(region(page).getByText('Управление у мастера',{exact:true})).toBeVisible();const final=await state(page.request,preset);expect(final.control_mode).toBe('HUMAN');expect(BigInt(final.control_generation)-BigInt(initial.control_generation)).toBe(3n);expect(BigInt(final.context_version)-BigInt(initial.context_version)).toBe(1n);
-  counts(before,await helper(preset),2,1);await helper(preset,'success',true);expect(posts).toBe(2);
-  await page.reload();await choose(page,preset);expect(posts).toBe(2);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
-});
 
 test('two actual tabs reject stale intent; delayed prior-conversation GET cannot replace current state',async({page,context:browser})=>{
   const preset='ctrl_stale';await signIn(page,preset);const other=await browser.newPage();await other.goto('/');await choose(other,preset);
@@ -120,13 +107,6 @@ test('valid200 plus failed GET is read-only recovery; old Resume replay never ov
   const replay=await command(page.request,preset,'RESUME',body(initial),key,token);expect(replay.status()).toBe(200);expect((await json(replay)).outcome).toBe('REPLAY');
   await region(page).getByRole('button',{name:'Повторить чтение режима'}).click();await expect(region(page).getByText('Управление у мастера',{exact:true})).toBeVisible();expect(posts).toBe(1);counts(before,await helper(preset),2);
   await page.unrouteAll({behavior:'wait'});
-});
-
-test('actual UNKNOWN survives Takeover and replacement worker without resend',async({page})=>{
-  const preset='ctrl_unknown';await signIn(page,preset);await page.getByLabel('Ручной текстовый ответ').fill('CONTROL unknown delivery');await page.getByRole('button',{name:'Проверить и отправить',exact:true}).click();await expect(page.getByRole('button',{name:'Проверить и отправить',exact:true})).toBeEnabled();
-  const ran=await helper(preset,'unknown',true);expect(ran.calls).toBe(1);expect(ran.effects).toBe(1);await region(page).getByRole('button',{name:'Обновить режим'}).click();await expect(region(page).getByText(/Есть отправка с неизвестным результатом/)).toBeVisible();
-  await clickControl(page,preset,'TAKEOVER');await expect(region(page).getByText(/Есть отправка с неизвестным результатом/)).toBeVisible();expect(await region(page).getByRole('button',{name:/resend|повтор.*отправ/i}).count()).toBe(0);
-  const restarted=await helper(preset,'recover',true);expect(restarted.calls).toBe(1);expect(restarted.effects).toBe(1);expect(restarted.worked).toBe(0);await page.reload();await choose(page,preset);await expect(region(page).getByText(/Есть отправка с неизвестным результатом/)).toBeVisible();
 });
 
 test('OWNER revoke denies CONTROL and clears shared protected views; Workspace remains isolated',async({page})=>{
