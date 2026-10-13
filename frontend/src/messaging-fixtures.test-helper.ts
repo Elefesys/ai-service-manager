@@ -1,5 +1,6 @@
 import { Session } from './api';
 import { Connection, Conversation, Delivery, ImageFile, Message, SendReceipt } from './messaging-api';
+import { ControlBody, ControlContext, ControlOperation, ControlReceipt, ControlState } from './conversation-control-api';
 export const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 export const ws = id(1), actor = id(2), conversationId = id(3), when = '2030-01-01T00:00:00.123456Z';
 export const session = (csrf = 'csrf'): Session => ({ user_account_id: actor, csrf_token: csrf, expires_at: when, memberships: [{ workspace_id: ws, role: 'OWNER', permissions: ['tenancy:read'] }] });
@@ -13,3 +14,7 @@ export const receipt = (): SendReceipt => ({ workspace_id: ws, receipt_id: id(8)
 export const page = <T,>(...items: T[]) => ({ items, next_cursor: null });
 export const deferred = <T,>() => { let resolve!: (v: T) => void, reject!: (e: unknown) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 export const ok = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+export const controlContext = (): ControlContext => ({workspace:ws,conversation:conversationId,client:conversation().client_id});
+export const controlState = (context=controlContext()): ControlState => ({workspace_id:context.workspace,conversation_id:context.conversation,client_id:context.client,control_mode:'HUMAN',control_generation:'9007199254740993',context_version:'9007199254740995',observed_at:when,manual_delivery:{has_dispatching:false,has_unknown:false}});
+export const controlBody = (): ControlBody => ({expected_client_id:controlContext().client,expected_control_generation:controlState().control_generation,expected_context_version:controlState().context_version});
+export const controlReceipt = (operation:ControlOperation='RESUME',body=controlBody(),context=controlContext()): ControlReceipt => ({outcome:'ACCEPTED',result:{workspace_id:context.workspace,conversation_id:context.conversation,client_id:body.expected_client_id,receipt_id:id(401),audit_event_id:id(402),operation,previous_mode:'HUMAN',accepted_mode:operation==='RESUME'?'AI':'HUMAN',previous_generation:body.expected_control_generation,accepted_generation:String(BigInt(body.expected_control_generation)+1n),context_version:body.expected_context_version,accepted_at:when}});

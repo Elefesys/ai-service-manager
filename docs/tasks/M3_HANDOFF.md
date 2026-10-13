@@ -5,6 +5,221 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
+## 0. Текущая выдача C0 — C5-M3.2-CONSOLE-CONTROL, реализация
+
+Дата: 2026-10-13 UTC. **Пользователь поручил продолжить реализацию M3.**
+C5 реализует первый ограниченный UI-срез M3.2 на уже принятом CONTROL API.
+Отдельный предварительный contract-only PR не нужен: wire/domain contract
+сохранён, ниже зафиксированы правила его использования в интерфейсе.
+
+### 0.1. Результат и последовательность M3
+
+В выбранном диалоге Console владелец видит текущий режим, может явно забрать
+управление или разрешить будущую автоматику, видит начатую/неопределённую отправку
+и сохраняет работающий ручной ответ. Это делает принятый backend доступным из UI.
+
+C0 уточняет порядок небольших срезов в рамках прежнего M3.2:
+**CONSOLE-CONTROL сейчас → ESCALATION backend/API → CONSOLE ожидания/Escalation
+→ оставшиеся native/provenance gates и M3-ACCEPTANCE.**
+Escalation пока не имеет принятого DDL/API; её ожидание не блокирует UI существующих
+трёх CONTROL routes. M3-A10 закрывается здесь только в части control/in-flight,
+не в части причины/очереди ожидания владельца. Native-owner/edit-delete остаются
+NOT VERIFIED; конкретный account evidence будет отдельной выдачей C0.
+Новый milestone не создаётся. C3/C1/C2/C6/C8 сейчас не получают параллельной
+implementation задачи; один автор и один новый implementation PR.
+
+### 0.2. Точный старт и принятые основания
+
+| Поле | Значение |
+|---|---|
+| Repository | `Elefesys/ai-service-manager` |
+| Accepted main / schema | `4b63d9ad59fee3631b4314211aaae40884488c98` / `0010` |
+| Accepted main tree | `0db9939107435dec730c8963af5e686fa0f818ce` |
+| Ветка C5 | `c5/m3-2-console-control`, отдельный checkout |
+| Старт implementation | C0 preparation commit на этой ветке, sole parent = accepted main; полный SHA/tree в C0 выдаче |
+| C0 preparation scope | Только `docs/TASK_REGISTER.md` и `docs/tasks/M3_HANDOFF.md` |
+| Принятый contract | `docs/tasks/M3_CONTRACT.md`, 238882 bytes, blob `1763a5379926e4ae3e47483faf91b006e5bc4f30`, неизменен |
+
+GUARDS закрыт: [C0 post-merge receipt](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6137086496).
+[Main CI38338767227](https://github.com/Elefesys/ai-service-manager/actions/runs/38338767227)
+9/9 SUCCESS + clean9/9: 1082 unit, 597 PostgreSQL, 114 frontend, 27 browser.
+Это baseline, не evidence ещё не написанного UI.
+
+Сверить start/parent/tree, читать AGENTS, IMPL-001, Spec §§5.10–5.14/18.5/Console,
+ADR-024/025/026/267, MVP GJ-G/GJ-J, Roadmap M3 и Implementation Plan M3.1/M3.2.
+Непосредственные источники: M3_CONTRACT §§8/12.2–12.5/13, actual
+`conversations/http.py`, `http_models.py`, `control.py`,
+`0010_conversation_guards.py:conversation_control_read`,
+generated OpenAPI и текущие MessagingPanel/API/browser fixtures.
+Исторические proposal/OPEN строки contract не отменяют принятие CONTROL/GUARDS.
+
+C0 подготовит ветку; C5 продолжает её, не создаёт её повторно и не использует
+слитые M2/GUARDS или экспериментальную CI ветку. Новый Draft PR в main открыть
+после содержательного UI diff. Coordination-only commit не требует отдельного
+PR/CI/review. Reset/rebase/force/main merge не выдаются.
+
+### 0.3. Exact write allowlist — 14 paths
+
+| Path | Допустимое изменение |
+|---|---|
+| `frontend/src/ConversationControl.tsx` | Новый компактный control UI; при необходимости держать pending intent выше в MessagingPanel |
+| `frontend/src/ConversationControl.test.tsx` | Значимые unit/component проверки состояний и конкурирующих ответов |
+| `frontend/src/conversation-control-api.ts` | Строгий потребитель трёх принятых routes |
+| `frontend/src/conversation-control-api.test.ts` | DTO/error/identity/decimal-string и exact request checks |
+| `frontend/src/MessagingPanel.tsx` | Встраивание UI, согласованное обновление после control/manual; существующий manual recovery сохранить |
+| `frontend/src/MessagingPanel.test.tsx` | Интеграция UI и необходимые mocks новых GET, прежние assertions сохранить |
+| `frontend/src/messaging-fixtures.test-helper.ts` | Только связанные synthetic fixture values/helpers |
+| `frontend/src/App.test.tsx` | Только необходимые adapters/mocks и regression общей session/owner boundary |
+| `frontend/src/style.css` | Узкие стили control UI, keyboard/narrow layout |
+| `frontend/e2e/conversation-control.spec.ts` | Новые journeys через настоящий owner API/PostgreSQL |
+| `frontend/e2e/messaging.spec.ts` | Только необходимая адаптация существующего journey к добавленному UI, без ослабления |
+| `scripts/m2_4_browser_fixture.py` | Конечные CONTROLLED TEST presets и read-only control/receipt/Audit counters; сохранить прежний provisioning scope |
+| `tests/test_m2_4_browser_fixture.py` | Проверки добавленных finite presets/read-only counters и прежних границ |
+| `docs/tasks/M3_CONSOLE_CONTROL.md` | Краткие UI правила, команды, соответствие scenarios→tests и ограничения; финальные SHA/CI — в receipt |
+
+Это максимум, не требование изменить все файлы. Full PR может содержать эти
+14 paths плюс два C0 preparation docs; C5 два preparation docs не редактирует.
+Другой path или реальный дефект backend contract — конкретный minimal diff/факт C0
+до расширения. Не добавлять «на будущее» routes/components/абстракции.
+
+Backend, migrations/0010, schema/readiness, auth/tenancy/billing/M2 contracts,
+M3_CONTRACT, canon, manifests/lockfiles, App auth implementation, текущий
+messaging-api и browser worker, Compose/Docker/workflows/штатные scripts неизменны.
+**Новая migration не назначается.** У прежнего CI 9 jobs; foundation40/browser25,
+остальные budgets/pins сохранены. [Оптимизация CI DEFERRED до завершения M3](https://github.com/Elefesys/ai-service-manager/pull/29#issuecomment-6139376486);
+из PR29 ничего не переносить, включая clock fixtures.
+
+### 0.4. Поведение интерфейса по принятому контракту
+
+1. **Текущее состояние — отдельный GET control.** При выборе диалога показывать
+   загрузку/недоступность/состояние именно выбранного actor/Workspace/conversation/
+   Client. Сверять response IDs. HUMAN — управление у мастера; AI — владелец
+   разрешил автоматику. Режим AI не означает наличие работающей LLM или обещание
+   отправки. В пользовательском UI не нужны SHA, generation/fence, Docker и
+   названия fixture consumers. Достаточны понятный режим, действия и предупреждения.
+   Refresh — чтение, mount/focus/выбор/автовосстановление session ничего не пишут.
+
+2. **Только явное действие владельца.** «Забрать управление» вызывает takeover;
+   «Разрешить автоматику» — resume. Запрос формируется из последнего пригодного
+   control GET: exact expected_client_id/control_generation/context_version,
+   новый Idempotency-Key на новое намерение, cookie + CSRF по действующей схеме.
+   Нет If-Match, query, actor/mode в body. POST отвечает **200**, а не M2 manual202.
+   Takeover не блокировать по billing/Telegram availability или наличию старого
+   UNKNOWN: сервер разрешает локальную остановку независимо от них.
+   Resume не обходится frontend-проверкой billing; authoritative denial приходит
+   с сервера. Новый Resume работает только для будущих входящих сообщений.
+
+3. **Receipt не равен текущему режиму.** ACCEPTED/REPLAY подтверждают сохранённую
+   операцию. После них выполнять свежий GET; при его ошибке показывать подтверждение
+   операции отдельно от недоступного current state и повторять только чтение.
+   Старый replay Resume не должен рисовать AI поверх более нового HUMAN.
+   Успешный manual intent тоже требует свежего control GET, поскольку сервер
+   атомарно ставит HUMAN; не повторять control POST как часть manual send.
+
+4. **Pending intent и потеря ответа.** В памяти страницы сохранить immutable
+   actor/Workspace/conversation/Client/operation/body/key. Пока результат
+   неоднозначен, не создавать новый key и не подменять expected tuple свежими
+   values для повтора. После восстановления session повтор возможен лишь
+   явным действием того же actor в том же контексте, тем же route/body/key.
+   Network/timeout/abort/5xx/невалидный ответ не доказывают rollback.
+   Idempotency conflict останавливает повтор. STALE_STATE требует свежего GET
+   и нового осознанного действия, без автоматического retry-loop.
+   Можно завершить локальное ожидание без повтора, явно указав, что это не отмена
+   возможной серверной операции. Не сохранять intent в local/session storage.
+
+5. **Смена контекста и обычные гонки UI.** Late GET/POST из другого диалога,
+   Workspace, actor или прежней session не меняет текущую карточку. При 401/403
+   использовать существующие recovery/deny callbacks; отозванный OWNER не
+   продолжает работу из cached session. Нельзя переносить pending intent другому
+   пользователю. В выбранном диалоге не отправлять перекрывающиеся новые
+   manual/control намерения; сохранить явное восстановление прежнего manual
+   намерения. Старый UNKNOWN доставки — не pending HTTP намерение.
+   Все параметры версий остаются decimal strings/BigInt, не Number.
+
+6. **Начатая и неизвестная отправка.** Показать оба признака
+   manual_delivery.has_dispatching/has_unknown с нейтральной семантикой отправки:
+   actual0010 read охватывает связанные Outbox, не только ручные сообщения.
+   Takeover останавливает дальнейшую автоматику, но не отзывает уже начатый
+   внешний запрос; UNKNOWN не становится CANCELLED и не даёт кнопку повторного
+   send. История сообщений остаётся источником отдельных delivery outcomes.
+   Это предупреждение о конкретном состоянии, не общий security disclaimer.
+
+7. **Совместимость и доступность.** Ручной текст, private images, pagination,
+   статусы доставки, billing/Auth и доступ OWNER сохраняются. Loading/error/empty
+   состояния не показывают старое «успешное» состояние как текущее.
+   Keyboard и узкий экран работают; использовать существующий визуальный стиль.
+   Никаких LLM, Escalation заглушек, обещанного срока ответа или переключателя
+   автоматического native takeover в этом срезе.
+
+API parser сохраняет точные DTO/nullable/enum/error envelopes из accepted
+http_models/OpenAPI: canonical UUID/time, positive decimal <=9223372036854775807,
+previous_generation+1=accepted_generation, operation/accepted_mode и identity
+исходного запроса. Результат с неверной identity не принимается как успех.
+Не расширять текущие auth/M2 parsers ради новых CONTROL codes.
+
+### 0.5. Достаточные проверки
+
+| ID | Проверяемый результат | Достаточное evidence |
+|---|---|---|
+| UI-C01 | Выбор/refresh read-only; правильные IDs/mode, роли и большие version strings | API/component tests |
+| UI-C02 | HUMAN→Resume→AI→Takeover→HUMAN, затем manual остаётся HUMAN; receipt/Audit по одной принятой операции | Actual browser→HTTP→PG, read-only counters; основной journey также @narrow |
+| UI-C03 | Две вкладки/stale tuple: второй intent отклонён, нет auto retry; старый response не меняет новый контекст | Actual two-page/API journey + deferred-response component tests |
+| UI-C04 | Реальный commit с потерянным HTTP ответом: тот же key/body возвращает REPLAY, counters не растут повторно; ошибка GET после успеха повторяет только GET | Browser route.fetch с последующим abort/задержкой + actual PG, без fabricated success JSON |
+| UI-C05 | Session/CSRF recovery, revoke, смена actor/Workspace/conversation не переадресуют намерение | Component tests; один адресный actual browser context/revoke scenario |
+| UI-C06 | DISPATCHING/UNKNOWN видны, control не обещает recall/resend; старый replay не подменяет current state | Component/parser для обоих flags + actual UNKNOWN через существующий CONTROLLED worker; отдельный новый in-flight harness не нужен |
+| UI-C07 | Прежние manual/private image/billing/auth journeys сохранены; клавиатура и narrow без горизонтального overflow | Весь existing frontend/browser suite плюс UI-C02 |
+
+Не нужно дублировать все backend concurrency/RLS/migration тесты: они приняты и
+остаются в штатном CI. Новые tests проверяют риски добавленного UI. Для DISPATCHING
+сослаться также на существующий actual backend test; не создавать новый runtime
+fault framework. В browser допускается задержать/оборвать настоящий response,
+но не подменять им отсутствующее server execution.
+
+Использовать существующие disposable browser TEST fixtures: finite synthetic
+identities/bindings, owner HTTP commands, runtime ingest/Worker и private storage.
+Новые control counters — read-only; не INSERT/UPDATE canonical control receipts,
+Audit/Conversation/Message/Outbox/Jobs от migrator ради зелёного теста.
+При необходимости добавить несколько именованных presets, а не произвольный
+SQL/fixture endpoint. Existing worker умеет unknown/success и seed из PRESETS;
+новый worker/daemon не требуется. Прежние assertions и quiet/no-secret diagnostics
+сохранить, не включать dumps session/CSRF/password/signed URLs.
+
+Локально: `npm --prefix frontend run typecheck`, `npm --prefix frontend test`,
+`npm --prefix frontend run build`, применимые Ruff/unit checks finite fixture,
+`git diff --check`. Actual browser: `sh scripts/test_browser.sh`;
+полный foundation: `sh scripts/ci.sh`. Если локального Docker нет, честно
+использовать actual disposable CI и отдельно указать, что локально не исполнялось.
+
+Нужен финальный штатный PR CI **9/9 SUCCESS + clean-source9/9** на final source.
+Сохранить все прежние 1082 unit/597 PG/114 frontend/27 browser cases; новые counts
+указать по факту, без квоты тестов. Не исключать suites, не повышать timeout,
+не менять workflows или повторять зелёный SHA ради статистики.
+Не нужен полный historical ZIP/image audit для UI-only изменений.
+
+### 0.6. Возврат и приёмка
+
+Один канонический C5 receipt в новом Draft PR, обновлять его и проверять чтением.
+Вернуть final head/parent/tree, exact C0 start/base, full PR scope и собственный
+implementation diff, summary поведения, таблицу UI-C01–07→actual tests/results,
+команды, CI run/attempt/9 jobs/clean gates/tested merge и несколько замечаний по UX.
+Небольшие screenshots только synthetic UI без private URLs/credentials можно
+приложить при необходимости; отдельная презентация не нужна.
+
+Статус результата — REVIEW либо BLOCKED с конкретным фактом. После готового
+candidate удерживать head. Далее C0 intake → короткое независимое C8 review
+нового UI/receipt recovery → решение C0 → merge пользователем → actual main CI.
+C1/C2/C6 повторный review неизменного backend/schema/harness заранее не выдаётся.
+Если обнаружено противоречие accepted API, вернуть его C0, а не менять контракт
+или расширять задачу скрыто.
+
+C5-M3.2-CONSOLE-CONTROL и весь M3 сейчас IN_PROGRESS; работа ещё не выполнена.
+GUARDS INTEGRATED/VERIFIED LOCAL/TEST, IMPL-05 OPEN/fix DEFERRED сохранены.
+VM/live Telegram/рабочие DB-S3/deploy/merge вне этой выдачи. После принятия этого
+среза C0 выдаст C3 ограниченный ESCALATION backend/API; M4 пока не начинается.
+
+<details>
+<summary>Завершённые TURNS/CONTROL/GUARDS поручения; не активная выдача</summary>
+
 ## 0. Текущая выдача C0 — C3-M3.1-GUARDS, реализация
 
 Дата: 2026-10-12 UTC. **GUARDS contract принят; C3 разрешена implementation
@@ -1338,6 +1553,8 @@ reviewed continuation. Независимый C8 реализации остаё
 
 </details>
 
+</details>
+
 ## 1. Исходная точка и результат для владельца
 
 M2 INTEGRATED / VERIFIED в принятом LOCAL/TEST scope:
@@ -1412,9 +1629,10 @@ M3 не требует ServiceRequest/Quote/Order/ApprovalRequest будущих
 
 Названия/число таблиц, маршрутов, jobs и численные debounce/deadline не фиксируются
 этим планом. C0/C2 выбирают минимум под сценарии до соответствующего кода.
-Текущая принятая на main миграция0009 — CONTROL после PR27.
-Следующая schema дельта требует отдельного решения C0/C2 после GUARDS contract;
-новая revision сейчас не назначена. Applied0001–0009 не переписываются.
+Текущая принятая на main миграция0010 — GUARDS после PR28.
+CONSOLE-CONTROL использует принятый API без DDL. Следующая schema дельта для
+Escalation требует отдельного решения C0/C2; новая revision сейчас не назначена.
+Applied0001–0010 не переписываются.
 
 ## 4. Контракт до кода: существенные решения
 

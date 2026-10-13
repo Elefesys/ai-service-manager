@@ -8,13 +8,14 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { requireSafeResult, safeDiagnostic, type SafeResult } from './safe-diagnostic';
 import { parseMessage, parsePage, parseReceipt, type SendReceipt } from '../src/messaging-api';
+import { parseControlState, parseControlReceipt, type ControlBody, type ControlOperation } from '../src/conversation-control-api';
 
 const envPath=process.env.ASM_BROWSER_ENV_FILE, fixturePath=process.env.ASM_BROWSER_FIXTURE_FILE, inventoryPath=process.env.ASM_BROWSER_MESSAGING_FILE, passwordPath=process.env.ASM_BROWSER_PASSWORD_FILE, counterDir=process.env.ASM_BROWSER_COUNTER_DIR;
 if(!envPath||!fixturePath||!inventoryPath||!passwordPath||!counterDir) throw new Error('E2E_SAFE_FAILURE:MESSAGING_PRIVATE_FILES_REQUIRED');
 function privateJson(path:string) { try { return JSON.parse(readFileSync(path,'utf8')); } catch { throw new Error('E2E_SAFE_FAILURE:MESSAGING_FIXTURE_OUTPUT'); } }
 const fixtures:Record<string,{workspace_id:string;user_account_id:string;login:string}>=privateJson(fixturePath).messaging_fixtures;
 type Ref={conversation_id:string;message_id:string;file_id:string};
-type Inventory={conversation_id:string;alternate_conversation_id:string;connection_ids:string[];conversation_ids:string[];message_ids:string[];images:{ready:Ref;failed?:Ref;pending?:Ref}};
+type Inventory={conversation_id:string;client_id:string;alternate_conversation_id:string;connection_ids:string[];conversation_ids:string[];message_ids:string[];images:{ready:Ref;failed?:Ref;pending?:Ref}};
 const inventory:Record<string,Inventory>=privateJson(inventoryPath), password=readFileSync(passwordPath,'utf8');
 const origin='http://127.0.0.1:8080';
 const path=(preset:string,suffix:string)=>`/api/v1/workspaces/${fixtures[preset].workspace_id}/${suffix}`;
@@ -62,6 +63,20 @@ function row(page:Page,id:string){return page.getByTestId(`message-${id}`);}
 const post=async(request:APIRequestContext,preset:string,text:string,key:string,token:string)=>http(()=>request.post(messages(preset),{headers:{Origin:origin,'X-CSRF-Token':token,'Idempotency-Key':key},data:{text}}));
 async function safeContinue(route:Route){requireSafeResult(await safeDiagnostic('MESSAGING_ROUTE_CONTINUE_FAILED',()=>route.continue()));}
 
+const controlPanel=(page:Page)=>page.getByRole('region',{name:'Управление диалогом',exact:true});
+const controlContext=(preset:string)=>({workspace:fixtures[preset].workspace_id,conversation:inventory[preset].conversation_id,client:inventory[preset].client_id});
+const controlPath=(preset:string,route='control')=>path(preset,`conversations/${inventory[preset].conversation_id}/${route}`);
+async function currentControl(page:Page,preset:string){const r=await http(()=>page.request.get(controlPath(preset)));expect(r.status()).toBe(200);return parseControlState(await json(r),controlContext(preset));}
+async function changeControl(page:Page,preset:string,operation:ControlOperation,keyboard=false){
+  const pending=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===controlPath(preset,operation==='RESUME'?'resume':'takeover'));
+  const button=controlPanel(page).getByRole('button',{name:operation==='RESUME'?'Разрешить автоматику':'Забрать управление',exact:true});
+  if(keyboard){await controlPanel(page).getByRole('button',{name:'Забрать управление'}).focus();await page.keyboard.press('Tab');await expect(button).toBeFocused();await page.keyboard.press('Enter');}else await button.click();
+  const r=await pending;expect(r.status()).toBe(200);const body=requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',async()=>JSON.parse(r.request().postData()!))) as ControlBody;
+  const receipt=parseControlReceipt(requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>r.json())),controlContext(preset),operation,body);expect(receipt.outcome).toBe('ACCEPTED');
+  await expect(controlPanel(page).getByRole('button',{name:'Забрать управление'})).toBeEnabled();
+}
+function controlDelta(before:Record<string,number|boolean>,after:Record<string,number|boolean>,count:number){for(const key of ['control_receipts','control_audit_events'])expect(Number(after[key])-Number(before[key])).toBe(count);}
+
 test('@narrow CONTROLLED incoming text/private image -> exact keyboard reply -> Worker current delivery',async({page},info)=>{
   test.setTimeout(60000);await signIn(page,'happy');
   await expect(panel(page).getByText('Incoming happy main — é 🎨',{exact:true})).toBeVisible();
@@ -71,14 +86,24 @@ test('@narrow CONTROLLED incoming text/private image -> exact keyboard reply -> 
   await ready.getByRole('button',{name:'Открыть изображение'}).click();const img=ready.getByRole('img');await loadedPrivateImage(img);
   const signed=await privateImageValue(()=>img.getAttribute('src'));expect(!!signed).toBe(true);expect((await panel(page).textContent())!.includes(signed!)).toBe(false);expect(imageRequests.length>0).toBe(true);expect((await Promise.all(imageRequests)).every(Boolean)).toBe(true);
   const unsigned=new URL(signed!);unsigned.search='';const anonymous=await http(()=>page.request.get(unsigned.href));expect(anonymous.status()).toBe(403);
+  // The shared worker drains scheduled FETCH jobs too. Keep CONTROL's manual/
+  // worker assertions here, after the original PENDING/FAILED image assertions.
+  const beforeControl=await helper('happy','control-stats'),initialControl=await currentControl(page,'happy');let controlPosts=0;
+  page.on('request',r=>{if(r.method()==='POST'&&/\/(resume|takeover)$/.test(new URL(r.url()).pathname))controlPosts++;});
+  await controlPanel(page).getByRole('button',{name:'Обновить режим'}).click();await expect(controlPanel(page).getByText('Управление у мастера',{exact:true})).toBeVisible();expect(controlPosts).toBe(0);
+  await changeControl(page,'happy','RESUME',true);await expect(controlPanel(page).getByText('Автоматика разрешена',{exact:true})).toBeVisible();
+  await changeControl(page,'happy','TAKEOVER');await expect(controlPanel(page).getByText('Управление у мастера',{exact:true})).toBeVisible();
   const before=await helper('happy','stats'),calls=await worker('happy','stats');const text=`  Manual ${randomUUID()}\ne\u0301 🙂  `;let posts=0;
   page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname.endsWith('/messages'))posts++;});
   const input=panel(page).getByLabel('Ручной текстовый ответ');await input.fill(text);await input.press('Enter');const exact=await input.inputValue();expect(exact===text+'\n').toBe(true);expect(posts).toBe(0);
   await input.press('Tab');await expect(panel(page).getByRole('button',{name:'Проверить и отправить'})).toBeFocused();
   const accepted=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname.endsWith('/messages'));await page.keyboard.press('Enter');const r=await accepted;expect(r.status()).toBe(202);const receipt=parseReceipt(requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>r.json())));
   await expect(row(page,receipt.message_id).getByText('В очереди',{exact:true})).toBeVisible();expect((await row(page,receipt.message_id).locator('.message-text').textContent())===exact).toBe(true);
+  await expect(controlPanel(page).getByText('Управление у мастера',{exact:true})).toBeVisible();const finalControl=await currentControl(page,'happy');expect(finalControl.control_mode).toBe('HUMAN');expect(BigInt(finalControl.control_generation)-BigInt(initialControl.control_generation)).toBe(3n);expect(BigInt(finalControl.context_version)-BigInt(initialControl.context_version)).toBe(1n);
+  controlDelta(beforeControl,await helper('happy','control-stats'),2);expect(controlPosts).toBe(2);
   const ran=await worker('happy');expect(Number(ran.calls)-Number(calls.calls)).toBe(1);expect(Number(ran.effects)-Number(calls.effects)).toBe(1);await refresh(page);await expect(row(page,receipt.message_id).getByText('Канал принял',{exact:true})).toBeVisible();oneCommand(before,await helper('happy','stats'));
   await page.reload();await choose(page,'happy');expect(posts).toBe(1);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+  await expect(controlPanel(page).getByText('Управление у мастера',{exact:true})).toBeVisible();expect(controlPosts).toBe(2);
 });
 
 test('real committed202 response loss -> login plus CSRF recovery -> one command and same receipt',async({page})=>{
@@ -109,8 +134,11 @@ test('canonical UNKNOWN survives replacement worker, same receipt and reload wit
   test.setTimeout(60000);await signIn(page,'unknown');const before=await helper('unknown','stats');let key='',text='';
   page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname===messages('unknown')){key=r.headers()['idempotency-key'];text=JSON.parse(r.postData()!).text;}});
   const receipt=await send(page,`UNKNOWN ${randomUUID()}`);const ran=await worker('unknown','unknown');expect(ran.calls).toBe(1);expect(ran.effects).toBe(1);await refresh(page);await expect(row(page,receipt.message_id).getByText(/Результат неизвестен — повтора нет/)).toBeVisible();expect(await row(page,receipt.message_id).getByRole('button').count()).toBe(0);
+  const beforeControl=await helper('unknown','control-stats');await controlPanel(page).getByRole('button',{name:'Обновить режим'}).click();await expect(controlPanel(page).getByText(/Есть отправка с неизвестным результатом/)).toBeVisible();
+  await changeControl(page,'unknown','TAKEOVER');await expect(controlPanel(page).getByText('Управление у мастера',{exact:true})).toBeVisible();await expect(controlPanel(page).getByText(/Есть отправка с неизвестным результатом/)).toBeVisible();expect(await controlPanel(page).getByRole('button',{name:/resend|повтор.*отправ/i}).count()).toBe(0);controlDelta(beforeControl,await helper('unknown','control-stats'),1);
   const replay=await post(page.request,'unknown',text,key,await csrf(page.request));expect(replay.status()).toBe(202);const observed=parseReceipt(await json(replay));expect(observed.outcome==='REPLAY'&&observed.message_id===receipt.message_id).toBe(true);
   const restarted=await worker('unknown','recover');expect(restarted.calls).toBe(1);expect(restarted.effects).toBe(1);expect(restarted.worked).toBe(0);await page.reload();await choose(page,'unknown');await expect(row(page,receipt.message_id).getByText(/Результат неизвестен — повтора нет/)).toBeVisible();oneCommand(before,await helper('unknown','stats'));expect((await worker('unknown','stats')).calls).toBe(1);key='';text='';
+  await expect(controlPanel(page).getByText(/Есть отправка с неизвестным результатом/)).toBeVisible();
 });
 
 test('valid202 plus failed history GET permits only read recovery and no second POST',async({page})=>{

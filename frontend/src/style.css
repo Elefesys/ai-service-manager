@@ -42,3 +42,8 @@ nav { display: flex; gap: 22px; border-bottom: 1px solid #cdd4de; padding-bottom
 .reply-form textarea:focus-visible { outline: 3px solid #74ac96; outline-offset: 2px; }
 .messaging .mono, .delivery { overflow-wrap: anywhere; }
 @media (max-width: 700px) { .messaging-columns { grid-template-columns: minmax(0, 1fr); } .messaging .billing-heading { flex-wrap: wrap; } }
+.conversation-control { border: 1px solid var(--line, #d6e0e9); border-radius: 12px; padding: 1rem; margin: 1rem 0; overflow-wrap: anywhere; }
+.conversation-control h3 { margin: 0; }
+.control-mode { font-weight: 700; }
+.control-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
+.control-actions button { white-space: normal; }

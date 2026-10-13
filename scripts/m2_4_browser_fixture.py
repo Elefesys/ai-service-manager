@@ -34,8 +34,14 @@ PRESETS = (
     "late",
     "revoked",
     "permanent",
+    "ctrl_stale",
+    "ctrl_recovery",
+    "ctrl_read",
+    "ctrl_revoked",
+    "ctrl_inactive",
+    "ctrl_restricted",
 )
-ACTIONS = ("inventory", "stats", "downgrade", "disable", "restrict")
+ACTIONS = ("inventory", "stats", "control-stats", "downgrade", "disable", "restrict")
 
 
 def validate_operation(preset, operation):
@@ -44,9 +50,9 @@ def validate_operation(preset, operation):
     ):
         raise ProvisioningError("Invalid finite messaging fixture action")
     allowed = {
-        "downgrade": ("revoked",),
-        "disable": ("inactive",),
-        "restrict": ("restricted",),
+        "downgrade": ("revoked", "ctrl_revoked"),
+        "disable": ("inactive", "ctrl_inactive"),
+        "restrict": ("restricted", "ctrl_restricted"),
     }
     if operation in allowed and preset not in allowed[operation]:
         raise ProvisioningError("Invalid finite messaging state change")
@@ -126,7 +132,7 @@ async def setup_messaging(password):
                     )
             # Two authorized Workspaces for browser context races. This does not
             # make the separate foreign Workspace visible to either actor.
-            for preset in ("isolation", "revoked"):
+            for preset in ("isolation", "revoked", "ctrl_revoked"):
                 await connection.execute(
                     text(
                         "INSERT INTO platform.workspace_memberships(workspace_id,user_account_id,role) "
@@ -168,7 +174,7 @@ async def inventory(connection):
             (
                 await connection.execute(
                     text(
-                        "SELECT id,provider_chat_id FROM app.conversations "
+                        "SELECT id,client_id,provider_chat_id FROM app.conversations "
                         "WHERE workspace_id=:ws ORDER BY created_at DESC,id DESC LIMIT 100"
                     ),
                     params,
@@ -211,9 +217,12 @@ async def inventory(connection):
             .all()
         )
         named = {row["provider_chat_id"]: str(row["id"]) for row in conversations}
+        clients = {row["provider_chat_id"]: str(row["client_id"]) for row in conversations}
         result[preset] = {
             "conversation_id": named[f"m24-{preset}-main"],
             "alternate_conversation_id": named[f"m24-{preset}-alternate"],
+            "client_id": clients[f"m24-{preset}-main"],
+            "alternate_client_id": clients[f"m24-{preset}-alternate"],
             "connection_ids": [str(value) for value in connections],
             "conversation_ids": [str(row["id"]) for row in conversations],
             "message_ids": [str(value) for value in messages],
@@ -238,7 +247,7 @@ async def action(preset, operation):
                 return await inventory(connection)
             owner = await identity(connection, preset)
             params = {"ws": owner.workspace_id, "actor": owner.user_account_id}
-            if operation == "stats":
+            if operation in {"stats", "control-stats"}:
                 statements = {
                     "messages": "SELECT count(*) FROM app.messages WHERE workspace_id=:ws AND direction='OUTBOUND'",
                     "receipts": "SELECT count(*) FROM platform.messaging_command_receipts WHERE workspace_id=:ws",
@@ -246,6 +255,11 @@ async def action(preset, operation):
                     "outbox_events": "SELECT count(*) FROM app.outbox_events WHERE workspace_id=:ws",
                     "jobs": "SELECT count(*) FROM platform.messaging_jobs WHERE workspace_id=:ws AND kind='SEND_MANUAL_TEXT'",
                 }
+                if operation == "control-stats":
+                    statements.update(
+                        control_receipts="SELECT count(*) FROM platform.conversation_control_receipts WHERE workspace_id=:ws",
+                        control_audit_events="SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws AND event_type IN ('CONVERSATION_TAKEN_OVER','CONVERSATION_RESUMED')",
+                    )
                 return {
                     name: (await connection.execute(text(sql), params)).scalar_one()
                     for name, sql in statements.items()

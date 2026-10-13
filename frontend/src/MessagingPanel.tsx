@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Session } from './api';
+import { ConversationControl, ControlIntent } from './ConversationControl';
 import { Connection, Conversation, Message, MessagingError, Page, ReadGrant, SendBody, SendReceipt, exactManualText, messagingApi } from './messaging-api';
 
 type Intent = { readonly actor: string; readonly workspace: string; readonly conversation: string; readonly body: SendBody; readonly key: string; phase: 'sending' | 'uncertain' | 'confirmed' | 'conflict'; ambiguous: boolean; failedSession: Session; receipt?: SendReceipt };
@@ -32,6 +33,8 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   const imageState = useRef(view.image);
   imageState.current = view.image;
   const intent = useRef<Intent | null>(null);
+  const controlIntent = useRef<ControlIntent | null>(null);
+  const [controlRefresh, refreshControl] = useState(0);
   const [, redraw] = useState(0);
   const alive = useRef(true), denied = useRef(-1);
   const controllers = useRef(new Set<AbortController>());
@@ -42,7 +45,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   const update = (patch: Partial<View>) => { if (current()) setView(v => ({ ...(v.generation === generation ? v : blank(generation)), ...patch })); };
   const changed = () => redraw(n => n + 1);
   const controller = () => { const c = new AbortController(); controllers.current.add(c); return c; };
-  const sameActor = (p: Intent) => p.actor === session?.user_account_id && p.workspace === workspace;
+  const sameActor = (p: Pick<Intent, 'actor' | 'workspace'>) => p.actor === session?.user_account_id && p.workspace === workspace;
   const matching = !!intent.current && sameActor(intent.current) && intent.current.conversation === view.selected;
   function interruptSend() {
     if (intent.current?.phase === 'sending') { intent.current.phase = 'uncertain'; intent.current.ambiguous = true; changed(); }
@@ -77,7 +80,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         return { ...v, conversations: { items: merge(cursor === null ? [] : v.conversations.items ?? [], p.items, x => x.conversation_id), cursor: p.next_cursor, busy: false, error: '' } };
       });
       if (kind === 'conversations' && !selection.current.id && page.items.length) {
-        const p = intent.current;
+        const p = intent.current ?? controlIntent.current;
         const original = p && sameActor(p) ? (page.items as Conversation[]).find(v => v.conversation_id === p.conversation) : undefined;
         choose((original ?? (page.items as Conversation[])[0]).conversation_id);
       }
@@ -134,6 +137,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
       if (!inConversation(id, epoch) || intent.current !== p) return;
       p.phase = 'confirmed'; p.receipt = Object.freeze(receipt); changed();
       update({ receipt, draft: '', notice: 'Намерение принято сервером. Это ещё не доставка.' });
+      refreshControl(n => n + 1);
       // The receipt is final even if this read fails. Never put the GET in the
       // POST recovery catch: only reads may follow a valid 202.
       void history(id);
@@ -159,7 +163,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (!session || !current() || intent.current || !view.selected || reading.current.messages) return;
+    if (!session || !current() || intent.current || controlIntent.current || !view.selected || reading.current.messages) return;
     try { exactManualText(view.draft); } catch { update({ notice: 'Введите 1–4096 символов Unicode: не только пробелы, без NUL и одиночных суррогатов.' }); return; }
     const p: Intent = { actor: session.user_account_id, workspace, conversation: view.selected, body: Object.freeze({ text: view.draft }), key: crypto.randomUUID(), phase: 'uncertain', ambiguous: false, failedSession: session };
     intent.current = p; void send(p);
@@ -194,7 +198,10 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
 
   const p = intent.current, detached = p && (!matching || !owner || view.denied);
   const selected = view.conversations.items?.find(c => c.conversation_id === view.selected);
-  return <>
+  return <ConversationControl session={owner && !view.denied ? session : null} context={selected ? { workspace, conversation: selected.conversation_id, client: selected.client_id } : null}
+    intent={controlIntent} manualPending={() => !!intent.current} refresh={controlRefresh} accepted={() => void history()}
+    recover={() => { interruptSend(); recover(); }} expired={() => { interruptSend(); expired(); }} accessDenied={() => { authorization(new MessagingError(403,'ACCESS_DENIED')); }}>
+    {(control, controlPending) => <>
     {detached && <section className="panel alert" aria-label="Незавершённый ответ"><p role="status">В прежнем контексте осталось намерение ответа. Оно не переносится и не отправляется в этом контексте.</p><button onClick={discard}>Завершить ответ без повтора</button></section>}
     {owner && (view.denied ? <section className="panel alert" role="alert"><h2>Нет доступа к переписке</h2><p>История и изображения скрыты.</p><button onClick={recover}>Проверить доступ к переписке</button></section> : <section className="panel messaging" aria-label="Переписка">
       <div className="billing-heading"><div><span className="kicker">OWNER</span><h2>Переписка</h2></div></div>
@@ -214,6 +221,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
       <section aria-label="История сообщений"><div className="billing-heading"><h3>История сообщений</h3><button className="secondary" disabled={!view.selected || view.messages.busy || p?.phase === 'sending'} onClick={() => void history()}>Обновить сообщения</button></div>
         {!view.selected && <p>Выберите диалог.</p>}
         {selected && <p className="muted">Окно ответа: {selected.reply_window_expires_at ?? 'Нет отметки Telegram'}. Текущее разрешение проверяет сервер.</p>}
+        {control}
         {view.messages.busy && <p role="status">Загружаем сообщения…</p>}{view.messages.error && <p role="alert">{view.messages.error}</p>}
         {view.messages.items?.length === 0 && <p>Сообщений пока нет.</p>}
         <ol className="message-list">{view.messages.items?.map(m => <li key={m.message_id} data-testid={`message-${m.message_id}`}><article>
@@ -230,7 +238,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         {view.messages.cursor && <button disabled={view.messages.busy || p?.phase === 'sending'} onClick={() => void history(view.selected, view.messages.cursor)}>Ещё сообщения</button>}
         {view.messages.items !== null && view.messages.cursor === null && !view.messages.busy && <p className="muted">Начало истории.</p>}
         <p className="muted">«Канал принял» не означает получение или прочтение клиентом. UNKNOWN не отправляется повторно.</p>
-        {view.selected && <form className="form reply-form" onSubmit={submit}><label htmlFor="manual-reply">Ручной текстовый ответ</label><textarea id="manual-reply" rows={4} value={matching && p && p.phase !== 'confirmed' ? p.body.text : view.draft} onChange={e => update({ draft: e.target.value })} disabled={!!p} aria-describedby="reply-help" /><p id="reply-help" className="muted">1–4096 символов Unicode. Пробелы и переносы сохраняются; Enter добавляет строку.</p><button type="submit" disabled={!!p || view.messages.busy}>Проверить и отправить</button></form>}
+        {view.selected && <form className="form reply-form" onSubmit={submit}><label htmlFor="manual-reply">Ручной текстовый ответ</label><textarea id="manual-reply" rows={4} value={matching && p && p.phase !== 'confirmed' ? p.body.text : view.draft} onChange={e => update({ draft: e.target.value })} disabled={!!p || controlPending} aria-describedby="reply-help" /><p id="reply-help" className="muted">1–4096 символов Unicode. Пробелы и переносы сохраняются; Enter добавляет строку.</p><button type="submit" disabled={!!p || controlPending || view.messages.busy}>Проверить и отправить</button></form>}
         {view.notice && <p role="status">{view.notice}</p>}
         {view.receipt && <p className="muted">Принятие намерения: {view.receipt.accepted_at}. Текущее состояние — в истории, даже если сообщение находится на другой странице.</p>}
         {matching && p && <div className="notice" aria-live="polite">
@@ -242,5 +250,6 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         </div>}
       </section></div>
     </section>)}
-  </>;
+  </>}
+  </ConversationControl>;
 }
