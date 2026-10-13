@@ -34,9 +34,11 @@ jobs:
         run: sh scripts/test_browser.sh
       - name: Require unchanged tracked and untracked source
         run: test -z "$(git status --porcelain --untracked-files=all)"
-  foundation:
+  foundation-core:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    outputs:
+      tested_sha: ${{ steps.source.outputs.tested_sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -52,18 +54,20 @@ jobs:
         run: |
           mkdir -p reports
           set -o pipefail
-          sh scripts/ci.sh 2>&1 | tee reports/ci.log
+          sh scripts/ci.sh --foundation-core 2>&1 | tee reports/ci.log
       - name: Require unchanged tracked and untracked source
         shell: bash
         run: |
           test -z "$(git status --porcelain --untracked-files=all)"
       - name: Record tested source
+        id: source
         if: always()
         run: |
           mkdir -p reports
           git rev-parse HEAD > reports/tested-commit.txt
           git status --porcelain --untracked-files=all > reports/worktree-status.txt
           git archive --format=tar.gz HEAD > reports/source.tar.gz
+          printf 'tested_sha=%s\n' "$(cat reports/tested-commit.txt)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -71,6 +75,89 @@ jobs:
           path: reports/
           retention-days: 7
           if-no-files-found: error
+  foundation-egress:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    outputs:
+      tested_sha: ${{ steps.source.outputs.tested_sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Prepare pinned LOCAL egress image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          printf 'FOUNDATION_EGRESS_SETUP_START\n'
+          python3 scripts/init_local.py
+          docker compose --env-file infra/images.lock.env --env-file .env build --pull api
+          docker version --format '{{json .}}' > reports/egress-docker-version.json
+          docker compose version --short > reports/egress-compose-version.txt
+          printf 'FOUNDATION_EGRESS_SETUP_END\n'
+      - name: Run all synthetic lifecycle and E01-E05 scenarios
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'FOUNDATION_EGRESS_LIFECYCLE_START\n'
+          sh scripts/test_telegram_egress.sh 2>&1 | tee reports/egress.log
+          printf 'FOUNDATION_EGRESS_LIFECYCLE_END\n'
+      - name: Clean disposable Compose environment
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'FOUNDATION_EGRESS_CLEANUP_START\n'
+          if test -f .env; then
+            docker compose --env-file infra/images.lock.env --env-file .env --profile test down --remove-orphans
+          fi
+          printf 'FOUNDATION_EGRESS_CLEANUP_END\n'
+      - name: Require unchanged tracked and untracked source
+        run: test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Record tested egress source
+        id: source
+        if: always()
+        run: |
+          mkdir -p reports
+          git rev-parse HEAD > reports/tested-commit.txt
+          git status --porcelain --untracked-files=all > reports/worktree-status.txt
+          git archive --format=tar.gz HEAD > reports/source.tar.gz
+          printf 'tested_sha=%s\n' "$(cat reports/tested-commit.txt)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: foundation-egress-normal-${{ github.run_id }}
+          path: reports/
+          retention-days: 7
+          if-no-files-found: error
+  foundation:
+    needs: [foundation-core, foundation-egress]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Require both foundation jobs and the same tested source
+        shell: bash
+        env:
+          CORE_RESULT: ${{ needs['foundation-core'].result }}
+          EGRESS_RESULT: ${{ needs['foundation-egress'].result }}
+          CORE_SOURCE: ${{ needs['foundation-core'].outputs.tested_sha }}
+          EGRESS_SOURCE: ${{ needs['foundation-egress'].outputs.tested_sha }}
+        run: |
+          set -eu
+          actual=$(git rev-parse HEAD)
+          printf 'FOUNDATION_GATE_RUN=%s ATTEMPT=%s SOURCE=%s CORE_SOURCE=%s EGRESS_SOURCE=%s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$actual" "$CORE_SOURCE" "$EGRESS_SOURCE"
+          sh scripts/check_foundation_gate.sh "$CORE_RESULT" "$EGRESS_RESULT"
+          test "$actual" = "$GITHUB_SHA"
+          test "$CORE_SOURCE" = "$actual"
+          test "$EGRESS_SOURCE" = "$actual"
+          printf 'FOUNDATION_SOURCE_PAIRING_PASS\n'
+      - name: Require unchanged tracked and untracked source
+        if: always()
+        run: test -z "$(git status --porcelain --untracked-files=all)"
   docker29-compatibility:
     # Disposable GitHub runner only. Never install/replace an owner VM daemon.
     runs-on: ubuntu-24.04
