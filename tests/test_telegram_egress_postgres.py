@@ -779,8 +779,8 @@ class TestEgressTurnSuccessGate:
             await stabilize_turns(h)
 
 
-async def canonical_fingerprint(connection, *, revision="0010"):
-    assert revision in {"0009", "0010"}
+async def canonical_fingerprint(connection, *, revision="0011"):
+    assert revision in {"0009", "0010", "0011"}
     tables = (
         await connection.execute(
             text(

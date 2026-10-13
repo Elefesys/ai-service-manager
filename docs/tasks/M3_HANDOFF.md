@@ -5,6 +5,114 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
+## 0. Активная выдача C0 — C3-M3.2-ESCALATION-IMPLEMENTATION
+
+Дата: 2026-10-13 UTC. Основание — [конкретная выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6151237330).
+Она заменяет прежний contract-only HOLD ниже. Продолжать тот же Draft PR31,
+ветку `c3/m3-2-escalation` в отдельном checkout. Реализация разрешена;
+единственный статус исполнения — в [TASK_REGISTER](../TASK_REGISTER.md).
+
+| Source / gate | Принятый факт |
+|---|---|
+| Accepted main / frozen G / schema | `c502d5fd258aef15bb5549e1529df8d038a4fb9b` / `0010` |
+| Implementation start | `65454012c0e5a2c9643bf1401d86773a5a4df29a` |
+| Start tree | `de09e1bf435d15929059f4e7691bd1fa17c0f2a4` |
+| Start CI | [38430231534/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38430231534), SUCCESS9/9 + clean9/9 |
+| Actual tested start merge | `2650c69c48c0e882317e6ca6a68cda18f26918ed`, parents main+start, tree=start |
+| Accepted R2 contract | 331348 bytes, blob `3d2f88ddedf0ab9944db3181040abe16a7034e81`; append evidence after§14.11 |
+| Assigned migration | `migrations/versions/0011_escalations.py`, revision0011/down0010; applied0001–0010 immutable |
+
+C0 принял R2; три design findings CLOSED. Legacy-overload finding NOT CONFIRMED.
+Оба diagnostic patches (C3 refresh и C6 observer) приняты и сохраняются.
+Исторические причины CI failures UNKNOWN; отдельное расследование прекращено.
+На принятом start текущих CI blockers нет. Эти результаты не проверяют E runtime.
+
+### 0.1. Результат и принятые границы
+
+Работающий LOCAL/TEST backend/API по M3_CONTRACT§14, без нового milestone:
+trusted CONTROLLED Inbox→Turn→PROCESS_TURN/ESCALATE_OWNER создаёт отдельный
+запрос; live OWNER читает очередь/detail, resolve сохраняет внутренний ответ,
+cancel закрывает ожидание; reminders2/5min и expiry10min durable и recoverable.
+Это M3-A09 и основание будущего owner-wait UI, без UI реализации здесь.
+
+Exact marker `CONTROLLED ESCALATION TEST` допускается только при fresh live
+Resume OWNER и принятом CONTROLLED_GUARDS_V1. Lifetime exclusion GUARDS/Escalation
+на Turn, historical replay, canonical Workspace/Client/Conversation и точные
+fingerprints обязательны. Не создавать запрос migrator-ом вместо runtime,
+не вводить public create API/произвольного actor. Answer1..512 scalars/2048bytes
+сохраняется точно, без send/Approval/Resume и оживления старого Turn.
+
+PENDINGv1→RESOLVED/CANCELLED/EXPIREDv2; assignee immutable; resolve только ему,
+cancel любому current OWNER. Material context/control invalidation атомарна
+и не добавляет лишний counter bump. Local read/decision независимы от billing/
+channel availability. Ровно четыре routes§14.5, existing cookie/Origin/CSRF,
+strict DTO/error/cursor, exact key/body, current authority и saved receipt.
+
+Две таблицы,36→38;11 function profiles, FORCE RLS/capability-only runtime.
+Owner UPDATE→Audit→receipt→context в одной transaction. Ациклические identity,
+terminal/relation/membership и seven-column receipt→Audit FKs. Cleanup строго
+receipt→Esc Audit→timer Jobs→request→old parents, без CASCADE/disable/nulling.
+Timer post-lock trusted time и due-before-attempt; exact allowlisted23514
+внутри rollback, затем committable DEAD/INVALID_INPUT/NULL; остальные ошибки
+и failed commit не объявляют сохранённый успех. До expiry DEAD не стирает
+ожидание, после expiry actions запрещены даже без scheduler.
+
+### 0.2. Канон и точный scope
+
+AGENTS, IMPL-001; оригиналы Spec§§1.7/5.10–5.14/14.11/16/18.5–18.8/24.7;
+ADR023–026/121–128/139/197–198/267; MVP GJ-G/GJ-J; Roadmap M3;
+Implementation Plan M3.1/M3.2; OPEN082/083/085. Принятые §§8/9/12/13/14
+M3_CONTRACT и actual dependencies обязательны; canon/snapshots не менять.
+
+Разрешены ровно40 implementation paths из **M3_CONTRACT§14.10** с указанными
+там причинами и дополнительно этот handoff + `docs/TASK_REGISTER.md` для
+переноса принятой выдачи/фактов. Максимум42, не требование изменить каждый.
+`tests/test_m2_1_postgres.py`, `tests/test_m3_1_control_api_postgres.py`,
+manifest/dependencies/locks/workflows/Compose/images не выданы.
+Дополнительный path — конкретный diff/причина C0 **до применения**.
+
+Пять условных paths: `scripts/prepare_telegram_egress.py`,
+`scripts/test_telegram_egress.sh`, `scripts/test_telegram_egress_migration.sh`,
+`tests/test_telegram_egress.py`, `tests/test_telegram_egress_migration.py` —
+только после конкретного C0/C6 diff review. До него предложенный patch хранится
+отдельно от tracked candidate; новые pins не включаются. H/T/C/G identities
+сохранить; G=`c502…`/0010 отдельно от E/0011. Нужна genuine G→E phase в двух
+existing state lanes, exact38 E inventory и полное canonical residual timer
+set после drain; kind/count waiver, сдвиг часов/available_at или удаление future
+Jobs в asm_local запрещены. Serial private clock только disposable asm_test,
+committed replacement и exact restore. Prepare600/cleanup90, state25min,
+foundation40/browser25, exact Docker29 и все9 jobs неизменны.
+
+### 0.3. Текущий implementation checkpoint и gates
+
+Подготовлены domain/migration/API/Audit и focused tests. Runtime/PG/S3/browser/
+Docker29 proofs **NOT RUN** локально: Docker и PostgreSQL отсутствуют. C3 не
+выдаёт отдельные задачи ролям; конкретный proposed G→E patch возвращается C0
+для адресного C6. Общий C1/C2 review не повторяется.
+
+Локальный полный non-integration: **1113 PASS/1 FAIL**. Единственный failure —
+`tests/test_auth_contract.py::test_auth_machine_contract_and_generated_c5_api_have_no_drift`:
+closed total route inventory ещё не содержит четыре принятых Escalation routes.
+Этот path не выдан; C3 сохранил assertion и подготовил отдельный proposed diff
+C0, оставив семь frozen auth routes и остальные checks прежними. Это текущий
+конкретный scope blocker; результат не называется зелёным.
+
+Focused backend91 PASS, frontend Audit30 PASS; Ruff/mypy и generated OpenAPI
+проверяются на candidate. Actual assertions/matrix§14.9, commands/results и
+неприменённые patches — в одном обновляемом C3 PR31 receipt; SHA-only commits
+не создавать. После C0/C6 review нужен final implementation CI9/9+clean9/9 с
+actual checkout/archive/merge parents/tree. Start CI не переносится на E и
+повторно ради статистики не запускается. C0 выдаёт scoped C8 после готового
+candidate; C5 owner-wait — после принятого backend/API SHA и своего gate.
+
+M3 остаётся IN_PROGRESS. M3/native/provenance, production OPEN082/083/085,
+IMPL-05 OPEN/fix DEFERRED и CI optimization DEFERRED сохранены. M4/LLM/RAG,
+Approval/M6, Notification Engine/M9, client follow-ups, production сроки вне
+среза. VM/live Telegram/рабочие DB-S3/deploy/merge не выполнять.
+
+<details>
+<summary>Завершённая выдача ESCALATION-CONTRACT; принята C0, не активное поручение</summary>
+
 ## 0. Текущая выдача C0 — C3-M3.2-ESCALATION-CONTRACT
 
 Дата: 2026-10-13 UTC. **CONTROL UI интегрирован и проверен; следующий срез —
@@ -155,6 +263,8 @@ C6 подключается только при конкретной дельт�
 VM/live Telegram/рабочие DB-S3/deploy/merge и M4 вне выдачи.
 M3-A08 native/provenance и весь M3 остаются NOT VERIFIED/IN_PROGRESS по своему scope.
 IMPL-05 OPEN/fix DEFERRED и CI optimization DEFERRED до завершения M3 сохранены.
+
+</details>
 
 <details>
 <summary>Завершённая выдача CONSOLE-CONTROL; не активное поручение</summary>

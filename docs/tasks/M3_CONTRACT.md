@@ -3102,3 +3102,40 @@ diff при implementation. C3 не выдаёт другим ролям зад�
 deploy/merge. M3 остаётся IN_PROGRESS, IMPL-05 OPEN/fix DEFERRED и CI optimization
 DEFERRED. C5 owner-wait и независимый C8 implementation review следуют после своих
 gate; их отсутствие не скрывается документационным PASS.
+
+
+### 14.12. C0 implementation activation и C3 compatibility checkpoint / 2026-10-13
+
+[Выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6151237330)
+принимает R2 и закрывает три design findings; legacy-overload claim NOT CONFIRMED.
+Исторические формулировки§14.11 сохранены выше. Назначена migration0011/down0010,
+разрешены40 paths§14.10 плюс handoff/register только для принятых фактов.
+Accepted main/frozen G=c502d5fd258aef15bb5549e1529df8d038a4fb9b/0010;
+implementation start65454012c0e5a2c9643bf1401d86773a5a4df29a,
+tree de09e1bf435d15929059f4e7691bd1fa17c0f2a4. Start CI38430231534/attempt1
+SUCCESS9/9+clean9/9 проверил merge2650c69c48c0e882317e6ca6a68cda18f26918ed,
+parents main+start/tree=start. Это не runtime evidence новой Escalation.
+
+Подготовленная implementation следует§14: две таблицы/11 profiles, нормальный
+CONTROLLED producer, три durable timers, committable allowlisted failure,
+четыре owner routes, strict saved receipt/current projection и additive Audit.
+Applied0001–0010 и полный принятый prefix331348bytes/blob
+3d2f88ddedf0ab9944db3181040abe16a7034e81 сохранены побайтно.
+
+Actual-PG tests подготовлены для creation/commit loss, concurrent owner replay,
+FK/RLS/rollback, lock waits/fairness, expiry boundaries, timer crash/reclaim/
+exhaustion и schema cycles. Не выполнены локально без Docker/PG/S3 и не являются
+пока proof§14.9. Focused backend91 и Audit frontend30 PASS; полный local
+non-integration1113 PASS/1 FAIL на старом closed total route inventory.
+`tests/test_auth_contract.py` вне allowlist: exact additive four-route diff
+только предложен C0, frozen auth contract/assertions не изменены.
+
+Пять controller paths§14.8/10 пока не включены в tracked candidate. Отдельный
+proposed patch сохраняет frozen H/T/C/G, добавляет genuine G→E/38 inventory и
+canonical residual3timer set. C0 организует адресный C6 по diff; budgets/pins/
+CI jobs и прежние diagnostic evidence не меняются. Новых production source pins
+не требуется: TelegramClient/config bytes не затронуты. Полный CI нового E,
+actual state lanes, scoped C8 и приёмка C0 остаются gates. Статус исполнения
+IN_PROGRESS; текущий checkpoint BLOCKED/HOLD на указанных согласованиях,
+не INTEGRATED/VERIFIED. Один canonical PR31 receipt содержит SHA/tree/parents,
+commands/results/proposed patches; SHA-only commits не создаются.

@@ -36,6 +36,21 @@ async def control(telegram):
         # removes its shared billing Audit. No cascade or constraint bypass.
         async with telegram.migrator.begin() as c:
             if (
+                await c.execute(text("SELECT to_regclass('app.escalations')"))
+            ).scalar_one() is not None:
+                # E children must precede source Jobs and CONTROL parents. No
+                # CASCADE or mutation of immutable refs during ordinary teardown.
+                for table, predicate in (
+                    ("platform.escalation_command_receipts", ""),
+                    ("app.audit_events", " AND event_type='ESCALATION_DECIDED'"),
+                    ("platform.messaging_jobs", " AND kind='ESCALATION_TIMER'"),
+                    ("app.escalations", ""),
+                ):
+                    await c.execute(
+                        text(f"DELETE FROM {table} WHERE workspace_id IN (:a,:b)" + predicate),
+                        {"a": A, "b": B},
+                    )
+            if (
                 await c.execute(text("SELECT to_regclass('platform.turn_guard_receipts')"))
             ).scalar_one() is not None:
                 await c.execute(

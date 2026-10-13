@@ -3,6 +3,21 @@ import { billingApi, normalizeContact, parseAuditPage, parseBilling, parseBillin
 import { billing, event, fail, ok, receipt, stamp, ws } from './billing-fixtures.test-helper';
 
 describe('R4 generated OpenAPI consumer', () => {
+  it('accepts both Escalation decisions with mixed Audit and rejects cross-variant or answer payloads', () => {
+    const resolve = {...event(6),object_type:'ESCALATION',object_version:'2',event_type:'ESCALATION_DECIDED',payload:{operation:'RESOLVE',status:'RESOLVED'}};
+    const cancel = {...resolve,audit_event_id:event(7).audit_event_id,payload:{operation:'CANCEL',status:'CANCELLED'}};
+    const message = {...event(3),object_type:'MESSAGE',event_type:'MESSAGE_SEND_REQUESTED',payload:{content_type:'TEXT'}};
+    const control = {...event(4),object_type:'CONVERSATION',event_type:'CONVERSATION_RESUMED',payload:{previous_mode:'HUMAN',control_mode:'AI',previous_generation:'1',control_generation:'2'}};
+    const items = [resolve,cancel,message,control,event()];
+    expect(parseAuditPage({items,next_cursor:null})).toEqual({items,next_cursor:null});
+    for (const item of [
+      {...resolve,object_version:'1'}, {...resolve,object_type:'MESSAGE'}, {...resolve,actor_user_account_id:null},
+      {...resolve,actor_kind:'LOCAL_PROVISIONER'}, {...resolve,payload:{operation:'RESOLVE',status:'CANCELLED'}},
+      {...cancel,payload:{operation:'CANCEL',status:'RESOLVED'}}, {...cancel,payload:{operation:'CANCEL',status:'EXPIRED'}},
+      {...resolve,payload:{...resolve.payload,answer_text:'private'}}, {...resolve,payload:{operation:'RESOLVE'}},
+      {...resolve,escalation_id:resolve.object_id}, {...resolve,object_version:2},
+    ]) expect(() => parseAuditPage({items:[item],next_cursor:null})).toThrow('INVALID_RESPONSE');
+  });
   it('accepts exact CONTROL variants in mixed Audit and rejects incoherent counters/relations', () => {
     const takeover = {...event(4),object_type:'CONVERSATION',object_version:'9',event_type:'CONVERSATION_TAKEN_OVER',payload:{previous_mode:'AI',control_mode:'HUMAN',previous_generation:'9007199254740992',control_generation:'9007199254740993'}};
     const resume = {...takeover,audit_event_id:event(5).audit_event_id,event_type:'CONVERSATION_RESUMED',payload:{...takeover.payload,control_mode:'AI'}};

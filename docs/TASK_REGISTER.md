@@ -2,6 +2,50 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Текущий статус — Escalation implementation разрешена / 2026-10-13 UTC
+
+**C3-M3.2-ESCALATION-IMPLEMENTATION — IN_PROGRESS. Весь M3 — IN_PROGRESS.**
+[Выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6151237330) заменяет contract-only HOLD.
+Один Draft PR31, `c3/m3-2-escalation`, отдельный checkout, без reset/rebase/merge.
+Полные разрешённые paths и критерии — [активный M3_HANDOFF§0](tasks/M3_HANDOFF.md).
+
+| Принятый факт | Exact value / статус |
+|---|---|
+| Accepted main / frozen G / schema | `c502d5fd258aef15bb5549e1529df8d038a4fb9b` /0010 |
+| Implementation start / tree | `65454012c0e5a2c9643bf1401d86773a5a4df29a` / `de09e1bf435d15929059f4e7691bd1fa17c0f2a4` |
+| Start CI | [38430231534/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38430231534), SUCCESS9/9 + clean9/9 |
+| Actual tested start merge | `2650c69c48c0e882317e6ca6a68cda18f26918ed`; parents main+start, tree=start |
+| R2 contract | Принят C0;331348bytes/blob `3d2f88ddedf0ab9944db3181040abe16a7034e81` |
+| Три design findings | CLOSED по verdict C0; legacy-overload claim NOT CONFIRMED |
+| C3 refresh / C6 observer diagnostics | Оба приняты; исторические причины UNKNOWN; расследование прекращено |
+| Migration queue | `0011_escalations.py`, revision0011/down0010 назначена C0; applied0001–0010 immutable |
+| Start CI blockers | Нет; E runtime ещё не VERIFIED |
+
+| Задача / решение | Статус | Следующий шаг |
+|---|---|---|
+| M0/M1/M2, M3.1-TURNS/CONTROL/GUARDS | Прежние INTEGRATED / VERIFIED LOCAL/TEST границы | Не переоткрывать без конкретного дефекта |
+| C5-M3.2-CONSOLE-CONTROL | INTEGRATED / VERIFIED LOCAL/TEST, PR30 | M3-A10 только принятый control/in-flight scope |
+| C3-M3.2-ESCALATION-CONTRACT | Принят C0 | Baseline§14 сохранить, evidence отдельно после14.11 |
+| C3-M3.2-ESCALATION-IMPLEMENTATION | IN_PROGRESS | Подготовленный domain/API/0011/tests; runtime gates ещё не пройдены |
+| E compatibility checkpoint | Требует конкретного C0/C6 review | Proposed five-path G→E patch отдельно, пока не применён |
+| Route inventory scope blocker | BLOCKED до разрешения C0 одного дополнительного path | Полный local1113 PASS/1 FAIL; proposed `tests/test_auth_contract.py` добавляет exact четыре routes без ослабления7 auth assertions |
+| C8 scoped implementation review | TODO | C0 выдаёт после готового candidate |
+| C5 owner-wait/Escalation UI | TODO | После принятого backend/API SHA |
+| Native-owner/edit-delete provenance; M3-ACCEPTANCE | TODO / NOT VERIFIED | Прежние отдельные gates/evidence |
+| IMPL-05 | OPEN; fix DEFERRED | Не включать в эту задачу |
+| C6-CI-FOUNDATION-SPLIT / CI optimization | BLOCKED / DEFERRED до завершения M3 | PR29 закрыт без merge; C6-CI-SPLIT-01 CLOSED только experimental4dc2c32, -02 OPEN |
+
+Текущий checkpoint не является REVIEW готового runtime. Docker локально недоступен;
+actual PG/S3/relay/browser/Docker29 и final CI9/9+clean9/9 впереди. Proposed patches,
+точные commands/results/head/tree/parent и ограничения — один обновляемый C3
+receipt PR31, без документационных SHA commits. После адресного C0/C6 —
+применение compatibility, финальные проверки, C0/C8 и actual main gates.
+C3 сам роли не назначает. OPEN082/083/085, M4/LLM/RAG, Approval/M6, Notification
+Engine/M9 и client follow-ups прежние. VM/live/рабочие DB-S3/deploy/merge не выданы.
+
+<details>
+<summary>История выдачи ESCALATION-CONTRACT; заменена implementation выдачей C0</summary>
+
 ## Текущий статус — CONTROL UI закрыт; Escalation contract выдан / 2026-10-13 UTC
 
 **M3.1-TURNS/CONTROL/GUARDS и C5-M3.2-CONSOLE-CONTROL —
@@ -72,6 +116,8 @@ domain state остаются авторитетными. Нет внешних 
 Approval/M4/LLM или придуманного production SLA. VM/live/deploy/merge не выданы.
 Фактические PR/head/CI/verdict обновляются в GitHub receipts; следующий substantive
 handoff актуализирует этот реестр без самоссылочных SHA commits.
+
+</details>
 
 <details>
 <summary>История выдачи CONSOLE-CONTROL; завершена PR30</summary>

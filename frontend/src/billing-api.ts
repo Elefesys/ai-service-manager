@@ -17,7 +17,8 @@ export type AuditItem = { audit_event_id: string; occurred_at: string; correlati
   { object_type: 'WORKSPACE_BILLING_ACCOUNT'; event_type: 'BILLING_ACCOUNT_CONTACT_UPDATED'; actor_kind: 'USER_ACCOUNT'; actor_user_account_id: string; payload: { changed_fields: ['contact_display_name'] } } |
   { object_type: 'MESSAGE'; object_version: '1'; event_type: 'MESSAGE_SEND_REQUESTED'; actor_kind: 'USER_ACCOUNT'; actor_user_account_id: string; payload: { content_type: 'TEXT' } } |
   { object_type: 'CONVERSATION'; event_type: 'CONVERSATION_TAKEN_OVER'; actor_kind: 'USER_ACCOUNT'; actor_user_account_id: string; payload: { previous_mode: 'HUMAN' | 'AI'; control_mode: 'HUMAN'; previous_generation: string; control_generation: string } } |
-  { object_type: 'CONVERSATION'; event_type: 'CONVERSATION_RESUMED'; actor_kind: 'USER_ACCOUNT'; actor_user_account_id: string; payload: { previous_mode: 'HUMAN' | 'AI'; control_mode: 'AI'; previous_generation: string; control_generation: string } });
+  { object_type: 'CONVERSATION'; event_type: 'CONVERSATION_RESUMED'; actor_kind: 'USER_ACCOUNT'; actor_user_account_id: string; payload: { previous_mode: 'HUMAN' | 'AI'; control_mode: 'AI'; previous_generation: string; control_generation: string } } |
+  { object_type: 'ESCALATION'; object_version: '2'; event_type: 'ESCALATION_DECIDED'; actor_kind: 'USER_ACCOUNT'; actor_user_account_id: string; payload: { operation: 'RESOLVE'; status: 'RESOLVED' } | { operation: 'CANCEL'; status: 'CANCELLED' } });
 export type AuditPage = { items: AuditItem[]; next_cursor: string | null };
 export class BillingError extends Error {
   constructor(public status: number, public code: string, public stateReason?: string) { super(code); }
@@ -82,6 +83,9 @@ function auditItem(value: unknown): AuditItem {
     const p = object(v.payload, ['previous_mode','control_mode','previous_generation','control_generation']);
     if (!oneOf(p.previous_mode, ['HUMAN','AI']) || p.control_mode !== (v.event_type === 'CONVERSATION_TAKEN_OVER' ? 'HUMAN' : 'AI') || !decimal(p.previous_generation) || !decimal(p.control_generation)) invalid();
     if (BigInt(p.control_generation as string) !== BigInt(p.previous_generation as string) + 1n) invalid();
+  } else if (v.event_type === 'ESCALATION_DECIDED' && v.object_type === 'ESCALATION' && v.object_version === '2' && v.actor_kind === 'USER_ACCOUNT' && uuid(v.actor_user_account_id)) {
+    const p = object(v.payload, ['operation','status']);
+    if (!((p.operation === 'RESOLVE' && p.status === 'RESOLVED') || (p.operation === 'CANCEL' && p.status === 'CANCELLED'))) invalid();
   } else invalid();
   return v as AuditItem;
 }

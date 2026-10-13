@@ -487,6 +487,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "conversation_turns",
             "conversation_turn_messages",
             "file_objects",
+            "escalations",
             "messages",
             "outbox_events",
         }
