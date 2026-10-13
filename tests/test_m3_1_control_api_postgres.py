@@ -600,3 +600,36 @@ async def test_resume_accepts_valid_essential_product_in_available_modes(api, mo
         reason=reason,
     )
     assert (await post(h, cid, "resume")).status_code == 200
+
+
+async def test_automated_outbox_does_not_set_manual_delivery_flags_and_history_remains_visible(api):
+    from asm.messaging.errors import Code
+    from asm.messaging.models import OutcomeKind, SendOutcome
+    from test_m3_1_guards_postgres import accepted, next_kind
+
+    h = api
+    cid, _, _, receipt, claim = await accepted(h)
+    permit = await h.kernel.begin_guarded_send(claim)
+    response = await h.client.get(route(cid))
+    assert response.status_code == 200
+    assert response.json()["manual_delivery"] == {"has_dispatching": False, "has_unknown": False}
+    await h.kernel.finish_send(
+        claim.job_id,
+        claim.claim_token,
+        permit.attempt_id,
+        SendOutcome(OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT),
+    )
+    response = await h.client.get(route(cid))
+    assert response.json()["manual_delivery"] == {"has_dispatching": False, "has_unknown": False}
+    history = await h.client.get(route(cid, "messages"))
+    assert history.status_code == 200
+    message = next(
+        row for row in history.json()["items"] if row["message_id"] == str(receipt.message_id)
+    )
+    assert message["direction"] == "OUTBOUND" and message["delivery"]["status"] == "UNKNOWN"
+    # Existing manual intent still takes HUMAN and sets only its own manual flag.
+    assert (await manual(h, cid)).status_code == 202
+    claim = await next_kind(h, "SEND_MANUAL_TEXT")
+    await h.kernel.begin_send(claim)
+    response = await h.client.get(route(cid))
+    assert response.json()["manual_delivery"] == {"has_dispatching": True, "has_unknown": False}

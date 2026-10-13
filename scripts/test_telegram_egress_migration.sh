@@ -109,16 +109,17 @@ try:
         assert full['results'] == ['timeout', 'export']
         assert full['deadline'] == full['started_at'] + 600 and full['charged_seconds'] < 600
         admission['full_retained_negatives'] = full
-        admission['stage'] = 'actual_cleanup_negatives'
-        try:
-            runpy.run_path(str(e.ROOT / 'tests/test_telegram_egress_migration.py'),
-                           init_globals={'control_cleanup_request': {'historical': H, 'candidate': source}},
-                           run_name='__control_cleanup_negatives__')
-        except SystemExit as completed:
-            assert completed.code == 0, 'CONTROL_CLEANUP_NEGATIVE_EXIT'
-        negative = json.loads((e.ROOT / 'reports/control-cleanup-negatives.json').read_text())
-        assert negative['candidate'] == source and negative['result'] == 'PASS' and negative['count'] == 3
+        # The GUARDS coordinator executed __control_cleanup_negatives__ in
+        # the byte-identical frozen C checkout before preserving/removing it.
+        negative = json.loads((e.ROOT / 'reports/retained-control/control-cleanup-negatives.json').read_text())
+        assert negative['candidate'] == 'c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5'
+        assert negative['result'] == 'PASS' and negative['count'] == 3
         admission['actual_cleanup_negatives'] = negative['results']
+        guards = json.loads((e.ROOT / 'reports/guards-schema-phase.json').read_text())
+        assert guards['coordinator'] == source and guards['historical'] == negative['candidate']
+        assert guards['cleanup']['state'] == 'PASS'
+        assert guards['prepare_budget']['charged_total_seconds'] < 600
+        admission['guards_schema'] = {'source': source, 'revision': '0010', 'report': 'guards-schema-phase.json'}
     assert not e.command(['git', 'status', '--porcelain', '--untracked-files=all']).strip()
     print('TELEGRAM_EGRESS_MIGRATION_DISPOSABLE_PASS', flush=True)
 except BaseException as error:

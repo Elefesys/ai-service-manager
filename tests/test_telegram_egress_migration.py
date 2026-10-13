@@ -933,6 +933,8 @@ asyncio.run(main())
 
 CONTROL_T = "ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad"
 CONTROL_PHASE = "CONTROL_SCHEMA_0008_0009"
+GUARDS_C = "c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5"
+GUARDS_PHASE = "GUARDS_SCHEMA_0009_0010"
 SCHEMA_OWNER_LABEL = "io.asm.schema-owner"
 RETAINED_MODULE_BLOB = "571bc4e48fc8c7de8e89f0cfe01c06949d7e84c1"
 RETAINED_HELPER_BLOB = "f6cda8841f50eab0347a365079af6ed76632d988"
@@ -2867,13 +2869,25 @@ def run_control_coordinator(request):
             if added:
                 e.command(["git", "worktree", "remove", str(checkout)])
             assert ledger["retained_clean"], "FROZEN_TURNS_SOURCE_CHANGED"
+            # C is a frozen executor in its own checkout. It receives the
+            # same original deadline, not a nested coordinator/fresh600.
+            control = directory / "control"
+            retained_c = reports / "retained-control"
+            retained_c.mkdir(parents=True, exist_ok=True)
+            with e.migration_budget(deadline - time.monotonic()):
+                e.command(["git", "merge-base", "--is-ancestor", GUARDS_C, candidate])
+                (retained_c / "source-C.tar.gz").write_bytes(
+                    e.command(["git", "archive", "--format=tar.gz", GUARDS_C])
+                )
+                e.command(["git", "worktree", "add", "--detach", str(control), GUARDS_C])
+            ledger["retained_control_source"] = GUARDS_C
             issued = time.monotonic()
             assert issued < deadline, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
             value = {
                 "version": 1,
                 "phase": CONTROL_PHASE,
                 "historical": CONTROL_T,
-                "candidate": candidate,
+                "candidate": GUARDS_C,
                 "uid": os.getuid(),
                 "started_at": started,
                 "issued_at": issued,
@@ -2883,35 +2897,117 @@ def run_control_coordinator(request):
             handoff = directory / "control-budget.json"
             e.write_private(handoff, e.encoded(value))
             ledger["handoff"] = value
-            ledger["stage"] = "control_admission"
+            ledger["stage"] = "retained_control_admission"
             owner = SchemaOwnership(
-                directory / "owner-C", "asm-control-schema-phase", CONTROL_PHASE, candidate
+                directory / "owner-C", "asm-control-schema-phase", CONTROL_PHASE, GUARDS_C
             )
             owner.admit()
             ledger["cleanup"] = {"state": "ADMITTED"}
             with schema_cleanup_scope(owner, ledger, path):
-                ledger["stage"] = "control_shell"
+                ledger["stage"] = "retained_control_shell"
+                began = time.monotonic()
+                try:
+                    result = supervised_schema_child(
+                        [
+                            "sh",
+                            "scripts/test_telegram_egress.sh",
+                            "--control-schema-upgrade",
+                            CONTROL_T,
+                            GUARDS_C,
+                            str(handoff),
+                        ],
+                        cwd=control,
+                        timeout=deadline - time.monotonic(),
+                        environment=owner.environment(),
+                    )
+                    ledger["control_exit"] = result
+                    assert result == 0 and not handoff.exists(), "CONTROL_SCHEMA_PHASE_FAILED"
+                finally:
+                    ledger["whole_control_seconds"] = time.monotonic() - began
+                    if (control / "reports").exists():
+                        shutil.copytree(control / "reports", retained_c, dirs_exist_ok=True)
+            ledger["control_cleanup"] = ledger["cleanup"]
+            ledger["whole_retained_charge"] = time.monotonic() - started
+            assert time.monotonic() < deadline, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            control_report = json.loads((retained_c / "control-schema-phase.json").read_text())
+            assert (
+                control_report["coordinator"] == GUARDS_C
+                and control_report["historical"] == CONTROL_T
+            )
+            assert control_report["cleanup"]["state"] == "PASS"
+            ledger["retained_control_report"] = "retained-control/control-schema-phase.json"
+
+            issued = time.monotonic()
+            value = {
+                "version": 1,
+                "phase": GUARDS_PHASE,
+                "historical": GUARDS_C,
+                "candidate": candidate,
+                "uid": os.getuid(),
+                "started_at": started,
+                "issued_at": issued,
+                "charged_seconds": issued - started,
+                "deadline": deadline,
+            }
+            handoff_g = directory / "guards-budget.json"
+            e.write_private(handoff_g, e.encoded(value))
+            ledger["guards_handoff"] = value
+            ledger["stage"] = "guards_admission"
+            owner_g = SchemaOwnership(
+                directory / "owner-G", "asm-guards-schema-phase", GUARDS_PHASE, candidate
+            )
+            owner_g.admit()
+            ledger["cleanup"] = {"state": "ADMITTED"}
+            with schema_cleanup_scope(owner_g, ledger, path):
+                ledger["stage"] = "guards_shell"
                 result = supervised_schema_child(
                     [
                         "sh",
                         "scripts/test_telegram_egress.sh",
-                        "--control-schema-upgrade",
-                        CONTROL_T,
+                        "--guards-schema-upgrade",
+                        GUARDS_C,
                         candidate,
-                        str(handoff),
+                        str(handoff_g),
                     ],
                     cwd=e.ROOT,
                     timeout=(deadline - time.monotonic()) + 480,
-                    environment=owner.environment(),
+                    environment=owner_g.environment(),
                 )
-                ledger["control_exit"] = result
-                assert result == 0 and not handoff.exists(), "CONTROL_SCHEMA_PHASE_FAILED"
+                ledger["guards_exit"] = result
+                assert result == 0 and not handoff_g.exists(), "GUARDS_SCHEMA_PHASE_FAILED"
                 e.source_check(candidate)
-            ledger["control_cleanup"] = ledger["cleanup"]
-            # Preserve successful child ownership evidence before removing the
-            # private wrapper/intent directory too.
+            ledger["guards_cleanup"] = ledger["cleanup"]
+            # Retain all six existing daemon assertions in the unchanged C
+            # executor. Its report is kept as C evidence, never relabelled G.
+            ledger["stage"] = "retained_control_cleanup_negatives"
+            result = supervised_schema_child(
+                [
+                    sys.executable,
+                    "-c",
+                    "import runpy; runpy.run_path('tests/test_telegram_egress_migration.py', init_globals={'control_cleanup_request': {'historical': '754f1c883e5a94a7fc9e729af2605424f949ba33', 'candidate': 'c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5'}}, run_name='__control_cleanup_negatives__')",
+                ],
+                cwd=control,
+                timeout=480,
+            )
+            try:
+                assert result == 0, "CONTROL_CLEANUP_NEGATIVE_EXIT"
+                negative = json.loads(
+                    (control / "reports/control-cleanup-negatives.json").read_text()
+                )
+                assert (
+                    negative["candidate"] == GUARDS_C
+                    and negative["result"] == "PASS"
+                    and negative["count"] == 3
+                )
+                ledger["retained_control_negatives"] = negative
+            finally:
+                shutil.copytree(control / "reports", retained_c, dirs_exist_ok=True)
+            assert not e.command(
+                ["git", "-C", str(control), "status", "--porcelain", "--untracked-files=all"]
+            ).strip(), "FROZEN_CONTROL_SOURCE_CHANGED"
+            e.command(["git", "worktree", "remove", str(control)])
             schema_publish(ledger, path)
-            print("CONTROL_SCHEMA_COORDINATOR_PASS", flush=True)
+            print("GUARDS_SCHEMA_COORDINATOR_PASS", flush=True)
     except BaseException as error:
         primary = error
         schema_record_failure(ledger, error)
@@ -3341,6 +3437,473 @@ def run_control_schema_phase(request):
         schema_publish(report, report_path, primary)
 
 
+def consume_guards_budget(path, historical, candidate):
+    """One private handoff, absolute monotonic deadline, no inherited/global reset."""
+    raw = e.private_bytes(path)
+    info = path.stat()
+    assert info.st_nlink == 1, "GUARDS_BUDGET_SINGLE_LINK"
+    value = e.strict_json(raw)
+    assert set(value) == {
+        "version",
+        "phase",
+        "historical",
+        "candidate",
+        "uid",
+        "started_at",
+        "issued_at",
+        "charged_seconds",
+        "deadline",
+    }, "GUARDS_BUDGET_FORMAT"
+    assert value["version"] == 1 and type(value["version"]) is int, "GUARDS_BUDGET_VERSION"
+    assert value["phase"] == GUARDS_PHASE and value["historical"] == historical == GUARDS_C, (
+        "GUARDS_BUDGET_PHASE_SOURCE"
+    )
+    assert (
+        value["candidate"] == candidate
+        and type(value["uid"]) is int
+        and value["uid"] == os.getuid()
+    ), "GUARDS_BUDGET_CANDIDATE_OWNER"
+    for key in ("started_at", "issued_at", "charged_seconds", "deadline"):
+        assert type(value[key]) in (int, float) and 0 < value[key] < float("inf"), (
+            "GUARDS_BUDGET_CLOCK"
+        )
+    assert abs(value["deadline"] - value["started_at"] - 600) < 0.001, "GUARDS_BUDGET_TOTAL"
+    assert abs(value["issued_at"] - value["started_at"] - value["charged_seconds"]) < 0.001, (
+        "GUARDS_BUDGET_CHARGED"
+    )
+    now = time.monotonic()
+    assert value["issued_at"] <= now < value["deadline"], "GUARDS_BUDGET_EXHAUSTED"
+    # Preserve the absolute bound across process startup and handoff delay.
+    assert (path.stat().st_dev, path.stat().st_ino) == (info.st_dev, info.st_ino), (
+        "GUARDS_BUDGET_FILE_CHANGED"
+    )
+    path.unlink()
+    return {
+        **value,
+        "handoff_seconds": now - value["issued_at"],
+        "remaining_seconds": value["deadline"] - now,
+    }
+
+
+def guards_schema_recovery_source(result, observe, report, historical, candidate):
+    detail = {
+        "injection": "after_commit_before_success_exit",
+        "exit_code": result.returncode,
+        "observed": "NOT_READ",
+    }
+    report["upgrade_ack_loss"] = detail
+    assert historical == GUARDS_C
+    if result.returncode != 86 or result.stdout.strip() != b"GUARDS_UPGRADE_COMMITTED_RESULT_LOST":
+        detail["result"] = "UNEXPECTED_MIGRATOR_RESULT"
+        raise AssertionError("GUARDS_EXPECTED_POST_COMMIT_FAILURE")
+    detail.update(
+        result="CONTROLLED_FAILURE_OBSERVED", marker="GUARDS_UPGRADE_COMMITTED_RESULT_LOST"
+    )
+    try:
+        observation = observe()
+    except Exception:
+        detail["observed"] = "UNREADABLE"
+        raise
+    detail["observed"] = observation
+    assert observation["revision"] in {"0009", "0010"} and observation["role"] == "asm_migrator"
+    assert observation["database"] == "asm_local"
+    assert type(observation["reader_pid"]) is int and observation["reader_pid"] > 0
+    assert type(observation["backend_pid"]) is int and observation["backend_pid"] > 0
+    lost = report.get("lost_result_process")
+    assert isinstance(lost, dict) and set(lost) == {
+        "namespace",
+        "pid",
+        "start_ticks",
+        "boot_id",
+    }, "GUARDS_PROCESS_IDENTITY_REQUIRED"
+    assert type(lost["pid"]) is int and lost["pid"] > 0
+    assert type(lost["start_ticks"]) is int and lost["start_ticks"] > 0
+    assert type(observation["reader_start_ticks"]) is int
+    assert observation["reader_boot_id"] == lost["boot_id"] and lost["boot_id"], (
+        "GUARDS_RECOVERY_HOST_BOOT"
+    )
+    # Docker can reuse a released PID namespace inode; PID1 alone is not a
+    # process identity. Kernel start ticks prove this reader was created later
+    # on the same boot, including that reuse case, and reject the prior process.
+    assert observation["reader_start_ticks"] > lost["start_ticks"], "GUARDS_FRESH_PROCESS_REQUIRED"
+    for key, value in report["seed_identity"].items():
+        assert observation[key] == value, "GUARDS_RECOVERY_DATABASE_IDENTITY"
+    source = historical if observation["revision"] == "0009" else candidate
+    detail["recovery_source"] = source
+    return source
+
+
+def run_guards_schema_phase(request):
+    """New disposable LOCAL volume, exact C/G images, drained GUARDS cutover."""
+    report = schema_envelope(request, GUARDS_PHASE)
+    report.update(images={}, checks=[], stage_timings=[])
+    primary = None
+
+    def run(args, **kwargs):
+        began = time.monotonic()
+        outcome = "FAILED"
+        try:
+            result = e.command(args, **kwargs)
+            outcome = "PASS"
+            return result
+        finally:
+            report["stage_timings"].append(
+                {"stage": report["stage"], "seconds": time.monotonic() - began, "outcome": outcome}
+            )
+
+    started = report["started_at"]
+    report_path = e.ROOT / "reports/guards-schema-phase.json"
+    schema_publish(report, report_path)
+    try:
+        historical = "c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5"
+        report["stage"] = "observe_source"
+        candidate = run(["git", "rev-parse", "HEAD"]).decode().strip()
+        report["observed_source"] = candidate
+        assert set(request) == {"historical", "candidate", "budget_file"}, "CONTROL_REQUEST_FORMAT"
+        assert request["historical"] == historical and request["candidate"] == candidate, (
+            "CONTROL_REQUEST_SOURCE"
+        )
+        report["stage"] = "consume_budget"
+        budget = consume_guards_budget(Path(request["budget_file"]), historical, candidate)
+        report.update(
+            coordinator=candidate,
+            historical=historical,
+            budget_state="VALIDATED_CONSUMED",
+            prepare_budget=dict(budget),
+        )
+        schema_publish(report, report_path)
+        assert (
+            Path.cwd() == e.ROOT and os.getuid() != 0 and os.environ.get("GITHUB_ACTIONS") == "true"
+        ), "CONTROL_DISPOSABLE_RUNNER"
+        report["stage"] = "source_check"
+        e.source_check(candidate)
+        report["stage"] = "daemon_admission"
+        assert not run(["docker", "ps", "-aq"]).strip()
+        assert not run(["docker", "volume", "ls", "-q"]).strip()
+        project = "asm-guards-schema-phase"
+        owner = SchemaOwnership.inherited(project, candidate)
+        report["cleanup"] = {"state": "ADMITTED"}
+        pins = dict(
+            line.split("=", 1)
+            for line in (e.ROOT / "infra/images.lock.env").read_text().splitlines()
+            if line and not line.startswith("#")
+        )
+        with (
+            schema_private_workspace(report, "asm-guards-schema-") as temporary,
+            schema_cleanup_scope(owner, report, report_path),
+        ):
+            directory = Path(temporary)
+            sources, images = {}, {}
+            # Only exact tracked archives enter build contexts. The historical-only
+            # production migration_build_images helper is deliberately not called for I.
+            report["stage"] = "prepare_images"
+            prepare_started = time.monotonic()
+            remaining = budget["deadline"] - prepare_started
+            assert remaining > 0, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            with e.migration_budget(remaining):
+                for source in (historical, candidate):
+                    archive = directory / source
+                    archive.mkdir()
+                    report["stage"] = "archive_" + source[:8]
+                    e.migration_build_context(source, archive)
+                    sources[source] = archive
+                    images[source] = {}
+                    for kind in ("runtime", "development"):
+                        tag = "asm-guards-schema-" + kind + ":" + source
+                        reuse = "asm-control-schema-" + kind + ":" + source
+                        existing = (
+                            run(["docker", "image", "ls", "-q", "--no-trunc", reuse])
+                            .decode()
+                            .strip()
+                        )
+                        if existing:
+                            report["stage"] = "reuse_" + source[:8] + "_" + kind
+                            e.migration_image(existing, source, kind)
+                            run(["docker", "tag", existing, tag])
+                        else:
+                            report["stage"] = "build_" + source[:8] + "_" + kind
+                            run(
+                                [
+                                    "docker",
+                                    "build",
+                                    "--pull",
+                                    "--network=default",
+                                    "--target",
+                                    kind,
+                                    "--build-arg",
+                                    "PYTHON_IMAGE=" + pins["PYTHON_IMAGE"],
+                                    "--build-arg",
+                                    "UV_IMAGE=" + pins["UV_IMAGE"],
+                                    "-f",
+                                    str(archive / "infra/Dockerfile.backend"),
+                                    "-t",
+                                    tag,
+                                    str(archive),
+                                ],
+                                timeout=480,
+                            )
+                        image_id = json.loads(run(["docker", "image", "inspect", tag]))[0]["Id"]
+                        images[source][kind] = image_id
+                        report["stage"] = "image_probe_" + source[:8] + "_" + kind
+                        report["images"][source + ":" + kind] = e.migration_image(
+                            image_id, source, kind
+                        )
+            prepared_at = time.monotonic()
+            report["prepare_budget"] = {
+                **budget,
+                "candidate_prepare_seconds": prepared_at - prepare_started,
+                "charged_total_seconds": 600 - (budget["deadline"] - prepared_at),
+                "remaining_seconds": budget["deadline"] - prepared_at,
+            }
+            assert prepared_at < budget["deadline"], "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            # init_local emits only a fixed diagnostic, never credentials. All private
+            # runtime files are outside both source archives and the repository.
+            report["stage"] = "runtime_configuration"
+            subprocess.run(
+                [sys.executable, str(e.ROOT / "scripts/init_local.py")],
+                cwd=directory,
+                check=True,
+                timeout=30,
+            )
+            compose = [
+                "docker",
+                "compose",
+                "--project-directory",
+                str(sources[candidate]),
+                "--project-name",
+                project,
+                "--env-file",
+                str(e.ROOT / "infra/images.lock.env"),
+                "--env-file",
+                str(directory / ".env"),
+                "-f",
+                str(sources[candidate] / "compose.yaml"),
+                "--profile",
+                "telegram-operator",
+            ]
+            model = json.loads(run([*compose, "config", "--format", "json"]))
+            variables = dict(model["services"]["api"]["environment"])
+            variables.update(model["services"]["migrate"]["environment"])
+            assert variables["ASM_TELEGRAM_ENABLED"] == "false" and variables["TG_BOT_TOKEN"] == ""
+            envfile = directory / "controller.env"
+            e.write_private(
+                envfile,
+                "".join(k + "=" + str(v) + "\n" for k, v in sorted(variables.items())).encode(),
+            )
+            state = directory / "state"
+            state.mkdir(mode=0o700)
+            prefix = [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                project + "_default",
+                "--env-file",
+                str(envfile),
+                "--user",
+                f"{os.getuid()}:{os.getgid()}",
+                "--mount",
+                f"type=bind,source={state},target=/state",
+            ]
+
+            def controller(action):
+                report["stage"] = "controller_" + action
+                try:
+                    output = run(
+                        [
+                            *prefix,
+                            images[candidate]["development"],
+                            "python",
+                            "tests/test_m3_1_guards_migrations.py",
+                            "--guards-schema-phase",
+                            action,
+                            "/state/receipt.json",
+                        ],
+                        timeout=120,
+                    )
+                except BaseException:
+                    failure = state / "controller-failure.json"
+                    if failure.exists():
+                        report["controller_failure"] = json.loads(e.private_bytes(failure))
+                    raise
+                assert output.decode().strip() == "GUARDS_SCHEMA_" + action.upper() + "_PASS"
+                report["checks"].append(action)
+
+            def migrate(source, direction, revision):
+                report["stage"] = direction + "_" + revision
+                run(
+                    [*prefix, images[source]["development"], "alembic", direction, revision],
+                    timeout=30,
+                )
+
+            def probe(source, expected):
+                report["stage"] = "probe_" + source[:8] + "_" + str(expected)
+                code = "import asyncio\nfrom asm.foundation import RuntimeDatabase,Settings\nasync def main():\n d=RuntimeDatabase(Settings())\n try:\n  try: await d.check()\n  except Exception:\n   assert not EXPECTED\n  else: assert EXPECTED\n finally: await d.close()\nasyncio.run(main())\n".replace(
+                    "EXPECTED", repr(expected)
+                )
+                run([*prefix, images[source]["runtime"], "python", "-c", code], timeout=30)
+
+            def callers(source):
+                report["stage"] = "callers_" + source[:8]
+                run(["docker", "tag", images[source]["runtime"], "asm-backend:local"])
+                run(
+                    [
+                        *compose,
+                        "up",
+                        "-d",
+                        "--no-deps",
+                        "--pull",
+                        "never",
+                        "--force-recreate",
+                        "--wait",
+                        "api",
+                        "worker",
+                        "scheduler",
+                    ],
+                    timeout=120,
+                )
+                result = {}
+                for service in ("api", "worker", "scheduler"):
+                    ident = run([*compose, "ps", "-q", service]).decode().strip()
+                    info = json.loads(run(["docker", "inspect", ident]))[0]
+                    assert info["Image"] == images[source]["runtime"] and info["State"]["Running"]
+                    result[service] = {"id": ident, "image": info["Image"], "source": source}
+                return result
+
+            def drain():
+                report["stage"] = "drain"
+                run([*compose, "stop", "--timeout", "10", "api", "worker", "scheduler"], timeout=60)
+                for service in ("api", "worker", "scheduler"):
+                    ident = run([*compose, "ps", "-aq", service]).decode().strip()
+                    assert not json.loads(run(["docker", "inspect", ident]))[0]["State"]["Running"]
+
+            try:
+                report["stage"] = "infrastructure"
+                run([*compose, "up", "-d", "--wait", "postgres", "storage"], timeout=120)
+                run([*compose, "run", "--rm", "--no-deps", "-T", "storage-init"], timeout=120)
+                migrate(historical, "upgrade", "0009")
+                report["baseline_callers"] = callers(historical)
+                probe(historical, True)
+                probe(candidate, False)
+                drain()
+                controller("seed9")  # migration identity only; T runtime is drained.
+                report["seed_identity"] = json.loads((state / "receipt.json").read_text())[
+                    "identity"
+                ]
+                # Reject the actual changed helper's direct migration commands before
+                # any source/image switch or migration journal on this candidate.
+                guard = directory / "guard"
+                guard.mkdir(mode=0o700)
+                e.write_private(guard / "operation.lock", b"")
+                before = {p.name: p.read_bytes() for p in guard.iterdir()}
+                for action in ("migration-attest", "migration-prepare"):
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(e.ROOT / "scripts/prepare_telegram_egress.py"),
+                            action,
+                            "--state-dir",
+                            str(guard),
+                            "--accepted-sha",
+                            candidate,
+                            "--from-sha",
+                            e.MIGRATION_FROM,
+                        ],
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        timeout=30,
+                    )
+                    assert (
+                        result.returncode == 1
+                        and b"EGRESS_MIGRATION_HISTORICAL_SCHEMA_ONLY" in result.stdout
+                    )
+                    assert {p.name: p.read_bytes() for p in guard.iterdir()} == before
+                report["checks"].append("candidate_direct_cli_pairing_refusal")
+                migrate(candidate, "upgrade", "0010")
+                migrate(candidate, "upgrade", "0010")  # repeat upgrade is a no-op
+                controller("check10")  # independent committed revision read after migrator exits
+                probe(candidate, True)
+                probe(historical, False)
+                # GUARDS-clean populated-C case: preserve all 35 tables and exact C definitions.
+                migrate(candidate, "downgrade", "0009")
+                controller("check9")
+                probe(historical, True)
+                # A separate migrator really commits 0010, then exits unsuccessfully.
+                # Observe its failure; NEVER infer the revision from that exit alone.
+                report["stage"] = "committed_upgrade_ack_loss"
+                lost = subprocess.run(
+                    [
+                        *prefix,
+                        images[candidate]["development"],
+                        "python",
+                        "tests/test_m3_1_guards_migrations.py",
+                        "--guards-schema-phase",
+                        "upgrade-lost-result",
+                        "/state/receipt.json",
+                    ],
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                    timeout=30,
+                )
+
+                def observe_revision():
+                    return json.loads(
+                        run(
+                            [
+                                *prefix,
+                                images[candidate]["development"],
+                                "python",
+                                "tests/test_m3_1_guards_migrations.py",
+                                "--guards-schema-phase",
+                                "observe",
+                                "/state/receipt.json",
+                            ],
+                            timeout=30,
+                        )
+                    )
+
+                saved_loss = json.loads((state / "receipt.json").read_text())["lost_result_process"]
+                report["lost_result_process"] = saved_loss
+                recovery_source = guards_schema_recovery_source(
+                    lost, observe_revision, report, historical, candidate
+                )
+                controller("check10")  # projection/private S3/pending/UNKNOWN still exact
+                probe(historical, False)  # committed0010 explicitly rejects T
+                probe(recovery_source, True)
+                report["upgrade_ack_loss"]["historical_readiness"] = "REJECTED"
+                report["upgrade_ack_loss"]["candidate_readiness"] = "PASS"
+                # Exercise C runtime/worker on the correctly paired schema before
+                # permanent callers start, so duplicate-first admission is deterministic.
+                controller("fresh")
+                report["cutover_callers"] = callers(recovery_source)
+                report["upgrade_ack_loss"]["forward_callers"] = report["cutover_callers"]
+                drain()
+                controller("refuse")
+                report["restarted_callers"] = callers(recovery_source)
+                report["upgrade_ack_loss"]["restarted_callers"] = report["restarted_callers"]
+                probe(recovery_source, True)
+                drain()
+                controller("refuse")
+                report["database"] = json.loads((state / "receipt.json").read_text())
+                assert report["database"]["populated_refusal"] == "PASS"
+                # No raw signed URL or fixture content is published.
+                report["database"]["object"].pop("key")
+            except BaseException as error:
+                schema_record_failure(report, error)
+                raise
+            finally:
+                schema_publish(report, report_path, sys.exception())
+        e.source_check(candidate)
+        print("TELEGRAM_EGRESS_GUARDS_SCHEMA_PHASE_PASS", flush=True)
+    except BaseException as error:
+        primary = error
+        schema_record_failure(report, error)
+        raise
+    finally:
+        report["total_seconds"] = time.monotonic() - started
+        schema_publish(report, report_path, primary)
+
+
 def run_schema_cleanup_negatives(request):
     """Actual daemon/PG negatives; mandatory only in the two existing state lanes."""
     import tempfile
@@ -3736,7 +4299,9 @@ if __name__ == "__control_coordinator__":
 
 
 if __name__ == "__schema_harness__":
-    if "control_schema_request" in globals():
+    if "guards_schema_request" in globals():
+        run_guards_schema_phase(globals()["guards_schema_request"])
+    elif "control_schema_request" in globals():
         run_control_schema_phase(globals()["control_schema_request"])
     else:
         run_schema_phase(globals()["schema_request"])
@@ -5297,9 +5862,9 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
     coordinator = (e.ROOT / "scripts/test_telegram_egress_migration.sh").read_text()
     shell = (e.ROOT / "scripts/test_telegram_egress.sh").read_text()
     assert "if fault == 'state':" in coordinator
-    # T is now the immutable retained executor; C gets its own private handoff.
+    # T and C execute frozen sources; G is the single new terminal phase.
     assert "run_name='__control_coordinator__'" in coordinator
-    assert "run_name='__control_cleanup_negatives__'" in coordinator
+    assert "reports/retained-control/control-cleanup-negatives.json" in coordinator
     assert "negative['count'] == 3" in coordinator
     import ast
     import inspect
@@ -5319,17 +5884,37 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
         ]
         for call in sorted(calls, key=lambda call: call.lineno)
     ]
-    assert argv == [
+    assert argv[:3] == [
         ["sh", "scripts/test_telegram_egress.sh", "--schema-upgrade", "historical", "CONTROL_T"],
         [
             "sh",
             "scripts/test_telegram_egress.sh",
             "--control-schema-upgrade",
             "CONTROL_T",
-            "candidate",
+            "GUARDS_C",
             "str(handoff)",
         ],
+        [
+            "sh",
+            "scripts/test_telegram_egress.sh",
+            "--guards-schema-upgrade",
+            "GUARDS_C",
+            "candidate",
+            "str(handoff_g)",
+        ],
     ]
+    assert len(argv) == 4
+    assert argv[3][:2] == ["sys.executable", "-c"]
+    assert "run_name='__control_cleanup_negatives__'" in argv[3][2]
+    assert GUARDS_C in argv[3][2]
+    ordered = sorted(calls, key=lambda call: call.lineno)
+    assert ast.unparse(next(k.value for k in ordered[1].keywords if k.arg == "cwd")) == "control"
+    assert (
+        ast.unparse(next(k.value for k in ordered[1].keywords if k.arg == "timeout"))
+        == "deadline - time.monotonic()"
+    )
+    assert ast.unparse(next(k.value for k in ordered[3].keywords if k.arg == "cwd")) == "control"
+    assert "--guards-schema-upgrade" in shell
     assert '"budget_file": sys.argv[4]' in shell or "'budget_file': sys.argv[4]" in shell
     assert "run_name='__schema_harness__'" in shell
     assert "754f1c883e5a94a7fc9e729af2605424f949ba33" in coordinator
@@ -5588,6 +6173,10 @@ def test_schema_probe_programs_are_executable_python_without_hidden_indentation(
 def test_control_initial_failure_retains_source_budget_and_primary(
     tmp_path, monkeypatch, entry, fault
 ):
+    # Reproduce the runner's fractional clock edge: subtracting the two stored
+    # floats yields 600.0000000000001, although deadline is exactly start+600.
+    # This early-refusal unit seam does no waiting or external command work.
+    monkeypatch.setattr(time, "monotonic", lambda: 905.198142485)
     root = tmp_path / "checkout"
     root.mkdir()
     foreign = tmp_path / "foreign"
@@ -5651,7 +6240,7 @@ def test_control_initial_failure_retains_source_budget_and_primary(
     if entry == "child" and fault != "git":
         assert report["historical"] == CONTROL_T and report["coordinator"] == candidate
         assert report["prepare_budget"]["charged_seconds"] == 30
-        assert report["prepare_budget"]["deadline"] - report["prepare_budget"]["started_at"] == 600
+        assert report["prepare_budget"]["deadline"] == report["prepare_budget"]["started_at"] + 600
         assert report["budget_at_report"]["charged_seconds"] >= 30
         assert report["budget_state"] == "VALIDATED_CONSUMED" and not path.exists()
     else:
@@ -6000,7 +6589,7 @@ def test_control_coordinator_archive_failure_retains_ledger_and_cleans_only_admi
     report = json.loads((root / "reports/control-schema-ledger.json").read_text())
     assert report["primary_failure"]["stage"] == "retained_archive"
     assert report["primary_failure"]["reason"] == "EGRESS_COMMAND_FAILED"
-    assert report["deadline"] - report["started_at"] == 600 and report["elapsed_seconds"] >= 0
+    assert report["deadline"] == report["started_at"] + 600 and report["elapsed_seconds"] >= 0
     assert len(admitted) == 1 and cleaned == admitted
     assert report["requested_source"] == report["observed_source"] == "c" * 40
     assert (root / "reports/retained-turns/source-pairing.json").exists()
@@ -6618,3 +7207,86 @@ def test_retained_journal_no_failure_requires_success_ack(tmp_path, monkeypatch,
         with pytest.raises(e.EgressError, match="CONTROL_RETAINED_JOURNAL_UNCONFIRMED"):
             checkpoint.collect(report)
         assert report["primary_failure"]["type"] == "UNCONFIRMED"
+
+
+@pytest.mark.parametrize("revision,selected", [("0009", GUARDS_C), ("0010", "g" * 40)])
+def test_guards_recovery_uses_actual_revision_and_fresh_process_identity(revision, selected):
+    report = {
+        "seed_identity": {
+            "database": "asm_local",
+            "database_oid": 45,
+            "server_address": "172.20.0.2",
+            "postmaster_started": "canonical-start",
+        },
+        "lost_result_process": {
+            "namespace": "pid:[10]",
+            "pid": 1,
+            "start_ticks": 100,
+            "boot_id": "boot",
+        },
+    }
+    observation = {
+        **report["seed_identity"],
+        "revision": revision,
+        "role": "asm_migrator",
+        "reader_pid": 1,
+        "backend_pid": 20,
+        "reader_start_ticks": 101,
+        "reader_boot_id": "boot",
+    }
+    lost = SimpleNamespace(returncode=86, stdout=b"GUARDS_UPGRADE_COMMITTED_RESULT_LOST\n")
+    assert (
+        guards_schema_recovery_source(lost, lambda: observation, report, GUARDS_C, "g" * 40)
+        == selected
+    )
+    for changed in (
+        {"revision": "0008"},
+        {"revision": "unknown"},
+        {"reader_start_ticks": 100},
+        {"database_oid": 46},
+        {"reader_boot_id": "other"},
+    ):
+        with pytest.raises(AssertionError):
+            guards_schema_recovery_source(
+                lost, lambda: {**observation, **changed}, report, GUARDS_C, "g" * 40
+            )
+        assert "recovery_source" not in report["upgrade_ack_loss"]
+
+    def unreadable():
+        raise OSError("unreadable")
+
+    with pytest.raises(OSError):
+        guards_schema_recovery_source(lost, unreadable, report, GUARDS_C, "g" * 40)
+    assert report["upgrade_ack_loss"]["observed"] == "UNREADABLE"
+
+
+@pytest.mark.parametrize(
+    "damage", [None, "phase", "historical", "candidate", "deadline", "charged_seconds"]
+)
+def test_guards_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage):
+    path = tmp_path / "budget.json"
+    issued = time.monotonic()
+    value = dict(
+        version=1,
+        phase=GUARDS_PHASE,
+        historical=GUARDS_C,
+        candidate="a" * 40,
+        uid=os.getuid(),
+        started_at=issued - 430,
+        issued_at=issued,
+        charged_seconds=430,
+        deadline=issued + 170,
+    )
+    if damage:
+        value[damage] = value[damage] + 1 if damage in {"deadline", "charged_seconds"} else "wrong"
+    e.write_private(path, e.encoded(value))
+    if damage:
+        with pytest.raises(AssertionError):
+            consume_guards_budget(path, GUARDS_C, "a" * 40)
+        assert path.exists()
+    else:
+        consumed = consume_guards_budget(path, GUARDS_C, "a" * 40)
+        assert (
+            consumed["deadline"] == value["deadline"] and 0 < consumed["remaining_seconds"] <= 170
+        )
+        assert not path.exists()

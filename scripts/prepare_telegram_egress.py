@@ -1933,6 +1933,7 @@ SCHEMA_TABLES["0008"] = SCHEMA_TABLES["0007"] | {
     "platform.turn_consumer_receipts",
 }
 SCHEMA_TABLES["0009"] = SCHEMA_TABLES["0008"] | {"platform.conversation_control_receipts"}
+SCHEMA_TABLES["0010"] = SCHEMA_TABLES["0009"] | {"platform.turn_guard_receipts"}
 
 
 def schema_inventory(revision, names):

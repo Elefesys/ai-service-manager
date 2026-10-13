@@ -1623,3 +1623,652 @@ re-reviews C0 принимает или корректирует§12 и выда
 с exact paths/резервом0009→0008. До этого запрещены runtime/DDL/tests/OpenAPI/
 frontend/infra edits. Следующие C8/приёмка/merge/main CI не подменяются авторским
 review или документом.
+
+## 13. M3.1-GUARDS — предложение минимальной границы исполнения
+
+Дата: 2026-10-12. **CONTRACT PROPOSAL / REVIEW, не разрешение реализации.**
+Основание — [выдача C0](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6119082701)
+и активный [M3_HANDOFF §0](M3_HANDOFF.md). Accepted implementation:
+`c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5`, schema0009. Preparation parent этой
+работы: `67326f7e2e0865e1b84f5e4fc7c67d5044e48ba7`. §§1–12 сохранены byte-for-byte;
+исторические OPEN там не заменяют текущий [реестр](../TASK_REGISTER.md).
+Сейчас изменяется только этот файл; revision следующей миграции не назначена.
+R1 по [решению C0](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6121132463)
+продолжает head `d4f9bdec7ec801e61165e142b16e98f6d2322e0b`: разрешена адресная
+правка существующего §13. C1/C2 reviews приняты, две TEST policy LOCKED;
+общий contract и implementation ещё не приняты, findings остаются OPEN (§13.10).
+
+Прочитаны actual0005/0006/0007/0008/0009, `OwnerControlService`, `Worker`,
+`MessagingDatabase`/`WorkerUnitOfWork`, `TurnSnapshot`/`consume`, manual commands,
+results/policy и соответствующие tests. Канонические основания: Spec
+§§5.1–5.14,18.5–18.8,18.14,25.7; ADR024–026/121–128/180/197–198/217/267;
+MVP GJ-G/GJ-J; Roadmap M3; Implementation Plan M3.1; IMPL-001.
+Оригиналы из SOURCE_MANIFEST сверены с предоставленными файлами. Это дополнение
+не переопределяет M4, AI tools, модель Escalation или product billing.
+
+### 13.1. Один исполняемый срез и явно предлагаемые изменения
+
+Срез проверяет цепочку fresh controlled ingress → READY Turn → guarded consumer
+→ атомарный text intent → отдельный send Job → existing controlled adapter.
+Вместо LLM — детерминированный `CONTROLLED_GUARDS_V1`, результат которого ровно
+`CONTROLLED GUARDS TEST` (без завершающего LF). Он работает через штатные
+`Worker.execute/run_once/run`, PostgreSQL claim и Outbox, а не через отдельно
+вызываемую тестом функцию admission. `TURN_TEST_V1` остаётся effects-free.
+
+Для этого среза C0 зафиксировал следующие ограниченные policy относительно
+принятого CONTROL (GUARDS-POLICY-01/02, §13.10):
+
+1. **Новый Resume в LOCAL/TEST для CONTROLLED** сохраняет внутренний профиль
+   `CONTROLLED_GUARDS_V1` в своём receipt. Старые receipts получают NULL, без
+   backfill. Replay Resume возвращает прежний результат и профиль не добавляет.
+   Telegram Resume по-прежнему не включает автоматический consumer. Сам Resume
+   не создаёт Jobs; только последующий fresh ingress может привести к новому шагу.
+   Это явное расширение внутренней семантики CONTROL, принятое C0 только для
+   LOCAL/TEST + CONTROLLED среза.
+2. Допуск этого TEST-профиля требует **live OWNER, принявшего соответствующий
+   Resume**, active Workspace/Business/Connection и текущей product availability
+   по existing `messaging.manual_send`. Последняя — лишь availability check;
+   permission на автоматический эффект задаёт отдельный доверенный GUARDS path.
+   Это не предоставление manual capability LLM и не entitlement для production AI.
+   Отзыв выбранного OWNER до допуска блокирует работу; наличие другого OWNER
+   автоматически её не перепоручает. Для нового допуска нужен новый Resume.
+3. **Не более одного принятого automated text intent на Turn**, независимо от
+   последующих revision. Новый material context может подавить ещё не начатую
+   отправку, но не создаёт автоматически замену уже принятого intent. Следующий
+   fresh Turn имеет свой ключ. C0 принял one-per-Turn для deterministic TEST
+   consumer; общая production AI/M4 replacement policy этим не определяется.
+
+Исполнение этих policy требует принятия всего §13 и отдельной выдачи implementation.
+Профиль ограничен одновременно
+server environment LOCAL/TEST, разрешённой LOCAL/TEST БД и canonical provider
+CONTROLLED; Python и SQL проверяют это независимо. Пользовательский JSON, GUC,
+job payload, произвольный connection UUID и флаг `origin` профиль не назначают.
+Секреты, внешние AI/Telegram sends и новый endpoint для активации не нужны.
+
+### 13.2. Происхождение, идентичность и доказательство актуальности
+
+| Поле / источник | Правило |
+|---|---|
+| `OWNER_MANUAL` | Только существующий owner command и `SEND_MANUAL_TEXT`; прежние live session/OWNER, fingerprint, receipt и `MESSAGE_SEND_REQUESTED` неизменны |
+| `AUTOMATED` | Только новый `PROCESS_TURN/GUARDED_TEXT` и создаваемый им `SEND_GUARDED_TEXT`; тип определяется SQL command path и сохранённым Job/Outbox, не входным flag |
+| Workspace/Connection | `messaging_admit(job_id, claim_token)` читает canonical Job; переданные в Python claim остальные refs не авторитетны |
+| Conversation/Client/Business/chat | Читаются через canonical Turn → Conversation → Connection; exact relation во Workspace обязательна, same-workspace чужой Client также отвергается |
+| Turn revision / input context | Existing `conversation_turns.revision` и `conversations.version`; отдельно сохранены в DB input, сравниваются на result admission |
+| Generation/fence | Existing captured Turn/Inbox tuple и current Conversation tuple; private `conversation_turn_activation_matches` плюс exact сохранённый Resume receipt с этим поколением и TEST-профилем |
+| Claim | Existing Job/token/lease, task/XID/physical transaction guards; claim проверяется снова после lock waits, а не только при входе в UoW |
+| Origin members | Все existing Turn members имеют earliest committed Inbox origin с AI, exact generation/fence и ingress sequence строго больше fence |
+| Intent context | Новое поле receipt: версия Conversation **после** собственного outbound Message insert; используется для dispatch, а не версия до этого insert |
+
+Legacy NULL, HUMAN-captured Turn, pre-fence ingress, дубликат с более ранним origin
+и Turn прежнего поколения не получают authority от текущего AI. Дополнительный
+NULL-профиль старого Resume исключает автоматизацию уже имеющегося AI backlog
+при upgrade. Новый Resume меняет generation/fence штатным образом; поэтому и
+старый AI backlog не становится разрешённым после нового Resume. Scan/backfill,
+reprocess IGNORED, восстановление полномочий из old OBSERVED receipt отсутствуют.
+
+DB сохраняет отдельный `GuardedTurnSnapshot` в existing `messaging_jobs.turn_input`:
+existing TurnSnapshot + canonical conversation/client/business refs,
+`activation_fence_seq`, `resume_receipt_id`, consumer literal. Это отдельный private
+DTO; форма TurnSnapshot, TURN_TEST_V1 и старых consumer receipts не меняется.
+Digest вычисляет DB по своему canonical input. Чужой snapshot digest, подмена
+client/turn/revision и результат от другого claim не могут создать intent.
+
+Intent namespace — `GUARDED_TEXT_V1`, ключ `(workspace_id, turn_id)`; случайный
+Message/Outbox UUID не является idempotency key. Winning revision сохраняется.
+DB-authoritative request fingerprint:
+`sha256(UTF8('asm:m3:guarded_text:v1\n' || canonical_input::text || '\n' || exact_text))`,
+где `canonical_input` — сохранённый DB jsonb, а не заново сериализованный Python
+payload. Text — ровно полученные Unicode bytes после UTF-8 encoding, без trim,
+нормализации или подстановки; существующие M2 пределы 4096 chars/16384 bytes,
+non-empty TEXT. Claim token не входит в business fingerprint, но отдельно
+связывает winning receipt и terminal replay. Другой body для того же сохранённого
+результата даёт `IDEMPOTENCY_KEY_CONFLICT`, а не второе Message.
+
+### 13.3. Scheduling и реальные callable границы
+
+`turn_enqueue` сохраняет GROUP/MEDIA/TEST_CONSUME без изменения их назначения.
+Когда Turn READY, добавляет ровно один `PROCESS_TURN/GUARDED_TEXT` на revision
+только при matching activation и новом controlled Resume profile. Existing
+`UNIQUE(workspace_id,turn_id,turn_revision,step)` обеспечивает дедупликацию.
+Поздний file terminal может создать шаг новой revision; если intent этого Turn
+уже принят, шаг заканчивается `ALREADY_ACCEPTED` со ссылкой на него без consumer,
+нового receipt/Message/Outbox/send Job. Нет переоткрытия старого intent.
+Производитель только планирует по activation/profile; это не окончательный
+permission check. `turn_enqueue` не получает authority/billing locks из material
+hook: эта цепочка принадлежит последующему guarded admission.
+
+Предлагаемый private Python ABI в `MessagingDatabase`:
+
+| Метод | Результат и commit boundary |
+|---|---|
+| `prepare_guarded_turn(claim)` | Отдельная короткая transaction; canonical input либо terminal progress; снимок выдаётся после commit |
+| `accept_guarded_text(claim, snapshot_digest, text)` | Reconciliation saved result, затем новая admitted transaction; возвращает committed `GuardReceipt`, никогда SendPermit |
+| `replay_guarded_text(job_id, winning_token, snapshot_digest, text)` | Только чтение canonical committed receipt/terminal result; не обновляет lease, generation или authority |
+| `begin_guarded_send(claim)` | Самостоятельный final admission; `SendPermit` появляется только после durable DISPATCHING commit |
+
+`Worker.execute` маршрутизирует новый Turn step к `prepare_guarded_turn`, затем
+вычисляет constant text вне UoW и вызывает `accept_guarded_text`. Send Job проходит
+`begin_guarded_send`, затем existing bounded adapter call и existing finalize.
+Ни LLM, ни HTTP, ни ожидание controlled transport не держат business transaction.
+Никакой worker не конструирует `AuthenticatedAccount`/TenantContext за OWNER:
+saved Resume actor проверяется private DB authority helper, worker admission
+остаётся отдельным от user-only context. `messaging.policy.Permission.SEND`
+по-прежнему owner permission, не новый automated enum с тем же смыслом.
+
+Подключение будущего trusted caller требует отдельной выдачи C0: конкретный
+серверный producer/consumer version, product permission и разрешённый provider,
+принятые C1/C2 contracts и интеграционные tests того же admission/dispatch path.
+Нельзя подключить его параметром environment, свободным callback из HTTP,
+подменой consumer literal или расширением provider enum только в DTO. AIRun,
+ModelGateway, prompts, M6–M9 commands и generic action registry здесь отсутствуют.
+
+### 13.4. Transactions, locks и проверки после ожиданий
+
+Все новые mutating capabilities: READ COMMITTED, existing transaction/task/XID
+guards, lock_timeout2s/statement_timeout5s; lease30s и retry horizon не меняются.
+Основная сериализация — `Conversation FOR NO KEY UPDATE`, та же, что у CONTROL,
+manual acceptance, ingress capture и material hooks. Одна conversation на unit.
+
+| Callable | Порядок locks после canonical worker admission |
+|---|---|
+| prepare / accept guarded result | Собственный Job UPDATE → Workspace/User/Membership SHARE выбранного Resume actor → Business SHARE → Connection SHARE → billing rows в existing порядке → Conversation NO KEY UPDATE → свой Turn NO KEY UPDATE |
+| begin guarded send | Собственный Job UPDATE → свой Outbox UPDATE → та же authority/Business/Connection/billing цепочка → Conversation NO KEY UPDATE → свой Turn NO KEY UPDATE |
+| finish/recover guarded send | Existing Job → Outbox → Conversation; после DISPATCHING не получает owner/product/control authority повторно |
+| claim/exhaustion/recovery scan | Existing single candidate transaction и NOWAIT/savepoint preflight; новый send kind использует send branch, не Turn branch |
+
+Resume receipt immutable: его refs можно предварительно прочитать, но relation,
+profile и live authority подтверждаются под указанными locks. Receipt FK к
+Membership и Conversation добавляет KEY SHARE; новые Message/Outbox/Job FK также
+берут KEY SHARE на своих parents. Conversation NO KEY UPDATE совместим с этим
+FK mode. Принимающая transaction не блокирует существующие send Jobs/Outboxes
+после Conversation; создаёт только собственные новые rows. CONTROL не захватывает
+existing Jobs/Outbox. Старый порядок Inbox/file → connection/conversation/Turn
+сохраняется; GUARDS не захватывает existing Inbox/file после Conversation.
+Billing: account → mode → subscriptions/revisions/plans/entitlements, как0007/0009.
+Новый accepted receipt ссылается на уже locked Turn/Conversation и immutable
+Resume; implicit edges включаются в C2 review, а не прячутся за advisory lock.
+
+**После последнего ожидания**, непосредственно перед изменением, новая DB clock
+и canonical rows подтверждают одновременно:
+
+- live Job/token/kind/step/lease, exact refs; Turn READY и exact revision;
+- live выбранный OWNER/Workspace, active Business/Connection, TEST/CONTROLLED
+  profile; current AI + exact generation/fence + все origin members;
+- current context равен input context (accept) либо intent context (begin send);
+- product availability посредством existing DB-authoritative billing check,
+  включая activation/expiry interval по post-wait clock; Python decision сама
+  по себе не authority. Structural billing error — existing bounded UNAVAILABLE,
+  действительный отказ — NOT_ALLOWED, без нового эффекта.
+
+Locks защищают state от конкурентного изменения до commit; clock-dependent
+условия повторяются после waits даже при ранее успешном prepare. Boundary
+подписки: `from <= db_now < until`; equality на expiry отказывает. Revocation,
+product/channel change, начавшийся после полученных SHARE locks, сериализуется
+после commit допуска. Нельзя объявлять его уже победившим отзывом.
+
+В этом срезе channel gate допускает только CONTROLLED, для которого нет Telegram
+rights/window. `TELEGRAM` отказывает **до** probe/dispatch, даже при AI и valid
+claim. Existing manual Telegram path сохраняет generation + observation-version
+CAS, rights refresh вне transaction, post-wait права и строгий
+`db_now < last_client_inbound_at + 24h`. Будущий automated Telegram caller обязан
+встроить этот probe/CAS/window в **тот же final guarded admission**; отдельное
+успешное чтение прав либо Resume не заменяет такую проверку. Сейчас эта будущая
+ветвь не реализуется и не объявляется проверенной.
+
+На accept saved exact result replay проверяется прежде live claim; для новой
+работы обязательна live claim. Authority может отказать раньше при получении
+своих locks. После получения цепочки locks superseded revision имеет приоритет
+над stale context/control/origin, затем проверяются product и остальные gates.
+Неверный/истёкший/reclaimed token отвергается без изменения текущей работы;
+terminal winning replay проверяется отдельно до требования live lease.
+Если concurrent finalizer commit завершился во время admission wait, выполняется
+existing canonical re-read с теми же winning token/digest/text, без нового permit.
+STALE/SUPERSEDED/NOT_ALLOWED допускают только собственный terminal Job и receipt
+результата; **нет domain mutation**, нового Message/Outbox/Audit или follow-up Job.
+ALREADY_ACCEPTED завершает только текущий шаг и возвращает прежнюю идентичность.
+Replay не создаёт ни одной row и не делает старый результат исполнимым заново.
+Prepare без ещё сохранённого input может завершить только свой Job с progress,
+без result receipt; потеря его ACK сама по себе не разрешает computation/send
+повторно. Committed terminal Job даёт STALE_CLAIM; после rollback возможен только
+existing bounded retry/reclaim с повторным live admission.
+Exhaustion нового GUARDS step завершает только этот Job, не переводит уже READY
+Turn в FAILED. Старые GROUP/MEDIA/TEST_CONSUME exhaustion rules сохраняются.
+
+Acceptance одной transaction создаёт immutable result receipt + OUTBOUND TEXT
+Message + PENDING Outbox `SEND_GUARDED_TEXT` + один send Job, затем terminalizes
+consumer Job. Ошибка любого write, включая последний consumer Job terminal
+UPDATE, или commit откатывает всё. Existing
+`turn_manual_material` на деле обрабатывает **любой** OUTBOUND Message: его
+однократный context+1 сохраняется и для automated Message. После insert читается
+и сохраняется `intent_context_version=input_context_version+1`; generation не
+меняется, `conversation_manual_takeover` из manual command здесь не вызывается.
+Другие новые material facts после этого invalidate pending dispatch.
+
+### 13.5. Dispatch, in-flight и восстановление
+
+Guarded result acceptance не разрешает adapter call. Final `begin_guarded_send`
+повторяет §13.4 и атомарно сохраняет existing `attempt_id`, DISPATCHING и winning
+claim до выдачи permit. **Durable commit DISPATCHING — linearization point**:
+
+| Порядок | Обязательный результат |
+|---|---|
+| Takeover/manual acceptance победил до result admission | STALE, без intent и вызова adapter |
+| Intent принят, Takeover/new context победил до dispatch | Outbox FAILED с existing `NOT_ALLOWED`, Job DEAD; private причина STALE/SUPERSEDED/NOT_ALLOWED; новый attempt/CALL не начинается. До первого begin CALL=0; при повторном begin счётчик прежних calls не увеличивается |
+| DISPATCHING commit победил, затем Takeover, в том числе до фактического I/O | Permit может быть использован один раз исходным worker; mode switch не доказывает отмену. Финальный outcome принимается независимо от нового поколения |
+| Успех / definite non-retryable failure | Existing Outbox SENT/FAILED и Job SUCCEEDED/DEAD; terminal material hook context+1 ровно один раз |
+| Proven NOT_SENT, retryable | Existing PENDING/READY, прежние backoff/5 claims/15min; **каждый** новый begin снова проверяет GUARDS, поэтому Takeover пресекает retry |
+| Возможный effect, timeout/cancellation/response loss | UNKNOWN/DEAD; не CANCELLED, не READY, без второго вызова |
+| Dispatch commit потерял ACK | Нет полученного permit — worker не делает I/O. При состоявшемся commit/start_after_commit — recovery UNKNOWN/CALL=0; DISPATCHING не выдаёт новый permit. Если canonical read доказал rollback/PENDING, разрешён только обычный retry/reclaim с новым guarded admission |
+| Finalize commit потерял ACK | Canonical exact attempt/claim/outcome replay до live lease checks; сохранённый SENT не понижается в UNKNOWN |
+
+Отдельного automated retry engine нет. `messaging_finish_send`, reschedule,
+recovery и terminal preflight расширяются ровно на новый typed send kind.
+При отказе повторного begin после proven NOT_SENT прежний `attempt_id` может
+оставаться: запрещён новый attempt/transport, а не наличие уже сохранённого ID.
+Сохраняются last_attempt/last_claim/last_outcome, late SUCCESS после уже записанного
+UNKNOWN отвергается, restart не исполняет DISPATCHING повторно. При stale pending
+intent private rejection фиксируется в одном новом nullable Job поле
+`guard_rejection` (STALE/SUPERSEDED/NOT_ALLOWED); existing публичные error/status
+enums не расширяются. Outbox FAILED сам является terminal material fact и потому
+даёт existing context+1; это не применение stale consumer result.
+
+Для будущего Console достаточно origin, Turn/revision, accepted generation,
+input/intent context, intent/attempt IDs и truthful delivery status из сохранённых
+rows. Не обещать отмену in-flight после Takeover. Public DTO/history/delivery fields
+не меняются; новая UI-функция или CONTROL screen/buttons здесь не появляются.
+Существующие `manual_delivery.has_dispatching/has_unknown` должны фильтровать
+`kind='SEND_MANUAL_TEXT'`: сейчас SQL считает все Outbox, что было эквивалентно
+manual-only схеме. Это необходимая compatibility correction при втором kind;
+нельзя молча показать automated pending как ручную отправку.
+Existing history SQL возвращает OUTBOUND любого Outbox kind; MessageResponse
+не содержит origin, а `MessagingPanel` сейчас подписывает все такие rows как
+«Ручной ответ». В будущей implementation эта единственная подпись заменяется
+на нейтральную **«Исходящее»** для любого OUTBOUND. Manual и automated rows не
+скрываются, их PENDING/DISPATCHING/SENT/FAILED/UNKNOWN остаются честными;
+existing manual composer и receipt recovery сохраняются. Это узкая compatibility
+правка двух frontend paths (§13.9), не новый origin DTO/API/OpenAPI или экран.
+
+### 13.6. Минимальная schema и security profiles — proposal C2
+
+Нужна **одна новая migration после0009**, номер/filename назначают C0/C2 до кода.
+Рекомендация C2 — `0010_conversation_guards.py`, revision0010/down_revision0009;
+это **не резерв номера и не разрешение DDL**. C0 назначит их вместе с implementation.
+Причина: текущие Outbox/Jobs CHECK и command receipts разрешают только manual
+send; записать automated intent в них как manual означало бы выдумать owner
+команду и `MESSAGE_SEND_REQUESTED`. Applied0001–0009 не редактируются.
+
+| Объект | Точная необходимая дельта / назначение |
+|---|---|
+| `platform.conversation_control_receipts` | Nullable immutable `guard_profile`, только NULL или `CONTROLLED_GUARDS_V1` и только RESUME/AI; заполняется при новом CONTROLLED Resume (§13.1). Composite UNIQUE для FK нового receipt на `(workspace_id,id,conversation_id,client_id,accepted_generation)`; прежние fingerprint/result/Audit constraints неизменны |
+| `platform.messaging_jobs` | Новый kind `SEND_GUARDED_TEXT` с тем же outbox-only shape, что manual; новый Turn step `GUARDED_TEXT`; turn_input разрешён только двум consumer steps. Turn outcomes дополнены ACCEPTED/NOT_ALLOWED/ALREADY_ACCEPTED. `guard_rejection` nullable, closed enum и только для terminal rejected guarded send. Existing lease/retry/attempt поля используются без новых часов/счётчиков |
+| `app.outbox_events` | CHECK kind дополнен `SEND_GUARDED_TEXT`; shape, Message FK, unique message, immutable identity, states/attempt/error constraints сохранены |
+| `platform.turn_guard_receipts` | Единственная новая private table: fields ниже; immutable результат и единственная accepted action identity, без AIRun/action registry |
+
+Новая table хранит `workspace_id`, `job_id`, `winning_claim_token`,
+`connection_id`, `conversation_id`, `client_id`, `turn_id`, `turn_revision`,
+`resume_receipt_id`, `input_control_generation`, `activation_fence_seq`,
+`input_context_version`, `snapshot_digest`, consumer literal,
+`request_fingerprint`, `result_text`, `outcome`, `accepted_at`, nullable
+`intent_context_version/message_id/outbox_id/send_job_id`. Outcome —
+ACCEPTED/STALE/SUPERSEDED/NOT_ALLOWED; last four refs/version non-NULL ровно для
+ACCEPTED, для остальных outcomes все четыре NULL; intent context = input context+1
+с проверкой bigint overflow. Result text нужен для exact replay
+и DB fingerprint, не является второй mutable копией Message.
+
+PK `(workspace_id,job_id)`; partial UNIQUE `(workspace_id,turn_id)` WHERE
+outcome=ACCEPTED. UNIQUE `(workspace_id,outbox_id)` в receipt вместе с existing
+one-Outbox-per-Message/one-send-Job-per-Outbox обеспечивает уникальность accepted
+Message/Outbox/send Job; отдельные дубли этих UNIQUE и новый action UUID не нужны.
+Captured revision связывается с immutable consumer Job. FK не ссылаются на
+mutable current Turn revision либо Conversation context/generation как замену
+admission; актуальность проверяется по §13.4.
+
+Точная relation chain (`ws` = `workspace_id`, constants — non-NULL literals):
+
+| Связь | Columns / supporting parent key |
+|---|---|
+| Receipt → consumer Job | `(ws,job_id,connection_id,PROCESS_TURN,turn_id,turn_revision,GUARDED_TEXT)` → existing `messaging_jobs_turn_receipt_key` |
+| Receipt → Turn | `(ws,turn_id,connection_id,conversation_id)` → existing four-column Turn UNIQUE |
+| Receipt → Conversation/Client | `(ws,conversation_id,client_id)` → existing `conversations_control_client_key` |
+| Receipt → Resume | `(ws,resume_receipt_id,conversation_id,client_id,input_control_generation)` → proposed five-column Resume UNIQUE выше; operation/profile/fence подтверждает trusted insert/current helper |
+| Receipt → Message | `(ws,message_id,connection_id,conversation_id,OUTBOUND,TEXT)` → existing `messages_file_source_key` из0006 |
+| Receipt → Outbox | `(ws,outbox_id,message_id)` → existing Outbox UNIQUE; connection связан через typed Message/Outbox FK |
+| Receipt → send Job | `(ws,send_job_id,outbox_id,SEND_GUARDED_TEXT)` → **новый** supporting Job UNIQUE `(workspace_id,id,outbox_id,kind)` |
+| Send Job → Outbox kind | `(ws,outbox_id,connection_id,kind)` → **новый** supporting Outbox UNIQUE `(workspace_id,id,connection_id,kind)`; typed FK требует совпадающий manual/guarded kind, независимых CHECK двух rows недостаточно |
+
+Existing parent keys переиспользуются, не дублируются. Common refs NOT NULL;
+нужные constants — GENERATED либо checked non-NULL literals, nullable CHECK —
+явные IS NULL/IS NOT NULL/IS TRUE. Insert capability дополнительно сравнивает
+DB input, fence/profile и exact Message text. Все receipt fields immutable;
+для full-row UPDATE protection используется existing `turn_immutable()`, без
+нового trigger helper. RLS/constraints не заменяются наличием workspace UUID.
+
+Runtime не имеет прямых SELECT/DML новой table; owner asm_migrator, ENABLE/FORCE
+RLS и только migrator policy. Proposed inventory: 36 таблиц вместо35, exact set
+старых35 + `platform.turn_guard_receipts`, не проверка одним count.
+Origin Message хранится через его единственный typed Outbox и guard receipt:
+`SEND_MANUAL_TEXT` → OWNER_MANUAL, `SEND_GUARDED_TEXT` → AUTOMATED. Новое поле
+Message origin и backfill всей истории для этого доказательства не нужны.
+
+| Новый SQL профиль (schema `platform`) | SECURITY / EXECUTE |
+|---|---|
+| `guard_turn_prepare(uuid,uuid)` | DEFINER, asm_migrator; asm_runtime EXECUTE, внутри mandatory worker admission |
+| `guard_turn_accept(uuid,uuid,text,text)` | DEFINER, asm_migrator; asm_runtime EXECUTE; digest/text, без произвольных entity refs |
+| `guard_turn_replay(uuid,uuid,text,text)` | DEFINER, asm_migrator; asm_runtime EXECUTE; single-statement exact terminal read |
+| `guard_send_begin(uuid,uuid)` | DEFINER, asm_migrator; asm_runtime EXECUTE; новый kind only |
+| `guard_require_current(uuid,uuid,uuid,bigint)` | DEFINER, asm_migrator; private, no runtime EXECUTE; canonical workspace/Turn/Resume/expected context, checks only under caller locks |
+| `guard_text_fingerprint(jsonb,text)` | INVOKER, IMMUTABLE STRICT; private, no runtime EXECUTE; codec§13.2 |
+
+У всех шести `search_path=pg_catalog,pg_temp`, PUBLIC EXECUTE revoked; no GUC
+как authority, no dynamic user SQL. Existing function signatures/security modes
+сохраняются. Изменяются определения только перечисленных caller families:
+CONTROL execute (profile)/read (manual filter), `turn_enqueue`, exact claim/admit
+parsing, `messaging_retry`, send finish/reschedule, relevant legacy и scan
+entrypoints `messaging_claim`/`messaging_recover_expired`, `turn_preflight`/exhaustion.
+В claim/retry/finish/reschedule/recover/preflight новый `SEND_GUARDED_TEXT` явно
+входит в send branch, а не PROCESS_TURN fallback; GUARDS exhaustion завершает
+только Job (§13.4).
+
+**Отдельный обязательный replacement тела existing
+`platform.turn_execute(uuid,uuid)` в новой migration:** сразу после canonical
+Job guard разрешены только GROUP/MEDIA/TEST_CONSUME. Для GUARDED_TEXT — existing
+`INVALID_INPUT` (SQLSTATE P2001) **до** preflight/supersede/seal/terminal mutation,
+в том числе после Takeover. Одного нового Worker router недостаточно: legacy SQL
+capability остаётся runtime-executable. Signature, SECURITY/grants, старые
+outcomes и TEST_CONSUME codec/result сохраняются; applied0008 не редактируется.
+Это замена existing body, не седьмая новая функция.
+
+Exact pg_proc inventory tests сравнивают все прежние profiles плюс эти шесть;
+новый helper или grant вне этого списка требует C2/C0 согласования.
+
+Strict private DTOs: `GuardedTurnSnapshot`, `GuardTextResult` (consumer/digest/text),
+`GuardReceipt` (outcome/refs/versions/fingerprint), `GuardProgress`
+(SUPERSEDED/STALE/NOT_ALLOWED/ALREADY_ACCEPTED). Existing JobClaim kind и
+TurnJobClaim step расширяются; старые формы parse identically. SendPermit и
+FinalizeResult reuse, новые public DTO/status/error/Audit variants отсутствуют.
+`MESSAGE_SEND_REQUESTED` остаётся manual USER_ACCOUNT event. В данном controlled
+proof automated acceptance наблюдаема через private receipt/Job, без фиктивного
+Audit от OWNER. Production automated Audit policy — часть отдельного допуска
+будущего caller, не молчаливое разрешение отсутствия Audit для M4.
+
+### 13.7. Upgrade, refusal и точная совместимость
+
+Предлагаемый cutover — existing drained LOCAL/TEST source/schema discipline.
+Миграция сохраняет все35 существующих таблиц/rows, receipts, pending manual,
+UNKNOWN, files и TURNS/CONTROL metadata; старым Resume добавляется только NULL
+profile. Не меняет mode/generation/context/sequence, не создаёт Jobs, не запускает
+retained Inbox/ignored событий. Повторный upgrade head штатно no-op. Exact schema
+revision readiness для API/worker/scheduler и TEST provisioning обновляется
+одновременно; source0009 на новой схеме и новый source на0009 отказывают.
+
+Downgrade в0009 разрешён только **до использования новой семантики**. Первая
+проверка под migration locks отказывает до DDL при любом non-NULL guard profile,
+новом kind/step, guard receipt или guard_rejection, включая terminal rows.
+На неиспользованной схеме новая table пуста, добавленные поля NULL: удаляется
+только дельта, восстанавливаются точные0009 function/check definitions; full
+snapshot существующих35 tables до/после совпадает. Не вызывается downgrade0009,
+не очищаются receipts/история и не превращаются automated rows в manual.
+Forward recovery — обычный выбор подтверждённой schema, не обход refusal.
+
+Compatibility proposal: frozen H/0007 → frozen T/0008 → frozen
+**C=`c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5`/0009** → future reviewed G/new revision.
+Existing historical proofs остаются на своих source/schema pairs. В двух existing
+state shards добавить один C→G upgrade/readiness/preservation/recovery phase;
+не умножать fault families. Existing coordinator, source/image attestations,
+fresh DB observation, STOP/refusal и cleanup используются как есть. Нужна
+адресная C6 оценка этого конкретного source/schema phase, не переработка helper.
+Historical0007 saved-plan/migration_source guard не расширяется на latest head.
+
+Whole retained phases и новые prepare обязаны вместиться в прежний aggregate600s,
+cleanup90s, state25min/foundation35min и exact Docker29 lane. Это **не измерено**
+на contract head. Если дополнительный frozen C checkout/image/phase не помещается,
+C3 возвращает timing evidence и узкий diff C0/C6 до изменения harness; бюджеты,
+gates, source pins и assertions не ослабляются. IMPL-05 OPEN/DEFERRED сохраняется,
+GUARDS не чинит journal publication/collection и не вводит новый fault framework.
+
+### 13.8. Компактная матрица будущих доказательств
+
+Все новые runtime строки ниже — **PLANNED**, не PASS текущего документа. Для
+конкуренции использовать existing actual PG lock observation/barriers, canonical
+worker methods и counted controlled adapter. Считать каждый CALL/EFFECT, без
+transport dedupe. Моки не заменяют PostgreSQL, process restart или wire evidence.
+
+| Сценарий / критерий | Actual caller / граница | Обязательный observable / tests |
+|---|---|---|
+| Fresh Resume + fresh controlled text, M3-A03/A04 | OwnerControlService → ingress → штатный worker/новый step → send Job | Один receipt/Message/Outbox/send Job, CALL=1/EFFECT=1; normal queue, не прямой insert send fixture; новый guards PG test |
+| GUARDED_TEXT через legacy Turn capability, A03/A04 | Genuine normal-produced guarded Job/current claim через `MessagingDatabase.process_turn` и `platform.turn_execute`; повторный вариант после Takeover | INVALID_INPUT до mutation: Turn/Jobs/receipts unchanged, никакого GROUPED/seal/enqueue. Тот же claim через новый штатный guarded path даёт intended result (current AI → ACCEPTED; после Takeover → STALE); один узкий actual-PG routing case |
+| Takeover до accept и отдельно до begin, A04 | Два PG connections, подтверждённый Conversation wait; owner API выигрывает commit | STALE без intent либо существующий pending→FAILED; CALL=0, нет новых Audit/Jobs; новый parametrized guards PG test |
+| AI→HUMAN→AI, legacy/HUMAN/старый AI backlog, A05/A11 | Old snapshot/claim после нового Resume + свежий producer | Старые отказы, fresh origin проходит; profileNULL не запускается; reuse capture tests CONTROL + новый guards/migration test |
+| Новый inbound/file terminal/manual, revised Turn, A03 | Pause consumer/dispatch, existing material callers | STALE или SUPERSEDED; own Message +1 не делает intent stale; чужой Client/Turn/ref отвергается; новый guards PG test |
+| OWNER revoke, product expiry/activation, inactive channel, A04/A05 | Guard boundary после **наблюдённого** lock wait | Post-wait решение, expiry equality deny, CALL=0 при отказе; existing billing boundary fixtures, новый guards PG test |
+| Expired/reclaimed claim и два worker, A05 | Normal claim/reclaim → prepare/accept/begin | Старый token без mutation, новый token допускается только при current state; concurrency same intent = один accepted result; exact terminal replay без lease/новых rows |
+| Rollback и lost acceptance ACK, A03/A11 | Failure на receipt/Message/Outbox/send Job INSERT, последнем consumer Job terminal UPDATE и commit, затем fresh reader | Всё либо ничего; canonical acceptance replay; changed text conflict; собственный context+1 ровно один раз; новый guards PG test |
+| Dispatch commit до Takeover и commit→I/O окно, A06 | Реальный begin, barrier перед adapter, Takeover, release | SENT/FAILED/UNKNOWN по факту, без повторного authority veto finalize; future UI refs сохраняют старое generation; новый guards PG test |
+| Lost dispatch ACK / start_after_commit, A06 | Existing process test boundary после durable start, до permit/I/O; fresh reader и recovery | UNKNOWN/CALL=0, новый permit не выдаётся; guarded-kind reuse existing M2 case, отдельно от after-effect case |
+| Possible effect + response loss + process restart, A06 | Existing counted controlled transport и отдельный worker process, затем scheduler/recovery | UNKNOWN, CALL=1/EFFECT=1 после restart/Takeover/Resume; новый guarded-kind вариант existing process test, не MockTransport |
+| Safe NOT_SENT, exhaustion и lost finalize ACK, A06 | Existing send finish/retry/recover через новый kind | Прежние bounds; Takeover блокирует новый begin без нового attempt/CALL, старый attempt_id допустим; saved SENT не становится UNKNOWN; узкое расширение M2 kernel regression |
+| HUMAN manual/inbound/file reconciliation и existing history, A04/A11 | Existing owner API/worker с mixed manual/automated Outbox; существующий `MessagingPanel` | Прежние receipts/fingerprints/Audit/UNKNOWN; manual flags считают только manual. Узкий frontend test показывает все mixed outbound rows/statuses с «Исходящее», без ложной подписи «Ручной ответ», сохраняет manual composer/receipt recovery; новые CONTROL read assertions сохранены |
+| C/0009↔G, clean/repeat/populated/refusal, A11 | Actual migration role + exact source readiness/35-table projection | Old rows/receipts unchanged, NULL profile/no Jobs; used schema refuses before DDL; exact36 inventory/SQL grants; новая migration suite |
+
+Существующее evidence, которое сохраняется, но не переименовывается в GUARDS:
+
+- `tests/test_m3_1_control_postgres.py`: ingress/Resume capture, stale effects-free
+  consumer, winning receipt replay, lock progress и client isolation;
+  `tests/test_m3_1_control_api_postgres.py`: live OWNER и post-lock product,
+  `test_control_read_reports_dispatching_and_unknown_without_recalling_intents`.
+- `tests/test_m3_1_turns_postgres.py`: grouping, media/context revisions,
+  superseded-before-exhaustion, single-candidate NOWAIT/fair scan и consumer ACK.
+- `tests/test_m2_1_postgres.py`: `test_actual_process_crash_restart_durable_effect_ledger`,
+  `test_lost_finalize_ack_reads_canonical_success_and_replays_exact_outcome`,
+  cancellation/NOT_SENT/recovery и finish after owner revoke. Добавленный guarded
+  case должен пройти normal producer/worker admission, а не скопировать raw Outbox.
+  В existing process family отдельно сохраняются `start_after_commit` →
+  UNKNOWN/CALL=0 и `after_effect`/response loss → UNKNOWN/CALL=1/EFFECT=1;
+  это разные обязательные границы, не новая fault family/harness.
+- `tests/test_m2_3_wire_postgres.py::test_real_http_accept_lost_response_process_restart_never_second_wire_call`
+  остаётся отдельным actual Telegram-compatible wire/PG UNKNOWN proof. Он не
+  доказывает automated Telegram admission, который здесь запрещён.
+
+M3-A03 покрывается для уже material inbound/manual/file/delivery/control facts.
+Native-owner, material edit/delete/provenance пока не реализованы: их частьA03/A08
+NOT VERIFIED. ConsoleA10, EscalationA09/M3.2 и итоговыйA12 — отдельные выдачи;
+нейтральная existing-history подпись не является реализацией Console CONTROL UI.
+
+### 13.9. Один будущий план и предложенный allowlist
+
+Ниже **запрос write scope перед implementation**, не текущее разрешение. C1/C2
+reviews приняты; далее C0 проверяет точную R1 и закрытие двух findings, без
+повторного полного C1/C2 review. Затем конкретный C6 source/schema compatibility
+review при прежних budgets → C0 назначает revision/точные paths → один
+новый migration + integrated worker path → компактные tests и retained regression
+→ штатные gates на final integration SHA → независимый C8 → решение C0.
+
+| Предлагаемые paths | Единственная причина изменения |
+|---|---|
+| `migrations/versions/<назначенная_revision>_conversation_guards.py` | §13.6, predecessor0009; placeholders заменить только после резерва C0/C2 |
+| `backend/src/asm/conversations/guards.py` (новый) | Strict private DTOs и deterministic consumer; не общий tool framework |
+| `backend/src/asm/messaging/database.py`, `backend/src/asm/messaging/worker.py`, `backend/src/asm/messaging/results.py` | Четыре typed methods, canonical step/kind parsing, normal consumer/send routing; existing attempt/finalize reuse |
+| `backend/src/asm/foundation.py`, `backend/src/asm/telegram/provisioning.py` | Только exact новой schema revision readiness/provisioning; CONTROLLED wiring если требуется existing constructor, без route/env/provider changes |
+| `tests/test_m3_1_guards.py`, `tests/test_m3_1_guards_postgres.py`, `tests/test_m3_1_guards_migrations.py` (новые) | Private DTO/codec; §13.8 actual command/worker/PG cases; C/0009 cycle/refusal, source/schema readiness |
+| `tests/test_m2_1_postgres.py`, `tests/test_m3_1_control_postgres.py` | Только fixture cleanup в FK порядке, нормальный drain нового step, reuse process/ACK/recovery cases; исходные manual assertions сохранены |
+| `tests/test_m3_1_control_api_postgres.py` | Дополнительный mixed-kind manual_delivery negative, прежняя public shape/Audit |
+| `frontend/src/MessagingPanel.tsx`, `frontend/src/MessagingPanel.test.tsx` | Только OUTBOUND label «Исходящее» и узкая existing-history regression: без «Ручной ответ», mixed rows/statuses/manual composer/receipt recovery сохранены; без нового origin DTO или CONTROL UI |
+| `tests/test_foundation.py`, `tests/test_m2_3_setup.py`, `tests/test_tenancy_postgres.py`, `tests/test_m2_3_schema_postgres.py` | Exact latest revision/table/function inventories и downgrade-refusal head assertions; historical0007/0008/0009 expectations остаются revision-qualified |
+| `tests/test_m3_1_migrations.py`, `tests/test_m3_1_control_migrations.py` | Только latest-head fixture/cycle plumbing; frozen T/C definitions/data projections не заменяются сравнением intersection |
+| `tests/test_postgres.py` | Exact inventory: старые35 + новая guard receipt table |
+| `tests/test_m1_3_c0_acceptance.py` | Explicit TRUNCATE child guard receipt вместе с CONTROL receipt, даже при пустом child; без CASCADE и изменения старых assertions |
+| `tests/test_telegram_egress_postgres.py` | Latest G/schema pairing; frozen C сохраняет exact0009 projection/inventory, без intersection |
+| `scripts/prepare_telegram_egress.py`, `scripts/test_telegram_egress.sh`, `scripts/test_telegram_egress_migration.sh`, `tests/test_telegram_egress.py`, `tests/test_telegram_egress_migration.py` | Только необходимая exact inventory и frozen C→G phase/source pairing§13.7 после адресного C6/C0 согласования; не lifecycle/pin/recovery redesign |
+| `docs/tasks/M3_CONTRACT.md`, `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` | Принятое дополнение/evidence и точная LOCAL/TEST source/schema инструкция после кода; register/handoff остаются у C0 |
+
+Дополнение R1 к proposed allowlist — ровно эти пять paths: два frontend label/test
+и три inventory/fixture/schema tests. Сейчас ни один из них не является write scope;
+`tests/test_m1_3_postgres.py` и Audit columns не добавляются заодно.
+Другие runtime modules, owner API/tenancy API, HTTP/OpenAPI snapshots, frontend
+за пределами двух названных label/test paths, dependencies/locks,
+Compose/workflows, applied migrations, imported canon не
+планируются к изменению. Если inventory/fixture требует дополнительный path,
+предъявить конкретный diff и причину C0 до записи; не расширять список молча.
+Каждую адаптацию старого теста объяснить новой typed kind/schema, сохранив прежний
+смысл assertion; skip/xfail, подмена actual среды и обновление ожиданий «до зелёного»
+не допускаются. Номер теста/количество строк не являются критерием приёмки.
+
+### 13.10. Конкретные вопросы review и статус доказательств
+
+По [C0 R1 decision](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6121132463),
+принявшему [C1 review](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6120487284)
+и [C2 review](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6120992738):
+
+| Решение | Предлагаемый выбор / оставшийся вопрос |
+|---|---|
+| GUARDS-POLICY-01 — LOCKED C0 | Только LOCAL/TEST + CONTROLLED: новый Resume profile и live автор Resume; existing manual_send только availability, отдельный trusted automated path. Production AI/M4 permission не выдаётся |
+| GUARDS-POLICY-02 — LOCKED C0 | Только deterministic TEST consumer: один accepted intent на Turn, stale pending без automatic replacement; поздний media revision не создаёт второй ответ. Допустим пропуск TEST ответа при новой информации; это не общая production AI policy |
+| C1-M3-GUARDS-01 / P3 — OPEN до verdict C0 | R1 §§13.5/13.8/13.9: existing OUTBOUND label «Исходящее», public shape/statuses/manual flow сохранены, два точных future frontend paths; фактическая implementation ещё не выдана |
+| C2-M3-GUARDS-01 / P2 — OPEN до verdict C0 | R1 §§13.6/13.8: existing turn_execute body allowlist до preflight/mutation, genuine guarded claim negative и intended new path; шесть новых profiles, applied0008 неизменна |
+| GUARDS-DB-01 — OPEN до R1 acceptance | C2 поддержал одну receipt table; §13.6 уточняет exact typed FK chain/parent-key reuse и новый Job→Outbox kind FK. Номер миграции остаётся рекомендацией C2 до назначения C0 |
+| GUARDS-COMPAT-01 — OPEN | После сведённого R1 C0 выдаёт конкретный C6 source/schema review: frozen C/0009 → G phase/exact inventories при прежних budgets. Укладываемость пока не измерена; общий audit/harness redesign не выдан |
+
+Это исправления документационного proposal по static source traces, а не finding
+исполненного GUARDS runtime или принятого CONTROL. Общий contract не объявляется
+принятым; runtime строки §13.8 остаются PLANNED. Закрытие findings выполняет C0.
+
+Контракт сознательно не обещает exactly-once внешнего эффекта: durable intent,
+canonical result и UNKNOWN/no-resend сохраняют прежнюю честную границу M2.
+Чтение текущего AI flag или successful effects-free receipt не заменяет admission.
+IMPL-01/02/03/04 CLOSED; IMPL-05 OPEN/DEFERRED без новых изменений. Native account
+gate NOT VERIFIED; M3 остаётся IN_PROGRESS. VM/Telegram/live/deploy/merge не выданы.
+
+На contract head выполняются только source/ancestry, single-path/prefix, diff и
+ссылочные/consistency проверки. Runtime/PG/S3/relay/Docker/новые fault experiments
+не запрашиваются для документа. Автоматический PR CI сохраняется; его status,
+tested merge/parents/tree указываются в единственном PR receipt и **не являются
+GUARDS execution evidence**. После receipt C3 удерживает head до решения C0;
+самостоятельно задачи C1/C2/C6 не выдаёт и implementation не начинает.
+
+### 13.11. Implementation GUARDS — C3, 2026-10-12
+
+Выдача C0 implementation6123042372 сняла прежний HOLD после R1/C6 acceptance.
+Продолжение — `c3/m3-1-guards`, Draft PR28, sole start parent
+`4caf1d64ce6073cc8064b088f9a0a9cdf245ad20`; frozen C/main —
+`c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5`. Принятые226090bytes выше сохранены
+как неизменный prefix. Это описание реализации и подготовленных проверок;
+actual final-source CI и verdict привязываются только в едином
+[C3 receipt6119496506](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6119496506).
+До завершения runtime gates задача IN_PROGRESS, не VERIFIED.
+
+`0010_conversation_guards.py` (0010→0009) добавляет одну private FORCE RLS
+receipt table, nullable profile/rejection, typed kind/step и relation constraints.
+Шесть новых SQL profiles соответствуют §13.6; public EXECUTE только у четырёх
+runtime capabilities, private check/fingerprint runtime не вызываются.
+Existing SQL replacements используют зафиксированные0009 bodies; unused
+reverse восстанавливает их без правки applied0001–0009. Runtime/readiness и
+TEST provisioning требуют exact0010. Legacy Resume replay не пишет profile.
+
+`conversations/guards.py` содержит закрытые внутренние DTO и effects-free
+`consume_guarded`, возвращающий exact `CONTROLLED GUARDS TEST`.
+`messaging/database.py` добавляет четыре typed worker entrypoints; никакого
+owner context для consumer/send не создаётся. `worker.py` маршрутизирует
+GUARDED_TEXT и SEND_GUARDED_TEXT отдельно от effects-free TEST_CONSUME/manual
+admission; не вызывает Telegram probe для automated path. BEGIN/COMMIT и
+adapter I/O разделены. Result acceptance, DB fingerprint, canonical replay,
+post-wait checks и durable dispatch принадлежат PostgreSQL. Existing controlled
+adapter считает каждый CALL/EFFECT; transport дедупликации не добавлено.
+
+Матрица §13.8 реализована следующими проверками (короткие имена ниже — suffix
+`test_` в `tests/test_m3_1_guards_postgres.py`, если path не указан):
+
+| Строка §13.8 | Исполнимые проверки / ожидаемые assertions |
+|---|---|
+| 1 fresh positive | `fresh_owner_resume_normal_ingress_worker_atomic_intent_and_final_send`: owner API → fresh Inbox → normal queue/worker, один accepted intent, own context+1, SENT/CALL1/EFFECT1, нет manual receipt/Audit, pool checkedout0 на adapter |
+| 2 legacy routing | `legacy_capability_rejects_genuine_guarded_claim_before_any_mutation`: current/Takeover, INVALID_INPUT и full facts unchanged; intended path ACCEPTED/STALE |
+| 3 Takeover wait | `takeover_wins_observed_conversation_wait`: actual PG blockers, accept STALE без intent, begin FAILED/STALE без attempt/CALL |
+| 4 generation/backlog | `new_material_or_generation_rejects_old_snapshot[resume]`, `telegram_resume_and_fresh_ingress_never_plan_or_probe_automated_send`, migration legacy NULL/replay/no-backfill; retained CONTROL capture tests |
+| 5 new material/relations | `new_material_or_generation_rejects_old_snapshot`, `late_same_turn_file_revision_cannot_replace_accepted_intent`, `private_receipts_and_same_workspace_relation_forgery_are_rejected`: inbound/manual/file hooks, late revision ALREADY_ACCEPTED, exact same-kind FK23503 |
+| 6 live authority/time | `post_wait_live_authority_and_db_clock`: owner revoke, expiry, activation, inactive channel; observed locks и DB clock, обе accept/begin boundaries |
+| 7 claims/concurrency | `claim_expiry_reclaim_and_guarded_exhaustion_leave_ready_turn`, `canonical_refs_bad_digest_token_and_concurrent_exact_replay`: old token rejects, canonical refs, два accept возвращают один immutable receipt, changed text conflict |
+| 8 atomicity/accept ACK | `acceptance_rolls_back_every_write_and_final_update` шесть boundaries + `acceptance_and_finalize_ack_loss_read_canonical_success`; full facts rollback, DB-authoritative fingerprint и canonical receipt |
+| 9 durable begin | `dispatch_linearizes_before_effect_and_takeover_does_not_veto_finalize`: Takeover до/после adapter effect после committed begin; factual SENT, CALL1/EFFECT1 |
+| 10 start ACK/process | `guarded_process_death_unknown_no_resend_after_restart_and_resume[start_after_commit-0]`: existing M2 child exit42, durable start, UNKNOWN/CALL0/EFFECT0 после recovery |
+| 11 possible effect/process | тот же existing process family `[after_effect-1]`: UNKNOWN/CALL1/EFFECT1 после restart/Takeover/Resume; второй call отсутствует |
+| 12 retry/finalize | `proven_not_sent_rechecks_guard_and_exhausts_without_turn_failure`, lost finalize ACK: каждый новый begin rechecks, старый attempt допустим, пять claims max, READY Turn не FAILED, canonical SENT сохранён |
+| 13 retained/manual/history | `tests/test_m3_1_control_api_postgres.py` mixed read + `frontend/src/MessagingPanel.test.tsx` mixed10rows/all5statuses; только manual flags считают manual, composer/recovery и public shape прежние |
+| 14 schema/source | `tests/test_m3_1_guards_migrations.py`: fixed C35/G36, populated repeat/reverse definitions/data, legacy NULL, used refusal, fresh actual-schema observer/lost commit ACK; tenancy exact SQL profiles и existing schema inventory tests |
+
+C6 plan воплощён в существующих двух state lanes: H wrapper один раз;
+H→T direct frozen T; T→C direct selector из byte-identical frozen C checkout;
+C→G selector из G. C runtime/development images переиспользуются только после
+attestation. G controller расположен в разрешённом guards migration test.
+Сохраняются retained T full/negative и C six-daemon proofs; C tail negatives
+исполняются в C checkout и сохраняются в `reports/retained-control/`.
+
+Один coordinator600 начинается после H до T preparation. Whole T/negatives,
+whole C including capture/cleanup/report, pre-G и G image preparation используют
+исходный absolute deadline. Retained C supervisor получает remaining600 без
+terminal+480; terminal G сохраняет прежний runtime bound. Cleanup90, state25min,
+foundation35min, exact Docker29, all9/source9 unchanged. G reports:
+`reports/guards-schema-phase.json`, `reports/control-schema-ledger.json`;
+retained C report сохраняет C source, не объявляется G evidence.
+Actual укладываемость проверяется runner; новый лимит не введён.
+
+Адаптации старых проверок ограничены принятым поведением: latest readiness/setup
+0009→0010 (0009 теперь negative); latest inventory35→36 с отдельными frozen T/C
+sets; cleanup удаляет новый child receipt до родителей; retained CONTROL tests
+явно исполняют0009 cycle; mixed history отделяет manual status flags. Static
+coordinator assertion теперь требует явные T/C/G executors и C negative tail.
+OpenAPI, auth/owner DTO, manual fingerprints/Audit, source pins и guards не менялись.
+
+Локально: Ruff/format/mypy, generated OpenAPI consistency и frontend typecheck
+PASS; frontend114 PASS; полный non-integration1082 PASS/0 FAIL (110.40s).
+Docker отсутствует: local actual PG/S3/browser/Docker29 NOT RUN. Эти локальные
+результаты не доказывают runtime строки таблицы; actual результаты и точный
+head/tree/merge/ordered parents/run/jobs/artifact digests публикуются в receipt.
+Секреты/live Telegram/VM/рабочие DB/S3 не использовались. C0 intake и независимый
+C8 ещё обязательны; scope exclusions §§13.8–13.10 сохранены.
+
+Первый implementation run38248730093 / head77155722c34a671af011caa90407f64c3f9a4a9e:
+8 jobs PASS, foundation остановлен на3 старых unit queue cases до PG suite.
+Причина — eager database-name lookup в общем constructor при TEST environment;
+старые doubles намеренно описывают только прежний driver/role contract.
+Проверка имени БД перенесена в `_require_guards`, то есть применяется ко всем
+четырём новым entrypoints до transaction, вместе с server-environment gate.
+DB-side current_database/provider/authority checks сохранены; старые tests/fixtures
+не изменены. Адресный TEST-environment rerun:25 PASS. Это содержательная правка
+admission boundary; полный новый source CI требуется после неё.
+
+В первом actual normal/exact Docker29 C→G phase обе проверки PASS: guarded
+CALL1/EFFECT1, C35 projection/private-S3 unchanged, unused reverse/used refusal,
+post-commit exit86 → independent actual0010 observer → G callers/restart.
+Prepare charge normal419.586215s / Docker29427.785057s < исходных600;
+whole retained C113.157986s /113.469536s включён, G prepare8.112129s /8.133850s.
+Retained T/C/daemon negatives и clean8 сохранены. Это evidence первого tree,
+не переносится автоматически на исправленный final head; новые IDs в receipt.
+
+Второй run38251039019 / heada8eff5f161c1bb5ad7b99216a7333ead35d02f17:
+constructor regression закрыта;8 jobs PASS, foundation1081 unit PASS/1 FAIL
+до597 PG cases. Retained early-failure unit сравнивал float subtraction с600:
+`1475.198142485 - 875.198142485 == 600.0000000000001`, хотя сохранённое
+`deadline == started_at + 600` точно TRUE. Исправлены два одинаковых unit
+assertions на эту исходную exact identity, без tolerance/расширения bounds;
+существующий early-refusal seam фиксирует наблюдённый fractional clock для
+детерминированного воспроизведения. Runtime/harness clocks, deadlines, cleanup,
+source guards и actual Docker cases не менялись. Адресный budget/early-failure
+suite38 PASS. Новая полная source проверка обязательна, ручного rerun-to-green нет.
+Вторые G phases actual PASS: charge369.394445s normal /368.402980s Docker29;
+whole retained C93.381538s /92.315675s включён; данные/identities/retained proofs
+подтверждены чтением artifacts11748991093/11748866348. Это evidence второго tree.
+
+Третий run38253408056 / head756714f78327f80118d962d4b9311e74165fa906:
+unit1082 PASS (185.25s); actual PG591 PASS/6 FAIL (847.68s), затем foundation
+CANCELLED на прежнем35min. Остальные8 jobs/clean8 PASS. Разобраны ошибки именно
+новых scenarios: fresh manual API принимает202, а не200; owner Takeover нельзя
+исполнять из migrator через runtime-only raw_context; file/crash setup не может
+предполагать отсутствие retained effects-free Jobs. Исправление сохраняет все
+outcome/counter/assertions и production: Takeover prepare/execute берёт lock
+через настоящую runtime capability; file case проходит обычный Inbox/claim и
+проверяет отдельный context increment после finish_fetch; existing M2 crash
+child выполняет обычный worker loop до прежнего barrier/exit42, не меняя очередь.
+Старые M2 helpers/CHILD и runtime/DDL/budgets не менялись. Это содержательный
+test-setup fix; новый CI обязателен, лимит foundation35 не расширен.
+Третьи G phases PASS: charge421.186321s normal /419.969723s Docker29; whole C
+112.615779s /111.796138s включён. Artifacts11749449642/11749900999 проверены;
+этот частичный PASS не объявляется завершённой GUARDS приёмкой.

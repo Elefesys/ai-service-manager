@@ -156,6 +156,7 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
                             *TABLES,
                             "platform.messaging_command_receipts",
                             "platform.conversation_control_receipts",
+                            "platform.turn_guard_receipts",
                         )
                     )
                 )

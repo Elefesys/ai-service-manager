@@ -1422,3 +1422,23 @@ _R1_CLIENT = (
     b"iEkYZDdEo8F2EeULPOb5ipwydBnVY3l8LPH73zj4Tjwm/memjGAlIsJH3BRfv89S+BjLtzVP+j7oiR//rLGQK1E9Joyq/+nS"
     b"JbwJsBJEwWhhW4q/gbnf2YsY+le8oLEFlad+QnPPHj1vaFpxmkZpzllfmU8PXMLxKHBv8D9zbxDi"
 )
+
+
+def test_guards_inventory_is_exact_c_plus_one_and_old_sources_remain_frozen():
+    assert len(egress.SCHEMA_TABLES["0007"]) == 31
+    assert len(egress.SCHEMA_TABLES["0008"]) == 34
+    assert len(egress.SCHEMA_TABLES["0009"]) == 35
+    assert egress.SCHEMA_TABLES["0010"] == egress.SCHEMA_TABLES["0009"] | {
+        "platform.turn_guard_receipts"
+    }
+    assert len(egress.SCHEMA_TABLES["0010"]) == 36
+    for rev in ("0009", "0010"):
+        exact = egress.SCHEMA_TABLES[rev]
+        egress.schema_inventory(rev, exact)
+        for changed in (
+            exact - {"platform.inbox_events"},
+            exact | {"app.extra"},
+            (exact - {"platform.inbox_events"}) | {"platform.replacement"},
+        ):
+            with pytest.raises(egress.EgressError, match="EGRESS_MIGRATION_DATABASE_TABLES"):
+                egress.schema_inventory(rev, changed)

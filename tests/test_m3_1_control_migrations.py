@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from asm.messaging.errors import Code
@@ -452,6 +453,21 @@ C_COLUMNS = {
 }
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def retained_control_schema(db):
+    # These cases prove exact C definitions, not latest-head GUARDS. Runtime
+    # readiness is initially checked by db on G; all C data is cleaned before
+    # the fixture restores head. The frozen C_COLUMNS/assertions stay unchanged.
+    runtime, _ = db
+    await runtime.engine.dispose()
+    await _migrate("downgrade", "0009")
+    try:
+        yield
+    finally:
+        await _migrate("upgrade", "head")
+        await runtime.engine.dispose()
+
+
 async def assert_schema(c, revision):
     assert revision in ("0008", "0009")
     assert (
@@ -851,7 +867,8 @@ async def test_control_commit_ack_loss_fresh_reader_selects_exact_0009(messaging
         observed = await fresh_observation(os.environ["ASM_MIGRATION_DATABASE_URL"])
         assert observed["role"] == "asm_migrator" and observed["database"] == "asm_test"
         assert observed["reader_pid"] != child.pid
-        await h.runtime.check()
+        with pytest.raises(RuntimeError, match="schema"):
+            await h.runtime.check()  # G must refuse the freshly observed C/0009.
     finally:
         await _migrate("upgrade", "head")
         await h.runtime.engine.dispose()

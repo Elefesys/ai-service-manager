@@ -402,7 +402,7 @@ async def test_downgrade_refuses_55000_before_first_destructive_statement(telegr
         assert caught.value.orig.sqlstate == "55000"
         assert (
             await c.execute(text("SELECT version_num FROM platform.alembic_version"))
-        ).scalar_one() == "0009"  # Direct 0007 refusal preserves the current head too.
+        ).scalar_one() == "0010"  # Direct 0007 refusal preserves the current head too.
         assert (
             await c.execute(text("SELECT count(*) FROM platform.telegram_connection_state"))
         ).scalar_one() == 1

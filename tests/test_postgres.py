@@ -135,6 +135,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "telegram_connection_state",
             "telegram_update_receipts",
             "turn_consumer_receipts",
+            "turn_guard_receipts",
             "user_accounts",
             "workspace_billing_accounts",
             "workspace_memberships",

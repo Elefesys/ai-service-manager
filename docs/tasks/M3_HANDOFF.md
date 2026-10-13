@@ -5,6 +5,489 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
+## 0. Текущая выдача C0 — C3-M3.1-GUARDS, реализация
+
+Дата: 2026-10-12 UTC. **GUARDS contract принят; C3 разрешена implementation
+в том же Draft PR28.** Это следующий срез M3.1, не новый milestone.
+C3 — единственный implementation автор; C0 владеет реестром/handoff,
+migration queue и приёмкой. M3.1-GUARDS и весь M3 остаются IN_PROGRESS.
+
+### 0.1. Принятый design и точный старт
+
+[C0 R1 acceptance](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6121868191)
+на `9645c99d49c0a27ea9f4fd95de676771df0a135d` закрывает
+C1-M3-GUARDS-01/P3 и C2-M3-GUARDS-01/P2 **в contract scope**.
+[C6 design PASS](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6122758140)
+проверен C0: новых findings нет. GUARDS-POLICY-01/02, GUARDS-DB-01 и теперь
+GUARDS-COMPAT-01 **LOCKED в design scope**. C6 source/budget plan конкретизирован
+в §0.5 ниже. Actual runtime/timing доказательства остаются частью этой реализации.
+
+| Привязка | Значение |
+|---|---|
+| Repository / PR | `Elefesys/ai-service-manager` / [PR28](https://github.com/Elefesys/ai-service-manager/pull/28) |
+| Branch / checkout | `c3/m3-1-guards`, отдельный checkout; продолжить ту же ветку |
+| Принятый contract head | `9645c99d49c0a27ea9f4fd95de676771df0a135d` |
+| Contract head tree | `c29c13a6a67c0d8349ddb5f73f0d5a1ffe10febd` |
+| Parent принятого R1 | `d4f9bdec7ec801e61165e142b16e98f6d2322e0b` |
+| Accepted main / frozen C | `c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5` / schema0009 |
+
+Начать от **C0 continuation commit**, который содержит эту выдачу, имеет sole
+parent = принятый R1 и меняет только `docs/TASK_REGISTER.md` и этот handoff.
+Его полный SHA/tree опубликован в поручении C0. Сверить parent, два changed paths
+и неизменный contract blob; не терять preparation и не возвращаться к старой
+CONTROL ветке. Reset/rebase/force/new PR/main mutation не входят в выдачу.
+
+[R1 CI38229073360 attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38229073360)
+SUCCESS9/9 + clean9/9: tested merge
+`750e4432e1e9e3636b9e810530ff253e0726fe47`, parents accepted main + R1,
+tree=R1;1056 non-integration/555 PG/113 frontend/27 browser PASS.
+Это retained0009 на docs head. Preparation CI и implementation CI привязываются
+к своим SHA; ни один docs PASS не доказывает GUARDS execution.
+
+### 0.2. Источники, разрешение и граница среза
+
+Прочитать AGENTS, единый реестр, весь M3_CONTRACT (особенно §§6/8/12/13),
+M2 send/recovery contract, R1/C2/C6 receipts и actual0005–0009 definitions,
+CONTROL service, consumer/TurnSnapshot, messaging database/worker/results/commands/
+policy, Outbox/recovery/material hooks и relevant tests. Канон — originals по
+SOURCE_MANIFEST: Spec§§5.1–5.14/18.5–18.8/18.14/25.7,
+ADR024–026/121–128/180/197–198/217/267, MVP GJ-G/GJ-J, Roadmap M3,
+Implementation Plan M3.1 и IMPL-001.
+
+Цель: fresh CONTROLLED ingress → обычный PostgreSQL-backed worker →
+guarded deterministic text result → атомарный Message/receipt/Outbox/send Job →
+отдельный final dispatch admission → existing counted controlled adapter.
+Takeover/new context пресекают устаревшую работу; уже допущенный send сохраняет
+честный outcome. `TURN_TEST_V1` остаётся effects-free. Это LOCAL/TEST срез
+admission/control/idempotency, без ModelGateway/AIRun/LLM/нового tool framework.
+
+C0 **назначает и разрешает одну** новую migration:
+`migrations/versions/0010_conversation_guards.py`,
+**revision0010, down_revision0009**. Резерв принадлежит этому срезу/C3; другого
+DDL writer нет. Applied0001–0009 immutable. Это разрешение реализации и проверок,
+не приёмка её результата; production coexistence/cutover этой выдачей не заявлены.
+
+Принятый M3_CONTRACT226090bytes/blob
+`3a16de4c4336e70af53143e08b8858fc2452d7a9`/SHA256
+`8b3df3bf404857fe182323a1238bbac4862c860d7c5c5c7e9f1f3ae2abda6cab`
+сохранить целиком как byte-prefix. C3 может **append §13.11 implementation evidence**
+с mapping коду/сценариям/source/CI и C6 plan; новый отдельный technical contract
+не нужен. Исторические OPEN/proposal/невыданный0010 в §§13.1–13.10/старых receipts
+заменены этой активной выдачей; согласованная technical semantics сохраняется.
+
+### 0.3. Exact write allowlist —31 paths
+
+26 existing +5 new; новые: migration, guards module и3 GUARDS test files.
+Список — максимальный разрешённый scope, не требование менять каждый файл:
+
+```text
+migrations/versions/0010_conversation_guards.py
+backend/src/asm/conversations/guards.py
+backend/src/asm/messaging/database.py
+backend/src/asm/messaging/worker.py
+backend/src/asm/messaging/results.py
+backend/src/asm/foundation.py
+backend/src/asm/telegram/provisioning.py
+tests/test_m3_1_guards.py
+tests/test_m3_1_guards_postgres.py
+tests/test_m3_1_guards_migrations.py
+tests/test_m2_1_postgres.py
+tests/test_m3_1_control_postgres.py
+tests/test_m3_1_control_api_postgres.py
+frontend/src/MessagingPanel.tsx
+frontend/src/MessagingPanel.test.tsx
+tests/test_foundation.py
+tests/test_m2_3_setup.py
+tests/test_tenancy_postgres.py
+tests/test_m2_3_schema_postgres.py
+tests/test_m3_1_migrations.py
+tests/test_m3_1_control_migrations.py
+tests/test_postgres.py
+tests/test_m1_3_c0_acceptance.py
+tests/test_telegram_egress_postgres.py
+scripts/prepare_telegram_egress.py
+scripts/test_telegram_egress.sh
+scripts/test_telegram_egress_migration.sh
+tests/test_telegram_egress.py
+tests/test_telegram_egress_migration.py
+docs/tasks/M3_CONTRACT.md
+docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md
+```
+
+Назначение каждого path — принятое §13.9 с R1 five-path additions.
+`foundation.py`/`provisioning.py` — exact0010 readiness/TEST provisioning и только
+необходимое существующему constructor CONTROLLED wiring. Frontend — только
+нейтральная OUTBOUND подпись «Исходящее» и existing-history regression; manual
+composer, history rows/delivery statuses/receipt recovery сохраняются.
+Fixture/inventory изменения — только вследствие0010/typed kind/receipt FK;
+старые assertions и revision-qualified T/C cycles сохраняются.
+
+Нужен другой path или изменение принятой semantics — сначала конкретный diff
+и причина C0 до записи. AGENTS/register/handoff, imported canon, applied migrations,
+owner/tenancy HTTP API, DTO/OpenAPI snapshots, dependencies/lockfiles, Compose/
+workflows/pins не входят в allowlist. `tests/test_m1_3_postgres.py` не требуется:
+GUARDS не добавляет Audit columns. Разрешённые scripts/helper меняются только
+для exact inventories/source pairing/new phase по §0.5, без общего redesign.
+
+### 0.4. Обязательная runtime/DB граница
+
+Реализовать §13 целиком в принятом scope. В частности:
+
+1. Новый LOCAL/TEST + CONTROLLED Resume сохраняет private
+   `CONTROLLED_GUARDS_V1`; legacy profile NULL, replay без добавления профиля.
+   Сам Resume Jobs не создаёт; старый HUMAN/AI/pre-fence backlog не получает
+   authority. Live автор именно этого Resume, Workspace/Business/Connection
+   и product availability проверяются при result admission и final send.
+   `messaging.manual_send` — availability, не owner permission для worker.
+   Automated TELEGRAM отказывает до probe/I/O; будущий caller требует отдельной
+   выдачи. Server/DB/provider gates не задаются пользовательским flag/GUC/payload.
+
+2. Trusted typed origin, canonical refs, generation/fence/revision/context и
+   claim/XID/lease по §13.2–4. Существующий worker admission, короткие transactions,
+   Job→authority/Business/Connection/billing→Conversation NO KEY UPDATE→Turn,
+   для send own Job→own Outbox прежде этой цепочки. Post-wait DB clock повторяет
+   live/expiry/activation checks, equality expiry deny. Enqueue не берёт
+   authority/billing locks из material hook; external computation/I/O вне UoW.
+
+3. `prepare_guarded_turn`/`accept_guarded_text`/`replay_guarded_text`/
+   `begin_guarded_send` через normal Worker. Не более одного accepted intent на
+   Turn. Input=context до собственного Message; receipt intent context=input+1
+   после material trigger. Чужой новый material fact инвалидирует pending send.
+   Result receipt+Message+Outbox+send Job+consumer terminal UPDATE атомарны.
+   Canonical winning replay прежде live lease и повторное чтение после wait,
+   changed text conflict, без повторной computation/action/permit.
+
+4. `turn_execute(uuid,uuid)` — replacement тела в0010:
+   GROUP/MEDIA/TEST_CONSUME only после canonical guard; GUARDED_TEXT INVALID_INPUT
+   **до** preflight/supersede/seal/terminal mutation. Старые ABI/grants/codec
+   сохраняются. Typed send branches в claim/retry/finalize/recovery/preflight;
+   GUARDS exhaustion terminalizes Job, не FAILED READY Turn.
+
+5. DISPATCHING commit до permit/I/O — linearization. До него stale send подавляется;
+   после него Takeover/новая generation/Owner revoke не отменяют factual finalize.
+   Proven NOT_SENT может иметь старый attempt_id; каждый новый begin повторяет
+   admission. Возможный effect → UNKNOWN/no-resend; lost start ACK → нет нового
+   permit, committed start/recovery UNKNOWN/CALL=0. Lost finalize ACK читает
+   canonical saved outcome и не понижает SENT. Прежние retry/lease/bounds сохраняются.
+
+6. Одна `platform.turn_guard_receipts`, nullable immutable Resume.guard_profile/
+   Job.guard_rejection, typed kind/step; exact36 = старые35 + эта table.
+   Captured revision FK к immutable consumer Job; current context/generation не
+   превращаются в FK. Явный send Job→Outbox same-kind FK, все восемь relation
+   chains §13.6, reuse parent keys/turn_immutable и accepted identity uniqueness.
+   Runtime без direct table SELECT/DML, existing role/RLS/context правила.
+   Ровно6 новых SQL profiles §13.6; existing signatures/grants сохранены.
+   Никаких выдуманных manual command/owner session/Audit от автоматического send.
+
+7. Existing inbound/manual/file/delivery reconciliation работают в HUMAN.
+   `manual_delivery` фильтрует SEND_MANUAL_TEXT; history OUTBOUND имеет
+   нейтральную подпись, без скрытия automated rows. Public shape, manual
+   fingerprints/receipts/Audit/UNKNOWN, auth/tenant/client isolation сохраняются.
+
+### 0.5. Принятый C6 source/schema и budget plan
+
+Это обязательная конкретизация §13.7 по
+[C6 PASS](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6122758140).
+G — будущий implementation candidate/его проверенный merge с равным tree,
+**не** текущий docs/preparation SHA.
+
+| Phase | Исполнитель / исходники | Schema и граница |
+|---|---|---|
+| Retained predecessor→H | P=`0b7e24ee425ebb429bf87dfe382cbd3fab883028`, H=`754f1c883e5a94a7fc9e729af2605424f949ba33`; unchanged H wrapper | Сохранённые0006→0007 intent/image/state proofs |
+| Retained H→T | T=`ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad`; unchanged T checkout, `test_telegram_egress.sh --schema-upgrade H T` | Полный0007→0008, прежние full-T timeout/export cases |
+| Retained T→C | C=`c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5`; **C checkout**, direct `test_telegram_egress.sh --control-schema-upgrade T C budget_C` | Прежний0008→0009 child byte-identical, fixed T/C columns/recovery |
+| Новый C→G | G coordinator + explicit known C/G schema selector; отдельная owned LOCAL DB/volume |0009→0010 readiness/preservation/reverse/refusal/recovery; actual G callers/restart |
+
+В existing normal/Docker29 state lanes H/T/C выполняются по одному разу,
+добавляется один G phase; новых matrix jobs/fault families нет.
+**Не вызывать полный frozen C migration wrapper state внутри G**: он повторит
+H/T chain и создаст другой coordinator600. Развести G coordinator source,
+frozen C executor и G phase candidate; G-root `source_check(C)` не заменяет
+реальный C checkout. Known phase/source pairs закрыты, не произвольная revision.
+
+Прежние6 daemon negatives исполняются через direct
+`__control_cleanup_negatives__` **в C checkout**, candidate=C, с C report,
+сохранённым до удаления checkout. Их можно оставить в tail после нового G phase;
+C report не переименовывается в G. Retained failure останавливает продвижение.
+Полный T/negative/C evidence сохраняется отдельно до teardown/removal.
+
+Сохранить exact H/T/C runtime/development image/source identities и archives;
+C images из retained C phase переиспользуются после attestation, без лишней
+пересборки. G migration/observer — G development image/asm_migrator.
+Перед cutover старые API/worker/scheduler drained; старт/restart каждого caller
+только на confirmed source/schema, actual image/CID сверяются.
+Historical0007 saved-plan/`migration_source()` guard не расширяется на G.
+
+**Один исходный prepare deadline t0+600** начинается после H, до любой T/C/G
+source preparation. H сохраняет прежние held180/state25min bounds.
+В этот600 входят whole T + full-T negatives, **весь retained C shell**
+(prepare/runtime/capture/cleanup/report handoff), pre-G интервалы и G prepare.
+C время не прибавляется повторно отдельным C prepare. C получает прежний
+one-use0600 T/C/CONTROL budget, G — отдельный C/G/G budget с тем же started/deadline,
+phase/source/owner/clock binding и накопленной charge; remaining=deadline-now.
+
+Нынешний terminal C watchdog `remaining+480` **не переносится на retained C**:
+внешний G supervisor ограничивает весь retained C remaining600 и завершает
+owned process group при timeout, затем ждёт cleanup. Для terminal G остаются
+нынешние отдельные runtime/command/state limits. Нового fresh600 и продления90
+при re-entry нет: один persisted cleanup90/owner с тем же child/parent deadline.
+State25min/foundation35min/exact Docker29/all9 gates не менять.
+
+C6 измерил прежний0009 chain: whole T+negatives+C416.452s normal/341.616s Docker29;
+арифметический остаток183.548/258.384s **не гарантия G и не новый лимит**.
+Реальные C checkout/image work и G prepare/runtime стоимость показать на final G.
+Если не помещается — вернуть C0 actual timing/узкий gap diff, не повышать
+лимиты и не удалять прежние assertions; не пытаться rerun-to-green.
+
+Migration checks:
+- exact0007/0008/0009 inventories и T_COLUMNS/C_COLUMNS остаются frozen;
+  G full36 inventory/columns содержит новые nullable fields/receipt.
+- forward preservation — **fixed C projection** старых34 data tables плюс отдельно
+  `alembic_version`0009→0010; это old35 inventory, не dynamic intersection.
+  До запуска G workers проверить old rows/private-S3 bytes/pending manual/UNKNOWN/
+  TURNS/CONTROL, NULL profile/rejection, empty guard receipt, отсутствие backfill/
+  enqueue/reset. Дальнейшие worker effects отделены от DDL preservation.
+- fresh/repeat upgrade; на0009 C readiness PASS/G refusal, на0010 наоборот;
+  API/worker/scheduler/TEST provisioning требуют exact0010.
+- no-use downgrade **только0010** восстанавливает exact0009 full35 data/
+  definitions/grants/constraints/indexes/triggers/RLS и C readiness.
+  Used-profile/kind/step/receipt/rejection (включая terminal) отказывает до DDL;
+  snapshot used G не меняется. Не очищать usage ради успешного rollback.
+- один новый existing commit/lost-result marker/exit86 case C→G с fresh
+  independent migration-role observer: actual revision и DB/volume/asm_local/
+  PID/birth/boot identity выбирают source. Confirmed0009→C, confirmed0010→G,
+  unreadable/unknown/mismatch→STOP. Exit code сам source не выбирает.
+  Старый control recovery остаётся T/0009-qualified; новая ветвь явно C/0010.
+  Controller уместен в разрешённом guards migration test, нового framework нет.
+
+Все7 compat paths уже в31-path allowlist. Latest canonical_fingerprint и
+candidate-egress-source expected_revision обновляются на G **revision-qualified**;
+frozen C bytes/expectations не переписываются. `infra/postgres/ensure_m1_3_prerequisites.sh`,
+`scripts/check_backend.sh`, Compose/pins/workflows не нуждаются в адаптации.
+
+### 0.6. Проверки и фактические доказательства
+
+Покрыть 14 строк §13.8 компактными actual PostgreSQL/worker/process cases,
+переиспользуя existing barriers/lock observation/counting/recovery. Fresh positive
+обязательно проходит Resume → normal ingress/queue → guarded consumer → send,
+а не raw Outbox fixture. Отдельно показать legacy-route rejection до mutation,
+post-wait отказ, accept atomicity/replay и две различные process границы:
+lost dispatch ACK до permit (CALL=0) и possible effect/response loss (CALL=1/EFFECT=1).
+Это функциональная корректность и восстановление существующего пути.
+
+Сохранить прежние unit/PG/frontend/browser/HTTP/wire/manual/CONTROL assertions.
+Нейтральную history подпись проверить одним содержательным mixed-history
+regression; новые UI flows не нужны. Для fixture/inventory adaptations указать
+причину по0010/новому kind/FK, без skip/xfail/ослабления assertion.
+
+Использовать штатные команды проекта: адресные GUARDS unit/PG/migration suites,
+`sh scripts/ci.sh`, `sh scripts/test_browser.sh`, Ruff/mypy, frontend typecheck/tests,
+generated OpenAPI consistency и whitespace/source checks. Final-source gates —
+прежние9 jobs + clean-source9/9, normal/exact Docker29 и retained T/C/G evidence.
+Если локальный Docker отсутствует, честно обозначить NOT RUN и получить actual
+PG/S3/browser/Docker evidence на disposable GitHub runners штатным PR CI.
+Моки и success docs head не подменяют эту проверку.
+
+Receipt/runbook связывают full final head, parent/tree, accepted main,
+tested merge с ordered parents main+head и tree=head, run/attempt/jobs,
+clean checkouts, actual commands/counts и ограничения. Для нового G предъявить
+оба state report/source/image bindings, C→G/reverse/refusal/recovery assertions,
+actual timings/600 ledger/cleanup и сохранённые T/C markers.
+Указать artifact IDs/digests и точные report paths для адресной проверки;
+повторять полный исторический ZIP/archive audit без конкретной причины не нужно.
+Не запускать повторные CI только ради цвета; при реальном исправлении новое
+evidence привязывается к новому SHA.
+
+### 0.7. Возврат C0 и границы выдачи
+
+C3 продолжает тот же Draft PR28, делает содержательные commits и push в
+`c3/m3-1-guards`; head удерживает после возврата на REVIEW. Обновляет один
+[единый receipt](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6119496506),
+проверяет публикацию чтением и возвращает его ссылку. Нужны: changed paths/diff,
+migration/profile/contract mapping, каждый §13.8 case → actual test/assertion,
+команды/evidence выше, ограничения и OPEN/gap. Если реализация или actual gates
+не завершены, статус остаётся IN_PROGRESS с конкретным остатком, не READY/VERIFIED.
+
+Затем C0 intake → адресные C1 product / C2 DB / C6 source-budget implementation
+reviews по final candidate → C8 independent acceptance по выдаче C0 → решение
+C0 → merge пользователем → проверка main. Повторный полный design review без
+semantic delta не нужен. C3 не закрывает findings от имени C0 и не выдаёт задачи
+другим чатам. При дополнительном path/semantic/budget gap вернуть конкретный
+diff/evidence и дождаться решения только по этому расширению.
+
+IMPL-01/02/03/04 CLOSED. **IMPL-05 OPEN, fix DEFERRED; неблокирующий P3 только
+LOCAL/TEST по C0**, исходный C6 P2/CHANGES_REQUESTED сохранён как history.
+Штатный STOP run остаётся неуспешным; automatic resume/reuse restored failed
+journal не поддержан, новый run получает новый workspace. Нового факта влияния
+на обычный path нет; этот fix и новый FS/chaos/security/fault framework не выдаются.
+
+Native-owner/edit-delete provenance, production automated Telegram, ModelGateway/
+LLM/M4, Escalation и Console CONTROL UI — отдельный scope. Базовые auth/tenant/
+Client/data/idempotency protections сохраняются. VM/SSH, live Telegram,
+working DB/S3, credentials/secrets, ACK/binding/renewal, deploy и merge не разрешены.
+Допустимы только предусмотренные disposable LOCAL/TEST/CI проверки.
+
+<details>
+<summary>История GUARDS-CONTRACT до выдачи implementation; активная выдача выше</summary>
+
+## 0. Текущая выдача C0 — C3-M3.1-GUARDS-CONTRACT
+
+Дата: 2026-10-12 UTC. **CONTROL закрыт; следующий срез — GUARDS. Сейчас только
+контрактное дополнение, реализация будет выдана после review.**
+Это начальная фаза M3.1-GUARDS в существующем плане, не новый milestone.
+C3 — единственный автор; C0 владеет реестром, этим handoff и приёмкой.
+
+### 0.1. Принятая база, ветка и файлы
+
+[PR27](https://github.com/Elefesys/ai-service-manager/pull/27) слит пользователем.
+Accepted main **`c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5`**, tree
+`d7f0dbd35a637877b57d721cbb6a39c6ef59eae4`, schema0009.
+Parents: `ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad` +
+`634ea9b3b1af91124abd1b60873cc6fa723b5361`; дерево равно принятому candidate.
+[Main CI38209943421](https://github.com/Elefesys/ai-service-manager/actions/runs/38209943421)
+9/9 SUCCESS + clean9/9; 1056 non-integration/555 PG/113 frontend/27 browser.
+[Приёмка C0](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6118563610):
+M3.1-CONTROL INTEGRATED/VERIFIED LOCAL/TEST, весь M3 IN_PROGRESS.
+
+Ветка **`c3/m3-1-guards`**, отдельный checkout. Начать от **C0 preparation head**,
+единственный parent которого равен accepted main. Он меняет только
+`docs/TASK_REGISTER.md` и `docs/tasks/M3_HANDOFF.md`; exact continuation SHA/tree
+даны в поручении C0. Проверить parent и два paths; не потерять подготовку, не
+продолжать старую CONTROL ветку, не reset/rebase/force. Main не менять.
+
+**Единственный разрешённый C3 write path: `docs/tasks/M3_CONTRACT.md`.**
+Append новый §13 GUARDS, сохраняя целиком принятый prefix:
+170371 bytes, blob `aa3729960a43cf09d729a3514671d44c0b9685a4`,
+SHA256 `12cfeb72a4c101c557a710522d0e553dbada06d2ade307649187086e85b6a3df`.
+Существующие §§1–12 остаются исторически точными. Изменение принятой семантики
+явно назвать proposal с причиной/последствиями для решения C0 до реализации.
+Новые отдельные технические contracts не создавать.
+
+Runtime, DDL, tests, frontend/OpenAPI, shared helper, workflows/Compose/pins,
+AGENTS/реестр/handoff и imported canon сейчас не входят в C3 write scope.
+Applied0001–0009 immutable; номер следующей миграции ещё не назначен.
+
+### 0.2. Зачем нужен этот срез
+
+CONTROL уже сохраняет HUMAN/AI, generation и Resume fence; worker сейчас обрабатывает
+PROCESS_TURN через effects-free TEST consumer, а send path — SEND_MANUAL_TEXT.
+Нужна одна рабочая граница, к которой последующий AI runtime сможет подключить
+автоматический результат: устаревшая работа не меняет состояние и не отправляет
+сообщение после Takeover. Уже допущенная отправка сохраняет честный исход.
+Приём сообщений, ручной ответ и reconciliation продолжают работать в HUMAN.
+
+Основания: AGENTS, текущий реестр, весь M3_CONTRACT (особенно §§6/8/12),
+M2_CONTRACT send/recovery; Spec §§5.1–5.14/18.5–18.8,
+ADR024–026/121–128/180/197–198/267; MVP GJ-G/GJ-J; Roadmap M3 и
+Implementation Plan M3.1. При предлагаемой schema дельте дополнительно ADR217,
+Spec§18.14/25.7. Прочитать actual0009 и унаследованные определения0005/0007/0008,
+CONTROL orchestration, messaging worker/database/commands/results/policy,
+TurnSnapshot/consumer, Outbox/attempt/recovery и relevant existing tests.
+Выводы о внешнем API не нужны для этой фазы; native account gate остаётся отдельным.
+
+### 0.3. Содержание минимального §13
+
+1. **Доверенный источник и актуальность.** Развести OWNER_MANUAL и automated origin;
+   происхождение задаёт доверенный command path, не клиентский flag. Указать
+   необходимый набор Workspace/Client/Conversation/Turn refs, context/revision,
+   control generation/fence и live claim/lease. Показать, какие существующие поля
+   используются, какие действительно нужны дополнительно; legacy NULL/backlog и
+   старый HUMAN Turn не получают новую authority после Resume.
+
+2. **Конкретная transaction boundary.** Дать callable/SQL-orchestration outline и
+   lock order, включая имеющиеся FK/trigger edges. Admission и Takeover используют
+   одну сериализованную conversation границу. Live authority, product availability,
+   channel rights/window и свежесть проверяются в нужном месте после ожиданий;
+   lease сам по себе не разрешает эффект. External HTTP/LLM вне DB transaction.
+   Отдельно описать отказ/STALE/SUPERSEDED и replay без новых mutation/Audit/jobs.
+   Это требование к исполнению, не proposal универсального policy engine.
+
+3. **Send и in-flight.** Указать durable linearization point до I/O, идентичность
+   intent/attempt и совместимость с существующей send/recovery моделью. Takeover
+   до admission подавляет новую автоматическую отправку; после dispatch commit
+   запрос может уже начаться, в том числе в промежутке commit→I/O. Фактические
+   SUCCEEDED/FAILED/UNKNOWN сохраняются после смены generation. UNKNOWN не
+   переименовывать в CANCELLED и не отправлять повторно вслепую. Lost ACK ведёт
+   к canonical read/reconciliation, не к новому вызову transport. Для UI определить
+   только данные, нужные будущему потребителю; сам UI здесь не строится.
+
+4. **Реальная точка использования без M4.** Описать минимальный интегрируемый
+   worker/Outbox path и LOCAL/TEST сценарий с детерминированным результатом на
+   существующем controlled transport. Нужна проверка реальной DB/worker границы,
+   а не свободная функция, которую вызывает только тест. Схема/сервисы AIRun,
+   ModelGateway, prompts, бизнес-команды M6–M9 и живой AI provider здесь не нужны.
+   Production/Telegram automation этим design не включается; согласовать точное
+   условие подключения будущего trusted caller без публичного обходного route.
+
+5. **Совместимость и минимальная schema/API дельта.** Сохранить существующие manual
+   fingerprints/receipts/UNKNOWN, CONTROL replay, TURNS и старые API/Audit snapshots.
+   Перечислить необходимые DTO/status/SQL profiles и будущие paths. Если нужна
+   миграция — обосновать каждое поле/constraint/таблицу, predecessor0009, no backfill,
+   upgrade/downgrade/refusal и source/schema pairing. Это proposal: C0/C2 назначают
+   revision и write scope перед кодом. Если schema не нужна, показать, как existing
+   model покрывает требования. Не добавлять unused tables/adapters.
+
+6. **Проверяемые сценарии M3-A03/A04–A06/A11.** Дать компактную таблицу scenario →
+   actual caller/граница → observable result → существующий или необходимый test:
+   Takeover до admission; AI→HUMAN→AI со старым worker; новый material context/
+   superseded Turn; истёкший/reclaimed claim; dispatch до Takeover и результат
+   после него; возможный effect/response loss/restart без resend; обычные manual/
+   inbound/reconciliation в HUMAN. Проверки — обычные concurrency/recovery и
+   existing controlled wire, без расширения программы filesystem/chaos faults.
+   Отделить новые GUARDS proofs от уже принятых M2 UNKNOWN и CONTROL TEST outcomes.
+
+7. **Один план реализации.** Предложить точный минимальный allowlist будущей
+   implementation, используемые public/private methods, предполагаемые migration
+   изменения, existing suite reuse и несколько обязательных regressions. Сложность
+   каждого нового механизма объяснить конкретным сценарием. Нереализованные native/
+   edit/delete/Console/Escalation/M4 границы обозначить явно; не расширять VERIFIED.
+
+### 0.4. Соразмерность и сохранённые ограничения
+
+Приоритет владельца — работающий MVP с базовой защитой и возможностью расширения.
+Auth/tenant isolation, целостность данных, idempotency и право человека остановить
+новую автоматику обязательны. Новые security/chaos программы, новый framework
+надёжного журналирования и общая платформа будущих tools не являются результатом
+этой задачи. Предпочитать имеющиеся DB/Jobs/Outbox механизмы и короткий ясный flow.
+
+IMPL-01/02/03/04 CLOSED. IMPL-05 остаётся OPEN, исправление DEFERRED по
+[решению C0](https://github.com/Elefesys/ai-service-manager/pull/27#issuecomment-6118079467);
+не исправлять его заодно и не переоткрывать без нового practical evidence.
+Native-owner observability NOT VERIFIED; automatic native takeover, material
+edit/delete/provenance и reprocess ignored events не выданы. HUMAN default,
+explicit Resume, no backlog automation и сохранение manual/inbound действуют.
+
+Новые длительные прогоны, provider probes, Docker/PG/fault experiments для написания
+контракта не нужны. Существующие CI gates/лимиты не отключать и не повышать.
+VM/SSH/live Telegram/рабочие DB-S3/secrets/ACK/activation/renewal/deploy/merge,
+новые платные сервисы/аккаунты не входят в выдачу.
+
+### 0.5. Возврат, PR и review
+
+Содержательный contract commit/обычный push в подготовленную ветку разрешены.
+После завершения дополнения открыть **один новый Draft PR в main**; он продолжится
+для реализации после её отдельной выдачи. Не открывать PR только для C0 preparation:
+это исключает лишний предварительный CI на одной документационной подготовке.
+Автоматический CI после открытия Draft PR работает штатно; вручную не rerun-to-green.
+Docs CI не является execution GUARDS.
+
+Вернуть один receipt: full base/parent/head/tree и PR; diff ровно одного C3 path;
+byte-prefix/hash proof; краткие выбранные решения и действительно OPEN trade-offs;
+точный будущий allowlist/миграция proposal; таблица сценариев и существующие
+tests; выполненные source/diff/link checks и фактический CI status, без ложного
+runtime PASS. При отсутствии нужной среды это явно указать, новый scope не
+расширять молча. После сдачи удерживать head.
+
+Далее C0 intake → адресные C1 (product/admission/manual) и C2 (DB/locks/recovery)
+reviews → решение C0 → implementation в том же PR. C6 нужен только при конкретной
+необходимой source/schema/harness дельте; C8 — после готовой реализации.
+C3 сам не выдаёт поручения другим чатам и не начинает code до решения C0.
+
+</details>
+
+<details>
+<summary>История завершённой CONTROL implementation выдачи</summary>
+
 ## 0. Текущая выдача C0 — C3-M3.1-CONTROL, реализация
 
 Дата решения: 2026-10-10 UTC. **CONTROL-CONTRACT R1 принят; C3 выдана реализация
@@ -282,6 +765,9 @@ material edit/delete/codec/provenance остаются отдельным gate. 
 VM/SSH/live Telegram/рабочие DB-S3/owner binding/ACK/TEST продление/deploy/merge
 не входят в эту задачу. Новых аккаунтов/tokens/данных или действий пользователя
 для LOCAL/TEST implementation не требуется. M3 остаётся IN_PROGRESS.
+
+
+</details>
 
 <details>
 <summary>История CONTROL-CONTRACT до R1; завершено, текущая implementation выдача — §0 выше</summary>
@@ -926,8 +1412,9 @@ M3 не требует ServiceRequest/Quote/Order/ApprovalRequest будущих
 
 Названия/число таблиц, маршрутов, jobs и численные debounce/deadline не фиксируются
 этим планом. C0/C2 выбирают минимум под сценарии до соответствующего кода.
-Текущая принятая на main миграция0008; для CONTROL C0 выдал0009/predecessor0008
-по §0 только для LOCAL/TEST implementation. Applied0001–0008 не переписываются.
+Текущая принятая на main миграция0009 — CONTROL после PR27.
+Следующая schema дельта требует отдельного решения C0/C2 после GUARDS contract;
+новая revision сейчас не назначена. Applied0001–0009 не переписываются.
 
 ## 4. Контракт до кода: существенные решения
 

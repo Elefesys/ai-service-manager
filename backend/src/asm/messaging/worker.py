@@ -7,12 +7,13 @@ from uuid import uuid4
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from asm.conversations.guards import GuardedTurnSnapshot, GuardTextResult, consume_guarded
 from asm.conversations.turns import ConsumerResult, TurnSnapshot, consume
 from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import OutcomeKind, SendOutcome
-from asm.messaging.results import JobClaim, SendPermit
+from asm.messaging.results import JobClaim, SendPermit, TurnJobClaim
 
 if TYPE_CHECKING:
     from asm.files.transfer import CleanupSweep, FetchTransfer
@@ -94,7 +95,12 @@ class Worker:
 
         if claim.kind == "PROCESS_TURN":
             try:
-                snapshot = await self.database.process_turn(claim)
+                guarded = isinstance(claim, TurnJobClaim) and claim.step == "GUARDED_TEXT"
+                snapshot = (
+                    await self.database.prepare_guarded_turn(claim)
+                    if guarded
+                    else await self.database.process_turn(claim)
+                )
             except SQLAlchemyError as error:
                 await self._retry_error(claim, error)
                 return
@@ -103,7 +109,12 @@ class Worker:
                     await self._retry_error(claim, error)
                     return
                 raise
-            if isinstance(snapshot, TurnSnapshot):
+            if isinstance(snapshot, GuardedTurnSnapshot):
+                await self.database.checkpoint("guard_before_consume")
+                guarded_result = consume_guarded(snapshot)
+                await self.database.checkpoint("guard_after_consume")
+                await self._finish_guarded(claim, guarded_result)
+            elif isinstance(snapshot, TurnSnapshot):
                 await self.database.checkpoint("turn_before_consume")
                 result = consume(snapshot)
                 await self.database.checkpoint("turn_after_consume")
@@ -117,15 +128,20 @@ class Worker:
                 await self.files.execute(claim)
             return
 
-        if claim.kind != "SEND_MANUAL_TEXT":
+        if claim.kind not in {"SEND_MANUAL_TEXT", "SEND_GUARDED_TEXT"}:
             raise MessagingError(Code.INVALID_INPUT)
 
         # If start commit ACK is lost, no permit reaches this code: recovery
         # conservatively marks the durable DISPATCHING attempt UNKNOWN.
-        probe = await self.database.telegram_probe(claim)
-        if probe is None:
-            permit = await self.database.begin_send(claim)
+        if claim.kind == "SEND_GUARDED_TEXT":
+            # This private path refuses TELEGRAM before any rights probe/I/O.
+            permit = await self.database.begin_guarded_send(claim)
+            probe = None
         else:
+            probe = await self.database.telegram_probe(claim)
+        if claim.kind == "SEND_MANUAL_TEXT" and probe is None:
+            permit = await self.database.begin_send(claim)
+        elif probe is not None:
             observation: dict[str, object] = (
                 await self.telegram.observe(
                     probe.bot_identity, probe.external_connection_id, probe.owner_user_id
@@ -166,6 +182,27 @@ class Worker:
             outcome = SendOutcome(OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT)
         await self.adapter.checkpoint("before_finalize")
         await self._finish(permit, outcome)
+
+    async def _finish_guarded(self, claim: JobClaim, result: GuardTextResult) -> None:
+        try:
+            await self.database.accept_guarded_text(claim, result.snapshot_digest, result.text)
+        except SQLAlchemyError as primary:
+            try:
+                await self.database.replay_guarded_text(
+                    claim.job_id, claim.claim_token, result.snapshot_digest, result.text
+                )
+                return
+            except MessagingError as miss:
+                if miss.code != Code.STALE_CLAIM:
+                    raise miss from primary
+            except SQLAlchemyError as secondary:
+                raise secondary from primary
+            # A proven missing receipt permits only fresh live admission, never
+            # a repeated computation or transport call.
+            try:
+                await self.database.accept_guarded_text(claim, result.snapshot_digest, result.text)
+            except (SQLAlchemyError, MessagingError) as secondary:
+                raise secondary from primary
 
     async def run_once(self, stop: asyncio.Event | None = None) -> bool:
         if stop is not None and stop.is_set():

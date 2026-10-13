@@ -35,6 +35,13 @@ async def control(telegram):
         # This wrapper owns CONTROL children before the retained Telegram fixture
         # removes its shared billing Audit. No cascade or constraint bypass.
         async with telegram.migrator.begin() as c:
+            if (
+                await c.execute(text("SELECT to_regclass('platform.turn_guard_receipts')"))
+            ).scalar_one() is not None:
+                await c.execute(
+                    text("DELETE FROM platform.turn_guard_receipts WHERE workspace_id IN (:a,:b)"),
+                    {"a": A, "b": B},
+                )
             await c.execute(
                 text(
                     "DELETE FROM platform.conversation_control_receipts WHERE workspace_id IN (:a,:b)"

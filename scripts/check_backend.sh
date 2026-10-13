@@ -3,10 +3,10 @@ set -eu
 ruff check backend tests scripts migrations
 ruff format --check --diff backend tests scripts migrations
 mypy backend/src
-pytest -q -m 'not integration'
+pytest -q --durations=20 -m 'not integration'
 alembic upgrade head
 alembic upgrade head
-pytest -q -m integration
+pytest -v --durations=20 -m integration
 alembic downgrade base
 alembic upgrade head
 python scripts/export_contracts.py --check

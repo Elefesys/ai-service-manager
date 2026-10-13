@@ -779,7 +779,8 @@ class TestEgressTurnSuccessGate:
             await stabilize_turns(h)
 
 
-async def canonical_fingerprint(connection):
+async def canonical_fingerprint(connection, *, revision="0010"):
+    assert revision in {"0009", "0010"}
     tables = (
         await connection.execute(
             text(
@@ -796,8 +797,8 @@ async def canonical_fingerprint(connection):
 
     assert (
         await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
-    ).scalar_one() == "0009"
-    schema_inventory("0009", (namespace + "." + table for namespace, table in tables))
+    ).scalar_one() == revision
+    schema_inventory(revision, (namespace + "." + table for namespace, table in tables))
     fingerprint = {}
     for namespace, table in tables:
         assert re.fullmatch(r"[a-z_][a-z_0-9]*", namespace)
@@ -953,7 +954,7 @@ async def durable_local():
                 ), "E05_FRESH_EMPTY_LOCAL_DATABASE_REQUIRED"
             else:
                 # The first case's sealed billing catalog is immutable by contract.
-                # Require its complete attested cleanup fingerprint (all 35 tables),
+                # Require its complete attested cleanup fingerprint (all 36 G tables),
                 # not a relaxed empty-DB check or a destructive catalog reset.
                 previous = read_json(catalog_file)
                 assert previous["database_identity"] == target["database_identity"]

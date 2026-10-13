@@ -43,6 +43,20 @@ describe('owner conversation view and private reads', () => {
     expect(screen.getByText('Изображение загружается.')).toBeVisible(); expect(screen.getByText(/Изображение недоступно · INVALID_INPUT/)).toBeVisible();
     expect(screen.getByRole('button',{name:'Открыть изображение'})).toBeEnabled(); expect(screen.queryByRole('button',{name:/resend|отправить повторно/i})).toBeNull();
   });
+  it('keeps mixed manual and automated history neutral with every delivery status', async()=>{
+    const states=['PENDING','DISPATCHING','SENT','FAILED','UNKNOWN'] as const;
+    const rows=states.flatMap((state,i)=>[
+      {...outbound(state),message_id:id(130+i),text:`Manual ${state}`},
+      {...outbound(state),message_id:id(140+i),text:`CONTROLLED GUARDS TEST ${state}`},
+    ]);
+    vi.mocked(messagingApi.messages).mockResolvedValue(page(message(),...rows));
+    setup(); await ready();
+    expect(screen.getAllByText('Исходящее')).toHaveLength(10);
+    expect(screen.queryByText('Ручной ответ')).toBeNull();
+    for(const row of rows) expect(screen.getByTestId(`message-${row.message_id}`)).toHaveTextContent(row.text!);
+    expect(screen.getByLabelText('Ручной текстовый ответ')).toBeEnabled();
+    expect(messagingApi.send).not.toHaveBeenCalled();
+  });
   it('uses opaque pagination, replaces current projections, resets pages on refresh', async()=>{
     vi.mocked(messagingApi.connections).mockResolvedValueOnce({items:[connection()],next_cursor:'connection_cursor'}).mockResolvedValue(page({...connection(),state:'DISABLED'}));
     vi.mocked(messagingApi.conversations).mockResolvedValueOnce({items:[conversation()],next_cursor:'conversation_cursor'}).mockResolvedValue(page(conversation(10)));

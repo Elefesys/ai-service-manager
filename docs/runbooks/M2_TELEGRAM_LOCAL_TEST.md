@@ -4999,3 +4999,80 @@ teardown, private S3/UNKNOWN/wire1 и прежние timings/budgets. Новог
 Docker journal-fault phase нет: journal IPC проверяется адресными child-process
 tests в существующем non-integration runner. Final SHA/run/artifact digests и
 фактический verdict публикуются в едином PR27 receipt; review остаётся за C0/C6.
+
+### M3.1-GUARDS / 0010 — disposable LOCAL/TEST validation, 2026-10-12
+
+Implementation C3 по C0 issuecomment6123042372 продолжает Draft PR28 от
+`4caf1d64ce6073cc8064b088f9a0a9cdf245ad20`. Исторические Telegram/R1/R2/R3 receipts
+выше неизменны. Этот раздел не выдаёт VM/deploy/ACK/binding/activation/send команд.
+M3.1-GUARDS остаётся IN_PROGRESS до runtime gates/приёмки C0.
+
+На G exact schema —0010 (36 tables); frozen C
+`c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5` требует0009 (35 tables).
+Новый CONTROLLED Resume в asm_local/asm_test сохраняет private guards profile;
+legacy profile NULL не продвигается replay. Fresh post-fence text проходит normal
+worker и counted controlled adapter. Automated TELEGRAM path не разрешён.
+No-use reverse0010→0009 допустим; любой guards usage, включая terminal,
+останавливает downgrade до DDL. Не удалять usage ради rollback.
+
+Исполнимые проверки в disposable окружении — прежние `sh scripts/ci.sh`,
+`sh scripts/test_browser.sh` и existing normal/exact Docker29 state shards.
+Адресно: `pytest -q tests/test_m3_1_guards.py` и
+`pytest -q -m integration tests/test_m3_1_guards_postgres.py tests/test_m3_1_guards_migrations.py`.
+PG/controller требуют настоящие подготовленные asm_test/owned asm_local и S3;
+unit/Mock не заменяют эти gates.
+
+State chain сохраняет H/T/C по одному разу и добавляет C→G. C selector и все6
+C daemon assertions исполняются из frozen C checkout, reports сохранены как C.
+G controller: `tests/test_m3_1_guards_migrations.py --guards-schema-phase`;
+это internal runner entrypoint с closed source/budget/ownership guards.
+Fresh observer после existing lost-commit-result exit86 выбирает C при actual0009,
+G при actual0010; unknown/unreadable/identity mismatch — STOP. Exit code не
+выбирает runtime. Failed journal автоматически не возобновляется (IMPL-05 deferred).
+
+Доказательства: `reports/guards-schema-phase.json` (C/G image IDs/source,
+35-column projection/no-backfill/private-S3, readiness/reverse/refusal/process
+identity/callers/restart/timings), `reports/control-schema-ledger.json` (исходный
+600 и accumulated charge), `reports/retained-control/` (полный C и daemon
+negatives), existing T reports и final `tested-commit.txt`/`worktree-status.txt`.
+Retained C shell целиком входит в remaining600; G prepare использует тот же
+absolute deadline; cleanup90/state25min/foundation35min и9jobs не увеличены.
+При нехватке бюджета сохранить timing/primary failure и вернуть C0 gap.
+
+Локальная среда C3: Docker unavailable; actual PG/S3/browser/Docker29 NOT RUN.
+Локально non-integration1082 PASS/0 FAIL, frontend114 PASS/typecheck PASS,
+Ruff/mypy/generated OpenAPI consistency PASS. Actual implementation CI/attempt,
+merge ordered parents/main+head/tree equality, all9+clean9, source/image/schema
+и artifact IDs/digests привязываются в едином
+[C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/28#issuecomment-6119496506).
+Docs/source preparation CI0009 не является GUARDS runtime evidence.
+
+Первый implementation CI38248730093 (7715572…):8 jobs PASS; foundation3 unit
+FAIL при ASM_ENVIRONMENT=TEST, до597 PG cases. Ошибка constructor исправляется
+переносом database-name gate в четыре новые GUARDS entrypoints; прежний kernel
+constructor/queue doubles остаются совместимы. Старые assertions не менялись.
+Для локального non-integration использовать также
+`ASM_ENVIRONMENT=TEST pytest -q -m 'not integration'`, как у checks container.
+Первый C→G normal/Docker29 actual PASS дал prepare charge419.586/427.785s из600,
+G counted send1/1 и C preservation/private S3/reverse/refusal/ACK recovery PASS.
+Это исторический first-candidate evidence; исправленный head требует своего CI.
+
+Второй CI38251039019 (a8eff5f…):8 jobs PASS; foundation1081 unit PASS/1 FAIL
+до PG. Причина — binary-float cancellation в retained unit assertion, не
+превышение600: сохранённое deadline=start+600, но обратное вычитание дало
+600.0000000000001. Unit проверяет исходное exact addition (не approximate
+сравнение); обнаруженный clock воспроизводится в том же early-refusal seam.
+Production deadlines/clocks и guards неизменны. Оба свежих G reports PASS:
+charge369.394445/368.402980s <600, C35/G36/private S3/ACK/refusal/guarded1/1
+и retained T/C proofs. Final candidate должен пройти свой полный CI.
+
+Третий CI38253408056 (756714f…): unit1082 PASS, PG591 PASS/6 FAIL; foundation
+CANCELLED на прежнем35min,8 остальных jobs/clean8 PASS. Новые test scenarios
+исправлены по actual API/role/queue contract: fresh manual acceptance202;
+runtime owner prepare/execute для observed Takeover wait; обычный Inbox/file
+caller с отдельным material context increment; existing crash family с worker
+loop до прежнего exit42 вместо предположения, что send — первый Job в очереди.
+Production/старые helpers/CHILD, counters, deadlines и source guards сохранены.
+Оба G artifacts11749449642/11749900999 PASS: charge421.186321/419.969723s из600,
+whole C112.615779/111.796138s включён. Это evidence третьего head; исправленный
+setup требует нового full CI в тех же пределах, без rerun-to-green.
