@@ -116,5 +116,5 @@ export function ConversationControl({session,context,intent,manualPending,refres
       {p.phase!=='sending'&&p.phase!=='confirmed'&&<button className="secondary" onClick={discard}>Завершить операцию без повтора</button>}
     </div>}
   </section>:null;
-  return <>{p&&!matching&&<section className="panel alert" aria-label="Незавершённое управление"><p>В прежнем контексте осталось намерение изменения режима. Оно не переносится и не отправляется здесь.</p><button onClick={discard}>Завершить операцию без повтора</button></section>}{children?children(control,!!p):control}</>;
+  return <>{p&&!matching&&<section className="panel alert" aria-label="Незавершённое управление"><p>В прежнем контексте осталось намерение изменения режима. Оно не переносится и не отправляется здесь.</p><p>Завершение ожидания не отменяет возможную серверную операцию.</p><button onClick={discard}>Завершить операцию без повтора</button></section>}{children?children(control,!!p):control}</>;
 }

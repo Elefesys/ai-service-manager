@@ -105,4 +105,12 @@ describe('frozen intent, recovery and context ownership',()=>{
   it('hard remount performs GET only and never reconstructs a lost intent',async()=>{
     vi.mocked(controlApi.command).mockRejectedValue(new TypeError('network'));const v=setup();await resume();await screen.findByText(/Результат изменения режима неизвестен/);v.unmount();setup();await ready();expect(controlApi.command).toHaveBeenCalledTimes(1);expect(screen.queryByRole('button',{name:'Повторить исходную операцию'})).toBeNull();expect(localStorage.length+sessionStorage.length).toBe(0);
   });
+  it('abandoning a detached intent warns before discard; login and late success never replay it',async()=>{
+    const old=deferred<ControlReceipt>();vi.mocked(controlApi.command).mockReturnValue(old.promise);const v=setup();await resume();
+    v.rerender(<ConversationControl {...v.props} session={null}/>);
+    expect(screen.getByText('Завершение ожидания не отменяет возможную серверную операцию.')).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'Завершить операцию без повтора'}));expect(v.intent.current).toBeNull();
+    v.rerender(<ConversationControl {...v.props} session={session('fresh')}/>);await ready();await act(async()=>old.resolve(controlReceipt()));
+    expect(controlApi.command).toHaveBeenCalledTimes(1);expect(v.props.accepted).not.toHaveBeenCalled();expect(v.intent.current).toBeNull();expect(screen.queryByRole('button',{name:'Повторить исходную операцию'})).toBeNull();
+  });
 });
