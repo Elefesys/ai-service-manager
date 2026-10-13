@@ -88,6 +88,11 @@ async def test_provision_rejects_target_before_engine_or_identity_write(
         ("happy", "inventory"),
         ("../../arbitrary", "stats"),
         ("happy", "sql"),
+        (None, "control-stats"),
+        ("../../arbitrary", "control-stats"),
+        ("ctrl_happy", "downgrade"),
+        ("ctrl_recovery", "disable"),
+        ("ctrl_unknown", "restrict"),
     ],
 )
 async def test_finite_negative_actions_are_checked_before_database(
@@ -230,6 +235,72 @@ def test_seed_is_finite_multipage_and_uses_valid_exact_normalized_events(harness
     assert values[-1].image_file_id == "m24-image-pending"
     assert sum(e.image_file_id == "m24-image-pending" for e in values) == 1
     assert all(e.text is None or "e\u0301 🎨" in e.text for e in values)
+
+
+def test_control_presets_use_existing_canonical_seed_and_finite_mutation_scope(harness):
+    presets = {p for p in harness.fixture.PRESETS if p.startswith("ctrl_")}
+    assert presets == {
+        "ctrl_happy",
+        "ctrl_stale",
+        "ctrl_recovery",
+        "ctrl_read",
+        "ctrl_revoked",
+        "ctrl_unknown",
+        "ctrl_inactive",
+        "ctrl_restricted",
+    }
+    for preset in presets:
+        harness.fixture.validate_operation(preset, "control-stats")
+        events = [
+            e for e in harness.worker.seed_events() if e.bot_identity == harness.fixture.bot(preset)
+        ]
+        assert len(events) == 3
+        assert {e.chat_id for e in events} == {f"m24-{preset}-main", f"m24-{preset}-alternate"}
+
+
+async def test_control_counters_are_read_only_bound_to_finite_owner_workspace(harness, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    workspace, actor = uuid4(), uuid4()
+    queries = []
+
+    class Connection:
+        async def execute(self, sql, params):
+            queries.append((str(sql), params))
+            return SimpleNamespace(scalar_one=lambda: 7)
+
+    class Engine:
+        @asynccontextmanager
+        async def begin(self):
+            yield Connection()
+
+        async def dispose(self):
+            pass
+
+    async def guard(_):
+        pass
+
+    async def identity(_, preset):
+        assert preset == "ctrl_recovery"
+        return SimpleNamespace(workspace_id=workspace, user_account_id=actor)
+
+    monkeypatch.setattr(harness.fixture, "create_async_engine", lambda *args, **kwargs: Engine())
+    monkeypatch.setattr(harness.fixture, "guard", guard)
+    monkeypatch.setattr(harness.fixture, "identity", identity)
+    result = await harness.fixture.action("ctrl_recovery", "control-stats")
+    assert set(result) == {
+        "messages",
+        "receipts",
+        "audit_events",
+        "outbox_events",
+        "jobs",
+        "control_receipts",
+        "control_audit_events",
+    }
+    assert len(queries) == 7 and set(result.values()) == {7}
+    for sql, params in queries:
+        assert sql.startswith("SELECT count(*) FROM ") and "workspace_id=:ws" in sql
+        assert params == {"ws": workspace, "actor": actor}
 
 
 @pytest.mark.parametrize("module", ["fixture", "worker"])

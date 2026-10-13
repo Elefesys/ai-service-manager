@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { api } from './api';
+import { controlApi, ControlReceipt } from './conversation-control-api';
+import { controlState, controlReceipt } from './messaging-fixtures.test-helper';
 import { MessagingPanel } from './MessagingPanel';
 import { billingApi, BillingError } from './billing-api';
 import { billing } from './billing-fixtures.test-helper';
@@ -10,6 +12,8 @@ import { MessagingError, Message, ReadGrant, SendReceipt, messagingApi } from '.
 import { connection, conversation, conversationId, deferred, id, message, ok, outbound, page, photo, receipt, session, ws } from './messaging-fixtures.test-helper';
 
 beforeEach(() => {
+  vi.spyOn(controlApi,'read').mockImplementation(async context=>controlState(context));
+  vi.spyOn(controlApi,'command').mockImplementation(async(context,operation,body)=>controlReceipt(operation,body,context));
   vi.spyOn(messagingApi,'connections').mockResolvedValue(page(connection()));
   vi.spyOn(messagingApi,'conversations').mockResolvedValue(page(conversation()));
   vi.spyOn(messagingApi,'messages').mockResolvedValue(page(message()));
@@ -27,6 +31,24 @@ async function submit(text='  Оригинал\ne\u0301🙂  ') {
   await act(async()=>fireEvent.submit(screen.getByRole('button',{name:'Проверить и отправить'}).closest('form')!));
 }
 const newSession = (v: ReturnType<typeof setup>, token='recovered') => v.rerender(<MessagingPanel {...v.props} session={session(token)}/>);
+
+describe('manual/control intent coordination',()=>{
+  it('blocks manual submit synchronously while CONTROL is unresolved',async()=>{
+    const pending=deferred<ControlReceipt>();vi.mocked(controlApi.command).mockReturnValue(pending.promise);setup();await ready();
+    fireEvent.change(screen.getByLabelText('Ручной текстовый ответ'),{target:{value:'Draft'}});
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Разрешить автоматику'})).toBeEnabled());
+    fireEvent.click(screen.getByRole('button',{name:'Разрешить автоматику'}));
+    fireEvent.submit(screen.getByRole('button',{name:'Проверить и отправить'}).closest('form')!);
+    expect(messagingApi.send).not.toHaveBeenCalled();expect(screen.getByLabelText('Ручной текстовый ответ')).toBeDisabled();
+    await act(async()=>pending.resolve(controlReceipt()));await ready();expect(screen.getByLabelText('Ручной текстовый ответ')).toHaveValue('Draft');
+  });
+  it('blocks CONTROL during manual recovery and reads HUMAN after valid202 without control POST',async()=>{
+    const pending=deferred<SendReceipt>();vi.mocked(messagingApi.send).mockReturnValue(pending.promise);
+    vi.mocked(controlApi.read).mockResolvedValueOnce({...controlState(),control_mode:'AI'}).mockResolvedValue(controlState());setup();await screen.findByText('Автоматика разрешена');await submit();
+    expect(screen.getByRole('button',{name:'Забрать управление'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'Забрать управление'}));expect(controlApi.command).not.toHaveBeenCalled();
+    await act(async()=>pending.resolve(receipt()));await screen.findByText('Управление у мастера');await ready();expect(controlApi.read).toHaveBeenCalledTimes(2);expect(controlApi.command).not.toHaveBeenCalled();
+  });
+});
 
 describe('owner conversation view and private reads', () => {
   it('uses OWNER role with frozen permissions and shows safe exact text', async()=>{
