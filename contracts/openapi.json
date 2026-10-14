@@ -1690,11 +1690,18 @@
               }
             ],
             "title": "Next Cursor"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Observed At",
+            "type": "string"
           }
         },
         "required": [
           "items",
-          "next_cursor"
+          "next_cursor",
+          "observed_at"
         ],
         "title": "EscalationPage",
         "type": "object"

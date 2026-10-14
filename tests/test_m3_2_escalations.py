@@ -3,31 +3,37 @@
 import hashlib
 import importlib.util
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 from uuid import UUID, uuid4
 
 import pytest
 from alembic import op
 from asm.billing.models import AuditPage
-from asm.billing.validation import encode_cursor, strict_json
+from asm.billing.validation import TIMESTAMP_PATTERN, decode_cursor, encode_cursor, strict_json
 from asm.conversations.escalation_http import escalation_query
 from asm.conversations.escalation_http_models import (
     EscalationCancelRequest,
     EscalationCommandResponse,
     EscalationCursor,
+    EscalationPage,
     EscalationResolveRequest,
     EscalationView,
 )
 from asm.conversations.escalations import (
+    EscalationCode,
     EscalationError,
     EscalationProgress,
     EscalationTimerResult,
+    OwnerEscalationService,
     decision_fingerprint,
 )
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.results import EscalationTimerClaim, TurnJobClaim, parse_claim
+from asm.tenancy.types import MembershipRole
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.requests import Request
@@ -238,9 +244,21 @@ def test_generated_api_exact_four_routes_closed_dtos_and_mixed_audit_variant():
         EscalationResolveRequest,
         EscalationCancelRequest,
         EscalationView,
+        EscalationPage,
         EscalationCommandResponse,
     ):
         assert model.model_json_schema()["additionalProperties"] is False
+    page = api["components"]["schemas"]["EscalationPage"]
+    assert (
+        set(page["required"]) == set(page["properties"]) == {"items", "next_cursor", "observed_at"}
+    )
+    assert page["additionalProperties"] is False
+    assert page["properties"]["observed_at"] == {
+        "type": "string",
+        "format": "date-time",
+        "pattern": TIMESTAMP_PATTERN,
+        "title": "Observed At",
+    }
     event = dict(
         audit_event_id=str(uuid4()),
         occurred_at="2026-10-13T12:00:00.000000Z",
@@ -266,3 +284,134 @@ def test_generated_api_exact_four_routes_closed_dtos_and_mixed_audit_variant():
     ):
         with pytest.raises(ValidationError):
             AuditPage.model_validate(dict(items=[event | changes], next_cursor=None))
+
+
+PAGE_MOMENT = "2030-01-01T00:01:00.123456Z"
+
+
+def page_row(number=2):
+    """Synthetic projection for validation only; HTTP/PG proof uses normal ingress."""
+    return dict(
+        workspace_id=str(UUID(int=1)),
+        escalation_id=str(UUID(int=number)),
+        conversation_id=str(UUID(int=3)),
+        client_id=str(UUID(int=4)),
+        turn_id=str(UUID(int=5)),
+        assignee_user_account_id=str(UUID(int=6)),
+        reason="OWNER_DECISION_REQUIRED",
+        question="CONTROLLED ESCALATION TEST: требуется решение владельца.",
+        policy="LOCAL_TEST_OWNER_WAIT_V1",
+        version="1",
+        status="PENDING",
+        bound_context=dict(
+            turn_revision="1", control_generation="2", context_version="3", fingerprint="a" * 64
+        ),
+        current_context=dict(control_mode="AI", control_generation="2", context_version="3"),
+        validity="CURRENT",
+        waiting="WAITING_FOR_HUMAN",
+        created_at="2030-01-01T00:00:00.000000Z",
+        due_at="2030-01-01T00:02:00.000000Z",
+        second_reminder_at="2030-01-01T00:05:00.000000Z",
+        expires_at="2030-01-01T00:10:00.000000Z",
+        observed_at=PAGE_MOMENT,
+        reminders=[
+            dict(ordinal=1, due_at="2030-01-01T00:02:00.000000Z", recorded_at=None),
+            dict(ordinal=2, due_at="2030-01-01T00:05:00.000000Z", recorded_at=None),
+        ],
+        maintenance="SCHEDULED",
+        resolution=None,
+        closure=None,
+        can_resolve=True,
+        can_cancel=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "clock",
+    [
+        {},
+        {"observed_at": None},
+        {"observed_at": 1},
+        {"observed_at": "2030-01-01T00:01:00Z"},
+        {"observed_at": "2030-01-01T00:01:00.123456+00:00"},
+        {"observed_at": "2030-02-30T00:01:00.123456Z"},
+    ],
+)
+def test_page_requires_canonical_nonnullable_db_timestamp(clock):
+    with pytest.raises(ValidationError):
+        EscalationPage.model_validate(dict(items=[], next_cursor=None) | clock)
+
+
+def test_page_clock_empty_nonempty_and_closed_consistent_shape():
+    for rows in ([], [page_row()]):
+        payload = dict(items=rows, next_cursor=None, observed_at=PAGE_MOMENT)
+        assert EscalationPage.model_validate(payload).model_dump(mode="json") == payload
+        with pytest.raises(ValidationError):
+            EscalationPage.model_validate(payload | {"extra": True})
+    with pytest.raises(ValidationError):
+        EscalationPage.model_validate(payload | {"observed_at": "2030-01-01T00:01:01.123456Z"})
+
+
+def list_service(raw):
+    unit = SimpleNamespace(
+        messaging_membership_role=AsyncMock(return_value=MembershipRole.OWNER),
+        escalation_list=AsyncMock(return_value=raw),
+    )
+
+    @asynccontextmanager
+    async def workspace(token, ws):
+        assert token == "session" and ws == UUID(int=1)
+        yield unit
+
+    return OwnerEscalationService(SimpleNamespace(workspace=workspace)), unit
+
+
+@pytest.mark.parametrize("limit,count", [(2, 0), (2, 3), (100, 101)])
+async def test_list_envelope_preserves_db_clock_and_bounded_lookahead(limit, count):
+    rows = [page_row(i) for i in range(count + 2, 2, -1)]
+    service, unit = list_service(dict(items=rows, observed_at=PAGE_MOMENT))
+    page = await service.list("session", UUID(int=1), limit, "PENDING", None)
+    unit.escalation_list.assert_awaited_once_with(limit + 1, "PENDING", None, None)
+    assert page.observed_at == PAGE_MOMENT
+    assert [v.model_dump() for v in page.items] == rows[:limit]
+    if count > limit:
+        assert decode_cursor(page.next_cursor) == dict(
+            v=1,
+            endpoint="ESCALATIONS",
+            workspace_id=str(UUID(int=1)),
+            direction="DESC",
+            status="PENDING",
+            created_at=rows[limit - 1]["created_at"],
+            id=rows[limit - 1]["escalation_id"],
+        )
+    else:
+        assert page.next_cursor is None
+
+
+async def test_list_invalid_envelope_clock_rows_and_lookahead_fail_unavailable():
+    envelope = dict(items=[], observed_at=PAGE_MOMENT)
+    for raw in (
+        [],
+        None,
+        {},
+        {"items": []},
+        {"observed_at": PAGE_MOMENT},
+        envelope | {"observed_at": None},
+        envelope | {"observed_at": "bad"},
+        envelope | {"items": None},
+        envelope | {"items": {}},
+        envelope | {"extra": True},
+        envelope | {"items": [{}]},
+        envelope | {"items": [page_row()] * 3},  # > limit+1
+        envelope | {"items": [page_row() | {"workspace_id": str(UUID(int=99))}]},
+        envelope
+        | {"items": [page_row(), page_row() | {"observed_at": "2030-01-01T00:01:01.123456Z"}]},
+    ):
+        service, _ = list_service(raw)
+        with pytest.raises(EscalationError) as caught:
+            await service.list("session", UUID(int=1), 1, "PENDING", None)
+        assert caught.value.code == EscalationCode.UNAVAILABLE
+    service, _ = list_service(envelope | {"items": [page_row()]})
+    with pytest.raises(EscalationError) as caught:
+        await service.list("session", UUID(int=1), 1, "RESOLVED", None)
+    assert caught.value.code == EscalationCode.UNAVAILABLE

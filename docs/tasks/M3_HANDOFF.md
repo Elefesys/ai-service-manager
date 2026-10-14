@@ -5,6 +5,58 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
+## 0. Активная выдача C0 — C3-M3.2-ESCALATION-PAGE-R1
+
+Дата:2026-10-14 UTC. [Поручение C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164474811)
+по [C8-M3-ESC-01/P2 OPEN](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164119233).
+HOLD C3 снят только для page wire correction; C8 после review остаётся HOLD.
+Тот же Draft PR31/`c3/m3-2-escalation`, отдельный checkout, последовательный
+commit без reset/rebase/force-push. Remote и чистота проверены до изменения.
+
+| Source | Exact value |
+|---|---|
+| Base | `c413a6f80b30fbdd12717af3f12642a5b5f785f4` |
+| Base tree / sole parent | `1a87601835bd9646e40f62e399f0b71304e28abc` / `9d65a69c47d26ceacdb5f3093d14720c5d40e779` |
+| Accepted main / frozen G | `c502d5fd258aef15bb5549e1529df8d038a4fb9b`,0010 |
+| Reviewed base CI |38525189666/attempt1,9/9+clean9/9;1122 unit/679 PG,78 Escalation,194 frontend/33 browser |
+| Base tested merge | `1b4dcd13a482a2efe0cc148499078711c468928d`, parents main+base, tree=base |
+
+Разрешены ровно9 paths:
+- `backend/src/asm/conversations/escalation_http_models.py`: required page Timestamp/consistency.
+- `backend/src/asm/conversations/escalations.py`: strict list envelope и один DB clock.
+- `migrations/versions/0011_escalations.py`: только тело escalation_list внутри _reads().
+- `contracts/openapi.json`: штатная regeneration page schema.
+- `tests/test_m3_2_escalations.py`: targeted DTO/schema/service regression.
+- `tests/test_m3_2_escalations_api_postgres.py`: actual raw HTTP/PG empty/nonempty/pagination.
+- `docs/tasks/M3_CONTRACT.md`: append§14.16 после прежнего339842-byte prefix.
+- `docs/tasks/M3_HANDOFF.md`: этот активный блок, история ниже сохранена.
+- `docs/TASK_REGISTER.md`: текущая correction/finding и факты.
+
+Результат: ровно items,next_cursor,required observed_at; один MATERIALIZED DB clock
+передаётся через empty/nonempty envelope, все item clocks совпадают. Сохранить
+guards, UNAVAILABLE, lookahead/≤100/status anchor, read-only GET и business lifecycle.
+0011/down0010 ещё candidate; остальные тела/DDL/signatures/profiles,0001–0010,
+controller/dependency/pins/locks/workflows/Compose/frontend immutable в этом R1.
+
+Сначала regression:24 PASS/7 FAIL до code fix; затем31 focused PASS/9 integration
+ deselected, static/contracts/original11 checks PASS. Local Docker отсутствует,
+local PG NOT RUN; один новый raw HTTP/PG case collected, прежние78 сохранены.
+Не переносить base GREEN. Final-source CI9+clean9, обе G→E/state lanes и migration
+reverse обязательны; бюджеты prepare600/cleanup90/state25/foundation40/browser25
+сохранить. Полные local suites/CI optimization и новый C6 review не назначены.
+
+Возврат через [canonical C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6152762197):
+final head/parent/tree, delta отc413/numstat, DB clock trace, commands/results,
+actual HTTP/PG/CI run/attempt/jobs/clean/checkout/parents/tree. Docs идут вместе
+с substantive fix, без status/SHA-only commit. После CI — REVIEW и HOLD;
+finding OPEN до C0/C8, весь M3 IN_PROGRESS. C0 назначает только повтор C8-M3-ESC-01
+и затронутых ESC-C02/07; остальные independent PASS сохранены. C6-ESC-COMPAT-01
+CLOSED. C5 owner-wait/native/provenance/acceptance впереди; IMPL-05 fix и CI
+optimization DEFERRED. VM/live Telegram/рабочие DB-S3/deploy/merge запрещены.
+
+<details>
+<summary>История implementation выдачи до PAGE-R1; прежние checkpoints и результаты</summary>
+
 ## 0. Активная выдача C0 — C3-M3.2-ESCALATION-IMPLEMENTATION
 
 Дата: 2026-10-13 UTC. Основание — [конкретная выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6151237330).
@@ -165,6 +217,9 @@ M3 остаётся IN_PROGRESS. M3/native/provenance, production OPEN082/083/08
 IMPL-05 OPEN/fix DEFERRED и CI optimization DEFERRED сохранены. M4/LLM/RAG,
 Approval/M6, Notification Engine/M9, client follow-ups, production сроки вне
 среза. VM/live Telegram/рабочие DB-S3/deploy/merge не выполнять.
+
+
+</details>
 
 <details>
 <summary>Завершённая выдача ESCALATION-CONTRACT; принята C0, не активное поручение</summary>

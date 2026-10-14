@@ -11,6 +11,7 @@ import pytest_asyncio
 from asm.auth.http import install_auth
 from asm.billing.http import install_billing
 from asm.billing.models import AuditPage
+from asm.billing.validation import decode_cursor, encode_cursor, timestamp
 from asm.conversations.escalation_http import install_escalations
 from asm.conversations.escalation_http_models import (
     EscalationCommandResponse,
@@ -110,6 +111,97 @@ async def test_live_http_two_tabs_replay_current_view_and_mixed_audit(escalation
     assert decision[0].payload.model_dump() == {"operation": "RESOLVE", "status": "RESOLVED"}
     assert {v.event_type for v in events} >= {"ESCALATION_DECIDED", "CONVERSATION_RESUMED"}
     assert h.adapter.calls == 0
+
+
+async def test_page_db_clock_empty_nonempty_keyset_and_read_only(escalation_api):
+    h = escalation_api
+    async with serial_clock(h) as (anchor, set_clock):
+        before = await facts(h)
+        empty = await h.client.get(route())
+        assert empty.status_code == 200
+        assert empty.json() == dict(items=[], next_cursor=None, observed_at=timestamp(anchor))
+        assert await facts(h) == before
+
+        # All three requests use normal ingress/Resume/worker, including a tied
+        # created_at pair; no inserted Escalations or rescheduled timer Jobs.
+        requests = []
+        for i in range(3):
+            if i == 2:
+                await set_clock(anchor + timedelta(seconds=1))
+            e, _, _ = await created(h, suffix=f"page-{i}", chat=f"page-chat-{i}")
+            requests.append(e)
+        ordered = sorted(requests, key=lambda e: (e["created_at"], e["id"]), reverse=True)
+        moment = anchor + timedelta(seconds=30)
+        await set_clock(moment)
+        before = await facts(h)
+
+        first = await h.client.get(route(), params={"limit": "2"})
+        assert first.status_code == 200
+        page = first.json()
+        assert set(page) == {"items", "next_cursor", "observed_at"}
+        assert page["observed_at"] == timestamp(moment)
+        assert [item["escalation_id"] for item in page["items"]] == [
+            str(e["id"]) for e in ordered[:2]
+        ]
+        assert all(item["observed_at"] == timestamp(moment) for item in page["items"])
+        assert all(
+            item["status"] == "PENDING" and item["waiting"] == "WAITING_FOR_HUMAN"
+            for item in page["items"]
+        )
+        cursor = decode_cursor(page["next_cursor"])
+        assert cursor == dict(
+            v=1,
+            endpoint="ESCALATIONS",
+            workspace_id=str(A),
+            direction="DESC",
+            status="PENDING",
+            created_at=timestamp(ordered[1]["created_at"]),
+            id=str(ordered[1]["id"]),
+        )
+
+        moment += timedelta(seconds=1)
+        await set_clock(moment)
+        second = await h.client.get(route(), params={"limit": "2", "cursor": page["next_cursor"]})
+        assert second.status_code == 200
+        tail = second.json()
+        assert set(tail) == {"items", "next_cursor", "observed_at"}
+        assert tail["observed_at"] == timestamp(moment) and tail["next_cursor"] is None
+        assert [item["escalation_id"] for item in tail["items"]] == [str(ordered[2]["id"])]
+        assert tail["items"][0]["observed_at"] == timestamp(moment)
+
+        moment += timedelta(seconds=1)
+        await set_clock(moment)
+        last_cursor = encode_cursor(
+            cursor
+            | {
+                "created_at": timestamp(ordered[2]["created_at"]),
+                "id": str(ordered[2]["id"]),
+            }
+        )
+        last = await h.client.get(route(), params={"limit": "2", "cursor": last_cursor})
+        assert last.status_code == 200
+        assert last.json() == dict(items=[], next_cursor=None, observed_at=timestamp(moment))
+        assert await facts(h) == before
+
+        # An overdue read projects expiry without committing a lifecycle change.
+        moment = anchor + timedelta(minutes=11)
+        await set_clock(moment)
+        expired = await h.client.get(route())
+        assert expired.status_code == 200
+        data = expired.json()
+        assert set(data) == {"items", "next_cursor", "observed_at"}
+        assert data["observed_at"] == timestamp(moment) and data["next_cursor"] is None
+        assert [item["escalation_id"] for item in data["items"]] == [str(e["id"]) for e in ordered]
+        assert all(
+            item["observed_at"] == timestamp(moment)
+            and item["status"] == "PENDING"
+            and item["validity"] == "EXPIRED"
+            and item["waiting"] is None
+            and not item["can_resolve"]
+            and not item["can_cancel"]
+            for item in data["items"]
+        )
+        assert await facts(h) == before and h.adapter.calls == 0
 
 
 async def test_auth_csrf_types_headers_relations_and_revoked_replay_fail_closed(escalation_api):

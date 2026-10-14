@@ -10,7 +10,7 @@ from pydantic import Field, ValidationError, model_validator
 
 from asm.auth.service import AuthService
 from asm.billing.models import StrictModel
-from asm.billing.validation import encode_cursor
+from asm.billing.validation import Timestamp, encode_cursor
 from asm.conversations.escalation_http_models import (
     EscalationAcceptedResult,
     EscalationCancelRequest,
@@ -97,6 +97,11 @@ class _Saved(StrictModel):
     request_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$", repr=False)
 
 
+class _Listed(StrictModel):
+    items: list[EscalationView] = Field(max_length=101)
+    observed_at: Timestamp
+
+
 class OwnerEscalationService:
     def __init__(self, auth: AuthService) -> None:
         self.auth = auth
@@ -136,14 +141,15 @@ class OwnerEscalationService:
                 datetime.fromisoformat(cursor.created_at) if cursor else None,
                 UUID(cursor.id) if cursor else None,
             )
-            if not isinstance(raw, list) or len(raw) > limit + 1:
-                raise EscalationError(EscalationCode.UNAVAILABLE)
             try:
-                rows = [EscalationView.model_validate(row) for row in raw]
+                listed = _Listed.model_validate(raw)
             except ValidationError:
                 raise EscalationError(EscalationCode.UNAVAILABLE) from None
-            if any(
-                row.workspace_id != str(workspace) or (status != "ALL" and row.status != status)
+            rows = listed.items
+            if len(rows) > limit + 1 or any(
+                row.workspace_id != str(workspace)
+                or (status != "ALL" and row.status != status)
+                or row.observed_at != listed.observed_at
                 for row in rows
             ):
                 raise EscalationError(EscalationCode.UNAVAILABLE)
@@ -161,7 +167,9 @@ class OwnerEscalationService:
                         id=last.escalation_id,
                     ).model_dump()
                 )
-            result = EscalationPage(items=rows[:limit], next_cursor=next_cursor)
+            result = EscalationPage(
+                items=rows[:limit], next_cursor=next_cursor, observed_at=listed.observed_at
+            )
         return result
 
     async def command(

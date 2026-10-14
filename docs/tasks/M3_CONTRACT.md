@@ -3205,3 +3205,53 @@ SQLSTATE, diagnostic table/name, FK prefix и rollback/original-row assertions.
 Это correction новых tests, не изменение принятого FK-контракта/DDL. Число cases78
 и отсутствие skip/xfail прежние. Full final-source CI/clean9 и C8 ещё требуются;
 второй красный run и его фактические G→E successes сохраняются в canonical receipt.
+
+
+### 14.16. C8-M3-ESC-01 — page observed_at correction (R1)
+
+[C0 PAGE-R1](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164474811)
+разрешает узкую correction от reviewed `c413a6f80b30fbdd12717af3f12642a5b5f785f4`.
+[C8 review](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164119233)
+нашёл несоответствие уже принятому§14.5: page DTO/OpenAPI/service теряли общий
+observed_at, особенно для empty list. Это не новое product/business решение.
+Весь прежний339842-byte prefix,§14.1–14.15 и LOCKED boundaries сохранены.
+
+Единственная SQL delta — outer JSONB result новой `platform.escalation_list`
+в `_reads()` ещё не интегрированной0011/down0010: `{items,observed_at}`.
+Прежний MATERIALIZED `clock` захватывает `platform.escalation_now()` один раз;
+VIEW использует `clock.moment`, outer SELECT FROM clock возвращает тот же
+canonical UTC moment даже при пустом items subquery. Owner/scope/status/cursor/
+count guards, descending tuple order, signature/ACL/profiles и все остальные
+0011 bodies/DDL не меняются. Applied0001–0010 прежние;0012 не создаётся.
+
+Service строго проверяет closed envelope, Timestamp, row DTO/authority/filter,
+limit+1 bound и clock equality всех rows, включая lookahead; invalid result →
+существующий UNAVAILABLE, без empty fallback/Python clock/first-item clock.
+Публичный closed EscalationPage имеет ровно items,next_cursor,observed_at;
+observed_at required/non-null, Timestamp и согласован со всеми items. Pagination
+по-прежнему выдаёт≤100 и cursor последнего возвращённого item. Generated OpenAPI
+содержит только эту schema delta, routes и остальные schemas прежние.
+
+Regression-first: до code fix focused unit module дал24 PASS/7 FAIL (missing
+field, canonical clock rejection, generated page schema, envelope service).
+После fix:31 PASS/9 integration deselected по двум разрешённым modules.
+Ruff check/format, mypy60 modules, generated contract --check,11 original hashes
+и diff checks проходят. Local Docker отсутствует: local HTTP/PG NOT RUN.
+Новый actual-PG case собран, но collection не объявляется runtime proof.
+
+В новом HTTP/PG case используется retained normal fixture/serial asm_test clock
+с exact restore: точный empty JSON; три normal ingress/Resume/worker requests,
+включая tied created_at; общий page/item moment, limit2/lookahead/descending tuple
+и cursor последнего output row; следующая страница и новая empty page получают
+свои DB moments. Raw HTTP fields/values проверяются независимо от DTO. Повторный
+GET после expiry сохраняет raw PENDING, показывает EXPIRED validity и не пишет
+expiry/context/control/Jobs/Audit/receipt/Message/Outbox: full facts equality и
+adapter.calls=0. Все прежние78 PG cases/assertions сохранены; всего79, API9.
+
+Новому source требуются штатные CI9/9+clean9/9, включая обе existing G→E/state
+lanes и retained migration/reverse gates. Reviewed base CI38525189666 GREEN
+не переносится. Prepare600/cleanup90/state25/foundation40/browser25, controller,
+pins/dependencies/workflows/Compose и frontend прежние. Не запускать повторные
+full local suites ради статистики. Final source/actual results — в едином
+[C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6152762197),
+без status/SHA-only commit после CI. Finding OPEN до C0/scoped C8; M3 IN_PROGRESS.

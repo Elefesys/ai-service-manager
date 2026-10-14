@@ -158,6 +158,13 @@ class EscalationView(StrictModel):
 class EscalationPage(StrictModel):
     items: list[EscalationView] = Field(max_length=100)
     next_cursor: str | None = Field(max_length=1024)
+    observed_at: Timestamp
+
+    @model_validator(mode="after")
+    def clock(self) -> Self:
+        if any(item.observed_at != self.observed_at for item in self.items):
+            raise ValueError("Inconsistent Escalation page clock")
+        return self
 
 
 class EscalationCursor(StrictModel):

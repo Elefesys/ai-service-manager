@@ -2,6 +2,40 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Текущий статус — C3-M3.2-ESCALATION-PAGE-R1 / 2026-10-14 UTC
+
+**PAGE-R1 — IN_PROGRESS. C8-M3-ESC-01/P2 OPEN. Весь M3 — IN_PROGRESS.**
+[Выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164474811)
+снимает C3 HOLD только для required page observed_at по принятому§14.5.
+Scope9 paths и критерии — [M3_HANDOFF§0](tasks/M3_HANDOFF.md); correction/evidence
+append — [M3_CONTRACT§14.16](tasks/M3_CONTRACT.md). Один Draft PR31/прежняя ветка.
+
+| Принятый факт / gate | Значение |
+|---|---|
+| Continuation base | `c413a6f80b30fbdd12717af3f12642a5b5f785f4` |
+| Base tree / sole parent | `1a87601835bd9646e40f62e399f0b71304e28abc` / `9d65a69c47d26ceacdb5f3093d14720c5d40e779` |
+| Main/frozen G | `c502d5fd258aef15bb5549e1529df8d038a4fb9b`,0010 |
+| Reviewed base execution |38525189666/attempt1,9/9 SUCCESS+clean9/9;1122 non-integration/679 PG,78 Escalation,194 frontend/33 browser |
+| Reviewed tested merge | `1b4dcd13a482a2efe0cc148499078711c468928d`; main+base, tree=base |
+| C8 implementation review | CHANGES_REQUESTED: один page wire defect; остальные ESC-C01/03/04/05/06 и проверенная часть02/07 PASS |
+| PAGE-R1 local regression | До fix24 PASS/7 FAIL; после31 PASS/9 integration deselected; Ruff/mypy/contracts/original11 PASS |
+| Local actual HTTP/PG | NOT RUN: Docker отсутствует; new raw page case только collected |
+| New source gates | CI9+clean9/actual PG79/E compatibility ещё PENDING; base GREEN не переносится |
+| Finding disposition | OPEN до проверки C0/scoped C8; C3 после evidence возвращает REVIEW/HOLD |
+| C6-ESC-COMPAT-01 | CLOSED, новый controller review не назначен |
+
+Correction касается только list SQL envelope→service→page/schema; business lifecycle
+не меняется. Все78 прежних PG cases сохранены, добавлен1 page regression. Бюджеты,
+controller/pins/dependencies/workflows/Compose/frontend и0001–0010 неизменны.
+Единственный [C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6152762197)
+содержит final source/results и сохраняет reviewed checkpoint/history; docs после
+CI отдельным status-only commit не обновляются. M3 acceptance/C5 owner-wait/native
+provenance впереди, M4/LLM/Approval/Notifications вне scope, IMPL-05 fix и CI
+optimization DEFERRED. VM/live/рабочие DB-S3/deploy/merge не выданы.
+
+<details>
+<summary>История implementation до PAGE-R1; не активный статус</summary>
+
 ## Текущий статус — Escalation implementation продолжена после C6 review
 
 **C3-M3.2-ESCALATION-IMPLEMENTATION — IN_PROGRESS. Весь M3 — IN_PROGRESS.**
@@ -66,6 +100,9 @@ assumptions об ordinary TEST_CONSUME и старый exact function inventory;
 и display-ожидание schema prefix в pg_get_constraintdef. Test-query corrections
 сохраняют exact target OID/SQLSTATE/rollback и все78 cases;§14.15 фиксирует причины.
 Production/controller/DDL/pins неизменны; final-source CI и scoped C8 ещё OPEN.
+
+
+</details>
 
 <details>
 <summary>История выдачи ESCALATION-CONTRACT; заменена implementation выдачей C0</summary>

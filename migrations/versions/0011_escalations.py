@@ -771,7 +771,9 @@ def _reads() -> None:
           SELECT {VIEW} AS value,e.created_at,e.id {VIEW_FROM}
           WHERE e.workspace_id=ws AND (p_status='ALL' OR e.status=p_status) AND (p_at IS NULL OR (e.created_at,e.id)<(p_at,p_id))
           ORDER BY e.created_at DESC,e.id DESC LIMIT p_count)
-          SELECT coalesce(jsonb_agg(value ORDER BY created_at DESC,id DESC),'[]'::jsonb) INTO result FROM items;
+          SELECT jsonb_build_object(
+            'items',(SELECT coalesce(jsonb_agg(value ORDER BY created_at DESC,id DESC),'[]'::jsonb) FROM items),
+            'observed_at',{_stamp("clock.moment")}) INTO result FROM clock;
         RETURN result;
       END $$""")
 
