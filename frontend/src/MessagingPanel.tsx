@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Session } from './api';
+import { EscalationContext } from './escalation-api';
 import { ConversationControl, ControlIntent } from './ConversationControl';
 import { Connection, Conversation, Message, MessagingError, Page, ReadGrant, SendBody, SendReceipt, exactManualText, messagingApi } from './messaging-api';
 
@@ -19,7 +20,7 @@ function merge<T extends { created_at: string }>(old: T[], next: T[], id: (v: T)
 }
 
 // Page lifetime includes login/recovery. No storage, polling, or write on mount.
-export function MessagingPanel({ session, workspace, recover, expired, accessDenied }: { session: Session | null; workspace: string; recover: () => void; expired: () => void; accessDenied?: () => void }) {
+export function MessagingPanel({ session, workspace, recover, expired, accessDenied, ownerDecision }: { session: Session | null; workspace: string; recover: () => void; expired: () => void; accessDenied?: () => void; ownerDecision?: EscalationContext | null }) {
   const owner = !!session && !!workspace && session.memberships.some(m => m.workspace_id === workspace && m.role === 'OWNER');
   const scope = useRef({ session, workspace, owner, generation: 0 });
   const selection = useRef({ id: '', epoch: 0 });
@@ -222,6 +223,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         {!view.selected && <p>Выберите диалог.</p>}
         {selected && <p className="muted">Окно ответа: {selected.reply_window_expires_at ?? 'Нет отметки Telegram'}. Текущее разрешение проверяет сервер.</p>}
         {control}
+        {ownerDecision?.workspace===workspace&&ownerDecision.conversation===selected?.conversation_id&&ownerDecision.client===selected.client_id&&<p role="status" className="notice">По этому диалогу сохранено внутреннее решение владельца. Обновите сообщения и режим перед следующим действием; решение не является отправкой клиенту.</p>}
         {view.messages.busy && <p role="status">Загружаем сообщения…</p>}{view.messages.error && <p role="alert">{view.messages.error}</p>}
         {view.messages.items?.length === 0 && <p>Сообщений пока нет.</p>}
         <ol className="message-list">{view.messages.items?.map(m => <li key={m.message_id} data-testid={`message-${m.message_id}`}><article>

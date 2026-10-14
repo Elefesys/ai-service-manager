@@ -20,6 +20,14 @@ from provision_local_auth import (
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+ESCALATION_PRESETS = (
+    "esc_happy",
+    "esc_narrow",
+    "esc_recovery",
+    "esc_read",
+    "esc_stale",
+    "esc_revoked",
+)
 PRESETS = (
     "happy",
     "recovery",
@@ -40,8 +48,16 @@ PRESETS = (
     "ctrl_revoked",
     "ctrl_inactive",
     "ctrl_restricted",
+) + ESCALATION_PRESETS
+ACTIONS = (
+    "inventory",
+    "stats",
+    "control-stats",
+    "escalation-stats",
+    "downgrade",
+    "disable",
+    "restrict",
 )
-ACTIONS = ("inventory", "stats", "control-stats", "downgrade", "disable", "restrict")
 
 
 def validate_operation(preset, operation):
@@ -50,9 +66,10 @@ def validate_operation(preset, operation):
     ):
         raise ProvisioningError("Invalid finite messaging fixture action")
     allowed = {
-        "downgrade": ("revoked", "ctrl_revoked"),
-        "disable": ("inactive", "ctrl_inactive"),
-        "restrict": ("restricted", "ctrl_restricted"),
+        "downgrade": ("revoked", "ctrl_revoked", "esc_revoked"),
+        "disable": ("inactive", "ctrl_inactive", "esc_happy", "esc_narrow"),
+        "restrict": ("restricted", "ctrl_restricted", "esc_happy", "esc_narrow"),
+        "escalation-stats": ESCALATION_PRESETS,
     }
     if operation in allowed and preset not in allowed[operation]:
         raise ProvisioningError("Invalid finite messaging state change")
@@ -132,7 +149,7 @@ async def setup_messaging(password):
                     )
             # Two authorized Workspaces for browser context races. This does not
             # make the separate foreign Workspace visible to either actor.
-            for preset in ("isolation", "revoked", "ctrl_revoked"):
+            for preset in ("isolation", "revoked", "ctrl_revoked", "esc_revoked"):
                 await connection.execute(
                     text(
                         "INSERT INTO platform.workspace_memberships(workspace_id,user_account_id,role) "
@@ -143,6 +160,18 @@ async def setup_messaging(password):
                         "actor": UUID(fixtures[preset]["user_account_id"]),
                     },
                 )
+            # A second live OWNER can cancel a revoked assignee's request through
+            # the same public owner API. No decision row is provisioned here.
+            await connection.execute(
+                text(
+                    "INSERT INTO platform.workspace_memberships(workspace_id,user_account_id,role) "
+                    "VALUES(:ws,:actor,'OWNER')"
+                ),
+                {
+                    "ws": UUID(fixtures["esc_revoked"]["workspace_id"]),
+                    "actor": UUID(fixtures["isolation_peer"]["user_account_id"]),
+                },
+            )
         return fixtures
     finally:
         await engine.dispose()
@@ -247,7 +276,7 @@ async def action(preset, operation):
                 return await inventory(connection)
             owner = await identity(connection, preset)
             params = {"ws": owner.workspace_id, "actor": owner.user_account_id}
-            if operation in {"stats", "control-stats"}:
+            if operation in {"stats", "control-stats", "escalation-stats"}:
                 statements = {
                     "messages": "SELECT count(*) FROM app.messages WHERE workspace_id=:ws AND direction='OUTBOUND'",
                     "receipts": "SELECT count(*) FROM platform.messaging_command_receipts WHERE workspace_id=:ws",
@@ -255,10 +284,17 @@ async def action(preset, operation):
                     "outbox_events": "SELECT count(*) FROM app.outbox_events WHERE workspace_id=:ws",
                     "jobs": "SELECT count(*) FROM platform.messaging_jobs WHERE workspace_id=:ws AND kind='SEND_MANUAL_TEXT'",
                 }
-                if operation == "control-stats":
+                if operation in {"control-stats", "escalation-stats"}:
                     statements.update(
                         control_receipts="SELECT count(*) FROM platform.conversation_control_receipts WHERE workspace_id=:ws",
                         control_audit_events="SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws AND event_type IN ('CONVERSATION_TAKEN_OVER','CONVERSATION_RESUMED')",
+                    )
+                if operation == "escalation-stats":
+                    statements.update(
+                        escalations="SELECT count(*) FROM app.escalations WHERE workspace_id=:ws",
+                        escalation_receipts="SELECT count(*) FROM platform.escalation_command_receipts WHERE workspace_id=:ws",
+                        escalation_audit="SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws AND event_type='ESCALATION_DECIDED'",
+                        escalation_timers="SELECT count(*) FROM platform.messaging_jobs WHERE workspace_id=:ws AND kind='ESCALATION_TIMER'",
                     )
                 return {
                     name: (await connection.execute(text(sql), params)).scalar_one()

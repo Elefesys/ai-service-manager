@@ -14,6 +14,7 @@ from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
+from asm.conversations.escalations import MARKER
 from asm.files.config import StorageSettings
 from asm.files.database import FileDatabase
 from asm.files.provider import ControlledImageProvider
@@ -24,14 +25,23 @@ from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.models import EventKind, NormalizedEventV1, OutcomeKind
 from asm.messaging.worker import Worker
-from m2_4_browser_fixture import PRESETS, bot, route
+from m2_4_browser_fixture import ESCALATION_PRESETS, PRESETS, bot, route
 from PIL import Image
 from provision_local_auth import PrivateArgumentParser, ProvisioningError
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
-ACTIONS = ("seed", "success", "unknown", "permanent", "recover", "stats")
+ACTIONS = (
+    "seed",
+    "success",
+    "unknown",
+    "permanent",
+    "recover",
+    "stats",
+    "escalate-main",
+    "escalate-alternate",
+)
 COUNTER_DIRECTORY = Path("/run/m2-browser-counters")
 
 
@@ -40,6 +50,12 @@ def validate_operation(preset, operation):
         preset is not None if operation == "seed" else preset not in PRESETS
     ):
         raise ProvisioningError("Invalid finite messaging runner action")
+    if operation.startswith("escalate-") and (
+        preset not in ESCALATION_PRESETS
+        or operation == "escalate-alternate"
+        and preset not in ("esc_happy", "esc_narrow")
+    ):
+        raise ProvisioningError("Invalid finite Escalation runner action")
 
 
 def target():
@@ -190,7 +206,8 @@ def seed_events():
                 )
             for index in range(1, 27):
                 yield event(preset, f"history-{index}")
-        yield event(preset, "ready-image", image="ready")
+        if preset not in ESCALATION_PRESETS:
+            yield event(preset, "ready-image", image="ready")
         if preset == "happy":
             yield event(preset, "failed-image", image="failed")
     # Leave one genuinely scheduled FETCH pending for the initial UI. A later
@@ -234,6 +251,37 @@ async def seed(kernel, worker, adapter):
                 raise ProvisioningError("Canonical browser FETCH required")
             await worker.execute(fetch)
     return {"processed": processed}
+
+
+async def escalate(kernel, worker, adapter, preset, operation):
+    # Browser performs the accepted owner Resume first. This ordinary controlled
+    # ingress cannot create a request if Resume/billing/marker/authority fails.
+    conversation = "alternate" if operation == "escalate-alternate" else "main"
+    value = event(preset, f"escalation-{uuid4()}", conversation=conversation).model_copy(
+        update={"text": MARKER}
+    )
+    incoming = await kernel.ingest_event(adapter.source(value.bot_identity), value, uuid4())
+    if incoming.code != "ACCEPTED":
+        raise ProvisioningError("Fresh controlled Escalation ingress required")
+    processed = 0
+    async with asyncio.timeout(15):
+        for _ in range(512):
+            claim = await kernel.claim_job("m3-browser-escalation")
+            if claim is None:
+                # Bounded ordinary worker scheduling; no clock/Job-row rewrite.
+                await asyncio.sleep(0.025)
+                continue
+            await worker.execute(claim)
+            processed += 1
+            if claim.kind == "PROCESS_TURN" and claim.step == "ESCALATE_OWNER":
+                saved = await kernel.replay_escalation(claim.job_id, claim.claim_token)
+                if saved.workspace_id != incoming.workspace_id:
+                    raise ProvisioningError("Concurrent Escalation fixture not allowed")
+                processed += await drain(worker)
+                if adapter.mismatched:
+                    raise ProvisioningError("Concurrent browser outbound fixture not allowed")
+                return {"created": 1, "worked": processed, **counters(preset)}
+    raise ProvisioningError("Bounded Escalation creation not observed")
 
 
 async def action(preset, operation):
@@ -281,6 +329,8 @@ async def action(preset, operation):
                     if counters(selected) != {"calls": 0, "effects": 0}:
                         raise ProvisioningError("Fresh browser TEST counters required")
                 return await seed(kernel, worker, adapter)
+            if operation.startswith("escalate-"):
+                return await escalate(kernel, worker, adapter, preset, operation)
             recovered = await kernel.recover_expired() if operation == "recover" else 0
             worked = await drain(worker)
             if adapter.mismatched:

@@ -93,6 +93,10 @@ async def test_provision_rejects_target_before_engine_or_identity_write(
         ("ctrl_stale", "downgrade"),
         ("ctrl_recovery", "disable"),
         ("ctrl_stale", "restrict"),
+        ("happy", "escalation-stats"),
+        ("esc_stale", "downgrade"),
+        ("esc_read", "disable"),
+        ("esc_recovery", "restrict"),
     ],
 )
 async def test_finite_negative_actions_are_checked_before_database(
@@ -256,6 +260,59 @@ def test_control_presets_use_existing_canonical_seed_and_finite_mutation_scope(h
         assert {e.chat_id for e in events} == {f"m24-{preset}-main", f"m24-{preset}-alternate"}
 
 
+def test_escalation_presets_retain_pending_image_boundary_and_need_runtime_creation(harness):
+    assert set(harness.fixture.ESCALATION_PRESETS) == {
+        "esc_happy",
+        "esc_narrow",
+        "esc_recovery",
+        "esc_read",
+        "esc_stale",
+        "esc_revoked",
+    }
+    events = list(harness.worker.seed_events())
+    assert events[-1].image_file_id == "m24-image-pending"
+    for preset in harness.fixture.ESCALATION_PRESETS:
+        own = [e for e in events if e.bot_identity == harness.fixture.bot(preset)]
+        assert len(own) == 2 and all(e.image_file_id is None for e in own)
+        assert all(e.text != harness.worker.MARKER for e in own)
+        harness.fixture.validate_operation(preset, "escalation-stats")
+        harness.worker.validate_operation(preset, "escalate-main")
+    for preset in ("esc_happy", "esc_narrow"):
+        harness.fixture.validate_operation(preset, "disable")
+        harness.fixture.validate_operation(preset, "restrict")
+        harness.worker.validate_operation(preset, "escalate-alternate")
+
+
+@pytest.mark.parametrize(
+    "preset,operation",
+    [
+        ("happy", "escalate-main"),
+        ("esc_read", "escalate-alternate"),
+        (None, "escalate-main"),
+        ("esc_happy", "escalate-arbitrary"),
+    ],
+)
+async def test_escalation_runner_rejects_unassigned_actions_before_database(
+    harness, monkeypatch, preset, operation
+):
+    def forbidden(*args, **kwargs):
+        pytest.fail("Unexpected database construction")
+
+    monkeypatch.setattr(harness.worker, "create_async_engine", forbidden)
+    with pytest.raises(harness.worker.ProvisioningError):
+        await harness.worker.action(preset, operation)
+
+
+async def test_escalation_runtime_keeps_privileged_environment_denial(harness, monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail("Unexpected database construction")
+
+    monkeypatch.setattr(harness.worker, "create_async_engine", forbidden)
+    # The fixture intentionally still has a migration credential in its env.
+    with pytest.raises(harness.worker.ProvisioningError):
+        await harness.worker.action("esc_recovery", "escalate-main")
+
+
 async def test_control_counters_are_read_only_bound_to_finite_owner_workspace(harness, monkeypatch):
     from contextlib import asynccontextmanager
 
@@ -299,6 +356,54 @@ async def test_control_counters_are_read_only_bound_to_finite_owner_workspace(ha
     for sql, params in queries:
         assert sql.startswith("SELECT count(*) FROM ") and "workspace_id=:ws" in sql
         assert params == {"ws": workspace, "actor": actor}
+
+
+async def test_escalation_counters_are_read_only_and_do_not_return_answers(harness, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    workspace, actor = uuid4(), uuid4()
+    queries = []
+
+    class Connection:
+        async def execute(self, sql, params):
+            queries.append((str(sql), params))
+            return SimpleNamespace(scalar_one=lambda: 0)
+
+    class Engine:
+        @asynccontextmanager
+        async def begin(self):
+            yield Connection()
+
+        async def dispose(self):
+            pass
+
+    async def guard(_):
+        pass
+
+    async def identity(_, preset):
+        assert preset == "esc_recovery"
+        return SimpleNamespace(workspace_id=workspace, user_account_id=actor)
+
+    monkeypatch.setattr(harness.fixture, "create_async_engine", lambda *a, **kw: Engine())
+    monkeypatch.setattr(harness.fixture, "guard", guard)
+    monkeypatch.setattr(harness.fixture, "identity", identity)
+    result = await harness.fixture.action("esc_recovery", "escalation-stats")
+    assert set(result) == {
+        "messages",
+        "receipts",
+        "audit_events",
+        "outbox_events",
+        "jobs",
+        "control_receipts",
+        "control_audit_events",
+        "escalations",
+        "escalation_receipts",
+        "escalation_audit",
+        "escalation_timers",
+    }
+    for sql, params in queries:
+        assert sql.startswith("SELECT count(*) FROM ") and "workspace_id=:ws" in sql
+        assert "answer" not in sql and params == {"ws": workspace, "actor": actor}
 
 
 @pytest.mark.parametrize("module", ["fixture", "worker"])
