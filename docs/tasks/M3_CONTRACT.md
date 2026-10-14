@@ -3255,3 +3255,29 @@ pins/dependencies/workflows/Compose и frontend прежние. Не запус�
 full local suites ради статистики. Final source/actual results — в едином
 [C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6152762197),
 без status/SHA-only commit после CI. Finding OPEN до C0/scoped C8; M3 IN_PROGRESS.
+
+
+### 14.17. C0 — foundation time budget 40→45 минут
+
+[C0 C6-M3-FOUNDATION-TIME-BUDGET](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6168070726)
+разрешает от exact base `0dd8a3490cfccf7fb613c169f3bd5116373827fd` только
+job-level `foundation.timeout-minutes: 40→45` и три coordination docs в одном
+содержательном commit. Весь прежний prefix через§14.16 сохранён побайтно.
+Это текущий override прежнего foundation40; исторические записи не отменяются.
+
+PAGE-R1 CI38549789284/attempt2 BLOCKED:8 SUCCESS/1 CANCELLED, clean8/1 SKIPPED;
+foundation40m19s, основной step40m13s. HTTP/reverse-proxy smoke не завершён.
+Логи обеих попыток:1133 non-integration и680 PG PASS,79 Escalation
+(61 domain+9 API+9 migration); это не полный GREEN и не доказательство нового source.
+Пять дополнительных минут предназначены для обязательных завершающих smoke,
+cleanup и clean; фиксированная длительность не обещана.
+
+Все9 jobs, matrix/steps/conditions/clean checks, concurrency/permissions/pins,
+locks/scripts/controllers/dependency и product/SQL/DTO/OpenAPI/tests прежние.
+Prepare600s/cleanup90s/state25m/browser25m и остальные limits не меняются.
+CI optimization/IMPL-05 fix DEFERRED. Один новый штатный PR CI на final source:
+9/9 SUCCESS+clean9/9 без SKIPPED, actual foundation completion и строка
+`HTTP and frontend reverse-proxy smoke passed`; source records/archives обязательны.
+При failed/cancelled — конкретный BLOCKED и HOLD, без rerun/нового повышения45.
+Final evidence — отдельный canonical C6 receipt, без status/SHA-only commit.
+C3/C8 HOLD; C8-M3-ESC-01/P2 OPEN до scoped recheck и решения C0; M3 IN_PROGRESS.

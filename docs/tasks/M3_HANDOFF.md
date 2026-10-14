@@ -5,6 +5,51 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
+## 0. Активная выдача C0 — C6-M3-FOUNDATION-TIME-BUDGET
+
+Дата:2026-10-14 UTC. [Поручение C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6168070726).
+C3 HOLD; C8 HOLD. Приёмка PAGE-R1 BLOCKED незавершённым CI; M3 IN_PROGRESS.
+C6 выполняет только эту выдачу в отдельном checkout, последовательно в том же
+Draft PR31/`c3/m3-2-escalation`, без reset/rebase/force-push.
+
+| Source / gate | Exact value |
+|---|---|
+| Exact base | `0dd8a3490cfccf7fb613c169f3bd5116373827fd` |
+| Sole parent / base tree | `c413a6f80b30fbdd12717af3f12642a5b5f785f4` / `c21d936d22b85fe849296f06650f800ff459b6b1` |
+| Accepted main / frozen G | `c502d5fd258aef15bb5549e1529df8d038a4fb9b`,0010 |
+| Base tested merge | `f5409011ccf81223b6bc1f1286766c866779da85`; ordered parents main+base, tree=base tree |
+| Base workflow blob | `8a1c480320c0518075edd4ecf2a74177acdde3a0` |
+| Previous CI |38549789284/attempt2:8 SUCCESS/1 CANCELLED, clean8/1 SKIPPED; foundation40m19s |
+
+AGENTS, IMPL-001, canonical architecture/ADR/roadmap/plan и действующие contract
+boundaries прочитаны; remote/base и чистота exact checkout сверены до изменения.
+Разрешены максимум4 paths: `.github/workflows/ci.yml` — только foundation40→45;
+`M3_CONTRACT.md` — append§14.17 после неизменного prefix; этот handoff — один
+активный C6 block с сохранением истории; `docs/TASK_REGISTER.md` — текущая задача
+и фактический BLOCKED предыдущего CI. Все четыре входят в один содержательный commit.
+
+Текущий override foundation45 заменяет только прежний лимит40; prepare600s,
+cleanup90s/state25m/browser25m и остальные limits прежние. Остальные workflow
+bytes,9 jobs/matrix/steps/conditions/clean checks, pins/locks/controllers/dependency,
+product/SQL/DTO/OpenAPI/tests/applied migrations не меняются. Новые tests, builds
+и полные local suites не нужны; проверить exact diff и `git diff --check`.
+
+После одного содержательного commit — один новый штатный PR CI на final source,
+9 SUCCESS+clean9 SUCCESS без SKIPPED. Нужны actual foundation completion,
+`HTTP and frontend reverse-proxy smoke passed`, unit/PG/Escalation/frontend/browser
+counts и обе normal/Docker29 state lanes. Старые8 зелёных jobs не переносятся.
+В отдельном canonical C6 receipt: head/parent/tree, paths/numstat/workflow line,
+run/attempt/jobs/clean/duration/counts/smoke, actual checkout/virtual merge/ordered
+parents/tree и существующие source artifacts. C3/C8 receipts не переписывать.
+При cancelled/failed — точные step/time/log, BLOCKED и HOLD; не повторять цикл,
+не повышать45 и не менять gates. После receipt C6 HOLD; C0 назначит только
+C8-M3-ESC-01 и затронутые ESC-C02/07. Finding пока OPEN, C6-ESC-COMPAT-01 CLOSED.
+C5 owner-wait/native/provenance/M3 acceptance впереди; IMPL-05 fix и CI optimization
+DEFERRED. VM/live Telegram/рабочие DB-S3/deploy/merge не выполнять.
+
+<details>
+<summary>История PAGE-R1 и прежних выдач; текущая выдача C6 приведена выше</summary>
+
 ## 0. Активная выдача C0 — C3-M3.2-ESCALATION-PAGE-R1
 
 Дата:2026-10-14 UTC. [Поручение C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164474811)
@@ -2210,3 +2255,5 @@ telegram modules, migration0005/0007 и M2_CONTRACT; сверить модель
 M3 считается завершённой после матрицы/интеграции/применимого operator evidence.
 Отсутствующий provider факт не подменяется synthetic PASS. M4 выдаётся отдельно
 с точными Turn/context/control/admission контрактами и принятым main SHA.
+
+</details>

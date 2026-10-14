@@ -2,6 +2,39 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
+## Текущий статус — C6-M3-FOUNDATION-TIME-BUDGET / 2026-10-14 UTC
+
+**C6 — IN_PROGRESS. PAGE-R1 acceptance — BLOCKED незавершённым CI.
+C3 HOLD; C8 HOLD. C8-M3-ESC-01/P2 OPEN. Весь M3 — IN_PROGRESS.**
+[Выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6168070726)
+разрешает только foundation40→45 и три coordination docs одним содержательным
+commit. Scope/проверки — [M3_HANDOFF§0](tasks/M3_HANDOFF.md), текущий override
+и неизменные границы — [M3_CONTRACT§14.17](tasks/M3_CONTRACT.md).
+
+| Факт / gate | Значение |
+|---|---|
+| Exact C6 base | `0dd8a3490cfccf7fb613c169f3bd5116373827fd` |
+| Sole parent / tree | `c413a6f80b30fbdd12717af3f12642a5b5f785f4` / `c21d936d22b85fe849296f06650f800ff459b6b1` |
+| Accepted main / frozen G | `c502d5fd258aef15bb5549e1529df8d038a4fb9b`,0010 |
+| Previous tested merge | `f5409011ccf81223b6bc1f1286766c866779da85`; ordered parents main+base, tree=base tree |
+| Previous final-source CI |38549789284/attempt2:8 SUCCESS/1 CANCELLED; clean8 SUCCESS/1 SKIPPED; BLOCKED |
+| Foundation attempt1 / attempt2 |115804663667:40m21s /115821443996:40m19s; основной step40m13s в обеих попытках при лимите40 |
+| Actual PAGE-R1 tests |1133 non-integration/680 PG PASS;79 Escalation=61 domain+9 API+9 migration; HTTP/reverse-proxy smoke не завершён |
+| Cancellation evidence |`The operation was canceled.`; отдельная административная причина не подтверждена, test failure в прочитанных C0 логах не обнаружен |
+| Current budget |Только foundation job40→45; остальные workflow bytes и budgets сохранены |
+| New final-source evidence |PENDING: один новый штатный PR CI9/9+clean9/9 без SKIPPED и actual smoke/source records; старые8 SUCCESS не переносятся |
+| Next owner gate |C0 source/CI intake, затем только C8-M3-ESC-01 и затронутые ESC-C02/07; finding OPEN до решения C0 |
+| C6-ESC-COMPAT-01 |CLOSED; повторный controller review/fault matrix не назначен |
+
+После canonical C6 receipt — HOLD. При новом cancelled/failed вернуть точный
+BLOCKED; без rerun/нового повышения45 и без status/SHA-only commits после CI.
+C3/C8 authored receipts и вся история сохранены. C5 owner-wait/native/provenance/
+M3 acceptance впереди; IMPL-05 fix и CI optimization DEFERRED. VM/live Telegram/
+рабочие DB-S3/deploy/merge не выданы.
+
+<details>
+<summary>История PAGE-R1 и предыдущих статусов; текущий статус C6 приведён выше</summary>
+
 ## Текущий статус — C3-M3.2-ESCALATION-PAGE-R1 / 2026-10-14 UTC
 
 **PAGE-R1 — IN_PROGRESS. C8-M3-ESC-01/P2 OPEN. Весь M3 — IN_PROGRESS.**
@@ -3304,6 +3337,8 @@ C0 проверил фактический merge PR #10: `049b212f135f09c025d2f8
 `C0-M1.2-E2E-01` — CLOSED / INTEGRATED / VERIFIED в границах этого исправления. M1.2 сохраняет приёмку; исторический исходный base M1.3 остаётся `28c289ce6f77e33676cfa416585cc0e20c0be4e3`. Новый main не является разрешением DDL или доказательством M1.3.
 
 R2 C1 ещё не получена. Сообщение Codex «не удалось создать продолжение» не доказывает контекстный лимит, исчерпание quota или safety block. C0 заменяет способ передачи: новая cloud-задача с PR #9 как контекстом; один временный текстовый файл `docs/tasks/C1_M1_3_R2_RESUME.txt` допускается только для переноса полного поручения и удаляется из итогового tracked tree. Архитектурные решения D-01…D-13 не меняются; итоговая дельта от reviewed `f4fb513…` — только реестр, C0 disposition и контракт R2. Без merge/rebase/force-push, нового конкурирующего PR или изменения кода. Runtime M1.3 остаётся NOT AUTHORIZED; контракт R2 ждёт C0/C2 review.
+
+</details>
 
 </details>
 
