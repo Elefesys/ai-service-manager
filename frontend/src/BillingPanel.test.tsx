@@ -20,6 +20,18 @@ async function ready() { await waitFor(() => expect(screen.getByRole('button',{n
 async function submit(name='New contact') { await ready(); fireEvent.change(screen.getByLabelText('Имя контакта'),{target:{value:name}}); await act(async () => { fireEvent.submit(screen.getByRole('button',{name:'Сохранить контакт'}).closest('form')!); }); }
 
 describe('owner panel authority and request ownership', () => {
+  it('renders decision labels in the existing Audit without internal answer content or owner-wait controls', async () => {
+    const resolve = {...event(6),object_type:'ESCALATION' as const,object_version:'2' as const,event_type:'ESCALATION_DECIDED' as const,actor_kind:'USER_ACCOUNT' as const,actor_user_account_id:session().user_account_id,payload:{operation:'RESOLVE' as const,status:'RESOLVED' as const}};
+    const cancel = {...resolve,audit_event_id:event(7).audit_event_id,payload:{operation:'CANCEL' as const,status:'CANCELLED' as const}};
+    vi.mocked(billingApi.audit).mockResolvedValueOnce({items:[resolve,event()],next_cursor:'escalation-next'}).mockResolvedValueOnce({items:[cancel],next_cursor:null});
+    setup(); await screen.findByText('Ответ владельца сохранён');
+    expect(screen.getByText('Контакт изменён')).toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'Загрузить ещё'}));
+    await screen.findByText('Запрос владельцу отменён');
+    expect(screen.getByText('Ответ владельца сохранён')).toBeVisible();
+    expect(billingApi.audit).toHaveBeenLastCalledWith(ws,'escalation-next',expect.any(AbortSignal));
+    expect(screen.queryByRole('button',{name:/Resolve|Cancel|Ответить владельцу/})).not.toBeInTheDocument();
+  });
   it('renders CONTROL labels alongside retained events and paginates without CONTROL actions', async () => {
     const takeover = {...event(4),actor_kind:'USER_ACCOUNT' as const,actor_user_account_id:session().user_account_id,object_type:'CONVERSATION' as const,event_type:'CONVERSATION_TAKEN_OVER' as const,payload:{previous_mode:'AI' as const,control_mode:'HUMAN' as const,previous_generation:'2',control_generation:'3'}};
     const resume = {...event(5),actor_kind:'USER_ACCOUNT' as const,actor_user_account_id:session().user_account_id,object_type:'CONVERSATION' as const,event_type:'CONVERSATION_RESUMED' as const,payload:{previous_mode:'HUMAN' as const,control_mode:'AI' as const,previous_generation:'1',control_generation:'2'}};

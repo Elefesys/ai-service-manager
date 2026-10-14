@@ -148,6 +148,12 @@ class TenantUnitOfWork:
                 primary = getattr(diagnostic, "message_primary", None)
                 if primary in {code.value for code in ControlCode}:
                     raise ControlError(ControlCode(primary)) from None
+            if getattr(error.orig, "sqlstate", "") == "P2501":
+                from asm.conversations.escalations import EscalationCode, EscalationError
+
+                primary = getattr(diagnostic, "message_primary", None)
+                if primary in {code.value for code in EscalationCode}:
+                    raise EscalationError(EscalationCode(primary)) from None
             bounded = database_error(error)
             if bounded is not None:
                 raise bounded from None
@@ -292,6 +298,46 @@ class TenantUnitOfWork:
         except BaseException:
             self._failed = True
             raise
+
+    async def escalation_read(self, escalation_id: UUID) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.escalation_read(:escalation)", {"escalation": escalation_id}
+        )
+
+    async def escalation_list(
+        self, count: int, status: str, at: datetime | None, escalation_id: UUID | None
+    ) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.escalation_list(:count,:status,:at,:id)",
+            {"count": count, "status": status, "at": at, "id": escalation_id},
+        )
+
+    async def escalation_command(
+        self,
+        escalation_id: UUID,
+        conversation_id: UUID,
+        client_id: UUID,
+        operation: str,
+        key: str,
+        version: int,
+        generation: int,
+        context_version: int,
+        answer: str | None,
+    ) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.escalation_command(:escalation,:conversation,:client,:operation,:key,:version,:generation,:context,:answer)",
+            {
+                "escalation": escalation_id,
+                "conversation": conversation_id,
+                "client": client_id,
+                "operation": operation,
+                "key": key,
+                "version": version,
+                "generation": generation,
+                "context": context_version,
+                "answer": answer,
+            },
+        )
 
     async def conversation_control_read(self, conversation_id: UUID) -> Any:
         return await self._messaging_execute(

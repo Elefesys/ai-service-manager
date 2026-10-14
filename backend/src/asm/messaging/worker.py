@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from asm.conversations.escalations import EscalationService
 from asm.conversations.guards import GuardedTurnSnapshot, GuardTextResult, consume_guarded
 from asm.conversations.turns import ConsumerResult, TurnSnapshot, consume
 from asm.messaging.adapter import ControlledAdapter
@@ -81,6 +82,12 @@ class Worker:
                 raise secondary from primary
 
     async def execute(self, claim: JobClaim) -> None:
+        if claim.kind == "ESCALATION_TIMER":
+            # Commit failure propagates: no speculative SUCCEEDED/DEAD. Recovery
+            # re-reads canonical Jobs in a fresh transaction, never an old lease.
+            await self.database.execute_escalation_timer(claim)
+            return
+
         if claim.kind == "PROCESS_INBOX":
             try:
                 await self.database.process_inbox(claim)
@@ -94,6 +101,18 @@ class Worker:
             return
 
         if claim.kind == "PROCESS_TURN":
+            if isinstance(claim, TurnJobClaim) and claim.step == "ESCALATE_OWNER":
+                try:
+                    await EscalationService(self.database).request_for_turn(claim)
+                except SQLAlchemyError as primary:
+                    # A lost ACK may hide committed creation. Only immutable
+                    # winning-claim replay can confirm it; a miss propagates and
+                    # leaves further attempts to ordinary reclaim/admission.
+                    try:
+                        await self.database.replay_escalation(claim.job_id, claim.claim_token)
+                    except (SQLAlchemyError, MessagingError) as secondary:
+                        raise secondary from primary
+                return
             try:
                 guarded = isinstance(claim, TurnJobClaim) and claim.step == "GUARDED_TEXT"
                 snapshot = (

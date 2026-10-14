@@ -248,12 +248,38 @@ class ConversationResumedAudit(ControlAuditBase):
     payload: ResumePayload
 
 
+class EscalationResolvePayload(StrictModel):
+    operation: Literal["RESOLVE"]
+    status: Literal["RESOLVED"]
+
+
+class EscalationCancelPayload(StrictModel):
+    operation: Literal["CANCEL"]
+    status: Literal["CANCELLED"]
+
+
+class EscalationDecidedAudit(StrictModel):
+    audit_event_id: CanonicalUUID
+    occurred_at: Timestamp
+    correlation_id: CanonicalUUID
+    object_type: Literal["ESCALATION"]
+    object_id: CanonicalUUID
+    object_version: Literal["2"]
+    event_type: Literal["ESCALATION_DECIDED"]
+    actor_kind: Literal["USER_ACCOUNT"]
+    actor_user_account_id: CanonicalUUID
+    payload: Annotated[
+        EscalationResolvePayload | EscalationCancelPayload, Field(discriminator="operation")
+    ]
+
+
 AuditItem = Annotated[
     ProvisionAudit
     | ContactAudit
     | MessageSendAudit
     | ConversationTakenOverAudit
-    | ConversationResumedAudit,
+    | ConversationResumedAudit
+    | EscalationDecidedAudit,
     Field(discriminator="event_type"),
 ]
 

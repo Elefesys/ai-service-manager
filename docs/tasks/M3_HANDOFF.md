@@ -5,6 +5,426 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
+## 0. Активная выдача C0 — C6-M3-FOUNDATION-TIME-BUDGET
+
+Дата:2026-10-14 UTC. [Поручение C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6168070726).
+C3 HOLD; C8 HOLD. Приёмка PAGE-R1 BLOCKED незавершённым CI; M3 IN_PROGRESS.
+C6 выполняет только эту выдачу в отдельном checkout, последовательно в том же
+Draft PR31/`c3/m3-2-escalation`, без reset/rebase/force-push.
+
+| Source / gate | Exact value |
+|---|---|
+| Exact base | `0dd8a3490cfccf7fb613c169f3bd5116373827fd` |
+| Sole parent / base tree | `c413a6f80b30fbdd12717af3f12642a5b5f785f4` / `c21d936d22b85fe849296f06650f800ff459b6b1` |
+| Accepted main / frozen G | `c502d5fd258aef15bb5549e1529df8d038a4fb9b`,0010 |
+| Base tested merge | `f5409011ccf81223b6bc1f1286766c866779da85`; ordered parents main+base, tree=base tree |
+| Base workflow blob | `8a1c480320c0518075edd4ecf2a74177acdde3a0` |
+| Previous CI |38549789284/attempt2:8 SUCCESS/1 CANCELLED, clean8/1 SKIPPED; foundation40m19s |
+
+AGENTS, IMPL-001, canonical architecture/ADR/roadmap/plan и действующие contract
+boundaries прочитаны; remote/base и чистота exact checkout сверены до изменения.
+Разрешены максимум4 paths: `.github/workflows/ci.yml` — только foundation40→45;
+`M3_CONTRACT.md` — append§14.17 после неизменного prefix; этот handoff — один
+активный C6 block с сохранением истории; `docs/TASK_REGISTER.md` — текущая задача
+и фактический BLOCKED предыдущего CI. Все четыре входят в один содержательный commit.
+
+Текущий override foundation45 заменяет только прежний лимит40; prepare600s,
+cleanup90s/state25m/browser25m и остальные limits прежние. Остальные workflow
+bytes,9 jobs/matrix/steps/conditions/clean checks, pins/locks/controllers/dependency,
+product/SQL/DTO/OpenAPI/tests/applied migrations не меняются. Новые tests, builds
+и полные local suites не нужны; проверить exact diff и `git diff --check`.
+
+После одного содержательного commit — один новый штатный PR CI на final source,
+9 SUCCESS+clean9 SUCCESS без SKIPPED. Нужны actual foundation completion,
+`HTTP and frontend reverse-proxy smoke passed`, unit/PG/Escalation/frontend/browser
+counts и обе normal/Docker29 state lanes. Старые8 зелёных jobs не переносятся.
+В отдельном canonical C6 receipt: head/parent/tree, paths/numstat/workflow line,
+run/attempt/jobs/clean/duration/counts/smoke, actual checkout/virtual merge/ordered
+parents/tree и существующие source artifacts. C3/C8 receipts не переписывать.
+При cancelled/failed — точные step/time/log, BLOCKED и HOLD; не повторять цикл,
+не повышать45 и не менять gates. После receipt C6 HOLD; C0 назначит только
+C8-M3-ESC-01 и затронутые ESC-C02/07. Finding пока OPEN, C6-ESC-COMPAT-01 CLOSED.
+C5 owner-wait/native/provenance/M3 acceptance впереди; IMPL-05 fix и CI optimization
+DEFERRED. VM/live Telegram/рабочие DB-S3/deploy/merge не выполнять.
+
+<details>
+<summary>История PAGE-R1 и прежних выдач; текущая выдача C6 приведена выше</summary>
+
+## 0. Активная выдача C0 — C3-M3.2-ESCALATION-PAGE-R1
+
+Дата:2026-10-14 UTC. [Поручение C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164474811)
+по [C8-M3-ESC-01/P2 OPEN](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164119233).
+HOLD C3 снят только для page wire correction; C8 после review остаётся HOLD.
+Тот же Draft PR31/`c3/m3-2-escalation`, отдельный checkout, последовательный
+commit без reset/rebase/force-push. Remote и чистота проверены до изменения.
+
+| Source | Exact value |
+|---|---|
+| Base | `c413a6f80b30fbdd12717af3f12642a5b5f785f4` |
+| Base tree / sole parent | `1a87601835bd9646e40f62e399f0b71304e28abc` / `9d65a69c47d26ceacdb5f3093d14720c5d40e779` |
+| Accepted main / frozen G | `c502d5fd258aef15bb5549e1529df8d038a4fb9b`,0010 |
+| Reviewed base CI |38525189666/attempt1,9/9+clean9/9;1122 unit/679 PG,78 Escalation,194 frontend/33 browser |
+| Base tested merge | `1b4dcd13a482a2efe0cc148499078711c468928d`, parents main+base, tree=base |
+
+Разрешены ровно9 paths:
+- `backend/src/asm/conversations/escalation_http_models.py`: required page Timestamp/consistency.
+- `backend/src/asm/conversations/escalations.py`: strict list envelope и один DB clock.
+- `migrations/versions/0011_escalations.py`: только тело escalation_list внутри _reads().
+- `contracts/openapi.json`: штатная regeneration page schema.
+- `tests/test_m3_2_escalations.py`: targeted DTO/schema/service regression.
+- `tests/test_m3_2_escalations_api_postgres.py`: actual raw HTTP/PG empty/nonempty/pagination.
+- `docs/tasks/M3_CONTRACT.md`: append§14.16 после прежнего339842-byte prefix.
+- `docs/tasks/M3_HANDOFF.md`: этот активный блок, история ниже сохранена.
+- `docs/TASK_REGISTER.md`: текущая correction/finding и факты.
+
+Результат: ровно items,next_cursor,required observed_at; один MATERIALIZED DB clock
+передаётся через empty/nonempty envelope, все item clocks совпадают. Сохранить
+guards, UNAVAILABLE, lookahead/≤100/status anchor, read-only GET и business lifecycle.
+0011/down0010 ещё candidate; остальные тела/DDL/signatures/profiles,0001–0010,
+controller/dependency/pins/locks/workflows/Compose/frontend immutable в этом R1.
+
+Сначала regression:24 PASS/7 FAIL до code fix; затем31 focused PASS/9 integration
+ deselected, static/contracts/original11 checks PASS. Local Docker отсутствует,
+local PG NOT RUN; один новый raw HTTP/PG case collected, прежние78 сохранены.
+Не переносить base GREEN. Final-source CI9+clean9, обе G→E/state lanes и migration
+reverse обязательны; бюджеты prepare600/cleanup90/state25/foundation40/browser25
+сохранить. Полные local suites/CI optimization и новый C6 review не назначены.
+
+Возврат через [canonical C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6152762197):
+final head/parent/tree, delta отc413/numstat, DB clock trace, commands/results,
+actual HTTP/PG/CI run/attempt/jobs/clean/checkout/parents/tree. Docs идут вместе
+с substantive fix, без status/SHA-only commit. После CI — REVIEW и HOLD;
+finding OPEN до C0/C8, весь M3 IN_PROGRESS. C0 назначает только повтор C8-M3-ESC-01
+и затронутых ESC-C02/07; остальные independent PASS сохранены. C6-ESC-COMPAT-01
+CLOSED. C5 owner-wait/native/provenance/acceptance впереди; IMPL-05 fix и CI
+optimization DEFERRED. VM/live Telegram/рабочие DB-S3/deploy/merge запрещены.
+
+<details>
+<summary>История implementation выдачи до PAGE-R1; прежние checkpoints и результаты</summary>
+
+## 0. Активная выдача C0 — C3-M3.2-ESCALATION-IMPLEMENTATION
+
+Дата: 2026-10-13 UTC. Основание — [конкретная выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6151237330).
+Продолжение от checkpoint разрешено [решением C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6161454304)
+после [адресного C6 review](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6161347908).
+Она заменяет прежний contract-only HOLD ниже. Продолжать тот же Draft PR31,
+ветку `c3/m3-2-escalation` в отдельном checkout. Реализация разрешена;
+единственный статус исполнения — в [TASK_REGISTER](../TASK_REGISTER.md).
+
+| Source / gate | Принятый факт |
+|---|---|
+| Accepted main / frozen G / schema | `c502d5fd258aef15bb5549e1529df8d038a4fb9b` / `0010` |
+| Implementation start | `65454012c0e5a2c9643bf1401d86773a5a4df29a` |
+| Start tree | `de09e1bf435d15929059f4e7691bd1fa17c0f2a4` |
+| Start CI | [38430231534/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38430231534), SUCCESS9/9 + clean9/9 |
+| Actual tested start merge | `2650c69c48c0e882317e6ca6a68cda18f26918ed`, parents main+start, tree=start |
+| Accepted R2 contract | 331348 bytes, blob `3d2f88ddedf0ab9944db3181040abe16a7034e81`; append evidence after§14.11 |
+| Assigned migration | `migrations/versions/0011_escalations.py`, revision0011/down0010; applied0001–0010 immutable |
+
+C0 принял R2; три design findings CLOSED. Legacy-overload finding NOT CONFIRMED.
+Оба diagnostic patches (C3 refresh и C6 observer) приняты и сохраняются.
+Исторические причины CI failures UNKNOWN; отдельное расследование прекращено.
+На принятом start текущих CI blockers нет. Эти результаты не проверяют E runtime.
+
+### 0.1. Результат и принятые границы
+
+Работающий LOCAL/TEST backend/API по M3_CONTRACT§14, без нового milestone:
+trusted CONTROLLED Inbox→Turn→PROCESS_TURN/ESCALATE_OWNER создаёт отдельный
+запрос; live OWNER читает очередь/detail, resolve сохраняет внутренний ответ,
+cancel закрывает ожидание; reminders2/5min и expiry10min durable и recoverable.
+Это M3-A09 и основание будущего owner-wait UI, без UI реализации здесь.
+
+Exact marker `CONTROLLED ESCALATION TEST` допускается только при fresh live
+Resume OWNER и принятом CONTROLLED_GUARDS_V1. Lifetime exclusion GUARDS/Escalation
+на Turn, historical replay, canonical Workspace/Client/Conversation и точные
+fingerprints обязательны. Не создавать запрос migrator-ом вместо runtime,
+не вводить public create API/произвольного actor. Answer1..512 scalars/2048bytes
+сохраняется точно, без send/Approval/Resume и оживления старого Turn.
+
+PENDINGv1→RESOLVED/CANCELLED/EXPIREDv2; assignee immutable; resolve только ему,
+cancel любому current OWNER. Material context/control invalidation атомарна
+и не добавляет лишний counter bump. Local read/decision независимы от billing/
+channel availability. Ровно четыре routes§14.5, existing cookie/Origin/CSRF,
+strict DTO/error/cursor, exact key/body, current authority и saved receipt.
+
+Две таблицы,36→38;11 function profiles, FORCE RLS/capability-only runtime.
+Owner UPDATE→Audit→receipt→context в одной transaction. Ациклические identity,
+terminal/relation/membership и seven-column receipt→Audit FKs. Cleanup строго
+receipt→Esc Audit→timer Jobs→request→old parents, без CASCADE/disable/nulling.
+Timer post-lock trusted time и due-before-attempt; exact allowlisted23514
+внутри rollback, затем committable DEAD/INVALID_INPUT/NULL; остальные ошибки
+и failed commit не объявляют сохранённый успех. До expiry DEAD не стирает
+ожидание, после expiry actions запрещены даже без scheduler.
+
+### 0.2. Канон и точный scope
+
+AGENTS, IMPL-001; оригиналы Spec§§1.7/5.10–5.14/14.11/16/18.5–18.8/24.7;
+ADR023–026/121–128/139/197–198/267; MVP GJ-G/GJ-J; Roadmap M3;
+Implementation Plan M3.1/M3.2; OPEN082/083/085. Принятые §§8/9/12/13/14
+M3_CONTRACT и actual dependencies обязательны; canon/snapshots не менять.
+
+Разрешены ровно40 implementation paths из **M3_CONTRACT§14.10** с указанными
+там причинами и дополнительно этот handoff + `docs/TASK_REGISTER.md` для
+переноса принятой выдачи/фактов. C0 добавил `tests/test_auth_contract.py` только
+для exact approved four-route inventory diff; полный endpoint equality, семь
+frozen auth routes и остальные assertions сохраняются. Максимум43 paths,
+не требование изменить каждый.
+`tests/test_m2_1_postgres.py`, `tests/test_m3_1_control_api_postgres.py`,
+manifest/dependencies/locks/workflows/Compose/images не выданы.
+Дополнительный path — конкретный diff/причина C0 **до применения**.
+
+Пять условных paths: `scripts/prepare_telegram_egress.py`,
+`scripts/test_telegram_egress.sh`, `scripts/test_telegram_egress_migration.sh`,
+`tests/test_telegram_egress.py`, `tests/test_telegram_egress_migration.py` —
+активированы C0 ровно для corrected replacement C6:41783 UTF-8 bytes,
+SHA256 `2c63dc567c151c8c6be0be342f98f19eb947b6f355ad43a202bd76367140b0f8`.
+Исходный proposal41097bytes/hash`78762113ce37a2709f366a8a95d4284525f9def366be579241f4c756bcf4540e`
+отклонён: G report export мог заменить primary failure. Corrected finally
+сохраняет исходное исключение, записывает export failure как secondary; без
+прежнего failure export остаётся primary, private evidence retained.
+Иная содержательная controller/budget/source-identity дельта требует конкретного
+proposed diff C0 до применения. Новые pins не включаются. H/T/C/G identities
+сохранить; G=`c502…`/0010 отдельно от E/0011. Нужна genuine G→E phase в двух
+existing state lanes, exact38 E inventory и полное canonical residual timer
+set после drain; kind/count waiver, сдвиг часов/available_at или удаление future
+Jobs в asm_local запрещены. Serial private clock только disposable asm_test,
+committed replacement и exact restore. Prepare600/cleanup90, state25min,
+foundation40/browser25, exact Docker29 и все9 jobs неизменны.
+
+### 0.3. Текущий implementation checkpoint и gates
+
+Продолжение последовательно от `373aeaf42debba80266c976f95658124455045d5`,
+parent`65454012c0e5a2c9643bf1401d86773a5a4df29a`,
+tree`65ee8f983693ffd973f822c0d28cb952ef64999b`: remote head и clean source
+совпали. Применены exact corrected controller replacement выше и approved
+route diff1268bytes/SHA256`501b68c29f740cf57490b2129b5633db694ecde8e70e23c023773390bd060a3e`;
+hashes, все base blobs/dependency и `git apply --check` проверены до изменения.
+C6 controller review завершён; scope blocker закрыт решением C0, C3 продолжает
+реализацию без нового общего C1/C2/C6 review. C0 проверяет фактическую интеграцию
+C6-ESC-COMPAT-01 по следующему source diff; C3 не объявляет acceptance за C0.
+
+Actual final-source PG/S3/G→E/CI9+clean9 ещё должны дать фактический результат.
+Docker локально отсутствует; local collection/unit не считаются PG/daemon proof.
+Нужны обе state lanes: genuine G baseline/old36/private S3/UNKNOWN, source/schema
+readiness, drain API/worker/scheduler, repeat/unused reverse/used refusal до DDL,
+fresh-reader ACK-loss identity/restart и полный canonical3 residual queue.
+0010 helper branch не объявляется выполненным fallback restart; неизвестное
+состояние STOP. Exact commands/results/checkout/archives/head/parents/tree и
+timings/primary/secondary/cleanup — один обновляемый
+[C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6152762197).
+Старый CI38448949685/attempt1:5 SUCCESS/4 FAILURE, clean5/4 SKIPPED; он не
+проверял эти patches и повторно не запускается. Никакого будущего GREEN заранее.
+
+Сверка implementation matrix§14.9 дополнительно дала21 адресный PG case,
+всего78 вместо57: write rollback, late-file lifetime/material, typed terminal
+links и committable poison cleanup в claim/recovery. Это только два уже выданных
+test paths; reviewed controller и его migration-controller dependency прежние.
+Локально1122 non-integration PASS/0 FAIL; PG collection не runtime proof.
+Причины/точные assertions — M3_CONTRACT§14.14 и canonical receipt. Все final-source
+CI/clean gates остаются обязательными после содержательного test commit.
+Actual первый run нового controller:650 PG PASS/8 FAIL (семь idle-queue assumptions
+в новых fixtures, один старый function inventory). Минимальные fixes: normal
+TEST_CONSUME worker drain до timer assertions и exact11 profiles в уже выданном
+tenancy test. Production/DDL/controller bytes неизменны; причины сохранены§14.14.
+
+Второй actual run38521506363:675 PG PASS/4 FAIL, jobs8 SUCCESS/1 FAILURE,
+clean8/1 SKIPPED. Исправлены только новые test queries: Guard receipt имеет
+`job_id`, а typed FK target проверяется catalog OID независимо от display/search_path.
+Late-file lifetime и FK23503 уже сработали; детали§14.15. Все78 cases сохраняются,
+production/controller/dependency прежние; новый source требует полного CI заново.
+
+<details>
+<summary>История checkpoint373aeaf: scope HOLD до решения C0, не активный blocker</summary>
+
+Подготовлены domain/migration/API/Audit и focused tests. Runtime/PG/S3/browser/
+Docker29 proofs **NOT RUN** локально: Docker и PostgreSQL отсутствуют. C3 не
+выдаёт отдельные задачи ролям; конкретный proposed G→E patch возвращается C0
+для адресного C6. Общий C1/C2 review не повторяется.
+
+Локальный полный non-integration: **1113 PASS/1 FAIL**. Единственный failure —
+`tests/test_auth_contract.py::test_auth_machine_contract_and_generated_c5_api_have_no_drift`:
+closed total route inventory ещё не содержит четыре принятых Escalation routes.
+Этот path не выдан; C3 сохранил assertion и подготовил отдельный proposed diff
+C0, оставив семь frozen auth routes и остальные checks прежними. Это текущий
+конкретный scope blocker; результат не называется зелёным.
+
+Focused backend91 PASS, frontend Audit30 PASS; Ruff/mypy и generated OpenAPI
+проверяются на candidate. Actual assertions/matrix§14.9, commands/results и
+неприменённые patches — в одном обновляемом C3 PR31 receipt; SHA-only commits
+не создавать. После C0/C6 review нужен final implementation CI9/9+clean9/9 с
+actual checkout/archive/merge parents/tree. Start CI не переносится на E и
+повторно ради статистики не запускается. C0 выдаёт scoped C8 после готового
+candidate; C5 owner-wait — после принятого backend/API SHA и своего gate.
+
+</details>
+
+M3 остаётся IN_PROGRESS. M3/native/provenance, production OPEN082/083/085,
+IMPL-05 OPEN/fix DEFERRED и CI optimization DEFERRED сохранены. M4/LLM/RAG,
+Approval/M6, Notification Engine/M9, client follow-ups, production сроки вне
+среза. VM/live Telegram/рабочие DB-S3/deploy/merge не выполнять.
+
+
+</details>
+
+<details>
+<summary>Завершённая выдача ESCALATION-CONTRACT; принята C0, не активное поручение</summary>
+
+## 0. Текущая выдача C0 — C3-M3.2-ESCALATION-CONTRACT
+
+Дата: 2026-10-13 UTC. **CONTROL UI интегрирован и проверен; следующий срез —
+Escalation backend/API в рамках прежнего M3.2.** C3 сначала дополняет единый
+контракт минимальным §14. После адресного согласования схема/API реализуются
+в этой же ветке и PR отдельным разрешением C0. Это не новый milestone.
+
+### 0.1. Принятая база и точный старт
+
+| Поле | Значение |
+|---|---|
+| Repository | `Elefesys/ai-service-manager` |
+| Accepted main / schema | `c502d5fd258aef15bb5549e1529df8d038a4fb9b` / `0010` |
+| Accepted tree | `9ed2c0cd679d1577b93998c5a429c90e4b810588` |
+| Branch | `c3/m3-2-escalation`, отдельный checkout |
+| C0 preparation/start | Sole parent = accepted main; полный SHA/tree в GitHub выдаче C0 |
+| C0 preparation files | Только `docs/TASK_REGISTER.md` и этот handoff |
+| Единственный write path C3 сейчас | `docs/tasks/M3_CONTRACT.md`, только новый §14 в конце |
+
+[C0 post-merge PR30](https://github.com/Elefesys/ai-service-manager/pull/30#issuecomment-6142120541):
+CONTROL UI **INTEGRATED / VERIFIED LOCAL/TEST**.
+[Main CI38374030362](https://github.com/Elefesys/ai-service-manager/actions/runs/38374030362),
+attempt1: **9/9 SUCCESS + clean9/9; 1089 unit/597 PG/192 frontend/33 browser**.
+Tree actual merge точно совпадает с принятым candidate.
+
+C3 продолжает подготовленную C0 ветку от указанного в выдаче start. Не использовать
+слитые TURNS/CONTROL/GUARDS или отложенную CI ветку. Baseline M3_CONTRACT:
+**238882 bytes**, blob `1763a5379926e4ae3e47483faf91b006e5bc4f30`.
+Этот полный prefix должен остаться побайтно прежним. Два preparation docs C3
+не редактирует. Новая migration сейчас не назначена; applied0001–0010 immutable.
+
+### 0.2. Что должен получить владелец
+
+Отдельный запрос участия владельца с понятной причиной, ответственным, сохранённым
+контекстом и исходом. Владелец позже увидит его в очереди Console и даст решение;
+повторный запрос не размножает ожидания, устаревший ответ не применяется к другому
+состоянию. Сроки и внутренние напоминания переживают restart.
+
+Здесь проектируется **минимальный backend/API** для M3-A09 и будущей owner-wait
+части M3-A10. Сейчас нет UI реализации, нового AI/LLM, ApprovalRequest или
+полного Notification Engine. CONTROL UI уже работает и его API не переоткрывается.
+
+### 0.3. Источники и неизменные решения
+
+Сначала AGENTS, IMPL-001, Spec §§1.7/5.10–5.14/14.11/16/18.5–18.8/24.7;
+ADR-023–026/121–128/139/197–198/267; MVP GJ-G/GJ-J, Roadmap M3,
+Implementation Plan M3.1/M3.2 и OPEN-082/083/085. Затем M3_CONTRACT §§8/9/12/13,
+этот handoff §§4.5/5 и actual conversations/control/guards/turns,
+messaging Jobs/worker/scheduler, tenancy/auth, Audit, migrations0008–0010,
+OpenAPI и owner read/command patterns. Canon/original snapshots не редактировать.
+
+Принято:
+- Escalation — отдельный lifecycle ожидания, не Conversation.control_mode.
+  Resolve/cancel/expiry не снимают HUMAN и не выполняют неявный Resume.
+- Relevant context/generation и current authority проверяются в короткой
+  serialized/CAS транзакции; прежний receipt не выдаётся за current state.
+  Новая несовместимая информация/withdrawal отменяет устаревшее ожидание;
+  поздний owner answer не применяется к другой версии/Client.
+- Workspace и canonical Client/Conversation/Turn binding обязательны.
+  LLM не назначает авторитетные business facts/actor и не выполняет решение.
+- Durable Jobs используют PostgreSQL. Internal reminders ограничены,
+  дедуплицированы и видимы через будущий Console API; клиентских follow-ups,
+  внешних owner notifications и нового notification framework в этом срезе нет.
+- OPEN-082 о реальных сроках/quiet hours/контактах мастера остаётся OPEN.
+  Для LOCAL/TEST допустима явно ограниченная synthetic policy, без обещаний
+  клиенту или выдуманных production сроков. OPEN-083 safe default сохранён.
+- Принятый M3_CONTRACT§13.5/actual0010: `manual_delivery` flags считают
+  **только SEND_MANUAL_TEXT**. Все OUTBOUND kinds/statuses видны в истории.
+  Неточная фраза прежней выдачи C0 исправлена ниже согласно PR30 receipt.
+
+### 0.4. Содержание одного минимального §14
+
+C3 предлагает один конкретный рекомендуемый вариант, отмечая ещё не принятые
+реализационные решения как **PROPOSED/OPEN**, а не выдумывая LOCKED-ответы.
+
+1. **Исполняемое происхождение запроса.** Какой существующий callable producer/
+   service/worker создаёт Escalation и как его authority/relevance доказываются.
+   В M3 ещё нет Agent M4: отделить реальный reusable domain path от конечного
+   synthetic LOCAL/TEST trigger. Не предлагать unused service, публичный
+   произвольный worker principal или создание canonical rows migrator-ом
+   вместо тестирования runtime. Существующий GUARDS TEST consumer не менять
+   молча; необходимую совместимую дельту назвать явно.
+2. **Модель и state transitions.** Минимальные reason/assignee/context fingerprint,
+   request/version/dedupe identity, статусы и create/resolve/cancel/expire.
+   Определить meaning owner answer и сохранённого outcome: ответ сам не является
+   отправкой клиенту, Approval денежного действия или переключением в AI.
+   Описать effect на waiting projection, context/control counters и будущую
+   работу; не возрождать stale Turn/output. Назвать фактическую cancellation
+   boundary для текущих material events, не реализуя native/edit/delete раньше
+   отдельного provenance gate.
+3. **Сроки и Jobs.** Сохраняемые due/expiry и bounded reminder policy, deterministic
+   test clock, reclaim/restart/dedupe и terminal cleanup. Resolve против expiry,
+   cancel против reminder и stale claim должны иметь однозначный исход;
+   проверять trusted time/relevance при выполнении команды, даже если scheduler
+   ещё не обработал срок. Не busy-loop и не sleeps как гарантия correctness.
+4. **Owner API для следующего C5.** Минимальные list/detail/actions, если нужны:
+   точные routes/DTO/errors/permission, expected version/Client/context,
+   cookie/Origin/CSRF, exact key/body replay, conflict/stale, bounded pagination.
+   Разделить receipt и current projection. Обосновать read/resolve/cancel при
+   недоступном канале/billing; не перенести send permission на локальный owner
+   decision автоматически. Не ломать действующие CONTROL/manual/auth routes.
+5. **DB/transaction design.** Только необходимые таблицы/constraints/FK/RLS,
+   owner/runtime capabilities, Audit и receipt binding. Объяснить минимальную
+   новую durable state и возможность reuse Jobs без generic ledger. Указать
+   общий lock order с CONTROL/manual/GUARDS, атомарность, replay после ACK loss,
+   concurrent duplicate/resolve/stale/expiry и независимость conversations.
+   Схема/число таблиц/SQL signatures остаются proposal для C2; не писать DDL.
+6. **Совместимость и компактная реализация.** Proposed переход от0010 к новой
+   revision, clean/repeat/populated/refusal/rollback и exact source/schema gates.
+   Сохранить прежние receipts/data/UNKNOWN и9 CI jobs/budgets/pins.
+   Дать конкретный будущий allowlist с причиной для каждого path, без разрешения
+   менять их сейчас. Если объём действительно велик, предложить минимальное
+   деление внутри того же M3.2 по работающему результату.
+7. **Достаточные проверки.** Таблица contract→service/API/actual PG/worker
+   assertions для M3-A09: создание/dedupe, resolve/cancel/expire/late answer,
+   context/control/owner changes, same-key ACK loss, две конкурирующие команды,
+   restart/reminder once, tenant/Client isolation и compatibility. Отдельно
+   предусмотреть future C5 owner-wait UI; mocks не называть PG evidence.
+   Не повторять неизменные M2/CONTROL suites и не вводить новую security program.
+
+Если канон не отвечает на прикладной выбор, сформулировать конкретный OPEN-вопрос,
+влияние и рекомендуемый MVP ответ C0. Не закрывать OPEN-082/083/085 целиком
+для удобства реализации и не изменять принятую архитектуру по умолчанию.
+
+### 0.5. Проверки, возврат и следующий gate
+
+Сейчас проверяются source binding, один разрешённый implementation path,
+побайтное сохранение всего старого M3_CONTRACT и preparation docs,
+`git diff --check`, внутреннее соответствие §14 actual source/канону.
+Продуктовые PG/browser/Docker suites заново для одного proposal локально не нужны.
+После содержательного дополнения открыть **один Draft PR в main**; штатный CI
+сохранить, не запускать отдельный PR/CI на одной подготовке и не rerun зелёный
+SHA ради статистики. Документационный CI не доказывает будущую Escalation.
+
+Один C3 receipt в этом PR: head/parent/tree/base/start, path/numstat/prefix proof,
+основные предложения и конкретные OPEN решения, future implementation allowlist,
+фактические проверки/CI run/status, ограничения и следующий шаг.
+Статус результата REVIEW либо конкретный BLOCKED; затем HOLD exact head.
+
+C0 проведёт intake; C1 проверит новый API/owner semantics, C2 — минимальную схему,
+транзакции и migration proposal. Их review ограничен §14 и используемыми зависимостями.
+C6 подключается только при конкретной дельте существующего migration/CI controller,
+без отдельного общего аудита. После принятых решений C0 назначит revision/exact paths
+и выдаст реализацию **в том же PR**. C5 ждёт принятого backend/API SHA; C8 —
+готового implementation candidate. Сейчас поручение получает только C3.
+
+Не менять backend/API/DDL/frontend/workflows/runners/deps/canon/реестр.
+VM/live Telegram/рабочие DB-S3/deploy/merge и M4 вне выдачи.
+M3-A08 native/provenance и весь M3 остаются NOT VERIFIED/IN_PROGRESS по своему scope.
+IMPL-05 OPEN/fix DEFERRED и CI optimization DEFERRED до завершения M3 сохранены.
+
+</details>
+
+<details>
+<summary>Завершённая выдача CONSOLE-CONTROL; не активное поручение</summary>
+
 ## 0. Текущая выдача C0 — C5-M3.2-CONSOLE-CONTROL, реализация
 
 Дата: 2026-10-13 UTC. **Пользователь поручил продолжить реализацию M3.**
@@ -137,8 +557,9 @@ messaging-api и browser worker, Compose/Docker/workflows/штатные scripts
    Все параметры версий остаются decimal strings/BigInt, не Number.
 
 6. **Начатая и неизвестная отправка.** Показать оба признака
-   manual_delivery.has_dispatching/has_unknown с нейтральной семантикой отправки:
-   actual0010 read охватывает связанные Outbox, не только ручные сообщения.
+   manual_delivery.has_dispatching/has_unknown. По принятому M3_CONTRACT§13.5
+   actual0010 read фильтрует kind=SEND_MANUAL_TEXT; статусы всех OUTBOUND видны
+   в истории. Формулировка C0 уточнена при post-merge приёмке PR30.
    Takeover останавливает дальнейшую автоматику, но не отзывает уже начатый
    внешний запрос; UNKNOWN не становится CANCELLED и не даёт кнопку повторного
    send. История сообщений остаётся источником отдельных delivery outcomes.
@@ -216,6 +637,8 @@ C5-M3.2-CONSOLE-CONTROL и весь M3 сейчас IN_PROGRESS; работа е
 GUARDS INTEGRATED/VERIFIED LOCAL/TEST, IMPL-05 OPEN/fix DEFERRED сохранены.
 VM/live Telegram/рабочие DB-S3/deploy/merge вне этой выдачи. После принятия этого
 среза C0 выдаст C3 ограниченный ESCALATION backend/API; M4 пока не начинается.
+
+</details>
 
 <details>
 <summary>Завершённые TURNS/CONTROL/GUARDS поручения; не активная выдача</summary>
@@ -1832,3 +2255,5 @@ telegram modules, migration0005/0007 и M2_CONTRACT; сверить модель
 M3 считается завершённой после матрицы/интеграции/применимого operator evidence.
 Отсутствующий provider факт не подменяется synthetic PASS. M4 выдаётся отдельно
 с точными Turn/context/control/admission контрактами и принятым main SHA.
+
+</details>

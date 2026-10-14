@@ -22,7 +22,12 @@ class InboxReceipt(Result):
 class JobClaim(Result):
     job_id: UUID
     kind: Literal[
-        "PROCESS_INBOX", "SEND_MANUAL_TEXT", "SEND_GUARDED_TEXT", "FETCH_IMAGE", "PROCESS_TURN"
+        "PROCESS_INBOX",
+        "SEND_MANUAL_TEXT",
+        "SEND_GUARDED_TEXT",
+        "FETCH_IMAGE",
+        "PROCESS_TURN",
+        "ESCALATION_TIMER",
     ]
     workspace_id: UUID
     connection_id: UUID
@@ -39,10 +44,21 @@ class TurnJobClaim(JobClaim):
     kind: Literal["PROCESS_TURN"]
     turn_id: UUID
     turn_revision: int = Field(gt=0)
-    step: Literal["GROUP", "MEDIA", "TEST_CONSUME", "GUARDED_TEXT"]
+    step: Literal["GROUP", "MEDIA", "TEST_CONSUME", "GUARDED_TEXT", "ESCALATE_OWNER"]
+
+
+class EscalationTimerClaim(JobClaim):
+    kind: Literal["ESCALATION_TIMER"]
+    escalation_id: UUID
+    step: Literal["REMIND_1", "REMIND_2", "EXPIRE"]
+    inbox_id: None
+    outbox_id: None
+    file_id: None = None
 
 
 def parse_claim(value: object) -> JobClaim:
+    if isinstance(value, dict) and value.get("kind") == "ESCALATION_TIMER":
+        return EscalationTimerClaim.model_validate(value)
     if isinstance(value, dict) and value.get("kind") == "PROCESS_TURN":
         return TurnJobClaim.model_validate(value)
     return JobClaim.model_validate(value)

@@ -15,6 +15,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from asm.conversations.escalations import (
+    EscalationCreationResult,
+    EscalationProgress,
+    EscalationTimerResult,
+)
 from asm.conversations.guards import (
     GuardedTurnSnapshot,
     GuardProgress,
@@ -447,6 +452,43 @@ class MessagingDatabase:
         # constructor retains its existing driver/role contract for every caller.
         if not self._guards_enabled or self._engine.url.database not in {"asm_local", "asm_test"}:
             raise MessagingError(Code.NOT_ALLOWED)
+
+    async def request_escalation(
+        self, claim: JobClaim
+    ) -> EscalationCreationResult | EscalationProgress:
+        self._require_guards()
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit._execute("SELECT platform.escalation_request_for_turn(:job,:token)")
+            result = (
+                EscalationCreationResult.model_validate(raw)
+                if raw["code"] == "ESCALATED"
+                else EscalationProgress.model_validate(raw)
+            )
+            await self.checkpoint("escalation_create_before_commit")
+        await self.checkpoint("escalation_create_after_commit")
+        return result
+
+    async def replay_escalation(self, job_id: UUID, claim_token: UUID) -> EscalationCreationResult:
+        self._require_guards()
+        require_uuid(job_id)
+        require_uuid(claim_token)
+        async with self._transaction() as connection:
+            return EscalationCreationResult.model_validate(
+                await call(
+                    connection,
+                    "SELECT platform.escalation_request_replay(:job,:token)",
+                    {"job": job_id, "token": claim_token},
+                )
+            )
+
+    async def execute_escalation_timer(self, claim: JobClaim) -> EscalationTimerResult:
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            result = EscalationTimerResult.model_validate(
+                await unit._execute("SELECT platform.escalation_timer_execute(:job,:token)")
+            )
+            await self.checkpoint("escalation_timer_before_commit")
+        await self.checkpoint("escalation_timer_after_commit")
+        return result
 
     async def prepare_guarded_turn(self, claim: JobClaim) -> GuardedTurnSnapshot | GuardProgress:
         self._require_guards()

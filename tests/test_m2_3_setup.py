@@ -249,8 +249,8 @@ async def test_billing_and_binding_use_one_short_reviewed_capability_transaction
             if sql == "SELECT current_user":
                 return Result("asm_migrator")
             if sql == "SELECT version_num FROM platform.alembic_version":
-                # The current operator is paired only with the accepted 0010 head.
-                return Result("0010")
+                # The current operator is paired only with the accepted 0011 candidate head.
+                return Result("0011")
             assert sql.startswith("SELECT platform.initialize_")
             assert params["workspace"] == WS
             if "initialize_local_messaging_billing" in sql:
@@ -312,7 +312,7 @@ def test_clis_default_to_no_network_and_never_echo_accidental_token(
     assert "TELEGRAM_" in output.err
 
 
-@pytest.mark.parametrize("head", ["0007", "0008", "0009", "0011", "unknown"])
+@pytest.mark.parametrize("head", ["0007", "0008", "0009", "0010", "0012", "unknown"])
 async def test_binding_wrong_head_rejected_before_either_initializer(monkeypatch, head):
     from types import SimpleNamespace
 

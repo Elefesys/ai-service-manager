@@ -5076,3 +5076,76 @@ Production/старые helpers/CHILD, counters, deadlines и source guards со
 Оба G artifacts11749449642/11749900999 PASS: charge421.186321/419.969723s из600,
 whole C112.615779/111.796138s включён. Это evidence третьего head; исправленный
 setup требует нового full CI в тех же пределах, без rerun-to-green.
+
+
+### M3.2 Escalation backend: implementation checkpoint, 2026-10-13
+
+Активная выдача — M3_HANDOFF§0 и M3_CONTRACT§14.12. Подготовлена0011/down0010;
+переход/rollout **не разрешён этим checkpoint**. VM, binding, Telegram/ACK/receipts
+не изменять. Прежние R1/R2/R3, M2 и GUARDS evidence выше остаются историческими.
+Полный G=c502d5fd258aef15bb5549e1529df8d038a4fb9b/schema0010 отделяется от E/0011.
+
+В disposable LOCAL/TEST после принятия E: live OWNER делает обычный fresh Resume
+на CONTROLLED connection, trusted adapter принимает exact TEXT
+`CONTROLLED ESCALATION TEST`; worker/scheduler запускаются прежними entrypoints
+`python -m asm.foundation worker` и `python -m asm.foundation scheduler`.
+Обычная очередь создаёт Escalation и ровно REMIND_1/REMIND_2/EXPIRE на +2/+5/+10min.
+GET `/api/v1/workspaces/{workspace_id}/escalations` и GET `/{escalation_id}`
+дают очередь/detail. POST `/{escalation_id}/resolve` либо `/cancel` используют
+existing cookie/Origin/CSRF/Idempotency-Key, exact DTO§14.5. Resolve сохраняет
+внутренний answer; adapter wire/effect counter остаётся0. Нового UI здесь нет.
+
+При потере create ACK worker читает immutable winning-claim result; при падении
+до commit обычный lease30/reclaim восстанавливает Job. Timer attempt делает
+короткую DB transaction; commit failure/old token не даёт ложного успеха.
+DEAD/INVALID_INPUT видим как maintenance FAILED, без автоматического reenqueue;
+raw PENDING после expiry не разрешает owner action. После terminal request
+будущие Jobs остаются durable: позже terminalize NOOP_TERMINAL. Их нельзя
+удалять/передвигать и нельзя объявлять очередь пустой по одному kind/count.
+Read-only canonical evidence + обычный restart/recovery, без исправления clocks
+или history в рабочей БД. Production SLA и external owner notifications не приняты.
+
+Focused local commands (locked Python3.13 environment, без Docker substitutions):
+
+```sh
+ruff check backend tests scripts migrations
+ruff format --check backend tests scripts migrations
+mypy backend/src
+PYTHONPATH=backend/src python scripts/export_contracts.py --check
+pytest -q tests/test_m3_2_escalations.py tests/test_foundation.py tests/test_m2_3_setup.py tests/test_m3_1_guards.py
+pytest -q -m 'not integration'
+npm --prefix frontend run test -- src/billing-api.test.ts src/BillingPanel.test.tsx
+npm --prefix frontend run typecheck
+```
+
+Focused91 PASS; Audit30 PASS; полный local1113 PASS/1 FAIL. Failure — exact total
+route inventory в `tests/test_auth_contract.py`, невыданный path; proposed diff
+C0 добавляет четыре новых routes, сохраняя frozen7 auth и остальные проверки.
+Actual PG/S3/browser/relay/exact Docker29 NOT RUN здесь: Docker отсутствует.
+После C0/C6 review proposed controller patch обязательны прежние
+`sh scripts/ci.sh`, `sh scripts/test_browser.sh`, normal/exact Docker29 state
+lanes и clean gates на final integration SHA. Не выдавать unit/orchestration
+результат за actual runtime evidence.
+
+Подготовленные PG команды runner собирает без skip/xfail:
+
+```sh
+pytest -q -m integration tests/test_m3_2_escalations_postgres.py tests/test_m3_2_escalations_api_postgres.py tests/test_m3_2_escalations_migrations.py
+```
+
+Private clock seam существует только в serial disposable asm_test tests:
+committed replacement `escalation_now()` и exact finally restore definition/
+owner/ACL/volatility/search_path; остальные clocks реальны. Есть отдельные
+process crashes и real-clock creation/reclaim. В proposed asm_local G→E phase
+clock seam не используется: G image создаёт baseline, E normal cookie/API/worker
+создаёт и разрешает запрос; после drain проверяется полный canonical set трёх
+timer IDs/relations/due/status/attempts плюс неизменность остальных38-table data.
+Private signed S3 GET200/hash и unsigned403 проверяются через действующий grant.
+
+Proposed reports: `reports/retained-guards/guards-schema-phase.json` (frozen G),
+`reports/escalation-schema-phase.json` (G/E images/revisions/callers/recovery,
+old36/no-backfill/reverse/refusal/private S3/residual timers), retained H/T/C
+и observer reports, общий `control-schema-ledger.json`. Prepare600/cleanup90,
+state25min/foundation40/browser25 и9jobs не увеличивать; нехватка бюджета →
+STOP и timings C0. До конкретного C0/C6 review эти controller changes не
+применены. CI нового E/scoped C8/приёмка C0 впереди; M3 IN_PROGRESS.

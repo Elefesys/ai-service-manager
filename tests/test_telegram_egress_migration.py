@@ -935,6 +935,8 @@ CONTROL_T = "ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad"
 CONTROL_PHASE = "CONTROL_SCHEMA_0008_0009"
 GUARDS_C = "c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5"
 GUARDS_PHASE = "GUARDS_SCHEMA_0009_0010"
+ESCALATION_G = "c502d5fd258aef15bb5549e1529df8d038a4fb9b"
+ESCALATION_PHASE = "ESCALATION_SCHEMA_0010_0011"
 SCHEMA_OWNER_LABEL = "io.asm.schema-owner"
 RETAINED_MODULE_BLOB = "571bc4e48fc8c7de8e89f0cfe01c06949d7e84c1"
 RETAINED_HELPER_BLOB = "f6cda8841f50eab0347a365079af6ed76632d988"
@@ -2758,6 +2760,214 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
     ledger["full_retained_negatives"] = summary
 
 
+@contextmanager
+def observe_control_cleanup_commands(command, module, path, binding):
+    """Observe original command frames; never wrap/replace a frozen C function.
+
+    Embedded verbatim at the retained invocation boundary. Only allowlisted
+    identities/error classes are exported; argv, environment and output are not.
+    Observation adds tracing/IO overhead, so this is instrumented C evidence.
+    Journal failures must not replace the executor's return/primary/secondary.
+    """
+    import json
+    import os
+    import re
+    import subprocess
+    import sys
+    import time
+    from pathlib import Path
+
+    stream = None
+    errors = 0
+    sequence = 0
+    try:
+        stream = os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w")
+    except OSError:
+        errors += 1
+
+    def emit(record):
+        nonlocal errors
+        try:
+            if stream is not None:
+                stream.write(json.dumps(record, sort_keys=True) + "\n")
+                stream.flush()
+        except (OSError, ValueError):
+            errors += 1
+
+    def identity(args):
+        result = {"program": "REDACTED", "operation": []}
+        if not args or Path(args[0]).name != "docker":
+            return result
+        result["program"] = "docker"
+        if len(args) < 2:
+            return result
+        op = args[1]
+        if op in {"stop", "ps", "rm", "inspect", "run", "create", "exec", "compose"}:
+            result["operation"] = [op]
+        elif op in {"volume", "network", "image"} and len(args) > 2:
+            if args[2] in {"ls", "inspect", "rm", "create"}:
+                result["operation"] = [op, args[2]]
+        # Never scan run/create/exec payloads or arbitrary -c arguments for IDs.
+        positions = args[2:] if op in {"stop", "rm", "inspect"} else []
+        if op == "exec":
+            positions = args[2:3]
+            if len(args) > 3 and args[3] in {"psql", "python"}:
+                result["operation"].append(args[3])
+        result["container_ids"] = [v for v in positions if re.fullmatch("[0-9a-f]{64}", v)]
+        return result
+
+    def stderr_detail(raw):
+        raw = raw if isinstance(raw, bytes) else b""
+        sample = raw[:4096].lower()
+        kind = "REDACTED_UNCLASSIFIED_STDERR" if raw else "EMPTY"
+        if b"removal of container" in sample and b"already in progress" in sample:
+            kind = "DOCKER_REMOVAL_IN_PROGRESS"
+        elif b"no such container" in sample:
+            kind = "DOCKER_NO_SUCH_CONTAINER"
+        elif b"is not running" in sample:
+            kind = "DOCKER_CONTAINER_NOT_RUNNING"
+        elif b"psql: error:" in sample:
+            kind = "PG_OBSERVATION_FAILED"
+        return {"class": kind, "bytes": len(raw), "classification_truncated": len(raw) > 4096}
+
+    def trace(frame, event, arg):
+        nonlocal sequence, errors
+        if event != "call" or frame.f_code is not command.__code__:
+            return None
+        try:
+            sequence += 1
+            if sequence > 10000:
+                errors += 1
+                return None
+            began = time.monotonic()
+            record = {"sequence": sequence, "at": began, **identity(frame.f_locals["args"])}
+            sites = []
+            caller = frame.f_back
+            while caller is not None:
+                if caller.f_code.co_filename == module:
+                    sites.append({"function": caller.f_code.co_name, "line": caller.f_lineno})
+                    fault = caller.f_locals.get("fault")
+                    if fault in {"retained-t-watchdog", "new-c-command-timeout", "new-c-cli-exit"}:
+                        record["case"] = fault
+                caller = caller.f_back
+            record["callsite"] = sites
+            record["stage"] = (
+                "cleanup" if any(v["function"] == "cleanup" for v in sites) else "fixture"
+            )
+            emit({"event": "command_start", **record})
+            frame.f_trace_lines = False
+            exception = None
+            partial_stderr = b""
+
+            def completed(frame, event, arg):
+                nonlocal exception, partial_stderr, errors
+                try:
+                    if event == "exception":
+                        error = arg[1]
+                        name = type(error).__name__
+                        exception = (
+                            name
+                            if name
+                            in {
+                                "EgressError",
+                                "TimeoutExpired",
+                                "FileNotFoundError",
+                                "PermissionError",
+                            }
+                            else "OTHER_EXCEPTION"
+                        )
+                        if isinstance(error, subprocess.TimeoutExpired):
+                            partial_stderr = error.stderr
+                    elif event == "return":
+                        result = frame.f_locals.get("result")
+                        emit(
+                            {
+                                "event": "command_end",
+                                **record,
+                                "seconds": time.monotonic() - began,
+                                "timeout": frame.f_locals["timeout"],
+                                "exit_code": result.returncode if result is not None else None,
+                                "exception": exception,
+                                "stderr": stderr_detail(
+                                    result.stderr if result is not None else partial_stderr
+                                ),
+                            }
+                        )
+                except Exception:
+                    errors += 1
+                return completed
+
+            return completed
+        except Exception:
+            errors += 1
+            return None
+
+    previous = sys.gettrace()
+    emit({"event": "observer_start", "evidence": "INSTRUMENTED_IMMUTABLE_C", **binding})
+    try:
+        # The standalone retained process has no other tracer to displace.
+        if previous is None:
+            sys.settrace(trace)
+        else:
+            errors += 1
+        yield
+    finally:
+        sys.settrace(previous)
+        emit(
+            {
+                "event": "observer_end",
+                "commands": sequence,
+                "errors": errors,
+                "complete": errors == 0,
+            }
+        )
+        if stream is not None:
+            try:
+                stream.close()
+            except OSError:
+                pass
+
+
+def control_cleanup_observer_script(report, source):
+    """Current observer and original C runpy invocation, with separate bindings."""
+    import inspect
+
+    observer = inspect.getsource(observe_control_cleanup_commands)
+
+    def blob(raw):
+        return hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+
+    binding = {
+        "observer": {
+            "source": source,
+            "module_blob": blob(Path(__file__).read_bytes()),
+            "function_sha256": hashlib.sha256(observer.encode()).hexdigest(),
+        },
+        "executor": {
+            "source": GUARDS_C,
+            "module_blob": "012eaa4ba0b9eb926bfc9d0fe06e25490a592cce",
+            "helper_blob": "8fa26f3c203b9b3dbcb44c5ceb88a9dfda64ea77",
+        },
+    }
+    return (
+        "import runpy,hashlib\nfrom pathlib import Path\nfrom contextlib import contextmanager\n"
+        "from scripts import prepare_telegram_egress as e\n"
+        + observer
+        + "\nbinding="
+        + repr(binding)
+        + "\n"
+        + "module='tests/test_telegram_egress_migration.py'\n"
+        + "assert e.ROOT.resolve()==Path.cwd().resolve(), 'CONTROL_OBSERVER_HELPER_ROOT'\n"
+        + "for path,key in [(Path(module),'module_blob'),(Path(e.__file__),'helper_blob')]:\n"
+        + " raw=path.read_bytes()\n"
+        + " assert hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\\0'+raw).hexdigest()==binding['executor'][key], 'CONTROL_OBSERVER_EXECUTOR_BYTES'\n"
+        + "with observe_control_cleanup_commands(e.command,module,"
+        + repr(str(report))
+        + ",binding):\n"
+        + " runpy.run_path(module, init_globals={'control_cleanup_request': {'historical': '754f1c883e5a94a7fc9e729af2605424f949ba33', 'candidate': 'c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5'}}, run_name='__control_cleanup_negatives__')\n"
+    )
+
+
 def run_control_coordinator(request):
     """Retained frozen T shell is charged once, including runtime and cleanup."""
     ledger = schema_envelope(request, "CONTROL_COORDINATOR")
@@ -2937,12 +3147,24 @@ def run_control_coordinator(request):
             assert control_report["cleanup"]["state"] == "PASS"
             ledger["retained_control_report"] = "retained-control/control-schema-phase.json"
 
+            # G remains an exact frozen executor; E receives a separate remaining
+            # budget from the same original monotonic600, never a fresh allowance.
+            guards = directory / "guards"
+            retained_g = reports / "retained-guards"
+            retained_g.mkdir(parents=True, exist_ok=True)
+            with e.migration_budget(deadline - time.monotonic()):
+                e.command(["git", "merge-base", "--is-ancestor", ESCALATION_G, candidate])
+                (retained_g / "source-G.tar.gz").write_bytes(
+                    e.command(["git", "archive", "--format=tar.gz", ESCALATION_G])
+                )
+                e.command(["git", "worktree", "add", "--detach", str(guards), ESCALATION_G])
+            ledger["retained_guards_source"] = ESCALATION_G
             issued = time.monotonic()
             value = {
                 "version": 1,
                 "phase": GUARDS_PHASE,
                 "historical": GUARDS_C,
-                "candidate": candidate,
+                "candidate": ESCALATION_G,
                 "uid": os.getuid(),
                 "started_at": started,
                 "issued_at": issued,
@@ -2954,37 +3176,99 @@ def run_control_coordinator(request):
             ledger["guards_handoff"] = value
             ledger["stage"] = "guards_admission"
             owner_g = SchemaOwnership(
-                directory / "owner-G", "asm-guards-schema-phase", GUARDS_PHASE, candidate
+                directory / "owner-G", "asm-guards-schema-phase", GUARDS_PHASE, ESCALATION_G
             )
             owner_g.admit()
             ledger["cleanup"] = {"state": "ADMITTED"}
             with schema_cleanup_scope(owner_g, ledger, path):
                 ledger["stage"] = "guards_shell"
+                try:
+                    result = supervised_schema_child(
+                        [
+                            "sh",
+                            "scripts/test_telegram_egress.sh",
+                            "--guards-schema-upgrade",
+                            GUARDS_C,
+                            ESCALATION_G,
+                            str(handoff_g),
+                        ],
+                        cwd=guards,
+                        timeout=(deadline - time.monotonic()) + 480,
+                        environment=owner_g.environment(),
+                    )
+                    ledger["guards_exit"] = result
+                    assert result == 0 and not handoff_g.exists(), "GUARDS_SCHEMA_PHASE_FAILED"
+                    assert not e.command(
+                        ["git", "-C", str(guards), "status", "--porcelain", "--untracked-files=all"]
+                    ).strip(), "FROZEN_GUARDS_SOURCE_CHANGED"
+                finally:
+                    failure = sys.exception()
+                    try:
+                        if (guards / "reports").exists():
+                            shutil.copytree(guards / "reports", retained_g, dirs_exist_ok=True)
+                    except BaseException as error:
+                        ledger["retained_reports_failed"] = True
+                        ledger["private_state_retained"] = True
+                        if failure is None:
+                            ledger["stage"] = "retained_guards_reports"
+                            raise
+                        ledger.setdefault("secondary_failures", []).append(
+                            {"stage": "retained_guards_reports", **schema_failure(error)}
+                        )
+                        failure.add_note("CONTROL_GUARDS_REPORT_FAILED")
+            ledger["guards_cleanup"] = ledger["cleanup"]
+            e.command(["git", "worktree", "remove", str(guards)])
+            issued = time.monotonic()
+            assert issued < deadline, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            value = dict(
+                version=1,
+                phase=ESCALATION_PHASE,
+                historical=ESCALATION_G,
+                candidate=candidate,
+                uid=os.getuid(),
+                started_at=started,
+                issued_at=issued,
+                charged_seconds=issued - started,
+                deadline=deadline,
+            )
+            handoff_e = directory / "escalation-budget.json"
+            e.write_private(handoff_e, e.encoded(value))
+            ledger["escalation_handoff"] = value
+            ledger["stage"] = "escalation_admission"
+            owner_e = SchemaOwnership(
+                directory / "owner-E", "asm-escalation-schema-phase", ESCALATION_PHASE, candidate
+            )
+            owner_e.admit()
+            ledger["cleanup"] = {"state": "ADMITTED"}
+            with schema_cleanup_scope(owner_e, ledger, path):
+                ledger["stage"] = "escalation_shell"
                 result = supervised_schema_child(
                     [
                         "sh",
                         "scripts/test_telegram_egress.sh",
-                        "--guards-schema-upgrade",
-                        GUARDS_C,
+                        "--escalation-schema-upgrade",
+                        ESCALATION_G,
                         candidate,
-                        str(handoff_g),
+                        str(handoff_e),
                     ],
                     cwd=e.ROOT,
                     timeout=(deadline - time.monotonic()) + 480,
-                    environment=owner_g.environment(),
+                    environment=owner_e.environment(),
                 )
-                ledger["guards_exit"] = result
-                assert result == 0 and not handoff_g.exists(), "GUARDS_SCHEMA_PHASE_FAILED"
+                ledger["escalation_exit"] = result
+                assert result == 0 and not handoff_e.exists(), "ESCALATION_SCHEMA_PHASE_FAILED"
                 e.source_check(candidate)
-            ledger["guards_cleanup"] = ledger["cleanup"]
-            # Retain all six existing daemon assertions in the unchanged C
-            # executor. Its report is kept as C evidence, never relabelled G.
+            ledger["escalation_cleanup"] = ledger["cleanup"]
+            # Original C bytes/assertions and unchanged invocation request.
+            # The separate current observer journal labels execution instrumented.
             ledger["stage"] = "retained_control_cleanup_negatives"
             result = supervised_schema_child(
                 [
                     sys.executable,
                     "-c",
-                    "import runpy; runpy.run_path('tests/test_telegram_egress_migration.py', init_globals={'control_cleanup_request': {'historical': '754f1c883e5a94a7fc9e729af2605424f949ba33', 'candidate': 'c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5'}}, run_name='__control_cleanup_negatives__')",
+                    control_cleanup_observer_script(
+                        reports / "retained-control-cleanup-observer.jsonl", candidate
+                    ),
                 ],
                 cwd=control,
                 timeout=480,
@@ -3904,6 +4188,491 @@ def run_guards_schema_phase(request):
         schema_publish(report, report_path, primary)
 
 
+def consume_escalation_budget(path, historical, candidate):
+    """One private handoff, absolute monotonic deadline, no inherited/global reset."""
+    raw = e.private_bytes(path)
+    info = path.stat()
+    assert info.st_nlink == 1, "ESCALATION_BUDGET_SINGLE_LINK"
+    value = e.strict_json(raw)
+    assert set(value) == {
+        "version",
+        "phase",
+        "historical",
+        "candidate",
+        "uid",
+        "started_at",
+        "issued_at",
+        "charged_seconds",
+        "deadline",
+    }, "ESCALATION_BUDGET_FORMAT"
+    assert value["version"] == 1 and type(value["version"]) is int, "ESCALATION_BUDGET_VERSION"
+    assert (
+        value["phase"] == ESCALATION_PHASE and value["historical"] == historical == ESCALATION_G
+    ), "ESCALATION_BUDGET_PHASE_SOURCE"
+    assert (
+        value["candidate"] == candidate
+        and type(value["uid"]) is int
+        and value["uid"] == os.getuid()
+    ), "ESCALATION_BUDGET_CANDIDATE_OWNER"
+    for key in ("started_at", "issued_at", "charged_seconds", "deadline"):
+        assert type(value[key]) in (int, float) and 0 < value[key] < float("inf"), (
+            "ESCALATION_BUDGET_CLOCK"
+        )
+    assert abs(value["deadline"] - value["started_at"] - 600) < 0.001, "ESCALATION_BUDGET_TOTAL"
+    assert abs(value["issued_at"] - value["started_at"] - value["charged_seconds"]) < 0.001, (
+        "ESCALATION_BUDGET_CHARGED"
+    )
+    now = time.monotonic()
+    assert value["issued_at"] <= now < value["deadline"], "ESCALATION_BUDGET_EXHAUSTED"
+    # Preserve the absolute bound across process startup and handoff delay.
+    assert (path.stat().st_dev, path.stat().st_ino) == (info.st_dev, info.st_ino), (
+        "ESCALATION_BUDGET_FILE_CHANGED"
+    )
+    path.unlink()
+    return {
+        **value,
+        "handoff_seconds": now - value["issued_at"],
+        "remaining_seconds": value["deadline"] - now,
+    }
+
+
+def escalation_schema_recovery_source(result, observe, report, historical, candidate):
+    detail = {
+        "injection": "after_commit_before_success_exit",
+        "exit_code": result.returncode,
+        "observed": "NOT_READ",
+    }
+    report["upgrade_ack_loss"] = detail
+    assert historical == ESCALATION_G
+    if (
+        result.returncode != 86
+        or result.stdout.strip() != b"ESCALATION_UPGRADE_COMMITTED_RESULT_LOST"
+    ):
+        detail["result"] = "UNEXPECTED_MIGRATOR_RESULT"
+        raise AssertionError("ESCALATION_EXPECTED_POST_COMMIT_FAILURE")
+    detail.update(
+        result="CONTROLLED_FAILURE_OBSERVED", marker="ESCALATION_UPGRADE_COMMITTED_RESULT_LOST"
+    )
+    try:
+        observation = observe()
+    except Exception:
+        detail["observed"] = "UNREADABLE"
+        raise
+    detail["observed"] = observation
+    assert observation["revision"] in {"0010", "0011"} and observation["role"] == "asm_migrator"
+    assert observation["database"] == "asm_local"
+    assert type(observation["reader_pid"]) is int and observation["reader_pid"] > 0
+    assert type(observation["backend_pid"]) is int and observation["backend_pid"] > 0
+    lost = report.get("lost_result_process")
+    assert isinstance(lost, dict) and set(lost) == {
+        "namespace",
+        "pid",
+        "start_ticks",
+        "boot_id",
+    }, "ESCALATION_PROCESS_IDENTITY_REQUIRED"
+    assert type(lost["pid"]) is int and lost["pid"] > 0
+    assert type(lost["start_ticks"]) is int and lost["start_ticks"] > 0
+    assert type(observation["reader_start_ticks"]) is int
+    assert observation["reader_boot_id"] == lost["boot_id"] and lost["boot_id"], (
+        "ESCALATION_RECOVERY_HOST_BOOT"
+    )
+    # Docker can reuse a released PID namespace inode; PID1 alone is not a
+    # process identity. Kernel start ticks prove this reader was created later
+    # on the same boot, including that reuse case, and reject the prior process.
+    assert observation["reader_start_ticks"] > lost["start_ticks"], (
+        "ESCALATION_FRESH_PROCESS_REQUIRED"
+    )
+    for key, value in report["seed_identity"].items():
+        assert observation[key] == value, "ESCALATION_RECOVERY_DATABASE_IDENTITY"
+    source = historical if observation["revision"] == "0010" else candidate
+    detail["recovery_source"] = source
+    return source
+
+
+def run_escalation_schema_phase(request):
+    """Separate genuine G/0010→E/0011 phase; no future timer deletion/clock shift."""
+    report = schema_envelope(request, ESCALATION_PHASE)
+    report.update(images={}, checks=[], stage_timings=[])
+    primary = None
+
+    def run(args, **kwargs):
+        began = time.monotonic()
+        outcome = "FAILED"
+        try:
+            result = e.command(args, **kwargs)
+            outcome = "PASS"
+            return result
+        finally:
+            report["stage_timings"].append(
+                {"stage": report["stage"], "seconds": time.monotonic() - began, "outcome": outcome}
+            )
+
+    started = report["started_at"]
+    report_path = e.ROOT / "reports/escalation-schema-phase.json"
+    schema_publish(report, report_path)
+    try:
+        historical = "c502d5fd258aef15bb5549e1529df8d038a4fb9b"
+        report["stage"] = "observe_source"
+        candidate = run(["git", "rev-parse", "HEAD"]).decode().strip()
+        report["observed_source"] = candidate
+        assert set(request) == {"historical", "candidate", "budget_file"}, "CONTROL_REQUEST_FORMAT"
+        assert request["historical"] == historical and request["candidate"] == candidate, (
+            "CONTROL_REQUEST_SOURCE"
+        )
+        report["stage"] = "consume_budget"
+        budget = consume_escalation_budget(Path(request["budget_file"]), historical, candidate)
+        report.update(
+            coordinator=candidate,
+            historical=historical,
+            budget_state="VALIDATED_CONSUMED",
+            prepare_budget=dict(budget),
+        )
+        schema_publish(report, report_path)
+        assert (
+            Path.cwd() == e.ROOT and os.getuid() != 0 and os.environ.get("GITHUB_ACTIONS") == "true"
+        ), "CONTROL_DISPOSABLE_RUNNER"
+        report["stage"] = "source_check"
+        e.source_check(candidate)
+        report["stage"] = "daemon_admission"
+        assert not run(["docker", "ps", "-aq"]).strip()
+        assert not run(["docker", "volume", "ls", "-q"]).strip()
+        project = "asm-escalation-schema-phase"
+        owner = SchemaOwnership.inherited(project, candidate)
+        report["cleanup"] = {"state": "ADMITTED"}
+        pins = dict(
+            line.split("=", 1)
+            for line in (e.ROOT / "infra/images.lock.env").read_text().splitlines()
+            if line and not line.startswith("#")
+        )
+        with (
+            schema_private_workspace(report, "asm-escalation-schema-") as temporary,
+            schema_cleanup_scope(owner, report, report_path),
+        ):
+            directory = Path(temporary)
+            sources, images = {}, {}
+            # Only exact tracked archives enter build contexts. The historical-only
+            # production migration_build_images helper is deliberately not called for I.
+            report["stage"] = "prepare_images"
+            prepare_started = time.monotonic()
+            remaining = budget["deadline"] - prepare_started
+            assert remaining > 0, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            with e.migration_budget(remaining):
+                for source in (historical, candidate):
+                    archive = directory / source
+                    archive.mkdir()
+                    report["stage"] = "archive_" + source[:8]
+                    e.migration_build_context(source, archive)
+                    sources[source] = archive
+                    images[source] = {}
+                    for kind in ("runtime", "development"):
+                        tag = "asm-escalation-schema-" + kind + ":" + source
+                        reuse = "asm-guards-schema-" + kind + ":" + source
+                        existing = (
+                            run(["docker", "image", "ls", "-q", "--no-trunc", reuse])
+                            .decode()
+                            .strip()
+                        )
+                        if existing:
+                            report["stage"] = "reuse_" + source[:8] + "_" + kind
+                            e.migration_image(existing, source, kind)
+                            run(["docker", "tag", existing, tag])
+                        else:
+                            report["stage"] = "build_" + source[:8] + "_" + kind
+                            run(
+                                [
+                                    "docker",
+                                    "build",
+                                    "--pull",
+                                    "--network=default",
+                                    "--target",
+                                    kind,
+                                    "--build-arg",
+                                    "PYTHON_IMAGE=" + pins["PYTHON_IMAGE"],
+                                    "--build-arg",
+                                    "UV_IMAGE=" + pins["UV_IMAGE"],
+                                    "-f",
+                                    str(archive / "infra/Dockerfile.backend"),
+                                    "-t",
+                                    tag,
+                                    str(archive),
+                                ],
+                                timeout=480,
+                            )
+                        image_id = json.loads(run(["docker", "image", "inspect", tag]))[0]["Id"]
+                        images[source][kind] = image_id
+                        report["stage"] = "image_probe_" + source[:8] + "_" + kind
+                        report["images"][source + ":" + kind] = e.migration_image(
+                            image_id, source, kind
+                        )
+            prepared_at = time.monotonic()
+            report["prepare_budget"] = {
+                **budget,
+                "candidate_prepare_seconds": prepared_at - prepare_started,
+                "charged_total_seconds": 600 - (budget["deadline"] - prepared_at),
+                "remaining_seconds": budget["deadline"] - prepared_at,
+            }
+            assert prepared_at < budget["deadline"], "CONTROL_PREPARE_BUDGET_EXHAUSTED"
+            # init_local emits only a fixed diagnostic, never credentials. All private
+            # runtime files are outside both source archives and the repository.
+            report["stage"] = "runtime_configuration"
+            subprocess.run(
+                [sys.executable, str(e.ROOT / "scripts/init_local.py")],
+                cwd=directory,
+                check=True,
+                timeout=30,
+            )
+            compose = [
+                "docker",
+                "compose",
+                "--project-directory",
+                str(sources[candidate]),
+                "--project-name",
+                project,
+                "--env-file",
+                str(e.ROOT / "infra/images.lock.env"),
+                "--env-file",
+                str(directory / ".env"),
+                "-f",
+                str(sources[candidate] / "compose.yaml"),
+                "--profile",
+                "telegram-operator",
+            ]
+            model = json.loads(run([*compose, "config", "--format", "json"]))
+            variables = dict(model["services"]["api"]["environment"])
+            variables.update(model["services"]["migrate"]["environment"])
+            assert variables["ASM_TELEGRAM_ENABLED"] == "false" and variables["TG_BOT_TOKEN"] == ""
+            envfile = directory / "controller.env"
+            e.write_private(
+                envfile,
+                "".join(k + "=" + str(v) + "\n" for k, v in sorted(variables.items())).encode(),
+            )
+            state = directory / "state"
+            state.mkdir(mode=0o700)
+            prefix = [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                project + "_default",
+                "--env-file",
+                str(envfile),
+                "--user",
+                f"{os.getuid()}:{os.getgid()}",
+                "--mount",
+                f"type=bind,source={state},target=/state",
+            ]
+
+            def controller(action, *, legacy_g=False):
+                report["stage"] = "controller_" + action
+                try:
+                    output = run(
+                        [
+                            *prefix,
+                            images[historical if legacy_g else candidate]["development"],
+                            "python",
+                            "tests/test_m3_1_guards_migrations.py"
+                            if legacy_g
+                            else "tests/test_m3_2_escalations_migrations.py",
+                            "--guards-schema-phase" if legacy_g else "--escalation-schema-phase",
+                            action,
+                            "/state/receipt.json",
+                        ],
+                        timeout=120,
+                    )
+                except BaseException:
+                    failure = state / "controller-failure.json"
+                    if failure.exists():
+                        report["controller_failure"] = json.loads(e.private_bytes(failure))
+                    raise
+                assert (
+                    output.decode().strip()
+                    == ("GUARDS_SCHEMA_" if legacy_g else "ESCALATION_SCHEMA_")
+                    + action.upper()
+                    + "_PASS"
+                )
+                report["checks"].append(action)
+
+            def migrate(source, direction, revision):
+                report["stage"] = direction + "_" + revision
+                run(
+                    [*prefix, images[source]["development"], "alembic", direction, revision],
+                    timeout=30,
+                )
+
+            def probe(source, expected):
+                report["stage"] = "probe_" + source[:8] + "_" + str(expected)
+                code = "import asyncio\nfrom asm.foundation import RuntimeDatabase,Settings\nasync def main():\n d=RuntimeDatabase(Settings())\n try:\n  try: await d.check()\n  except Exception:\n   assert not EXPECTED\n  else: assert EXPECTED\n finally: await d.close()\nasyncio.run(main())\n".replace(
+                    "EXPECTED", repr(expected)
+                )
+                run([*prefix, images[source]["runtime"], "python", "-c", code], timeout=30)
+
+            def callers(source):
+                report["stage"] = "callers_" + source[:8]
+                run(["docker", "tag", images[source]["runtime"], "asm-backend:local"])
+                run(
+                    [
+                        *compose,
+                        "up",
+                        "-d",
+                        "--no-deps",
+                        "--pull",
+                        "never",
+                        "--force-recreate",
+                        "--wait",
+                        "api",
+                        "worker",
+                        "scheduler",
+                    ],
+                    timeout=120,
+                )
+                result = {}
+                for service in ("api", "worker", "scheduler"):
+                    ident = run([*compose, "ps", "-q", service]).decode().strip()
+                    info = json.loads(run(["docker", "inspect", ident]))[0]
+                    assert info["Image"] == images[source]["runtime"] and info["State"]["Running"]
+                    result[service] = {"id": ident, "image": info["Image"], "source": source}
+                return result
+
+            def drain():
+                report["stage"] = "drain"
+                run([*compose, "stop", "--timeout", "10", "api", "worker", "scheduler"], timeout=60)
+                for service in ("api", "worker", "scheduler"):
+                    ident = run([*compose, "ps", "-aq", service]).decode().strip()
+                    assert not json.loads(run(["docker", "inspect", ident]))[0]["State"]["Running"]
+
+            try:
+                report["stage"] = "infrastructure"
+                run([*compose, "up", "-d", "--wait", "postgres", "storage"], timeout=120)
+                run([*compose, "run", "--rm", "--no-deps", "-T", "storage-init"], timeout=120)
+                # The unchanged G image seeds C history, upgrades itself and runs
+                # its normal GUARDS producer/delivery. E cannot manufacture G proof.
+                migrate(historical, "upgrade", "0009")
+                controller("seed9", legacy_g=True)
+                migrate(historical, "upgrade", "0010")
+                controller("check10", legacy_g=True)
+                controller("fresh", legacy_g=True)
+                report["baseline_callers"] = callers(historical)
+                probe(historical, True)
+                probe(candidate, False)
+                drain()
+                controller("seed10")  # observe genuine populated G after all G callers drain.
+                report["seed_identity"] = json.loads((state / "receipt.json").read_text())[
+                    "identity"
+                ]
+                # Reject the actual changed helper's direct migration commands before
+                # any source/image switch or migration journal on this candidate.
+                guard = directory / "guard"
+                guard.mkdir(mode=0o700)
+                e.write_private(guard / "operation.lock", b"")
+                before = {p.name: p.read_bytes() for p in guard.iterdir()}
+                for action in ("migration-attest", "migration-prepare"):
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(e.ROOT / "scripts/prepare_telegram_egress.py"),
+                            action,
+                            "--state-dir",
+                            str(guard),
+                            "--accepted-sha",
+                            candidate,
+                            "--from-sha",
+                            e.MIGRATION_FROM,
+                        ],
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        timeout=30,
+                    )
+                    assert (
+                        result.returncode == 1
+                        and b"EGRESS_MIGRATION_HISTORICAL_SCHEMA_ONLY" in result.stdout
+                    )
+                    assert {p.name: p.read_bytes() for p in guard.iterdir()} == before
+                report["checks"].append("candidate_direct_cli_pairing_refusal")
+                migrate(candidate, "upgrade", "0011")
+                migrate(candidate, "upgrade", "0011")  # repeat upgrade is a no-op
+                controller("check11")  # independent committed revision read after migrator exits
+                probe(candidate, True)
+                probe(historical, False)
+                # Escalation-unused populated G: exact old36 projections and G definitions.
+                migrate(candidate, "downgrade", "0010")
+                controller("check10")
+                probe(historical, True)
+                # A separate migrator commits0011, then exits unsuccessfully.
+                # Observe its failure; NEVER infer the revision from that exit alone.
+                report["stage"] = "committed_upgrade_ack_loss"
+                lost = subprocess.run(
+                    [
+                        *prefix,
+                        images[candidate]["development"],
+                        "python",
+                        "tests/test_m3_2_escalations_migrations.py",
+                        "--escalation-schema-phase",
+                        "upgrade-lost-result",
+                        "/state/receipt.json",
+                    ],
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                    timeout=30,
+                )
+
+                def observe_revision():
+                    return json.loads(
+                        run(
+                            [
+                                *prefix,
+                                images[candidate]["development"],
+                                "python",
+                                "tests/test_m3_2_escalations_migrations.py",
+                                "--escalation-schema-phase",
+                                "observe",
+                                "/state/receipt.json",
+                            ],
+                            timeout=30,
+                        )
+                    )
+
+                saved_loss = json.loads((state / "receipt.json").read_text())["lost_result_process"]
+                report["lost_result_process"] = saved_loss
+                recovery_source = escalation_schema_recovery_source(
+                    lost, observe_revision, report, historical, candidate
+                )
+                controller("check11")  # projection/private S3/pending/UNKNOWN still exact
+                probe(historical, False)  # committed0011 explicitly rejects G
+                probe(recovery_source, True)
+                report["upgrade_ack_loss"]["historical_readiness"] = "REJECTED"
+                report["upgrade_ack_loss"]["candidate_readiness"] = "PASS"
+                # Exercise E API/worker on the correctly paired schema before
+                # permanent callers start, so duplicate-first admission is deterministic.
+                controller("fresh")
+                report["cutover_callers"] = callers(recovery_source)
+                report["upgrade_ack_loss"]["forward_callers"] = report["cutover_callers"]
+                drain()
+                controller("refuse")
+                report["restarted_callers"] = callers(recovery_source)
+                report["upgrade_ack_loss"]["restarted_callers"] = report["restarted_callers"]
+                probe(recovery_source, True)
+                drain()
+                controller("refuse")
+                report["database"] = json.loads((state / "receipt.json").read_text())
+                assert report["database"]["populated_refusal"] == "PASS"
+                # No raw signed URL or fixture content is published.
+                report["database"]["object"].pop("key")
+            except BaseException as error:
+                schema_record_failure(report, error)
+                raise
+            finally:
+                schema_publish(report, report_path, sys.exception())
+        e.source_check(candidate)
+        print("TELEGRAM_EGRESS_ESCALATION_SCHEMA_PHASE_PASS", flush=True)
+    except BaseException as error:
+        primary = error
+        schema_record_failure(report, error)
+        raise
+    finally:
+        report["total_seconds"] = time.monotonic() - started
+        schema_publish(report, report_path, primary)
+
+
 def run_schema_cleanup_negatives(request):
     """Actual daemon/PG negatives; mandatory only in the two existing state lanes."""
     import tempfile
@@ -4299,6 +5068,9 @@ if __name__ == "__control_coordinator__":
 
 
 if __name__ == "__schema_harness__":
+    if "escalation_schema_request" in globals():
+        run_escalation_schema_phase(globals()["escalation_schema_request"])
+        raise SystemExit(0)
     if "guards_schema_request" in globals():
         run_guards_schema_phase(globals()["guards_schema_request"])
     elif "control_schema_request" in globals():
@@ -4331,6 +5103,64 @@ OWNER_RECEIPT_NAMES = (
     "asm-telegram-tls-budget-owner2-0b7e24ee.json",
     "asm-telegram-tls-budget-fixed-owner2-0b7e24ee.json",
 )
+
+
+@pytest.mark.parametrize("outcome", ["success", "exit", "timeout"])
+def test_control_cleanup_observer_preserves_real_subprocess_outcome(tmp_path, outcome):
+    """Local subprocess semantics only; this is not daemon/PG evidence."""
+    path = tmp_path / "commands.jsonl"
+    marker = "PRIVATE_ARG_ENV_STDERR"
+    program = (
+        "import sys,time; sys.stdout.buffer.write(b'original stdout'); sys.stdout.flush(); "
+        f"sys.stderr.write('removal of container is already in progress {marker}'); sys.stderr.flush(); "
+        + {"success": "pass", "exit": "sys.exit(7)", "timeout": "time.sleep(10)"}[outcome]
+    )
+    original = e.command.__code__
+    previous = sys.gettrace()
+    with observe_control_cleanup_commands(e.command, __file__, path, {}):
+        if outcome == "success":
+            assert (
+                e.command([sys.executable, "-c", program], environment={"SECRET": marker})
+                == b"original stdout"
+            )
+        else:
+            error = e.EgressError if outcome == "exit" else subprocess.TimeoutExpired
+            with pytest.raises(error) as raised:
+                e.command(
+                    [sys.executable, "-c", program], timeout=1, environment={"SECRET": marker}
+                )
+            if outcome == "exit":
+                assert str(raised.value) == "EGRESS_COMMAND_FAILED"
+            else:
+                assert raised.value.stdout == b"original stdout"
+                assert raised.value.timeout == 1
+    assert e.command.__code__ is original and sys.gettrace() is previous
+    raw = path.read_text()
+    assert marker not in raw and program not in raw and "original stdout" not in raw
+    start, command_start, command_end, end = [json.loads(line) for line in raw.splitlines()]
+    assert start["evidence"] == "INSTRUMENTED_IMMUTABLE_C"
+    assert command_start["sequence"] == command_end["sequence"] == 1
+    assert command_end["exit_code"] == {"success": 0, "exit": 7, "timeout": None}[outcome]
+    assert (
+        command_end["exception"]
+        == {"success": None, "exit": "EgressError", "timeout": "TimeoutExpired"}[outcome]
+    )
+    assert command_end["stderr"]["class"] == "DOCKER_REMOVAL_IN_PROGRESS"
+    assert command_end["seconds"] > 0
+    assert end == {"event": "observer_end", "commands": 1, "errors": 0, "complete": True}
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_control_cleanup_observer_unwritable_journal_preserves_primary(tmp_path):
+    original = subprocess.TimeoutExpired(["private"], 3)
+    previous = sys.gettrace()
+    with pytest.raises(subprocess.TimeoutExpired) as raised:
+        with observe_control_cleanup_commands(
+            e.command, __file__, tmp_path / "missing" / "journal", {}
+        ):
+            assert e.command([sys.executable, "-c", "print('original')"]) == b"original\n"
+            raise original
+    assert raised.value is original and sys.gettrace() is previous
 
 
 @pytest.fixture
@@ -5862,7 +6692,7 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
     coordinator = (e.ROOT / "scripts/test_telegram_egress_migration.sh").read_text()
     shell = (e.ROOT / "scripts/test_telegram_egress.sh").read_text()
     assert "if fault == 'state':" in coordinator
-    # T and C execute frozen sources; G is the single new terminal phase.
+    # T/C/G execute frozen sources; E is a separate terminal phase.
     assert "run_name='__control_coordinator__'" in coordinator
     assert "reports/retained-control/control-cleanup-negatives.json" in coordinator
     assert "negative['count'] == 3" in coordinator
@@ -5884,7 +6714,7 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
         ]
         for call in sorted(calls, key=lambda call: call.lineno)
     ]
-    assert argv[:3] == [
+    assert argv[:4] == [
         ["sh", "scripts/test_telegram_egress.sh", "--schema-upgrade", "historical", "CONTROL_T"],
         [
             "sh",
@@ -5899,22 +6729,54 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
             "scripts/test_telegram_egress.sh",
             "--guards-schema-upgrade",
             "GUARDS_C",
-            "candidate",
+            "ESCALATION_G",
             "str(handoff_g)",
         ],
+        [
+            "sh",
+            "scripts/test_telegram_egress.sh",
+            "--escalation-schema-upgrade",
+            "ESCALATION_G",
+            "candidate",
+            "str(handoff_e)",
+        ],
     ]
-    assert len(argv) == 4
-    assert argv[3][:2] == ["sys.executable", "-c"]
-    assert "run_name='__control_cleanup_negatives__'" in argv[3][2]
-    assert GUARDS_C in argv[3][2]
+    assert len(argv) == 5
+    assert argv[4][:2] == ["sys.executable", "-c"]
+    assert (
+        argv[4][2]
+        == "control_cleanup_observer_script(reports / 'retained-control-cleanup-observer.jsonl', candidate)"
+    )
+    observed = control_cleanup_observer_script(Path("/unused-journal.jsonl"), "unit-observer")
+    bootstrap = ast.parse(observed)
+    retained = [
+        node
+        for node in ast.walk(bootstrap)
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == "runpy.run_path"
+    ]
+    assert len(retained) == 1 and ast.unparse(retained[0].args[0]) == "module"
+    assert "module='tests/test_telegram_egress_migration.py'" in observed
+    assert {k.arg: ast.literal_eval(k.value) for k in retained[0].keywords} == {
+        "init_globals": {
+            "control_cleanup_request": {
+                "historical": "754f1c883e5a94a7fc9e729af2605424f949ba33",
+                "candidate": GUARDS_C,
+            }
+        },
+        "run_name": "__control_cleanup_negatives__",
+    }
     ordered = sorted(calls, key=lambda call: call.lineno)
     assert ast.unparse(next(k.value for k in ordered[1].keywords if k.arg == "cwd")) == "control"
     assert (
         ast.unparse(next(k.value for k in ordered[1].keywords if k.arg == "timeout"))
         == "deadline - time.monotonic()"
     )
-    assert ast.unparse(next(k.value for k in ordered[3].keywords if k.arg == "cwd")) == "control"
-    assert "--guards-schema-upgrade" in shell
+    assert ast.unparse(next(k.value for k in ordered[4].keywords if k.arg == "cwd")) == "control"
+    assert ast.literal_eval(next(k.value for k in ordered[4].keywords if k.arg == "timeout")) == 480
+    assert "--guards-schema-upgrade" in shell and "--escalation-schema-upgrade" in shell
+    assert "retained-guards/guards-schema-phase.json" in coordinator
+    assert "reports/escalation-schema-phase.json" in coordinator
+    assert ast.unparse(next(k.value for k in ordered[2].keywords if k.arg == "cwd")) == "guards"
     assert '"budget_file": sys.argv[4]' in shell or "'budget_file': sys.argv[4]" in shell
     assert "run_name='__schema_harness__'" in shell
     assert "754f1c883e5a94a7fc9e729af2605424f949ba33" in coordinator
@@ -7286,6 +8148,89 @@ def test_guards_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage):
         assert path.exists()
     else:
         consumed = consume_guards_budget(path, GUARDS_C, "a" * 40)
+        assert (
+            consumed["deadline"] == value["deadline"] and 0 < consumed["remaining_seconds"] <= 170
+        )
+        assert not path.exists()
+
+
+@pytest.mark.parametrize("revision,selected", [("0010", ESCALATION_G), ("0011", "e" * 40)])
+def test_escalation_recovery_uses_actual_revision_and_fresh_process_identity(revision, selected):
+    report = {
+        "seed_identity": {
+            "database": "asm_local",
+            "database_oid": 45,
+            "server_address": "172.20.0.2",
+            "postmaster_started": "canonical-start",
+        },
+        "lost_result_process": {
+            "namespace": "pid:[10]",
+            "pid": 1,
+            "start_ticks": 100,
+            "boot_id": "boot",
+        },
+    }
+    observation = {
+        **report["seed_identity"],
+        "revision": revision,
+        "role": "asm_migrator",
+        "reader_pid": 1,
+        "backend_pid": 20,
+        "reader_start_ticks": 101,
+        "reader_boot_id": "boot",
+    }
+    lost = SimpleNamespace(returncode=86, stdout=b"ESCALATION_UPGRADE_COMMITTED_RESULT_LOST\n")
+    assert (
+        escalation_schema_recovery_source(lost, lambda: observation, report, ESCALATION_G, "e" * 40)
+        == selected
+    )
+    for changed in (
+        {"revision": "0008"},
+        {"revision": "unknown"},
+        {"reader_start_ticks": 100},
+        {"database_oid": 46},
+        {"reader_boot_id": "other"},
+    ):
+        with pytest.raises(AssertionError):
+            escalation_schema_recovery_source(
+                lost, lambda: {**observation, **changed}, report, ESCALATION_G, "e" * 40
+            )
+        assert "recovery_source" not in report["upgrade_ack_loss"]
+
+    def unreadable():
+        raise OSError("unreadable")
+
+    with pytest.raises(OSError):
+        escalation_schema_recovery_source(lost, unreadable, report, ESCALATION_G, "e" * 40)
+    assert report["upgrade_ack_loss"]["observed"] == "UNREADABLE"
+
+
+@pytest.mark.parametrize(
+    "damage", [None, "phase", "historical", "candidate", "deadline", "charged_seconds"]
+)
+def test_escalation_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage):
+    path = tmp_path / "budget.json"
+    issued = time.monotonic()
+    value = dict(
+        version=1,
+        phase=ESCALATION_PHASE,
+        historical=ESCALATION_G,
+        candidate="a" * 40,
+        uid=os.getuid(),
+        started_at=issued - 430,
+        issued_at=issued,
+        charged_seconds=430,
+        deadline=issued + 170,
+    )
+    if damage:
+        value[damage] = value[damage] + 1 if damage in {"deadline", "charged_seconds"} else "wrong"
+    e.write_private(path, e.encoded(value))
+    if damage:
+        with pytest.raises(AssertionError):
+            consume_escalation_budget(path, ESCALATION_G, "a" * 40)
+        assert path.exists()
+    else:
+        consumed = consume_escalation_budget(path, ESCALATION_G, "a" * 40)
         assert (
             consumed["deadline"] == value["deadline"] and 0 < consumed["remaining_seconds"] <= 170
         )

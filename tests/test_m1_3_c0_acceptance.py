@@ -157,6 +157,13 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
                             "platform.messaging_command_receipts",
                             "platform.conversation_control_receipts",
                             "platform.turn_guard_receipts",
+                            "platform.escalation_command_receipts",
+                            "app.escalations",
+                            "platform.messaging_jobs",
+                            "platform.turn_consumer_receipts",
+                            "platform.file_object_uploads",
+                            "app.file_objects",
+                            "app.conversation_turn_messages",
                         )
                     )
                 )

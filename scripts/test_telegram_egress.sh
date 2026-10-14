@@ -21,6 +21,12 @@ from scripts import prepare_telegram_egress as e
 os.umask(0o077)
 root = Path.cwd()
 migration = None
+if sys.argv[1:2] == ['--escalation-schema-upgrade']:
+    assert len(sys.argv) == 5, 'EXPLICIT_ESCALATION_SCHEMA_RUNNER_REQUIRED'
+    runpy.run_path(str(root / 'tests/test_telegram_egress_migration.py'),
+                   init_globals={'escalation_schema_request': {'historical': sys.argv[2], 'candidate': sys.argv[3], 'budget_file': sys.argv[4]}},
+                   run_name='__schema_harness__')
+    raise AssertionError('ESCALATION_SCHEMA_HARNESS_MUST_COMPLETE_EXPLICITLY')
 if sys.argv[1:2] == ['--guards-schema-upgrade']:
     assert len(sys.argv) == 5, 'EXPLICIT_GUARDS_SCHEMA_RUNNER_REQUIRED'
     runpy.run_path(str(root / 'tests/test_telegram_egress_migration.py'),
@@ -478,7 +484,7 @@ http {
             reports = root / 'reports'
             reports.mkdir(exist_ok=True)
             (reports / 'candidate-egress-source.json').write_text(json.dumps({
-                'source_sha': source, 'expected_revision': '0010', 'images': proofs,
+                'source_sha': source, 'expected_revision': '0011', 'images': proofs,
                 # Raw commit headers preserve parents even in Actions' shallow
                 # checkout; revision walking would incorrectly report no parents.
                 'parents': [line[7:] for line in run(['git', 'cat-file', 'commit', source]).decode().split('\n\n', 1)[0].splitlines() if line.startswith('parent ')],

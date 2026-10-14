@@ -2272,3 +2272,1012 @@ test-setup fix; новый CI обязателен, лимит foundation35 не
 Третьи G phases PASS: charge421.186321s normal /419.969723s Docker29; whole C
 112.615779s /111.796138s включён. Artifacts11749449642/11749900999 проверены;
 этот частичный PASS не объявляется завершённой GUARDS приёмкой.
+
+## 14. M3.2 — минимальный Escalation backend/API: proposal для C0/C1/C2
+
+### 14.1. Статус, источники и один рекомендуемый результат
+
+**R2 / REVIEW, 2026-10-13; только контракт, не разрешение implementation.** Основание —
+[выдача C0](https://github.com/Elefesys/ai-service-manager/pull/30#issuecomment-6142964762)
+и активный M3_HANDOFF§0 на `a20423248b54c46720e361d7e79c47ee278f00de`, уточнённые
+[ограниченной R2 C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6145970644)
+после C1/C2 review. R2 разрешает редактировать только собственный ещё не принятый §14.
+Accepted main — `c502d5fd258aef15bb5549e1529df8d038a4fb9b`, schema0010;
+main CI38374030362/attempt1 SUCCESS относится к прежнему продукту. Весь prefix
+этого документа до §14 — прежние238882 bytes/blob
+`1763a5379926e4ae3e47483faf91b006e5bc4f30`, без правок исторических решений/evidence.
+Прикладная LOCAL/TEST policy принята C0 в R2 (§14.11); DB mechanics остаются REVIEW,
+runtime proofs PLANNED/NOT RUN. Принятие policy не означает приёмку всего контракта.
+
+Прочитаны AGENTS/IMPL-001; оригиналы Spec §§1.7/5.10–5.14/14.11/16/18.5–18.8/24.7,
+ADR-023–026/121–128/139/197–198/267, MVP GJ-G/GJ-J, Roadmap M3,
+Implementation Plan M3.1/M3.2, OPEN-082/083/085; §§8/9/12/13 этого контракта.
+Оригиналы из `project_sources` сверены с SOURCE_MANIFEST и imported canon.
+Actual source traces: conversations/control/guards/turns, owner HTTP/strict DTOs,
+messaging/database/worker/results, tenancy UOW/auth boundary, Audit API/parser,
+applied0008–0010, exact readiness и существующий source/schema controller.
+
+Результат будущего backend-среза: штатный CONTROLLED Turn может вместо TEST text
+создать один durable запрос решения своему владельцу. Owner API читает очередь
+и контекст, принимает короткий внутренний ответ либо отмену. Два внутренних
+напоминания и expiry исполняются существующими PostgreSQL Jobs после restart.
+Это отдельный lifecycle; Conversation.control_mode не становится «ESCALATED».
+Создание, ответ, отмена, expiry и reminder не выполняют Resume и не отправляют
+Message клиенту. В HUMAN режим остаётся HUMAN; в AI нет нового разрешения
+автоматики помимо уже принятого явного Resume и текущих GUARDS.
+
+Не входят: Agent/LLM M4, ApprovalRequest/M6, денежные действия, новые transports,
+клиентские follow-ups, внешние owner notifications, Notification Engine/M9,
+новые Telegram/native/edit/delete producers, Console owner-wait UI. OPEN-082
+остаётся OPEN: TEST сроки ниже не являются SLA, quiet-hours/contact policy или
+обещанием клиенту. OPEN-083 safe default и OPEN-085/native NOT VERIFIED сохранены.
+CONTROL routes, manual composer/receipt recovery, manual-only `manual_delivery`
+и вся OUTBOUND история остаются совместимыми.
+
+### 14.2. Исполняемый producer без M4 и точная дельта GUARDS
+
+Предлагается новый Turn step **`ESCALATE_OWNER`** внутри существующего
+`PROCESS_TURN`, а не публичный create endpoint или самостоятельный worker principal.
+Реальный путь: trusted CONTROLLED ingest → Inbox commit → обычный PROCESS_INBOX →
+Turn/group/media → `turn_enqueue` → обычный claim/admit → `Worker.run_once` →
+`EscalationService.request_for_turn(claim)` → короткая DB capability
+`platform.escalation_request_for_turn(job_id,claim_token)` → durable request/Jobs.
+Worker вызывает сервис в штатном маршруте; отдельный тестовый вызов SQL не заменяет
+этот путь. Никаких canonical Escalation rows через migrator fixture.
+
+**Конечный synthetic trigger:** в READY Turn есть хотя бы один canonical inbound
+TEXT member с точным текстом `CONTROLLED ESCALATION TEST`. Без trim/case-fold,
+regex intent detection, LLM или произвольного JSON reason. Другие members этого
+же Turn включаются в snapshot; сам marker остаётся обычным входящим Message.
+Trusted source/нормализация, provider=CONTROLLED, server environment LOCAL/TEST,
+DB name `asm_local`/`asm_test` и private `CONTROLLED_GUARDS_V1` Resume profile —
+независимые обязательные gates. Строка в Telegram, legacy/HUMAN/pre-fence входе
+не создаёт запрос и не наделяет отправителя полномочиями.
+
+`turn_enqueue` сохраняет прежние GROUP/MEDIA/TEST_CONSUME jobs. В **новой** migration
+меняется только выбор дополнительного action step для допустимого READY Turn:
+marker → ESCALATE_OWNER; остальные Turns → прежний GUARDED_TEXT. Это явная
+совместимая дельта §13.3: literal `CONTROLLED GUARDS TEST`, его consumer, DTO,
+fingerprint и accepted receipts не меняются. Marker не добавляется в старый
+GUARDS text result. Exact marker повторно проверяется DB при admission.
+
+Для старых уже поставленных GUARDED_TEXT jobs выбор не переписывается миграцией.
+Guard prepare/accept дополнительно отказывают для marker Turn и для Turn,
+по которому уже принят Escalation; существующий accepted guard intent никогда
+не переклассифицируется: winning receipt replay остаётся до новых marker/pending
+checks. Escalation create симметрично отказывает при accepted
+guard receipt по любому revision того же Turn. Проверки и INSERT сериализуются
+на Conversation. На один Turn возможен **либо** accepted guarded intent, **либо**
+accepted Escalation, никогда оба. Новый marker job появляется только через
+обычный fresh enqueue, не через migration/backlog sweep.
+
+Creator принимает только job/token. Workspace, Client, Conversation, Business,
+Turn/revision, connection, origin members, Resume receipt/actor/generation/fence
+читаются из сохранённых связанных строк. Ни assignee, ни deadline, ни причина,
+ни «текущая версия» не поступают как authority из worker payload/GUC.
+Reuse `messaging_admit`/`messaging_guard`, physical transaction/task ownership,
+canonical claim token/lease; owner и worker contexts по-прежнему разделены.
+Live автор именно этого Resume становится ответственным. Проверяются существующие
+origin/fence условия §13.2, READY/current revision, live OWNER, active Workspace/
+Business/CONTROLLED connection и прежняя availability `messaging.manual_send`
+через SQL authoritative gate. Это допуск synthetic producer, не permission
+локальной owner-команды и не разрешение production AI.
+
+Доменный метод строит request из canonical Turn snapshot под locks, атомарно
+принимает его и завершает собственный consumer Job. Здесь нет inference/network
+между snapshot и acceptance, поэтому второй prepare/compute/finalize цикл не нужен.
+Snapshot включает существующие member Message/File versions и новые binding поля,
+но не содержит выдуманных business facts. Future M4 caller сможет использовать
+доменную модель только после отдельного authority/producer контракта; текущая
+capability не принимает любой чужой kind/step или произвольные reason/answer.
+
+`platform.turn_execute` сохраняет allowlist GROUP/MEDIA/TEST_CONSUME и отвергает
+ESCALATE_OWNER до preflight/seal/mutation; guard prepare/accept допускают только
+GUARDED_TEXT. Новый `EscalationTimerClaim` также нельзя провести через эти legacy
+capabilities, send begin или process_inbox. Отказ старого token не чинится новым
+user context. Python gate размещается у нового callable, не в общем constructor.
+
+### 14.3. Identity, immutable request и lifecycle
+
+Одна новая domain row `app.escalations` представляет запрос, его immutable origin
+и дальнейший исход. Минимальные поля сгруппированы ниже; это модель, **не DDL**.
+
+| Группа | Предлагаемые поля и смысл |
+|---|---|
+| Identity | `workspace_id,id`, namespace=`ESCALATION_REQUEST_V1`, canonical `conversation_id,client_id,connection_id,turn_id`; один accepted request на `(workspace_id,turn_id,namespace)` независимо от revision |
+| Origin | `source_job_id,source_job_kind=PROCESS_TURN,source_job_step=ESCALATE_OWNER,source_claim_token,turn_revision,resume_receipt_id,control_generation,activation_fence_seq,input_context_version`, canonical `request_snapshot`, `context_fingerprint`, `request_fingerprint`, `created_at`, immutable `creation_result` |
+| Request | `reason=OWNER_DECISION_REQUIRED`, `assignee_user_account_id`=live Resume actor, `question=CONTROLLED ESCALATION TEST: требуется решение владельца.`, `policy=LOCAL_TEST_OWNER_WAIT_V1`; не caller-controlled строки |
+| Relevance | `waiting_context_version=input_context_version+1`; captured generation/Turn revision, immutable snapshot digest. Текущие версии читаются отдельно, не FK на mutable version |
+| Lifecycle | `version`=1 при PENDING, =2 при единственном terminal переходе; `status=PENDING/RESOLVED/CANCELLED/EXPIRED`; nullable `closure_reason,completed_at,answer_text,decided_by_user_account_id` с closed shape. Audit reference хранится только в owner receipt (§14.6), в request обратной ссылки нет |
+| Schedule | Сохранённые `due_at,second_reminder_at,expires_at`; nullable `first_reminded_at,second_reminded_at`. Reminder не меняет lifecycle version; count выводится из двух slots, нового notification ledger нет |
+
+`context_fingerprint` — lowercase hex SHA-256 от UTF-8 DB canonical
+`request_snapshot::text` (jsonb): existing Turn snapshot без внешнего `code/job_id`
+envelope и без старого `snapshot_digest`, плюс canonical conversation/client/business,
+Resume/fence и source job identity. Snapshot фиксируется один раз; bytes/codec
+не зависят от порядка ключей HTTP. `request_fingerprint` — SHA-256 UTF-8 строки
+`asm:m3:escalation_request:v1\n` + DB jsonb text объекта с полями `snapshot`,
+`reason`, `assignee_user_account_id`, `question`, `policy`. Due timestamps получаются
+из одного trusted acceptance moment, не входят в dedupe identity и не пересчитываются
+на replay. DB вычисляет оба fingerprints; worker не может прислать свой hash как истину.
+
+Partial UNIQUE `(workspace_id,conversation_id)` WHERE status=PENDING ограничивает
+одновременное ожидание одним. При уже имеющемся request этого Turn возвращается
+`ALREADY_ESCALATED` с его ID, включая terminal: не открывать его заново и не двигать
+сроки. При другом PENDING request — `WAITING_EXISTS`, без нового request/reminders.
+При guard intent того же Turn — `ALREADY_ACCEPTED`, без Escalation. Rejected producer
+завершает только свой Job с typed outcome STALE/SUPERSEDED/NOT_ALLOWED либо указанным
+dedupe outcome; не FAILED Turn и не «успешное решение». Existing receipt не становится
+current authorization. Нормальный runtime не удаляет terminal requests/receipts.
+
+| Переход | Результат и counters |
+|---|---|
+| Create после полного admission | PENDING/version1; Conversation.context +1 ровно один раз; control_mode/generation/fence +0; три timer Jobs и consumer SUCCEEDED атомарно; Message/Outbox/send/Audit от fake OWNER отсутствуют |
+| Owner resolve | Только актуальный PENDING до expiry; RESOLVED/version2, exact внутренний `answer_text`, actor/time, owner receipt/Audit; context +1, control +0 |
+| Owner cancel | Актуальный PENDING до expiry; CANCELLED/version2/OWNER_CANCELLED, actor/time, receipt/Audit; context +1, control +0; answer NULL |
+| Material invalidation | PENDING → CANCELLED/version2/CONTEXT_CHANGED либо CONTROL_CHANGED в том же commit, что material fact; дополнительного context/generation increment нет |
+| Assignee потерял OWNER/активность | При timer execution PENDING → CANCELLED/version2/ASSIGNEE_REVOKED; context +1, control +0. Уже до timer current projection не разрешает resolve/reminder; другой live OWNER может явно cancel |
+| Trusted time `now >= expires_at` | PENDING → EXPIRED/version2/DEADLINE_ELAPSED при timer; context +1, control +0; answer/owner actor/Audit NULL. Ни retry, ни задержанный scheduler не продлевают срок |
+| Reminder slot | Только current PENDING и due ≤ now < expiry; записывается свой ранее пустой slot, Job SUCCEEDED; lifecycle/context/control +0 |
+| Повтор/отказ/terminal timer | Canonical replay или NOOP_TERMINAL; ноль новых domain rows/versions/Audit/reminders/effects |
+
+В MVP answer — **записанная внутренняя заметка-решение владельца** по запросу,
+а не текст, уже отправленный клиенту, executable instruction, Approval или
+изменение booking/payment. Сохраняется exact text длиной1..512 Unicode scalars,
+UTF-8 ≤2048 bytes, без NUL/surrogates и не whitespace-only; никакого trim/NFC.
+Ни resolve, ни cancel/expiry не ставят PROCESS_TURN, SEND или «продолжить старый ответ».
+Старый source Turn исчерпал свою единственную Escalation identity навсегда;
+late-file revision не создаёт второй запрос/guarded intent. Новая работа может
+прийти только от нового допустимого ingress/Turn по обычным текущим gates.
+
+**Waiting projection** — WAITING_FOR_HUMAN только для PENDING с совпадающими
+bound context/generation/Turn revision, live assignee и now < expiry. Иначе NULL;
+RESOLVED не означает автоматически READY_TO_RESPOND или AI. Текущий MVP не вводит
+полную state machine WAITING_FOR_CLIENT/PAYMENT/EXTERNAL_SERVICE из Spec5.14.
+Existing Conversation/control DTO не расширяется: будущий C5 получает owner-wait
+через новый Escalation API и связывает по canonical conversation/client.
+
+### 14.4. Material boundary, время и durable reminders
+
+Предлагается private AFTER UPDATE trigger на **изменение** Conversation.version
+или control_generation. Под уже удерживаемым Conversation NO KEY UPDATE он
+отменяет несовместимый PENDING request, меняя только Escalation row. При одновременном
+изменении обоих counters причина CONTROL_CHANGED имеет приоритет. Trigger не берёт
+Job/Outbox/connection/Turn locks и не увеличивает Conversation повторно.
+Create сначала увеличивает context, затем вставляет новую PENDING row; terminal
+команда/таймер сначала закрывает row, затем увеличивает context. Это предотвращает
+самоотмену и рекурсивные increments без bypass GUC или временного disable trigger.
+
+Фактическая material boundary сохраняет уже принятую семантику: новый PROCESSED
+inbound Message в PROCESS_INBOX commit; новый manual/guarded outbound intent;
+FileObject PENDING→READY/FAILED; delivery PENDING/DISPATCHING→SENT/FAILED/UNKNOWN;
+новый accepted Takeover/Resume/manual generation. Durable Inbox ACK до обработки
+ещё не является новым Message/context fact. Duplicate/replay/IGNORED, seal сам
+по себе и reminder не отменяют ожидание. Новое сообщение об отказе клиента пока
+обычный новый material inbound: старый запрос отменяется независимо от NLP.
+Отдельный распознаватель withdrawal и native/edit/delete provenance не добавляются.
+
+GUARDS prepare/accept/begin дополнительно проверяют отсутствие сохранённого PENDING
+Escalation в Conversation, под тем же serialization lock. Это консервативный gate:
+даже уже overdue PENDING блокирует новый automated admission до terminal cleanup,
+а не исчезает в момент чтения часов. Late snapshot после закрытия отклоняется по
+новому context; accepted guard receipt своего Turn остаётся неизменным.
+Уже committed DISPATCHING не отзывается созданием/отменой ожидания: finish сохраняет
+фактический SENT/FAILED/UNKNOWN, без blind resend. Его terminal material commit
+может отменить ещё PENDING Escalation. Manual send и Takeover не блокируются wait.
+
+**Один finite TEST policy:** acceptance=t; due_at=t+2min, second_reminder_at=t+5min,
+expires_at=t+10min; ровно два внутренних slots, без quiet hours, env knobs и
+production defaults. При create вставляются три существующих durable Job rows
+нового kind `ESCALATION_TIMER`, steps REMIND_1/REMIND_2/EXPIRE, available_at равен
+сохранённому сроку; UNIQUE `(workspace_id,escalation_id,step)`. Пять attempts,
+прежний bounded jitter/backoff ≤60s, retry window15min и lease30s сохраняются.
+Ошибки не создают дополнительные reminder Jobs и не сдвигают domain expiry.
+
+Обычный worker исполняет timer в короткой transaction, scheduler продолжает
+существующий claim/reclaim/recovery; нового poller/cron/notification transport нет.
+После locks заново проверяются claim/lease и trusted time. Приоритет: terminal
+row → NOOP; несовместимый generation/context/Turn → CANCELLED; неактивный assignee
+→ CANCELLED; now ≥ expiry → EXPIRED; иначе только due reminder slot. EXPIRE раньше
+своего deadline не допускается к claim; forged/неподходящий step/token отклоняется.
+При восстановлении после обоих reminder due, но до expiry каждый slot записывается
+не более одного раза; порядок между1/2 не обещается. После expiry missed reminders
+не «догоняются». Это durable запись для Console, не обещание, что человек её увидел.
+
+Slot update + own Job SUCCEEDED — один commit. Crash до commit оставляет slot пустым;
+после commit повторный worker не создаёт второй reminder. Cancel/resolve выиграли
+Conversation lock → timer завершится NOOP; reminder выиграл раньше → сохранённый
+slot остаётся историческим, subsequent cancel его не стирает. Старый token после
+reclaim не может записать slot или закрыть request. Terminal rows immutable;
+оставшиеся максимум три jobs лениво завершаются NOOP при due/claim/recovery.
+Owner/material paths не блокируют их под Conversation lock ради eager cancellation.
+
+Exhaustion нового consumer завершает только consumer Job, не Turn: новая ветка
+`messaging_reschedule` исключает оба steps GUARDED_TEXT/ESCALATE_OWNER из FAILED
+Turn mutation. Timer не использует PROCESS_TURN fallback. В timer maintenance
+claim/recovery/exhaustion после canonical preflight сначала проверяют terminal,
+relevance/assignee/expiry. Успешный terminal cleanup или уже terminal request даёт
+SUCCEEDED с EXPIRED/CANCELLED/NOOP_TERMINAL, даже если retry budget исчерпан: работа
+по закрытию/проверке уже выполнена. Если request ещё current PENDING до expiry,
+exhaustion завершает только own Job DEAD/RETRY_EXHAUSTED, без reminder/domain write.
+Неисчерпанный expired-lease Job в этом случае штатно возвращается READY с прежним
+DEPENDENCY_TIMEOUT/backoff; reminder исполняет только новый admitted claim.
+Recovery не вызывает `escalation_timer_execute` с просроченным lease и не создаёт
+новый token/worker context ради обхода admission.
+
+**Committable invariant failure:** own Job UPDATE и все canonical preflight locks
+из §14.7 получены **до** внутреннего PL/pgSQL EXCEPTION block/subtransaction.
+Внутри него только attempted slot/terminal request update и соответствующий
+Conversation context increment. Для перехватываемого permanent failure rollback
+этого внутреннего блока возвращает request/slots/counters к прежним значениям;
+наружные locks сохраняются, и снаружи блока пишется DEAD только в own Job. Общий
+SQL fragment допустим в исходнике новой migration, новый SQL profile не добавляется.
+
+Перехват ограничен **SQLSTATE23514** и точными stacked diagnostics
+`SCHEMA_NAME=app`, `TABLE_NAME=escalations`, `CONSTRAINT_NAME` из трёх имён:
+`escalations_lifecycle_check`, `escalations_reminders_check`,
+`escalations_immutable_check`. Первые два — named CHECK новой row shape; последнее
+— diagnostic constraint name нового immutable trigger, который выставляет все
+три diagnostic fields явно. Это ошибки собственной записи timer после canonical
+preflight (worker admission либо maintenance authority), не классификация входного
+owner body. Mapping в существующий Job error code —
+**INVALID_INPUT**, `escalation_outcome=NULL`; текст исключения не парсится.
+Несовпавший/пустой diagnostic, другой CHECK/FK/unique error или любой иной SQLSTATE
+пробрасывается без такой terminal записи; `WHEN OTHERS → DEAD` запрещён.
+
+| Timer result после успешного commit | status / error_code / escalation_outcome | Domain |
+|---|---|---|
+| Успешный slot/cleanup/terminal observation | SUCCEEDED / NULL / REMINDED либо EXPIRED либо CANCELLED либо NOOP_TERMINAL | Только реально записанный slot/переход; NOOP не меняет row |
+| Permanent invariant failure из точного набора выше | DEAD / INVALID_INPUT / NULL | Cleanup subtransaction откатан; request/slots/context/control неизменны |
+| Обычный exhaustion, cleanup не требовался | DEAD / RETRY_EXHAUSTED / NULL | Current PENDING сохраняется; slot не записывается |
+| Обычный retry/recovery без terminal результата | READY / DEPENDENCY_TIMEOUT либо DEPENDENCY_UNAVAILABLE / NULL | Прежние attempt/window/backoff; без domain write |
+
+Во всех terminal shapes claim_token/lease_until/worker_id=NULL, completed_at finite,
+Job.version +1; attempt_count/first_started_at соответствуют existing Job CHECK.
+Terminalization READY без прежнего attempt использует существующий pattern
+`greatest(1,attempt_count)`/`coalesce(first_started_at,clock_timestamp())` только
+после due/preflight, не расходует второй attempt и не расширяет retry budget.
+Job completion и успешный domain write — всё ещё один внешний commit. Ошибка
+самой записи DEAD/commit не перехватывается как доказательство durable результата;
+при потерянном ACK canonical Job читается свежей transaction, без speculative success.
+STALE_CLAIM/P2001, NOWAIT55P03→P3001 BUSY, cancellation/statement timeout57014,
+unavailable DB/connection и failed commit не превращаются в durable DEAD. BUSY
+откатывает **весь** scan candidate, включая Job lock (§14.7). При недоступной DB
+никакой durable transition не обещается; retained Job остаётся для recovery.
+DEAD Jobs больше не выбираются ни READY claim, ни RUNNING recovery; re-enqueue нет.
+
+**Truthful projection:** DEAD timer означает FAILED maintenance, но не lifecycle
+transition. До expiry raw PENDING с current relevance/live assignee сохраняет
+validity=CURRENT/waiting=WAITING_FOR_HUMAN и обычные owner actions. При now≥expiry
+waiting=NULL/actions=false независимо от scheduler/DEAD; validity=EXPIRED, если
+не выиграла более ранняя причина CONTROL_CHANGED/CONTEXT_CHANGED/ASSIGNEE_REVOKED.
+Сохранённый status остаётся PENDING до реально committed terminal transition.
+
+**Часы:** новая private `platform.escalation_now()` — VOLATILE, runtime/HTTP/GUC не
+могут её задавать; обычное тело возвращает DB clock_timestamp. Deadline сравнивается
+после последнего lock wait. Для deterministic actual-PG тестов только serial fixture
+в disposable asm_test проверяет database name и роль asm_migrator; замена тела
+helper фиксированным UTC clock **committed**, видна другим test connections.
+VOLATILE/search_path/ACL/owner/security сохраняются. Fixture восстанавливает точные
+definition/owner/security/grants в finally отдельной исправной transaction и сверяет
+catalog даже после assertion/DB error. Если тест завершает child process, cleanup
+clock принадлежит живому parent; потеря parent уничтожает disposable DB, не оставляет
+подменённую shared DB. В asm_local state lane этот seam не применяется.
+Это явный test seam времени, не создание domain rows и не доказательство elapsed
+wall time. Lease/retry/control/billing часы не подменяются. Tests идут через обычные
+ingress/claim/API/capabilities; точные before/equal/after проверяются без sleep-based
+correctness. Отдельный restart case оставляет настоящий clock и реальные processes.
+
+GET и owner command всегда проверяют relevance/time, даже если timer ещё не
+запускался. GET не пишет expiry; он явно различает stored status и current validity.
+Rejected late command не фиксирует accepted receipt/Audit и не применяет ответ;
+expiry позже записывает timer. Clock equality принадлежит expiry. Чтобы terminal
+context +1 не переполнился, create требует input_context ≤ bigint_max−2: pending
+резервирует один increment. Любой внешний material increment уже атомарно отменяет
+pending без второго increment. Прочие existing overflow guards сохраняются.
+
+### 14.5. Четыре owner routes и строгий consumer contract
+
+Ровно четыре additive routes относительно `/api/v1/workspaces/{workspace_id}`:
+
+| Method / path | Результат |
+|---|---|
+| GET `/escalations` | 200 `EscalationPage`: `items` (≤100 `EscalationView`), `next_cursor` string/null, один `observed_at` всей страницы |
+| GET `/escalations/{escalation_id}` | 200 `EscalationView` с текущей projection; без query parameters |
+| POST `/escalations/{escalation_id}/resolve` | 200 `EscalationCommandResponse`, только после commit; exact внутренний answer |
+| POST `/escalations/{escalation_id}/cancel` | 200 тот же discriminated response; без answer/свободного reason |
+
+Нет HTTP create/reassign/reopen/send/mark-read endpoint. Предлагаемые domain
+permissions `escalations:read` и `escalations:decide` находятся в новом module;
+оба только live Workspace OWNER. Они не расширяют tenancy.v1 и не используют
+permission `messaging.manual_send`. **Resolve — только текущему live OWNER,
+равному immutable assignee; cancel — любому live OWNER этого Workspace.**
+Другой OWNER видит запрос и может закрыть его после ухода ответственного, но
+не подменяет чужой ответ и не выполняет скрытую reassignment. Выбор требует C1/C0.
+
+Read/resolve/cancel не вызывают Telegram, EntitlementService или billing refresh
+и доступны при неактивном канале/Business либо недоступном billing, если auth,
+Workspace и owner membership действуют. Это локальное решение, не outbound effect.
+Создание нового synthetic request по-прежнему имеет отдельный producer gate§14.2.
+Неактивный User/Workspace, отозванные session/OWNER не обходятся доступностью
+исторического receipt. Ops/system admin не превращается в business OWNER.
+
+Cookie/Origin/CSRF, allowed Host, rate limit, no-store, header limit16KiB,
+Content-Type application/json, identity encoding, body read3s и общий body cap4096
+сохраняются в existing AuthBoundary. Все POST требуют ровно один Origin и
+CSRF token, ровно один `Idempotency-Key` по `[A-Za-z0-9._:-]{1,128}`; If-Match
+не принимается. Новый 512-scalar answer помещается в обычный cap при компактном
+UTF-8 JSON; чрезмерно escaped JSON всё равно ограничен4096 wire bytes и получает413.
+Ни отдельной cookie, ни более широкого body limit/auth middleware exception не нужно.
+
+Все DTO — extra=forbid, без coercion: canonical lowercase UUID, positive decimal
+strings ≤int64 для versions/generation, UTC timestamps с6 fractional digits/Z,
+closed enums и проверяемые nullable shapes. Duplicate JSON keys, NaN, lone
+surrogate, NUL, пустой/whitespace-only answer, неизвестные поля/queries, повторные
+параметры/headers и неправильные JSON types отклоняются. JSON whitespace/order
+не значимы; значения answer/key/IDs/counters после строгого parse сохраняются
+точно, без trim/normalization. Генерируемый OpenAPI отражает именно эти shapes.
+
+Общий POST body: `expected_conversation_id`, `expected_client_id`,
+`expected_escalation_version`, `expected_control_generation`, `expected_context_version`.
+Resolve дополнительно требует `answer_text` с пределами§14.3. Cancel **не содержит**
+answer, null answer также extra field. Все expected values обязательны; server
+не подставляет текущий Client/версии из соседнего UI state и не принимает body
+workspace/assignee/reason/deadline. Canonical Escalation→Conversation→Client
+проверяется до команды; чужой Workspace/Client/Conversation/несуществующий ID →404.
+
+`EscalationView` содержит ровно следующие поля/группы:
+
+| Поля | Wire shape / смысл |
+|---|---|
+| `workspace_id,escalation_id,conversation_id,client_id,turn_id,assignee_user_account_id` | Canonical UUIDs; origin linkage, не credential |
+| `reason,question,policy,version,status` | Literals§14.3; version decimal1/2; status — **сохранённый** lifecycle |
+| `bound_context` | `turn_revision,control_generation,context_version` (context = waiting_context_version), decimal strings, `fingerprint`64 lowercase hex |
+| `current_context` | `control_mode` HUMAN/AI, `control_generation,context_version`; прочитаны сейчас, отдельно от origin |
+| `validity` | CURRENT / CONTROL_CHANGED / CONTEXT_CHANGED / ASSIGNEE_REVOKED / EXPIRED / TERMINAL; для stored terminal всегда TERMINAL; для PENDING порядок checks§14.4 |
+| `waiting` | Literal WAITING_FOR_HUMAN ровно при PENDING+CURRENT, иначе null |
+| `created_at,due_at,second_reminder_at,expires_at,observed_at` | UTC timestamps; due/expiry сохранены, observed_at — текущий read, не saved acceptance |
+| `reminders` | Ровно2 элемента `{ordinal:1\|2,due_at,recorded_at:Timestamp\|null}` в ordinal order; никакой отметки «прочитано»/external delivery |
+| `maintenance` | SCHEDULED / COMPLETE / FAILED: FAILED при любом DEAD timer (ровно INVALID_INPUT/RETRY_EXHAUSTED, outcome=NULL по §14.4), COMPLETE когда все3 timer jobs SUCCEEDED, иначе SCHEDULED. FAILED имеет приоритет даже при terminal request; сам по себе не меняет status/validity/waiting/actions |
+| `resolution` | Только RESOLVED: `{answer_text,actor_user_account_id,completed_at}`, иначе null |
+| `closure` | Только CANCELLED/EXPIRED: `{reason,actor_user_account_id:UUID\|null,completed_at}`; reason OWNER_CANCELLED / CONTROL_CHANGED / CONTEXT_CHANGED / ASSIGNEE_REVOKED / DEADLINE_ELAPSED; actor non-null только OWNER_CANCELLED |
+| `can_resolve,can_cancel` | Текущие подсказки для этого session actor, не capabilities; resolve = CURRENT+assignee; cancel = PENDING, matching context/generation/Turn и now<expiry даже при revoked assignee; при POST всё перепроверяется |
+
+Read — одна связная DB projection/statement snapshot с live owner admission и одним
+observed_at, без изменения terminal rows и без network. Для PENDING/EXPIRED validity
+UI должен показать «срок истёк», waiting=null, actions=false, даже если stored status
+ещё PENDING. После terminal commit status становится EXPIRED. Receipt не используется
+для обновления `current_context` или для вывода «запрос всё ещё ожидает».
+
+List query: только `limit` (default25,1..100), `status` (default PENDING;
+PENDING/RESOLVED/CANCELLED/EXPIRED/ALL) и `cursor`. Status фильтрует **stored** status,
+поэтому отстающий timer не скрывает проблему из очереди. Stable descending
+`(created_at,id)` keyset, fetch limit+1; status/validity могут меняться между pages,
+frozen-history guarantee нет. Cursor — existing bounded base64url JSON ≤1024chars:
+`v:1,endpoint:ESCALATIONS,workspace_id,direction:DESC,status,created_at,id`.
+Decode строгий, scope/filter совпадают с query; anchor реально существует в том же
+Workspace с точным tuple, но его нынешний status не обязан оставаться прежним.
+Cursor не выдаёт authority. Forged/malformed/wrong endpoint/workspace/filter/anchor
+→422 INVALID_REQUEST; offset, произвольные sort/search/include не вводятся.
+
+Response command: `{outcome:ACCEPTED|REPLAY,result:EscalationAcceptedResult}`,
+как у существующего CONTROL envelope.
+Saved result содержит `workspace_id,escalation_id,conversation_id,client_id`,
+`receipt_id,audit_event_id`, `operation:RESOLVE|CANCEL`, `accepted_status`,
+`previous_version,accepted_version,accepted_context_version,control_generation`,
+`accepted_at`. Все значения неизменны после commit; accepted_version=2 и
+accepted_context_version=expected_context_version+1. Result не содержит новой
+Message/Outbox, текущих clocks или editable answer copy. Owner читает exact
+сохранённый answer в detail, если нужна reconciliation своего решения.
+
+| HTTP / error envelope `{"error":{"code":...}}` | Условие |
+|---|---|
+| 401 SESSION_REQUIRED;403 ACCESS_DENIED | Прежняя session/live OWNER граница; resolve чужого assignee также403 |
+| 403 ORIGIN_DENIED/CSRF_REJECTED;413 BODY_TOO_LARGE;415 UNSUPPORTED_MEDIA_TYPE;429 RATE_LIMITED | Прежние auth errors/Retry-After, без нового обхода |
+| 404 NOT_FOUND | Canonical tenant/Client/Conversation/Escalation relation не совпала |
+| 422 INVALID_REQUEST | DTO/query/key/header/cursor/body validation |
+| 409 IDEMPOTENCY_KEY_CONFLICT | Существующий workspace namespace/key имеет другой exact fingerprint/actor/operation |
+| 409 STALE_STATE | После locks не совпали expected lifecycle/context/control или request уже material-incompatible |
+| 409 ESCALATION_EXPIRED | Stored EXPIRED либо current PENDING уже достиг expires_at |
+| 409 ESCALATION_FINAL | Новый key для stored RESOLVED/CANCELLED; terminal не переоткрывается |
+| 409 VERSION_EXHAUSTED | Невозможен допустимый bounded increment; ни half-commit, ни wraparound |
+| 503 UNAVAILABLE | DB/lock/invariant/service failure; не расширять definitely-unsent или считать command rejected после неизвестного commit |
+| 500 INTERNAL_ERROR | Прежний sanitized unexpected-error envelope; никаких SQL/body/token details |
+
+Порядок после session/live owner, validation, key lock и relation proof: exact saved
+receipt replay; затем current locks/state, terminal-state result, material relevance,
+trusted expiry, resolve assignee policy, expected CAS, mutation. Cancel не зависит
+от live assignee, но time/CAS обязательны. На любой reject отсутствуют новый receipt,
+Audit, answer и изменение counters. После неизвестного ACK клиент повторяет
+**тот же key/body**; после conflict/stale/expiry сначала fresh detail, никаких
+автоматических новой key/новых expected versions. Старый receipt доступен на replay
+только после новой live OWNER проверки, даже если с тех пор контекст уже другой.
+
+### 14.6. Минимальная DB, receipts, Audit и capability profiles
+
+Предложены **две** новые таблицы: `app.escalations` и
+`platform.escalation_command_receipts`. Expected inventory новой schema — exact
+старые36 qualified names плюс эти2, то есть38, а не проверка только count.
+Первая уже является durable creation receipt через immutable origin/creation_result;
+третья worker receipt table, generic action/event/notification ledger не нужны.
+Owner command receipt необходим: manual/control receipts имеют другие typed shapes,
+namespace, fingerprints и не могут представлять ответ по Escalation.
+
+В `platform.messaging_jobs` добавляются nullable `escalation_id` и закрытый
+`escalation_outcome`; новый kind ESCALATION_TIMER с единственным escalation reference
+и steps REMIND_1/REMIND_2/EXPIRE. У timer inbox/outbox/file/turn refs NULL; connection
+связан typed FK с request. Turn step ESCALATE_OWNER остаётся в старом Turn shape,
+без timer reference. Расширяются точные CHECK/claim DTO/JSON/profiles/ветки lifecycle,
+но не размеры lease/retry/deadlines. Existing `turn_outcome` получает только
+ESCALATED/ALREADY_ESCALATED/WAITING_EXISTS сверх уже принятых outcomes;
+Новый `escalation_outcome` non-null **только** при timer SUCCEEDED: REMINDED/EXPIRED/
+CANCELLED/NOOP_TERMINAL. Для DEAD он NULL; точные пары DEAD/INVALID_INPUT и
+DEAD/RETRY_EXHAUSTED, а также READY/RUNNING NULL shape заданы в §14.4.
+У всех не-timer Jobs оба escalation поля NULL. Исторические forms
+parse identically; send kind/Outbox/attempt поля и semantics не меняются.
+
+| Relation / constraint | Минимальная DB гарантия |
+|---|---|
+| Escalation → source Job | `(ws,source_job_id,connection_id,source_job_kind,turn_id,turn_revision,source_job_step)` → `platform.messaging_jobs(ws,id,connection_id,kind,turn_id,turn_revision,step)`, existing `messaging_jobs_turn_receipt_key`; все поля NOT NULL, checked PROCESS_TURN/ESCALATE_OWNER literals |
+| Escalation → Turn / Conversation | `(ws,turn_id,connection_id,conversation_id)` → existing `app.conversation_turns(ws,id,connection_id,conversation_id)`; `(ws,conversation_id,client_id)` → `app.conversations(ws,id,client_id)`, existing `conversations_control_client_key`; cross-Client link невозможен |
+| Escalation → Resume | `(ws,resume_receipt_id,conversation_id,client_id,control_generation)` → `platform.conversation_control_receipts(ws,id,conversation_id,client_id,accepted_generation)`, existing0010 `control_guard_reference_key`. Capability и immutable-origin trigger сверяют RESUME operation, actor именно этого receipt, fence/profile; все refs NOT NULL |
+| Assignee / decider / receipt actor | Request `(ws,assignee_user_account_id)` и `(ws,decided_by_user_account_id)`, receipt `(ws,actor_user_account_id)` → existing `platform.workspace_memberships(ws,user_account_id)`. Assignee и receipt actor NOT NULL; decider non-null только у owner terminal. Global user FK не заменяет этот tenant binding; live OWNER проверяется отдельно |
+| Timer → Escalation | Новый supporting UNIQUE Escalation `(ws,id,connection_id)`; Job `(ws,escalation_id,connection_id)` → этот key, UNIQUE Job `(ws,escalation_id,step)`; escalation_id immutable в Job identity. Нельзя подставить connection другого Workspace/Business |
+| Request uniqueness | Unique ws/Turn/namespace и source_job_id; partial unique ws/Conversation PENDING; terminal usage остаётся dedupe usage |
+| Bounded list access | Два keyset indexes: `(workspace_id,status,created_at,id)` для status filter и `(workspace_id,created_at,id)` для ALL; existing Job due/lease indexes переиспользуются |
+| Owner receipt → request relation | Receipt `(ws,escalation_id,conversation_id,client_id)` → новый Escalation UNIQUE `(ws,id,conversation_id,client_id)`; NOT NULL. Receipt UNIQUE `(ws,namespace,idempotency_key)`, `(ws,escalation_id)` и `(ws,audit_event_id)` |
+| Owner receipt → terminal decision | Receipt `(ws,escalation_id,accepted_version,accepted_status,actor_user_account_id)` → новый Escalation UNIQUE `(ws,id,version,status,decided_by_user_account_id)`; все local поля NOT NULL. Это binding к frozen terminal row, не к текущим Conversation/Turn counters |
+| Audit → Escalation | Audit `(ws,escalation_object_id)` → existing Escalation PK `(ws,id)`. Только immutable identity, без actor/version/operation в этом FK; у request нет поля или FK на Audit |
+| Owner receipt → Audit | Точный binding из семи local/referenced columns и supporting UNIQUE ниже; receipt не может ссылаться на другой request/actor/version/operation/variant |
+| Lifecycle shape | PENDING version1, terminal version2; resolution/closure/actor/answer/time строго по статусу; source/schedule/fingerprints immutable; due1<due2<expiry, finite timestamps; reminder slot write-once, terminal row полностью immutable |
+
+В таблице `ws` означает ровно `workspace_id`. Все tenant FKs ON DELETE RESTRICT,
+NOT DEFERRABLE; existing parent keys reused. Новые supporting keys
+нужны только для указанных typed relations. CHECK с nullable полями явно использует
+IS NULL/IS NOT NULL/IS TRUE. Lifecycle `version` — версия решения, не count SQL UPDATE:
+reminder не инвалидирует owner CAS. Hash хранится32bytes; hex только в DTO. Request
+snapshot/result нельзя менять вместе с hash, даже если computed hashes совпали.
+
+Обе таблицы принадлежат asm_migrator, ENABLE/FORCE RLS, migrator policy; runtime
+без прямых SELECT/INSERT/UPDATE/DELETE. Owner reads только через tenant/live-owner
+capabilities; worker только через canonical Job/claim. Пользовательский principal
+не расширяется worker grants, тестовый произвольный SET ROLE/GUC не является admission.
+Штатные migration/service roles сохраняются, PUBLIC EXECUTE закрыт.
+
+Owner namespace **`ESCALATION_DECISION_V1`** общий для resolve/cancel, UNIQUE
+`(workspace_id,namespace,idempotency_key)`, actor входит в fingerprint, не в unique
+scope. DB authoritative codec: UTF-8 LF-joined fixed fields в порядке
+`asm:m3:escalation_decision:v1`, ws, actor, escalation, conversation, client,
+operation, expected_escalation_version, expected_control_generation,
+expected_context_version; затем LF и length-prefixed answer:
+`<UTF8 byte length>:<exact answer>` для RESOLVE, `-1:` для CANCEL, без завершающего LF.
+UUID/decimal/operation canonical; fixed fields не содержат LF. Key — lookup identity,
+не часть hash. Domain/body/key/actor mismatch → conflict; replay возвращает сохранённый
+result, без нового clock/version/Audit. Correlation id сохраняется как evidence,
+новый retry correlation не меняет identity.
+
+**Один новый Audit variant, policy принята C0:** `ESCALATION_DECIDED`, object_type=ESCALATION,
+object_id=request id, object_version="2", actor_kind=USER_ACCOUNT, actor ID non-null;
+payload ровно `{operation:RESOLVE|CANCEL,status:RESOLVED|CANCELLED}`, согласованные пары.
+Answer, message content и snapshot в Audit не копируются. Два nullable generated
+STORED targets: `escalation_object_id` = object_id только при object_type=ESCALATION;
+`escalation_operation` = payload->>'operation' только при event_type=ESCALATION_DECIDED,
+иначе NULL. Strict Audit CHECK требует весь согласованный variant, object_version=2,
+оба generated targets NOT NULL для него и ровно пары RESOLVE/RESOLVED либо
+CANCEL/CANCELLED. Прежние discriminator branches остаются прежними.
+
+Точные новые связи (local и referenced порядок одинаков, **семь** полей):
+
+| Constraint | Exact columns |
+|---|---|
+| Supporting UNIQUE `app.audit_events` | `(workspace_id,audit_event_id,escalation_object_id,object_version,actor_user_account_id,escalation_operation,event_type)` |
+| Local FK `platform.escalation_command_receipts` | `(workspace_id,audit_event_id,escalation_id,accepted_version,actor_user_account_id,operation,audit_event_type)` |
+| Referenced FK `app.audit_events` | `(workspace_id,audit_event_id,escalation_object_id,object_version,actor_user_account_id,escalation_operation,event_type)` |
+
+Все local FK поля NOT NULL; receipt CHECK фиксирует audit_event_type=ESCALATION_DECIDED,
+accepted_version=2 и `(operation,accepted_status)` ровно RESOLVE/RESOLVED или
+CANCEL/CANCELLED. Saved result CHECK связывает ровно поля wire result§14.5 с receipt
+columns; actor связан FK и fingerprint, нового actor field в result нет.
+Answer/fingerprint точные по §14.3/6. Separate
+receipt→request relation и terminal FK выше сохраняются одновременно. Один Audit
+event ID принадлежит одному owner receipt; API/replay возвращает его из receipt.
+
+Atomic write order: **terminal request UPDATE → Audit INSERT → owner receipt INSERT
+→ Conversation context+1**. До Audit INSERT request уже terminal, поэтому все
+немедленные FK выполнимы. Сам Audit зависит только от request identity; request
+не зависит от Audit. После terminal request полностью immutable, повторный UPDATE
+ради audit_event_id не нужен. Все четыре записи имеют один commit/rollback.
+Creation, material cancellation, expiry/reminder не выдаются за owner Audit:
+их evidence — canonical source/timer Job и immutable request/closure/slots. Это
+ограниченная LOCAL/TEST policy, не заранее принятое отсутствие system Audit в M4/M9.
+
+Strict backend union/generated OpenAPI и существующий Audit parser/label должны
+быть расширены одновременно, иначе mixed page сломает уже работающую Console.
+Это единственная принятая frontend дельта backend-среза: label «Решение по запросу
+владельцу сохранено» и strict variant test. Нового owner-wait UI здесь нет; другие
+Audit variants/payloads/labels/billing GET semantics неизменны.
+
+Предлагаемые **11 новых SQL profiles** (схема platform; точные signatures под C2 review):
+
+| Signature | Security / назначение |
+|---|---|
+| `escalation_request_for_turn(uuid,uuid)` | DEFINER; runtime EXECUTE, canonical producer admission, atomic create; terminal accepted replay до новой claim admission |
+| `escalation_request_replay(uuid,uuid)` | DEFINER; runtime EXECUTE, single-statement immutable creation result по source job + winning token, включая уже закрытый request |
+| `escalation_timer_execute(uuid,uuid)` | DEFINER; runtime EXECUTE, только admitted timer kind/step, current-time transition |
+| `escalation_read(uuid)` | DEFINER; runtime EXECUTE, live owner/tenant detail |
+| `escalation_list(integer,text,timestamptz,uuid)` | DEFINER; runtime EXECUTE, bounded count/status/anchor, live owner projection |
+| `escalation_command(uuid,uuid,uuid,text,text,bigint,bigint,bigint,text)` | DEFINER; runtime EXECUTE, escalation/conversation/client/operation/key/expected version/generation/context/answer; полный owner transaction, без caller time |
+| `escalation_command_fingerprint(uuid,uuid,uuid,uuid,uuid,text,bigint,bigint,bigint,text)` | Private INVOKER IMMUTABLE; codec выше, CANCEL answer=NULL допустим, поэтому не STRICT |
+| `escalation_now()` | Private INVOKER VOLATILE, trusted DB clock и явный test seam§14.4 |
+| `escalation_validity(uuid,uuid,timestamptz)` | Private DEFINER STABLE, только canonical read checks; при mutations caller предварительно держит нужные locks, при GET statement snapshot |
+| `escalation_context_changed()` | Private DEFINER trigger, material invalidation без parent/Job lock inversion |
+| `escalation_immutable()` | Private DEFINER trigger, immutable origin/schedule/creation result, allowed slot/lifecycle transitions и full terminal freeze; no arbitrary DML capability |
+
+У всех owner asm_migrator и `search_path=pg_catalog,pg_temp`, PUBLIC EXECUTE revoked;
+private пять profiles также без asm_runtime EXECUTE. Request hash считается внутри
+creation capability, отдельный hash helper не нужен. Existing function bodies
+заменяются только в новой migration: enqueue, guard prepare/accept/current gate,
+Job JSON/guard/admit, claim/preflight/supersede/retry/reschedule/recovery. Legacy
+turn_execute allowlist сохраняется; требуется actual negative на новый step.
+SQL signatures/прежние grants не расширяются произвольным JSON dispatcher.
+Действующие scanner signatures — `messaging_claim(text,timestamptz,timestamptz,uuid)`
+и `messaging_recover_expired(timestamptz,timestamptz,uuid)`. Старые `(text)`/`(integer)`
+удалены upgrade0008; snapshots ORIGINAL и их восстановление внутри downgrade не
+являются final0010 capabilities. R2 не создаёт их, не добавляет grants/filters или
+tests с вызовом несуществующих функций; существующий `to_regprocedure` NULL assertion
+в `test_m3_1_migrations.py` сохраняется. Source anchors:0008:776–779,1033–1052;
+0010:637–654; test:610–633. Это source tracing, не новый actual DB run.
+
+**Scoped ordinary fixture cleanup:** owner receipts → только Escalation Audit events
+→ timer Jobs → Escalation requests → прежние source/CONTROL parents. Весь новый prefix
+выполняется в already-allowlisted `test_m3_1_control_postgres.py::control` / новых
+Escalation fixtures **до** их existing cleanup и delegated Telegram/M2 teardown.
+Source/CONTROL rows ещё существуют при удалении request. Runtime историю не удаляет;
+обычная уборка test tenant следует только после доказанного migration refusal,
+не делает used schema «unused» ради downgrade. CASCADE, disable constraints/triggers
+и обнуление immutable fields запрещены. Для M1 explicit TRUNCATE учитывает полную
+FK closure, включая Audit/timer/source parents, с прежними assertions.
+
+### 14.7. Общий lock graph, atomicity и потеря ACK
+
+Все новые mutations — READ COMMITTED, существующие statement5s/lock2s limits;
+никакого HTTP/S3/LLM внутри transaction. Generation/context/revision/role/time
+читаются заново после последнего ожидаемого lock. Immutable refs можно читать
+до locks только для определения цепочки, но не для authority decision.
+
+| Caller | Порядок относительно существующих CONTROL/manual/GUARDS |
+|---|---|
+| Owner resolve/cancel | Existing session + Workspace/User/Membership SHARE → command namespace/key advisory → canonical relation proof/replay → Conversation NO KEY UPDATE → Escalation NO KEY UPDATE → terminal UPDATE → Audit INSERT → receipt INSERT → context+1. Terminal UPDATE может усилить own Escalation lock из-за terminal supporting key; parent/Job locks после него не добавляются. Business/connection/billing locks не нужны |
+| Create ESCALATE_OWNER | Own Job UPDATE → Resume actor Workspace/User/Membership SHARE → Business SHARE → connection SHARE → существующая billing chain§12.7 → Conversation NO KEY UPDATE → existing pending Escalation, если есть, NO KEY UPDATE → own Turn NO KEY UPDATE → insert request/new timer rows/own Job completion |
+| Timer execute | Own Job UPDATE → assigned Workspace/User/Membership SHARE (existing rows даже при denial) → Conversation NO KEY UPDATE → Escalation NO KEY UPDATE; нет connection/billing/network зависимости. Turn revision читается под Conversation serialization без отдельного Turn lock |
+| CONTROL / manual | Прежние parent/key/connection/Telegram/billing locks§12.7 → Conversation NO KEY UPDATE → новый trigger берёт только pending Escalation. CONTROL по-прежнему не блокирует Turn/старые Jobs; manual context +1 и generation +1 неизменны |
+| PROCESS_INBOX / file / send finalize | Прежние own Job/Inbox/connection либо FileObject/intents либо Outbox → Conversation → pending Escalation через material trigger → прежний Turn lock, где он был. Trigger не возвращается к предыдущим locks |
+| GUARDS accept/begin | Прежние Job/(Outbox)/authority/business/connection/billing → Conversation → read-only pending-Escalation check → own Turn. Никакого Escalation→Job/Outbox или Turn→Conversation пути |
+| Claim/recovery/exhaustion | Existing bounded single-candidate SAVEPOINT/NOWAIT scan: own Job → assigned Workspace/User/Membership SHARE/NOWAIT → Conversation NO KEY UPDATE/NOWAIT → Escalation NO KEY UPDATE/NOWAIT. Затем trusted moment/due/relevance и лишь затем inner cleanup subtransaction§14.4. BUSY откатывает весь candidate, включая Job/authority locks, и двигает scan |
+
+Conversation — общий serial barrier всех child transitions. Ни один caller не
+блокирует existing Escalation до Conversation, ни одна domain mutation не берёт
+existing Job после Conversation. INSERT трёх **новых** timer Jobs и обновление
+уже заблокированного own Job разрешены. FK KEY SHARE совместим с NO KEY UPDATE;
+FOR UPDATE на Conversation «на всякий случай» не вводится. Across Conversations
+нет global escalation mutex; workspace/key lock связывает только совпадающий key.
+
+Предварительный список кандидатов claim использует старый indexed available_at
+и bounded cutoff. Действующий four-argument claim проверяет timer due через
+escalation_now **до attempt_count, first_started_at и exhaustion/cleanup mutations**;
+ещё не due → BUSY/полный candidate rollback. Due взят из immutable request schedule
+по canonical step; момент получен после всех authority/Conversation/Escalation locks.
+Three-argument recovery и reschedule/exhaustion соблюдают тот же preflight/due/order;
+STABLE validity читает уже locked state и не берёт новые authority locks. Общие
+lease/retry clocks прежние, expired lease не становится admitted execution.
+Это сохраняет correctness и при test clock. В deterministic PG cases clock anchor
+выбирается в прошлом так, чтобы все synthetic milestones были до wall-clock cutoff;
+runtime index/lease clock и очередь не подменяются тестовым selector. Фиксированный
+clock переставляется между before/equal/after steps, а реальные lock barriers
+доказывают, что command перечитывает время после ожидания. Source helper после теста
+восстановлен; такой test не выдаётся за реальный десятиминутный elapsed run.
+
+Atomic create включает context increment, request/creation_result/fingerprints,
+все3 timers и consumer terminal. Failure на любой записи/commit оставляет всё
+прежним. После неизвестного create ACK сначала `escalation_request_replay` с теми
+же job/winning token: она требует terminal source Job с правильным outcome и
+typed request binding, возвращает **immutable creation_result**, даже если request
+уже RESOLVED. Отсутствие receipt не считается успехом: новый attempt только через
+штатный claim/reclaim и полную relevance, не прямое повторное INSERT. Old token
+не становится действующим из-за dedupe. Lifetime token/lease не требуются только
+для чтения доказанного ранее committed результата.
+
+Private strict `EscalationCreationResult`: `code=ESCALATED`, workspace/source_job/
+escalation/conversation/client/turn/resume UUIDs, source Turn revision, input context,
+waiting context, control generation, context/request fingerprints, initial_version=1,
+initial_status=PENDING, created/due/second_reminder/expiry timestamps. Это saved
+acceptance, не `EscalationView`; claim token не возвращается в owner API. Private
+progress хранит typed outcome и canonical source job/Turn/request ID (последний
+nullable только при отказе без request); timer result — own job/request/step/status/
+error_code/outcome и реально записанный slot/terminal timestamp либо NULL. DEAD не
+выдумывает domain timestamp/outcome; shapes точно по §14.4. Все parsing branches
+extra=forbid, не raw dict.
+
+Owner resolve/cancel сначала UPDATE terminal/answer, затем INSERT typed Audit,
+затем INSERT receipt, последним context+1 — одним commit, немедленные FK§14.6.
+Same-key/same-body concurrent calls получают
+один accepted result/replay; same-key/different-body конфликтуют. Два разных keys
+с одной expected version: первый accepted, второй FINAL/STALE, только один Audit
+и одна смена context. Исключение перед commit откатывает все четыре части.
+After-commit ACK loss → exact replay, не новое действие. Этим API не создаётся
+внешний эффект, поэтому нет новой отправочной семантики UNKNOWN; сохранённые
+M2/GUARDS UNKNOWN/attempts/no-resend не меняются.
+
+Resolve/expiry: при now==expiry любой ещё не принятый resolve отклоняется, даже
+если timer job не claimed. Если resolve получил lock и проверил time<expiry первым,
+он может commit уже после wall deadline: это принятый до срока linearization point,
+timer затем NOOP. Если timer первым зафиксировал EXPIRED, resolve получает409.
+Material/owner revoke против команды/таймера проверяются через наблюдённые PG waits,
+не тест «повезло с порядком coroutine». Role revoke after accepted commit не стирает
+Audit/answer; последующий replay всё равно требует текущий OWNER.
+
+### 14.8. Migration и exact source/schema compatibility от0010
+
+Нужна одна новая migration **E**. Рекомендация C2 **`0011_escalations.py`,
+revision0011/down_revision0010** принята C0 в R2 как кандидат. Окончательное
+назначение revision/filename и write permission будут в отдельной выдаче кода
+после приёмки R2; сейчас DDL не создаётся и номер самостоятельно не резервируется.
+Applied0001–0010 immutable. Только новая migration добавляет две tables, typed
+keys/checks/trigger/Audit delta и перечисленные capability replacements. Новых
+enum extensions общего назначения, dependences/locks или seed бизнес-данных нет.
+
+Upgrade под drained API/worker/**scheduler** сохраняет все36 таблиц старого
+column projection: rows/IDs/versions/control modes/fences, command/consumer/guard
+receipts и exact fingerprints/results, PENDING/UNKNOWN/outbound attempts, files/
+private objects/grants. Новые nullable Job fields NULL; escalation tables пусты.
+Ни backfill requests, ни marker reprocess, ни jobs для history не создаются.
+Повторный upgrade E — no-op. Code readiness/provisioning принимает ровно E:
+old0010 source/E и E source/0010 дают отказ, до runtime claim/seed.
+
+Downgrade E→0010 разрешён лишь на неиспользованной новой семантике. Первое действие
+под migration locks — refusal при любой Escalation/decision receipt, новом timer
+kind/ESCALATE_OWNER step/outcome/reference или новом Audit variant, включая terminal
+rows. Никакого удаления истории ради downgrade. При отсутствии usage удаляется
+только новая дельта и восстанавливаются **точные**0010 function/check/grant/trigger
+definitions; full36-table projection совпадает, existing GUARDS/CONTROL usage сама
+по себе не запрещает этот обратный шаг. Downgrade0010 не вызывается заодно.
+После usage требуется forward recovery/fix; не старый image поверх E.
+
+Compatibility source **G** = accepted main
+`c502d5fd258aef15bb5549e1529df8d038a4fb9b` / schema0010; будущий reviewed **E** source
+будет pinned отдельно. Текущие historical H/0007, T/0008, C/0009 и G/0010 proofs
+нельзя переименовать в новый source. В existing normal/exact Docker29 state lanes
+понадобится одна отдельная G→E phase: seed genuine G runtime/0010, drain, migrate,
+fresh actual-revision observer при ACK loss, E readiness/restart/request/API,
+unused reverse и used refusal. Сравнение36 projection, exact38 names, private S3
+preservation и retained UNKNOWN/no-resend; не новый fault matrix/CI job.
+
+В E phase terminal request сохраняет будущие timer Jobs до их due/lazy NOOP.
+После остановки API/worker/scheduler fresh drain observer может допустить **только**
+ожидаемый retained набор по canonical workspace/request/job IDs из committed
+creation result/DB relation, kind=ESCALATION_TIMER, steps REMIND_1/REMIND_2/EXPIRE.
+Для каждого remaining Job проверяются точные connection/request refs, saved
+available_at/due, status=READY, отсутствие claim/lease/worker; request terminal.
+Сравнивается полный набор remaining READY/RUNNING, а не count или общий kind filter:
+другой/extra Job, RUNNING timer или неканонический ref остаётся blocker. IDs таймеров
+читаются из DB после genuine creation; owner DTO ради controller не расширяется.
+Прежние drain/claim/recovery guards для всех остальных Jobs и остановка трёх
+процессов сохраняются. Нельзя удалять future Jobs, сдвигать due/часы или исполнять
+их досрочно ради пустой очереди. E readiness, persisted timer identities/schedule
+и restart проверяются отдельно от frozen G/0010 proof на **G source**. No-effect
+restart в asm_local не выдаётся за пройденный десятиминутный timer lifecycle;
+before/equal/after runtime proofs остаются в serial disposable asm_test§14.4.
+
+Это **конкретная причина будущего адресного C6/C0 review** controller paths§14.10:
+latest candidate уже не0010, а retained G phase должна остаться на G source/0010.
+Default candidate egress fixture получает exact E/38 отдельно от frozen G/36;
+старые source/image/pin/recovery guards остаются строгими, arbitrary-head или
+intersection-of-tables не допускается. Новые SOURCE pins только если конкретный
+source delta этого требует и C0 согласует exact diff; никакого второго допустимого
+hash/normalization/guard bypass. Сейчас controller и pin values не меняются.
+
+Остаются9 existing jobs, clean-source gates/artifacts, exact Docker29, prepare600s,
+cleanup90s, state25min, foundation40min, browser25min. Прежняя historical строка
+§13.7 о foundation35min не переписывается: текущая принятая workflow уже40min.
+Укладываемость G→E **не измерена**; при нехватке бюджета предъявить timings и
+конкретный узкий diff C0, не увеличивать лимит и не отключать retained phase.
+CI optimization DEFERRED до завершения M3; IMPL-05 OPEN/fix DEFERRED. Никаких VM,
+live Telegram, working DB/S3 или rollout действий этот migration proposal не выдаёт.
+
+### 14.9. Компактная матрица будущих actual proofs
+
+Все runtime rows ниже **PLANNED / NOT RUN**, не PASS контрактного head.
+Один bounded набор новых tests использует реальные owner services/API, PostgreSQL,
+обычный claim/worker/scheduler и счётчики adapter. Unit clock/DTO tests не заменяют
+actual PG; mocks не доказывают locks/recovery. Новый внешней-effect harness не нужен:
+Escalation не имеет outbound transport. Retained M2 wire/PG/S3/relay/no-resend и
+CONTROL suites запускаются штатно без дублирования всех их сценариев.
+
+| Contract / критерий | Actual boundary | Минимальные assertions |
+|---|---|---|
+| §14.2 create, M3-A09 | Fresh OWNER Resume → trusted CONTROLLED marker Inbox/Turn → normal worker, ни одной inserted fixture Escalation | Один PENDING request, exact origin/assignee/hash/context+1,3 unique timers, consumer terminal; CALL/EFFECT=0, Message history содержит только inbound; non-marker по-прежнему GUARDS CALL1/EFFECT1 |
+| §14.2 authority/routing, A03/A04/A09 | Genuine new claims через legacy/новые capabilities; spoofed refs/token/context, TELEGRAM/PROD/legacy/HUMAN/pre-fence variants | Wrong kind/step/tenant/Client/Turn/Resume/ref/claim отказ до mutation; current admission только normal path; DB+Python gates независимы; no fake Owner |
+| §14.2/3 dedupe, A09 | Concurrent inbox duplicate + request workers/reclaimed token + повторное enqueue/late-file revision | Один accepted request или один guard intent на Turn; no second request после terminal,3 timer identities всего; changed canonical binding не маскируется dedupe; old GUARDED_TEXT marker job не создаёт второй effect |
+| §14.3/7 rollback/ACK, A07/A09 | Fail each request/timer/Audit/receipt/terminal write и commit; fresh runtime reader после lost ACK | All-or-nothing; creation canonical result прежний даже после resolve; exact owner replay без новой версии/Audit; другой answer/key namespace конфликт; нет speculative success |
+| §14.3/5 resolve/cancel, A09 | Real authenticated HTTP → service → runtime capability, billing/connection unavailable | Exact internal answer сохранён; no Message/Outbox/Resume; context+1/lifecycle1→2; другой OWNER resolve403, cancel200; channel/billing не запрашивались; live caller revoke403 без accepted rows |
+| §14.4 material, A03/A04/A05/A09 | Real PROCESS_INBOX, manual acceptance, file finalization, delivery terminal, Takeover/Resume | Pending cancellation в том же commit, одна прежняя counter delta; duplicate/replay/IGNORED/reminder без cancellation; no stale/new-client answer; HUMAN остаётся HUMAN, manual доступен |
+| §14.4/7 timer boundaries, A09 | Deterministic private clock before/equal/after + реальные PG wait barriers | now==expiry deny даже при остановленном scheduler; lock loser перечитывает часы/роль/context; no reminder после expiry/material/cancel; нет недоказанного sleep-order |
+| §14.4 restart/reclaim, A09 | Отдельный worker process завершается до/после slot commit, свежие worker/scheduler; реальные PG Jobs | До commit slot пустой, после commit ровно1; stale token без writes; два slots максимум; future timer после terminal NOOP; retained due/expiry не сдвинулись; dead/exhaustion видимы |
+| §14.4/6/7 failure branch, A09 | Один bounded actual-PG case через normal timer execution и recovery/exhaustion; targeted stricter CHECK того же имени в disposable asm_test, восстановленный в finally | Реальная23514 с точными diagnostics → committed DEAD/INVALID_INPUT/NULL; прежние request/slots/context/control. До expiry current wait сохраняется с FAILED maintenance, при expiry waiting=NULL/actions=false с прежним reason priority; обычный exhaustion отдельно DEAD/RETRY_EXHAUSTED/NULL; successful cleanup SUCCEEDED с фактическим outcome. Fresh scanner больше не выбирает DEAD Job; ошибка вне allowlist/BUSY/отмена/failed commit не считаются durable DEAD. Clock replacement committed/VOLATILE, exact restore/catalog check у живого parent |
+| §14.7 concurrency/fairness, A09 | Две owner команды разных keys; resolve vs expiry; cancel vs reminder; blocked Conv плюс здоровая | Один terminal outcome/Audit; counter consistency; request другого Conversation продвигается; NOWAIT rollback не удерживает candidate Job; complete lock graph не содержит обратного edge |
+| §14.5 API/isolation, A07/A09 | Real cookie/Origin/CSRF/OWNER, strict JSON/OpenAPI, page cursor и same-tenant wrong Client | No cross-tenant/relation leak; errors точны; duplicate/extra/wrong type reject; same-key timeout replay; status/validity/receipt различены; bounded pagination и смена status anchor не ломают следующую страницу |
+| §14.6 security/Audit, A09/A11 | Runtime/migrator grants + actual pg_proc/FK negatives; existing mixed Audit API/parser | Exact38 tables/11 new profiles, RLS FORCE/no raw DML; typed actor/object/version/operation/FK reject подстановок; старые5 variants + ESCALATION_DECIDED читаются вместе; старые labels/values прежние |
+| §14.3/6/7 owner binding/cleanup, A09/A11 | Один адресный actual-PG owner transition → Audit → receipt; отрицательные FK probes и ordinary fixture teardown | Полный terminal/relation/Audit binding; wrong request/version/status/actor/operation/event ID/type и чужой membership отвергнуты, SQLSTATE и имя FK/CHECK зафиксированы. Rollback оставляет прежний snapshot. Receipt→Esc Audit→timer Jobs→request→old parents удаляются без CASCADE/disable/nulling; used-refusal proof выполнен до уборки |
+| §14.7 actual scan, A09 | Four-argument claim/three-argument recovery, private clock before/equal/after и PG lock barriers | Not-due не меняет attempt_count/first_started_at; assignee locks до Conversation, trusted moment после locks; BUSY полностью освобождает candidate. Existing NULL assertions для удалённых overloads сохранены, новых вызовов legacy нет |
+| §14.8 migration, A11 | Actual E migration role + genuine G/0010/E source readiness; clean/repeat/populated/refusal/ACK/restart | Old36 projection/fingerprints/private S3/UNKNOWN сохранены; no history jobs; unused reverse точный; каждый used blocker отказывает до DDL; mismatched source/schema STOP. E residual timers только по exact canonical ID/kind/step set§14.8, без форсирования due; frozen G proof остаётся на G source |
+| Final implementation gates, A12 | `sh scripts/ci.sh`, `sh scripts/test_browser.sh`, все9 jobs/clean gates, archives и actual tested SHA/parents | Не заменять продуктовые проверки unit mocks; final reviewed integration SHA CI и независимый scoped C8 обязательны до приёмки C0; C3 сам VERIFIED не объявляет |
+
+Future C5 owner-wait часть A10 получает только после принятого backend/API SHA:
+очередь с причиной/ответственным/сроком, detail текущего Client/context, internal
+answer/cancel, revoked/stale/expired states, same-key ACK recovery и видимые reminders.
+UI не называется готовым из-за new Audit label и не переносит answer в manual composer
+автоматически. Native/provenance часть A03/A08 остаётся NOT VERIFIED.
+
+### 14.10. Предлагаемый exact implementation allowlist — пока без write permission
+
+Один working vertical slice в этой же ветке/PR: после contract acceptance C0
+назначает revision/paths → domain/schema/normal workers + owner API/compatibility
+→ actual tests/CI/C8 → C0 intake. Отдельного DDL-only результата с неиспользуемым
+сервисом не предлагается. Следующая UI часть A10 остаётся прежней отдельной выдачей
+C5 в M3.2, не новым milestone. Таблица — максимум **40 paths** будущего scope,
+не требование менять каждый path и не разрешение писать сейчас. Единственное
+расширение списка в R2 — `tests/test_m1_3_postgres.py` по C1-M3-ESC-01/C0.
+
+| Exact path(s) | Единственная причина будущей дельты |
+|---|---|
+| `migrations/versions/0011_escalations.py` | Кандидат E, revision0011/down0010, принят C0 как рекомендация§14.8; окончательное назначение/write permission ещё не выданы |
+| `backend/src/asm/conversations/escalations.py` (новый) | Domain lifecycle DTOs/services/permissions; real request_for_turn и local owner decision, не generic workflow engine |
+| `backend/src/asm/conversations/escalation_http.py`, `backend/src/asm/conversations/escalation_http_models.py` (новые) | Четыре routes/strict wire/cursors/errors, receipt vs current projection |
+| `backend/src/asm/messaging/database.py`, `backend/src/asm/messaging/worker.py`, `backend/src/asm/messaging/results.py` | Typed request/replay/timer entrypoints, нормальные new step/kind claims/routing; прежние send/recovery bounds сохранены |
+| `backend/src/asm/tenancy/database.py` | Только owner UOW wrappers для escalation read/list/command; прежний user-only context не расширять |
+| `backend/src/asm/foundation.py` | Install new routes и exact E readiness; без нового env/config/runtime role |
+| `backend/src/asm/telegram/provisioning.py` | Только exact E schema gate, не новый provisioning или live setup |
+| `backend/src/asm/billing/models.py`, `contracts/openapi.json` | Один strict ESCALATION_DECIDED Audit variant + generated новый API; старые billing/CONTROL/manual DTOs неизменны |
+| `frontend/src/billing-api.ts`, `frontend/src/billing-api.test.ts`, `frontend/src/BillingPanel.tsx`, `frontend/src/BillingPanel.test.tsx` | Только mixed Audit parser/type/label/compatibility tests; никакого Escalation UI/новых consumers |
+| `tests/test_m3_2_escalations.py` (новый) | Domain/DTO/codec/errors/permission/public schema, clock cleanup и negative scopes |
+| `tests/test_m3_2_escalations_postgres.py` (новый) | Normal producer/worker/Jobs/locks/rollback/restart/time/fencing/exhaustion matrix§14.9 |
+| `tests/test_m3_2_escalations_api_postgres.py` (новый) | Actual owner API/session/CAS/idempotency/cursors/isolation/mixed Audit |
+| `tests/test_m3_2_escalations_migrations.py` (новый) | E/G clean/repeat/populated/refusal, exact definitions/projection, source readiness |
+| `tests/test_foundation.py`, `tests/test_m2_3_setup.py`, `tests/test_postgres.py`, `tests/test_tenancy_postgres.py`, `tests/test_m2_3_schema_postgres.py` | Только latest E revision/exact38 names/profiles; frozen historical inventories не переписываются |
+| `tests/test_m1_3_postgres.py` | Только актуальная exact physical projection/default assertions и typed keys `app.audit_events` для новых generated Escalation targets из §14.6; прежние M1/M2/CONTROL columns/defaults/FKs/grants и все остальные assertions сохранить. Не заменять full comparison count/subset/skip. |
+| `tests/test_m3_1_guards_postgres.py`, `tests/test_m3_1_control_postgres.py` | Узкие pending-wait/marker mutual-exclusion/material compatibility assertions; в `control` wrapper весь новый receipt→Esc Audit→timer→request cleanup prefix§14.6 до old CONTROL/Telegram/M2 teardown; old accepted behavior прежнее |
+| `tests/test_m3_1_migrations.py`, `tests/test_m3_1_control_migrations.py`, `tests/test_m3_1_guards_migrations.py` | Только latest-head fixture/cycle restoration plumbing; exact frozen T/C/G contracts и predecessor data projections сохранены |
+| `tests/test_m1_3_c0_acceptance.py` | Explicit полная FK closure в existing TRUNCATE, включая новые receipt/Audit/timer/request связи и прежние source parents; без CASCADE/ослабления M1 assertions |
+| `tests/test_telegram_egress_postgres.py` | Latest E source/schema inventory/default fixture и retained frozen G semantics, без повторения wire suite |
+| `scripts/prepare_telegram_egress.py`, `scripts/test_telegram_egress.sh`, `scripts/test_telegram_egress_migration.sh`, `tests/test_telegram_egress.py`, `tests/test_telegram_egress_migration.py` | Только exact G→E phase/inventory/source pairing§14.8 после адресного C6/C0 diff review; без оптимизации/lifecycle/recovery guard redesign |
+| `docs/tasks/M3_CONTRACT.md`, `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` | Принятое дополнение/evidence и локальная E/G readiness/recovery инструкция; SHA/CI в одном PR receipt |
+
+Все остальные paths — отдельный конкретный diff C0 **до записи**. В частности,
+AGENTS/canon/TASK_REGISTER/M3_HANDOFF, applied migrations, dependencies/locks,
+Compose/images/workflows/runners, auth.v1/tenancy.v1, CONTROL UI/API и Telegram
+client/transport не входят. `tests/test_m2_1_postgres.py` не добавляется: выбран
+cleanup prefix в разрешённом wrapper. Если он невыполним, сначала dependency/diff C0.
+Текущий R2 task разрешает редактирование **только §14** с побайтным сохранением prefix.
+Изменённые старые fixtures/assertions объясняются конкретным FK/new-kind/head
+поведением, не желанием получить зелёный CI. Skip/xfail/понижение actual checks,
+подмена источника/schema/часов в неуказанных tests и widening guards запрещены.
+
+### 14.11. Принятые policy, DB mechanics на review и возврат C0
+
+Основание статусов — [C0 R2/disposition C1/C2](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6145970644).
+LOCKED ниже относится только к выбранной LOCAL/TEST policy; весь implementation
+ещё не выдан. Production OPEN-082/083/085 остаются OPEN.
+
+| Решение / статус | Принятый ответ или оставшаяся проверка |
+|---|---|
+| ESC-PRODUCER-01 — LOCKED C0, LOCAL/TEST | Exact finite CONTROLLED marker в normal Turn → ESCALATE_OWNER; lifetime exclusion GUARDS/Escalation по Turn; historical winning replay сохранён |
+| ESC-OWNER-01 — LOCKED C0, LOCAL/TEST | Immutable assignee=live Resume OWNER, resolve только ему, cancel любому live Workspace OWNER; reassign/reopen вне среза |
+| ESC-OUTCOME-01 — LOCKED C0, LOCAL/TEST | Exact answer1..512scalars/2048bytes — внутреннее решение без send/Approval/Resume; counters/relevance§14.3; старый Turn не оживает |
+| ESC-API-01 — LOCKED C0, LOCAL/TEST | Четыре routes§14.5, прежние cookie/Origin/CSRF/live OWNER/error/CAS/replay; local read/decide без billing/channel gate |
+| ESC-TIME-01 — policy LOCKED C0; mechanics REVIEW | Reminders2/5min, expiry10min. Post-lock time/DEAD projection/serial private seam§14.4/7 требуют actual proofs; production SLA/quiet hours не приняты |
+| ESC-AUDIT-01 — policy LOCKED C0; FK mechanics REVIEW | Один owner ESCALATION_DECIDED +4 narrow frontend compatibility paths; system evidence Job/request только для controlled среза; точный ациклический binding§14.6 |
+| ESC-DB-01 — REVIEW C0 | Две tables/38 total,11 profiles, existing Job/Turn/Resume keys, tenant membership и terminal/Audit receipt FKs; committable timer failure§14.4. Кандидат0011/down0010 принят как рекомендация, окончательное назначение/write permission после R2 |
+| ESC-COMPAT-01 — REVIEW, C6 только на конкретный implementation diff | Frozen G/0010 отдельно от G→E; canonical residual timers§14.8; budget fit PLANNED/NOT RUN, guards/budgets/CI9 прежние |
+
+| Finding C0 | R2 response / verdict boundary |
+|---|---|
+| C1-M3-ESC-01/P3 ACCEPTED, OPEN | §14.10 exact `test_m1_3_postgres.py`,40 future paths; cleanup в existing wrapper, не добавлен M2 test path |
+| C2-M3-ESC-01/P2 ACCEPTED, OPEN | §14.3/6/7: нет domain Audit backpointer; exact terminal/relation/Audit/membership FKs; выполнимый write/cleanup order; адресный proof§14.9 |
+| C2-M3-ESC-02/P2 ACCEPTED, OPEN | §14.4/5/6/7: nested cleanup rollback и exact23514/diagnostics→INVALID_INPUT, outcome=NULL; truthful projection/due/locks; bounded proof§14.9 |
+| C2-M3-ESC-03/P2 NOT CONFIRMED | Upgrade0008 удаляет старые overloads; ORIGINAL/downgrade не final source. Никакого recreate/filter/grant/call; NULL assertions сохранены§14.6. «100 final signatures» из collector без DROP/downgrade tracing не принято как inventory evidence |
+
+Три принятых finding остаются OPEN до verdict C0; C3 их сам не закрывает.
+Текущий результат — **REVIEW / HOLD после публикации**, не полная приёмка Escalation
+контракта и не runtime VERIFIED. Проверки этого документа: exact source ancestry,
+byte prefix, один C3 path, сохранение двух C0 prep docs, diff whitespace, сверка
+канона и actual dependency traces/путей. Полные local product suites для одного
+proposal не запускаются. Штатный автоматический PR CI сохраняется; его status,
+head/tested merge/parents/tree фиксируются в одном PR receipt, не объявляются
+Escalation execution evidence. Зелёный SHA ради статистики не rerun.
+
+C0 проверяет эти три R2 исправления → выдаёт revision/exact implementation scope
+в том же PR. C1/C2 HOLD, повторный общий audit не требуется; только конкретная SQL
+неоднозначность может потребовать адресной проверки. C6 — на конкретный controller
+diff при implementation. C3 не выдаёт другим ролям задачи, не пишет код/DDL и не делает VM/live/
+deploy/merge. M3 остаётся IN_PROGRESS, IMPL-05 OPEN/fix DEFERRED и CI optimization
+DEFERRED. C5 owner-wait и независимый C8 implementation review следуют после своих
+gate; их отсутствие не скрывается документационным PASS.
+
+
+### 14.12. C0 implementation activation и C3 compatibility checkpoint / 2026-10-13
+
+[Выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6151237330)
+принимает R2 и закрывает три design findings; legacy-overload claim NOT CONFIRMED.
+Исторические формулировки§14.11 сохранены выше. Назначена migration0011/down0010,
+разрешены40 paths§14.10 плюс handoff/register только для принятых фактов.
+Accepted main/frozen G=c502d5fd258aef15bb5549e1529df8d038a4fb9b/0010;
+implementation start65454012c0e5a2c9643bf1401d86773a5a4df29a,
+tree de09e1bf435d15929059f4e7691bd1fa17c0f2a4. Start CI38430231534/attempt1
+SUCCESS9/9+clean9/9 проверил merge2650c69c48c0e882317e6ca6a68cda18f26918ed,
+parents main+start/tree=start. Это не runtime evidence новой Escalation.
+
+Подготовленная implementation следует§14: две таблицы/11 profiles, нормальный
+CONTROLLED producer, три durable timers, committable allowlisted failure,
+четыре owner routes, strict saved receipt/current projection и additive Audit.
+Applied0001–0010 и полный принятый prefix331348bytes/blob
+3d2f88ddedf0ab9944db3181040abe16a7034e81 сохранены побайтно.
+
+Actual-PG tests подготовлены для creation/commit loss, concurrent owner replay,
+FK/RLS/rollback, lock waits/fairness, expiry boundaries, timer crash/reclaim/
+exhaustion и schema cycles. Не выполнены локально без Docker/PG/S3 и не являются
+пока proof§14.9. Focused backend91 и Audit frontend30 PASS; полный local
+non-integration1113 PASS/1 FAIL на старом closed total route inventory.
+`tests/test_auth_contract.py` вне allowlist: exact additive four-route diff
+только предложен C0, frozen auth contract/assertions не изменены.
+
+Пять controller paths§14.8/10 пока не включены в tracked candidate. Отдельный
+proposed patch сохраняет frozen H/T/C/G, добавляет genuine G→E/38 inventory и
+canonical residual3timer set. C0 организует адресный C6 по diff; budgets/pins/
+CI jobs и прежние diagnostic evidence не меняются. Новых production source pins
+не требуется: TelegramClient/config bytes не затронуты. Полный CI нового E,
+actual state lanes, scoped C8 и приёмка C0 остаются gates. Статус исполнения
+IN_PROGRESS; текущий checkpoint BLOCKED/HOLD на указанных согласованиях,
+не INTEGRATED/VERIFIED. Один canonical PR31 receipt содержит SHA/tree/parents,
+commands/results/proposed patches; SHA-only commits не создаются.
+
+### 14.13. C0/C6 exact compatibility activation
+
+[C0 continuation](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6161454304)
+после [C6 review](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6161347908)
+принимает corrected five-path replacement:41783bytes,
+SHA256 `2c63dc567c151c8c6be0be342f98f19eb947b6f355ad43a202bd76367140b0f8`.
+Он применён вместо исходного proposal78762113… от чистого373aeaf checkpoint.
+G report-export failure больше не заменяет прежний shell/timeout primary:
+secondary записан безопасно, private evidence retained; без прежнего failure
+export становится primary. C0 принимает фактический source diff отдельно.
+Route inventory diff1268bytes/hash`501b68c29f740cf57490b2129b5633db694ecde8e70e23c023773390bd060a3e`
+также принят и применён; scope43 с `tests/test_auth_contract.py`, без изменения
+семи auth routes/полного endpoint equality. История§14.12 сохранена.
+
+H/T/C/G identities, Telegram production pins, applied0001–0010, prepare600/
+cleanup90 и все прежние CI lanes/budgets неизменны. Source/unit review не
+является actual G→E/57 PG proof. Final source9/9 CI+clean9, matrix§14.9,
+timings/cleanup/archives и scoped C8 остаются обязательными gates.
+Commands/results/полные SHA — один canonical PR receipt, не будущий GREEN.
+
+### 14.14. Адресное дополнение implementation matrix
+
+При сопоставлении§14.9 с первоначальными57 PG cases добавлен21 случай в уже
+выданных `test_m3_2_escalations_postgres.py` и
+`test_m3_2_escalations_api_postgres.py`: реальные CHECK failures на каждой
+creation/owner write boundary; Resume и поздние file/delivery material changes;
+same-Turn late-file revision до/после owner resolution с lifetime identity;
+отрицательные typed terminal/Audit substitutions; allowlisted cleanup failure
+через actual claim/exhaustion и recovery после реального истечения lease.
+Прежний receipt-write rollback case расширен параметрами без изменения503,
+full snapshot equality и retry assertions. В material-case прежние ожидания
+manual/inbound/Takeover сохранены; Resume проверяет прежний generation-only bump.
+
+78 PG cases собраны локально; collection не является execution evidence.
+Controlled fault constraints и private asm_test clock восстанавливаются в finally;
+LOCAL time/due, production source и reviewed five-path controller patch не меняются.
+`tests/test_m3_2_escalations_migrations.py` остаётся exact reviewed dependency.
+Actual результаты обоих последовательных source/CI записываются только в receipt;
+для окончательного test source обязательны новые9/9 CI и clean9/9.
+
+Первый actual runner source76ce3d6/merge8117637 выполнил650 PG PASS/8 FAIL:
+семь assertions об отсутствии следующей работы получили легальный оставшийся
+PROCESS_TURN/TEST_CONSUME; восьмой — старый exact tenancy function inventory.
+Новая `created` fixture завершает ordinary TEST_CONSUME через normal claim/worker
+до timer assertions, с bounded loop и отказом при любом другом kind/step:
+нет удаления/сдвига Job или ослабления not-due/no-DEAD-retry assertions.
+`tests/test_tenancy_postgres.py` получает ровно11 принятых profiles; полное equality,
+M1/M2/CONTROL/GUARDS grants, owner/search_path/PUBLIC checks сохранены.
+Обе G→E state lanes на этом source прошли; они не подменяют8 failures и не
+переносятся как final-source GREEN. Полный rerun после содержательных fixes обязателен.
+
+### 14.15. Actual test-query corrections после второго runner
+
+Run38521506363 на treef55d4a9:675 PG PASS/4 FAIL; прежние восемь failures
+исправлены. Все четыре новые ошибки локализованы в test queries, production
+и reviewed controller не меняются. Оба late-file cases уже прошли same-Turn
+revision/lifetime/timer/replay assertions, затем SELECT несуществующего `id`
+из `platform.turn_guard_receipts` упал с42703; используется фактический `job_id`.
+Оба typed request/status probes получили ожидаемый23503 с правильной relation,
+но `pg_get_constraintdef` опустил `app` из-за search_path. Проверка REFERENCES
+теперь сравнивает actual `confrelid` с schema-qualified regclass OIDs, сохраняя
+SQLSTATE, diagnostic table/name, FK prefix и rollback/original-row assertions.
+Это correction новых tests, не изменение принятого FK-контракта/DDL. Число cases78
+и отсутствие skip/xfail прежние. Full final-source CI/clean9 и C8 ещё требуются;
+второй красный run и его фактические G→E successes сохраняются в canonical receipt.
+
+
+### 14.16. C8-M3-ESC-01 — page observed_at correction (R1)
+
+[C0 PAGE-R1](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164474811)
+разрешает узкую correction от reviewed `c413a6f80b30fbdd12717af3f12642a5b5f785f4`.
+[C8 review](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164119233)
+нашёл несоответствие уже принятому§14.5: page DTO/OpenAPI/service теряли общий
+observed_at, особенно для empty list. Это не новое product/business решение.
+Весь прежний339842-byte prefix,§14.1–14.15 и LOCKED boundaries сохранены.
+
+Единственная SQL delta — outer JSONB result новой `platform.escalation_list`
+в `_reads()` ещё не интегрированной0011/down0010: `{items,observed_at}`.
+Прежний MATERIALIZED `clock` захватывает `platform.escalation_now()` один раз;
+VIEW использует `clock.moment`, outer SELECT FROM clock возвращает тот же
+canonical UTC moment даже при пустом items subquery. Owner/scope/status/cursor/
+count guards, descending tuple order, signature/ACL/profiles и все остальные
+0011 bodies/DDL не меняются. Applied0001–0010 прежние;0012 не создаётся.
+
+Service строго проверяет closed envelope, Timestamp, row DTO/authority/filter,
+limit+1 bound и clock equality всех rows, включая lookahead; invalid result →
+существующий UNAVAILABLE, без empty fallback/Python clock/first-item clock.
+Публичный closed EscalationPage имеет ровно items,next_cursor,observed_at;
+observed_at required/non-null, Timestamp и согласован со всеми items. Pagination
+по-прежнему выдаёт≤100 и cursor последнего возвращённого item. Generated OpenAPI
+содержит только эту schema delta, routes и остальные schemas прежние.
+
+Regression-first: до code fix focused unit module дал24 PASS/7 FAIL (missing
+field, canonical clock rejection, generated page schema, envelope service).
+После fix:31 PASS/9 integration deselected по двум разрешённым modules.
+Ruff check/format, mypy60 modules, generated contract --check,11 original hashes
+и diff checks проходят. Local Docker отсутствует: local HTTP/PG NOT RUN.
+Новый actual-PG case собран, но collection не объявляется runtime proof.
+
+В новом HTTP/PG case используется retained normal fixture/serial asm_test clock
+с exact restore: точный empty JSON; три normal ingress/Resume/worker requests,
+включая tied created_at; общий page/item moment, limit2/lookahead/descending tuple
+и cursor последнего output row; следующая страница и новая empty page получают
+свои DB moments. Raw HTTP fields/values проверяются независимо от DTO. Повторный
+GET после expiry сохраняет raw PENDING, показывает EXPIRED validity и не пишет
+expiry/context/control/Jobs/Audit/receipt/Message/Outbox: full facts equality и
+adapter.calls=0. Все прежние78 PG cases/assertions сохранены; всего79, API9.
+
+Новому source требуются штатные CI9/9+clean9/9, включая обе existing G→E/state
+lanes и retained migration/reverse gates. Reviewed base CI38525189666 GREEN
+не переносится. Prepare600/cleanup90/state25/foundation40/browser25, controller,
+pins/dependencies/workflows/Compose и frontend прежние. Не запускать повторные
+full local suites ради статистики. Final source/actual results — в едином
+[C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6152762197),
+без status/SHA-only commit после CI. Finding OPEN до C0/scoped C8; M3 IN_PROGRESS.
+
+
+### 14.17. C0 — foundation time budget 40→45 минут
+
+[C0 C6-M3-FOUNDATION-TIME-BUDGET](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6168070726)
+разрешает от exact base `0dd8a3490cfccf7fb613c169f3bd5116373827fd` только
+job-level `foundation.timeout-minutes: 40→45` и три coordination docs в одном
+содержательном commit. Весь прежний prefix через§14.16 сохранён побайтно.
+Это текущий override прежнего foundation40; исторические записи не отменяются.
+
+PAGE-R1 CI38549789284/attempt2 BLOCKED:8 SUCCESS/1 CANCELLED, clean8/1 SKIPPED;
+foundation40m19s, основной step40m13s. HTTP/reverse-proxy smoke не завершён.
+Логи обеих попыток:1133 non-integration и680 PG PASS,79 Escalation
+(61 domain+9 API+9 migration); это не полный GREEN и не доказательство нового source.
+Пять дополнительных минут предназначены для обязательных завершающих smoke,
+cleanup и clean; фиксированная длительность не обещана.
+
+Все9 jobs, matrix/steps/conditions/clean checks, concurrency/permissions/pins,
+locks/scripts/controllers/dependency и product/SQL/DTO/OpenAPI/tests прежние.
+Prepare600s/cleanup90s/state25m/browser25m и остальные limits не меняются.
+CI optimization/IMPL-05 fix DEFERRED. Один новый штатный PR CI на final source:
+9/9 SUCCESS+clean9/9 без SKIPPED, actual foundation completion и строка
+`HTTP and frontend reverse-proxy smoke passed`; source records/archives обязательны.
+При failed/cancelled — конкретный BLOCKED и HOLD, без rerun/нового повышения45.
+Final evidence — отдельный canonical C6 receipt, без status/SHA-only commit.
+C3/C8 HOLD; C8-M3-ESC-01/P2 OPEN до scoped recheck и решения C0; M3 IN_PROGRESS.

@@ -105,7 +105,7 @@ def migration():
     return module
 
 
-async def assert_refusal(c):
+async def assert_refusal(c, *, revision="0010"):
     from sqlalchemy.exc import DBAPIError
 
     before, ddl = await fingerprints(c), await definitions(c)
@@ -118,7 +118,12 @@ async def assert_refusal(c):
 
             await c.run_sync(downgrade)
     assert caught.value.orig.sqlstate == "55000"
-    await assert_schema(c, "0010")
+    if revision == "0011":
+        from test_m3_2_escalations_migrations import assert_schema as assert_e_schema
+
+        await assert_e_schema(c)
+    else:
+        await assert_schema(c, "0010")
     assert await fingerprints(c) == before and await definitions(c) == ddl
 
 
@@ -139,7 +144,9 @@ async def test_clean_populated_c_cycle_fixed35_projection_and_exact_definitions(
         for _ in range(2):
             await _migrate("upgrade", "0010")
             await _migrate("upgrade", "0010")
-            await h.runtime.check()
+            # Current E source must refuse G/0010; the historical cycle stays G.
+            with pytest.raises(RuntimeError, match="schema"):
+                await h.runtime.check()
             async with h.migrator.connect() as c:
                 await assert_schema(c, "0010")
                 await no_backfill(c)
@@ -193,7 +200,7 @@ async def test_any_guard_usage_refuses_before_ddl_and_preserves_full_g(control, 
             await execute(h, cid, "TAKEOVER", "before-dispatch")
             await h.kernel.begin_guarded_send(send)
     async with h.migrator.begin() as c:
-        await assert_refusal(c)
+        await assert_refusal(c, revision="0011")
 
 
 COMMIT_ACK_LOSS_MARKER = "GUARDS_UPGRADE_COMMITTED_RESULT_LOST"
@@ -274,7 +281,9 @@ async def test_guards_commit_ack_loss_fresh_reader_observes_actual_0010(messagin
             and observed["database"] == "asm_test"
         )
         assert observed["reader_pid"] != child.pid
-        await h.runtime.check()
+        # Lost ACK is still observed as actual G, which E correctly refuses.
+        with pytest.raises(RuntimeError, match="schema"):
+            await h.runtime.check()
     finally:
         await _migrate("upgrade", "head")
         await h.runtime.engine.dispose()
