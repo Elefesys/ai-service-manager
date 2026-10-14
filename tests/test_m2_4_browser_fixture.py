@@ -313,6 +313,56 @@ async def test_escalation_runtime_keeps_privileged_environment_denial(harness, m
         await harness.worker.action("esc_recovery", "escalate-main")
 
 
+@pytest.mark.parametrize("conversation", ["main", "alternate"])
+async def test_escalation_action_ingests_validated_event_then_uses_worker(harness, conversation):
+    """Exercise the real immutable event type, before any runtime I/O is needed."""
+    from asm.messaging.models import NormalizedEventV1
+
+    workspace, job, token = uuid4(), uuid4(), uuid4()
+    claim = SimpleNamespace(
+        kind="PROCESS_TURN", step="ESCALATE_OWNER", job_id=job, claim_token=token
+    )
+    observed = []
+
+    class Kernel:
+        async def ingest_event(self, source, value, correlation):
+            assert isinstance(value, NormalizedEventV1)
+            assert source == value.bot_identity == harness.fixture.bot("esc_happy")
+            assert value.text == harness.worker.MARKER and value.image_file_id is None
+            assert value.chat_id == f"m24-esc_happy-{conversation}"
+            assert value.sender_id == f"m24-esc_happy-{conversation}-client"
+            observed.append("ingest")
+            return SimpleNamespace(code="ACCEPTED", workspace_id=workspace)
+
+        async def claim_job(self, name):
+            observed.append("claim")
+            return claim
+
+        async def replay_escalation(self, job_id, claim_token):
+            assert (job_id, claim_token) == (job, token)
+            observed.append("replay")
+            return SimpleNamespace(workspace_id=workspace)
+
+    class Worker:
+        async def execute(self, received):
+            assert received is claim
+            observed.append("execute")
+
+        async def run_once(self):
+            observed.append("drain")
+            return False
+
+    result = await harness.worker.escalate(
+        Kernel(),
+        Worker(),
+        SimpleNamespace(source=lambda value: value, mismatched=False),
+        "esc_happy",
+        f"escalate-{conversation}",
+    )
+    assert observed == ["ingest", "claim", "execute", "replay", "drain"]
+    assert result == {"created": 1, "worked": 1, "calls": 0, "effects": 0}
+
+
 async def test_seed_handles_due_turn_between_inbox_claims_but_leaves_last_fetch_pending(
     harness, monkeypatch
 ):

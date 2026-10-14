@@ -9,6 +9,7 @@ import json
 import os
 import stat
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
@@ -277,9 +278,7 @@ async def escalate(kernel, worker, adapter, preset, operation):
     # Browser performs the accepted owner Resume first. This ordinary controlled
     # ingress cannot create a request if Resume/billing/marker/authority fails.
     conversation = "alternate" if operation == "escalate-alternate" else "main"
-    value = event(preset, f"escalation-{uuid4()}", conversation=conversation).model_copy(
-        update={"text": MARKER}
-    )
+    value = replace(event(preset, f"escalation-{uuid4()}", conversation=conversation), text=MARKER)
     incoming = await kernel.ingest_event(adapter.source(value.bot_identity), value, uuid4())
     if incoming.code != "ACCEPTED":
         raise ProvisioningError("Fresh controlled Escalation ingress required")

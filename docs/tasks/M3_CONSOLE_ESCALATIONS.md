@@ -90,7 +90,7 @@ and PENDING observation execute before these additions.
 - `npm --prefix frontend run typecheck`: PASS.
 - `npm --prefix frontend test`:294 PASS at the implementation checkpoint, including
   all prior194;99 new API/panel cases and1 additional shared denial variant.
-- `.venv/bin/pytest -q tests/test_m2_4_browser_fixture.py`:61 PASS (prior43 retained).
+- `.venv/bin/pytest -q tests/test_m2_4_browser_fixture.py`:63 PASS (prior43 retained).
 - `.venv/bin/ruff check` and `ruff format --check` on the three allowed harness paths:
   PASS. `git diff --check`:PASS.
 - `npm --prefix frontend run build`: PASS,38 modules.
@@ -129,3 +129,17 @@ runtime/storage guards,120s envelope and counters remain unchanged. The returned
 sanitized seed_turns count makes real interleaving observable in the next CI.
 Focused harness:61 PASS (original43 preserved); regression failed before the fix.
 All runtime claims still require final-source CI. No green SHA is rerun for statistics.
+
+## Immutable event correction after second runtime attempt
+
+Source20fd979/tree5d76b2f CI38609838175/attempt1 browser116010314670
+successfully seeded123 events and executed26 interleaved seed Turns. All33 retained
+browser journeys passed; the six new executions failed in the new creation helper
+before UI decisions. Its generic diagnostic does not expose the exception.
+The exact helper was then exercised locally with the real NormalizedEventV1 type:
+both main/alternate cases failed at `model_copy`, before ingress. That type is a
+frozen dataclass, not a Pydantic model. `dataclasses.replace` constructs and
+validates the marker event before the existing runtime ingest/worker/replay path.
+Both regressions now pass; focused harness63 PASS. No backend or old assertion
+changes, diagnostic expansion, direct domain-row writes or runtime bypass were
+needed. These unit checks do not replace the forthcoming actual browser/PG gate.
