@@ -1271,7 +1271,7 @@ async def test_late_same_turn_file_revision_preserves_lifetime_escalation_identi
     assert (await read(h, e)).status == ("RESOLVED" if resolved else "CANCELLED")
     assert await h.kernel.replay_escalation(claim.job_id, claim.claim_token) == result
     assert not await query(
-        h, "SELECT id FROM platform.turn_guard_receipts WHERE outcome='ACCEPTED'"
+        h, "SELECT job_id FROM platform.turn_guard_receipts WHERE outcome='ACCEPTED'"
     )
     assert h.adapter.calls == h.adapter.effects == 0
 
@@ -1323,20 +1323,24 @@ async def test_typed_receipt_terminal_and_audit_links_reject_each_remaining_subs
         # The reported database constraint must be one of the actual typed
         # terminal/relation/Audit FKs or the exact scalar/pair CHECK, not a unique
         # collision from reusing the receipt. Preserve the original row on error.
-        definition = (
-            await c.execute(
-                text(
-                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='platform.escalation_command_receipts'::regclass AND conname=:name"
-                ),
-                {"name": diag.constraint_name},
+        constraint = (
+            (
+                await c.execute(
+                    text(
+                        "SELECT pg_get_constraintdef(oid) AS definition,confrelid IN ('app.escalations'::regclass,'app.audit_events'::regclass) AS typed_target FROM pg_constraint WHERE conrelid='platform.escalation_command_receipts'::regclass AND conname=:name"
+                    ),
+                    {"name": diag.constraint_name},
+                )
             )
-        ).scalar_one()
+            .mappings()
+            .one()
+        )
+        definition = constraint["definition"]
         if wrong in ("request", "status"):
             assert definition.startswith("FOREIGN KEY (workspace_id,")
-            assert (
-                "REFERENCES app.escalations(" in definition
-                or "REFERENCES app.audit_events(" in definition
-            )
+            # pg_get_constraintdef may omit a schema on search_path. Assert
+            # the actual referenced relation OID, not its rendered spelling.
+            assert constraint["typed_target"] is True
         elif wrong == "version":
             assert "accepted_version = 2" in definition
         elif wrong == "event_type":

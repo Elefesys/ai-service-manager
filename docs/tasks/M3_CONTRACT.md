@@ -3190,3 +3190,18 @@ PROCESS_TURN/TEST_CONSUME; восьмой — старый exact tenancy functio
 M1/M2/CONTROL/GUARDS grants, owner/search_path/PUBLIC checks сохранены.
 Обе G→E state lanes на этом source прошли; они не подменяют8 failures и не
 переносятся как final-source GREEN. Полный rerun после содержательных fixes обязателен.
+
+### 14.15. Actual test-query corrections после второго runner
+
+Run38521506363 на treef55d4a9:675 PG PASS/4 FAIL; прежние восемь failures
+исправлены. Все четыре новые ошибки локализованы в test queries, production
+и reviewed controller не меняются. Оба late-file cases уже прошли same-Turn
+revision/lifetime/timer/replay assertions, затем SELECT несуществующего `id`
+из `platform.turn_guard_receipts` упал с42703; используется фактический `job_id`.
+Оба typed request/status probes получили ожидаемый23503 с правильной relation,
+но `pg_get_constraintdef` опустил `app` из-за search_path. Проверка REFERENCES
+теперь сравнивает actual `confrelid` с schema-qualified regclass OIDs, сохраняя
+SQLSTATE, diagnostic table/name, FK prefix и rollback/original-row assertions.
+Это correction новых tests, не изменение принятого FK-контракта/DDL. Число cases78
+и отсутствие skip/xfail прежние. Full final-source CI/clean9 и C8 ещё требуются;
+второй красный run и его фактические G→E successes сохраняются в canonical receipt.

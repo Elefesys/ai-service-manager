@@ -130,6 +130,12 @@ Actual первый run нового controller:650 PG PASS/8 FAIL (семь idl
 TEST_CONSUME worker drain до timer assertions и exact11 profiles в уже выданном
 tenancy test. Production/DDL/controller bytes неизменны; причины сохранены§14.14.
 
+Второй actual run38521506363:675 PG PASS/4 FAIL, jobs8 SUCCESS/1 FAILURE,
+clean8/1 SKIPPED. Исправлены только новые test queries: Guard receipt имеет
+`job_id`, а typed FK target проверяется catalog OID независимо от display/search_path.
+Late-file lifetime и FK23503 уже сработали; детали§14.15. Все78 cases сохраняются,
+production/controller/dependency прежние; новый source требует полного CI заново.
+
 <details>
 <summary>История checkpoint373aeaf: scope HOLD до решения C0, не активный blocker</summary>
 

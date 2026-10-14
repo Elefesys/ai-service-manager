@@ -61,6 +61,12 @@ clean8 SUCCESS/1 SKIPPED;650 PG PASS/8 FAIL. Исправляются семь �
 assumptions об ordinary TEST_CONSUME и старый exact function inventory;
 полные assertions/grants сохранены. Новый source требует всех final gates заново.
 
+Второй actual CI:675 PG PASS/4 FAIL,8 jobs SUCCESS/1 FAILURE и clean8/1 SKIPPED.
+Прежние8 failures устранены; четыре новых — SELECT `id` вместо Guard `job_id`
+и display-ожидание schema prefix в pg_get_constraintdef. Test-query corrections
+сохраняют exact target OID/SQLSTATE/rollback и все78 cases;§14.15 фиксирует причины.
+Production/controller/DDL/pins неизменны; final-source CI и scoped C8 ещё OPEN.
+
 <details>
 <summary>История выдачи ESCALATION-CONTRACT; заменена implementation выдачей C0</summary>
 
