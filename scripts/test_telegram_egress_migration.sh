@@ -115,11 +115,18 @@ try:
         assert negative['candidate'] == 'c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5'
         assert negative['result'] == 'PASS' and negative['count'] == 3
         admission['actual_cleanup_negatives'] = negative['results']
-        guards = json.loads((e.ROOT / 'reports/guards-schema-phase.json').read_text())
-        assert guards['coordinator'] == source and guards['historical'] == negative['candidate']
+        guards = json.loads((e.ROOT / 'reports/retained-guards/guards-schema-phase.json').read_text())
+        assert guards['coordinator'] == 'c502d5fd258aef15bb5549e1529df8d038a4fb9b' and guards['historical'] == negative['candidate']
         assert guards['cleanup']['state'] == 'PASS'
         assert guards['prepare_budget']['charged_total_seconds'] < 600
-        admission['guards_schema'] = {'source': source, 'revision': '0010', 'report': 'guards-schema-phase.json'}
+        admission['guards_schema'] = {'source': guards['coordinator'], 'revision': '0010', 'report': 'retained-guards/guards-schema-phase.json'}
+        escalation = json.loads((e.ROOT / 'reports/escalation-schema-phase.json').read_text())
+        assert escalation['coordinator'] == source and escalation['historical'] == guards['coordinator']
+        assert escalation['cleanup']['state'] == 'PASS'
+        assert escalation['prepare_budget']['charged_total_seconds'] < 600
+        assert escalation['database']['populated_refusal'] == 'PASS'
+        assert len(escalation['database']['timers']) == 3
+        admission['escalation_schema'] = {'source': source, 'revision': '0011', 'report': 'escalation-schema-phase.json'}
     assert not e.command(['git', 'status', '--porcelain', '--untracked-files=all']).strip()
     print('TELEGRAM_EGRESS_MIGRATION_DISPOSABLE_PASS', flush=True)
 except BaseException as error:

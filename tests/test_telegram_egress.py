@@ -1432,7 +1432,12 @@ def test_guards_inventory_is_exact_c_plus_one_and_old_sources_remain_frozen():
         "platform.turn_guard_receipts"
     }
     assert len(egress.SCHEMA_TABLES["0010"]) == 36
-    for rev in ("0009", "0010"):
+    assert egress.SCHEMA_TABLES["0011"] == egress.SCHEMA_TABLES["0010"] | {
+        "app.escalations",
+        "platform.escalation_command_receipts",
+    }
+    assert len(egress.SCHEMA_TABLES["0011"]) == 38
+    for rev in ("0009", "0010", "0011"):
         exact = egress.SCHEMA_TABLES[rev]
         egress.schema_inventory(rev, exact)
         for changed in (

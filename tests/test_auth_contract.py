@@ -51,9 +51,20 @@ def test_auth_machine_contract_and_generated_c5_api_have_no_drift():
         "POST /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/takeover",
         "POST /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/resume",
     ]
+    # Accepted M3.2 adds exactly four owner routes; the frozen auth list stays exact.
+    escalation_endpoints = [
+        "GET /api/v1/workspaces/{workspace_id}/escalations",
+        "GET /api/v1/workspaces/{workspace_id}/escalations/{escalation_id}",
+        "POST /api/v1/workspaces/{workspace_id}/escalations/{escalation_id}/resolve",
+        "POST /api/v1/workspaces/{workspace_id}/escalations/{escalation_id}/cancel",
+    ]
     assert len(contract["endpoints"]) == 7
     assert actual_endpoints == sorted(
-        contract["endpoints"] + billing_endpoints + messaging_endpoints + control_endpoints
+        contract["endpoints"]
+        + billing_endpoints
+        + messaging_endpoints
+        + control_endpoints
+        + escalation_endpoints
     )
     assert contract["schema_revision"] == "0003" and contract["down_revision"] == "0002"
     assert contract["environments"] == ["LOCAL", "TEST"]

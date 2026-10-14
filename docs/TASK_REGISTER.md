@@ -2,10 +2,12 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — Escalation implementation разрешена / 2026-10-13 UTC
+## Текущий статус — Escalation implementation продолжена после C6 review
 
 **C3-M3.2-ESCALATION-IMPLEMENTATION — IN_PROGRESS. Весь M3 — IN_PROGRESS.**
 [Выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6151237330) заменяет contract-only HOLD.
+[Решение C0 о продолжении](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6161454304)
+сняло scope HOLD: corrected C6 replacement и дополнительный route path разрешены.
 Один Draft PR31, `c3/m3-2-escalation`, отдельный checkout, без reset/rebase/merge.
 Полные разрешённые paths и критерии — [активный M3_HANDOFF§0](tasks/M3_HANDOFF.md).
 
@@ -27,19 +29,26 @@
 | C5-M3.2-CONSOLE-CONTROL | INTEGRATED / VERIFIED LOCAL/TEST, PR30 | M3-A10 только принятый control/in-flight scope |
 | C3-M3.2-ESCALATION-CONTRACT | Принят C0 | Baseline§14 сохранить, evidence отдельно после14.11 |
 | C3-M3.2-ESCALATION-IMPLEMENTATION | IN_PROGRESS | Подготовленный domain/API/0011/tests; runtime gates ещё не пройдены |
-| E compatibility checkpoint | Требует конкретного C0/C6 review | Proposed five-path G→E patch отдельно, пока не применён |
-| Route inventory scope blocker | BLOCKED до разрешения C0 одного дополнительного path | Полный local1113 PASS/1 FAIL; proposed `tests/test_auth_contract.py` добавляет exact четыре routes без ослабления7 auth assertions |
+| E compatibility checkpoint | C6 review завершён; exact corrected replacement APPROVED C0 и применён |41783bytes/hash`2c63dc567c151c8c6be0be342f98f19eb947b6f355ad43a202bd76367140b0f8`; actual G→E и время ещё требуют CI |
+| C6-ESC-COMPAT-01/P2 | Исправление принято C0, source integration предъявляется | G export сохраняет primary/secondary/private evidence; verdict фактического diff за C0 |
+| Route inventory scope blocker | Закрыт решением C0; exact diff применён |1268bytes/hash`501b68c29f740cf57490b2129b5633db694ecde8e70e23c023773390bd060a3e`; максимум43 paths; четыре routes добавлены в closed equality,7 auth assertions прежние |
 | C8 scoped implementation review | TODO | C0 выдаёт после готового candidate |
 | C5 owner-wait/Escalation UI | TODO | После принятого backend/API SHA |
 | Native-owner/edit-delete provenance; M3-ACCEPTANCE | TODO / NOT VERIFIED | Прежние отдельные gates/evidence |
 | IMPL-05 | OPEN; fix DEFERRED | Не включать в эту задачу |
 | C6-CI-FOUNDATION-SPLIT / CI optimization | BLOCKED / DEFERRED до завершения M3 | PR29 закрыт без merge; C6-CI-SPLIT-01 CLOSED только experimental4dc2c32, -02 OPEN |
 
-Текущий checkpoint не является REVIEW готового runtime. Docker локально недоступен;
-actual PG/S3/relay/browser/Docker29 и final CI9/9+clean9/9 впереди. Proposed patches,
-точные commands/results/head/tree/parent и ограничения — один обновляемый C3
-receipt PR31, без документационных SHA commits. После адресного C0/C6 —
-применение compatibility, финальные проверки, C0/C8 и actual main gates.
+Исторический checkpoint373aeaf: local1113 PASS/1 FAIL из-за старого total route
+inventory; CI38448949685/attempt1 FAILURE5 SUCCESS/4 FAILURE, clean5/4 SKIPPED.
+Исходный controller proposal hash78762113… отклонён: export мог заменить
+primary failure. Этот checkpoint сохранён непосредственным parent продолжения;
+неполный старый source повторно не запускается. Accepted contract prefix прежний.
+
+Текущий candidate не является REVIEW готового runtime. Docker локально недоступен;
+actual PG/S3/relay/browser/Docker29 и final CI9/9+clean9/9 требуются на final source.
+Точные commands/results/head/tree/parent, archives, matrix и ограничения — один
+обновляемый [C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6152762197),
+без документационных SHA commits. Затем C0/scoped C8 и actual main gates.
 C3 сам роли не назначает. OPEN082/083/085, M4/LLM/RAG, Approval/M6, Notification
 Engine/M9 и client follow-ups прежние. VM/live/рабочие DB-S3/deploy/merge не выданы.
 

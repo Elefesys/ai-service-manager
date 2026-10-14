@@ -3139,3 +3139,23 @@ actual state lanes, scoped C8 и приёмка C0 остаются gates. Ст�
 IN_PROGRESS; текущий checkpoint BLOCKED/HOLD на указанных согласованиях,
 не INTEGRATED/VERIFIED. Один canonical PR31 receipt содержит SHA/tree/parents,
 commands/results/proposed patches; SHA-only commits не создаются.
+
+### 14.13. C0/C6 exact compatibility activation
+
+[C0 continuation](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6161454304)
+после [C6 review](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6161347908)
+принимает corrected five-path replacement:41783bytes,
+SHA256 `2c63dc567c151c8c6be0be342f98f19eb947b6f355ad43a202bd76367140b0f8`.
+Он применён вместо исходного proposal78762113… от чистого373aeaf checkpoint.
+G report-export failure больше не заменяет прежний shell/timeout primary:
+secondary записан безопасно, private evidence retained; без прежнего failure
+export становится primary. C0 принимает фактический source diff отдельно.
+Route inventory diff1268bytes/hash`501b68c29f740cf57490b2129b5633db694ecde8e70e23c023773390bd060a3e`
+также принят и применён; scope43 с `tests/test_auth_contract.py`, без изменения
+семи auth routes/полного endpoint equality. История§14.12 сохранена.
+
+H/T/C/G identities, Telegram production pins, applied0001–0010, prepare600/
+cleanup90 и все прежние CI lanes/budgets неизменны. Source/unit review не
+является actual G→E/57 PG proof. Final source9/9 CI+clean9, matrix§14.9,
+timings/cleanup/archives и scoped C8 остаются обязательными gates.
+Commands/results/полные SHA — один canonical PR receipt, не будущий GREEN.

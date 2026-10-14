@@ -8,6 +8,8 @@
 ## 0. Активная выдача C0 — C3-M3.2-ESCALATION-IMPLEMENTATION
 
 Дата: 2026-10-13 UTC. Основание — [конкретная выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6151237330).
+Продолжение от checkpoint разрешено [решением C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6161454304)
+после [адресного C6 review](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6161347908).
 Она заменяет прежний contract-only HOLD ниже. Продолжать тот же Draft PR31,
 ветку `c3/m3-2-escalation` в отдельном checkout. Реализация разрешена;
 единственный статус исполнения — в [TASK_REGISTER](../TASK_REGISTER.md).
@@ -66,7 +68,10 @@ M3_CONTRACT и actual dependencies обязательны; canon/snapshots не 
 
 Разрешены ровно40 implementation paths из **M3_CONTRACT§14.10** с указанными
 там причинами и дополнительно этот handoff + `docs/TASK_REGISTER.md` для
-переноса принятой выдачи/фактов. Максимум42, не требование изменить каждый.
+переноса принятой выдачи/фактов. C0 добавил `tests/test_auth_contract.py` только
+для exact approved four-route inventory diff; полный endpoint equality, семь
+frozen auth routes и остальные assertions сохраняются. Максимум43 paths,
+не требование изменить каждый.
 `tests/test_m2_1_postgres.py`, `tests/test_m3_1_control_api_postgres.py`,
 manifest/dependencies/locks/workflows/Compose/images не выданы.
 Дополнительный path — конкретный diff/причина C0 **до применения**.
@@ -74,8 +79,14 @@ manifest/dependencies/locks/workflows/Compose/images не выданы.
 Пять условных paths: `scripts/prepare_telegram_egress.py`,
 `scripts/test_telegram_egress.sh`, `scripts/test_telegram_egress_migration.sh`,
 `tests/test_telegram_egress.py`, `tests/test_telegram_egress_migration.py` —
-только после конкретного C0/C6 diff review. До него предложенный patch хранится
-отдельно от tracked candidate; новые pins не включаются. H/T/C/G identities
+активированы C0 ровно для corrected replacement C6:41783 UTF-8 bytes,
+SHA256 `2c63dc567c151c8c6be0be342f98f19eb947b6f355ad43a202bd76367140b0f8`.
+Исходный proposal41097bytes/hash`78762113ce37a2709f366a8a95d4284525f9def366be579241f4c756bcf4540e`
+отклонён: G report export мог заменить primary failure. Corrected finally
+сохраняет исходное исключение, записывает export failure как secondary; без
+прежнего failure export остаётся primary, private evidence retained.
+Иная содержательная controller/budget/source-identity дельта требует конкретного
+proposed diff C0 до применения. Новые pins не включаются. H/T/C/G identities
 сохранить; G=`c502…`/0010 отдельно от E/0011. Нужна genuine G→E phase в двух
 existing state lanes, exact38 E inventory и полное canonical residual timer
 set после drain; kind/count waiver, сдвиг часов/available_at или удаление future
@@ -84,6 +95,31 @@ committed replacement и exact restore. Prepare600/cleanup90, state25min,
 foundation40/browser25, exact Docker29 и все9 jobs неизменны.
 
 ### 0.3. Текущий implementation checkpoint и gates
+
+Продолжение последовательно от `373aeaf42debba80266c976f95658124455045d5`,
+parent`65454012c0e5a2c9643bf1401d86773a5a4df29a`,
+tree`65ee8f983693ffd973f822c0d28cb952ef64999b`: remote head и clean source
+совпали. Применены exact corrected controller replacement выше и approved
+route diff1268bytes/SHA256`501b68c29f740cf57490b2129b5633db694ecde8e70e23c023773390bd060a3e`;
+hashes, все base blobs/dependency и `git apply --check` проверены до изменения.
+C6 controller review завершён; scope blocker закрыт решением C0, C3 продолжает
+реализацию без нового общего C1/C2/C6 review. C0 проверяет фактическую интеграцию
+C6-ESC-COMPAT-01 по следующему source diff; C3 не объявляет acceptance за C0.
+
+Actual final-source PG/S3/G→E/CI9+clean9 ещё должны дать фактический результат.
+Docker локально отсутствует; local collection/unit не считаются PG/daemon proof.
+Нужны обе state lanes: genuine G baseline/old36/private S3/UNKNOWN, source/schema
+readiness, drain API/worker/scheduler, repeat/unused reverse/used refusal до DDL,
+fresh-reader ACK-loss identity/restart и полный canonical3 residual queue.
+0010 helper branch не объявляется выполненным fallback restart; неизвестное
+состояние STOP. Exact commands/results/checkout/archives/head/parents/tree и
+timings/primary/secondary/cleanup — один обновляемый
+[C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6152762197).
+Старый CI38448949685/attempt1:5 SUCCESS/4 FAILURE, clean5/4 SKIPPED; он не
+проверял эти patches и повторно не запускается. Никакого будущего GREEN заранее.
+
+<details>
+<summary>История checkpoint373aeaf: scope HOLD до решения C0, не активный blocker</summary>
 
 Подготовлены domain/migration/API/Audit и focused tests. Runtime/PG/S3/browser/
 Docker29 proofs **NOT RUN** локально: Docker и PostgreSQL отсутствуют. C3 не
@@ -104,6 +140,8 @@ Focused backend91 PASS, frontend Audit30 PASS; Ruff/mypy и generated OpenAPI
 actual checkout/archive/merge parents/tree. Start CI не переносится на E и
 повторно ради статистики не запускается. C0 выдаёт scoped C8 после готового
 candidate; C5 owner-wait — после принятого backend/API SHA и своего gate.
+
+</details>
 
 M3 остаётся IN_PROGRESS. M3/native/provenance, production OPEN082/083/085,
 IMPL-05 OPEN/fix DEFERRED и CI optimization DEFERRED сохранены. M4/LLM/RAG,
