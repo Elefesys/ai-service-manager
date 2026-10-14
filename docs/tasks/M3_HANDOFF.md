@@ -118,6 +118,18 @@ timings/primary/secondary/cleanup — один обновляемый
 Старый CI38448949685/attempt1:5 SUCCESS/4 FAILURE, clean5/4 SKIPPED; он не
 проверял эти patches и повторно не запускается. Никакого будущего GREEN заранее.
 
+Сверка implementation matrix§14.9 дополнительно дала21 адресный PG case,
+всего78 вместо57: write rollback, late-file lifetime/material, typed terminal
+links и committable poison cleanup в claim/recovery. Это только два уже выданных
+test paths; reviewed controller и его migration-controller dependency прежние.
+Локально1122 non-integration PASS/0 FAIL; PG collection не runtime proof.
+Причины/точные assertions — M3_CONTRACT§14.14 и canonical receipt. Все final-source
+CI/clean gates остаются обязательными после содержательного test commit.
+Actual первый run нового controller:650 PG PASS/8 FAIL (семь idle-queue assumptions
+в новых fixtures, один старый function inventory). Минимальные fixes: normal
+TEST_CONSUME worker drain до timer assertions и exact11 profiles в уже выданном
+tenancy test. Production/DDL/controller bytes неизменны; причины сохранены§14.14.
+
 <details>
 <summary>История checkpoint373aeaf: scope HOLD до решения C0, не активный blocker</summary>
 

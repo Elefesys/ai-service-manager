@@ -242,14 +242,24 @@ async def test_same_tenant_different_client_relation_and_cursor_filter_anchor(es
         ).status_code == 422
 
 
-async def test_db_fault_rolls_back_decision_audit_receipt_and_context(escalation_api):
+@pytest.mark.parametrize("target", ["terminal", "audit", "receipt", "context"])
+async def test_db_fault_rolls_back_decision_audit_receipt_and_context(escalation_api, target):
     h = escalation_api
     e, _, _ = await created(h)
     before = await facts(h)
+    table, check = {
+        "terminal": ("app.escalations", "status='PENDING'"),
+        "audit": ("app.audit_events", "event_type<>'ESCALATION_DECIDED'"),
+        "receipt": ("platform.escalation_command_receipts", "false"),
+        "context": (
+            "app.conversations",
+            f"id<>'{e['conversation_id']}'::uuid OR version<={e['waiting_context_version']}",
+        ),
+    }[target]
     async with h.migrator.begin() as c:
         await c.execute(
             text(
-                "ALTER TABLE platform.escalation_command_receipts ADD CONSTRAINT test_receipt_write_failure CHECK(false) NOT VALID"
+                f"ALTER TABLE {table} ADD CONSTRAINT test_receipt_write_failure CHECK({check}) NOT VALID"
             )
         )
     try:
@@ -258,11 +268,7 @@ async def test_db_fault_rolls_back_decision_audit_receipt_and_context(escalation
         assert await facts(h) == before
     finally:
         async with h.migrator.begin() as c:
-            await c.execute(
-                text(
-                    "ALTER TABLE platform.escalation_command_receipts DROP CONSTRAINT test_receipt_write_failure"
-                )
-            )
+            await c.execute(text(f"ALTER TABLE {table} DROP CONSTRAINT test_receipt_write_failure"))
     assert (await post(h, e)).status_code == 200
 
 

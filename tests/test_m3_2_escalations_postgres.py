@@ -1,6 +1,7 @@
 """Actual PG Escalation lifecycle through CONTROLLED Inbox, normal queue and owner UOW."""
 
 import asyncio
+import json
 import sys
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -94,8 +95,10 @@ async def serial_clock(h):
             await c.commit()
 
 
-async def source(h, *, marker=MARKER, suffix="new", chat="chat-a"):
-    if chat == "chat-a":
+async def source(h, *, marker=MARKER, suffix="new", chat="chat-a", conversation=None):
+    if conversation is not None:
+        cid = conversation
+    elif chat == "chat-a":
         cid, _, _ = await incoming(h)
     else:
         initial = await ingest(
@@ -135,6 +138,14 @@ async def created(h, **source_options):
     cid, claim = await source(h, **source_options)
     before = await state(h, cid)
     await h.worker.execute(claim)
+    # ESCALATE_OWNER and TEST_CONSUME are independent ordinary Turn jobs.
+    # Finish the latter through the normal worker before an assertion about an
+    # otherwise idle timer queue. A prematurely admitted timer still fails here;
+    # no queue row is deleted, filtered out or rescheduled by the fixture.
+    async with asyncio.timeout(5):
+        while other := await h.kernel.claim_job("escalation-fixture-consumers"):
+            assert other.kind == "PROCESS_TURN" and other.step == "TEST_CONSUME"
+            await h.worker.execute(other)
     e = (await query(h, "SELECT * FROM app.escalations WHERE source_job_id=:id", id=claim.job_id))[
         0
     ]
@@ -347,7 +358,7 @@ async def test_other_live_owner_cancel_revoked_assignee_and_no_product_channel_g
     assert (await read(h, e, actor=PROVIDER)).closure.actor_user_account_id == str(PROVIDER)
 
 
-@pytest.mark.parametrize("material", ["manual", "takeover", "inbound"])
+@pytest.mark.parametrize("material", ["manual", "takeover", "inbound", "resume"])
 async def test_material_change_atomically_cancels_without_extra_context_increment(
     control, material
 ):
@@ -358,6 +369,8 @@ async def test_material_change_atomically_cancels_without_extra_context_incremen
         await command(h, e["conversation_id"], "manual exact", "material")
     elif material == "takeover":
         await execute(h, e["conversation_id"], "TAKEOVER", "material")
+    elif material == "resume":
+        await execute(h, e["conversation_id"], "RESUME", "material")
     else:
         await incoming(h, number=91)
     after = await state(h, e["conversation_id"])
@@ -365,7 +378,7 @@ async def test_material_change_atomically_cancels_without_extra_context_incremen
     assert view.status == "CANCELLED" and view.closure.reason == (
         "CONTEXT_CHANGED" if material == "inbound" else "CONTROL_CHANGED"
     )
-    assert after["version"] == prior["version"] + (material != "takeover")
+    assert after["version"] == prior["version"] + (material in ("manual", "inbound"))
     assert after["control_generation"] == prior["control_generation"] + (material != "inbound")
     assert not await query(h, "SELECT * FROM platform.escalation_command_receipts")
 
@@ -1104,3 +1117,337 @@ asyncio.run(main())
             "version": 1,
         }
         assert h.adapter.calls == h.adapter.effects == 0
+
+
+@pytest.mark.parametrize(
+    "target", ["context", "request", "REMIND_1", "REMIND_2", "EXPIRE", "source_terminal"]
+)
+async def test_creation_database_fault_at_each_write_rolls_back_entire_acceptance(control, target):
+    h = control
+    cid, claim = await source(h)
+    current = await state(h, cid)
+    before = await facts(h)
+    if target == "context":
+        table = "app.conversations"
+        check = f"id<>'{cid}'::uuid OR version<={current['version']}"
+    elif target == "request":
+        table, check = "app.escalations", "false"
+    elif target == "source_terminal":
+        table = "platform.messaging_jobs"
+        check = "step IS DISTINCT FROM 'ESCALATE_OWNER' OR status<>'SUCCEEDED'"
+    else:
+        table = "platform.messaging_jobs"
+        check = f"kind<>'ESCALATION_TIMER' OR step<>'{target}'"
+    async with h.migrator.begin() as c:
+        await c.execute(
+            text(
+                f"ALTER TABLE {table} ADD CONSTRAINT escalation_creation_fault CHECK({check}) NOT VALID"
+            )
+        )
+    try:
+        with pytest.raises(DBAPIError) as caught:
+            await h.kernel.request_escalation(claim)
+        assert caught.value.orig.sqlstate == "23514"
+        assert caught.value.orig.diag.constraint_name == "escalation_creation_fault"
+        assert await facts(h) == before
+    finally:
+        async with h.migrator.begin() as c:
+            await c.execute(text(f"ALTER TABLE {table} DROP CONSTRAINT escalation_creation_fault"))
+    result = await h.kernel.request_escalation(claim)
+    assert isinstance(result, EscalationCreationResult)
+    assert len(await query(h, "SELECT id FROM app.escalations")) == 1
+    assert (
+        len(
+            await query(
+                h,
+                "SELECT id FROM platform.messaging_jobs WHERE escalation_id=:id",
+                id=result.escalation_id,
+            )
+        )
+        == 3
+    )
+    assert h.adapter.calls == h.adapter.effects == 0
+
+
+@pytest.mark.parametrize("material", ["file", "delivery"])
+async def test_pending_wait_is_invalidated_by_late_existing_file_or_delivery_result(
+    control, material
+):
+    from asm.files.database import FileDatabase
+    from test_m2_2_db_postgres import MANIFEST
+
+    h = control
+    cid, _, _ = await incoming(h)
+    if material == "file":
+        receipt = await ingest(
+            h, event(event_id="older-photo", message_id="older-photo", image_file_id="image")
+        )
+        await process_receipt(h, receipt)
+        delayed = await next_kind(h, "FETCH_IMAGE")
+    else:
+        await command(h, cid, "earlier manual", "older-manual")
+        delayed = await next_kind(h, "SEND_MANUAL_TEXT")
+    e, _, _ = await created(h, conversation=cid)
+    before = await state(h, cid)
+    if material == "file":
+        files = FileDatabase(h.kernel)
+        permit = await files.prepare_upload(delayed, MANIFEST)
+        assert (
+            await files.finish_fetch(delayed.job_id, delayed.claim_token, permit.intent_id)
+        ).status == "READY"
+    else:
+        await h.worker.execute(delayed)
+    view = await read(h, e)
+    after = await state(h, cid)
+    assert view.status == "CANCELLED" and view.closure.reason == "CONTEXT_CHANGED"
+    assert after["version"] == before["version"] + 1
+    assert after["control_generation"] == before["control_generation"]
+    assert h.adapter.calls == h.adapter.effects == (material == "delivery")
+    assert not await query(h, "SELECT id FROM platform.escalation_command_receipts")
+
+
+@pytest.mark.parametrize("resolved", [False, True])
+async def test_late_same_turn_file_revision_preserves_lifetime_escalation_identity(
+    control, resolved
+):
+    from asm.files.database import FileDatabase
+    from test_m2_2_db_postgres import MANIFEST
+
+    h = control
+    cid, _, _ = await incoming(h)
+    await execute(h, cid, "RESUME", "late-file-resume")
+    for value in (
+        event(event_id="late-marker", message_id="late-marker", text=MARKER),
+        event(event_id="late-photo", message_id="late-photo", image_file_id="image"),
+    ):
+        await process_receipt(h, await ingest(h, value))
+    fetch = await next_kind(h, "FETCH_IMAGE")
+    # Preserve the accepted real 15-second media deadline; no due/clock mutation.
+    async with asyncio.timeout(25):
+        while True:
+            claim = await h.kernel.claim_job("late-escalation")
+            if claim is None:
+                await asyncio.sleep(0.03)
+                continue
+            if claim.kind == "PROCESS_TURN" and claim.step == "ESCALATE_OWNER":
+                break
+            await h.worker.execute(claim)
+    result = await h.kernel.request_escalation(claim)
+    assert isinstance(result, EscalationCreationResult)
+    e = (await query(h, "SELECT * FROM app.escalations"))[0]
+    assert (
+        await query(
+            h,
+            "SELECT turn_id FROM app.conversation_turn_messages WHERE file_id=:id",
+            id=fetch.file_id,
+        )
+    )[0]["turn_id"] == e["turn_id"]
+    assert e["request_snapshot"]["readiness"] == "PARTIAL"
+    timers = await query(
+        h,
+        "SELECT to_jsonb(j) row FROM platform.messaging_jobs j WHERE escalation_id=:id ORDER BY id",
+        id=e["id"],
+    )
+    if resolved:
+        await decide(h, e, "RESOLVE")
+    files = FileDatabase(h.kernel)
+    permit = await files.prepare_upload(fetch, MANIFEST)
+    assert (
+        await files.finish_fetch(fetch.job_id, fetch.claim_token, permit.intent_id)
+    ).status == "READY"
+    revised = await next_kind(h, "PROCESS_TURN", "ESCALATE_OWNER")
+    progress = await h.kernel.request_escalation(revised)
+    assert progress.code == "ALREADY_ESCALATED" and progress.escalation_id == e["id"]
+    assert revised.turn_revision > result.turn_revision
+    assert len(await query(h, "SELECT id FROM app.escalations")) == 1
+    assert (
+        await query(
+            h,
+            "SELECT to_jsonb(j) row FROM platform.messaging_jobs j WHERE escalation_id=:id ORDER BY id",
+            id=e["id"],
+        )
+        == timers
+    )
+    assert (await read(h, e)).status == ("RESOLVED" if resolved else "CANCELLED")
+    assert await h.kernel.replay_escalation(claim.job_id, claim.claim_token) == result
+    assert not await query(
+        h, "SELECT id FROM platform.turn_guard_receipts WHERE outcome='ACCEPTED'"
+    )
+    assert h.adapter.calls == h.adapter.effects == 0
+
+
+@pytest.mark.parametrize("wrong", ["request", "version", "status", "operation", "event_type"])
+async def test_typed_receipt_terminal_and_audit_links_reject_each_remaining_substitution(
+    control, wrong
+):
+    h = control
+    e, _, _ = await created(h)
+    await decide(h, e, "RESOLVE")
+    async with h.migrator.begin() as c:
+        original = (
+            await c.execute(text("SELECT to_jsonb(r) FROM platform.escalation_command_receipts r"))
+        ).scalar_one()
+        changed = dict(original)
+        field, value = {
+            "request": ("escalation_id", str(uuid4())),
+            "version": ("accepted_version", 3),
+            "status": ("accepted_status", "CANCELLED"),
+            "operation": ("operation", "CANCEL"),
+            "event_type": ("audit_event_type", "CONVERSATION_CONTROL_CHANGED"),
+        }[wrong]
+        changed[field] = value
+        changed["result"] = dict(original["result"])
+        if field in changed["result"]:
+            changed["result"][field] = str(value) if field == "accepted_version" else value
+        # Keep status/operation shape valid for the terminal-status FK probe.
+        if wrong == "status":
+            changed["operation"] = changed["result"]["operation"] = "CANCEL"
+        with pytest.raises(DBAPIError) as caught:
+            async with c.begin_nested():
+                await c.execute(
+                    text("DELETE FROM platform.escalation_command_receipts WHERE id=:id"),
+                    {"id": original["id"]},
+                )
+                await c.execute(
+                    text(
+                        "INSERT INTO platform.escalation_command_receipts SELECT (jsonb_populate_record(NULL::platform.escalation_command_receipts,CAST(:row AS jsonb))).*"
+                    ),
+                    {"row": json.dumps(changed)},
+                )
+        assert caught.value.orig.sqlstate == (
+            "23503" if wrong in ("request", "status") else "23514"
+        )
+        diag = caught.value.orig.diag
+        assert (diag.schema_name, diag.table_name) == ("platform", "escalation_command_receipts")
+        assert diag.constraint_name is not None
+        # The reported database constraint must be one of the actual typed
+        # terminal/relation/Audit FKs or the exact scalar/pair CHECK, not a unique
+        # collision from reusing the receipt. Preserve the original row on error.
+        definition = (
+            await c.execute(
+                text(
+                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='platform.escalation_command_receipts'::regclass AND conname=:name"
+                ),
+                {"name": diag.constraint_name},
+            )
+        ).scalar_one()
+        if wrong in ("request", "status"):
+            assert definition.startswith("FOREIGN KEY (workspace_id,")
+            assert (
+                "REFERENCES app.escalations(" in definition
+                or "REFERENCES app.audit_events(" in definition
+            )
+        elif wrong == "version":
+            assert "accepted_version = 2" in definition
+        elif wrong == "event_type":
+            assert "audit_event_type = 'ESCALATION_DECIDED'" in definition
+        else:
+            assert (
+                "operation = 'RESOLVE'" in definition
+                and "accepted_status = 'RESOLVED'" in definition
+            )
+        assert (
+            await c.execute(text("SELECT to_jsonb(r) FROM platform.escalation_command_receipts r"))
+        ).scalar_one() == original
+
+
+@pytest.mark.parametrize("entry", ["claim", "recovery"])
+async def test_allowlisted_expiry_failure_survives_actual_claim_exhaustion_and_recovery(
+    control, entry
+):
+    h = control
+    async with serial_clock(h) as (anchor, set_clock):
+        e, _, _ = await created(h)
+        timer = (
+            await query(
+                h,
+                "SELECT * FROM platform.messaging_jobs WHERE escalation_id=:id AND step='REMIND_1'",
+                id=e["id"],
+            )
+        )[0]
+        if entry == "recovery":
+            await set_clock(anchor + timedelta(minutes=2))
+            claim = await h.kernel.claim_job("poison-recovery")
+            assert claim.job_id == timer["id"]
+        await query(
+            h,
+            "UPDATE platform.messaging_jobs SET attempt_count=5,first_started_at=coalesce(first_started_at,clock_timestamp()) WHERE id=:id RETURNING *",
+            id=timer["id"],
+        )
+        before_request = (await query(h, "SELECT to_jsonb(e) row FROM app.escalations e"))[0]
+        before_context = await state(h, e["conversation_id"])
+        async with h.migrator.begin() as c:
+            original = (
+                await c.execute(
+                    text(
+                        "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='app.escalations'::regclass AND conname='escalations_lifecycle_check'"
+                    )
+                )
+            ).scalar_one()
+            await c.execute(
+                text(
+                    "ALTER TABLE app.escalations RENAME CONSTRAINT escalations_lifecycle_check TO escalation_test_lifecycle_original"
+                )
+            )
+            await c.execute(
+                text(
+                    "ALTER TABLE app.escalations ADD CONSTRAINT escalations_lifecycle_check CHECK(status='PENDING')"
+                )
+            )
+        try:
+            await set_clock(anchor + timedelta(minutes=10))
+            fresh = MessagingDatabase(h.runtime.engine, environment="TEST")
+            if entry == "recovery":
+                # The real DB lease expires; only policy time uses the accepted
+                # private seam. Do not rewrite lease_until to manufacture recovery.
+                remaining = (claim.lease_until - datetime.now(UTC)).total_seconds()
+                if remaining > 0:
+                    await asyncio.sleep(remaining + 0.05)
+                assert await fresh.recover_expired() == 1
+                assert await fresh.recover_expired() == 0
+            else:
+                assert await fresh.claim_job("poison-exhaustion") is None
+                assert await fresh.claim_job("no-dead-reclaim") is None
+            persisted = (
+                await query(
+                    h,
+                    "SELECT status,error_code,escalation_outcome,claim_token,lease_until,worker_id FROM platform.messaging_jobs WHERE id=:id",
+                    id=timer["id"],
+                )
+            )[0]
+            assert persisted == dict(
+                status="DEAD",
+                error_code="INVALID_INPUT",
+                escalation_outcome=None,
+                claim_token=None,
+                lease_until=None,
+                worker_id=None,
+            )
+            assert (await query(h, "SELECT to_jsonb(e) row FROM app.escalations e"))[
+                0
+            ] == before_request
+            assert await state(h, e["conversation_id"]) == before_context
+            view = await read(h, e)
+            assert (
+                view.status == "PENDING"
+                and view.validity == "EXPIRED"
+                and view.maintenance == "FAILED"
+            )
+            assert view.waiting is None and not view.can_resolve and not view.can_cancel
+        finally:
+            async with h.migrator.begin() as c:
+                await c.execute(
+                    text("ALTER TABLE app.escalations DROP CONSTRAINT escalations_lifecycle_check")
+                )
+                await c.execute(
+                    text(
+                        "ALTER TABLE app.escalations RENAME CONSTRAINT escalation_test_lifecycle_original TO escalations_lifecycle_check"
+                    )
+                )
+                assert (
+                    await c.execute(
+                        text(
+                            "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='app.escalations'::regclass AND conname='escalations_lifecycle_check'"
+                        )
+                    )
+                ).scalar_one() == original

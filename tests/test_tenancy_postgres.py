@@ -684,6 +684,17 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "guard_send_begin": (True, True),
             "guard_require_current": (True, False),
             "guard_text_fingerprint": (False, False),
+            "escalation_request_for_turn": (True, True),
+            "escalation_request_replay": (True, True),
+            "escalation_timer_execute": (True, True),
+            "escalation_read": (True, True),
+            "escalation_list": (True, True),
+            "escalation_command": (True, True),
+            "escalation_command_fingerprint": (False, False),
+            "escalation_now": (False, False),
+            "escalation_validity": (True, False),
+            "escalation_context_changed": (True, False),
+            "escalation_immutable": (True, False),
         }
         assert {row["proname"] for row in functions} == (
             legacy_functions | set(m1_3_profiles) | set(m2_profiles) | set(m3_profiles)

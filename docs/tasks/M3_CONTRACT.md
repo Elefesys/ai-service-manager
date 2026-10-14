@@ -3159,3 +3159,34 @@ cleanup90 и все прежние CI lanes/budgets неизменны. Source/u
 является actual G→E/57 PG proof. Final source9/9 CI+clean9, matrix§14.9,
 timings/cleanup/archives и scoped C8 остаются обязательными gates.
 Commands/results/полные SHA — один canonical PR receipt, не будущий GREEN.
+
+### 14.14. Адресное дополнение implementation matrix
+
+При сопоставлении§14.9 с первоначальными57 PG cases добавлен21 случай в уже
+выданных `test_m3_2_escalations_postgres.py` и
+`test_m3_2_escalations_api_postgres.py`: реальные CHECK failures на каждой
+creation/owner write boundary; Resume и поздние file/delivery material changes;
+same-Turn late-file revision до/после owner resolution с lifetime identity;
+отрицательные typed terminal/Audit substitutions; allowlisted cleanup failure
+через actual claim/exhaustion и recovery после реального истечения lease.
+Прежний receipt-write rollback case расширен параметрами без изменения503,
+full snapshot equality и retry assertions. В material-case прежние ожидания
+manual/inbound/Takeover сохранены; Resume проверяет прежний generation-only bump.
+
+78 PG cases собраны локально; collection не является execution evidence.
+Controlled fault constraints и private asm_test clock восстанавливаются в finally;
+LOCAL time/due, production source и reviewed five-path controller patch не меняются.
+`tests/test_m3_2_escalations_migrations.py` остаётся exact reviewed dependency.
+Actual результаты обоих последовательных source/CI записываются только в receipt;
+для окончательного test source обязательны новые9/9 CI и clean9/9.
+
+Первый actual runner source76ce3d6/merge8117637 выполнил650 PG PASS/8 FAIL:
+семь assertions об отсутствии следующей работы получили легальный оставшийся
+PROCESS_TURN/TEST_CONSUME; восьмой — старый exact tenancy function inventory.
+Новая `created` fixture завершает ordinary TEST_CONSUME через normal claim/worker
+до timer assertions, с bounded loop и отказом при любом другом kind/step:
+нет удаления/сдвига Job или ослабления not-due/no-DEAD-retry assertions.
+`tests/test_tenancy_postgres.py` получает ровно11 принятых profiles; полное equality,
+M1/M2/CONTROL/GUARDS grants, owner/search_path/PUBLIC checks сохранены.
+Обе G→E state lanes на этом source прошли; они не подменяют8 failures и не
+переносятся как final-source GREEN. Полный rerun после содержательных fixes обязателен.

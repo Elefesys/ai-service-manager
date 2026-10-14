@@ -52,6 +52,15 @@ actual PG/S3/relay/browser/Docker29 и final CI9/9+clean9/9 требуются �
 C3 сам роли не назначает. OPEN082/083/085, M4/LLM/RAG, Approval/M6, Notification
 Engine/M9 и client follow-ups прежние. VM/live/рабочие DB-S3/deploy/merge не выданы.
 
+Матрица§14.9 дополнена21 PG case в двух разрешённых новых test modules: всего78
+collected, не local actual PG. Полный local non-integration1122 PASS/0 FAIL.
+Controller/dependency/pins/budgets и production source остаются прежними;
+source-bound runtime результаты и оставшиеся gates ведутся в canonical receipt.
+Первый actual CI нового controller:8 jobs SUCCESS/1 foundation FAILURE,
+clean8 SUCCESS/1 SKIPPED;650 PG PASS/8 FAIL. Исправляются семь новых fixture
+assumptions об ordinary TEST_CONSUME и старый exact function inventory;
+полные assertions/grants сохранены. Новый source требует всех final gates заново.
+
 <details>
 <summary>История выдачи ESCALATION-CONTRACT; заменена implementation выдачей C0</summary>
 
