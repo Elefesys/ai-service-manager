@@ -313,6 +313,76 @@ async def test_escalation_runtime_keeps_privileged_environment_denial(harness, m
         await harness.worker.action("esc_recovery", "escalate-main")
 
 
+async def test_seed_handles_due_turn_between_inbox_claims_but_leaves_last_fetch_pending(
+    harness, monkeypatch
+):
+    """More finite fixtures must not assume that a real durable queue is FIFO."""
+    first, last, turn = uuid4(), uuid4(), uuid4()
+    events = [
+        harness.worker.event("esc_happy", "first"),
+        harness.worker.event("happy", "pending-image", image="pending"),
+    ]
+    monkeypatch.setattr(harness.worker, "seed_events", lambda: iter(events))
+    waiting = [
+        SimpleNamespace(kind="PROCESS_INBOX", job_id=first),
+        SimpleNamespace(kind="PROCESS_TURN", step="TEST_CONSUME", job_id=turn),
+        SimpleNamespace(kind="PROCESS_INBOX", job_id=last),
+        SimpleNamespace(kind="FETCH_IMAGE", job_id=uuid4()),
+    ]
+    accepted, executed = [], []
+
+    class Kernel:
+        async def ingest_event(self, source, value, correlation):
+            accepted.append(value)
+            return SimpleNamespace(code="ACCEPTED", job_id=first if len(accepted) == 1 else last)
+
+        async def claim_job(self, name):
+            return waiting.pop(0)
+
+    class Worker:
+        async def execute(self, claim):
+            executed.append(claim.job_id)
+
+    result = await harness.worker.seed(Kernel(), Worker(), SimpleNamespace(source=lambda v: v))
+    assert result["processed"] == 2
+    assert result["seed_turns"] == 1
+    assert executed == [first, turn, last]
+    assert len(waiting) == 1 and waiting[0].kind == "FETCH_IMAGE"
+
+
+@pytest.mark.parametrize(
+    "kind,step",
+    [
+        ("FETCH_IMAGE", None),
+        ("SEND_MANUAL_TEXT", None),
+        ("PROCESS_TURN", "GUARDED_TEXT"),
+        ("PROCESS_TURN", "ESCALATE_OWNER"),
+        ("ESCALATION_TIMER", "EXPIRE"),
+        ("PROCESS_INBOX", None),
+    ],
+)
+async def test_seed_still_rejects_unrelated_jobs_without_executing_them(
+    harness, monkeypatch, kind, step
+):
+    monkeypatch.setattr(
+        harness.worker, "seed_events", lambda: iter([harness.worker.event("esc_happy", "first")])
+    )
+
+    class Kernel:
+        async def ingest_event(self, source, value, correlation):
+            return SimpleNamespace(code="ACCEPTED", job_id=uuid4())
+
+        async def claim_job(self, name):
+            return SimpleNamespace(kind=kind, step=step, job_id=uuid4())
+
+    class Worker:
+        async def execute(self, claim):
+            pytest.fail("Unrelated seed work must not execute")
+
+    with pytest.raises(harness.worker.ProvisioningError, match="Exclusive browser seed"):
+        await harness.worker.seed(Kernel(), Worker(), SimpleNamespace(source=lambda v: v))
+
+
 async def test_control_counters_are_read_only_bound_to_finite_owner_workspace(harness, monkeypatch):
     from contextlib import asynccontextmanager
 

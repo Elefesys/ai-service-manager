@@ -236,21 +236,41 @@ async def drain(worker):
 
 async def seed(kernel, worker, adapter):
     processed = 0
+    seed_turns = 0
+
+    async def next_seed_claim(name):
+        nonlocal seed_turns
+        for _ in range(256):
+            claim = await kernel.claim_job(name)
+            # Earlier HUMAN seed Turns may become due while later fixtures are
+            # ingested. Execute only their ordinary effect-free Turn work, then
+            # retain the exact Inbox/FETCH assertions below. No send/guard/timer
+            # or extra FETCH is drained; the last PENDING image still stays so.
+            if (
+                claim is None
+                or claim.kind != "PROCESS_TURN"
+                or claim.step not in {"GROUP", "MEDIA", "TEST_CONSUME"}
+            ):
+                return claim
+            await worker.execute(claim)
+            seed_turns += 1
+        raise ProvisioningError("Bounded browser seed Turn jobs exceeded")
+
     for value in seed_events():
         receipt = await kernel.ingest_event(adapter.source(value.bot_identity), value, uuid4())
         if receipt.code != "ACCEPTED":
             raise ProvisioningError("Fresh browser TEST Inbox required")
-        claim = await kernel.claim_job("m24-browser-seed")
+        claim = await next_seed_claim("m24-browser-seed")
         if claim is None or claim.kind != "PROCESS_INBOX" or claim.job_id != receipt.job_id:
             raise ProvisioningError("Exclusive browser seed queue required")
         await worker.execute(claim)
         processed += 1
         if value.image_file_id and value.image_file_id != "m24-image-pending":
-            fetch = await kernel.claim_job("m24-browser-image")
+            fetch = await next_seed_claim("m24-browser-image")
             if fetch is None or fetch.kind != "FETCH_IMAGE":
                 raise ProvisioningError("Canonical browser FETCH required")
             await worker.execute(fetch)
-    return {"processed": processed}
+    return {"processed": processed, "seed_turns": seed_turns}
 
 
 async def escalate(kernel, worker, adapter, preset, operation):

@@ -90,7 +90,7 @@ and PENDING observation execute before these additions.
 - `npm --prefix frontend run typecheck`: PASS.
 - `npm --prefix frontend test`:294 PASS at the implementation checkpoint, including
   all prior194;99 new API/panel cases and1 additional shared denial variant.
-- `.venv/bin/pytest -q tests/test_m2_4_browser_fixture.py`:54 PASS (prior43 retained).
+- `.venv/bin/pytest -q tests/test_m2_4_browser_fixture.py`:61 PASS (prior43 retained).
 - `.venv/bin/ruff check` and `ruff format --check` on the three allowed harness paths:
   PASS. `git diff --check`:PASS.
 - `npm --prefix frontend run build`: PASS,38 modules.
@@ -109,3 +109,23 @@ CONTROLLED evidence is not live Telegram or a production SLA. Canonical sources,
 backend/API/DDL/OpenAPI, auth contracts, applied0001–0011, other consumers,
 ConversationControl, dependencies/Compose/workflows/CI budgets are unchanged.
 Next: canonical REVIEW/BLOCKED receipt, HOLD, C0 intake and independent scoped C8.
+
+## Seed ordering correction after first runtime attempt
+
+Initial source e54f1ab/tree86dc436 CI38609159739/attempt1 browser116007742763
+stopped during seed, before journeys, with sanitized M2_4_BROWSER_WORKER_FAILED;
+clean was SKIPPED. That log does not identify the underlying exception.
+A deterministic interleaving regression then reproduced the old seed's exact
+`Exclusive browser seed queue required` failure: a due TEST_CONSUME claim can
+precede the next expected Inbox. This is confirmed unit evidence of a harness
+ordering defect; it does not retroactively prove the old CI exception.
+
+The seed now executes only bounded GROUP/MEDIA/TEST_CONSUME work between claims,
+retaining the exact expected Inbox job ID and FETCH-kind assertions. SEND,
+GUARDED_TEXT, ESCALATE_OWNER, timers, unrelated Inbox/FETCH still fail closed.
+Six negative cases retain that boundary; the positive regression leaves the last
+FETCH unclaimed. No general drain or timestamp/Job rewrite is introduced, and
+runtime/storage guards,120s envelope and counters remain unchanged. The returned
+sanitized seed_turns count makes real interleaving observable in the next CI.
+Focused harness:61 PASS (original43 preserved); regression failed before the fix.
+All runtime claims still require final-source CI. No green SHA is rerun for statistics.
