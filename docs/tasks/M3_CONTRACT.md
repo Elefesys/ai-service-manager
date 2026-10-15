@@ -3286,15 +3286,22 @@ C3/C8 HOLD; C8-M3-ESC-01/P2 OPEN до scoped recheck и решения C0; M3 IN
 
 ### 15.1. Статус, источники и границы доказательства
 
-**C3-M3.1-PROVENANCE-CONTRACT-R2, 2026-10-15 UTC; revised proposal, не LOCKED/VERIFIED.**
+**C3-M3.1-PROVENANCE-CONTRACT-R3, 2026-10-15 UTC; REVIEW, затем C3 HOLD; не LOCKED/VERIFIED.**
 [Исходная выдача](https://github.com/Elefesys/ai-service-manager/pull/32#issuecomment-6185468957),
 [R2 C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189981613),
 [решение C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189999448),
 [C1 review](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189743405),
 [C2 review](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189782680).
-R2 редактирует только существующий§15 по месту. Start/sole parent R2 commit
-`f5e71ff47f000ee55a5509cae4ec22487ca8b6c2`, tree
-`9b91c33724e4f847c8febfbeb24bcf42188e4713`; тот же Draft PR33/branch.
+[R3 C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191877569),
+[C1 R2 PASS](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191616132),
+[C2 R2 CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191712300).
+C1-PROV-01…05/C2-PROV-01…03 закрыты на уровне revised design. Единственный
+обязательный finding R3 — C2-PROV-04/P2, ещё OPEN до приёмки C0: initial-fold
+suppression membership и связанные shared bodies§15.4/7/9. Start/sole parent R3
+`165dd09b0138c66216a8a7d8240af95663165769`, tree
+`f619c5ebad814141d0db0f9cbafccc6cd2089200`; тот же Draft PR33/branch.
+R2 CI38724672096/attempt2 SUCCESS по [C0 intake](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191327158)
+относится только к R2; actual final-head CI фиксируется в новом R3 receipt.
 C0 выбрал ограниченную no-refetch photo policy и направление material/renewal;
 это решения для исправляемого проекта, не приёмка revised текста или реализации.
 Основание — `bae25093bafb9534af68de5c586763667b896e70`, tree
@@ -3542,7 +3549,7 @@ Caption-only с тем же original ref сохраняет пригодный o
 ### 15.4. P02 — increments, traces, Turn, atomicity и current read
 
 C0 сохранил policy per-target increments/deferred folding/sticky invalidation;
-исправленная ordering-норма R2 ещё подлежит review. Единица material effect — один
+ordering-норма R2 согласована C1/C2 на уровне revised design. Единица material effect — один
 canonical Message. N actual changed targets одного DELETE дают context+N и revision+1
 на каждый affected Turn **за batch**, не за ID; прежний принятый prefix§6 не изменён.
 
@@ -3635,6 +3642,45 @@ file не возвращают автоматизацию этого Turn. GROUP
 Hidden deferred original не group-ится; visible folded original использует только
 свою original ingress eligibility, никогда дату/sequence edit.
 
+**R3-02 — общие bodies для новой suppression membership.** Исключение§15.7
+дополняет будущий member CHECK/validator, не меняет original Message/FK type:
+PHOTO остаётся IMAGE_REFERENCE даже при effective TEXT. `turn_group_message` при
+первом materialization выбирает форму INITIAL_FOLD_SUPPRESSED только по verified
+immutable evidence; `turn_member_check` и `turn_members_consistent` проверяют её
+same-Message/origin relation, exact count и прежние capture/deadlines. У fresh eligible
+singleton revision1/member_count1; добавление к existing collecting Turn даёт
+member_count+1/revision+1 ровно за grouping. Fold до membership не даёт отдельного
+revision bump или invalidation этого Turn. Последующий seal сохраняет свои прежние
+переходы/revision rules, не считается вторым grouping.
+
+`turn_seal`, GROUP/MEDIA, V2 `turn_snapshot`/typed decoder и общий readiness body
+оценивают **каждый member** через effective helper, включая file=NULL suppression:
+effective TEXT B — usable TEXT/NOT_APPLICABLE, без media wait за original PHOTO;
+effective replacement PHOTO — PARTIAL/MEDIA_REPLACED_UNAVAILABLE, без вымышленного
+PENDING/FETCH. Пустой inner JOIN к file_objects не доказывает COMPLETE. WAITING_MEDIA
+возможен лишь из-за реального PENDING **effective** original FileObject другого
+либо обычного member, в пределах прежнего media deadline. Недоступная replacement
+сама не создаёт ожидания; её caption можно использовать по согласованной current
+норме. Hidden/no-usable-input и sticky invalidation продолжают блокировать consumer.
+
+Private V2 snapshot разносит historical Message/member identity (original
+content_type, origin/capture, реальный file либо NULL, проверенная member form/evidence
+ref) и current usable material той же effective projection§15.4; digest покрывает
+обе части и принятые semantic versions. Decoder не выводит current type/readiness из
+original content_type или наличия file. Это private snapshot contract, **не новые
+поля MessageResponse/current/API**. Saved V1 snapshot/digest/receipt и V1 decoder
+не переписываются и новой member формой задним числом не дополняются.
+
+Initially hidden PHOTO получает suppression evidence, но **не member/Turn/FETCH**.
+Strictly newer dated edit после dated conflict может восстановить original ref:
+current ORIGINAL_NOT_FETCHED/PARTIAL, без автоматической новой membership/Turn/FETCH.
+При deletion/sticky undated restore по-прежнему запрещён. Evidence хранит initial
+disposition независимо от mutable current, поэтому duplicate original, replay и
+maintenance не переигрывают grouping и не откладывают original FETCH на потом;
+ineligible original также не получает новую eligibility при повторе. Уже созданный
+member остаётся immutable при следующих edits; старые generations/fence/deadlines,
+sticky invalidation, FileObject/WINNER и V1 results сохраняются.
+
 Current readiness: COMPLETE лишь при доступных используемых inputs; иначе PARTIAL
 с typed reason MEDIA_REPLACED_UNAVAILABLE / ORDER_UNCERTAIN / DELETED /
 UNSUPPORTED_CONTENT / ORIGINAL_NOT_FETCHED (retained media pending/failed reasons прежние).
@@ -3682,6 +3728,16 @@ Inbox/Job; historical deferred source Job уже terminal. Supporting keys/FKs§
 NO KEY UPDATE на C/Inbox совместим с identity-only FK KEY SHARE; это необходимая
 статическая граница, не объявление PASS concurrency или отсутствия всех deadlocks.
 
+R3-03: new suppression evidence/member relations§15.7 замыкаются на immutable
+Message/target/origin/receipt/effect identity, не на mutable Message.version/current
+watermark. Evidence создаётся только original INBOUND path после уже взятого
+connection→Conversation barrier; sorted target→Message→Turn order сохраняется.
+В stable-target actual-SENT path нет такой membership/evidence вставки, прямого
+нового connection FK или foreign Job edge; общие helpers не должны добавлять их
+неявно. Origin/source читаются по immutable identity, без повторного lock чужого
+Job/Inbox; identity-only FK KEY SHARE совместим с принятым Inbox NO KEY UPDATE.
+Это обязательство future FK/capability review, не actual concurrency PASS.
+
 Atom и порядок immediate FK: current state/versions/Turn invalidation/context+
 Escalation cancellation → INSERT typed MESSAGE_MATERIAL_CHANGED Audit → INSERT effect
 → own Inbox/Job terminal, один commit. Audit actor_kind=CHANNEL_EVENT,
@@ -3691,6 +3747,17 @@ refs/source receipt, без текста/provider IDs. Не USER_ACCOUNT Owner. 
 target один Audit/effect, для unknown/no-op0. Effect ссылается на тот же Audit/accepted
 version, без FK к mutable Message.version/watermark и без обратного Audit→effect FK.
 Crash before commit откатывает atom; lost ACK не удваивает его. HTTP/S3 вне transaction.
+
+Для R3 initial suppression выбран один порядок внутри этого atom: insert original
+Message/context+1 под original claim → bind/recheck deferred target и применить
+один final fact (m1→2/context+1) → strict material Audit → effect → immutable
+suppression evidence → grouping/member, только если evidence требует membership →
+own Inbox/Job terminal → commit. Immediate evidence→effect→Audit refs уже существуют
+до member INSERT. Deferred integrity check к commit проверяет disposition↔membership
+и отсутствие original File/FETCH; он не откладывает authority/identity checks до
+после grouping. Нарушение любой relation/overflow откатывает **весь** atom. Existing
+material flow для already-known Message сохраняет порядок выше; suppression evidence
+не дополнительный material effect/Audit/context bump.
 
 **Versioned nested owner DTO (R2-05).** В paired MessageResponse добавляется обязательный
 `current` ровно с полями `schema_version:1`, `state`, `content_type`, `text`,
@@ -3908,6 +3975,87 @@ admission capabilities. Original Message body/NormalizedEventV1/hash, Outbox del
 | Actual effect | Message non-NULL, UNIQUE `(source_update_receipt,canonical_message)`; tenant-safe refs на stable target, immutable Message identity, source receipt и тот же Audit. new_version=old_version+1, bounded reason. Historical accepted versions не FK к mutable Message.version или current watermark |
 | Audit | Strict CHANNEL_EVENT/NULL user variant; supporting Audit key связывает ws/Audit ID/тот же Message/event type/accepted version. Audit ссылается на stable canonical identity/source receipt, effect→Audit; обратного Audit→effect FK нет |
 
+**R3-01 — закрытая initial-fold suppression membership (C2-PROV-04).** Retained0008
+CHECK требует FileObject для IMAGE_REFERENCE; заменить member type на current TEXT
+нельзя из-за composite Message FK. В **будущем successor**, не в applied0008/0009,
+выбрана одна новая форма с `membership_form='INITIAL_FOLD_SUPPRESSED'` и обязательным
+`initial_suppression_id`. Для прежней формы оба новых поля NULL; прежние rows/V1 не
+переписываются. Никакого общего PHOTO/file=NULL разрешения нет.
+
+| Member form | Required / NULL и неизменные relations |
+|---|---|
+| Retained, membership_form=NULL | initial_suppression_id=NULL; прежний CHECK: TEXT/file=NULL либо IMAGE_REFERENCE/file NOT NULL с настоящим same-Message FileObject FK. PENDING/FAILED — существующие FileObject, не suppression |
+| INITIAL_FOLD_SUPPRESSED | original content_type=IMAGE_REFERENCE, direction=INBOUND, file_id=NULL; initial_suppression_id NOT NULL и tenant-safe compound FK на evidence того же Message/target/origin с disposition=ELIGIBLE_VISIBLE. Все прежние Turn/Message/origin refs, ingress и capture relations сохраняются |
+
+Marker/evidence/file combination вне этих двух строк — refusal. New member сохраняет
+original `app.messages.content_type`/identity и original origin Inbox; mutable current
+TEXT/PHOTO не подставляется в FK. OUTBOUND/SENT не допускается в обеих member формах.
+
+Immutable основание сохраняется в proposed private
+`platform.message_initial_suppressions`: PK `(workspace_id,id)`, UNIQUE
+`(workspace_id,message_id)`. Это **не** mutable target flag и не копия всего event log.
+Required refs: same-tenant canonical Message, stable bound target, original origin
+Inbox, initial material effect и его source receipt; они все NOT NULL. Supporting
+composite keys/constraint validator связывают evidence→target/Message с одной
+INBOUND IMAGE_REFERENCE identity, теми же C/connection/chat/provider message и через
+C — тем же Client/Business. Evidence→effect проверяет тот же target/Message/source
+receipt и immutable accepted old_version=1/new_version=2; effect→Audit — прежняя
+relation. Origin Inbox действительно CLIENT_MESSAGE того же original provider key,
+original photo ref/body/sender/date; не Inbox edit и не произвольный более новый
+duplicate. Выбор origin прежний: earliest `(turn_ingress_seq NULLS FIRST,id)` после
+connection barrier. Его immutable ingress/captured generation/mode/fence сохраняются
+через exact origin relation; legacy NULL captures не заменяются текущими значениями.
+Membership допустима лишь при прежней original grouping eligibility, которая сама
+по себе **не** выдаёт AI admission.
+
+Evidence хранит frozen `initial_material` (closed semantic state/content по§15.3),
+bounded fold summary/witness refs на immutable verified V2 sidecars (не более трёх,
+delete — один) и `membership_disposition`. Material snapshot доказывает на момент
+first bind ровно одно из: VISIBLE TEXT; VISIBLE PHOTO с ref, отличным от original;
+DELETED/ORDER_UNCERTAIN/UNSUPPORTED_CONTENT. Same original PHOTO, в том числе лишь
+изменённый caption, не suppression exception. Witness equality/identity и выбранный
+effect source проверяются по§15.3–4, quarantine/identity conflict не основание.
+Later target/watermark/current может измениться; frozen initial evidence и accepted
+versions остаются валидными без historical FK к mutable Message.version/watermark.
+Все поля evidence immutable; runtime UPDATE/DELETE запрещены, refs ON DELETE RESTRICT.
+
+`membership_disposition` закрыт: HIDDEN при initial hidden state; иначе
+INELIGIBLE_ORIGIN при отсутствии original grouping eligibility; иначе
+ELIGIBLE_VISIBLE. По этому порядку NULL ingress допустим лишь в no-member ветке;
+ELIGIBLE_VISIBLE требует настоящий original ingress и прежние exact capture checks.
+К commit ELIGIBLE_VISIBLE требует ровно один matching new member; HIDDEN и
+INELIGIBLE_ORIGIN требуют отсутствия membership. Deferred integrity constraint
+проверяет обе стороны, включая попытку позднего member INSERT; evidence не содержит
+обратного Turn/Job FK. Это сохраняет отсутствие membership после hidden→dated restore.
+
+Право создать evidence имеет только private initial-original materialization body
+с server-verified own PROCESS_INBOX claim/task/physical-XID context: именно он в этой
+transaction впервые INSERT-нул данный Message, связал validated deferred fact и
+принял effect1→2 **до** file creation/grouping. Проверяется отсутствие original
+FileObject и связанного FETCH_IMAGE; наличие файла любого статуса, ранее созданного
+member или merely missing file у старого Message — refusal. Runtime не может
+выпустить capability для уже существующего Message, передать arbitrary suppression
+boolean или вставить/изменить evidence direct DML. INSERT evidence и member находятся
+в одном original atom§15.4, не в последующем «repair» commit.
+
+Отсутствие FETCH доказывается не только снимком отсутствующих rows: каждый future
+original File/FETCH creation path обязан отказать для Message с таким immutable
+evidence. Existing File/FETCH/WINNER не удаляются/не маскируются ради exception.
+Повторный original/grouping, replay и maintenance читают initial disposition и не
+создают пропущенную работу позже. Guard проверяет immutable relation под уже принятым
+original connection→Conversation порядком; File completion path не получает
+обратного File→connection lock. Missing/wrong-tenant/wrong-Message/forged evidence
+или mismatch frozen proof даёт integrity refusal и zero partial atom, не fallback
+на NULL-photo либо создание фиктивного PENDING.
+
+Evidence INSERT-before-member позволяет immediate member→evidence→effect→Audit FKs;
+deferred check нужен только для commit-completeness/disposition/no-File инвариантов.
+Новые evidence/member keys ссылаются на immutable Message/target/origin/receipt/effect
+identities, без прямого connection или чужого Job FK. INBOUND-only private capability,
+FORCE RLS и запрет direct runtime SELECT/DML распространяются на evidence. Принятый
+stable-target SENT mapping ниже остаётся без новых reverse edges. Это constraints/
+capability proposal, не SQL implementation, revision или новый migration grant.
+
 Unknown создаёт только bounded target и terminal transport outcome,0 Client/C/Message/
 Turn/File/material effect/Audit. Тот же входной PROCESS_INBOX заканчивается; новых
 wait/polling/automation jobs нет. Duplicate IDs сворачиваются только для lock/effect/
@@ -3945,7 +4093,8 @@ UNKNOWN/private objects, receipts и прежние capability semantics; не �
 Message/Turn/job, не backfill-ит origin/date. Unused downgrade возвращает именно
 predecessor definitions/grants/inventory. Used blockers проверяются **до любого DDL**
 для объектов, введённых откатываемой revision: V2 receipt/sidecar/material-result/
-target/effect/invalidated Turn для material; renewal receipt/Audit/новый interval и
+target/effect/initial-suppression evidence/new member form/invalidated Turn для material;
+renewal receipt/Audit/новый interval и
 mode transition для renewal. Уже принятый renewal predecessor не объявляется новым
 material used state. Последующие revisions сначала откатываются по их собственным
 правилам. Used recovery — совместимый P source/gates OFF либо forward fix, не B поверх
@@ -4165,6 +4314,22 @@ TEST messages и оставить HUMAN до reconciliation;
 | P-A08-02 actual PG ordering | Ingress/Resume barrier, candidate before/after Resume при одинаковых provider fields, replay0; local fence не causal proof. Console control сохраняет accepted guards; candidate-only не создаёт transcript и не блокирует actual0011 Resume новой фиктивной проверкой |
 | P-A08-03 account/renewal gate | Exact actual source/schema/binding; оба TEST окна. Future renewal CAS mode+append subscription+strict Audit/receipt atom, replay сохранённых дат, conflict/rollback/no-overlap/SUSPENDED rejection, clock после wait и реальный product gate на from/until. Finite authenticated collector, Console control до native, после native HUMAN; observation ≠causal/latest-state proof |
 
+**C2-PROV-04: адресные R3 traces / future PG assertions.** Это ручной вывод из
+proposal, **не исполненные tests**. Во всех positive traces B/C/identity verified;
+P — ещё неизвестный original PHOTO F/caption A. Deferred commits имеют0 domain
+increments/effects/Audit/File/Turn. Затем normal original worker впервые materializes
+P; ΔC ниже включает original+1, material Audit/effect считается отдельно от transport.
+Для fresh singleton origin eligible, нет collecting Turn и немедленного seal;
+для existing Turn origin попадает в прежнее collecting окно без boundary/seal.
+
+| ID / trace | Обязательный результат / future assertion |
+|---|---|
+| R3-T1: deferred E20(TEXT B) → original PHOTO F | m2/ΔC+2/один material effect+Audit,0 File/FETCH. Immutable Message/member IMAGE_REFERENCE; INITIAL_FOLD_SUPPRESSED/file=NULL с same-Message evidence ELIGIBLE_VISIBLE; current TEXT B. Fresh revision1/member_count1; existing R/n→R+1/n+1, fold не второй bump. Seal/snapshot используют TEXT, без ложного media wait; при отсутствии иных blockers COMPLETE |
+| R3-T2: deferred E20(PHOTO G/caption B), G≠F → original F | Те же m2/ΔC+2/один effect+Audit,0 File/FETCH и exact grouping increments. New member IMAGE_REFERENCE/file=NULL; current PHOTO/PARTIAL/MEDIA_REPLACED_UNAVAILABLE. Seal/snapshot сохраняют unavailable reason, empty file JOIN не COMPLETE и не PENDING/WAITING_MEDIA ради replacement |
+| R3-T3: deferred E10(PHOTO G), F10(PHOTO H), G≠H → original F → E20(PHOTO F) | Initial dated conflict: m2/ΔC+2/один effect+Audit, evidence HIDDEN,0 member/Turn/File/FETCH. Strictly newer restore: m3/ещё C+1/ещё один effect+Audit; current ORIGINAL_NOT_FETCHED/PARTIAL,0 нового member/Turn/File/FETCH. Evidence HIDDEN остаётся immutable, historical FK не зависит от m3/current watermark |
+| R3-T4: legacy/unchanged PHOTO+NULL; invalid suppression | Retained member form PHOTO/file=NULL отказывает. Missing/wrong-tenant/wrong-Message/forged evidence, origin/effect mismatch, попытка exception при реальном PENDING/FAILED File или для старого missing File — refusal, zero partial atom: нет новых Message/context/member/Turn/effect/Audit/evidence/Job deltas этого atom. Подмена member type на TEXT также refusal |
+| R3-T5: duplicate original / exact replay / maintenance после T1–T3 | Не добавляют material effect/Audit/context/grouping bump/File/FETCH. Existing membership не дублируется; initial HIDDEN/INELIGIBLE_ORIGIN не получает member, даже после restore. Законные GROUP/MEDIA переходы имеющегося Turn сохраняют прежние revision/deadline rules. Saved V1 snapshot/digest/receipt/decoder и File WINNER неизменны |
+
 Граница execution evidence: принятый GUARDS producer исполняется только на CONTROLLED,
 автоматической Telegram отправки сейчас нет. Поэтому P-A03-06 состоит из двух честных
 proofs: TELEGRAM V2→обычный worker→material state/context/Escalation invalidation и
@@ -4180,8 +4345,8 @@ Public/production mutation helper не принимает произвольны
 | Decision / статус | Что выбрано C0 / что остаётся |
 |---|---|
 | P-01 **OPEN** | Candidate-only + явный control не восстанавливают native human transcript. Resumable путь — canonical Console reply; native-only HUMAN до отдельно принятого context ingestion/reconciliation. No automatic takeover по arrival; native/latest-state/A08 NOT VERIFIED |
-| P-02 policy direction выбрано, revised contract **REVIEW** | Per-target increments, deferred folding, sticky suppression invalidated Turn сохраняются. R2 выбирает conservative undated→sticky uncertainty и точные traces; C1/C2 должны адресно проверить revised ordering/unions/locks. Implementation NOT VERIFIED |
-| P-03 no-refetch policy **выбрана C0**, revised contract **REVIEW** | Явное MEDIA_REPLACED_UNAVAILABLE/label/PARTIAL и потеря открытия/анализа replacement. Full replacement не поддержан этим slice. DTO/grant/UI реализация NOT VERIFIED, весь A03/M3 не принят |
+| P-02 policy direction выбрано, revised contract **REVIEW** | Per-target increments, deferred folding, sticky suppression invalidated Turn сохраняются. C1/C2 R2 согласовали ordering/unions/locks на уровне design; R3 membership/shared bodies по C2-PROV-04 ещё требуют адресного C2 review и C0 acceptance. Implementation NOT VERIFIED |
+| P-03 no-refetch policy **выбрана C0**, revised contract **REVIEW** | Явное MEDIA_REPLACED_UNAVAILABLE/label/PARTIAL и потеря открытия/анализа replacement. Full replacement не поддержан этим slice. Согласованный C1 current DTO неизменён; R3 дополняет internal membership/seal/snapshot. DTO/grant/UI реализация NOT VERIFIED, весь A03/M3 не принят |
 | P-04 **OPEN** | C0/C2/C6 отдельно назначают exact predecessor/revision/order/source/profile/implementation allowlist. Renewal/material последовательно;0012 не назначена; actual migration/compat evidence ещё нет |
 | P-05 **OPEN** | Выбран future append subscription + CAS NORMAL/PROVISIONED_LOCAL mode + immutable before/after/Audit. Команда/схема/collector/deploy/live не выданы и NOT VERIFIED. Старый TEST истёк, оба новых окна не подтверждены, VM UNKNOWN/live BLOCKED_TEST_INTERVAL |
 
@@ -4196,19 +4361,30 @@ Public/production mutation helper не принимает произвольны
 | R2-07 / C1-PROV-05 + C2-PROV-03 |§15.7–8/P-A08-03: оба TEST окна, CAS single mode row, immutable before/after, stable replay dates, последовательные schemas |
 | R2-08 / C2-P01/P03/P04/P06 |§15.4/6/7/9: composite binding/FKs, stable-target SENT closure, same apply/readiness/read body; actual PG proof не заявлен |
 
-C1-P01–07/C2-P01–07 review dispositions сохранены в исходных комментариях; обязательные
-C1-PROV-01…05/C2-PROV-01…03 отображены выше. Старые PASS — статическая оценка старого
-proposal/retained source, не acceptance R2. Policy choice, revised-contract acceptance,
-implementation evidence и account observation — разные стадии.
+C1-P01–07/C2-P01–07 review dispositions сохранены в исходных комментариях. По C1/C2
+R2 reviews§15.1 C1-PROV-01…05/C2-PROV-01…03 CLOSED **на уровне revised design**;
+повтор этих sections не требуется. C2-PROV-04/P2 остаётся OPEN до адресной приёмки,
+в этом diff только предлагаемое исправление:
+
+| R3 / C2-PROV-04 mapping | Норма / ручной trace и будущая проверка |
+|---|---|
+| R3-01 |§15.7: closed INITIAL_FOLD_SUPPRESSED/member evidence, frozen initial basis/identity/disposition и commit integrity; R3-T1–T4 |
+| R3-02 |§15.4: shared grouping/member validators/seal/V2 snapshot/readiness, original identity отдельно от current; R3-T1–T3/T5 |
+| R3-03 |§15.4/7: original atom, immutable FK/accepted version, connection→C→sorted targets/Messages/Turns, stable-target SENT без reverse connection/foreign Job; P-A03-02/04 и R3-T4 |
+| R3-04 |§15.9 R3-T1–T5: exact counters/grouping, negative constraints, hidden restore/replay/maintenance, truthful snapshot и retained V1 |
+
+Policy choice, revised-contract acceptance, implementation evidence и account
+observation — разные стадии; native P-01/latest-state остаётся OPEN.
 
 P01→§15.1–2; P02→§15.3–4; P03→§15.5; P04→§15.6–7;
 P05→§15.8; P06→§15.9. Static scope/prefix/original11/manifest/history/links,
-ручные traces и diff-check достаточны для R2. Product suites/Docker/Actions dispatch/
+ручные traces и diff-check достаточны для R3. Product suites/Docker/Actions dispatch/
 rerun не запускаются ради docs. Automatic final-head CI будет указан фактически
-в **одном новом canonical R2 receipt того же Draft PR33**, без status-only commit;
-старый green head не R2 evidence. Старые C3/C1/C2 receipts не редактируются.
+в **одном новом canonical R3 receipt того же Draft PR33**, без status-only commit;
+старый R2 green head не R3 evidence. Старые C3/C1/C2 receipts не редактируются.
 Возврат **REVIEW**, затем C3 HOLD. C0 проверяет новый exact head и назначает адресный
-повторный C1/C2 review; C1/C2/C5/C6/C8 до выдачи HOLD. Runtime/migration/renewal/probe/
+C2 re-review только C2-PROV-04/shared bodies/locks; полного C1 review при неизменном
+API/current DTO не требуется. C1/C2/C5/C6/C8 до выдачи HOLD. Runtime/migration/renewal/probe/
 VM/live/DB/S3/sends/deploy не выданы; merge пользователем после приёмки.
 M3 IN_PROGRESS, A03/A08/acceptance впереди, M4/LLM/production/IMPL-05/CI optimization
 не открываются.

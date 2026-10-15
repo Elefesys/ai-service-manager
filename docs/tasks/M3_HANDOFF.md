@@ -5,7 +5,58 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Активная выдача C0 — C3-M3.1-PROVENANCE-CONTRACT-R2
+## 0. Активная выдача C0 — C3-M3.1-PROVENANCE-CONTRACT-R3
+
+[Поручение C0 R3](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191877569).
+**C3 R3 — REVIEW при передаче diff, затем HOLD.** M3 IN_PROGRESS;
+C1/C2/C5/C6/C8 HOLD до отдельной выдачи. Ниже сохранена история; её прежние active
+формулировки не новые поручения. Единственный обязательный finding — C2-PROV-04/P2,
+OPEN до адресного C2 re-review и приёмки C0, не самостоятельно закрыт C3.
+
+| Binding / evidence | Значение |
+|---|---|
+| Repository / PR / branch→target | Elefesys/ai-service-manager / тот же Draft [PR33](https://github.com/Elefesys/ai-service-manager/pull/33) / `c3/m3-1-provenance`→main |
+| R3 start / sole parent | `165dd09b0138c66216a8a7d8240af95663165769` |
+| Start tree | `f619c5ebad814141d0db0f9cbafccc6cd2089200` |
+| Accepted main/base / schema | `bae25093bafb9534af68de5c586763667b896e70` /0011; applied0001–0011 immutable; successor/revision/order не назначены |
+| C3 R2 / C0 intake | [R2 receipt](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6190608696) / [C0 intake](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191327158), сохранены |
+| C1 R2 | [PASS](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191616132): C1-PROV-01…05 CLOSED на уровне revised design |
+| C2 R2 | [CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191712300): C2-PROV-01…03 CLOSED на уровне revised design; C2-PROV-04/P2 OPEN |
+| Existing R2 CI | [38724672096/attempt2](https://github.com/Elefesys/ai-service-manager/actions/runs/38724672096), aggregate9/9+clean9/9 SUCCESS по C0; только R2 evidence, не R3/future implementation PASS |
+
+Отдельный чистый checkout exact start; remote main/branch/tree сверены. Один
+содержательный commit поверх R2 в том же PR, без reset/rebase/force-push. Final
+head/parent/tree/numstat и actual automatic CI — в одном новом canonical R3 receipt,
+без self-SHA/status-only commit; старые authored receipts не редактируются.
+
+Ровно3 paths: `docs/tasks/M3_CONTRACT.md` (точечно§15.4/7/9, статус§15.1), этот handoff,
+`docs/TASK_REGISTER.md`. Accepted prefix345960 bytes/SHA256
+`b53b3f9caa4af82c095cd2e4d1ac22a0bef435a5d657dacde3278498d2808302`,
+original11/manifest и historical tails сохранены. AGENTS/Spec/применимые ADR,
+MVP/Roadmap/Implementation Plan и actual0008 CHECK/FKs/final0009 grouping/capture,
+shared seal/snapshot bodies сверены; accepted0011 не переоткрывается.
+
+| R3 / C2-PROV-04 | Предлагаемая норма |
+|---|---|
+| R3-01 →§15.7 | Одна closed INITIAL_FOLD_SUPPRESSED member форма: original IMAGE_REFERENCE/INBOUND, file=NULL только с same-Message immutable initial evidence/effect/origin; legacy PHOTO по-прежнему требует FileObject |
+| R3-02 →§15.4/7 | Общие grouping/member validator/seal/V2 snapshot/readiness различают historical identity и usable current. TEXT без media wait; replacement PHOTO PARTIAL; hidden original без membership/FETCH, restore ORIGINAL_NOT_FETCHED не создаёт Turn |
+| R3-03 →§15.4/7 | Один original atom; Audit→effect→evidence→member, commit integrity. Original connection→C и sorted target/Message/Turn order, identity-only FKs; stable-target SENT без reverse connection/foreign Job; FORCE RLS/private capabilities сохранены |
+| R3-04 →§15.9 R3-T1–T5 | Ручные traces/future PG assertions: m2/context+2/один effect+Audit, fresh revision1/member_count1 либо один collecting increment; forged evidence refusal/zero partial atom; replay/hidden restore/seal/V1 |
+
+API/current DTO, V2 codec/ordering/TargetResult, no-refetch/native/renewal policy и
+future path allowlist не расширены. P-01/native/A08/latest-state OPEN/NOT VERIFIED;
+P-04/P-05 OPEN. TEST interval истёк, VM UNKNOWN/live BLOCKED_TEST_INTERVAL.
+Static scope/prefix/original11/manifest/history/link/diff checks и ручные traces
+достаточны; это не executed PG tests. Product suites/Docker/Actions dispatch/rerun
+не запускаются ради docs; automatic CI не отключается и не переносится с R2.
+
+Следующий шаг C0: exact-head intake, затем адресный **C2 re-review только
+C2-PROV-04 и затронутых shared bodies/locks**. Полный C1 review не нужен при сохранённом
+API/current DTO. Runtime/migrations/renewal/probe/VM/live/DB/S3/sends/deploy не выданы;
+PR Draft, merge пользователем после приёмки. M4/CI optimization/IMPL-05 не открываются.
+
+
+## История выдачи C0 — C3-M3.1-PROVENANCE-CONTRACT-R2
 
 [R2 C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189981613)
 и [disposition C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189999448).

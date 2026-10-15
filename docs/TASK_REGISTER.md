@@ -2,7 +2,38 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C3-M3.1-PROVENANCE-CONTRACT-R2 / 2026-10-15 UTC
+## Текущий статус — C3-M3.1-PROVENANCE-CONTRACT-R3 / 2026-10-15 UTC
+
+**R3 — REVIEW при передаче diff, затем C3 HOLD. M3 — IN_PROGRESS.**
+[Поручение C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191877569),
+[активный handoff](tasks/M3_HANDOFF.md),
+[proposal§15](tasks/M3_CONTRACT.md#15-native-provenance-и-material-editdelete--proposal).
+
+| Задача / факт | Текущий статус и граница evidence |
+|---|---|
+| Accepted main/base / schema | `bae25093bafb9534af68de5c586763667b896e70` /0011; applied0001–0011 immutable; следующий revision/order не назначены |
+| R3 start / sole parent / tree | `165dd09b0138c66216a8a7d8240af95663165769` / tree `f619c5ebad814141d0db0f9cbafccc6cd2089200` |
+| C3 R2 delivery/intake | [C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6190608696), [C0 intake](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191327158), сохранены |
+| C1 R2 | [PASS revised design](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191616132); C1-PROV-01…05 CLOSED, без implementation acceptance |
+| C2 R2 | [CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191712300); C2-PROV-01…03 CLOSED revised design, единственный обязательный C2-PROV-04/P2 OPEN |
+| C3 R3 | REVIEW: один commit поверх R2, тот же Draft PR33/branch→main, ровно3 docs. INITIAL_FOLD_SUPPRESSED member/evidence и общие grouping/seal/snapshot/readiness; R3-01…04→§15.4/7/9, traces R3-T1–T5. Finding не закрывается C3 до C0 acceptance |
+| C1/C2/C5/C6/C8 | HOLD. После intake C0 выдаст только адресный C2 re-review C2-PROV-04/shared bodies/locks; полный C1 review не нужен при неизменном API/current DTO |
+| R2 CI | [38724672096/attempt2](https://github.com/Elefesys/ai-service-manager/actions/runs/38724672096), aggregate9/9+clean9/9 SUCCESS по C0; не evidence нового R3 head и не future V2 PG PASS |
+| TURNS/CONTROL/GUARDS/Escalation/Console | Прежняя INTEGRATED/VERIFIED LOCAL/TEST приёмка сохранена; accepted0011/runtime не переоткрыт |
+| M3-A03 / P-02 / P-03 | Revised design остаётся REVIEW из-за C2-PROV-04; согласованные R2 ordering/codec/current DTO и выбранная no-refetch policy сохранены. Implementation/UI/grant/final acceptance NOT VERIFIED |
+| M3-A08 / P-01 | OPEN/NOT VERIFIED: native/latest-state не закрыт. Console canonical reply — поддержанный resumable path; native-only HUMAN до принятого reconciliation; actual0011 не содержит новой Resume block |
+| P-04/P-05 / TEST / VM | OPEN; implementation/renewal/probe не выданы. Старый TEST interval истёк, оба новых окна не подтверждены; VM UNKNOWN/live BLOCKED_TEST_INTERVAL |
+| M3-ACCEPTANCE / M4 / CI optimization / IMPL-05 | M3 acceptance впереди; M4/optimization/IMPL-05 не открываются |
+
+Scope/prefix345960 bytes/original11/manifest/history/link/diff checks и manual traces
+достаточны. Новый canonical R3 receipt содержит final SHA/parent/tree/numstat и actual
+automatic CI; old R2 green не переносится, status-only commit не нужен. Product suites/
+Docker/Actions dispatch/rerun/VM/live/DB/S3/sends/deploy не запускаются. Future allowlist
+остаётся proposal, PR Draft; merge пользователем после приёмки. Старые receipts и
+historical tails ниже сохранены, их прежние active формулировки не новые поручения.
+
+
+## История — C3-M3.1-PROVENANCE-CONTRACT-R2 / 2026-10-15 UTC
 
 **R2 — REVIEW при передаче diff; затем C3 HOLD. M3 — IN_PROGRESS.**
 [Выдача R2](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189981613),
