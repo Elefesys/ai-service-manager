@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { escalationApi, EscalationError } from './escalation-api';
 import { api } from './api';
 import { controlApi, ControlReceipt } from './conversation-control-api';
 import { controlState, controlReceipt } from './messaging-fixtures.test-helper';
@@ -12,6 +13,7 @@ import { MessagingError, Message, ReadGrant, SendReceipt, messagingApi } from '.
 import { connection, conversation, conversationId, deferred, id, message, ok, outbound, page, photo, receipt, session, ws } from './messaging-fixtures.test-helper';
 
 beforeEach(() => {
+  vi.spyOn(escalationApi,'list').mockResolvedValue({items:[],next_cursor:null,observed_at:'2030-01-01T00:00:00.000000Z'});
   vi.spyOn(controlApi,'read').mockImplementation(async context=>controlState(context));
   vi.spyOn(controlApi,'command').mockImplementation(async(context,operation,body)=>controlReceipt(operation,body,context));
   vi.spyOn(messagingApi,'connections').mockResolvedValue(page(connection()));
@@ -183,7 +185,7 @@ describe('one frozen intention and receipt-aware recovery',()=>{
     await screen.findByRole('button',{name:'Повторить исходный ответ'}); const before=checks; fireEvent.focus(window); await waitFor(()=>expect(checks).toBeGreaterThan(before)); await waitFor(()=>expect(screen.getByRole('button',{name:'Повторить исходный ответ'})).toBeEnabled()); fireEvent.click(screen.getByRole('button',{name:'Повторить исходный ответ'})); await ready(); expect(messagingApi.send).toHaveBeenCalledTimes(2);
     v.unmount(); const reloaded=render(<App/>); await ready(); expect(messagingApi.send).toHaveBeenCalledTimes(2); const reads=vi.mocked(messagingApi.connections).mock.calls.length; reloaded.unmount(); render(<App pathname="/ops/"/>); await screen.findByText('Проверка готовности пройдена'); expect(messagingApi.connections).toHaveBeenCalledTimes(reads); expect(screen.queryByRole('region',{name:'Переписка'})).toBeNull(); expect(localStorage.length+sessionStorage.length).toBe(0);
   });
-  it.each(['billing','messaging'] as const)('current %s OWNER denial hides both panels and preserves a pending reply until explicit recovery',async source=>{
+  it.each(['billing','messaging','escalation'] as const)('current %s OWNER denial hides all owner panels and preserves a pending reply until explicit recovery',async source=>{
     vi.spyOn(api,'session').mockResolvedValue(session()); vi.spyOn(api,'businesses').mockResolvedValue([]);
     vi.spyOn(billingApi,'read').mockResolvedValue({...billing(),workspace_id:ws});
     vi.spyOn(billingApi,'audit').mockResolvedValue({items:[],next_cursor:null});
@@ -193,10 +195,12 @@ describe('one frozen intention and receipt-aware recovery',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Открыть изображение'})); await screen.findByRole('img');
     await submit('Frozen reply through owner denial');
     if(source==='billing') {vi.mocked(billingApi.read).mockRejectedValueOnce(new BillingError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить подписку'}));}
-    else {vi.mocked(messagingApi.connections).mockRejectedValueOnce(new MessagingError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить подключения'}));}
+    else if(source==='messaging') {vi.mocked(messagingApi.connections).mockRejectedValueOnce(new MessagingError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить подключения'}));}
+    else {vi.mocked(escalationApi.list).mockRejectedValueOnce(new EscalationError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить очередь'}));}
     await screen.findByText('Нет доступа к данным владельца');
     expect(screen.queryByRole('img')).toBeNull(); expect(screen.queryByTestId('current-contact')).toBeNull();
     expect(screen.queryByRole('region',{name:'Переписка'})).toBeNull(); expect(screen.queryByRole('region',{name:'Audit'})).toBeNull();
+    expect(screen.queryByRole('region',{name:'Запросы владельцу'})).toBeNull();
     expect(screen.queryByDisplayValue('Frozen reply through owner denial')).toBeNull(); expect(api.session).toHaveBeenCalledTimes(1);
     await act(async()=>pending.resolve(receipt())); // A late202 cannot reopen the denied context.
     expect(screen.queryByRole('img')).toBeNull(); expect(messagingApi.send).toHaveBeenCalledTimes(1);

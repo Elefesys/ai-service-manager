@@ -9,13 +9,14 @@ import { randomUUID } from 'node:crypto';
 import { requireSafeResult, safeDiagnostic, type SafeResult } from './safe-diagnostic';
 import { parseMessage, parsePage, parseReceipt, type SendReceipt } from '../src/messaging-api';
 import { parseControlState, parseControlReceipt, type ControlBody, type ControlOperation } from '../src/conversation-control-api';
+import { parseEscalation, parseEscalationPage, parseEscalationReceipt, type EscalationView, type EscalationBody, type EscalationReceipt, type EscalationOperation } from '../src/escalation-api';
 
 const envPath=process.env.ASM_BROWSER_ENV_FILE, fixturePath=process.env.ASM_BROWSER_FIXTURE_FILE, inventoryPath=process.env.ASM_BROWSER_MESSAGING_FILE, passwordPath=process.env.ASM_BROWSER_PASSWORD_FILE, counterDir=process.env.ASM_BROWSER_COUNTER_DIR;
 if(!envPath||!fixturePath||!inventoryPath||!passwordPath||!counterDir) throw new Error('E2E_SAFE_FAILURE:MESSAGING_PRIVATE_FILES_REQUIRED');
 function privateJson(path:string) { try { return JSON.parse(readFileSync(path,'utf8')); } catch { throw new Error('E2E_SAFE_FAILURE:MESSAGING_FIXTURE_OUTPUT'); } }
 const fixtures:Record<string,{workspace_id:string;user_account_id:string;login:string}>=privateJson(fixturePath).messaging_fixtures;
 type Ref={conversation_id:string;message_id:string;file_id:string};
-type Inventory={conversation_id:string;client_id:string;alternate_conversation_id:string;connection_ids:string[];conversation_ids:string[];message_ids:string[];images:{ready:Ref;failed?:Ref;pending?:Ref}};
+type Inventory={conversation_id:string;client_id:string;alternate_conversation_id:string;alternate_client_id:string;connection_ids:string[];conversation_ids:string[];message_ids:string[];images:{ready:Ref;failed?:Ref;pending?:Ref}};
 const inventory:Record<string,Inventory>=privateJson(inventoryPath), password=readFileSync(passwordPath,'utf8');
 const origin='http://127.0.0.1:8080';
 const path=(preset:string,suffix:string)=>`/api/v1/workspaces/${fixtures[preset].workspace_id}/${suffix}`;
@@ -213,4 +214,116 @@ test('real credentialed messaging CORS POST and rejected preflight do not duplic
     const positive=await page.evaluate(async({url,token,key})=>{try{return (await fetch(url,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','X-CSRF-Token':token,'Idempotency-Key':key},body:JSON.stringify({text:'CORS accepted'})})).status;}catch{return 0;}},{url,token,key:randomUUID()});expect(positive).toBe(202);await expect.poll(()=>statuses.includes(200)).toBe(true);
     const negative=await page.evaluate(async({url,token,key})=>{try{await fetch(url,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json','X-CSRF-Token':token,'Idempotency-Key':key,'X-Disallowed':'1'},body:JSON.stringify({text:'Must not commit'})});return false;}catch{return true;}},{url,token,key:randomUUID()});expect(negative).toBe(true);await expect.poll(()=>statuses.includes(400)).toBe(true);await expect.poll(()=>errors.some(e=>e.includes('Preflight'))).toBe(true);oneCommand(before,await helper('foreign','stats'));await worker('foreign');
   }finally{await network.detach();}
+});
+
+// UI-E01–07. Keep these worker journeys AFTER the retained seeded PENDING image
+// assertion above. Each request is produced by accepted Resume -> marker -> Jobs.
+const escQueue=(page:Page)=>page.getByRole('region',{name:'Запросы владельцу',exact:true});
+const escDetail=(page:Page)=>page.getByRole('region',{name:'Карточка запроса',exact:true});
+const escPath=(preset:string,id?:string)=>path(preset,`escalations${id?`/${id}`:''}`);
+const escContext=(v:EscalationView)=>({workspace:v.workspace_id,escalation:v.escalation_id,conversation:v.conversation_id,client:v.client_id});
+async function escList(request:APIRequestContext,preset:string){const r=await http(()=>request.get(`${escPath(preset)}?limit=10&status=ALL`));expect(r.status()).toBe(200);return parseEscalationPage(await json(r),fixtures[preset].workspace_id,'ALL');}
+async function escRead(request:APIRequestContext,preset:string,v:EscalationView){const r=await http(()=>request.get(escPath(preset,v.escalation_id)));expect(r.status()).toBe(200);return parseEscalation(await json(r),fixtures[preset].workspace_id,escContext(v));}
+async function createEsc(page:Page,preset:string,alternate=false){
+  const c={workspace:fixtures[preset].workspace_id,conversation:alternate?inventory[preset].alternate_conversation_id:inventory[preset].conversation_id,client:alternate?inventory[preset].alternate_client_id:inventory[preset].client_id};
+  const url=path(preset,`conversations/${c.conversation}`),read=await http(()=>page.request.get(`${url}/control`));expect(read.status()).toBe(200);const state=parseControlState(await json(read),c);
+  const body:ControlBody={expected_client_id:c.client,expected_control_generation:state.control_generation,expected_context_version:state.context_version};
+  const token=await csrf(page.request),r=await http(()=>page.request.post(`${url}/resume`,{headers:{Origin:origin,'X-CSRF-Token':token,'Idempotency-Key':randomUUID()},data:body}));expect(r.status()).toBe(200);expect(parseControlReceipt(await json(r),c,'RESUME',body).outcome).toBe('ACCEPTED');
+  const ran=await worker(preset,alternate?'escalate-alternate':'escalate-main');expect(ran.created).toBe(1);expect(ran.calls).toBe(0);expect(ran.effects).toBe(0);
+  const item=(await escList(page.request,preset)).items.find(v=>v.conversation_id===c.conversation&&v.status==='PENDING');expect(!!item).toBe(true);expect(item!.client_id===c.client&&item!.assignee_user_account_id===fixtures[preset].user_account_id).toBe(true);return item!;
+}
+async function openEsc(page:Page,v:EscalationView){
+  await escQueue(page).getByRole('button',{name:'Обновить очередь'}).click();await expect(escQueue(page).getByText('Загружаем очередь…',{exact:true})).toHaveCount(0);
+  await page.getByTestId(`escalation-${v.escalation_id}`).click();await expect(escDetail(page).getByText('Ожидается решение владельца',{exact:true})).toBeVisible();
+}
+function escDelta(before:Record<string,number|boolean>,after:Record<string,number|boolean>,count:number){
+  for(const key of ['escalation_receipts','escalation_audit'])expect(Number(after[key])-Number(before[key])).toBe(count);
+  for(const key of ['messages','receipts','audit_events','outbox_events','jobs','control_receipts','control_audit_events','escalations','escalation_timers'])expect(after[key]).toBe(before[key]);
+}
+async function decide(page:Page,preset:string,v:EscalationView,operation:EscalationOperation,answer='',keyboard=false){
+  const pending=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===`${escPath(preset,v.escalation_id)}/${operation==='RESOLVE'?'resolve':'cancel'}`);
+  if(operation==='RESOLVE'){
+    const input=escDetail(page).getByLabel('Внутренний ответ владельца');await input.fill(answer);
+    if(keyboard){await input.press('Tab');await expect(escDetail(page).getByRole('button',{name:'Сохранить внутренний ответ'})).toBeFocused();await page.keyboard.press('Enter');}
+    else await escDetail(page).getByRole('button',{name:'Сохранить внутренний ответ'}).click();
+  }else await escDetail(page).getByRole('button',{name:'Отменить запрос'}).click();
+  const response=await pending;expect(response.status()).toBe(200);const body=requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',async()=>JSON.parse(response.request().postData()!))) as EscalationBody;
+  expect(operation==='RESOLVE'?body.answer_text===answer:!Object.hasOwn(body,'answer_text')).toBe(true);
+  const saved=parseEscalationReceipt(requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>response.json())),escContext(v),operation,body);
+  await expect(escDetail(page).getByText('Решение сохранено. Актуальная карточка получена.')).toBeVisible();return saved;
+}
+
+test('@narrow Escalation runtime queue -> exact internal resolve and cancel; inactive/restricted, keyboard, no send or Resume',async({page},info)=>{
+  test.setTimeout(60000);const preset=info.project.name==='chromium-narrow'?'esc_narrow':'esc_happy';await signIn(page,preset);
+  const main=await createEsc(page,preset),alternate=await createEsc(page,preset,true);const before=await helper(preset,'escalation-stats');
+  expect(before.escalations).toBe(2);expect(before.escalation_timers).toBe(6);await helper(preset,'disable');await helper(preset,'restrict');
+  await openEsc(page,main);await expect(escDetail(page).getByText(/Запись напоминания не означает/)).toBeVisible();const controlBefore=await currentControl(page,preset);let writes=0;
+  page.on('request',r=>{if(r.method()==='POST'&&/\/(messages|resume|takeover)$/.test(new URL(r.url()).pathname))writes++;});
+  const exact='  Внутреннее решение\ne\u0301 🎨  ';const saved=await decide(page,preset,main,'RESOLVE',exact,true);expect(saved.outcome).toBe('ACCEPTED');
+  expect((await escDetail(page).locator('.exact-answer').textContent())===exact).toBe(true);const current=await escRead(page.request,preset,main);expect(current.status).toBe('RESOLVED');expect(current.waiting).toBeNull();expect(current.resolution?.answer_text===exact).toBe(true);
+  const controlAfter=await currentControl(page,preset);expect(controlAfter.control_mode).toBe(controlBefore.control_mode);expect(controlAfter.control_generation).toBe(controlBefore.control_generation);expect(BigInt(controlAfter.context_version)-BigInt(controlBefore.context_version)).toBe(1n);
+  await expect(panel(page).getByText(/По этому диалогу сохранено внутреннее решение/)).toBeVisible();expect((await panel(page).getByLabel('Ручной текстовый ответ').inputValue())==='').toBe(true);
+  await openEsc(page,alternate);await decide(page,preset,alternate,'CANCEL');const closed=await escRead(page.request,preset,alternate);expect(closed.status).toBe('CANCELLED');expect(closed.closure?.reason).toBe('OWNER_CANCELLED');expect(closed.resolution).toBeNull();escDelta(before,await helper(preset,'escalation-stats'),2);expect(writes).toBe(0);
+  await escQueue(page).getByLabel('Сохранённый статус').selectOption('ALL');await expect(escQueue(page).locator('.escalation-list > li')).toHaveCount(2);await expect(escQueue(page).getByRole('button',{name:'Ещё запросы'})).toHaveCount(0);
+  const restart=await worker(preset,'recover');expect(restart.calls).toBe(0);expect(restart.effects).toBe(0);
+  await page.reload();await expect(escQueue(page)).toBeVisible();expect(writes).toBe(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+});
+
+test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key/body REPLAY and one decision',async({page})=>{
+  test.setTimeout(60000);const preset='esc_recovery';await signIn(page,preset);const v=await createEsc(page,preset);await openEsc(page,v);const before=await helper(preset,'escalation-stats');
+  let attempts=0,original:string|null=null,key:string|undefined,first:EscalationReceipt|undefined,identical=true;
+  let complete!:(result:SafeResult<number>)=>void;const committed=new Promise<SafeResult<number>>(r=>{complete=r;});const url=`${escPath(preset,v.escalation_id)}/resolve`;
+  await page.route(`**${url}`,async route=>{
+    attempts++;if(attempts>1){identical=identical&&original===route.request().postData()&&key===route.request().headers()['idempotency-key'];await safeContinue(route);return;}
+    original=route.request().postData();key=route.request().headers()['idempotency-key'];const real=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',()=>route.fetch({timeout:10000}));
+    if(real.ok){const parsed=await safeDiagnostic('MESSAGING_BODY_FAILED',async()=>parseEscalationReceipt(await real.value.json(),escContext(v),'RESOLVE',JSON.parse(original!) as EscalationBody));if(parsed.ok)first=parsed.value;else{complete(parsed);return;}}
+    const aborted=await safeDiagnostic('MESSAGING_ROUTE_ABORT_FAILED',()=>route.abort('failed'));complete(!real.ok?real:!aborted.ok?aborted:{ok:true,value:real.value.status()});
+  });
+  try{
+    await escDetail(page).getByLabel('Внутренний ответ владельца').fill('  Сохранить точно\ne\u0301 🎨  ');await escDetail(page).getByRole('button',{name:'Сохранить внутренний ответ'}).click();expect(requireSafeResult(await committed)).toBe(200);
+    await expect(escDetail(page).getByText(/Результат решения неизвестен/)).toBeVisible();escDelta(before,await helper(preset,'escalation-stats'),1);
+    await page.context().clearCookies();await escDetail(page).getByRole('button',{name:'Проверить сессию для решения'}).click();await loginForm(page,preset);
+    await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();const token=await csrf(page.request);const rotate=await http(()=>page.request.post('/api/v1/auth/rotate',{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}));expect(rotate.status()).toBe(200);
+    const denied=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();expect((await denied).status()).toBe(403);
+    await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();const replayed=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();const response=await replayed;expect(response.status()).toBe(200);
+    const saved=parseEscalationReceipt(requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>response.json())),escContext(v),'RESOLVE',JSON.parse(original!) as EscalationBody);expect(saved.outcome).toBe('REPLAY');expect(JSON.stringify(saved.result)===JSON.stringify(first?.result)).toBe(true);
+    await expect(escDetail(page).getByText('Сохранённый внутренний ответ')).toBeVisible();expect(attempts).toBe(3);expect(identical).toBe(true);escDelta(before,await helper(preset,'escalation-stats'),1);expect((await worker(preset,'stats')).calls).toBe(0);
+    await page.reload();await expect(escQueue(page)).toBeVisible();expect(attempts).toBe(3);
+  }finally{await page.unrouteAll({behavior:'wait'});original=null;key=undefined;first=undefined;}
+});
+
+test('Escalation valid200 plus failed GET offers only read recovery',async({page})=>{
+  test.setTimeout(60000);const preset='esc_read';await signIn(page,preset);const v=await createEsc(page,preset);await openEsc(page,v);const before=await helper(preset,'escalation-stats');let posts=0,failed=false;
+  page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname===`${escPath(preset,v.escalation_id)}/cancel`)posts++;});
+  await page.route(`**${escPath(preset,v.escalation_id)}`,async route=>{if(!failed){failed=true;requireSafeResult(await safeDiagnostic('MESSAGING_ROUTE_ABORT_FAILED',()=>route.abort('failed')));}else await safeContinue(route);});
+  await escDetail(page).getByRole('button',{name:'Отменить запрос'}).click();await expect(escDetail(page).getByText('Решение подтверждено. Повторяется только чтение.')).toBeVisible();await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toHaveCount(0);
+  await escDetail(page).getByRole('button',{name:'Повторить чтение запроса'}).click();await expect(escDetail(page).getByText(/Отменён владельцем/)).toBeVisible();expect(posts).toBe(1);escDelta(before,await helper(preset,'escalation-stats'),1);await page.unrouteAll({behavior:'wait'});
+});
+
+test('Escalation stale tab loses to actual Takeover material change; no automatic retry or answer',async({page,context:browser})=>{
+  test.setTimeout(60000);const preset='esc_stale';await signIn(page,preset);const v=await createEsc(page,preset);await openEsc(page,v);const other=await browser.newPage();await other.goto('/');await choose(other,preset);const before=await helper(preset,'escalation-stats');
+  try{
+    await changeControl(other,preset,'TAKEOVER');let posts=0;page.on('request',r=>{if(r.method()==='POST'&&new URL(r.url()).pathname===`${escPath(preset,v.escalation_id)}/resolve`)posts++;});
+    await escDetail(page).getByLabel('Внутренний ответ владельца').fill('Obsolete internal decision');const rejected=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===`${escPath(preset,v.escalation_id)}/resolve`);await escDetail(page).getByRole('button',{name:'Сохранить внутренний ответ'}).click();expect((await rejected).status()).toBe(409);
+    await expect(escDetail(page).getByText(/Повтор решения остановлен/)).toBeVisible();await expect(escDetail(page).getByText(/Изменилось управление/)).toBeVisible();await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toHaveCount(0);expect(posts).toBe(1);
+    const current=await escRead(page.request,preset,v);expect(current.status).toBe('CANCELLED');expect(current.resolution).toBeNull();expect(current.current_context.control_mode).toBe('HUMAN');const after=await helper(preset,'escalation-stats');expect(after.escalation_receipts).toBe(before.escalation_receipts);expect(after.escalation_audit).toBe(before.escalation_audit);controlDelta(before,after,1);
+  }finally{await other.close();}
+});
+
+test('Escalation live OWNER revoke clears every protected view; peer cancel and Workspace isolation',async({page,context:browser})=>{
+  test.setTimeout(60000);const preset='esc_revoked';await signIn(page,preset);const v=await createEsc(page,preset);await openEsc(page,v);const token=await csrf(page.request),before=await helper(preset,'escalation-stats');
+  expect((await http(()=>page.request.get(`${escPath('foreign')}?limit=10&status=PENDING`))).status()).toBe(403);
+  expect((await http(()=>page.request.get(escPath(preset,inventory.foreign.conversation_id)))).status()).toBe(404);
+  await helper(preset,'downgrade');await escQueue(page).getByRole('button',{name:'Обновить очередь'}).click();await expect(page.getByText('Нет доступа к данным владельца',{exact:true})).toBeVisible();
+  for(const name of ['Запросы владельцу','Audit','Переписка'])await expect(page.getByRole('region',{name,exact:true})).toHaveCount(0);expect(await page.getByRole('img').count()).toBe(0);
+  expect((await http(()=>page.request.get(escPath(preset,v.escalation_id)))).status()).toBe(403);
+  const rejected=await http(()=>page.request.post(`${escPath(preset,v.escalation_id)}/cancel`,{headers:{Origin:origin,'X-CSRF-Token':token,'Idempotency-Key':randomUUID()},data:{expected_conversation_id:v.conversation_id,expected_client_id:v.client_id,expected_escalation_version:v.version,expected_control_generation:v.current_context.control_generation,expected_context_version:v.current_context.context_version}}));expect(rejected.status()).toBe(403);escDelta(before,await helper(preset,'escalation-stats'),0);
+  await page.getByLabel('Workspace',{exact:true}).selectOption(fixtures.isolation_peer.workspace_id);await expect(escQueue(page)).toBeVisible();await expect(page.getByTestId(`escalation-${v.escalation_id}`)).toHaveCount(0);
+  // Separate authenticated actor, never a transplanted session/token.
+  const peer=await browser.browser()!.newContext({baseURL:origin});const peerPage=await peer.newPage();
+  try{
+    await signIn(peerPage,'isolation_peer');await peerPage.getByLabel('Workspace',{exact:true}).selectOption(fixtures[preset].workspace_id);await peerPage.getByTestId(`escalation-${v.escalation_id}`).click();
+    await expect(escDetail(peerPage).getByText('Ответственный потерял доступ владельца')).toBeVisible();await expect(escDetail(peerPage).getByRole('button',{name:'Сохранить внутренний ответ'})).toBeDisabled();await expect(escDetail(peerPage).getByRole('button',{name:'Отменить запрос'})).toBeEnabled();
+    await decide(peerPage,preset,v,'CANCEL');escDelta(before,await helper(preset,'escalation-stats'),1);expect((await worker(preset,'stats')).calls).toBe(0);
+  }finally{await peer.close();}
 });

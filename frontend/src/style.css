@@ -47,3 +47,16 @@ nav { display: flex; gap: 22px; border-bottom: 1px solid #cdd4de; padding-bottom
 .control-mode { font-weight: 700; }
 .control-actions { display: flex; flex-wrap: wrap; gap: .65rem; }
 .control-actions button { white-space: normal; }
+/* Owner decisions are separate from delivery and use the existing Console scale. */
+.escalations { min-width: 0; }
+.escalation-list { list-style: none; padding: 0; display: grid; gap: .7rem; }
+.escalation-list button { width: 100%; text-align: left; display: grid; gap: .35rem; white-space: normal; overflow-wrap: anywhere; }
+.escalation-list button[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: 2px; }
+.escalation-detail { border-top: 1px solid #d5dce4; margin-top: 1.5rem; padding-top: 1rem; overflow-wrap: anywhere; }
+.escalation-detail textarea { width: 100%; box-sizing: border-box; margin: .5rem 0; }
+.escalation-detail dl { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr); gap: .5rem 1rem; }
+.escalation-detail dd { margin: 0; }
+.escalation-detail summary { cursor: pointer; padding: .5rem 0; }
+.escalation-detail .exact-answer { white-space: pre-wrap; }
+.escalations :focus-visible { outline: 3px solid #2460a5; outline-offset: 3px; }
+@media (max-width: 520px) { .escalation-detail dl { grid-template-columns: 1fr; } .escalation-detail dd { margin-bottom: .4rem; } }

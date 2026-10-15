@@ -8,6 +8,8 @@ import { parseSession } from './api';
 vi.mock('./BillingPanel', () => ({ BillingPanel: () => null }));
 // Keep the accepted auth request assertions; full messaging integration has its own suite.
 vi.mock('./MessagingPanel', () => ({ MessagingPanel: () => null }));
+// Auth request ordering stays exact; the new owner's boundary is tested in its suite.
+vi.mock('./EscalationsPanel', () => ({ EscalationsPanel: () => null }));
 
 const uid = '11111111-1111-4111-8111-111111111111';
 const wid = '22222222-2222-4222-8222-222222222222';

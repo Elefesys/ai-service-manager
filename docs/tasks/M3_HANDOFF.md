@@ -5,7 +5,73 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Активная выдача C0 — C6-M3-FOUNDATION-TIME-BUDGET
+## 0. Активная выдача C0 — C5-M3.2-CONSOLE-ESCALATIONS
+
+Единственная активная выдача: [C0,2026-10-14](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6172495208).
+C5 — единственный автор; остальные C1/C2/C3/C6/C8 HOLD. Нижние блоки — история,
+их старые OPEN/proposal/status headers не переоткрывают принятый backend/API.
+
+| Exact start | Значение |
+|---|---|
+| Repository / branch / integration target | Elefesys/ai-service-manager / `c5/m3-2-console-escalations` / main |
+| Accepted base / tree | `ab06bc135f45c88203e434eacefd107412a8eb15` / `3c97459793bd200dfe9720b37ea0895b4189a8bb` |
+| Base ordered parents / schema | `c502d5fd258aef15bb5549e1529df8d038a4fb9b` + `09d92a141ae5b2f000b9de27e562c1d7a3fd791f` /0011 |
+| PR31 integration | [C0 INTEGRATED/VERIFIED LOCAL/TEST](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6170928749) |
+| Actual main CI |38584344077/attempt1,9/9 SUCCESS+clean9/9;1133 unit/680 PG/79 Escalation/194 frontend/33 browser |
+| Finding disposition | C8-M3-ESC-01 CLOSED; C6-ESC-COMPAT-01 CLOSED |
+
+Отдельный чистый checkout создан от base после remote/ancestry проверки.
+Новый Draft PR после содержательного UI diff. Не продолжать старые branches/PR,
+не reset/rebase/force-push/merge. При изменении main/занятой ветке сообщить C0.
+
+Источники: AGENTS/IMPL-001; Spec5.10–5.14/18.5–18.8/Console;
+ADR024/025/026/267/272; MVP GJ-G/J; Roadmap M3/Implementation Plan M3.2;
+M3_CONTRACT8/12/13/14.3–5/14.9/14.16–17 и generated OpenAPI/actual escalation modules.
+Original11 checksums подтверждены; canonical sources/contract не меняются.
+
+Результат: компактная OWNER queue по Workspace без выбора Business/channel;
+stored status/validity/wait/maintenance раздельно, per-page observed_at,
+opaque cursor, detail canonical Escalation→Conversation→Client, internal answer
+и cancel по свежим flags с повторной серверной проверкой. Ответ exact Unicode,
+не send/Resume/исполняемая инструкция. Frozen actor/context/body/key только в памяти;
+после ambiguity/session/CSRF только явный same-intent retry; conflict останавливает
+повтор, valid200 допускает далее только GET. Late responses не меняют новый scope.
+Общая protected owner boundary, прежние auth/Billing/Audit/messaging/CONTROL/private
+image/UNKNOWN сохранены. Другой context не получает прежний answer/identity.
+
+Exact allowlist (максимум17 paths):
+- `frontend/src/EscalationsPanel.tsx`, `frontend/src/EscalationsPanel.test.tsx`;
+- `frontend/src/escalation-api.ts`, `frontend/src/escalation-api.test.ts`, `frontend/src/escalation-fixtures.test-helper.ts`;
+- additive `frontend/src/App.tsx`, `frontend/src/App.test.tsx`;
+- только canonical decision notice/wiring в `frontend/src/MessagingPanel.tsx`, соответствующий `frontend/src/MessagingPanel.test.tsx`;
+- `frontend/src/style.css`, `frontend/e2e/messaging.spec.ts`;
+- finite `scripts/m2_4_browser_fixture.py`, `scripts/m2_4_browser_worker.py`, `tests/test_m2_4_browser_fixture.py`;
+- `docs/tasks/M3_CONSOLE_ESCALATIONS.md`, этот handoff, `docs/TASK_REGISTER.md`.
+
+Backend/migrations/applied0001–0011/DDL/grants/auth/tenancy/R4/OpenAPI/M3_CONTRACT,
+старые consumers/ConversationControl, dependencies/locks/Compose/Docker/workflows,
+CI scripts/budgets неизменны;0012 не назначена. Foundation45/browser25/state25,
+prepare600/cleanup90 и9 jobs/clean guards сохраняются. Другой path — blocker и
+minimal proposal C0 до применения. VM/live/deploy/рабочие DB-S3/внешние отправки не выданы.
+
+UI-E01–07 и достаточные assertions изложены в выдаче и
+[M3_CONSOLE_ESCALATIONS](M3_CONSOLE_ESCALATIONS.md). Новые runtime journeys только
+после старой seeded PENDING image границы в messaging.spec; migrator не создаёт
+Escalation/receipt/Audit/Message/Outbox/Jobs. Normal Resume→marker→Inbox/Turn/Worker,
+asm_runtime TEST/storage guard, finite presets/read-only counters, CALL/EFFECT0
+для решений; никакого clock/scheduler fault framework ради UI. Synthetic UI-E03
+отделён от retained actual PG evidence, не объявляется новым server execution.
+
+Локально typecheck/frontend/build, Ruff/fixture unit/diff. Без local Docker actual
+runtime NOT RUN locally. Final-source PR CI обязан выполнить штатные ci.sh и
+test_browser.sh,9/9 SUCCESS+clean9/9 и retained suites. Не повторять зелёный SHA.
+Canonical C5 receipt в новом Draft PR: exact base/final head/parent/tree/paths/numstat,
+UI-E01–07→tests/results, commands/limitations, run/attempt/9jobs/clean/actual checkout/
+merge parents/tree. Docs вместе с implementation, без post-CI status commits.
+Возврат REVIEW/BLOCKED и HOLD; C0 intake→scoped C8→C0 decision→merge пользователем→
+actual main CI. Весь M3 IN_PROGRESS; native/edit-delete provenance/M3 acceptance впереди.
+
+## История выдачи C0 — C6-M3-FOUNDATION-TIME-BUDGET
 
 Дата:2026-10-14 UTC. [Поручение C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6168070726).
 C3 HOLD; C8 HOLD. Приёмка PAGE-R1 BLOCKED незавершённым CI; M3 IN_PROGRESS.
@@ -50,7 +116,7 @@ DEFERRED. VM/live Telegram/рабочие DB-S3/deploy/merge не выполня
 <details>
 <summary>История PAGE-R1 и прежних выдач; текущая выдача C6 приведена выше</summary>
 
-## 0. Активная выдача C0 — C3-M3.2-ESCALATION-PAGE-R1
+## История выдачи C0 — C3-M3.2-ESCALATION-PAGE-R1
 
 Дата:2026-10-14 UTC. [Поручение C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164474811)
 по [C8-M3-ESC-01/P2 OPEN](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6164119233).
@@ -102,7 +168,7 @@ optimization DEFERRED. VM/live Telegram/рабочие DB-S3/deploy/merge зап
 <details>
 <summary>История implementation выдачи до PAGE-R1; прежние checkpoints и результаты</summary>
 
-## 0. Активная выдача C0 — C3-M3.2-ESCALATION-IMPLEMENTATION
+## История выдачи C0 — C3-M3.2-ESCALATION-IMPLEMENTATION
 
 Дата: 2026-10-13 UTC. Основание — [конкретная выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6151237330).
 Продолжение от checkpoint разрешено [решением C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6161454304)

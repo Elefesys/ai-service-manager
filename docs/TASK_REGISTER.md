@@ -2,7 +2,37 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C6-M3-FOUNDATION-TIME-BUDGET / 2026-10-14 UTC
+## Текущий статус — C5-M3.2-CONSOLE-ESCALATIONS / 2026-10-14 UTC
+
+**C5 — IN_PROGRESS. M3 — IN_PROGRESS.** Единственный автор нового owner-wait UI;
+C1/C2/C3/C6/C8 HOLD до следующего конкретного gate.
+[Выдача C0](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6172495208)
+и [C0 main acceptance](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6170928749).
+
+| Принятый факт / задача | Статус и evidence |
+|---|---|
+| C3-M3.2-ESCALATION backend/API, PR31 | **INTEGRATED / VERIFIED LOCAL/TEST** по C0;0011/down0010 |
+| Accepted main / C5 base | `ab06bc135f45c88203e434eacefd107412a8eb15` |
+| Tree / ordered parents | `3c97459793bd200dfe9720b37ea0895b4189a8bb`; `c502d5fd258aef15bb5549e1529df8d038a4fb9b` + `09d92a141ae5b2f000b9de27e562c1d7a3fd791f` |
+| Actual main CI | [38584344077/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38584344077),9/9 SUCCESS + clean9/9; checkout actual main |
+| Accepted baseline |1133 unit/680 PG,79 Escalation (61+9+9),194 frontend/33 browser PASS; foundation115922197802/browser115922197945 |
+| Findings | C8-M3-ESC-01/P2 CLOSED; C6-ESC-COMPAT-01 CLOSED по C0 |
+| C5-M3.2-CONSOLE-ESCALATIONS | IN_PROGRESS, отдельный checkout/`c5/m3-2-console-escalations` от exact base; новый Draft PR→main |
+| M3-A10 | CONTROL/in-flight принят ранее; owner-wait UI в этой задаче, UI-E01–07 |
+| M3-A03/A08 native/edit-delete provenance и M3-ACCEPTANCE | Следующие отдельные задачи; весь M3 не VERIFIED |
+| CI optimization / IMPL-05 fix | DEFERRED; budgets/jobs/clean guards неизменны |
+
+Реализация: queue/detail, строгие четыре routes, internal answer/cancel,
+memory-only same-key recovery, shared owner deny и canonical context notice.
+[Активный handoff](tasks/M3_HANDOFF.md) и [UI rules/evidence map](tasks/M3_CONSOLE_ESCALATIONS.md).
+Docs входят вместе с содержательным UI diff, без coordination-only/SHA-only commits.
+Local Docker отсутствует: actual HTTP/PG/browser evidence нужен из final-source
+штатного PR CI9/9+clean9/9. Итоговый head/parent/tree/tested merge/jobs/results
+будут в одном canonical C5 PR receipt; pre-CI snapshot ниже не заменяет этот receipt.
+Возврат REVIEW или конкретный BLOCKED, затем HOLD → C0 intake → scoped C8 → C0.
+Draft/merge/production/live/VM не выданы. M4/LLM/Approval/Notifications вне scope.
+
+## История — C6-M3-FOUNDATION-TIME-BUDGET / 2026-10-14 UTC
 
 **C6 — IN_PROGRESS. PAGE-R1 acceptance — BLOCKED незавершённым CI.
 C3 HOLD; C8 HOLD. C8-M3-ESC-01/P2 OPEN. Весь M3 — IN_PROGRESS.**

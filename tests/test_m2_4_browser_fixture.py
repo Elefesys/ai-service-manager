@@ -93,6 +93,10 @@ async def test_provision_rejects_target_before_engine_or_identity_write(
         ("ctrl_stale", "downgrade"),
         ("ctrl_recovery", "disable"),
         ("ctrl_stale", "restrict"),
+        ("happy", "escalation-stats"),
+        ("esc_stale", "downgrade"),
+        ("esc_read", "disable"),
+        ("esc_recovery", "restrict"),
     ],
 )
 async def test_finite_negative_actions_are_checked_before_database(
@@ -256,6 +260,179 @@ def test_control_presets_use_existing_canonical_seed_and_finite_mutation_scope(h
         assert {e.chat_id for e in events} == {f"m24-{preset}-main", f"m24-{preset}-alternate"}
 
 
+def test_escalation_presets_retain_pending_image_boundary_and_need_runtime_creation(harness):
+    assert set(harness.fixture.ESCALATION_PRESETS) == {
+        "esc_happy",
+        "esc_narrow",
+        "esc_recovery",
+        "esc_read",
+        "esc_stale",
+        "esc_revoked",
+    }
+    events = list(harness.worker.seed_events())
+    assert events[-1].image_file_id == "m24-image-pending"
+    for preset in harness.fixture.ESCALATION_PRESETS:
+        own = [e for e in events if e.bot_identity == harness.fixture.bot(preset)]
+        assert len(own) == 2 and all(e.image_file_id is None for e in own)
+        assert all(e.text != harness.worker.MARKER for e in own)
+        harness.fixture.validate_operation(preset, "escalation-stats")
+        harness.worker.validate_operation(preset, "escalate-main")
+    for preset in ("esc_happy", "esc_narrow"):
+        harness.fixture.validate_operation(preset, "disable")
+        harness.fixture.validate_operation(preset, "restrict")
+        harness.worker.validate_operation(preset, "escalate-alternate")
+
+
+@pytest.mark.parametrize(
+    "preset,operation",
+    [
+        ("happy", "escalate-main"),
+        ("esc_read", "escalate-alternate"),
+        (None, "escalate-main"),
+        ("esc_happy", "escalate-arbitrary"),
+    ],
+)
+async def test_escalation_runner_rejects_unassigned_actions_before_database(
+    harness, monkeypatch, preset, operation
+):
+    def forbidden(*args, **kwargs):
+        pytest.fail("Unexpected database construction")
+
+    monkeypatch.setattr(harness.worker, "create_async_engine", forbidden)
+    with pytest.raises(harness.worker.ProvisioningError):
+        await harness.worker.action(preset, operation)
+
+
+async def test_escalation_runtime_keeps_privileged_environment_denial(harness, monkeypatch):
+    def forbidden(*args, **kwargs):
+        pytest.fail("Unexpected database construction")
+
+    monkeypatch.setattr(harness.worker, "create_async_engine", forbidden)
+    # The fixture intentionally still has a migration credential in its env.
+    with pytest.raises(harness.worker.ProvisioningError):
+        await harness.worker.action("esc_recovery", "escalate-main")
+
+
+@pytest.mark.parametrize("conversation", ["main", "alternate"])
+async def test_escalation_action_ingests_validated_event_then_uses_worker(harness, conversation):
+    """Exercise the real immutable event type, before any runtime I/O is needed."""
+    from asm.messaging.models import NormalizedEventV1
+
+    workspace, job, token = uuid4(), uuid4(), uuid4()
+    claim = SimpleNamespace(
+        kind="PROCESS_TURN", step="ESCALATE_OWNER", job_id=job, claim_token=token
+    )
+    observed = []
+
+    class Kernel:
+        async def ingest_event(self, source, value, correlation):
+            assert isinstance(value, NormalizedEventV1)
+            assert source == value.bot_identity == harness.fixture.bot("esc_happy")
+            assert value.text == harness.worker.MARKER and value.image_file_id is None
+            assert value.chat_id == f"m24-esc_happy-{conversation}"
+            assert value.sender_id == f"m24-esc_happy-{conversation}-client"
+            observed.append("ingest")
+            return SimpleNamespace(code="ACCEPTED", workspace_id=workspace)
+
+        async def claim_job(self, name):
+            observed.append("claim")
+            return claim
+
+        async def replay_escalation(self, job_id, claim_token):
+            assert (job_id, claim_token) == (job, token)
+            observed.append("replay")
+            return SimpleNamespace(workspace_id=workspace)
+
+    class Worker:
+        async def execute(self, received):
+            assert received is claim
+            observed.append("execute")
+
+        async def run_once(self):
+            observed.append("drain")
+            return False
+
+    result = await harness.worker.escalate(
+        Kernel(),
+        Worker(),
+        SimpleNamespace(source=lambda value: value, mismatched=False),
+        "esc_happy",
+        f"escalate-{conversation}",
+    )
+    assert observed == ["ingest", "claim", "execute", "replay", "drain"]
+    assert result == {"created": 1, "worked": 1, "calls": 0, "effects": 0}
+
+
+async def test_seed_handles_due_turn_between_inbox_claims_but_leaves_last_fetch_pending(
+    harness, monkeypatch
+):
+    """More finite fixtures must not assume that a real durable queue is FIFO."""
+    first, last, turn = uuid4(), uuid4(), uuid4()
+    events = [
+        harness.worker.event("esc_happy", "first"),
+        harness.worker.event("happy", "pending-image", image="pending"),
+    ]
+    monkeypatch.setattr(harness.worker, "seed_events", lambda: iter(events))
+    waiting = [
+        SimpleNamespace(kind="PROCESS_INBOX", job_id=first),
+        SimpleNamespace(kind="PROCESS_TURN", step="TEST_CONSUME", job_id=turn),
+        SimpleNamespace(kind="PROCESS_INBOX", job_id=last),
+        SimpleNamespace(kind="FETCH_IMAGE", job_id=uuid4()),
+    ]
+    accepted, executed = [], []
+
+    class Kernel:
+        async def ingest_event(self, source, value, correlation):
+            accepted.append(value)
+            return SimpleNamespace(code="ACCEPTED", job_id=first if len(accepted) == 1 else last)
+
+        async def claim_job(self, name):
+            return waiting.pop(0)
+
+    class Worker:
+        async def execute(self, claim):
+            executed.append(claim.job_id)
+
+    result = await harness.worker.seed(Kernel(), Worker(), SimpleNamespace(source=lambda v: v))
+    assert result["processed"] == 2
+    assert result["seed_turns"] == 1
+    assert executed == [first, turn, last]
+    assert len(waiting) == 1 and waiting[0].kind == "FETCH_IMAGE"
+
+
+@pytest.mark.parametrize(
+    "kind,step",
+    [
+        ("FETCH_IMAGE", None),
+        ("SEND_MANUAL_TEXT", None),
+        ("PROCESS_TURN", "GUARDED_TEXT"),
+        ("PROCESS_TURN", "ESCALATE_OWNER"),
+        ("ESCALATION_TIMER", "EXPIRE"),
+        ("PROCESS_INBOX", None),
+    ],
+)
+async def test_seed_still_rejects_unrelated_jobs_without_executing_them(
+    harness, monkeypatch, kind, step
+):
+    monkeypatch.setattr(
+        harness.worker, "seed_events", lambda: iter([harness.worker.event("esc_happy", "first")])
+    )
+
+    class Kernel:
+        async def ingest_event(self, source, value, correlation):
+            return SimpleNamespace(code="ACCEPTED", job_id=uuid4())
+
+        async def claim_job(self, name):
+            return SimpleNamespace(kind=kind, step=step, job_id=uuid4())
+
+    class Worker:
+        async def execute(self, claim):
+            pytest.fail("Unrelated seed work must not execute")
+
+    with pytest.raises(harness.worker.ProvisioningError, match="Exclusive browser seed"):
+        await harness.worker.seed(Kernel(), Worker(), SimpleNamespace(source=lambda v: v))
+
+
 async def test_control_counters_are_read_only_bound_to_finite_owner_workspace(harness, monkeypatch):
     from contextlib import asynccontextmanager
 
@@ -299,6 +476,54 @@ async def test_control_counters_are_read_only_bound_to_finite_owner_workspace(ha
     for sql, params in queries:
         assert sql.startswith("SELECT count(*) FROM ") and "workspace_id=:ws" in sql
         assert params == {"ws": workspace, "actor": actor}
+
+
+async def test_escalation_counters_are_read_only_and_do_not_return_answers(harness, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    workspace, actor = uuid4(), uuid4()
+    queries = []
+
+    class Connection:
+        async def execute(self, sql, params):
+            queries.append((str(sql), params))
+            return SimpleNamespace(scalar_one=lambda: 0)
+
+    class Engine:
+        @asynccontextmanager
+        async def begin(self):
+            yield Connection()
+
+        async def dispose(self):
+            pass
+
+    async def guard(_):
+        pass
+
+    async def identity(_, preset):
+        assert preset == "esc_recovery"
+        return SimpleNamespace(workspace_id=workspace, user_account_id=actor)
+
+    monkeypatch.setattr(harness.fixture, "create_async_engine", lambda *a, **kw: Engine())
+    monkeypatch.setattr(harness.fixture, "guard", guard)
+    monkeypatch.setattr(harness.fixture, "identity", identity)
+    result = await harness.fixture.action("esc_recovery", "escalation-stats")
+    assert set(result) == {
+        "messages",
+        "receipts",
+        "audit_events",
+        "outbox_events",
+        "jobs",
+        "control_receipts",
+        "control_audit_events",
+        "escalations",
+        "escalation_receipts",
+        "escalation_audit",
+        "escalation_timers",
+    }
+    for sql, params in queries:
+        assert sql.startswith("SELECT count(*) FROM ") and "workspace_id=:ws" in sql
+        assert "answer" not in sql and params == {"ws": workspace, "actor": actor}
 
 
 @pytest.mark.parametrize("module", ["fixture", "worker"])
