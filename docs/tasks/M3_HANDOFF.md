@@ -5,7 +5,80 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Активная выдача C0 — C3-M3.1-PROVENANCE-CONTRACT
+## 0. Активная выдача C0 — C3-M3.1-PROVENANCE-CONTRACT-R2
+
+[R2 C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189981613)
+и [disposition C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189999448).
+**C3 R2 — REVIEW при передаче этого diff; затем C3 HOLD.** C1/C2 read-only reviews
+завершены CHANGES_REQUESTED; C1/C2/C5/C6/C8 HOLD до адресной повторной выдачи C0.
+Ниже сохранены прежние snapshots; их старые статусы не новые поручения. M3 IN_PROGRESS.
+
+| Binding / evidence | Точное значение |
+|---|---|
+| Repository / PR / branch→target | Elefesys/ai-service-manager / тот же Draft [PR33](https://github.com/Elefesys/ai-service-manager/pull/33) / `c3/m3-1-provenance`→main |
+| R2 start / sole parent нового commit | `f5e71ff47f000ee55a5509cae4ec22487ca8b6c2` |
+| Start tree | `9b91c33724e4f847c8febfbeb24bcf42188e4713` |
+| Accepted main/base | `bae25093bafb9534af68de5c586763667b896e70` |
+| Accepted schema |0011; applied0001–0011 immutable; successor/order не назначены |
+| Initial design receipt | [C3](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6188075575), сохранён |
+| Initial C0 intake / old-head CI | [C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6188855331); [38707131575/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38707131575)9/9 SUCCESS+clean9/9 по C0, только initial head evidence |
+| C1 / C2 completed reviews | [C1](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189743405) / [C2](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189782680), CHANGES_REQUESTED к§15; accepted CONTROL/GUARDS/Escalation не переоткрыты |
+
+Отдельный чистый checkout R2 от exact start; remote main/branch/parent/tree сверены.
+Продолжение PR33 одним содержательным commit поверх start, без reset/rebase/force-push
+и нового PR. Final head/tree/numstat и actual automatic CI только в новом R2 receipt,
+без self-SHA/status-only commit. При ref drift — конкретная дельта C0, не перезапись.
+
+Разрешены ровно `docs/tasks/M3_CONTRACT.md`, этот `docs/tasks/M3_HANDOFF.md` и
+`docs/TASK_REGISTER.md`. §15 редактируется **по месту**, не конкурирующий§16.
+Принятые первые345960 bytes остаются с SHA256
+`b53b3f9caa4af82c095cd2e4d1ac22a0bef435a5d657dacde3278498d2808302`.
+Original11/manifest/history неизменны. Future allowlist§15.7 не write permission.
+AGENTS/IMPL-001/canon из первой выдачи, особо Spec4.8–4.10/5.12.1,
+ADR026/180/267 и MVP GJ-G/J сверены с exact source0004–0011/normalizer/results/DTO.
+
+| R2 / finding | Где и что исправлено |
+|---|---|
+| R2-01 / C1-PROV-02 |§15.3: closed variants/NULL/common equality, один per-target union/unique-ID ordering |
+| R2-02 / C2-PROV-01 |§15.3–4: any valid undated edit→sticky uncertainty, без identical NOOP; known/deferred traces и точные increments, history не выравнивается |
+| R2-03 / C2-PROV-02 |§15.6–7: separate codec2 queued EDIT/DELETE и MATERIAL_PROCESSED/NULL Inbox Message, retained V1; full telegram_fingerprint |
+| R2-04 / C1-PROV-03 |§15.4/9: new-key terminal Escalation errors точные, old winning replay сохранён |
+| R2-05 / C1-PROV-04 |§15.3–4/9: chosen no-refetch, closed current DTO/examples, grant/late response/refresh/TTL |
+| R2-06 / C1-PROV-01 |§15.5/8/9: Console-only canonical reply; native-only HUMAN до reconciliation, latest-state case OPEN |
+| R2-07 / C1-PROV-05 + C2-PROV-03 |§15.7–8: оба TEST окна; append subscription+CAS single mode row, immutable before/after, replay исходного T0; schemas последовательно |
+| R2-08 / C2-P01/P03/P04/P06 |§15.4/6/7/9: exact composite identity, historical effect/Audit versions, stable-target SENT FK/locks, shared apply/readiness/effective view |
+
+P-02 направление material/per-target/deferred/sticky suppression выбрано C0;
+исправленная ordering-норма ждёт review. P-03 C0 выбрал no-refetch ограниченного slice:
+«фото заменено, новое изображение недоступно», PARTIAL; full replacement/refetch не
+поддержан. Current DTO/UI/grant ещё NOT VERIFIED. Это не приёмка A03/M3.
+
+P-01 OPEN: кандидат native не human transcript. Поддержанный resumable human-reply
+путь — canonical Console reply. После native-only разговора оставить HUMAN до
+принятого reconciliation; не повторять доставленный native текст через Console.
+Actual0011 полноту native history не проверяет и новой блокировки Resume не содержит.
+Takeover→native «согласовали другой вариант»→Resume→client «да» остаётся незакрытым
+latest-state case; native/A08 не списываются и NOT VERIFIED.
+
+P-04/P-05 OPEN: последовательность revisions/implementation отдельно. Для будущего
+renewal выбран append ACTIVE/COMPED + CAS expected NORMAL/PROVISIONED_LOCAL mode
+с immutable before/after receipt/Audit, без runtime DML/смены old subscriptions.
+Оба окна должны действовать; TEST2026-10-09T00:00Z истёк, VM UNKNOWN,
+live BLOCKED_TEST_INTERVAL. Collector-only не зависит от A03 activation, но требует
+согласованную actual schema; finite probe после native оставляет HUMAN.
+
+Проверки R2: static scope/prefix/original11/manifest/history/link consistency,
+ручные traces и git diff --check. Product suites/Docker/Actions dispatch/rerun не
+запускаются. Automatic PR CI не отключается, old green не переносится на R2.
+Foundation45/browser25/state25, prepare600/cleanup90,9 jobs/clean guards прежние.
+Один новый canonical R2 receipt; старые C3/C1/C2 reviews не редактируются.
+Возврат REVIEW→C3 HOLD→C0 exact-head intake→адресный повторный review.
+Runtime/SQL/API/OpenAPI/frontend/tests/CI/dependencies, migration/renewal/probe/VM/
+live/DB/S3/sends/deploy не выданы. PR Draft; merge пользователем после приёмки.
+M3-ACCEPTANCE отдельно; M4/CI optimization/IMPL-05 остаются DEFERRED/не открыты.
+
+
+## История выдачи C0 — C3-M3.1-PROVENANCE-CONTRACT (initial delivery PR33)
 
 Единственная активная выдача: [C0,2026-10-15](https://github.com/Elefesys/ai-service-manager/pull/32#issuecomment-6185468957).
 **C3 — IN_PROGRESS**, только design и план account probe. C1/C2/C5/C6/C8 HOLD до

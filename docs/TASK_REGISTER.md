@@ -2,7 +2,41 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C3-M3.1-PROVENANCE-CONTRACT / 2026-10-15 UTC
+## Текущий статус — C3-M3.1-PROVENANCE-CONTRACT-R2 / 2026-10-15 UTC
+
+**R2 — REVIEW при передаче diff; затем C3 HOLD. M3 — IN_PROGRESS.**
+[Выдача R2](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189981613),
+[решение C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189999448),
+[активный handoff](tasks/M3_HANDOFF.md),
+[исправленный proposal§15](tasks/M3_CONTRACT.md#15-native-provenance-и-material-editdelete--proposal).
+
+| Задача / факт | Статус и граница evidence |
+|---|---|
+| Accepted main/base | `bae25093bafb9534af68de5c586763667b896e70`, schema0011; applied0001–0011 immutable |
+| R2 start / sole parent / tree | `f5e71ff47f000ee55a5509cae4ec22487ca8b6c2` / tree `9b91c33724e4f847c8febfbeb24bcf42188e4713` |
+| C3-M3.1-PROVENANCE-CONTRACT, initial | [C3 receipt](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6188075575) сохранён; [C0 intake](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6188855331), initial CI38707131575/attempt1 9/9 SUCCESS+clean9/9 по C0 |
+| C1 / C2 read-only reviews | Завершены [C1 CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189743405) / [C2 CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189782680); C0 подтвердил findings. C1/C2 HOLD, повторный review только по новому поручению |
+| C3 R2 | Тот же Draft PR33/branch→main, один содержательный commit, ровно3 docs: existing§15 по месту + handoff/register. R2-01…08 и все C1/C2 findings→§15.9. REVIEW, затем HOLD; implementation NOT VERIFIED |
+| C5/C6/C8 | HOLD; новой UI/infra/probe/test задачи нет |
+| TURNS/CONTROL/GUARDS/Escalation/Console PR32 | Прежняя INTEGRATED/VERIFIED LOCAL/TEST приёмка сохранена; initial review не findings против accepted runtime |
+| M3-A03 / P-02 | C0 сохранил per-target/deferred/sticky suppression policy; revised undated ordering/unions/constraints и implementation ждут адресной приёмки/evidence |
+| M3-A03 / P-03 | C0 выбрал no-refetch ограниченного material slice: MEDIA_REPLACED_UNAVAILABLE, PARTIAL, новое фото не открывается/не анализируется. Current DTO/grant/UI/full M3 ещё NOT VERIFIED |
+| M3-A08 / P-01 | OPEN/NOT VERIFIED: candidate-only не canonical human context. Console-only canonical reply — resumable path; native-only HUMAN до принятого reconciliation, без duplicate send. Actual0011 не блокирует Resume по полноте transcript |
+| P-04 / P-05 | OPEN: отдельные revisions/order/source/allowlists; выбран future append subscription+CAS current NORMAL/PROVISIONED_LOCAL mode, immutable before/after/Audit/replay исходных дат. Команда/renewal/collector/live не выданы |
+| TEST / VM | Старый interval истёк2026-10-09T00:00Z, оба новых окна не подтверждены; VM UNKNOWN, live BLOCKED_TEST_INTERVAL. Collector-only не требует A03, но требует exact actual schema/interval |
+| M3-A10 / M3-ACCEPTANCE / M3-A12 | Прежняя UI/control приёмка сохранена; новый material current view вне неё. Финальная M3 acceptance после A03/A08 и применимого TEST/account evidence |
+| CI optimization / IMPL-05 / M4 | DEFERRED/не открыты; budgets/jobs/clean guards прежние |
+
+Chosen policy, revised-contract acceptance, implementation и account evidence не
+смешиваются. Static checks/traces достаточны для docs; final SHA/tree/numstat и actual
+automatic PR CI будут в одном **новом** canonical R2 receipt. Initial-head green не R2
+PASS. Status-only commit после CI не нужен; старые C3/C1/C2 comments не изменяются.
+Product suites/Docker/Actions dispatch/rerun/VM/live/DB/S3/sends/deploy не выполняются.
+C0 назначает адресный повторный review; PR остаётся Draft, merge только после приёмки.
+Ниже сохранена история; её старые active/status формулировки не разрешают новую работу.
+
+
+## История — C3-M3.1-PROVENANCE-CONTRACT / 2026-10-15 UTC
 
 **C3 — IN_PROGRESS. M3 — IN_PROGRESS.** Единственный автор design slice;
 C1/C2/C5/C6/C8 HOLD до адресного поручения C0.
