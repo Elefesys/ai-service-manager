@@ -16,7 +16,7 @@ Design PR33 интегрирован, C2-PROV-04 CLOSED на уровне design
 | Binding | Значение |
 |---|---|
 | Checkout/branch | Отдельный `c3/m3-1-material`; новый PR не открыт |
-| Base/sole parent | `933ddd284ff5b77fb1aa88a4270ab0032bc499c9` |
+| Base/first source commit parent | `933ddd284ff5b77fb1aa88a4270ab0032bc499c9` |
 | Base tree/schema | `d0759acb9f83ec3f3e10d9c5d1325c937c343ee7` /0011 |
 | Assigned successor |0012←0011, `migrations/versions/0012_message_provenance.py` |
 | Scope | Закрытый allowlist57; applied0001–0011/original11/manifest и prefix345960 immutable; C6 reserved6 untouched |

@@ -4387,7 +4387,7 @@ native/latest-state OPEN, renewal/collector/live и право merge/activation 
 | Source binding | Значение |
 |---|---|
 | Branch | `c3/m3-1-material`; новый PR не открывается |
-| Exact base / sole parent | `933ddd284ff5b77fb1aa88a4270ab0032bc499c9` |
+| Exact base / first source commit parent | `933ddd284ff5b77fb1aa88a4270ab0032bc499c9` |
 | Base tree / schema | `d0759acb9f83ec3f3e10d9c5d1325c937c343ee7` /0011 |
 | Base ordered parents | `bae25093bafb9534af68de5c586763667b896e70`, `642160d2181b9fb5d062e449a0ff603467c40e51` |
 | Successor | `0012_message_provenance.py`, revision0012/down_revision0011; material first, renewal не назначен |
@@ -4869,7 +4869,10 @@ original/File/SENT share the context/apply path. Other public signatures and sco
 authority are retained. No runtime arbitrary ws material setter is added.
 
 Immutable downgrade source copies (SHA256 of each complete `ORIGINAL` Python string,
-UTF-8, no strip; equality to final0011 source checked after only CREATE prefix normalization):
+UTF-8, no strip; equality to final0011 source checked after only CREATE prefix normalization).
+Trailing whitespace in two fixed source literals is encoded as Python `\x20`,
+so the decoded predecessor bodies/CHECKs remain byte-identical and the new source
+passes `git diff --check`:
 
 | Function key | SHA256 |
 |---|---|

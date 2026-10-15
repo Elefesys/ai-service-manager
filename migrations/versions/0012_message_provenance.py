@@ -418,11 +418,11 @@ ORIGINAL = {
           completed_at=accepted,version=version+1 WHERE id=j.id;
         RETURN result;
       END $$""",
-    "turn_supersede(1)": r"""CREATE OR REPLACE FUNCTION platform.turn_supersede(j platform.messaging_jobs) RETURNS boolean
+    "turn_supersede(1)": """CREATE OR REPLACE FUNCTION platform.turn_supersede(j platform.messaging_jobs) RETURNS boolean
       LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$ DECLARE timer_e app.escalations%ROWTYPE; timer_moment timestamptz; timer_due timestamptz;
         timer_validity text; timer_outcome text; timer_error text; timer_recorded timestamptz;
         fault_schema text; fault_table text; fault_constraint text; BEGIN
-        IF j.kind='ESCALATION_TIMER' THEN 
+        IF j.kind='ESCALATION_TIMER' THEN\x20
         SELECT * INTO STRICT timer_e FROM app.escalations WHERE workspace_id=j.workspace_id AND id=j.escalation_id;
         timer_moment:=platform.escalation_now();
         timer_due:=CASE j.step WHEN 'REMIND_1' THEN timer_e.due_at WHEN 'REMIND_2' THEN timer_e.second_reminder_at WHEN 'EXPIRE' THEN timer_e.expires_at END;
@@ -443,7 +443,7 @@ ORIGINAL = {
               UPDATE app.conversations SET version=version+1 WHERE workspace_id=j.workspace_id AND id=timer_e.conversation_id;
             END IF;
             timer_recorded:=timer_moment;
-          
+\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20
           END IF;
         EXCEPTION WHEN check_violation THEN
           GET STACKED DIAGNOSTICS fault_schema=SCHEMA_NAME,fault_table=TABLE_NAME,fault_constraint=CONSTRAINT_NAME;
@@ -697,8 +697,8 @@ OLD_RECEIPT_CHECK = r"""(workspace_id IS NULL AND connection_id IS NULL AND inbo
 
 OLD_MEMBER_CHECK = r"""(content_type='TEXT' AND file_id IS NULL) OR (content_type='IMAGE_REFERENCE' AND file_id IS NOT NULL)"""
 
-OLD_AUDIT_CHECK = r"""
-      
+OLD_AUDIT_CHECK = """
+\x20\x20\x20\x20\x20\x20
       (event_type='WORKSPACE_BILLING_PROVISIONED' AND
  actor_kind='LOCAL_PROVISIONER' AND actor_user_account_id IS NULL AND
  object_type='WORKSPACE_BILLING_ACCOUNT' AND payload='{}'::jsonb) OR
