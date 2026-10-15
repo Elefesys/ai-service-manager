@@ -120,19 +120,34 @@ try:
         assert guards['cleanup']['state'] == 'PASS'
         assert guards['prepare_budget']['charged_total_seconds'] < 600
         admission['guards_schema'] = {'source': guards['coordinator'], 'revision': '0010', 'report': 'retained-guards/guards-schema-phase.json'}
-        escalation = json.loads((e.ROOT / 'reports/escalation-schema-phase.json').read_text())
-        assert escalation['coordinator'] == source and escalation['historical'] == guards['coordinator']
+        escalation = json.loads((e.ROOT / 'reports/retained-escalation/escalation-schema-phase.json').read_text())
+        assert escalation['coordinator'] == '933ddd284ff5b77fb1aa88a4270ab0032bc499c9' and escalation['historical'] == guards['coordinator']
         assert escalation['cleanup']['state'] == 'PASS'
         assert escalation['prepare_budget']['charged_total_seconds'] < 600
         assert escalation['database']['populated_refusal'] == 'PASS'
         assert len(escalation['database']['timers']) == 3
-        admission['escalation_schema'] = {'source': source, 'revision': '0011', 'report': 'escalation-schema-phase.json'}
+        admission['escalation_schema'] = {'source': escalation['coordinator'], 'revision': '0011', 'report': 'retained-escalation/escalation-schema-phase.json'}
+        material = json.loads((e.ROOT / 'reports/material-schema-phase.json').read_text())
+        assert material['coordinator'] == source and material['historical'] == escalation['coordinator']
+        assert material['cleanup']['state'] == 'PASS' and material['database']['populated_refusal'] == 'PASS'
+        budget = material['prepare_budget']
+        assert budget['started_at'] == escalation['prepare_budget']['started_at']
+        assert budget['deadline'] == escalation['prepare_budget']['deadline'] == budget['started_at'] + 600
+        assert budget['issued_at'] >= escalation['started_at'] + escalation['total_seconds']
+        assert budget['charged_total_seconds'] < 600
+        assert material['upgrade_ack_loss']['observed']['revision'] == '0012'
+        assert material['upgrade_ack_loss']['recovery_source'] == source
+        assert material['downgrade_ack_loss']['observed']['revision'] == '0011'
+        assert material['downgrade_ack_loss']['recovery_source'] == escalation['coordinator']
+        assert material['used_recovery']['source'] == source
+        assert material['database']['refusal']['before_ddl'] and material['database']['refusal']['tables'] == 42
+        admission['material_schema'] = {'source': source, 'revision': '0012', 'report': 'material-schema-phase.json'}
     assert not e.command(['git', 'status', '--porcelain', '--untracked-files=all']).strip()
     print('TELEGRAM_EGRESS_MIGRATION_DISPOSABLE_PASS', flush=True)
 except BaseException as error:
     primary = error
     reason = str(error)
-    if not re.fullmatch('(?:CONTROL|EGRESS|FROZEN|HISTORICAL|MIGRATION)_[A-Z0-9_]{1,100}', reason):
+    if not re.fullmatch('(?:CONTROL|EGRESS|FROZEN|HISTORICAL|MIGRATION|MATERIAL)_[A-Z0-9_]{1,100}', reason):
         reason = 'CONTROL_' + type(error).__name__.upper()
     admission['failure'] = {'type': type(error).__name__, 'reason': reason, 'stage': admission['stage']}
     raise

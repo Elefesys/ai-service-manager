@@ -1447,3 +1447,107 @@ def test_guards_inventory_is_exact_c_plus_one_and_old_sources_remain_frozen():
         ):
             with pytest.raises(egress.EgressError, match="EGRESS_MIGRATION_DATABASE_TABLES"):
                 egress.schema_inventory(rev, changed)
+
+
+def test_material_inventory_is_source_derived_and_historical_projections_stay_closed():
+    from test_m3_2_escalations_migrations import E_COLUMNS
+    from test_telegram_egress_postgres import material_source_profile
+
+    profile = material_source_profile()
+    assert set(profile["columns"]) == egress.SCHEMA_TABLES["0012"]
+    assert egress.SCHEMA_TABLES["0011"] == set(E_COLUMNS)
+    assert profile["new_columns"] == {
+        "platform.telegram_connection_state": ("material_enabled",),
+        "platform.telegram_update_receipts": ("codec",),
+        "platform.inbox_events": ("material_result",),
+        "app.conversation_turns": ("material_invalidated",),
+        "app.conversation_turn_messages": (
+            "membership_form",
+            "initial_suppression_id",
+            "suppression_disposition",
+        ),
+        "app.audit_events": ("material_target_id", "material_source_receipt_id"),
+    }
+    assert profile["module"].PUBLIC_FUNCTIONS == (
+        "platform.telegram_replay_v1(text,jsonb)",
+        "platform.material_processing_replay(uuid,uuid)",
+    )
+    for revision in ("0007", "0008", "0009", "0010", "0011"):
+        assert not set(profile["new_tables"]) & egress.SCHEMA_TABLES[revision]
+        with pytest.raises(egress.EgressError, match="DATABASE_TABLES"):
+            egress.schema_inventory(revision, profile["columns"])
+    for damaged in (
+        set(profile["columns"]) - {"platform.telegram_provenance"},
+        set(profile["columns"]) | {"platform.extra"},
+        (set(profile["columns"]) - {"platform.telegram_provenance"}) | {"platform.foreign"},
+    ):
+        with pytest.raises(egress.EgressError, match="DATABASE_TABLES"):
+            egress.schema_inventory("0012", damaged)
+
+
+def test_material_downgrade_keeps_exact_frozen_bodies_and_checks_and_all_used_guards():
+    from types import SimpleNamespace
+
+    from test_telegram_egress_postgres import (
+        material_ddl_operations,
+        material_function_source,
+        material_source_profile,
+    )
+
+    profile = material_source_profile()
+    previous = {}
+    for path in sorted((egress.ROOT / "migrations/versions").glob("[0-9]*.py")):
+        if path.name[:4] >= "0012":
+            break
+        _, statements = material_ddl_operations(path)
+        for statement in statements:
+            if parsed := material_function_source(statement):
+                previous[parsed["signature"]] = statement
+    for original in profile["module"].ORIGINAL.values():
+        parsed = material_function_source(original)
+
+        def normalize(value):
+            return value.replace("CREATE OR REPLACE FUNCTION", "CREATE FUNCTION", 1)
+
+        assert normalize(original) == normalize(previous[parsed["signature"]])
+    for name, digest in {
+        "OLD_RECEIPT_CHECK": "2c33d64a122148d0e62bf3c1fd34610bee6b0e7d0dfea60faf36bda981b7f6be",
+        "OLD_INBOX_CHECK": "7eeb77ebb9bfeddf15abf0a9215ac03f1752270691caca802d2061c60b77f804",
+        "OLD_MEMBER_CHECK": "fd1eb0e3703a811a9f881cc871d8d2838691e857372a93372b8a2cff84b5d809",
+        "OLD_AUDIT_CHECK": "da07204e67d993452b643699ad6e35406bf231755f776226d953afcb60e0a6e1",
+    }.items():
+        assert egress.sha(getattr(profile["module"], name).encode()) == digest
+    down = []
+    profile["module"].op = SimpleNamespace(execute=down.append)
+    profile["module"].downgrade()
+    assert down[0].startswith("LOCK TABLE") and down[1].startswith("DO $$ BEGIN")
+    for predicate in (
+        "platform.telegram_update_receipts WHERE codec IS NOT NULL",
+        "platform.telegram_provenance",
+        "platform.message_material_targets",
+        "platform.message_material_effects",
+        "platform.message_initial_suppressions",
+        "material_result IS NOT NULL OR result_code='MATERIAL_PROCESSED'",
+        "material_invalidated",
+        "membership_form IS NOT NULL OR initial_suppression_id IS NOT NULL",
+        "event_type='MESSAGE_MATERIAL_CHANGED'",
+        "platform.telegram_connection_state WHERE material_enabled",
+        "ERRCODE='55000'",
+    ):
+        assert predicate in down[1]
+    assert down[2:19] == list(profile["module"].ORIGINAL.values())
+    assert not any("CASCADE" in sql or "DELETE FROM" in sql for sql in down)
+
+
+def test_material_egress_current_revision_and_runtime_only_narrow_wrappers():
+    import inspect
+
+    from asm.foundation import DATABASE_SCHEMA_REVISION
+    from test_telegram_egress_postgres import canonical_fingerprint
+
+    assert DATABASE_SCHEMA_REVISION == "0012"
+    assert inspect.signature(canonical_fingerprint).parameters["revision"].default == "0012"
+    shell = (egress.ROOT / "scripts/test_telegram_egress.sh").read_text()
+    assert "'expected_revision': '0012'" in shell
+    # The source/image-switch production helper is still historical0007-only.
+    assert 'heads == [b"0007"]' in inspect.getsource(egress.migration_source)

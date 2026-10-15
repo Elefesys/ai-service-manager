@@ -1938,6 +1938,12 @@ SCHEMA_TABLES["0011"] = SCHEMA_TABLES["0010"] | {
     "app.escalations",
     "platform.escalation_command_receipts",
 }
+SCHEMA_TABLES["0012"] = SCHEMA_TABLES["0011"] | {
+    "platform.telegram_provenance",
+    "platform.message_material_targets",
+    "platform.message_material_effects",
+    "platform.message_initial_suppressions",
+}
 
 
 def schema_inventory(revision, names):
