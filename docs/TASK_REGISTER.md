@@ -2,7 +2,39 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C5-M3.2-CONSOLE-ESCALATIONS / 2026-10-14 UTC
+## Текущий статус — C3-M3.1-PROVENANCE-CONTRACT / 2026-10-15 UTC
+
+**C3 — IN_PROGRESS. M3 — IN_PROGRESS.** Единственный автор design slice;
+C1/C2/C5/C6/C8 HOLD до адресного поручения C0.
+[Выдача C0](https://github.com/Elefesys/ai-service-manager/pull/32#issuecomment-6185468957),
+[активный handoff](tasks/M3_HANDOFF.md), [proposal§15](tasks/M3_CONTRACT.md#15-native-provenance-и-material-editdelete--proposal).
+
+| Принятый факт / задача | Статус и evidence |
+|---|---|
+| C5-M3.2-CONSOLE-ESCALATIONS, PR32 | **INTEGRATED / VERIFIED LOCAL/TEST** по [C0 receipt](https://github.com/Elefesys/ai-service-manager/pull/32#issuecomment-6184721998); [C8 UI-E01–07 PASS](https://github.com/Elefesys/ai-service-manager/pull/32#issuecomment-6180763886), findings нет |
+| Actual main / exact C3 base | `bae25093bafb9534af68de5c586763667b896e70` |
+| Tree / ordered parents | `ad857f156e6ff7ebb23a18c4b127256e774dd7bd`; `ab06bc135f45c88203e434eacefd107412a8eb15` + `ad161ce0e04f6271890458cbec56681199846df8` |
+| Actual main CI | [38684447412/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38684447412),9/9 SUCCESS+clean9/9; checkout exact main по C0 |
+| Accepted baseline |1153 unit/680 PG/79 Escalation PG/294 frontend/39 browser PASS; schema0011 |
+| TURNS/CONTROL/GUARDS/Escalation backend/API и оба Console среза | Прежние **INTEGRATED / VERIFIED LOCAL/TEST** границы; не переоткрывать без конкретного противоречия |
+| C3-M3.1-PROVENANCE-CONTRACT | **IN_PROGRESS**; `c3/m3-1-provenance` от exact base; только append§15+две coordination docs, новый Draft PR→main |
+| M3-A03 | Новый proposal material edit/delete; runtime не выдан. P-02 increments/ordering/Turn и P-03 replaced-photo limitation требуют решения C0 |
+| M3-A08 | Native provenance/account observability **NOT VERIFIED**. P-01 strict post-Resume causality не обеспечивается Bot API; explicit Console/manual alternative на решение C0 |
+| M3-A10 | Owner control/in-flight и Escalation UI приняты в границах PR30/PR32; новый material view не входит в прошлую приёмку |
+| M3-ACCEPTANCE / M3-A12 | Впереди после решения A03/A08 и применимого TEST/live evidence; весь M3 не VERIFIED |
+| TEST/account probe | Только finite plan§15.8; прежний interval истёк2026-10-09T00:00Z; поддержанный renewal/collector и actual runtime требуют отдельной выдачи |
+| CI optimization / IMPL-05 fix | **DEFERRED**; budgets/jobs/clean guards прежние |
+| M4/LLM/production rollout | Не открыты этой выдачей |
+
+P01–P06 и фактические OPEN P-01–05 описаны в§15. Existing V1 hashes/receipts/original11
+immutable, ignored history не переигрывается. Native и material activation независимы.
+Design static checks достаточны; final source/actual automatic PR CI фиксируются
+в одном canonical C3 receipt без status-only commit после CI. Старый main GREEN не
+новый-head evidence. Product tests/Docker/dispatch/rerun/VM/live/sends не выполняются.
+Возврат REVIEW/BLOCKED, затем HOLD; C0 назначает C1/C2/C6 после конкретного решения.
+
+
+## История — C5-M3.2-CONSOLE-ESCALATIONS / 2026-10-14 UTC
 
 **C5 — IN_PROGRESS. M3 — IN_PROGRESS.** Единственный автор нового owner-wait UI;
 C1/C2/C3/C6/C8 HOLD до следующего конкретного gate.

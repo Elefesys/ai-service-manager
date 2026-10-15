@@ -3281,3 +3281,560 @@ CI optimization/IMPL-05 fix DEFERRED. Один новый штатный PR CI �
 При failed/cancelled — конкретный BLOCKED и HOLD, без rerun/нового повышения45.
 Final evidence — отдельный canonical C6 receipt, без status/SHA-only commit.
 C3/C8 HOLD; C8-M3-ESC-01/P2 OPEN до scoped recheck и решения C0; M3 IN_PROGRESS.
+
+## 15. Native provenance и material edit/delete — proposal
+
+### 15.1. Статус, источники и границы доказательства
+
+**C3-M3.1-PROVENANCE-CONTRACT, 2026-10-15 UTC; proposal для C0/C1/C2.**
+[Выдача C0](https://github.com/Elefesys/ai-service-manager/pull/32#issuecomment-6185468957).
+Основание — `bae25093bafb9534af68de5c586763667b896e70`, tree
+`ad857f156e6ff7ebb23a18c4b127256e774dd7bd`, ordered parents
+`ab06bc135f45c88203e434eacefd107412a8eb15` + `ad161ce0e04f6271890458cbec56681199846df8`.
+Принята schema0011. Revision после0011 не назначена;0001–0011 immutable.
+Предыдущие345960 bytes этого документа, blob `e19f8c8aa82c43ec88e8873f16675d13929934e5`,
+SHA256 `b53b3f9caa4af82c095cd2e4d1ac22a0bef435a5d657dacde3278498d2808302`
+сохраняются точно. Этот раздел не активирует runtime, native takeover, probe или M4.
+
+Прочитаны AGENTS/IMPL-001, original11/SOURCE_MANIFEST, Spec4.6–4.10/5.10–5.14/
+18.5–18.8/24.7, ADR019–026/121–128/267/272, MVP GJ-G/J, Roadmap M3,
+Implementation Plan M3.1/M3.2, M2_CONTRACT§2/10, настоящий документ§6/9/12–14,
+M3_HANDOFF§4.4/5/6. Принятые CONTROL/GUARDS/Escalation и Console PASS не пересматриваются.
+
+| Уровень | Что действительно известно |
+|---|---|
+| DOCUMENTED | Официальные источники ниже повторно прочитаны2026-10-15; описание полей/transport, не evidence аккаунта |
+| CURRENT SOURCE | Ниже указан фактический код на exact base; чтение кода/tests не новый execution PASS |
+| OBSERVED ACCOUNT | В этой выдаче **NOT RUN**. Прежняя M2-приёмка text/photo/manual не доказывает native/echo/edit/delete provenance; текущий account/runtime не инспектировался |
+| PROPOSED | Все новые DTO, outcomes, counters, tables, gates и paths§15.3–15.9 требуют принятия C0 и адресного согласования; отсутствие кода намеренное |
+
+Официальные ссылки: [Update](https://core.telegram.org/bots/api#update),
+[Message](https://core.telegram.org/bots/api#message),
+[BusinessConnection](https://core.telegram.org/bots/api#businessconnection),
+[BusinessMessagesDeleted](https://core.telegram.org/bots/api#businessmessagesdeleted),
+[getting updates](https://core.telegram.org/bots/api#getting-updates),
+[setWebhook](https://core.telegram.org/bots/api#setwebhook),
+[WebhookInfo](https://core.telegram.org/bots/api#webhookinfo),
+[connected business bots](https://core.telegram.org/api/bots/connected-business-bots).
+Bot API описывает отдельные business/new/edit/delete updates. `from`,
+`business_connection_id`, `sender_business_bot`, `edit_date`, `is_from_offline`
+у Message optional; последнее помечает, в частности, implicit/scheduled отправку.
+BusinessConnection связывает connection с создавшим её user. Delete содержит connection,
+chat и массив message IDs, но не actor/date удаления. Webhook допускает повторы
+и нарушенный порядок; update_id не бесконечный sequence. Эти факты не дают общего
+causal clock с нашей Console. Отсутствие native update за finite interval означает
+NOT OBSERVED, не доказательство невозможности. MTProto-поля из второй документации
+не переносятся в Bot API DTO и не разрешают userbot.
+
+### 15.2. P01 — provenance и фактическая потеря информации
+
+Trusted binding `B` — server-configured bot после independently checked getMe,
+immutable route `(TELEGRAM,bot,external_connection_id)` → Workspace/connection/Business,
+`platform.telegram_connection_state.owner_user_id`, подтверждённый оператором независимо
+от очередного webhook. `BusinessConnection.user.id` должен совпасть с этим Owner;
+сообщение не создаёт binding. `C` — найденная по той же connection/chat Conversation,
+её immutable Client/ClientIdentity. Наличие Workspace без C не даёт права на другого Client.
+Native `from=Owner` не означает `ClientIdentity.external_user_id=Owner`;
+получатель определяется C, не переименованием sender. Связь Telegram Owner с локальным
+UserAccount тоже не выводится из одинакового имени/username.
+
+Текущий путь: `telegram/webhook.py::WebhookBoundary` проверяет secret до parsing;
+`strict_json` ограничивает тело/Unicode/duplicate keys; `normalize_update` строит11-field
+projection; `TelegramIngress.ingest` вызывает SQL и возвращает ACK после commit.
+SQL `telegram_ingest` создан в0007 и заменён/обёрнут в0008 для isolation/connection
+barrier;0009 добавляет ingress capture через trigger.0009–0011 не добавили origin-поля
+в Telegram codec. SQL fingerprint вычисляется в БД, не принимается от caller.
+
+| Вход / поле и ограничение | CURRENT SOURCE: projection → durable результат | PROPOSED authoritative outcome / достаточное основание |
+|---|---|---|
+| Client text | private chat, `from.id=chat.id`, nonbot; `date/message_id/business_connection_id`, text нужны adapter, хотя общая provider-схема шире | После B и исключения approved Owner: QUEUED → canonical INBOUND Message/C; существующая identity проверяется, не rebind |
+| Client photo/caption | Сохраняет один file_id по max `(width*height,width,height,file_id)`, caption и media_group_id; размеры массива/file_unique_id не сохраняются | Тот же Client predicate и B/C; один исходный FileObject. URL в caption не file source; фото ≠ image-as-document |
+| Native Owner reply | Обычно `from.id=approved Owner`, chat — клиент. Normalizer может дать event.kind=UNSUPPORTED из-за sender≠chat; SQL всё равно проверяет Owner раньше unsupported | Сейчас IGNORED_NATIVE_OWNER_MESSAGE. Предлагается OWNER_CANDIDATE_ONLY: B+C+Owner equality — identity evidence, но не post-Resume/human causality; никакого Client Message/takeover |
+| Own-bot echo | `sender_business_bot.id=bot` сохраняется; необязательность поля не доказывает, что всякий echo его содержит | Сейчас любой nonnull sender_business_bot → IGNORED_ECHO. V2 различает OWN_BOT, но только для exclusion/diagnostics; не SENT confirmation, не native authority |
+| Другой business bot / обычный bot | sender_business_bot другого ID тоже IGNORED_ECHO; `from.is_bot` используется для UNSUPPORTED, но отдельным полем V1 не хранится | V2 OTHER_BOT/BOT_SENDER исключены из takeover и Client input; отсутствие такого update в probe — NOT OBSERVED |
+| Offline/automatic | `is_from_offline` вообще не читается. Owner-shaped input → native ignored; client-shaped input может пройти как CLIENT_MESSAGE; старый fingerprint одинаков с/без этого поля | V2 true → AUTOMATIC, без takeover. Absent — отдельное MISSING, не доказательство ручного ввода. Для Client это attribution, не новая Owner authority |
+| Unsupported/service/nonbusiness | Known unsupported reason обычно сворачивается в event.kind; не сохраняются raw extras/reason. Nonbusiness → receipt без tenant refs | Explicit ignored, без вымышленного Client/C. Новые типы провайдера не становятся поддержанными из-за наличия text/photo |
+| Edit | Normalizer сохраняет исходную `date`, text/selected photo, IDs; edited kind устанавливается даже после unsupported predicate. `edit_date` потерян. SQL возвращает IGNORED_MESSAGE_EDITED до owner/echo branch | Только V2 typed edit + exact existing target/B/C → material policy§15.3. Это изменение содержимого, не доказательство личности редактора/takeover |
+| Delete | projection содержит connection/chat/ordered IDs; не выдумывает message_id/date/from. SQL → IGNORED_MESSAGE_DELETED | V2 deletion авторитетна для scoped known target, без attribution удалившему человеку; unknown target не создаёт Client/Message |
+| Delayed/duplicate | update key `(bot,update_id)`; same V1 hash возвращает receipt до route/disconnect checks; другой hash409. Новый update_id с прежним Message ID дедуплицируется позже по immutable projection | Один canonical эффект. Доставка после Resume не означает отправку после Resume. Message conflict не превращается в edit; legacy ignored не replay-ится как новая работа |
+
+Для первых двух строк V1 normalized event сохраняется в Inbox. Worker
+`messaging_process_inbox` (0008 с последующими replacements) сериализует connection,
+проверяет Message/Conversation identity, создаёт Client только для нового CLIENT_MESSAGE,
+планирует file и группирует Turn.§6 определяет context increment.
+**Telegram ignored не равен ignored Inbox:** в текущем SQL native/echo/edit/delete
+завершаются в `platform.telegram_update_receipts`, с NULL Inbox/Job. Там сохраняются
+hash/kind/result/refs/received_at, **не projection и не raw update**. Поэтому даже
+поле, участвовавшее в hash ignored projection, нельзя прочитать обратно из receipt.
+CONTROLLED ignored, напротив, может пройти через прежний Inbox/PROCESS job.
+Durable IGNORED доказывает commit выбранной V1 ветки и дедупликацию; не совершение
+domain action, не наблюдение отброшенного поля, не полноту доставки Telegram.
+
+Опорные source/tests: `backend/src/asm/telegram/{normalization,webhook,database}.py`,
+`backend/src/asm/messaging/{models,database,worker}.py`, migrations0005–0011;
+`tests/test_m2_3_transport.py::test_projection_exact_unicode_opaque_photo_order_and_delete_chat`,
+`test_unsupported_sender_or_document_cannot_be_client_input`,
+`tests/test_m2_3_db_postgres.py::test_terminal_ignored_receipts_and_lifecycle_never_create_work`,
+`test_receipt_concurrent_dedupe_and_exact_conflict_precede_disconnection`,
+`tests/test_m2_3_wire_postgres.py::test_real_tcp_webhook_never_acknowledges_before_durable_commit`.
+Native fixture в существующем DB test использует owner-shaped sender/chat; это не
+account observation настоящего исходящего Owner→Client сообщения.
+
+### 15.3. P02 — минимальный material payload и порядок изменений
+
+Предлагается отдельный `TelegramProjectionV2`, **не изменение NormalizedEventV1**.
+Envelope: `codec=TELEGRAM_PROVENANCE_V2`, exact `legacy_v1` projection, discriminator
+NEW/EDIT/DELETE/LIFECYCLE/UNSUPPORTED и типизированное дополнение ниже. B/Workspace/
+Client/Conversation/receive time/ingress generation caller не задаёт. Body256KiB,
+typed projection64KiB, старые string/Unicode bounds остаются. Unknown extras не хранятся.
+
+| V2 поле | Тип / правило |
+|---|---|
+| update_id, connection_id | Canonical decimal positive bigint и opaque bounded string; согласованы с legacy_v1 |
+| message target | Для NEW/EDIT: positive decimal chat_id/message_id, chat_type PRIVATE/UNSUPPORTED, sent_at UTC microsecond timestamp. Для DELETE: chat_id и1…100 positive IDs, exact исходный порядок для hash |
+| origin | sender_id nullable; sender_is_bot TRUE/FALSE/MISSING; sender_business_bot_id nullable; offline TRUE/MISSING; unsupported_reason NONE/NONPRIVATE/BOT_SENDER/SENDER_CHAT/GUEST/UNSUPPORTED_MEDIA/EMPTY_CONTENT/AMBIGUOUS_SENDER/NONBUSINESS. При нескольких причинах применяется этот фиксированный порядок. Неверно типизированное известное поле — invalid, не MISSING |
+| edit | edited_at nullable UTC timestamp из edit_date; null не заменяется received_at/date. Для принятого ordered edit требуется edited_at≥sent_at |
+| content | TEXT `{text}` либо PHOTO `{caption:null|string, selected_file_id, selected_unique_id:null|string}` либо UNSUPPORTED `{reason}`; без URL/bytes/entities/raw metadata. Выбор photo прежний; file_unique_id optional в adapter, не file authority |
+| DELETE content/origin/time | NULL: событие не сообщает автора/время удаления; sender не синтезируется из Owner/Client/chat |
+
+Legacy projection и V2 common fields проверяются на согласованность SQL; caller не
+может подставить benign V1 hash к другой connection/content. Client eligibility
+использует B и exact sender/C, native и automated branches запрещены независимо от
+похожего текста. Для EDIT supported content определяется заново: нынешний unconditional
+MESSAGE_EDITED не является доказательством поддержанного photo/text.
+
+**Canonical target:** `(Workspace,connection,provider_chat_id,provider_message_id)`.
+INBOUND находится по Message; OUTBOUND — только через уже сохранённый valid SENT
+Outbox.provider_message_id и его Message/C. UNKNOWN/PENDING нельзя связать по тексту,
+близкому времени или echo. Если найдено более одного target — IDENTITY_CONFLICT,
+без выбора первого. Conversation/Client/Business refs сверяются composite relations.
+Для INBOUND edit sender равен существующей ClientIdentity; для known OUTBOUND —
+approved business Owner/допустимый saved bot origin. Это проверка исходного Message,
+не утверждение, кто нажал Edit. `sent_at` должен совпасть с исходным provider date
+для INBOUND; OUTBOUND, где такой timestamp не сохранён, не выдумывает равенство с
+локальным intent time. Cross-connection/chat/client/bot mismatch — отказ без effects.
+DELETE не требует недоступного sender, но требует B и точного target scope.
+
+Минимальная модель сохраняет **immutable original Message body и ingest hash**.
+Одна current material projection на provider target задаёт effective text/photo,
+VISIBLE/DELETED/ORDER_UNCERTAIN/UNSUPPORTED_CONTENT и ordering watermark; это не
+редактор и не архив всех версий. `Message.version` — semantic version current view.
+Original projection остаётся доказательством получения и источником старого dedupe.
+Public/consumer reads обязаны читать effective view, не показывать оригинал как текущий.
+
+| Случай | Предлагаемое действие / terminal или deferred outcome |
+|---|---|
+| Known ordered edit, strictly newer edited_at | Применить effective semantic content; обновить ordering watermark. Сравнение содержания exact Unicode, без trim/NFC; missing caption эквивалентен NULL, пустая строка отдельна |
+| То же semantic содержание, более новая edit_date или другой update_id | NOOP_CONTENT: можно продвинуть технический watermark; semantic counters0. Повтор обработки same receipt тоже0 |
+| edit_date ниже максимальной достоверной | STALE_EDIT,0; не откатывать более новую версию. update_id не tie-breaker |
+| Одинаковая edit_date, разное содержание | ORDER_UNCERTAIN: не выбирать «последний принятый». Скрыть спорное effective содержание от automation, инвалидировать один раз. При следующем строго более позднем корректном edit можно снять uncertainty; delete всегда сильнее |
+| edit_date отсутствует/противоречит sent_at | UNORDERED_EDIT: известный target становится ORDER_UNCERTAIN один раз; не публиковать недоказанный новый text. Следующий ordered edit сам по себе не доказывает, что он новее undated edit: uncertainty sticky до явного будущего reconciliation; общего reconciliation здесь нет |
+| Known delete | Sticky DELETED; первым переходом скрыть current text/photo, сохранить original/history/receipts. Следующий delete/no-op0; последующий edit не resurrect |
+| Delete batch | Один PROCESS_INBOX commit, unique target IDs отсортированы для locks; каждый target получает APPLIED/ALREADY_DELETED/DEFERRED/IDENTITY_CONFLICT. Повторы ID внутри массива не двойной effect; mixed known/unknown разрешён, mismatch не rebind |
+| Unknown target / edit-before-original | DEFERRED_TARGET: сохранить только один current candidate/watermark/uncertainty под B+connection/chat/message; не создавать Client/C/Message/Turn/File/job ожидания. При original — recheck sender/date/B/C, затем применить совместимый current candidate в той же transaction до reads/grouping |
+| delete-before-original | Durable target tombstone без Client. При original — создать исторический canonical Message с неизменным ingest hash и сразу DELETED effective state; без FETCH/Turn membership и без видимого промежуточного original |
+| Несколько deferred edits/delete | Свернуть тем же ordering rule в один final candidate/tombstone; старые update receipts остаются. Нет бесконечного polling/TTL, после которого поздний original «воскреснет»; unknown records не запускают очередь |
+| Conflict target при позднем original | Deferred candidate не приписывать новому Client. Оставить blocked target outcome и безопасную ORDER_UNCERTAIN current view; materialization не выдаётся за подтверждение спорного содержания |
+| Caption/text edit | Применить текстовую дельту; исходный FileObject пригоден, если current selected photo ref неизменен |
+| Photo replacement или supported type change | Применить effective content/ref, инвалидировать прежний image input. **Минимальный proposal не скачивает заменённое фото:** current view сообщает MEDIA_REPLACED_UNAVAILABLE и не выдаёт старое фото за новое. Это отдельное явное решение P-03 для C0, а не отложенная обработка события |
+| Несемантические provider изменения | При одинаковом supported current text/selected photo/state — NOOP_CONTENT; entities/reply markup/presentation не новая семантика этого adapter |
+
+Приоритеты: receipt replay/conflict → B/typed target validation → sticky deletion →
+unknown-target folding → order check → semantic comparison/apply. Для already-visible
+идентичного supported содержания missing edit_date не создаёт uncertainty: это NOOP,
+но не подтверждение watermark. Для уже uncertain состояния совпадение с одним из
+кандидатов не снимает uncertainty. Lower dated edit не продвигает watermark даже
+при одинаковом содержании. Missing origin boolean не заменяется false;
+selected_unique_id использует те же bounded opaque-ID правила256/1024 bytes.
+
+Материальный ключ photo для legacy target — exact selected file_id; V2 не пытается
+угадать равенство неизвестных bytes по file_unique_id. Изменившийся file_id может
+консервативно дать MEDIA_REPLACED_UNAVAILABLE даже для тех же bytes; это не обещание
+побайтового diff. Если content стал unsupported, старый текст/фото не остаётся current:
+UNSUPPORTED_CONTENT с invalidation. Отсутствие доступного нового фото видно Owner.
+Вариант полноценной замены FileObject потребует отменить UNIQUE(workspace_id,message_id),
+добавить immutable media sources/revision FK и заново проверить WINNER/late PUT/grants;
+он **не входит** в рекомендуемый минимальный срез. C0 должен явно принять ограничение
+либо выдать эту конкретную более широкую дельту до кода; M3 acceptance не обходится.
+
+### 15.4. P02 — increments, Turn, guards, atomicity и read contract
+
+Единица material operation — изменение **одного** canonical Message. Для delete
+array предлагается явное уточнение будущей строки§6: N реально изменённых targets
+дают context+N, а не+1 за HTTP envelope и не bump всех counters. Это новое предложение
+для batch, требует C0; прежние строки§6 и их реализация не изменяются этой выдачей.
+
+| Commit / logical effect | Message.version | Conversation.version | Turn.revision | control_generation/fence |
+|---|---:|---:|---:|---|
+| Known material text/caption/photo/state change | +1 у target | +1 | +1 у связанного Turn |0 / прежний |
+| Batch N новых tombstones | +1 каждому из N | +N в одной C | +1 каждому затронутому Turn **за batch**, не N |0 / прежний |
+| Original после deferred candidate/tombstone | starts1, затем+1 за применённый final material projection | +1 за original и+1 за впервые применённый folded material fact | Нет membership у deleted/uncertain; иначе обычный новый Turn, без дополнительного revision bump до первой membership |0 / capture original, не edit |
+| Unknown/deferred до original, stale/no-op/duplicate/conflict/replay |0|0|0|0 / прежний |
+| Первый вход в uncertainty / unavailable; затем повтор той же uncertainty | +1 /0 | +1 /0 | +1 /0 |0 / прежний |
+| Снятие dated uncertainty строго более поздним ordered edit |+1|+1|+1|0 / прежний |
+| Original FileObject PENDING→READY/FAILED после edit/delete |0|+1 по сохранённому§6| +1 только если file всё ещё effective; иначе0 |0 / прежний |
+| Собственный Audit/effect/receipt, watermark, echo/owner candidate |0|0|0|0 / прежний |
+| Existing Console Takeover/Resume без сообщения |0|0|0|Прежняя таблица§12; новый fence только Resume |
+
+Folded material effect имеет отдельный ключ `(source_update_receipt,canonical_message)`;
+если batch позднее найдёт ещё один target, он получает собственный+1. Исторический
+DEFERRED receipt не переписывается; новый effect ссылается на него и на materializing
+Inbox/valid SENT finalization. Промежуточные deferred edits, никогда не ставшие canonical
+view, не создают фиктивные Message versions. Per-target и batch rules задают точный
+результат независимо от порядка claims; переполнение счётчика → полный rollback.
+
+У Turn остаются immutable membership/origin, captured generation/fence и все deadlines.
+Edit не переносит member в новый Turn, delete не уменьшает historical member_count;
+consumer current view помечает tombstones и не использует их text/file. Sealed Turn
+не открывается и не продлевает media wait. Предлагается sticky
+`material_invalidated=true` у затронутого уже существующего Turn: old snapshots
+SUPERSEDED/STALE, GUARDS не создаёт новый automated intent ни на новой revision, ни
+после Resume/позднего file completion. Один edit не становится новым CLIENT_MESSAGE.
+GROUP/MEDIA могут только завершить прежнюю maintenance; новые guarded/ESCALATE_OWNER
+jobs для invalidated Turn не enqueue-ятся. Следующий новый Client Message начинает
+отдельный Turn, не добавляется к invalidated collecting группе.
+Это консервативный выбор для C0, не обещание автоматического ответа на edit.
+
+Current readiness отдельно учитывает unavailable/uncertain/tombstoned members:
+COMPLETE только когда все используемые inputs доступны; иначе PARTIAL с typed
+причиной; полностью удалённый Turn — NO_USABLE_INPUT и не consumer-ready. Уже
+сохранённый V1 snapshot/readiness/digest не переписывается. Future V2 snapshot нужен
+лишь для новых snapshots изменённых Turns; сохранённый V1 понимается старым decoder.
+Существующий FileObject/WINNER/storage_key не изменяется и не удаляется. Late FETCH
+может законно завершить свою исходную работу; текущую семантику это не восстанавливает.
+Новые grants на replaced/deleted/uncertain current image запрещены; ранее выданный
+signed URL нельзя объявить мгновенно отозванным. Retention/physical erasure — отдельная
+политика, не consequence Telegram delete.
+
+`escalation_context_changed`0011 отменяет PENDING с CONTEXT_CHANGED в том же commit,
+без второго context bump; terminal Escalation неизменна. Late answer/new-key command
+получает stale state; exact старый winning receipt replay остаётся историческим.
+GUARDS accept/begin проверяет context/revision/material flag под Conversation lock.
+Если edit выиграл до admission —0 новых effects. Если DISPATCHING commit уже был —
+прежний outcome SENT/FAILED/UNKNOWN сохраняется; нет recall/resend/echo reconciliation.
+Pending manual intent остаётся ранее принятой ручной операцией по M2, не отменяется
+под видом AI suppression. Новый manual send/Takeover/Resume сохраняет прежние guards.
+
+Предлагаемый lock order: webhook update-key advisory → connection SHARE → имеющаяся
+Conversation NO KEY UPDATE для capture → собственные новые receipt/Inbox/Job; никакого
+material apply до durable ACK. Worker: свой Job UPDATE → свой Inbox NO KEY UPDATE →
+connection UPDATE → existing identity barrier при original → Conversation NO KEY UPDATE
+→ material target rows по sorted provider IDs → canonical Messages по sorted UUID
+→ affected Turns по sorted UUID → context UPDATE/PENDING Escalation trigger → own
+effect/Audit/Inbox/Job finalization. Mutation не блокирует существующие Outbox/FETCH Jobs
+или FileObjects после Conversation; она только меняет current view. Valid SENT finalize
+сохраняет Job→Outbox→Conversation и только затем разрешает deferred target без lock
+другого Inbox/Job. Provider-ID lookup перечитывается после Conversation wait.
+Unknown chat без C держит connection UPDATE и target row; original creation сериализуется
+той же connection. Нет обратного target→Conversation пути. C2 проверяет implicit FK
+KEY SHARE edges, включая новые effects/Audit; timeout/reclaim берёт прежний NOWAIT/
+savepoint path. DB clock/claim проверяются после последнего ожидания. HTTP/S3 вне unit.
+
+Atom: effective state + exact versions + Turn invalidation + Escalation cancellation +
+typed `MESSAGE_MATERIAL_CHANGED` Audit + effect result + own job terminal state.
+Предлагаемый точный Audit actor_kind=`CHANNEL_EVENT`, actor_user_account_id=NULL,
+с bounded origin class, **не USER_ACCOUNT Owner**. Это новая strict union ветка,
+не существующий actor kind. Message object version=accepted semantic version, refs к canonical C/Client и receipt,
+old/new version/reason; без текста/provider IDs. Один Audit на actual target change,
+0 для no-op/unknown/replay; migration должна расширить строгий Audit union/FK/profile.
+Crash before commit откатывает всё, lost ACK replay возвращает прежний результат.
+
+Минимальный будущий owner read добавляет versioned material projection к Message:
+`state`, `effective_content_type`, `effective_text`, `image_availability` и changed flag.
+Original content/delivery остаются историческими полями; UI явно показывает current
+edit/deleted/unavailable state и не открывает stale image. Provider IDs/receipt internals
+не уходят в API. Existing strict DTO/TS consumers требуют **совместного** изменения
+MessageResponse/parser/panel и generated OpenAPI; optional unknown field нельзя назвать
+обратно совместимым со strict parser. До этого paired gate A03 не включается на VM.
+
+### 15.5. P03 — native intervention, causality и Resume
+
+Строгий automatic native takeover **не доказуем на текущем Bot API контракте**:
+есть две неразличимые для сервера истории — Owner отправил до Resume, update задержан;
+Owner отправил после Resume, update пришёл сразу. Native сообщение не содержит нашего
+control_generation/fence или ack Console Resume. Provider second-resolution time и
+server clock не имеют документированной общей causal границы; update_id упорядочивает
+provider updates, но Resume вообще не provider update. Локальный ingress capture
+доказывает admission после fence, а не момент человеческого действия. Даже успешный
+account probe не устраняет эту неразличимость и не доказывает полноту origin markers.
+
+| Проверки в порядке приоритета | Однозначное действие |
+|---|---|
+| Auth/route/B/Client relation отсутствует или конфликтует | Existing reject/unsupported;0 takeover, не создать C по Owner sender |
+| Same update либо тот же known native Message identity уже terminal | Replay/duplicate,0 новых Message/context/generation/Audit |
+| sender_business_bot=own, или exact known outbound identity | OWN_ECHO_EXCLUDED;0 takeover; UNKNOWN остаётся UNKNOWN |
+| Другой business bot / sender_is_bot true / offline true / unsupported sender_chat | BOT_OR_AUTOMATIC_EXCLUDED;0 takeover |
+| `from=approved Owner`, private chat=C, origin markers absent | OWNER_CANDIDATE_ONLY:0 domain Message/context/control. Presence/absence sender_business_bot не положительная authority |
+| Candidate ingress до текущего Resume fence/captured старый generation | PRE_RESUME_EXCLUDED;0 takeover даже если обработан после Resume |
+| Candidate ingress после fence, provider date «новее», но нет отдельного causal proof | ORDER_UNPROVEN;0 takeover. Это включает невиденный раньше pre-Resume delayed update |
+| Identity+human origin+post-Resume causal proof+first durable native effect | Был бы sufficient set: под C lock native Message/context+1 и generation+1/HUMAN/fenceNULL один раз. **На текущем API эта ветка недостижима; token/proof не изобретается и не принимается от caller** |
+| Явный live OWNER Console Takeover или новый разрешённый manual intent | Existing accepted command/key/CAS/auth boundary§12; takeover по воле Owner, не по догадке о native событии |
+
+Рекомендация C0 P-01: сохранить native только как наблюдаемую candidate/ignored
+категорию; обязательный явный Takeover перед ответом из Telegram, явный Resume после.
+Это минимальная альтернатива без нового endpoint/новой owner capability. Уменьшенная
+гарантия «takeover по arrival после Resume» противоречила бы запрету false delayed
+takeover и здесь **не предлагается как VERIFIED**. Изменение желаемого native scope
+принимает C0 явно, при необходимости ADR; LOCKED ADR026/267 не переписываются.
+Ни native candidate, ни edit/delete не делают auto-Resume, не оживляют старый Turn,
+не подтверждают UNKNOWN и не становятся Client sender identity.
+
+### 15.6. P04 — versioned codec, cutover и сохранение receipt identity
+
+Один namespace update `(configured bot,update_id)` сохраняется для обеих версий.
+Предлагается nullable codec marker у Telegram receipt: NULL=историческая V1,
+2=V2; old columns/hash/result/timestamps не переписываются. V2 хранит bounded typed
+projection в отдельной закрытой sidecar row FK к receipt; raw update не хранится.
+V1 Inbox по-прежнему имеет старый normalized event/hash. V2 mutation Inbox содержит
+валидный V1-compatible event kind EDITED/DELETED и ссылку через sidecar на typed delta;
+только эта подтверждённая связь разрешает новую worker branch, не сам EventKind.
+Новый Job kind/отдельная queue не нужны: существующий PROCESS_INBOX и новые typed outcomes.
+
+V2 fingerprint: prefix `asm:m3:telegram_provenance:v2\n`, затем length-prefixed UTF-8
+parts (NULL=`-1:\n`, длина в bytes), фиксированный порядок:
+bot,update_id,hex(V1 fingerprint),discriminator,chat_type,sender_is_bot,offline,
+unsupported_reason,edited_at,content_kind,selected_unique_id.
+Остальные common/content/delete fields уже входят в exact V1 projection hash;
+V2 validator проверяет их равенство, не держит вторую несогласованную копию.
+Enums encoded uppercase, timestamps прежние UTC6, missing отдельно от false,
+delete array exact ordered для hash, unique/sorted только при effects. Python/SQL
+vectors обязательны. Это proposal нового codec, не смена prefix у V1.
+
+| Состояние при доставке/upgrade | Обязательное поведение |
+|---|---|
+| Existing V1 receipt, relevant V1 projection совпадает | Вернуть **старый** receipt/result до V2 interpretation, независимо от dropped новых полей и нынешнего gate/route. No added sidecar, no fresh marks |
+| Existing V1 key, V1 projection differs | EVENT_ID_CONFLICT409; не fork как V2 и не overwrite |
+| Existing V2 key | Только exact V2 fingerprint replay; изменённый relevant V2 field →409, даже если V1 subset совпал |
+| Key отсутствует | После cutover только V2 writer; в одном commit receipt+sidecar+Inbox/Job либо terminal ignored. Нельзя одновременно разрешить V1 fresh creation на том же bot |
+| V1 pending Inbox при новом source | Обычный старый decoder/process, те же hash/provenance/eligibility. Старый MESSAGE_EDITED/DELETED без V2 sidecar остаётся ignored |
+| V1 completed/ignored | Только read/replay; не backfill origin/edit_date, не reclassify/перезапускать историю |
+| Gate A03 выключен | Новый V2 edit/delete сохраняет terminal ignored с captured gate=OFF; последующее включение не переигрывает его |
+| DB commit response lost / restart |503 до доказанного commit; redelivery exact key → prior receipt; worker resume только своей durable claim, не новая операция |
+
+Чтобы malformed V2 extra не сломало **старый** V1 replay, webhook сначала выполняет
+normal auth+strict JSON+legacy normalization и narrow legacy receipt probe. Найденный
+V1 hash/conflict возвращает прежний результат; отсутствие — не ACK. Затем V2 parse и
+final ingest снова проверяет namespace под тем же advisory lock, закрывая race двух
+фаз. Existing V2 всегда требует полный V2 parse/hash. Legacy probe не раскрывает
+receipt/tenant публично; HTTP ACK прежний. V1 и V2 raw bodies не логируются.
+
+Cutover — операторский feature gate по exact binding, C0-accepted source/schema;
+не provider-date cutoff. Короткий guarded stop старого writer/worker, сохранение
+доставки через обычные webhook retries, upgrade, exact readiness, start нового source;
+никакого drop_pending_updates/getUpdates/отключения connection. Новые gates default OFF:
+codec capture, material A03 и native domain activation различаются. P-01 рекомендует
+native domain activation отсутствующей вообще, не скрытый bool, который можно включить.
+Доставка «давнего» update без старого receipt — новая receipt, но не доказательство
+свежего owner action. Кодек не использует update_id high-water для потери событий.
+
+### 15.7. P04 — минимальная schema/security и предлагаемый future allowlist
+
+Минимально нужны: receipt codec/sidecar; tenant-scoped current target table с nullable
+canonical Message и ordered edit/tombstone/uncertainty; immutable per-target effect
+rows с Audit/version/receipt refs; effective-view read helper; Turn invalidation flag;
+узкие ingress/process/read/grant/admission capabilities. Original Message body,
+NormalizedEventV1 и его hashes, Outbox delivery, applied migrations не меняются.
+Unknown target table всегда привязана B к Workspace/connection/chat; не произвольная
+межтенантная map. Bound Message требует composite C/Client/connection relations.
+В state только latest folded content и refs, без generic event journal или редактора.
+
+Новые tenant rows FORCE RLS; platform sidecars/effects без прямого runtime SELECT/DML,
+только allowlisted SECURITY DEFINER с pinned pg_catalog,pg_temp search_path,
+non-owner/non-BYPASSRLS runtime и прежним transaction/task/XID context. Новая Audit
+ветка требует exact constraints/FK, а не ослабления существующих allowed payloads.
+Private helpers не grant-ятся runtime. Migration review сверяет полный function/grant/
+RLS/trigger inventory; narrow TEST gate не даёт универсального caller-supplied authority.
+
+Source `B=bae25093...`/schema0011 остаётся frozen predecessor. Новый P source принимает
+только назначенный C0 successor schema; B/P mismatch отказывает readiness. Upgrade
+не создаёт Message/Turn/job из истории и сохраняет old-column exports, hashes, signed
+grant semantics, UNKNOWN и private objects. Default markers inactive/NULL, никаких
+synthetic origin dates. Unused successor→0011 возможен лишь после inventory-проверки;
+наличие V2 receipt/sidecar, material target/effect, invalidated Turn или нового TEST
+interval receipt — used-refusal **до DDL**. Rollback used state: остановить rollout и
+вернуться к совместимому P source с gates OFF/forward fix; не запускать B поверх P,
+не удалять историю ради downgrade. Все старые compatibility lanes сохраняются.
+
+Следующая таблица — **proposed maximum allowlist**, не write permission. Migration
+filename не назначает revision: `migrations/versions/m3_message_provenance.py`, поле
+revision определит C0/C2 отдельно; predecessor0011. Разделение на адресные выдачи
+C3/C1/C2/C5/C6 определит C0; никто здесь не запущен параллельно.
+
+| Exact future path(s) | Единственная причина |
+|---|---|
+| `migrations/versions/m3_message_provenance.py` (new) | Additive successor, tables/FKs/RLS/Audit/functions, no changes0001–0011 |
+| `backend/src/asm/telegram/normalization.py`, `backend/src/asm/telegram/database.py`, `backend/src/asm/telegram/webhook.py` | V1 replay seam, V2 typed codec/receipt binding; прежняя auth/limits/ACK |
+| `backend/src/asm/conversations/material.py` (new) | Закрытые typed delta/effect/current-view DTOs; не generic event engine |
+| `backend/src/asm/messaging/database.py`, `backend/src/asm/messaging/results.py`, `backend/src/asm/messaging/worker.py` | V2 PROCESS_INBOX branch/typed outcomes, unchanged claims/recovery horizons |
+| `backend/src/asm/conversations/turns.py`, `backend/src/asm/conversations/guards.py`, `backend/src/asm/conversations/escalations.py` | Versioned current material snapshot, suppression invalidated Turn; retained V1 decoders |
+| `backend/src/asm/messaging/http_models.py`, `backend/src/asm/messaging/http_service.py`, `contracts/openapi.json` | Current material view в существующей history, generated paired contract; никаких edit/delete endpoints |
+| `backend/src/asm/billing/models.py` | Только strict MESSAGE_MATERIAL_CHANGED Audit variant |
+| `backend/src/asm/foundation.py`, `backend/src/asm/telegram/provisioning.py` | Только exact successor readiness/schema check, не live setup/TEST renewal |
+| `frontend/src/messaging-api.ts`, `frontend/src/messaging-api.test.ts`, `frontend/src/messaging-fixtures.test-helper.ts`, `frontend/src/MessagingPanel.tsx`, `frontend/src/MessagingPanel.test.tsx` | Paired strict parser и current edit/deleted/unavailable presentation; прежняя manual recovery |
+| `frontend/src/billing-api.ts`, `frontend/src/billing-api.test.ts`, `frontend/src/BillingPanel.tsx`, `frontend/src/BillingPanel.test.tsx` | Новый bounded Audit label/parser, сохранить mixed history |
+| `tests/test_m3_1_provenance.py`, `tests/test_m3_1_provenance_postgres.py`, `tests/test_m3_1_provenance_migrations.py` (new) | P06 assertions/V1–V2 vectors, actual concurrency/upgrade/refusal |
+| `tests/test_m3_1_control_postgres.py`, `tests/test_m3_1_control_api_postgres.py`, `tests/test_m3_1_guards_postgres.py`, `tests/test_m3_2_escalations_postgres.py`, `tests/test_m3_2_escalations_api_postgres.py` | Только mutation→stale/Resume/UNKNOWN/late answer cases и explicit child cleanup |
+| `tests/test_m2_3_transport.py`, `tests/test_m2_3_db_postgres.py`, `tests/test_m2_3_wire_postgres.py`, `tests/test_m2_3_api_postgres.py`, `tests/test_m2_3_schema_postgres.py` | Retained V1 + new authenticated V2 path, isolation/grant/current view |
+| `tests/test_foundation.py`, `tests/test_postgres.py`, `tests/test_tenancy_postgres.py`, `tests/test_m2_3_setup.py`, `tests/test_m1_3_postgres.py`, `tests/test_m1_3_c0_acceptance.py` | Только exact new head/inventory/explicit FK cleanup; прежние assertions неизменны |
+| `tests/test_m3_1_migrations.py`, `tests/test_m3_1_control_migrations.py`, `tests/test_m3_1_guards_migrations.py`, `tests/test_m3_2_escalations_migrations.py` | Latest fixture restore/child cleanup; frozen predecessor projections сохранены |
+| `scripts/prepare_telegram_egress.py`, `scripts/test_telegram_egress.sh`, `scripts/test_telegram_egress_migration.sh`, `tests/test_telegram_egress.py`, `tests/test_telegram_egress_migration.py`, `tests/test_telegram_egress_postgres.py` | Только согласованный C6 source/schema/inventory extension; без CI optimization/новых budgets |
+| `frontend/e2e/messaging.spec.ts`, `scripts/m2_4_browser_fixture.py`, `scripts/m2_4_browser_worker.py`, `tests/test_m2_4_browser_fixture.py` | Один paired current-view journey через normal worker, existing TEST guards/PENDING-image boundary |
+| `docs/tasks/M3_CONTRACT.md`, `docs/tasks/M3_HANDOFF.md`, `docs/TASK_REGISTER.md`, `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` | Принятый scope/операторский порядок/evidence с содержательным diff |
+
+Не включены transport client, dependencies, locks, Compose/images/workflows, SQL originals,
+auth/CONTROL API, FileObject replacement engine. Если выбран full photo replacement,
+его конкретный дополнительный allowlist сначала утверждает C0; эта таблица его не
+разрешает. Security/grant изменения выполняются в новой migration, не правкой old SQL.
+
+### 15.8. P05 — короткий account probe для будущей выдачи C0/C6
+
+**План исполним после трёх конкретных gates; сейчас NOT RUN.** Gate1 — C0 принимает
+P-01/02/03 и collector diff; Gate2 — поддержанный новый TEST interval; Gate3 — C6
+подтверждает exact runtime/image/schema/binding и guarded deployment/recovery.
+Collector сам по себе не требует A03 schema/activation. Probe на0011 возможен только
+при уже поддержанном действующем interval; сейчас такого evidence нет. Если renewal
+добавит successor schema, collector source/readiness должны быть согласованы именно
+с ней. Runtime material implementation/probe имеют разные разрешения. Git merge не меняет VM.
+
+1. C6 получает текущее accepted source SHA/image digests/schema и сверяет actual VM
+   read-only с ними; нельзя считать VM уже на0011. Collector target — принятый source
+   и отдельно review-нутый collector commit с тем же exact schema gate. Если renewal
+   требует migration, сначала отдельный source/schema rollout C0. Проверить TEST/asm_test, runtime role,
+   normal webhook auth, configured bot, existing connection/Workspace/Business и
+   independently approved Owner; Client/C известны либо создаются обычным client inbound.
+   Readonly getMe/getBusinessConnection/getWebhookInfo только по отдельной live выдаче,
+   один bounded запрос каждого, без retry loop; webhook URL/allowed business types и
+   expected binding совпадают. Несовпадение/timeout/чужой chat → STOP до отправок.
+2. Старый interval завершён **2026-10-09T00:00Z**. Source `provisioning.commit_binding`
+   требует0011 и вызывает fresh-only initialize_local_messaging_billing; `provision`
+   затем делает setWebhook. Повтор с новыми датами не является renewal и здесь запрещён.
+   Текущего поддержанного in-place renewal этой binding в прочитанном path нет.
+   Предложение отдельной C0/C1/C2 задачи: operator-only LOCAL/TEST command append нового
+   ACTIVE/COMPED interval к тому же sealed test_messaging revision1/Workspace, только
+   после проверки полного old state и отсутствия overlap; immutable request key/hash/
+   receipt/Audit, exact replay NOOP, mismatch conflict. Не менять old intervals/catalog/
+   connection/history и не открывать runtime прямой SQL. Новый interval `[T0,T0+60min)`
+   с DB time; observation начинается не позже T0+30min. Если command ещё не принят —
+   **BLOCKED_TEST_INTERVAL**, никаких Console sends/Resume. Секреты не нужны в чате.
+3. Current V1 не сохраняет нужные поля. Предложить C6 minimal diagnostic collector:
+   после normal auth+strict JSON, до normalize_update извлечь только whitelist ниже;
+   после ingest добавить sanitized receipt outcome/commit observation. Тело/headers
+   не сохранять, отдельный маршрут не создавать. Collector default OFF, exact bot/
+   connection/chat allowlist, TTL15min, максимум50 events/256KiB, private mode0600,
+   stop на лимите/ошибке. Он не меняет ACK/domain decisions; capture loss помечает
+   evidence INCOMPLETE, не PASS. Вне allowlist не сохранять даже metadata.
+4. Включить capture на `Tstart` с абсолютным `Tstop=min(Tstart+15min,TEST_until)`.
+   Owner сначала нажимает Console Takeover, подтверждает HUMAN; нет synthetic AI
+   consumer в live conversation. Client отправляет один новый короткий TEST text и
+   одну безопасную photo с caption. Дождаться visible canonical rows максимум60s на
+   шаг; отсутствие → записать NOT OBSERVED/STOP, не посылать бесконечные повторы.
+5. Owner делает один обычный native reply в этом chat, затем один Console manual send
+   с одним сохранённым key. Зафиксировать send outcome независимо от echo; ambiguity
+   → остановить sends, сохранить UNKNOWN, не использовать новый key. Наличие/отсутствие
+   own echo фиксируется отдельно. Затем Client редактирует свой TEST text и caption,
+   при доступном UI один раз заменяет TEST photo, затем удаляет эти два сообщения
+   для обеих сторон. Owner может один раз изменить свой native TEST reply, чтобы
+   видеть sender/origin edit; не удаляет принятую project history. Каждое действие
+   имеет local ordinal/time и ожидаемый class, никаких claims о доставке заранее.
+6. Other-bot/offline/scheduled проверить только если уже реально доступно на account
+   без смены подключения/режима/подписок; максимум по одному действию. Иначе отдельные
+   строки NOT OBSERVED/NOT AVAILABLE IN THIS PROBE. Не заменять connected bot ради
+   примера. При необходимости пользователь делает scheduled TEST send в оставшемся
+   окне; это проверяет marker, не доказательство полного списка implicit actions.
+7. После действий оставить capture до Tstop, без изменения webhook/getUpdates mode,
+   queue/inbox/jobs, paused chats или connection. Live delay/redelivery не инсценировать.
+   Из duplicate доставки сделать observation, если она действительно случилась;
+   synthetic delayed-before/after-Resume cases тестируются отдельно в LOCAL/PG.
+   Resume для завершения не обязателен: оставить HUMAN; если Owner позже явно выбирает
+   Resume, записать отдельный accepted command, не считать его native proof.
+8. Collector сам выключается на Tstop. C6 сверяет finite counts/drop status/normal
+   receipt results, сохраняет sanitized evidence и digest, удаляет только временный
+   приватный capture/key по принятому плану. Не удаляет DB receipts, Messages или S3.
+   Матрица по каждому действию: action observed / webhook observed / fields present /
+   current receipt / canonical effect / NOT OBSERVED reason. Выводы A03 и A08 раздельны.
+
+Whitelist evidence: probe pseudonym; action/arrival/commit ordinal; update equality token
+и относительный provider-order rank; configured bot/connection/chat/sender/message
+устойчивые псевдонимы; target-ID equality для edits/delete; sender_is_bot, наличие
+sender_business_bot и его relation own/other/none; offline TRUE/MISSING; event type,
+text/photo/caption presence (не содержание); date/edit_date offsets в секундах от T0;
+private-chat predicate; equals_approved_owner/client/configured_bot; canonical binding
+match; sanitized result/duplicate flag и local control generation/fence relation.
+Не сохранять text/caption, content hashes, username/names, реальные IDs, file_id,
+file_unique_id, URLs, token/secret, IP, header/body/exception dumps. Для отношений
+использовать HMAC с приватным случайным ключом одного probe (domain разделён по виду
+identity), не обычный hash угадываемых numeric IDs. Provider-order rank сохраняет
+относительный порядок без публикации чисел; пропуски/MISSING остаются явными.
+Одинаковые User IDs используют общий user namespace, чтобы Owner/Client/bot comparison
+не потерялся. Отдельно arrival order и provider-time order, их совпадение не causality.
+
+Proposed collector-only exact paths: `backend/src/asm/telegram/provenance_probe.py`
+(new: whitelist/redaction/finite buffer), `backend/src/asm/telegram/webhook.py`
+(post-auth/pre-normalize hook), `backend/src/asm/telegram/config.py` (OFF/TTL/allowlist),
+`tests/test_telegram_provenance_probe.py` (new: auth-before-capture/redaction/bounds),
+`docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md` (finite operation). Никакого raw logging.
+Отдельный renewal proposal: `migrations/versions/m3_test_messaging_interval.py` (new,
+revision не назначена), `scripts/renew_telegram_test_interval.py` (new),
+`tests/test_telegram_test_interval.py` (new), `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md`.
+C0/C2 определяют migration order до выдачи этой **отдельной** задачи. Если она идёт
+до A03, proposed companion allowlist — те же exact foundation/provisioning/readiness,
+profile/fixture/cleanup, migration-cycle и шесть C6 compatibility paths из§15.7,
+плюс `docs/tasks/M3_HANDOFF.md` и `docs/TASK_REGISTER.md`; их единственная дельта —
+renewal revision/receipts и exact inventory. Ни этот перечень, ни четыре новых пути
+не являются permission на deploy; не требуется расширять permissions runtime.
+
+Ровно что понадобится пользователю позже: выбрать с C0 finite время, подтвердить
+prepared Owner/Client account pair без публикации IDs/секретов, выполнить Takeover,
+два client сообщения, native reply, один Console send, edits/delete только TEST messages;
+опциональный scheduled пример лишь при доступности. Доступ/секреты C6 использует
+существующим защищённым способом. Сейчас никаких действий/паролей от пользователя
+не требуется и отправки не инициируются.
+
+### 15.9. P06 — конечная приёмка, OPEN и следующий scope
+
+Это **future assertions**, не выдуманные пройденные tests. Только затронутый risk;
+прежние TURNS/CONTROL/GUARDS/Escalation suites остаются regression gates.
+
+| ID / часть | Минимальный actual assertion и слой |
+|---|---|
+| P-A03-01 normalizer/codec | V1 vectors побайтно; V2 dropped-before fields preserved/typed, missing≠false; caption/photo selection, unsupported edits, DELETE no invented sender/date; SQL/Python hashes совпадают |
+| P-A03-02 actual PG identity | Same message ID в двух Workspace/connection/chat не alias; same Workspace wrong Client/C отказ; native sender не создаёт Client; known outbound только exact valid SENT mapping, UNKNOWN остаётся unmatched |
+| P-A03-03 PG order/material | original→edit/delete и edit/delete→original; known/unknown/duplicate targets в batch; lower/equal-conflicting/newer/undated edits; sticky delete. Проверить точные§15.4 counters/effects/Audit/old hashes, не только final text |
+| P-A03-04 workers/restart | Barriers: before commit rollback, lost commit ACK replay, two claims, restart after DEFERRED и after apply; один effect per target. Без polling jobs для unknown; wrong/stale claim и forged V2 sidecar отказ |
+| P-A03-05 Turn/file | Captured origin/generation/fence/deadlines/membership unchanged; revision/invalidation exact; sealed не reopen; new Client starts new Turn. Replaced/deleted image не current; late FETCH retains WINNER/old objects, no stale grants/new automation |
+| P-A03-06 action races | Material commit до GUARDS accept/begin → no new side effect; после DISPATCHING → existing SENT/FAILED/UNKNOWN, external count не растёт. Pending Escalation cancels once/context exact; old API decision stale, winning receipt replay unchanged |
+| P-A03-07 API/UI/security | Paired strict DTO/parser показывает edited/deleted/uncertain/unavailable, old content не current; actual auth/CSRF/read/grant isolation и mixed Audit. UI read не takeover/send, manual recovery прежняя |
+| P-A03-08 migration/compat | Clean/repeat/populated upgrade от exact B0011; pending/completed V1/ignored/UNKNOWN/files/receipts/export hashes прежние; first V2/redelivery V1/same-key conflicts; used refusal before DDL; B/P mismatch fails. Old green не новый-source evidence |
+| P-A08-01 synthetic provenance | Independent approved Owner+B+C; own echo/other bot/from-bot/offline/unsupported missing markers;0 false Client/takeover. V1 receipt не доказывает absent extra; V1 ignored never reprocess |
+| P-A08-02 actual PG ordering | Existing ingress/Resume lock barriers; duplicate-first и native candidate before/after Resume с одинаковыми provider fields;0 candidate effects/generation increments, no revived Turn. Explicit Console command остаётся единственным достаточным path при P-01 |
+| P-A08-03 account observation | Exact runtime/schema/binding/new interval; authenticated finite collector; controlled user actions и реально увиденные поля, own echo absence отдельно. No-observation не impossibility; observation не strict native causality proof |
+| P-A03-09 account edit/delete | Сопоставить target relations и actual receipt/effect с action; при collector-only0011 ожидается прежний IGNORED, не pretend material PASS. Material live check только после принятой отдельной A03 activation |
+
+Граница execution evidence: принятый GUARDS producer исполняется только на CONTROLLED,
+автоматической Telegram отправки сейчас нет. Поэтому P-A03-06 состоит из двух честных
+proofs: TELEGRAM V2→обычный worker→material state/context/Escalation invalidation и
+CONTROLLED guarded worker→тот же private material-apply helper→stale admission.
+Второй proof использует disposable LOCAL/TEST fixture с finite typed delta, не подменяет
+provider/route/Client в сохранённых rows и не называется live Telegram E2E. Test-only
+trusted wrapper создаётся/удаляется migrator в fixture, не grant-ится обычному runtime
+и не остаётся в production schema; C2 проверяет вызов того же apply body/lock order.
+Public/production mutation helper не принимает произвольный caller Workspace/claim.
+Если C0 требует positive automated Telegram admission, это отдельный scope по§13.4,
+а не ослабление текущего CONTROLLED-only guard ради теста.
+
+| OPEN decision | Конкретный вопрос / рекомендуемый ответ / владелец |
+|---|---|
+| P-01 native guarantee | API не связывает native действие с Console epoch и не доказывает completeness origin markers. Рекомендация: explicit Console/manual control, native candidate only. C0 принимает scope/ADR consequence; A08 strict native НЕ VERIFIED |
+| P-02 material policy | Принять per-target batch increments, sticky undated uncertainty, no automatic reply from invalidated old Turn и deferred folding§15.3/4. C0 policy, C1/C2 validate locks/FKs/typed outcomes до implementation |
+| P-03 photo replacement | Принять visible MEDIA_REPLACED_UNAVAILABLE без refetch как минимальный A03 либо отдельно расширить media-source/FileObject модель. Это влияет на scope и M3 acceptance; ограничение нельзя скрыть под PASS |
+| P-04 source/schema | C2/C6/C0 назначают revision и точный successor profile/compatibility diff;0012 не назначена этим proposal. Renewal, collector и A03 не запускаются одной неявной миграцией |
+| P-05 TEST/probe | Existing billing renewal отсутствует в текущем setup path; нужна отдельная поддержанная команда и finite interval. До неё live send/probe BLOCKED_TEST_INTERVAL. Текущее VM состояние UNKNOWN |
+
+P01→§15.1–2; P02→§15.3–4; P03→§15.5; P04→§15.6–7;
+P05→§15.8; P06→§15.9. Design source/static checks и actual final-head CI будут
+в единственном canonical C3 receipt нового Draft PR; никакого post-CI status commit.
+Возврат **REVIEW**, затем C3 HOLD. Следующий рекомендуемый scope — адресное C1/C2
+согласование P-02/03/04 и решение C0 по P-01; C6 получает только отдельный collector/
+renewal/probe plan после этих решений. Код, VM/live/ACK/deploy и merge сейчас не выданы.
+M3 остаётся IN_PROGRESS; M3-ACCEPTANCE отдельно, M4/LLM/production/IMPL-05/CI optimization
+не открываются. Прежние принятые receipts не изменяются.

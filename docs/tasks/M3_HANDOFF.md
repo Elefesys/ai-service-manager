@@ -5,9 +5,78 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Активная выдача C0 — C5-M3.2-CONSOLE-ESCALATIONS
+## 0. Активная выдача C0 — C3-M3.1-PROVENANCE-CONTRACT
 
-Единственная активная выдача: [C0,2026-10-14](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6172495208).
+Единственная активная выдача: [C0,2026-10-15](https://github.com/Elefesys/ai-service-manager/pull/32#issuecomment-6185468957).
+**C3 — IN_PROGRESS**, только design и план account probe. C1/C2/C5/C6/C8 HOLD до
+адресного поручения C0. Ниже сохранена история завершённых выдач; её старые статусы
+не разрешают новую работу. Весь M3 IN_PROGRESS, M4 не открыт.
+
+| Exact start | Значение |
+|---|---|
+| Repository / branch → target | Elefesys/ai-service-manager / `c3/m3-1-provenance` → main |
+| Accepted base / tree | `bae25093bafb9534af68de5c586763667b896e70` / `ad857f156e6ff7ebb23a18c4b127256e774dd7bd` |
+| Ordered parents | `ab06bc135f45c88203e434eacefd107412a8eb15` + `ad161ce0e04f6271890458cbec56681199846df8` |
+| Accepted schema |0011;0001–0011 immutable; следующая revision не назначена |
+| PR32 | [INTEGRATED / VERIFIED LOCAL/TEST по C0](https://github.com/Elefesys/ai-service-manager/pull/32#issuecomment-6184721998) |
+| Base main CI | [38684447412/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/38684447412),9/9 SUCCESS+clean9/9;1153 unit/680 PG/79 Escalation PG/294 frontend/39 browser |
+
+Создан отдельный чистый checkout. Remote main/new branch, parent order/tree сверены
+до правок и совпали с exact base. Без reset/rebase/force-push/продолжения PR31/PR32.
+Новый Draft PR после содержательного contract diff; final source/CI только в PR receipt.
+При чужой дельте branch/main — остановка с конкретным diff, не перезапись.
+
+Разрешены **ровно три paths**, один содержательный commit:
+
+- `docs/tasks/M3_CONTRACT.md`: append нового§15; прежние345960 bytes неизменны,
+  SHA256 `b53b3f9caa4af82c095cd2e4d1ac22a0bef435a5d657dacde3278498d2808302`,
+  blob `e19f8c8aa82c43ec88e8873f16675d13929934e5`;
+- этот `docs/tasks/M3_HANDOFF.md`: один активный блок, предыдущий C5 блок — история;
+- `docs/TASK_REGISTER.md`: PR32 accepted evidence, C3 IN_PROGRESS/остальные HOLD,
+  остаток A03/A08/acceptance и DEFERRED.
+
+Источники: AGENTS/IMPL-001; original11/manifest; Spec4.6–4.10/5.10–5.14/18.5–18.8/24.7;
+ADR019–026/121–128/267/272; MVP GJ-G/J; Roadmap/Plan M3.1/M3.2;
+M2_CONTRACT2/10, M3_CONTRACT6/9/12.6/12.9 и принятые CONTROL/GUARDS/Escalation;
+нижние§4.4/5/6. Actual normalization/webhook/SQL/Message/Turn/control/guards/escalation
+и tests прочитаны. Официальные Telegram sources заново проверены2026-10-15;
+DOCUMENTED/CURRENT SOURCE/OBSERVED ACCOUNT/PROPOSED разделены в§15.1.
+
+| Поручение | Результат proposal |
+|---|---|
+| P01 |§15.1–2: field/provenance table; V1 теряет offline/edit_date, Telegram ignored receipt не хранит projection |
+| P02 |§15.3–4: typed edit/delete, scoped targets/deferred/order/batch/no-op, exact increments, Turn/file/Escalation/guard/locks/Audit |
+| P03 |§15.5: native identity не доказывает post-Resume causality; finite table, explicit Console/manual alternative для решения C0 |
+| P04 |§15.6–7: V1 replay before V2 parse, shared namespace, cutover/restart/refusal, schema/security и exact proposed paths без revision |
+| P05 |§15.8: finite post-auth collector, supported TEST renewal gap, controlled actions/redaction/stop; только план |
+| P06 |§15.9: отдельные A03/A08 assertions, actual OPEN P-01–05 и будущая адресная выдача |
+
+Два policy решения не замаскированы под существующую реализацию: per-target material
+increments/invalidated Turn не запускает автоматический ответ; replaced photo помечено
+MEDIA_REPLACED_UNAVAILABLE без refetch в минимальном варианте. C0 принимает эти
+границы или выдаёт конкретное расширение. Native automatic takeover NOT VERIFIED;
+Console Takeover/manual atomic takeover остаются принятыми. Unknown delivery не
+подтверждается echo, auto-Resume/старый Turn revival запрещены.
+
+Static design verification: exact three-path scope, prefix/original11/manifest/link
+consistency и `git diff --check`. Product tests/Docker/свои Actions dispatch/rerun
+не нужны и не выполняются. Автоматический PR CI не отключается; actual final-head
+status/run/attempt указываются в receipt, прежний main PASS не переносится.
+Foundation45/browser25/state25, prepare600/cleanup90,9 jobs/clean guards прежние.
+
+Один canonical C3 receipt нового Draft PR: exact base/head/parent/tree,3 paths/numstat,
+prefix/original11, P01–P06 map, evidence levels, commands/results/actual CI, OPEN и
+next scope. Возврат REVIEW либо конкретный BLOCKED, затем HOLD. C0 назначает C1/C2,
+и при необходимости C6; merge пользователем после приёмки. Старые C5/C8 receipts
+не меняются. Никаких runtime/SQL/API/frontend/test/fixture/script/CI/dependency правок,
+VM/live/ACK/sends/deploy/рабочих DB/S3. Новый path — minimal proposal C0 до применения.
+TEST interval2026-10-09T00:00Z истёк; renewal не выполнялся. M3-ACCEPTANCE/M4/LLM/
+production/CI optimization/IMPL-05 вне scope, прежний канон/manifest immutable.
+
+
+## История выдачи C0 — C5-M3.2-CONSOLE-ESCALATIONS (завершено в PR32)
+
+Историческая выдача: [C0,2026-10-14](https://github.com/Elefesys/ai-service-manager/pull/31#issuecomment-6172495208).
 C5 — единственный автор; остальные C1/C2/C3/C6/C8 HOLD. Нижние блоки — история,
 их старые OPEN/proposal/status headers не переоткрывают принятый backend/API.
 
