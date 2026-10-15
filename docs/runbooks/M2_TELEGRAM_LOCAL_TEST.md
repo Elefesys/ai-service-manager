@@ -5149,3 +5149,44 @@ old36/no-backfill/reverse/refusal/private S3/residual timers), retained H/T/C
 state25min/foundation40/browser25 и9jobs не увеличивать; нехватка бюджета →
 STOP и timings C0. До конкретного C0/C6 review эти controller changes не
 применены. CI нового E/scoped C8/приёмка C0 впереди; M3 IN_PROGRESS.
+
+
+### M3.1 MATERIAL /0012 — source checkpoint; execution deferred, 2026-10-15
+
+[C0 MATERIAL](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336) и
+[source-first continuation](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195754984).
+Exact predecessor `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/schema0011; branch
+`c3/m3-1-material`, assigned0012←0011. Current Runtime/Telegram provisioner requires
+0012; all frozen0007/0008/0009/0010/0011 source/schema lanes retain their exact source.
+Полный successor DDL/source inventory и typed profiles —
+[M3_CONTRACT§15.10](../tasks/M3_CONTRACT.md#1510-material-implementation-source-checkpoint--2026-10-15-utc).
+Это **source inventory**, actual catalog/PG/migration/races/RLS/paired browser
+**NOT RUN — deferred to штатный final candidate CI**. Existing main/design green
+и local unit/build не являются новым PostgreSQL/browser proof.
+
+`telegram_connection_state.material_enabled` defaults false. Every fresh receipt
+uses codec2+immutable provenance even with gate OFF; EDIT/DELETE remain ignored
+when OFF. Previously saved V1 keys replay before new-field parsing and are not
+upgraded/replayed into material state. No backfill, replacement-media fetch,
+native takeover/context reconciliation, renewal, collector or production activation
+is issued. This source checkpoint is not an operator activation command.
+
+Only disposable existing TEST fixtures enable the gate for finite material tests.
+Browser preset `material` initializes a TELEGRAM connection from the beginning;
+fixed original/edit/delete inputs pass through ordinary ingress/claim/worker and
+owner API/UI. It neither rewrites saved provider rows nor directly edits current.
+Existing browser recovery/send/control flows remain. No actual Telegram, VM, S3
+send/probe, deployment or user credential is needed for the source handoff.
+
+C0 intake precedes a separate C6 assignment on the exact accepted C3 head. C6
+owns only the six existing egress files identified in the handoff; they are untouched
+by C3. Prepare P/schema0012 pairing while retaining frozen H/T/C/G and E/schema0011
+projections and failure/cleanup ownership. C6 source validation precedes the first
+PR because egress compatibility runs before backend integration. After C6, C0
+assigns one Draft candidate PR: all9 normal automatic CI jobs/clean-source checks,
+actual migration lifecycle/backend integration and paired Playwright remain
+mandatory. Record exact final PR head/tested merge SHA/tree and new test node
+results; report any failure/timeout with its exact log. No workflow/Compose/runner/
+dependency/budget edits, Actions dispatch/rerun, concurrent renewal or new service
+installation are part of this checkpoint. MATERIAL/M3 IN_PROGRESS, A03 NOT VERIFIED;
+C3 HOLD after source return, all further execution/activation follows C0 issuance.

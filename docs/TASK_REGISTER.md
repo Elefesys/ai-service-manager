@@ -2,7 +2,33 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C3-M3.1-PROVENANCE-CONTRACT-R3 / 2026-10-15 UTC
+## Текущий статус — C3-M3.1-MATERIAL source checkpoint / 2026-10-15 UTC
+
+**MATERIAL/M3 IN_PROGRESS; C3 HOLD после source return. A03 NOT VERIFIED.**
+[C0 implementation](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336),
+[C0 continuation](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195754984),
+[handoff](tasks/M3_HANDOFF.md), [source/evidence§15.10](tasks/M3_CONTRACT.md#1510-material-implementation-source-checkpoint--2026-10-15-utc).
+
+| Задача / факт | Статус и граница evidence |
+|---|---|
+| Design PR33 | [INTEGRATED по C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6194957626); C1-PROV-01…05/C2-PROV-01…04 CLOSED design по [C2 R3](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6193806982)/[C0 acceptance](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6193890730) |
+| Implementation base | `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`, tree `d0759acb9f83ec3f3e10d9c5d1325c937c343ee7`, schema0011 |
+| C3 source | `c3/m3-1-material`, assigned0012←0011, allowlist57; closed V2 ingress/material/shared bodies and paired API/OpenAPI/TS/UI; executable PG/migration/race/security/browser cases written |
+| Local evidence | Ruff149/mypy61/export/typecheck/build PASS; scoped284 unit and93 Vitest PASS.103 PG cases collected only; no actual PostgreSQL execution |
+| C6 handoff | Source inventory4 tables/9 columns/23 new+17 replaced functions/17 frozen bodies/used blockers/source-schema pairs§15.10; actual catalog NOT RUN. Reserved6 unchanged, C6 HOLD until separate C0 issuance |
+| PG/migrations/races/RLS/API/browser | **NOT RUN — deferred to штатный final candidate CI**; local unavailable services do not block source return under continuation; acceptance remains blocked on actual execution |
+| Final candidate | C0 intake→sequential C6 compatibility→one Draft PR assigned by C0→9 automatic jobs+clean-source checks. No PR/dispatch/rerun from C3 source checkpoint |
+| M3-A03/P-02/P-03/P-04 | Design accepted, implementation IN_PROGRESS; no runtime/DTO/grant/UI acceptance or activation. Final SHA/tree/parents/paths/numstat in canonical PR33 source receipt |
+| C1/C2/C5/C6/C8 | HOLD pending C0 candidate/review assignments |
+| Native/A08/P-01/renewal/P-05/collector/P-A03-09/live/VM | Existing OPEN/NOT VERIFIED and TEST interval boundaries preserved; no credentials/VM/sends/deploy issued |
+| M3-ACCEPTANCE/M4/IMPL-05/CI optimization | M3 acceptance pending; later work not opened |
+
+Applied0001–0011, original11/manifest, accepted prefix345960 and normative§15
+unchanged; no workflows/Compose/dependencies changes. Source evidence is not actual
+PG/catalog/browser/account PASS. Historical rows/receipts below remain snapshots,
+not current assignments. No status-only commit is required.
+
+## История — C3-M3.1-PROVENANCE-CONTRACT-R3 / 2026-10-15 UTC
 
 **R3 — REVIEW при передаче diff, затем C3 HOLD. M3 — IN_PROGRESS.**
 [Поручение C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191877569),

@@ -79,6 +79,7 @@ async def test_only_two_new_tables_forced_rls_no_runtime_control_access(migrator
             "connection_id",
             "inbox_id",
             "received_at",
+            "codec",
         ]
 
 
@@ -402,7 +403,7 @@ async def test_downgrade_refuses_55000_before_first_destructive_statement(telegr
         assert caught.value.orig.sqlstate == "55000"
         assert (
             await c.execute(text("SELECT version_num FROM platform.alembic_version"))
-        ).scalar_one() == "0011"  # Direct 0007 refusal preserves the current head too.
+        ).scalar_one() == "0012"  # Direct 0007 refusal preserves the current head too.
         assert (
             await c.execute(text("SELECT count(*) FROM platform.telegram_connection_state"))
         ).scalar_one() == 1

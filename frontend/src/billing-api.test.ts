@@ -93,3 +93,11 @@ describe('R4 generated OpenAPI consumer', () => {
     } finally { vi.useRealTimers(); }
   });
 });
+
+describe('M3 channel material Audit',()=>{
+  it('requires exact actor, accepted version and closed payload in mixed pages',()=>{
+    const material={...event(12),event_type:'MESSAGE_MATERIAL_CHANGED',object_type:'MESSAGE',object_version:'2',actor_kind:'CHANNEL_EVENT',actor_user_account_id:null,payload:{target_id:event(13).object_id,source_receipt_id:event(14).object_id,previous_version:'1',accepted_version:'2',reason:'CONTENT_CHANGED'}};
+    expect(parseAuditPage({items:[material,event()],next_cursor:null}).items).toHaveLength(2);
+    for(const bad of [{...material,actor_kind:'USER_ACCOUNT'},{...material,actor_user_account_id:event().actor_user_account_id},{...material,object_version:'3'},{...material,payload:{...material.payload,previous_version:'2'}},{...material,payload:{...material.payload,reason:'OTHER'}},{...material,payload:{...material.payload,text:'private'}}])expect(()=>parseAuditPage({items:[bad],next_cursor:null})).toThrow();
+  });
+});

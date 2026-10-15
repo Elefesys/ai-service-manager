@@ -12,6 +12,7 @@
                   "CONVERSATION_RESUMED": "#/components/schemas/ConversationResumedAudit",
                   "CONVERSATION_TAKEN_OVER": "#/components/schemas/ConversationTakenOverAudit",
                   "ESCALATION_DECIDED": "#/components/schemas/EscalationDecidedAudit",
+                  "MESSAGE_MATERIAL_CHANGED": "#/components/schemas/MessageMaterialAudit",
                   "MESSAGE_SEND_REQUESTED": "#/components/schemas/MessageSendAudit",
                   "WORKSPACE_BILLING_PROVISIONED": "#/components/schemas/ProvisionAudit"
                 },
@@ -35,6 +36,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/EscalationDecidedAudit"
+                },
+                {
+                  "$ref": "#/components/schemas/MessageMaterialAudit"
                 }
               ]
             },
@@ -2241,6 +2245,203 @@
         "title": "MembershipRole",
         "type": "string"
       },
+      "MessageCurrent": {
+        "additionalProperties": false,
+        "properties": {
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "TEXT",
+                  "PHOTO"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Type"
+          },
+          "image_availability": {
+            "enum": [
+              "NOT_APPLICABLE",
+              "ORIGINAL_PENDING",
+              "ORIGINAL_READY",
+              "ORIGINAL_FAILED",
+              "ORIGINAL_NOT_FETCHED",
+              "MEDIA_REPLACED_UNAVAILABLE",
+              "HIDDEN"
+            ],
+            "title": "Image Availability",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "VISIBLE",
+              "DELETED",
+              "ORDER_UNCERTAIN",
+              "UNSUPPORTED_CONTENT"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "schema_version",
+          "state",
+          "content_type",
+          "text",
+          "image_availability",
+          "changed"
+        ],
+        "title": "MessageCurrent",
+        "type": "object"
+      },
+      "MessageMaterialAudit": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_kind": {
+            "const": "CHANNEL_EVENT",
+            "title": "Actor Kind",
+            "type": "string"
+          },
+          "actor_user_account_id": {
+            "title": "Actor User Account Id",
+            "type": "null"
+          },
+          "audit_event_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Audit Event Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "MESSAGE_MATERIAL_CHANGED",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "object_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Object Id",
+            "type": "string"
+          },
+          "object_type": {
+            "const": "MESSAGE",
+            "title": "Object Type",
+            "type": "string"
+          },
+          "object_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Object Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/MessageMaterialPayload"
+          }
+        },
+        "required": [
+          "audit_event_id",
+          "occurred_at",
+          "correlation_id",
+          "object_type",
+          "object_id",
+          "object_version",
+          "event_type",
+          "actor_kind",
+          "actor_user_account_id",
+          "payload"
+        ],
+        "title": "MessageMaterialAudit",
+        "type": "object"
+      },
+      "MessageMaterialPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Accepted Version",
+            "type": "string"
+          },
+          "previous_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Previous Version",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "CONTENT_CHANGED",
+              "DELETED",
+              "ORDER_UNCERTAIN",
+              "ORDER_RESTORED",
+              "UNSUPPORTED_CONTENT"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "source_receipt_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Source Receipt Id",
+            "type": "string"
+          },
+          "target_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_id",
+          "source_receipt_id",
+          "previous_version",
+          "accepted_version",
+          "reason"
+        ],
+        "title": "MessageMaterialPayload",
+        "type": "object"
+      },
       "MessageResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2263,6 +2464,9 @@
             "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
             "title": "Created At",
             "type": "string"
+          },
+          "current": {
+            "$ref": "#/components/schemas/MessageCurrent"
           },
           "delivery": {
             "anyOf": [
@@ -2334,7 +2538,8 @@
           "created_at",
           "version",
           "file",
-          "delivery"
+          "delivery",
+          "current"
         ],
         "title": "MessageResponse",
         "type": "object"

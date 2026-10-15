@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 
-from asm.conversations.turns import TurnSnapshot
+from asm.conversations.turns import TurnMemberV2, TurnSnapshot
 from asm.messaging.models import manual_text
 from asm.messaging.results import Result
 
@@ -20,6 +20,25 @@ class GuardedTurnSnapshot(TurnSnapshot):
     activation_fence_seq: int = Field(gt=0, strict=True)
     resume_receipt_id: UUID
     consumer: Literal["CONTROLLED_GUARDS_V1"]
+
+
+class GuardedTurnSnapshotV2(GuardedTurnSnapshot):
+    schema_version: Literal[2]
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def strict_schema(cls, value: object) -> object:
+        if type(value) is not int:
+            raise ValueError("Invalid snapshot version")
+        return value
+
+    members: tuple[TurnMemberV2, ...] = Field(min_length=1, max_length=64)
+
+
+def parse_guarded_snapshot(value: object) -> GuardedTurnSnapshot:
+    if isinstance(value, dict) and value.get("schema_version") == 2:
+        return GuardedTurnSnapshotV2.model_validate(value)
+    return GuardedTurnSnapshot.model_validate(value)
 
 
 class GuardTextResult(Result):
@@ -93,6 +112,6 @@ class GuardProgress(Result):
 
 def consume_guarded(snapshot: GuardedTurnSnapshot) -> GuardTextResult:
     """Pure computation; admission and idempotency are owned by PostgreSQL."""
-    if type(snapshot) is not GuardedTurnSnapshot:
+    if type(snapshot) not in (GuardedTurnSnapshot, GuardedTurnSnapshotV2):
         raise TypeError("A guarded snapshot is required")
     return GuardTextResult(snapshot_digest=snapshot.snapshot_digest, text=GUARD_TEXT)

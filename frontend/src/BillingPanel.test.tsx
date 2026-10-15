@@ -155,3 +155,11 @@ describe('owner panel authority and request ownership', () => {
     const calls=vi.mocked(billingApi.read).mock.calls.length; v.unmount(); render(<App pathname="/ops/"/>); await screen.findByText('Проверка готовности пройдена'); expect(billingApi.read).toHaveBeenCalledTimes(calls); expect(screen.queryByRole('region',{name:'Audit'})).not.toBeInTheDocument();
   });
 });
+
+describe('M3 mixed channel Audit',()=>{
+  it('renders a channel event alongside owner history without inventing an editor identity',async()=>{
+    const material={...event(12),event_type:'MESSAGE_MATERIAL_CHANGED' as const,object_type:'MESSAGE' as const,object_version:'2',actor_kind:'CHANNEL_EVENT' as const,actor_user_account_id:null,payload:{target_id:event(13).object_id,source_receipt_id:event(14).object_id,previous_version:'1',accepted_version:'2',reason:'CONTENT_CHANGED' as const}};
+    vi.mocked(billingApi.audit).mockResolvedValue({items:[material,event()],next_cursor:null});setup();
+    await screen.findByText('Содержимое сообщения изменено в канале');expect(screen.getByText('Событие канала')).toBeVisible();expect(screen.getByText('Контакт изменён')).toBeVisible();
+  });
+});

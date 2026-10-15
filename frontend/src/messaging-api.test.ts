@@ -66,3 +66,23 @@ describe('five request consumers', () => {
     await expect(messagingApi.send(ws,conversationId,{text:'a'},'key','csrf')).rejects.toBeInstanceOf(MessagingError);
   });
 });
+
+describe('M3 current material contract',()=>{
+  it.each(['DELETED','ORDER_UNCERTAIN','UNSUPPORTED_CONTENT'] as const)('hides all usable content for %s while keeping historical file',state=>{
+    const original=photo();const current={schema_version:1 as const,state,content_type:null,text:null,image_availability:'HIDDEN' as const,changed:true};
+    const value={...original,version:'2',current};expect(parseMessage(value)).toEqual(value);
+    for(const bad of [{...current,text:'old'},{...current,content_type:'PHOTO'},{...current,image_availability:'ORIGINAL_READY'},{...current,changed:false}])expect(()=>parseMessage({...value,current:bad})).toThrow();
+  });
+  it.each(['ORIGINAL_PENDING','ORIGINAL_READY','ORIGINAL_FAILED','ORIGINAL_NOT_FETCHED','MEDIA_REPLACED_UNAVAILABLE'] as const)('accepts truthful photo availability %s',image_availability=>{
+    const status=image_availability==='ORIGINAL_PENDING'?'PENDING':image_availability==='ORIGINAL_FAILED'?'FAILED':'READY';
+    const original=photo(status);const value={...original,version:'2',file:image_availability==='ORIGINAL_NOT_FETCHED'?null:original.file,current:{schema_version:1 as const,state:'VISIBLE' as const,content_type:'PHOTO' as const,text:'caption',image_availability,changed:true}};
+    expect(parseMessage(value)).toEqual(value);
+  });
+  it('accepts PHOTO to TEXT suppression, rejects all extra/missing current and historical contradictions',()=>{
+    const original=photo();const current={schema_version:1 as const,state:'VISIBLE' as const,content_type:'TEXT' as const,text:'exact e\u0301',image_availability:'NOT_APPLICABLE' as const,changed:true};
+    const value={...original,version:'2',file:null,current};expect(parseMessage(value)).toEqual(value);
+    for(const bad of [undefined,null,{...current,schema_version:true},{...current,schema_version:2},{...current,text:''},{...current,image_availability:'ORIGINAL_READY'},{...current,provider_id:'private'},{...current,changed:1}])expect(()=>parseMessage({...value,current:bad})).toThrow();
+    expect(()=>parseMessage({...message(),current:{...message().current,text:'different'}})).toThrow();
+    expect(()=>parseMessage({...value,version:'1'})).toThrow();
+  });
+});

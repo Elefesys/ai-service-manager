@@ -5,7 +5,77 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Активная выдача C0 — C3-M3.1-PROVENANCE-CONTRACT-R3
+## 0. C3-M3.1-MATERIAL — source checkpoint для C0 / 2026-10-15 UTC
+
+[Исходная выдача](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336),
+[продолжение source-first](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195754984).
+**MATERIAL/M3 IN_PROGRESS; C3 HOLD после canonical return. A03 NOT VERIFIED.**
+Design PR33 интегрирован, C2-PROV-04 CLOSED на уровне design по
+[C2 R3](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6193806982)/[C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6193890730).
+
+| Binding | Значение |
+|---|---|
+| Checkout/branch | Отдельный `c3/m3-1-material`; новый PR не открыт |
+| Base/sole parent | `933ddd284ff5b77fb1aa88a4270ab0032bc499c9` |
+| Base tree/schema | `d0759acb9f83ec3f3e10d9c5d1325c937c343ee7` /0011 |
+| Assigned successor |0012←0011, `migrations/versions/0012_message_provenance.py` |
+| Scope | Закрытый allowlist57; applied0001–0011/original11/manifest и prefix345960 immutable; C6 reserved6 untouched |
+| Final head/tree/parent/paths/numstat | Один source receipt в PR33; без self-SHA/status-only commit |
+
+Source реализует closed V2+saved V1 replay, default-OFF material ingress, bounded
+fold, stable target/effect/Audit/suppression, original-before-File/grouping, terminal
+winning replay, shared Turn/control/guard/Escalation context, no-refetch/current-only
+API/OpenAPI/TS/UI and billing Audit companion. Historical source and current state
+разделены. Browser fixture имеет finite material preset/actions, без подмены provider
+или arbitrary current DML. PG cases включают реальные worker barriers, physical
+process exit/restart, negative constraints/FORCE RLS, миграции и all42 fingerprints.
+
+Полный source inventory/table columns/constraints/triggers132 signatures/grants,
+17 immutable downgrade body hashes,4 fixed CHECK hashes, owned used blockers,
+source/schema pairing и P-A03/R3 test node mapping — [M3_CONTRACT§15.10](M3_CONTRACT.md#1510-material-implementation-source-checkpoint--2026-10-15-utc).
+**Это DDL/source inventory, actual PostgreSQL catalog NOT RUN.**
+
+| Проверка этого source checkpoint | Фактический результат |
+|---|---|
+| `uv sync --frozen`; `npm --prefix frontend ci --ignore-scripts` | Locked dependencies prepared; lockfiles unchanged |
+| `uv run --frozen ruff check backend tests scripts migrations` | PASS |
+| `uv run --frozen ruff format --check --diff backend tests scripts migrations` | PASS,149 files already formatted |
+| `uv run --frozen mypy backend/src` | PASS,61 source files |
+| `uv run --frozen pytest -q -m 'not integration' tests/test_m3_1_provenance.py tests/test_m2_3_transport.py tests/test_foundation.py tests/test_m2_3_setup.py tests/test_m2_4_browser_fixture.py tests/test_m3_1_turns.py tests/test_m3_1_guards.py tests/test_m2_3_api.py` | PASS,284 tests;2 existing Starlette/AnyIO deprecation warnings |
+| `uv run --frozen python scripts/export_contracts.py --check` | PASS |
+| `npm --prefix frontend run typecheck` | PASS |
+| `npm --prefix frontend test -- src/messaging-api.test.ts src/MessagingPanel.test.tsx src/billing-api.test.ts src/BillingPanel.test.tsx` | PASS,93 tests/4 files |
+| `npm --prefix frontend run build` | PASS,38 modules |
+| `uv run --frozen pytest --collect-only -q -m integration tests/test_m3_1_provenance_postgres.py tests/test_m3_1_provenance_migrations.py tests/test_m2_3_wire_postgres.py` |103 collected; **collection only**, no PG execution |
+| DDL source expansion / frozen bodies |131 `op.execute` calls;4 new tables;23 new+17 replaced functions;17 predecessor copies exact after CREATE/CREATE OR REPLACE normalization |
+| `git diff --check`; allowlist/prefix/original11/applied migrations/C6 reserved checks | PASS at canonical checkpoint; exact head/tree/path numstat in PR33 receipt |
+
+| Обязательный remaining gate | Статус и следующий executor |
+|---|---|
+| Actual PG identity/codec/fold/terminal/counters/R3-T1…T5/File/grant/shared body | **NOT RUN — deferred to штатный final candidate CI** |
+| Fresh/populated/repeat migrations, all42 fingerprints, exact unused catalog reverse, used refusal, schema/source pairing | **NOT RUN — deferred to штатный final candidate CI**; C6 compatibility preparation first |
+| Real workers/process death/rollback/ACK loss, connection/C/SENT/FK barriers, NOWAIT/reclaim/expiry/overflow | **NOT RUN — deferred to штатный final candidate CI** |
+| Runtime non-owner/FORCE RLS/private ACL/auth/CSRF/wrong Workspace/Client and retained security regressions | **NOT RUN — deferred to штатный final candidate CI** |
+| Paired Docker API/PostgreSQL/Console browser journey and retained39 browser regressions | **NOT RUN — deferred to штатный final candidate CI** |
+| Final candidate nine automatic jobs and nine clean-source checks; exact PR head/tested merge SHA/tree | **NOT RUN**; no PR/dispatch/rerun in this source-only handoff |
+
+Local environment has no PostgreSQL/browser services; no additional service
+installation was performed after the continuation. Unit/static/build evidence is
+not PostgreSQL, race, catalog, browser or account evidence. Full prior backend/browser
+suites were not requested locally. Existing main/design CI does not certify this code.
+
+
+Следующая последовательность: C0 проверяет exact source checkpoint; C6 получает
+отдельную выдачу от принятого head и последовательно меняет только reserved6 egress
+paths для0012, сохраняя H/T/C/G/E projections. Затем C0 назначает общий candidate и
+один Draft implementation PR; все9 automatic jobs/clean-source checks и actual
+backend PG/migration/paired browser обязательны. Сверяются final PR head, tested
+merge SHA/tree и выполнение новых node IDs, а не только badge. Failures исправляются
+в том же scope; известный timeout возвращается C0 с exact log. C6 пока HOLD.
+Native/latest-state/P-A03-09/renewal/collector/live/VM/deploy не активированы.
+Gate default OFF; пользовательские credentials/VM-команды/сообщения не нужны.
+
+## История выдачи C0 — C3-M3.1-PROVENANCE-CONTRACT-R3
 
 [Поручение C0 R3](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191877569).
 **C3 R3 — REVIEW при передаче diff, затем HOLD.** M3 IN_PROGRESS;

@@ -56,6 +56,14 @@ def migration():
 
 
 async def assert_schema(c):
+    revision = (
+        await c.execute(text("SELECT version_num FROM platform.alembic_version"))
+    ).scalar_one()
+    if revision == "0012":
+        from test_m3_1_provenance_migrations import assert_schema as assert_p_schema
+
+        await assert_p_schema(c)
+        return
     assert (
         await c.execute(text("SELECT version_num FROM platform.alembic_version"))
     ).scalar_one() == "0011"
@@ -136,7 +144,8 @@ async def test_clean_populated_g_cycles_exact36_rows_definitions_and_new_38_inve
         for _ in range(2):
             await _migrate("upgrade", "0011")
             await _migrate("upgrade", "0011")
-            await h.runtime.check()
+            with pytest.raises(RuntimeError, match="schema"):
+                await h.runtime.check()
             async with h.migrator.connect() as c:
                 await assert_schema(c)
                 await no_backfill(c)

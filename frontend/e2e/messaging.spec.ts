@@ -327,3 +327,25 @@ test('Escalation live OWNER revoke clears every protected view; peer cancel and 
     await decide(peerPage,preset,v,'CANCEL');escDelta(before,await helper(preset,'escalation-stats'),1);expect((await worker(preset,'stats')).calls).toBe(0);
   }finally{await peer.close();}
 });
+
+// P-A03-07: synthetic TELEGRAM input -> real V2 ingress/runtime worker -> owner
+// API/current panel. No provider row substitution or external Telegram send.
+test('material edit and delete refresh the paired current projection and preserve original history',async({page})=>{
+  const preset='material';await page.goto('/');await loginForm(page,preset);await choose(page,preset);
+  await expect(panel(page).getByText('Material original A',{exact:true})).toBeVisible();
+  const original=(await history(page.request,preset)).items[0];expect(original.version).toBe('1');
+  expect(await worker(preset,'material-edit')).toEqual({processed:1,replayed:0});await refresh(page);
+  await expect(panel(page).getByText('Material edited B',{exact:true})).toBeVisible();
+  await expect(panel(page).getByText('Material original A',{exact:true})).toHaveCount(0);
+  const edited=(await history(page.request,preset)).items[0];expect(edited.message_id).toBe(original.message_id);expect(edited.text).toBe('Material original A');expect(edited.version).toBe('2');
+  expect(edited.current).toEqual({schema_version:1,state:'VISIBLE',content_type:'TEXT',text:'Material edited B',image_availability:'NOT_APPLICABLE',changed:true});
+  expect(await worker(preset,'material-edit')).toEqual({processed:0,replayed:1});
+  expect((await history(page.request,preset)).items[0]).toEqual(edited);
+  expect(await worker(preset,'material-delete')).toEqual({processed:1,replayed:0});await refresh(page);
+  await expect(panel(page).getByText('Сообщение удалено.',{exact:true})).toBeVisible();await expect(panel(page).getByText('Material edited B',{exact:true})).toHaveCount(0);
+  const deleted=(await history(page.request,preset)).items[0];expect(deleted.version).toBe('3');expect(deleted.text).toBe('Material original A');
+  expect(deleted.current).toEqual({schema_version:1,state:'DELETED',content_type:null,text:null,image_availability:'HIDDEN',changed:true});
+  await expect(row(page,original.message_id).getByRole('button',{name:'Открыть изображение'})).toHaveCount(0);
+  const other=await http(()=>page.request.get(messages(preset,inventory[preset].alternate_conversation_id)));expect(other.status()).toBe(200);
+  expect(parsePage(await json(other),parseMessage).items[0].current.text).toBe('Material original alternate');
+});

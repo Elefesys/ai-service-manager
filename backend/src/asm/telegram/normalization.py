@@ -5,6 +5,9 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
+from pydantic import ValidationError
+
+from asm.conversations.material import TelegramProjectionV2
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import EventKind, NormalizedEventV1, identifier, scalar_text, timestamp
 
@@ -266,3 +269,137 @@ def _part(value: str | None) -> bytes:
         return b"-1:\n"
     raw = value.encode("utf-8")
     return str(len(raw)).encode("ascii") + b":" + raw + b"\n"
+
+
+def normalize_update_v2(bot_identity: str, update: dict[str, Any]) -> TelegramProjectionV2:
+    """Only after the saved-V1 probe. Never infer missing provider origin fields."""
+    legacy = normalize_update(bot_identity, update)
+    discriminator = {
+        "BUSINESS_MESSAGE": "NEW",
+        "EDITED_BUSINESS_MESSAGE": "EDIT",
+        "DELETED_BUSINESS_MESSAGES": "DELETE",
+        "BUSINESS_CONNECTION": "LIFECYCLE",
+        "UNSUPPORTED": "UNSUPPORTED",
+    }[legacy["kind"]]
+    result: dict[str, Any] = dict.fromkeys(
+        ("chat_id", "message_id", "sent_at", "edited_at", "chat_type", "origin", "content")
+    )
+    result.update(
+        codec="TELEGRAM_PROVENANCE_V2",
+        bot=bot_identity,
+        update_id=legacy["update_id"],
+        legacy_v1=legacy,
+        discriminator=discriminator,
+        connection=legacy["external_connection_id"],
+        unsupported_reason="NONBUSINESS" if discriminator == "UNSUPPORTED" else "NONE",
+    )
+    if discriminator == "DELETE":
+        result["chat_id"] = legacy["deleted_chat_id"]
+    elif discriminator in ("NEW", "EDIT"):
+        value = update["business_message" if discriminator == "NEW" else "edited_business_message"]
+        event = legacy["event"]
+        chat = value["chat"]
+        if "type" in chat and type(chat["type"]) is not str:
+            raise invalid()
+        if "is_from_offline" in value and value["is_from_offline"] is not True:
+            raise invalid()
+        for key in ("sender_chat", "guest_bot_caller_user", "guest_bot_caller_chat"):
+            if key in value:
+                numeric_id(object_value(value[key]).get("id"))
+        media = ("document", "video", "sticker", "animation", "audio", "voice")
+        for key in media:
+            if key in value:
+                object_value(value[key])
+        unsupported_media = any(key in value for key in media)
+        content: dict[str, Any]
+        if unsupported_media:
+            content = {"kind": "UNSUPPORTED", "reason": "UNSUPPORTED_MEDIA"}
+        elif "photo" in value:
+            sizes = []
+            for photo in value["photo"]:
+                unique = (
+                    identifier(photo["file_unique_id"], image=True)
+                    if "file_unique_id" in photo
+                    else None
+                )
+                sizes.append(
+                    (
+                        (
+                            photo["width"] * photo["height"],
+                            photo["width"],
+                            photo["height"],
+                            photo["file_id"],
+                        ),
+                        unique,
+                    )
+                )
+            selected = max(key for key, _ in sizes)
+            uniques = {unique for key, unique in sizes if key == selected}
+            if len(uniques) != 1:
+                raise invalid()
+            content = {
+                "kind": "PHOTO",
+                "caption": event["text"],
+                "selected_file_id": event["image_file_id"],
+                "selected_unique_id": uniques.pop(),
+            }
+        elif event["text"]:
+            content = {"kind": "TEXT", "text": event["text"]}
+        else:
+            content = {"kind": "UNSUPPORTED", "reason": "EMPTY_CONTENT"}
+        reason = "NONE"
+        for condition, label in (
+            (chat.get("type") != "private", "NONPRIVATE"),
+            (value.get("from", {}).get("is_bot") is True, "BOT_SENDER"),
+            ("sender_chat" in value, "SENDER_CHAT"),
+            (any(k in value for k in ("guest_bot_caller_user", "guest_bot_caller_chat")), "GUEST"),
+            (unsupported_media, "UNSUPPORTED_MEDIA"),
+            (content.get("reason") == "EMPTY_CONTENT", "EMPTY_CONTENT"),
+            (event["sender_id"] != event["chat_id"], "AMBIGUOUS_SENDER"),
+        ):
+            if condition:
+                reason = label
+                break
+        result.update(
+            chat_id=event["chat_id"],
+            message_id=event["message_id"],
+            sent_at=event["occurred_at"],
+            edited_at=timestamp(date_value(value["edit_date"])) if "edit_date" in value else None,
+            chat_type="PRIVATE" if chat.get("type") == "private" else "UNSUPPORTED",
+            origin={
+                "sender_id": event["sender_id"],
+                "sender_is_bot": ("TRUE" if value["from"]["is_bot"] else "FALSE")
+                if "from" in value
+                else "MISSING",
+                "sender_business_bot_id": legacy["sender_business_bot_id"],
+                "offline": "TRUE" if "is_from_offline" in value else "MISSING",
+            },
+            content=content,
+            unsupported_reason=reason,
+        )
+    try:
+        return TelegramProjectionV2.model_validate(result)
+    except ValidationError:
+        raise invalid() from None
+
+
+def update_fingerprint_v2(projection: TelegramProjectionV2) -> str:
+    p = projection.model_dump()
+    origin, content = p["origin"] or {}, p["content"] or {}
+    values = (
+        p["bot"],
+        p["update_id"],
+        update_fingerprint(p["bot"], p["legacy_v1"]),
+        p["discriminator"],
+        p["chat_type"],
+        origin.get("sender_is_bot"),
+        origin.get("offline"),
+        p["unsupported_reason"],
+        p["edited_at"],
+        content.get("kind"),
+        content.get("selected_unique_id"),
+        content.get("reason"),
+    )
+    return hashlib.sha256(
+        b"asm:m3:telegram_provenance:v2\n" + b"".join(_part(v) for v in values)
+    ).hexdigest()

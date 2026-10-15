@@ -25,8 +25,15 @@ from asm.conversations.guards import (
     GuardProgress,
     GuardReceipt,
     GuardTextResult,
+    parse_guarded_snapshot,
 )
-from asm.conversations.turns import ConsumerReceipt, ConsumerResult, TurnProgress, TurnSnapshot
+from asm.conversations.turns import (
+    ConsumerReceipt,
+    ConsumerResult,
+    TurnProgress,
+    TurnSnapshot,
+    parse_snapshot,
+)
 from asm.messaging.adapter import Barrier, TrustedSource
 from asm.messaging.errors import Code, MessagingError, database_error
 from asm.messaging.models import NormalizedEventV1, SendOutcome, identifier
@@ -35,10 +42,12 @@ from asm.messaging.results import (
     InboxProcessingResult,
     InboxReceipt,
     JobClaim,
+    MutationInboxProcessingResult,
     ScanStep,
     SendPermit,
     TerminalRejection,
     parse_claim,
+    parse_inbox_result,
 )
 from asm.tenancy.database import _active as _owner_active
 
@@ -146,8 +155,8 @@ class WorkerUnitOfWork:
             self._failed = True
             raise
 
-    async def process_inbox(self) -> InboxProcessingResult:
-        return InboxProcessingResult.model_validate(
+    async def process_inbox(self) -> InboxProcessingResult | MutationInboxProcessingResult:
+        return parse_inbox_result(
             await self._execute("SELECT platform.messaging_process_inbox(:job, :token)")
         )
 
@@ -301,10 +310,36 @@ class MessagingDatabase:
                 unit._closed = True
                 _active.reset(token)
 
-    async def process_inbox(self, claim: JobClaim) -> InboxProcessingResult:
-        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
-            result = await unit.process_inbox()
-            await self.checkpoint("process_before_commit")
+    async def process_inbox(
+        self, claim: JobClaim
+    ) -> InboxProcessingResult | MutationInboxProcessingResult:
+        try:
+            async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+                result = await unit.process_inbox()
+                await self.checkpoint("process_before_commit")
+        except MessagingError as error:
+            if error.code != Code.STALE_CLAIM:
+                raise
+            # A concurrent winner can commit while admission waits. Re-read only
+            # that winning terminal claim in a fresh physical transaction.
+            async with self._transaction() as connection:
+                # Historical migration test lanes retain their old capabilities;
+                # readiness still rejects those schemas for the current server.
+                available = await call(
+                    connection,
+                    "SELECT to_regprocedure('platform.material_processing_replay(uuid,uuid)') IS NOT NULL",
+                    {},
+                )
+                if not available:
+                    raise error
+                saved = await call(
+                    connection,
+                    "SELECT platform.material_processing_replay(:job,:claim)",
+                    {"job": claim.job_id, "claim": claim.claim_token},
+                )
+            if saved is None:
+                raise
+            return MutationInboxProcessingResult.model_validate(saved)
         await self.checkpoint("process_after_commit")
         return result
 
@@ -401,7 +436,7 @@ class MessagingDatabase:
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:
             raw = await unit._execute("SELECT platform.turn_execute(:job, :token)")
             result = (
-                TurnSnapshot.model_validate(raw)
+                parse_snapshot(raw)
                 if raw["code"] == "SNAPSHOT"
                 else TurnProgress.model_validate(raw)
             )
@@ -495,7 +530,7 @@ class MessagingDatabase:
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:
             raw = await unit._execute("SELECT platform.guard_turn_prepare(:job, :token)")
             result = (
-                GuardedTurnSnapshot.model_validate(raw)
+                parse_guarded_snapshot(raw)
                 if raw["code"] == "SNAPSHOT"
                 else GuardProgress.model_validate(raw)
             )

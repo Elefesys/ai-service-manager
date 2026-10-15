@@ -155,7 +155,7 @@ PHYSICAL_COLUMNS = {
     "platform.workspace_billing_accounts": "workspace_id:uuid! billing_account_id:uuid! contact_display_name:text! version:bigint! created_at:timestamp_with_time_zone! updated_at:timestamp_with_time_zone!",
     "platform.workspace_subscriptions": "workspace_id:uuid! subscription_id:uuid! plan_revision_id:uuid! required_publication_state:text! status:text! funding_mode:text! effective_from:timestamp_with_time_zone! effective_until:timestamp_with_time_zone! version:bigint! created_at:timestamp_with_time_zone! updated_at:timestamp_with_time_zone!",
     "platform.workspace_service_modes": "workspace_id:uuid! service_mode_id:uuid! mode:text! reason_code:text! effective_from:timestamp_with_time_zone! effective_until:timestamp_with_time_zone version:bigint! created_at:timestamp_with_time_zone! updated_at:timestamp_with_time_zone!",
-    "app.audit_events": "workspace_id:uuid! audit_event_id:uuid! occurred_at:timestamp_with_time_zone! actor_kind:text! actor_user_account_id:uuid correlation_id:uuid! event_type:text! object_type:text! object_id:uuid! object_version:bigint! payload:jsonb! billing_account_object_id:uuid message_object_id:uuid conversation_object_id:uuid conversation_control_generation:bigint escalation_object_id:uuid escalation_operation:text",
+    "app.audit_events": "workspace_id:uuid! audit_event_id:uuid! occurred_at:timestamp_with_time_zone! actor_kind:text! actor_user_account_id:uuid correlation_id:uuid! event_type:text! object_type:text! object_id:uuid! object_version:bigint! payload:jsonb! billing_account_object_id:uuid message_object_id:uuid conversation_object_id:uuid conversation_control_generation:bigint escalation_object_id:uuid escalation_operation:text material_target_id:uuid material_source_receipt_id:uuid",
     "platform.billing_contact_command_receipts": "workspace_id:uuid! receipt_id:uuid! billing_account_id:uuid! operation:text! idempotency_key:text! request_fingerprint:bytea! expected_version:bigint! status:text! result_version:bigint result_outcome:text created_at:timestamp_with_time_zone! completed_at:timestamp_with_time_zone",
 }
 
@@ -441,6 +441,13 @@ async def test_exact_physical_schema_constraints_keys_and_grants(migrator):
                     )
                 elif table == "app.audit_events" and column == "escalation_object_id":
                     assert "CASE" in default and "ESCALATION" in default and "object_id" in default
+                elif table == "app.audit_events" and column in {
+                    "material_target_id",
+                    "material_source_receipt_id",
+                }:
+                    assert all(
+                        part in default for part in ("CASE", "MESSAGE_MATERIAL_CHANGED", "payload")
+                    )
                 elif table == "app.audit_events" and column == "escalation_operation":
                     assert all(
                         part in default

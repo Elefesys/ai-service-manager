@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -230,7 +231,7 @@ def test_seed_is_finite_multipage_and_uses_valid_exact_normalized_events(harness
     assert len({(e.bot_identity, e.event_id) for e in values}) == len(values)
     assert {e.provider for e in values} == {"CONTROLLED"}
     assert {e.bot_identity for e in values} == {
-        harness.fixture.bot(p) for p in harness.fixture.PRESETS
+        harness.fixture.bot(p) for p in harness.fixture.PRESETS if p != "material"
     }
     page = [e for e in values if e.bot_identity == harness.fixture.bot("pagination")]
     assert len({e.external_connection_id for e in page}) == 27
@@ -372,6 +373,7 @@ async def test_seed_handles_due_turn_between_inbox_claims_but_leaves_last_fetch_
         harness.worker.event("esc_happy", "first"),
         harness.worker.event("happy", "pending-image", image="pending"),
     ]
+    monkeypatch.setattr(harness.worker, "seed_material", AsyncMock(return_value=0))
     monkeypatch.setattr(harness.worker, "seed_events", lambda: iter(events))
     waiting = [
         SimpleNamespace(kind="PROCESS_INBOX", job_id=first),
@@ -414,6 +416,7 @@ async def test_seed_handles_due_turn_between_inbox_claims_but_leaves_last_fetch_
 async def test_seed_still_rejects_unrelated_jobs_without_executing_them(
     harness, monkeypatch, kind, step
 ):
+    monkeypatch.setattr(harness.worker, "seed_material", AsyncMock(return_value=0))
     monkeypatch.setattr(
         harness.worker, "seed_events", lambda: iter([harness.worker.event("esc_happy", "first")])
     )
@@ -533,3 +536,25 @@ def test_unknown_cli_arguments_never_echo_payloads(harness, monkeypatch, capsys,
     output = capsys.readouterr()
     assert output.out == "" and "canary" not in output.err
     assert output.err in {"M2_4_BROWSER_FIXTURE_FAILED\n", "M2_4_BROWSER_WORKER_FAILED\n"}
+
+
+def test_material_harness_is_finite_and_uses_distinct_numeric_telegram_binding(harness):
+    from asm.telegram.normalization import normalize_update_v2
+
+    worker, fixture = harness.worker, harness.fixture
+    assert fixture.bot("material") == "9000012"
+    for operation, kind in (
+        ("original", "NEW"),
+        ("material-edit", "EDIT"),
+        ("material-delete", "DELETE"),
+    ):
+        value = normalize_update_v2(fixture.bot("material"), worker.material_event(operation))
+        assert value.discriminator == kind and value.connection == fixture.route("material")
+    for preset, operation in (
+        ("happy", "material-edit"),
+        ("material", "success"),
+        ("material", "escalate-main"),
+    ):
+        with pytest.raises(fixture.ProvisioningError):
+            worker.validate_operation(preset, operation)
+    assert all(v.bot_identity != fixture.bot("material") for v in worker.seed_events())

@@ -29,6 +29,7 @@ ESCALATION_PRESETS = (
     "esc_revoked",
 )
 PRESETS = (
+    "material",
     "happy",
     "recovery",
     "unknown",
@@ -90,7 +91,7 @@ def target():
 def bot(preset):
     if preset not in PRESETS:
         raise ProvisioningError("Invalid finite messaging preset")
-    return f"m24-{preset}-bot"
+    return "9000012" if preset == "material" else f"m24-{preset}-bot"
 
 
 def route(preset, index=0):
@@ -133,6 +134,30 @@ async def setup_messaging(password):
                         "bot": bot(preset),
                         "external": route(preset, index),
                     }
+                    if preset == "material":
+                        observation = dict(
+                            bot_identity=bot(preset),
+                            external_connection_id=route(preset),
+                            owner_user_id="8000012",
+                            is_enabled=True,
+                            can_reply=True,
+                            error_code=None,
+                        )
+                        binding = (
+                            await connection.execute(
+                                text(
+                                    "SELECT platform.initialize_telegram_connection(:ws,:business,:bot,:external,'8000012',CAST(:observation AS jsonb))"
+                                ),
+                                params | {"observation": json.dumps(observation)},
+                            )
+                        ).scalar_one()
+                        await connection.execute(
+                            text(
+                                "UPDATE platform.telegram_connection_state SET material_enabled=true WHERE workspace_id=:ws AND connection_id=:id"
+                            ),
+                            {"ws": ws, "id": UUID(binding["connection_id"])},
+                        )
+                        continue
                     await connection.execute(
                         text(
                             "INSERT INTO app.channel_connections(workspace_id,id,business_id,provider,bot_identity,external_connection_id) "
@@ -186,9 +211,13 @@ async def identity(connection, preset):
                 "SELECT DISTINCT m.workspace_id,m.user_account_id FROM platform.auth_credentials c "
                 "JOIN platform.workspace_memberships m ON m.user_account_id=c.user_account_id "
                 "JOIN app.channel_connections cc ON cc.workspace_id=m.workspace_id "
-                "WHERE c.login=:login AND cc.provider='CONTROLLED' AND cc.bot_identity=:bot"
+                "WHERE c.login=:login AND cc.provider=:provider AND cc.bot_identity=:bot"
             ),
-            {"login": f"browser.m24-{preset}", "bot": bot(preset)},
+            {
+                "login": f"browser.m24-{preset}",
+                "bot": bot(preset),
+                "provider": "TELEGRAM" if preset == "material" else "CONTROLLED",
+            },
         )
     ).one()
     return row
@@ -248,10 +277,14 @@ async def inventory(connection):
         named = {row["provider_chat_id"]: str(row["id"]) for row in conversations}
         clients = {row["provider_chat_id"]: str(row["client_id"]) for row in conversations}
         result[preset] = {
-            "conversation_id": named[f"m24-{preset}-main"],
-            "alternate_conversation_id": named[f"m24-{preset}-alternate"],
-            "client_id": clients[f"m24-{preset}-main"],
-            "alternate_client_id": clients[f"m24-{preset}-alternate"],
+            "conversation_id": named["7000012" if preset == "material" else f"m24-{preset}-main"],
+            "alternate_conversation_id": named[
+                "7000013" if preset == "material" else f"m24-{preset}-alternate"
+            ],
+            "client_id": clients["7000012" if preset == "material" else f"m24-{preset}-main"],
+            "alternate_client_id": clients[
+                "7000013" if preset == "material" else f"m24-{preset}-alternate"
+            ],
             "connection_ids": [str(value) for value in connections],
             "conversation_ids": [str(row["id"]) for row in conversations],
             "message_ids": [str(value) for value in messages],

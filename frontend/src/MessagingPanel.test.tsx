@@ -10,7 +10,7 @@ import { MessagingPanel } from './MessagingPanel';
 import { billingApi, BillingError } from './billing-api';
 import { billing } from './billing-fixtures.test-helper';
 import { MessagingError, Message, ReadGrant, SendReceipt, messagingApi } from './messaging-api';
-import { connection, conversation, conversationId, deferred, id, message, ok, outbound, page, photo, receipt, session, ws } from './messaging-fixtures.test-helper';
+import { connection, conversation, conversationId, deferred, id, message, ok, outbound, page, photo, receipt, session, when, ws } from './messaging-fixtures.test-helper';
 
 beforeEach(() => {
   vi.spyOn(escalationApi,'list').mockResolvedValue({items:[],next_cursor:null,observed_at:'2030-01-01T00:00:00.000000Z'});
@@ -70,8 +70,8 @@ describe('owner conversation view and private reads', () => {
   it('keeps mixed manual and automated history neutral with every delivery status', async()=>{
     const states=['PENDING','DISPATCHING','SENT','FAILED','UNKNOWN'] as const;
     const rows=states.flatMap((state,i)=>[
-      {...outbound(state),message_id:id(130+i),text:`Manual ${state}`},
-      {...outbound(state),message_id:id(140+i),text:`CONTROLLED GUARDS TEST ${state}`},
+      {...outbound(state),message_id:id(130+i),text:`Manual ${state}`,current:{...outbound(state).current,text:`Manual ${state}`}},
+      {...outbound(state),message_id:id(140+i),text:`CONTROLLED GUARDS TEST ${state}`,current:{...outbound(state).current,text:`CONTROLLED GUARDS TEST ${state}`}},
     ]);
     vi.mocked(messagingApi.messages).mockResolvedValue(page(message(),...rows));
     setup(); await ready();
@@ -94,16 +94,16 @@ describe('owner conversation view and private reads', () => {
     expect(screen.queryByTestId(`message-${id(6)}`)).toBeNull(); expect(screen.queryByRole('button',{name:'Ещё сообщения'})).toBeNull(); expect(messagingApi.send).not.toHaveBeenCalled();
   });
   it.each(['success','401','403'])('ignores late %s across actor/Workspace/session changes before auth handling', async kind=>{
-    const old=deferred<ReturnType<typeof page<Message>>>(); vi.mocked(messagingApi.messages).mockImplementationOnce(()=>old.promise).mockResolvedValue(page({...message(90),text:'Current context'}));
+    const old=deferred<ReturnType<typeof page<Message>>>(); vi.mocked(messagingApi.messages).mockImplementationOnce(()=>old.promise).mockResolvedValue(page(message(90,'Current context')));
     const v=setup(); await waitFor(()=>expect(messagingApi.messages).toHaveBeenCalledTimes(1));
     const next={...session('other'),user_account_id:id(80),memberships:[{...session().memberships[0],workspace_id:id(81)}]};
     v.rerender(<MessagingPanel {...v.props} session={next} workspace={id(81)}/>); await screen.findByText('Current context');
-    await act(async()=>{ if(kind==='success')old.resolve(page({...message(),text:'Old private text'}));else old.reject(new MessagingError(Number(kind),kind==='401'?'SESSION_REQUIRED':'ACCESS_DENIED')); });
+    await act(async()=>{ if(kind==='success')old.resolve(page(message(6,'Old private text')));else old.reject(new MessagingError(Number(kind),kind==='401'?'SESSION_REQUIRED':'ACCESS_DENIED')); });
     expect(screen.queryByText('Old private text')).toBeNull(); expect(screen.getByText('Current context')).toBeVisible(); expect(v.props.expired).not.toHaveBeenCalled(); expect(v.props.recover).not.toHaveBeenCalled();
   });
   it('ignores an old conversation read even after switching back to the same ID', async()=>{
     const old=deferred<ReturnType<typeof page<Message>>>(); vi.mocked(messagingApi.conversations).mockResolvedValue(page(conversation(),conversation(10)));
-    vi.mocked(messagingApi.messages).mockImplementationOnce(()=>old.promise).mockResolvedValue(page({...message(90),text:'Fresh projection'})); setup();
+    vi.mocked(messagingApi.messages).mockImplementationOnce(()=>old.promise).mockResolvedValue(page(message(90,'Fresh projection'))); setup();
     fireEvent.click(await screen.findByTestId(`conversation-${id(10)}`)); await screen.findByText('Fresh projection'); fireEvent.click(screen.getByTestId(`conversation-${conversationId}`)); await ready();
     await act(async()=>old.reject(new MessagingError(403,'ACCESS_DENIED'))); expect(screen.getByText('Fresh projection')).toBeVisible(); expect(screen.queryByText('Нет доступа к переписке')).toBeNull();
   });
@@ -139,7 +139,7 @@ describe('one frozen intention and receipt-aware recovery',()=>{
     expect(messagingApi.messages).toHaveBeenCalledTimes(2);
     expect(messagingApi.messages).toHaveBeenLastCalledWith(ws,conversationId,null,expect.any(AbortSignal));
     expect(screen.getByRole('button',{name:'Проверить и отправить'})).toBeDisabled();
-    await act(async()=>fresh.resolve(page({...outbound(),message_id:receipt().message_id,text:'Exact pending reply'})));
+    await act(async()=>fresh.resolve(page({...outbound(),message_id:receipt().message_id,text:'Exact pending reply',current:{...outbound().current,text:'Exact pending reply'}})));
     await ready(); expect(screen.getByTestId(`message-${receipt().message_id}`)).toHaveTextContent('В очереди');
     expect(screen.getByLabelText('Ручной текстовый ответ')).toHaveValue(''); expect(messagingApi.send).toHaveBeenCalledTimes(1);
   });
@@ -210,5 +210,27 @@ describe('one frozen intention and receipt-aware recovery',()=>{
     expect(messagingApi.send).toHaveBeenCalledTimes(1); expect(screen.queryByRole('img')).toBeNull();
     fireEvent.click(replay); await ready(); const calls=vi.mocked(messagingApi.send).mock.calls;
     expect(calls).toHaveLength(2); expect(calls[1].slice(0,4)).toEqual(calls[0].slice(0,4)); expect(calls[1][4]).toBe('recovered');
+  });
+});
+
+describe('M3 material refresh',()=>{
+  it('clears displayed image and ignores a late grant after semantic version changes',async()=>{
+    const original=photo();vi.mocked(messagingApi.messages).mockResolvedValue(page(original));
+    const late=deferred<Awaited<ReturnType<typeof messagingApi.grant>>>();
+    vi.mocked(messagingApi.grant).mockImplementationOnce(()=>late.promise);
+    setup();await ready();fireEvent.click(screen.getByRole('button',{name:'Открыть изображение'}));
+    const changed={...original,version:'2',current:{schema_version:1 as const,state:'VISIBLE' as const,content_type:'PHOTO' as const,text:'new caption',image_availability:'MEDIA_REPLACED_UNAVAILABLE' as const,changed:true}};
+    vi.mocked(messagingApi.messages).mockResolvedValue(page(changed));fireEvent.click(screen.getByRole('button',{name:'Обновить сообщения'}));
+    await screen.findByText('new caption');
+    await act(async()=>late.resolve({url:'https://files.example/old?sig=late',expires_at:when}));
+    expect(screen.queryByRole('img')).toBeNull();expect(screen.queryByRole('button',{name:'Открыть изображение'})).toBeNull();
+    expect(messagingApi.grant).toHaveBeenCalledTimes(1);
+  });
+  it('replaces original text after edit and shows deleted state after refresh',async()=>{
+    vi.mocked(messagingApi.messages).mockResolvedValue(page(message()));setup();await ready();
+    vi.mocked(messagingApi.messages).mockResolvedValue(page({...message(),version:'2',current:{...message().current,text:'Edited current',changed:true}}));
+    fireEvent.click(screen.getByRole('button',{name:'Обновить сообщения'}));await screen.findByText('Edited current');expect(screen.queryByText(message().text!)).toBeNull();
+    vi.mocked(messagingApi.messages).mockResolvedValue(page({...message(),version:'3',current:{schema_version:1,state:'DELETED',content_type:null,text:null,image_availability:'HIDDEN',changed:true}}));
+    fireEvent.click(screen.getByRole('button',{name:'Обновить сообщения'}));await screen.findByText('Сообщение удалено.');expect(screen.queryByText('Edited current')).toBeNull();
   });
 });

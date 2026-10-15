@@ -26,6 +26,7 @@ from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.models import EventKind, NormalizedEventV1, OutcomeKind
 from asm.messaging.worker import Worker
+from asm.telegram.database import TelegramIngress
 from m2_4_browser_fixture import ESCALATION_PRESETS, PRESETS, bot, route
 from PIL import Image
 from provision_local_auth import PrivateArgumentParser, ProvisioningError
@@ -35,6 +36,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 ACTIONS = (
     "seed",
+    "material-edit",
+    "material-delete",
     "success",
     "unknown",
     "permanent",
@@ -51,6 +54,10 @@ def validate_operation(preset, operation):
         preset is not None if operation == "seed" else preset not in PRESETS
     ):
         raise ProvisioningError("Invalid finite messaging runner action")
+    if (operation.startswith("material-") and preset != "material") or (
+        preset == "material" and operation not in {"material-edit", "material-delete", "stats"}
+    ):
+        raise ProvisioningError("Finite material browser action required")
     if operation.startswith("escalate-") and (
         preset not in ESCALATION_PRESETS
         or operation == "escalate-alternate"
@@ -198,6 +205,8 @@ def seed_events():
     # Deterministic finite fixtures; accepted Message/File rows still originate
     # exclusively from canonical runtime ingest/process/fetch capabilities.
     for preset in PRESETS:
+        if preset == "material":
+            continue
         yield event(preset, "main")
         yield event(preset, "alternate", conversation="alternate")
         if preset == "pagination":
@@ -257,6 +266,7 @@ async def seed(kernel, worker, adapter):
             seed_turns += 1
         raise ProvisioningError("Bounded browser seed Turn jobs exceeded")
 
+    processed += await seed_material(kernel, worker, next_seed_claim)
     for value in seed_events():
         receipt = await kernel.ingest_event(adapter.source(value.bot_identity), value, uuid4())
         if receipt.code != "ACCEPTED":
@@ -272,6 +282,77 @@ async def seed(kernel, worker, adapter):
                 raise ProvisioningError("Canonical browser FETCH required")
             await worker.execute(fetch)
     return {"processed": processed, "seed_turns": seed_turns}
+
+
+async def seed_material(kernel, worker, next_seed_claim):
+    processed = 0
+    for alternate in (False, True):
+        receipt = await TelegramIngress(kernel, bot("material")).ingest_update(
+            material_event("original", alternate=alternate), uuid4()
+        )
+        claim = await next_seed_claim("material-browser-seed")
+        if receipt.code != "ACCEPTED" or claim is None or claim.job_id != receipt.job_id:
+            raise ProvisioningError("Fresh material browser Inbox required")
+        await worker.execute(claim)
+        processed += 1
+    return processed
+
+
+def material_event(operation, *, alternate=False):
+    if operation not in {"original", "material-edit", "material-delete"} or (
+        alternate and operation != "original"
+    ):
+        raise ProvisioningError("Finite material event required")
+    chat = 7000013 if alternate else 7000012
+    update = {
+        "original": 120001 + int(alternate),
+        "material-edit": 120003,
+        "material-delete": 120004,
+    }[operation]
+    if operation == "material-delete":
+        return {
+            "update_id": update,
+            "deleted_business_messages": {
+                "business_connection_id": route("material"),
+                "chat": {"id": chat},
+                "message_ids": [501],
+            },
+        }
+    body = {
+        "business_connection_id": route("material"),
+        "chat": {"id": chat, "type": "private"},
+        "from": {"id": chat, "is_bot": False},
+        "message_id": 501,
+        "date": 1767323045,
+        "text": "Material original alternate" if alternate else "Material original A",
+    }
+    if operation == "material-edit":
+        body.update(edit_date=1767323065, text="Material edited B")
+    return {
+        "update_id": update,
+        "edited_business_message" if operation == "material-edit" else "business_message": body,
+    }
+
+
+async def material_action(kernel, worker, operation):
+    receipt = await TelegramIngress(kernel, bot("material")).ingest_update(
+        material_event(operation), uuid4()
+    )
+    if receipt.code == "DUPLICATE":
+        return {"processed": 0, "replayed": 1}
+    for _ in range(256):
+        claim = await kernel.claim_job("material-browser-worker")
+        if claim is None:
+            raise ProvisioningError("Due material Inbox required")
+        if claim.job_id == receipt.job_id:
+            result = await kernel.process_inbox(claim)
+            if result.code != "MATERIAL_PROCESSED":
+                raise ProvisioningError("Material completion required")
+            return {"processed": 1, "replayed": 0}
+        if claim.kind != "PROCESS_TURN" or claim.step not in {"GROUP", "MEDIA", "TEST_CONSUME"}:
+            raise ProvisioningError("Exclusive material browser worker required")
+        await worker.execute(claim)
+    raise ProvisioningError("Bounded material browser work exceeded")
 
 
 async def escalate(kernel, worker, adapter, preset, operation):
@@ -348,6 +429,8 @@ async def action(preset, operation):
                     if counters(selected) != {"calls": 0, "effects": 0}:
                         raise ProvisioningError("Fresh browser TEST counters required")
                 return await seed(kernel, worker, adapter)
+            if operation.startswith("material-"):
+                return await material_action(kernel, worker, operation)
             if operation.startswith("escalate-"):
                 return await escalate(kernel, worker, adapter, preset, operation)
             recovered = await kernel.recover_expired() if operation == "recover" else 0

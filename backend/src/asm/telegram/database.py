@@ -9,6 +9,7 @@ from pydantic import Field
 
 from asm.messaging.database import MessagingDatabase, call, require_uuid
 from asm.messaging.results import Result
+from asm.telegram.normalization import normalize_update, normalize_update_v2
 
 
 class TelegramReceipt(Result):
@@ -43,6 +44,20 @@ class TelegramProbe(Result):
 class TelegramIngress:
     def __init__(self, database: MessagingDatabase, bot_identity: str) -> None:
         self.database, self.bot_identity = database, bot_identity
+
+    async def ingest_update(self, update: dict[str, Any], correlation_id: UUID) -> TelegramReceipt:
+        legacy = normalize_update(self.bot_identity, update)
+        require_uuid(correlation_id)
+        async with self.database._transaction() as connection:
+            saved = await call(
+                connection,
+                "SELECT platform.telegram_replay_v1(:bot, CAST(:projection AS jsonb))",
+                {"bot": self.bot_identity, "projection": json.dumps(legacy, ensure_ascii=False)},
+            )
+        if saved is not None:
+            return TelegramReceipt.model_validate(saved)
+        projection = normalize_update_v2(self.bot_identity, update)
+        return await self.ingest(projection.model_dump(), correlation_id)
 
     async def ingest(self, projection: dict[str, Any], correlation_id: UUID) -> TelegramReceipt:
         require_uuid(correlation_id)

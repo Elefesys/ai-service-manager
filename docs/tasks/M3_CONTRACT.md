@@ -3286,31 +3286,21 @@ C3/C8 HOLD; C8-M3-ESC-01/P2 OPEN до scoped recheck и решения C0; M3 IN
 
 ### 15.1. Статус, источники и границы доказательства
 
-**C3-M3.1-PROVENANCE-CONTRACT-R3, 2026-10-15 UTC; REVIEW, затем C3 HOLD; не LOCKED/VERIFIED.**
-[Исходная выдача](https://github.com/Elefesys/ai-service-manager/pull/32#issuecomment-6185468957),
-[R2 C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189981613),
-[решение C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189999448),
-[C1 review](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189743405),
-[C2 review](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189782680).
-[R3 C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191877569),
-[C1 R2 PASS](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191616132),
-[C2 R2 CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191712300).
-C1-PROV-01…05/C2-PROV-01…03 закрыты на уровне revised design. Единственный
-обязательный finding R3 — C2-PROV-04/P2, ещё OPEN до приёмки C0: initial-fold
-suppression membership и связанные shared bodies§15.4/7/9. Start/sole parent R3
-`165dd09b0138c66216a8a7d8240af95663165769`, tree
-`f619c5ebad814141d0db0f9cbafccc6cd2089200`; тот же Draft PR33/branch.
-R2 CI38724672096/attempt2 SUCCESS по [C0 intake](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191327158)
-относится только к R2; actual final-head CI фиксируется в новом R3 receipt.
-C0 выбрал ограниченную no-refetch photo policy и направление material/renewal;
-это решения для исправляемого проекта, не приёмка revised текста или реализации.
-Основание — `bae25093bafb9534af68de5c586763667b896e70`, tree
-`ad857f156e6ff7ebb23a18c4b127256e774dd7bd`, ordered parents
-`ab06bc135f45c88203e434eacefd107412a8eb15` + `ad161ce0e04f6271890458cbec56681199846df8`.
-Принята schema0011. Revision после0011 не назначена;0001–0011 immutable.
+**Design§15 принят и интегрирован; MATERIAL implementation IN_PROGRESS / A03 NOT VERIFIED.**
+[C2 R3 PASS](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6193806982),
+[C0 design acceptance](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6193890730),
+[C0 integration](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6194957626).
+C1-PROV-01…05/C2-PROV-01…04 CLOSED **на уровне design**; это не runtime acceptance.
+PR33 design head `642160d2181b9fb5d062e449a0ff603467c40e51` слит.
+Implementation выдан [C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336), порядок source checkpoint→C6→
+actual candidate CI уточнён [продолжением](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195754984).
+Exact base `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`, tree `d0759acb9f83ec3f3e10d9c5d1325c937c343ee7`,
+schema0011; назначен successor0012/down_revision0011.0001–0011 immutable.
+Branch `c3/m3-1-material`; source return и execution gaps —§15.10.
+MATERIAL/M3 IN_PROGRESS, C3 HOLD после source receipt; новый PR не открыт.
 Предыдущие345960 bytes этого документа, blob `e19f8c8aa82c43ec88e8873f16675d13929934e5`,
 SHA256 `b53b3f9caa4af82c095cd2e4d1ac22a0bef435a5d657dacde3278498d2808302`
-сохраняются точно. Этот раздел не активирует runtime, native takeover, probe или M4.
+сохраняются точно. Native/probe/renewal/VM/live/merge/activation не выданы.
 
 Прочитаны AGENTS/IMPL-001, original11/SOURCE_MANIFEST, Spec4.6–4.10/5.10–5.14/
 18.5–18.8/24.7 (в R2 особо4.8–4.10/5.12.1), ADR019–026/121–128/180/267/272, MVP GJ-G/J, Roadmap M3,
@@ -3322,7 +3312,7 @@ M3_HANDOFF§4.4/5/6. Принятые CONTROL/GUARDS/Escalation и Console PASS 
 | DOCUMENTED | Официальные источники ниже повторно прочитаны2026-10-15; описание полей/transport, не evidence аккаунта |
 | CURRENT SOURCE | Ниже указан фактический код на exact base; чтение кода/tests не новый execution PASS |
 | OBSERVED ACCOUNT | В этой выдаче **NOT RUN**. Прежняя M2-приёмка text/photo/manual не доказывает native/echo/edit/delete provenance; текущий account/runtime не инспектировался |
-| PROPOSED | Все новые DTO, outcomes, counters, tables, gates и paths§15.3–15.9 требуют принятия C0 и адресного согласования; отсутствие кода намеренное |
+| ACCEPTED DESIGN / SOURCE CHECKPOINT |§15 принят C0; material0012 source и доступные local checks —§15.10. Actual PG/catalog/browser NOT RUN, native/renewal вне реализации |
 
 Официальные ссылки: [Update](https://core.telegram.org/bots/api#update),
 [Message](https://core.telegram.org/bots/api#message),
@@ -4296,7 +4286,7 @@ TEST messages и оставить HUMAN до reconciliation;
 
 ### 15.9. P06 — конечная приёмка, OPEN и следующий scope
 
-Это **future assertions**, не выдуманные пройденные tests. Только затронутый risk;
+Это **обязательные assertions**; исполняемые material cases и статус NOT RUN перечислены в§15.10. Только затронутый risk;
 прежние TURNS/CONTROL/GUARDS/Escalation suites остаются regression gates.
 
 | ID / часть | Минимальный future assertion и слой |
@@ -4314,8 +4304,8 @@ TEST messages и оставить HUMAN до reconciliation;
 | P-A08-02 actual PG ordering | Ingress/Resume barrier, candidate before/after Resume при одинаковых provider fields, replay0; local fence не causal proof. Console control сохраняет accepted guards; candidate-only не создаёт transcript и не блокирует actual0011 Resume новой фиктивной проверкой |
 | P-A08-03 account/renewal gate | Exact actual source/schema/binding; оба TEST окна. Future renewal CAS mode+append subscription+strict Audit/receipt atom, replay сохранённых дат, conflict/rollback/no-overlap/SUSPENDED rejection, clock после wait и реальный product gate на from/until. Finite authenticated collector, Console control до native, после native HUMAN; observation ≠causal/latest-state proof |
 
-**C2-PROV-04: адресные R3 traces / future PG assertions.** Это ручной вывод из
-proposal, **не исполненные tests**. Во всех positive traces B/C/identity verified;
+**C2-PROV-04 CLOSED на уровне design:** адресные R3 traces / обязательные PG assertions.
+Исполняемые cases —§15.10; actual PG **NOT RUN**. Во всех positive traces B/C/identity verified;
 P — ещё неизвестный original PHOTO F/caption A. Deferred commits имеют0 domain
 increments/effects/Audit/File/Turn. Затем normal original worker впервые materializes
 P; ΔC ниже включает original+1, material Audit/effect считается отдельно от transport.
@@ -4345,9 +4335,9 @@ Public/production mutation helper не принимает произвольны
 | Decision / статус | Что выбрано C0 / что остаётся |
 |---|---|
 | P-01 **OPEN** | Candidate-only + явный control не восстанавливают native human transcript. Resumable путь — canonical Console reply; native-only HUMAN до отдельно принятого context ingestion/reconciliation. No automatic takeover по arrival; native/latest-state/A08 NOT VERIFIED |
-| P-02 policy direction выбрано, revised contract **REVIEW** | Per-target increments, deferred folding, sticky suppression invalidated Turn сохраняются. C1/C2 R2 согласовали ordering/unions/locks на уровне design; R3 membership/shared bodies по C2-PROV-04 ещё требуют адресного C2 review и C0 acceptance. Implementation NOT VERIFIED |
-| P-03 no-refetch policy **выбрана C0**, revised contract **REVIEW** | Явное MEDIA_REPLACED_UNAVAILABLE/label/PARTIAL и потеря открытия/анализа replacement. Full replacement не поддержан этим slice. Согласованный C1 current DTO неизменён; R3 дополняет internal membership/seal/snapshot. DTO/grant/UI реализация NOT VERIFIED, весь A03/M3 не принят |
-| P-04 **OPEN** | C0/C2/C6 отдельно назначают exact predecessor/revision/order/source/profile/implementation allowlist. Renewal/material последовательно;0012 не назначена; actual migration/compat evidence ещё нет |
+| P-02 policy/design **ACCEPTED** | Per-target increments, deferred folding, sticky suppression invalidated Turn сохранены. C2-PROV-04 CLOSED по C2 R3/C0; material source§15.10, implementation NOT VERIFIED |
+| P-03 no-refetch policy/design **ACCEPTED** | Явное MEDIA_REPLACED_UNAVAILABLE/label/PARTIAL и потеря открытия/анализа replacement сохранены. Full replacement не поддержан этим slice. Current DTO/internal membership/seal/snapshot реализованы в source§15.10; DTO/grant/UI actual PG/browser NOT RUN, A03/M3 не принят |
+| P-04 **IN_PROGRESS** для material; renewal OPEN | C0 назначил material0012←0011, exact base/allowlist57 и отдельные6 C6 paths. Source inventory§15.10; actual migration/catalog/compat NOT RUN. Renewal остаётся отдельной последовательной выдачей |
 | P-05 **OPEN** | Выбран future append subscription + CAS NORMAL/PROVISIONED_LOCAL mode + immutable before/after/Audit. Команда/схема/collector/deploy/live не выданы и NOT VERIFIED. Старый TEST истёк, оба новых окна не подтверждены, VM UNKNOWN/live BLOCKED_TEST_INTERVAL |
 
 | R2 пункт / findings | Исправленный proposal |
@@ -4363,8 +4353,8 @@ Public/production mutation helper не принимает произвольны
 
 C1-P01–07/C2-P01–07 review dispositions сохранены в исходных комментариях. По C1/C2
 R2 reviews§15.1 C1-PROV-01…05/C2-PROV-01…03 CLOSED **на уровне revised design**;
-повтор этих sections не требуется. C2-PROV-04/P2 остаётся OPEN до адресной приёмки,
-в этом diff только предлагаемое исправление:
+повтор этих sections не требуется. C2-PROV-04/P2 CLOSED по C2 R3/C0 на уровне design;
+следующий mapping сохранён, execution evidence —§15.10:
 
 | R3 / C2-PROV-04 mapping | Норма / ручной trace и будущая проверка |
 |---|---|
@@ -4377,14 +4367,594 @@ Policy choice, revised-contract acceptance, implementation evidence и account
 observation — разные стадии; native P-01/latest-state остаётся OPEN.
 
 P01→§15.1–2; P02→§15.3–4; P03→§15.5; P04→§15.6–7;
-P05→§15.8; P06→§15.9. Static scope/prefix/original11/manifest/history/links,
-ручные traces и diff-check достаточны для R3. Product suites/Docker/Actions dispatch/
-rerun не запускаются ради docs. Automatic final-head CI будет указан фактически
-в **одном новом canonical R3 receipt того же Draft PR33**, без status-only commit;
-старый R2 green head не R3 evidence. Старые C3/C1/C2 receipts не редактируются.
-Возврат **REVIEW**, затем C3 HOLD. C0 проверяет новый exact head и назначает адресный
-C2 re-review только C2-PROV-04/shared bodies/locks; полного C1 review при неизменном
-API/current DTO не требуется. C1/C2/C5/C6/C8 до выдачи HOLD. Runtime/migration/renewal/probe/
-VM/live/DB/S3/sends/deploy не выданы; merge пользователем после приёмки.
-M3 IN_PROGRESS, A03/A08/acceptance впереди, M4/LLM/production/IMPL-05/CI optimization
-не открываются.
+P05→§15.8; P06→§15.9. Design R3 принят/интегрирован; прежние canonical receipts
+сохранены. Material source checkpoint и точные local/deferred gates —§15.10.
+После C0 intake C6 получает отдельную compatibility выдачу; затем C0 назначает один
+Draft implementation PR с9 штатными automatic jobs и clean-source checks. PG/browser
+остаются обязательны до приёмки. Actions dispatch/rerun, новые runners/budgets,
+renewal/probe/VM/live/deploy/merge/activation не выдаются этим checkpoint.
+C3 HOLD после возврата; C1/C2/C5/C6/C8 HOLD до назначения C0. MATERIAL/M3 IN_PROGRESS,
+A03/A08/acceptance впереди; M4/LLM/production/IMPL-05/CI optimization не открыты.
+
+### 15.10. MATERIAL implementation source checkpoint / 2026-10-15 UTC
+
+Выдача [C0 MATERIAL](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336), продолжение
+[после ограничения окружения](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195754984). Implementation source готов к
+C0 intake; **MATERIAL/M3 IN_PROGRESS, A03 NOT VERIFIED; C3 HOLD после возврата**.
+Принятый design§15.2–15.8 и assertion tables§15.9 не изменены. No-refetch policy,
+native/latest-state OPEN, renewal/collector/live и право merge/activation не расширены.
+
+| Source binding | Значение |
+|---|---|
+| Branch | `c3/m3-1-material`; новый PR не открывается |
+| Exact base / sole parent | `933ddd284ff5b77fb1aa88a4270ab0032bc499c9` |
+| Base tree / schema | `d0759acb9f83ec3f3e10d9c5d1325c937c343ee7` /0011 |
+| Base ordered parents | `bae25093bafb9534af68de5c586763667b896e70`, `642160d2181b9fb5d062e449a0ff603467c40e51` |
+| Successor | `0012_message_provenance.py`, revision0012/down_revision0011; material first, renewal не назначен |
+| Final head/tree/parents and changed paths/numstat | Один canonical source checkpoint comment в [PR33](https://github.com/Elefesys/ai-service-manager/pull/33); no self-SHA/status-only commit |
+
+Implementation включает saved-V1 lookup до strict V2 parse и final locked recheck,
+full H1→H2, separate codec2 sidecar, default-OFF captured material gate, bounded
+target fold, immutable results/effects/Audit/suppression proof, atomic original
+fold before File/grouping, winning terminal replay, current-only shared projection,
+sticky Turn invalidation, preserved SENT/WINNER and legacy snapshots. Job→Inbox→
+connection→identity barrier (original only)→Conversation→sorted targets→Messages→
+Turns is the source lock order; SENT binds only an existing target under its existing
+Conversation barrier without a reverse connection/foreign Job FK. Actual blocking
+and rollback behavior is still subject to the PG tests below.
+
+Owner message DTO now requires closed `current` (schema_version1, state,
+content_type, text, image_availability, changed); immutable historical fields remain.
+Versioned V2 internal snapshots keep historical identity and add current/member
+suppression evidence; saved V1 parsing stays exact. The image grant SQL shares
+`message_effective` eligibility. The Console uses current, clears an old image on
+refresh and drops a late grant captured at another Message version. Audit adds the
+closed `MESSAGE_MATERIAL_CHANGED`/`CHANNEL_EVENT` variant. OpenAPI and both TS
+consumers are changed together. No realtime/TTL guarantee or replacement fetch is added.
+
+#### 15.10.1. Contract→source→executable cases
+
+| Contract / proof | Implementation | Исполняемые test node IDs; PG/browser пока NOT RUN |
+|---|---|---|
+| P-A03-01 / §15.3/6 | `normalization.py`, `material.py`, `telegram/database.py`, 0012 validation/ingress | `tests/test_m3_1_provenance.py::test_p_a03_01_*`; `PG::test_full_codec_sql_python_parity_closed_null_matrix_and_immutable_sidecar`; `MIG::test_cutover_saved_v1_replay_precedes_new_field_parse_and_fresh_v1_refused`; `tests/test_m2_3_wire_postgres.py::test_material_authenticated_webhook_to_normal_worker_preserves_original` |
+| P-A03-02 / §15.7 | Provenance, target/effect/suppression composite FKs, immutable accepted versions, exact SENT binding | `PG::test_cross_binding_fk_null_bypasses_and_historical_effect_versions`; `PG::test_identity_conflict_does_not_poison_trusted_original_and_chat_isolation`; `PG::test_same_provider_id_across_workspace_and_connection_never_aliases`; `PG::test_exact_sent_binding_only_and_deferred_finalizer_without_connection_reverse` |
+| P-A03-03 / §15.3/4 | Bounded fold, private apply/context, per-target effects/Audit and per-batch Turn bump | `PG::test_known_order_per_commit_counters_and_sticky_turn[steps0…17]`; `PG::test_deferred_order_fold_has_no_domain_writes_before_original[steps0…17]`; `PG::test_mixed_delete_batch_sorted_unique_context_n_turn_once_and_late_original`; `PG::test_overflow_is_full_rollback_without_effect_or_audit` |
+| P-A03-04 / §15.4/6/7 | Normal claim/admission, terminal MATERIAL_PROCESSED, winning-claim replay, ordered barriers | `PG::test_rollback_and_lost_ack_restart_exact_terminal_replay`; `PG::test_real_barrier_recheck_and_postwait_claim_expiry`; `PG::test_original_and_material_workers_serialize_unknown_chat_without_deadlock`; `PG::test_material_reclaim_nowait_skips_locked_candidate_and_old_token_cannot_apply`; SENT test above |
+| P-A03-05 / §15.4/7 | Shared grouping/member/seal/snapshot/readiness, effective projection and File grant predicate | R3 nodes below; `PG::test_late_original_fetch_retains_winner_and_context_but_never_stale_image`; `tests/test_m3_1_provenance.py::test_r3_t1_v2_snapshot_keeps_photo_identity_but_consumes_current_text` |
+| P-A03-06 / §15.4/9 | Same private `material_apply_context`, existing context→Escalation trigger, shared GUARDS admission | `PG::test_shared_body_guards_stale_admission_and_retained_dispatch`; `PG::test_shared_body_escalation_context_cancel_once_terminal_precedence_and_saved_replay`; `PG::test_shared_body_retains_expired_escalation_precedence`; retained CONTROL/GUARDS/Escalation suites remain candidate gates |
+| P-A03-07 / §15.4/7 | Required current DTO, paired OpenAPI/TS parser/panel, CHANNEL_EVENT Audit, current-only grant | `tests/test_m3_1_provenance.py::test_p_a03_07_*`; `PG::test_api_current_closed_history_and_same_workspace_wrong_client`; `PG::test_runtime_nonowner_force_rls_and_no_raw_table_or_private_function_access`; four scoped Vitest modules; `frontend/e2e/messaging.spec.ts` test “material edit and delete refresh the paired current projection and preserve original history” |
+| P-A03-08 / §15.6/7 | 0011→0012, immutable ORIGINAL/OLD_CHECK copies, first used refusal, current readiness0012 | `MIG::test_fresh_head_full42_columns_profiles_rls_and_no_unused_backfill`; `MIG::test_populated_0011_repeat_upgrade_and_exact_unused_reverse`; `MIG::test_owned_used_refusal_precedes_every_ddl_and_preserves_all42`; cutover node above; C6 source/schema compatibility still pending |
+| R3-T1/T2 | First original fold before File/grouping; typed PHOTO/file=NULL only with suppression proof | `PG::test_initial_photo_suppression_visible_snapshot_and_duplicate`: fresh-turn/existing-turn × R3-T1-text/R3-T2-photo, exact m2/C+2/effect/Audit/grouping/seal/V2 assertions |
+| R3-T3 | HIDDEN initial exclusion, newer restore without retroactive membership/FETCH | `PG::test_r3_t3_hidden_restore_and_t5_no_late_group_or_fetch` |
+| R3-T4 | Before-insert authority and deferred completeness, typed legacy member retained | `PG::test_r3_t4_invalid_first_suppression_rolls_back_entire_original_atom`: null-form, missing-proof, text-member, wrong-tenant/message/origin/effect, forged-basis and PENDING/FAILED File negatives; all42-table rollback fingerprints |
+| R3-T5 | Duplicate original/exact replay/maintenance; retained V1 decoder/snapshot/receipt/WINNER | R3-T1/T2/T3 nodes; `MIG::test_legacy_ineligible_photo_first_original_stays_suppressed_after_restore`; populated-cycle node; `tests/test_m3_1_provenance.py::test_r3_t5_saved_v1_decoder_does_not_adopt_new_member_form` |
+
+`PG` = `tests/test_m3_1_provenance_postgres.py`, `MIG` =
+`tests/test_m3_1_provenance_migrations.py`. Parameter suffixes are generated by pytest;
+the concrete collection, not a claimed execution, is recorded below. Every integration
+module uses the existing disposable `asm_test` fixtures and `integration` marker;
+no skip/xfail or substitute mock PostgreSQL. The CONTROLLED proof creates/drops a
+finite migrator-only TEST wrapper around the same private apply body; it does not
+rewrite saved provider/route/Client rows or grant a production mutation capability.
+
+
+#### 15.10.2. Source inventory for C6; not an actual catalog report
+
+This inventory is expanded from migration Python/DDL, without a PostgreSQL connection.
+The full table projection is `P_COLUMNS` in the migration test: retained exact
+`E_COLUMNS` (38 tables/schema0011) plus4 tables and9 columns on6 existing tables.
+No prior projected column is removed/reordered. `app.messages` and `app.outbox_events`
+gain supporting unique keys only. All retained types/defaults/constraints/indexes/
+triggers/policies/ACLs are defined by immutable0001–0011; the successor delta is
+`_schema`, `_integrity`, `_suppression`, `_material`, `_worker`, `_shared` and explicit
+owner/REVOKE/GRANT loop in0012. Source operation count131 is not SQL statement count
+or successful-DDL evidence. Implicit constraint/index names must be checked by PG,
+not guessed from source. Actual catalog comparison is `catalog`/`definitions` in
+the tests (functions+bodies/ACL/owner, relations, columns/types/defaults, constraints,
+indexes, triggers, policies, sequences), and is **NOT RUN**.
+
+| Полная P table projection | Columns, exact source order |
+|---|---|
+| `app.audit_events` | `workspace_id, audit_event_id, occurred_at, actor_kind, actor_user_account_id, correlation_id, event_type, object_type, object_id, object_version, payload, billing_account_object_id, message_object_id, conversation_object_id, conversation_control_generation, escalation_object_id, escalation_operation, material_target_id, material_source_receipt_id` |
+| `app.business_members` | `workspace_id, id, business_id, user_account_id, name, role, status, version, created_at` |
+| `app.businesses` | `workspace_id, id, name, status, version, created_at` |
+| `app.channel_connections` | `workspace_id, id, business_id, provider, bot_identity, external_connection_id, status, version, created_at` |
+| `app.client_identities` | `workspace_id, id, client_id, provider, external_user_id, created_at` |
+| `app.clients` | `workspace_id, id, version, created_at` |
+| `app.conversation_turn_messages` | `workspace_id, message_id, turn_id, conversation_id, connection_id, direction, content_type, origin_inbox_id, turn_ingress_at, turn_ingress_seq, file_id, membership_form, initial_suppression_id, suppression_disposition` |
+| `app.conversation_turns` | `workspace_id, id, conversation_id, connection_id, provider_chat_id, revision, control_generation, state, policy_version, debounce_ms, group_ms, media_ms, max_members, member_count, media_group_id, first_ingress_at, last_ingress_at, hard_at, quiet_at, media_deadline_at, seal_time, closed_at, ready_at, readiness, error_code, created_at, ingress_control_mode, activation_fence_seq, material_invalidated` |
+| `app.conversations` | `workspace_id, id, connection_id, business_id, client_id, identity_id, provider_chat_id, version, created_at, last_client_inbound_at, control_mode, control_generation, activation_fence_seq` |
+| `app.escalations` | `workspace_id, id, namespace, conversation_id, client_id, connection_id, turn_id, source_job_id, source_job_kind, source_job_step, source_claim_token, turn_revision, resume_receipt_id, control_generation, activation_fence_seq, input_context_version, waiting_context_version, request_snapshot, context_fingerprint, request_fingerprint, creation_result, reason, assignee_user_account_id, question, policy, created_at, due_at, second_reminder_at, expires_at, first_reminded_at, second_reminded_at, version, status, closure_reason, completed_at, answer_text, decided_by_user_account_id` |
+| `app.file_objects` | `workspace_id, id, message_id, connection_id, conversation_id, required_direction, required_content_type, status, winner_intent_id, winner_state, storage_key, mime_type, size_bytes, sha256, width, height, error_code, version, created_at, completed_at` |
+| `app.locations` | `workspace_id, id, business_id, name, status, version, created_at` |
+| `app.messages` | `workspace_id, id, conversation_id, connection_id, provider_chat_id, provider_message_id, direction, content_type, text, image_file_id, media_group_id, occurred_at, projection_fingerprint, version, created_at` |
+| `app.outbox_events` | `workspace_id, id, connection_id, message_id, kind, required_direction, status, attempt_id, provider_message_id, error_code, completed_at, version, created_at` |
+| `platform.alembic_version` | `version_num` |
+| `platform.auth_credentials` | `user_account_id, login, password_hash, version, created_at` |
+| `platform.auth_sessions` | `token_hash, user_account_id, credential_version, account_version, created_at, expires_at, revoked_at` |
+| `platform.billing_contact_command_receipts` | `workspace_id, receipt_id, billing_account_id, operation, idempotency_key, request_fingerprint, expected_version, status, result_version, result_outcome, created_at, completed_at` |
+| `platform.channel_routes` | `workspace_id, id, connection_id, provider, bot_identity, route_key, created_at` |
+| `platform.conversation_control_receipts` | `workspace_id, id, operation_namespace, operation, idempotency_key, conversation_id, client_id, actor_user_account_id, correlation_id, expected_generation, expected_context_version, previous_mode, accepted_mode, previous_generation, accepted_generation, context_version, activation_fence_seq, request_fingerprint, audit_event_id, audit_event_type, accepted_at, result, guard_profile` |
+| `platform.escalation_command_receipts` | `workspace_id, id, namespace, idempotency_key, escalation_id, conversation_id, client_id, actor_user_account_id, correlation_id, operation, expected_version, expected_control_generation, expected_context_version, accepted_version, accepted_status, accepted_context_version, request_fingerprint, audit_event_id, audit_event_type, accepted_at, result` |
+| `platform.file_object_uploads` | `workspace_id, id, file_id, job_id, claim_token, storage_key, mime_type, size_bytes, sha256, width, height, status, cleanup_claim_token, cleanup_lease_until, cleanup_attempts, next_check_at, last_checked_at, cleanup_outcome, version, created_at` |
+| `platform.inbox_events` | `workspace_id, id, connection_id, provider, bot_identity, external_connection_id, required_direction, event_id, normalized_event, event_fingerprint, correlation_id, received_at, status, result_code, message_id, completed_at, version, turn_ingress_at, turn_ingress_seq, turn_control_generation, turn_control_mode, turn_activation_fence_seq, material_result` |
+| `platform.message_initial_suppressions` | `workspace_id, id, message_id, target_id, origin_inbox_id, effect_id, source_receipt_id, previous_version, accepted_version, initial_material, fold_witnesses, membership_disposition` |
+| `platform.message_material_effects` | `workspace_id, id, target_id, message_id, source_receipt_id, audit_event_id, event_type, previous_version, accepted_version, reason, accepted_at` |
+| `platform.message_material_targets` | `workspace_id, id, connection_id, provider_chat_id, provider_message_id, message_id, conversation_id, client_id, direction, outbox_id, inbound_provider_id, required_sent, quarantined, original_grouping_closed, origin_identity, deleted, undated_seen, max_edit_at, candidate, dated_conflict, delete_receipt, undated_receipt, candidate_receipt, conflict_receipt, current_material` |
+| `platform.messaging_command_receipts` | `workspace_id, id, operation, idempotency_key, request_fingerprint, actor_user_account_id, correlation_id, message_id, outbox_id, audit_event_id, accepted_at` |
+| `platform.messaging_jobs` | `workspace_id, id, connection_id, kind, inbox_id, outbox_id, correlation_id, status, available_at, claim_token, lease_until, worker_id, attempt_count, first_started_at, error_code, completed_at, last_attempt_id, last_claim_token, last_outcome, last_provider_message_id, last_error_code, version, created_at, file_id, last_retry_after_seconds, last_retry_due, telegram_probe_claim, telegram_probe_generation, telegram_probe_version, turn_id, turn_revision, step, turn_outcome, turn_input, guard_rejection, escalation_id, escalation_outcome` |
+| `platform.plan_entitlements` | `plan_revision_id, capability_key, value_kind, enabled, limit_value, criticality, created_at` |
+| `platform.saas_plan_revisions` | `plan_revision_id, plan_id, revision, publication_state, published_at, created_at` |
+| `platform.saas_plans` | `plan_id, code, display_name, status, created_at` |
+| `platform.telegram_connection_state` | `workspace_id, connection_id, provider, bot_identity, external_connection_id, owner_user_id, generation, observation_version, observed_generation, observed_at, observation_xid, is_enabled, can_reply, error_code, material_enabled` |
+| `platform.telegram_provenance` | `receipt_id, codec, bot_identity, update_id, workspace_id, connection_id, inbox_id, projection, material_enabled` |
+| `platform.telegram_update_receipts` | `id, bot_identity, update_id, fingerprint, kind, result_code, workspace_id, connection_id, inbox_id, received_at, codec` |
+| `platform.turn_consumer_receipts` | `workspace_id, job_id, connection_id, kind, turn_id, turn_revision, step, consumer, winning_claim_token, input_context_version, input_control_generation, snapshot_digest, result, accepted_at` |
+| `platform.turn_guard_receipts` | `workspace_id, job_id, winning_claim_token, connection_id, conversation_id, client_id, turn_id, turn_revision, resume_receipt_id, input_control_generation, activation_fence_seq, input_context_version, snapshot_digest, consumer, request_fingerprint, result_text, outcome, accepted_at, intent_context_version, message_id, outbox_id, send_job_id, namespace, kind, step, direction, content_type, send_kind` |
+| `platform.user_accounts` | `id, status, version, created_at` |
+| `platform.workspace_billing_accounts` | `workspace_id, billing_account_id, contact_display_name, version, created_at, updated_at` |
+| `platform.workspace_memberships` | `workspace_id, user_account_id, role, status, version, created_at` |
+| `platform.workspace_service_modes` | `workspace_id, service_mode_id, mode, reason_code, effective_from, effective_until, version, created_at, updated_at` |
+| `platform.workspace_subscriptions` | `workspace_id, subscription_id, plan_revision_id, required_publication_state, status, funding_mode, effective_from, effective_until, version, created_at, updated_at` |
+| `platform.workspaces` | `id, status, version, created_at` |
+
+New tables are owned by `asm_migrator`, ENABLE+FORCE RLS, with one
+`material_migrator TO asm_migrator USING(true) WITH CHECK(true)` policy each and
+`REVOKE ALL ... FROM PUBLIC,asm_runtime`. No runtime raw table grants, runtime RLS
+policy or sequence is added. Three new histories reject UPDATE through
+`turn_immutable`; targets have before-write identity/witness checks and deferred
+current/fold consistency. Receipt codec is immutable; deferred provenance iff/binding
+checks also cover deletes. Suppression authority is before INSERT and completeness
+is deferred on proof/member. `material_no_file` forbids a late File for initial
+suppression. Existing immutable original Message columns/capture/deadlines remain.
+
+| Constraint family | Exact source obligations |
+|---|---|
+| Provenance | receipt PK and full composite codec/bot/update/ws/connection/Inbox FK; same-Workspace Inbox/receipt unique keys; closed V2 JSON/common equality; tenantless only NONBUSINESS; codec2↔sidecar iff and queued fingerprint checked deferred |
+| Target | PK(ws,id), unique(ws,connection,chat,provider ID), partial unique(ws,Message); conditional full INBOUND/exact SENT OUTBOUND FK/NULL matrix; Conversation/Client and immutable Message identity; at most3 retained fold witnesses; same ws/connection/chat/target/kind/date/semantic witnesses; sticky delete/uncertainty/quarantine/excluded grouping; no foreign Job FK |
+| Effect/Audit | unique(source receipt,Message); target/message and source FK; immutable accepted_version=previous_version+1; exact Audit composite key incl event type/version/target/source; CHANNEL_EVENT/no user and closed payload/reason; no FK to mutable current Message.version |
+| Suppression/member | one proof per(ws,Message), previous1/accepted2, exact effect/source/origin FK; frozen initial state/witnesses/disposition; own first-original physical transaction authority; PHOTO/INBOUND/fileNULL exception only same-Message ELIGIBLE_VISIBLE proof; HIDDEN/INELIGIBLE never gain membership |
+| Inbox/receipt | retained old closed CHECK alternatives, separate codec2 queued EDIT/DELETE and MATERIAL_PROCESSED/NULL Message; complete sorted per-target result union, exact source/effect/Audit binding and immutable terminal results |
+
+The following is the complete successor schema DDL expansion (excluding function
+bodies, table security loop and locks already described); it is executable source,
+not `pg_get_*` output. Retained checks appear in full so C6 can compare the exact
+OR extension and immutable reverse.
+
+```sql
+ALTER TABLE platform.telegram_connection_state ADD COLUMN material_enabled boolean NOT NULL DEFAULT false;
+      ALTER TABLE platform.telegram_update_receipts ADD COLUMN codec smallint CHECK(codec=2),
+        ADD CONSTRAINT telegram_material_identity_key UNIQUE(id,codec,bot_identity,update_id,workspace_id,connection_id,inbox_id),
+        ADD CONSTRAINT telegram_material_source_key UNIQUE(workspace_id,id),
+        DROP CONSTRAINT telegram_update_receipts_check;
+
+ALTER TABLE platform.telegram_update_receipts ADD CONSTRAINT telegram_update_receipts_check CHECK(
+      (codec IS NULL AND ((workspace_id IS NULL AND connection_id IS NULL AND inbox_id IS NULL AND kind='UNSUPPORTED' AND result_code='IGNORED_UNSUPPORTED') OR
+        (workspace_id IS NOT NULL AND connection_id IS NOT NULL AND
+          ((result_code='QUEUED' AND kind='BUSINESS_MESSAGE' AND inbox_id IS NOT NULL) OR (result_code<>'QUEUED' AND inbox_id IS NULL))))) OR
+      (codec=2 AND ((workspace_id IS NULL AND connection_id IS NULL AND inbox_id IS NULL AND kind='UNSUPPORTED' AND result_code='IGNORED_UNSUPPORTED') OR
+        (workspace_id IS NOT NULL AND connection_id IS NOT NULL AND ((result_code='QUEUED' AND kind IN
+          ('BUSINESS_MESSAGE','EDITED_BUSINESS_MESSAGE','DELETED_BUSINESS_MESSAGES') AND inbox_id IS NOT NULL) OR
+          (result_code<>'QUEUED' AND inbox_id IS NULL))))) IS TRUE);
+
+ALTER TABLE platform.inbox_events ADD COLUMN material_result jsonb,
+      ADD CONSTRAINT inbox_material_identity_key UNIQUE(workspace_id,id,connection_id,bot_identity,event_id),
+      DROP CONSTRAINT inbox_events_check;
+
+ALTER TABLE platform.inbox_events ADD CONSTRAINT inbox_events_check CHECK(
+      (material_result IS NULL AND ((status='PENDING' AND result_code IS NULL AND message_id IS NULL AND completed_at IS NULL) OR
+       (status='PROCESSED' AND result_code IS NOT NULL AND result_code IN ('PROCESSED','DUPLICATE') AND message_id IS NOT NULL AND completed_at IS NOT NULL) OR
+       (status='IGNORED' AND result_code IS NOT NULL AND result_code IN ('IGNORED_NATIVE_OWNER_MESSAGE','IGNORED_MESSAGE_EDITED','IGNORED_MESSAGE_DELETED','IGNORED_UNSUPPORTED') AND message_id IS NULL AND completed_at IS NOT NULL) OR
+       (status='FAILED' AND result_code IS NOT NULL AND result_code IN ('MESSAGE_ID_CONFLICT','CONVERSATION_IDENTITY_CONFLICT','RETRY_EXHAUSTED','DEPENDENCY_TIMEOUT','DEPENDENCY_UNAVAILABLE','INVALID_INPUT') AND message_id IS NULL AND completed_at IS NOT NULL))) OR
+      (status='PROCESSED' AND result_code='MATERIAL_PROCESSED' AND message_id IS NULL AND completed_at IS NOT NULL
+        AND platform.material_result_valid(material_result) IS TRUE));
+
+CREATE TABLE platform.telegram_provenance(
+      receipt_id uuid PRIMARY KEY,codec smallint NOT NULL DEFAULT 2 CHECK(codec=2),
+      bot_identity text NOT NULL,update_id text NOT NULL,workspace_id uuid,connection_id uuid,inbox_id uuid,
+      projection jsonb NOT NULL,material_enabled boolean NOT NULL,
+      UNIQUE(workspace_id,receipt_id),UNIQUE(workspace_id,inbox_id),
+      FOREIGN KEY(receipt_id) REFERENCES platform.telegram_update_receipts(id) ON DELETE RESTRICT,
+      FOREIGN KEY(receipt_id,codec,bot_identity,update_id,workspace_id,connection_id,inbox_id)
+        REFERENCES platform.telegram_update_receipts(id,codec,bot_identity,update_id,workspace_id,connection_id,inbox_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,inbox_id,connection_id,bot_identity,update_id)
+        REFERENCES platform.inbox_events(workspace_id,id,connection_id,bot_identity,event_id) ON DELETE RESTRICT,
+      CHECK(projection=platform.telegram_validate_v2(bot_identity,projection)),
+      CHECK((workspace_id IS NULL AND connection_id IS NULL AND inbox_id IS NULL AND projection->>'discriminator'='UNSUPPORTED') OR
+        (workspace_id IS NOT NULL AND connection_id IS NOT NULL AND projection->>'discriminator'<>'UNSUPPORTED')))
+      ;
+
+ALTER TABLE app.messages
+      ADD CONSTRAINT messages_material_identity_key UNIQUE(workspace_id,id,connection_id,conversation_id,provider_chat_id,direction),
+      ADD CONSTRAINT messages_material_inbound_key UNIQUE(workspace_id,id,provider_message_id,direction);
+      ALTER TABLE app.outbox_events ADD CONSTRAINT outbox_material_sent_key
+        UNIQUE(workspace_id,id,message_id,connection_id,status,provider_message_id);
+      ALTER TABLE app.conversation_turns ADD COLUMN material_invalidated boolean NOT NULL DEFAULT false;
+
+CREATE TABLE platform.message_material_targets(
+      workspace_id uuid NOT NULL,id uuid NOT NULL DEFAULT uuidv7(),connection_id uuid NOT NULL,
+      provider_chat_id text NOT NULL CHECK(platform.telegram_numeric_id(provider_chat_id)),
+      provider_message_id text NOT NULL CHECK(platform.telegram_numeric_id(provider_message_id)),
+      message_id uuid,conversation_id uuid,client_id uuid,direction text,outbox_id uuid,
+      inbound_provider_id text,required_sent text,
+      quarantined boolean NOT NULL DEFAULT false,original_grouping_closed boolean NOT NULL DEFAULT false,origin_identity jsonb,
+      deleted boolean NOT NULL DEFAULT false,undated_seen boolean NOT NULL DEFAULT false,
+      max_edit_at timestamptz CHECK(isfinite(max_edit_at)),candidate jsonb,dated_conflict boolean NOT NULL DEFAULT false,
+      delete_receipt uuid,undated_receipt uuid,candidate_receipt uuid,conflict_receipt uuid,
+      current_material jsonb CHECK(current_material IS NULL OR platform.material_state_valid(current_material)),
+      PRIMARY KEY(workspace_id,id),UNIQUE(workspace_id,connection_id,provider_chat_id,provider_message_id),
+      UNIQUE(workspace_id,id,message_id),
+      FOREIGN KEY(workspace_id,connection_id) REFERENCES app.channel_connections(workspace_id,id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,message_id,connection_id,conversation_id,provider_chat_id,direction)
+        REFERENCES app.messages(workspace_id,id,connection_id,conversation_id,provider_chat_id,direction) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,conversation_id,client_id) REFERENCES app.conversations(workspace_id,id,client_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,message_id,inbound_provider_id,direction)
+        REFERENCES app.messages(workspace_id,id,provider_message_id,direction) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,outbox_id,message_id,connection_id,required_sent,provider_message_id)
+        REFERENCES app.outbox_events(workspace_id,id,message_id,connection_id,status,provider_message_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,delete_receipt) REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,undated_receipt) REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,candidate_receipt) REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,conflict_receipt) REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      CHECK((message_id IS NULL AND conversation_id IS NULL AND client_id IS NULL AND direction IS NULL AND outbox_id IS NULL
+        AND inbound_provider_id IS NULL AND required_sent IS NULL AND current_material IS NULL) OR
+        (message_id IS NOT NULL AND conversation_id IS NOT NULL AND client_id IS NOT NULL AND direction IS NOT NULL
+          AND current_material IS NOT NULL AND NOT quarantined AND
+          ((direction='INBOUND' AND inbound_provider_id=provider_message_id AND inbound_provider_id IS NOT NULL AND outbox_id IS NULL AND required_sent IS NULL) OR
+           (direction='OUTBOUND' AND inbound_provider_id IS NULL AND outbox_id IS NOT NULL AND required_sent='SENT' AND required_sent IS NOT NULL)))),
+      CHECK((deleted AND delete_receipt IS NOT NULL AND NOT undated_seen AND NOT dated_conflict AND max_edit_at IS NULL AND candidate IS NULL
+        AND undated_receipt IS NULL AND candidate_receipt IS NULL AND conflict_receipt IS NULL) OR
+        (NOT deleted AND delete_receipt IS NULL AND (undated_seen=(undated_receipt IS NOT NULL)) AND
+          ((max_edit_at IS NULL AND candidate IS NULL AND candidate_receipt IS NULL AND conflict_receipt IS NULL AND NOT dated_conflict) OR
+           (max_edit_at IS NOT NULL AND candidate_receipt IS NOT NULL AND
+             ((dated_conflict AND candidate IS NULL AND conflict_receipt IS NOT NULL) OR
+              (NOT dated_conflict AND candidate IS NOT NULL AND conflict_receipt IS NULL AND platform.material_content_valid(candidate) IS TRUE)))))));
+
+CREATE UNIQUE INDEX message_material_bound_key ON platform.message_material_targets(workspace_id,message_id) WHERE message_id IS NOT NULL;
+      ALTER TABLE app.audit_events ADD COLUMN material_target_id uuid GENERATED ALWAYS AS
+        (CASE WHEN event_type='MESSAGE_MATERIAL_CHANGED' THEN (payload->>'target_id')::uuid END) STORED,
+      ADD COLUMN material_source_receipt_id uuid GENERATED ALWAYS AS
+        (CASE WHEN event_type='MESSAGE_MATERIAL_CHANGED' THEN (payload->>'source_receipt_id')::uuid END) STORED,
+      ADD CONSTRAINT audit_material_target_fkey FOREIGN KEY(workspace_id,material_target_id,object_id)
+        REFERENCES platform.message_material_targets(workspace_id,id,message_id) ON DELETE RESTRICT,
+      ADD CONSTRAINT audit_material_source_fkey FOREIGN KEY(workspace_id,material_source_receipt_id)
+        REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      ADD CONSTRAINT audit_material_ref_key UNIQUE(workspace_id,audit_event_id,object_id,event_type,object_version,material_target_id,material_source_receipt_id),
+      DROP CONSTRAINT audit_events_discriminator_payload_check;
+
+ALTER TABLE app.audit_events ADD CONSTRAINT audit_events_discriminator_payload_check CHECK(
+      (
+
+      (event_type='WORKSPACE_BILLING_PROVISIONED' AND
+ actor_kind='LOCAL_PROVISIONER' AND actor_user_account_id IS NULL AND
+ object_type='WORKSPACE_BILLING_ACCOUNT' AND payload='{}'::jsonb) OR
+ (event_type='BILLING_ACCOUNT_CONTACT_UPDATED' AND actor_kind='USER_ACCOUNT' AND
+ actor_user_account_id IS NOT NULL AND object_type='WORKSPACE_BILLING_ACCOUNT' AND
+ payload='{"changed_fields":["contact_display_name"]}'::jsonb) OR (event_type='MESSAGE_SEND_REQUESTED' AND actor_kind='USER_ACCOUNT' AND actor_user_account_id IS NOT NULL AND object_type='MESSAGE' AND object_version=1 AND payload='{"content_type":"TEXT"}'::jsonb) OR ((
+        event_type IN ('CONVERSATION_TAKEN_OVER','CONVERSATION_RESUMED') AND actor_kind='USER_ACCOUNT'
+        AND actor_user_account_id IS NOT NULL AND object_type='CONVERSATION' AND object_version>0
+        AND conversation_object_id IS NOT NULL AND conversation_control_generation IS NOT NULL
+        AND payload=jsonb_build_object('previous_mode',payload->>'previous_mode','control_mode',payload->>'control_mode',
+          'previous_generation',payload->>'previous_generation','control_generation',payload->>'control_generation')
+        AND payload->>'previous_mode' IN ('HUMAN','AI')
+        AND payload->>'control_mode'=CASE event_type WHEN 'CONVERSATION_TAKEN_OVER' THEN 'HUMAN' ELSE 'AI' END
+        AND CASE WHEN payload->>'previous_generation' ~ '^[1-9][0-9]{0,18}$'
+                   AND payload->>'control_generation' ~ '^[1-9][0-9]{0,18}$'
+          THEN (payload->>'previous_generation')::numeric<9223372036854775807
+            AND (payload->>'control_generation')::numeric=(payload->>'previous_generation')::numeric+1
+          ELSE false END) IS TRUE) OR ((event_type='ESCALATION_DECIDED' AND actor_kind='USER_ACCOUNT'
+        AND actor_user_account_id IS NOT NULL AND object_type='ESCALATION' AND object_version=2
+        AND escalation_object_id IS NOT NULL AND escalation_operation IS NOT NULL AND
+        payload IN ('{"operation":"RESOLVE","status":"RESOLVED"}'::jsonb,'{"operation":"CANCEL","status":"CANCELLED"}'::jsonb)) IS TRUE)) OR ((event_type='MESSAGE_MATERIAL_CHANGED' AND actor_kind='CHANNEL_EVENT'
+        AND actor_user_account_id IS NULL AND object_type='MESSAGE' AND material_target_id IS NOT NULL AND material_source_receipt_id IS NOT NULL
+        AND platform.material_object(payload,ARRAY['target_id','source_receipt_id','previous_version','accepted_version','reason'])
+        AND payload->>'target_id'=material_target_id::text AND payload->>'source_receipt_id'=material_source_receipt_id::text
+        AND jsonb_typeof(payload->'previous_version')='string' AND jsonb_typeof(payload->'accepted_version')='string'
+        AND platform.telegram_numeric_id(payload->>'previous_version') AND platform.telegram_numeric_id(payload->>'accepted_version')
+        AND (payload->>'previous_version')::numeric+1=object_version AND payload->>'accepted_version'=object_version::text
+        AND payload->>'reason' IN ('CONTENT_CHANGED','DELETED','ORDER_UNCERTAIN','ORDER_RESTORED','UNSUPPORTED_CONTENT')) IS TRUE));
+
+CREATE TABLE platform.message_material_effects(
+      workspace_id uuid NOT NULL,id uuid NOT NULL DEFAULT uuidv7(),target_id uuid NOT NULL,message_id uuid NOT NULL,
+      source_receipt_id uuid NOT NULL,audit_event_id uuid NOT NULL,
+      event_type text NOT NULL DEFAULT 'MESSAGE_MATERIAL_CHANGED' CHECK(event_type='MESSAGE_MATERIAL_CHANGED'),
+      previous_version bigint NOT NULL CHECK(previous_version>0),accepted_version bigint NOT NULL CHECK(accepted_version::numeric=previous_version::numeric+1),
+      reason text NOT NULL CHECK(reason IN ('CONTENT_CHANGED','DELETED','ORDER_UNCERTAIN','ORDER_RESTORED','UNSUPPORTED_CONTENT')),
+      accepted_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      PRIMARY KEY(workspace_id,id),UNIQUE(source_receipt_id,message_id),
+      UNIQUE(workspace_id,id,target_id,message_id,source_receipt_id,previous_version,accepted_version),
+      FOREIGN KEY(workspace_id,target_id,message_id) REFERENCES platform.message_material_targets(workspace_id,id,message_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,source_receipt_id) REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,audit_event_id,message_id,event_type,accepted_version,target_id,source_receipt_id)
+        REFERENCES app.audit_events(workspace_id,audit_event_id,object_id,event_type,object_version,material_target_id,material_source_receipt_id) ON DELETE RESTRICT);
+
+CREATE TABLE platform.message_initial_suppressions(
+      workspace_id uuid NOT NULL,id uuid NOT NULL DEFAULT uuidv7(),message_id uuid NOT NULL,target_id uuid NOT NULL,
+      origin_inbox_id uuid NOT NULL,effect_id uuid NOT NULL,source_receipt_id uuid NOT NULL,
+      previous_version bigint NOT NULL DEFAULT 1 CHECK(previous_version=1),accepted_version bigint NOT NULL DEFAULT 2 CHECK(accepted_version=2),
+      initial_material jsonb NOT NULL,fold_witnesses uuid[] NOT NULL CHECK(cardinality(fold_witnesses) BETWEEN 1 AND 3),
+      membership_disposition text NOT NULL CHECK(membership_disposition IN ('HIDDEN','INELIGIBLE_ORIGIN','ELIGIBLE_VISIBLE')),
+      PRIMARY KEY(workspace_id,id),UNIQUE(workspace_id,message_id),
+      UNIQUE(workspace_id,id,message_id,origin_inbox_id,membership_disposition),
+      FOREIGN KEY(workspace_id,message_id) REFERENCES app.messages(workspace_id,id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,origin_inbox_id) REFERENCES platform.inbox_events(workspace_id,id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,effect_id,target_id,message_id,source_receipt_id,previous_version,accepted_version)
+        REFERENCES platform.message_material_effects(workspace_id,id,target_id,message_id,source_receipt_id,previous_version,accepted_version) ON DELETE RESTRICT);
+
+ALTER TABLE app.conversation_turn_messages
+      ADD COLUMN membership_form text,ADD COLUMN initial_suppression_id uuid,
+      ADD COLUMN suppression_disposition text GENERATED ALWAYS AS
+        (CASE WHEN membership_form='INITIAL_FOLD_SUPPRESSED' THEN 'ELIGIBLE_VISIBLE' END) STORED,
+      ADD CONSTRAINT turn_member_suppression_fkey FOREIGN KEY(workspace_id,initial_suppression_id,message_id,origin_inbox_id,suppression_disposition)
+        REFERENCES platform.message_initial_suppressions(workspace_id,id,message_id,origin_inbox_id,membership_disposition) ON DELETE RESTRICT,
+      DROP CONSTRAINT conversation_turn_messages_check;
+
+ALTER TABLE app.conversation_turn_messages ADD CONSTRAINT conversation_turn_messages_check CHECK(
+      (membership_form IS NULL AND initial_suppression_id IS NULL AND ((content_type='TEXT' AND file_id IS NULL) OR (content_type='IMAGE_REFERENCE' AND file_id IS NOT NULL))) OR
+      (membership_form='INITIAL_FOLD_SUPPRESSED' AND membership_form IS NOT NULL AND initial_suppression_id IS NOT NULL
+        AND content_type='IMAGE_REFERENCE' AND direction='INBOUND' AND file_id IS NULL) IS TRUE);
+```
+
+Complete added trigger definitions from the source expansion:
+
+```sql
+CREATE TRIGGER material_immutable BEFORE UPDATE ON platform.telegram_provenance FOR EACH ROW EXECUTE FUNCTION platform.turn_immutable();
+CREATE TRIGGER material_immutable BEFORE UPDATE ON platform.message_material_effects FOR EACH ROW EXECUTE FUNCTION platform.turn_immutable();
+CREATE TRIGGER material_immutable BEFORE UPDATE ON platform.message_initial_suppressions FOR EACH ROW EXECUTE FUNCTION platform.turn_immutable();
+CREATE TRIGGER material_receipt_immutable BEFORE UPDATE ON platform.telegram_update_receipts
+      FOR EACH ROW EXECUTE FUNCTION platform.messaging_immutable('codec');
+CREATE CONSTRAINT TRIGGER material_integrity AFTER INSERT OR UPDATE OR DELETE ON platform.telegram_update_receipts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_integrity();
+CREATE CONSTRAINT TRIGGER material_integrity AFTER INSERT OR UPDATE OR DELETE ON platform.telegram_provenance DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_integrity();
+CREATE CONSTRAINT TRIGGER material_integrity AFTER INSERT OR UPDATE OR DELETE ON platform.inbox_events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_integrity();
+CREATE TRIGGER material_target_check BEFORE INSERT OR UPDATE ON platform.message_material_targets FOR EACH ROW EXECUTE FUNCTION platform.material_target_check();
+CREATE CONSTRAINT TRIGGER material_target_consistency AFTER INSERT OR UPDATE ON platform.message_material_targets DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_target_check();
+CREATE TRIGGER material_no_file BEFORE INSERT ON app.file_objects FOR EACH ROW EXECUTE FUNCTION platform.material_no_file();
+CREATE TRIGGER material_suppression_authority BEFORE INSERT ON platform.message_initial_suppressions FOR EACH ROW EXECUTE FUNCTION platform.material_suppression_check();
+CREATE CONSTRAINT TRIGGER material_suppression_completeness AFTER INSERT OR UPDATE ON platform.message_initial_suppressions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_suppression_check();
+CREATE CONSTRAINT TRIGGER material_suppression_completeness AFTER INSERT OR UPDATE ON app.conversation_turn_messages DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_suppression_check();
+```
+
+The source function closure is132 surviving functions:109 retained after the
+predecessor's two explicit DROP statements, plus23 new. Seventeen retained bodies
+are replaced;92 retain their predecessor body. All new functions use fixed
+`search_path=pg_catalog,pg_temp` and owner `asm_migrator`;16 are SECURITY DEFINER,
+7 pure validators/codecs are INVOKER (as listed below); all23
+explicitly REVOKE PUBLIC/runtime, then only two narrow wrappers receive runtime
+EXECUTE. Replacement preserves existing owner/ACL/signature/security. The table
+below lists every surviving signature from source (argument names included);
+runtime ACL is derived from ordered explicit GRANT/REVOKE source, not catalog evidence.
+
+| Function signature | Source body | Runtime EXECUTE | Security |
+|---|---|---|---|
+| `app.current_messaging_owner_workspace_id()` | retained0011 | YES | DEFINER |
+| `app.current_workspace_id()` | retained0011 | YES | DEFINER |
+| `platform.auth_bootstrap(p_hash text, p_ttl integer)` | retained0011 | YES | DEFINER |
+| `platform.auth_lock_session(p_hash text, p_exclusive boolean)` | retained0011 | NO | DEFINER |
+| `platform.auth_login( p_previous text, p_account uuid, p_account_version bigint, p_credential_version bigint, p_new text, p_ttl integer)` | retained0011 | YES | DEFINER |
+| `platform.auth_logout(p_hash text)` | retained0011 | YES | DEFINER |
+| `platform.auth_memberships(p_hash text)` | retained0011 | YES | DEFINER |
+| `platform.auth_password_lookup(p_login text)` | retained0011 | YES | DEFINER |
+| `platform.auth_rotate(p_previous text, p_new text)` | retained0011 | YES | DEFINER |
+| `platform.auth_session(p_hash text)` | retained0011 | YES | DEFINER |
+| `platform.conversation_control_execute( p_conversation uuid,p_client uuid,p_operation text,p_key text,p_generation bigint,p_context bigint)` | retained0011 | YES | DEFINER |
+| `platform.conversation_control_fingerprint( ws uuid,actor uuid,conversation uuid,client uuid,operation text,generation bigint,context bigint)` | retained0011 | NO | INVOKER |
+| `platform.conversation_control_locked( p_conversation uuid,p_client uuid,p_operation text,p_key text,p_generation bigint,p_context bigint)` | retained0011 | NO | DEFINER |
+| `platform.conversation_control_prepare( p_conversation uuid,p_client uuid,p_operation text,p_key text,p_generation bigint,p_context bigint)` | retained0011 | YES | DEFINER |
+| `platform.conversation_control_read(p_conversation uuid)` | retained0011 | YES | DEFINER |
+| `platform.conversation_manual_prelock(p_conversation uuid,p_text text,p_key text)` | retained0011 | YES | DEFINER |
+| `platform.conversation_manual_takeover(ws uuid,p_conversation uuid)` | retained0011 | NO | DEFINER |
+| `platform.conversation_turn_activation_matches(ws uuid,p_turn uuid)` | 0012 REPLACED | NO | DEFINER |
+| `platform.escalation_command(p_escalation uuid,p_conversation uuid,p_client uuid,p_operation text,p_key text, p_version bigint,p_generation bigint,p_context bigint,p_answer text)` | retained0011 | YES | DEFINER |
+| `platform.escalation_command_fingerprint( ws uuid,actor uuid,escalation uuid,conversation uuid,client uuid,operation text, version bigint,generation bigint,context bigint,answer text)` | retained0011 | NO | INVOKER |
+| `platform.escalation_context_changed()` | retained0011 | NO | DEFINER |
+| `platform.escalation_immutable()` | retained0011 | NO | DEFINER |
+| `platform.escalation_list(p_count integer,p_status text,p_at timestamptz,p_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.escalation_now()` | retained0011 | NO | INVOKER |
+| `platform.escalation_read(p_escalation uuid)` | retained0011 | YES | DEFINER |
+| `platform.escalation_request_for_turn(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.escalation_request_replay(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.escalation_timer_execute(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.escalation_validity(ws uuid,p_escalation uuid,p_now timestamptz)` | retained0011 | NO | DEFINER |
+| `platform.files_begin_fetch(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.files_claim_cleanup(p_limit integer)` | retained0011 | YES | DEFINER |
+| `platform.files_finish_cleanup(p_intent uuid,p_claim uuid,p_error text)` | retained0011 | YES | DEFINER |
+| `platform.files_finish_fetch(p_job uuid,p_claim uuid,p_intent uuid)` | retained0011 | YES | DEFINER |
+| `platform.files_immutable()` | retained0011 | NO | INVOKER |
+| `platform.files_manifest_valid(m jsonb)` | retained0011 | NO | INVOKER |
+| `platform.files_plan(p_workspace uuid,p_message uuid,p_correlation uuid)` | 0012 REPLACED | NO | DEFINER |
+| `platform.files_prepare_upload(p_job uuid,p_claim uuid,p_manifest jsonb)` | retained0011 | YES | DEFINER |
+| `platform.files_read_manifest(p_conversation uuid,p_message uuid,p_file uuid)` | 0012 REPLACED | YES | DEFINER |
+| `platform.files_upload_json(u platform.file_object_uploads)` | retained0011 | NO | INVOKER |
+| `platform.guard_entitlement()` | retained0011 | NO | INVOKER |
+| `platform.guard_plan_revision()` | retained0011 | NO | INVOKER |
+| `platform.guard_require_current(ws uuid,p_turn uuid,p_resume uuid,p_context bigint)` | 0012 REPLACED | NO | DEFINER |
+| `platform.guard_send_begin(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.guard_text_fingerprint(p_input jsonb,p_text text)` | retained0011 | NO | INVOKER |
+| `platform.guard_turn_accept(p_job uuid,p_claim uuid,p_digest text,p_text text)` | retained0011 | YES | DEFINER |
+| `platform.guard_turn_prepare(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.guard_turn_replay(p_job uuid,p_claim uuid,p_digest text,p_text text)` | retained0011 | YES | DEFINER |
+| `platform.initialize_local_billing(p_workspace_id uuid,p_catalog_code text,p_catalog_revision integer,p_contact_display_name text,p_subscription_status text,p_funding_mode text,p_effective_from timestamptz,p_effective_until timestamptz,p_service_mode text)` | retained0011 | NO | DEFINER |
+| `platform.initialize_local_messaging_billing(p_workspace uuid,p_contact text,p_from timestamptz,p_until timestamptz)` | retained0011 | NO | DEFINER |
+| `platform.initialize_telegram_connection(p_workspace uuid,p_business uuid,p_bot text,p_external text,p_owner text,p_observation jsonb)` | retained0011 | NO | DEFINER |
+| `platform.material_apply(ws uuid,p_target uuid,corr uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.material_apply_context(ws uuid,p_message uuid,corr uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.material_bind(ws uuid,p_message uuid,initial boolean,corr uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.material_bump_turns(ws uuid,messages uuid[],corr uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.material_content_valid(c jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.material_fold(ws uuid,p_target uuid,p_source uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.material_identity(ws uuid,p_message uuid,p jsonb)` | 0012 NEW | NO | DEFINER |
+| `platform.material_integrity()` | 0012 NEW | NO | DEFINER |
+| `platform.material_no_file()` | 0012 NEW | NO | DEFINER |
+| `platform.material_object(p jsonb,keys text[])` | 0012 NEW | NO | INVOKER |
+| `platform.material_process(j platform.messaging_jobs)` | 0012 NEW | NO | DEFINER |
+| `platform.material_processing_replay(p_job uuid,p_claim uuid)` | 0012 NEW | YES | DEFINER |
+| `platform.material_result_valid(a jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.material_semantic(c jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.material_state_valid(v jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.material_suppression_check()` | 0012 NEW | NO | DEFINER |
+| `platform.material_target_check()` | 0012 NEW | NO | DEFINER |
+| `platform.material_turn_usable(ws uuid,p_turn uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.message_effective(ws uuid,p_message uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.messaging_admit(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_begin_send(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_claim(p_worker text,p_until timestamptz,p_at timestamptz,p_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_fingerprint(e jsonb,projection boolean)` | retained0011 | NO | INVOKER |
+| `platform.messaging_finish_send(p_job uuid,p_claim uuid,p_attempt uuid,p_outcome text,p_provider_message text,p_error text)` | retained0011 | YES | DEFINER |
+| `platform.messaging_finish_send(p_job uuid,p_claim uuid,p_attempt uuid,p_outcome text,p_provider_message text,p_error text,p_retry_after_seconds integer)` | retained0011 | YES | DEFINER |
+| `platform.messaging_guard(p_job uuid,p_claim uuid)` | retained0011 | NO | DEFINER |
+| `platform.messaging_immutable()` | retained0011 | NO | INVOKER |
+| `platform.messaging_ingest(p_provider text,p_bot text,p_event jsonb,p_correlation uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_job_json(j platform.messaging_jobs)` | retained0011 | NO | INVOKER |
+| `platform.messaging_lock_billing()` | retained0011 | YES | DEFINER |
+| `platform.messaging_lock_billing_workspace(ws uuid)` | retained0011 | NO | DEFINER |
+| `platform.messaging_lock_owner(ws uuid,actor uuid)` | retained0011 | NO | DEFINER |
+| `platform.messaging_manual_send_allowed(ws uuid)` | retained0011 | NO | DEFINER |
+| `platform.messaging_prepare_text(p_conversation uuid,p_text text,p_key text)` | retained0011 | YES | DEFINER |
+| `platform.messaging_process_inbox(p_job uuid,p_claim uuid)` | 0012 REPLACED | YES | DEFINER |
+| `platform.messaging_read_connections(p_limit integer,p_at timestamptz,p_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_conversations(p_limit integer)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_conversations(p_limit integer,p_at timestamptz,p_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_delivery(p_message uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_inbox(p_inbox uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_messages(p_conversation uuid,p_limit integer)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_messages(p_conversation uuid,p_limit integer,p_at timestamptz,p_id uuid)` | 0012 REPLACED | YES | DEFINER |
+| `platform.messaging_recover_expired(p_until timestamptz,p_at timestamptz,p_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_request_text(p_conversation uuid,p_text text,p_key text)` | retained0011 | YES | DEFINER |
+| `platform.messaging_reschedule(p_job uuid,p_error text,p_retry boolean)` | retained0011 | NO | DEFINER |
+| `platform.messaging_reschedule(p_job uuid,p_error text,p_retry boolean,p_delay integer)` | retained0011 | NO | DEFINER |
+| `platform.messaging_reschedule(p_job uuid,p_error text,p_retry boolean,p_delay integer,p_nowait boolean)` | retained0011 | NO | DEFINER |
+| `platform.messaging_retry(p_job uuid,p_claim uuid,p_error text,p_retry boolean)` | retained0011 | YES | DEFINER |
+| `platform.messaging_valid_id(value text,max_chars integer,max_bytes integer)` | retained0011 | NO | INVOKER |
+| `platform.messaging_validate_event(e jsonb)` | retained0011 | NO | INVOKER |
+| `platform.resolve_workspace_membership(actor_id uuid, target_workspace_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.telegram_begin_send(p_job uuid,p_claim uuid,p_generation bigint,p_observation_version bigint,p_observation jsonb)` | retained0011 | YES | DEFINER |
+| `platform.telegram_can_send(ws uuid,conn uuid,conversation uuid,same_uow boolean)` | retained0011 | NO | DEFINER |
+| `platform.telegram_fingerprint(bot text,p jsonb)` | retained0011 | NO | INVOKER |
+| `platform.telegram_fingerprint_v2(bot text,p jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.telegram_ingest(p_bot text,p_projection jsonb,p_correlation uuid)` | 0012 REPLACED | YES | DEFINER |
+| `platform.telegram_numeric_id(value text)` | retained0011 | NO | INVOKER |
+| `platform.telegram_owner_observe(p_conversation uuid,p_generation bigint,p_observation_version bigint,p_observation jsonb)` | retained0011 | YES | DEFINER |
+| `platform.telegram_probe_json(s platform.telegram_connection_state)` | retained0011 | NO | INVOKER |
+| `platform.telegram_receipt_json(r platform.telegram_update_receipts,code text)` | 0012 NEW | NO | DEFINER |
+| `platform.telegram_replay_v1(p_bot text,p_projection jsonb)` | 0012 NEW | YES | DEFINER |
+| `platform.telegram_save_observation(ws uuid,conn uuid,p_generation bigint,p_version bigint,o jsonb)` | retained0011 | NO | DEFINER |
+| `platform.telegram_validate_observation(o jsonb)` | retained0011 | NO | INVOKER |
+| `platform.telegram_validate_projection(bot text,p jsonb)` | retained0011 | NO | INVOKER |
+| `platform.telegram_validate_v2(bot text,p jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.telegram_worker_probe(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.turn_consumer_finalize(p_job uuid,p_claim uuid,p_result jsonb)` | 0012 REPLACED | YES | DEFINER |
+| `platform.turn_consumer_replay(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.turn_enqueue(ws uuid,p_turn uuid,corr uuid)` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_execute(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.turn_group_message(ws uuid,p_message uuid,corr uuid)` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_immutable()` | 0012 REPLACED | NO | INVOKER |
+| `platform.turn_ingress()` | retained0011 | NO | DEFINER |
+| `platform.turn_material()` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_member_check()` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_members_consistent()` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_preflight(j platform.messaging_jobs,p_nowait boolean,p_terminal boolean)` | retained0011 | NO | DEFINER |
+| `platform.turn_require_isolation()` | retained0011 | NO | INVOKER |
+| `platform.turn_seal(ws uuid,p_turn uuid,p_seal timestamptz,corr uuid,bump boolean)` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_snapshot(ws uuid,p_turn uuid)` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_supersede(j platform.messaging_jobs)` | 0012 REPLACED | NO | DEFINER |
+| `platform.update_billing_contact(expected_version bigint,contact_display_name text,idempotency_key text)` | retained0011 | YES | DEFINER |
+
+Changed capability profiles: ingress accepts fresh V2 only, with a separate saved-V1
+replay wrapper; PROCESS_INBOX has a closed material terminal and own winning-claim
+replay wrapper; owner message read returns required current; image manifest read
+requires ORIGINAL_READY; Turn execute/guard prepare may return V2 snapshots while
+old persisted V1 is decoded unchanged; consumer finalize uses effective current;
+shared activation/enqueue/admission reject sticky invalidated/no visible input;
+original/File/SENT share the context/apply path. Other public signatures and scope
+authority are retained. No runtime arbitrary ws material setter is added.
+
+Immutable downgrade source copies (SHA256 of each complete `ORIGINAL` Python string,
+UTF-8, no strip; equality to final0011 source checked after only CREATE prefix normalization):
+
+| Function key | SHA256 |
+|---|---|
+| `telegram_ingest(3)` | `d4f721a95492512516dfa2fee8ebf8f328ac65c9397ab495e6079df93a36e150` |
+| `messaging_process_inbox(2)` | `0553893a279d6e99ec9e31d5ef53bb0cb2892f163a06c75dae734e868b102d14` |
+| `files_plan(3)` | `0c54939f99ea35d3c51c82b62ee95d72bba52684a9089306715fa90ba0746e9b` |
+| `turn_group_message(3)` | `d243c77f84df2a6f76acfae76609ec574010842c4af378ed0281d96f9df07984` |
+| `turn_member_check(0)` | `90e436d84b4b5d4e7f5f3af84305c9fd128e244a7d834f1ac0b6db337544c90d` |
+| `turn_members_consistent(0)` | `24cb6bbf1f87abfa7db79ae01d74066edf54e8e479aba52a3803558708a06ca9` |
+| `turn_immutable(0)` | `7c791be6b0014ef1fdb33362e6d60dc85606dc93ae03066c7ed1ff7d611f352c` |
+| `turn_material(0)` | `cca96d0b3fd2e3d62057b433b2da496d49c048d6bbdd1e5fb20469068cb0279e` |
+| `turn_seal(5)` | `f6b0af975822f3b3583cb7098057a268344ad7015361fa9afdc625a3c4260d7b` |
+| `turn_enqueue(3)` | `5e05c02a6eb9d7d6f26b8d40ae52cc8933649dc63bd6b49d29ce8ee464526cd0` |
+| `conversation_turn_activation_matches(2)` | `6490af54d1eb8f2ce910fb92756d52a7c1efeb74bcdef2711f750d417af13591` |
+| `guard_require_current(4)` | `5f1d2af143058b6c31c5ee2cdf143d4820bc1ba618ae511415f4c0b4c40d6aba` |
+| `turn_snapshot(2)` | `c08f501ab8531f74b179c9bf64d442a5af7f4581231f82854a468b00954937c8` |
+| `turn_consumer_finalize(3)` | `b507659817f6faac9511b75b6f1f7458befbfbab331b3b124597b9c7d6e2613a` |
+| `turn_supersede(1)` | `3dc2768dc757cc236a1f562aafb0e8fb87a94809d120a6c275a7cccfb90db904` |
+| `files_read_manifest(3)` | `de7c4b4dee362402f324f203749fccd910ecc0a11bb2a37d64f6f5968e0354a9` |
+| `messaging_read_messages(4)` | `948fc60122590b14343789ba1534d18ae5466fa1595120508ae4c0b0798cf967` |
+
+The four fixed predecessor CHECK strings are likewise stored in0012, never captured
+from a live catalog during upgrade:
+
+| Fixed CHECK | SHA256 of UTF-8 Python string |
+|---|---|
+| `OLD_RECEIPT_CHECK` | `2c33d64a122148d0e62bf3c1fd34610bee6b0e7d0dfea60faf36bda981b7f6be` |
+| `OLD_INBOX_CHECK` | `7eeb77ebb9bfeddf15abf0a9215ac03f1752270691caca802d2061c60b77f804` |
+| `OLD_MEMBER_CHECK` | `fd1eb0e3703a811a9f881cc871d8d2838691e857372a93372b8a2cff84b5d809` |
+| `OLD_AUDIT_CHECK` | `da07204e67d993452b643699ad6e35406bf231755f776226d953afcb60e0a6e1` |
+
+Downgrade takes the explicit ownership-table ACCESS EXCLUSIVE locks, then refuses
+with SQLSTATE55000 **before any DDL** if any receipt codec, sidecar, target, effect,
+suppression, material Inbox result/code, invalidated Turn, new member form/evidence,
+material Audit or enabled material gate exists. Unused reversal restores the17
+fixed bodies and4 predecessor CHECKs, drops only owned0012 additions and never
+CASCADE/deletes history. Actual all42 row/catalog equality is pending integration.
+
+| Sequential source/schema lane for C6 | Closed projection / boundary |
+|---|---|
+| Frozen H source `754f1c883e5a94a7fc9e729af2605424f949ba33` /0007 | Existing H projection31 and frozen assertions; historical sources are not rewritten |
+| Frozen T source `ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad` /0008 | Existing T projection34; original CONTROL phase0008→0009 retained |
+| Frozen C source `c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5` /0009 | Existing C projection35; GUARDS phase0009→0010 retained |
+| Frozen G source `c502d5fd258aef15bb5549e1529df8d038a4fb9b` /0010 | Existing G projection36; Escalation phase0010→0011 retained |
+| E/predecessor source `933ddd284ff5b77fb1aa88a4270ab0032bc499c9` /0011 | Exact `E_COLUMNS`38; used history/V1 bytes preserved; full actual catalog read required |
+| P/current C3 source checkpoint /0012 | Exact `P_COLUMNS`42 above; current Runtime/provisioner readiness accepts only0012; cross-pair source/schema refusal required |
+| Future renewal | No revision/source/profile assigned; never run concurrently with material preparation |
+
+C6 receives exact accepted C3 head from a separate C0 issuance, works sequentially,
+and owns only `scripts/prepare_telegram_egress.py`, `scripts/test_telegram_egress.sh`,
+`scripts/test_telegram_egress_migration.sh`, `tests/test_telegram_egress.py`,
+`tests/test_telegram_egress_migration.py`, `tests/test_telegram_egress_postgres.py`.
+All six remain byte-identical in this C3 checkpoint. C6 must extend the current
+source/schema0012 capability/catalog assertions while retaining all old frozen
+controllers/projections, failure ownership/cleanup and9-job clean-source gates.
+The old egress profile currently stops at0011; this checkpoint is intentionally
+handed off before a PR, since egress runs before backend integration in foundation.
+
+#### 15.10.3. Actual local evidence and mandatory deferred execution
+
+| Проверка этого source checkpoint | Фактический результат |
+|---|---|
+| `uv sync --frozen`; `npm --prefix frontend ci --ignore-scripts` | Locked dependencies prepared; lockfiles unchanged |
+| `uv run --frozen ruff check backend tests scripts migrations` | PASS |
+| `uv run --frozen ruff format --check --diff backend tests scripts migrations` | PASS,149 files already formatted |
+| `uv run --frozen mypy backend/src` | PASS,61 source files |
+| `uv run --frozen pytest -q -m 'not integration' tests/test_m3_1_provenance.py tests/test_m2_3_transport.py tests/test_foundation.py tests/test_m2_3_setup.py tests/test_m2_4_browser_fixture.py tests/test_m3_1_turns.py tests/test_m3_1_guards.py tests/test_m2_3_api.py` | PASS,284 tests;2 existing Starlette/AnyIO deprecation warnings |
+| `uv run --frozen python scripts/export_contracts.py --check` | PASS |
+| `npm --prefix frontend run typecheck` | PASS |
+| `npm --prefix frontend test -- src/messaging-api.test.ts src/MessagingPanel.test.tsx src/billing-api.test.ts src/BillingPanel.test.tsx` | PASS,93 tests/4 files |
+| `npm --prefix frontend run build` | PASS,38 modules |
+| `uv run --frozen pytest --collect-only -q -m integration tests/test_m3_1_provenance_postgres.py tests/test_m3_1_provenance_migrations.py tests/test_m2_3_wire_postgres.py` |103 collected; **collection only**, no PG execution |
+| DDL source expansion / frozen bodies |131 `op.execute` calls;4 new tables;23 new+17 replaced functions;17 predecessor copies exact after CREATE/CREATE OR REPLACE normalization |
+| `git diff --check`; allowlist/prefix/original11/applied migrations/C6 reserved checks | PASS at canonical checkpoint; exact head/tree/path numstat in PR33 receipt |
+
+| Обязательный remaining gate | Статус и следующий executor |
+|---|---|
+| Actual PG identity/codec/fold/terminal/counters/R3-T1…T5/File/grant/shared body | **NOT RUN — deferred to штатный final candidate CI** |
+| Fresh/populated/repeat migrations, all42 fingerprints, exact unused catalog reverse, used refusal, schema/source pairing | **NOT RUN — deferred to штатный final candidate CI**; C6 compatibility preparation first |
+| Real workers/process death/rollback/ACK loss, connection/C/SENT/FK barriers, NOWAIT/reclaim/expiry/overflow | **NOT RUN — deferred to штатный final candidate CI** |
+| Runtime non-owner/FORCE RLS/private ACL/auth/CSRF/wrong Workspace/Client and retained security regressions | **NOT RUN — deferred to штатный final candidate CI** |
+| Paired Docker API/PostgreSQL/Console browser journey and retained39 browser regressions | **NOT RUN — deferred to штатный final candidate CI** |
+| Final candidate nine automatic jobs and nine clean-source checks; exact PR head/tested merge SHA/tree | **NOT RUN**; no PR/dispatch/rerun in this source-only handoff |
+
+Local environment has no PostgreSQL/browser services; no additional service
+installation was performed after the continuation. Unit/static/build evidence is
+not PostgreSQL, race, catalog, browser or account evidence. Full prior backend/browser
+suites were not requested locally. Existing main/design CI does not certify this code.

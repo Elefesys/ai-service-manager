@@ -127,6 +127,9 @@ async def test_real_postgres_capabilities_and_roles(database):
             "file_objects",
             "inbox_events",
             "locations",
+            "message_initial_suppressions",
+            "message_material_effects",
+            "message_material_targets",
             "messages",
             "messaging_command_receipts",
             "messaging_jobs",
@@ -135,6 +138,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "saas_plan_revisions",
             "saas_plans",
             "telegram_connection_state",
+            "telegram_provenance",
             "telegram_update_receipts",
             "turn_consumer_receipts",
             "turn_guard_receipts",
@@ -144,7 +148,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "Only the accepted M0 through M3.2 tables are allowed"
+        ], "Only the accepted M0 through M3 material tables are allowed"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

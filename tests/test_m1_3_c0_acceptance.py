@@ -154,6 +154,10 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
                     + ",".join(
                         (
                             *TABLES,
+                            "platform.telegram_provenance",
+                            "platform.message_material_targets",
+                            "platform.message_material_effects",
+                            "platform.message_initial_suppressions",
                             "platform.messaging_command_receipts",
                             "platform.conversation_control_receipts",
                             "platform.turn_guard_receipts",

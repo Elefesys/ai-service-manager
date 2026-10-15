@@ -21,7 +21,7 @@ from asm.messaging.database import MessagingDatabase
 from asm.messaging.worker import Worker
 from asm.telegram.client import TelegramClient
 from asm.telegram.database import TelegramIngress
-from asm.telegram.normalization import normalize_update, update_fingerprint
+from asm.telegram.normalization import normalize_update_v2, update_fingerprint_v2
 from asm.telegram.webhook import install_webhook
 from asm.tenancy import AuthenticatedAccount
 from fastapi import FastAPI
@@ -34,6 +34,7 @@ from test_m2_1_postgres import messaging as messaging
 from test_m2_2_storage_postgres import image_bytes
 from test_m2_2_storage_postgres import images as images
 from test_m2_2_storage_postgres import request as private_request
+from test_m2_3_db_postgres import cleanup_material
 from test_m2_3_transport import (
     BOT,
     CHAT,
@@ -99,6 +100,7 @@ async def telegram_case(messaging):
     finally:
         # Unbound ignored receipts have no Workspace; delete only this TEST bot.
         async with h.migrator.begin() as c:
+            await cleanup_material(c)
             await c.execute(
                 text("DELETE FROM platform.telegram_update_receipts WHERE bot_identity=:bot"),
                 dict(bot=str(BOT)),
@@ -116,7 +118,7 @@ async def telegram_case(messaging):
 
 
 async def inbound(h, raw=None):
-    receipt = await h.ingress.ingest(normalize_update(str(BOT), raw or update()), uuid4())
+    receipt = await h.ingress.ingest_update(raw or update(), uuid4())
     assert await h.worker.run_once()
     rows = await query(
         h, "SELECT * FROM app.conversations WHERE connection_id=:id", id=h.telegram_connection
@@ -413,8 +415,8 @@ async def test_http_webhook_durable_concurrent_dedupe_conflict_unknown_route_and
                 bot=str(BOT),
             )
         )[0]
-        assert bytes(row["fingerprint"]).hex() == update_fingerprint(
-            str(BOT), normalize_update(str(BOT), raw)
+        assert bytes(row["fingerprint"]).hex() == update_fingerprint_v2(
+            normalize_update_v2(str(BOT), raw)
         )
         assert (
             len(
@@ -493,7 +495,7 @@ async def test_webhook_commit_ack_loss_atomic_rollback_and_safe_replay(telegram_
         assert len(await query(h, f"SELECT * FROM {table} WHERE workspace_id=:ws", ws=A)) == int(
             stage.endswith("after_commit")
         )
-    receipt = await h.ingress.ingest(normalize_update(str(BOT), raw), uuid4())
+    receipt = await h.ingress.ingest_update(raw, uuid4())
     assert receipt.code == ("DUPLICATE" if stage.endswith("after_commit") else "ACCEPTED")
     assert await h.worker.run_once()
     assert (
@@ -628,3 +630,62 @@ async def test_real_tcp_webhook_never_acknowledges_before_durable_commit(telegra
         server.should_exit = True
         await asyncio.wait_for(task, 5)
         sock.close()
+
+
+async def test_material_authenticated_webhook_to_normal_worker_preserves_original(telegram_case):
+    """P-A03-04/07: real HTTP auth and PG, with no external send or fake current."""
+    from test_m3_1_turns_postgres import claim_exact
+
+    h = telegram_case
+    await query(
+        h,
+        "UPDATE platform.telegram_connection_state SET material_enabled=true WHERE connection_id=:id RETURNING connection_id",
+        id=h.telegram_connection,
+    )
+    app = FastAPI()
+    install_webhook(app, config(), h.ingress)
+    first = update()
+    edited = {
+        "update_id": 124,
+        "edited_business_message": {
+            **first["business_message"],
+            "text": "edited current",
+            "edit_date": first["business_message"]["date"] + 1,
+        },
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        assert (await client.post("/webhooks/telegram", json=edited)).status_code == 403
+        assert not await query(h, "SELECT * FROM platform.telegram_update_receipts")
+        for value in (first, edited):
+            response = await client.post(
+                "/webhooks/telegram",
+                json=value,
+                headers={"X-Telegram-Bot-Api-Secret-Token": SECRET},
+            )
+            assert response.status_code == 200
+            job = (
+                await query(
+                    h,
+                    "SELECT j.id FROM platform.messaging_jobs j JOIN platform.inbox_events i ON (i.workspace_id,i.id)=(j.workspace_id,j.inbox_id) WHERE i.event_id=:id",
+                    id=str(value["update_id"]),
+                )
+            )[0]["id"]
+            await h.kernel.process_inbox(await claim_exact(h, job))
+        row = (
+            await query(
+                h,
+                "SELECT m.text,m.version,platform.message_effective(m.workspace_id,m.id) AS current FROM app.messages m",
+            )
+        )[0]
+        assert row["text"] == first["business_message"]["text"] and row["version"] == 2
+        assert row["current"]["text"] == "edited current" and row["current"]["changed"]
+        assert (
+            await client.post(
+                "/webhooks/telegram",
+                json=edited,
+                headers={"X-Telegram-Bot-Api-Secret-Token": SECRET},
+            )
+        ).status_code == 200
+        assert len(await query(h, "SELECT * FROM platform.message_material_effects")) == 1

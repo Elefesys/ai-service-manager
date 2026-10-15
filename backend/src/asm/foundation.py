@@ -32,7 +32,7 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0011"
+DATABASE_SCHEMA_REVISION = "0012"
 
 
 class Settings(AuthSettings):
