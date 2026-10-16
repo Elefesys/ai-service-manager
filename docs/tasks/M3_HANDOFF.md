@@ -5,7 +5,49 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. C6-M3.1-MATERIAL-CI-DIAG-R2 — original-invocation diagnostics / 2026-10-16 UTC
+## 0. C6-M3.1-MATERIAL-CI-DIAG-R3 — stdlib H host correction / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209721060),
+[C0-DIAG-01/P1](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209702274),
+[§15.14](M3_CONTRACT.md#1514-c6-m31-material-ci-diag-r3--stdlib-h-host-boundary--2026-10-16-utc).
+Branch `c6/m3-1-material-ci-diag-r3`, exact correction base/sole parent
+a9f58a1364b98b5331b83fa17893363abb7d5dae, tree4c938731b25a4b0424f8e86d33bcf779f6f1fe8b.
+R2 was returned CHANGES REQUIRED, not accepted for PR advancement. Its historical
+60/196-unit results below remain tied to that a9 source and do not prove this host
+boundary. Final R3 head/tree/numstat are in one canonical receipt; REVIEW then HOLD.
+Main/E933ddd…/0011 and OPEN/Draft PR34 c6/m3-1-material-compat/d810dde… unchanged.
+
+The actual outer state loader now uses an early stdlib-only dispatch before
+pytest collection. The unchanged observer runs while runpy's module is available
+for inspect; a request/result container transfers its result/summary or original
+exception object. Started execution cannot fall back into a second H. Setup/load
+failure stays finite INVALID, original H result/exception primary; image/intent,
+H cleanup/diagnostic gates, observer protocol/launcher/P and budgets unchanged.
+
+Actual new regression against separate clean a9: **6 FAIL/9 PASS in6.10s**,
+pytest attempted and state diagnostics INVALID. Corrected affected selection:
+**91 PASS/510 deselected in14.80s**, including15 real-loader `python -S` cases and
+the existing60 invocation cases. Only external H execution doubled; no loader or
+definitions namespace substitution, dependency, Docker/PG/browser/CI execution.
+Synthetic COMPLETE report/ACK proves host transfer only, not actual H builds.
+Ruff/format/shell/embedded/generated compilation/diff/source audit PASS;168 existing
+definitions byte-exact, only related seam double adjusted with assertions intact.
+All274 baseline tracked blobs verified. Full§15.13 prefix563611 bytes/SHA256
+2aee65737913ebfede51103ae02e8758405ce3f934d7a7abf040cda4fd9b109a preserved;
+only§15.14 appended. Five-path scope; all product/C3/PG/migrations/frozen sources,
+private protocol/source guards and original S/600/720/+480/S+1200/90 unchanged.
+
+**Seven findings OPEN:** C2-MAT-01/02/03, C1-MAT-01/02, C5-MATERIAL-01, C0-DIAG-01.
+Historical CI38850821014 stays4 SUCCESS/5 FAILURE, clean4 SUCCESS/5 SKIPPED;
+H cause UNKNOWN; Docker29 prep499.951432356s remains partial. C0 reviews source
+before advancing the same Draft PR34; both complete state/P lanes, all9+clean9,
+retained/late-C negatives, actual0012/PG/PHOTO/browser and C1/C2/C5/later C8 remain.
+C6 HOLD after return; C3/C1/C2/C5/C8 HOLD. MATERIAL/M3 IN_PROGRESS, PR34 Draft/
+BLOCKED, implementation not INTEGRATED/VERIFIED; gate OFF. No PR-head update,
+new PR/merge/dispatch/rerun/cancel/live operation; unissued work and IMPL-05 deferral
+remain as assigned.
+
+## История — C6-M3.1-MATERIAL-CI-DIAG-R2 — original-invocation diagnostics / 2026-10-16 UTC
 
 [C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208852583),
 [accepted C3 intake](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208831490),

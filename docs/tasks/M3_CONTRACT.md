@@ -5376,3 +5376,83 @@ P/late C cleanup, actual0012 lifecycle/raw42/catalog/security/recovery/replay/cu
 T→T2 and paired PHOTO/browser, C1/C2/C5 disposition and later C8. PR34 Draft/BLOCKED;
 MATERIAL/M3 IN_PROGRESS, not INTEGRATED/VERIFIED, gate OFF. Native/A08/renewal/
 collector/M4 unissued; broad CI optimization/IMPL-05 DEFERRED.
+
+### 15.14. C6-M3.1-MATERIAL-CI-DIAG-R3 — stdlib H host boundary / 2026-10-16 UTC
+
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209721060),
+[C0-DIAG-01/P1 reproduction/disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209702274),
+[historical R2 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209600353).
+Separate branch `c6/m3-1-material-ci-diag-r3`; exact correction base/sole parent
+`a9f58a1364b98b5331b83fa17893363abb7d5dae`, tree
+`4c938731b25a4b0424f8e86d33bcf779f6f1fe8b` (its sole parent7119341…).
+R2 is a correction base, not accepted for advancing PR34. Accepted C3 ancestor
+f0c111a… and main/frozen E933ddd…/0011 remain fixed; PR34 stays OPEN/Draft on
+`c6/m3-1-material-compat`/d810dde939f727085af15f7614eeddd36f4909b8.
+One focused source descendant; final head/tree/numstat in the canonical receipt.
+The complete old contract through§15.13 is preserved byte-for-byte: **563611 bytes**,
+SHA256 `2aee65737913ebfede51103ae02e8758405ce3f934d7a7abf040cda4fd9b109a`.
+
+The real outer state loader previously reached test-only `import pytest`. With
+site packages disabled it fell back to unobserved H/DIAGNOSTIC_MODULE_LOAD_FAILED;
+successful H could not pass the distinct diagnostic gate. The explicit
+`__h_observer_definitions__` entrypoint now dispatches before pytest imports and
+runs the unchanged observer while runpy's module remains available to ordinary
+`inspect.getsource`. Only stdlib is required. A shared request/result container
+transfers the original CompletedProcess/summary or the exact original exception
+object. The outer boundary re-raises that exception outside its load-failure catch.
+The started marker prevents a second H invocation after dispatch. Missing module
+still invokes original H once with finite INVALID diagnostics; observer setup
+failure retains its existing DIAGNOSTIC_SETUP_FAILED behavior. Image/intent stay
+direct. SystemExit(0) completes host dispatch; it does not replace H's exit code.
+Ordinary pytest collection and all existing cleanup/success gates remain intact.
+
+**Observed regression, not a proposed expectation.** The new fixture/test nodes
+were copied to an external test file and run from a separate, unchanged detached
+a9 checkout. All274 tracked files were independently blob-checked against its
+index. The child runs `python -S`, executes the actual outer state branch with
+real runpy/full checked-in source and records any pytest import attempt. No loader
+or definitions namespace is stubbed. Only external H execution is a stdlib double;
+its synthetic empty completion uses the actual observer and independent ACK.
+Test-only AST extraction selects the outer branch; runtime source is not rewritten.
+
+```sh
+# cwd: /workspace/scratch/65ac7d472387/c6-material-ci-diag-r3-baseline
+PYTHONPATH=backend/src:tests /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m pytest -q /workspace/scratch/65ac7d472387/c6-material-ci-diag-r3-evidence/test_stdlib_host_regression.py --tb=short
+# cwd: /workspace/scratch/65ac7d472387/c6-material-ci-diag-r3
+PYTHONPATH=backend/src:tests /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m pytest -q tests/test_telegram_egress_migration.py -k 'invocation or material_shell or schema_entrypoint' --tb=short
+```
+
+Base: **6 FAIL/9 PASS in6.10s**, pytest attempted in normal/setup state cases;
+normal H success/nonzero yielded INVALID/DIAGNOSTIC_MODULE_LOAD_FAILED, exactly
+one invocation. Correction: **91 PASS/510 deselected in14.80s**, including all15
+new cases and the existing60 invocation cases. New cases cover H success/nonzero/
+original OSError identity, exactly-one invocation, COMPLETE result/report/hash
+transfer, finite invalid setup/load, unchanged image/intent, no pytest import and
+restored host environment/sys.path/tracing. No broader suite repeated.
+
+Ruff check/format, shell syntax, module/embedded/generated-observer compilation,
+diff and source audit PASS. **168 existing definitions are byte-exact**; only the
+related outer-seam test's loader double changes, with its assertions preserved.
+The module outside this dispatch/two new nodes/related seam and the outer program
+outside this H boundary are AST-exact. Generated observer SHA256 remains
+`6e254dda632211b318ed299345c73d1b5e95e2bebb32af330247402f64055458`.
+Exactly five allowed paths changed. Original11, all product/PG/C3 regressions,
+0001–0011/ORIGINAL17/OLD_CHECK4/0012←0011, inventories/Inbox winning pair/five NULL
+Job fields, frozen H/T/C/G/E, P semantics, source/owner/path/HMAC/final-ACK/privacy
+protocol,16KiB/64KiB/16 records, workflows/locks and all budgets are unchanged.
+
+Historical R2's60/196 PASS remain evidence for a9 only; C0-DIAG-01 demonstrates
+their missing stdlib-loader coverage. This correction is source/unit evidence,
+not actual H/build/state/PG/PHOTO/browser acceptance or recovered historical stderr.
+Historical38850821014 remains4 SUCCESS/5 FAILURE, clean4 SUCCESS/5 SKIPPED; H cause
+UNKNOWN and Docker29 prep499.951432356s partial. **Seven findings OPEN:**
+C2-MAT-01/02/03, C1-MAT-01/02, C5-MATERIAL-01, C0-DIAG-01.
+C6 REVIEW on source return, then HOLD; C3/C1/C2/C5/C8 HOLD. No installs/services,
+Docker/PG/browser/Actions execution, PR-head update/new PR/merge or live operation.
+C0 reviews before any PR advancement; actual9+clean9, both full state/P lanes,
+retained/late-C negatives,0012/PG/current-T→T2/paired PHOTO/browser and subsequent
+C1/C2/C5/later C8 acceptance remain required. S/retained600/P720/remaining+480/
+nominal S+1200/cleanup90/individual bounds/state25/browser25/foundation45 unchanged.
+PR34 Draft/BLOCKED; MATERIAL/M3 IN_PROGRESS, not INTEGRATED/VERIFIED; gate OFF.
+Native/A08/renewal/collector/live/VM/working DB/S3/sends/deploy/M4 unissued;
+IMPL-05/broad CI optimization DEFERRED.

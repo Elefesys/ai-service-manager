@@ -67,17 +67,29 @@ try:
         try:
             if fault == 'state':
                 diagnostics = None
+                loaded = {}
                 try:
-                    diagnostics = runpy.run_path(str(e.ROOT / 'tests/test_telegram_egress_migration.py'),
-                                                 run_name='__h_observer_definitions__')
+                    runpy.run_path(str(e.ROOT / 'tests/test_telegram_egress_migration.py'),
+                                   init_globals={'h_observer_request': {
+                                       'historical': historical, 'source': source, 'reports': reports},
+                                       'h_observer_result': loaded},
+                                   run_name='__h_observer_definitions__')
+                except SystemExit as completed:
+                    if completed.code == 0 and loaded.get('started'):
+                        diagnostics = loaded
                 except Exception:
-                    pass
+                    if loaded.get('started'):
+                        raise
+                if 'error' in loaded:
+                    raise loaded['error']
                 if diagnostics is None:
+                    if loaded.get('started'):
+                        raise RuntimeError('DIAGNOSTIC_HOST_RESULT_FAILED')
                     result = subprocess.run(['sh', 'scripts/test_telegram_egress_migration.sh', fault],
                                             cwd=historical, stdin=subprocess.DEVNULL)
                     observation = {'status': 'INVALID', 'secondary': ['DIAGNOSTIC_MODULE_LOAD_FAILED']}
                 else:
-                    result, observation = diagnostics['run_historical_observed'](historical, source, reports)
+                    result, observation = diagnostics['result']
                 admission['historical_diagnostics'] = observation
             else:
                 result = subprocess.run(['sh', 'scripts/test_telegram_egress_migration.sh', fault],

@@ -6897,6 +6897,18 @@ def run_schema_cleanup_negatives(request):
     )
 
 
+if __name__ == "__h_observer_definitions__":
+    # Keep runpy's module alive for the observer's ordinary inspect.getsource calls.
+    # Hand off executor exceptions without catching them as definition-load errors.
+    h_observer_result = globals()["h_observer_result"]
+    h_observer_result["started"] = True
+    try:
+        h_observer_result["result"] = run_historical_observed(**globals()["h_observer_request"])
+    except BaseException as h_observer_error:
+        h_observer_result["error"] = h_observer_error
+    raise SystemExit(0)
+
+
 if __name__ == "__schema_docker__":
     schema_docker_cli(globals()["ownership_file"], globals()["docker_args"])
     raise SystemExit(0)
@@ -7469,6 +7481,194 @@ def test_invocation_private_record_failure_is_secondary(invocation_units, monkey
     assert not target.exists()
 
 
+@pytest.fixture
+def stdlib_host_checkout(tmp_path):
+    """Clean source snapshot and real frozen H; only H execution is doubled below."""
+    checkout, historical = tmp_path / "candidate", tmp_path / "historical"
+
+    def git(*args):
+        return subprocess.check_output(["git", *args], stderr=subprocess.PIPE)
+
+    git("clone", "--quiet", "--shared", "--no-checkout", str(e.ROOT), str(checkout))
+    git("-C", str(checkout), "checkout", "--quiet", "--detach", "HEAD")
+    for name in (
+        "scripts/test_telegram_egress_migration.sh",
+        "tests/test_telegram_egress_migration.py",
+    ):
+        (checkout / name).write_bytes((e.ROOT / name).read_bytes())
+    git("-C", str(checkout), "add", "scripts", "tests")
+    git(
+        "-C",
+        str(checkout),
+        "-c",
+        "user.name=Stdlib host unit",
+        "-c",
+        "user.email=stdlib-host@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "commit",
+        "--quiet",
+        "--allow-empty",
+        "-m",
+        "Unit-only clean snapshot of checked-in host source",
+    )
+    source = git("-C", str(checkout), "rev-parse", "HEAD").decode().strip()
+    assert not git("-C", str(checkout), "status", "--porcelain", "--untracked-files=all")
+    git(
+        "-C",
+        str(checkout),
+        "worktree",
+        "add",
+        "--quiet",
+        "--detach",
+        str(historical),
+        "754f1c883e5a94a7fc9e729af2605424f949ba33",
+    )
+    reports = checkout / "reports" / "historical"
+    reports.mkdir(parents=True, mode=0o700)
+    return checkout, historical, reports, source
+
+
+@pytest.mark.parametrize(
+    "shard,damage,outcome",
+    [
+        ("state", damage, outcome)
+        for damage in ("none", "setup", "load")
+        for outcome in ("success", "exit", "exception")
+    ]
+    + [
+        (shard, "none", outcome)
+        for shard in ("image", "intent")
+        for outcome in ("success", "exit", "exception")
+    ],
+)
+def test_invocation_outer_stdlib_host_real_loader(stdlib_host_checkout, shard, damage, outcome):
+    """Real outer loader under -S; synthetic H proves transfer, never Docker/PG."""
+    checkout, historical, reports, source = stdlib_host_checkout
+    if damage == "load":
+        module = checkout / "tests/test_telegram_egress_migration.py"
+        module.rename(module.with_suffix(".unavailable"))
+    if damage == "setup":
+        source = "0" * 40
+    program = r"""import ast,hashlib,json,os,runpy,subprocess,sys
+from pathlib import Path
+from scripts import prepare_telegram_egress as e
+assert sys.flags.no_site == 1 and 'site' not in sys.modules
+shard,damage,outcome,historical,reports,source=sys.argv[1:]
+historical,reports=Path(historical),Path(reports)
+pytest_imports=[]
+class NoPytest:
+ def find_spec(self,fullname,path=None,target=None):
+  if fullname=='pytest' or fullname.startswith('pytest.'):
+   pytest_imports.append(fullname)
+   raise ModuleNotFoundError("No module named 'pytest'",name=fullname)
+sys.meta_path.insert(0,NoPytest())
+shell=(e.ROOT/'scripts/test_telegram_egress_migration.sh').read_text()
+tree=ast.parse(shell.split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0])
+boundary=next(n for n in ast.walk(tree) if isinstance(n,ast.If)
+ and ast.unparse(n.test)=="fault == 'state'"
+ and ast.unparse(n.body[0])=='diagnostics = None')
+# AST extraction is test-only. The runtime loader executes the complete checked-in
+# module normally; neither runpy nor any loaded observer definition is replaced.
+original_run=subprocess.run
+calls=[]
+executor_error=OSError('SYNTHETIC_H_EXECUTOR_ERROR')
+executor_result=subprocess.CompletedProcess(['sh','scripts/test_telegram_egress_migration.sh',shard],
+ 0 if outcome=='success' else 23)
+def external_h(args,**kwargs):
+ if args!=executor_result.args:
+  return original_run(args,**kwargs)
+ assert kwargs['cwd']==historical and kwargs['stdin']==subprocess.DEVNULL
+ frame=sys._getframe(1)
+ observed=frame.f_code.co_name=='run_historical_observed'
+ config=frame.f_locals.get('config') if observed else None
+ calls.append({'observer':observed,'prepared':config is not None})
+ if config is not None:
+  assert set(kwargs)=={'cwd','stdin','env','pass_fds'}
+  assert Path(config['startup_path']).is_file()
+  # Replace only external H execution: use the actual loaded observer to emit an
+  # empty authenticated completion and its independent ACK. Launcher/frozen-build
+  # behavior is covered by the existing real-interpreter invocation units.
+  diagnostic=frame.f_globals['InvocationDiagnostic'](config,'H_BUILD')
+  diagnostic.close()
+  raw=Path(config['path']).read_bytes()
+  assert os.write(kwargs['pass_fds'][0],hashlib.sha256(raw).hexdigest().encode())==64
+ else:
+  assert set(kwargs)=={'cwd','stdin'}
+ if outcome=='exception': raise executor_error
+ return executor_result
+namespace=dict(fault=shard,runpy=runpy,e=e,historical=historical,source=source,
+ reports=reports,subprocess=subprocess,admission={})
+before=dict(os.environ),sys.path[:],sys.gettrace()
+subprocess.run=external_h
+raised=None
+try:
+ exec(compile(ast.Module(body=[boundary],type_ignores=[]),'actual-outer-H-boundary','exec'),namespace)
+except BaseException as error:
+ raised=error
+finally:
+ subprocess.run=original_run
+assert before==(dict(os.environ),sys.path[:],sys.gettrace())
+assert 'pytest' not in sys.modules
+public=reports/'build-observation.json'
+print(json.dumps({'calls':calls,'pytest_imports':pytest_imports,
+ 'result_identity':namespace.get('result') is executor_result,
+ 'exception_identity':raised is executor_error,
+ 'exception':None if raised is None else type(raised).__name__,
+ 'observation':namespace['admission'].get('historical_diagnostics'),
+ 'public_status':json.loads(public.read_text())['status'] if public.exists() else None}))
+"""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-c",
+            program,
+            shard,
+            damage,
+            outcome,
+            str(historical),
+            str(reports),
+            source,
+        ],
+        cwd=checkout,
+        env=dict(os.environ, PYTHONPATH=str(checkout)),
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    print("STDLIB_HOST " + result.stdout.strip())
+    assert data["pytest_imports"] == []
+    observed = shard == "state" and damage != "load"
+    prepared = observed and damage == "none"
+    assert data["calls"] == [{"observer": observed, "prepared": prepared}]
+    assert data["exception_identity"] == (outcome == "exception")
+    assert data["exception"] == ("OSError" if outcome == "exception" else None)
+    assert data["result_identity"] == (outcome != "exception")
+    assert data["public_status"] == ("COMPLETE" if prepared else None)
+    if shard == "state" and outcome != "exception":
+        observation = data["observation"]
+        if prepared:
+            assert observation["status"] == "COMPLETE" and observation["records"] == 0
+            assert (
+                observation["sha256"]
+                == hashlib.sha256((reports / "build-observation.json").read_bytes()).hexdigest()
+            )
+        else:
+            assert observation == {
+                "status": "INVALID",
+                "secondary": [
+                    "DIAGNOSTIC_SETUP_FAILED" if observed else "DIAGNOSTIC_MODULE_LOAD_FAILED"
+                ],
+            }
+    else:
+        assert data["observation"] is None
+
+
 @pytest.mark.parametrize("shard", ["state", "image", "intent"])
 def test_invocation_outer_state_seam_and_primary_cleanup_order(tmp_path, shard):
     import ast
@@ -7494,9 +7694,16 @@ def test_invocation_outer_state_seam_and_primary_cleanup_order(tmp_path, shard):
         calls.append("original")
         return subprocess.CompletedProcess(args, 1)
 
+    def definitions(*args, **kwargs):
+        response = kwargs["init_globals"]["h_observer_result"]
+        response["started"] = True
+        request = kwargs["init_globals"]["h_observer_request"]
+        response["result"] = observed(request["historical"], request["source"], request["reports"])
+        raise SystemExit(0)
+
     namespace = {
         "fault": shard,
-        "runpy": SimpleNamespace(run_path=lambda *a, **k: {"run_historical_observed": observed}),
+        "runpy": SimpleNamespace(run_path=definitions),
         "e": SimpleNamespace(ROOT=tmp_path),
         "historical": tmp_path,
         "source": "a" * 40,

@@ -2,7 +2,34 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C6-M3.1-MATERIAL-CI-DIAG-R2 / 2026-10-16 UTC
+## Текущий статус — C6-M3.1-MATERIAL-CI-DIAG-R3 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all seven findings OPEN.**
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209721060),
+[C0-DIAG-01/P1 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209702274),
+[R2 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209600353),
+[§15.14](tasks/M3_CONTRACT.md#1514-c6-m31-material-ci-diag-r3--stdlib-h-host-boundary--2026-10-16-utc).
+
+| Task / binding | Current source result / actual gate |
+|---|---|
+| C6-M3.1-MATERIAL-CI-DIAG-R3 | REVIEW on source return, then HOLD. Branch c6/m3-1-material-ci-diag-r3; exact correction base/sole parent a9f58a1364b98b5331b83fa17893363abb7d5dae, tree4c938731b25a4b0424f8e86d33bcf779f6f1fe8b. One focused descendant; final head/tree/numstat in canonical receipt |
+| R2 disposition | CHANGES REQUIRED, correction base only. Historical60/196 PASS tied to a9; missing real stdlib-loader coverage found by C0. No PR advancement accepted |
+| Main / PR34 | E933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011; PR34 OPEN/Draft, c6/m3-1-material-compat / d810dde939f727085af15f7614eeddd36f4909b8 unchanged |
+| Host correction | Early stdlib dispatch before pytest; unchanged observer executes with runpy module alive. Result/summary or exact executor exception transferred; started marker prevents repeat H. Setup/load finite INVALID; image/intent direct; cleanup/gates/observer protocol/P unchanged |
+| Observed regression | External test containing only the two new nodes on clean exact a9:6 FAIL/9 PASS in6.10s, actual pytest import attempt and INVALID-load path. Corrected affected selection91 PASS/510 deselected in14.80s, includes15 new real-loader python -S cases and60 existing invocation cases |
+| Evidence limits | Only external H execution doubled, synthetic empty report/ACK; real runpy/full module, no namespace stub. No dependency/service/Docker/PG/browser/Actions execution. Source/unit proof, no actual state/product acceptance |
+| Preservation | Exactly five allowed paths; full§15.13 prefix563611 bytes/SHA2562aee6573…;168 existing definitions byte-exact, related seam assertions intact;274 unchanged baseline blobs verified. Original11/C3/product/PG/applied migrations/0012/inventories/Inbox pair/five NULL Job fields/frozen H/T/C/G/E/launcher/HMAC/ACK/privacy/workflows/locks unchanged |
+| OPEN findings | C2-MAT-01/P1, C2-MAT-02/P2, C2-MAT-03/P1, C1-MAT-01/P1, C1-MAT-02/P2, C5-MATERIAL-01/P2, C0-DIAG-01/P1. Source/unit evidence closes none |
+| Actual evidence / next gate | Historical38850821014:4 SUCCESS/5 FAILURE, clean4 SUCCESS/5 SKIPPED; H cause UNKNOWN, Docker29 prep499.951432356s partial. C0 source intake before PR update; actual9+clean9/both state-P/retained-late-C/0012-PG-current-T→T2/PHOTO-browser, C1/C2/C5 and later C8 still required |
+
+C6 HOLD after canonical return; C3/C1/C2/C5/C8 HOLD. No implementation
+INTEGRATED/VERIFIED, gate OFF. Original S/retained600/P720/remaining+480/S+1200/
+cleanup90/individual bounds/state25/browser25/foundation45/9 jobs+clean9 unchanged.
+No PR-head update/new PR/merge/dispatch/rerun/cancel/live operation. Native/A08/
+renewal/collector/VM/working DB/S3/sends/deploy/M4 unissued; IMPL-05/broad optimization
+DEFERRED. Earlier sections below are historical, including their then-current six findings.
+
+## История — C6-M3.1-MATERIAL-CI-DIAG-R2 / 2026-10-16 UTC
 
 **MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all six findings OPEN.**
 [C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208852583),
