@@ -184,7 +184,7 @@ async def test_populated_0011_repeat_upgrade_and_exact_unused_reverse(control):
         from asm.messaging.models import OutcomeKind, SendOutcome
         from test_m2_2_db_postgres import MANIFEST
         from test_m2_3_db_postgres import begin_observed, probe_worker
-        from test_m3_1_turns_postgres import seal, snapshot
+        from test_m3_1_turns_postgres import seal, snapshot, turn_claim, wait_due
 
         unknown = await request(h, cid, "old-unknown", "retained UNKNOWN")
         job = (
@@ -215,7 +215,23 @@ async def test_populated_0011_repeat_upgrade_and_exact_unused_reverse(control):
         await files.finish_fetch(fetch.job_id, fetch.claim_token, upload.intent_id)
         # Frozen V1 snapshot/digest/receipt and WINNER are in the old-column hash.
         for turn in await query(h, "SELECT id FROM app.conversation_turns"):
-            await seal(h, turn["id"])
+
+            async def current_stage():
+                rows = await query(
+                    h, "SELECT state FROM app.conversation_turns WHERE id=:id", id=turn["id"]
+                )
+                assert len(rows) == 1
+                return rows[0]["state"]
+
+            # File WINNER can already seal/bump this Turn. Claim only the job
+            # for its actual stage and current revision; never recreate GROUP.
+            if await current_stage() == "COLLECTING":
+                await seal(h, turn["id"])
+            if await current_stage() == "WAITING_MEDIA":
+                await wait_due(h, turn["id"], "MEDIA")
+                media = await turn_claim(h, turn["id"], "MEDIA")
+                assert (await h.kernel.process_turn(media)).code == "GROUPED"
+            assert await current_stage() == "READY"
             consumer, snap = await snapshot(h, turn["id"])
             assert not hasattr(snap, "schema_version")
             await h.kernel.finish_turn(consumer, consume(snap))

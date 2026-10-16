@@ -10,7 +10,6 @@ import pytest_asyncio
 from asm.auth.http import install_auth
 from asm.messaging.http import install_messaging
 from asm.messaging.http_service import ConnectionObservation
-from asm.telegram.normalization import normalize_update
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from test_auth_postgres import auth as auth
@@ -184,10 +183,8 @@ async def test_lifecycle_invalidation_during_refresh_causes_503_without_new_inte
     before = await counts(h)
 
     async def invalidate(_):
-        await h.ingress.ingest(
-            normalize_update(
-                str(BOT), {"update_id": 900001, "business_connection": business_connection()}
-            ),
+        await h.ingress.ingest_update(
+            {"update_id": 900001, "business_connection": business_connection()},
             uuid4(),
         )
 

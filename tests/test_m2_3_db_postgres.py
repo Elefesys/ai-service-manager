@@ -873,6 +873,7 @@ async def test_owner_cursor_projection_has_no_internal_ids_and_checks_exact_anch
         "version",
         "file",
         "delivery",
+        "current",
     }
     assert rows[0]["message_id"] == send["message_id"] and rows[0]["file"] is None
     assert set(rows[0]["delivery"]) == {"status", "error_code", "completed_at", "version"}

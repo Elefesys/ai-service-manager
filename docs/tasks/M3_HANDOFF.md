@@ -5,7 +5,54 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. C6-M3.1-MATERIAL-HARNESS-R5 — source return / 2026-10-16 UTC
+## 0. C2-M3.1-MATERIAL-CURRENT-PROFILE-R4 — source return / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218233521),
+[C0 actual disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218176738),
+[contract§15.17](M3_CONTRACT.md#1517-c2-m31-material-current-profile-r4--test-boundaries-and-same-call-sent-diagnostics--2026-10-16-utc).
+Branch c2/m3-1-material-current-profile-r4; base/sole parent89f9e157ddfc328ba4564fc003b047f517352cdf,
+tree9be95d45e6a70bf76adf146c1035e571d52205af. One focused descendant, full identity/
+numstat/commands in canonical receipt; REVIEW on return then C2 HOLD. Main/E933ddd…/0011
+and OPEN/Draft PR34 c6/m3-1-material-compat at89f9e15 unchanged.
+
+Thirteen reached PG failures receive narrow test corrections: three wire_dates
+call sites (two PG plus state), existing V2 adapter in six held-transaction TELEGRAM
+arms and normal ingest_update at lifecycle refresh, exact current key/23 signature
+profiles, actual-stage legacy seed and same-instant UTC caller. R3 rollback adds
+actual migration metadata to its41 data fingerprints. Existing assertions/receipts/
+barriers/strict DTOs and V1/current/frozen boundaries remain; no product/DDL correction.
+SENT gets only same-call diagnostics: one finish_send, original3s and held connection
+FOR UPDATE, closed metadata/cycle-safe≤4-node chain/≤4KiB/no payload, primary preserved
+through diagnostic/cleanup failures. Cause UNKNOWN until actual metadata exists.
+
+Local: cached Ruff0.16.7 check/format9 files PASS; compile/diff/AST/prefix/source
+audits PASS.235 other function bodies/decorators byte-exact. Six new pure tests
+6 PASS/64 deselected in0.86s on Python3.12.14 with cached packages, not packaged3.13.
+Initial six import failures lacked psycopg/libpq; helpers now reside in the allowed
+pure test module, so the tests no longer import PG harness. Pure DTO/V2/fingerprint/
+UTC probes PASS. No installs/new services/runtimes or full PG/state/browser run.
+Full contract prefix582717 bytes/SHA2566f68bd44… and original11/frozen/runtime/product/
+migrations/frontend remain unchanged; all twelve paths are inside C0's closed list.
+
+Actual baseline38909147338/merge d0fd7e5:5 SUCCESS/4 FAILURE; clean5 SUCCESS/4 SKIPPED;
+1438 units PASS, PG785 PASS/14 FAIL, browser43 PASS/1 FAIL, both state fresh failures.
+Saved-V1 reader returned before the later DTO failure, not fresh PASS. Historical R3
+“all42” wording is corrected:41 data tables before this complementary metadata read.
+C0 CLOSED C0-DIAG-02 (C1-R2-01 alias), C1-MAT-02, C2-MAT-03; earlier scoped
+C5-MATERIAL-01/C0-DIAG-01 closures remain. Eleven OPEN findings and aliases are
+recorded in§15.17/register; source checks close none. C5 independent one-file task
+ACTIVE from89, no branch absorbed; C1/C3/C6/C8 HOLD.
+
+C0 intake/combination before normal automatic CI; full9+clean9/product PG/strict
+fresh+ACL/SENT/EXPIRED/ingress/catalog/populated reverse/R3 raw42/both complete P-state/
+used recovery/cutover/restart/retained full120/export/all3 late-C+owned cleanup and
+remaining C1/C2/applicable C5 acceptance, then C8 required. Gate OFF; MATERIAL/M3
+IN_PROGRESS, PR Draft/BLOCKED, not INTEGRATED/VERIFIED. S/600/P720/+480/S+1200/
+cleanup90/state25/browser25/foundation45 unchanged. No PR advancement/new PR/merge/
+Actions operations/live/VM/working DB/S3/sends/deploy/native/A08/renewal/collector/M4;
+IMPL-05/broad optimization DEFERRED. Earlier returns below remain historical.
+
+## История — C6-M3.1-MATERIAL-HARNESS-R5 — source return / 2026-10-16 UTC
 
 [C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211450459),
 [current C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211420811),

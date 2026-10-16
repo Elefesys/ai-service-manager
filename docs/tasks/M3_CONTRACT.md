@@ -5635,3 +5635,109 @@ No new Docker/PG/browser/Actions/services/install/live/PR-head/new PR/merge oper
 C6 HOLD after return; C3/C1/C2/C5/C8 HOLD. MATERIAL/M3 IN_PROGRESS, not INTEGRATED/
 VERIFIED; gate OFF. Native/A08/renewal/collector/M4 unissued; IMPL-05/broad optimization
 DEFERRED; VM/working DB/S3/sends/deploy remain unissued.
+
+### 15.17. C2-M3.1-MATERIAL-CURRENT-PROFILE-R4 — test boundaries and same-call SENT diagnostics / 2026-10-16 UTC
+
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218233521),
+[C0 R3 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218176738),
+[C2 R3 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6217695756),
+[C1 R3 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6217641903).
+This is the separately issued source task, not a reopening of the completed reviews.
+Branch `c2/m3-1-material-current-profile-r4`; exact base/sole parent
+`89f9e157ddfc328ba4564fc003b047f517352cdf`, base tree
+`9be95d45e6a70bf76adf146c1035e571d52205af`. One focused descendant;
+final head/tree/numstat and commands belong in the canonical PR34 receipt.
+Main/base/frozen E `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011 and
+PR34 OPEN/Draft `c6/m3-1-material-compat` at89f9e15 remain unchanged.
+The entire preceding582717-byte contract through§15.16 is byte-exact,
+SHA256 `6f68bd4443ec384b0cceee98cc9af8276d15846962ca162207ac9fc06db76cfe`.
+
+**Actual baseline, not execution of this source.** CI38909147338/attempt1 tested
+merge `d0fd7e5da7c29b1e065e72a7bfcc11519bdd39d6`:5 SUCCESS/4 FAILURE,
+clean5 SUCCESS/4 SKIPPED. Foundation117000270183:1438 packaged units PASS;
+PG785 PASS/14 FAIL. Browser43 PASS/1 FAIL. Both state117000270974/117000270455
+stop at material_controller_fresh/MessageResponse:2037 after the saved-V1 reader.
+The two foundation DTO failures export occurred_at/created_at pattern errors;
+the state reports export only ValidationError/frame/sqlstate=NULL. The analogous
+field cause in state remains a source-supported inference. Saved reader progress
+does not accept fresh/catalog or later P lifecycle. Empty archived worktree-status
+does not replace four skipped workflow clean-source gates.
+
+C0 CLOSED C0-DIAG-02 (packaging alias C1-R2-01), C1-MAT-02 and C2-MAT-03 on this
+actual run; C5-MATERIAL-01/C0-DIAG-01 retain scoped closure. Historical statements
+in earlier sections that call the R3 helper's coverage “all42” are corrected here:
+it covered41 data tables, intentionally omitting platform.alembic_version.
+All10 intended negative/same-claim-positive R3 cases passed; seven independent
+canonical used-refusal cases covered42 but do not supply that R3 assertion.
+
+| Source correction | Preserved boundary / remaining execution |
+|---|---|
+| Three raw SQL→MessageResponse sites | Existing wire_dates precedes the unchanged strict DTO in provenance PG, fresh controller and current0012 compatibility case. No key dropping, permissive timestamp/parser, storage changes or R5 saved-V1 reader edits; full page/current/history/tenant/provider/wrong-Client/later catalog gates remain |
+| Six held TELEGRAM race arms | Existing v2_fixture wraps only the two direct current-profile producers. Each telegram_ingest remains on its original held connection/transaction; commit/rollback/barrier/Resume and earliest-origin assertions remain. Second arrival keeps its identity/text/date relationships. Shared V1 projection and CONTROLLED neighbors unchanged |
+| Lifecycle refresh companion | Same callback point uses normal ingest_update with the original raw lifecycle update;503 UNAVAILABLE/no-new-intention/UNVERIFIED assertions unchanged |
+| Current projection/capabilities | Closed exact message key set gains current. Catalog expects23 exact signatures:2 runtime replay wrappers/21 private,7 invoker/16 SECURITY DEFINER; owner/search_path/PUBLIC/runtime and predecessor/negative privilege assertions remain. No wildcard, grant or product SQL change |
+| Populated0011 seed | Every enumerated Turn follows actual COLLECTING→GROUP, WAITING_MEDIA→due MEDIA, READY→TEST_CONSUME; current-revision claim helper and final READY assertion remain strict. File WINNER may already seal/bump a Turn. No forced Job/status/revision, skipped Turn, manufactured snapshot or removed WINNER; frozen V1 receipt/digest, pending/ignored/lifecycle/UNKNOWN and repeat exact reverse/hash loop retained |
+| UTC caller | expires_at.astimezone(UTC) supplies the identical instant to unchanged serial_clock; production deadlines and all EXPIRED assertions unchanged |
+| R3 rollback42 | Existing41 data fingerprints plus actual ordered version_num rows before/after the rejected transaction; assert41 data entries/one metadata row. Shared legacy fingerprint semantics untouched. Exact SQLSTATE/constraint/reason/context, zero partial atom and same original/same claim positive after only trigger removal remain |
+| SENT | Diagnostic-only instrumentation of the existing single finish_send inside original3s timeout and held channel_connection FOR UPDATE. No second SQL/finalizer/probe, release/retry, mapper patch or product/DDL correction. Stable-target lock order/implicit FK closure and atomic SENT+deferred apply remain requirements |
+
+**Diagnostic contract.** Test-only formatter and scope live in the existing pure
+`tests/test_m3_1_provenance.py`; the named PG case imports the scope. This keeps
+the six new pure tests independent of PG harness imports. The report is one
+ASCII JSON line, including LF≤4096 bytes: static stage/action, closed outcome,
+at most4 distinct exception nodes through orig/cause/context, closed exception
+class and schema/table/constraint identifiers, five-character uppercase SQLSTATE,
+and at most3 allowlisted platform function/numeric-line pairs per node.
+Absent/untrusted/oversized values are UNKNOWN; traversal is cycle-safe and
+chain_limited records a truncated chain. Context input is bounded to16KiB and
+only parsed into the closed function/line fields. No raw context, SQL, parameters,
+message/detail, arbitrary str/repr, payload/text/IDs/claims/tokens/connection strings
+are emitted. Formatter failure yields static UNKNOWN metadata; sink failure does
+not replace the primary. The original exception identity/traceback survives both
+failing and suppressing lock cleanup. Success/setup failures do not emit a fabricated
+finalizer diagnostic. Existing actual primary SQLSTATE/constraint/lock edge remains
+**UNKNOWN**; synthetic unit SQLSTATE values are not SENT execution evidence.
+
+**Local source/pure evidence.** Available Python3.12.14/Pydantic2.13.5, cached
+Ruff0.16.7; required Python3.13 interpreter is absent (retained venv links are broken).
+Ruff check/format for all9 changed Python modules, compile/diff and exact AST/source
+scope audits PASS. Existing235 function bodies/decorators in those modules stay
+byte-exact; existing pure codec/migration/model tests and R5 reader untouched.
+Six new tests execute with cached pytest packages:6 PASS/64 deselected in0.86s,
+no skips/xfails, on3.12 rather than the packaged3.13 image. The first local attempt
+imported the PG harness and failed6 times on unavailable psycopg/libpq before the
+formatter; placing the helper in the permitted pure module removed that dependency.
+No install or environment bootstrapping followed. Exact-source pure probes also
+reproduce the two raw timestamp failures and validate strict wire_dates output/
+unchanged input, V2 normalizer+fingerprint equality and second-arrival relationships,
+and same-instant UTC normalization. These are not full1438-unit/PG/state acceptance.
+All14 prior PG failures and both state sites were reviewed:13 have the bounded test
+corrections above; SENT receives diagnostics only. No broader suite or service run.
+
+The closed12-path scope contains only the nine named test modules and these three
+task documents. Backend/product/models/decoders/Worker/error mapper, every migration
+including0012 and applied0001–0011, ORIGINAL17/OLD_CHECK4, original11, V1/hash/codec,
+private Inbox winning pair/five NULL Job delivery fields, terminal/token/T→T2,
+scripts/runtime/shell/frozen-H fixture, infra/workflows/Compose/Dockerfiles/pins/locks/
+dependencies and frontend remain byte-exact.
+
+**Eleven distinct OPEN findings per C0; this source closes none:**
+C1-MAT-01/P1 (C1-R3-02 alias), C1-R2-02/P2 (C1-R3-01 alias),
+C2-MAT-01/P1, C2-MAT-02/P2, C1-R3-03/P2, C0-R3-01/P2,
+C0-R3-02/P2, C0-R3-03/P2, C0-R3-04/P2, C0-R3-05/P2 and C5-R3-01/P2.
+C5 separately ACTIVE only on frontend/e2e/messaging.spec.ts from89; no C5 source
+absorbed here. C1/C3/C6/C8 HOLD. C2 source REVIEW on return, then HOLD.
+C0 combines accepted independent returns before one normal automatic CI advance.
+Required actual gates:9+clean9, full product PG/strict fresh DTO+tenant/wrong-Client,
+SENT lock/atomicity, EXPIRED precedence, both ingress race suites, exact catalog/
+ACL/populated reverse/R3 raw42, both complete state-P/used/recovery/cutover/restart,
+retained positives/full120-timeout/export/all3 late-C negatives and owned cleanup,
+remaining C1/C2/applicable C5 acceptance then independent C8.
+
+MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; not INTEGRATED/VERIFIED; gate OFF.
+Original S/retained600/P720/remaining+480/nominal S+1200/cleanup90/state25/browser25/
+foundation45 and individual limits unchanged. No clock reset/charges subtraction/
+retry/budget increase, new PR/PR-head advance/merge/dispatch/rerun/cancel, installs/
+new services/Docker/PG/browser runtime or live operation. VM/working DB/S3/sends/
+deploy/native/A08/P-A03-09/renewal/collector/M4 unissued; IMPL-05/broad optimization
+DEFERRED.

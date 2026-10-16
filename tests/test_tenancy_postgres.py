@@ -554,6 +554,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                 await connection.execute(
                     text("""
             SELECT p.proname, p.prosecdef, p.proconfig, r.rolname,
+                   n.nspname||'.'||p.proname||'('||oidvectortypes(p.proargtypes)||')' AS signature,
                    EXISTS(SELECT 1 FROM aclexplode(p.proacl) a WHERE a.grantee=0 AND a.privilege_type='EXECUTE') AS public_execute,
                    has_function_privilege('asm_runtime', p.oid, 'EXECUTE') AS runtime_execute
             FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
@@ -696,8 +697,46 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "escalation_context_changed": (True, False),
             "escalation_immutable": (True, False),
         }
+        # Exact 0012 additions, including argument types: no overload/name-only
+        # grant broadening. Runtime gets only the two replay wrappers.
+        material_profiles = {
+            "platform.telegram_replay_v1(text, jsonb)": (True, True),
+            "platform.material_processing_replay(uuid, uuid)": (True, True),
+            "platform.material_object(jsonb, text[])": (False, False),
+            "platform.material_content_valid(jsonb)": (False, False),
+            "platform.material_semantic(jsonb)": (False, False),
+            "platform.material_state_valid(jsonb)": (False, False),
+            "platform.telegram_validate_v2(text, jsonb)": (False, False),
+            "platform.telegram_fingerprint_v2(text, jsonb)": (False, False),
+            "platform.telegram_receipt_json(platform.telegram_update_receipts, text)": (
+                True,
+                False,
+            ),
+            "platform.material_result_valid(jsonb)": (False, False),
+            "platform.material_integrity()": (True, False),
+            "platform.material_target_check()": (True, False),
+            "platform.material_suppression_check()": (True, False),
+            "platform.material_no_file()": (True, False),
+            "platform.message_effective(uuid, uuid)": (True, False),
+            "platform.material_turn_usable(uuid, uuid)": (True, False),
+            "platform.material_identity(uuid, uuid, jsonb)": (True, False),
+            "platform.material_fold(uuid, uuid, uuid)": (True, False),
+            "platform.material_apply(uuid, uuid, uuid)": (True, False),
+            "platform.material_apply_context(uuid, uuid, uuid)": (True, False),
+            "platform.material_bump_turns(uuid, uuid[], uuid)": (True, False),
+            "platform.material_bind(uuid, uuid, boolean, uuid)": (True, False),
+            "platform.material_process(platform.messaging_jobs)": (True, False),
+        }
+        material_names = {signature.split(".")[1].split("(")[0] for signature in material_profiles}
+        material_rows = [row for row in functions if row["proname"] in material_names]
+        assert len(material_rows) == len(material_profiles) == 23
+        assert {row["signature"] for row in material_rows} == set(material_profiles)
         assert {row["proname"] for row in functions} == (
-            legacy_functions | set(m1_3_profiles) | set(m2_profiles) | set(m3_profiles)
+            legacy_functions
+            | set(m1_3_profiles)
+            | set(m2_profiles)
+            | set(m3_profiles)
+            | material_names
         )
         m1_3_profiles.update(m2_profiles)
         m1_3_profiles.update(m3_profiles)
@@ -708,6 +747,13 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
         )
         for row in (row for row in functions if row["proname"] in m1_3_profiles):
             security_definer, runtime_execute = m1_3_profiles[row["proname"]]
+            assert row["prosecdef"] is security_definer
+            assert row["runtime_execute"] is runtime_execute
+            assert row["rolname"] == "asm_migrator"
+            assert not row["public_execute"]
+            assert row["proconfig"] == ["search_path=pg_catalog, pg_temp"]
+        for row in material_rows:
+            security_definer, runtime_execute = material_profiles[row["signature"]]
             assert row["prosecdef"] is security_definer
             assert row["runtime_execute"] is runtime_execute
             assert row["rolname"] == "asm_migrator"

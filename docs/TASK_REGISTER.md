@@ -2,7 +2,37 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C6-M3.1-MATERIAL-HARNESS-R5 / 2026-10-16 UTC
+## Текущий статус — C2-M3.1-MATERIAL-CURRENT-PROFILE-R4 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; eleven distinct findings OPEN.**
+[C0 source task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218233521),
+[C0 R3 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218176738),
+[§15.17](tasks/M3_CONTRACT.md#1517-c2-m31-material-current-profile-r4--test-boundaries-and-same-call-sent-diagnostics--2026-10-16-utc).
+
+| Task / binding | Current result / actual gate |
+|---|---|
+| C2-M3.1-MATERIAL-CURRENT-PROFILE-R4 | REVIEW on return, then HOLD. Separate c2/m3-1-material-current-profile-r4, exact base/sole parent89f9e157ddfc328ba4564fc003b047f517352cdf/tree9be95d45e6a70bf76adf146c1035e571d52205af; one focused descendant, final identity/numstat in canonical receipt |
+| Main / PR34 | Main/frozen E933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011; PR34 OPEN/Draft c6/m3-1-material-compat stays89f9e15; no advancement |
+| Source | Nine named test modules + three documents only. Wire dates, V2 held ingress/lifecycle, exact current/23-signature profiles, actual-stage0011 seed, UTC caller; complementary R3 metadata gives41+1. Existing assertions and product/migrations/frozen sources unchanged |
+| SENT | Single original finish_send/3s/held FOR UPDATE with bounded closed metadata only; primary exception survives diagnostic/cleanup failures. No runtime fix; primary cause UNKNOWN |
+| Local checks | Ruff0.16.7 check/format9 files, compile/diff/AST/prefix/source audits PASS;235 other function bodies/decorators byte-exact.6 new pure pytest PASS/64 deselected/0.86s on3.12.14 plus DTO/V2/fingerprint/UTC probes; not packaged3.13 or PG. Initial6 PG-harness import failures led to pure helper placement; no installs/environment bootstrap |
+| Actual baseline | CI38909147338/attempt1, merge d0fd7e5da7c29b1e065e72a7bfcc11519bdd39d6:5 SUCCESS/4 FAILURE, clean5 SUCCESS/4 SKIPPED;1438 units PASS, PG785 PASS/14 FAIL, browser43 PASS/1 FAIL, both state stop at fresh DTO after saved-V1 reader |
+| CLOSED by C0 | C0-DIAG-02 (C1-R2-01 alias), C1-MAT-02, C2-MAT-03. C5-MATERIAL-01/C0-DIAG-01 retain scoped closures; full gates remain blocked |
+| Eleven OPEN | C1-MAT-01/P1 (C1-R3-02 alias), C1-R2-02/P2 (C1-R3-01 alias), C2-MAT-01/P1, C2-MAT-02/P2, C1-R3-03/P2, C0-R3-01/P2, C0-R3-02/P2, C0-R3-03/P2, C0-R3-04/P2, C0-R3-05/P2, C5-R3-01/P2 |
+| Independent work | C5-ESCALATION-RECOVERY-DIAG-R3 separately ACTIVE only frontend/e2e/messaging.spec.ts from89; no branch absorbed. C1/C3/C6/C8 HOLD; C2 HOLD after source receipt |
+| Remaining actual gates | C0 accepts/combines both returns before same PR normal automatic CI;9+clean9, full PG/fresh DTO+tenant/wrong-Client/SENT/EXPIRED/ingress/catalog/ACL/populated reverse/R3 raw42/both full P-state/used recovery/cutover/restart/retained full120/export/all3 late-C negatives/owned cleanup, C1/C2/applicable C5 then independent C8 |
+
+This source closes no actual finding. Historical R3 “all42” is corrected to41 data
+tables; new scoped metadata read is future raw42 evidence, not an executed proof.
+The entire§15.16 contract prefix582717 bytes/SHA2566f68bd44… and original11 remain
+exact. No skip/xfail/marker/selector weakening or broader unrelated reruns.
+Gate OFF; not INTEGRATED/VERIFIED. Original S/retained600/P720/remaining+480/
+nominal S+1200/cleanup90/state25/browser25/foundation45 and individual limits unchanged.
+No installs/new services/Docker/PG/browser runtime/Actions operations/PR-head/new PR/
+merge/live/VM/working DB/S3/sends/deploy/native/A08/P-A03-09/renewal/collector/M4.
+IMPL-05/broad optimization DEFERRED; earlier sections retain their historical status.
+
+## История — C6-M3.1-MATERIAL-HARNESS-R5 / 2026-10-16 UTC
 
 **MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; seven distinct findings OPEN.**
 [C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211450459),

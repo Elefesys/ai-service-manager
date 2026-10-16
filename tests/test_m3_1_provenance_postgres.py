@@ -17,6 +17,7 @@ from asm.conversations.material import MessageCurrent, TargetResult
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.http_models import MessageResponse
+from asm.messaging.http_service import wire_dates
 from asm.messaging.models import OutcomeKind, SendOutcome
 from asm.telegram.database import TelegramIngress
 from asm.telegram.normalization import normalize_update_v2, update_fingerprint_v2
@@ -29,6 +30,7 @@ from test_m2_3_db_postgres import telegram as telegram
 from test_m3_1_control_postgres import control as control
 from test_m3_1_control_postgres import wait_blocked
 from test_m3_1_guards_postgres import accepted, prepared
+from test_m3_1_provenance import _sent_failure_scope
 from test_m3_1_turns_postgres import claim_exact, seal, snapshot
 from test_tenancy_postgres import PROVIDER, UB, A, B
 from test_tenancy_postgres import db as db
@@ -612,7 +614,7 @@ async def test_api_current_closed_history_and_same_workspace_wrong_client(materi
     values = await owner_sql(
         h, "SELECT platform.messaging_read_messages(:id,25,NULL,NULL)", id=m["conversation_id"]
     )
-    dto = MessageResponse.model_validate(values[0])
+    dto = MessageResponse.model_validate(wire_dates(values[0]))
     assert dto.text == "A" and dto.current.text == "B" and dto.current.changed
     for actor, ws in ((UB, B), (PROVIDER, A)):
         with pytest.raises(DBAPIError):
@@ -793,6 +795,12 @@ async def test_r3_t4_invalid_first_suppression_rolls_back_entire_original_atom(
 
         async with h.migrator.connect() as c:
             before = await fingerprints(c)
+            metadata_before = (
+                await c.execute(
+                    text("SELECT version_num FROM platform.alembic_version ORDER BY version_num")
+                )
+            ).all()
+            assert len(before) == 41 and len(metadata_before) == 1
         with pytest.raises(DBAPIError) as rejected:
             await h.kernel.process_inbox(claim)
         expected = {
@@ -820,6 +828,11 @@ async def test_r3_t4_invalid_first_suppression_rolls_back_entire_original_atom(
             )
         async with h.migrator.connect() as c:
             assert await fingerprints(c) == before
+            assert (
+                await c.execute(
+                    text("SELECT version_num FROM platform.alembic_version ORDER BY version_num")
+                )
+            ).all() == metadata_before
         assert not await query(h, "SELECT * FROM app.messages")
         assert await traces(h) == dict(effects=0, audits=0, files=0, fetches=0)
     finally:
@@ -994,15 +1007,20 @@ async def test_exact_sent_binding_only_and_deferred_finalizer_without_connection
     )
     # A connection lock held by another transaction must not block SENT's
     # C -> existing target binding (including its implicit FK checks).
-    async with h.migrator.begin() as blocker:
-        await blocker.execute(
-            text("SELECT id FROM app.channel_connections WHERE id=:id FOR UPDATE"),
-            {"id": h.telegram_connection},
-        )
-        async with asyncio.timeout(3):
-            await h.kernel.finish_send(
-                send.job_id, send.claim_token, UUID(permit["attempt_id"]), result
+    with _sent_failure_scope(outcome) as record_failure:
+        async with h.migrator.begin() as blocker:
+            await blocker.execute(
+                text("SELECT id FROM app.channel_connections WHERE id=:id FOR UPDATE"),
+                {"id": h.telegram_connection},
             )
+            async with asyncio.timeout(3):
+                try:
+                    await h.kernel.finish_send(
+                        send.job_id, send.claim_token, UUID(permit["attempt_id"]), result
+                    )
+                except BaseException as primary:
+                    record_failure(primary)
+                    raise
     target = (
         await query(h, "SELECT * FROM platform.message_material_targets WHERE id=:id", id=t["id"])
     )[0]
@@ -1099,7 +1117,7 @@ async def test_shared_body_retains_expired_escalation_precedence(control):
     h = control
     async with serial_clock(h) as (_, set_clock):
         e, _, _ = await created(h)
-        await set_clock(e["expires_at"])
+        await set_clock(e["expires_at"].astimezone(UTC))
         assert await h.kernel.claim_job("material-expired-maintenance") is None
         m = (
             await query(

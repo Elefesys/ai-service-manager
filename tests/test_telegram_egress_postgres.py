@@ -39,6 +39,7 @@ from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.commands import request_manual_text
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code
+from asm.messaging.http_service import wire_dates
 from asm.messaging.worker import Worker
 from asm.telegram.client import TelegramClient, TelegramError
 from asm.telegram.database import TelegramIngress
@@ -2034,7 +2035,7 @@ async def material_schema_controller(action, state_path):
                     assert page
                     for row in page:
                         assert "current" in row
-                        MessageResponse.model_validate(row)
+                        MessageResponse.model_validate(wire_dates(row))
                 async with migrator.connect() as c:
                     protected, timers = await material_runtime_fingerprint(c, old)
                     saved["protected12"] = digest(protected)
@@ -2091,7 +2092,7 @@ class TestEgressMaterialCompatibility:
         async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
             page = await unit.messaging_messages_page(turn["conversation_id"], 10, None, None)
         assert len(page) == 1
-        assert MessageResponse.model_validate(page[0]).current.changed is False
+        assert MessageResponse.model_validate(wire_dates(page[0])).current.changed is False
 
     @pytest.mark.parametrize(
         "used",

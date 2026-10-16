@@ -20,7 +20,7 @@ from test_m2_1_models import event
 from test_m2_1_postgres import CA, CA2, command, ingest, query
 from test_m2_1_postgres import messaging as messaging
 from test_m2_2_db_postgres import MANIFEST
-from test_m2_3_db_postgres import BOT, ingress, projection
+from test_m2_3_db_postgres import BOT, ingress, projection, v2_fixture
 from test_m2_3_db_postgres import telegram as telegram
 from test_tenancy_postgres import UA, A, B
 from test_tenancy_postgres import db as db
@@ -596,7 +596,7 @@ async def test_ingress_share_barrier_earliest_committed_origin(
                     ),
                     {
                         "bot": BOT,
-                        "projection": json.dumps(first_projection),
+                        "projection": json.dumps(v2_fixture(first_projection)),
                         "correlation": uuid4(),
                     },
                 )
