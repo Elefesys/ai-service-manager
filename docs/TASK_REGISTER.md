@@ -2,7 +2,35 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C3-M3.1-MATERIAL-R2 source correction / 2026-10-16 UTC
+## Текущий статус — C6-M3.1-MATERIAL-CI-DIAG-R2 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all six findings OPEN.**
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208852583),
+[accepted C3 checkpoint](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208831490),
+[diagnosis](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208328996),
+[§15.13](tasks/M3_CONTRACT.md#1513-c6-m31-material-ci-diag-r2--bounded-original-invocation-diagnostics--2026-10-16-utc).
+
+| Task / binding | Current source result / actual gate |
+|---|---|
+| C6-M3.1-MATERIAL-CI-DIAG-R2 | REVIEW on return, then HOLD. Branch c6/m3-1-material-ci-diag-r2; base/sole parent f0c111ac0b74695cc12444ccdf077314d06d2a9b, tree ca3f638b206b232a7a6cd8f1920e31580991b58b. Final head/tree/numstat in canonical receipt |
+| C3 accepted source | R2 seven-space correction/two original-string regression nodes preserved; C0 source/client intake accepted, actual0012 acceptance pending |
+| Main / PR34 | E933ddd…/0011; PR34 remains OPEN/Draft, c6/m3-1-material-compat / d810dde939f727085af15f7614eeddd36f4909b8. No head update/new PR/merge or CI execution here |
+| H observation | State-only private startup launcher executes original immutable H stdin. Original command/build objects, actual target/exit/timeout, separate observer/executor identities; no retry/probe/source rewrite. H cause still UNKNOWN |
+| P ordinary migration | Original e.command frame observation, closed source/tree/direction/revision; client vs server/explicit SQLSTATE distinction,30s and ACK86 unchanged |
+| Private evidence |0700/0600; authenticated closed report≤64KiB/16 records; classify≤16KiB per captured stream; no raw outputs/SQL/argv/env/credentials. H requires independent64-byte final ACK; invalid diagnostics cannot replace original executor failure |
+| Scoped evidence |59 new invocation cases PASS; combined195 PASS/390 deselected includes those59. Ruff/format/shell/embedded code/diff/source audit PASS. Synthetic doubles, no actual H/P/PG/Docker/browser gates |
+| Preservation | Full§15.12 prefix551663 bytes/SHA2560be54876…;134 existing definitions exact, P/outer AST exact after removing diagnostics. Original11, applied0001–0011/ORIGINAL17/OLD_CHECK4/0012←0011,10 columns/6 old/4 new/42 total/132 signatures, Inbox winning pair/five NULL delivery fields, frozen T/C/G/E/workflows/locks unchanged |
+| Historical CI |38850821014/attempt1 tested merge51fca8…/tree fb06ad7…, not this source:4 SUCCESS/5 FAILURE; clean4 SUCCESS/5 SKIPPED. H build before S/P opaque; Docker29 prep499.951432356s partial, full P and3 late C negatives not reached |
+| OPEN findings | C2-MAT-01/P1, C1-MAT-01/P1, C1-MAT-02/P2, C5-MATERIAL-01/P2, C2-MAT-02/P2, C2-MAT-03/P1. Source/unit evidence closes none |
+| Next gate | C0 combined intake → one update of same Draft PR34 → automatic CI9/9+clean9/9, both full state/P/retained/late-C cleanup, actual0012/raw42/catalog/security/recovery/replay/current-T→T2/paired PHOTO/browser → C1/C2/C5, later C8 |
+
+C6 HOLD after canonical source return; C3/C1/C2/C5/C8 HOLD. No implementation
+INTEGRATED/VERIFIED. Original S/retained600/P720/remaining+480/S+1200/cleanup90,
+individual bounds/state25/browser25/foundation45 and9 jobs/clean9 remain fixed.
+Gate OFF; native/A08/renewal/collector/live/VM/working DB/S3/sends/deploy/M4 unissued;
+broad CI optimization/IMPL-05 DEFERRED. No installs/services/dispatch/rerun/cancel.
+
+## История — C3-M3.1-MATERIAL-R2 source correction / 2026-10-16 UTC
 
 **MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all six findings OPEN.**
 [C0 R2](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208530769),

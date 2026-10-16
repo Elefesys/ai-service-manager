@@ -5225,3 +5225,151 @@ new PR, merge, dispatch/rerun or edits to other receipts. C3 HOLD after return;
 C1/C2/C5/C6/C8 HOLD until C0 issuance. PR34 Draft/BLOCKED; MATERIAL/M3 IN_PROGRESS,
 implementation not INTEGRATED/VERIFIED. Gate OFF; native/A08/renewal/collector/live/
 VM/working DB/S3/sends/deploy/M4 unissued; broad CI optimization/IMPL-05 DEFERRED.
+
+### 15.13. C6-M3.1-MATERIAL-CI-DIAG-R2 — bounded original-invocation diagnostics / 2026-10-16 UTC
+
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208852583),
+[accepted C3 intake](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208831490),
+[C3 source receipt](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208752834),
+[historical C6 diagnosis](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208328996).
+Separate branch/checkout `c6/m3-1-material-ci-diag-r2`, exact accepted base and sole
+parent `f0c111ac0b74695cc12444ccdf077314d06d2a9b`, tree
+`ca3f638b206b232a7a6cd8f1920e31580991b58b`; its parent is d810dde939f727085af15f7614eeddd36f4909b8.
+Main/frozen E remains933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011.
+Existing Draft PR34 remains on `c6/m3-1-material-compat`/d810dde; no PR-head update.
+The complete contract through§15.12 is preserved: **551663 bytes**, SHA256
+`0be54876bec43bc88348586ccf8e7b99571be02207ed9af9773fcd06ce75f050`.
+Only this section is appended; final head/tree/numstat appear in the canonical receipt.
+
+D1 observes the **same original H invocation**, only in the two existing state
+shards. Image/intent still invoke their original shell directly. The current
+wrapper sets up a private startup ZIP outside H; its sitecustomize entry establishes
+observation and lets Python itself execute the original stdin program. No stdin
+consumption/rewrite or alternate executor; argv/cwd/interpreter and original helper
+objects remain intact. PYTHONPATH and sys.path are restored before original code;
+temporary bytecode suppression is restored after importing H, without inserting
+observer files or caches into H. Unrelated interpreter invocations pass through.
+
+The original `e.command.__code__` is selected, with its original
+`migration_build_images.__code__` caller and actual build argv checked in memory.
+Only matching H docker builds are recorded; target runtime/development comes from
+that invocation, never from loop order. No command/helper/subprocess rebinding,
+duplicate call, probe build or retry. Evidence is labelled
+**INSTRUMENTED_IMMUTABLE_H** because tracing/reporting consumes time.
+
+| Frozen H binding | Exact identity |
+|---|---|
+| Executor source/tree |754f1c883e5a94a7fc9e729af2605424f949ba33 / b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f |
+| H shell blob |1672fbb4fb676ad69885043e46350f53334db0fc |
+| H test-module blob |99cf8d1a3f8a85b64e2785710a728964d5bd3f03 |
+| H helper blob |58486046a6bb5682a336a1578705ed973e7b4fc6 |
+
+Observer source/tree, current shell/module/helper blobs and generated observer-code
+SHA256 are separate from those executor identities. Git clean-source/tree/blob
+checks precede launch. The child verifies frozen file bytes, launcher identity/code
+hash and the intended compiled stdin entrypoint before observing original frames.
+Missing/substituted entry/source/path never yields valid diagnostic evidence.
+The startup ZIP is also bounded to128KiB of code and has only sitecustomize.py.
+
+D2 scopes observation to current P's **ordinary** migrate→run→original command calls.
+The P envelope executor identifies the host command module; each row identifies
+the selected E/P development image's source/tree.
+Source/tree come from accepted image proofs and the closed E/P source map; direction
+and revision are closed values. Original args/stdin/cwd/env, returned bytes/exception,
+30-second command limit, report stage/timing and source/schema order remain unchanged.
+Post-commit86 result-loss calls and their evidence are outside this observer scope.
+The producer labels P evidence INSTRUMENTED_CURRENT_P. Recognized InvalidRequestError
+parameter failures remain client errors with UNKNOWN SQLSTATE. PostgreSQL SQLSTATE
+is serialized only when explicitly present in bounded captured output and in the
+finite recognized set; no code is inferred from an exception name.
+
+D3 uses these additive reports, under existing artifact directories:
+`historical/build-observation.json` and `migration-P-observation.json`.
+They explain original invocations, not new product acceptance.
+
+| Closed schema/bound | Definition |
+|---|---|
+| Envelope v1 | phase/evidence; separate observer/executor bindings; accepted source→tree map; start/end monotonic times; trace-restored flag; status; bounded secondary codes; observed count/records; HMAC |
+| Invocation record | fixed operation H_DOCKER_BUILD/P_ALEMBIC; exact source/tree; target or UNKNOWN; closed direction/revision/stage; start/elapsed; outcome; numeric exit or UNKNOWN; finite exception/category; stream byte counts/status; SQLSTATE/step/line or UNKNOWN |
+| Stream classification | At most16KiB of each already captured stream, bounded head/tail; UNKNOWN/EMPTY/PRESENT/TRUNCATED explicit. No additional capture mode |
+| Persisted report | At most64KiB, at most16 records; current P has11 ordinary migrate callsites. Limit/observer errors make evidence incomplete |
+| Privacy | No raw output/argv/stdin/SQL/payload/URL/env/config/credentials/traceback/Dockerfile command text; unknown messages stay UNKNOWN |
+| Files | Temporary directories0700/files0600; same UID, resolved path, dev/inode/mode/single-link and descriptor/read stability checks; exclusive NOFOLLOW creates/opens |
+| Integrity/completion | Fresh private HMAC key per session, absent from exported report. Closed schema/source/clock/content validation and export hash; missing/tampered/incomplete/export-failed records cannot pass |
+| H final-write acknowledgement | Separate private FD carries one64-byte final-report hash after successful observer completion. Parent reads at most65 bytes without blocking; missing/partial/mismatched ACK refuses completeness. Original stdout/stderr capture and shell exit are unchanged |
+| Trace lifecycle | Original frame/code observation only; previous tracer conflict is incomplete evidence. Prior tracing state is restored, including exception/cancellation paths |
+
+The independent H ACK prevents a visible COMPLETE file whose last fsync failed
+from being accepted. In-process P additionally retains observer failure state.
+Failed exports remove their own partially created target when identity still
+matches. Diagnostics never claim COMPLETE solely from a parseable report or exit0.
+
+Executor failure remains primary. Setup/import failure runs the original H shell
+once without observation and records invalid diagnostics. Classifier/write/export/
+private cleanup problems are separate finite secondary outcomes. Existing H reports,
+source pairing, exit/traceback, source checks and owned-volume cleanup are preserved.
+For successful H, the distinct H_DIAGNOSTIC_VALIDATION_FAILED gate runs after
+historical owned-volume checks; successful P with invalid diagnostics gets
+P_DIAGNOSTIC_VALIDATION_FAILED. P's existing finally publishes invalid diagnostic
+status while preserving the original exception object when execution already failed.
+The outer P success gate additionally requires the exported report hash.
+
+Observation is charged to existing clocks: H stays before original S and inside
+its existing warm-build/job limits; P uses its existing preparation/runtime limits.
+No S reset/move/subtraction, new budget, timeout/cache/pin change, assertion weakening
+or cleanup shortcut. Retained version1 S+600, P version2 S+720, remaining+480 /
+nominal S+1200 supervision, cleanup90 and state25/browser25/foundation45 stay fixed.
+
+**Local verification, no runtime gate claim.** Reused cached locked
+`/workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python`, with
+`PYTHONPATH=backend/src:tests` selecting this checkout. No sync/install/services.
+
+```sh
+PYTHONPATH=backend/src:tests /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m pytest -q tests/test_telegram_egress_migration.py -k 'test_invocation_' --tb=short
+PYTHONPATH=backend/src:tests /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m pytest -q tests/test_telegram_egress_migration.py -k 'invocation or material_budget or material_handoff or material_phase or material_entrypoint or material_shell or schema_entrypoint or control_cleanup or control_secondary or retained or ack_loss or material_recovery' --tb=short
+/workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m ruff check tests/test_telegram_egress_migration.py
+/workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m ruff format --check tests/test_telegram_egress_migration.py
+sh -n scripts/test_telegram_egress_migration.sh
+git diff --check f0c111ac0b74695cc12444ccdf077314d06d2a9b
+```
+
+Results: **59 new invocation cases PASS in7.46s; focused combined195 PASS /
+390 deselected in11.56s** (the59 are included, not additional unique cases).
+Ruff/format, shell/embedded-Python/generated-launcher compilation and diff checks
+PASS. Units use real isolated Python subprocesses and the original frozen helper/
+build objects with synthetic local executable/test doubles; no daemon/PG operation.
+They cover both actual targets, return bytes/nonzero/partial timeout/cancellation,
+client vs server/UNKNOWN classification, bounds/canaries, source/entry/owner/path/
+launcher substitution, tampering/incompleteness/write/export/final-fsync/ACK failures,
+state-only boundary, failure precedence, restored tracing and charged observer costs.
+The existing P shell-gate unit adds only valid diagnostic fixture data and two
+new status/hash negatives; all prior budget/cleanup assertions remain.
+
+Offline source audit verifies original11 attachment/repo/manifest/frozen-main bytes,
+the complete§15.12 prefix and the exact five-path scope. **134 existing top-level
+function/class definitions stay byte-exact**; only current P and its existing shell
+gate unit are adjusted, with additive diagnostics/tests. Removing only the approved
+diagnostic statements from current P and the outer embedded program yields ASTs
+identical to accepted base, including ACK86, cleanup, requests/order and original S.
+All product/PG/C3 regression nodes, migration0012 and applied0001–0011/ORIGINAL17/
+OLD_CHECK4, source inventories10 columns/6 old tables/4 new/42 total/132 signatures,
+private Inbox winning pair/five NULL delivery fields, frozen H/T/C/G/E, workflows/
+Compose/images/pins/dependencies/locks are unchanged to the accepted C3 base.
+
+Historical CI38850821014/attempt1 tested merge51fca8…/tree fb06ad7…, **not f0c111a
+or this descendant**:4 SUCCESS/5 FAILURE, clean4 SUCCESS/5 SKIPPED. H root cause
+remains UNKNOWN. Docker29 preparation499.951432356s is partial; P/full state and3 late
+C negatives were not completed. Accepted C3 null-bind correction is independent
+source/client evidence, not recovered historical CI stderr or a common root cause.
+
+All six findings stay OPEN: C2-MAT-01/03, C1-MAT-01/02, C5-MATERIAL-01, C2-MAT-02.
+C6 source is REVIEW on return, then HOLD; C3/C1/C2/C5/C8 HOLD. No actual PG, Docker
+build/state, browser, Actions dispatch/rerun/cancel or live/VM/working DB/S3/sends/
+deploy execution. No PR-head update/new PR/merge. C0 reviews the combined descendant,
+advances the same Draft PR34 once and observes normal automatic CI; concrete new
+failures return to C0 without guessed fixes or another budget increase. Still require
+all9+clean9 on exact tested SHA/tree, both complete state lanes/full retained negatives/
+P/late C cleanup, actual0012 lifecycle/raw42/catalog/security/recovery/replay/current
+T→T2 and paired PHOTO/browser, C1/C2/C5 disposition and later C8. PR34 Draft/BLOCKED;
+MATERIAL/M3 IN_PROGRESS, not INTEGRATED/VERIFIED, gate OFF. Native/A08/renewal/
+collector/M4 unissued; broad CI optimization/IMPL-05 DEFERRED.

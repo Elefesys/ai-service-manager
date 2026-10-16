@@ -5,7 +5,62 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. C3-M3.1-MATERIAL-R2 — online SQL source correction / 2026-10-16 UTC
+## 0. C6-M3.1-MATERIAL-CI-DIAG-R2 — original-invocation diagnostics / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208852583),
+[accepted C3 intake](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208831490),
+[C6 diagnosis](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208328996),
+[§15.13 source/evidence](M3_CONTRACT.md#1513-c6-m31-material-ci-diag-r2--bounded-original-invocation-diagnostics--2026-10-16-utc).
+Separate branch `c6/m3-1-material-ci-diag-r2`, accepted base/sole parent
+`f0c111ac0b74695cc12444ccdf077314d06d2a9b`, tree
+`ca3f638b206b232a7a6cd8f1920e31580991b58b` (parent d810dde…).
+C3's seven-space correction and both real-string regression nodes are read-only.
+Main/frozen E933ddd…/0011 and existing PR34 branch/head d810dde… stay fixed.
+Final head/tree/numstat are in the canonical C6 receipt; source REVIEW then C6 HOLD.
+
+Only H's current state invocation boundary and current P ordinary migration
+observation changed. Private startup ZIP preserves original H stdin execution,
+helper/build objects and pass-through interpreter behavior; evidence is instrumented
+immutable H. P scopes tracing to original e.command inside ordinary migrate/run,
+with unchanged args/environment/30s bound; expected post-commit86 arms stay outside.
+No duplicate/retry/probe/alternate migration, source rewrite or product fix.
+
+Reports bind separate observer/executor source/tree/blob/code identities. Closed
+schema, at most16 records/64KiB, at most16KiB classification per captured stream,
+finite categories and explicit UNKNOWN/TRUNCATED; no raw outputs/SQL/argv/env/URL/
+credentials. Private0700/0600 paths, identity/source checks, per-session HMAC and
+H's independent64-byte completion ACK reject missing/tampered/failed evidence.
+P distinguishes recognized client parameter errors from PostgreSQL failures;
+SQLSTATE is exported only when explicitly safely recognized. Diagnostic failures
+are secondary to executor failure; success with invalid diagnostics fails a distinct
+diagnostic gate after required cleanup. Original traces/source pairing/owned checks
+remain. All overhead consumes original clocks, without changing S/600/720/480/90.
+
+**Local source evidence:**59 new invocation cases PASS; focused combined195 PASS /
+390 deselected, includes those59. Actual isolated interpreter/frozen-function and
+outer/P boundary seams use synthetic doubles only. Ruff/format/shell/embedded code,
+five-path/frozen-source/flow audit PASS.134 existing definitions are byte-exact;
+removing only diagnostics yields original P/outer ASTs. Full contract through§15.12
+is preserved:551663 bytes/SHA2560be54876…; only§15.13 appended. Original11, all product/
+PG tests, migrations/inventory/Inbox pair/five NULL Job fields and workflows/locks
+are unchanged. No dependency installation, service, PG/Docker/browser/Actions run.
+
+**Current actual evidence remains BLOCKED.** Historical38850821014/attempt1 tested
+merge51fca8…/tree fb06ad7…:4 SUCCESS/5 FAILURE; clean4 SUCCESS/5 SKIPPED. H cause UNKNOWN;
+its lost exit/target/stderr are not reconstructed by this change. Docker29 prep
+499.951432356s is partial, not full P/state/late-C-negative acceptance. C3's accepted
+source correction is not observed historical CI stderr. All six findings remain
+OPEN: C2-MAT-01/03, C1-MAT-01/02, C5-MATERIAL-01, C2-MAT-02.
+
+Next: C0 combined-source intake → advance the same Draft PR34 once → normal automatic
+CI on exact descendant → actual9/9+clean9/9, both full state/P/retained negatives/
+3 late C cleanup, product PG/current-T→T2/PHOTO/browser → C1/C2/C5, later C8.
+No PR-head update/new PR/merge/dispatch/rerun in this task. C6 HOLD after receipt;
+C3/C1/C2/C5/C8 HOLD. MATERIAL/M3 IN_PROGRESS, not INTEGRATED/VERIFIED; PR34 Draft/
+BLOCKED, gate OFF. Native/A08/renewal/collector/live/VM/working DB/S3/sends/deploy/
+M4 unissued; broad CI optimization/IMPL-05 DEFERRED.
+
+## История — C3-M3.1-MATERIAL-R2 — online SQL source correction / 2026-10-16 UTC
 
 [C0 R2 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208530769),
 [C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208519238),

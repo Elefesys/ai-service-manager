@@ -65,8 +65,23 @@ try:
         subprocess.run(['git', 'worktree', 'add', '--detach', str(historical), H],
                        check=True, capture_output=True, timeout=40, umask=0o022)
         try:
-            result = subprocess.run(['sh', 'scripts/test_telegram_egress_migration.sh', fault],
-                                    cwd=historical, stdin=subprocess.DEVNULL)
+            if fault == 'state':
+                diagnostics = None
+                try:
+                    diagnostics = runpy.run_path(str(e.ROOT / 'tests/test_telegram_egress_migration.py'),
+                                                 run_name='__h_observer_definitions__')
+                except Exception:
+                    pass
+                if diagnostics is None:
+                    result = subprocess.run(['sh', 'scripts/test_telegram_egress_migration.sh', fault],
+                                            cwd=historical, stdin=subprocess.DEVNULL)
+                    observation = {'status': 'INVALID', 'secondary': ['DIAGNOSTIC_MODULE_LOAD_FAILED']}
+                else:
+                    result, observation = diagnostics['run_historical_observed'](historical, source, reports)
+                admission['historical_diagnostics'] = observation
+            else:
+                result = subprocess.run(['sh', 'scripts/test_telegram_egress_migration.sh', fault],
+                                        cwd=historical, stdin=subprocess.DEVNULL)
             # H publishes its image/data/receipt proof before its teardown. Preserve
             # that report verbatim; source_sha=H must never be relabelled as I.
             if (historical / 'reports').exists():
@@ -94,6 +109,8 @@ try:
                 }, indent=2) + '\n')
                 e.command(['docker', 'volume', 'rm', *volumes])
             assert not e.command(['docker', 'volume', 'ls', '-q']).strip(), 'HISTORICAL_VOLUMES_REMAIN'
+            if fault == 'state':
+                assert observation['status'] == 'COMPLETE', 'H_DIAGNOSTIC_VALIDATION_FAILED'
         finally:
             e.command(['git', 'worktree', 'remove', str(historical)])
     if fault == 'state':
@@ -128,6 +145,9 @@ try:
         assert len(escalation['database']['timers']) == 3
         admission['escalation_schema'] = {'source': escalation['coordinator'], 'revision': '0011', 'report': 'retained-escalation/escalation-schema-phase.json'}
         material = json.loads((e.ROOT / 'reports/material-schema-phase.json').read_text())
+        observed_p = material['migration_diagnostics']
+        assert observed_p['status'] == 'COMPLETE', 'P_DIAGNOSTIC_VALIDATION_FAILED'
+        assert observed_p['sha256'] == e.sha((e.ROOT / 'reports/migration-P-observation.json').read_bytes()), 'P_DIAGNOSTIC_REPORT_CHANGED'
         assert material['coordinator'] == source and material['historical'] == escalation['coordinator']
         assert material['cleanup']['state'] == 'PASS' and material['database']['populated_refusal'] == 'PASS'
         budget = material['prepare_budget']

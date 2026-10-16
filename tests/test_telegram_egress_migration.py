@@ -2764,6 +2764,972 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
     ledger["full_retained_negatives"] = summary
 
 
+def diagnostic_blob(raw):
+    return hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+
+
+def diagnostic_identity(path, *, directory=False):
+    """Private, same-owner objects only; never follow a substituted path."""
+    path = Path(path).absolute()
+    assert path.resolve() == path, "DIAGNOSTIC_PATH"
+    info = path.lstat()
+    assert info.st_uid == os.getuid(), "DIAGNOSTIC_OWNER"
+    assert stat.S_IMODE(info.st_mode) == (0o700 if directory else 0o600), "DIAGNOSTIC_MODE"
+    assert stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)
+    assert directory or info.st_nlink == 1, "DIAGNOSTIC_LINK"
+    return [info.st_dev, info.st_ino, info.st_uid, stat.S_IMODE(info.st_mode)]
+
+
+def diagnostic_binding_valid(binding):
+    assert set(binding) == {"observer", "executor"}, "DIAGNOSTIC_BINDING"
+    for role, fields in binding.items():
+        assert set(fields) == {"source", "tree", "shell_blob", "module_blob", "helper_blob"} | (
+            {"code_sha256"} if role == "observer" else set()
+        ), "DIAGNOSTIC_BINDING"
+        assert all(
+            type(fields[k]) is str and re.fullmatch("[0-9a-f]{40}", fields[k])
+            for k in ("source", "tree", "shell_blob", "module_blob", "helper_blob")
+        ), "DIAGNOSTIC_BINDING"
+        if role == "observer":
+            assert type(fields["code_sha256"]) is str and re.fullmatch(
+                "[0-9a-f]{64}", fields["code_sha256"]
+            ), "DIAGNOSTIC_BINDING"
+
+
+def diagnostic_new(directory, binding, *, sources=None):
+    diagnostic_binding_valid(binding)
+    directory = Path(directory).absolute()
+    identity = diagnostic_identity(directory, directory=True)
+    path = directory / "invocations.json"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    os.close(fd)
+    return {
+        "directory": str(directory),
+        "directory_identity": identity,
+        "path": str(path),
+        "identity": diagnostic_identity(path),
+        "key": os.urandom(32).hex(),
+        "binding": binding,
+        "sources": sources
+        if sources is not None
+        else {v["source"]: v["tree"] for v in binding.values()},
+    }
+
+
+def diagnostic_output(raw):
+    """Inspect <=16KiB per already captured stream. No raw text leaves this function."""
+    if not isinstance(raw, bytes):
+        return {"bytes": 0, "status": "UNKNOWN"}, b""
+    truncated = len(raw) > 16384
+    sample = raw[:8191] + b"\n" + raw[-8192:] if truncated else raw
+    return {
+        "bytes": len(raw),
+        "status": "TRUNCATED" if truncated else "PRESENT" if raw else "EMPTY",
+    }, sample
+
+
+def diagnostic_classify(stdout, stderr):
+    out, first = diagnostic_output(stdout)
+    err, second = diagnostic_output(stderr)
+    # Each stream is classified separately; do not construct a match across its boundary.
+    samples = (first, second)
+    result = {
+        "stdout": out,
+        "stderr": err,
+        "category": "UNKNOWN",
+        "exception_class": "UNKNOWN",
+        "sqlstate": "UNKNOWN",
+        "build_step": "UNKNOWN",
+        "dockerfile_line": "UNKNOWN",
+    }
+    if any(
+        re.search(rb"sqlalchemy\.exc\.InvalidRequestError(?::|\))", s)
+        and b"A value is required for bind parameter" in s
+        for s in samples
+    ):
+        result.update(category="CLIENT_PARAMETER_ERROR", exception_class="InvalidRequestError")
+    else:
+        server = (
+            "SyntaxError",
+            "UndefinedColumn",
+            "UndefinedFunction",
+            "UndefinedTable",
+            "CheckViolation",
+            "ForeignKeyViolation",
+            "UniqueViolation",
+            "NotNullViolation",
+            "InsufficientPrivilege",
+            "RaiseException",
+            "ObjectInUse",
+            "SerializationFailure",
+            "DeadlockDetected",
+        )
+        for name in server:
+            if any(
+                re.search(rb"psycopg\.errors\." + name.encode() + rb"(?::|\))", s) for s in samples
+            ):
+                result.update(category="POSTGRESQL_ERROR", exception_class=name)
+                for s in samples:
+                    match = re.search(rb"(?m)^SQLSTATE[=: ]+([0-9A-Z]{5})\s*$", s)
+                    if match and match[1] in {
+                        b"42601",
+                        b"42703",
+                        b"42883",
+                        b"42P01",
+                        b"23514",
+                        b"23503",
+                        b"23505",
+                        b"23502",
+                        b"42501",
+                        b"P0001",
+                        b"55006",
+                        b"40001",
+                        b"40P01",
+                    }:
+                        result["sqlstate"] = match[1].decode("ascii")
+                break
+    if result["category"] == "UNKNOWN":
+        for category, pattern in (
+            (
+                "REGISTRY_AUTH",
+                rb"(?i)(?:unauthorized: authentication required|denied: requested access)",
+            ),
+            ("IMAGE_RESOLUTION", rb"(?i)failed to resolve (?:source metadata|reference)"),
+            ("DOCKER_DAEMON", rb"(?i)cannot connect to the docker daemon"),
+            ("BUILD_STEP_FAILED", rb"(?i)failed to solve:.*did not complete successfully"),
+        ):
+            if any(re.search(pattern, s) for s in samples):
+                result["category"] = category
+                break
+    for s in samples:
+        match = re.search(rb"(?m)^#([0-9]{1,5}) (?:ERROR:|\[[0-9]+/[0-9]+\])", s)
+        if match:
+            result["build_step"] = int(match[1])
+        match = re.search(rb"(?m)^Dockerfile(?:\.backend)?:([0-9]{1,5})\s*$", s)
+        if match:
+            result["dockerfile_line"] = int(match[1])
+    return result
+
+
+class InvocationDiagnostic:
+    """Bounded H/P observation of ORIGINAL command frames, with authenticated private output.
+
+    No function/subprocess replacement, output capture or executor retry. Errors in
+    this observer are finite secondary outcomes, never exceptions in the executor.
+    """
+
+    def __init__(self, config, phase):
+        diagnostic_binding_valid(config["binding"])
+        assert phase in {"H_BUILD", "P_MIGRATION"}, "DIAGNOSTIC_PHASE"
+        assert 1 <= len(config["sources"]) <= 2 and all(
+            type(s) is str
+            and type(t) is str
+            and re.fullmatch("[0-9a-f]{40}", s)
+            and re.fullmatch("[0-9a-f]{40}", t)
+            for s, t in config["sources"].items()
+        ), "DIAGNOSTIC_SOURCES"
+        self.config = config
+        self.phase = phase
+        self.previous = None
+        self.installed = False
+        self.active = None
+        self.command = None
+        self.build = None
+        self.closed = False
+        self.data = {
+            "version": 1,
+            "phase": phase,
+            "evidence": "INSTRUMENTED_IMMUTABLE_H"
+            if phase == "H_BUILD"
+            else "INSTRUMENTED_CURRENT_P",
+            "binding": config["binding"],
+            "accepted_sources": config["sources"],
+            "started_at": time.monotonic(),
+            "ended_at": "UNKNOWN",
+            "trace_restored": False,
+            "status": "INCOMPLETE",
+            "secondary": [],
+            "observed": 0,
+            "records": [],
+        }
+        self.save()
+
+    def error(self, code):
+        self.config["observer_failed"] = True
+        if code not in self.data["secondary"] and len(self.data["secondary"]) < 8:
+            self.data["secondary"].append(code)
+
+    def save(self):
+        import hmac
+
+        try:
+            cfg = self.config
+            assert (
+                diagnostic_identity(cfg["directory"], directory=True) == cfg["directory_identity"]
+            )
+            assert diagnostic_identity(cfg["path"]) == cfg["identity"]
+            raw = json.dumps(self.data, sort_keys=True, separators=(",", ":")).encode()
+            auth = hmac.new(bytes.fromhex(cfg["key"]), raw, "sha256").hexdigest()
+            raw = json.dumps(
+                {**self.data, "auth": auth}, sort_keys=True, separators=(",", ":")
+            ).encode()
+            assert len(raw) <= 65536 and len(self.data["records"]) <= 16
+            fd = os.open(cfg["path"], os.O_WRONLY | os.O_NOFOLLOW)
+            try:
+                info = os.fstat(fd)
+                assert [info.st_dev, info.st_ino, info.st_uid, stat.S_IMODE(info.st_mode)] == cfg[
+                    "identity"
+                ]
+                assert info.st_nlink == 1
+                os.ftruncate(fd, 0)
+                view = memoryview(raw)
+                while view:
+                    count = os.write(fd, view)
+                    assert count > 0
+                    view = view[count:]
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        except Exception:
+            self.error("REPORT_WRITE_FAILED")
+
+    def select(self, frame):
+        args = frame.f_locals.get("args")
+        if self.phase == "P_MIGRATION":
+            if self.active is not None and args == self.active[0]:
+                return dict(self.active[1])
+            return None
+        caller = frame.f_back
+        if caller is None or caller.f_code is not self.build.__code__:
+            return None
+        if not isinstance(args, list) or args[:2] != ["docker", "build"]:
+            return None
+        binding = self.config["binding"]["executor"]
+        source, tree = binding["source"], binding["tree"]
+        if not (
+            len(args) == 21
+            and args[:5] == ["docker", "build", "--pull", "--network=default", "--target"]
+            and args[5] in {"runtime", "development"}
+            and args[10:17]
+            == [
+                "--label",
+                "asm.connect5.source=" + source,
+                "--label",
+                "asm.connect5.tree=" + tree,
+                "--label",
+                "asm.connect5.kind=" + args[5],
+                "-f",
+            ]
+            and args[18:20] == ["-t", "asm-connect5-" + args[5] + ":" + source]
+            and args[17] == str(Path(args[20]) / "infra/Dockerfile.backend")
+            and caller.f_locals.get("source") == source
+            and caller.f_locals.get("tree") == tree
+        ):
+            self.error("INVOCATION_BINDING_FAILED")
+            return None
+        return {
+            "operation": "H_DOCKER_BUILD",
+            "source": source,
+            "tree": tree,
+            "target": args[5],
+            "direction": "UNKNOWN",
+            "revision": "UNKNOWN",
+            "stage": "H_BUILD",
+        }
+
+    def trace(self, frame, event, arg):
+        if event != "call" or frame.f_code is not self.command.__code__:
+            return None
+        try:
+            selected = self.select(frame)
+            if selected is None:
+                return None
+            self.data["observed"] += 1
+            if len(self.data["records"]) == 16:
+                self.error("RECORD_LIMIT")
+                return None
+            began = time.monotonic()
+            record = {
+                **selected,
+                "started_at": began,
+                "seconds": "UNKNOWN",
+                "outcome": "INCOMPLETE",
+                "exit_code": "UNKNOWN",
+                "exception": "UNKNOWN",
+            }
+            self.data["records"].append(record)
+            self.save()
+            frame.f_trace_lines = False
+            exception = None
+
+            def completed(frame, event, arg):
+                nonlocal exception
+                try:
+                    if event == "exception":
+                        exception = arg[1]
+                    elif event == "return":
+                        result = frame.f_locals.get("result")
+                        timeout = isinstance(exception, subprocess.TimeoutExpired)
+                        name = type(exception).__name__
+                        record["exception"] = (
+                            name
+                            if name
+                            in {
+                                "EgressError",
+                                "TimeoutExpired",
+                                "FileNotFoundError",
+                                "PermissionError",
+                                "OSError",
+                            }
+                            else "UNKNOWN"
+                        )
+                        record["seconds"] = time.monotonic() - began
+                        code = getattr(result, "returncode", None)
+                        record["exit_code"] = (
+                            code
+                            if type(code) is int and -2147483648 <= code <= 2147483647
+                            else "UNKNOWN"
+                        )
+                        record["outcome"] = (
+                            "TIMEOUT"
+                            if timeout
+                            else "COMMAND_EXIT"
+                            if code not in (None, 0)
+                            else "EXCEPTION"
+                            if exception
+                            else "SUCCESS"
+                        )
+                        record.update(
+                            diagnostic_classify(
+                                getattr(result, "stdout", None)
+                                if result is not None
+                                else exception.stdout
+                                if timeout
+                                else None,
+                                getattr(result, "stderr", None)
+                                if result is not None
+                                else exception.stderr
+                                if timeout
+                                else None,
+                            )
+                        )
+                        self.save()
+                except Exception:
+                    self.error("CLASSIFICATION_FAILED")
+                return completed
+
+            return completed
+        except Exception:
+            self.error("OBSERVATION_FAILED")
+            return None
+
+    def install(self, command, *, previous=None, build=None):
+        self.previous = previous
+        self.command, self.build = command, build
+        if previous is not None:
+            self.error("TRACE_CONFLICT")
+            return
+        sys.settrace(self.trace)
+        self.installed = True
+
+    def restore(self):
+        if self.installed:
+            if sys.gettrace() != self.trace:
+                self.error("TRACE_CHANGED")
+            sys.settrace(self.previous)
+            self.installed = False
+
+    @contextmanager
+    def migration(self, command, args, source, tree, direction, revision):
+        before = self.data["observed"]
+        try:
+            assert direction in {"upgrade", "downgrade"} and revision in {
+                "0009",
+                "0010",
+                "0011",
+                "0012",
+            }
+            assert re.fullmatch("[0-9a-f]{40}", source) and re.fullmatch("[0-9a-f]{40}", tree)
+            assert self.config["sources"].get(source) == tree
+            assert args[:2] == ["docker", "run"] and args[-3:] == ["alembic", direction, revision]
+            self.active = (
+                args,
+                {
+                    "operation": "P_ALEMBIC",
+                    "source": source,
+                    "tree": tree,
+                    "target": "UNKNOWN",
+                    "direction": direction,
+                    "revision": revision,
+                    "stage": direction.upper() + "_" + revision,
+                },
+            )
+            self.install(command, previous=sys.gettrace())
+        except Exception:
+            self.error("INVOCATION_BINDING_FAILED")
+        try:
+            yield
+        finally:
+            self.restore()
+            self.active = None
+            if self.data["observed"] != before + 1:
+                self.error("INVOCATION_MISSING")
+
+    def close(self):
+        if self.closed:
+            return
+        self.restore()
+        self.closed = True
+        self.data["ended_at"] = time.monotonic()
+        self.data["trace_restored"] = True
+        if any(r["outcome"] == "INCOMPLETE" for r in self.data["records"]):
+            self.error("INVOCATION_INCOMPLETE")
+        self.data["status"] = "INCOMPLETE" if self.data["secondary"] else "COMPLETE"
+        self.save()
+
+
+def diagnostic_read(config):
+    import hmac
+    import math
+
+    assert not config.get("observer_failed", False)
+    assert diagnostic_identity(config["directory"], directory=True) == config["directory_identity"]
+    assert diagnostic_identity(config["path"]) == config["identity"]
+    fd = os.open(config["path"], os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        before = os.fstat(fd)
+        assert [
+            before.st_dev,
+            before.st_ino,
+            before.st_uid,
+            stat.S_IMODE(before.st_mode),
+        ] == config["identity"]
+        assert before.st_nlink == 1 and 0 < before.st_size <= 65536
+        raw = os.read(fd, 65537)
+        after = os.fstat(fd)
+        assert (before.st_size, before.st_mtime_ns, before.st_ctime_ns) == (
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        )
+    finally:
+        os.close(fd)
+    assert diagnostic_identity(config["path"]) == config["identity"]
+    if config.get("require_ack", False):
+        assert config.get("completion_ack") == hashlib.sha256(raw).hexdigest()
+    data = json.loads(raw)
+    assert set(data) == {
+        "version",
+        "phase",
+        "evidence",
+        "binding",
+        "accepted_sources",
+        "started_at",
+        "ended_at",
+        "trace_restored",
+        "status",
+        "secondary",
+        "observed",
+        "records",
+        "auth",
+    }
+    auth = data.pop("auth")
+    canonical = json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
+    assert type(auth) is str and hmac.compare_digest(
+        auth, hmac.new(bytes.fromhex(config["key"]), canonical, "sha256").hexdigest()
+    )
+    assert data["version"] == 1 and data["binding"] == config["binding"]
+    assert data["accepted_sources"] == config["sources"] and 1 <= len(config["sources"]) <= 2
+    assert all(
+        re.fullmatch("[0-9a-f]{40}", s) and re.fullmatch("[0-9a-f]{40}", t)
+        for s, t in config["sources"].items()
+    )
+    assert set(data["binding"]) == {"observer", "executor"}
+    for role, fields in data["binding"].items():
+        assert set(fields) == {"source", "tree", "shell_blob", "module_blob", "helper_blob"} | (
+            {"code_sha256"} if role == "observer" else set()
+        )
+        assert all(
+            re.fullmatch("[0-9a-f]{40}", fields[k])
+            for k in ("source", "tree", "shell_blob", "module_blob", "helper_blob")
+        )
+        if role == "observer":
+            assert re.fullmatch("[0-9a-f]{64}", fields["code_sha256"])
+    assert data["phase"] in {"H_BUILD", "P_MIGRATION"}
+    assert data["evidence"] == (
+        "INSTRUMENTED_IMMUTABLE_H" if data["phase"] == "H_BUILD" else "INSTRUMENTED_CURRENT_P"
+    )
+    assert (
+        data["status"] == "COMPLETE" and data["secondary"] == [] and data["trace_restored"] is True
+    )
+    assert all(
+        type(data[k]) in (int, float) and math.isfinite(data[k]) for k in ("started_at", "ended_at")
+    )
+    assert 0 < data["started_at"] <= data["ended_at"]
+    assert type(data["observed"]) is int and data["observed"] == len(data["records"]) <= 16
+    for row in data["records"]:
+        assert set(row) == {
+            "operation",
+            "source",
+            "tree",
+            "target",
+            "direction",
+            "revision",
+            "stage",
+            "started_at",
+            "seconds",
+            "outcome",
+            "exit_code",
+            "exception",
+            "stdout",
+            "stderr",
+            "category",
+            "exception_class",
+            "sqlstate",
+            "build_step",
+            "dockerfile_line",
+        }
+        assert re.fullmatch("[0-9a-f]{40}", row["source"]) and re.fullmatch(
+            "[0-9a-f]{40}", row["tree"]
+        )
+        assert config["sources"].get(row["source"]) == row["tree"]
+        assert all(
+            type(row[k]) in (int, float) and math.isfinite(row[k]) and row[k] >= 0
+            for k in ("started_at", "seconds")
+        )
+        assert (
+            data["started_at"]
+            <= row["started_at"]
+            <= row["started_at"] + row["seconds"]
+            <= data["ended_at"]
+        )
+        assert row["outcome"] in {"SUCCESS", "COMMAND_EXIT", "TIMEOUT", "EXCEPTION"}
+        assert (
+            row["exit_code"] == "UNKNOWN"
+            or type(row["exit_code"]) is int
+            and -2147483648 <= row["exit_code"] <= 2147483647
+        )
+        assert row["exception"] in {
+            "UNKNOWN",
+            "EgressError",
+            "TimeoutExpired",
+            "FileNotFoundError",
+            "PermissionError",
+            "OSError",
+        }
+        assert row["category"] in {
+            "UNKNOWN",
+            "CLIENT_PARAMETER_ERROR",
+            "POSTGRESQL_ERROR",
+            "REGISTRY_AUTH",
+            "IMAGE_RESOLUTION",
+            "DOCKER_DAEMON",
+            "BUILD_STEP_FAILED",
+        }
+        assert row["exception_class"] in {
+            "UNKNOWN",
+            "InvalidRequestError",
+            "SyntaxError",
+            "UndefinedColumn",
+            "UndefinedFunction",
+            "UndefinedTable",
+            "CheckViolation",
+            "ForeignKeyViolation",
+            "UniqueViolation",
+            "NotNullViolation",
+            "InsufficientPrivilege",
+            "RaiseException",
+            "ObjectInUse",
+            "SerializationFailure",
+            "DeadlockDetected",
+        }
+        assert (
+            row["sqlstate"] == "UNKNOWN"
+            or row["category"] == "POSTGRESQL_ERROR"
+            and row["sqlstate"]
+            in {
+                "42601",
+                "42703",
+                "42883",
+                "42P01",
+                "23514",
+                "23503",
+                "23505",
+                "23502",
+                "42501",
+                "P0001",
+                "55006",
+                "40001",
+                "40P01",
+            }
+        )
+        for k in ("build_step", "dockerfile_line"):
+            assert row[k] == "UNKNOWN" or type(row[k]) is int and 0 <= row[k] <= 99999
+        for k in ("stdout", "stderr"):
+            assert set(row[k]) == {"bytes", "status"}
+            assert type(row[k]["bytes"]) is int and row[k]["bytes"] >= 0
+            assert row[k]["status"] in {"UNKNOWN", "EMPTY", "PRESENT", "TRUNCATED"}
+        if data["phase"] == "H_BUILD":
+            assert row["operation"] == "H_DOCKER_BUILD" and row["stage"] == "H_BUILD"
+            assert (
+                row["target"] in {"runtime", "development"}
+                and row["direction"] == row["revision"] == "UNKNOWN"
+            )
+            assert (row["source"], row["tree"]) == (
+                data["binding"]["executor"]["source"],
+                data["binding"]["executor"]["tree"],
+            )
+        else:
+            assert row["operation"] == "P_ALEMBIC" and row["target"] == "UNKNOWN"
+            assert row["direction"] in {"upgrade", "downgrade"} and row["revision"] in {
+                "0009",
+                "0010",
+                "0011",
+                "0012",
+            }
+            assert row["stage"] == row["direction"].upper() + "_" + row["revision"]
+    return data, raw
+
+
+def diagnostic_export(config, target):
+    """Only authenticated, complete, closed records can enter CI artifacts."""
+    created = None
+    try:
+        data, raw = diagnostic_read(config)
+        target = Path(target).absolute()
+        assert (
+            target.parent.resolve() == target.parent and target.parent.stat().st_uid == os.getuid()
+        )
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        created = diagnostic_identity(target)
+        try:
+            with os.fdopen(fd, "wb", closefd=False) as stream:
+                stream.write(raw)
+                stream.flush()
+                os.fsync(fd)
+        finally:
+            os.close(fd)
+        assert diagnostic_identity(target)
+        assert target.read_bytes() == raw
+        return {
+            "status": "COMPLETE",
+            "records": len(data["records"]),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+        }
+    except Exception:
+        if created is not None:
+            try:
+                if diagnostic_identity(target) == created:
+                    target.unlink()
+            except Exception:
+                pass
+        return {"status": "INVALID", "secondary": ["DIAGNOSTIC_EXPORT_OR_VALIDATION_FAILED"]}
+
+
+def start_h_diagnostic(config, root, program, original_pythonpath):
+    """Private startup launcher: Python itself executes the UNMODIFIED H stdin program.
+
+    Startup imports this 0600 module; no executable wrapper, stdin read/rewrite,
+    helper rebinding or altered argv/path/environment remains in the executor.
+    Unrelated interpreter invocations are passed through without observation.
+    """
+    import atexit
+    import zipfile
+
+    if original_pythonpath is None:
+        os.environ.pop("PYTHONPATH", None)
+    else:
+        os.environ["PYTHONPATH"] = original_pythonpath
+    startup_path = config["startup_path"]
+    sys.path[:] = [p for p in sys.path if p != startup_path]
+    if sys.argv != ["-", "state"] or Path.cwd() != Path(root):
+        return
+    diagnostic = InvocationDiagnostic(config, "H_BUILD")
+    previous = sys.gettrace()
+    entered = False
+    acknowledged = False
+
+    def finish():
+        nonlocal acknowledged
+        if not entered:
+            diagnostic.error("ENTRYPOINT_MISSING")
+            if sys.gettrace() is not previous:
+                sys.settrace(previous)
+        diagnostic.close()
+        # Separate bounded completion ACK closes the last-write/fsync failure gap.
+        # This is a private FD, never a new stdout/stderr capture mode. No ACK is
+        # sent on observer errors; the parent's original shell exit is unchanged.
+        if (
+            not acknowledged
+            and not diagnostic.data["secondary"]
+            and config.get("ack_fd") is not None
+        ):
+            acknowledged = True
+            try:
+                assert diagnostic_identity(config["path"]) == config["identity"]
+                raw = Path(config["path"]).read_bytes()
+                assert 0 < len(raw) <= 65536
+                assert (
+                    os.write(config["ack_fd"], hashlib.sha256(raw).hexdigest().encode("ascii"))
+                    == 64
+                )
+            except Exception:
+                diagnostic.error("COMPLETION_ACK_FAILED")
+
+    atexit.register(finish)
+    try:
+        assert diagnostic_identity(startup_path) == config["startup_identity"]
+        with zipfile.ZipFile(startup_path) as archive:
+            assert archive.namelist() == ["sitecustomize.py"]
+            assert archive.getinfo("sitecustomize.py").file_size <= 131072
+            launcher_source = archive.read("sitecustomize.py")
+        assert (
+            hashlib.sha256(launcher_source[: config["startup_code_bytes"]]).hexdigest()
+            == config["binding"]["observer"]["code_sha256"]
+        )
+        binding = config["binding"]["executor"]
+        for name, field in (
+            ("scripts/test_telegram_egress_migration.sh", "shell_blob"),
+            ("tests/test_telegram_egress_migration.py", "module_blob"),
+            ("scripts/prepare_telegram_egress.py", "helper_blob"),
+        ):
+            assert diagnostic_blob((Path(root) / name).read_bytes()) == binding[field]
+        # sitecustomize runs before Python inserts the '-' sys.path[0]. Restore
+        # this temporary import path before the original program starts.
+        saved = sys.path[:]
+        bytecode = sys.dont_write_bytecode
+        try:
+            sys.path.insert(0, root)
+            sys.dont_write_bytecode = True
+            from scripts import prepare_telegram_egress as original
+        finally:
+            sys.path[:] = saved
+            sys.dont_write_bytecode = bytecode
+        assert original.ROOT == Path(root)
+        assert (
+            Path(original.command.__code__.co_filename).resolve()
+            == Path(root) / "scripts/prepare_telegram_egress.py"
+        )
+        expected = compile(program, "<stdin>", "exec", dont_inherit=True)
+        assert previous is None
+    except Exception:
+        diagnostic.error("SOURCE_OR_TRACE_BINDING_FAILED")
+        finish()
+        return
+
+    def entry(frame, event, arg):
+        nonlocal entered
+        if (
+            event != "call"
+            or frame.f_code.co_filename != "<stdin>"
+            or frame.f_code.co_name != "<module>"
+        ):
+            return None
+        if frame.f_code != expected:
+            diagnostic.error("ENTRYPOINT_BINDING_FAILED")
+            sys.settrace(previous)
+            finish()
+            return None
+        entered = True
+        diagnostic.install(
+            original.command, previous=previous, build=original.migration_build_images
+        )
+
+        def leaving(frame, event, arg):
+            if event == "return":
+                finish()
+            return leaving
+
+        frame.f_trace_lines = False
+        return leaving
+
+    sys.settrace(entry)
+
+
+def invocation_diagnostic_code():
+    import inspect
+
+    functions = (
+        diagnostic_blob,
+        diagnostic_identity,
+        diagnostic_binding_valid,
+        diagnostic_new,
+        diagnostic_output,
+        diagnostic_classify,
+        InvocationDiagnostic,
+        start_h_diagnostic,
+    )
+    return (
+        "import hashlib,json,os,re,stat,subprocess,sys,time\nfrom pathlib import Path\nfrom contextlib import contextmanager\n"
+        + "\n\n".join(inspect.getsource(f) for f in functions)
+    )
+
+
+def diagnostic_binding(source, executor, checkout):
+    observer = schema_source_binding(source, checkout=e.ROOT)
+    target = schema_source_binding(executor, checkout=checkout)
+
+    def objects(root, ref):
+        result = {"source": ref, "tree": observer["tree"] if root == e.ROOT else target["tree"]}
+        for name, field in (
+            ("scripts/test_telegram_egress_migration.sh", "shell_blob"),
+            ("tests/test_telegram_egress_migration.py", "module_blob"),
+            ("scripts/prepare_telegram_egress.py", "helper_blob"),
+        ):
+            expected = e.command(["git", "rev-parse", ref + ":" + name]).decode().strip()
+            assert diagnostic_blob((root / name).read_bytes()) == expected, (
+                "DIAGNOSTIC_SOURCE_BINDING"
+            )
+            result[field] = expected
+        return result
+
+    binding = {"observer": objects(e.ROOT, source), "executor": objects(Path(checkout), executor)}
+    binding["observer"]["code_sha256"] = hashlib.sha256(
+        invocation_diagnostic_code().encode()
+    ).hexdigest()
+    return binding
+
+
+def write_h_diagnostic_launcher(config, historical, program):
+    import zipfile
+
+    config["startup_path"] = str(Path(config["directory"]) / "launcher.zip")
+    core = invocation_diagnostic_code()
+    config["startup_code_bytes"] = len(core.encode())
+    original_path = os.environ.get("PYTHONPATH")
+    fd = os.open(
+        config["startup_path"], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
+    )
+    config["startup_identity"] = diagnostic_identity(config["startup_path"])
+    launcher = (
+        core
+        + "\nstart_h_diagnostic("
+        + repr(config)
+        + ","
+        + repr(str(historical))
+        + ","
+        + repr(program)
+        + ","
+        + repr(original_path)
+        + ")\n"
+    )
+    # Zip import has no writable __pycache__: every private file stays0600.
+    with os.fdopen(fd, "wb") as stream, zipfile.ZipFile(stream, "w") as archive:
+        archive.writestr("sitecustomize.py", launcher)
+    return dict(
+        os.environ,
+        PYTHONPATH=config["startup_path"] + (os.pathsep + original_path if original_path else ""),
+    )
+
+
+def run_historical_observed(historical, source, reports):
+    """Exactly one original H shell invocation; diagnostic errors never replace it."""
+    import tempfile
+
+    temporary, config, environment = None, None, None
+    read_fd, write_fd = None, None
+    summary = {"status": "INVALID", "secondary": ["DIAGNOSTIC_SETUP_FAILED"]}
+    try:
+        binding = diagnostic_binding(source, "754f1c883e5a94a7fc9e729af2605424f949ba33", historical)
+        assert binding["executor"] == {
+            "source": "754f1c883e5a94a7fc9e729af2605424f949ba33",
+            "tree": "b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f",
+            "shell_blob": "1672fbb4fb676ad69885043e46350f53334db0fc",
+            "module_blob": "99cf8d1a3f8a85b64e2785710a728964d5bd3f03",
+            "helper_blob": "58486046a6bb5682a336a1578705ed973e7b4fc6",
+        }
+        temporary = tempfile.TemporaryDirectory(prefix="asm-h-diagnostic-")
+        directory = Path(temporary.name)
+        config = diagnostic_new(
+            directory, binding, sources={binding["executor"]["source"]: binding["executor"]["tree"]}
+        )
+        read_fd, write_fd = os.pipe()
+        os.set_blocking(read_fd, False)
+        config.update(require_ack=True, ack_fd=write_fd)
+        shell = (historical / "scripts/test_telegram_egress_migration.sh").read_bytes()
+        program = shell.split(b"<<'PY'\n", 1)[1].rsplit(b"\nPY", 1)[0]
+        environment = write_h_diagnostic_launcher(config, historical, program)
+    except Exception:
+        config, environment = None, None
+        for fd in (read_fd, write_fd):
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+        read_fd, write_fd = None, None
+    try:
+        result = subprocess.run(
+            ["sh", "scripts/test_telegram_egress_migration.sh", "state"],
+            cwd=historical,
+            stdin=subprocess.DEVNULL,
+            **({"env": environment, "pass_fds": (write_fd,)} if environment is not None else {}),
+        )
+    finally:
+        parent_errors = False
+        if write_fd is not None:
+            try:
+                os.close(write_fd)
+            except OSError:
+                parent_errors = True
+        if config is not None:
+            try:
+                ack = os.read(read_fd, 65)
+                if len(ack) == 64:
+                    config["completion_ack"] = ack.decode("ascii")
+            except (OSError, UnicodeError):
+                pass
+            summary = diagnostic_export(config, reports / "build-observation.json")
+        if read_fd is not None:
+            try:
+                os.close(read_fd)
+            except OSError:
+                parent_errors = True
+        if temporary is not None:
+            try:
+                temporary.cleanup()
+            except Exception:
+                parent_errors = True
+        if parent_errors:
+            summary = {"status": "INVALID", "secondary": ["DIAGNOSTIC_CLEANUP_FAILED"]}
+    return result, summary
+
+
+def start_material_diagnostic(directory, report):
+    try:
+        directory = directory / "migration-observer"
+        directory.mkdir(mode=0o700)
+        source = report["coordinator"]
+        binding = diagnostic_binding(source, source, e.ROOT)
+        config = diagnostic_new(
+            directory,
+            binding,
+            sources={MATERIAL_E: MATERIAL_E_TREE, source: binding["executor"]["tree"]},
+        )
+        return config, InvocationDiagnostic(config, "P_MIGRATION")
+    except Exception:
+        return None, None
+
+
+@contextmanager
+def observe_material_migration(diagnostic, args, source, tree, direction, revision):
+    if diagnostic is None:
+        yield
+    else:
+        with diagnostic.migration(e.command, args, source, tree, direction, revision):
+            yield
+
+
+def finish_material_diagnostic(pair, path):
+    try:
+        config, diagnostic = pair
+        assert diagnostic is not None
+        diagnostic.close()
+        return diagnostic_export(config, path)
+    except Exception:
+        return {"status": "INVALID", "secondary": ["DIAGNOSTIC_SETUP_OR_CLOSE_FAILED"]}
+
+
 @contextmanager
 def observe_control_cleanup_commands(command, module, path, binding):
     """Observe original command frames; never wrap/replace a frozen C function.
@@ -5068,7 +6034,9 @@ def material_schema_recovery_source(
 def run_material_schema_phase(request):
     """Finite E/0011→P/0012 proof, with frozen E producers and independent readers."""
     report = schema_envelope(request, MATERIAL_PHASE)
-    report.update(images={}, checks=[], stage_timings=[])
+    report.update(
+        images={}, checks=[], stage_timings=[], migration_diagnostics={"status": "NOT_REACHED"}
+    )
     primary = None
     preparing = True
 
@@ -5320,10 +6288,12 @@ def run_material_schema_phase(request):
 
             def migrate(source, direction, revision):
                 report["stage"] = direction + "_" + revision
-                run(
-                    [*prefix, images[source]["development"], "alembic", direction, revision],
-                    timeout=30,
-                )
+                args = [*prefix, images[source]["development"], "alembic", direction, revision]
+                tree = report["images"][source + ":development"]["source_tree"]
+                with observe_material_migration(
+                    migration_diagnostic[1], args, source, tree, direction, revision
+                ):
+                    run(args, timeout=30)
 
             def probe(source, expected):
                 controller("pairing-before")
@@ -5379,6 +6349,7 @@ def run_material_schema_phase(request):
                     ident = run([*compose, "ps", "-aq", service]).decode().strip()
                     assert not json.loads(run(["docker", "inspect", ident]))[0]["State"]["Running"]
 
+            migration_diagnostic = start_material_diagnostic(directory, report)
             try:
                 report["stage"] = "infrastructure"
                 run([*compose, "up", "-d", "--wait", "postgres", "storage"], timeout=120)
@@ -5519,7 +6490,15 @@ def run_material_schema_phase(request):
                 schema_record_failure(report, error)
                 raise
             finally:
+                primary_migration = sys.exception()
+                report["migration_diagnostics"] = finish_material_diagnostic(
+                    migration_diagnostic, e.ROOT / "reports/migration-P-observation.json"
+                )
                 schema_publish(report, report_path, sys.exception())
+                if primary_migration is None:
+                    assert report["migration_diagnostics"]["status"] == "COMPLETE", (
+                        "P_DIAGNOSTIC_VALIDATION_FAILED"
+                    )
         e.source_check(candidate)
         print("TELEGRAM_EGRESS_MATERIAL_SCHEMA_PHASE_PASS", flush=True)
     except BaseException as error:
@@ -5970,6 +6949,705 @@ OWNER_RECEIPT_NAMES = (
     "asm-telegram-tls-budget-owner2-0b7e24ee.json",
     "asm-telegram-tls-budget-fixed-owner2-0b7e24ee.json",
 )
+
+
+@pytest.fixture
+def invocation_units(tmp_path, monkeypatch):
+    """Synthetic executables only; never contacts a Docker daemon or database."""
+    root = tmp_path / "H"
+    root.mkdir(mode=0o700)
+    source, tree = (
+        "754f1c883e5a94a7fc9e729af2605424f949ba33",
+        "b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f",
+    )
+    fields = {}
+    for name, field in (
+        ("scripts/test_telegram_egress_migration.sh", "shell_blob"),
+        ("tests/test_telegram_egress_migration.py", "module_blob"),
+        ("scripts/prepare_telegram_egress.py", "helper_blob"),
+        ("infra/images.lock.env", None),
+    ):
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(subprocess.check_output(["git", "show", source + ":" + name], cwd=e.ROOT))
+        if field:
+            fields[field] = diagnostic_blob(path.read_bytes())
+    binding = {
+        "executor": dict(source=source, tree=tree, **fields),
+        "observer": dict(
+            source="a" * 40,
+            tree="b" * 40,
+            **fields,
+            code_sha256=hashlib.sha256(invocation_diagnostic_code().encode()).hexdigest(),
+        ),
+    }
+    binary = tmp_path / "bin"
+    binary.mkdir(mode=0o700)
+    docker = binary / "docker"
+    docker.write_text(
+        "#!"
+        + sys.executable
+        + "\n"
+        + """import json,os,sys,time
+a=sys.argv[1:];case=os.environ.get('DIAG_UNIT_CASE','exit');target=os.environ.get('DIAG_UNIT_TARGET','runtime')
+if a[:2]==['image','ls']: sys.exit(0)
+if a[:2]==['image','inspect']:
+ kind='runtime' if 'runtime' in a[-1] else 'development'
+ print(json.dumps([{'Id':'sha256:'+'b'*64,'Config':{'Labels':{'asm.connect5.source':'754f1c883e5a94a7fc9e729af2605424f949ba33','asm.connect5.tree':'b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f','asm.connect5.kind':kind}}}]))
+ sys.exit(0)
+assert a[0] in ('build','run')
+if a[0]=='build' and a[a.index('--target')+1]!=target: sys.exit(0)
+if case=='success': sys.stdout.buffer.write(b'ORIGINAL_BYTES');sys.exit(0)
+if case=='client': message=b"sqlalchemy.exc.InvalidRequestError: A value is required for bind parameter 'PRIVATE_BIND'\\nSQLSTATE=42601\\n"
+elif case=='server': message=b'psycopg.errors.SyntaxError: PRIVATE_SQL\\nSQLSTATE=42601\\n'
+elif case=='oversize': message=b'x'*20000+b'PRIVATE_MIDDLE_SQL'+b'y'*20000
+else: message=b'#17 ERROR: PRIVATE_DOCKER_COMMAND\\nDockerfile.backend:19\\nPRIVATE_SECRET_URL_ENV_SQL_PAYLOAD\\n'
+sys.stdout.buffer.write(b'PRIVATE_STDOUT'+(b'x'*40000 if case=='oversize' else b''));sys.stdout.flush()
+sys.stderr.buffer.write(message);sys.stderr.flush()
+if case=='timeout': time.sleep(5)
+sys.exit(23)
+"""
+    )
+    docker.chmod(0o700)
+    monkeypatch.setenv("PATH", str(binary) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setenv("DIAG_UNIT_CASE", "exit")
+
+    def config():
+        directory = tmp_path / ("private-" + uuid4().hex)
+        directory.mkdir(mode=0o700)
+        return diagnostic_new(directory, copy.deepcopy(binding))
+
+    program = b"""import os,sys,time
+from pathlib import Path
+from scripts import prepare_telegram_egress as original
+assert sys.argv==['-','state'] and Path.cwd()==original.ROOT
+assert os.environ.get('PYTHONPATH')==os.environ.get('DIAG_UNIT_ORIGINAL_PATH')
+command,build,runner=original.command,original.migration_build_images,original.subprocess.run
+original.migration_source=lambda source:'b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f'
+original.migration_build_context=lambda source,directory:None
+original.migration_image=lambda *args:None
+if os.environ.get('DIAG_UNIT_CASE')=='timeout': original.MIGRATION_DEADLINE=time.monotonic()+0.4
+try:
+ tags,images=original.migration_build_images('754f1c883e5a94a7fc9e729af2605424f949ba33','b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f')
+ assert set(tags)==set(images)=={'runtime','development'}
+except Exception as error:
+ assert original.command is command and original.migration_build_images is build
+ assert original.subprocess.run is runner
+ assert type(error).__name__ in ('EgressError','TimeoutExpired')
+ sys.exit(23)
+assert original.command is command and original.migration_build_images is build
+assert original.subprocess.run is runner
+"""
+    monkeypatch.setenv("DIAG_UNIT_ORIGINAL_PATH", os.environ.get("PYTHONPATH", ""))
+    return SimpleNamespace(root=root, binding=binding, config=config, program=program)
+
+
+@pytest.mark.parametrize("target", ["runtime", "development"])
+@pytest.mark.parametrize("outcome", ["exit", "timeout", "success", "oversize"])
+def test_invocation_h_launcher_original_frozen_functions_and_stream_bounds(
+    invocation_units, monkeypatch, target, outcome
+):
+    f = invocation_units
+    config = f.config()
+    monkeypatch.setenv("DIAG_UNIT_CASE", outcome)
+    monkeypatch.setenv("DIAG_UNIT_TARGET", target)
+    env = write_h_diagnostic_launcher(config, f.root, f.program)
+    result = subprocess.run(
+        [sys.executable, "-", "state"],
+        input=f.program,
+        cwd=f.root,
+        env=env,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == (0 if outcome == "success" else 23), result.stderr
+    data, raw = diagnostic_read(config)
+    assert data["evidence"] == "INSTRUMENTED_IMMUTABLE_H"
+    row = data["records"][-1]
+    assert row["target"] == target if outcome != "success" else row["target"] == "development"
+    assert (
+        row["outcome"]
+        == {
+            "success": "SUCCESS",
+            "exit": "COMMAND_EXIT",
+            "timeout": "TIMEOUT",
+            "oversize": "COMMAND_EXIT",
+        }[outcome]
+    )
+    assert (
+        row["exit_code"]
+        == {"success": 0, "exit": 23, "timeout": "UNKNOWN", "oversize": 23}[outcome]
+    )
+    assert (
+        row["source"] == f.binding["executor"]["source"]
+        and row["tree"] == f.binding["executor"]["tree"]
+    )
+    if outcome == "exit":
+        assert row["build_step"] == 17 and row["dockerfile_line"] == 19
+    if outcome == "oversize":
+        assert row["stdout"]["status"] == row["stderr"]["status"] == "TRUNCATED"
+        assert row["category"] == row["sqlstate"] == "UNKNOWN"
+    assert b"PRIVATE_" not in raw and len(raw) < 65536
+    assert all(stat.S_IMODE(p.stat().st_mode) == 0o600 for p in Path(config["directory"]).iterdir())
+    assert not (Path(config["directory"]) / "__pycache__").exists()
+    assert not (f.root / "scripts/__pycache__").exists()
+    assert data["observed"] == (2 if outcome == "success" or target == "development" else 1)
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "entrypoint",
+        "helper",
+        "module",
+        "source",
+        "tree",
+        "missing",
+        "path",
+        "startup-identity",
+        "startup-code",
+    ],
+)
+def test_invocation_h_substitution_never_masks_original_failure(invocation_units, damage):
+    f = invocation_units
+    config = f.config()
+    if damage in {"source", "tree"}:
+        config["binding"]["executor"][damage] = "e" * 40
+    env = write_h_diagnostic_launcher(config, f.root, f.program)
+    if damage == "startup-identity":
+        startup = Path(config["startup_path"])
+        raw = startup.read_bytes()
+        startup.rename(startup.with_name("original.zip"))
+        startup.write_bytes(raw)
+        startup.chmod(0o600)
+    if damage == "startup-code":
+        import zipfile
+
+        startup = Path(config["startup_path"])
+        with zipfile.ZipFile(startup) as archive:
+            raw = archive.read("sitecustomize.py").replace(
+                b"Bounded H/P observation", b"Changed H/P observation"
+            )
+        with zipfile.ZipFile(startup, "w") as archive:
+            archive.writestr("sitecustomize.py", raw)
+    program = f.program + b"\nprint('UNREACHABLE')\n" if damage == "entrypoint" else f.program
+    if damage in {"helper", "module"}:
+        path = f.root / (
+            "scripts/prepare_telegram_egress.py"
+            if damage == "helper"
+            else "tests/test_telegram_egress_migration.py"
+        )
+        path.write_bytes(path.read_bytes() + b"\n# substituted\n")
+    if damage in {"missing", "path"}:
+        Path(config["path"]).unlink()
+        if damage == "path":
+            Path(config["path"]).symlink_to(f.root / "infra/images.lock.env")
+    result = subprocess.run(
+        [sys.executable, "-", "state"],
+        input=program,
+        cwd=f.root,
+        env=env,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == 23, result.stderr
+    with pytest.raises((AssertionError, FileNotFoundError)):
+        diagnostic_read(config)
+
+
+def test_invocation_h_unrelated_interpreter_preserves_argv_stdin_cwd(invocation_units):
+    f = invocation_units
+    config = f.config()
+    env = write_h_diagnostic_launcher(config, f.root, f.program)
+    code = "import os,sys,json; assert sys.gettrace() is None; print(json.dumps([sys.argv[1:],sys.stdin.read(),os.getcwd(),os.environ.get('PYTHONPATH')]))"
+    result = subprocess.run(
+        [sys.executable, "-c", code, "UNCHANGED_ARG"],
+        input=b"UNCHANGED_STDIN",
+        cwd=f.root,
+        env=env,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == [
+        ["UNCHANGED_ARG"],
+        "UNCHANGED_STDIN",
+        str(f.root),
+        os.environ.get("PYTHONPATH"),
+    ]
+    assert Path(config["path"]).read_bytes() == b""
+
+
+def test_invocation_h_final_fsync_failure_needs_independent_ack(invocation_units):
+    f = invocation_units
+    config = f.config()
+    read_fd, write_fd = os.pipe()
+    config.update(require_ack=True, ack_fd=write_fd)
+    # A complete authenticated file can be visible before its final fsync fails.
+    program = (
+        "import os\n_original_sync=os.fsync\ndef failed_final_sync(fd):\n"
+        ' if b\'\\"status\\":\\"COMPLETE\\"\' in open('
+        + repr(config["path"])
+        + ",'rb').read(): raise OSError('PRIVATE_FSYNC')\n"
+        " return _original_sync(fd)\nos.fsync=failed_final_sync\n"
+    ).encode() + f.program
+    env = write_h_diagnostic_launcher(config, f.root, program)
+    try:
+        result = subprocess.run(
+            [sys.executable, "-", "state"],
+            input=program,
+            cwd=f.root,
+            env=env,
+            capture_output=True,
+            pass_fds=(write_fd,),
+            timeout=10,
+        )
+        os.close(write_fd)
+        write_fd = None
+        ack = os.read(read_fd, 65)
+        assert result.returncode == 23 and ack == b""
+        assert json.loads(Path(config["path"]).read_bytes())["status"] == "COMPLETE"
+        assert diagnostic_export(config, f.root / "invalid.json")["status"] == "INVALID"
+    finally:
+        if write_fd is not None:
+            os.close(write_fd)
+        os.close(read_fd)
+
+
+def test_invocation_partial_timeout_object_and_observation_overhead(invocation_units, monkeypatch):
+    f = invocation_units
+    config = f.config()
+    diagnostic = InvocationDiagnostic(config, "P_MIGRATION")
+    args = ["docker", "run", "UNIT_IMAGE", "alembic", "upgrade", "0012"]
+    primary = subprocess.TimeoutExpired(
+        args, 30, output=b"PRIVATE_STDOUT" * 3000, stderr=b"PRIVATE_STDERR" * 3000
+    )
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(primary))
+    with pytest.raises(subprocess.TimeoutExpired) as raised:
+        with observe_material_migration(diagnostic, args, "a" * 40, "b" * 40, "upgrade", "0012"):
+            e.command(args, timeout=30)
+    assert raised.value is primary and primary.timeout == 30
+    diagnostic.close()
+    data, raw = diagnostic_read(config)
+    assert (
+        data["records"][0]["stdout"]["status"]
+        == data["records"][0]["stderr"]["status"]
+        == "TRUNCATED"
+    )
+    assert data["records"][0]["outcome"] == "TIMEOUT" and b"PRIVATE_" not in raw
+
+    clock = [100.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(e, "MIGRATION_DEADLINE", 110.0)
+    original_write = os.write
+    calls = []
+
+    def observed_write(fd, raw):
+        clock[0] += 2
+        return original_write(fd, raw)
+
+    monkeypatch.setattr(os, "write", observed_write)
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **kw: (
+            calls.append(kw["timeout"]),
+            subprocess.CompletedProcess(a[0], 0, b"ORIGINAL", b""),
+        )[1],
+    )
+    cfg = f.config()
+    observer = InvocationDiagnostic(cfg, "P_MIGRATION")
+    with observe_material_migration(observer, args, "a" * 40, "b" * 40, "upgrade", "0012"):
+        assert e.command(args, timeout=30) == b"ORIGINAL"
+    observer.close()
+    assert calls == [6.0] and clock[0] == 108.0 and e.MIGRATION_DEADLINE == 110.0
+    assert diagnostic_read(cfg)[0]["records"][0]["seconds"] == 2.0
+
+
+@pytest.mark.parametrize("outcome", ["success", "exit", "timeout", "client", "server", "oversize"])
+def test_invocation_p_actual_ordinary_migrate_preserves_primary(
+    invocation_units, monkeypatch, outcome
+):
+    import ast
+    import inspect
+
+    f = invocation_units
+    monkeypatch.setenv("DIAG_UNIT_CASE", outcome)
+    config = f.config()
+    diagnostic = InvocationDiagnostic(config, "P_MIGRATION")
+    source, tree = "a" * 40, "b" * 40
+    function = next(
+        n
+        for n in ast.walk(ast.parse(inspect.getsource(run_material_schema_phase)))
+        if isinstance(n, ast.FunctionDef) and n.name == "migrate"
+    )
+    assert ast.unparse(function).endswith("run(args, timeout=30)")
+    command = e.command
+    calls = []
+
+    def run(args, timeout):
+        calls.append((args, timeout))
+        # Timeout only is shorter in this synthetic unit, not in the real path.
+        return command(args, timeout=0.15 if outcome == "timeout" else timeout)
+
+    namespace = {
+        "report": {"images": {source + ":development": {"source_tree": tree}}},
+        "images": {source: {"development": "UNIT_IMAGE"}},
+        "prefix": ["docker", "run"],
+        "run": run,
+        "migration_diagnostic": (config, diagnostic),
+        "observe_material_migration": observe_material_migration,
+    }
+    exec(
+        compile(ast.Module(body=[function], type_ignores=[]), "unit-original-migrate", "exec"),
+        namespace,
+    )
+    previous = sys.gettrace()
+    try:
+        if outcome == "success":
+            assert namespace["migrate"](source, "upgrade", "0012") is None
+        else:
+            with pytest.raises(
+                subprocess.TimeoutExpired if outcome == "timeout" else e.EgressError
+            ) as raised:
+                namespace["migrate"](source, "upgrade", "0012")
+            assert (
+                str(raised.value) == "EGRESS_COMMAND_FAILED"
+                if outcome != "timeout"
+                else raised.value.timeout == 0.15
+            )
+    finally:
+        diagnostic.close()
+    assert e.command is command and sys.gettrace() is previous and len(calls) == 1
+    assert calls[0] == (["docker", "run", "UNIT_IMAGE", "alembic", "upgrade", "0012"], 30)
+    data, raw = diagnostic_read(config)
+    row = data["records"][0]
+    assert (row["source"], row["tree"], row["direction"], row["revision"]) == (
+        source,
+        tree,
+        "upgrade",
+        "0012",
+    )
+    if outcome == "client":
+        assert (row["category"], row["exception_class"], row["sqlstate"]) == (
+            "CLIENT_PARAMETER_ERROR",
+            "InvalidRequestError",
+            "UNKNOWN",
+        )
+    if outcome == "server":
+        assert (row["category"], row["exception_class"], row["sqlstate"]) == (
+            "POSTGRESQL_ERROR",
+            "SyntaxError",
+            "42601",
+        )
+    assert b"PRIVATE_" not in raw and b"UNIT_IMAGE" not in raw and len(raw) < 65536
+
+
+@pytest.mark.parametrize("field", ["source", "tree", "module_blob", "code_sha256", "extra"])
+def test_invocation_rejects_nonidentity_binding_before_persisting(invocation_units, field):
+    f = invocation_units
+    directory = f.root / "invalid-binding"
+    directory.mkdir(mode=0o700)
+    binding = copy.deepcopy(f.binding)
+    binding["observer"][field] = "PRIVATE_SQL_ENV_PAYLOAD_CANARY"
+    with pytest.raises(AssertionError, match="^DIAGNOSTIC_BINDING"):
+        diagnostic_new(directory, binding)
+    assert list(directory.iterdir()) == []
+
+
+def test_invocation_unknown_message_and_finite_sqlstate_never_escape():
+    raw = b"psycopg.errors.SyntaxError: PRIVATE_SQL\nSQLSTATE=SECRT\n"
+    classified = diagnostic_classify(raw, b"PRIVATE_ENV_URL_PAYLOAD")
+    assert classified["sqlstate"] == "UNKNOWN"
+    assert "PRIVATE_" not in json.dumps(classified) and "SECRT" not in json.dumps(classified)
+    metadata, sample = diagnostic_output(b"x" * 20000 + b"PRIVATE_MIDDLE" + b"y" * 20000)
+    assert (
+        metadata["status"] == "TRUNCATED"
+        and len(sample) <= 16384
+        and b"PRIVATE_MIDDLE" not in sample
+    )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "tamper",
+        "incomplete",
+        "symlink",
+        "owner",
+        "mode",
+        "directory",
+        "write",
+        "export",
+        "trace",
+        "record-limit",
+        "source",
+        "tree",
+        "revision",
+        "direction",
+        "fsync",
+    ],
+)
+def test_invocation_private_record_failure_is_secondary(invocation_units, monkeypatch, damage):
+    f = invocation_units
+    config = f.config()
+    diagnostic = InvocationDiagnostic(config, "P_MIGRATION")
+    original = e.command
+    previous = sys.gettrace()
+    if damage == "write":
+        monkeypatch.setattr(
+            os, "write", lambda *a: (_ for _ in ()).throw(PermissionError("PRIVATE_WRITE_ERROR"))
+        )
+    if damage == "trace":
+        sys.settrace(lambda *a: None)
+    try:
+        for _ in range(17 if damage == "record-limit" else 1):
+            args = ["docker", "run", "UNIT_IMAGE", "alembic", "downgrade", "0011"]
+            with pytest.raises(e.EgressError, match="^EGRESS_COMMAND_FAILED$"):
+                with diagnostic.migration(
+                    original,
+                    args,
+                    "c" * 40 if damage == "source" else "a" * 40,
+                    "c" * 40 if damage == "tree" else "b" * 40,
+                    "PRIVATE_DIRECTION" if damage == "direction" else "downgrade",
+                    "9999" if damage == "revision" else "0011",
+                ):
+                    original(args, timeout=30)
+    finally:
+        if damage == "trace":
+            assert sys.gettrace() is not None
+            sys.settrace(previous)
+        if damage != "incomplete":
+            if damage == "fsync":
+                monkeypatch.setattr(
+                    os, "fsync", lambda *a: (_ for _ in ()).throw(OSError("PRIVATE_FSYNC"))
+                )
+            diagnostic.close()
+    assert e.command is original and sys.gettrace() is previous
+    path = Path(config["path"])
+    if damage == "tamper":
+        path.write_bytes(path.read_bytes().replace(b'"exit_code":23', b'"exit_code":0'))
+    if damage == "symlink":
+        path.unlink()
+        path.symlink_to(f.root / "infra/images.lock.env")
+    if damage == "owner":
+        config["identity"][2] += 1
+    if damage == "mode":
+        path.chmod(0o644)
+    if damage == "directory":
+        directory = Path(config["directory"])
+        directory.rename(directory.with_name(directory.name + "-old"))
+        directory.mkdir(mode=0o700)
+    target = f.root / ("missing/export.json" if damage == "export" else "export.json")
+    assert diagnostic_export(config, target)["status"] == "INVALID"
+    assert not target.exists()
+
+
+@pytest.mark.parametrize("shard", ["state", "image", "intent"])
+def test_invocation_outer_state_seam_and_primary_cleanup_order(tmp_path, shard):
+    import ast
+
+    shell = (e.ROOT / "scripts/test_telegram_egress_migration.sh").read_text()
+    tree = ast.parse(shell.split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0])
+    boundary = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.If)
+        and ast.unparse(n.test) == "fault == 'state'"
+        and ast.unparse(n.body[0]) == "diagnostics = None"
+    )
+    calls = []
+
+    def observed(*args):
+        calls.append("instrumented")
+        return subprocess.CompletedProcess([], 1), {"status": "INVALID"}
+
+    def original(args, **kwargs):
+        assert args == ["sh", "scripts/test_telegram_egress_migration.sh", shard]
+        assert kwargs == {"cwd": tmp_path, "stdin": subprocess.DEVNULL}
+        calls.append("original")
+        return subprocess.CompletedProcess(args, 1)
+
+    namespace = {
+        "fault": shard,
+        "runpy": SimpleNamespace(run_path=lambda *a, **k: {"run_historical_observed": observed}),
+        "e": SimpleNamespace(ROOT=tmp_path),
+        "historical": tmp_path,
+        "source": "a" * 40,
+        "reports": tmp_path,
+        "subprocess": SimpleNamespace(run=original, DEVNULL=subprocess.DEVNULL),
+        "admission": {},
+    }
+    exec(
+        compile(ast.Module(body=[boundary], type_ignores=[]), "unit-outer-boundary", "exec"),
+        namespace,
+    )
+    assert calls == (["instrumented"] if shard == "state" else ["original"])
+    assert (
+        shell.index("FROZEN_HISTORICAL_ASSERTIONS_FAILED")
+        < shell.index("HISTORICAL_VOLUMES_REMAIN")
+        < shell.index("H_DIAGNOSTIC_VALIDATION_FAILED")
+        < shell.index("run_name='__control_coordinator__'")
+    )
+
+
+@pytest.mark.parametrize("outcome", ["success", "server", "timeout", "cancel"])
+def test_invocation_p_observer_in_isolated_interpreter(invocation_units, monkeypatch, outcome):
+    f = invocation_units
+    monkeypatch.setenv("DIAG_UNIT_CASE", "timeout" if outcome == "cancel" else outcome)
+    config = f.config()
+    program = """import json,os,signal,sys,threading
+import test_telegram_egress_migration as m
+config=CONFIG
+d=m.InvocationDiagnostic(config,'P_MIGRATION')
+args=['docker','run','UNIT_IMAGE','alembic','upgrade','0012']
+original=m.e.command
+error='NONE';result=None
+timer=threading.Timer(0.2,lambda:os.kill(os.getpid(),signal.SIGINT)) if CASE=='cancel' else None
+if timer: timer.start()
+try:
+ with m.observe_material_migration(d,args,'a'*40,'b'*40,'upgrade','0012'):
+  result=original(args,timeout=0.2 if CASE=='timeout' else 30)
+except BaseException as raised:
+ error=type(raised).__name__
+finally:
+ if timer: timer.join()
+ d.close()
+assert original is m.e.command and sys.gettrace() is None
+assert result==b'ORIGINAL_BYTES' if CASE=='success' else result is None
+print(json.dumps({'exception':error,'status':m.diagnostic_read(config)[0]['status']}))
+""".replace("CONFIG", repr(config)).replace("CASE", repr(outcome))
+    # The child must import this candidate, not a package in the reused venv.
+    env = dict(os.environ, PYTHONPATH=str(e.ROOT / "tests") + os.pathsep + str(e.ROOT))
+    result = subprocess.run(
+        [sys.executable, "-c", program], cwd=e.ROOT, env=env, capture_output=True, timeout=10
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "exception": {
+            "success": "NONE",
+            "server": "EgressError",
+            "timeout": "TimeoutExpired",
+            "cancel": "KeyboardInterrupt",
+        }[outcome],
+        "status": "COMPLETE",
+    }
+    data, raw = diagnostic_read(config)
+    assert b"PRIVATE_" not in raw and len(data["records"]) == 1
+
+
+@pytest.mark.parametrize("primary", [None, e.EgressError("EGRESS_COMMAND_FAILED")])
+def test_invocation_p_final_diagnostic_failure_preserves_executor_primary(tmp_path, primary):
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(run_material_schema_phase))
+    finalbody = next(
+        n.finalbody
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Try)
+        and n.finalbody
+        and isinstance(n.finalbody[0], ast.Assign)
+        and ast.unparse(n.finalbody[0].targets[0]) == "primary_migration"
+    )
+    report, published = {}, []
+    namespace = {
+        "sys": sys,
+        "primary": primary,
+        "report": report,
+        "migration_diagnostic": (None, None),
+        "report_path": tmp_path / "report",
+        "finish_material_diagnostic": lambda *a: {
+            "status": "INVALID",
+            "secondary": ["DIAGNOSTIC_EXPORT_OR_VALIDATION_FAILED"],
+        },
+        "schema_publish": lambda r, p, err: published.append(err),
+        "e": SimpleNamespace(ROOT=tmp_path),
+    }
+    program = ast.Module(
+        body=[
+            ast.Try(
+                body=ast.parse("if primary is not None: raise primary").body,
+                handlers=[],
+                orelse=[],
+                finalbody=finalbody,
+            )
+        ],
+        type_ignores=[],
+    )
+    with pytest.raises(e.EgressError if primary else AssertionError) as raised:
+        exec(
+            compile(ast.fix_missing_locations(program), "unit-original-P-finally", "exec"),
+            namespace,
+        )
+    assert (
+        raised.value is primary
+        if primary
+        else str(raised.value) == "P_DIAGNOSTIC_VALIDATION_FAILED"
+    )
+    assert published == [primary] and report["migration_diagnostics"]["status"] == "INVALID"
+
+
+def test_invocation_h_diagnostic_failure_runs_cleanup_before_distinct_gate():
+    import ast
+
+    shell = (e.ROOT / "scripts/test_telegram_egress_migration.sh").read_text()
+    nodes = ast.parse(shell.split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0])
+    primary = next(
+        n
+        for n in ast.walk(nodes)
+        if isinstance(n, ast.Assert)
+        and isinstance(n.msg, ast.Constant)
+        and n.msg.value == "FROZEN_HISTORICAL_ASSERTIONS_FAILED"
+    )
+    validation = next(
+        n
+        for n in ast.walk(nodes)
+        if isinstance(n, ast.Assert)
+        and isinstance(n.msg, ast.Constant)
+        and n.msg.value == "H_DIAGNOSTIC_VALIDATION_FAILED"
+    )
+    code = compile(
+        ast.Module(body=[primary, validation], type_ignores=[]), "unit-H-primary", "exec"
+    )
+    for status in [0, 1]:
+        with pytest.raises(
+            AssertionError,
+            match="H_DIAGNOSTIC_VALIDATION_FAILED"
+            if status == 0
+            else "FROZEN_HISTORICAL_ASSERTIONS_FAILED",
+        ):
+            exec(
+                code,
+                {
+                    "result": subprocess.CompletedProcess([], status),
+                    "observation": {"status": "INVALID"},
+                },
+            )
+
+
+@pytest.mark.parametrize("setup_failure", [False, True])
+def test_invocation_actual_outer_runner_executes_original_h_once(
+    invocation_units, monkeypatch, setup_failure
+):
+    f = invocation_units
+    reports = f.root / "reports"
+    reports.mkdir(mode=0o700)
+    # Original H refuses at its disposable admission, before any daemon command.
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    if setup_failure:
+        monkeypatch.setattr(
+            sys.modules[__name__],
+            "diagnostic_binding",
+            lambda *a: (_ for _ in ()).throw(PermissionError("PRIVATE_SETUP")),
+        )
+    else:
+        monkeypatch.setattr(
+            sys.modules[__name__], "diagnostic_binding", lambda *a: copy.deepcopy(f.binding)
+        )
+    result, summary = run_historical_observed(f.root, "a" * 40, reports)
+    assert result.returncode == 1
+    assert summary["status"] == ("INVALID" if setup_failure else "COMPLETE")
 
 
 @pytest.mark.parametrize("outcome", ["success", "exit", "timeout"])
@@ -9899,6 +11577,8 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
         "owner_token",
         "exhausted_preparation",
         "supervisor_deadline",
+        "diagnostic_status",
+        "diagnostic_hash",
     ],
 )
 def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
@@ -9935,7 +11615,12 @@ def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
         "upgrade_ack_loss": {"observed": {"revision": "0012"}, "recovery_source": "a" * 40},
         "downgrade_ack_loss": {"observed": {"revision": "0011"}, "recovery_source": MATERIAL_E},
         "used_recovery": {"source": "a" * 40},
+        "migration_diagnostics": {
+            "status": "COMPLETE",
+            "sha256": e.sha(b"unit-closed-observation"),
+        },
     }
+    (f.root / "reports/migration-P-observation.json").write_bytes(b"unit-closed-observation")
     if damage in {
         "version",
         "extension_seconds",
@@ -9962,6 +11647,10 @@ def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
         )
     elif damage == "supervisor_deadline":
         ledger["material_supervisor_deadline"] += 120
+    elif damage == "diagnostic_status":
+        material["migration_diagnostics"]["status"] = "INVALID"
+    elif damage == "diagnostic_hash":
+        material["migration_diagnostics"]["sha256"] = "0" * 64
     (f.root / "reports/control-schema-ledger.json").write_bytes(e.encoded(ledger))
     (f.root / "reports/material-schema-phase.json").write_bytes(e.encoded(material))
     source = (f.original_root / "scripts/test_telegram_egress_migration.sh").read_text()
