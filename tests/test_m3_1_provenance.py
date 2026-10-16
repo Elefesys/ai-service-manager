@@ -2,9 +2,16 @@
 
 import copy
 import hashlib
+import runpy
+from contextlib import asynccontextmanager
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from asm.conversations.material import MessageCurrent, TargetResult, TelegramProjectionV2
 from asm.conversations.turns import TurnSnapshot, TurnSnapshotV2, parse_snapshot
 from asm.messaging.errors import MessagingError
@@ -17,9 +24,71 @@ from asm.telegram.normalization import (
     update_fingerprint_v2,
 )
 from pydantic import ValidationError
+from sqlalchemy.dialects.postgresql import psycopg
+from sqlalchemy.sql.elements import TextClause
 
 BOT = "9000001"
 DATE = 1792051200
+
+
+def assert_online_empty_parameters(statement, parameters):
+    """Exercise psycopg parameter construction before any database call."""
+    assert isinstance(statement, TextClause)
+    assert not parameters
+    compiled = statement.compile(dialect=psycopg.dialect())
+    assert compiled.construct_params(parameters) == {}
+
+
+def test_material_upgrade_online_has_no_required_parameters():
+    statements = []
+
+    def execute(statement, parameters):
+        assert_online_empty_parameters(statement, parameters)
+        statements.append(statement)
+
+    connection = SimpleNamespace(
+        dialect=psycopg.dialect(), execute=execute, in_transaction=lambda: False
+    )
+    context = MigrationContext.configure(connection)
+    assert not context.as_sql
+    source = Path(__file__).resolve().parents[1] / "migrations/versions/0012_message_provenance.py"
+    # Real op.execute -> online Alembic _exec -> TextClause + empty parameters.
+    # The sink compiles the untouched expanded strings, never supplies null.
+    with Operations.context(context):
+        runpy.run_path(str(source))["upgrade"]()
+    assert len(statements) == 131
+
+
+async def test_material_forged_basis_setup_online_has_no_required_parameters(monkeypatch):
+    import test_m3_1_provenance_postgres as pg
+
+    class SetupCompiled(Exception):
+        """Stop the actual PG case immediately after its CREATE reaches the sink."""
+
+    statements = []
+
+    async def execute(statement, parameters=None):
+        assert_online_empty_parameters(statement, {} if parameters is None else parameters)
+        statements.append(statement)
+        if statement.text == "SELECT current_database()":
+            return SimpleNamespace(scalar_one=lambda: "asm_test")
+        assert statement.text.startswith("CREATE FUNCTION platform.test_material_corrupt() ")
+        raise SetupCompiled
+
+    @asynccontextmanager
+    async def begin():
+        yield SimpleNamespace(execute=execute)
+
+    # Bypass only the earlier domain fixture work. The PG test itself constructs
+    # its real forged-basis CREATE/text(...) and calls the empty-parameter sink.
+    monkeypatch.setattr(pg, "process", AsyncMock())
+    monkeypatch.setattr(pg, "ingest_raw", AsyncMock(return_value=SimpleNamespace(job_id=uuid4())))
+    monkeypatch.setattr(pg, "claim_exact", AsyncMock())
+    with pytest.raises(SetupCompiled):
+        await pg.test_r3_t4_invalid_first_suppression_rolls_back_entire_original_atom(
+            SimpleNamespace(migrator=SimpleNamespace(begin=begin)), "forged-basis"
+        )
+    assert len(statements) == 2
 
 
 def update(number=101, message=201, *, edit=False, delete=False, **changes):

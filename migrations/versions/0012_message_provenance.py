@@ -575,7 +575,7 @@ def _validation() -> None:
     op.execute("""CREATE FUNCTION platform.material_semantic(c jsonb) RETURNS jsonb
       LANGUAGE sql IMMUTABLE SET search_path=pg_catalog,pg_temp AS $$
       SELECT CASE WHEN c IS NULL OR c='null'::jsonb THEN NULL WHEN c->>'kind'='UNSUPPORTED' THEN
-        '{"state":"UNSUPPORTED_CONTENT","content":null}'::jsonb
+        '{"state":"UNSUPPORTED_CONTENT","content": null}'::jsonb
       ELSE jsonb_build_object('state','VISIBLE','content',c-'selected_unique_id') END $$""")
     op.execute("""CREATE FUNCTION platform.material_state_valid(v jsonb) RETURNS boolean
       LANGUAGE sql IMMUTABLE SET search_path=pg_catalog,pg_temp AS $$
@@ -583,7 +583,7 @@ def _validation() -> None:
         ((v->>'state' IN ('DELETED','ORDER_UNCERTAIN','UNSUPPORTED_CONTENT') AND v->'content'='null'::jsonb) OR
          (v->>'state'='VISIBLE' AND (v->'content'->>'kind'='TEXT' AND platform.material_content_valid(v->'content') OR
            v->'content'->>'kind'='PHOTO' AND platform.material_object(v->'content',ARRAY['kind','caption','selected_file_id'])
-             AND platform.material_content_valid((v->'content')||'{"selected_unique_id":null}'::jsonb))))) IS TRUE $$""")
+             AND platform.material_content_valid((v->'content')||'{"selected_unique_id": null}'::jsonb))))) IS TRUE $$""")
     op.execute(r"""CREATE FUNCTION platform.telegram_validate_v2(bot text,p jsonb) RETURNS jsonb
       LANGUAGE plpgsql SET search_path=pg_catalog,pg_temp AS $$
       DECLARE l jsonb; e jsonb; o jsonb; c jsonb; d text; k text; moment timestamptz;
@@ -1045,8 +1045,8 @@ def _integrity() -> None:
         IF TG_WHEN='AFTER' THEN
           SELECT * INTO current_target FROM platform.message_material_targets WHERE workspace_id=NEW.workspace_id AND id=NEW.id;
           IF current_target.message_id IS NOT NULL THEN
-            expected:=CASE WHEN current_target.deleted THEN '{"state":"DELETED","content":null}'::jsonb
-              WHEN current_target.undated_seen OR current_target.dated_conflict THEN '{"state":"ORDER_UNCERTAIN","content":null}'::jsonb
+            expected:=CASE WHEN current_target.deleted THEN '{"state":"DELETED","content": null}'::jsonb
+              WHEN current_target.undated_seen OR current_target.dated_conflict THEN '{"state":"ORDER_UNCERTAIN","content": null}'::jsonb
               WHEN current_target.candidate IS NOT NULL THEN platform.material_semantic(current_target.candidate) ELSE current_target.current_material END;
             IF current_target.current_material IS DISTINCT FROM expected THEN RAISE EXCEPTION 'unapplied material fact' USING ERRCODE='23514'; END IF;
           END IF;
@@ -1204,8 +1204,8 @@ def _material() -> None:
       BEGIN
         SELECT * INTO STRICT t FROM platform.message_material_targets WHERE workspace_id=ws AND id=p_target FOR UPDATE;
         IF t.message_id IS NULL OR t.quarantined THEN RETURN NULL; END IF;
-        material:=CASE WHEN t.deleted THEN '{"state":"DELETED","content":null}'::jsonb
-          WHEN t.undated_seen OR t.dated_conflict THEN '{"state":"ORDER_UNCERTAIN","content":null}'::jsonb
+        material:=CASE WHEN t.deleted THEN '{"state":"DELETED","content": null}'::jsonb
+          WHEN t.undated_seen OR t.dated_conflict THEN '{"state":"ORDER_UNCERTAIN","content": null}'::jsonb
           WHEN t.candidate IS NOT NULL THEN platform.material_semantic(t.candidate) ELSE t.current_material END;
         IF material=t.current_material THEN RETURN NULL; END IF;
         source:=coalesce(t.delete_receipt,t.undated_receipt,t.conflict_receipt,t.candidate_receipt);

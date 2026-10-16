@@ -767,7 +767,7 @@ async def test_r3_t4_invalid_first_suppression_rolls_back_entire_original_atom(
         "wrong-message": "NEW.message_id:='00000000-0000-0000-0000-000000009991';",
         "wrong-origin": "NEW.origin_inbox_id:='00000000-0000-0000-0000-000000009992';",
         "wrong-effect": "NEW.effect_id:='00000000-0000-0000-0000-000000009993';",
-        "forged-basis": 'NEW.initial_material:=\'{"state":"DELETED","content":null}\'::jsonb;',
+        "forged-basis": 'NEW.initial_material:=\'{"state":"DELETED","content": null}\'::jsonb;',
         "pending-file": "PERFORM platform.files_plan(NEW.workspace_id,NEW.message_id,'00000000-0000-0000-0000-000000009994');",
         "failed-file": "PERFORM platform.files_plan(NEW.workspace_id,NEW.message_id,'00000000-0000-0000-0000-000000009994'); UPDATE app.file_objects SET status='FAILED',error_code='INVALID_INPUT',completed_at=clock_timestamp(),version=version+1 WHERE workspace_id=NEW.workspace_id AND message_id=NEW.message_id;",
     }[corruption]

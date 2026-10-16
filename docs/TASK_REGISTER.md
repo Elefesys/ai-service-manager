@@ -2,7 +2,36 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C6-M3.1-MATERIAL-COMPAT-R2 source checkpoint / 2026-10-16 UTC
+## Текущий статус — C3-M3.1-MATERIAL-R2 source correction / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all six findings OPEN.**
+[C0 R2](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208530769),
+[binding disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208519238),
+[evidence§15.12](tasks/M3_CONTRACT.md#1512-c3-m31-material-r2--online-sql-parameter-correction--2026-10-16-utc).
+
+| Task / finding | Current source result / actual gate |
+|---|---|
+| C3-M3.1-MATERIAL-R2 | REVIEW on return, then HOLD. Branch c3/m3-1-material-r2; exact base/sole parent d810dde939f727085af15f7614eeddd36f4909b8, tree fb06ad7bf5cf4d821e880328888c9bbf25eea3b7, base parent e7f5547…; main/E933ddd…/0011 and existing PR34 head unchanged. Final head/tree/numstat in canonical receipt |
+| C2-MAT-03/P1 OPEN | Six0012 literal spaces + one actual forged-basis setup space; equal JSON. Two actual-string online TextClause/psycopg regressions: base2 FAIL with required-null InvalidRequestError → candidate2 PASS. All131 expanded operations accept empty parameters; actual migration still required |
+| C2-MAT-01/P1 OPEN | Earlier three CASE source corrections accepted; actual complete0012 lifecycle/catalog/reverse/refusal remains required |
+| C1-MAT-01/P1 OPEN | Private immutable Inbox winning pair/five NULL Job delivery fields source PASS; actual terminal/replay/rollback/reclaim/ACK-loss and precise R3 negative+positive required |
+| C1-MAT-02/P2 OPEN | Known T→fresh T2/current-version refusal source PASS; actual maintenance/late File/Resume and positive neighbor required |
+| C5-MATERIAL-01/P2 OPEN | Four normal-Worker PHOTO/private-grant journeys source PASS; actual paired browser not reached; no additional product fix requested |
+| C2-MAT-02/P2 OPEN | Original-S terminal720 source accepted. Docker29 preparation499.951432356s PARTIAL; neither full state lane passed. Retained600/individual/supervisor/cleanup bounds and3 late C negatives unchanged |
+| Separate H-build blocker | Normal state failed before T/P; target/numeric exit/stderr and root cause UNKNOWN. Not attributed to MAT-03; C6 diagnostics require a separate exact-base issuance |
+| Final historical CI | Run38850821014/attempt1, tested merge51fca8a26bb19fa511040592a8b04613ddf0eb96/tree fb06ad7…:4 SUCCESS/5 FAILURE; clean4 SUCCESS/5 SKIPPED. No retained migrate traceback/DDL/SQLSTATE; source counterexample is not an observed CI exception |
+| R2 local evidence | New regression2 PASS; scoped67 PASS/98 deselected (includes those2); Ruff/format3, diff/allowlist/original11/applied0001–0011/ORIGINAL17/OLD_CHECK4/prefix/source inventory PASS. Cached locked environment; no installs/services/actual PG/Docker/browser/Actions execution |
+| Preserved contracts | Entire§15.11 prefix546352 bytes/SHA25679f920fd…;10 columns/6 old tables,4 new/42 total,132 signatures; C6/frozen H/T/C/G/E bytes, V1 replay/hash/decoder, no-refetch, current Turn and initial-suppression proofs |
+| Sequential next route | C0 source intake → C6 diagnostics-only task on accepted C3 descendant → combined intake → same PR34 automatic CI → C1/C2/C5 actual/source disposition → later C8. No intermediate head update/new PR/merge/dispatch/rerun |
+
+All actual0012 fresh/populated/repeat/unused reverse/used55000-before-DDL/raw42/catalog/
+security/recovery/replay, known-T/current-version and paired PHOTO/browser gates remain;
+require both complete state lanes and9/9+clean9/9 on the actual tested SHA/tree.
+Source success closes no finding. C3 HOLD after canonical return; C1/C2/C5/C6/C8 HOLD.
+Implementation not INTEGRATED/VERIFIED. Gate OFF; native/A08/renewal/collector/live/VM/
+working DB/S3/sends/deploy/M4 unissued; broad CI optimization/IMPL-05 DEFERRED.
+
+## История — C6-M3.1-MATERIAL-COMPAT-R2 source checkpoint / 2026-10-16 UTC
 
 **MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all five findings OPEN pending final
 source reviews and actual acceptance. C6 REVIEW on return, then HOLD.**

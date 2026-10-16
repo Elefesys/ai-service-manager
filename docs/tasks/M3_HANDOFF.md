@@ -5,7 +5,54 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. C6-M3.1-MATERIAL-COMPAT-R2 — terminal720 source checkpoint / 2026-10-16 UTC
+## 0. C3-M3.1-MATERIAL-R2 — online SQL source correction / 2026-10-16 UTC
+
+[C0 R2 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208530769),
+[C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208519238),
+[source/evidence§15.12](M3_CONTRACT.md#1512-c3-m31-material-r2--online-sql-parameter-correction--2026-10-16-utc).
+Branch `c3/m3-1-material-r2` starts from exact base/sole parent
+`d810dde939f727085af15f7614eeddd36f4909b8`, tree
+`fb06ad7bf5cf4d821e880328888c9bbf25eea3b7`, base parent R1
+`e7f554772ad4dd697d38c88f4f6423b3d3895499`. Main/frozen E933ddd…/0011 stays fixed;
+the existing Draft PR34 C6 branch remains at d810dde. Final C3 identity/numstat and
+commands are in one canonical PR34 receipt. Source REVIEW on return, then C3 HOLD.
+
+Only six0012 JSON literal spaces and one forged-basis setup space remove unintended
+SQLAlchemy null binds; decoded JSON and intended suppression rejection are unchanged.
+Two focused tests exercise actual online Alembic/TextClause/psycopg parameter
+construction and the PG case's real CREATE setup, without DB calls or SQL rewriting.
+Against unchanged base inputs both fail with required-null InvalidRequestError;
+corrected inputs both pass. Independent expansion: base bad indices2/3/48/58,
+candidate all131 empty-parameter constructions PASS. Scoped units67 PASS/98 deselected;
+Ruff/format3 and diff/source audits PASS in the reused locked offline environment.
+No install/services/PG/Docker/browser/CI execution; client preflight is not actual PG.
+
+**Current evidence: PR34 Draft/BLOCKED; MATERIAL/M3 IN_PROGRESS.** Final historical
+CI38850821014/attempt1, tested merge51fca8…/tree fb06ad7…: **4 SUCCESS/5 FAILURE;
+clean4 SUCCESS/5 SKIPPED**. Migration/startup failures did not retain traceback/
+DDL/SQLSTATE; MAT-03 is reproduced source evidence, not an observed CI exception.
+Normal state separately failed an H build before T/P; actual target/exit/stderr and
+root cause remain UNKNOWN. Docker29 preparation499.951432356s is PARTIAL, not a full
+P/state-lane PASS. C1/C5 source rereviews requested no additional product correction.
+
+All six findings stay OPEN: C2-MAT-01/P1, C1-MAT-01/P1, C1-MAT-02/P2,
+C5-MATERIAL-01/P2, C2-MAT-02/P2, C2-MAT-03/P1. Source correction does not close them.
+Required later: actual0012 lifecycle/raw42/catalog/security/recovery/replay, current
+T→T2 maintenance/File/Resume refusals, paired PHOTO/browser, both full state lanes
+including3 late C negatives and9/9+clean9/9 on exact tested SHA/tree.
+
+Preserved: contract prefix through§15.11 (546352 bytes/SHA25679f920fd…); original11,
+applied0001–0011/ORIGINAL17/OLD_CHECK4;10 columns/6 old tables,4 new/42 total,
+132 signatures; immutable Inbox winning pair/five NULL delivery fields; C6 sources,
+frozen H/T/C/G/E, original S/retained600/P720, supervision/cleanup/individual bounds.
+
+Next: C0 source intake → separate C6 diagnostics-only issuance on accepted C3 SHA
+→ combined source intake → same PR34 automatic CI → C1/C2/C5 disposition → later C8.
+No intermediate PR-head update/new PR/merge/dispatch/rerun. C1/C2/C5/C6/C8 HOLD;
+C3 HOLD after receipt. No implementation INTEGRATED/VERIFIED. Gate OFF; native/A08/
+renewal/collector/live/VM/working DB/S3/sends/deploy/M4 unissued; IMPL-05 DEFERRED.
+
+## История — C6-M3.1-MATERIAL-COMPAT-R2 — terminal720 source checkpoint / 2026-10-16 UTC
 
 [C0 accepted source/budget decision](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207691746)
 and [five-path assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207709114).

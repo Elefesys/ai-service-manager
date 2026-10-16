@@ -5155,3 +5155,73 @@ normal/Docker29 full P preparation<720 from original S, complete retained negati
 owned cleanup within state25min, actual0012 migrations/catalog/42-table hashes/
 recovery/refusal/security/races and paired PHOTO/browser acceptance. Gate OFF;
 live/VM/working DB/S3/sends/deploy/native/renewal/collector/M4 remain unissued.
+
+### 15.12. C3-M3.1-MATERIAL-R2 — online SQL parameter correction / 2026-10-16 UTC
+
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208530769)
+and [binding disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208519238).
+Separate branch/checkout `c3/m3-1-material-r2`, exact base/sole parent
+`d810dde939f727085af15f7614eeddd36f4909b8`, tree
+`fb06ad7bf5cf4d821e880328888c9bbf25eea3b7`; base parent is accepted R1
+`e7f554772ad4dd697d38c88f4f6423b3d3895499`. Main/frozen E stays
+`933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011. Final head/tree/numstat are in the
+canonical PR34 receipt, not a self-SHA commit. The complete preceding contract
+through§15.11 is unchanged:546352 bytes, SHA256
+`79f920fdf779236e33c7b622f31a9e8ee750ea87596431378a880dbae6a65ae4`.
+
+C2-MAT-03/P1 correction adds one space after the colon in exactly six new0012 JSON
+literals (base lines578/586/1048/1049/1207/1208) and the actual PG forged-basis setup
+literal (line770). All seven decoded JSON values are equal before/after. No other
+migration or PG-test behavior changes: the invalid proof, precise SQLSTATE/reason/
+function context, all42 rollback and same-claim positive neighbor remain intact.
+No executor workaround, fake null bind, preprocessing or dependency change.
+
+Two new nonintegration nodes in `tests/test_m3_1_provenance.py` use untouched source:
+`test_material_upgrade_online_has_no_required_parameters` invokes actual upgrade
+through online Alembic Operations/_exec and a TextClause execution sink;
+`test_material_forged_basis_setup_online_has_no_required_parameters` invokes the
+actual PG case with only preceding domain fixture work mocked, and stops after its
+real CREATE reaches the sink. Both use PostgreSQL/psycopg compilation and empty
+`construct_params` semantics, require an empty result, and never sanitize SQL.
+
+| R2 local command/evidence | Result |
+|---|---|
+| Both new nodes against unchanged d810dde migration/PG setup |2 FAILED with the intended `InvalidRequestError: A value is required for bind parameter 'null'`; migration first fails at expanded operation2/material_semantic, setup fails before its negative assertion |
+| Same two nodes after the seven spaces |2 PASSED |
+| Independent expansion + psycopg empty-parameter construction | Base failures exactly indices2/3/48/58; candidate all131 operations PASS, no required parameters; not PostgreSQL execution |
+| `uv run --offline --frozen --no-sync pytest -q -m 'not integration' tests/test_m3_1_provenance.py tests/test_telegram_egress.py -k 'material or p_a03 or r3'` |67 passed,98 deselected; includes the two new nodes and retained inventory/reverse/source companions |
+| Ruff check / format --check on the three changed Python paths; git diff --check | PASS |
+| Read-only source audit | Original11 attachments/repo/manifest, applied0001–0011, ORIGINAL17/OLD_CHECK4, six-path scope and exact immutable contract prefix PASS |
+
+Reused cached frozen environment: Python3.13.16, SQLAlchemy2.0.52, Alembic1.20.0,
+psycopg3.3.5, pytest9.1.1; UV_PROJECT_ENVIRONMENT selects the existing R1 venv and
+PYTHONPATH=backend/src:tests binds this checkout. No installation/sync/services.
+Inventory remains10 columns/6 old tables,4 new/42 total,132 function signatures;
+Inbox immutable result/winning-token pair and five NULL Job delivery fields remain.
+All C6 code and frozen H/T/C/G/E identities/bodies, original-S terminal720 with
+retained600, supervisor/cleanup/individual bounds and9 jobs/clean9 are unchanged.
+
+Historical final CI38850821014/attempt1 tested merge
+`51fca8a26bb19fa511040592a8b04613ddf0eb96` (main+base, base tree):
+**4 SUCCESS/5 FAILURE; clean4 SUCCESS/5 SKIPPED**. Foundation, compatibility and
+browser stopped at migrate exit1; Docker29 state stopped at first upgrade0012.
+No retained migrate traceback/DDL/SQLSTATE proves MAT-03 was the observed CI error.
+Normal state has a **separate unknown H-build blocker** before T/P; failed target,
+numeric exit and stderr were not retained. Do not infer its cause from MAT-03 or
+Docker29 H success. Docker29 P preparation499.951432356s is **PARTIAL**; neither
+complete state lane passed. C0/C2/C6 receipts retain those detailed observations.
+
+All six findings remain OPEN: C2-MAT-01/P1, C1-MAT-01/P1, C1-MAT-02/P2,
+C5-MATERIAL-01/P2, C2-MAT-02/P2 and C2-MAT-03/P1. This source/client PASS closes none.
+Actual0012 fresh/populated/repeat/unused reverse/used55000-before-DDL/raw42/catalog/
+security/recovery/replay, known T→T2/current-version refusals, paired PHOTO/browser,
+both full state lanes including3 late C negatives and9/9+clean9/9 remain required.
+PG/Docker/browser/image builds/Actions execution **NOT RUN in R2 by task scope**.
+
+Next: C0 source intake → separately assigned C6 diagnostics-only work on the exact
+accepted C3 descendant → combined source intake → same PR34 normal automatic CI
+→ C1/C2/C5 actual/source disposition → later C8. No intermediate PR-head update,
+new PR, merge, dispatch/rerun or edits to other receipts. C3 HOLD after return;
+C1/C2/C5/C6/C8 HOLD until C0 issuance. PR34 Draft/BLOCKED; MATERIAL/M3 IN_PROGRESS,
+implementation not INTEGRATED/VERIFIED. Gate OFF; native/A08/renewal/collector/live/
+VM/working DB/S3/sends/deploy/M4 unissued; broad CI optimization/IMPL-05 DEFERRED.
