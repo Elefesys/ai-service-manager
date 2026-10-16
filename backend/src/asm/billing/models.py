@@ -273,13 +273,49 @@ class EscalationDecidedAudit(StrictModel):
     ]
 
 
+class MessageMaterialPayload(StrictModel):
+    target_id: CanonicalUUID
+    source_receipt_id: CanonicalUUID
+    previous_version: PositiveDecimal
+    accepted_version: PositiveDecimal
+    reason: Literal[
+        "CONTENT_CHANGED", "DELETED", "ORDER_UNCERTAIN", "ORDER_RESTORED", "UNSUPPORTED_CONTENT"
+    ]
+
+    @model_validator(mode="after")
+    def versions(self) -> Self:
+        if int(self.accepted_version) != int(self.previous_version) + 1:
+            raise ValueError("Invalid material versions")
+        return self
+
+
+class MessageMaterialAudit(StrictModel):
+    audit_event_id: CanonicalUUID
+    occurred_at: Timestamp
+    correlation_id: CanonicalUUID
+    object_type: Literal["MESSAGE"]
+    object_id: CanonicalUUID
+    object_version: PositiveDecimal
+    event_type: Literal["MESSAGE_MATERIAL_CHANGED"]
+    actor_kind: Literal["CHANNEL_EVENT"]
+    actor_user_account_id: None
+    payload: MessageMaterialPayload
+
+    @model_validator(mode="after")
+    def accepted_version(self) -> Self:
+        if self.object_version != self.payload.accepted_version:
+            raise ValueError("Invalid material audit version")
+        return self
+
+
 AuditItem = Annotated[
     ProvisionAudit
     | ContactAudit
     | MessageSendAudit
     | ConversationTakenOverAudit
     | ConversationResumedAudit
-    | EscalationDecidedAudit,
+    | EscalationDecidedAudit
+    | MessageMaterialAudit,
     Field(discriminator="event_type"),
 ]
 

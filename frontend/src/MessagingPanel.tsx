@@ -2,11 +2,11 @@ import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Session } from './api';
 import { EscalationContext } from './escalation-api';
 import { ConversationControl, ControlIntent } from './ConversationControl';
-import { Connection, Conversation, Message, MessagingError, Page, ReadGrant, SendBody, SendReceipt, exactManualText, messagingApi } from './messaging-api';
+import { Connection, Conversation, Message, MessagingError, Page, ReadGrant, SendBody, SendReceipt, exactManualText, messagingApi, currentImageEligible } from './messaging-api';
 
 type Intent = { readonly actor: string; readonly workspace: string; readonly conversation: string; readonly body: SendBody; readonly key: string; phase: 'sending' | 'uncertain' | 'confirmed' | 'conflict'; ambiguous: boolean; failedSession: Session; receipt?: SendReceipt };
 type Collection<T> = { items: T[] | null; cursor: string | null; busy: boolean; error: string };
-type ImageView = { message: string; busy: boolean; grant: ReadGrant | null; error: string };
+type ImageView = { message: string; version: string; busy: boolean; grant: ReadGrant | null; error: string };
 type View = { generation: number; connections: Collection<Connection>; conversations: Collection<Conversation>; messages: Collection<Message>; selected: string; draft: string; notice: string; denied: boolean; image: ImageView | null; receipt: SendReceipt | null };
 const empty = <T,>(): Collection<T> => ({ items: null, cursor: null, busy: false, error: '' });
 const blank = (generation: number): View => ({ generation, connections: empty(), conversations: empty(), messages: empty(), selected: '', draft: '', notice: '', denied: false, image: null, receipt: null });
@@ -33,6 +33,8 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   const view = stored.generation === generation ? stored : blank(generation);
   const imageState = useRef(view.image);
   imageState.current = view.image;
+  const messagesState = useRef(view.messages.items);
+  messagesState.current = view.messages.items;
   const intent = useRef<Intent | null>(null);
   const controlIntent = useRef<ControlIntent | null>(null);
   const [controlRefresh, refreshControl] = useState(0);
@@ -175,16 +177,16 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
     update({ draft: '', notice: 'Намерение завершено без повтора. Это не отменяет возможную серверную команду.' });
   }
   async function openImage(message: Message) {
-    if (!session || !current() || message.file?.status !== 'READY') return;
+    if (!session || !current() || !currentImageEligible(message) || !message.file) return;
     const id = selection.current.id, epoch = selection.current.epoch, seq = ++sequence.current.image, c = controller();
-    update({ image: { message: message.message_id, busy: true, grant: null, error: '' } });
+    update({ image: { message: message.message_id, version: message.version, busy: true, grant: null, error: '' } });
     try {
       const grant = await messagingApi.grant(workspace, id, message.message_id, message.file.file_id, session.csrf_token, c.signal);
-      if (!inConversation(id, epoch) || seq !== sequence.current.image) return;
-      update({ image: { message: message.message_id, busy: false, grant: Date.parse(grant.expires_at) > Date.now() ? grant : null, error: Date.parse(grant.expires_at) > Date.now() ? '' : 'Ссылка истекла. Запросите доступ снова.' } });
+      if (!inConversation(id, epoch) || seq !== sequence.current.image || !messagesState.current?.some(m => m.message_id === message.message_id && m.version === message.version && currentImageEligible(m))) return;
+      update({ image: { message: message.message_id, version: message.version, busy: false, grant: Date.parse(grant.expires_at) > Date.now() ? grant : null, error: Date.parse(grant.expires_at) > Date.now() ? '' : 'Ссылка истекла. Запросите доступ снова.' } });
     } catch (e) {
-      if (!inConversation(id, epoch) || seq !== sequence.current.image) return;
-      if (!authorization(e)) update({ image: { message: message.message_id, busy: false, grant: null, error: 'Изображение недоступно. Можно запросить доступ снова.' } });
+      if (!inConversation(id, epoch) || seq !== sequence.current.image || !messagesState.current?.some(m => m.message_id === message.message_id && m.version === message.version && currentImageEligible(m))) return;
+      if (!authorization(e)) update({ image: { message: message.message_id, version: message.version, busy: false, grant: null, error: 'Изображение недоступно. Можно запросить доступ снова.' } });
     } finally { controllers.current.delete(c); }
   }
   const grant = view.image?.grant;
@@ -228,18 +230,24 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         {view.messages.items?.length === 0 && <p>Сообщений пока нет.</p>}
         <ol className="message-list">{view.messages.items?.map(m => <li key={m.message_id} data-testid={`message-${m.message_id}`}><article>
           <strong>{m.direction === 'INBOUND' ? 'Входящее' : 'Исходящее'}</strong><time dateTime={m.occurred_at}>{m.occurred_at}</time>
-          {m.text !== null && <p className="message-text">{m.text}</p>}
+          {m.current.changed && <p className="muted">Изменено</p>}
+          {m.current.state === 'DELETED' && <p>Сообщение удалено.</p>}
+          {m.current.state === 'ORDER_UNCERTAIN' && <p>Актуальное содержимое неизвестно.</p>}
+          {m.current.state === 'UNSUPPORTED_CONTENT' && <p>Новое содержимое не поддерживается.</p>}
+          {m.current.text !== null && <p className="message-text">{m.current.text}</p>}
+          {m.current.image_availability === 'MEDIA_REPLACED_UNAVAILABLE' && <p>Фото заменено, новое изображение недоступно.</p>}
+          {m.current.image_availability === 'ORIGINAL_NOT_FETCHED' && <p>Исходное фото не было загружено.</p>}
           {m.delivery && <p className="delivery" role="status">{deliveryState[m.delivery.status]}{m.delivery.error_code && ` · ${m.delivery.error_code}`}</p>}
-          {m.file && <div className="message-image">
+          {m.file && m.current.state === 'VISIBLE' && m.current.content_type === 'PHOTO' && m.current.image_availability.startsWith('ORIGINAL_') && <div className="message-image">
             {m.file.status === 'PENDING' && <p>Изображение загружается.</p>}
             {m.file.status === 'FAILED' && <p>Изображение недоступно · {m.file.error_code}</p>}
-            {m.file.status === 'READY' && <><p>{m.file.manifest!.mime_type} · {m.file.manifest!.width} × {m.file.manifest!.height} · {m.file.manifest!.size_bytes} байт</p><button className="secondary" disabled={view.image?.message === m.message_id && view.image.busy} onClick={() => void openImage(m)}>Открыть изображение</button></>}
-            {view.image?.message === m.message_id && <>{view.image.busy && <p role="status">Проверяем доступ к изображению…</p>}{view.image.error && <p role="alert">{view.image.error}</p>}{view.image.grant && <img key={view.image.grant.url} alt="Изображение из диалога" src={view.image.grant.url} crossOrigin="anonymous" referrerPolicy="no-referrer" onError={() => { if (current() && imageState.current === view.image) update({ image: { message: m.message_id, busy: false, grant: null, error: 'Изображение не загрузилось. Запросите доступ снова.' } }); }} />}</>}
+            {currentImageEligible(m) && <><p>{m.file.manifest!.mime_type} · {m.file.manifest!.width} × {m.file.manifest!.height} · {m.file.manifest!.size_bytes} байт</p><button className="secondary" disabled={view.image?.message === m.message_id && view.image.busy} onClick={() => void openImage(m)}>Открыть изображение</button></>}
+            {view.image?.message === m.message_id && view.image.version === m.version && currentImageEligible(m) && <>{view.image.busy && <p role="status">Проверяем доступ к изображению…</p>}{view.image.error && <p role="alert">{view.image.error}</p>}{view.image.grant && <img key={view.image.grant.url} alt="Изображение из диалога" src={view.image.grant.url} crossOrigin="anonymous" referrerPolicy="no-referrer" onError={() => { if (current() && imageState.current === view.image) update({ image: { message: m.message_id, version: m.version, busy: false, grant: null, error: 'Изображение не загрузилось. Запросите доступ снова.' } }); }} />}</>}
           </div>}
         </article></li>)}</ol>
         {view.messages.cursor && <button disabled={view.messages.busy || p?.phase === 'sending'} onClick={() => void history(view.selected, view.messages.cursor)}>Ещё сообщения</button>}
         {view.messages.items !== null && view.messages.cursor === null && !view.messages.busy && <p className="muted">Начало истории.</p>}
-        <p className="muted">«Канал принял» не означает получение или прочтение клиентом. UNKNOWN не отправляется повторно.</p>
+        <p className="muted">Изменения появляются после обновления сообщений. Уже выданная ссылка действует до истечения срока. «Канал принял» не означает получение или прочтение клиентом. UNKNOWN не отправляется повторно.</p>
         {view.selected && <form className="form reply-form" onSubmit={submit}><label htmlFor="manual-reply">Ручной текстовый ответ</label><textarea id="manual-reply" rows={4} value={matching && p && p.phase !== 'confirmed' ? p.body.text : view.draft} onChange={e => update({ draft: e.target.value })} disabled={!!p || controlPending} aria-describedby="reply-help" /><p id="reply-help" className="muted">1–4096 символов Unicode. Пробелы и переносы сохраняются; Enter добавляет строку.</p><button type="submit" disabled={!!p || controlPending || view.messages.busy}>Проверить и отправить</button></form>}
         {view.notice && <p role="status">{view.notice}</p>}
         {view.receipt && <p className="muted">Принятие намерения: {view.receipt.accepted_at}. Текущее состояние — в истории, даже если сообщение находится на другой странице.</p>}

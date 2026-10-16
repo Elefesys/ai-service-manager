@@ -6,6 +6,7 @@ from pydantic import Field, field_validator, model_validator
 
 from asm.billing.models import CommonCode, StrictModel
 from asm.billing.validation import CanonicalUUID, PositiveDecimal, Timestamp
+from asm.conversations.material import MessageCurrent
 from asm.messaging.errors import MessagingError
 from asm.messaging.models import manual_text
 
@@ -136,11 +137,37 @@ class MessageResponse(StrictModel):
     version: PositiveDecimal
     file: FileResponse | None
     delivery: DeliveryResponse | None
+    current: MessageCurrent
 
     @model_validator(mode="after")
     def relations(self) -> Self:
-        if (self.content_type == "IMAGE_REFERENCE") != (self.file is not None):
-            raise ValueError("Invalid file relation")
+        if not self.current.changed and (
+            self.current.state != "VISIBLE"
+            or self.current.text != self.text
+            or self.current.content_type != ("TEXT" if self.content_type == "TEXT" else "PHOTO")
+        ):
+            raise ValueError("Invalid unchanged material")
+        if self.current.changed != (int(self.version) > 1):
+            raise ValueError("Invalid changed relation")
+        if self.content_type == "TEXT" and self.file is not None:
+            raise ValueError("Invalid text file")
+        if (
+            self.content_type == "IMAGE_REFERENCE"
+            and self.file is None
+            and not self.current.changed
+        ):
+            raise ValueError("Missing original file")
+        if self.current.image_availability.startswith("ORIGINAL_"):
+            if self.content_type != "IMAGE_REFERENCE":
+                raise ValueError("Invalid original image")
+            if self.current.image_availability == "ORIGINAL_NOT_FETCHED":
+                if self.file is not None:
+                    raise ValueError("Unexpected original file")
+            elif (
+                self.file is None
+                or self.current.image_availability != "ORIGINAL_" + self.file.status
+            ):
+                raise ValueError("Invalid original availability")
         if (self.direction == "OUTBOUND") != (self.delivery is not None):
             raise ValueError("Invalid delivery relation")
         return self

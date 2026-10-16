@@ -937,6 +937,10 @@ GUARDS_C = "c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5"
 GUARDS_PHASE = "GUARDS_SCHEMA_0009_0010"
 ESCALATION_G = "c502d5fd258aef15bb5549e1529df8d038a4fb9b"
 ESCALATION_PHASE = "ESCALATION_SCHEMA_0010_0011"
+MATERIAL_E = "933ddd284ff5b77fb1aa88a4270ab0032bc499c9"
+MATERIAL_E_TREE = "d0759acb9f83ec3f3e10d9c5d1325c937c343ee7"
+MATERIAL_BASE = "edda243773702e7be1cd969d3ede622b4dacb74e"
+MATERIAL_PHASE = "MATERIAL_SCHEMA_0011_0012"
 SCHEMA_OWNER_LABEL = "io.asm.schema-owner"
 RETAINED_MODULE_BLOB = "571bc4e48fc8c7de8e89f0cfe01c06949d7e84c1"
 RETAINED_HELPER_BLOB = "f6cda8841f50eab0347a365079af6ed76632d988"
@@ -1916,7 +1920,7 @@ class RetainedCheckpoint:
 def schema_failure(error):
     """Reports never retain exception text containing argv, paths or credentials."""
     reason = str(error)
-    if not re.fullmatch(r"(?:CONTROL|EGRESS|FROZEN|SCHEMA)_[A-Z0-9_]{1,100}", reason):
+    if not re.fullmatch(r"(?:CONTROL|EGRESS|FROZEN|SCHEMA|MATERIAL)_[A-Z0-9_]{1,100}", reason):
         reason = (
             "CONTROL_COMMAND_TIMEOUT"
             if isinstance(error, subprocess.TimeoutExpired)
@@ -2760,6 +2764,974 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
     ledger["full_retained_negatives"] = summary
 
 
+def diagnostic_blob(raw):
+    return hashlib.sha1(b"blob " + str(len(raw)).encode() + b"\0" + raw).hexdigest()
+
+
+def diagnostic_identity(path, *, directory=False):
+    """Private, same-owner objects only; never follow a substituted path."""
+    path = Path(path).absolute()
+    assert path.resolve() == path, "DIAGNOSTIC_PATH"
+    info = path.lstat()
+    assert info.st_uid == os.getuid(), "DIAGNOSTIC_OWNER"
+    assert stat.S_IMODE(info.st_mode) == (0o700 if directory else 0o600), "DIAGNOSTIC_MODE"
+    assert stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)
+    assert directory or info.st_nlink == 1, "DIAGNOSTIC_LINK"
+    return [info.st_dev, info.st_ino, info.st_uid, stat.S_IMODE(info.st_mode)]
+
+
+def diagnostic_binding_valid(binding):
+    assert set(binding) == {"observer", "executor"}, "DIAGNOSTIC_BINDING"
+    for role, fields in binding.items():
+        assert set(fields) == {"source", "tree", "shell_blob", "module_blob", "helper_blob"} | (
+            {"code_sha256"} if role == "observer" else set()
+        ), "DIAGNOSTIC_BINDING"
+        assert all(
+            type(fields[k]) is str and re.fullmatch("[0-9a-f]{40}", fields[k])
+            for k in ("source", "tree", "shell_blob", "module_blob", "helper_blob")
+        ), "DIAGNOSTIC_BINDING"
+        if role == "observer":
+            assert type(fields["code_sha256"]) is str and re.fullmatch(
+                "[0-9a-f]{64}", fields["code_sha256"]
+            ), "DIAGNOSTIC_BINDING"
+
+
+def diagnostic_new(directory, binding, *, sources=None):
+    diagnostic_binding_valid(binding)
+    directory = Path(directory).absolute()
+    identity = diagnostic_identity(directory, directory=True)
+    path = directory / "invocations.json"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    os.close(fd)
+    return {
+        "directory": str(directory),
+        "directory_identity": identity,
+        "path": str(path),
+        "identity": diagnostic_identity(path),
+        "key": os.urandom(32).hex(),
+        "binding": binding,
+        "sources": sources
+        if sources is not None
+        else {v["source"]: v["tree"] for v in binding.values()},
+    }
+
+
+def diagnostic_output(raw):
+    """Inspect <=16KiB per already captured stream. No raw text leaves this function."""
+    if not isinstance(raw, bytes):
+        return {"bytes": 0, "status": "UNKNOWN"}, b""
+    truncated = len(raw) > 16384
+    sample = raw[:8191] + b"\n" + raw[-8192:] if truncated else raw
+    return {
+        "bytes": len(raw),
+        "status": "TRUNCATED" if truncated else "PRESENT" if raw else "EMPTY",
+    }, sample
+
+
+def diagnostic_classify(stdout, stderr):
+    out, first = diagnostic_output(stdout)
+    err, second = diagnostic_output(stderr)
+    # Each stream is classified separately; do not construct a match across its boundary.
+    samples = (first, second)
+    result = {
+        "stdout": out,
+        "stderr": err,
+        "category": "UNKNOWN",
+        "exception_class": "UNKNOWN",
+        "sqlstate": "UNKNOWN",
+        "build_step": "UNKNOWN",
+        "dockerfile_line": "UNKNOWN",
+    }
+    if any(
+        re.search(rb"sqlalchemy\.exc\.InvalidRequestError(?::|\))", s)
+        and b"A value is required for bind parameter" in s
+        for s in samples
+    ):
+        result.update(category="CLIENT_PARAMETER_ERROR", exception_class="InvalidRequestError")
+    else:
+        server = (
+            "SyntaxError",
+            "UndefinedColumn",
+            "UndefinedFunction",
+            "UndefinedTable",
+            "CheckViolation",
+            "ForeignKeyViolation",
+            "UniqueViolation",
+            "NotNullViolation",
+            "InsufficientPrivilege",
+            "RaiseException",
+            "ObjectInUse",
+            "SerializationFailure",
+            "DeadlockDetected",
+        )
+        for name in server:
+            if any(
+                re.search(rb"psycopg\.errors\." + name.encode() + rb"(?::|\))", s) for s in samples
+            ):
+                result.update(category="POSTGRESQL_ERROR", exception_class=name)
+                for s in samples:
+                    match = re.search(rb"(?m)^SQLSTATE[=: ]+([0-9A-Z]{5})\s*$", s)
+                    if match and match[1] in {
+                        b"42601",
+                        b"42703",
+                        b"42883",
+                        b"42P01",
+                        b"23514",
+                        b"23503",
+                        b"23505",
+                        b"23502",
+                        b"42501",
+                        b"P0001",
+                        b"55006",
+                        b"40001",
+                        b"40P01",
+                    }:
+                        result["sqlstate"] = match[1].decode("ascii")
+                break
+    if result["category"] == "UNKNOWN":
+        for category, pattern in (
+            (
+                "REGISTRY_AUTH",
+                rb"(?i)(?:unauthorized: authentication required|denied: requested access)",
+            ),
+            ("IMAGE_RESOLUTION", rb"(?i)failed to resolve (?:source metadata|reference)"),
+            ("DOCKER_DAEMON", rb"(?i)cannot connect to the docker daemon"),
+            ("BUILD_STEP_FAILED", rb"(?i)failed to solve:.*did not complete successfully"),
+        ):
+            if any(re.search(pattern, s) for s in samples):
+                result["category"] = category
+                break
+    for s in samples:
+        match = re.search(rb"(?m)^#([0-9]{1,5}) (?:ERROR:|\[[0-9]+/[0-9]+\])", s)
+        if match:
+            result["build_step"] = int(match[1])
+        match = re.search(rb"(?m)^Dockerfile(?:\.backend)?:([0-9]{1,5})\s*$", s)
+        if match:
+            result["dockerfile_line"] = int(match[1])
+    return result
+
+
+class InvocationDiagnostic:
+    """Bounded H/P observation of ORIGINAL command frames, with authenticated private output.
+
+    No function/subprocess replacement, output capture or executor retry. Errors in
+    this observer are finite secondary outcomes, never exceptions in the executor.
+    """
+
+    def __init__(self, config, phase):
+        diagnostic_binding_valid(config["binding"])
+        assert phase in {"H_BUILD", "P_MIGRATION"}, "DIAGNOSTIC_PHASE"
+        assert 1 <= len(config["sources"]) <= 2 and all(
+            type(s) is str
+            and type(t) is str
+            and re.fullmatch("[0-9a-f]{40}", s)
+            and re.fullmatch("[0-9a-f]{40}", t)
+            for s, t in config["sources"].items()
+        ), "DIAGNOSTIC_SOURCES"
+        self.config = config
+        self.phase = phase
+        self.previous = None
+        self.installed = False
+        self.active = None
+        self.command = None
+        self.build = None
+        self.closed = False
+        self.data = {
+            "version": 1,
+            "phase": phase,
+            "evidence": "INSTRUMENTED_IMMUTABLE_H"
+            if phase == "H_BUILD"
+            else "INSTRUMENTED_CURRENT_P",
+            "binding": config["binding"],
+            "accepted_sources": config["sources"],
+            "started_at": time.monotonic(),
+            "ended_at": "UNKNOWN",
+            "trace_restored": False,
+            "status": "INCOMPLETE",
+            "secondary": [],
+            "observed": 0,
+            "records": [],
+        }
+        self.save()
+
+    def error(self, code):
+        self.config["observer_failed"] = True
+        if code not in self.data["secondary"] and len(self.data["secondary"]) < 8:
+            self.data["secondary"].append(code)
+
+    def save(self):
+        import hmac
+
+        try:
+            cfg = self.config
+            assert (
+                diagnostic_identity(cfg["directory"], directory=True) == cfg["directory_identity"]
+            )
+            assert diagnostic_identity(cfg["path"]) == cfg["identity"]
+            raw = json.dumps(self.data, sort_keys=True, separators=(",", ":")).encode()
+            auth = hmac.new(bytes.fromhex(cfg["key"]), raw, "sha256").hexdigest()
+            raw = json.dumps(
+                {**self.data, "auth": auth}, sort_keys=True, separators=(",", ":")
+            ).encode()
+            assert len(raw) <= 65536 and len(self.data["records"]) <= 16
+            fd = os.open(cfg["path"], os.O_WRONLY | os.O_NOFOLLOW)
+            try:
+                info = os.fstat(fd)
+                assert [info.st_dev, info.st_ino, info.st_uid, stat.S_IMODE(info.st_mode)] == cfg[
+                    "identity"
+                ]
+                assert info.st_nlink == 1
+                os.ftruncate(fd, 0)
+                view = memoryview(raw)
+                while view:
+                    count = os.write(fd, view)
+                    assert count > 0
+                    view = view[count:]
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+        except Exception:
+            self.error("REPORT_WRITE_FAILED")
+
+    def select(self, frame):
+        args = frame.f_locals.get("args")
+        if self.phase == "P_MIGRATION":
+            if self.active is not None and args == self.active[0]:
+                return dict(self.active[1])
+            return None
+        caller = frame.f_back
+        if caller is None or caller.f_code is not self.build.__code__:
+            return None
+        if not isinstance(args, list) or args[:2] != ["docker", "build"]:
+            return None
+        binding = self.config["binding"]["executor"]
+        source, tree = binding["source"], binding["tree"]
+        if not (
+            len(args) == 21
+            and args[:5] == ["docker", "build", "--pull", "--network=default", "--target"]
+            and args[5] in {"runtime", "development"}
+            and args[10:17]
+            == [
+                "--label",
+                "asm.connect5.source=" + source,
+                "--label",
+                "asm.connect5.tree=" + tree,
+                "--label",
+                "asm.connect5.kind=" + args[5],
+                "-f",
+            ]
+            and args[18:20] == ["-t", "asm-connect5-" + args[5] + ":" + source]
+            and args[17] == str(Path(args[20]) / "infra/Dockerfile.backend")
+            and caller.f_locals.get("source") == source
+            and caller.f_locals.get("tree") == tree
+        ):
+            self.error("INVOCATION_BINDING_FAILED")
+            return None
+        return {
+            "operation": "H_DOCKER_BUILD",
+            "source": source,
+            "tree": tree,
+            "target": args[5],
+            "direction": "UNKNOWN",
+            "revision": "UNKNOWN",
+            "stage": "H_BUILD",
+        }
+
+    def trace(self, frame, event, arg):
+        if event != "call" or frame.f_code is not self.command.__code__:
+            return None
+        try:
+            selected = self.select(frame)
+            if selected is None:
+                return None
+            self.data["observed"] += 1
+            if len(self.data["records"]) == 16:
+                self.error("RECORD_LIMIT")
+                return None
+            began = time.monotonic()
+            record = {
+                **selected,
+                "started_at": began,
+                "seconds": "UNKNOWN",
+                "outcome": "INCOMPLETE",
+                "exit_code": "UNKNOWN",
+                "exception": "UNKNOWN",
+            }
+            self.data["records"].append(record)
+            self.save()
+            frame.f_trace_lines = False
+            exception = None
+
+            def completed(frame, event, arg):
+                nonlocal exception
+                try:
+                    if event == "exception":
+                        exception = arg[1]
+                    elif event == "return":
+                        result = frame.f_locals.get("result")
+                        timeout = isinstance(exception, subprocess.TimeoutExpired)
+                        name = type(exception).__name__
+                        record["exception"] = (
+                            name
+                            if name
+                            in {
+                                "EgressError",
+                                "TimeoutExpired",
+                                "FileNotFoundError",
+                                "PermissionError",
+                                "OSError",
+                            }
+                            else "UNKNOWN"
+                        )
+                        record["seconds"] = time.monotonic() - began
+                        code = getattr(result, "returncode", None)
+                        record["exit_code"] = (
+                            code
+                            if type(code) is int and -2147483648 <= code <= 2147483647
+                            else "UNKNOWN"
+                        )
+                        record["outcome"] = (
+                            "TIMEOUT"
+                            if timeout
+                            else "COMMAND_EXIT"
+                            if code not in (None, 0)
+                            else "EXCEPTION"
+                            if exception
+                            else "SUCCESS"
+                        )
+                        record.update(
+                            diagnostic_classify(
+                                getattr(result, "stdout", None)
+                                if result is not None
+                                else exception.stdout
+                                if timeout
+                                else None,
+                                getattr(result, "stderr", None)
+                                if result is not None
+                                else exception.stderr
+                                if timeout
+                                else None,
+                            )
+                        )
+                        self.save()
+                except Exception:
+                    self.error("CLASSIFICATION_FAILED")
+                return completed
+
+            return completed
+        except Exception:
+            self.error("OBSERVATION_FAILED")
+            return None
+
+    def install(self, command, *, previous=None, build=None):
+        self.previous = previous
+        self.command, self.build = command, build
+        if previous is not None:
+            self.error("TRACE_CONFLICT")
+            return
+        sys.settrace(self.trace)
+        self.installed = True
+
+    def restore(self):
+        if self.installed:
+            if sys.gettrace() != self.trace:
+                self.error("TRACE_CHANGED")
+            sys.settrace(self.previous)
+            self.installed = False
+
+    @contextmanager
+    def migration(self, command, args, source, tree, direction, revision):
+        before = self.data["observed"]
+        try:
+            assert direction in {"upgrade", "downgrade"} and revision in {
+                "0009",
+                "0010",
+                "0011",
+                "0012",
+            }
+            assert re.fullmatch("[0-9a-f]{40}", source) and re.fullmatch("[0-9a-f]{40}", tree)
+            assert self.config["sources"].get(source) == tree
+            assert args[:2] == ["docker", "run"] and args[-3:] == ["alembic", direction, revision]
+            self.active = (
+                args,
+                {
+                    "operation": "P_ALEMBIC",
+                    "source": source,
+                    "tree": tree,
+                    "target": "UNKNOWN",
+                    "direction": direction,
+                    "revision": revision,
+                    "stage": direction.upper() + "_" + revision,
+                },
+            )
+            self.install(command, previous=sys.gettrace())
+        except Exception:
+            self.error("INVOCATION_BINDING_FAILED")
+        try:
+            yield
+        finally:
+            self.restore()
+            self.active = None
+            if self.data["observed"] != before + 1:
+                self.error("INVOCATION_MISSING")
+
+    def close(self):
+        if self.closed:
+            return
+        self.restore()
+        self.closed = True
+        self.data["ended_at"] = time.monotonic()
+        self.data["trace_restored"] = True
+        if any(r["outcome"] == "INCOMPLETE" for r in self.data["records"]):
+            self.error("INVOCATION_INCOMPLETE")
+        self.data["status"] = "INCOMPLETE" if self.data["secondary"] else "COMPLETE"
+        self.save()
+
+
+def diagnostic_read(config):
+    import hmac
+    import math
+
+    assert not config.get("observer_failed", False)
+    assert diagnostic_identity(config["directory"], directory=True) == config["directory_identity"]
+    assert diagnostic_identity(config["path"]) == config["identity"]
+    fd = os.open(config["path"], os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        before = os.fstat(fd)
+        assert [
+            before.st_dev,
+            before.st_ino,
+            before.st_uid,
+            stat.S_IMODE(before.st_mode),
+        ] == config["identity"]
+        assert before.st_nlink == 1 and 0 < before.st_size <= 65536
+        raw = os.read(fd, 65537)
+        after = os.fstat(fd)
+        assert (before.st_size, before.st_mtime_ns, before.st_ctime_ns) == (
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        )
+    finally:
+        os.close(fd)
+    assert diagnostic_identity(config["path"]) == config["identity"]
+    if config.get("require_ack", False):
+        assert config.get("completion_ack") == hashlib.sha256(raw).hexdigest()
+    data = json.loads(raw)
+    assert set(data) == {
+        "version",
+        "phase",
+        "evidence",
+        "binding",
+        "accepted_sources",
+        "started_at",
+        "ended_at",
+        "trace_restored",
+        "status",
+        "secondary",
+        "observed",
+        "records",
+        "auth",
+    }
+    auth = data.pop("auth")
+    canonical = json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
+    assert type(auth) is str and hmac.compare_digest(
+        auth, hmac.new(bytes.fromhex(config["key"]), canonical, "sha256").hexdigest()
+    )
+    assert data["version"] == 1 and data["binding"] == config["binding"]
+    assert data["accepted_sources"] == config["sources"] and 1 <= len(config["sources"]) <= 2
+    assert all(
+        re.fullmatch("[0-9a-f]{40}", s) and re.fullmatch("[0-9a-f]{40}", t)
+        for s, t in config["sources"].items()
+    )
+    assert set(data["binding"]) == {"observer", "executor"}
+    for role, fields in data["binding"].items():
+        assert set(fields) == {"source", "tree", "shell_blob", "module_blob", "helper_blob"} | (
+            {"code_sha256"} if role == "observer" else set()
+        )
+        assert all(
+            re.fullmatch("[0-9a-f]{40}", fields[k])
+            for k in ("source", "tree", "shell_blob", "module_blob", "helper_blob")
+        )
+        if role == "observer":
+            assert re.fullmatch("[0-9a-f]{64}", fields["code_sha256"])
+    assert data["phase"] in {"H_BUILD", "P_MIGRATION"}
+    assert data["evidence"] == (
+        "INSTRUMENTED_IMMUTABLE_H" if data["phase"] == "H_BUILD" else "INSTRUMENTED_CURRENT_P"
+    )
+    assert (
+        data["status"] == "COMPLETE" and data["secondary"] == [] and data["trace_restored"] is True
+    )
+    assert all(
+        type(data[k]) in (int, float) and math.isfinite(data[k]) for k in ("started_at", "ended_at")
+    )
+    assert 0 < data["started_at"] <= data["ended_at"]
+    assert type(data["observed"]) is int and data["observed"] == len(data["records"]) <= 16
+    for row in data["records"]:
+        assert set(row) == {
+            "operation",
+            "source",
+            "tree",
+            "target",
+            "direction",
+            "revision",
+            "stage",
+            "started_at",
+            "seconds",
+            "outcome",
+            "exit_code",
+            "exception",
+            "stdout",
+            "stderr",
+            "category",
+            "exception_class",
+            "sqlstate",
+            "build_step",
+            "dockerfile_line",
+        }
+        assert re.fullmatch("[0-9a-f]{40}", row["source"]) and re.fullmatch(
+            "[0-9a-f]{40}", row["tree"]
+        )
+        assert config["sources"].get(row["source"]) == row["tree"]
+        assert all(
+            type(row[k]) in (int, float) and math.isfinite(row[k]) and row[k] >= 0
+            for k in ("started_at", "seconds")
+        )
+        assert (
+            data["started_at"]
+            <= row["started_at"]
+            <= row["started_at"] + row["seconds"]
+            <= data["ended_at"]
+        )
+        assert row["outcome"] in {"SUCCESS", "COMMAND_EXIT", "TIMEOUT", "EXCEPTION"}
+        assert (
+            row["exit_code"] == "UNKNOWN"
+            or type(row["exit_code"]) is int
+            and -2147483648 <= row["exit_code"] <= 2147483647
+        )
+        assert row["exception"] in {
+            "UNKNOWN",
+            "EgressError",
+            "TimeoutExpired",
+            "FileNotFoundError",
+            "PermissionError",
+            "OSError",
+        }
+        assert row["category"] in {
+            "UNKNOWN",
+            "CLIENT_PARAMETER_ERROR",
+            "POSTGRESQL_ERROR",
+            "REGISTRY_AUTH",
+            "IMAGE_RESOLUTION",
+            "DOCKER_DAEMON",
+            "BUILD_STEP_FAILED",
+        }
+        assert row["exception_class"] in {
+            "UNKNOWN",
+            "InvalidRequestError",
+            "SyntaxError",
+            "UndefinedColumn",
+            "UndefinedFunction",
+            "UndefinedTable",
+            "CheckViolation",
+            "ForeignKeyViolation",
+            "UniqueViolation",
+            "NotNullViolation",
+            "InsufficientPrivilege",
+            "RaiseException",
+            "ObjectInUse",
+            "SerializationFailure",
+            "DeadlockDetected",
+        }
+        assert (
+            row["sqlstate"] == "UNKNOWN"
+            or row["category"] == "POSTGRESQL_ERROR"
+            and row["sqlstate"]
+            in {
+                "42601",
+                "42703",
+                "42883",
+                "42P01",
+                "23514",
+                "23503",
+                "23505",
+                "23502",
+                "42501",
+                "P0001",
+                "55006",
+                "40001",
+                "40P01",
+            }
+        )
+        for k in ("build_step", "dockerfile_line"):
+            assert row[k] == "UNKNOWN" or type(row[k]) is int and 0 <= row[k] <= 99999
+        for k in ("stdout", "stderr"):
+            assert set(row[k]) == {"bytes", "status"}
+            assert type(row[k]["bytes"]) is int and row[k]["bytes"] >= 0
+            assert row[k]["status"] in {"UNKNOWN", "EMPTY", "PRESENT", "TRUNCATED"}
+        if data["phase"] == "H_BUILD":
+            assert row["operation"] == "H_DOCKER_BUILD" and row["stage"] == "H_BUILD"
+            assert (
+                row["target"] in {"runtime", "development"}
+                and row["direction"] == row["revision"] == "UNKNOWN"
+            )
+            assert (row["source"], row["tree"]) == (
+                data["binding"]["executor"]["source"],
+                data["binding"]["executor"]["tree"],
+            )
+        else:
+            assert row["operation"] == "P_ALEMBIC" and row["target"] == "UNKNOWN"
+            assert row["direction"] in {"upgrade", "downgrade"} and row["revision"] in {
+                "0009",
+                "0010",
+                "0011",
+                "0012",
+            }
+            assert row["stage"] == row["direction"].upper() + "_" + row["revision"]
+    return data, raw
+
+
+def diagnostic_export(config, target):
+    """Only authenticated, complete, closed records can enter CI artifacts."""
+    created = None
+    try:
+        data, raw = diagnostic_read(config)
+        target = Path(target).absolute()
+        assert (
+            target.parent.resolve() == target.parent and target.parent.stat().st_uid == os.getuid()
+        )
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        try:
+            info = os.fstat(fd)
+            created = [info.st_dev, info.st_ino, info.st_uid, stat.S_IMODE(info.st_mode)]
+            assert info.st_nlink == 1 and diagnostic_identity(target) == created
+            with os.fdopen(fd, "wb", closefd=False) as stream:
+                stream.write(raw)
+                stream.flush()
+                os.fsync(fd)
+        finally:
+            os.close(fd)
+        assert diagnostic_identity(target) == created
+        assert target.read_bytes() == raw
+        return {
+            "status": "COMPLETE",
+            "records": len(data["records"]),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+        }
+    except Exception:
+        if created is not None:
+            try:
+                if diagnostic_identity(target) == created:
+                    target.unlink()
+            except Exception:
+                pass
+        return {"status": "INVALID", "secondary": ["DIAGNOSTIC_EXPORT_OR_VALIDATION_FAILED"]}
+
+
+def start_h_diagnostic(config, root, program, original_pythonpath):
+    """Private startup launcher: Python itself executes the UNMODIFIED H stdin program.
+
+    Startup imports this 0600 module; no executable wrapper, stdin read/rewrite,
+    helper rebinding or altered argv/path/environment remains in the executor.
+    Unrelated interpreter invocations are passed through without observation.
+    """
+    import atexit
+    import zipfile
+
+    if original_pythonpath is None:
+        os.environ.pop("PYTHONPATH", None)
+    else:
+        os.environ["PYTHONPATH"] = original_pythonpath
+    startup_path = config["startup_path"]
+    sys.path[:] = [p for p in sys.path if p != startup_path]
+    if sys.argv != ["-", "state"] or Path.cwd() != Path(root):
+        return
+    diagnostic = InvocationDiagnostic(config, "H_BUILD")
+    previous = sys.gettrace()
+    entered = False
+    acknowledged = False
+
+    def finish():
+        nonlocal acknowledged
+        if not entered:
+            diagnostic.error("ENTRYPOINT_MISSING")
+            if sys.gettrace() is not previous:
+                sys.settrace(previous)
+        diagnostic.close()
+        # Separate bounded completion ACK closes the last-write/fsync failure gap.
+        # This is a private FD, never a new stdout/stderr capture mode. No ACK is
+        # sent on observer errors; the parent's original shell exit is unchanged.
+        if (
+            not acknowledged
+            and not diagnostic.data["secondary"]
+            and config.get("ack_fd") is not None
+        ):
+            acknowledged = True
+            try:
+                assert diagnostic_identity(config["path"]) == config["identity"]
+                raw = Path(config["path"]).read_bytes()
+                assert 0 < len(raw) <= 65536
+                assert (
+                    os.write(config["ack_fd"], hashlib.sha256(raw).hexdigest().encode("ascii"))
+                    == 64
+                )
+            except Exception:
+                diagnostic.error("COMPLETION_ACK_FAILED")
+
+    atexit.register(finish)
+    try:
+        assert diagnostic_identity(startup_path) == config["startup_identity"]
+        with zipfile.ZipFile(startup_path) as archive:
+            assert archive.namelist() == ["sitecustomize.py"]
+            assert archive.getinfo("sitecustomize.py").file_size <= 131072
+            launcher_source = archive.read("sitecustomize.py")
+        assert (
+            hashlib.sha256(launcher_source[: config["startup_code_bytes"]]).hexdigest()
+            == config["binding"]["observer"]["code_sha256"]
+        )
+        binding = config["binding"]["executor"]
+        for name, field in (
+            ("scripts/test_telegram_egress_migration.sh", "shell_blob"),
+            ("tests/test_telegram_egress_migration.py", "module_blob"),
+            ("scripts/prepare_telegram_egress.py", "helper_blob"),
+        ):
+            assert diagnostic_blob((Path(root) / name).read_bytes()) == binding[field]
+        # sitecustomize runs before Python inserts the '-' sys.path[0]. Restore
+        # this temporary import path before the original program starts.
+        saved = sys.path[:]
+        bytecode = sys.dont_write_bytecode
+        try:
+            sys.path.insert(0, root)
+            sys.dont_write_bytecode = True
+            from scripts import prepare_telegram_egress as original
+        finally:
+            sys.path[:] = saved
+            sys.dont_write_bytecode = bytecode
+        assert original.ROOT == Path(root)
+        assert (
+            Path(original.command.__code__.co_filename).resolve()
+            == Path(root) / "scripts/prepare_telegram_egress.py"
+        )
+        expected = compile(program, "<stdin>", "exec", dont_inherit=True)
+        assert previous is None
+    except Exception:
+        diagnostic.error("SOURCE_OR_TRACE_BINDING_FAILED")
+        finish()
+        return
+
+    def entry(frame, event, arg):
+        nonlocal entered
+        if (
+            event != "call"
+            or frame.f_code.co_filename != "<stdin>"
+            or frame.f_code.co_name != "<module>"
+        ):
+            return None
+        if frame.f_code != expected:
+            diagnostic.error("ENTRYPOINT_BINDING_FAILED")
+            sys.settrace(previous)
+            finish()
+            return None
+        entered = True
+        diagnostic.install(
+            original.command, previous=previous, build=original.migration_build_images
+        )
+
+        def leaving(frame, event, arg):
+            if event == "return":
+                finish()
+            return leaving
+
+        frame.f_trace_lines = False
+        return leaving
+
+    sys.settrace(entry)
+
+
+def invocation_diagnostic_code():
+    import inspect
+
+    functions = (
+        diagnostic_blob,
+        diagnostic_identity,
+        diagnostic_binding_valid,
+        diagnostic_new,
+        diagnostic_output,
+        diagnostic_classify,
+        InvocationDiagnostic,
+        start_h_diagnostic,
+    )
+    return (
+        "import hashlib,json,os,re,stat,subprocess,sys,time\nfrom pathlib import Path\nfrom contextlib import contextmanager\n"
+        + "\n\n".join(inspect.getsource(f) for f in functions)
+    )
+
+
+def diagnostic_binding(source, executor, checkout):
+    observer = schema_source_binding(source, checkout=e.ROOT)
+    target = schema_source_binding(executor, checkout=checkout)
+
+    def objects(root, ref):
+        result = {"source": ref, "tree": observer["tree"] if root == e.ROOT else target["tree"]}
+        for name, field in (
+            ("scripts/test_telegram_egress_migration.sh", "shell_blob"),
+            ("tests/test_telegram_egress_migration.py", "module_blob"),
+            ("scripts/prepare_telegram_egress.py", "helper_blob"),
+        ):
+            expected = e.command(["git", "rev-parse", ref + ":" + name]).decode().strip()
+            assert diagnostic_blob((root / name).read_bytes()) == expected, (
+                "DIAGNOSTIC_SOURCE_BINDING"
+            )
+            result[field] = expected
+        return result
+
+    binding = {"observer": objects(e.ROOT, source), "executor": objects(Path(checkout), executor)}
+    binding["observer"]["code_sha256"] = hashlib.sha256(
+        invocation_diagnostic_code().encode()
+    ).hexdigest()
+    return binding
+
+
+def write_h_diagnostic_launcher(config, historical, program):
+    import zipfile
+
+    config["startup_path"] = str(Path(config["directory"]) / "launcher.zip")
+    core = invocation_diagnostic_code()
+    config["startup_code_bytes"] = len(core.encode())
+    original_path = os.environ.get("PYTHONPATH")
+    fd = os.open(
+        config["startup_path"], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600
+    )
+    config["startup_identity"] = diagnostic_identity(config["startup_path"])
+    launcher = (
+        core
+        + "\nstart_h_diagnostic("
+        + repr(config)
+        + ","
+        + repr(str(historical))
+        + ","
+        + repr(program)
+        + ","
+        + repr(original_path)
+        + ")\n"
+    )
+    # Zip import has no writable __pycache__: every private file stays0600.
+    with os.fdopen(fd, "wb") as stream, zipfile.ZipFile(stream, "w") as archive:
+        archive.writestr("sitecustomize.py", launcher)
+    return dict(
+        os.environ,
+        PYTHONPATH=config["startup_path"] + (os.pathsep + original_path if original_path else ""),
+    )
+
+
+def run_historical_observed(historical, source, reports):
+    """Exactly one original H shell invocation; diagnostic errors never replace it."""
+    import tempfile
+
+    temporary, config, environment = None, None, None
+    read_fd, write_fd = None, None
+    summary = {"status": "INVALID", "secondary": ["DIAGNOSTIC_SETUP_FAILED"]}
+    try:
+        binding = diagnostic_binding(source, "754f1c883e5a94a7fc9e729af2605424f949ba33", historical)
+        assert binding["executor"] == {
+            "source": "754f1c883e5a94a7fc9e729af2605424f949ba33",
+            "tree": "b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f",
+            "shell_blob": "1672fbb4fb676ad69885043e46350f53334db0fc",
+            "module_blob": "99cf8d1a3f8a85b64e2785710a728964d5bd3f03",
+            "helper_blob": "58486046a6bb5682a336a1578705ed973e7b4fc6",
+        }
+        temporary = tempfile.TemporaryDirectory(prefix="asm-h-diagnostic-")
+        directory = Path(temporary.name)
+        config = diagnostic_new(
+            directory, binding, sources={binding["executor"]["source"]: binding["executor"]["tree"]}
+        )
+        read_fd, write_fd = os.pipe()
+        os.set_blocking(read_fd, False)
+        config.update(require_ack=True, ack_fd=write_fd)
+        shell = (historical / "scripts/test_telegram_egress_migration.sh").read_bytes()
+        program = shell.split(b"<<'PY'\n", 1)[1].rsplit(b"\nPY", 1)[0]
+        environment = write_h_diagnostic_launcher(config, historical, program)
+    except Exception:
+        config, environment = None, None
+        for fd in (read_fd, write_fd):
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+        read_fd, write_fd = None, None
+    try:
+        result = subprocess.run(
+            ["sh", "scripts/test_telegram_egress_migration.sh", "state"],
+            cwd=historical,
+            stdin=subprocess.DEVNULL,
+            **({"env": environment, "pass_fds": (write_fd,)} if environment is not None else {}),
+        )
+    finally:
+        parent_errors = False
+        if write_fd is not None:
+            try:
+                os.close(write_fd)
+            except OSError:
+                parent_errors = True
+        if config is not None:
+            try:
+                ack = os.read(read_fd, 65)
+                if len(ack) == 64:
+                    config["completion_ack"] = ack.decode("ascii")
+            except (OSError, UnicodeError):
+                pass
+            summary = diagnostic_export(config, reports / "build-observation.json")
+        if read_fd is not None:
+            try:
+                os.close(read_fd)
+            except OSError:
+                parent_errors = True
+        if temporary is not None:
+            try:
+                temporary.cleanup()
+            except Exception:
+                parent_errors = True
+        if parent_errors:
+            summary = {"status": "INVALID", "secondary": ["DIAGNOSTIC_CLEANUP_FAILED"]}
+    return result, summary
+
+
+def start_material_diagnostic(directory, report):
+    try:
+        directory = directory / "migration-observer"
+        directory.mkdir(mode=0o700)
+        source = report["coordinator"]
+        binding = diagnostic_binding(source, source, e.ROOT)
+        config = diagnostic_new(
+            directory,
+            binding,
+            sources={MATERIAL_E: MATERIAL_E_TREE, source: binding["executor"]["tree"]},
+        )
+        return config, InvocationDiagnostic(config, "P_MIGRATION")
+    except Exception:
+        return None, None
+
+
+@contextmanager
+def observe_material_migration(diagnostic, args, source, tree, direction, revision):
+    if diagnostic is None:
+        yield
+    else:
+        with diagnostic.migration(e.command, args, source, tree, direction, revision):
+            yield
+
+
+def finish_material_diagnostic(pair, path):
+    try:
+        config, diagnostic = pair
+        assert diagnostic is not None
+        diagnostic.close()
+        return diagnostic_export(config, path)
+    except Exception:
+        return {"status": "INVALID", "secondary": ["DIAGNOSTIC_SETUP_OR_CLOSE_FAILED"]}
+
+
 @contextmanager
 def observe_control_cleanup_commands(command, module, path, binding):
     """Observe original command frames; never wrap/replace a frozen C function.
@@ -2968,12 +3940,109 @@ def control_cleanup_observer_script(report, source):
     )
 
 
+def schema_source_binding(source, *, checkout=None, expected_tree=None):
+    assert re.fullmatch(r"[0-9a-f]{40}", source), "MATERIAL_SOURCE_ID"
+    raw = e.command(["git", "cat-file", "commit", source]).decode()
+    headers = raw.split("\n\n", 1)[0].splitlines()
+    trees = [line[5:] for line in headers if line.startswith("tree ")]
+    assert len(trees) == 1 and re.fullmatch(r"[0-9a-f]{40}", trees[0])
+    if expected_tree is not None:
+        assert trees == [expected_tree], "MATERIAL_SOURCE_TREE"
+    result = {
+        "sha": source,
+        "tree": trees[0],
+        "parents": [line[7:] for line in headers if line.startswith("parent ")],
+    }
+    if checkout is not None:
+        assert (
+            e.command(["git", "-C", str(checkout), "rev-parse", "HEAD"]).decode().strip() == source
+        )
+        assert not e.command(
+            ["git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=all"]
+        ).strip(), "MATERIAL_FROZEN_SOURCE_CHANGED"
+        result["clean"] = True
+    return result
+
+
+def schema_ordered_sources(historical, candidate):
+    chain = (historical, CONTROL_T, GUARDS_C, ESCALATION_G, MATERIAL_E, MATERIAL_BASE, candidate)
+    assert historical == "754f1c883e5a94a7fc9e729af2605424f949ba33"
+    assert len(set(chain)) == 7, "MATERIAL_DISTINCT_SOURCES"
+    for earlier, later in zip(chain, chain[1:], strict=False):
+        e.command(["git", "merge-base", "--is-ancestor", earlier, later])
+    return [
+        schema_source_binding(s, expected_tree=MATERIAL_E_TREE if s == MATERIAL_E else None)
+        for s in chain
+    ]
+
+
+def material_escalation_evidence(raw, started, retained_deadline):
+    """Bind terminal preparation to the retained, completed E report, not its exit alone."""
+    assert len(raw) <= 1024 * 1024, "MATERIAL_E_REPORT_LIMIT"
+    report = json.loads(raw)
+    assert (
+        report["phase"] == ESCALATION_PHASE
+        and report["coordinator"] == report["observed_source"] == MATERIAL_E
+        and report["historical"] == ESCALATION_G
+        and report["budget_state"] == "VALIDATED_CONSUMED"
+        and "failure" not in report
+        and "primary_failure" not in report
+    ), "MATERIAL_E_REPORT_SOURCE_RESULT"
+    budget, cleanup = report["prepare_budget"], report["cleanup"]
+    assert (
+        budget["version"] == 1
+        and budget["phase"] == ESCALATION_PHASE
+        and budget["historical"] == ESCALATION_G
+        and budget["candidate"] == MATERIAL_E
+        and budget["started_at"] == started
+        and budget["deadline"] == retained_deadline == started + 600
+        and type(budget["charged_total_seconds"]) in (int, float)
+        and 0 < budget["charged_total_seconds"] < 600
+    ), "MATERIAL_E_REPORT_BUDGET"
+    assert (
+        cleanup["state"] == "PASS"
+        and cleanup["source"] == MATERIAL_E
+        and cleanup["phase"] == ESCALATION_PHASE
+        and cleanup["project"] == "asm-escalation-schema-phase"
+        and re.fullmatch("[0-9a-f]{32}", cleanup["token"]) is not None
+    ), "MATERIAL_E_REPORT_CLEANUP"
+    assert (
+        report["database"]["populated_refusal"] == "PASS" and len(report["database"]["timers"]) == 3
+    ), "MATERIAL_E_REPORT_INCOMPLETE"
+    for kind in ("runtime", "development"):
+        image = report["images"][MATERIAL_E + ":" + kind]
+        assert (
+            image["source_sha"] == MATERIAL_E
+            and image["source_tree"] == MATERIAL_E_TREE
+            and image["kind"] == kind
+        ), "MATERIAL_E_REPORT_IMAGE_SOURCE"
+    for key in ("started_at", "total_seconds"):
+        assert type(report[key]) in (int, float) and 0 < report[key] < float("inf"), (
+            "MATERIAL_E_REPORT_CLOCK"
+        )
+    ended = report["started_at"] + report["total_seconds"]
+    assert started <= report["started_at"] <= ended < float("inf"), "MATERIAL_E_REPORT_CLOCK"
+    return {
+        "report_sha256": e.sha(raw),
+        "report_ended_at": ended,
+        "owner_token": cleanup["token"],
+    }
+
+
 def run_control_coordinator(request):
     """Retained frozen T shell is charged once, including runtime and cleanup."""
     ledger = schema_envelope(request, "CONTROL_COORDINATOR")
     started = ledger["started_at"]
     deadline = started + 600
-    ledger.update(budget_seconds=600, deadline=deadline, retained=CONTROL_T)
+    material_deadline = started + 720
+    ledger.update(
+        budget_seconds=600,
+        deadline=deadline,
+        retained=CONTROL_T,
+        material_deadline=material_deadline,
+        material_extension_seconds=120,
+        material_supervisor_deadline=material_deadline + 480,
+    )
     reports = e.ROOT / "reports"
     path = reports / "control-schema-ledger.json"
     retained = reports / "retained-turns"
@@ -2991,6 +4060,7 @@ def run_control_coordinator(request):
         ledger.update(
             historical=historical, candidate=candidate, budget_state="COORDINATOR_VALIDATED"
         )
+        ledger["ordered_sources"] = schema_ordered_sources(historical, candidate)
         retained.mkdir(parents=True, exist_ok=True)
         with schema_coordinator_workspace(ledger) as temp:
             directory = Path(temp)
@@ -3218,13 +4288,28 @@ def run_control_coordinator(request):
                         failure.add_note("CONTROL_GUARDS_REPORT_FAILED")
             ledger["guards_cleanup"] = ledger["cleanup"]
             e.command(["git", "worktree", "remove", str(guards)])
+            # E is now frozen too. Run its accepted controller and fixtures from
+            # its exact checkout, and preserve its own report/source identities.
+            escalation = directory / "escalation"
+            retained_e = reports / "retained-escalation"
+            retained_e.mkdir(parents=True, exist_ok=True)
+            with e.migration_budget(deadline - time.monotonic()):
+                e.command(["git", "merge-base", "--is-ancestor", ESCALATION_G, MATERIAL_E])
+                e.command(["git", "merge-base", "--is-ancestor", MATERIAL_E, candidate])
+                (retained_e / "source-E.tar.gz").write_bytes(
+                    e.command(["git", "archive", "--format=tar.gz", MATERIAL_E])
+                )
+                e.command(["git", "worktree", "add", "--detach", str(escalation), MATERIAL_E])
+            ledger["retained_escalation_source"] = schema_source_binding(
+                MATERIAL_E, checkout=escalation, expected_tree=MATERIAL_E_TREE
+            )
             issued = time.monotonic()
             assert issued < deadline, "CONTROL_PREPARE_BUDGET_EXHAUSTED"
             value = dict(
                 version=1,
                 phase=ESCALATION_PHASE,
                 historical=ESCALATION_G,
-                candidate=candidate,
+                candidate=MATERIAL_E,
                 uid=os.getuid(),
                 started_at=started,
                 issued_at=issued,
@@ -3236,29 +4321,120 @@ def run_control_coordinator(request):
             ledger["escalation_handoff"] = value
             ledger["stage"] = "escalation_admission"
             owner_e = SchemaOwnership(
-                directory / "owner-E", "asm-escalation-schema-phase", ESCALATION_PHASE, candidate
+                directory / "owner-E", "asm-escalation-schema-phase", ESCALATION_PHASE, MATERIAL_E
             )
             owner_e.admit()
             ledger["cleanup"] = {"state": "ADMITTED"}
             with schema_cleanup_scope(owner_e, ledger, path):
                 ledger["stage"] = "escalation_shell"
+                try:
+                    result = supervised_schema_child(
+                        [
+                            "sh",
+                            "scripts/test_telegram_egress.sh",
+                            "--escalation-schema-upgrade",
+                            ESCALATION_G,
+                            MATERIAL_E,
+                            str(handoff_e),
+                        ],
+                        cwd=escalation,
+                        timeout=(deadline - time.monotonic()) + 480,
+                        environment=owner_e.environment(),
+                    )
+                    ledger["escalation_exit"] = result
+                    assert result == 0 and not handoff_e.exists(), "ESCALATION_SCHEMA_PHASE_FAILED"
+                    ledger["retained_escalation_source"] = schema_source_binding(
+                        MATERIAL_E, checkout=escalation, expected_tree=MATERIAL_E_TREE
+                    )
+                finally:
+                    failure = sys.exception()
+                    try:
+                        if (escalation / "reports").exists():
+                            shutil.copytree(escalation / "reports", retained_e, dirs_exist_ok=True)
+                    except BaseException as error:
+                        ledger["retained_reports_failed"] = True
+                        ledger["private_state_retained"] = True
+                        if failure is None:
+                            ledger["stage"] = "retained_escalation_reports"
+                            raise
+                        ledger.setdefault("secondary_failures", []).append(
+                            {"stage": "retained_escalation_reports", **schema_failure(error)}
+                        )
+                        failure.add_note("CONTROL_ESCALATION_REPORT_FAILED")
+            ledger["escalation_cleanup"] = ledger["cleanup"]
+            e.command(["git", "worktree", "remove", str(escalation)])
+            ledger["stage"] = "material_budget_handoff"
+            evidence = material_escalation_evidence(
+                (retained_e / "escalation-schema-phase.json").read_bytes(), started, deadline
+            )
+            assert (
+                ledger["escalation_exit"] == 0
+                and ledger["retained_escalation_source"]["clean"] is True
+                and ledger["escalation_cleanup"]["state"] == "PASS"
+                and ledger["escalation_cleanup"]["token"] == evidence["owner_token"]
+            ), "MATERIAL_E_NOT_COMPLETED"
+            completion = {
+                **evidence,
+                "source": MATERIAL_E,
+                "tree": MATERIAL_E_TREE,
+                "source_clean": True,
+                "exit_code": 0,
+                "cleanup_state": "PASS",
+                "completed_at": time.monotonic(),
+            }
+            owner_p = SchemaOwnership(
+                directory / "owner-P", "asm-material-schema-phase", MATERIAL_PHASE, candidate
+            )
+            issued = time.monotonic()
+            # Includes all preceding E runtime, supervision, exports and cleanup.
+            # C0's explicit terminal +120 is measured from the same original S.
+            ledger["material_remaining_seconds"] = material_deadline - issued
+            assert completion["report_ended_at"] <= completion["completed_at"] <= issued, (
+                "MATERIAL_E_COMPLETION_ORDER"
+            )
+            ledger["escalation_completion"] = completion
+            assert issued < material_deadline, "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
+            value = dict(
+                version=2,
+                phase=MATERIAL_PHASE,
+                historical=MATERIAL_E,
+                candidate=candidate,
+                uid=os.getuid(),
+                owner_token=owner_p.token,
+                started_at=started,
+                issued_at=issued,
+                charged_seconds=issued - started,
+                retained_deadline=deadline,
+                extension_seconds=120,
+                deadline=material_deadline,
+                escalation_completion=completion,
+            )
+            handoff_p = directory / "material-budget.json"
+            e.write_private(handoff_p, e.encoded(value))
+            ledger["material_handoff"] = value
+            ledger["stage"] = "material_admission"
+            owner_p.admit()
+            ledger["cleanup"] = {"state": "ADMITTED"}
+            with schema_cleanup_scope(owner_p, ledger, path):
+                ledger["stage"] = "material_shell"
+                assert time.monotonic() < material_deadline, "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
                 result = supervised_schema_child(
                     [
                         "sh",
                         "scripts/test_telegram_egress.sh",
-                        "--escalation-schema-upgrade",
-                        ESCALATION_G,
+                        "--material-schema-upgrade",
+                        MATERIAL_E,
                         candidate,
-                        str(handoff_e),
+                        str(handoff_p),
                     ],
                     cwd=e.ROOT,
-                    timeout=(deadline - time.monotonic()) + 480,
-                    environment=owner_e.environment(),
+                    timeout=(material_deadline - time.monotonic()) + 480,
+                    environment=owner_p.environment(),
                 )
-                ledger["escalation_exit"] = result
-                assert result == 0 and not handoff_e.exists(), "ESCALATION_SCHEMA_PHASE_FAILED"
+                ledger["material_exit"] = result
+                assert result == 0 and not handoff_p.exists(), "MATERIAL_SCHEMA_PHASE_FAILED"
                 e.source_check(candidate)
-            ledger["escalation_cleanup"] = ledger["cleanup"]
+            ledger["material_cleanup"] = ledger["cleanup"]
             # Original C bytes/assertions and unchanged invocation request.
             # The separate current observer journal labels execution instrumented.
             ledger["stage"] = "retained_control_cleanup_negatives"
@@ -3292,6 +4468,7 @@ def run_control_coordinator(request):
             e.command(["git", "worktree", "remove", str(control)])
             schema_publish(ledger, path)
             print("GUARDS_SCHEMA_COORDINATOR_PASS", flush=True)
+            print("MATERIAL_SCHEMA_COORDINATOR_PASS", flush=True)
     except BaseException as error:
         primary = error
         schema_record_failure(ledger, error)
@@ -4673,6 +5850,674 @@ def run_escalation_schema_phase(request):
         schema_publish(report, report_path, primary)
 
 
+def consume_material_budget(path, historical, candidate):
+    """P-only version2: retained S+600, terminal S+720, completed E and one owner."""
+    info = path.lstat()
+    raw = e.private_bytes(path)
+    assert info.st_nlink == 1, "MATERIAL_BUDGET_SINGLE_LINK"
+    value = e.strict_json(raw)
+    assert set(value) == {
+        "version",
+        "phase",
+        "historical",
+        "candidate",
+        "uid",
+        "owner_token",
+        "started_at",
+        "issued_at",
+        "charged_seconds",
+        "deadline",
+        "retained_deadline",
+        "extension_seconds",
+        "escalation_completion",
+    }, "MATERIAL_BUDGET_FORMAT"
+    assert value["version"] == 2 and type(value["version"]) is int, "MATERIAL_BUDGET_VERSION"
+    assert value["phase"] == MATERIAL_PHASE and value["historical"] == historical == MATERIAL_E, (
+        "MATERIAL_BUDGET_PHASE_SOURCE"
+    )
+    assert (
+        value["candidate"] == candidate
+        and re.fullmatch(r"[0-9a-f]{40}", candidate) is not None
+        and candidate != historical
+        and type(value["uid"]) is int
+        and value["uid"] == os.getuid()
+    ), "MATERIAL_BUDGET_CANDIDATE_OWNER"
+    for key in ("started_at", "issued_at", "charged_seconds", "deadline", "retained_deadline"):
+        assert type(value[key]) in (int, float) and 0 < value[key] < float("inf"), (
+            "MATERIAL_BUDGET_CLOCK"
+        )
+    assert (
+        value["retained_deadline"] == value["started_at"] + 600
+        and value["deadline"] == value["started_at"] + 720
+        and type(value["extension_seconds"]) is int
+        and value["extension_seconds"] == 120
+    ), "MATERIAL_BUDGET_TOTAL"
+    assert value["issued_at"] - value["started_at"] == value["charged_seconds"], (
+        "MATERIAL_BUDGET_CHARGED"
+    )
+    owner = SchemaOwnership.inherited("asm-material-schema-phase", candidate)
+    assert (
+        isinstance(value["owner_token"], str)
+        and re.fullmatch("[0-9a-f]{32}", value["owner_token"]) is not None
+        and owner.token == value["owner_token"]
+        and owner.phase == MATERIAL_PHASE
+    ), "MATERIAL_BUDGET_OWNER"
+    completion = value["escalation_completion"]
+    assert set(completion) == {
+        "source",
+        "tree",
+        "source_clean",
+        "exit_code",
+        "cleanup_state",
+        "owner_token",
+        "report_sha256",
+        "report_ended_at",
+        "completed_at",
+    }, "MATERIAL_E_COMPLETION_FORMAT"
+    assert (
+        completion["source"] == MATERIAL_E
+        and completion["tree"] == MATERIAL_E_TREE
+        and completion["source_clean"] is True
+        and type(completion["exit_code"]) is int
+        and completion["exit_code"] == 0
+        and completion["cleanup_state"] == "PASS"
+    ), "MATERIAL_E_NOT_COMPLETED"
+    for key in ("report_ended_at", "completed_at"):
+        assert type(completion[key]) in (int, float) and 0 < completion[key] < float("inf"), (
+            "MATERIAL_E_COMPLETION_CLOCK"
+        )
+    evidence = material_escalation_evidence(
+        (e.ROOT / "reports/retained-escalation/escalation-schema-phase.json").read_bytes(),
+        value["started_at"],
+        value["retained_deadline"],
+    )
+    assert all(completion[key] == expected for key, expected in evidence.items()), (
+        "MATERIAL_E_REPORT_CHANGED"
+    )
+    assert completion["report_ended_at"] <= completion["completed_at"] <= value["issued_at"], (
+        "MATERIAL_E_COMPLETION_ORDER"
+    )
+    # Recheck the original bytes and file identity before consuming this capability.
+    after = path.lstat()
+    fields = (
+        "st_dev",
+        "st_ino",
+        "st_nlink",
+        "st_uid",
+        "st_mode",
+        "st_size",
+        "st_mtime_ns",
+        "st_ctime_ns",
+    )
+    assert all(getattr(after, key) == getattr(info, key) for key in fields), (
+        "MATERIAL_BUDGET_FILE_CHANGED"
+    )
+    assert e.private_bytes(path) == raw, "MATERIAL_BUDGET_FILE_CHANGED"
+    now = time.monotonic()
+    assert value["issued_at"] <= now < value["deadline"], "MATERIAL_BUDGET_EXHAUSTED"
+    path.unlink()
+    return {
+        **value,
+        "observed_at": now,
+        "charged_at_observation": now - value["started_at"],
+        "handoff_seconds": now - value["issued_at"],
+        "remaining_seconds": value["deadline"] - now,
+    }
+
+
+def material_observed_source(observation, report, historical, candidate, *, fresh=False):
+    assert historical == MATERIAL_E and re.fullmatch(r"[0-9a-f]{40}", candidate)
+    assert candidate != historical
+    assert observation["revision"] in {"0011", "0012"}, "MATERIAL_RECOVERY_REVISION"
+    assert observation["role"] == "asm_migrator", "MATERIAL_RECOVERY_ROLE"
+    identity = report["seed_identity"]
+    assert set(identity) == {
+        "database",
+        "database_oid",
+        "server_address",
+        "server_port",
+        "postmaster_started",
+        "seed_sha256",
+    }, "MATERIAL_RECOVERY_IDENTITY_REQUIRED"
+    assert identity["database"] == "asm_local" and identity["server_port"] == 5432
+    assert type(identity["database_oid"]) is int and identity["database_oid"] > 0
+    assert re.fullmatch(r"[0-9a-f]{64}", identity["seed_sha256"])
+    assert identity["server_address"] and identity["postmaster_started"]
+    assert all(observation[key] == value for key, value in identity.items()), (
+        "MATERIAL_RECOVERY_DATABASE_IDENTITY"
+    )
+    for key in ("reader_pid", "backend_pid", "reader_start_ticks"):
+        assert type(observation[key]) is int and observation[key] > 0, "MATERIAL_RECOVERY_PROCESS"
+    assert re.fullmatch(r"pid:\[[0-9]+\]", observation["reader_namespace"])
+    assert observation["reader_boot_id"], "MATERIAL_RECOVERY_HOST_BOOT"
+    if fresh:
+        lost = report["lost_result_process"]
+        assert set(lost) == {"namespace", "pid", "start_ticks", "boot_id"}, (
+            "MATERIAL_PROCESS_IDENTITY_REQUIRED"
+        )
+        assert type(lost["pid"]) is int and lost["pid"] > 0
+        assert type(lost["start_ticks"]) is int and lost["start_ticks"] > 0
+        assert re.fullmatch(r"pid:\[[0-9]+\]", lost["namespace"])
+        assert observation["reader_boot_id"] == lost["boot_id"], "MATERIAL_RECOVERY_HOST_BOOT"
+        assert observation["reader_start_ticks"] > lost["start_ticks"], (
+            "MATERIAL_FRESH_PROCESS_REQUIRED"
+        )
+    return historical if observation["revision"] == "0011" else candidate
+
+
+def material_schema_recovery_source(
+    result, observe, report, historical, candidate, *, direction="upgrade"
+):
+    assert direction in {"upgrade", "downgrade"}
+    detail = {
+        "injection": "after_commit_before_success_exit",
+        "exit_code": result.returncode,
+        "observed": "NOT_READ",
+    }
+    report[direction + "_ack_loss"] = detail
+    if (
+        result.returncode != 86
+        or result.stdout.strip() != b"MATERIAL_MIGRATION_COMMITTED_RESULT_LOST"
+    ):
+        detail["result"] = "UNEXPECTED_MIGRATOR_RESULT"
+        raise AssertionError("MATERIAL_EXPECTED_POST_COMMIT_FAILURE")
+    detail["result"] = "CONTROLLED_FAILURE_OBSERVED"
+    try:
+        observation = observe()
+    except Exception:
+        detail["observed"] = "UNREADABLE"
+        raise
+    detail["observed"] = observation
+    selected = material_observed_source(observation, report, historical, candidate, fresh=True)
+    detail["recovery_source"] = selected
+    return selected
+
+
+def run_material_schema_phase(request):
+    """Finite E/0011→P/0012 proof, with frozen E producers and independent readers."""
+    report = schema_envelope(request, MATERIAL_PHASE)
+    report.update(
+        images={}, checks=[], stage_timings=[], migration_diagnostics={"status": "NOT_REACHED"}
+    )
+    primary = None
+    preparing = True
+
+    def preparation_remaining():
+        budget = report["prepare_budget"]
+        observed = time.monotonic()
+        budget.update(
+            last_preparation_observed_at=observed,
+            charged_at_preparation_observation=observed - budget["started_at"],
+        )
+        assert observed < budget["deadline"], "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
+        return budget["deadline"] - observed
+
+    def run(args, **kwargs):
+        began = time.monotonic()
+        outcome = "FAILED"
+        try:
+            if preparing and "prepare_budget" in report:
+                kwargs["timeout"] = min(kwargs.get("timeout", 40), preparation_remaining())
+            result = e.command(args, **kwargs)
+            outcome = "PASS"
+            return result
+        finally:
+            report["stage_timings"].append(
+                {"stage": report["stage"], "seconds": time.monotonic() - began, "outcome": outcome}
+            )
+
+    started = report["started_at"]
+    report_path = e.ROOT / "reports/material-schema-phase.json"
+    schema_publish(report, report_path)
+    try:
+        historical = MATERIAL_E
+        report["stage"] = "observe_source"
+        candidate = run(["git", "rev-parse", "HEAD"]).decode().strip()
+        report["observed_source"] = candidate
+        assert set(request) == {"historical", "candidate", "budget_file"}, "CONTROL_REQUEST_FORMAT"
+        assert request["historical"] == historical and request["candidate"] == candidate, (
+            "CONTROL_REQUEST_SOURCE"
+        )
+        report["stage"] = "consume_budget"
+        budget = consume_material_budget(Path(request["budget_file"]), historical, candidate)
+        report.update(
+            coordinator=candidate,
+            historical=historical,
+            budget_state="VALIDATED_CONSUMED",
+            prepare_budget=dict(budget),
+        )
+        schema_publish(report, report_path)
+        assert (
+            Path.cwd() == e.ROOT and os.getuid() != 0 and os.environ.get("GITHUB_ACTIONS") == "true"
+        ), "CONTROL_DISPOSABLE_RUNNER"
+        report["stage"] = "source_check"
+        with e.migration_budget(preparation_remaining()):
+            e.source_check(candidate)
+            report["sources"] = schema_ordered_sources(
+                "754f1c883e5a94a7fc9e729af2605424f949ba33", candidate
+            )
+            report["stage"] = "daemon_admission"
+            assert not run(["docker", "ps", "-aq"]).strip()
+            assert not run(["docker", "volume", "ls", "-q"]).strip()
+        project = "asm-material-schema-phase"
+        owner = SchemaOwnership.inherited(project, candidate)
+        report["cleanup"] = {"state": "ADMITTED"}
+        pins = dict(
+            line.split("=", 1)
+            for line in (e.ROOT / "infra/images.lock.env").read_text().splitlines()
+            if line and not line.startswith("#")
+        )
+        with (
+            schema_private_workspace(report, "asm-material-schema-") as temporary,
+            schema_cleanup_scope(owner, report, report_path),
+        ):
+            directory = Path(temporary)
+            sources, images = {}, {}
+            # Only exact tracked archives enter build contexts. The historical-only
+            # production migration_build_images helper is deliberately not called for P.
+            report["stage"] = "prepare_images"
+            prepare_started = time.monotonic()
+            report["prepare_budget"]["image_prepare_started_at"] = prepare_started
+            with e.migration_budget(preparation_remaining()):
+                for source in (historical, candidate):
+                    archive = directory / source
+                    archive.mkdir()
+                    report["stage"] = "archive_" + source[:8]
+                    e.migration_build_context(source, archive)
+                    sources[source] = archive
+                    source_archive = run(["git", "archive", "--format=tar.gz", source])
+                    name = "source-E.tar.gz" if source == historical else "source-P.tar.gz"
+                    (e.ROOT / "reports" / name).write_bytes(source_archive)
+                    report.setdefault("archives", {})[name] = {
+                        "source": source,
+                        "sha256": e.sha(source_archive),
+                    }
+                    images[source] = {}
+                    for kind in ("runtime", "development"):
+                        tag = "asm-material-schema-" + kind + ":" + source
+                        reuse = "asm-escalation-schema-" + kind + ":" + source
+                        existing = (
+                            run(["docker", "image", "ls", "-q", "--no-trunc", reuse])
+                            .decode()
+                            .strip()
+                        )
+                        if existing:
+                            report["stage"] = "reuse_" + source[:8] + "_" + kind
+                            e.migration_image(existing, source, kind)
+                            run(["docker", "tag", existing, tag])
+                        else:
+                            report["stage"] = "build_" + source[:8] + "_" + kind
+                            run(
+                                [
+                                    "docker",
+                                    "build",
+                                    "--pull",
+                                    "--network=default",
+                                    "--target",
+                                    kind,
+                                    "--build-arg",
+                                    "PYTHON_IMAGE=" + pins["PYTHON_IMAGE"],
+                                    "--build-arg",
+                                    "UV_IMAGE=" + pins["UV_IMAGE"],
+                                    "-f",
+                                    str(archive / "infra/Dockerfile.backend"),
+                                    "-t",
+                                    tag,
+                                    str(archive),
+                                ],
+                                timeout=480,
+                            )
+                        image_id = json.loads(run(["docker", "image", "inspect", tag]))[0]["Id"]
+                        images[source][kind] = image_id
+                        report["stage"] = "image_probe_" + source[:8] + "_" + kind
+                        report["images"][source + ":" + kind] = e.migration_image(
+                            image_id, source, kind
+                        )
+                report["stage"] = "frozen_g_seed_image"
+                image_g = json.loads(
+                    run(
+                        [
+                            "docker",
+                            "image",
+                            "inspect",
+                            "asm-guards-schema-development:" + ESCALATION_G,
+                        ]
+                    )
+                )[0]["Id"]
+                report["images"][ESCALATION_G + ":development"] = e.migration_image(
+                    image_g, ESCALATION_G, "development"
+                )
+            prepared_at = time.monotonic()
+            report["prepare_budget"] = {
+                **report["prepare_budget"],
+                "preparation_ended_at": prepared_at,
+                "candidate_prepare_seconds": prepared_at - budget["observed_at"],
+                "image_prepare_seconds": prepared_at - prepare_started,
+                "charged_total_seconds": prepared_at - budget["started_at"],
+                "remaining_seconds": budget["deadline"] - prepared_at,
+            }
+            assert prepared_at < budget["deadline"], "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
+            preparing = False
+            # init_local emits only a fixed diagnostic, never credentials. All private
+            # runtime files are outside both source archives and the repository.
+            report["stage"] = "runtime_configuration"
+            subprocess.run(
+                [sys.executable, str(e.ROOT / "scripts/init_local.py")],
+                cwd=directory,
+                check=True,
+                timeout=30,
+            )
+            compose = [
+                "docker",
+                "compose",
+                "--project-directory",
+                str(sources[candidate]),
+                "--project-name",
+                project,
+                "--env-file",
+                str(e.ROOT / "infra/images.lock.env"),
+                "--env-file",
+                str(directory / ".env"),
+                "-f",
+                str(sources[candidate] / "compose.yaml"),
+                "--profile",
+                "telegram-operator",
+            ]
+            model = json.loads(run([*compose, "config", "--format", "json"]))
+            variables = dict(model["services"]["api"]["environment"])
+            variables.update(model["services"]["migrate"]["environment"])
+            assert variables["ASM_TELEGRAM_ENABLED"] == "false" and variables["TG_BOT_TOKEN"] == ""
+            envfile = directory / "controller.env"
+            e.write_private(
+                envfile,
+                "".join(k + "=" + str(v) + "\n" for k, v in sorted(variables.items())).encode(),
+            )
+            state = directory / "state"
+            state.mkdir(mode=0o700)
+            prefix = [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                project + "_default",
+                "--env-file",
+                str(envfile),
+                "--user",
+                f"{os.getuid()}:{os.getgid()}",
+                "--mount",
+                f"type=bind,source={state},target=/state",
+            ]
+
+            def controller(action, *, legacy=None):
+                report["stage"] = (legacy or "material") + "_controller_" + action
+                image, module, flag, receipt, marker = (
+                    (
+                        image_g,
+                        "tests/test_m3_1_guards_migrations.py",
+                        "--guards-schema-phase",
+                        "receipt.json",
+                        "GUARDS_SCHEMA_",
+                    )
+                    if legacy == "G"
+                    else (
+                        images[historical]["development"],
+                        "tests/test_m3_2_escalations_migrations.py",
+                        "--escalation-schema-phase",
+                        "receipt.json",
+                        "ESCALATION_SCHEMA_",
+                    )
+                    if legacy == "E"
+                    else (
+                        images[candidate]["development"],
+                        "tests/test_telegram_egress_postgres.py",
+                        "--material-schema-phase",
+                        "material.json",
+                        "MATERIAL_SCHEMA_",
+                    )
+                )
+                try:
+                    output = run(
+                        [*prefix, image, "python", module, flag, action, "/state/" + receipt],
+                        timeout=120,
+                    )
+                except BaseException:
+                    failure = state / "controller-failure.json"
+                    if failure.exists():
+                        report["controller_failure"] = json.loads(e.private_bytes(failure))
+                    raise
+                assert output.decode().strip() == marker + action.upper() + "_PASS"
+                report["checks"].append((legacy or "P") + ":" + action)
+
+            def migrate(source, direction, revision):
+                report["stage"] = direction + "_" + revision
+                args = [*prefix, images[source]["development"], "alembic", direction, revision]
+                tree = report["images"][source + ":development"]["source_tree"]
+                with observe_material_migration(
+                    migration_diagnostic[1], args, source, tree, direction, revision
+                ):
+                    run(args, timeout=30)
+
+            def probe(source, expected):
+                controller("pairing-before")
+                revision = json.loads((state / "material.json").read_text())["pairing_before"][
+                    "revision"
+                ]
+                report["stage"] = "probe_" + source[:8] + "_" + str(expected)
+                code = "import asyncio\nfrom asm.foundation import RuntimeDatabase,Settings,DATABASE_SCHEMA_REVISION\nassert DATABASE_SCHEMA_REVISION == SOURCE_REVISION\nasync def main():\n d=RuntimeDatabase(Settings())\n try:\n  try: await d.check()\n  except RuntimeError as error:\n   assert not EXPECTED and str(error)=='Database capability/schema mismatch'\n  else: assert EXPECTED\n finally: await d.close()\nasyncio.run(main())\n".replace(
+                    "EXPECTED", repr(expected)
+                ).replace("SOURCE_REVISION", repr("0011" if source == historical else "0012"))
+                run([*prefix, images[source]["runtime"], "python", "-c", code], timeout=30)
+                controller("pairing-after")
+                report.setdefault("pairings", []).append(
+                    {
+                        "source": source,
+                        "revision": revision,
+                        "ready": expected,
+                        "unchanged_rows_catalog": True,
+                    }
+                )
+
+            def callers(source):
+                report["stage"] = "callers_" + source[:8]
+                run(["docker", "tag", images[source]["runtime"], "asm-backend:local"])
+                run(
+                    [
+                        *compose,
+                        "up",
+                        "-d",
+                        "--no-deps",
+                        "--pull",
+                        "never",
+                        "--force-recreate",
+                        "--wait",
+                        "api",
+                        "worker",
+                        "scheduler",
+                    ],
+                    timeout=120,
+                )
+                result = {}
+                for service in ("api", "worker", "scheduler"):
+                    ident = run([*compose, "ps", "-q", service]).decode().strip()
+                    info = json.loads(run(["docker", "inspect", ident]))[0]
+                    assert info["Image"] == images[source]["runtime"] and info["State"]["Running"]
+                    result[service] = {"id": ident, "image": info["Image"], "source": source}
+                return result
+
+            def drain():
+                report["stage"] = "drain"
+                run([*compose, "stop", "--timeout", "10", "api", "worker", "scheduler"], timeout=60)
+                for service in ("api", "worker", "scheduler"):
+                    ident = run([*compose, "ps", "-aq", service]).decode().strip()
+                    assert not json.loads(run(["docker", "inspect", ident]))[0]["State"]["Running"]
+
+            migration_diagnostic = start_material_diagnostic(directory, report)
+            try:
+                report["stage"] = "infrastructure"
+                run([*compose, "up", "-d", "--wait", "postgres", "storage"], timeout=120)
+                run([*compose, "run", "--rm", "--no-deps", "-T", "storage-init"], timeout=120)
+                # Capture pristine E and P catalogs before any fixture exists.
+                migrate(historical, "upgrade", "0011")
+                controller("empty11")
+                probe(historical, True)
+                probe(candidate, False)
+                migrate(candidate, "upgrade", "0012")
+                migrate(candidate, "upgrade", "0012")
+                controller("empty12")
+                probe(candidate, True)
+                probe(historical, False)
+                migrate(candidate, "downgrade", "0011")
+                controller("empty11-check")
+                # Produce retained history only through immutable G/E code/images.
+                migrate(historical, "downgrade", "0009")
+                controller("seed9", legacy="G")
+                migrate(historical, "upgrade", "0010")
+                controller("check10", legacy="G")
+                controller("fresh", legacy="G")
+                controller("seed10", legacy="E")
+                migrate(historical, "upgrade", "0011")
+                controller("check11", legacy="E")
+                controller("fresh", legacy="E")
+                controller("refuse", legacy="E")
+                report["baseline_callers"] = callers(historical)
+                probe(historical, True)
+                probe(candidate, False)
+                drain()
+                controller("seed11")
+                report["seed_identity"] = json.loads((state / "material.json").read_text())[
+                    "identity"
+                ]
+                # This guard remains historical0007-only, before any journal/effect.
+                guard = directory / "guard"
+                guard.mkdir(mode=0o700)
+                e.write_private(guard / "operation.lock", b"")
+                before = {p.name: p.read_bytes() for p in guard.iterdir()}
+                for action in ("migration-attest", "migration-prepare"):
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(e.ROOT / "scripts/prepare_telegram_egress.py"),
+                            action,
+                            "--state-dir",
+                            str(guard),
+                            "--accepted-sha",
+                            candidate,
+                            "--from-sha",
+                            e.MIGRATION_FROM,
+                        ],
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        timeout=30,
+                    )
+                    assert (
+                        result.returncode == 1
+                        and b"EGRESS_MIGRATION_HISTORICAL_SCHEMA_ONLY" in result.stdout
+                    )
+                    assert {p.name: p.read_bytes() for p in guard.iterdir()} == before
+                report["checks"].append("candidate_direct_cli_pairing_refusal")
+                for _ in range(2):
+                    migrate(candidate, "upgrade", "0012")
+                    migrate(candidate, "upgrade", "0012")
+                    controller("check12")
+                    probe(candidate, True)
+                    probe(historical, False)
+                    migrate(candidate, "downgrade", "0011")
+                    controller("check11")
+                    probe(historical, True)
+                    probe(candidate, False)
+
+                def observe_revision():
+                    return json.loads(
+                        run(
+                            [
+                                *prefix,
+                                images[candidate]["development"],
+                                "python",
+                                "tests/test_telegram_egress_postgres.py",
+                                "--material-schema-phase",
+                                "observe",
+                                "/state/material.json",
+                            ],
+                            timeout=30,
+                        )
+                    )
+
+                for direction, revision in (("upgrade", "0012"), ("downgrade", "0011")):
+                    report["stage"] = "committed_" + direction + "_ack_loss"
+                    lost = subprocess.run(
+                        [
+                            *prefix,
+                            images[candidate]["development"],
+                            "python",
+                            "tests/test_telegram_egress_postgres.py",
+                            "--material-schema-phase",
+                            direction + "-lost-result",
+                            "/state/material.json",
+                        ],
+                        stdin=subprocess.DEVNULL,
+                        capture_output=True,
+                        timeout=30,
+                    )
+                    report["lost_result_process"] = json.loads(
+                        (state / "material.json").read_text()
+                    )["lost_result_process"]
+                    recovery_source = material_schema_recovery_source(
+                        lost, observe_revision, report, historical, candidate, direction=direction
+                    )
+                    # Assert the observed result; selection itself used no assumed exit/revision.
+                    assert report[direction + "_ack_loss"]["observed"]["revision"] == revision
+                    controller("check12" if revision == "0012" else "check11")
+                    probe(recovery_source, True)
+                    probe(historical if recovery_source == candidate else candidate, False)
+                    report[direction + "_ack_loss"]["paired_readiness"] = "PASS"
+                migrate(candidate, "upgrade", "0012")
+                controller("check12")
+                controller("fresh")  # current DTO/V1 reader + fresh V2/OFF receipt
+                controller("refuse")
+                observed = observe_revision()
+                recovery_source = material_observed_source(observed, report, historical, candidate)
+                assert observed["revision"] == "0012" and recovery_source == candidate
+                report["used_recovery"] = {"observed": observed, "source": recovery_source}
+                probe(historical, False)
+                probe(recovery_source, True)
+                report["cutover_callers"] = callers(recovery_source)
+                drain()
+                controller("refuse")
+                report["restarted_callers"] = callers(recovery_source)
+                drain()
+                controller("refuse")
+                report["database"] = json.loads((state / "material.json").read_text())
+                assert report["database"]["populated_refusal"] == "PASS"
+            except BaseException as error:
+                schema_record_failure(report, error)
+                raise
+            finally:
+                primary_migration = sys.exception()
+                report["migration_diagnostics"] = finish_material_diagnostic(
+                    migration_diagnostic, e.ROOT / "reports/migration-P-observation.json"
+                )
+                schema_publish(report, report_path, sys.exception())
+                if primary_migration is None:
+                    assert report["migration_diagnostics"]["status"] == "COMPLETE", (
+                        "P_DIAGNOSTIC_VALIDATION_FAILED"
+                    )
+        e.source_check(candidate)
+        print("TELEGRAM_EGRESS_MATERIAL_SCHEMA_PHASE_PASS", flush=True)
+    except BaseException as error:
+        primary = error
+        schema_record_failure(report, error)
+        raise
+    finally:
+        if preparing and "prepare_budget" in report:
+            stopped = time.monotonic()
+            report["prepare_budget"].update(
+                preparation_stopped_at=stopped,
+                charged_at_preparation_stop=stopped - report["prepare_budget"]["started_at"],
+            )
+        report["total_seconds"] = time.monotonic() - started
+        schema_publish(report, report_path, primary)
+
+
 def run_schema_cleanup_negatives(request):
     """Actual daemon/PG negatives; mandatory only in the two existing state lanes."""
     import tempfile
@@ -5052,6 +6897,18 @@ def run_schema_cleanup_negatives(request):
     )
 
 
+if __name__ == "__h_observer_definitions__":
+    # Keep runpy's module alive for the observer's ordinary inspect.getsource calls.
+    # Hand off executor exceptions without catching them as definition-load errors.
+    h_observer_result = globals()["h_observer_result"]
+    h_observer_result["started"] = True
+    try:
+        h_observer_result["result"] = run_historical_observed(**globals()["h_observer_request"])
+    except BaseException as h_observer_error:
+        h_observer_result["error"] = h_observer_error
+    raise SystemExit(0)
+
+
 if __name__ == "__schema_docker__":
     schema_docker_cli(globals()["ownership_file"], globals()["docker_args"])
     raise SystemExit(0)
@@ -5068,6 +6925,9 @@ if __name__ == "__control_coordinator__":
 
 
 if __name__ == "__schema_harness__":
+    if "material_schema_request" in globals():
+        run_material_schema_phase(globals()["material_schema_request"])
+        raise SystemExit(0)
     if "escalation_schema_request" in globals():
         run_escalation_schema_phase(globals()["escalation_schema_request"])
         raise SystemExit(0)
@@ -5103,6 +6963,985 @@ OWNER_RECEIPT_NAMES = (
     "asm-telegram-tls-budget-owner2-0b7e24ee.json",
     "asm-telegram-tls-budget-fixed-owner2-0b7e24ee.json",
 )
+
+
+@pytest.fixture
+def frozen_h_source():
+    """Pinned test input bytes, decoded without Git, services or external files."""
+    import base64
+    import zlib
+
+    expected = {
+        "scripts/test_telegram_egress_migration.sh": (
+            6248,
+            "1672fbb4fb676ad69885043e46350f53334db0fc",
+        ),
+        "tests/test_telegram_egress_migration.py": (
+            84396,
+            "99cf8d1a3f8a85b64e2785710a728964d5bd3f03",
+        ),
+        "scripts/prepare_telegram_egress.py": (139789, "58486046a6bb5682a336a1578705ed973e7b4fc6"),
+        "infra/images.lock.env": (720, "1f14e1686acd3ffdde9986ec58352d0e03735af8"),
+    }
+    raw = (e.ROOT / "tests/fixtures/telegram_egress_h_source.json").read_bytes()
+    assert len(raw) <= 131072
+    fixture = json.loads(raw)
+    assert set(fixture) == {"version", "source", "tree", "encoding", "total_bytes", "files"}
+    assert fixture["version"] == 1 and fixture["encoding"] == "zlib+base64"
+    assert fixture["source"] == "754f1c883e5a94a7fc9e729af2605424f949ba33"
+    assert fixture["tree"] == "b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f"
+    assert fixture["total_bytes"] == 231153 and set(fixture["files"]) == set(expected)
+    files = {}
+    for path, (size, blob) in expected.items():
+        entry = fixture["files"][path]
+        assert set(entry) == {"bytes", "git_blob", "data"}
+        assert (entry["bytes"], entry["git_blob"]) == (size, blob)
+        encoded = "".join(entry["data"])
+        assert len(encoded) <= 131072
+        packed = base64.b64decode(encoded, validate=True)
+        assert len(packed) <= 65536
+        decoder = zlib.decompressobj()
+        decoded = decoder.decompress(packed, size + 1)
+        assert decoder.eof and not decoder.unused_data and not decoder.unconsumed_tail
+        assert len(decoded) == size and diagnostic_blob(decoded) == blob
+        files[path] = decoded
+    assert sum(map(len, files.values())) == fixture["total_bytes"]
+    return SimpleNamespace(source=fixture["source"], tree=fixture["tree"], files=files)
+
+
+@pytest.fixture
+def invocation_units(tmp_path, monkeypatch, frozen_h_source):
+    """Synthetic executables only; never contacts a Docker daemon or database."""
+    root = tmp_path / "H"
+    root.mkdir(mode=0o700)
+    source, tree = frozen_h_source.source, frozen_h_source.tree
+    fields = {}
+    for name, field in (
+        ("scripts/test_telegram_egress_migration.sh", "shell_blob"),
+        ("tests/test_telegram_egress_migration.py", "module_blob"),
+        ("scripts/prepare_telegram_egress.py", "helper_blob"),
+        ("infra/images.lock.env", None),
+    ):
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(frozen_h_source.files[name])
+        if field:
+            fields[field] = diagnostic_blob(path.read_bytes())
+    binding = {
+        "executor": dict(source=source, tree=tree, **fields),
+        "observer": dict(
+            source="a" * 40,
+            tree="b" * 40,
+            **fields,
+            code_sha256=hashlib.sha256(invocation_diagnostic_code().encode()).hexdigest(),
+        ),
+    }
+    binary = tmp_path / "bin"
+    binary.mkdir(mode=0o700)
+    docker = binary / "docker"
+    docker.write_text(
+        "#!"
+        + sys.executable
+        + "\n"
+        + """import json,os,sys,time
+a=sys.argv[1:];case=os.environ.get('DIAG_UNIT_CASE','exit');target=os.environ.get('DIAG_UNIT_TARGET','runtime')
+if a[:2]==['image','ls']: sys.exit(0)
+if a[:2]==['image','inspect']:
+ kind='runtime' if 'runtime' in a[-1] else 'development'
+ print(json.dumps([{'Id':'sha256:'+'b'*64,'Config':{'Labels':{'asm.connect5.source':'754f1c883e5a94a7fc9e729af2605424f949ba33','asm.connect5.tree':'b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f','asm.connect5.kind':kind}}}]))
+ sys.exit(0)
+assert a[0] in ('build','run')
+if a[0]=='build' and a[a.index('--target')+1]!=target: sys.exit(0)
+if case=='success': sys.stdout.buffer.write(b'ORIGINAL_BYTES');sys.exit(0)
+if case=='client': message=b"sqlalchemy.exc.InvalidRequestError: A value is required for bind parameter 'PRIVATE_BIND'\\nSQLSTATE=42601\\n"
+elif case=='server': message=b'psycopg.errors.SyntaxError: PRIVATE_SQL\\nSQLSTATE=42601\\n'
+elif case=='oversize': message=b'x'*20000+b'PRIVATE_MIDDLE_SQL'+b'y'*20000
+else: message=b'#17 ERROR: PRIVATE_DOCKER_COMMAND\\nDockerfile.backend:19\\nPRIVATE_SECRET_URL_ENV_SQL_PAYLOAD\\n'
+sys.stdout.buffer.write(b'PRIVATE_STDOUT'+(b'x'*40000 if case=='oversize' else b''));sys.stdout.flush()
+sys.stderr.buffer.write(message);sys.stderr.flush()
+if case=='timeout': time.sleep(5)
+sys.exit(23)
+"""
+    )
+    docker.chmod(0o700)
+    monkeypatch.setenv("PATH", str(binary) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setenv("DIAG_UNIT_CASE", "exit")
+
+    def config():
+        directory = tmp_path / ("private-" + uuid4().hex)
+        directory.mkdir(mode=0o700)
+        return diagnostic_new(directory, copy.deepcopy(binding))
+
+    program = b"""import os,sys,time
+from pathlib import Path
+from scripts import prepare_telegram_egress as original
+assert sys.argv==['-','state'] and Path.cwd()==original.ROOT
+assert os.environ.get('PYTHONPATH')==os.environ.get('DIAG_UNIT_ORIGINAL_PATH')
+command,build,runner=original.command,original.migration_build_images,original.subprocess.run
+original.migration_source=lambda source:'b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f'
+original.migration_build_context=lambda source,directory:None
+original.migration_image=lambda *args:None
+if os.environ.get('DIAG_UNIT_CASE')=='timeout': original.MIGRATION_DEADLINE=time.monotonic()+0.4
+try:
+ tags,images=original.migration_build_images('754f1c883e5a94a7fc9e729af2605424f949ba33','b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f')
+ assert set(tags)==set(images)=={'runtime','development'}
+except Exception as error:
+ assert original.command is command and original.migration_build_images is build
+ assert original.subprocess.run is runner
+ assert type(error).__name__ in ('EgressError','TimeoutExpired')
+ sys.exit(23)
+assert original.command is command and original.migration_build_images is build
+assert original.subprocess.run is runner
+"""
+    monkeypatch.setenv("DIAG_UNIT_ORIGINAL_PATH", os.environ.get("PYTHONPATH", ""))
+    return SimpleNamespace(root=root, binding=binding, config=config, program=program)
+
+
+@pytest.mark.parametrize("target", ["runtime", "development"])
+@pytest.mark.parametrize("outcome", ["exit", "timeout", "success", "oversize"])
+def test_invocation_h_launcher_original_frozen_functions_and_stream_bounds(
+    invocation_units, monkeypatch, target, outcome
+):
+    f = invocation_units
+    config = f.config()
+    monkeypatch.setenv("DIAG_UNIT_CASE", outcome)
+    monkeypatch.setenv("DIAG_UNIT_TARGET", target)
+    env = write_h_diagnostic_launcher(config, f.root, f.program)
+    result = subprocess.run(
+        [sys.executable, "-", "state"],
+        input=f.program,
+        cwd=f.root,
+        env=env,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == (0 if outcome == "success" else 23), result.stderr
+    data, raw = diagnostic_read(config)
+    assert data["evidence"] == "INSTRUMENTED_IMMUTABLE_H"
+    row = data["records"][-1]
+    assert row["target"] == target if outcome != "success" else row["target"] == "development"
+    assert (
+        row["outcome"]
+        == {
+            "success": "SUCCESS",
+            "exit": "COMMAND_EXIT",
+            "timeout": "TIMEOUT",
+            "oversize": "COMMAND_EXIT",
+        }[outcome]
+    )
+    assert (
+        row["exit_code"]
+        == {"success": 0, "exit": 23, "timeout": "UNKNOWN", "oversize": 23}[outcome]
+    )
+    assert (
+        row["source"] == f.binding["executor"]["source"]
+        and row["tree"] == f.binding["executor"]["tree"]
+    )
+    if outcome == "exit":
+        assert row["build_step"] == 17 and row["dockerfile_line"] == 19
+    if outcome == "oversize":
+        assert row["stdout"]["status"] == row["stderr"]["status"] == "TRUNCATED"
+        assert row["category"] == row["sqlstate"] == "UNKNOWN"
+    assert b"PRIVATE_" not in raw and len(raw) < 65536
+    assert all(stat.S_IMODE(p.stat().st_mode) == 0o600 for p in Path(config["directory"]).iterdir())
+    assert not (Path(config["directory"]) / "__pycache__").exists()
+    assert not (f.root / "scripts/__pycache__").exists()
+    assert data["observed"] == (2 if outcome == "success" or target == "development" else 1)
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "entrypoint",
+        "helper",
+        "module",
+        "source",
+        "tree",
+        "missing",
+        "path",
+        "startup-identity",
+        "startup-code",
+    ],
+)
+def test_invocation_h_substitution_never_masks_original_failure(invocation_units, damage):
+    f = invocation_units
+    config = f.config()
+    if damage in {"source", "tree"}:
+        config["binding"]["executor"][damage] = "e" * 40
+    env = write_h_diagnostic_launcher(config, f.root, f.program)
+    if damage == "startup-identity":
+        startup = Path(config["startup_path"])
+        raw = startup.read_bytes()
+        startup.rename(startup.with_name("original.zip"))
+        startup.write_bytes(raw)
+        startup.chmod(0o600)
+    if damage == "startup-code":
+        import zipfile
+
+        startup = Path(config["startup_path"])
+        with zipfile.ZipFile(startup) as archive:
+            raw = archive.read("sitecustomize.py").replace(
+                b"Bounded H/P observation", b"Changed H/P observation"
+            )
+        with zipfile.ZipFile(startup, "w") as archive:
+            archive.writestr("sitecustomize.py", raw)
+    program = f.program + b"\nprint('UNREACHABLE')\n" if damage == "entrypoint" else f.program
+    if damage in {"helper", "module"}:
+        path = f.root / (
+            "scripts/prepare_telegram_egress.py"
+            if damage == "helper"
+            else "tests/test_telegram_egress_migration.py"
+        )
+        path.write_bytes(path.read_bytes() + b"\n# substituted\n")
+    if damage in {"missing", "path"}:
+        Path(config["path"]).unlink()
+        if damage == "path":
+            Path(config["path"]).symlink_to(f.root / "infra/images.lock.env")
+    result = subprocess.run(
+        [sys.executable, "-", "state"],
+        input=program,
+        cwd=f.root,
+        env=env,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == 23, result.stderr
+    with pytest.raises((AssertionError, FileNotFoundError)):
+        diagnostic_read(config)
+
+
+def test_invocation_h_unrelated_interpreter_preserves_argv_stdin_cwd(invocation_units):
+    f = invocation_units
+    config = f.config()
+    env = write_h_diagnostic_launcher(config, f.root, f.program)
+    code = "import os,sys,json; assert sys.gettrace() is None; print(json.dumps([sys.argv[1:],sys.stdin.read(),os.getcwd(),os.environ.get('PYTHONPATH')]))"
+    result = subprocess.run(
+        [sys.executable, "-c", code, "UNCHANGED_ARG"],
+        input=b"UNCHANGED_STDIN",
+        cwd=f.root,
+        env=env,
+        capture_output=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == [
+        ["UNCHANGED_ARG"],
+        "UNCHANGED_STDIN",
+        str(f.root),
+        os.environ.get("PYTHONPATH"),
+    ]
+    assert Path(config["path"]).read_bytes() == b""
+
+
+def test_invocation_h_final_fsync_failure_needs_independent_ack(invocation_units):
+    f = invocation_units
+    config = f.config()
+    read_fd, write_fd = os.pipe()
+    config.update(require_ack=True, ack_fd=write_fd)
+    # A complete authenticated file can be visible before its final fsync fails.
+    program = (
+        "import os\n_original_sync=os.fsync\ndef failed_final_sync(fd):\n"
+        ' if b\'\\"status\\":\\"COMPLETE\\"\' in open('
+        + repr(config["path"])
+        + ",'rb').read(): raise OSError('PRIVATE_FSYNC')\n"
+        " return _original_sync(fd)\nos.fsync=failed_final_sync\n"
+    ).encode() + f.program
+    env = write_h_diagnostic_launcher(config, f.root, program)
+    try:
+        result = subprocess.run(
+            [sys.executable, "-", "state"],
+            input=program,
+            cwd=f.root,
+            env=env,
+            capture_output=True,
+            pass_fds=(write_fd,),
+            timeout=10,
+        )
+        os.close(write_fd)
+        write_fd = None
+        ack = os.read(read_fd, 65)
+        assert result.returncode == 23 and ack == b""
+        assert json.loads(Path(config["path"]).read_bytes())["status"] == "COMPLETE"
+        assert diagnostic_export(config, f.root / "invalid.json")["status"] == "INVALID"
+    finally:
+        if write_fd is not None:
+            os.close(write_fd)
+        os.close(read_fd)
+
+
+def test_invocation_partial_timeout_object_and_observation_overhead(invocation_units, monkeypatch):
+    f = invocation_units
+    config = f.config()
+    diagnostic = InvocationDiagnostic(config, "P_MIGRATION")
+    args = ["docker", "run", "UNIT_IMAGE", "alembic", "upgrade", "0012"]
+    primary = subprocess.TimeoutExpired(
+        args, 30, output=b"PRIVATE_STDOUT" * 3000, stderr=b"PRIVATE_STDERR" * 3000
+    )
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(primary))
+    with pytest.raises(subprocess.TimeoutExpired) as raised:
+        with observe_material_migration(diagnostic, args, "a" * 40, "b" * 40, "upgrade", "0012"):
+            e.command(args, timeout=30)
+    assert raised.value is primary and primary.timeout == 30
+    diagnostic.close()
+    data, raw = diagnostic_read(config)
+    assert (
+        data["records"][0]["stdout"]["status"]
+        == data["records"][0]["stderr"]["status"]
+        == "TRUNCATED"
+    )
+    assert data["records"][0]["outcome"] == "TIMEOUT" and b"PRIVATE_" not in raw
+
+    clock = [100.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(e, "MIGRATION_DEADLINE", 110.0)
+    original_write = os.write
+    calls = []
+
+    def observed_write(fd, raw):
+        clock[0] += 2
+        return original_write(fd, raw)
+
+    monkeypatch.setattr(os, "write", observed_write)
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **kw: (
+            calls.append(kw["timeout"]),
+            subprocess.CompletedProcess(a[0], 0, b"ORIGINAL", b""),
+        )[1],
+    )
+    cfg = f.config()
+    observer = InvocationDiagnostic(cfg, "P_MIGRATION")
+    with observe_material_migration(observer, args, "a" * 40, "b" * 40, "upgrade", "0012"):
+        assert e.command(args, timeout=30) == b"ORIGINAL"
+    observer.close()
+    assert calls == [6.0] and clock[0] == 108.0 and e.MIGRATION_DEADLINE == 110.0
+    assert diagnostic_read(cfg)[0]["records"][0]["seconds"] == 2.0
+
+
+@pytest.mark.parametrize("outcome", ["success", "exit", "timeout", "client", "server", "oversize"])
+def test_invocation_p_actual_ordinary_migrate_preserves_primary(
+    invocation_units, monkeypatch, outcome
+):
+    import ast
+    import inspect
+
+    f = invocation_units
+    monkeypatch.setenv("DIAG_UNIT_CASE", outcome)
+    config = f.config()
+    diagnostic = InvocationDiagnostic(config, "P_MIGRATION")
+    source, tree = "a" * 40, "b" * 40
+    function = next(
+        n
+        for n in ast.walk(ast.parse(inspect.getsource(run_material_schema_phase)))
+        if isinstance(n, ast.FunctionDef) and n.name == "migrate"
+    )
+    assert ast.unparse(function).endswith("run(args, timeout=30)")
+    command = e.command
+    calls = []
+
+    def run(args, timeout):
+        calls.append((args, timeout))
+        # Timeout only is shorter in this synthetic unit, not in the real path.
+        return command(args, timeout=0.15 if outcome == "timeout" else timeout)
+
+    namespace = {
+        "report": {"images": {source + ":development": {"source_tree": tree}}},
+        "images": {source: {"development": "UNIT_IMAGE"}},
+        "prefix": ["docker", "run"],
+        "run": run,
+        "migration_diagnostic": (config, diagnostic),
+        "observe_material_migration": observe_material_migration,
+    }
+    exec(
+        compile(ast.Module(body=[function], type_ignores=[]), "unit-original-migrate", "exec"),
+        namespace,
+    )
+    previous = sys.gettrace()
+    try:
+        if outcome == "success":
+            assert namespace["migrate"](source, "upgrade", "0012") is None
+        else:
+            with pytest.raises(
+                subprocess.TimeoutExpired if outcome == "timeout" else e.EgressError
+            ) as raised:
+                namespace["migrate"](source, "upgrade", "0012")
+            assert (
+                str(raised.value) == "EGRESS_COMMAND_FAILED"
+                if outcome != "timeout"
+                else raised.value.timeout == 0.15
+            )
+    finally:
+        diagnostic.close()
+    assert e.command is command and sys.gettrace() is previous and len(calls) == 1
+    assert calls[0] == (["docker", "run", "UNIT_IMAGE", "alembic", "upgrade", "0012"], 30)
+    data, raw = diagnostic_read(config)
+    row = data["records"][0]
+    assert (row["source"], row["tree"], row["direction"], row["revision"]) == (
+        source,
+        tree,
+        "upgrade",
+        "0012",
+    )
+    if outcome == "client":
+        assert (row["category"], row["exception_class"], row["sqlstate"]) == (
+            "CLIENT_PARAMETER_ERROR",
+            "InvalidRequestError",
+            "UNKNOWN",
+        )
+    if outcome == "server":
+        assert (row["category"], row["exception_class"], row["sqlstate"]) == (
+            "POSTGRESQL_ERROR",
+            "SyntaxError",
+            "42601",
+        )
+    assert b"PRIVATE_" not in raw and b"UNIT_IMAGE" not in raw and len(raw) < 65536
+
+
+@pytest.mark.parametrize("field", ["source", "tree", "module_blob", "code_sha256", "extra"])
+def test_invocation_rejects_nonidentity_binding_before_persisting(invocation_units, field):
+    f = invocation_units
+    directory = f.root / "invalid-binding"
+    directory.mkdir(mode=0o700)
+    binding = copy.deepcopy(f.binding)
+    binding["observer"][field] = "PRIVATE_SQL_ENV_PAYLOAD_CANARY"
+    with pytest.raises(AssertionError, match="^DIAGNOSTIC_BINDING"):
+        diagnostic_new(directory, binding)
+    assert list(directory.iterdir()) == []
+
+
+def test_invocation_export_rejects_new_inode_and_preserves_substituted_target(
+    invocation_units, monkeypatch
+):
+    f = invocation_units
+    config = f.config()
+    observer = InvocationDiagnostic(config, "P_MIGRATION")
+    observer.close()
+    target = f.root / "export.json"
+    original_sync = os.fsync
+
+    def substitute(fd):
+        raw = target.read_bytes()
+        target.rename(target.with_name("original-export.json"))
+        target.write_bytes(raw)
+        target.chmod(0o600)
+        original_sync(fd)
+
+    monkeypatch.setattr(os, "fsync", substitute)
+    assert diagnostic_export(config, target)["status"] == "INVALID"
+    # A failed exporter cannot unlink a foreign replacement, even when its
+    # authenticated content/owner/mode match the original.
+    assert target.read_bytes() == (f.root / "original-export.json").read_bytes()
+
+
+def test_invocation_unknown_message_and_finite_sqlstate_never_escape():
+    raw = b"psycopg.errors.SyntaxError: PRIVATE_SQL\nSQLSTATE=SECRT\n"
+    classified = diagnostic_classify(raw, b"PRIVATE_ENV_URL_PAYLOAD")
+    assert classified["sqlstate"] == "UNKNOWN"
+    assert "PRIVATE_" not in json.dumps(classified) and "SECRT" not in json.dumps(classified)
+    metadata, sample = diagnostic_output(b"x" * 20000 + b"PRIVATE_MIDDLE" + b"y" * 20000)
+    assert (
+        metadata["status"] == "TRUNCATED"
+        and len(sample) <= 16384
+        and b"PRIVATE_MIDDLE" not in sample
+    )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "tamper",
+        "incomplete",
+        "symlink",
+        "owner",
+        "mode",
+        "directory",
+        "write",
+        "export",
+        "trace",
+        "record-limit",
+        "source",
+        "tree",
+        "revision",
+        "direction",
+        "fsync",
+    ],
+)
+def test_invocation_private_record_failure_is_secondary(invocation_units, monkeypatch, damage):
+    f = invocation_units
+    config = f.config()
+    diagnostic = InvocationDiagnostic(config, "P_MIGRATION")
+    original = e.command
+    previous = sys.gettrace()
+    if damage == "write":
+        monkeypatch.setattr(
+            os, "write", lambda *a: (_ for _ in ()).throw(PermissionError("PRIVATE_WRITE_ERROR"))
+        )
+    if damage == "trace":
+        sys.settrace(lambda *a: None)
+    try:
+        for _ in range(17 if damage == "record-limit" else 1):
+            args = ["docker", "run", "UNIT_IMAGE", "alembic", "downgrade", "0011"]
+            with pytest.raises(e.EgressError, match="^EGRESS_COMMAND_FAILED$"):
+                with diagnostic.migration(
+                    original,
+                    args,
+                    "c" * 40 if damage == "source" else "a" * 40,
+                    "c" * 40 if damage == "tree" else "b" * 40,
+                    "PRIVATE_DIRECTION" if damage == "direction" else "downgrade",
+                    "9999" if damage == "revision" else "0011",
+                ):
+                    original(args, timeout=30)
+    finally:
+        if damage == "trace":
+            assert sys.gettrace() is not None
+            sys.settrace(previous)
+        if damage != "incomplete":
+            if damage == "fsync":
+                monkeypatch.setattr(
+                    os, "fsync", lambda *a: (_ for _ in ()).throw(OSError("PRIVATE_FSYNC"))
+                )
+            diagnostic.close()
+    assert e.command is original and sys.gettrace() is previous
+    path = Path(config["path"])
+    if damage == "tamper":
+        path.write_bytes(path.read_bytes().replace(b'"exit_code":23', b'"exit_code":0'))
+    if damage == "symlink":
+        path.unlink()
+        path.symlink_to(f.root / "infra/images.lock.env")
+    if damage == "owner":
+        config["identity"][2] += 1
+    if damage == "mode":
+        path.chmod(0o644)
+    if damage == "directory":
+        directory = Path(config["directory"])
+        directory.rename(directory.with_name(directory.name + "-old"))
+        directory.mkdir(mode=0o700)
+    target = f.root / ("missing/export.json" if damage == "export" else "export.json")
+    assert diagnostic_export(config, target)["status"] == "INVALID"
+    assert not target.exists()
+
+
+@pytest.fixture
+def stdlib_host_checkout(tmp_path, frozen_h_source):
+    """Copied current/frozen bytes; source identities below are explicitly synthetic."""
+    checkout, historical = tmp_path / "candidate", tmp_path / "historical"
+    for name in (
+        "scripts/test_telegram_egress_migration.sh",
+        "tests/test_telegram_egress_migration.py",
+        "scripts/prepare_telegram_egress.py",
+    ):
+        target = checkout / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((e.ROOT / name).read_bytes())
+    for name, raw in frozen_h_source.files.items():
+        target = historical / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    fields = {
+        name: diagnostic_blob((checkout / name).read_bytes())
+        for name in frozen_h_source.files
+        if name != "infra/images.lock.env"
+    }
+    tree = e.sha(b"SYNTHETIC_UNIT_TREE\0" + json.dumps(fields, sort_keys=True).encode())[:40]
+    source = e.sha(b"SYNTHETIC_UNIT_COMMIT\0" + tree.encode())[:40]
+    assert not (checkout / ".git").exists() and not (historical / ".git").exists()
+    reports = checkout / "reports" / "historical"
+    reports.mkdir(parents=True, mode=0o700)
+    return checkout, historical, reports, source
+
+
+@pytest.mark.parametrize(
+    "shard,damage,outcome",
+    [
+        ("state", damage, outcome)
+        for damage in ("none", "setup", "load")
+        for outcome in ("success", "exit", "exception")
+    ]
+    + [
+        (shard, "none", outcome)
+        for shard in ("image", "intent")
+        for outcome in ("success", "exit", "exception")
+    ],
+)
+def test_invocation_outer_stdlib_host_real_loader(stdlib_host_checkout, shard, damage, outcome):
+    """Real outer loader under -S; synthetic H proves transfer, never Docker/PG."""
+    checkout, historical, reports, source = stdlib_host_checkout
+    if damage == "setup":
+        source = "0" * 40
+    program = r"""import ast,hashlib,json,os,runpy,subprocess,sys
+from pathlib import Path
+from scripts import prepare_telegram_egress as e
+assert sys.flags.no_site == 1 and 'site' not in sys.modules
+shard,damage,outcome,historical,reports,source=sys.argv[1:]
+historical,reports=Path(historical),Path(reports)
+assert not (e.ROOT/'.git').exists() and not (historical/'.git').exists()
+paths=('scripts/test_telegram_egress_migration.sh','tests/test_telegram_egress_migration.py',
+ 'scripts/prepare_telegram_egress.py')
+def file_blobs(root):
+ return {name:hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+  for name in paths for raw in [(root/name).read_bytes()]}
+current_files=file_blobs(e.ROOT)
+unit_tree=e.sha(b'SYNTHETIC_UNIT_TREE\0'+json.dumps(current_files,sort_keys=True).encode())[:40]
+unit_source=e.sha(b'SYNTHETIC_UNIT_COMMIT\0'+unit_tree.encode())[:40]
+h_source,h_tree='754f1c883e5a94a7fc9e729af2605424f949ba33','b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f'
+h_files=file_blobs(historical)
+assert h_files==dict(zip(paths,('1672fbb4fb676ad69885043e46350f53334db0fc',
+ '99cf8d1a3f8a85b64e2785710a728964d5bd3f03','58486046a6bb5682a336a1578705ed973e7b4fc6')))
+assert source==('0'*40 if damage=='setup' else unit_source)
+# Only external Git-command IO is synthetic. Real schema_source_binding and
+# diagnostic_binding still parse/validate these finite identities and file bytes.
+git_answers={}
+for ref,root,tree,files in ((unit_source,e.ROOT,unit_tree,current_files),
+ (h_source,historical,h_tree,h_files)):
+ git_answers[('git','cat-file','commit',ref)]=('tree '+tree+'\n\nSYNTHETIC_UNIT_ONLY\n').encode()
+ git_answers[('git','-C',str(root),'rev-parse','HEAD')]=(ref+'\n').encode()
+ git_answers[('git','-C',str(root),'status','--porcelain','--untracked-files=all')]=b''
+ for name,blob in files.items():
+  git_answers[('git','rev-parse',ref+':'+name)]=(blob+'\n').encode()
+git_calls=[];unexpected_commands=[]
+def external_git(args,kwargs):
+ assert kwargs==dict(stdin=subprocess.DEVNULL,capture_output=True,timeout=40,env=None)
+ key=tuple(args)
+ git_calls.append(key)
+ if key==('git','cat-file','commit','0'*40):
+  return subprocess.CompletedProcess(args,128,b'',b'SYNTHETIC_MISSING_SOURCE')
+ if key not in git_answers:
+  unexpected_commands.append('UNEXPECTED_GIT_COMMAND')
+  raise AssertionError('UNEXPECTED_GIT_COMMAND')
+ return subprocess.CompletedProcess(args,0,git_answers[key],b'')
+if damage=='load':
+ module=e.ROOT/'tests/test_telegram_egress_migration.py'
+ module.rename(module.with_suffix('.unavailable'))
+pytest_imports=[]
+class NoPytest:
+ def find_spec(self,fullname,path=None,target=None):
+  if fullname=='pytest' or fullname.startswith('pytest.'):
+   pytest_imports.append(fullname)
+   raise ModuleNotFoundError("No module named 'pytest'",name=fullname)
+sys.meta_path.insert(0,NoPytest())
+shell=(e.ROOT/'scripts/test_telegram_egress_migration.sh').read_text()
+tree=ast.parse(shell.split("<<'PY'\n",1)[1].rsplit('\nPY',1)[0])
+boundary=next(n for n in ast.walk(tree) if isinstance(n,ast.If)
+ and ast.unparse(n.test)=="fault == 'state'"
+ and ast.unparse(n.body[0])=='diagnostics = None')
+# AST extraction is test-only. The runtime loader executes the complete checked-in
+# module normally; neither runpy nor any loaded observer definition is replaced.
+original_run=subprocess.run
+calls=[]
+executor_error=OSError('SYNTHETIC_H_EXECUTOR_ERROR')
+executor_result=subprocess.CompletedProcess(['sh','scripts/test_telegram_egress_migration.sh',shard],
+ 0 if outcome=='success' else 23)
+def external_h(args,**kwargs):
+ if args[:1]==['git']:
+  return external_git(args,kwargs)
+ if args!=executor_result.args:
+  unexpected_commands.append('UNEXPECTED_EXTERNAL_COMMAND')
+  raise AssertionError('UNEXPECTED_EXTERNAL_COMMAND')
+ assert kwargs['cwd']==historical and kwargs['stdin']==subprocess.DEVNULL
+ frame=sys._getframe(1)
+ observed=frame.f_code.co_name=='run_historical_observed'
+ config=frame.f_locals.get('config') if observed else None
+ calls.append({'observer':observed,'prepared':config is not None})
+ if config is not None:
+  assert set(kwargs)=={'cwd','stdin','env','pass_fds'}
+  assert Path(config['startup_path']).is_file()
+  # Replace only external H execution: use the actual loaded observer to emit an
+  # empty authenticated completion and its independent ACK. Launcher/frozen-build
+  # behavior is covered by the existing real-interpreter invocation units.
+  diagnostic=frame.f_globals['InvocationDiagnostic'](config,'H_BUILD')
+  diagnostic.close()
+  raw=Path(config['path']).read_bytes()
+  assert os.write(kwargs['pass_fds'][0],hashlib.sha256(raw).hexdigest().encode())==64
+ else:
+  assert set(kwargs)=={'cwd','stdin'}
+ if outcome=='exception': raise executor_error
+ return executor_result
+namespace=dict(fault=shard,runpy=runpy,e=e,historical=historical,source=source,
+ reports=reports,subprocess=subprocess,admission={})
+before=dict(os.environ),sys.path[:],sys.gettrace()
+subprocess.run=external_h
+raised=None
+try:
+ exec(compile(ast.Module(body=[boundary],type_ignores=[]),'actual-outer-H-boundary','exec'),namespace)
+except BaseException as error:
+ raised=error
+finally:
+ subprocess.run=original_run
+assert before==(dict(os.environ),sys.path[:],sys.gettrace())
+assert 'pytest' not in sys.modules
+public=reports/'build-observation.json'
+print(json.dumps({'calls':calls,'pytest_imports':pytest_imports,
+ 'git_calls':len(git_calls),'unexpected_commands':unexpected_commands,
+ 'result_identity':namespace.get('result') is executor_result,
+ 'exception_identity':raised is executor_error,
+ 'exception':None if raised is None else type(raised).__name__,
+ 'observation':namespace['admission'].get('historical_diagnostics'),
+ 'public_status':json.loads(public.read_text())['status'] if public.exists() else None}))
+"""
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-c",
+            program,
+            shard,
+            damage,
+            outcome,
+            str(historical),
+            str(reports),
+            source,
+        ],
+        cwd=checkout,
+        env=dict(os.environ, PYTHONPATH=str(checkout)),
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    print("STDLIB_HOST " + result.stdout.strip())
+    assert data["pytest_imports"] == []
+    assert data["unexpected_commands"] == []
+    observed = shard == "state" and damage != "load"
+    prepared = observed and damage == "none"
+    assert data["git_calls"] == (12 if prepared else 1 if observed else 0)
+    assert data["calls"] == [{"observer": observed, "prepared": prepared}]
+    assert data["exception_identity"] == (outcome == "exception")
+    assert data["exception"] == ("OSError" if outcome == "exception" else None)
+    assert data["result_identity"] == (outcome != "exception")
+    assert data["public_status"] == ("COMPLETE" if prepared else None)
+    if shard == "state" and outcome != "exception":
+        observation = data["observation"]
+        if prepared:
+            assert observation["status"] == "COMPLETE" and observation["records"] == 0
+            assert (
+                observation["sha256"]
+                == hashlib.sha256((reports / "build-observation.json").read_bytes()).hexdigest()
+            )
+        else:
+            assert observation == {
+                "status": "INVALID",
+                "secondary": [
+                    "DIAGNOSTIC_SETUP_FAILED" if observed else "DIAGNOSTIC_MODULE_LOAD_FAILED"
+                ],
+            }
+    else:
+        assert data["observation"] is None
+
+
+@pytest.mark.parametrize("shard", ["state", "image", "intent"])
+def test_invocation_outer_state_seam_and_primary_cleanup_order(tmp_path, shard):
+    import ast
+
+    shell = (e.ROOT / "scripts/test_telegram_egress_migration.sh").read_text()
+    tree = ast.parse(shell.split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0])
+    boundary = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.If)
+        and ast.unparse(n.test) == "fault == 'state'"
+        and ast.unparse(n.body[0]) == "diagnostics = None"
+    )
+    calls = []
+
+    def observed(*args):
+        calls.append("instrumented")
+        return subprocess.CompletedProcess([], 1), {"status": "INVALID"}
+
+    def original(args, **kwargs):
+        assert args == ["sh", "scripts/test_telegram_egress_migration.sh", shard]
+        assert kwargs == {"cwd": tmp_path, "stdin": subprocess.DEVNULL}
+        calls.append("original")
+        return subprocess.CompletedProcess(args, 1)
+
+    def definitions(*args, **kwargs):
+        response = kwargs["init_globals"]["h_observer_result"]
+        response["started"] = True
+        request = kwargs["init_globals"]["h_observer_request"]
+        response["result"] = observed(request["historical"], request["source"], request["reports"])
+        raise SystemExit(0)
+
+    namespace = {
+        "fault": shard,
+        "runpy": SimpleNamespace(run_path=definitions),
+        "e": SimpleNamespace(ROOT=tmp_path),
+        "historical": tmp_path,
+        "source": "a" * 40,
+        "reports": tmp_path,
+        "subprocess": SimpleNamespace(run=original, DEVNULL=subprocess.DEVNULL),
+        "admission": {},
+    }
+    exec(
+        compile(ast.Module(body=[boundary], type_ignores=[]), "unit-outer-boundary", "exec"),
+        namespace,
+    )
+    assert calls == (["instrumented"] if shard == "state" else ["original"])
+    assert (
+        shell.index("FROZEN_HISTORICAL_ASSERTIONS_FAILED")
+        < shell.index("HISTORICAL_VOLUMES_REMAIN")
+        < shell.index("H_DIAGNOSTIC_VALIDATION_FAILED")
+        < shell.index("run_name='__control_coordinator__'")
+    )
+
+
+@pytest.mark.parametrize("outcome", ["success", "server", "timeout", "cancel"])
+def test_invocation_p_observer_in_isolated_interpreter(invocation_units, monkeypatch, outcome):
+    f = invocation_units
+    monkeypatch.setenv("DIAG_UNIT_CASE", "timeout" if outcome == "cancel" else outcome)
+    config = f.config()
+    program = """import json,os,signal,sys,threading
+import test_telegram_egress_migration as m
+config=CONFIG
+d=m.InvocationDiagnostic(config,'P_MIGRATION')
+args=['docker','run','UNIT_IMAGE','alembic','upgrade','0012']
+original=m.e.command
+error='NONE';result=None
+timer=threading.Timer(0.2,lambda:os.kill(os.getpid(),signal.SIGINT)) if CASE=='cancel' else None
+if timer: timer.start()
+try:
+ with m.observe_material_migration(d,args,'a'*40,'b'*40,'upgrade','0012'):
+  result=original(args,timeout=0.2 if CASE=='timeout' else 30)
+except BaseException as raised:
+ error=type(raised).__name__
+finally:
+ if timer: timer.join()
+ d.close()
+assert original is m.e.command and sys.gettrace() is None
+assert result==b'ORIGINAL_BYTES' if CASE=='success' else result is None
+print(json.dumps({'exception':error,'status':m.diagnostic_read(config)[0]['status']}))
+""".replace("CONFIG", repr(config)).replace("CASE", repr(outcome))
+    # The child must import this candidate, not a package in the reused venv.
+    env = dict(os.environ, PYTHONPATH=str(e.ROOT / "tests") + os.pathsep + str(e.ROOT))
+    result = subprocess.run(
+        [sys.executable, "-c", program], cwd=e.ROOT, env=env, capture_output=True, timeout=10
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "exception": {
+            "success": "NONE",
+            "server": "EgressError",
+            "timeout": "TimeoutExpired",
+            "cancel": "KeyboardInterrupt",
+        }[outcome],
+        "status": "COMPLETE",
+    }
+    data, raw = diagnostic_read(config)
+    assert b"PRIVATE_" not in raw and len(data["records"]) == 1
+
+
+@pytest.mark.parametrize("primary", [None, e.EgressError("EGRESS_COMMAND_FAILED")])
+def test_invocation_p_final_diagnostic_failure_preserves_executor_primary(tmp_path, primary):
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(run_material_schema_phase))
+    finalbody = next(
+        n.finalbody
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Try)
+        and n.finalbody
+        and isinstance(n.finalbody[0], ast.Assign)
+        and ast.unparse(n.finalbody[0].targets[0]) == "primary_migration"
+    )
+    report, published = {}, []
+    namespace = {
+        "sys": sys,
+        "primary": primary,
+        "report": report,
+        "migration_diagnostic": (None, None),
+        "report_path": tmp_path / "report",
+        "finish_material_diagnostic": lambda *a: {
+            "status": "INVALID",
+            "secondary": ["DIAGNOSTIC_EXPORT_OR_VALIDATION_FAILED"],
+        },
+        "schema_publish": lambda r, p, err: published.append(err),
+        "e": SimpleNamespace(ROOT=tmp_path),
+    }
+    program = ast.Module(
+        body=[
+            ast.Try(
+                body=ast.parse("if primary is not None: raise primary").body,
+                handlers=[],
+                orelse=[],
+                finalbody=finalbody,
+            )
+        ],
+        type_ignores=[],
+    )
+    with pytest.raises(e.EgressError if primary else AssertionError) as raised:
+        exec(
+            compile(ast.fix_missing_locations(program), "unit-original-P-finally", "exec"),
+            namespace,
+        )
+    assert (
+        raised.value is primary
+        if primary
+        else str(raised.value) == "P_DIAGNOSTIC_VALIDATION_FAILED"
+    )
+    assert published == [primary] and report["migration_diagnostics"]["status"] == "INVALID"
+
+
+def test_invocation_h_diagnostic_failure_runs_cleanup_before_distinct_gate():
+    import ast
+
+    shell = (e.ROOT / "scripts/test_telegram_egress_migration.sh").read_text()
+    nodes = ast.parse(shell.split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0])
+    primary = next(
+        n
+        for n in ast.walk(nodes)
+        if isinstance(n, ast.Assert)
+        and isinstance(n.msg, ast.Constant)
+        and n.msg.value == "FROZEN_HISTORICAL_ASSERTIONS_FAILED"
+    )
+    validation = next(
+        n
+        for n in ast.walk(nodes)
+        if isinstance(n, ast.Assert)
+        and isinstance(n.msg, ast.Constant)
+        and n.msg.value == "H_DIAGNOSTIC_VALIDATION_FAILED"
+    )
+    code = compile(
+        ast.Module(body=[primary, validation], type_ignores=[]), "unit-H-primary", "exec"
+    )
+    for status in [0, 1]:
+        with pytest.raises(
+            AssertionError,
+            match="H_DIAGNOSTIC_VALIDATION_FAILED"
+            if status == 0
+            else "FROZEN_HISTORICAL_ASSERTIONS_FAILED",
+        ):
+            exec(
+                code,
+                {
+                    "result": subprocess.CompletedProcess([], status),
+                    "observation": {"status": "INVALID"},
+                },
+            )
+
+
+@pytest.mark.parametrize("setup_failure", [False, True])
+def test_invocation_actual_outer_runner_executes_original_h_once(
+    invocation_units, monkeypatch, setup_failure
+):
+    f = invocation_units
+    reports = f.root / "reports"
+    reports.mkdir(mode=0o700)
+    # Original H refuses at its disposable admission, before any daemon command.
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    if setup_failure:
+        monkeypatch.setattr(
+            sys.modules[__name__],
+            "diagnostic_binding",
+            lambda *a: (_ for _ in ()).throw(PermissionError("PRIVATE_SETUP")),
+        )
+    else:
+        monkeypatch.setattr(
+            sys.modules[__name__], "diagnostic_binding", lambda *a: copy.deepcopy(f.binding)
+        )
+    result, summary = run_historical_observed(f.root, "a" * 40, reports)
+    assert result.returncode == 1
+    assert summary["status"] == ("INVALID" if setup_failure else "COMPLETE")
 
 
 @pytest.mark.parametrize("outcome", ["success", "exit", "timeout"])
@@ -6624,6 +9463,10 @@ def test_migration_deadline_clamps_every_subprocess(monkeypatch):
     "revision,versions",
     [
         ("0008", 8),
+        ("0009", 9),
+        ("0010", 10),
+        ("0011", 11),
+        ("0012", 12),
         ("9999", 7),
         ("0007", 8),
         ("0007", 6),
@@ -6692,7 +9535,7 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
     coordinator = (e.ROOT / "scripts/test_telegram_egress_migration.sh").read_text()
     shell = (e.ROOT / "scripts/test_telegram_egress.sh").read_text()
     assert "if fault == 'state':" in coordinator
-    # T/C/G execute frozen sources; E is a separate terminal phase.
+    # T/C/G/E execute frozen sources; P is the separate terminal phase.
     assert "run_name='__control_coordinator__'" in coordinator
     assert "reports/retained-control/control-cleanup-negatives.json" in coordinator
     assert "negative['count'] == 3" in coordinator
@@ -6737,14 +9580,22 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
             "scripts/test_telegram_egress.sh",
             "--escalation-schema-upgrade",
             "ESCALATION_G",
-            "candidate",
+            "MATERIAL_E",
             "str(handoff_e)",
         ],
     ]
-    assert len(argv) == 5
-    assert argv[4][:2] == ["sys.executable", "-c"]
+    assert len(argv) == 6
+    assert argv[4] == [
+        "sh",
+        "scripts/test_telegram_egress.sh",
+        "--material-schema-upgrade",
+        "MATERIAL_E",
+        "candidate",
+        "str(handoff_p)",
+    ]
+    assert argv[5][:2] == ["sys.executable", "-c"]
     assert (
-        argv[4][2]
+        argv[5][2]
         == "control_cleanup_observer_script(reports / 'retained-control-cleanup-observer.jsonl', candidate)"
     )
     observed = control_cleanup_observer_script(Path("/unused-journal.jsonl"), "unit-observer")
@@ -6771,15 +9622,25 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
         ast.unparse(next(k.value for k in ordered[1].keywords if k.arg == "timeout"))
         == "deadline - time.monotonic()"
     )
-    assert ast.unparse(next(k.value for k in ordered[4].keywords if k.arg == "cwd")) == "control"
-    assert ast.literal_eval(next(k.value for k in ordered[4].keywords if k.arg == "timeout")) == 480
+    assert ast.unparse(next(k.value for k in ordered[5].keywords if k.arg == "cwd")) == "control"
+    assert ast.literal_eval(next(k.value for k in ordered[5].keywords if k.arg == "timeout")) == 480
     assert "--guards-schema-upgrade" in shell and "--escalation-schema-upgrade" in shell
     assert "retained-guards/guards-schema-phase.json" in coordinator
-    assert "reports/escalation-schema-phase.json" in coordinator
+    assert "reports/retained-escalation/escalation-schema-phase.json" in coordinator
     assert ast.unparse(next(k.value for k in ordered[2].keywords if k.arg == "cwd")) == "guards"
     assert '"budget_file": sys.argv[4]' in shell or "'budget_file': sys.argv[4]" in shell
     assert "run_name='__schema_harness__'" in shell
     assert "754f1c883e5a94a7fc9e729af2605424f949ba33" in coordinator
+
+    assert (
+        "--material-schema-upgrade" in shell and "reports/material-schema-phase.json" in coordinator
+    )
+    assert ast.unparse(next(k.value for k in ordered[3].keywords if k.arg == "cwd")) == "escalation"
+    assert ast.unparse(next(k.value for k in ordered[4].keywords if k.arg == "cwd")) == "e.ROOT"
+    assert (
+        ast.unparse(next(k.value for k in ordered[4].keywords if k.arg == "timeout"))
+        == "material_deadline - time.monotonic() + 480"
+    )
 
 
 @pytest.mark.parametrize("revision", [None, "0007", "0009", "unknown"])
@@ -7440,6 +10301,9 @@ def test_control_coordinator_archive_failure_retains_ledger_and_cleans_only_admi
             return b"c" * 40
         if args[1] == "merge-base":
             return b""
+        if args[1] == "cat-file":
+            tree = MATERIAL_E_TREE if args[-1] == MATERIAL_E else "a" * 40
+            return ("tree " + tree + "\n\nfixture").encode()
         assert args[1] == "archive"
         raise e.EgressError("EGRESS_COMMAND_FAILED")
 
@@ -8235,3 +11099,1032 @@ def test_escalation_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, dama
             consumed["deadline"] == value["deadline"] and 0 < consumed["remaining_seconds"] <= 170
         )
         assert not path.exists()
+
+
+@pytest.mark.parametrize("direction", ["upgrade", "downgrade"])
+@pytest.mark.parametrize("revision,selected", [("0011", MATERIAL_E), ("0012", "a" * 40)])
+def test_material_recovery_requires_observed_schema_database_seed_and_fresh_reader(
+    direction, revision, selected
+):
+    report = {
+        "seed_identity": {
+            "database": "asm_local",
+            "database_oid": 45,
+            "server_address": "172.20.0.2/32",
+            "server_port": 5432,
+            "postmaster_started": "start",
+            "seed_sha256": "1" * 64,
+        },
+        "lost_result_process": {
+            "namespace": "pid:[10]",
+            "pid": 1,
+            "start_ticks": 100,
+            "boot_id": "boot",
+        },
+    }
+    observation = {
+        **report["seed_identity"],
+        "revision": revision,
+        "role": "asm_migrator",
+        "reader_pid": 1,
+        "backend_pid": 20,
+        "reader_namespace": "pid:[11]",
+        "reader_start_ticks": 101,
+        "reader_boot_id": "boot",
+    }
+    lost = SimpleNamespace(returncode=86, stdout=b"MATERIAL_MIGRATION_COMMITTED_RESULT_LOST\n")
+
+    def select(observe):
+        return material_schema_recovery_source(
+            lost, observe, report, MATERIAL_E, "a" * 40, direction=direction
+        )
+
+    assert select(lambda: observation) == selected
+    for changed in (
+        {"revision": None},
+        {"revision": "unknown"},
+        {"revision": "0010"},
+        {"revision": "0013"},
+        {"role": "asm_runtime"},
+        {"database": "asm_test"},
+        {"database_oid": 46},
+        {"server_address": "172.20.0.3/32"},
+        {"server_port": 5433},
+        {"postmaster_started": "restart"},
+        {"seed_sha256": "2" * 64},
+        {"reader_pid": 0},
+        {"backend_pid": True},
+        {"reader_start_ticks": 100},
+        {"reader_namespace": "missing"},
+        {"reader_boot_id": "other"},
+    ):
+        with pytest.raises(AssertionError):
+            select(lambda: {**observation, **changed})
+        assert "recovery_source" not in report[direction + "_ack_loss"]
+    for missing in observation:
+        with pytest.raises((AssertionError, KeyError)):
+            select(lambda: {key: value for key, value in observation.items() if key != missing})
+        assert "recovery_source" not in report[direction + "_ack_loss"]
+
+    def unreadable():
+        raise OSError("unreadable")
+
+    with pytest.raises(OSError):
+        select(unreadable)
+    assert report[direction + "_ack_loss"]["observed"] == "UNREADABLE"
+    for bad in (
+        SimpleNamespace(returncode=0, stdout=lost.stdout),
+        SimpleNamespace(returncode=86, stdout=b"different"),
+    ):
+        with pytest.raises(AssertionError, match="POST_COMMIT_FAILURE"):
+            material_schema_recovery_source(
+                bad,
+                lambda: pytest.fail("no revision inference from wrong result"),
+                report,
+                MATERIAL_E,
+                "a" * 40,
+                direction=direction,
+            )
+
+
+@pytest.fixture
+def material_budget_fixture(tmp_path, monkeypatch, frozen_h_source):
+    original_root = e.ROOT
+    pins = frozen_h_source.files["infra/images.lock.env"]
+    clock = [1000.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(e, "ROOT", tmp_path)
+    report_path = tmp_path / "reports/retained-escalation/escalation-schema-phase.json"
+    report_path.parent.mkdir(parents=True)
+    report = {
+        "phase": ESCALATION_PHASE,
+        "coordinator": MATERIAL_E,
+        "historical": ESCALATION_G,
+        "observed_source": MATERIAL_E,
+        "budget_state": "VALIDATED_CONSUMED",
+        "started_at": 840.0,
+        "total_seconds": 130.0,
+        "prepare_budget": {
+            "version": 1,
+            "phase": ESCALATION_PHASE,
+            "historical": ESCALATION_G,
+            "candidate": MATERIAL_E,
+            "started_at": 300.0,
+            "deadline": 900.0,
+            "charged_total_seconds": 550.0,
+        },
+        "cleanup": {
+            "state": "PASS",
+            "token": "e" * 32,
+            "project": "asm-escalation-schema-phase",
+            "phase": ESCALATION_PHASE,
+            "source": MATERIAL_E,
+        },
+        "images": {
+            MATERIAL_E + ":" + kind: {
+                "source_sha": MATERIAL_E,
+                "source_tree": MATERIAL_E_TREE,
+                "kind": kind,
+            }
+            for kind in ("runtime", "development")
+        },
+        "database": {"populated_refusal": "PASS", "timers": ["timer1", "timer2", "timer3"]},
+    }
+    raw = e.encoded(report)
+    report_path.write_bytes(raw)
+    owner = SimpleNamespace(token="f" * 32, phase=MATERIAL_PHASE, directory=tmp_path / "owner")
+    monkeypatch.setattr(SchemaOwnership, "inherited", lambda project, source: owner)
+    completion = {
+        **material_escalation_evidence(raw, 300.0, 900.0),
+        "source": MATERIAL_E,
+        "tree": MATERIAL_E_TREE,
+        "source_clean": True,
+        "exit_code": 0,
+        "cleanup_state": "PASS",
+        "completed_at": 998.0,
+    }
+    value = dict(
+        version=2,
+        phase=MATERIAL_PHASE,
+        historical=MATERIAL_E,
+        candidate="a" * 40,
+        uid=os.getuid(),
+        owner_token=owner.token,
+        started_at=300.0,
+        issued_at=999.0,
+        charged_seconds=699.0,
+        retained_deadline=900.0,
+        deadline=1020.0,
+        extension_seconds=120,
+        escalation_completion=completion,
+    )
+    return SimpleNamespace(
+        root=tmp_path,
+        original_root=original_root,
+        pins=pins,
+        clock=clock,
+        path=tmp_path / "budget.json",
+        value=value,
+        report=report,
+        report_path=report_path,
+        owner=owner,
+    )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "expired",
+        "future",
+        "phase",
+        "historical",
+        "candidate",
+        "uid",
+        "version",
+        "deadline",
+        "retained_deadline",
+        "charged_seconds",
+        "delta",
+        "infinite",
+        "boolean",
+        "extra",
+        "missing",
+        "hardlink",
+        "symlink",
+        "mode",
+        "owner_token",
+        "owner_phase",
+        "reset",
+        "false600",
+        "completion_missing",
+        "E_exit",
+        "E_cleanup",
+        "E_clean",
+        "E_source",
+        "E_late",
+        "E_hash",
+        "E_token",
+        "E_report_missing",
+        "E_report_changed",
+        "E_report_failure",
+        "E_report_incomplete",
+        "E_report_clock",
+        "E_report_image",
+    ],
+)
+def test_material_budget_preserves_original_S_terminal720_private_binding_and_single_use(
+    material_budget_fixture, damage
+):
+    f = material_budget_fixture
+    value, completion = f.value, f.value["escalation_completion"]
+    if damage in {"phase", "historical", "candidate", "owner_token"}:
+        value[damage] = "wrong"
+    elif damage in {"uid", "version", "charged_seconds"}:
+        value[damage] += 1
+    elif damage in {"deadline", "retained_deadline"}:
+        value[damage] += 0.0000001  # No tolerance may extend the stored absolute bound.
+    elif damage == "delta":
+        value["extension_seconds"] = 121
+    elif damage == "infinite":
+        value["started_at"] = float("inf")
+    elif damage == "boolean":
+        value["started_at"] = True
+    elif damage == "extra":
+        value["replacement_budget"] = 720
+    elif damage == "expired":
+        f.clock[0] = value["deadline"]
+    elif damage == "future":
+        f.clock[0] = value["issued_at"] - 0.001
+    elif damage == "owner_phase":
+        f.owner.phase = ESCALATION_PHASE
+    elif damage == "reset":
+        value.update(
+            started_at=600.0, retained_deadline=1200.0, deadline=1320.0, charged_seconds=399.0
+        )
+    elif damage == "false600":
+        value.update(deadline=900.0, extension_seconds=0)
+    elif damage == "completion_missing":
+        del completion["completed_at"]
+    elif damage == "E_exit":
+        completion["exit_code"] = 1
+    elif damage == "E_cleanup":
+        completion["cleanup_state"] = "ADMITTED"
+    elif damage == "E_clean":
+        completion["source_clean"] = False
+    elif damage == "E_source":
+        completion["source"] = "b" * 40
+    elif damage == "E_late":
+        completion["completed_at"] = value["issued_at"] + 0.001
+    elif damage == "E_hash":
+        completion["report_sha256"] = "0" * 64
+    elif damage == "E_token":
+        completion["owner_token"] = "d" * 32
+    elif damage == "E_report_missing":
+        f.report_path.unlink()
+    elif damage == "E_report_changed":
+        f.report_path.write_bytes(f.report_path.read_bytes() + b"\n")
+    elif damage == "E_report_failure":
+        f.report["primary_failure"] = {"reason": "CONTROL_COMMAND_TIMEOUT"}
+    elif damage == "E_report_incomplete":
+        f.report["cleanup"]["state"] = "ADMITTED"
+    elif damage == "E_report_clock":
+        f.report["total_seconds"] = float("nan")
+    elif damage == "E_report_image":
+        f.report["images"][MATERIAL_E + ":development"]["source_tree"] = "0" * 40
+    if damage in {"E_report_failure", "E_report_incomplete", "E_report_clock", "E_report_image"}:
+        f.report_path.write_bytes(e.encoded(f.report))
+    e.write_private(f.path, e.encoded(value))
+    if damage == "hardlink":
+        os.link(f.path, f.root / "alias")
+    elif damage == "symlink":
+        f.path.rename(f.root / "target")
+        f.path.symlink_to(f.root / "target")
+    elif damage == "mode":
+        f.path.chmod(0o644)
+    elif damage == "missing":
+        f.path.unlink()
+    if damage:
+        with pytest.raises((AssertionError, OSError, KeyError, e.EgressError)):
+            consume_material_budget(f.path, MATERIAL_E, "a" * 40)
+        assert f.path.exists() == (damage != "missing")
+    else:
+        consumed = consume_material_budget(f.path, MATERIAL_E, "a" * 40)
+        assert consumed == {
+            **value,
+            "observed_at": 1000.0,
+            "charged_at_observation": 700.0,
+            "handoff_seconds": 1.0,
+            "remaining_seconds": 20.0,
+        }
+        assert consumed["observed_at"] > consumed["retained_deadline"]
+        assert not f.path.exists()
+        with pytest.raises(OSError):
+            consume_material_budget(f.path, MATERIAL_E, "a" * 40)
+
+
+@pytest.mark.parametrize("fault", ["replace", "rewrite", "handoff_delay"])
+def test_material_handoff_changed_or_expired_during_validation_cannot_be_consumed(
+    material_budget_fixture, monkeypatch, fault
+):
+    f = material_budget_fixture
+    e.write_private(f.path, e.encoded(f.value))
+
+    def owner(project, source):
+        if fault == "replace":
+            e.write_private(f.path, f.path.read_bytes())
+        elif fault == "rewrite":
+            with f.path.open("ab") as stream:
+                stream.write(b"\n")
+        else:
+            f.clock[0] = f.value["deadline"]
+        return f.owner
+
+    monkeypatch.setattr(SchemaOwnership, "inherited", owner)
+    with pytest.raises(AssertionError, match="FILE_CHANGED|EXHAUSTED"):
+        consume_material_budget(f.path, MATERIAL_E, "a" * 40)
+    assert f.path.exists()
+
+
+def test_material_budget_fractional_deadlines_use_stored_absolute_values(material_budget_fixture):
+    f = material_budget_fixture
+    shift = 875.198142485 - f.value["started_at"]
+    for key in ("started_at", "issued_at"):
+        f.value[key] += shift
+    f.value["retained_deadline"] = f.value["started_at"] + 600
+    f.value["deadline"] = f.value["started_at"] + 720
+    f.value["charged_seconds"] = f.value["issued_at"] - f.value["started_at"]
+    f.report["started_at"] += shift
+    f.report["prepare_budget"].update(
+        started_at=f.value["started_at"],
+        deadline=f.value["retained_deadline"],
+    )
+    raw = e.encoded(f.report)
+    f.report_path.write_bytes(raw)
+    f.value["escalation_completion"].update(
+        **material_escalation_evidence(raw, f.value["started_at"], f.value["retained_deadline"]),
+        completed_at=998.0 + shift,
+    )
+    e.write_private(f.path, e.encoded(f.value))
+    f.clock[0] = f.value["deadline"] - 0.000001
+    consumed = consume_material_budget(f.path, MATERIAL_E, "a" * 40)
+    assert 0 < consumed["remaining_seconds"] < 0.000002
+    e.write_private(f.path, e.encoded(f.value))
+    f.clock[0] = f.value["deadline"]
+    with pytest.raises(AssertionError, match="EXHAUSTED"):
+        consume_material_budget(f.path, MATERIAL_E, "a" * 40)
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_material_phase_early_failure_reports_budget_and_performs_no_runtime(
+    material_budget_fixture, monkeypatch, missing
+):
+    f = material_budget_fixture
+    monkeypatch.chdir(f.root)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    commands = []
+
+    def command(args, **kwargs):
+        commands.append(args)
+        assert args == ["git", "rev-parse", "HEAD"]
+        return b"a" * 40
+
+    monkeypatch.setattr(e, "command", command)
+    if not missing:
+        e.write_private(f.path, e.encoded(f.value))
+    with pytest.raises((AssertionError, OSError, e.EgressError)):
+        run_material_schema_phase(
+            {"historical": MATERIAL_E, "candidate": "a" * 40, "budget_file": str(f.path)}
+        )
+    report = json.loads((f.root / "reports/material-schema-phase.json").read_text())
+    assert report["observed_source"] == "a" * 40 and report["cleanup"]["state"] == "NOT_ADMITTED"
+    assert report["primary_failure"] and commands == [["git", "rev-parse", "HEAD"]]
+    assert report["budget_state"] == ("NOT_VALIDATED" if missing else "VALIDATED_CONSUMED")
+    if not missing:
+        assert not f.path.exists() and report["prepare_budget"]["deadline"] == 1020.0
+        assert report["prepare_budget"]["retained_deadline"] == 900.0
+        assert report["budget_at_report"]["charged_seconds"] == 700.0
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "pass",
+        "build",
+        "build_deadline",
+        "admission_expired",
+        "source_expired",
+        "archive",
+        "probe",
+        "cleanup_secondary",
+        "G_probe_expired",
+        "final_gate_expired",
+        "just_before_deadline",
+    ],
+)
+def test_material_entrypoint_accounts_full_preparation_and_refuses_before_runtime(
+    material_budget_fixture, monkeypatch, fault
+):
+    f = material_budget_fixture
+    f.value["uid"] = 1001
+    e.write_private(f.path, e.encoded(f.value))
+    # The real private-file guards have their own tests above; only this runtime
+    # boundary seam supplies the disposable runner's non-root uid on root CI hosts.
+    monkeypatch.setattr(os, "getuid", lambda: 1001)
+    monkeypatch.setattr(e, "private_bytes", lambda p: Path(p).read_bytes())
+    monkeypatch.chdir(f.root)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    infra = f.root / "infra"
+    infra.mkdir()
+    (infra / "images.lock.env").write_bytes(f.pins)
+    operations, cleaned, runtime = [], [], []
+    primary = e.EgressError("EGRESS_IMAGE_PROOF_FAILED")
+    runtime_stop = RuntimeError("unit runtime boundary")
+
+    def source_check(source):
+        operations.append("source_check")
+        assert source == "a" * 40
+        f.clock[0] += 2
+        if fault == "source_expired":
+            f.clock[0] = f.value["deadline"]
+
+    monkeypatch.setattr(e, "source_check", source_check)
+    monkeypatch.setattr(
+        sys.modules[__name__], "schema_ordered_sources", lambda h, p: [{"sha": h}, {"sha": p}]
+    )
+
+    def command(args, **kwargs):
+        operations.append(args[:3])
+        if args == ["git", "rev-parse", "HEAD"]:
+            return b"a" * 40
+        assert 0 < kwargs.get("timeout", 40) <= f.value["deadline"] - f.clock[0]
+        f.clock[0] += 0.05
+        if args[:2] == ["git", "archive"]:
+            return ("tracked archive:" + args[-1]).encode()
+        if args[:3] == ["docker", "image", "ls"]:
+            if fault in {"build", "build_deadline"} and args[-1].endswith(":" + "a" * 40):
+                return b""
+            return b"sha256:" + b"b" * 64  # Existing images still require every byte probe.
+        if args[:2] == ["docker", "build"]:
+            assert kwargs["timeout"] < 20  # The build480 bound receives only S+720 remainder.
+            if fault == "build_deadline":
+                f.clock[0] = f.value["deadline"]
+                raise subprocess.TimeoutExpired(["unit build"], kwargs["timeout"])
+            return b"unit build output"
+        if args[:3] == ["docker", "image", "inspect"]:
+            return json.dumps([{"Id": "sha256:" + "b" * 64}]).encode()
+        assert args[:2] in [["docker", "ps"], ["docker", "volume"], ["docker", "tag"]]
+        return b""
+
+    monkeypatch.setattr(e, "command", command)
+
+    def archive(source, directory):
+        operations.append("archive:" + source)
+        f.clock[0] += 0.25
+        if fault == "archive":
+            raise primary
+
+    monkeypatch.setattr(e, "migration_build_context", archive)
+
+    def image_probe(image, source, kind):
+        operations.append("probe:" + source + ":" + kind)
+        f.clock[0] += 0.25
+        if fault in {"probe", "cleanup_secondary"}:
+            raise primary
+        if source == ESCALATION_G:
+            assert kind == "development"
+            if fault in {"G_probe_expired", "final_gate_expired"}:
+                f.clock[0] = f.value["deadline"]
+            elif fault == "just_before_deadline":
+                f.clock[0] = f.value["deadline"] - 0.000001
+        return {"id": image, "source_sha": source, "kind": kind}
+
+    monkeypatch.setattr(e, "migration_image", image_probe)
+
+    def cleanup(report):
+        cleaned.append(f.owner.token)
+        report["state"] = "PASS"
+        if fault == "cleanup_secondary":
+            raise RuntimeError("secondary cleanup failure")
+
+    f.owner.cleanup = cleanup
+
+    def start_runtime(args, **kwargs):
+        runtime.append(args)
+        assert args[1] == str(f.root / "scripts/init_local.py")
+        raise runtime_stop
+
+    monkeypatch.setattr(subprocess, "run", start_runtime)
+    if fault == "final_gate_expired":
+        # Independently exercise the final absolute gate, even when an inner
+        # helper did not catch a late completion. Never used by the real runner.
+        @contextmanager
+        def inner_budget(seconds):
+            assert seconds > 0
+            yield
+
+        monkeypatch.setattr(e, "migration_budget", inner_budget)
+    if fault == "admission_expired":
+        f.clock[0] = f.value["deadline"]
+    # The real selector uses runpy, without pytest's assert rewriting. Execute
+    # that exact function source so sanitized failure reasons match the runner.
+    import inspect
+
+    namespace = dict(globals())
+    exec(
+        compile(inspect.getsource(run_material_schema_phase), "<material entrypoint>", "exec"),
+        namespace,
+    )
+    with pytest.raises(
+        (AssertionError, RuntimeError, subprocess.TimeoutExpired, e.EgressError)
+    ) as caught:
+        namespace["run_material_schema_phase"](
+            {"historical": MATERIAL_E, "candidate": "a" * 40, "budget_file": str(f.path)}
+        )
+    report = json.loads((f.root / "reports/material-schema-phase.json").read_text())
+    if fault in {"pass", "build", "just_before_deadline"}:
+        assert caught.value is runtime_stop and len(runtime) == 1
+        budget = report["prepare_budget"]
+        assert budget["retained_deadline"] == 900 and budget["deadline"] == 1020
+        assert budget["charged_at_observation"] == 700
+        assert budget["charged_total_seconds"] == budget["preparation_ended_at"] - 300 < 720
+        assert budget["candidate_prepare_seconds"] == budget["preparation_ended_at"] - 1000
+        assert operations[-1] == "probe:" + ESCALATION_G + ":development"
+        if fault == "build":
+            assert operations.count(["docker", "build", "--pull"]) == 2
+    else:
+        assert runtime == []
+        if fault in {"archive", "probe", "cleanup_secondary"}:
+            assert caught.value is primary
+            assert report["primary_failure"]["reason"] == "EGRESS_IMAGE_PROOF_FAILED"
+        if fault in {"build_deadline", "source_expired", "G_probe_expired", "final_gate_expired"}:
+            assert report["budget_at_report"]["charged_seconds"] >= 720
+            assert report["prepare_budget"]["charged_at_preparation_stop"] >= 720
+        if fault == "final_gate_expired":
+            assert report["primary_failure"]["reason"] == "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
+            assert report["prepare_budget"]["preparation_ended_at"] == 1020
+        if fault == "cleanup_secondary":
+            assert report["secondary_failures"][0]["stage"] == "cleanup"
+    assert cleaned == ([] if fault in {"admission_expired", "source_expired"} else [f.owner.token])
+    assert report["cleanup"]["state"] == ("NOT_ADMITTED" if not cleaned else "PASS")
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "pass",
+        "E_exit",
+        "E_source",
+        "E_report_missing",
+        "E_report_incomplete",
+        "E_cleanup",
+        "E_primary_and_cleanup",
+        "E_cleanup_exhausted",
+        "P_admission_exhausted",
+    ],
+)
+def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
+    material_budget_fixture, monkeypatch, fault
+):
+    f = material_budget_fixture
+    shutil.rmtree(f.root / "reports")
+    f.clock[0] = 100.0
+    monkeypatch.chdir(f.root)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setattr(os, "getuid", lambda: 1001)
+    monkeypatch.setattr(e, "checked_path", lambda p, **kwargs: Path(p))
+    monkeypatch.setattr(e, "private_bytes", lambda p: Path(p).read_bytes())
+    monkeypatch.setattr(e, "source_check", lambda p: None)
+    monkeypatch.setattr(sys.modules[__name__], "schema_ordered_sources", lambda h, p: [])
+    monkeypatch.setattr(sys.modules[__name__], "enable_retained_checkpoint", lambda *a: None)
+    owners, cleaned, sequence, source_reads = [], [], [], []
+    snapshots = {}
+
+    @contextmanager
+    def workspace(ledger):
+        directory = f.root / "coordinator"
+        directory.mkdir(mode=0o700)
+        yield str(directory)
+
+    monkeypatch.setattr(sys.modules[__name__], "schema_coordinator_workspace", workspace)
+
+    def source_binding(source, **kwargs):
+        source_reads.append(source)
+        if fault == "E_source" and len(source_reads) == 2:
+            raise e.EgressError("EGRESS_DIRTY_SOURCE")
+        return {"sha": source, "tree": MATERIAL_E_TREE, "parents": [ESCALATION_G], "clean": True}
+
+    monkeypatch.setattr(sys.modules[__name__], "schema_source_binding", source_binding)
+
+    def command(args, **kwargs):
+        assert args[0] == "git"
+        if args[1:3] == ["rev-parse", "HEAD"]:
+            return b"a" * 40
+        if args[1:3] == ["worktree", "add"]:
+            Path(args[-2]).mkdir()
+        elif args[1:3] == ["worktree", "remove"]:
+            shutil.rmtree(args[-1])
+        return b"tracked archive" if args[1] == "archive" else b""
+
+    monkeypatch.setattr(e, "command", command)
+
+    def admit(owner):
+        owner.directory.mkdir(mode=0o700)
+        owner.admitted = True
+        owners.append(owner)
+        if owner.phase == MATERIAL_PHASE and fault == "P_admission_exhausted":
+            f.clock[0] = 820.0
+
+    def cleanup(owner, report):
+        cleaned.append(owner.phase)
+        report.update(
+            state="PASS",
+            token=owner.token,
+            source=owner.source,
+            phase=owner.phase,
+            project=owner.project,
+        )
+        f.clock[0] += 0.25
+        if owner.phase == ESCALATION_PHASE:
+            if fault == "E_cleanup_exhausted":
+                f.clock[0] = 820.0
+            if fault in {"E_cleanup", "E_primary_and_cleanup"}:
+                raise e.EgressError("EGRESS_CLEANUP_FAILED")
+
+    monkeypatch.setattr(SchemaOwnership, "admit", admit)
+    monkeypatch.setattr(SchemaOwnership, "cleanup", cleanup)
+    monkeypatch.setattr(SchemaOwnership, "inherited", lambda project, source: owners[-1])
+
+    def negatives(directory, checkout, request, ledger):
+        sequence.extend(["timeout", "export"])
+        f.clock[0] += 192
+
+    monkeypatch.setattr(sys.modules[__name__], "run_retained_full_negatives", negatives)
+
+    def child(args, *, cwd, timeout, environment=None):
+        reports = Path(cwd) / "reports"
+        reports.mkdir(exist_ok=True)
+        if args[0] == sys.executable:
+            sequence.append("C-cleanup-negatives")
+            assert timeout == 480
+            (reports / "control-cleanup-negatives.json").write_text(
+                json.dumps(
+                    {
+                        "candidate": GUARDS_C,
+                        "result": "PASS",
+                        "count": 3,
+                    }
+                )
+            )
+            return 0
+        selector = args[2]
+        if selector == "--schema-upgrade":
+            sequence.append("T")
+            assert timeout == 600
+            f.clock[0] += 114
+            (reports / "m3-schema-phase.json").write_text("{}")
+            return 0
+        path = Path(args[-1])
+        value = json.loads(path.read_text())
+        if selector == "--material-schema-upgrade":
+            sequence.append("P")
+            snapshots["handoff"] = copy.deepcopy(value)
+            assert timeout == 100 + 1200 - f.clock[0]
+            consumed = consume_material_budget(path, MATERIAL_E, "a" * 40)
+            assert consumed["charged_at_observation"] > 600
+            assert consumed["started_at"] == 100 and consumed["retained_deadline"] == 700
+            assert consumed["deadline"] == 820 and 0 < consumed["remaining_seconds"] < 50
+            return 0
+        assert value["version"] == 1 and value["started_at"] == 100 and value["deadline"] == 700
+        path.unlink()
+        names = {
+            "--control-schema-upgrade": ("C", "control-schema-phase.json", 117),
+            "--guards-schema-upgrade": ("G", "guards-schema-phase.json", 119),
+            "--escalation-schema-upgrade": ("E", "escalation-schema-phase.json", 135),
+        }
+        label, name, seconds = names[selector]
+        sequence.append(label)
+        began = f.clock[0]
+        f.clock[0] += seconds
+        if label == "E":
+            report = copy.deepcopy(f.report)
+            report.update(started_at=began, total_seconds=seconds)
+            report["prepare_budget"].update(
+                started_at=100.0,
+                deadline=700.0,
+                charged_total_seconds=began + 8 - 100,
+            )
+            report["cleanup"]["token"] = owners[-1].token
+            if fault == "E_report_incomplete":
+                report["cleanup"]["state"] = "ADMITTED"
+            if fault != "E_report_missing":
+                (reports / name).write_bytes(e.encoded(report))
+            if fault in {"E_exit", "E_primary_and_cleanup"}:
+                return 1
+        else:
+            (reports / name).write_text(
+                json.dumps(
+                    {
+                        "coordinator": args[-2],
+                        "historical": args[-3],
+                        "cleanup": {"state": "PASS"},
+                    }
+                )
+            )
+        return 0
+
+    monkeypatch.setattr(sys.modules[__name__], "supervised_schema_child", child)
+    import inspect
+
+    namespace = dict(globals())
+    exec(
+        compile(inspect.getsource(run_control_coordinator), "<current coordinator>", "exec"),
+        namespace,
+    )
+    request = {"historical": "754f1c883e5a94a7fc9e729af2605424f949ba33", "candidate": "a" * 40}
+    if fault == "pass":
+        namespace["run_control_coordinator"](request)
+        assert sequence == ["T", "timeout", "export", "C", "G", "E", "P", "C-cleanup-negatives"]
+        handoff = snapshots["handoff"]
+        assert handoff["escalation_completion"]["completed_at"] <= handoff["issued_at"]
+        assert handoff["charged_seconds"] == handoff["issued_at"] - 100 > 600
+    else:
+        with pytest.raises((AssertionError, OSError, e.EgressError)) as caught:
+            namespace["run_control_coordinator"](request)
+        assert "P" not in sequence and "C-cleanup-negatives" not in sequence
+    ledger = json.loads((f.root / "reports/control-schema-ledger.json").read_text())
+    assert ledger["started_at"] == 100 and ledger["deadline"] == 700
+    assert ledger["material_deadline"] == 820 and ledger["material_supervisor_deadline"] == 1300
+    assert cleaned == [owner.phase for owner in owners]
+    if fault != "pass":
+        assert ledger["primary_failure"]
+        if fault == "E_primary_and_cleanup":
+            assert "ESCALATION_SCHEMA_PHASE_FAILED" in str(caught.value)
+            # Retain the existing sanitizer's closed prefix set too.
+            assert ledger["primary_failure"] == {
+                "type": "AssertionError",
+                "reason": "CONTROL_ASSERTIONERROR",
+                "stage": "escalation_shell",
+            }
+            assert ledger["secondary_failures"][-1]["stage"] == "cleanup"
+        if fault == "E_cleanup_exhausted":
+            assert ledger["primary_failure"]["reason"] == "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
+            assert "material_handoff" not in ledger
+        if fault == "P_admission_exhausted":
+            assert ledger["primary_failure"]["stage"] == "material_shell"
+            assert ledger["cleanup"]["state"] == "PASS"
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "version",
+        "retained_deadline",
+        "deadline",
+        "extension_seconds",
+        "charged_seconds",
+        "charged_at_observation",
+        "charged_total_seconds",
+        "E_late",
+        "E_hash",
+        "owner_token",
+        "exhausted_preparation",
+        "supervisor_deadline",
+        "diagnostic_status",
+        "diagnostic_hash",
+    ],
+)
+def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
+    material_budget_fixture, damage
+):
+    import ast
+
+    f = material_budget_fixture
+    ledger = {
+        "started_at": 300.0,
+        "deadline": 900.0,
+        "material_deadline": 1020.0,
+        "material_extension_seconds": 120,
+        "material_supervisor_deadline": 1500.0,
+        "material_handoff": copy.deepcopy(f.value),
+        "escalation_completion": copy.deepcopy(f.value["escalation_completion"]),
+        "escalation_cleanup": {"token": "e" * 32},
+        "material_cleanup": {"token": f.owner.token},
+    }
+    budget = {
+        **copy.deepcopy(f.value),
+        "observed_at": 1000.0,
+        "charged_at_observation": 700.0,
+        "preparation_ended_at": 1010.0,
+        "charged_total_seconds": 710.0,
+        "remaining_seconds": 10.0,
+    }
+    material = {
+        "coordinator": "a" * 40,
+        "historical": MATERIAL_E,
+        "cleanup": {"state": "PASS", "token": f.owner.token},
+        "prepare_budget": budget,
+        "database": {"populated_refusal": "PASS", "refusal": {"before_ddl": True, "tables": 42}},
+        "upgrade_ack_loss": {"observed": {"revision": "0012"}, "recovery_source": "a" * 40},
+        "downgrade_ack_loss": {"observed": {"revision": "0011"}, "recovery_source": MATERIAL_E},
+        "used_recovery": {"source": "a" * 40},
+        "migration_diagnostics": {
+            "status": "COMPLETE",
+            "sha256": e.sha(b"unit-closed-observation"),
+        },
+    }
+    (f.root / "reports/migration-P-observation.json").write_bytes(b"unit-closed-observation")
+    if damage in {
+        "version",
+        "extension_seconds",
+        "charged_seconds",
+        "charged_at_observation",
+        "charged_total_seconds",
+    }:
+        budget[damage] += 1
+    elif damage in {"retained_deadline", "deadline"}:
+        budget[damage] += 0.000001
+    elif damage == "E_late":
+        budget["escalation_completion"]["completed_at"] = 1001.0
+        ledger["escalation_completion"]["completed_at"] = 1001.0
+        ledger["material_handoff"]["escalation_completion"]["completed_at"] = 1001.0
+    elif damage == "E_hash":
+        for entry in [budget, ledger["material_handoff"]]:
+            entry["escalation_completion"]["report_sha256"] = "0" * 64
+        ledger["escalation_completion"]["report_sha256"] = "0" * 64
+    elif damage == "owner_token":
+        material["cleanup"]["token"] = "0" * 32
+    elif damage == "exhausted_preparation":
+        budget.update(
+            preparation_ended_at=1020.0, charged_total_seconds=720.0, remaining_seconds=0.0
+        )
+    elif damage == "supervisor_deadline":
+        ledger["material_supervisor_deadline"] += 120
+    elif damage == "diagnostic_status":
+        material["migration_diagnostics"]["status"] = "INVALID"
+    elif damage == "diagnostic_hash":
+        material["migration_diagnostics"]["sha256"] = "0" * 64
+    (f.root / "reports/control-schema-ledger.json").write_bytes(e.encoded(ledger))
+    (f.root / "reports/material-schema-phase.json").write_bytes(e.encoded(material))
+    source = (f.original_root / "scripts/test_telegram_egress_migration.sh").read_text()
+    program = source.split("<<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+    state = next(
+        node
+        for node in ast.walk(ast.parse(program))
+        if isinstance(node, ast.If) and ast.unparse(node.test) == "fault == 'state'"
+    )
+    index = next(
+        i
+        for i, node in enumerate(state.body)
+        if isinstance(node, ast.Assign) and ast.unparse(node.targets[0]) == "material"
+    )
+    gate = compile(
+        ast.Module(body=state.body[index:], type_ignores=[]), "<material shell gate>", "exec"
+    )
+    namespace = {"e": e, "json": json, "source": "a" * 40, "escalation": f.report, "admission": {}}
+    if damage:
+        with pytest.raises(AssertionError):
+            exec(gate, namespace)
+        assert "material_schema" not in namespace["admission"]
+    else:
+        exec(gate, namespace)
+        assert namespace["admission"]["material_budget"]["charged_total_seconds"] == 710
+
+
+@pytest.mark.parametrize("primary", [None, RuntimeError("retained-E-primary")])
+def test_retained_e_export_failure_preserves_primary_and_private_evidence(
+    tmp_path, monkeypatch, primary
+):
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(run_control_coordinator))
+    finalizers = [
+        node.finalbody
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Try)
+        and any(
+            isinstance(item, ast.Constant) and item.value == "retained_escalation_reports"
+            for statement in node.finalbody
+            for item in ast.walk(statement)
+        )
+    ]
+    assert len(finalizers) == 1
+    program = ast.Module(
+        body=[
+            ast.Try(
+                body=ast.parse("if primary is not None: raise primary").body,
+                handlers=[],
+                orelse=[],
+                finalbody=finalizers[0],
+            )
+        ],
+        type_ignores=[],
+    )
+    code = compile(ast.fix_missing_locations(program), "retained-E-export-boundary", "exec")
+    (tmp_path / "reports").mkdir()
+    export_error = OSError("export-failure")
+
+    def fail(*args, **kwargs):
+        raise export_error
+
+    monkeypatch.setattr(shutil, "copytree", fail)
+    ledger = {"stage": "escalation_shell"}
+    with pytest.raises((RuntimeError, OSError)) as caught:
+        exec(
+            code,
+            {
+                "primary": primary,
+                "sys": sys,
+                "shutil": shutil,
+                "ledger": ledger,
+                "escalation": tmp_path,
+                "retained_e": tmp_path / "destination",
+                "schema_failure": schema_failure,
+            },
+        )
+    assert caught.value is (primary if primary is not None else export_error)
+    assert ledger["retained_reports_failed"] and ledger["private_state_retained"]
+    if primary is not None:
+        assert ledger["secondary_failures"][0]["stage"] == "retained_escalation_reports"
+        assert "CONTROL_ESCALATION_REPORT_FAILED" in primary.__notes__
+    else:
+        assert ledger["stage"] == "retained_escalation_reports"
+
+
+@pytest.mark.parametrize("expected", [True, False])
+@pytest.mark.parametrize("outcome", ["ready", "schema", "unsafe", "unreachable"])
+def test_material_readiness_probe_only_accepts_exact_pairing_result(monkeypatch, expected, outcome):
+    import ast
+    import inspect
+    import types
+
+    tree = ast.parse(inspect.getsource(run_material_schema_phase))
+    code = next(
+        n.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Constant)
+        and isinstance(n.value, str)
+        and "assert DATABASE_SCHEMA_REVISION == SOURCE_REVISION" in n.value
+    )
+    code = code.replace("EXPECTED", repr(expected)).replace("SOURCE_REVISION", repr("0012"))
+    closed = []
+
+    class Runtime:
+        def __init__(self, settings):
+            pass
+
+        async def check(self):
+            if outcome == "schema":
+                raise RuntimeError("Database capability/schema mismatch")
+            if outcome == "unsafe":
+                raise RuntimeError("Unsafe runtime database role")
+            if outcome == "unreachable":
+                raise OSError("unreachable")
+
+        async def close(self):
+            closed.append(True)
+
+    module = types.ModuleType("asm.foundation")
+    module.RuntimeDatabase, module.Settings, module.DATABASE_SCHEMA_REVISION = (
+        Runtime,
+        object,
+        "0012",
+    )
+    monkeypatch.setitem(sys.modules, "asm.foundation", module)
+    if (outcome, expected) in {("ready", True), ("schema", False)}:
+        exec(compile(code, "material-readiness-probe", "exec"), {})
+    else:
+        with pytest.raises((AssertionError, OSError)):
+            exec(compile(code, "material-readiness-probe", "exec"), {})
+    assert closed == [True]
+
+
+@pytest.mark.parametrize("damage", [None, "tree", "head", "dirty", "ancestry"])
+def test_material_source_binding_checks_order_tree_and_actual_checkout(
+    monkeypatch, tmp_path, damage
+):
+    calls = []
+
+    def command(args, **kwargs):
+        calls.append(args)
+        if args[1] == "cat-file":
+            tree = MATERIAL_E_TREE if args[-1] == MATERIAL_E else "b" * 40
+            if damage == "tree":
+                tree = "c" * 40
+            return ("tree " + tree + "\nparent " + ESCALATION_G + "\n\nfixture").encode()
+        if "rev-parse" in args:
+            return (MATERIAL_E if damage != "head" else "f" * 40).encode()
+        if "status" in args:
+            return b" M tracked.py" if damage == "dirty" else b""
+        assert args[1:3] == ["merge-base", "--is-ancestor"]
+        if damage == "ancestry":
+            raise e.EgressError("EGRESS_COMMAND_FAILED")
+        return b""
+
+    monkeypatch.setattr(e, "command", command)
+    if damage in {"tree", "head", "dirty"}:
+        with pytest.raises(AssertionError):
+            schema_source_binding(MATERIAL_E, checkout=tmp_path, expected_tree=MATERIAL_E_TREE)
+    elif damage == "ancestry":
+        with pytest.raises(e.EgressError):
+            schema_ordered_sources("754f1c883e5a94a7fc9e729af2605424f949ba33", "a" * 40)
+    else:
+        assert schema_source_binding(
+            MATERIAL_E, checkout=tmp_path, expected_tree=MATERIAL_E_TREE
+        ) == {"sha": MATERIAL_E, "tree": MATERIAL_E_TREE, "parents": [ESCALATION_G], "clean": True}
+        chain = schema_ordered_sources("754f1c883e5a94a7fc9e729af2605424f949ba33", "a" * 40)
+        assert [v["sha"] for v in chain] == [
+            "754f1c883e5a94a7fc9e729af2605424f949ba33",
+            CONTROL_T,
+            GUARDS_C,
+            ESCALATION_G,
+            MATERIAL_E,
+            MATERIAL_BASE,
+            "a" * 40,
+        ]
+        assert [c[-2:] for c in calls if c[1] == "merge-base"] == [
+            [a["sha"], b["sha"]] for a, b in zip(chain, chain[1:], strict=False)
+        ]
+    assert all(args[0] == "git" for args in calls)

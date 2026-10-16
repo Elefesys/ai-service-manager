@@ -402,7 +402,7 @@ async def test_disabled_webhook_and_secret_verified_before_parsing():
     class Ingress:
         calls = 0
 
-        async def ingest(self, projection, correlation):
+        async def ingest_update(self, projection, correlation):
             self.calls += 1
 
     ingress = Ingress()

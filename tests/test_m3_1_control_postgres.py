@@ -18,7 +18,7 @@ from sqlalchemy.exc import DBAPIError
 from test_m2_1_models import event
 from test_m2_1_postgres import command, ingest, query
 from test_m2_1_postgres import messaging as messaging
-from test_m2_3_db_postgres import BOT, ingress, projection
+from test_m2_3_db_postgres import BOT, ingress, projection, v2_fixture
 from test_m2_3_db_postgres import telegram as telegram
 from test_tenancy_postgres import PROVIDER, UA, UB, A, B, raw_context
 from test_tenancy_postgres import db as db
@@ -578,7 +578,7 @@ async def test_ingress_capture_serializes_resume_and_rollbacks(control, provider
                 text("SELECT platform.telegram_ingest(:bot,CAST(:event AS jsonb),:corr)"),
                 {
                     "bot": BOT,
-                    "event": json.dumps(projection(update="10102", message="20102")),
+                    "event": json.dumps(v2_fixture(projection(update="10102", message="20102"))),
                     "corr": uuid4(),
                 },
             )

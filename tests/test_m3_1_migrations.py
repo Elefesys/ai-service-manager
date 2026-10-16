@@ -440,7 +440,12 @@ async def assert_head(c, revision):
     assert (
         await c.execute(text("SELECT version_num FROM platform.alembic_version"))
     ).scalar_one() == revision
-    assert revision in ("0007", "0008", "0009", "0010", "0011")
+    assert revision in ("0007", "0008", "0009", "0010", "0011", "0012")
+    if revision == "0012":
+        from test_m3_1_provenance_migrations import assert_schema
+
+        await assert_schema(c)
+        return
     expected = set(H_COLUMNS) if revision == "0007" else I_TABLES
     if revision in ("0009", "0010", "0011"):
         expected = expected | {"platform.conversation_control_receipts"}
@@ -602,8 +607,8 @@ async def test_populated_refusal_is_before_destructive_ddl_and_preserves_exact_s
 
                 await c.run_sync(downgrade)
         assert caught.value.orig.sqlstate == "55000"
-        # Direct 0008 refusal must leave the current 0011 marker and all rows intact.
-        await assert_head(c, "0011")
+        # Direct 0008 refusal must leave the current 0012 marker and all rows intact.
+        await assert_head(c, "0012")
         assert await fingerprints(c) == before and await definitions(c) == objects
     # No M3 row is deleted to force a cycle; only the ordinary end-of-test
     # child-first tenant cleanup follows after refusal has been proved.

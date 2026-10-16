@@ -5149,3 +5149,81 @@ old36/no-backfill/reverse/refusal/private S3/residual timers), retained H/T/C
 state25min/foundation40/browser25 и9jobs не увеличивать; нехватка бюджета →
 STOP и timings C0. До конкретного C0/C6 review эти controller changes не
 применены. CI нового E/scoped C8/приёмка C0 впереди; M3 IN_PROGRESS.
+
+
+### M3.1 MATERIAL /0012 — source checkpoint; execution deferred, 2026-10-15
+
+[C0 MATERIAL](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336) и
+[source-first continuation](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195754984).
+Exact predecessor `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/schema0011; branch
+`c3/m3-1-material`, assigned0012←0011. Current Runtime/Telegram provisioner requires
+0012; all frozen0007/0008/0009/0010/0011 source/schema lanes retain their exact source.
+Полный successor DDL/source inventory и typed profiles —
+[M3_CONTRACT§15.10](../tasks/M3_CONTRACT.md#1510-material-implementation-source-checkpoint--2026-10-15-utc).
+Это **source inventory**, actual catalog/PG/migration/races/RLS/paired browser
+**NOT RUN — deferred to штатный final candidate CI**. Existing main/design green
+и local unit/build не являются новым PostgreSQL/browser proof.
+
+`telegram_connection_state.material_enabled` defaults false. Every fresh receipt
+uses codec2+immutable provenance even with gate OFF; EDIT/DELETE remain ignored
+when OFF. Previously saved V1 keys replay before new-field parsing and are not
+upgraded/replayed into material state. No backfill, replacement-media fetch,
+native takeover/context reconciliation, renewal, collector or production activation
+is issued. This source checkpoint is not an operator activation command.
+
+Only disposable existing TEST fixtures enable the gate for finite material tests.
+Browser preset `material` initializes a TELEGRAM connection from the beginning;
+fixed original/edit/delete inputs pass through ordinary ingress/claim/worker and
+owner API/UI. It neither rewrites saved provider rows nor directly edits current.
+Existing browser recovery/send/control flows remain. No actual Telegram, VM, S3
+send/probe, deployment or user credential is needed for the source handoff.
+
+C0 intake precedes a separate C6 assignment on the exact accepted C3 head. C6
+owns only the six existing egress files identified in the handoff; they are untouched
+by C3. Prepare P/schema0012 pairing while retaining frozen H/T/C/G and E/schema0011
+projections and failure/cleanup ownership. C6 source validation precedes the first
+PR because egress compatibility runs before backend integration. After C6, C0
+assigns one Draft candidate PR: all9 normal automatic CI jobs/clean-source checks,
+actual migration lifecycle/backend integration and paired Playwright remain
+mandatory. Record exact final PR head/tested merge SHA/tree and new test node
+results; report any failure/timeout with its exact log. No workflow/Compose/runner/
+dependency/budget edits, Actions dispatch/rerun, concurrent renewal or new service
+installation are part of this checkpoint. MATERIAL/M3 IN_PROGRESS, A03 NOT VERIFIED;
+C3 HOLD after source return, all further execution/activation follows C0 issuance.
+
+
+### MATERIAL-R1 correction /0012 — disposable proof, 2026-10-16
+
+[C0 R1](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6201238585)
+supersedes the first source-checkpoint handoff above. Exact R1 base is PR34 head
+`ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`; branch `c3/m3-1-material-r1`.
+Result/token are stored atomically on Inbox (`material_claim_token uuid`, nullable),
+not as a delivery outcome on PROCESS_INBOX Job. Unused reverse returns0011;
+material token/result/codec/proof remain used55000 blockers before DDL. Used recovery
+requires compatible0012 source, not erasing history. Gate remains OFF outside tests.
+
+Existing disposable browser runner now seeds four finite Telegram PHOTO originals
+using exact DB-issued Telegram permits and a finite TEST byte provider. FetchTransfer
+performs the normal byte validation/private TEST S3 upload/WINNER completion; no
+Telegram network request or saved provider-row substitution. Existing CONTROLLED
+image/auth/CSRF/Console/control/Escalation fixtures and last PENDING image remain.
+Inventory must contain all four PHOTO refs; paired preconditions require four
+READY originals/four WINNERs and successful owner grant+actual image load.
+
+Finite runtime actions are `material-{replacement,text,delete,late}-{caption,change}`
+plus existing `material-edit`/`material-delete`; only preset `material` accepts them.
+Each accepted mutation executes ordinary Worker, then only reads canonical terminal
+replay. Read-only provisioner `material-stats` is limited to this preset and reports
+File/FETCH/READY/WINNER/terminal counts plus original/File/upload history digests.
+Caption uses the same ref; replacement bytes are not registered/fetched. Paired
+journeys check current/history, loaded-image removal and new grant404 for old File.
+A separate real old grant response is held until semantic refresh and released
+unmodified: it must not restore display. Issued URLs may still work until their
+existing TTL; no atomic revocation is promised. Existing disposable stack teardown
+owns new TEST objects; no working S3 or new cleanup runner is involved.
+
+R1 local static/unit/component checks passed, but actual PG/migration/private-S3/
+Playwright proof is NOT RUN here. Source/node/evidence map is M3_CONTRACT§15.10.4.
+C0 intake→C6 descendant (budget blocker C2-MAT-02 still OPEN)→same Draft PR34 automatic
+CI; no new PR, dispatch/rerun, live/VM/sends/deploy or service installation. C3 HOLD
+after the canonical PR34 receipt; activation remains a separate C0 decision.

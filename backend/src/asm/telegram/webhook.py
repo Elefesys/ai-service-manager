@@ -14,7 +14,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from asm.messaging.errors import Code, MessagingError
 from asm.telegram.config import TelegramSettings
 from asm.telegram.database import TelegramIngress
-from asm.telegram.normalization import normalize_update, strict_json
+from asm.telegram.normalization import strict_json
 
 
 class WebhookAcknowledgement(BaseModel):
@@ -130,8 +130,7 @@ def install_webhook(
         if ingress is None:
             return failure("UNAVAILABLE", 503)
         try:
-            projection = normalize_update(settings.bot_id, strict_json(await request.body()))
-            await ingress.ingest(projection, uuid4())
+            await ingress.ingest_update(strict_json(await request.body()), uuid4())
         except MessagingError as error:
             if error.code == Code.EVENT_ID_CONFLICT:
                 return failure("EVENT_ID_CONFLICT", 409)

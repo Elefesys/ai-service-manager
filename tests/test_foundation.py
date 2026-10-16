@@ -74,4 +74,4 @@ def test_runtime_database_head_is_independent_from_frozen_tenancy_contract():
 
     assert SCHEMA_REVISION == "0003"
     # M3.2 Escalation adds 0011; the frozen tenancy.v1 head above stays 0003.
-    assert DATABASE_SCHEMA_REVISION == "0011"
+    assert DATABASE_SCHEMA_REVISION == "0012"

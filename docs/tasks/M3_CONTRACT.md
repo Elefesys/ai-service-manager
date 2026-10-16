@@ -3286,31 +3286,21 @@ C3/C8 HOLD; C8-M3-ESC-01/P2 OPEN до scoped recheck и решения C0; M3 IN
 
 ### 15.1. Статус, источники и границы доказательства
 
-**C3-M3.1-PROVENANCE-CONTRACT-R3, 2026-10-15 UTC; REVIEW, затем C3 HOLD; не LOCKED/VERIFIED.**
-[Исходная выдача](https://github.com/Elefesys/ai-service-manager/pull/32#issuecomment-6185468957),
-[R2 C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189981613),
-[решение C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189999448),
-[C1 review](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189743405),
-[C2 review](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6189782680).
-[R3 C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191877569),
-[C1 R2 PASS](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191616132),
-[C2 R2 CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191712300).
-C1-PROV-01…05/C2-PROV-01…03 закрыты на уровне revised design. Единственный
-обязательный finding R3 — C2-PROV-04/P2, ещё OPEN до приёмки C0: initial-fold
-suppression membership и связанные shared bodies§15.4/7/9. Start/sole parent R3
-`165dd09b0138c66216a8a7d8240af95663165769`, tree
-`f619c5ebad814141d0db0f9cbafccc6cd2089200`; тот же Draft PR33/branch.
-R2 CI38724672096/attempt2 SUCCESS по [C0 intake](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191327158)
-относится только к R2; actual final-head CI фиксируется в новом R3 receipt.
-C0 выбрал ограниченную no-refetch photo policy и направление material/renewal;
-это решения для исправляемого проекта, не приёмка revised текста или реализации.
-Основание — `bae25093bafb9534af68de5c586763667b896e70`, tree
-`ad857f156e6ff7ebb23a18c4b127256e774dd7bd`, ordered parents
-`ab06bc135f45c88203e434eacefd107412a8eb15` + `ad161ce0e04f6271890458cbec56681199846df8`.
-Принята schema0011. Revision после0011 не назначена;0001–0011 immutable.
+**Design§15 принят и интегрирован; MATERIAL implementation IN_PROGRESS / A03 NOT VERIFIED.**
+[C2 R3 PASS](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6193806982),
+[C0 design acceptance](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6193890730),
+[C0 integration](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6194957626).
+C1-PROV-01…05/C2-PROV-01…04 CLOSED **на уровне design**; это не runtime acceptance.
+PR33 design head `642160d2181b9fb5d062e449a0ff603467c40e51` слит.
+Implementation выдан [C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336), порядок source checkpoint→C6→
+actual candidate CI уточнён [продолжением](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195754984).
+Exact base `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`, tree `d0759acb9f83ec3f3e10d9c5d1325c937c343ee7`,
+schema0011; назначен successor0012/down_revision0011.0001–0011 immutable.
+Branch `c3/m3-1-material`; source return и execution gaps —§15.10.
+MATERIAL/M3 IN_PROGRESS, C3 HOLD после source receipt; новый PR не открыт.
 Предыдущие345960 bytes этого документа, blob `e19f8c8aa82c43ec88e8873f16675d13929934e5`,
 SHA256 `b53b3f9caa4af82c095cd2e4d1ac22a0bef435a5d657dacde3278498d2808302`
-сохраняются точно. Этот раздел не активирует runtime, native takeover, probe или M4.
+сохраняются точно. Native/probe/renewal/VM/live/merge/activation не выданы.
 
 Прочитаны AGENTS/IMPL-001, original11/SOURCE_MANIFEST, Spec4.6–4.10/5.10–5.14/
 18.5–18.8/24.7 (в R2 особо4.8–4.10/5.12.1), ADR019–026/121–128/180/267/272, MVP GJ-G/J, Roadmap M3,
@@ -3322,7 +3312,7 @@ M3_HANDOFF§4.4/5/6. Принятые CONTROL/GUARDS/Escalation и Console PASS 
 | DOCUMENTED | Официальные источники ниже повторно прочитаны2026-10-15; описание полей/transport, не evidence аккаунта |
 | CURRENT SOURCE | Ниже указан фактический код на exact base; чтение кода/tests не новый execution PASS |
 | OBSERVED ACCOUNT | В этой выдаче **NOT RUN**. Прежняя M2-приёмка text/photo/manual не доказывает native/echo/edit/delete provenance; текущий account/runtime не инспектировался |
-| PROPOSED | Все новые DTO, outcomes, counters, tables, gates и paths§15.3–15.9 требуют принятия C0 и адресного согласования; отсутствие кода намеренное |
+| ACCEPTED DESIGN / SOURCE CHECKPOINT |§15 принят C0; material0012 source и доступные local checks —§15.10. Actual PG/catalog/browser NOT RUN, native/renewal вне реализации |
 
 Официальные ссылки: [Update](https://core.telegram.org/bots/api#update),
 [Message](https://core.telegram.org/bots/api#message),
@@ -4296,7 +4286,7 @@ TEST messages и оставить HUMAN до reconciliation;
 
 ### 15.9. P06 — конечная приёмка, OPEN и следующий scope
 
-Это **future assertions**, не выдуманные пройденные tests. Только затронутый risk;
+Это **обязательные assertions**; исполняемые material cases и статус NOT RUN перечислены в§15.10. Только затронутый risk;
 прежние TURNS/CONTROL/GUARDS/Escalation suites остаются regression gates.
 
 | ID / часть | Минимальный future assertion и слой |
@@ -4314,8 +4304,8 @@ TEST messages и оставить HUMAN до reconciliation;
 | P-A08-02 actual PG ordering | Ingress/Resume barrier, candidate before/after Resume при одинаковых provider fields, replay0; local fence не causal proof. Console control сохраняет accepted guards; candidate-only не создаёт transcript и не блокирует actual0011 Resume новой фиктивной проверкой |
 | P-A08-03 account/renewal gate | Exact actual source/schema/binding; оба TEST окна. Future renewal CAS mode+append subscription+strict Audit/receipt atom, replay сохранённых дат, conflict/rollback/no-overlap/SUSPENDED rejection, clock после wait и реальный product gate на from/until. Finite authenticated collector, Console control до native, после native HUMAN; observation ≠causal/latest-state proof |
 
-**C2-PROV-04: адресные R3 traces / future PG assertions.** Это ручной вывод из
-proposal, **не исполненные tests**. Во всех positive traces B/C/identity verified;
+**C2-PROV-04 CLOSED на уровне design:** адресные R3 traces / обязательные PG assertions.
+Исполняемые cases —§15.10; actual PG **NOT RUN**. Во всех positive traces B/C/identity verified;
 P — ещё неизвестный original PHOTO F/caption A. Deferred commits имеют0 domain
 increments/effects/Audit/File/Turn. Затем normal original worker впервые materializes
 P; ΔC ниже включает original+1, material Audit/effect считается отдельно от transport.
@@ -4345,9 +4335,9 @@ Public/production mutation helper не принимает произвольны
 | Decision / статус | Что выбрано C0 / что остаётся |
 |---|---|
 | P-01 **OPEN** | Candidate-only + явный control не восстанавливают native human transcript. Resumable путь — canonical Console reply; native-only HUMAN до отдельно принятого context ingestion/reconciliation. No automatic takeover по arrival; native/latest-state/A08 NOT VERIFIED |
-| P-02 policy direction выбрано, revised contract **REVIEW** | Per-target increments, deferred folding, sticky suppression invalidated Turn сохраняются. C1/C2 R2 согласовали ordering/unions/locks на уровне design; R3 membership/shared bodies по C2-PROV-04 ещё требуют адресного C2 review и C0 acceptance. Implementation NOT VERIFIED |
-| P-03 no-refetch policy **выбрана C0**, revised contract **REVIEW** | Явное MEDIA_REPLACED_UNAVAILABLE/label/PARTIAL и потеря открытия/анализа replacement. Full replacement не поддержан этим slice. Согласованный C1 current DTO неизменён; R3 дополняет internal membership/seal/snapshot. DTO/grant/UI реализация NOT VERIFIED, весь A03/M3 не принят |
-| P-04 **OPEN** | C0/C2/C6 отдельно назначают exact predecessor/revision/order/source/profile/implementation allowlist. Renewal/material последовательно;0012 не назначена; actual migration/compat evidence ещё нет |
+| P-02 policy/design **ACCEPTED** | Per-target increments, deferred folding, sticky suppression invalidated Turn сохранены. C2-PROV-04 CLOSED по C2 R3/C0; material source§15.10, implementation NOT VERIFIED |
+| P-03 no-refetch policy/design **ACCEPTED** | Явное MEDIA_REPLACED_UNAVAILABLE/label/PARTIAL и потеря открытия/анализа replacement сохранены. Full replacement не поддержан этим slice. Current DTO/internal membership/seal/snapshot реализованы в source§15.10; DTO/grant/UI actual PG/browser NOT RUN, A03/M3 не принят |
+| P-04 **IN_PROGRESS** для material; renewal OPEN | C0 назначил material0012←0011, exact base/allowlist57 и отдельные6 C6 paths. Source inventory§15.10; actual migration/catalog/compat NOT RUN. Renewal остаётся отдельной последовательной выдачей |
 | P-05 **OPEN** | Выбран future append subscription + CAS NORMAL/PROVISIONED_LOCAL mode + immutable before/after/Audit. Команда/схема/collector/deploy/live не выданы и NOT VERIFIED. Старый TEST истёк, оба новых окна не подтверждены, VM UNKNOWN/live BLOCKED_TEST_INTERVAL |
 
 | R2 пункт / findings | Исправленный proposal |
@@ -4363,8 +4353,8 @@ Public/production mutation helper не принимает произвольны
 
 C1-P01–07/C2-P01–07 review dispositions сохранены в исходных комментариях. По C1/C2
 R2 reviews§15.1 C1-PROV-01…05/C2-PROV-01…03 CLOSED **на уровне revised design**;
-повтор этих sections не требуется. C2-PROV-04/P2 остаётся OPEN до адресной приёмки,
-в этом diff только предлагаемое исправление:
+повтор этих sections не требуется. C2-PROV-04/P2 CLOSED по C2 R3/C0 на уровне design;
+следующий mapping сохранён, execution evidence —§15.10:
 
 | R3 / C2-PROV-04 mapping | Норма / ручной trace и будущая проверка |
 |---|---|
@@ -4377,14 +4367,1522 @@ Policy choice, revised-contract acceptance, implementation evidence и account
 observation — разные стадии; native P-01/latest-state остаётся OPEN.
 
 P01→§15.1–2; P02→§15.3–4; P03→§15.5; P04→§15.6–7;
-P05→§15.8; P06→§15.9. Static scope/prefix/original11/manifest/history/links,
-ручные traces и diff-check достаточны для R3. Product suites/Docker/Actions dispatch/
-rerun не запускаются ради docs. Automatic final-head CI будет указан фактически
-в **одном новом canonical R3 receipt того же Draft PR33**, без status-only commit;
-старый R2 green head не R3 evidence. Старые C3/C1/C2 receipts не редактируются.
-Возврат **REVIEW**, затем C3 HOLD. C0 проверяет новый exact head и назначает адресный
-C2 re-review только C2-PROV-04/shared bodies/locks; полного C1 review при неизменном
-API/current DTO не требуется. C1/C2/C5/C6/C8 до выдачи HOLD. Runtime/migration/renewal/probe/
-VM/live/DB/S3/sends/deploy не выданы; merge пользователем после приёмки.
-M3 IN_PROGRESS, A03/A08/acceptance впереди, M4/LLM/production/IMPL-05/CI optimization
-не открываются.
+P05→§15.8; P06→§15.9. Design R3 принят/интегрирован; прежние canonical receipts
+сохранены. Material source checkpoint и точные local/deferred gates —§15.10.
+После C0 intake C6 получает отдельную compatibility выдачу; затем C0 назначает один
+Draft implementation PR с9 штатными automatic jobs и clean-source checks. PG/browser
+остаются обязательны до приёмки. Actions dispatch/rerun, новые runners/budgets,
+renewal/probe/VM/live/deploy/merge/activation не выдаются этим checkpoint.
+C3 HOLD после возврата; C1/C2/C5/C6/C8 HOLD до назначения C0. MATERIAL/M3 IN_PROGRESS,
+A03/A08/acceptance впереди; M4/LLM/production/IMPL-05/CI optimization не открыты.
+
+### 15.10. MATERIAL implementation source checkpoint / 2026-10-15 UTC
+
+Выдача [C0 MATERIAL](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336), продолжение
+[после ограничения окружения](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195754984). Implementation source готов к
+C0 intake; **MATERIAL/M3 IN_PROGRESS, A03 NOT VERIFIED; C3 HOLD после возврата**.
+Текущая correction R1 от reviewed PR34 —§15.10.4; inventory§15.10.2 обновлён для неё.
+Принятый design§15.2–15.8 и assertion tables§15.9 не изменены. No-refetch policy,
+native/latest-state OPEN, renewal/collector/live и право merge/activation не расширены.
+
+| Source binding | Значение |
+|---|---|
+| Branch | `c3/m3-1-material`; новый PR не открывается |
+| Exact base / first source commit parent | `933ddd284ff5b77fb1aa88a4270ab0032bc499c9` |
+| Base tree / schema | `d0759acb9f83ec3f3e10d9c5d1325c937c343ee7` /0011 |
+| Base ordered parents | `bae25093bafb9534af68de5c586763667b896e70`, `642160d2181b9fb5d062e449a0ff603467c40e51` |
+| Successor | `0012_message_provenance.py`, revision0012/down_revision0011; material first, renewal не назначен |
+| Final head/tree/parents and changed paths/numstat | Один canonical source checkpoint comment в [PR33](https://github.com/Elefesys/ai-service-manager/pull/33); no self-SHA/status-only commit |
+
+Implementation включает saved-V1 lookup до strict V2 parse и final locked recheck,
+full H1→H2, separate codec2 sidecar, default-OFF captured material gate, bounded
+target fold, immutable results/effects/Audit/suppression proof, atomic original
+fold before File/grouping, winning terminal replay, current-only shared projection,
+sticky Turn invalidation, preserved SENT/WINNER and legacy snapshots. Job→Inbox→
+connection→identity barrier (original only)→Conversation→sorted targets→Messages→
+Turns is the source lock order; SENT binds only an existing target under its existing
+Conversation barrier without a reverse connection/foreign Job FK. Actual blocking
+and rollback behavior is still subject to the PG tests below.
+
+Owner message DTO now requires closed `current` (schema_version1, state,
+content_type, text, image_availability, changed); immutable historical fields remain.
+Versioned V2 internal snapshots keep historical identity and add current/member
+suppression evidence; saved V1 parsing stays exact. The image grant SQL shares
+`message_effective` eligibility. The Console uses current, clears an old image on
+refresh and drops a late grant captured at another Message version. Audit adds the
+closed `MESSAGE_MATERIAL_CHANGED`/`CHANNEL_EVENT` variant. OpenAPI and both TS
+consumers are changed together. No realtime/TTL guarantee or replacement fetch is added.
+
+#### 15.10.1. Contract→source→executable cases
+
+| Contract / proof | Implementation | Исполняемые test node IDs; PG/browser пока NOT RUN |
+|---|---|---|
+| P-A03-01 / §15.3/6 | `normalization.py`, `material.py`, `telegram/database.py`, 0012 validation/ingress | `tests/test_m3_1_provenance.py::test_p_a03_01_*`; `PG::test_full_codec_sql_python_parity_closed_null_matrix_and_immutable_sidecar`; `MIG::test_cutover_saved_v1_replay_precedes_new_field_parse_and_fresh_v1_refused`; `tests/test_m2_3_wire_postgres.py::test_material_authenticated_webhook_to_normal_worker_preserves_original` |
+| P-A03-02 / §15.7 | Provenance, target/effect/suppression composite FKs, immutable accepted versions, exact SENT binding | `PG::test_cross_binding_fk_null_bypasses_and_historical_effect_versions`; `PG::test_identity_conflict_does_not_poison_trusted_original_and_chat_isolation`; `PG::test_same_provider_id_across_workspace_and_connection_never_aliases`; `PG::test_exact_sent_binding_only_and_deferred_finalizer_without_connection_reverse` |
+| P-A03-03 / §15.3/4 | Bounded fold, private apply/context, per-target effects/Audit and per-batch Turn bump | `PG::test_known_order_per_commit_counters_and_sticky_turn[steps0…17]`; `PG::test_deferred_order_fold_has_no_domain_writes_before_original[steps0…17]`; `PG::test_mixed_delete_batch_sorted_unique_context_n_turn_once_and_late_original`; `PG::test_overflow_is_full_rollback_without_effect_or_audit` |
+| P-A03-04 / §15.4/6/7 | Normal claim/admission, terminal MATERIAL_PROCESSED, winning-claim replay, ordered barriers | `PG::test_material_terminal_result_token_pair_is_closed_and_write_once`; `PG::test_material_token_requires_completed_verified_mutation`; `PG::test_material_off_edit_has_no_terminal_token_or_replay`; `PG::test_rollback_and_lost_ack_restart_exact_terminal_replay`; `PG::test_real_barrier_recheck_and_postwait_claim_expiry`; `PG::test_original_and_material_workers_serialize_unknown_chat_without_deadlock`; `PG::test_material_reclaim_nowait_skips_locked_candidate_and_old_token_cannot_apply`; SENT test above |
+| P-A03-05 / §15.4/7 | Shared grouping/member/seal/snapshot/readiness, effective projection and File grant predicate | R3 nodes below; `PG::test_known_turn_fresh_input_and_current_version_refusal_after_maintenance_file_resume[telegram/controlled-guard/controlled-escalation]`; `PG::test_late_original_fetch_retains_winner_and_context_but_never_stale_image`; `tests/test_m3_1_provenance.py::test_r3_t1_v2_snapshot_keeps_photo_identity_but_consumes_current_text` |
+| P-A03-06 / §15.4/9 | Same private `material_apply_context`, existing context→Escalation trigger, shared GUARDS admission | `PG::test_shared_body_guards_stale_admission_and_retained_dispatch`; `PG::test_shared_body_escalation_context_cancel_once_terminal_precedence_and_saved_replay`; `PG::test_shared_body_retains_expired_escalation_precedence`; retained CONTROL/GUARDS/Escalation suites remain candidate gates |
+| P-A03-07 / §15.4/7 | Required current DTO, paired OpenAPI/TS parser/panel, CHANNEL_EVENT Audit, current-only grant | `tests/test_m3_1_provenance.py::test_p_a03_07_*`; `PG::test_api_current_closed_history_and_same_workspace_wrong_client`; `PG::test_runtime_nonowner_force_rls_and_no_raw_table_or_private_function_access`; four scoped Vitest modules; `frontend/e2e/messaging.spec.ts` TEXT journey plus three “material PHOTO … normal Worker mutation and grant refusal” journeys and “material PHOTO delayed real old grant cannot restore image after semantic refresh” |
+| P-A03-08 / §15.6/7 | 0011→0012, immutable ORIGINAL/OLD_CHECK copies, first used refusal, current readiness0012 | `MIG::test_fresh_head_full42_columns_profiles_rls_and_no_unused_backfill`; `MIG::test_populated_0011_repeat_upgrade_and_exact_unused_reverse`; `MIG::test_owned_used_refusal_precedes_every_ddl_and_preserves_all42`; cutover node above; C6 source/schema compatibility still pending |
+| R3-T1/T2 | First original fold before File/grouping; typed PHOTO/file=NULL only with suppression proof | `PG::test_initial_photo_suppression_visible_snapshot_and_duplicate`: fresh-turn/existing-turn × R3-T1-text/R3-T2-photo, exact m2/C+2/effect/Audit/grouping/seal/V2 assertions |
+| R3-T3 | HIDDEN initial exclusion, newer restore without retroactive membership/FETCH | `PG::test_r3_t3_hidden_restore_and_t5_no_late_group_or_fetch` |
+| R3-T4 | Before-insert authority and deferred completeness, typed legacy member retained | `PG::test_r3_t4_invalid_first_suppression_rolls_back_entire_original_atom`: null-form, missing-proof, text-member, wrong-tenant/message/origin/effect, forged-basis and PENDING/FAILED File negatives; exact SQLSTATE/constraint/reason + intended function context, all42-table rollback fingerprints, same-claim positive neighboring atom after dropping the corruption trigger |
+| R3-T5 | Duplicate original/exact replay/maintenance; retained V1 decoder/snapshot/receipt/WINNER | R3-T1/T2/T3 nodes; `MIG::test_legacy_ineligible_photo_first_original_stays_suppressed_after_restore`; populated-cycle node; `tests/test_m3_1_provenance.py::test_r3_t5_saved_v1_decoder_does_not_adopt_new_member_form` |
+
+`PG` = `tests/test_m3_1_provenance_postgres.py`, `MIG` =
+`tests/test_m3_1_provenance_migrations.py`. Parameter suffixes are generated by pytest;
+the concrete collection, not a claimed execution, is recorded below. Every integration
+module uses the existing disposable `asm_test` fixtures and `integration` marker;
+no skip/xfail or substitute mock PostgreSQL. The CONTROLLED proof creates/drops a
+finite migrator-only TEST wrapper around the same private apply body; it does not
+rewrite saved provider/route/Client rows or grant a production mutation capability.
+
+
+#### 15.10.2. Source inventory for C6; not an actual catalog report
+
+This inventory is expanded from migration Python/DDL, without a PostgreSQL connection.
+The full table projection is `P_COLUMNS` in the migration test: retained exact
+`E_COLUMNS` (38 tables/schema0011) plus4 tables and10 columns on6 existing tables.
+No prior projected column is removed/reordered. `app.messages` and `app.outbox_events`
+gain supporting unique keys only. All retained types/defaults/constraints/indexes/
+triggers/policies/ACLs are defined by immutable0001–0011; the successor delta is
+`_schema`, `_integrity`, `_suppression`, `_material`, `_worker`, `_shared` and explicit
+owner/REVOKE/GRANT loop in0012. Source operation count131 is not SQL statement count
+or successful-DDL evidence. Implicit constraint/index names must be checked by PG,
+not guessed from source. Actual catalog comparison is `catalog`/`definitions` in
+the tests (functions+bodies/ACL/owner, relations, columns/types/defaults, constraints,
+indexes, triggers, policies, sequences), and is **NOT RUN**.
+
+| Полная P table projection | Columns, exact source order |
+|---|---|
+| `app.audit_events` | `workspace_id, audit_event_id, occurred_at, actor_kind, actor_user_account_id, correlation_id, event_type, object_type, object_id, object_version, payload, billing_account_object_id, message_object_id, conversation_object_id, conversation_control_generation, escalation_object_id, escalation_operation, material_target_id, material_source_receipt_id` |
+| `app.business_members` | `workspace_id, id, business_id, user_account_id, name, role, status, version, created_at` |
+| `app.businesses` | `workspace_id, id, name, status, version, created_at` |
+| `app.channel_connections` | `workspace_id, id, business_id, provider, bot_identity, external_connection_id, status, version, created_at` |
+| `app.client_identities` | `workspace_id, id, client_id, provider, external_user_id, created_at` |
+| `app.clients` | `workspace_id, id, version, created_at` |
+| `app.conversation_turn_messages` | `workspace_id, message_id, turn_id, conversation_id, connection_id, direction, content_type, origin_inbox_id, turn_ingress_at, turn_ingress_seq, file_id, membership_form, initial_suppression_id, suppression_disposition` |
+| `app.conversation_turns` | `workspace_id, id, conversation_id, connection_id, provider_chat_id, revision, control_generation, state, policy_version, debounce_ms, group_ms, media_ms, max_members, member_count, media_group_id, first_ingress_at, last_ingress_at, hard_at, quiet_at, media_deadline_at, seal_time, closed_at, ready_at, readiness, error_code, created_at, ingress_control_mode, activation_fence_seq, material_invalidated` |
+| `app.conversations` | `workspace_id, id, connection_id, business_id, client_id, identity_id, provider_chat_id, version, created_at, last_client_inbound_at, control_mode, control_generation, activation_fence_seq` |
+| `app.escalations` | `workspace_id, id, namespace, conversation_id, client_id, connection_id, turn_id, source_job_id, source_job_kind, source_job_step, source_claim_token, turn_revision, resume_receipt_id, control_generation, activation_fence_seq, input_context_version, waiting_context_version, request_snapshot, context_fingerprint, request_fingerprint, creation_result, reason, assignee_user_account_id, question, policy, created_at, due_at, second_reminder_at, expires_at, first_reminded_at, second_reminded_at, version, status, closure_reason, completed_at, answer_text, decided_by_user_account_id` |
+| `app.file_objects` | `workspace_id, id, message_id, connection_id, conversation_id, required_direction, required_content_type, status, winner_intent_id, winner_state, storage_key, mime_type, size_bytes, sha256, width, height, error_code, version, created_at, completed_at` |
+| `app.locations` | `workspace_id, id, business_id, name, status, version, created_at` |
+| `app.messages` | `workspace_id, id, conversation_id, connection_id, provider_chat_id, provider_message_id, direction, content_type, text, image_file_id, media_group_id, occurred_at, projection_fingerprint, version, created_at` |
+| `app.outbox_events` | `workspace_id, id, connection_id, message_id, kind, required_direction, status, attempt_id, provider_message_id, error_code, completed_at, version, created_at` |
+| `platform.alembic_version` | `version_num` |
+| `platform.auth_credentials` | `user_account_id, login, password_hash, version, created_at` |
+| `platform.auth_sessions` | `token_hash, user_account_id, credential_version, account_version, created_at, expires_at, revoked_at` |
+| `platform.billing_contact_command_receipts` | `workspace_id, receipt_id, billing_account_id, operation, idempotency_key, request_fingerprint, expected_version, status, result_version, result_outcome, created_at, completed_at` |
+| `platform.channel_routes` | `workspace_id, id, connection_id, provider, bot_identity, route_key, created_at` |
+| `platform.conversation_control_receipts` | `workspace_id, id, operation_namespace, operation, idempotency_key, conversation_id, client_id, actor_user_account_id, correlation_id, expected_generation, expected_context_version, previous_mode, accepted_mode, previous_generation, accepted_generation, context_version, activation_fence_seq, request_fingerprint, audit_event_id, audit_event_type, accepted_at, result, guard_profile` |
+| `platform.escalation_command_receipts` | `workspace_id, id, namespace, idempotency_key, escalation_id, conversation_id, client_id, actor_user_account_id, correlation_id, operation, expected_version, expected_control_generation, expected_context_version, accepted_version, accepted_status, accepted_context_version, request_fingerprint, audit_event_id, audit_event_type, accepted_at, result` |
+| `platform.file_object_uploads` | `workspace_id, id, file_id, job_id, claim_token, storage_key, mime_type, size_bytes, sha256, width, height, status, cleanup_claim_token, cleanup_lease_until, cleanup_attempts, next_check_at, last_checked_at, cleanup_outcome, version, created_at` |
+| `platform.inbox_events` | `workspace_id, id, connection_id, provider, bot_identity, external_connection_id, required_direction, event_id, normalized_event, event_fingerprint, correlation_id, received_at, status, result_code, message_id, completed_at, version, turn_ingress_at, turn_ingress_seq, turn_control_generation, turn_control_mode, turn_activation_fence_seq, material_result, material_claim_token` |
+| `platform.message_initial_suppressions` | `workspace_id, id, message_id, target_id, origin_inbox_id, effect_id, source_receipt_id, previous_version, accepted_version, initial_material, fold_witnesses, membership_disposition` |
+| `platform.message_material_effects` | `workspace_id, id, target_id, message_id, source_receipt_id, audit_event_id, event_type, previous_version, accepted_version, reason, accepted_at` |
+| `platform.message_material_targets` | `workspace_id, id, connection_id, provider_chat_id, provider_message_id, message_id, conversation_id, client_id, direction, outbox_id, inbound_provider_id, required_sent, quarantined, original_grouping_closed, origin_identity, deleted, undated_seen, max_edit_at, candidate, dated_conflict, delete_receipt, undated_receipt, candidate_receipt, conflict_receipt, current_material` |
+| `platform.messaging_command_receipts` | `workspace_id, id, operation, idempotency_key, request_fingerprint, actor_user_account_id, correlation_id, message_id, outbox_id, audit_event_id, accepted_at` |
+| `platform.messaging_jobs` | `workspace_id, id, connection_id, kind, inbox_id, outbox_id, correlation_id, status, available_at, claim_token, lease_until, worker_id, attempt_count, first_started_at, error_code, completed_at, last_attempt_id, last_claim_token, last_outcome, last_provider_message_id, last_error_code, version, created_at, file_id, last_retry_after_seconds, last_retry_due, telegram_probe_claim, telegram_probe_generation, telegram_probe_version, turn_id, turn_revision, step, turn_outcome, turn_input, guard_rejection, escalation_id, escalation_outcome` |
+| `platform.plan_entitlements` | `plan_revision_id, capability_key, value_kind, enabled, limit_value, criticality, created_at` |
+| `platform.saas_plan_revisions` | `plan_revision_id, plan_id, revision, publication_state, published_at, created_at` |
+| `platform.saas_plans` | `plan_id, code, display_name, status, created_at` |
+| `platform.telegram_connection_state` | `workspace_id, connection_id, provider, bot_identity, external_connection_id, owner_user_id, generation, observation_version, observed_generation, observed_at, observation_xid, is_enabled, can_reply, error_code, material_enabled` |
+| `platform.telegram_provenance` | `receipt_id, codec, bot_identity, update_id, workspace_id, connection_id, inbox_id, projection, material_enabled` |
+| `platform.telegram_update_receipts` | `id, bot_identity, update_id, fingerprint, kind, result_code, workspace_id, connection_id, inbox_id, received_at, codec` |
+| `platform.turn_consumer_receipts` | `workspace_id, job_id, connection_id, kind, turn_id, turn_revision, step, consumer, winning_claim_token, input_context_version, input_control_generation, snapshot_digest, result, accepted_at` |
+| `platform.turn_guard_receipts` | `workspace_id, job_id, winning_claim_token, connection_id, conversation_id, client_id, turn_id, turn_revision, resume_receipt_id, input_control_generation, activation_fence_seq, input_context_version, snapshot_digest, consumer, request_fingerprint, result_text, outcome, accepted_at, intent_context_version, message_id, outbox_id, send_job_id, namespace, kind, step, direction, content_type, send_kind` |
+| `platform.user_accounts` | `id, status, version, created_at` |
+| `platform.workspace_billing_accounts` | `workspace_id, billing_account_id, contact_display_name, version, created_at, updated_at` |
+| `platform.workspace_memberships` | `workspace_id, user_account_id, role, status, version, created_at` |
+| `platform.workspace_service_modes` | `workspace_id, service_mode_id, mode, reason_code, effective_from, effective_until, version, created_at, updated_at` |
+| `platform.workspace_subscriptions` | `workspace_id, subscription_id, plan_revision_id, required_publication_state, status, funding_mode, effective_from, effective_until, version, created_at, updated_at` |
+| `platform.workspaces` | `id, status, version, created_at` |
+
+New tables are owned by `asm_migrator`, ENABLE+FORCE RLS, with one
+`material_migrator TO asm_migrator USING(true) WITH CHECK(true)` policy each and
+`REVOKE ALL ... FROM PUBLIC,asm_runtime`. No runtime raw table grants, runtime RLS
+policy or sequence is added. Three new histories reject UPDATE through
+`turn_immutable`; targets have before-write identity/witness checks and deferred
+current/fold consistency. Receipt codec is immutable; deferred provenance iff/binding
+checks also cover deletes. Suppression authority is before INSERT and completeness
+is deferred on proof/member. `material_no_file` forbids a late File for initial
+suppression. Existing immutable original Message columns/capture/deadlines remain.
+
+| Constraint family | Exact source obligations |
+|---|---|
+| Provenance | receipt PK and full composite codec/bot/update/ws/connection/Inbox FK; same-Workspace Inbox/receipt unique keys; closed V2 JSON/common equality; tenantless only NONBUSINESS; codec2↔sidecar iff and queued fingerprint checked deferred |
+| Target | PK(ws,id), unique(ws,connection,chat,provider ID), partial unique(ws,Message); conditional full INBOUND/exact SENT OUTBOUND FK/NULL matrix; Conversation/Client and immutable Message identity; at most3 retained fold witnesses; same ws/connection/chat/target/kind/date/semantic witnesses; sticky delete/uncertainty/quarantine/excluded grouping; no foreign Job FK |
+| Effect/Audit | unique(source receipt,Message); target/message and source FK; immutable accepted_version=previous_version+1; exact Audit composite key incl event type/version/target/source; CHANNEL_EVENT/no user and closed payload/reason; no FK to mutable current Message.version |
+| Suppression/member | one proof per(ws,Message), previous1/accepted2, exact effect/source/origin FK; frozen initial state/witnesses/disposition; own first-original physical transaction authority; PHOTO/INBOUND/fileNULL exception only same-Message ELIGIBLE_VISIBLE proof; HIDDEN/INELIGIBLE never gain membership |
+| Inbox/receipt | retained old closed CHECK alternatives, separate codec2 queued EDIT/DELETE and MATERIAL_PROCESSED/NULL Message; complete sorted per-target result union + non-NULL private winning material_claim_token, exact source/effect/Audit binding and immutable terminal pair; legacy/NEW/PENDING pair NULL; outer CHECK IS TRUE excludes NULL bypass |
+
+The following is the complete successor schema DDL expansion (excluding function
+bodies, table security loop and locks already described); it is executable source,
+not `pg_get_*` output. Retained checks appear in full so C6 can compare the exact
+OR extension and immutable reverse.
+
+```sql
+ALTER TABLE platform.telegram_connection_state ADD COLUMN material_enabled boolean NOT NULL DEFAULT false;
+      ALTER TABLE platform.telegram_update_receipts ADD COLUMN codec smallint CHECK(codec=2),
+        ADD CONSTRAINT telegram_material_identity_key UNIQUE(id,codec,bot_identity,update_id,workspace_id,connection_id,inbox_id),
+        ADD CONSTRAINT telegram_material_source_key UNIQUE(workspace_id,id),
+        DROP CONSTRAINT telegram_update_receipts_check;
+
+ALTER TABLE platform.telegram_update_receipts ADD CONSTRAINT telegram_update_receipts_check CHECK(
+      (codec IS NULL AND ((workspace_id IS NULL AND connection_id IS NULL AND inbox_id IS NULL AND kind='UNSUPPORTED' AND result_code='IGNORED_UNSUPPORTED') OR
+        (workspace_id IS NOT NULL AND connection_id IS NOT NULL AND
+          ((result_code='QUEUED' AND kind='BUSINESS_MESSAGE' AND inbox_id IS NOT NULL) OR (result_code<>'QUEUED' AND inbox_id IS NULL))))) OR
+      (codec=2 AND ((workspace_id IS NULL AND connection_id IS NULL AND inbox_id IS NULL AND kind='UNSUPPORTED' AND result_code='IGNORED_UNSUPPORTED') OR
+        (workspace_id IS NOT NULL AND connection_id IS NOT NULL AND ((result_code='QUEUED' AND kind IN
+          ('BUSINESS_MESSAGE','EDITED_BUSINESS_MESSAGE','DELETED_BUSINESS_MESSAGES') AND inbox_id IS NOT NULL) OR
+          (result_code<>'QUEUED' AND inbox_id IS NULL))))) IS TRUE);
+
+ALTER TABLE platform.inbox_events ADD COLUMN material_result jsonb,ADD COLUMN material_claim_token uuid,
+      ADD CONSTRAINT inbox_material_identity_key UNIQUE(workspace_id,id,connection_id,bot_identity,event_id),
+      DROP CONSTRAINT inbox_events_check;
+
+ALTER TABLE platform.inbox_events ADD CONSTRAINT inbox_events_check CHECK(
+      ((material_result IS NULL AND material_claim_token IS NULL AND ((status='PENDING' AND result_code IS NULL AND message_id IS NULL AND completed_at IS NULL) OR
+       (status='PROCESSED' AND result_code IS NOT NULL AND result_code IN ('PROCESSED','DUPLICATE') AND message_id IS NOT NULL AND completed_at IS NOT NULL) OR
+       (status='IGNORED' AND result_code IS NOT NULL AND result_code IN ('IGNORED_NATIVE_OWNER_MESSAGE','IGNORED_MESSAGE_EDITED','IGNORED_MESSAGE_DELETED','IGNORED_UNSUPPORTED') AND message_id IS NULL AND completed_at IS NOT NULL) OR
+       (status='FAILED' AND result_code IS NOT NULL AND result_code IN ('MESSAGE_ID_CONFLICT','CONVERSATION_IDENTITY_CONFLICT','RETRY_EXHAUSTED','DEPENDENCY_TIMEOUT','DEPENDENCY_UNAVAILABLE','INVALID_INPUT') AND message_id IS NULL AND completed_at IS NOT NULL))) OR
+      (status='PROCESSED' AND result_code='MATERIAL_PROCESSED' AND message_id IS NULL AND completed_at IS NOT NULL
+        AND material_claim_token IS NOT NULL AND platform.material_result_valid(material_result) IS TRUE)) IS TRUE);
+
+CREATE TABLE platform.telegram_provenance(
+      receipt_id uuid PRIMARY KEY,codec smallint NOT NULL DEFAULT 2 CHECK(codec=2),
+      bot_identity text NOT NULL,update_id text NOT NULL,workspace_id uuid,connection_id uuid,inbox_id uuid,
+      projection jsonb NOT NULL,material_enabled boolean NOT NULL,
+      UNIQUE(workspace_id,receipt_id),UNIQUE(workspace_id,inbox_id),
+      FOREIGN KEY(receipt_id) REFERENCES platform.telegram_update_receipts(id) ON DELETE RESTRICT,
+      FOREIGN KEY(receipt_id,codec,bot_identity,update_id,workspace_id,connection_id,inbox_id)
+        REFERENCES platform.telegram_update_receipts(id,codec,bot_identity,update_id,workspace_id,connection_id,inbox_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,inbox_id,connection_id,bot_identity,update_id)
+        REFERENCES platform.inbox_events(workspace_id,id,connection_id,bot_identity,event_id) ON DELETE RESTRICT,
+      CHECK(projection=platform.telegram_validate_v2(bot_identity,projection)),
+      CHECK((workspace_id IS NULL AND connection_id IS NULL AND inbox_id IS NULL AND projection->>'discriminator'='UNSUPPORTED') OR
+        (workspace_id IS NOT NULL AND connection_id IS NOT NULL AND projection->>'discriminator'<>'UNSUPPORTED')))
+      ;
+
+ALTER TABLE app.messages
+      ADD CONSTRAINT messages_material_identity_key UNIQUE(workspace_id,id,connection_id,conversation_id,provider_chat_id,direction),
+      ADD CONSTRAINT messages_material_inbound_key UNIQUE(workspace_id,id,provider_message_id,direction);
+      ALTER TABLE app.outbox_events ADD CONSTRAINT outbox_material_sent_key
+        UNIQUE(workspace_id,id,message_id,connection_id,status,provider_message_id);
+      ALTER TABLE app.conversation_turns ADD COLUMN material_invalidated boolean NOT NULL DEFAULT false;
+
+CREATE TABLE platform.message_material_targets(
+      workspace_id uuid NOT NULL,id uuid NOT NULL DEFAULT uuidv7(),connection_id uuid NOT NULL,
+      provider_chat_id text NOT NULL CHECK(platform.telegram_numeric_id(provider_chat_id)),
+      provider_message_id text NOT NULL CHECK(platform.telegram_numeric_id(provider_message_id)),
+      message_id uuid,conversation_id uuid,client_id uuid,direction text,outbox_id uuid,
+      inbound_provider_id text,required_sent text,
+      quarantined boolean NOT NULL DEFAULT false,original_grouping_closed boolean NOT NULL DEFAULT false,origin_identity jsonb,
+      deleted boolean NOT NULL DEFAULT false,undated_seen boolean NOT NULL DEFAULT false,
+      max_edit_at timestamptz CHECK(isfinite(max_edit_at)),candidate jsonb,dated_conflict boolean NOT NULL DEFAULT false,
+      delete_receipt uuid,undated_receipt uuid,candidate_receipt uuid,conflict_receipt uuid,
+      current_material jsonb CHECK(current_material IS NULL OR platform.material_state_valid(current_material)),
+      PRIMARY KEY(workspace_id,id),UNIQUE(workspace_id,connection_id,provider_chat_id,provider_message_id),
+      UNIQUE(workspace_id,id,message_id),
+      FOREIGN KEY(workspace_id,connection_id) REFERENCES app.channel_connections(workspace_id,id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,message_id,connection_id,conversation_id,provider_chat_id,direction)
+        REFERENCES app.messages(workspace_id,id,connection_id,conversation_id,provider_chat_id,direction) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,conversation_id,client_id) REFERENCES app.conversations(workspace_id,id,client_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,message_id,inbound_provider_id,direction)
+        REFERENCES app.messages(workspace_id,id,provider_message_id,direction) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,outbox_id,message_id,connection_id,required_sent,provider_message_id)
+        REFERENCES app.outbox_events(workspace_id,id,message_id,connection_id,status,provider_message_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,delete_receipt) REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,undated_receipt) REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,candidate_receipt) REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,conflict_receipt) REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      CHECK((message_id IS NULL AND conversation_id IS NULL AND client_id IS NULL AND direction IS NULL AND outbox_id IS NULL
+        AND inbound_provider_id IS NULL AND required_sent IS NULL AND current_material IS NULL) OR
+        (message_id IS NOT NULL AND conversation_id IS NOT NULL AND client_id IS NOT NULL AND direction IS NOT NULL
+          AND current_material IS NOT NULL AND NOT quarantined AND
+          ((direction='INBOUND' AND inbound_provider_id=provider_message_id AND inbound_provider_id IS NOT NULL AND outbox_id IS NULL AND required_sent IS NULL) OR
+           (direction='OUTBOUND' AND inbound_provider_id IS NULL AND outbox_id IS NOT NULL AND required_sent='SENT' AND required_sent IS NOT NULL)))),
+      CHECK((deleted AND delete_receipt IS NOT NULL AND NOT undated_seen AND NOT dated_conflict AND max_edit_at IS NULL AND candidate IS NULL
+        AND undated_receipt IS NULL AND candidate_receipt IS NULL AND conflict_receipt IS NULL) OR
+        (NOT deleted AND delete_receipt IS NULL AND (undated_seen=(undated_receipt IS NOT NULL)) AND
+          ((max_edit_at IS NULL AND candidate IS NULL AND candidate_receipt IS NULL AND conflict_receipt IS NULL AND NOT dated_conflict) OR
+           (max_edit_at IS NOT NULL AND candidate_receipt IS NOT NULL AND
+             ((dated_conflict AND candidate IS NULL AND conflict_receipt IS NOT NULL) OR
+              (NOT dated_conflict AND candidate IS NOT NULL AND conflict_receipt IS NULL AND platform.material_content_valid(candidate) IS TRUE)))))));
+
+CREATE UNIQUE INDEX message_material_bound_key ON platform.message_material_targets(workspace_id,message_id) WHERE message_id IS NOT NULL;
+      ALTER TABLE app.audit_events ADD COLUMN material_target_id uuid GENERATED ALWAYS AS
+        (CASE WHEN event_type='MESSAGE_MATERIAL_CHANGED' THEN (payload->>'target_id')::uuid END) STORED,
+      ADD COLUMN material_source_receipt_id uuid GENERATED ALWAYS AS
+        (CASE WHEN event_type='MESSAGE_MATERIAL_CHANGED' THEN (payload->>'source_receipt_id')::uuid END) STORED,
+      ADD CONSTRAINT audit_material_target_fkey FOREIGN KEY(workspace_id,material_target_id,object_id)
+        REFERENCES platform.message_material_targets(workspace_id,id,message_id) ON DELETE RESTRICT,
+      ADD CONSTRAINT audit_material_source_fkey FOREIGN KEY(workspace_id,material_source_receipt_id)
+        REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      ADD CONSTRAINT audit_material_ref_key UNIQUE(workspace_id,audit_event_id,object_id,event_type,object_version,material_target_id,material_source_receipt_id),
+      DROP CONSTRAINT audit_events_discriminator_payload_check;
+
+ALTER TABLE app.audit_events ADD CONSTRAINT audit_events_discriminator_payload_check CHECK(
+      (
+
+      (event_type='WORKSPACE_BILLING_PROVISIONED' AND
+ actor_kind='LOCAL_PROVISIONER' AND actor_user_account_id IS NULL AND
+ object_type='WORKSPACE_BILLING_ACCOUNT' AND payload='{}'::jsonb) OR
+ (event_type='BILLING_ACCOUNT_CONTACT_UPDATED' AND actor_kind='USER_ACCOUNT' AND
+ actor_user_account_id IS NOT NULL AND object_type='WORKSPACE_BILLING_ACCOUNT' AND
+ payload='{"changed_fields":["contact_display_name"]}'::jsonb) OR (event_type='MESSAGE_SEND_REQUESTED' AND actor_kind='USER_ACCOUNT' AND actor_user_account_id IS NOT NULL AND object_type='MESSAGE' AND object_version=1 AND payload='{"content_type":"TEXT"}'::jsonb) OR ((
+        event_type IN ('CONVERSATION_TAKEN_OVER','CONVERSATION_RESUMED') AND actor_kind='USER_ACCOUNT'
+        AND actor_user_account_id IS NOT NULL AND object_type='CONVERSATION' AND object_version>0
+        AND conversation_object_id IS NOT NULL AND conversation_control_generation IS NOT NULL
+        AND payload=jsonb_build_object('previous_mode',payload->>'previous_mode','control_mode',payload->>'control_mode',
+          'previous_generation',payload->>'previous_generation','control_generation',payload->>'control_generation')
+        AND payload->>'previous_mode' IN ('HUMAN','AI')
+        AND payload->>'control_mode'=CASE event_type WHEN 'CONVERSATION_TAKEN_OVER' THEN 'HUMAN' ELSE 'AI' END
+        AND CASE WHEN payload->>'previous_generation' ~ '^[1-9][0-9]{0,18}$'
+                   AND payload->>'control_generation' ~ '^[1-9][0-9]{0,18}$'
+          THEN (payload->>'previous_generation')::numeric<9223372036854775807
+            AND (payload->>'control_generation')::numeric=(payload->>'previous_generation')::numeric+1
+          ELSE false END) IS TRUE) OR ((event_type='ESCALATION_DECIDED' AND actor_kind='USER_ACCOUNT'
+        AND actor_user_account_id IS NOT NULL AND object_type='ESCALATION' AND object_version=2
+        AND escalation_object_id IS NOT NULL AND escalation_operation IS NOT NULL AND
+        payload IN ('{"operation":"RESOLVE","status":"RESOLVED"}'::jsonb,'{"operation":"CANCEL","status":"CANCELLED"}'::jsonb)) IS TRUE)) OR ((event_type='MESSAGE_MATERIAL_CHANGED' AND actor_kind='CHANNEL_EVENT'
+        AND actor_user_account_id IS NULL AND object_type='MESSAGE' AND material_target_id IS NOT NULL AND material_source_receipt_id IS NOT NULL
+        AND platform.material_object(payload,ARRAY['target_id','source_receipt_id','previous_version','accepted_version','reason'])
+        AND payload->>'target_id'=material_target_id::text AND payload->>'source_receipt_id'=material_source_receipt_id::text
+        AND jsonb_typeof(payload->'previous_version')='string' AND jsonb_typeof(payload->'accepted_version')='string'
+        AND platform.telegram_numeric_id(payload->>'previous_version') AND platform.telegram_numeric_id(payload->>'accepted_version')
+        AND (payload->>'previous_version')::numeric+1=object_version AND payload->>'accepted_version'=object_version::text
+        AND payload->>'reason' IN ('CONTENT_CHANGED','DELETED','ORDER_UNCERTAIN','ORDER_RESTORED','UNSUPPORTED_CONTENT')) IS TRUE));
+
+CREATE TABLE platform.message_material_effects(
+      workspace_id uuid NOT NULL,id uuid NOT NULL DEFAULT uuidv7(),target_id uuid NOT NULL,message_id uuid NOT NULL,
+      source_receipt_id uuid NOT NULL,audit_event_id uuid NOT NULL,
+      event_type text NOT NULL DEFAULT 'MESSAGE_MATERIAL_CHANGED' CHECK(event_type='MESSAGE_MATERIAL_CHANGED'),
+      previous_version bigint NOT NULL CHECK(previous_version>0),accepted_version bigint NOT NULL CHECK(accepted_version::numeric=previous_version::numeric+1),
+      reason text NOT NULL CHECK(reason IN ('CONTENT_CHANGED','DELETED','ORDER_UNCERTAIN','ORDER_RESTORED','UNSUPPORTED_CONTENT')),
+      accepted_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      PRIMARY KEY(workspace_id,id),UNIQUE(source_receipt_id,message_id),
+      UNIQUE(workspace_id,id,target_id,message_id,source_receipt_id,previous_version,accepted_version),
+      FOREIGN KEY(workspace_id,target_id,message_id) REFERENCES platform.message_material_targets(workspace_id,id,message_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,source_receipt_id) REFERENCES platform.telegram_provenance(workspace_id,receipt_id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,audit_event_id,message_id,event_type,accepted_version,target_id,source_receipt_id)
+        REFERENCES app.audit_events(workspace_id,audit_event_id,object_id,event_type,object_version,material_target_id,material_source_receipt_id) ON DELETE RESTRICT);
+
+CREATE TABLE platform.message_initial_suppressions(
+      workspace_id uuid NOT NULL,id uuid NOT NULL DEFAULT uuidv7(),message_id uuid NOT NULL,target_id uuid NOT NULL,
+      origin_inbox_id uuid NOT NULL,effect_id uuid NOT NULL,source_receipt_id uuid NOT NULL,
+      previous_version bigint NOT NULL DEFAULT 1 CHECK(previous_version=1),accepted_version bigint NOT NULL DEFAULT 2 CHECK(accepted_version=2),
+      initial_material jsonb NOT NULL,fold_witnesses uuid[] NOT NULL CHECK(cardinality(fold_witnesses) BETWEEN 1 AND 3),
+      membership_disposition text NOT NULL CHECK(membership_disposition IN ('HIDDEN','INELIGIBLE_ORIGIN','ELIGIBLE_VISIBLE')),
+      PRIMARY KEY(workspace_id,id),UNIQUE(workspace_id,message_id),
+      UNIQUE(workspace_id,id,message_id,origin_inbox_id,membership_disposition),
+      FOREIGN KEY(workspace_id,message_id) REFERENCES app.messages(workspace_id,id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,origin_inbox_id) REFERENCES platform.inbox_events(workspace_id,id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id,effect_id,target_id,message_id,source_receipt_id,previous_version,accepted_version)
+        REFERENCES platform.message_material_effects(workspace_id,id,target_id,message_id,source_receipt_id,previous_version,accepted_version) ON DELETE RESTRICT);
+
+ALTER TABLE app.conversation_turn_messages
+      ADD COLUMN membership_form text,ADD COLUMN initial_suppression_id uuid,
+      ADD COLUMN suppression_disposition text GENERATED ALWAYS AS
+        (CASE WHEN membership_form='INITIAL_FOLD_SUPPRESSED' THEN 'ELIGIBLE_VISIBLE' END) STORED,
+      ADD CONSTRAINT turn_member_suppression_fkey FOREIGN KEY(workspace_id,initial_suppression_id,message_id,origin_inbox_id,suppression_disposition)
+        REFERENCES platform.message_initial_suppressions(workspace_id,id,message_id,origin_inbox_id,membership_disposition) ON DELETE RESTRICT,
+      DROP CONSTRAINT conversation_turn_messages_check;
+
+ALTER TABLE app.conversation_turn_messages ADD CONSTRAINT conversation_turn_messages_check CHECK(
+      (membership_form IS NULL AND initial_suppression_id IS NULL AND ((content_type='TEXT' AND file_id IS NULL) OR (content_type='IMAGE_REFERENCE' AND file_id IS NOT NULL))) OR
+      (membership_form='INITIAL_FOLD_SUPPRESSED' AND membership_form IS NOT NULL AND initial_suppression_id IS NOT NULL
+        AND content_type='IMAGE_REFERENCE' AND direction='INBOUND' AND file_id IS NULL) IS TRUE);
+```
+
+Complete added trigger definitions from the source expansion:
+
+```sql
+CREATE TRIGGER material_immutable BEFORE UPDATE ON platform.telegram_provenance FOR EACH ROW EXECUTE FUNCTION platform.turn_immutable();
+CREATE TRIGGER material_immutable BEFORE UPDATE ON platform.message_material_effects FOR EACH ROW EXECUTE FUNCTION platform.turn_immutable();
+CREATE TRIGGER material_immutable BEFORE UPDATE ON platform.message_initial_suppressions FOR EACH ROW EXECUTE FUNCTION platform.turn_immutable();
+CREATE TRIGGER material_receipt_immutable BEFORE UPDATE ON platform.telegram_update_receipts
+      FOR EACH ROW EXECUTE FUNCTION platform.messaging_immutable('codec');
+CREATE CONSTRAINT TRIGGER material_integrity AFTER INSERT OR UPDATE OR DELETE ON platform.telegram_update_receipts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_integrity();
+CREATE CONSTRAINT TRIGGER material_integrity AFTER INSERT OR UPDATE OR DELETE ON platform.telegram_provenance DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_integrity();
+CREATE CONSTRAINT TRIGGER material_integrity AFTER INSERT OR UPDATE OR DELETE ON platform.inbox_events DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_integrity();
+CREATE TRIGGER material_target_check BEFORE INSERT OR UPDATE ON platform.message_material_targets FOR EACH ROW EXECUTE FUNCTION platform.material_target_check();
+CREATE CONSTRAINT TRIGGER material_target_consistency AFTER INSERT OR UPDATE ON platform.message_material_targets DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_target_check();
+CREATE TRIGGER material_no_file BEFORE INSERT ON app.file_objects FOR EACH ROW EXECUTE FUNCTION platform.material_no_file();
+CREATE TRIGGER material_suppression_authority BEFORE INSERT ON platform.message_initial_suppressions FOR EACH ROW EXECUTE FUNCTION platform.material_suppression_check();
+CREATE CONSTRAINT TRIGGER material_suppression_completeness AFTER INSERT OR UPDATE ON platform.message_initial_suppressions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_suppression_check();
+CREATE CONSTRAINT TRIGGER material_suppression_completeness AFTER INSERT OR UPDATE ON app.conversation_turn_messages DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION platform.material_suppression_check();
+```
+
+The source function closure is132 surviving functions:109 retained after the
+predecessor's two explicit DROP statements, plus23 new. Seventeen retained bodies
+are replaced;92 retain their predecessor body. All new functions use fixed
+`search_path=pg_catalog,pg_temp` and owner `asm_migrator`;16 are SECURITY DEFINER,
+7 pure validators/codecs are INVOKER (as listed below); all23
+explicitly REVOKE PUBLIC/runtime, then only two narrow wrappers receive runtime
+EXECUTE. Replacement preserves existing owner/ACL/signature/security. The table
+below lists every surviving signature from source (argument names included);
+runtime ACL is derived from ordered explicit GRANT/REVOKE source, not catalog evidence.
+
+| Function signature | Source body | Runtime EXECUTE | Security |
+|---|---|---|---|
+| `app.current_messaging_owner_workspace_id()` | retained0011 | YES | DEFINER |
+| `app.current_workspace_id()` | retained0011 | YES | DEFINER |
+| `platform.auth_bootstrap(p_hash text, p_ttl integer)` | retained0011 | YES | DEFINER |
+| `platform.auth_lock_session(p_hash text, p_exclusive boolean)` | retained0011 | NO | DEFINER |
+| `platform.auth_login( p_previous text, p_account uuid, p_account_version bigint, p_credential_version bigint, p_new text, p_ttl integer)` | retained0011 | YES | DEFINER |
+| `platform.auth_logout(p_hash text)` | retained0011 | YES | DEFINER |
+| `platform.auth_memberships(p_hash text)` | retained0011 | YES | DEFINER |
+| `platform.auth_password_lookup(p_login text)` | retained0011 | YES | DEFINER |
+| `platform.auth_rotate(p_previous text, p_new text)` | retained0011 | YES | DEFINER |
+| `platform.auth_session(p_hash text)` | retained0011 | YES | DEFINER |
+| `platform.conversation_control_execute( p_conversation uuid,p_client uuid,p_operation text,p_key text,p_generation bigint,p_context bigint)` | retained0011 | YES | DEFINER |
+| `platform.conversation_control_fingerprint( ws uuid,actor uuid,conversation uuid,client uuid,operation text,generation bigint,context bigint)` | retained0011 | NO | INVOKER |
+| `platform.conversation_control_locked( p_conversation uuid,p_client uuid,p_operation text,p_key text,p_generation bigint,p_context bigint)` | retained0011 | NO | DEFINER |
+| `platform.conversation_control_prepare( p_conversation uuid,p_client uuid,p_operation text,p_key text,p_generation bigint,p_context bigint)` | retained0011 | YES | DEFINER |
+| `platform.conversation_control_read(p_conversation uuid)` | retained0011 | YES | DEFINER |
+| `platform.conversation_manual_prelock(p_conversation uuid,p_text text,p_key text)` | retained0011 | YES | DEFINER |
+| `platform.conversation_manual_takeover(ws uuid,p_conversation uuid)` | retained0011 | NO | DEFINER |
+| `platform.conversation_turn_activation_matches(ws uuid,p_turn uuid)` | 0012 REPLACED | NO | DEFINER |
+| `platform.escalation_command(p_escalation uuid,p_conversation uuid,p_client uuid,p_operation text,p_key text, p_version bigint,p_generation bigint,p_context bigint,p_answer text)` | retained0011 | YES | DEFINER |
+| `platform.escalation_command_fingerprint( ws uuid,actor uuid,escalation uuid,conversation uuid,client uuid,operation text, version bigint,generation bigint,context bigint,answer text)` | retained0011 | NO | INVOKER |
+| `platform.escalation_context_changed()` | retained0011 | NO | DEFINER |
+| `platform.escalation_immutable()` | retained0011 | NO | DEFINER |
+| `platform.escalation_list(p_count integer,p_status text,p_at timestamptz,p_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.escalation_now()` | retained0011 | NO | INVOKER |
+| `platform.escalation_read(p_escalation uuid)` | retained0011 | YES | DEFINER |
+| `platform.escalation_request_for_turn(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.escalation_request_replay(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.escalation_timer_execute(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.escalation_validity(ws uuid,p_escalation uuid,p_now timestamptz)` | retained0011 | NO | DEFINER |
+| `platform.files_begin_fetch(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.files_claim_cleanup(p_limit integer)` | retained0011 | YES | DEFINER |
+| `platform.files_finish_cleanup(p_intent uuid,p_claim uuid,p_error text)` | retained0011 | YES | DEFINER |
+| `platform.files_finish_fetch(p_job uuid,p_claim uuid,p_intent uuid)` | retained0011 | YES | DEFINER |
+| `platform.files_immutable()` | retained0011 | NO | INVOKER |
+| `platform.files_manifest_valid(m jsonb)` | retained0011 | NO | INVOKER |
+| `platform.files_plan(p_workspace uuid,p_message uuid,p_correlation uuid)` | 0012 REPLACED | NO | DEFINER |
+| `platform.files_prepare_upload(p_job uuid,p_claim uuid,p_manifest jsonb)` | retained0011 | YES | DEFINER |
+| `platform.files_read_manifest(p_conversation uuid,p_message uuid,p_file uuid)` | 0012 REPLACED | YES | DEFINER |
+| `platform.files_upload_json(u platform.file_object_uploads)` | retained0011 | NO | INVOKER |
+| `platform.guard_entitlement()` | retained0011 | NO | INVOKER |
+| `platform.guard_plan_revision()` | retained0011 | NO | INVOKER |
+| `platform.guard_require_current(ws uuid,p_turn uuid,p_resume uuid,p_context bigint)` | 0012 REPLACED | NO | DEFINER |
+| `platform.guard_send_begin(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.guard_text_fingerprint(p_input jsonb,p_text text)` | retained0011 | NO | INVOKER |
+| `platform.guard_turn_accept(p_job uuid,p_claim uuid,p_digest text,p_text text)` | retained0011 | YES | DEFINER |
+| `platform.guard_turn_prepare(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.guard_turn_replay(p_job uuid,p_claim uuid,p_digest text,p_text text)` | retained0011 | YES | DEFINER |
+| `platform.initialize_local_billing(p_workspace_id uuid,p_catalog_code text,p_catalog_revision integer,p_contact_display_name text,p_subscription_status text,p_funding_mode text,p_effective_from timestamptz,p_effective_until timestamptz,p_service_mode text)` | retained0011 | NO | DEFINER |
+| `platform.initialize_local_messaging_billing(p_workspace uuid,p_contact text,p_from timestamptz,p_until timestamptz)` | retained0011 | NO | DEFINER |
+| `platform.initialize_telegram_connection(p_workspace uuid,p_business uuid,p_bot text,p_external text,p_owner text,p_observation jsonb)` | retained0011 | NO | DEFINER |
+| `platform.material_apply(ws uuid,p_target uuid,corr uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.material_apply_context(ws uuid,p_message uuid,corr uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.material_bind(ws uuid,p_message uuid,initial boolean,corr uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.material_bump_turns(ws uuid,messages uuid[],corr uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.material_content_valid(c jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.material_fold(ws uuid,p_target uuid,p_source uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.material_identity(ws uuid,p_message uuid,p jsonb)` | 0012 NEW | NO | DEFINER |
+| `platform.material_integrity()` | 0012 NEW | NO | DEFINER |
+| `platform.material_no_file()` | 0012 NEW | NO | DEFINER |
+| `platform.material_object(p jsonb,keys text[])` | 0012 NEW | NO | INVOKER |
+| `platform.material_process(j platform.messaging_jobs)` | 0012 NEW | NO | DEFINER |
+| `platform.material_processing_replay(p_job uuid,p_claim uuid)` | 0012 NEW | YES | DEFINER |
+| `platform.material_result_valid(a jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.material_semantic(c jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.material_state_valid(v jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.material_suppression_check()` | 0012 NEW | NO | DEFINER |
+| `platform.material_target_check()` | 0012 NEW | NO | DEFINER |
+| `platform.material_turn_usable(ws uuid,p_turn uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.message_effective(ws uuid,p_message uuid)` | 0012 NEW | NO | DEFINER |
+| `platform.messaging_admit(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_begin_send(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_claim(p_worker text,p_until timestamptz,p_at timestamptz,p_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_fingerprint(e jsonb,projection boolean)` | retained0011 | NO | INVOKER |
+| `platform.messaging_finish_send(p_job uuid,p_claim uuid,p_attempt uuid,p_outcome text,p_provider_message text,p_error text)` | retained0011 | YES | DEFINER |
+| `platform.messaging_finish_send(p_job uuid,p_claim uuid,p_attempt uuid,p_outcome text,p_provider_message text,p_error text,p_retry_after_seconds integer)` | retained0011 | YES | DEFINER |
+| `platform.messaging_guard(p_job uuid,p_claim uuid)` | retained0011 | NO | DEFINER |
+| `platform.messaging_immutable()` | retained0011 | NO | INVOKER |
+| `platform.messaging_ingest(p_provider text,p_bot text,p_event jsonb,p_correlation uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_job_json(j platform.messaging_jobs)` | retained0011 | NO | INVOKER |
+| `platform.messaging_lock_billing()` | retained0011 | YES | DEFINER |
+| `platform.messaging_lock_billing_workspace(ws uuid)` | retained0011 | NO | DEFINER |
+| `platform.messaging_lock_owner(ws uuid,actor uuid)` | retained0011 | NO | DEFINER |
+| `platform.messaging_manual_send_allowed(ws uuid)` | retained0011 | NO | DEFINER |
+| `platform.messaging_prepare_text(p_conversation uuid,p_text text,p_key text)` | retained0011 | YES | DEFINER |
+| `platform.messaging_process_inbox(p_job uuid,p_claim uuid)` | 0012 REPLACED | YES | DEFINER |
+| `platform.messaging_read_connections(p_limit integer,p_at timestamptz,p_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_conversations(p_limit integer)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_conversations(p_limit integer,p_at timestamptz,p_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_delivery(p_message uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_inbox(p_inbox uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_messages(p_conversation uuid,p_limit integer)` | retained0011 | YES | DEFINER |
+| `platform.messaging_read_messages(p_conversation uuid,p_limit integer,p_at timestamptz,p_id uuid)` | 0012 REPLACED | YES | DEFINER |
+| `platform.messaging_recover_expired(p_until timestamptz,p_at timestamptz,p_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.messaging_request_text(p_conversation uuid,p_text text,p_key text)` | retained0011 | YES | DEFINER |
+| `platform.messaging_reschedule(p_job uuid,p_error text,p_retry boolean)` | retained0011 | NO | DEFINER |
+| `platform.messaging_reschedule(p_job uuid,p_error text,p_retry boolean,p_delay integer)` | retained0011 | NO | DEFINER |
+| `platform.messaging_reschedule(p_job uuid,p_error text,p_retry boolean,p_delay integer,p_nowait boolean)` | retained0011 | NO | DEFINER |
+| `platform.messaging_retry(p_job uuid,p_claim uuid,p_error text,p_retry boolean)` | retained0011 | YES | DEFINER |
+| `platform.messaging_valid_id(value text,max_chars integer,max_bytes integer)` | retained0011 | NO | INVOKER |
+| `platform.messaging_validate_event(e jsonb)` | retained0011 | NO | INVOKER |
+| `platform.resolve_workspace_membership(actor_id uuid, target_workspace_id uuid)` | retained0011 | YES | DEFINER |
+| `platform.telegram_begin_send(p_job uuid,p_claim uuid,p_generation bigint,p_observation_version bigint,p_observation jsonb)` | retained0011 | YES | DEFINER |
+| `platform.telegram_can_send(ws uuid,conn uuid,conversation uuid,same_uow boolean)` | retained0011 | NO | DEFINER |
+| `platform.telegram_fingerprint(bot text,p jsonb)` | retained0011 | NO | INVOKER |
+| `platform.telegram_fingerprint_v2(bot text,p jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.telegram_ingest(p_bot text,p_projection jsonb,p_correlation uuid)` | 0012 REPLACED | YES | DEFINER |
+| `platform.telegram_numeric_id(value text)` | retained0011 | NO | INVOKER |
+| `platform.telegram_owner_observe(p_conversation uuid,p_generation bigint,p_observation_version bigint,p_observation jsonb)` | retained0011 | YES | DEFINER |
+| `platform.telegram_probe_json(s platform.telegram_connection_state)` | retained0011 | NO | INVOKER |
+| `platform.telegram_receipt_json(r platform.telegram_update_receipts,code text)` | 0012 NEW | NO | DEFINER |
+| `platform.telegram_replay_v1(p_bot text,p_projection jsonb)` | 0012 NEW | YES | DEFINER |
+| `platform.telegram_save_observation(ws uuid,conn uuid,p_generation bigint,p_version bigint,o jsonb)` | retained0011 | NO | DEFINER |
+| `platform.telegram_validate_observation(o jsonb)` | retained0011 | NO | INVOKER |
+| `platform.telegram_validate_projection(bot text,p jsonb)` | retained0011 | NO | INVOKER |
+| `platform.telegram_validate_v2(bot text,p jsonb)` | 0012 NEW | NO | INVOKER |
+| `platform.telegram_worker_probe(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.turn_consumer_finalize(p_job uuid,p_claim uuid,p_result jsonb)` | 0012 REPLACED | YES | DEFINER |
+| `platform.turn_consumer_replay(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.turn_enqueue(ws uuid,p_turn uuid,corr uuid)` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_execute(p_job uuid,p_claim uuid)` | retained0011 | YES | DEFINER |
+| `platform.turn_group_message(ws uuid,p_message uuid,corr uuid)` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_immutable()` | 0012 REPLACED | NO | INVOKER |
+| `platform.turn_ingress()` | retained0011 | NO | DEFINER |
+| `platform.turn_material()` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_member_check()` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_members_consistent()` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_preflight(j platform.messaging_jobs,p_nowait boolean,p_terminal boolean)` | retained0011 | NO | DEFINER |
+| `platform.turn_require_isolation()` | retained0011 | NO | INVOKER |
+| `platform.turn_seal(ws uuid,p_turn uuid,p_seal timestamptz,corr uuid,bump boolean)` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_snapshot(ws uuid,p_turn uuid)` | 0012 REPLACED | NO | DEFINER |
+| `platform.turn_supersede(j platform.messaging_jobs)` | 0012 REPLACED | NO | DEFINER |
+| `platform.update_billing_contact(expected_version bigint,contact_display_name text,idempotency_key text)` | retained0011 | YES | DEFINER |
+
+Changed capability profiles: ingress accepts fresh V2 only, with a separate saved-V1
+replay wrapper; PROCESS_INBOX has a closed material terminal and own winning-claim
+replay wrapper; owner message read returns required current; image manifest read
+requires ORIGINAL_READY; Turn execute/guard prepare may return V2 snapshots while
+old persisted V1 is decoded unchanged; consumer finalize uses effective current;
+shared activation/enqueue/admission reject sticky invalidated/no visible input;
+original/File/SENT share the context/apply path. Other public signatures and scope
+authority are retained. No runtime arbitrary ws material setter is added.
+
+Immutable downgrade source copies (SHA256 of each complete `ORIGINAL` Python string,
+UTF-8, no strip; equality to final0011 source checked after only CREATE prefix normalization).
+Trailing whitespace in two fixed source literals is encoded as Python `\x20`,
+so the decoded predecessor bodies/CHECKs remain byte-identical and the new source
+passes `git diff --check`:
+
+| Function key | SHA256 |
+|---|---|
+| `telegram_ingest(3)` | `d4f721a95492512516dfa2fee8ebf8f328ac65c9397ab495e6079df93a36e150` |
+| `messaging_process_inbox(2)` | `0553893a279d6e99ec9e31d5ef53bb0cb2892f163a06c75dae734e868b102d14` |
+| `files_plan(3)` | `0c54939f99ea35d3c51c82b62ee95d72bba52684a9089306715fa90ba0746e9b` |
+| `turn_group_message(3)` | `d243c77f84df2a6f76acfae76609ec574010842c4af378ed0281d96f9df07984` |
+| `turn_member_check(0)` | `90e436d84b4b5d4e7f5f3af84305c9fd128e244a7d834f1ac0b6db337544c90d` |
+| `turn_members_consistent(0)` | `24cb6bbf1f87abfa7db79ae01d74066edf54e8e479aba52a3803558708a06ca9` |
+| `turn_immutable(0)` | `7c791be6b0014ef1fdb33362e6d60dc85606dc93ae03066c7ed1ff7d611f352c` |
+| `turn_material(0)` | `cca96d0b3fd2e3d62057b433b2da496d49c048d6bbdd1e5fb20469068cb0279e` |
+| `turn_seal(5)` | `f6b0af975822f3b3583cb7098057a268344ad7015361fa9afdc625a3c4260d7b` |
+| `turn_enqueue(3)` | `5e05c02a6eb9d7d6f26b8d40ae52cc8933649dc63bd6b49d29ce8ee464526cd0` |
+| `conversation_turn_activation_matches(2)` | `6490af54d1eb8f2ce910fb92756d52a7c1efeb74bcdef2711f750d417af13591` |
+| `guard_require_current(4)` | `5f1d2af143058b6c31c5ee2cdf143d4820bc1ba618ae511415f4c0b4c40d6aba` |
+| `turn_snapshot(2)` | `c08f501ab8531f74b179c9bf64d442a5af7f4581231f82854a468b00954937c8` |
+| `turn_consumer_finalize(3)` | `b507659817f6faac9511b75b6f1f7458befbfbab331b3b124597b9c7d6e2613a` |
+| `turn_supersede(1)` | `3dc2768dc757cc236a1f562aafb0e8fb87a94809d120a6c275a7cccfb90db904` |
+| `files_read_manifest(3)` | `de7c4b4dee362402f324f203749fccd910ecc0a11bb2a37d64f6f5968e0354a9` |
+| `messaging_read_messages(4)` | `948fc60122590b14343789ba1534d18ae5466fa1595120508ae4c0b0798cf967` |
+
+The four fixed predecessor CHECK strings are likewise stored in0012, never captured
+from a live catalog during upgrade:
+
+| Fixed CHECK | SHA256 of UTF-8 Python string |
+|---|---|
+| `OLD_RECEIPT_CHECK` | `2c33d64a122148d0e62bf3c1fd34610bee6b0e7d0dfea60faf36bda981b7f6be` |
+| `OLD_INBOX_CHECK` | `7eeb77ebb9bfeddf15abf0a9215ac03f1752270691caca802d2061c60b77f804` |
+| `OLD_MEMBER_CHECK` | `fd1eb0e3703a811a9f881cc871d8d2838691e857372a93372b8a2cff84b5d809` |
+| `OLD_AUDIT_CHECK` | `da07204e67d993452b643699ad6e35406bf231755f776226d953afcb60e0a6e1` |
+
+Downgrade takes the explicit ownership-table ACCESS EXCLUSIVE locks, then refuses
+with SQLSTATE55000 **before any DDL** if any receipt codec, sidecar, target, effect,
+suppression, material Inbox result/token/code, invalidated Turn, new member form/evidence,
+material Audit or enabled material gate exists. Unused reversal restores the17
+fixed bodies and4 predecessor CHECKs, drops only owned0012 additions and never
+CASCADE/deletes history. Actual all42 row/catalog equality is pending integration.
+
+| Sequential source/schema lane for C6 | Closed projection / boundary |
+|---|---|
+| Frozen H source `754f1c883e5a94a7fc9e729af2605424f949ba33` /0007 | Existing H projection31 and frozen assertions; historical sources are not rewritten |
+| Frozen T source `ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad` /0008 | Existing T projection34; original CONTROL phase0008→0009 retained |
+| Frozen C source `c6a55b6b17d1c1ab286ce97dfa4bd27197141fe5` /0009 | Existing C projection35; GUARDS phase0009→0010 retained |
+| Frozen G source `c502d5fd258aef15bb5549e1529df8d038a4fb9b` /0010 | Existing G projection36; Escalation phase0010→0011 retained |
+| E/predecessor source `933ddd284ff5b77fb1aa88a4270ab0032bc499c9` /0011 | Exact `E_COLUMNS`38; used history/V1 bytes preserved; full actual catalog read required |
+| P/current C3 source checkpoint /0012 | Exact `P_COLUMNS`42 above; current Runtime/provisioner readiness accepts only0012; cross-pair source/schema refusal required |
+| Future renewal | No revision/source/profile assigned; never run concurrently with material preparation |
+
+Historical first-checkpoint handoff (superseded for R1 by §15.10.4):
+C6 receives exact accepted C3 head from a separate C0 issuance, works sequentially,
+and owns only `scripts/prepare_telegram_egress.py`, `scripts/test_telegram_egress.sh`,
+`scripts/test_telegram_egress_migration.sh`, `tests/test_telegram_egress.py`,
+`tests/test_telegram_egress_migration.py`, `tests/test_telegram_egress_postgres.py`.
+All six remain byte-identical in this C3 checkpoint. C6 must extend the current
+source/schema0012 capability/catalog assertions while retaining all old frozen
+controllers/projections, failure ownership/cleanup and9-job clean-source gates.
+The old egress profile currently stops at0011; this checkpoint is intentionally
+handed off before a PR, since egress runs before backend integration in foundation.
+
+#### 15.10.3. Historical local evidence, 2026-10-15 checkpoint; deferred execution
+
+| Проверка этого source checkpoint | Фактический результат |
+|---|---|
+| `uv sync --frozen`; `npm --prefix frontend ci --ignore-scripts` | Locked dependencies prepared; lockfiles unchanged |
+| `uv run --frozen ruff check backend tests scripts migrations` | PASS |
+| `uv run --frozen ruff format --check --diff backend tests scripts migrations` | PASS,149 files already formatted |
+| `uv run --frozen mypy backend/src` | PASS,61 source files |
+| `uv run --frozen pytest -q -m 'not integration' tests/test_m3_1_provenance.py tests/test_m2_3_transport.py tests/test_foundation.py tests/test_m2_3_setup.py tests/test_m2_4_browser_fixture.py tests/test_m3_1_turns.py tests/test_m3_1_guards.py tests/test_m2_3_api.py` | PASS,284 tests;2 existing Starlette/AnyIO deprecation warnings |
+| `uv run --frozen python scripts/export_contracts.py --check` | PASS |
+| `npm --prefix frontend run typecheck` | PASS |
+| `npm --prefix frontend test -- src/messaging-api.test.ts src/MessagingPanel.test.tsx src/billing-api.test.ts src/BillingPanel.test.tsx` | PASS,93 tests/4 files |
+| `npm --prefix frontend run build` | PASS,38 modules |
+| `uv run --frozen pytest --collect-only -q -m integration tests/test_m3_1_provenance_postgres.py tests/test_m3_1_provenance_migrations.py tests/test_m2_3_wire_postgres.py` |103 collected; **collection only**, no PG execution |
+| DDL source expansion / frozen bodies |131 `op.execute` calls;4 new tables;23 new+17 replaced functions;17 predecessor copies exact after CREATE/CREATE OR REPLACE normalization |
+| `git diff --check`; allowlist/prefix/original11/applied migrations/C6 reserved checks | PASS at canonical checkpoint; exact head/tree/path numstat in PR33 receipt |
+
+| Обязательный remaining gate | Статус и следующий executor |
+|---|---|
+| Actual PG identity/codec/fold/terminal/counters/R3-T1…T5/File/grant/shared body | **NOT RUN — deferred to штатный final candidate CI** |
+| Fresh/populated/repeat migrations, all42 fingerprints, exact unused catalog reverse, used refusal, schema/source pairing | **NOT RUN — deferred to штатный final candidate CI**; C6 compatibility preparation first |
+| Real workers/process death/rollback/ACK loss, connection/C/SENT/FK barriers, NOWAIT/reclaim/expiry/overflow | **NOT RUN — deferred to штатный final candidate CI** |
+| Runtime non-owner/FORCE RLS/private ACL/auth/CSRF/wrong Workspace/Client and retained security regressions | **NOT RUN — deferred to штатный final candidate CI** |
+| Paired Docker API/PostgreSQL/Console browser journey and retained39 browser regressions | **NOT RUN — deferred to штатный final candidate CI** |
+| Final candidate nine automatic jobs and nine clean-source checks; exact PR head/tested merge SHA/tree | **NOT RUN**; no PR/dispatch/rerun in this source-only handoff |
+
+Local environment has no PostgreSQL/browser services; no additional service
+installation was performed after the continuation. Unit/static/build evidence is
+not PostgreSQL, race, catalog, browser or account evidence. Full prior backend/browser
+suites were not requested locally. Existing main/design CI does not certify this code.
+
+
+#### 15.10.4. C3-M3.1-MATERIAL-R1 correction / 2026-10-16 UTC
+
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6201238585),
+[C0 findings/disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6201199649).
+Separate clean checkout/branch `c3/m3-1-material-r1`, exact parent/base
+`ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`, tree
+`e4317cc6478b2c40669d96242c3adb89079ab46c`; frozen E/main stays
+`933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011. Final head/tree/parents/numstat are in
+one canonical PR34 receipt. PR34 remains Draft; C3 does not update its C6 branch.
+Findings remain **OPEN pending C0 review and actual acceptance**, not CLOSED/VERIFIED.
+
+| Finding | Substantive R1 correction / executable proof |
+|---|---|
+| C2-MAT-01 | Parenthesize exactly two IF CASE expressions in telegram_validate_v2 and one in material_suppression_check. Predicates unchanged. Existing MIG fresh/populated/repeat/unused reverse and positive R3 suppression nodes remain actual PG gates. |
+| C1-MAT-01 | New nullable private Inbox material_claim_token uuid, no default/backfill. Closed result/token pair; verified V2 EDIT/DELETE only. Final admitted claim recheck precedes atomic Inbox pair + Job SUCCEEDED. All five retained Job delivery fields remain NULL; no fake send outcome or widening of0005. Replay joins exact Job/Inbox/provenance and stored token. New terminal-pair/pending/NEW/nonbinding/OFF negatives; populated MIG includes actual saved-V1 refusal; all saved-results positives assert NULL delivery fields. Restart/ACK-loss now asserts saved winning token, wrong Job/token refusal and historical result after a later deletion; reclaim test rejects the old token even after the new winner commits. |
+| C1-MAT-02 | New known-Turn test has three arms: real Telegram ingress/Worker, CONTROLLED same private apply body for GUARDS, CONTROLLED same body with real TEXT Escalation marker. Captured T is collecting; mutation preserves its member/origin/capture/deadlines; fresh input actually arrives before old quiet_at and creates T2. Real GROUP/MEDIA, late File WINNER, owner Takeover/Resume retain invalidation. Read predicates use fresh DB context/revision/Resume under C/Turn barriers, including pre-Resume matching generation/fence; T has no new consumer/guard/Escalation/outbox authority. CONTROLLED T2 supplies a positive ordinary producer neighbor. No row-edited authority or Telegram AI producer. |
+| R3-T4 discrimination | Each corruption maps to exact SQLSTATE + CHECK name or precise exception/context. Wrong identity uses P0002 from material_suppression_check lookup, not an arbitrary DB exception. Same claim/original successfully commits after only the corruption trigger is removed; all42 rollback remains checked before that positive neighbor. |
+| C5-MATERIAL-01 | Four finite PHOTO originals, real FetchTransfer/private TEST S3/File/WINNER. Three paired journeys load original, apply same-ref caption (new successful grant/load), then replacement/type change/delete through ordinary Worker.execute and canonical replay read. Current/history, loaded-image removal, old-file grant404, unchanged original/File/upload digests and File/FETCH counts are asserted. Fourth journey holds route.fetch's actual200 grant response, performs semantic mutation+refresh, then releases it unmodified and observes no image/request restoration. Component loaded-image test is supplementary. Already issued URL TTL remains explicit. |
+
+R1 storage inventory is **10 columns/6 existing tables,4 new/42 total tables,
+23 new+17 replaced/132 surviving function signatures**. Only one additional column
+relative to reviewed PR34. ORIGINAL17 and OLD_CHECK4 are byte-exact;0001–0011 and
+normative§15.2–15.9 unchanged. Unused downgrade drops token with result; used55000
+guard checks token before DDL. P_COLUMNS, no-backfill, current C6 source inventory
+and existing used-result witness include token. Token has no new child/FK cleanup
+edge: ordinary fixture deletion removes the owning Inbox, never clears its write-once
+pair separately. C6 coordinator/shell/budget/ownership code is not changed.
+
+| Command / local evidence | Result |
+|---|---|
+| `uv run --offline --frozen ruff check <changed Python paths>`; `ruff format --check <changed Python paths>` | PASS,9 changed Python files |
+| `uv run --offline --frozen pytest -q -m 'not integration' tests/test_m3_1_provenance.py tests/test_m2_4_browser_fixture.py tests/test_telegram_egress.py -k 'material or provenance or seed'` |79 passed,152 deselected; includes exact frozen17/4 and current inventory checks |
+| `uv run --offline --frozen pytest -q tests/test_m2_4_browser_fixture.py` |68 passed; includes retained finite actions/seed/PENDING boundary and new byte-provider/Worker/readback guards |
+| `npm --prefix frontend run typecheck` | PASS, includes e2e TypeScript |
+| `npm --prefix frontend test -- src/MessagingPanel.test.tsx` |32 passed; DOM/component evidence only |
+| `pytest --collect-only -q -m integration tests/test_m3_1_provenance_postgres.py tests/test_m3_1_provenance_migrations.py tests/test_m2_3_wire_postgres.py` via frozen offline uv |121 collected, not executed |
+| Cached pglast8.6/PostgreSQL18.6, no repository dependency | Both formerly failing expanded operations4/61 now parse; all131 top-level SQL operations parse. Four pre-existing standalone PL/pgSQL catalog/type-resolution limitations at66/67/70/77 are unchanged from exact base; not actual migration/PG execution. |
+| Diff/allowlist/original11/applied0001–0011/normative sections/ORIGINAL17/OLD_CHECK4/source signatures | PASS; original attachments = repository = manifest11; source count132 |
+
+Local PostgreSQL/Docker/paired browser/migration/catalog/concurrency/actual R3/
+private-S3 acceptance **NOT RUN**. No services installed, skip/xfail, alternative
+runner, workflow dispatch/rerun or new PR. Existing failed PR34 CI is historical
+review evidence, not an R1 test run. C2-MAT-02 budget remains **OPEN, C6 scope**.
+C0 intake → assigned C6 descendant → existing PR34 automatic CI → C1/C2/C5 review
+and actual PG/browser acceptance. C3 HOLD after return. Gate OFF; native/latest-state,
+renewal/collector/P-A03-09/live/VM/working DB/S3/sends/deploy/M4 remain unissued.
+
+### 15.11. C0 — terminal MATERIAL preparation720 exception / 2026-10-16 UTC
+
+[Explicit C0 intake/decision](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207691746),
+[C6 implementation assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207709114),
+[C6 actual-budget analysis](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207442994).
+This section is the narrow accepted override of the earlier blanket600/no-new-budget
+wording in §§12.8/13/14/15.7 **only for terminal MATERIAL admission/preparation**.
+It does not rewrite historical results, change any other budget or open IMPL-05.
+The entire existing contract through§15.10.4 is preserved byte-for-byte.
+
+#### 15.11.1. Decision, measured cause and unchanged execution
+
+One original monotonic start **S** remains established before T. H/predecessor
+execution stays before that ledger, exactly as in the accepted harness. Retained
+T/C/G/E keep **D_retained=S+600** and their original version1 requests/consumers.
+Only P admission/source/archive/build/reuse/image-probe preparation receives
+**D_material=S+720** from that same S. This is an explicit **120-second increase**
+of the terminal cumulative limit, not an optimization that satisfies600 and not a
+fresh720 allocated at P. Every preceding elapsed cost remains charged: full T
+positive, genuine120-second command-timeout negative, export negative, C/G/E
+preparation/runtime/supervision/report retention/owned cleanup and handoff costs.
+No clock reset/shift, nested fresh allowance or subtraction of those durations.
+
+Failed CI38793747628/attempt1, tested merge
+`d6f2bd1eeceaebebb7140940f6b6d23ab98ddb26`, analysed head
+`ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`, produced these actual facts:
+
+| Lane | Elapsed at P guard | Remaining600 | Remaining720 before P preparation |
+|---|---:|---:|---:|
+| normal |603.658495599s|−3.658495599s|116.341504401s|
+| Docker29 |679.481488282s|−79.481488282s|40.518511718s|
+
+Both E exits were0/cleanup PASS. P never started; its report was absent. Pre-C
+276.016/306.369s includes the two required full T negatives, not unexplained idle
+time. ZIP/source/timing bindings and the complete nonoverlapping decomposition
+are in the C6 analysis. That evidence belongs to the failed source above and
+does not certify C3 R1 or this C6 descendant.
+
+720 is **not a guaranteed fit, mathematically minimal value or general new budget**.
+Actual P preparation/runtime and the full state25min job remain separate gates.
+Failure at the amended bound returns BLOCKED to C0 with exact evidence; there is
+no authorization for another increase, automatic retry/rerun or assertion skip.
+C2-MAT-02 remains OPEN pending complete final normal and Docker29 execution.
+
+Sequence stays T positive → real timeout negative → export negative → C → G → E
+→ P → all three original C cleanup negatives. Source archives/images, byte probes,
+all frozen function bodies/selectors/requests, readiness/recovery/refusal cycles,
+failure retention and source-clean gates remain mandatory. `SchemaOwnership`,
+`RetainedCheckpoint`, supervisor/process-group termination and cleanup code do not
+change. Existing P supervision remains **remaining+480**, hence the nominal
+absolute terminal bound becomes **S+1200**. Shared owner cleanup90, individual
+build480/controller-start120/migration-probe30/drain60/normal-command40 and late
+C-negative supervisor480 remain. State25min/browser25min/foundation45min, nine
+jobs/clean9, existing pins/artifacts/Compose/dependencies remain unchanged. The
+supervisor bound alone does not guarantee that the complete job fits25min.
+
+#### 15.11.2. Closed P-only protocol and evidence gates
+
+The coordinator issues P only after successful E exit, final exact E source/clean
+verification, report retention and successful owned cleanup. It reads the retained
+E report, verifies phase/source/image tree, the original600 budget, completed
+used-refusal/timer evidence and cleanup owner, then records the observed completion
+after export/cleanup/worktree removal. The request is private0600/current uid,
+single-link, one-use and bound to the new P owner's nonce.
+
+| Version2 field | Exact semantics |
+|---|---|
+| `version`, `phase`, `historical`, `candidate` |2; MATERIAL_SCHEMA_0011_0012; frozen E933ddd…; actual checked-out final C6 descendant. R1 is the base, never substituted for final P. |
+| `uid`, `owner_token` | Exact current uid and admitted asm-material-schema-phase owner nonce/source/phase. |
+| `started_at`, `retained_deadline`, `deadline`, `extension_seconds` | Original S; exactly S+600; exactly S+720; fixed integer120. No tolerance extends admission. Stored deadline comparisons use addition from S, avoiding float-subtraction equality errors. |
+| `issued_at`, `charged_seconds` | Actual issue time and exactly issued_at−S, including all retained work. |
+| `escalation_completion` | Closed object: exact E source/tree, source_clean=true, exit_code=0, cleanup_state=PASS, E owner nonce, SHA256 of the retained E report, its ended-at and coordinator-observed completed-at. |
+
+The child independently rereads/hash-checks that retained report and its original
+S+600/source/phase/cleanup/image binding. Required order is E report end ≤ observed
+E completion ≤ P issue ≤ child observation. Missing/incomplete/failed E, stale or
+changed report, reset S, wrong phase/source/owner/extension/deadline, changed file
+device/inode/content or private-file guards, reused or exhausted requests refuse
+before P runtime. The request file is removed only after successful validation.
+
+At admission the child records `observed_at`, `charged_at_observation=observed_at−S`
+and the true handoff delay/remaining. Source/ancestry/daemon admission and every
+archive/build/reuse/probe use only remaining D_material. The separate frozen G
+development-image verification is inside this preparation. Final evidence records
+`preparation_ended_at`, `charged_total_seconds=preparation_ended_at−S` **<720**, both
+absolute deadlines, candidate preparation duration and image preparation duration.
+Preparation failure retains the actual stop/charge and primary/secondary/owned
+cleanup evidence. No P report claims PASS600.
+
+The outer shell cross-checks the material report against the coordinator handoff,
+same S, both deadlines,120 extension and supervisor bound, exact saved E report
+hash/owner/completion order, P owner and admission/final-preparation arithmetic.
+The original schema/recovery/42-table/cleanup checks still run. A unit/mocked
+protocol check is not actual PostgreSQL/catalog/timing acceptance.
+
+#### 15.11.3. C6 source checkpoint, tests and remaining gates
+
+Branch `c6/m3-1-material-compat-r2` starts from accepted C3 R1
+`e7f554772ad4dd697d38c88f4f6423b3d3895499`, tree
+`0242e71790e0fe441ebc55a6311c80f5681b218f`, sole parent
+`ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`. Main/frozen E remains
+`933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011. The existing Draft PR34 head is
+not changed by this source task. Final C6 head/tree/parent/numstat and verification
+are bound in one canonical PR34 receipt, without a self-SHA/status-only commit.
+
+Only five assigned existing paths change: current material coordinator/consumer/
+preparation/report and protocol units in `tests/test_telegram_egress_migration.py`,
+outer evidence gates in `scripts/test_telegram_egress_migration.sh`, this appended
+section, current handoff and task register. R1 inventory/used witnesses in the two
+other egress test files are read-only:10 columns/6 existing tables,4 new/42 total,
+132 signatures, private Inbox material_claim_token, full P_COLUMNS/no-backfill,
+used55000 before DDL/raw42 preservation, unused exact reverse and ORIGINAL17/
+OLD_CHECK4 remain. No new DDL/product/workflow/image/dependency capability.
+
+| Protocol requirement | Executable unit evidence in test_telegram_egress_migration.py |
+|---|---|
+| Valid after600/before720; fixed S/deadlines/delta; closed/private/source/owner/E/reuse failures | `test_material_budget_preserves_original_S_terminal720_private_binding_and_single_use` |
+| Changed inode/content or expiry during validation; exact fractional endpoint | `test_material_handoff_changed_or_expired_during_validation_cannot_be_consumed`; `test_material_budget_fractional_deadlines_use_stored_absolute_values` |
+| Missing request and early failure report; no runtime | `test_material_phase_early_failure_reports_budget_and_performs_no_runtime` |
+| Full source/archive/reuse/probe/G-probe charge; end720 refusal, strict just-before720 positive boundary; primary/cleanup behavior | `test_material_entrypoint_accounts_full_preparation_and_refuses_before_runtime` |
+| Actual current coordinator entry, original sequence/retained600 requests, E exit/source/report/cleanup refusal, expired P admission and late C-negative call | `test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720` |
+| Executed outer-shell report gates and tampered deadline/charge/E/owner/supervisor evidence | `test_material_shell_validates_original_S_completed_E_and_terminal720_report` |
+
+Scoped unit command in the existing frozen offline environment:
+`uv run --offline --frozen --no-sync pytest -q -m 'not integration' tests/test_telegram_egress.py tests/test_telegram_egress_migration.py`
+with UV_PROJECT_ENVIRONMENT selecting the existing environment: **625 passed**.
+Ruff/check/format, shell/embedded-Python compilation and exact scope/prefix/frozen
+source audits are recorded with their actual results in the canonical receipt.
+These local results do not certify runtime720 feasibility.
+
+Actual PostgreSQL/Docker/image builds/paired PHOTO/browser/CI execution are
+**NOT RUN in this source task**. No service/dependency installation, dispatch,
+rerun, new PR or push to the old PR34 branch. Five findings remain OPEN;
+MATERIAL/M3 IN_PROGRESS, implementation not INTEGRATED/VERIFIED. C6 HOLD after
+canonical return; C3/C1/C2/C5/C8 HOLD until C0 assignments.
+
+Next: C0 exact source intake → move the combined descendant into the same Draft
+PR34 → one normal automatic CI → C1/C2/C5 re-review final source/actual evidence;
+C8 follows required gates. Required:9/9+clean9/9 on exact tested SHA/tree, both
+normal/Docker29 full P preparation<720 from original S, complete retained negatives/
+owned cleanup within state25min, actual0012 migrations/catalog/42-table hashes/
+recovery/refusal/security/races and paired PHOTO/browser acceptance. Gate OFF;
+live/VM/working DB/S3/sends/deploy/native/renewal/collector/M4 remain unissued.
+
+### 15.12. C3-M3.1-MATERIAL-R2 — online SQL parameter correction / 2026-10-16 UTC
+
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208530769)
+and [binding disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208519238).
+Separate branch/checkout `c3/m3-1-material-r2`, exact base/sole parent
+`d810dde939f727085af15f7614eeddd36f4909b8`, tree
+`fb06ad7bf5cf4d821e880328888c9bbf25eea3b7`; base parent is accepted R1
+`e7f554772ad4dd697d38c88f4f6423b3d3895499`. Main/frozen E stays
+`933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011. Final head/tree/numstat are in the
+canonical PR34 receipt, not a self-SHA commit. The complete preceding contract
+through§15.11 is unchanged:546352 bytes, SHA256
+`79f920fdf779236e33c7b622f31a9e8ee750ea87596431378a880dbae6a65ae4`.
+
+C2-MAT-03/P1 correction adds one space after the colon in exactly six new0012 JSON
+literals (base lines578/586/1048/1049/1207/1208) and the actual PG forged-basis setup
+literal (line770). All seven decoded JSON values are equal before/after. No other
+migration or PG-test behavior changes: the invalid proof, precise SQLSTATE/reason/
+function context, all42 rollback and same-claim positive neighbor remain intact.
+No executor workaround, fake null bind, preprocessing or dependency change.
+
+Two new nonintegration nodes in `tests/test_m3_1_provenance.py` use untouched source:
+`test_material_upgrade_online_has_no_required_parameters` invokes actual upgrade
+through online Alembic Operations/_exec and a TextClause execution sink;
+`test_material_forged_basis_setup_online_has_no_required_parameters` invokes the
+actual PG case with only preceding domain fixture work mocked, and stops after its
+real CREATE reaches the sink. Both use PostgreSQL/psycopg compilation and empty
+`construct_params` semantics, require an empty result, and never sanitize SQL.
+
+| R2 local command/evidence | Result |
+|---|---|
+| Both new nodes against unchanged d810dde migration/PG setup |2 FAILED with the intended `InvalidRequestError: A value is required for bind parameter 'null'`; migration first fails at expanded operation2/material_semantic, setup fails before its negative assertion |
+| Same two nodes after the seven spaces |2 PASSED |
+| Independent expansion + psycopg empty-parameter construction | Base failures exactly indices2/3/48/58; candidate all131 operations PASS, no required parameters; not PostgreSQL execution |
+| `uv run --offline --frozen --no-sync pytest -q -m 'not integration' tests/test_m3_1_provenance.py tests/test_telegram_egress.py -k 'material or p_a03 or r3'` |67 passed,98 deselected; includes the two new nodes and retained inventory/reverse/source companions |
+| Ruff check / format --check on the three changed Python paths; git diff --check | PASS |
+| Read-only source audit | Original11 attachments/repo/manifest, applied0001–0011, ORIGINAL17/OLD_CHECK4, six-path scope and exact immutable contract prefix PASS |
+
+Reused cached frozen environment: Python3.13.16, SQLAlchemy2.0.52, Alembic1.20.0,
+psycopg3.3.5, pytest9.1.1; UV_PROJECT_ENVIRONMENT selects the existing R1 venv and
+PYTHONPATH=backend/src:tests binds this checkout. No installation/sync/services.
+Inventory remains10 columns/6 old tables,4 new/42 total,132 function signatures;
+Inbox immutable result/winning-token pair and five NULL Job delivery fields remain.
+All C6 code and frozen H/T/C/G/E identities/bodies, original-S terminal720 with
+retained600, supervisor/cleanup/individual bounds and9 jobs/clean9 are unchanged.
+
+Historical final CI38850821014/attempt1 tested merge
+`51fca8a26bb19fa511040592a8b04613ddf0eb96` (main+base, base tree):
+**4 SUCCESS/5 FAILURE; clean4 SUCCESS/5 SKIPPED**. Foundation, compatibility and
+browser stopped at migrate exit1; Docker29 state stopped at first upgrade0012.
+No retained migrate traceback/DDL/SQLSTATE proves MAT-03 was the observed CI error.
+Normal state has a **separate unknown H-build blocker** before T/P; failed target,
+numeric exit and stderr were not retained. Do not infer its cause from MAT-03 or
+Docker29 H success. Docker29 P preparation499.951432356s is **PARTIAL**; neither
+complete state lane passed. C0/C2/C6 receipts retain those detailed observations.
+
+All six findings remain OPEN: C2-MAT-01/P1, C1-MAT-01/P1, C1-MAT-02/P2,
+C5-MATERIAL-01/P2, C2-MAT-02/P2 and C2-MAT-03/P1. This source/client PASS closes none.
+Actual0012 fresh/populated/repeat/unused reverse/used55000-before-DDL/raw42/catalog/
+security/recovery/replay, known T→T2/current-version refusals, paired PHOTO/browser,
+both full state lanes including3 late C negatives and9/9+clean9/9 remain required.
+PG/Docker/browser/image builds/Actions execution **NOT RUN in R2 by task scope**.
+
+Next: C0 source intake → separately assigned C6 diagnostics-only work on the exact
+accepted C3 descendant → combined source intake → same PR34 normal automatic CI
+→ C1/C2/C5 actual/source disposition → later C8. No intermediate PR-head update,
+new PR, merge, dispatch/rerun or edits to other receipts. C3 HOLD after return;
+C1/C2/C5/C6/C8 HOLD until C0 issuance. PR34 Draft/BLOCKED; MATERIAL/M3 IN_PROGRESS,
+implementation not INTEGRATED/VERIFIED. Gate OFF; native/A08/renewal/collector/live/
+VM/working DB/S3/sends/deploy/M4 unissued; broad CI optimization/IMPL-05 DEFERRED.
+
+### 15.13. C6-M3.1-MATERIAL-CI-DIAG-R2 — bounded original-invocation diagnostics / 2026-10-16 UTC
+
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208852583),
+[accepted C3 intake](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208831490),
+[C3 source receipt](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208752834),
+[historical C6 diagnosis](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208328996).
+Separate branch/checkout `c6/m3-1-material-ci-diag-r2`, exact accepted base `f0c111ac0b74695cc12444ccdf077314d06d2a9b`, tree
+`ca3f638b206b232a7a6cd8f1920e31580991b58b`; its parent is d810dde939f727085af15f7614eeddd36f4909b8.
+Main/frozen E remains933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011.
+Existing Draft PR34 remains on `c6/m3-1-material-compat`/d810dde; no PR-head update.
+The complete contract through§15.12 is preserved: **551663 bytes**, SHA256
+`0be54876bec43bc88348586ccf8e7b99571be02207ed9af9773fcd06ce75f050`.
+Only this section is appended. Two focused source commits retain the accepted base;
+the final immediate parent is711934148b3921047501ff3e3c3b6e6ff34c74a4. Final head/tree/
+combined numstat appear in the canonical receipt.
+
+D1 observes the **same original H invocation**, only in the two existing state
+shards. Image/intent still invoke their original shell directly. The current
+wrapper sets up a private startup ZIP outside H; its sitecustomize entry establishes
+observation and lets Python itself execute the original stdin program. No stdin
+consumption/rewrite or alternate executor; argv/cwd/interpreter and original helper
+objects remain intact. PYTHONPATH and sys.path are restored before original code;
+temporary bytecode suppression is restored after importing H, without inserting
+observer files or caches into H. Unrelated interpreter invocations pass through.
+
+The original `e.command.__code__` is selected, with its original
+`migration_build_images.__code__` caller and actual build argv checked in memory.
+Only matching H docker builds are recorded; target runtime/development comes from
+that invocation, never from loop order. No command/helper/subprocess rebinding,
+duplicate call, probe build or retry. Evidence is labelled
+**INSTRUMENTED_IMMUTABLE_H** because tracing/reporting consumes time.
+
+| Frozen H binding | Exact identity |
+|---|---|
+| Executor source/tree |754f1c883e5a94a7fc9e729af2605424f949ba33 / b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f |
+| H shell blob |1672fbb4fb676ad69885043e46350f53334db0fc |
+| H test-module blob |99cf8d1a3f8a85b64e2785710a728964d5bd3f03 |
+| H helper blob |58486046a6bb5682a336a1578705ed973e7b4fc6 |
+
+Observer source/tree, current shell/module/helper blobs and generated observer-code
+SHA256 are separate from those executor identities. Git clean-source/tree/blob
+checks precede launch. The child verifies frozen file bytes, launcher identity/code
+hash and the intended compiled stdin entrypoint before observing original frames.
+Missing/substituted entry/source/path never yields valid diagnostic evidence.
+The startup ZIP is also bounded to128KiB of code and has only sitecustomize.py.
+
+D2 scopes observation to current P's **ordinary** migrate→run→original command calls.
+The P envelope executor identifies the host command module; each row identifies
+the selected E/P development image's source/tree.
+Source/tree come from accepted image proofs and the closed E/P source map; direction
+and revision are closed values. Original args/stdin/cwd/env, returned bytes/exception,
+30-second command limit, report stage/timing and source/schema order remain unchanged.
+Post-commit86 result-loss calls and their evidence are outside this observer scope.
+The producer labels P evidence INSTRUMENTED_CURRENT_P. Recognized InvalidRequestError
+parameter failures remain client errors with UNKNOWN SQLSTATE. PostgreSQL SQLSTATE
+is serialized only when explicitly present in bounded captured output and in the
+finite recognized set; no code is inferred from an exception name.
+
+D3 uses these additive reports, under existing artifact directories:
+`historical/build-observation.json` and `migration-P-observation.json`.
+They explain original invocations, not new product acceptance.
+
+| Closed schema/bound | Definition |
+|---|---|
+| Envelope v1 | phase/evidence; separate observer/executor bindings; accepted source→tree map; start/end monotonic times; trace-restored flag; status; bounded secondary codes; observed count/records; HMAC |
+| Invocation record | fixed operation H_DOCKER_BUILD/P_ALEMBIC; exact source/tree; target or UNKNOWN; closed direction/revision/stage; start/elapsed; outcome; numeric exit or UNKNOWN; finite exception/category; stream byte counts/status; SQLSTATE/step/line or UNKNOWN |
+| Stream classification | At most16KiB of each already captured stream, bounded head/tail; UNKNOWN/EMPTY/PRESENT/TRUNCATED explicit. No additional capture mode |
+| Persisted report | At most64KiB, at most16 records; current P has11 ordinary migrate callsites. Limit/observer errors make evidence incomplete |
+| Privacy | No raw output/argv/stdin/SQL/payload/URL/env/config/credentials/traceback/Dockerfile command text; unknown messages stay UNKNOWN |
+| Files | Temporary directories0700/files0600; same UID, resolved path, dev/inode/mode/single-link and descriptor/read stability checks; exclusive NOFOLLOW creates/opens |
+| Integrity/completion | Fresh private HMAC key per session, absent from exported report. Closed schema/source/clock/content validation and export hash; missing/tampered/incomplete/export-failed records cannot pass |
+| H final-write acknowledgement | Separate private FD carries one64-byte final-report hash after successful observer completion. Parent reads at most65 bytes without blocking; missing/partial/mismatched ACK refuses completeness. Original stdout/stderr capture and shell exit are unchanged |
+| Trace lifecycle | Original frame/code observation only; previous tracer conflict is incomplete evidence. Prior tracing state is restored, including exception/cancellation paths |
+
+The independent H ACK prevents a visible COMPLETE file whose last fsync failed
+from being accepted. In-process P additionally retains observer failure state.
+Export identity is anchored to the opened descriptor before copying and checked
+again afterward. Replaced copies are rejected; failure cleanup never removes a
+foreign replacement. Failed exports remove their own partial target when identity
+still matches. Diagnostics never claim COMPLETE solely from a parseable report or exit0.
+
+Executor failure remains primary. Setup/import failure runs the original H shell
+once without observation and records invalid diagnostics. Classifier/write/export/
+private cleanup problems are separate finite secondary outcomes. Existing H reports,
+source pairing, exit/traceback, source checks and owned-volume cleanup are preserved.
+For successful H, the distinct H_DIAGNOSTIC_VALIDATION_FAILED gate runs after
+historical owned-volume checks; successful P with invalid diagnostics gets
+P_DIAGNOSTIC_VALIDATION_FAILED. P's existing finally publishes invalid diagnostic
+status while preserving the original exception object when execution already failed.
+The outer P success gate additionally requires the exported report hash.
+
+Observation is charged to existing clocks: H stays before original S and inside
+its existing warm-build/job limits; P uses its existing preparation/runtime limits.
+No S reset/move/subtraction, new budget, timeout/cache/pin change, assertion weakening
+or cleanup shortcut. Retained version1 S+600, P version2 S+720, remaining+480 /
+nominal S+1200 supervision, cleanup90 and state25/browser25/foundation45 stay fixed.
+
+**Local verification, no runtime gate claim.** Reused cached locked
+`/workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python`, with
+`PYTHONPATH=backend/src:tests` selecting this checkout. No sync/install/services.
+
+```sh
+PYTHONPATH=backend/src:tests /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m pytest -q tests/test_telegram_egress_migration.py -k 'test_invocation_' --tb=short
+PYTHONPATH=backend/src:tests /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m pytest -q tests/test_telegram_egress_migration.py -k 'invocation or material_budget or material_handoff or material_phase or material_entrypoint or material_shell or schema_entrypoint or control_cleanup or control_secondary or retained or ack_loss or material_recovery' --tb=short
+/workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m ruff check tests/test_telegram_egress_migration.py
+/workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m ruff format --check tests/test_telegram_egress_migration.py
+sh -n scripts/test_telegram_egress_migration.sh
+git diff --check f0c111ac0b74695cc12444ccdf077314d06d2a9b
+```
+
+Results: **60 new invocation cases PASS in7.65s; focused combined196 PASS /
+390 deselected in13.02s** (the60 are included, not additional unique cases).
+Ruff/format, shell/embedded-Python/generated-launcher compilation and diff checks
+PASS. Units use real isolated Python subprocesses and the original frozen helper/
+build objects with synthetic local executable/test doubles; no daemon/PG operation.
+They cover both actual targets, return bytes/nonzero/partial timeout/cancellation,
+client vs server/UNKNOWN classification, bounds/canaries, source/entry/owner/path/
+launcher substitution, tampering/incompleteness/write/export/final-fsync/ACK failures,
+state-only boundary, failure precedence, restored tracing and charged observer costs.
+The existing P shell-gate unit adds only valid diagnostic fixture data and two
+new status/hash negatives; all prior budget/cleanup assertions remain.
+
+Offline source audit verifies original11 attachment/repo/manifest/frozen-main bytes,
+the complete§15.12 prefix and the exact five-path scope. **134 existing top-level
+function/class definitions stay byte-exact**; only current P and its existing shell
+gate unit are adjusted, with additive diagnostics/tests. Removing only the approved
+diagnostic statements from current P and the outer embedded program yields ASTs
+identical to accepted base, including ACK86, cleanup, requests/order and original S.
+All product/PG/C3 regression nodes, migration0012 and applied0001–0011/ORIGINAL17/
+OLD_CHECK4, source inventories10 columns/6 old tables/4 new/42 total/132 signatures,
+private Inbox winning pair/five NULL delivery fields, frozen H/T/C/G/E, workflows/
+Compose/images/pins/dependencies/locks are unchanged to the accepted C3 base.
+
+Historical CI38850821014/attempt1 tested merge51fca8…/tree fb06ad7…, **not f0c111a
+or this descendant**:4 SUCCESS/5 FAILURE, clean4 SUCCESS/5 SKIPPED. H root cause
+remains UNKNOWN. Docker29 preparation499.951432356s is partial; P/full state and3 late
+C negatives were not completed. Accepted C3 null-bind correction is independent
+source/client evidence, not recovered historical CI stderr or a common root cause.
+
+All six findings stay OPEN: C2-MAT-01/03, C1-MAT-01/02, C5-MATERIAL-01, C2-MAT-02.
+C6 source is REVIEW on return, then HOLD; C3/C1/C2/C5/C8 HOLD. No actual PG, Docker
+build/state, browser, Actions dispatch/rerun/cancel or live/VM/working DB/S3/sends/
+deploy execution. No PR-head update/new PR/merge. C0 reviews the combined descendant,
+advances the same Draft PR34 once and observes normal automatic CI; concrete new
+failures return to C0 without guessed fixes or another budget increase. Still require
+all9+clean9 on exact tested SHA/tree, both complete state lanes/full retained negatives/
+P/late C cleanup, actual0012 lifecycle/raw42/catalog/security/recovery/replay/current
+T→T2 and paired PHOTO/browser, C1/C2/C5 disposition and later C8. PR34 Draft/BLOCKED;
+MATERIAL/M3 IN_PROGRESS, not INTEGRATED/VERIFIED, gate OFF. Native/A08/renewal/
+collector/M4 unissued; broad CI optimization/IMPL-05 DEFERRED.
+
+### 15.14. C6-M3.1-MATERIAL-CI-DIAG-R3 — stdlib H host boundary / 2026-10-16 UTC
+
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209721060),
+[C0-DIAG-01/P1 reproduction/disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209702274),
+[historical R2 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209600353).
+Separate branch `c6/m3-1-material-ci-diag-r3`; exact correction base/sole parent
+`a9f58a1364b98b5331b83fa17893363abb7d5dae`, tree
+`4c938731b25a4b0424f8e86d33bcf779f6f1fe8b` (its sole parent7119341…).
+R2 is a correction base, not accepted for advancing PR34. Accepted C3 ancestor
+f0c111a… and main/frozen E933ddd…/0011 remain fixed; PR34 stays OPEN/Draft on
+`c6/m3-1-material-compat`/d810dde939f727085af15f7614eeddd36f4909b8.
+One focused source descendant; final head/tree/numstat in the canonical receipt.
+The complete old contract through§15.13 is preserved byte-for-byte: **563611 bytes**,
+SHA256 `2aee65737913ebfede51103ae02e8758405ce3f934d7a7abf040cda4fd9b109a`.
+
+The real outer state loader previously reached test-only `import pytest`. With
+site packages disabled it fell back to unobserved H/DIAGNOSTIC_MODULE_LOAD_FAILED;
+successful H could not pass the distinct diagnostic gate. The explicit
+`__h_observer_definitions__` entrypoint now dispatches before pytest imports and
+runs the unchanged observer while runpy's module remains available to ordinary
+`inspect.getsource`. Only stdlib is required. A shared request/result container
+transfers the original CompletedProcess/summary or the exact original exception
+object. The outer boundary re-raises that exception outside its load-failure catch.
+The started marker prevents a second H invocation after dispatch. Missing module
+still invokes original H once with finite INVALID diagnostics; observer setup
+failure retains its existing DIAGNOSTIC_SETUP_FAILED behavior. Image/intent stay
+direct. SystemExit(0) completes host dispatch; it does not replace H's exit code.
+Ordinary pytest collection and all existing cleanup/success gates remain intact.
+
+**Observed regression, not a proposed expectation.** The new fixture/test nodes
+were copied to an external test file and run from a separate, unchanged detached
+a9 checkout. All274 tracked files were independently blob-checked against its
+index. The child runs `python -S`, executes the actual outer state branch with
+real runpy/full checked-in source and records any pytest import attempt. No loader
+or definitions namespace is stubbed. Only external H execution is a stdlib double;
+its synthetic empty completion uses the actual observer and independent ACK.
+Test-only AST extraction selects the outer branch; runtime source is not rewritten.
+
+```sh
+# cwd: /workspace/scratch/65ac7d472387/c6-material-ci-diag-r3-baseline
+PYTHONPATH=backend/src:tests /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m pytest -q /workspace/scratch/65ac7d472387/c6-material-ci-diag-r3-evidence/test_stdlib_host_regression.py --tb=short
+# cwd: /workspace/scratch/65ac7d472387/c6-material-ci-diag-r3
+PYTHONPATH=backend/src:tests /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m pytest -q tests/test_telegram_egress_migration.py -k 'invocation or material_shell or schema_entrypoint' --tb=short
+```
+
+Base: **6 FAIL/9 PASS in6.10s**, pytest attempted in normal/setup state cases;
+normal H success/nonzero yielded INVALID/DIAGNOSTIC_MODULE_LOAD_FAILED, exactly
+one invocation. Correction: **91 PASS/510 deselected in14.80s**, including all15
+new cases and the existing60 invocation cases. New cases cover H success/nonzero/
+original OSError identity, exactly-one invocation, COMPLETE result/report/hash
+transfer, finite invalid setup/load, unchanged image/intent, no pytest import and
+restored host environment/sys.path/tracing. No broader suite repeated.
+
+Ruff check/format, shell syntax, module/embedded/generated-observer compilation,
+diff and source audit PASS. **168 existing definitions are byte-exact**; only the
+related outer-seam test's loader double changes, with its assertions preserved.
+The module outside this dispatch/two new nodes/related seam and the outer program
+outside this H boundary are AST-exact. Generated observer SHA256 remains
+`6e254dda632211b318ed299345c73d1b5e95e2bebb32af330247402f64055458`.
+Exactly five allowed paths changed. Original11, all product/PG/C3 regressions,
+0001–0011/ORIGINAL17/OLD_CHECK4/0012←0011, inventories/Inbox winning pair/five NULL
+Job fields, frozen H/T/C/G/E, P semantics, source/owner/path/HMAC/final-ACK/privacy
+protocol,16KiB/64KiB/16 records, workflows/locks and all budgets are unchanged.
+
+Historical R2's60/196 PASS remain evidence for a9 only; C0-DIAG-01 demonstrates
+their missing stdlib-loader coverage. This correction is source/unit evidence,
+not actual H/build/state/PG/PHOTO/browser acceptance or recovered historical stderr.
+Historical38850821014 remains4 SUCCESS/5 FAILURE, clean4 SUCCESS/5 SKIPPED; H cause
+UNKNOWN and Docker29 prep499.951432356s partial. **Seven findings OPEN:**
+C2-MAT-01/02/03, C1-MAT-01/02, C5-MATERIAL-01, C0-DIAG-01.
+C6 REVIEW on source return, then HOLD; C3/C1/C2/C5/C8 HOLD. No installs/services,
+Docker/PG/browser/Actions execution, PR-head update/new PR/merge or live operation.
+C0 reviews before any PR advancement; actual9+clean9, both full state/P lanes,
+retained/late-C negatives,0012/PG/current-T→T2/paired PHOTO/browser and subsequent
+C1/C2/C5/later C8 acceptance remain required. S/retained600/P720/remaining+480/
+nominal S+1200/cleanup90/individual bounds/state25/browser25/foundation45 unchanged.
+PR34 Draft/BLOCKED; MATERIAL/M3 IN_PROGRESS, not INTEGRATED/VERIFIED; gate OFF.
+Native/A08/renewal/collector/live/VM/working DB/S3/sends/deploy/M4 unissued;
+IMPL-05/broad CI optimization DEFERRED.
+
+### 15.15. C6-M3.1-MATERIAL-CI-DIAG-R4 — diagnostic unit image inputs / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210115890),
+[C0-DIAG-02/P1 reproduction and R3 intake](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210103047).
+Branch `c6/m3-1-material-ci-diag-r4`; exact base/future sole parent
+`9cb1467c1705827a4e782421754850f5dee762ce`, tree
+`e0c1e5231cddfd25e44071990031371aaa16c482`, base parent a9f58a1….
+R3's stdlib host correction is source/unit accepted and preserved. Main/frozen
+E933ddd…/0011 and OPEN/Draft PR34 c6/m3-1-material-compat/d810dde… unchanged.
+One focused source descendant; exact final head/tree/numstat in canonical receipt.
+Entire contract through§15.14 preserved: **569463 bytes**, SHA256
+`bd6f9cb9cc6ef73edacfd9634fd415f9275d2e569ecee8cd4a6d8d311e51b582`.
+
+The ordinary units previously used git show and clone/commit/worktree even though
+the existing development image copies no .git/history. Only post-pytest diagnostic
+fixtures/tests change. The new `tests/fixtures/telegram_egress_h_source.json` is
+83297 bytes of versioned stdlib-readable zlib/base64 input data. Four exact frozen
+H files are verified against their actual Git objects during preparation; runtime
+tests read only this committed data, validate fixed paths/source/tree/decoded sizes/
+Git blobs, bound decompression and reject trailing/incomplete compressed data.
+
+| Frozen H754f1c… / tree b4fdef8… input | Decoded bytes | Git blob |
+|---|---:|---|
+| scripts/test_telegram_egress_migration.sh |6248|1672fbb4fb676ad69885043e46350f53334db0fc|
+| tests/test_telegram_egress_migration.py |84396|99cf8d1a3f8a85b64e2785710a728964d5bd3f03|
+| scripts/prepare_telegram_egress.py |139789|58486046a6bb5682a336a1578705ed973e7b4fc6|
+| infra/images.lock.env |720|1f14e1686acd3ffdde9986ec58352d0e03735af8|
+
+Total **231153 decoded bytes**; no reconstruction or current-source replacement.
+COPY tests already includes the fixture. invocation_units retains its original H
+helper/frame/launcher assertions. stdlib_host_checkout copies actual current files
+and those H bytes. Its real-loader child doubles only external H/Git-command IO;
+finite Git replies identify explicitly SYNTHETIC_UNIT source/tree values derived
+from actual copied blobs. Unexpected commands fail and are asserted absent.
+Real schema_source_binding/diagnostic_binding, runpy, observer/launcher/classifier
+and the whole loaded definitions namespace are not replaced. The child still uses
+python -S, records/refuses pytest imports and checks all15 original cases. Synthetic
+Git IO applies only to these units; both actual state lanes still require real Git
+source/tree/blob/clean validation. No runtime protocol/acceptance rule changes.
+
+**Observed packaging regression.** Separate unchanged9cb checkout and its complete
+source-only export were blob-checked (274 files); export has no .git. With Git
+available the two exact C0 nodes gave **2 setup ERROR in1.35s**, exit1: git show
+and git clone each exit128. Commands, from that export:
+
+```sh
+PYTHONPATH=backend/src:tests /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m pytest -q 'tests/test_telegram_egress_migration.py::test_invocation_h_launcher_original_frozen_functions_and_stream_bounds[exit-runtime]' 'tests/test_telegram_egress_migration.py::test_invocation_outer_stdlib_host_real_loader[state-none-success]' --tb=short
+```
+
+Correction ran in a fresh **168-file development COPY layout**: pyproject.toml,
+uv.lock, backend/, migrations/, alembic.ini, tests/, scripts/, contracts/ and only
+infra/postgres/ensure_m1_3_prerequisites.sh. Per-file byte/SHA256 manifest matches
+those inputs; no .git, uncopied docs/infra/image pins, parent checkout or history.
+Empty inherited environment; PATH contains only sh/python3 symlinks, Git lookup
+returns None, and the parent audit hook rejects any Git subprocess. PYTHONPATH is
+backend/src:tests; dependencies are the unchanged cached locked venv. Exact run,
+cwd c6-material-ci-diag-r4-evidence/copied-layout under the shared scratch root:
+
+```sh
+/usr/bin/env -i PATH=/workspace/scratch/65ac7d472387/c6-material-ci-diag-r4-evidence/restricted-bin PYTHONPATH=backend/src:tests PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 LANG=C.UTF-8 /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python /workspace/scratch/65ac7d472387/c6-material-ci-diag-r4-evidence/guarded_pytest.py -q tests/test_telegram_egress_migration.py -k 'invocation or material_shell or schema_entrypoint' --tb=short --junitxml=/workspace/scratch/65ac7d472387/c6-material-ci-diag-r4-evidence/copied-layout-results.xml
+```
+
+**91 PASS/510 deselected in10.00s**, JUnit91 tests/0 failure/0 error/0 skipped;
+no xfail/skip/filter changes. Includes all60 earlier invocation and15 stdlib-host
+cases: success/nonzero/original exception identity, one H invocation, setup/load
+INVALID, COMPLETE result/hash/ACK transfer, direct image/intent, privacy/bounds and
+restored environment/path/tracing. Actual Git subprocess attempts:0. Executables
+named docker are the existing synthetic fixture executables, not Docker/daemon.
+Supplemental loader control uses exact a9 shell/module bytes with the revised
+external unit nodes, still without Git: **6 FAIL/9 PASS in2.62s**, all six on the
+pytest import attempt. R3's missing-pytest regression remains effective.
+
+Ruff/format, compilation, diff/source/fixture/COPY audits PASS. All **306538 bytes**
+before test-only pytest import remain exact, SHA256
+`3b1b9e4d617d89da8268ba66d37e3097d188c1ca7504f8c161d170137062d6c9`.
+Entire shell blob7d1e08e…/SHA256145a8300… unchanged.168 other existing definitions,
+all original host assertions/cases, Original11, C3/product/PG, migrations/ORIGINAL17/
+OLD_CHECK4/0012←0011, Inbox/Job/inventory invariants, frozen H/T/C/G/E, generated
+observer6e254dda…, limits/HMAC/ACK/privacy/export/current P and all budgets remain
+unchanged. Exactly five allowed paths; no Dockerfile/workflow/dependency expansion.
+
+Packaging/unit evidence only; no install/service/Docker/build/PG/browser/Actions/
+live operation or new historical H cause. Historical38850821014 stays4 SUCCESS/
+5 FAILURE, clean4 SUCCESS/5 SKIPPED; H cause UNKNOWN, Docker29 prep499.951432356s
+partial. **Eight findings OPEN:** C2-MAT-01/02/03, C1-MAT-01/02, C5-MATERIAL-01,
+C0-DIAG-01/02. DIAG-01 source-fixed; actual state acceptance remains pending.
+C6 REVIEW then HOLD; C3/C1/C2/C5/C8 HOLD. C0 packaging intake before any update of
+the same Draft PR34; actual9+clean9/both full state-P/retained-late-C/0012-PG/
+current-T→T2/paired PHOTO-browser, C1/C2/C5 and later C8 still required. No PR-head
+update/new PR/merge/dispatch/rerun/cancel. S/600/P720/+480/S+1200/cleanup90 and
+individual/state25/browser25/foundation45 unchanged. MATERIAL/M3 IN_PROGRESS,
+not INTEGRATED/VERIFIED; PR34 Draft/BLOCKED; gate OFF. Unissued native/A08/renewal/
+collector/live/VM/working DB/S3/sends/deploy/M4 and deferred IMPL-05 unchanged.
+
+### 15.16. C6-M3.1-MATERIAL-HARNESS-R5 — packaged inputs and saved V1 reader / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211450459),
+[C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211420811).
+Separate branch `c6/m3-1-material-harness-r5`, exact base/sole parent
+`d7cea5a2e9da7b384aeaf11dd41df3e1e4abcbff`, base tree
+`a471c98e16343cf9d17d4d184df88ed491184544`. One focused descendant; final head/tree/
+numstat in canonical PR34 receipt. PR34 remains OPEN/Draft on that base, main/frozen
+E `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011 unchanged. Entire contract through
+§15.15 preserved: **576446 bytes**, SHA256
+`76ed7dd2fe91834ad7884d07c0f95e76889875232981fcc29ab58d48e3b8a75e`.
+
+**Observed baseline.** CI38868575912/attempt1 tested merge
+`58542ff01cfbcd95f5247a901168e7525f5ef9f0` with matching tree:6 SUCCESS/3 FAILURE,
+clean6 SUCCESS/3 SKIPPED. Foundation116867029172 failed all11 preparation units
+at uncopied `/app/infra/images.lock.env` before preparation logic;1395 passed/799
+deselected. Both state reports fail at material_controller_fresh: ValidationError,
+material_schema_controller:1995→parse_snapshot:84, SQLSTATE NULL. C6 re-read these
+three job logs and both state reports, verified ZIP hashes/tested merge/all275
+source-P archive blobs. Actual missing field locations/payload were not exported.
+Separate clean d7 baseline and exact168-file COPY layout reproduced `[pass]`:
+**1 expected FAIL in0.95s**, same missing input,0 subprocess attempts. Executing the
+unchanged controller reader block on synthetic source-shaped ordinary/guarded raw
+inputs reproduces missing code/job_id; ordinary reader also rejects six guarded
+fields. Each matching reader accepts only the nonpersistent response envelope.
+
+**Narrow correction.** material_budget_fixture explicitly depends on the unchanged
+frozen_h_source fixture, reading its verified720-byte image pins before e.ROOT is
+substituted. The preparation unit writes those bytes into its disposable input.
+All11 cases/real entrypoint/assertions remain unchanged; no current infra/Git lookup.
+Pins equal current and frozen H blob1f14e1686acd3ffdde9986ec58352d0e03735af8.
+
+The fresh controller now calls material_saved_v1_snapshots. Its sole SELECT reads
+id/kind/step/turn_input for **every non-NULL input**, with no consumer/step filtering.
+Nonempty inventory and unique actual UUID Job identities are required. Closed
+PROCESS_TURN/TEST_CONSUME selects parse_snapshot; PROCESS_TURN/GUARDED_TEXT with
+CONTROLLED_GUARDS_V1 selects parse_guarded_snapshot. Only code=SNAPSHOT/actual Job id
+are added in memory. Stored JSON, all fields and snapshot_digest are preserved and
+checked; no schema_version or persisted code/job_id is accepted. Unknown/wrong
+kind/step/consumer, extra fields or malformed inputs fail. No digest recomputation,
+row update, permissive fallback or stale worker execution. Escalation keeps its own
+immutable snapshot; ESCALATE_OWNER is not a third turn_input form. Other controller,
+catalog/fingerprint/recovery/refusal/ownership/pairing assertions remain byte-exact.
+
+**Executed source/unit verification**, cached locked Python3.13.16 dependencies:
+
+| Exact selection in the development COPY layout | Result |
+|---|---|
+| All seven material_budget_fixture consumers, explicitly including the entire11-case preparation function |78 PASS|
+| Three new test functions calling the actual controller helper: mixed ordinary/guarded inventory, Job binding/raw decoder refusal,28 invalid-last-row cases, empty/duplicate identity |32 PASS|
+| Combined preceding two selections; all subprocess/network attempts denied by parent audit |**110 PASS in2.87s**,0 subprocess/network attempts|
+| Existing invocation/host-loader/material-shell/schema-entrypoint selector |**91 PASS/510 deselected in10.05s**|
+
+Both runs use the same exact168 copied files, no.git/history/current infra pins,
+env-i, PATH containing only sh/python3 and Git lookup None. Per-file SHA256 manifest
+`9082ccc0f52debb7cd5cd94d95c37f0842d91429798c248e0a19afbe3daa2c51` is in the receipt.
+JUnit:0 failure/error/skip; no xfails or marker/collection exclusions.15 material-shell
+cases overlap:201 executions,**186 distinct cases**, not201 independent cases.
+The91 run retains real python-S/runpy and finite external H/Git units,37 synthetic
+docker/38 Python/2 sh parent launches;0 real Git or network attempts. Audit restrictions
+apply to the parent; this is not an OS sandbox or real image/DB execution. Full
+commands/environment, baseline probe and manifest are in the canonical receipt.
+
+Ruff/format/compilation/diff/scope/source audits PASS. Pre-pytest runtime prefix
+306538 bytes/SHA2563b1b9e4d617d89da8268ba66d37e3097d188c1ca7504f8c161d170137062d6c9,
+whole shell blob7d1e08edcfc11d12c5e7067586ec0cd795e664c5, frozen-H JSON/decoder,
+original11, product/strict parsers/C3/applied migrations/0012←0011/ORIGINAL17/OLD_CHECK4,
+Inbox winning pair/five NULL Job fields/current-T→T2/PHOTO, frozen H/T/C/G/E,
+observer/ACK/privacy/bounds/workflows/pins/dependencies remain unchanged.
+
+C0 closed **C5-MATERIAL-01 and C0-DIAG-01** on scoped actual d7/merge58542ff evidence.
+**Seven distinct findings OPEN:** C2-MAT-01/02/03, C1-MAT-01/02, C0-DIAG-02
+(C1-R2-01 is its packaging counterexample), C1-R2-02. Units close none. Latest actual
+P preparation623.690022374s/688.934643093s is scoped PASS720, not PASS600/full-state.
+Original S/retained600/P720/remaining+480/nominal S+1200/cleanup90/individual bounds/
+state25/browser25/foundation45 unchanged; no retry/reset/subtraction/budget increase.
+Full product PG and both complete P/state lifecycles, used55000/used recovery/cutover/
+restart, retained positives/full120-timeout/export/all3 late-C negatives and9+clean9
+remain mandatory. C0 intake before C0 alone advances the same Draft PR for normal
+automatic CI; C1/C2 acceptance, applicable C5 bridge, later independent C8 follow.
+No new Docker/PG/browser/Actions/services/install/live/PR-head/new PR/merge operation.
+C6 HOLD after return; C3/C1/C2/C5/C8 HOLD. MATERIAL/M3 IN_PROGRESS, not INTEGRATED/
+VERIFIED; gate OFF. Native/A08/renewal/collector/M4 unissued; IMPL-05/broad optimization
+DEFERRED; VM/working DB/S3/sends/deploy remain unissued.
+
+### 15.17. C2-M3.1-MATERIAL-CURRENT-PROFILE-R4 — test boundaries and same-call SENT diagnostics / 2026-10-16 UTC
+
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218233521),
+[C0 R3 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218176738),
+[C2 R3 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6217695756),
+[C1 R3 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6217641903).
+This is the separately issued source task, not a reopening of the completed reviews.
+Branch `c2/m3-1-material-current-profile-r4`; exact base/sole parent
+`89f9e157ddfc328ba4564fc003b047f517352cdf`, base tree
+`9be95d45e6a70bf76adf146c1035e571d52205af`. One focused descendant;
+final head/tree/numstat and commands belong in the canonical PR34 receipt.
+Main/base/frozen E `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011 and
+PR34 OPEN/Draft `c6/m3-1-material-compat` at89f9e15 remain unchanged.
+The entire preceding582717-byte contract through§15.16 is byte-exact,
+SHA256 `6f68bd4443ec384b0cceee98cc9af8276d15846962ca162207ac9fc06db76cfe`.
+
+**Actual baseline, not execution of this source.** CI38909147338/attempt1 tested
+merge `d0fd7e5da7c29b1e065e72a7bfcc11519bdd39d6`:5 SUCCESS/4 FAILURE,
+clean5 SUCCESS/4 SKIPPED. Foundation117000270183:1438 packaged units PASS;
+PG785 PASS/14 FAIL. Browser43 PASS/1 FAIL. Both state117000270974/117000270455
+stop at material_controller_fresh/MessageResponse:2037 after the saved-V1 reader.
+The two foundation DTO failures export occurred_at/created_at pattern errors;
+the state reports export only ValidationError/frame/sqlstate=NULL. The analogous
+field cause in state remains a source-supported inference. Saved reader progress
+does not accept fresh/catalog or later P lifecycle. Empty archived worktree-status
+does not replace four skipped workflow clean-source gates.
+
+C0 CLOSED C0-DIAG-02 (packaging alias C1-R2-01), C1-MAT-02 and C2-MAT-03 on this
+actual run; C5-MATERIAL-01/C0-DIAG-01 retain scoped closure. Historical statements
+in earlier sections that call the R3 helper's coverage “all42” are corrected here:
+it covered41 data tables, intentionally omitting platform.alembic_version.
+All10 intended negative/same-claim-positive R3 cases passed; seven independent
+canonical used-refusal cases covered42 but do not supply that R3 assertion.
+
+| Source correction | Preserved boundary / remaining execution |
+|---|---|
+| Three raw SQL→MessageResponse sites | Existing wire_dates precedes the unchanged strict DTO in provenance PG, fresh controller and current0012 compatibility case. No key dropping, permissive timestamp/parser, storage changes or R5 saved-V1 reader edits; full page/current/history/tenant/provider/wrong-Client/later catalog gates remain |
+| Six held TELEGRAM race arms | Existing v2_fixture wraps only the two direct current-profile producers. Each telegram_ingest remains on its original held connection/transaction; commit/rollback/barrier/Resume and earliest-origin assertions remain. Second arrival keeps its identity/text/date relationships. Shared V1 projection and CONTROLLED neighbors unchanged |
+| Lifecycle refresh companion | Same callback point uses normal ingest_update with the original raw lifecycle update;503 UNAVAILABLE/no-new-intention/UNVERIFIED assertions unchanged |
+| Current projection/capabilities | Closed exact message key set gains current. Catalog expects23 exact signatures:2 runtime replay wrappers/21 private,7 invoker/16 SECURITY DEFINER; owner/search_path/PUBLIC/runtime and predecessor/negative privilege assertions remain. No wildcard, grant or product SQL change |
+| Populated0011 seed | Every enumerated Turn follows actual COLLECTING→GROUP, WAITING_MEDIA→due MEDIA, READY→TEST_CONSUME; current-revision claim helper and final READY assertion remain strict. File WINNER may already seal/bump a Turn. No forced Job/status/revision, skipped Turn, manufactured snapshot or removed WINNER; frozen V1 receipt/digest, pending/ignored/lifecycle/UNKNOWN and repeat exact reverse/hash loop retained |
+| UTC caller | expires_at.astimezone(UTC) supplies the identical instant to unchanged serial_clock; production deadlines and all EXPIRED assertions unchanged |
+| R3 rollback42 | Existing41 data fingerprints plus actual ordered version_num rows before/after the rejected transaction; assert41 data entries/one metadata row. Shared legacy fingerprint semantics untouched. Exact SQLSTATE/constraint/reason/context, zero partial atom and same original/same claim positive after only trigger removal remain |
+| SENT | Diagnostic-only instrumentation of the existing single finish_send inside original3s timeout and held channel_connection FOR UPDATE. No second SQL/finalizer/probe, release/retry, mapper patch or product/DDL correction. Stable-target lock order/implicit FK closure and atomic SENT+deferred apply remain requirements |
+
+**Diagnostic contract.** Test-only formatter and scope live in the existing pure
+`tests/test_m3_1_provenance.py`; the named PG case imports the scope. This keeps
+the six new pure tests independent of PG harness imports. The report is one
+ASCII JSON line, including LF≤4096 bytes: static stage/action, closed outcome,
+at most4 distinct exception nodes through orig/cause/context, closed exception
+class and schema/table/constraint identifiers, five-character uppercase SQLSTATE,
+and at most3 allowlisted platform function/numeric-line pairs per node.
+Absent/untrusted/oversized values are UNKNOWN; traversal is cycle-safe and
+chain_limited records a truncated chain. Context input is bounded to16KiB and
+only parsed into the closed function/line fields. No raw context, SQL, parameters,
+message/detail, arbitrary str/repr, payload/text/IDs/claims/tokens/connection strings
+are emitted. Formatter failure yields static UNKNOWN metadata; sink failure does
+not replace the primary. The original exception identity/traceback survives both
+failing and suppressing lock cleanup. Success/setup failures do not emit a fabricated
+finalizer diagnostic. Existing actual primary SQLSTATE/constraint/lock edge remains
+**UNKNOWN**; synthetic unit SQLSTATE values are not SENT execution evidence.
+
+**Local source/pure evidence.** Available Python3.12.14/Pydantic2.13.5, cached
+Ruff0.16.7; required Python3.13 interpreter is absent (retained venv links are broken).
+Ruff check/format for all9 changed Python modules, compile/diff and exact AST/source
+scope audits PASS. Existing235 function bodies/decorators in those modules stay
+byte-exact; existing pure codec/migration/model tests and R5 reader untouched.
+Six new tests execute with cached pytest packages:6 PASS/64 deselected in0.86s,
+no skips/xfails, on3.12 rather than the packaged3.13 image. The first local attempt
+imported the PG harness and failed6 times on unavailable psycopg/libpq before the
+formatter; placing the helper in the permitted pure module removed that dependency.
+No install or environment bootstrapping followed. Exact-source pure probes also
+reproduce the two raw timestamp failures and validate strict wire_dates output/
+unchanged input, V2 normalizer+fingerprint equality and second-arrival relationships,
+and same-instant UTC normalization. These are not full1438-unit/PG/state acceptance.
+All14 prior PG failures and both state sites were reviewed:13 have the bounded test
+corrections above; SENT receives diagnostics only. No broader suite or service run.
+
+The closed12-path scope contains only the nine named test modules and these three
+task documents. Backend/product/models/decoders/Worker/error mapper, every migration
+including0012 and applied0001–0011, ORIGINAL17/OLD_CHECK4, original11, V1/hash/codec,
+private Inbox winning pair/five NULL Job delivery fields, terminal/token/T→T2,
+scripts/runtime/shell/frozen-H fixture, infra/workflows/Compose/Dockerfiles/pins/locks/
+dependencies and frontend remain byte-exact.
+
+**Eleven distinct OPEN findings per C0; this source closes none:**
+C1-MAT-01/P1 (C1-R3-02 alias), C1-R2-02/P2 (C1-R3-01 alias),
+C2-MAT-01/P1, C2-MAT-02/P2, C1-R3-03/P2, C0-R3-01/P2,
+C0-R3-02/P2, C0-R3-03/P2, C0-R3-04/P2, C0-R3-05/P2 and C5-R3-01/P2.
+C5 separately ACTIVE only on frontend/e2e/messaging.spec.ts from89; no C5 source
+absorbed here. C1/C3/C6/C8 HOLD. C2 source REVIEW on return, then HOLD.
+C0 combines accepted independent returns before one normal automatic CI advance.
+Required actual gates:9+clean9, full product PG/strict fresh DTO+tenant/wrong-Client,
+SENT lock/atomicity, EXPIRED precedence, both ingress race suites, exact catalog/
+ACL/populated reverse/R3 raw42, both complete state-P/used/recovery/cutover/restart,
+retained positives/full120-timeout/export/all3 late-C negatives and owned cleanup,
+remaining C1/C2/applicable C5 acceptance then independent C8.
+
+MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; not INTEGRATED/VERIFIED; gate OFF.
+Original S/retained600/P720/remaining+480/nominal S+1200/cleanup90/state25/browser25/
+foundation45 and individual limits unchanged. No clock reset/charges subtraction/
+retry/budget increase, new PR/PR-head advance/merge/dispatch/rerun/cancel, installs/
+new services/Docker/PG/browser runtime or live operation. VM/working DB/S3/sends/
+deploy/native/A08/P-A03-09/renewal/collector/M4 unissued; IMPL-05/broad optimization
+DEFERRED.
+
+### 15.18. C2-M3.1-MATERIAL-SENT-LOCK-R5 — single target/context updates and typed tenancy identity / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220709356),
+[C0 R4 actual disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220674632),
+[C2 R4 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220498853).
+Separate branch `c2/m3-1-material-sent-lock-r5`; exact base/sole parent
+`36240388fa580e563699c4dec3fd989cc2dd09f6`, tree
+`cb5c38e78a145184d8792f53702e102275fbb785`; ordered base parents
+`cb0e49af1a7ff263593373b41b116ef7d26c11c6`,
+`ef86965c4b4d747be5823034f81b1e187781f7b8`.
+One focused descendant; full head/tree/numstat/commands in the canonical receipt.
+Main/frozen E `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011 and
+PR34 OPEN/Draft `c6/m3-1-material-compat` at36240388 remain unchanged.
+The entire preceding592048-byte contract through§15.17 stays byte-exact,
+SHA256 `ad5697568bcd71639c06fbf827c97481c9e1149879a538518599866a72fb3604`.
+
+**Observed baseline; no new PostgreSQL execution.** CI38926368179/attempt1 tested
+merge `d3c39fa8977d86aa25f6ab9cc713a0c7f55d2f22`:8 SUCCESS/1 FAILURE,
+clean8 SUCCESS/1 SKIPPED. Foundation117058825254:1444 units PASS;
+797 PG PASS/2 FAIL. The original one-call SENT diagnostic is760 ASCII bytes/LF,
+chain_limited=false: MessagingError→OperationalError→LockNotAvailable/55P03;
+frames material_apply:17→material_bind:40→turn_material:21. Schema/table/constraint
+remain UNKNOWN. SENT failed at test line1018; UNKNOWN passed; subsequent SENT
+readback NOT RUN. No particular FK/resource/lock_timeout/deadlock was observed.
+The other failure is exact23 tenancy signature equality: composite type rendering
+omitted platform qualifiers, with the dedicated profile tail NOT RUN.
+
+**Source-supported RI cause and full closure.** Read the authoritative PostgreSQL18
+source at pinned `92d47d544bf64274b6a7aa8775f7b35bcf71f339`:
+[RI update gate1490–1495 and lookup426](https://github.com/postgres/postgres/blob/92d47d544bf64274b6a7aa8775f7b35bcf71f339/src/backend/utils/adt/ri_triggers.c#L1417-L1500),
+[heap UPDATE new xmin3874](https://github.com/postgres/postgres/blob/92d47d544bf64274b6a7aa8775f7b35bcf71f339/src/backend/access/heap/heapam.c#L3868-L3878),
+[slot raw-xmin check798–800](https://github.com/postgres/postgres/blob/92d47d544bf64274b6a7aa8775f7b35bcf71f339/src/backend/executor/execTuples.c#L785-L801).
+The FK update gate checks all/some NULL keys first, then current-transaction old
+tuple, then equal keys. The first UPDATE of the committed existing target sees
+an old xmin from another transaction: its unchanged non-NULL connection key can
+skip RI; new canonical keys still receive their normal checks. That UPDATE makes
+a new physical tuple with current xmin. The second current_material UPDATE sees
+that version as its old tuple: current-XID requires RI even for unchanged keys.
+The RI lookup uses FOR KEY SHARE, conflicting with the separately held connection
+FOR UPDATE. Thus the actual frame agrees with a concrete source path through the
+target's connection FK; that FK identity remains an inference, not exported fact.
+
+The same analysis also finds a second dependency after that first failure:
+turn_material's delivery C+1 followed by material_apply_context's material C+1
+updates the same Conversation twice. Its FK `(ws,connection,business)` can likewise
+recheck connection on the second current-XID tuple. A target-only correction would
+leave this source path. Both physical repetitions are removed for changed SENT.
+
+| Site / old path | Corrected source / preserved result |
+|---|---|
+| material_bind: canonical refs + original current; apply then updates current again | One target UPDATE stores validated canonical refs and the final folded current together. Provider/connection key and all identity/witness checks are unchanged. Original semantic current is carried privately for comparison/reason; no intermediate current is published |
+| material_apply: always writes changed current | Private p_previous=NULL retains ordinary apply unchanged; non-NULL binding path verifies stored current equals the recomputed fold, then uses the same Message/context/Audit/effect body without another target UPDATE. No-op still binds but returns NULL without counters/effect/Audit |
+| SENT trigger C+1 before binding, then shared C+1 | Under the same acquired C barrier, bind runs before the delivery UPDATE. A changed OUTBOUND first binding invokes shared context with delivery=true, performing Message+1 and one physical C+2 UPDATE, then the trigger returns. NULL/no-op/unmatched/quarantined bind falls through to the original delivery C+1; UNKNOWN retains its original path |
+| Shared material_apply_context | Only its C increment expression gains delivery2/ordinary1, with default false preserving all existing three-argument callers. Conversation/Message/Turn locks, Message+1, material_bump_turns, Escalation/shared invalidation body stay exact; per-fact context arithmetic remains delivery1+material1, invalidation once |
+| Tenancy catalog query/profile lookup | Catalog p.oid is compared to the closed23 fully qualified expected signatures resolved through regprocedure→OID, with duplicate OID refusal and exact set/count equality. Profiles look up by the same OID; no pretty-type-name/search_path comparison |
+
+Two necessary **private signature replacements**, not overload additions:
+`platform.material_apply(uuid,uuid,uuid)` →
+`platform.material_apply(uuid,uuid,uuid,jsonb)`;
+`platform.material_apply_context(uuid,uuid,uuid)` →
+`platform.material_apply_context(uuid,uuid,uuid,boolean)` (last argument DEFAULT false).
+Bind passes original semantic current; material_process passes NULL. Apply passes
+delivery=true only for non-NULL previous material and OUTBOUND, i.e. changed first
+SENT binding. Known bound outbound mutations pass NULL and retain context+1.
+The material_process fallback that detects a missed changed original/SENT binding
+still raises and rolls back. The two existing direct context callers retain default
+false. PRIVATE_FUNCTIONS and exactly these two tenancy profile entries are updated;
+old three-type apply signature is absent. Public wrappers/grants and private execute
+denials remain:23 additions/132 functions,2 runtime/21 private,7 invoker/16 SECDEF,
+same owner/search_path/PUBLIC/runtime profiles. No new capability or physical schema.
+
+The local shared-context change is a direct implementation dependency of the
+same RI gate: omitting it would preserve a reverse connection edge after C.
+Its body is byte-exact apart from the documented C increment/comment; no alternate
+invalidation path is introduced. Required order remains own Job→own Outbox→C→
+existing target→Message/Turn, with no new target/connection or foreign Job/Inbox lock
+after C. Changed refs check the own Message, held C and exact own valid-SENT Outbox;
+unchanged source FKs skip on the committed target's first UPDATE, nullable FKs retain
+MATCH SIMPLE behavior. Audit/effect point only to stable own target/Message/source;
+all RI, trigger, RLS and deferred consistency checks remain enabled and unchanged.
+
+One physical transaction still contains SENT, canonical binding/effective current,
+Message+1/C+2, shared Turn/context/Escalation, exactly one typed Audit/effect and Job
+completion. Any failure rolls back the complete atom. Existing all-or-none NULL,
+tenant/Client identity, write-once refs, quarantine/mismatch/UNKNOWN no-bind, sticky
+delete/uncertainty, effective grouping/readiness/late File, immutable private Inbox
+winning pair/results and five NULL mutation Job delivery fields remain. There is
+no deferred second apply/Job/ACK, mapper change, retry, prelock or constraint bypass.
+
+**Targeted regressions; awaiting actual CI.** The original SENT/UNKNOWN decorators,
+single finish_send/arguments/3s, separate connection FOR UPDATE and same-call bounded
+diagnostic scope are exact. Its first existing saved-result read is retained as
+historical for final full equality; no extra pre-finalizer SQL/probe/send. Added
+post-success readbacks assert exact Outbox outcome, full target binding/current,
+original Message text/current/version, C version, one source-linked typed Audit/effect
+and immutable DEFERRED_TARGET result. A neighboring equal-original SENT case keeps
+the same held blocker/3s and proves binding with Message1/C4/zero material effects;
+it exercises the trigger's NULL-result delivery fallback. Two overflow arms target
+Message=max and C=max−1: SQLSTATE22003 must originate in material_apply_context,
+with all41 data fingerprints plus actual ordered migration metadata unchanged,
+zero partial SENT/binding/current/context/effect/Audit/Job changes and historical
+result preserved. They add no positive retry or new provider send. R3 literal42,
+terminal/token/known-T/UTC/current/seed and six diagnostic tests remain exact.
+
+**Local evidence only.** Python3.12.14/Pydantic2.13.5 and cached Ruff0.16.7;
+required packaged3.13 interpreter is absent. Cached targeted existing online Alembic
+empty-parameter test:1 PASS/69 deselected in0.84s, compiling all131 expanded DDL
+operations without a DB. Ruff check/format3 changed Python files, compile/diff and
+AST/source audits PASS. Read-only AST-lifted existing source parser/inventories
+confirm42 tables,131 upgrade statements,132 functions,23 additions/2 runtime/21
+private/7 invoker/16 SECDEF and the exact typed tenancy map.127 complete surviving
+function profiles and all non-function DDL/column mappings are exact except the
+two typed identities in existing owner/REVOKE statements.53 other test definitions
+including decorators are byte-exact. These checks do not execute PostgreSQL, the
+new PG regressions, dedicated catalog/ACL tail or full product/state acceptance.
+
+Six changed paths inside the closed eight-path list:0012, named provenance PG and
+tenancy tests, and three task documents. The pure provenance and migration tests
+remain byte-exact. Applied0001–0011, ORIGINAL17/OLD_CHECK4, original11 and all other
+tracked blobs/modes are preserved: product/models/DTO/Worker/mapper, scripts/runtime/
+shell/frozen-H, workflows/Compose/pins/locks/dependencies and frontend. Revision
+0012←0011 and physical schema mapping are unchanged; no0013/new file/runner.
+
+**C0 actual statuses, not closures by this source.** Eight R4 closures remain:
+C1-R2-02 (C1-R3-01 alias), C2-MAT-02, C1-R3-03, C0-R3-01/02/04/05,
+C5-R3-01. Three remain OPEN: **C1-MAT-01/P1** (C1-R3-02 alias),
+**C0-R3-03/P2**, **C2-MAT-01/P1**. Earlier scoped closures and their regression
+matrix remain. Baseline browser308 Vitest/44 Playwright and clean PASS, both complete
+state lanes PASS; historical browser timeout cause UNKNOWN. Foundation downgrade/
+re-upgrade/contracts/wheel and subsequent storage/startup/HTTP smoke tail NOT RUN
+after PG exit1, clean SKIPPED. Other jobs' green evidence does not replace that tail.
+
+C0 source intake precedes one normal automatic CI on the same PR; full9+clean9,
+all foundation tail, exact dedicated tenancy/ACL/SENT atomicity and both complete
+state lanes are mandatory again after this correction. Source is REVIEW on return,
+then C2 HOLD; C1/C3/C5/C6/C8 HOLD. Remaining owner acceptance then independent C8.
+MATERIAL/M3 IN_PROGRESS, gate OFF, PR Draft/BLOCKED, not INTEGRATED/VERIFIED.
+Normal P prep719.560822218s left0.439177782s; foundation43:11 stopped before its tail.
+No optimization allowance follows. Original S/retained600/P720/fixed120/+480/S+1200/
+cleanup90/state25/browser25/foundation45 and individual3s/60s/10s remain unchanged.
+No clock reset/subtraction/retry/budget increase, installs/bootstrap/new services/
+Docker/PG/browser runtime/Actions operations/PR-head move/new PR/merge. Live/VM/
+working DB/S3/sends/deploy/native/A08/P-A03-09/renewal/collector/M4 unissued;
+IMPL-05/broad optimization DEFERRED.

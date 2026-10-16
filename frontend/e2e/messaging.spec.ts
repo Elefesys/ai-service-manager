@@ -16,7 +16,7 @@ if(!envPath||!fixturePath||!inventoryPath||!passwordPath||!counterDir) throw new
 function privateJson(path:string) { try { return JSON.parse(readFileSync(path,'utf8')); } catch { throw new Error('E2E_SAFE_FAILURE:MESSAGING_FIXTURE_OUTPUT'); } }
 const fixtures:Record<string,{workspace_id:string;user_account_id:string;login:string}>=privateJson(fixturePath).messaging_fixtures;
 type Ref={conversation_id:string;message_id:string;file_id:string};
-type Inventory={conversation_id:string;client_id:string;alternate_conversation_id:string;alternate_client_id:string;connection_ids:string[];conversation_ids:string[];message_ids:string[];images:{ready:Ref;failed?:Ref;pending?:Ref}};
+type Inventory={conversation_id:string;client_id:string;alternate_conversation_id:string;alternate_client_id:string;connection_ids:string[];conversation_ids:string[];message_ids:string[];images:{ready:Ref;failed?:Ref;pending?:Ref};material_photos?:Record<string,Ref>};
 const inventory:Record<string,Inventory>=privateJson(inventoryPath), password=readFileSync(passwordPath,'utf8');
 const origin='http://127.0.0.1:8080';
 const path=(preset:string,suffix:string)=>`/api/v1/workspaces/${fixtures[preset].workspace_id}/${suffix}`;
@@ -33,14 +33,14 @@ async function loadedPrivateImage(image:Locator){
   await expect.poll(()=>privateImageValue(()=>image.evaluate(n=>(n as HTMLImageElement).naturalWidth))).toBe(23);
 }
 async function csrf(request:APIRequestContext) {const r=await http(()=>request.get('/api/v1/auth/session'));expect(r.status()).toBe(200);return (await json(r)).csrf_token as string;}
-async function helper(preset:string,action:string,runtime=false):Promise<Record<string,number|boolean>> {
+async function helper(preset:string,action:string,runtime=false):Promise<Record<string,number|boolean|string>> {
   const args=['compose','--env-file',envPath!,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`];
   if(runtime)args.push('-v',`${counterDir}:/run/m2-browser-counters:rw`);
   args.push(runtime?'browser-runtime':'browser-provision','python',runtime?'scripts/m2_4_browser_worker.py':'scripts/m2_4_browser_fixture.py','--preset',preset,'--action',action);
   const r=requireSafeResult(await safeDiagnostic('MESSAGING_FIXTURE_FAILED',()=>promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:65536})));
   try{return JSON.parse(r.stdout);}catch{throw new Error('E2E_SAFE_FAILURE:MESSAGING_FIXTURE_OUTPUT');}
 }
-function oneCommand(before:Record<string,number|boolean>,after:Record<string,number|boolean>) {for(const key of ['messages','receipts','audit_events','outbox_events','jobs'])expect(Number(after[key])-Number(before[key])).toBe(1);}
+function oneCommand(before:Record<string,number|boolean|string>,after:Record<string,number|boolean|string>) {for(const key of ['messages','receipts','audit_events','outbox_events','jobs'])expect(Number(after[key])-Number(before[key])).toBe(1);}
 async function loginForm(page:Page,preset:string){await page.getByLabel('Логин').fill(fixtures[preset].login);await page.getByLabel('Пароль').fill(password);await page.getByRole('button',{name:'Войти',exact:true}).click();await expect(panel(page)).toBeVisible();}
 async function choose(page:Page,preset:string,id=inventory[preset].conversation_id){
   const ws=fixtures[preset].workspace_id;if(await page.getByLabel('Workspace',{exact:true}).inputValue()!==ws)await page.getByLabel('Workspace',{exact:true}).selectOption(ws);
@@ -76,7 +76,7 @@ async function changeControl(page:Page,preset:string,operation:ControlOperation,
   const receipt=parseControlReceipt(requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>r.json())),controlContext(preset),operation,body);expect(receipt.outcome).toBe('ACCEPTED');
   await expect(controlPanel(page).getByRole('button',{name:'Забрать управление'})).toBeEnabled();
 }
-function controlDelta(before:Record<string,number|boolean>,after:Record<string,number|boolean>,count:number){for(const key of ['control_receipts','control_audit_events'])expect(Number(after[key])-Number(before[key])).toBe(count);}
+function controlDelta(before:Record<string,number|boolean|string>,after:Record<string,number|boolean|string>,count:number){for(const key of ['control_receipts','control_audit_events'])expect(Number(after[key])-Number(before[key])).toBe(count);}
 
 test('@narrow CONTROLLED incoming text/private image -> exact keyboard reply -> Worker current delivery',async({page},info)=>{
   test.setTimeout(60000);await signIn(page,'happy');
@@ -236,7 +236,7 @@ async function openEsc(page:Page,v:EscalationView){
   await escQueue(page).getByRole('button',{name:'Обновить очередь'}).click();await expect(escQueue(page).getByText('Загружаем очередь…',{exact:true})).toHaveCount(0);
   await page.getByTestId(`escalation-${v.escalation_id}`).click();await expect(escDetail(page).getByText('Ожидается решение владельца',{exact:true})).toBeVisible();
 }
-function escDelta(before:Record<string,number|boolean>,after:Record<string,number|boolean>,count:number){
+function escDelta(before:Record<string,number|boolean|string>,after:Record<string,number|boolean|string>,count:number){
   for(const key of ['escalation_receipts','escalation_audit'])expect(Number(after[key])-Number(before[key])).toBe(count);
   for(const key of ['messages','receipts','audit_events','outbox_events','jobs','control_receipts','control_audit_events','escalations','escalation_timers'])expect(after[key]).toBe(before[key]);
 }
@@ -269,27 +269,105 @@ test('@narrow Escalation runtime queue -> exact internal resolve and cancel; ina
   await page.reload();await expect(escQueue(page)).toBeVisible();expect(writes).toBe(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
 });
 
-test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key/body REPLAY and one decision',async({page})=>{
-  test.setTimeout(60000);const preset='esc_recovery';await signIn(page,preset);const v=await createEsc(page,preset);await openEsc(page,v);const before=await helper(preset,'escalation-stats');
-  let attempts=0,original:string|null=null,key:string|undefined,first:EscalationReceipt|undefined,identical=true;
-  let complete!:(result:SafeResult<number>)=>void;const committed=new Promise<SafeResult<number>>(r=>{complete=r;});const url=`${escPath(preset,v.escalation_id)}/resolve`;
-  await page.route(`**${url}`,async route=>{
-    attempts++;if(attempts>1){identical=identical&&original===route.request().postData()&&key===route.request().headers()['idempotency-key'];await safeContinue(route);return;}
-    original=route.request().postData();key=route.request().headers()['idempotency-key'];const real=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',()=>route.fetch({timeout:10000}));
-    if(real.ok){const parsed=await safeDiagnostic('MESSAGING_BODY_FAILED',async()=>parseEscalationReceipt(await real.value.json(),escContext(v),'RESOLVE',JSON.parse(original!) as EscalationBody));if(parsed.ok)first=parsed.value;else{complete(parsed);return;}}
-    const aborted=await safeDiagnostic('MESSAGING_ROUTE_ABORT_FAILED',()=>route.abort('failed'));complete(!real.ok?real:!aborted.ok?aborted:{ok:true,value:real.value.status()});
-  });
+// Only the committed200 recovery case uses this closed, payload-free record.
+function escalationRecoveryDiagnostic(value:Record<string,unknown>):string{
+  const prefix='E2E_ESCALATION_RECOVERY_R3:';
+  const fallback=prefix+'{"stage":"UNKNOWN","diagnostic_error":true}';
   try{
-    await escDetail(page).getByLabel('Внутренний ответ владельца').fill('  Сохранить точно\ne\u0301 🎨  ');await escDetail(page).getByRole('button',{name:'Сохранить внутренний ответ'}).click();expect(requireSafeResult(await committed)).toBe(200);
-    await expect(escDetail(page).getByText(/Результат решения неизвестен/)).toBeVisible();escDelta(before,await helper(preset,'escalation-stats'),1);
-    await page.context().clearCookies();await escDetail(page).getByRole('button',{name:'Проверить сессию для решения'}).click();await loginForm(page,preset);
-    await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();const token=await csrf(page.request);const rotate=await http(()=>page.request.post('/api/v1/auth/rotate',{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}));expect(rotate.status()).toBe(200);
-    const denied=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();expect((await denied).status()).toBe(403);
-    await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();const replayed=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();const response=await replayed;expect(response.status()).toBe(200);
+    const stages=['SETUP','FIRST_SUBMIT','COMMITTED','AMBIGUOUS','CLEAR_COOKIES','SESSION_RECOVERY','LOGIN','RETRY_ENABLED','ROTATE_SESSION','ROTATE','FIRST_RETRY_CLICK','FIRST_RETRY_RESPONSE','CSRF_RECOVERY','SECOND_RETRY_CLICK','SECOND_RETRY_RESPONSE','RECEIPT','ASSERTIONS','RELOAD','DONE','CLEANUP'];
+    const routes=['ENTERED','FETCH_PENDING','FETCH_FAILED','PARSE_PENDING','PARSED','PARSE_FAILED','ABORT_PENDING','ABORTED','ABORT_FAILED','CONTINUE_PENDING','CONTINUED','CONTINUE_FAILED'];
+    const closed=(v:unknown,allowed:string[])=>typeof v==='string'&&allowed.includes(v)?v:'UNKNOWN';
+    const boolean=(v:unknown)=>typeof v==='boolean'?v:null;
+    let truncated=false;
+    const count=(v:unknown)=>{if(typeof v!=='number'||!Number.isSafeInteger(v)||v<0)return null;if(v>99){truncated=true;return 99;}return v;};
+    const status=(v:unknown)=>typeof v==='number'&&Number.isInteger(v)&&v>=100&&v<=599?v:null;
+    const record:Record<string,unknown>={stage:closed(value.stage,stages),route_stage:closed(value.route_stage,routes)};
+    for(const key of ['attempts','resolve_requests','resolve_responses','resolve_failed','resolve_finished','session_requests','session_responses','login_requests','login_responses','detail_requests','detail_responses'])record[key]=count(value[key]);
+    for(const key of ['first_status','rotate_status','resolve_status','session_status','login_status','detail_status'])record[key]=status(value[key]);
+    for(const key of ['observers_attached','observer_error','route_is_post','first_fetch_ok','first_parse_ok','first_abort_ok','same_body','same_key','same_intent','retry_clicked','replay_clicked','observers_removed','cleanup_ok'])record[key]=boolean(value[key]);
+    for(const key of ['ui_before_retry','ui_failure']){
+      const input=value[key],ui=input&&typeof input==='object'?input as Record<string,unknown>:{};
+      record[key]=Object.fromEntries(['closed','read_ok','detail_present','detail_loading','retry_present','retry_disabled','recover_present','saving','login_present','auth_recovering'].map(k=>[k,boolean(ui[k])]));
+    }
+    record.truncated=truncated;
+    const output=prefix+JSON.stringify(record);
+    return Buffer.byteLength(output,'utf8')<=4096?output:prefix+'{"stage":"UNKNOWN","truncated":true}';
+  }catch{return fallback;}
+}
+
+test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key/body REPLAY and one decision',async({page})=>{
+  test.setTimeout(60000);const preset='esc_recovery';
+  let attempts=0,original:string|null=null,key:string|undefined,first:EscalationReceipt|undefined,identical=true;
+  const diagnostic:Record<string,unknown>={stage:'SETUP',observers_attached:false,observer_error:false,retry_clicked:false,replay_clicked:false};
+  let failed=false,primary:unknown,removeObservers=()=>{};
+  const sampleUI=async()=>{
+    const result=await safeDiagnostic('MESSAGING_HTTP_FAILED',async()=>{
+      if(page.isClosed())return {closed:true,read_ok:false};
+      return page.evaluate(()=>{
+        const detail=document.querySelector('[aria-label="Карточка запроса"]');
+        const buttons=Array.from(detail?.querySelectorAll('button')??[]);
+        const retry=buttons.find(b=>b.textContent==='Повторить исходное решение');
+        return {closed:false,read_ok:true,detail_present:!!detail,detail_loading:!!detail?.textContent?.includes('Читаем актуальный запрос…'),retry_present:!!retry,retry_disabled:retry?.disabled??null,recover_present:buttons.some(b=>b.textContent==='Проверить сессию для решения'),saving:!!detail?.textContent?.includes('Сохраняем решение…'),login_present:!!document.querySelector('#login'),auth_recovering:Array.from(document.querySelectorAll('h2')).some(h=>h.textContent==='Уточняем результат')};
+      });
+    });
+    return result.ok?result.value:{read_ok:false};
+  };
+  try{
+    await signIn(page,preset);const v=await createEsc(page,preset);await openEsc(page,v);const before=await helper(preset,'escalation-stats');
+    let complete!:(result:SafeResult<number>)=>void;const committed=new Promise<SafeResult<number>>(r=>{complete=r;});const url=`${escPath(preset,v.escalation_id)}/resolve`;
+    const classify=(request:import('@playwright/test').Request)=>{
+      const pathname=new URL(request.url()).pathname,method=request.method();
+      return method==='POST'&&pathname===url?'resolve':method==='GET'&&pathname==='/api/v1/auth/session'?'session':method==='POST'&&pathname==='/api/v1/auth/login'?'login':method==='GET'&&pathname===escPath(preset,v.escalation_id)?'detail':null;
+    };
+    const increment=(field:string)=>{diagnostic[field]=Math.min(100,Number(diagnostic[field])+1);};
+    for(const name of ['resolve','session','login','detail']){diagnostic[`${name}_requests`]=0;diagnostic[`${name}_responses`]=0;}
+    diagnostic.resolve_failed=0;diagnostic.resolve_finished=0;
+    const requested=(request:import('@playwright/test').Request)=>{try{const kind=classify(request);if(kind)increment(`${kind}_requests`);}catch{diagnostic.observer_error=true;}};
+    const responded=(response:import('@playwright/test').Response)=>{try{const kind=classify(response.request());if(kind){increment(`${kind}_responses`);diagnostic[`${kind}_status`]=response.status();}}catch{diagnostic.observer_error=true;}};
+    const requestFailed=(request:import('@playwright/test').Request)=>{try{if(classify(request)==='resolve')increment('resolve_failed');}catch{diagnostic.observer_error=true;}};
+    const requestFinished=(request:import('@playwright/test').Request)=>{try{if(classify(request)==='resolve')increment('resolve_finished');}catch{diagnostic.observer_error=true;}};
+    removeObservers=()=>{
+      let removalFailed=false;
+      for(const remove of [()=>page.off('request',requested),()=>page.off('response',responded),()=>page.off('requestfailed',requestFailed),()=>page.off('requestfinished',requestFinished)]){try{remove();}catch{removalFailed=true;}}
+      if(removalFailed)throw new Error('E2E_SAFE_FAILURE:MESSAGING_ROUTE_RELEASE_FAILED');
+    };
+    page.on('request',requested);page.on('response',responded);page.on('requestfailed',requestFailed);page.on('requestfinished',requestFinished);diagnostic.observers_attached=true;
+    await page.route(`**${url}`,async route=>{
+      diagnostic.route_stage='ENTERED';diagnostic.route_is_post=route.request().method()==='POST';
+      attempts++;if(attempts>1){
+        diagnostic.same_body=original===route.request().postData();diagnostic.same_key=key===route.request().headers()['idempotency-key'];
+        identical=identical&&original===route.request().postData()&&key===route.request().headers()['idempotency-key'];
+        diagnostic.route_stage='CONTINUE_PENDING';const continued=await safeDiagnostic('MESSAGING_ROUTE_CONTINUE_FAILED',()=>route.continue());diagnostic.route_stage=continued.ok?'CONTINUED':'CONTINUE_FAILED';requireSafeResult(continued);return;
+      }
+      original=route.request().postData();key=route.request().headers()['idempotency-key'];diagnostic.route_stage='FETCH_PENDING';const real=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',()=>route.fetch({timeout:10000}));
+      diagnostic.first_fetch_ok=real.ok;diagnostic.route_stage=real.ok?'PARSE_PENDING':'FETCH_FAILED';
+      if(real.ok){diagnostic.first_status=real.value.status();const parsed=await safeDiagnostic('MESSAGING_BODY_FAILED',async()=>parseEscalationReceipt(await real.value.json(),escContext(v),'RESOLVE',JSON.parse(original!) as EscalationBody));diagnostic.first_parse_ok=parsed.ok;diagnostic.route_stage=parsed.ok?'PARSED':'PARSE_FAILED';if(parsed.ok)first=parsed.value;else{complete(parsed);return;}}
+      diagnostic.route_stage='ABORT_PENDING';const aborted=await safeDiagnostic('MESSAGING_ROUTE_ABORT_FAILED',()=>route.abort('failed'));diagnostic.first_abort_ok=aborted.ok;diagnostic.route_stage=aborted.ok?'ABORTED':'ABORT_FAILED';complete(!real.ok?real:!aborted.ok?aborted:{ok:true,value:real.value.status()});
+    });
+    diagnostic.stage='FIRST_SUBMIT';await escDetail(page).getByLabel('Внутренний ответ владельца').fill('  Сохранить точно\ne\u0301 🎨  ');await escDetail(page).getByRole('button',{name:'Сохранить внутренний ответ'}).click();diagnostic.stage='COMMITTED';expect(requireSafeResult(await committed)).toBe(200);
+    diagnostic.stage='AMBIGUOUS';await expect(escDetail(page).getByText(/Результат решения неизвестен/)).toBeVisible();escDelta(before,await helper(preset,'escalation-stats'),1);
+    diagnostic.stage='CLEAR_COOKIES';await page.context().clearCookies();diagnostic.stage='SESSION_RECOVERY';await escDetail(page).getByRole('button',{name:'Проверить сессию для решения'}).click();diagnostic.stage='LOGIN';await loginForm(page,preset);
+    diagnostic.stage='RETRY_ENABLED';await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();diagnostic.stage='ROTATE_SESSION';const token=await csrf(page.request);diagnostic.stage='ROTATE';const rotate=await http(()=>page.request.post('/api/v1/auth/rotate',{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}));diagnostic.rotate_status=rotate.status();expect(rotate.status()).toBe(200);
+    diagnostic.ui_before_retry=await sampleUI();
+    const denied=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);void denied.catch(()=>{}); // Handle an early rejection; still await the original promise below.
+    diagnostic.stage='FIRST_RETRY_CLICK';await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();diagnostic.retry_clicked=true;diagnostic.stage='FIRST_RETRY_RESPONSE';expect((await denied).status()).toBe(403);
+    diagnostic.stage='CSRF_RECOVERY';await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();const replayed=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);void replayed.catch(()=>{});
+    diagnostic.stage='SECOND_RETRY_CLICK';await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();diagnostic.replay_clicked=true;diagnostic.stage='SECOND_RETRY_RESPONSE';const response=await replayed;expect(response.status()).toBe(200);
+    diagnostic.stage='RECEIPT';
     const saved=parseEscalationReceipt(requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>response.json())),escContext(v),'RESOLVE',JSON.parse(original!) as EscalationBody);expect(saved.outcome).toBe('REPLAY');expect(JSON.stringify(saved.result)===JSON.stringify(first?.result)).toBe(true);
+    diagnostic.stage='ASSERTIONS';
     await expect(escDetail(page).getByText('Сохранённый внутренний ответ')).toBeVisible();expect(attempts).toBe(3);expect(identical).toBe(true);escDelta(before,await helper(preset,'escalation-stats'),1);expect((await worker(preset,'stats')).calls).toBe(0);
-    await page.reload();await expect(escQueue(page)).toBeVisible();expect(attempts).toBe(3);
-  }finally{await page.unrouteAll({behavior:'wait'});original=null;key=undefined;first=undefined;}
+    diagnostic.stage='RELOAD';await page.reload();await expect(escQueue(page)).toBeVisible();expect(attempts).toBe(3);diagnostic.stage='DONE';
+  }catch(error){failed=true;primary=error;}
+  finally{
+    // No payload/error serialization; a cleanup failure cannot replace the primary.
+    const removed=await safeDiagnostic('MESSAGING_ROUTE_RELEASE_FAILED',async()=>removeObservers());diagnostic.observers_removed=removed.ok;
+    const cleaned=await safeDiagnostic('MESSAGING_ROUTE_RELEASE_FAILED',()=>page.unrouteAll({behavior:'wait'}));diagnostic.cleanup_ok=cleaned.ok;
+    original=null;key=undefined;first=undefined;diagnostic.attempts=attempts;diagnostic.same_intent=attempts>1?identical:null;
+    if((!removed.ok||!cleaned.ok)&&!failed){failed=true;diagnostic.stage='CLEANUP';try{requireSafeResult(!removed.ok?removed:cleaned);}catch(error){primary=error;}}
+    if(failed){diagnostic.ui_failure=await sampleUI();try{console.log(escalationRecoveryDiagnostic(diagnostic));}catch{/* Preserve the primary even if diagnostic output is unavailable. */}}
+  }
+  if(failed)throw primary;
 });
 
 test('Escalation valid200 plus failed GET offers only read recovery',async({page})=>{
@@ -326,4 +404,108 @@ test('Escalation live OWNER revoke clears every protected view; peer cancel and 
     await expect(escDetail(peerPage).getByText('Ответственный потерял доступ владельца')).toBeVisible();await expect(escDetail(peerPage).getByRole('button',{name:'Сохранить внутренний ответ'})).toBeDisabled();await expect(escDetail(peerPage).getByRole('button',{name:'Отменить запрос'})).toBeEnabled();
     await decide(peerPage,preset,v,'CANCEL');escDelta(before,await helper(preset,'escalation-stats'),1);expect((await worker(preset,'stats')).calls).toBe(0);
   }finally{await peer.close();}
+});
+
+// P-A03-07: synthetic TELEGRAM input -> real V2 ingress/runtime worker -> owner
+// API/current panel. No provider row substitution or external Telegram send.
+test('material edit and delete refresh the paired current projection and preserve original history',async({page})=>{
+  const preset='material';await page.goto('/');await loginForm(page,preset);await choose(page,preset);
+  await expect(panel(page).getByText('Material original A',{exact:true})).toBeVisible();
+  const original=(await history(page.request,preset)).items[0];expect(original.version).toBe('1');
+  expect(await worker(preset,'material-edit')).toEqual({processed:1,replayed:0});await refresh(page);
+  await expect(panel(page).getByText('Material edited B',{exact:true})).toBeVisible();
+  await expect(panel(page).getByText('Material original A',{exact:true})).toHaveCount(0);
+  const edited=(await history(page.request,preset)).items[0];expect(edited.message_id).toBe(original.message_id);expect(edited.text).toBe('Material original A');expect(edited.version).toBe('2');
+  expect(edited.current).toEqual({schema_version:1,state:'VISIBLE',content_type:'TEXT',text:'Material edited B',image_availability:'NOT_APPLICABLE',changed:true});
+  expect(await worker(preset,'material-edit')).toEqual({processed:0,replayed:1});
+  expect((await history(page.request,preset)).items[0]).toEqual(edited);
+  expect(await worker(preset,'material-delete')).toEqual({processed:1,replayed:0});await refresh(page);
+  await expect(panel(page).getByText('Сообщение удалено.',{exact:true})).toBeVisible();await expect(panel(page).getByText('Material edited B',{exact:true})).toHaveCount(0);
+  const deleted=(await history(page.request,preset)).items[0];expect(deleted.version).toBe('3');expect(deleted.text).toBe('Material original A');
+  expect(deleted.current).toEqual({schema_version:1,state:'DELETED',content_type:null,text:null,image_availability:'HIDDEN',changed:true});
+  await expect(row(page,original.message_id).getByRole('button',{name:'Открыть изображение'})).toHaveCount(0);
+  const other=await http(()=>page.request.get(messages(preset,inventory[preset].alternate_conversation_id)));expect(other.status()).toBe(200);
+  expect(parsePage(await json(other),parseMessage).items[0].current.text).toBe('Material original alternate');
+});
+
+async function materialPhoto(page:Page,label:string){
+  const preset='material',ref=inventory[preset].material_photos![label];
+  await page.goto('/');await loginForm(page,preset);await choose(page,preset,ref.conversation_id);
+  const r=await http(()=>page.request.get(messages(preset,ref.conversation_id)));expect(r.status()).toBe(200);
+  const original=parsePage(await json(r),parseMessage).items.find(m=>m.message_id===ref.message_id)!;
+  expect(original.version).toBe('1');expect(original.current.image_availability).toBe('ORIGINAL_READY');expect(original.file?.status).toBe('READY');
+  const before=await helper(preset,'material-stats');expect(before.files).toBe(4);expect(before.fetches).toBe(4);expect(before.ready).toBe(4);expect(before.winners).toBe(4);expect(before.invalid_terminal).toBe(0);
+  return {preset,ref,original,before};
+}
+async function materialRead(page:Page,ref:Ref){
+  const r=await http(()=>page.request.get(messages('material',ref.conversation_id)));expect(r.status()).toBe(200);
+  return parsePage(await json(r),parseMessage).items.find(m=>m.message_id===ref.message_id)!;
+}
+async function openMaterialImage(page:Page,ref:Ref){
+  const received=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===grantPath('material',ref));
+  await row(page,ref.message_id).getByRole('button',{name:'Открыть изображение'}).click();expect((await received).status()).toBe(200);
+  await loadedPrivateImage(row(page,ref.message_id).getByRole('img'));
+}
+function retainedMaterialHistory(before:Record<string,number|boolean|string>,after:Record<string,number|boolean|string>,terminals:number){
+  for(const key of ['files','fetches','ready','winners','history_digest','files_digest','uploads_digest'])expect(after[key]).toBe(before[key]);
+  expect(after.invalid_terminal).toBe(0);expect(Number(after.terminals)-Number(before.terminals)).toBe(terminals);
+}
+for(const label of ['replacement','text','delete']){
+  test(`material PHOTO ${label}: loaded private image, same-ref caption, normal Worker mutation and grant refusal`,async({page})=>{
+    test.setTimeout(90000);
+    const {preset,ref,original,before}=await materialPhoto(page,label);await openMaterialImage(page,ref);
+    expect(await worker(preset,`material-${label}-caption`)).toEqual({processed:1,replayed:0});await refresh(page);
+    const caption=await materialRead(page,ref);expect(caption.version).toBe('2');expect(caption.text).toBe(original.text);expect(caption.file).toEqual(original.file);
+    expect(caption.current).toEqual({schema_version:1,state:'VISIBLE',content_type:'PHOTO',text:`Material ${label} caption`,image_availability:'ORIGINAL_READY',changed:true});
+    // Positive eligibility after a semantic version change and a second real GET.
+    await openMaterialImage(page,ref);
+    expect(await worker(preset,`material-${label}-change`)).toEqual({processed:1,replayed:0});await refresh(page);
+    expect(await row(page,ref.message_id).getByRole('img').count()).toBe(0);
+    await expect(row(page,ref.message_id).getByRole('button',{name:'Открыть изображение'})).toHaveCount(0);
+    const changed=await materialRead(page,ref);expect(changed.version).toBe('3');expect(changed.text).toBe(original.text);expect(changed.content_type).toBe(original.content_type);expect(changed.file).toEqual(original.file);
+    expect(changed.current).toEqual(label==='delete'
+      ? {schema_version:1,state:'DELETED',content_type:null,text:null,image_availability:'HIDDEN',changed:true}
+      : {schema_version:1,state:'VISIBLE',content_type:label==='text'?'TEXT':'PHOTO',text:label==='text'?'Material current text':'Material replacement change',image_availability:label==='text'?'NOT_APPLICABLE':'MEDIA_REPLACED_UNAVAILABLE',changed:true});
+    if(label==='replacement')await expect(row(page,ref.message_id).getByText('Фото заменено, новое изображение недоступно.',{exact:true})).toBeVisible();
+    const token=await csrf(page.request);const denied=await http(()=>page.request.post(grantPath(preset,ref),{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}));expect(denied.status()).toBe(404);
+    retainedMaterialHistory(before,await helper(preset,'material-stats'),2);
+    expect(await worker(preset,`material-${label}-change`)).toEqual({processed:0,replayed:1});expect(await materialRead(page,ref)).toEqual(changed);
+    // Already issued signed URLs are TTL-limited capabilities. No assertion of
+    // atomic URL revocation or realtime invalidation is made by this journey.
+  });
+}
+
+test('material PHOTO delayed real old grant cannot restore image after semantic refresh',async({page})=>{
+  test.setTimeout(90000);
+  const {preset,ref,original,before}=await materialPhoto(page,'late');await openMaterialImage(page,ref);
+  await refresh(page);expect(await row(page,ref.message_id).getByRole('img').count()).toBe(0);
+  let release!:()=>void,observed!:(r:SafeResult<number>)=>void,finished!:(r:SafeResult<void>)=>void;
+  const held=new Promise<void>(resolve=>{release=resolve;}),arrived=new Promise<SafeResult<number>>(resolve=>{observed=resolve;}),delivered=new Promise<SafeResult<void>>(resolve=>{finished=resolve;});
+  let handled=false;
+  await page.route(`**${grantPath(preset,ref)}`,async route=>{
+    if(handled){await safeContinue(route);return;}handled=true;
+    const actual=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',()=>route.fetch());
+    observed(actual.ok?{ok:true,value:actual.value.status()}:actual);
+    await held;
+    // Pass the unmodified real backend HTTP response. Only delivery order is
+    // controlled; DTO, signed URL and backend decision are never fabricated.
+    if(actual.ok)finished(await safeDiagnostic('MESSAGING_ROUTE_RELEASE_FAILED',()=>route.fulfill({response:actual.value})));
+    else finished(actual);
+  });
+  try{
+    const browserResponse=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===grantPath(preset,ref));
+    await row(page,ref.message_id).getByRole('button',{name:'Открыть изображение'}).click();expect(requireSafeResult(await arrived)).toBe(200);
+    expect(await worker(preset,'material-late-change')).toEqual({processed:1,replayed:0});await refresh(page);
+    const current=await materialRead(page,ref);expect(current.version).toBe('2');expect(current.current.image_availability).toBe('MEDIA_REPLACED_UNAVAILABLE');expect(current.text).toBe(original.text);expect(current.file).toEqual(original.file);
+    let oldImageRequests=0;const imageRequested=(request:{resourceType():string})=>{if(request.resourceType()==='image')oldImageRequests++;};page.on('request',imageRequested);
+    release();requireSafeResult(await delivered);
+    const received=await browserResponse;expect(received.status()).toBe(200);requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>received.finished()));
+    // A browser task after the response lets fetch/React callbacks settle;
+    // the condition is the real old response, not an arbitrary sleep.
+    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    expect(await row(page,ref.message_id).getByRole('img').count()).toBe(0);expect(oldImageRequests).toBe(0);page.off('request',imageRequested);
+    await expect(row(page,ref.message_id).getByRole('button',{name:'Открыть изображение'})).toHaveCount(0);
+    const token=await csrf(page.request);const denied=await http(()=>page.request.post(grantPath(preset,ref),{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}));expect(denied.status()).toBe(404);
+    retainedMaterialHistory(before,await helper(preset,'material-stats'),1);
+  }finally{release();await page.unrouteAll({behavior:'wait'});}
 });

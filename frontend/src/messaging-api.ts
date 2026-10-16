@@ -6,7 +6,8 @@ export type FileError = 'INVALID_INPUT' | 'DEPENDENCY_TIMEOUT' | 'DEPENDENCY_UNA
 export type DeliveryError = FileError | 'NOT_ALLOWED' | 'UNKNOWN_EXTERNAL_RESULT';
 export type ImageFile = { file_id: string; status: 'PENDING' | 'READY' | 'FAILED'; error_code: FileError | null; manifest: { mime_type: 'image/jpeg' | 'image/png' | 'image/webp'; size_bytes: string; width: number; height: number } | null };
 export type Delivery = { status: 'PENDING' | 'DISPATCHING' | 'SENT' | 'FAILED' | 'UNKNOWN'; error_code: DeliveryError | null; completed_at: string | null; version: string };
-export type Message = { message_id: string; conversation_id: string; direction: 'INBOUND' | 'OUTBOUND'; content_type: 'TEXT' | 'IMAGE_REFERENCE'; text: string | null; occurred_at: string; created_at: string; version: string; file: ImageFile | null; delivery: Delivery | null };
+export type MessageCurrent = { schema_version: 1; state: 'VISIBLE' | 'DELETED' | 'ORDER_UNCERTAIN' | 'UNSUPPORTED_CONTENT'; content_type: 'TEXT' | 'PHOTO' | null; text: string | null; image_availability: 'NOT_APPLICABLE' | 'ORIGINAL_PENDING' | 'ORIGINAL_READY' | 'ORIGINAL_FAILED' | 'ORIGINAL_NOT_FETCHED' | 'MEDIA_REPLACED_UNAVAILABLE' | 'HIDDEN'; changed: boolean };
+export type Message = { message_id: string; conversation_id: string; direction: 'INBOUND' | 'OUTBOUND'; content_type: 'TEXT' | 'IMAGE_REFERENCE'; text: string | null; occurred_at: string; created_at: string; version: string; file: ImageFile | null; delivery: Delivery | null; current: MessageCurrent };
 export type Page<T> = { items: T[]; next_cursor: string | null };
 export type SendBody = Readonly<{ text: string }>;
 export type SendReceipt = { workspace_id: string; receipt_id: string; message_id: string; accepted_at: string; outcome: 'ACCEPTED' | 'REPLAY' };
@@ -62,10 +63,32 @@ function parseDelivery(value: unknown): Delivery {
   if (oneOf(v.status, ['SENT','FAILED','UNKNOWN']) !== (v.completed_at !== null) || (v.status === 'SENT' && v.error_code !== null) || (oneOf(v.status, ['FAILED','UNKNOWN']) && v.error_code === null)) invalid();
   return v as Delivery;
 }
+export function parseCurrent(value: unknown): MessageCurrent {
+  const v = object(value, ['schema_version','state','content_type','text','image_availability','changed']);
+  const scalarText = (x: unknown): x is string => typeof x === 'string' && [...x].length <= 4096 && new TextEncoder().encode(x).length <= 16384 && ![...x].some(c => { const n=c.codePointAt(0)!; return n===0 || (n>=0xd800 && n<=0xdfff); });
+  if (v.schema_version !== 1 || typeof v.changed !== 'boolean' || !(v.text === null || scalarText(v.text))) invalid();
+  if (v.state === 'VISIBLE') {
+    if (v.content_type === 'TEXT') {
+      if (!scalarText(v.text) || !v.text || v.image_availability !== 'NOT_APPLICABLE') invalid();
+    } else if (v.content_type === 'PHOTO') {
+      if (!oneOf(v.image_availability,['ORIGINAL_PENDING','ORIGINAL_READY','ORIGINAL_FAILED','ORIGINAL_NOT_FETCHED','MEDIA_REPLACED_UNAVAILABLE'])) invalid();
+      if (oneOf(v.image_availability,['ORIGINAL_NOT_FETCHED','MEDIA_REPLACED_UNAVAILABLE']) && !v.changed) invalid();
+    } else invalid();
+  } else if (!oneOf(v.state,['DELETED','ORDER_UNCERTAIN','UNSUPPORTED_CONTENT']) || v.content_type !== null || v.text !== null || v.image_availability !== 'HIDDEN' || !v.changed) invalid();
+  return v as MessageCurrent;
+}
+export const currentImageEligible = (m: Message) => m.current.state === 'VISIBLE' && m.current.content_type === 'PHOTO' && m.current.image_availability === 'ORIGINAL_READY' && m.file?.status === 'READY';
 export function parseMessage(value: unknown): Message {
-  const v = object(value, ['message_id','conversation_id','direction','content_type','text','occurred_at','created_at','version','file','delivery']);
+  const v = object(value, ['message_id','conversation_id','direction','content_type','text','occurred_at','created_at','version','file','delivery','current']);
   if (!uuid(v.message_id) || !uuid(v.conversation_id) || !oneOf(v.direction, ['INBOUND','OUTBOUND']) || !oneOf(v.content_type, ['TEXT','IMAGE_REFERENCE']) || !(v.text === null || (typeof v.text === 'string' && [...v.text].length <= 4096)) || !timestamp(v.occurred_at) || !timestamp(v.created_at) || !decimal(v.version)) invalid();
-  if ((v.content_type === 'IMAGE_REFERENCE') !== (v.file !== null) || (v.direction === 'OUTBOUND') !== (v.delivery !== null)) invalid();
+  const current = parseCurrent(v.current);
+  if (current.changed !== (BigInt(v.version as string)>1n) || (v.direction === 'OUTBOUND') !== (v.delivery !== null) || (v.content_type === 'TEXT' && v.file !== null) || (v.content_type === 'IMAGE_REFERENCE' && v.file === null && !current.changed)) invalid();
+  if (current.image_availability.startsWith('ORIGINAL_')) {
+    if (v.content_type !== 'IMAGE_REFERENCE') invalid();
+    if (current.image_availability === 'ORIGINAL_NOT_FETCHED') { if (v.file !== null) invalid(); }
+    else if (v.file === null || current.image_availability !== 'ORIGINAL_'+parseFile(v.file).status) invalid();
+  }
+  if (!current.changed && (current.state !== 'VISIBLE' || current.content_type !== (v.content_type === 'TEXT' ? 'TEXT' : 'PHOTO') || current.text !== v.text)) invalid();
   if (v.file !== null) parseFile(v.file);
   if (v.delivery !== null) parseDelivery(v.delivery);
   return v as Message;

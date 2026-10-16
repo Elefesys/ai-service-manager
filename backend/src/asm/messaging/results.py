@@ -90,6 +90,19 @@ class InboxProcessingResult(Result):
     status: Literal["PROCESSED", "IGNORED", "FAILED"]
 
 
+class MutationInboxProcessingResult(Result):
+    code: Literal["MATERIAL_PROCESSED"]
+    inbox_id: UUID
+    message_id: None
+    status: Literal["PROCESSED"]
+
+
+def parse_inbox_result(value: object) -> InboxProcessingResult | MutationInboxProcessingResult:
+    if isinstance(value, dict) and value.get("code") == "MATERIAL_PROCESSED":
+        return MutationInboxProcessingResult.model_validate(value)
+    return InboxProcessingResult.model_validate(value)
+
+
 class SendReceipt(Result):
     code: Literal["ACCEPTED", "REPLAY"]
     workspace_id: UUID

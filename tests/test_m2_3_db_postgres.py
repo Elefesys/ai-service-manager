@@ -13,8 +13,10 @@ import pytest
 import pytest_asyncio
 from asm.billing.errors import BillingUnavailable
 from asm.billing.service import EntitlementService
+from asm.conversations.material import TelegramProjectionV2
 from asm.messaging.models import OutcomeKind, SendOutcome
 from asm.messaging.worker import Worker
+from asm.telegram.normalization import update_fingerprint_v2
 from asm.tenancy import AuthenticatedAccount
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -92,12 +94,108 @@ async def sql(h, statement, **params):
         return (await connection.execute(text(statement), params)).scalar_one()
 
 
+def v2_fixture(p, bot=BOT):
+    """Typed test input, retaining exact V1 bytes for predecessor/hash assertions."""
+    d = {
+        "BUSINESS_MESSAGE": "NEW",
+        "EDITED_BUSINESS_MESSAGE": "EDIT",
+        "DELETED_BUSINESS_MESSAGES": "DELETE",
+        "BUSINESS_CONNECTION": "LIFECYCLE",
+        "UNSUPPORTED": "UNSUPPORTED",
+    }.get(p["kind"], "UNSUPPORTED")
+    e = p.get("event")
+    result = dict(
+        codec="TELEGRAM_PROVENANCE_V2",
+        bot=bot,
+        update_id=p["update_id"],
+        legacy_v1=p,
+        discriminator=d,
+        connection=p["external_connection_id"],
+        chat_id=p["deleted_chat_id"] if d == "DELETE" else None,
+        message_id=None,
+        sent_at=None,
+        edited_at=None,
+        chat_type=None,
+        origin=None,
+        content=None,
+        unsupported_reason="NONBUSINESS" if d == "UNSUPPORTED" else "NONE",
+    )
+    if d in ("NEW", "EDIT") and isinstance(e, dict):
+        content = (
+            {"kind": "TEXT", "text": e["text"]}
+            if e.get("image_file_id") is None
+            else {
+                "kind": "PHOTO",
+                "caption": e["text"],
+                "selected_file_id": e["image_file_id"],
+                "selected_unique_id": None,
+            }
+        )
+        reason = "NONE"
+        if e.get("sender_id") != e.get("chat_id"):
+            reason = "AMBIGUOUS_SENDER"
+        elif e.get("kind") == "UNSUPPORTED":
+            reason = "UNSUPPORTED_MEDIA"
+            content = {"kind": "UNSUPPORTED", "reason": "UNSUPPORTED_MEDIA"}
+        result.update(
+            chat_id=e.get("chat_id"),
+            message_id=e.get("message_id"),
+            sent_at=e.get("occurred_at"),
+            chat_type="PRIVATE",
+            origin={
+                "sender_id": e.get("sender_id"),
+                "sender_is_bot": "FALSE" if e.get("sender_id") else "MISSING",
+                "sender_business_bot_id": p["sender_business_bot_id"],
+                "offline": "MISSING",
+            },
+            content=content,
+            unsupported_reason=reason,
+        )
+    return result
+
+
+async def cleanup_material(c):
+    """Explicit successor children, before frozen parent cleanup. Safe on old lanes."""
+    if (
+        await c.execute(text("SELECT to_regclass('platform.telegram_provenance')"))
+    ).scalar_one() is None:
+        return
+    for table, suffix in (
+        ("app.conversation_turn_messages", " AND initial_suppression_id IS NOT NULL"),
+        ("platform.message_initial_suppressions", ""),
+        ("platform.message_material_effects", ""),
+        ("app.audit_events", " AND event_type='MESSAGE_MATERIAL_CHANGED'"),
+        ("platform.message_material_targets", ""),
+    ):
+        await c.execute(
+            text(f"DELETE FROM {table} WHERE workspace_id IN (:a,:b)" + suffix), {"a": A, "b": B}
+        )
+    await c.execute(
+        text(
+            "DELETE FROM platform.telegram_provenance WHERE workspace_id IN (:a,:b) OR (workspace_id IS NULL AND bot_identity IN (SELECT bot_identity FROM platform.telegram_connection_state WHERE workspace_id IN (:a,:b)))"
+        ),
+        {"a": A, "b": B},
+    )
+
+    await c.execute(
+        text(
+            "DELETE FROM platform.telegram_update_receipts WHERE codec=2 AND (workspace_id IN (:a,:b) OR (workspace_id IS NULL AND bot_identity IN (SELECT bot_identity FROM platform.telegram_connection_state WHERE workspace_id IN (:a,:b))))"
+        ),
+        {"a": A, "b": B},
+    )
+
+
 async def ingress(h, p=None, bot=BOT):
+    p = p or projection()
+    revision = await sql(h, "SELECT version_num FROM platform.alembic_version")
+    # Frozen predecessor lanes still exercise their original writer directly.
+    if revision == "0012" and "codec" not in p:
+        p = v2_fixture(p, bot)
     return await sql(
         h,
         "SELECT platform.telegram_ingest(:bot,CAST(:p AS jsonb),:corr)",
         bot=bot,
-        p=json.dumps(p or projection()),
+        p=json.dumps(p),
         corr=uuid4(),
     )
 
@@ -237,6 +335,7 @@ async def telegram(messaging):
         yield h
     finally:
         async with h.migrator.begin() as connection:
+            await cleanup_material(connection)
             for table in (
                 "platform.billing_contact_command_receipts",
                 "app.audit_events",
@@ -774,6 +873,7 @@ async def test_owner_cursor_projection_has_no_internal_ids_and_checks_exact_anch
         "version",
         "file",
         "delivery",
+        "current",
     }
     assert rows[0]["message_id"] == send["message_id"] and rows[0]["file"] is None
     assert set(rows[0]["delivery"]) == {"status", "error_code", "completed_at", "version"}
@@ -863,7 +963,17 @@ async def test_db_receipt_codec_preserves_opaque_utf8_and_delete_chat(telegram):
             "SELECT encode(fingerprint,'hex') AS fingerprint FROM platform.telegram_update_receipts WHERE update_id='101'",
         )
     )[0]
-    assert stored["fingerprint"] == _fingerprint_vector(p)
+    assert stored["fingerprint"] == update_fingerprint_v2(
+        TelegramProjectionV2.model_validate(v2_fixture(p))
+    )
+    assert (
+        await query(
+            h,
+            "SELECT encode(platform.telegram_fingerprint(:bot,CAST(:p AS jsonb)),'hex') AS hash",
+            bot=BOT,
+            p=json.dumps(p),
+        )
+    )[0]["hash"] == _fingerprint_vector(p)
     deleted = projection(
         "401",
         kind="DELETED_BUSINESS_MESSAGES",
@@ -878,7 +988,9 @@ async def test_db_receipt_codec_preserves_opaque_utf8_and_delete_chat(telegram):
             "SELECT encode(fingerprint,'hex') AS fingerprint FROM platform.telegram_update_receipts WHERE update_id='401'",
         )
     )[0]
-    assert stored["fingerprint"] == _fingerprint_vector(deleted)
+    assert stored["fingerprint"] == update_fingerprint_v2(
+        TelegramProjectionV2.model_validate(v2_fixture(deleted))
+    )
     with pytest.raises(DBAPIError) as caught:
         await ingress(h, {**deleted, "deleted_chat_id": "7000002"})
     assert caught.value.orig.diag.message_primary == "EVENT_ID_CONFLICT"

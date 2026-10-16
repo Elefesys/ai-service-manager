@@ -2,7 +2,280 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C3-M3.1-PROVENANCE-CONTRACT-R3 / 2026-10-15 UTC
+## Текущий статус — C2-M3.1-MATERIAL-SENT-LOCK-R5 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; three distinct findings OPEN.**
+[C0 source task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220709356),
+[C0 R4 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220674632),
+[§15.18](tasks/M3_CONTRACT.md#1518-c2-m31-material-sent-lock-r5--single-targetcontext-updates-and-typed-tenancy-identity--2026-10-16-utc).
+
+| Task / binding | Current source result / actual gate |
+|---|---|
+| C2-M3.1-MATERIAL-SENT-LOCK-R5 | REVIEW on return, then HOLD. Separate branch c2/m3-1-material-sent-lock-r5, exact base/sole parent36240388fa580e563699c4dec3fd989cc2dd09f6/tree cb5c38e78a145184d8792f53702e102275fbb785; one focused descendant, full head/tree/numstat in receipt |
+| Main / PR34 | Main/frozen E933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011; OPEN/Draft PR34 c6/m3-1-material-compat stays36240388; no advancement |
+| Source cause / correction | Actual55P03/material_apply frame, exact FK UNKNOWN. Pinned PG18 current-XID RI path supports repeated target and C updates as connection lock edges. One target bind+final-current UPDATE; one shared changed-SENT C+2 UPDATE, ordinary/default C+1 and no-op/unmatched/UNKNOWN behavior preserved |
+| Private typed identities | Apply adds previous jsonb, context adds delivery boolean DEFAULT false; no new overload/capability.132 functions/23 additions/2 runtime/21 private/7 invoker/16 SECDEF, same owner/search_path/grants. Tenancy resolves closed full regprocedure signatures to unique OIDs and compares exact sets/profiles |
+| Regression source | Original single finish_send/3s/held connection FOR UPDATE/arguments/same-call diagnostic preserved; exact post-success SENT/current/version/Audit/effect/history readbacks. Neighbor no-op SENT plus Message/C overflow arms with intended22003 and41 data+actual metadata whole-atom rollback; PG NOT RUN locally |
+| Local checks | Existing online-DDL test1 PASS/69 deselected/0.84s; cached Ruff0.16.7 check/format3 modules, compile/diff/AST/source audits PASS.3.12.14, packaged3.13 absent;131 statements/42 tables/132 functions,127 other profiles and53 other test definitions exact; no install/bootstrap/services/runtime run |
+| Actual baseline | CI38926368179/attempt1, tested merge d3c39fa8977d86aa25f6ab9cc713a0c7f55d2f22:8 SUCCESS/1 FAILURE, clean8 SUCCESS/1 SKIPPED;1444 units PASS, PG797 PASS/2 FAIL. Browser308 Vitest/44 Playwright and both complete state lanes/clean PASS. Historical browser cause UNKNOWN |
+| CLOSED8 by C0 | C1-R2-02 (C1-R3-01 alias), C2-MAT-02, C1-R3-03, C0-R3-01/02/04/05, C5-R3-01. Earlier scoped closures/regression bridge remain |
+| OPEN3 | C1-MAT-01/P1 (C1-R3-02 alias), C0-R3-03/P2, C2-MAT-01/P1. No source self-closure or INTEGRATED/VERIFIED |
+| Remaining actual gates | C0 source intake then same PR normal automatic CI, full9+clean9, full foundation post-PG tail, dedicated tenancy profile/ACL/SENT atomicity and both complete state lanes again, remaining owners then independent C8. C1/C3/C5/C6/C8 HOLD |
+
+Contract prefix through§15.17 is exact592048 bytes/SHA256
+ad5697568bcd71639c06fbf827c97481c9e1149879a538518599866a72fb3604.
+Six changed paths inside eight allowed; applied0001–0011/ORIGINAL17/OLD_CHECK4,
+original11/product/DTO/Worker/mapper/frozen/runtime/scripts/workflows/Compose/pins/
+locks/frontend exact. Physical schema and0012←0011 unchanged. Foundation tail and
+clean gate were not reached after PG failure; other green jobs do not replace them.
+Gate OFF; normal P prep719.560822218s left0.439177782s, foundation43:11 is not full45min
+acceptance or optimization authority. S/600/P720/fixed120/+480/S+1200/cleanup90/state25/
+browser25/foundation45 and3s/60s/10s unchanged. No clock reset/subtraction/retry/budget
+increase/Actions operations/PR-head move/new PR/merge/live/VM/working DB/S3/sends/
+deploy/native/A08/P-A03-09/renewal/collector/M4. IMPL-05/broad optimization DEFERRED.
+Earlier sections retain their historical statements.
+
+## История — C2-M3.1-MATERIAL-CURRENT-PROFILE-R4 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; eleven distinct findings OPEN.**
+[C0 source task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218233521),
+[C0 R3 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218176738),
+[§15.17](tasks/M3_CONTRACT.md#1517-c2-m31-material-current-profile-r4--test-boundaries-and-same-call-sent-diagnostics--2026-10-16-utc).
+
+| Task / binding | Current result / actual gate |
+|---|---|
+| C2-M3.1-MATERIAL-CURRENT-PROFILE-R4 | REVIEW on return, then HOLD. Separate c2/m3-1-material-current-profile-r4, exact base/sole parent89f9e157ddfc328ba4564fc003b047f517352cdf/tree9be95d45e6a70bf76adf146c1035e571d52205af; one focused descendant, final identity/numstat in canonical receipt |
+| Main / PR34 | Main/frozen E933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011; PR34 OPEN/Draft c6/m3-1-material-compat stays89f9e15; no advancement |
+| Source | Nine named test modules + three documents only. Wire dates, V2 held ingress/lifecycle, exact current/23-signature profiles, actual-stage0011 seed, UTC caller; complementary R3 metadata gives41+1. Existing assertions and product/migrations/frozen sources unchanged |
+| SENT | Single original finish_send/3s/held FOR UPDATE with bounded closed metadata only; primary exception survives diagnostic/cleanup failures. No runtime fix; primary cause UNKNOWN |
+| Local checks | Ruff0.16.7 check/format9 files, compile/diff/AST/prefix/source audits PASS;235 other function bodies/decorators byte-exact.6 new pure pytest PASS/64 deselected/0.86s on3.12.14 plus DTO/V2/fingerprint/UTC probes; not packaged3.13 or PG. Initial6 PG-harness import failures led to pure helper placement; no installs/environment bootstrap |
+| Actual baseline | CI38909147338/attempt1, merge d0fd7e5da7c29b1e065e72a7bfcc11519bdd39d6:5 SUCCESS/4 FAILURE, clean5 SUCCESS/4 SKIPPED;1438 units PASS, PG785 PASS/14 FAIL, browser43 PASS/1 FAIL, both state stop at fresh DTO after saved-V1 reader |
+| CLOSED by C0 | C0-DIAG-02 (C1-R2-01 alias), C1-MAT-02, C2-MAT-03. C5-MATERIAL-01/C0-DIAG-01 retain scoped closures; full gates remain blocked |
+| Eleven OPEN | C1-MAT-01/P1 (C1-R3-02 alias), C1-R2-02/P2 (C1-R3-01 alias), C2-MAT-01/P1, C2-MAT-02/P2, C1-R3-03/P2, C0-R3-01/P2, C0-R3-02/P2, C0-R3-03/P2, C0-R3-04/P2, C0-R3-05/P2, C5-R3-01/P2 |
+| Independent work | C5-ESCALATION-RECOVERY-DIAG-R3 separately ACTIVE only frontend/e2e/messaging.spec.ts from89; no branch absorbed. C1/C3/C6/C8 HOLD; C2 HOLD after source receipt |
+| Remaining actual gates | C0 accepts/combines both returns before same PR normal automatic CI;9+clean9, full PG/fresh DTO+tenant/wrong-Client/SENT/EXPIRED/ingress/catalog/ACL/populated reverse/R3 raw42/both full P-state/used recovery/cutover/restart/retained full120/export/all3 late-C negatives/owned cleanup, C1/C2/applicable C5 then independent C8 |
+
+This source closes no actual finding. Historical R3 “all42” is corrected to41 data
+tables; new scoped metadata read is future raw42 evidence, not an executed proof.
+The entire§15.16 contract prefix582717 bytes/SHA2566f68bd44… and original11 remain
+exact. No skip/xfail/marker/selector weakening or broader unrelated reruns.
+Gate OFF; not INTEGRATED/VERIFIED. Original S/retained600/P720/remaining+480/
+nominal S+1200/cleanup90/state25/browser25/foundation45 and individual limits unchanged.
+No installs/new services/Docker/PG/browser runtime/Actions operations/PR-head/new PR/
+merge/live/VM/working DB/S3/sends/deploy/native/A08/P-A03-09/renewal/collector/M4.
+IMPL-05/broad optimization DEFERRED; earlier sections retain their historical status.
+
+## История — C6-M3.1-MATERIAL-HARNESS-R5 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; seven distinct findings OPEN.**
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211450459),
+[C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211420811),
+[§15.16](tasks/M3_CONTRACT.md#1516-c6-m31-material-harness-r5--packaged-inputs-and-saved-v1-reader--2026-10-16-utc).
+
+| Task / binding | Current source result / actual gate |
+|---|---|
+| C6-M3.1-MATERIAL-HARNESS-R5 | REVIEW on return then HOLD. Branch c6/m3-1-material-harness-r5, exact base/sole parent d7cea5a2e9da7b384aeaf11dd41df3e1e4abcbff/tree a471c98e16343cf9d17d4d184df88ed491184544; one focused descendant, final identity/numstat in receipt |
+| Main / PR34 | Main/frozen E933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011; PR34 OPEN/Draft c6/m3-1-material-compat/d7cea5a… unchanged |
+| Unit inputs | Explicit verified frozen-H pins dependency before ROOT substitution; all11 real-entrypoint preparation cases/assertions preserved; no uncopied infra or Git dependency |
+| Saved V1 | Complete non-NULL Job inventory; closed ordinary/guarded reader, actual Job-id response envelope only in memory; stored JSON/all fields/digest/no schema preserved, no Escalation form or product changes |
+| Before / after | Exact d7 COPY baseline preparation[pass]:1 expected FAIL/0 subprocesses. Old controller block synthetic raw-input mismatch reproduced. Corrected110 PASS (78 fixture/32 helper cases), existing91 PASS;15 overlap/186 distinct;0 skip/xfail, restricted168-file layout |
+| Preserved | Six-path scope;306538-byte runtime/shell/frozen fixture and decoder/original11/C3/product/migrations/ORIGINAL17/OLD_CHECK4/Inbox/current-T/PHOTO/observer/ACK/privacy/budgets exact; full§15.15 prefix576446 bytes/SHA25676ed7dd2… unchanged |
+| CLOSED by C0 | C5-MATERIAL-01 and C0-DIAG-01, scoped actual d7/merge58542ff evidence; applicable regression bridge remains required |
+| Seven OPEN | C2-MAT-01/02/03,C1-MAT-01/02,C0-DIAG-02 (C1-R2-01 packaging alias),C1-R2-02. R5 units do not close findings |
+| Actual gates | CI38868575912/attempt1:6 SUCCESS/3 FAILURE,clean6 SUCCESS/3 SKIPPED. Prep623.690022374s/688.934643093s PASS720, not600/full-state. Full product PG/both complete P-state/used55000/recovery/cutover/restart/retained/full120/export/all3 late-C/9+clean9 pending |
+
+C0 intake before C0 advances same Draft PR34 for normal automatic CI; remaining
+C1/C2 acceptance, applicable C5 bridge, later independent C8. C6 HOLD after return;
+C3/C1/C2/C5/C8 HOLD. Source/unit evidence only; no new Docker/PG/browser/Actions/
+install/services/PR-head/new PR/merge/live operations. Gate OFF; not INTEGRATED/
+VERIFIED. Original S/retained600/P720/+480/S+1200/cleanup90/individual/state25/browser25/
+foundation45 unchanged. Native/A08/renewal/collector/M4 unissued; IMPL-05/broad
+optimization DEFERRED. VM/working DB/S3/sends/deploy unissued; history below preserved.
+
+## История — C6-M3.1-MATERIAL-CI-DIAG-R4 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all eight findings OPEN.**
+[C0 R4](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210115890),
+[R3 intake/new packaging finding](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210103047),
+[§15.15](tasks/M3_CONTRACT.md#1515-c6-m31-material-ci-diag-r4--diagnostic-unit-image-inputs--2026-10-16-utc).
+
+| Task / binding | Current source result / actual gate |
+|---|---|
+| C6-M3.1-MATERIAL-CI-DIAG-R4 | REVIEW on return, then HOLD. Branch c6/m3-1-material-ci-diag-r4; exact base/sole parent9cb1467c1705827a4e782421754850f5dee762ce, tree e0c1e5231cddfd25e44071990031371aaa16c482. One focused descendant; final head/tree/numstat in receipt |
+| R3 / DIAG-01 | Host correction source/unit accepted by C0; complete306538-byte pre-pytest prefix and entire shell byte-exact. Actual state/CI acceptance pending |
+| Main / PR34 | E933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011; PR34 OPEN/Draft c6/m3-1-material-compat/d810dde939f727085af15f7614eeddd36f4909b8 unchanged |
+| Unit inputs | One pinned test-only JSON, four exact H objects/231153 decoded bytes; fixed paths/lengths/blob checks, bounded decode. No Git/runtime history. Host uses finite external Git-command/H doubles with actual copied blobs and explicitly synthetic identities; real loader/binding/observer unchanged |
+| Observed before/after | Unchanged9cb source-only export:2 setup ERROR in1.35s, show/clone exit128. Corrected168-file development COPY layout without .git/usable Git:91 PASS/510 deselected in10.00s, JUnit0 failure/error/skip, no xfail; includes15 host+60 earlier invocation cases |
+| Restrictions / control | Empty inherited environment; PATH only sh/python3, Git lookup None, audit blocks Git;0 Git subprocess attempts. Cached locked deps only. Revised loader still detects exact a9 missing-pytest defect:6 FAIL/9 PASS. No skip/marker/collection filtering changes |
+| Preservation | Exact five-path scope; runtime prefix/SHA2563b1b9e4d… and shell7d1e08e… unchanged;168 other definitions/all host assertions/cases exact. Full§15.14 prefix569463 bytes/SHA256bd6f9cb9… preserved. Original11/C3/product/PG/migrations/Inbox-Job-inventories/frozen H-T-C-G-E/observer-P/privacy-ACK/limits/workflows/locks/budgets unchanged |
+| OPEN findings | C2-MAT-01/P1, C2-MAT-02/P2, C2-MAT-03/P1, C1-MAT-01/P1, C1-MAT-02/P2, C5-MATERIAL-01/P2, C0-DIAG-01/P1, C0-DIAG-02/P1. DIAG-01 source-fixed; no actual acceptance claimed |
+| Actual gates | Historical38850821014 remains4 SUCCESS/5 FAILURE, clean4 SUCCESS/5 SKIPPED; H cause UNKNOWN, Docker29 prep499.951432356s partial. C0 packaging intake before same Draft PR34 automatic CI; actual9+clean9/both complete state-P/retained-late-C/0012-PG/current-T→T2/PHOTO-browser then C1/C2/C5/later C8 required |
+
+C6 HOLD after canonical return; C3/C1/C2/C5/C8 HOLD. Packaging/unit evidence only;
+no install/services/Docker/build/PG/browser/Actions execution. No implementation
+INTEGRATED/VERIFIED; gate OFF. S/600/P720/remaining+480/S+1200/cleanup90/individual
+bounds/state25/browser25/foundation45/9+clean9 unchanged. No PR-head update/new PR/
+merge/dispatch/rerun/cancel/live operation. Native/A08/renewal/collector/VM/working
+DB/S3/sends/deploy/M4 unissued; IMPL-05/broad optimization DEFERRED. Earlier sections
+below preserve their historical statuses/receipts.
+
+## История — C6-M3.1-MATERIAL-CI-DIAG-R3 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all seven findings OPEN.**
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209721060),
+[C0-DIAG-01/P1 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209702274),
+[R2 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209600353),
+[§15.14](tasks/M3_CONTRACT.md#1514-c6-m31-material-ci-diag-r3--stdlib-h-host-boundary--2026-10-16-utc).
+
+| Task / binding | Current source result / actual gate |
+|---|---|
+| C6-M3.1-MATERIAL-CI-DIAG-R3 | REVIEW on source return, then HOLD. Branch c6/m3-1-material-ci-diag-r3; exact correction base/sole parent a9f58a1364b98b5331b83fa17893363abb7d5dae, tree4c938731b25a4b0424f8e86d33bcf779f6f1fe8b. One focused descendant; final head/tree/numstat in canonical receipt |
+| R2 disposition | CHANGES REQUIRED, correction base only. Historical60/196 PASS tied to a9; missing real stdlib-loader coverage found by C0. No PR advancement accepted |
+| Main / PR34 | E933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011; PR34 OPEN/Draft, c6/m3-1-material-compat / d810dde939f727085af15f7614eeddd36f4909b8 unchanged |
+| Host correction | Early stdlib dispatch before pytest; unchanged observer executes with runpy module alive. Result/summary or exact executor exception transferred; started marker prevents repeat H. Setup/load finite INVALID; image/intent direct; cleanup/gates/observer protocol/P unchanged |
+| Observed regression | External test containing only the two new nodes on clean exact a9:6 FAIL/9 PASS in6.10s, actual pytest import attempt and INVALID-load path. Corrected affected selection91 PASS/510 deselected in14.80s, includes15 new real-loader python -S cases and60 existing invocation cases |
+| Evidence limits | Only external H execution doubled, synthetic empty report/ACK; real runpy/full module, no namespace stub. No dependency/service/Docker/PG/browser/Actions execution. Source/unit proof, no actual state/product acceptance |
+| Preservation | Exactly five allowed paths; full§15.13 prefix563611 bytes/SHA2562aee6573…;168 existing definitions byte-exact, related seam assertions intact;274 unchanged baseline blobs verified. Original11/C3/product/PG/applied migrations/0012/inventories/Inbox pair/five NULL Job fields/frozen H/T/C/G/E/launcher/HMAC/ACK/privacy/workflows/locks unchanged |
+| OPEN findings | C2-MAT-01/P1, C2-MAT-02/P2, C2-MAT-03/P1, C1-MAT-01/P1, C1-MAT-02/P2, C5-MATERIAL-01/P2, C0-DIAG-01/P1. Source/unit evidence closes none |
+| Actual evidence / next gate | Historical38850821014:4 SUCCESS/5 FAILURE, clean4 SUCCESS/5 SKIPPED; H cause UNKNOWN, Docker29 prep499.951432356s partial. C0 source intake before PR update; actual9+clean9/both state-P/retained-late-C/0012-PG-current-T→T2/PHOTO-browser, C1/C2/C5 and later C8 still required |
+
+C6 HOLD after canonical return; C3/C1/C2/C5/C8 HOLD. No implementation
+INTEGRATED/VERIFIED, gate OFF. Original S/retained600/P720/remaining+480/S+1200/
+cleanup90/individual bounds/state25/browser25/foundation45/9 jobs+clean9 unchanged.
+No PR-head update/new PR/merge/dispatch/rerun/cancel/live operation. Native/A08/
+renewal/collector/VM/working DB/S3/sends/deploy/M4 unissued; IMPL-05/broad optimization
+DEFERRED. Earlier sections below are historical, including their then-current six findings.
+
+## История — C6-M3.1-MATERIAL-CI-DIAG-R2 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all six findings OPEN.**
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208852583),
+[accepted C3 checkpoint](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208831490),
+[diagnosis](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208328996),
+[§15.13](tasks/M3_CONTRACT.md#1513-c6-m31-material-ci-diag-r2--bounded-original-invocation-diagnostics--2026-10-16-utc).
+
+| Task / binding | Current source result / actual gate |
+|---|---|
+| C6-M3.1-MATERIAL-CI-DIAG-R2 | REVIEW on return, then HOLD. Branch c6/m3-1-material-ci-diag-r2; accepted base f0c111ac0b74695cc12444ccdf077314d06d2a9b, tree ca3f638b206b232a7a6cd8f1920e31580991b58b. Two focused source commits; final immediate parent711934148b3921047501ff3e3c3b6e6ff34c74a4. Final head/tree/combined numstat in canonical receipt |
+| C3 accepted source | R2 seven-space correction/two original-string regression nodes preserved; C0 source/client intake accepted, actual0012 acceptance pending |
+| Main / PR34 | E933ddd…/0011; PR34 remains OPEN/Draft, c6/m3-1-material-compat / d810dde939f727085af15f7614eeddd36f4909b8. No head update/new PR/merge or CI execution here |
+| H observation | State-only private startup launcher executes original immutable H stdin. Original command/build objects, actual target/exit/timeout, separate observer/executor identities; no retry/probe/source rewrite. H cause still UNKNOWN |
+| P ordinary migration | Original e.command frame observation, closed source/tree/direction/revision; client vs server/explicit SQLSTATE distinction,30s and ACK86 unchanged |
+| Private evidence |0700/0600; authenticated closed report≤64KiB/16 records; classify≤16KiB per captured stream; no raw outputs/SQL/argv/env/credentials. H requires independent64-byte final ACK; invalid diagnostics cannot replace original executor failure |
+| Scoped evidence |60 new invocation cases PASS; combined196 PASS/390 deselected includes those60. Ruff/format/shell/embedded code/diff/source audit PASS. Synthetic doubles, no actual H/P/PG/Docker/browser gates |
+| Preservation | Full§15.12 prefix551663 bytes/SHA2560be54876…;134 existing definitions exact, P/outer AST exact after removing diagnostics. Original11, applied0001–0011/ORIGINAL17/OLD_CHECK4/0012←0011,10 columns/6 old/4 new/42 total/132 signatures, Inbox winning pair/five NULL delivery fields, frozen T/C/G/E/workflows/locks unchanged |
+| Historical CI |38850821014/attempt1 tested merge51fca8…/tree fb06ad7…, not this source:4 SUCCESS/5 FAILURE; clean4 SUCCESS/5 SKIPPED. H build before S/P opaque; Docker29 prep499.951432356s partial, full P and3 late C negatives not reached |
+| OPEN findings | C2-MAT-01/P1, C1-MAT-01/P1, C1-MAT-02/P2, C5-MATERIAL-01/P2, C2-MAT-02/P2, C2-MAT-03/P1. Source/unit evidence closes none |
+| Next gate | C0 combined intake → one update of same Draft PR34 → automatic CI9/9+clean9/9, both full state/P/retained/late-C cleanup, actual0012/raw42/catalog/security/recovery/replay/current-T→T2/paired PHOTO/browser → C1/C2/C5, later C8 |
+
+C6 HOLD after canonical source return; C3/C1/C2/C5/C8 HOLD. No implementation
+INTEGRATED/VERIFIED. Original S/retained600/P720/remaining+480/S+1200/cleanup90,
+individual bounds/state25/browser25/foundation45 and9 jobs/clean9 remain fixed.
+Gate OFF; native/A08/renewal/collector/live/VM/working DB/S3/sends/deploy/M4 unissued;
+broad CI optimization/IMPL-05 DEFERRED. No installs/services/dispatch/rerun/cancel.
+
+## История — C3-M3.1-MATERIAL-R2 source correction / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all six findings OPEN.**
+[C0 R2](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208530769),
+[binding disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208519238),
+[evidence§15.12](tasks/M3_CONTRACT.md#1512-c3-m31-material-r2--online-sql-parameter-correction--2026-10-16-utc).
+
+| Task / finding | Current source result / actual gate |
+|---|---|
+| C3-M3.1-MATERIAL-R2 | REVIEW on return, then HOLD. Branch c3/m3-1-material-r2; exact base/sole parent d810dde939f727085af15f7614eeddd36f4909b8, tree fb06ad7bf5cf4d821e880328888c9bbf25eea3b7, base parent e7f5547…; main/E933ddd…/0011 and existing PR34 head unchanged. Final head/tree/numstat in canonical receipt |
+| C2-MAT-03/P1 OPEN | Six0012 literal spaces + one actual forged-basis setup space; equal JSON. Two actual-string online TextClause/psycopg regressions: base2 FAIL with required-null InvalidRequestError → candidate2 PASS. All131 expanded operations accept empty parameters; actual migration still required |
+| C2-MAT-01/P1 OPEN | Earlier three CASE source corrections accepted; actual complete0012 lifecycle/catalog/reverse/refusal remains required |
+| C1-MAT-01/P1 OPEN | Private immutable Inbox winning pair/five NULL Job delivery fields source PASS; actual terminal/replay/rollback/reclaim/ACK-loss and precise R3 negative+positive required |
+| C1-MAT-02/P2 OPEN | Known T→fresh T2/current-version refusal source PASS; actual maintenance/late File/Resume and positive neighbor required |
+| C5-MATERIAL-01/P2 OPEN | Four normal-Worker PHOTO/private-grant journeys source PASS; actual paired browser not reached; no additional product fix requested |
+| C2-MAT-02/P2 OPEN | Original-S terminal720 source accepted. Docker29 preparation499.951432356s PARTIAL; neither full state lane passed. Retained600/individual/supervisor/cleanup bounds and3 late C negatives unchanged |
+| Separate H-build blocker | Normal state failed before T/P; target/numeric exit/stderr and root cause UNKNOWN. Not attributed to MAT-03; C6 diagnostics require a separate exact-base issuance |
+| Final historical CI | Run38850821014/attempt1, tested merge51fca8a26bb19fa511040592a8b04613ddf0eb96/tree fb06ad7…:4 SUCCESS/5 FAILURE; clean4 SUCCESS/5 SKIPPED. No retained migrate traceback/DDL/SQLSTATE; source counterexample is not an observed CI exception |
+| R2 local evidence | New regression2 PASS; scoped67 PASS/98 deselected (includes those2); Ruff/format3, diff/allowlist/original11/applied0001–0011/ORIGINAL17/OLD_CHECK4/prefix/source inventory PASS. Cached locked environment; no installs/services/actual PG/Docker/browser/Actions execution |
+| Preserved contracts | Entire§15.11 prefix546352 bytes/SHA25679f920fd…;10 columns/6 old tables,4 new/42 total,132 signatures; C6/frozen H/T/C/G/E bytes, V1 replay/hash/decoder, no-refetch, current Turn and initial-suppression proofs |
+| Sequential next route | C0 source intake → C6 diagnostics-only task on accepted C3 descendant → combined intake → same PR34 automatic CI → C1/C2/C5 actual/source disposition → later C8. No intermediate head update/new PR/merge/dispatch/rerun |
+
+All actual0012 fresh/populated/repeat/unused reverse/used55000-before-DDL/raw42/catalog/
+security/recovery/replay, known-T/current-version and paired PHOTO/browser gates remain;
+require both complete state lanes and9/9+clean9/9 on the actual tested SHA/tree.
+Source success closes no finding. C3 HOLD after canonical return; C1/C2/C5/C6/C8 HOLD.
+Implementation not INTEGRATED/VERIFIED. Gate OFF; native/A08/renewal/collector/live/VM/
+working DB/S3/sends/deploy/M4 unissued; broad CI optimization/IMPL-05 DEFERRED.
+
+## История — C6-M3.1-MATERIAL-COMPAT-R2 source checkpoint / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all five findings OPEN pending final
+source reviews and actual acceptance. C6 REVIEW on return, then HOLD.**
+[C0 intake/explicit terminal720 decision](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207691746),
+[C6 five-path task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207709114),
+[contract/evidence map§15.11](tasks/M3_CONTRACT.md#1511-c0--terminal-material-preparation720-exception--2026-10-16-utc).
+
+| Task / binding | Current source result / remaining gate |
+|---|---|
+| C6 branch/base | `c6/m3-1-material-compat-r2` from accepted C3 R1 `e7f554772ad4dd697d38c88f4f6423b3d3895499`; tree `0242e71790e0fe441ebc55a6311c80f5681b218f`; parent ef7b52… |
+| Main / existing PR34 | Frozen E933ddd…/0011; old PR34 head ef7b52… unchanged by C6. Final C6 head/tree/parent/numstat in one canonical PR34 receipt. No new PR/dispatch/rerun |
+| C2-MAT-02 | Explicit exception implemented: retained S+600 and P-only S+720 from original S; all preceding elapsed costs charged. Closed version2 private single-use handoff binds P owner and completed E source/report/hash/cleanup; final preparation charge<720. Finding remains OPEN pending both actual state lanes |
+| Bounds / preservation | P remaining+480 → nominal S+1200; shared cleanup90, individual commands, state25/browser25/foundation45,9 jobs/clean9 unchanged. Full T positives/120-timeout/export negatives, C/G/E frozen bodies/requests/ownership, source/image proofs and all3 late C cleanup negatives preserved |
+| R1 source companions | Read-only10-column/6-existing-table/42-table/132-signature inventory, private Inbox token, full P_COLUMNS/no-backfill/raw42 used55000-before-DDL/unused exact reverse/ORIGINAL17/OLD_CHECK4 |
+| Local evidence | Reused frozen/offline scoped egress+migration units:625 PASS. Targeted protocol/current coordinator/material entrypoint and executed shell gates cover refusal/no runtime, elapsed720 endpoints and primary/secondary/owned cleanup. Static/prefix/frozen checks and exact commands/results in canonical receipt |
+| Actual gates | PG/Docker/image builds/paired PHOTO/browser/CI NOT RUN here.720 sufficiency/minimality not established; no additional increase or retry authorized |
+| Next C0 route | Source intake → move combined descendant into same Draft PR34 → normal automatic CI9/9+clean9/9 on exact SHA/tree; both P prep<720 and retained negatives/cleanup within state25; actual product PG/PHOTO/browser; C1/C2/C5 re-review then C8 |
+
+Only assigned five paths changed with the substantive protocol correction;
+§15.11 appended after the complete immutable§15.10.4 prefix. Earlier evidence below
+remains bound to its historical sources. No implementation INTEGRATED/VERIFIED
+claim; C3/C1/C2/C5/C8 HOLD, C6 HOLD after canonical return. Gate OFF; no live/VM/
+working DB/S3/sends/deploy/native/renewal/collector/M4. IMPL-05 remains DEFERRED.
+
+## История — C3-M3.1-MATERIAL-R1 source correction / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; findings OPEN pending C0 and actual
+acceptance. C3 HOLD after canonical return.**
+[C0 R1](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6201238585),
+[source and assertion map](tasks/M3_CONTRACT.md#15104-c3-m31-material-r1-correction--2026-10-16-utc).
+
+| Binding / correction | Current result |
+|---|---|
+| R1 branch / exact parent | `c3/m3-1-material-r1` / `ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`, tree `e4317cc6478b2c40669d96242c3adb89079ab46c` |
+| C2-MAT-01 / C1-MAT-01 | Three CASE fixes; immutable Inbox material_result/material_claim_token pair, exact winning replay; all Job delivery fields NULL. Only0012;10 columns/6 old tables,4 new/42 total,132 function signatures |
+| C1-MAT-02 / R3-T4 | Fresh input in old quiet window→T2; current-version sticky refusal after GROUP/MEDIA/late File/Resume; Telegram and CONTROLLED GUARDS/Escalation arms. Exact negative SQLSTATE/constraint/reason plus positive neighbor |
+| C5-MATERIAL-01 | Four finite PHOTO/private-S3 browser journeys with ordinary Worker mutation; loaded image, caption positive, replacement/type/delete, grant404, real delayed old HTTP response. Source proof written; actual paired execution NOT RUN |
+| Local evidence | Ruff/format9,79 targeted Python,68 browser-harness Python, typecheck,32 MessagingPanel tests PASS.121 PG cases collected only. No actual PG/Docker/browser/migration/race/catalog PASS |
+| Next gate | C0 source intake→assigned C6 descendant→same PR34 automatic CI and C1/C2/C5 review; C2-MAT-02 budget stays OPEN with C6 |
+| Boundaries | Gate OFF; no new PR/dispatch/rerun/PR34-branch push, native/renewal/live/VM/sends/deploy/M4 |
+
+Final SHA/tree/parents/changed paths/numstat are in the single canonical PR34 R1
+receipt. Frozen originals/0001–0011/normative§15.2–15.9 unchanged. Historical evidence
+below remains attached to its old checkpoint, not to this R1 implementation.
+
+## История — C3-M3.1-MATERIAL source checkpoint / 2026-10-15 UTC
+
+**MATERIAL/M3 IN_PROGRESS; C3 HOLD после source return. A03 NOT VERIFIED.**
+[C0 implementation](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336),
+[C0 continuation](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195754984),
+[handoff](tasks/M3_HANDOFF.md), [source/evidence§15.10](tasks/M3_CONTRACT.md#1510-material-implementation-source-checkpoint--2026-10-15-utc).
+
+| Задача / факт | Статус и граница evidence |
+|---|---|
+| Design PR33 | [INTEGRATED по C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6194957626); C1-PROV-01…05/C2-PROV-01…04 CLOSED design по [C2 R3](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6193806982)/[C0 acceptance](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6193890730) |
+| Implementation base | `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`, tree `d0759acb9f83ec3f3e10d9c5d1325c937c343ee7`, schema0011 |
+| C3 source | `c3/m3-1-material`, assigned0012←0011, allowlist57; closed V2 ingress/material/shared bodies and paired API/OpenAPI/TS/UI; executable PG/migration/race/security/browser cases written |
+| Local evidence | Ruff149/mypy61/export/typecheck/build PASS; scoped284 unit and93 Vitest PASS.103 PG cases collected only; no actual PostgreSQL execution |
+| C6 handoff | Source inventory4 tables/9 columns/23 new+17 replaced functions/17 frozen bodies/used blockers/source-schema pairs§15.10; actual catalog NOT RUN. Reserved6 unchanged, C6 HOLD until separate C0 issuance |
+| PG/migrations/races/RLS/API/browser | **NOT RUN — deferred to штатный final candidate CI**; local unavailable services do not block source return under continuation; acceptance remains blocked on actual execution |
+| Final candidate | C0 intake→sequential C6 compatibility→one Draft PR assigned by C0→9 automatic jobs+clean-source checks. No PR/dispatch/rerun from C3 source checkpoint |
+| M3-A03/P-02/P-03/P-04 | Design accepted, implementation IN_PROGRESS; no runtime/DTO/grant/UI acceptance or activation. Final SHA/tree/parents/paths/numstat in canonical PR33 source receipt |
+| C1/C2/C5/C6/C8 | HOLD pending C0 candidate/review assignments |
+| Native/A08/P-01/renewal/P-05/collector/P-A03-09/live/VM | Existing OPEN/NOT VERIFIED and TEST interval boundaries preserved; no credentials/VM/sends/deploy issued |
+| M3-ACCEPTANCE/M4/IMPL-05/CI optimization | M3 acceptance pending; later work not opened |
+
+Applied0001–0011, original11/manifest, accepted prefix345960 and normative§15
+unchanged; no workflows/Compose/dependencies changes. Source evidence is not actual
+PG/catalog/browser/account PASS. Historical rows/receipts below remain snapshots,
+not current assignments. No status-only commit is required.
+
+## История — C3-M3.1-PROVENANCE-CONTRACT-R3 / 2026-10-15 UTC
 
 **R3 — REVIEW при передаче diff, затем C3 HOLD. M3 — IN_PROGRESS.**
 [Поручение C0](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6191877569),
