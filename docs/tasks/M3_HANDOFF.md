@@ -5,7 +5,50 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. C6-M3.1-MATERIAL-CI-DIAG-R3 — stdlib H host correction / 2026-10-16 UTC
+## 0. C6-M3.1-MATERIAL-CI-DIAG-R4 — unit image packaging / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210115890),
+[R3 intake/C0-DIAG-02](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210103047),
+[§15.15](M3_CONTRACT.md#1515-c6-m31-material-ci-diag-r4--diagnostic-unit-image-inputs--2026-10-16-utc).
+Branch c6/m3-1-material-ci-diag-r4, exact base/future sole parent
+9cb1467c1705827a4e782421754850f5dee762ce, tree e0c1e5231cddfd25e44071990031371aaa16c482;
+base parent a9f58a1…. One source descendant, final identity/numstat in receipt.
+R3 loader source/unit correction is accepted and byte-preserved. Main/E933ddd…/0011
+and PR34 OPEN/Draft c6/m3-1-material-compat/d810dde… unchanged.
+
+Only post-pytest fixtures/tests change. Pinned JSON input carries exact four H files
+from actual frozen Git objects:231153 decoded bytes, fixed paths/lengths/blob hashes,
+bounded zlib/base64. COPY tests already packages it. No Git/history at test runtime.
+The host unit copies current/H bytes, uses finite synthetic external Git-command IO
+and retains real binding functions/runpy/observer/ACK behavior. Unexpected commands
+fail; synthetic identities are explicitly unit-only. Real state Git validation stays.
+
+Exact9cb source-only baseline: **2 setup ERROR in1.35s**, git show/clone exit128.
+Corrected development COPY layout:168 files matching per-file manifest, no .git or
+uncopied infra/images.lock.env; empty inherited environment, restricted sh/python3
+PATH, Git lookup None and audit rejection. **91 PASS/510 deselected in10.00s**, JUnit
+91/0 errors/0 failures/0 skipped; no xfails. All15 host and60 earlier invocation cases
+included, real child python -S/no pytest. Synthetic docker executables only;0 actual
+Git subprocess attempts. Revised loader control with exact a9 shell/module still
+gives6 FAIL/9 PASS on pytest attempts. No broader suite/services/CI executed.
+
+Ruff/format/compile/diff/source/fixture/COPY audits PASS. Full runtime prefix306538
+bytes/SHA2563b1b9e4d… and entire shell7d1e08e… exact;168 other definitions and all
+host assertions/cases preserved. Full§15.14 prefix569463 bytes/SHA256bd6f9cb9…
+unchanged; only§15.15 appended. Earlier receipts/history remain tied to their source.
+All product/C3/PG/migrations/frozen sources/observer protocol/P/budgets unchanged.
+
+**Eight findings OPEN:** C2-MAT-01/02/03, C1-MAT-01/02, C5-MATERIAL-01,
+C0-DIAG-01/02; DIAG-01 source-fixed, actual state acceptance pending. This proves
+packaging/units, not actual Docker/PG/browser/Actions acceptance. Historical CI and
+H cause UNKNOWN/partial Docker29 prep remain unchanged. C0 reviews packaging before
+PR advancement; actual9+clean9/both full state-P/retained-late-C/0012-PG/PHOTO-browser
+and C1/C2/C5/later C8 remain required. C6 HOLD after return; C3/C1/C2/C5/C8 HOLD.
+MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED, not INTEGRATED/VERIFIED; gate OFF.
+No PR-head update/new PR/merge/dispatch/rerun/cancel/live operation; unissued work
+and IMPL-05/broad optimization deferral unchanged.
+
+## История — C6-M3.1-MATERIAL-CI-DIAG-R3 — stdlib H host correction / 2026-10-16 UTC
 
 [C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209721060),
 [C0-DIAG-01/P1](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209702274),

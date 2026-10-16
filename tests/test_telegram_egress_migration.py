@@ -6966,14 +6966,55 @@ OWNER_RECEIPT_NAMES = (
 
 
 @pytest.fixture
-def invocation_units(tmp_path, monkeypatch):
+def frozen_h_source():
+    """Pinned test input bytes, decoded without Git, services or external files."""
+    import base64
+    import zlib
+
+    expected = {
+        "scripts/test_telegram_egress_migration.sh": (
+            6248,
+            "1672fbb4fb676ad69885043e46350f53334db0fc",
+        ),
+        "tests/test_telegram_egress_migration.py": (
+            84396,
+            "99cf8d1a3f8a85b64e2785710a728964d5bd3f03",
+        ),
+        "scripts/prepare_telegram_egress.py": (139789, "58486046a6bb5682a336a1578705ed973e7b4fc6"),
+        "infra/images.lock.env": (720, "1f14e1686acd3ffdde9986ec58352d0e03735af8"),
+    }
+    raw = (e.ROOT / "tests/fixtures/telegram_egress_h_source.json").read_bytes()
+    assert len(raw) <= 131072
+    fixture = json.loads(raw)
+    assert set(fixture) == {"version", "source", "tree", "encoding", "total_bytes", "files"}
+    assert fixture["version"] == 1 and fixture["encoding"] == "zlib+base64"
+    assert fixture["source"] == "754f1c883e5a94a7fc9e729af2605424f949ba33"
+    assert fixture["tree"] == "b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f"
+    assert fixture["total_bytes"] == 231153 and set(fixture["files"]) == set(expected)
+    files = {}
+    for path, (size, blob) in expected.items():
+        entry = fixture["files"][path]
+        assert set(entry) == {"bytes", "git_blob", "data"}
+        assert (entry["bytes"], entry["git_blob"]) == (size, blob)
+        encoded = "".join(entry["data"])
+        assert len(encoded) <= 131072
+        packed = base64.b64decode(encoded, validate=True)
+        assert len(packed) <= 65536
+        decoder = zlib.decompressobj()
+        decoded = decoder.decompress(packed, size + 1)
+        assert decoder.eof and not decoder.unused_data and not decoder.unconsumed_tail
+        assert len(decoded) == size and diagnostic_blob(decoded) == blob
+        files[path] = decoded
+    assert sum(map(len, files.values())) == fixture["total_bytes"]
+    return SimpleNamespace(source=fixture["source"], tree=fixture["tree"], files=files)
+
+
+@pytest.fixture
+def invocation_units(tmp_path, monkeypatch, frozen_h_source):
     """Synthetic executables only; never contacts a Docker daemon or database."""
     root = tmp_path / "H"
     root.mkdir(mode=0o700)
-    source, tree = (
-        "754f1c883e5a94a7fc9e729af2605424f949ba33",
-        "b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f",
-    )
+    source, tree = frozen_h_source.source, frozen_h_source.tree
     fields = {}
     for name, field in (
         ("scripts/test_telegram_egress_migration.sh", "shell_blob"),
@@ -6983,7 +7024,7 @@ def invocation_units(tmp_path, monkeypatch):
     ):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(subprocess.check_output(["git", "show", source + ":" + name], cwd=e.ROOT))
+        path.write_bytes(frozen_h_source.files[name])
         if field:
             fields[field] = diagnostic_blob(path.read_bytes())
     binding = {
@@ -7482,50 +7523,29 @@ def test_invocation_private_record_failure_is_secondary(invocation_units, monkey
 
 
 @pytest.fixture
-def stdlib_host_checkout(tmp_path):
-    """Clean source snapshot and real frozen H; only H execution is doubled below."""
+def stdlib_host_checkout(tmp_path, frozen_h_source):
+    """Copied current/frozen bytes; source identities below are explicitly synthetic."""
     checkout, historical = tmp_path / "candidate", tmp_path / "historical"
-
-    def git(*args):
-        return subprocess.check_output(["git", *args], stderr=subprocess.PIPE)
-
-    git("clone", "--quiet", "--shared", "--no-checkout", str(e.ROOT), str(checkout))
-    git("-C", str(checkout), "checkout", "--quiet", "--detach", "HEAD")
     for name in (
         "scripts/test_telegram_egress_migration.sh",
         "tests/test_telegram_egress_migration.py",
+        "scripts/prepare_telegram_egress.py",
     ):
-        (checkout / name).write_bytes((e.ROOT / name).read_bytes())
-    git("-C", str(checkout), "add", "scripts", "tests")
-    git(
-        "-C",
-        str(checkout),
-        "-c",
-        "user.name=Stdlib host unit",
-        "-c",
-        "user.email=stdlib-host@example.invalid",
-        "-c",
-        "commit.gpgsign=false",
-        "-c",
-        "core.hooksPath=/dev/null",
-        "commit",
-        "--quiet",
-        "--allow-empty",
-        "-m",
-        "Unit-only clean snapshot of checked-in host source",
-    )
-    source = git("-C", str(checkout), "rev-parse", "HEAD").decode().strip()
-    assert not git("-C", str(checkout), "status", "--porcelain", "--untracked-files=all")
-    git(
-        "-C",
-        str(checkout),
-        "worktree",
-        "add",
-        "--quiet",
-        "--detach",
-        str(historical),
-        "754f1c883e5a94a7fc9e729af2605424f949ba33",
-    )
+        target = checkout / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((e.ROOT / name).read_bytes())
+    for name, raw in frozen_h_source.files.items():
+        target = historical / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    fields = {
+        name: diagnostic_blob((checkout / name).read_bytes())
+        for name in frozen_h_source.files
+        if name != "infra/images.lock.env"
+    }
+    tree = e.sha(b"SYNTHETIC_UNIT_TREE\0" + json.dumps(fields, sort_keys=True).encode())[:40]
+    source = e.sha(b"SYNTHETIC_UNIT_COMMIT\0" + tree.encode())[:40]
+    assert not (checkout / ".git").exists() and not (historical / ".git").exists()
     reports = checkout / "reports" / "historical"
     reports.mkdir(parents=True, mode=0o700)
     return checkout, historical, reports, source
@@ -7547,9 +7567,6 @@ def stdlib_host_checkout(tmp_path):
 def test_invocation_outer_stdlib_host_real_loader(stdlib_host_checkout, shard, damage, outcome):
     """Real outer loader under -S; synthetic H proves transfer, never Docker/PG."""
     checkout, historical, reports, source = stdlib_host_checkout
-    if damage == "load":
-        module = checkout / "tests/test_telegram_egress_migration.py"
-        module.rename(module.with_suffix(".unavailable"))
     if damage == "setup":
         source = "0" * 40
     program = r"""import ast,hashlib,json,os,runpy,subprocess,sys
@@ -7558,6 +7575,44 @@ from scripts import prepare_telegram_egress as e
 assert sys.flags.no_site == 1 and 'site' not in sys.modules
 shard,damage,outcome,historical,reports,source=sys.argv[1:]
 historical,reports=Path(historical),Path(reports)
+assert not (e.ROOT/'.git').exists() and not (historical/'.git').exists()
+paths=('scripts/test_telegram_egress_migration.sh','tests/test_telegram_egress_migration.py',
+ 'scripts/prepare_telegram_egress.py')
+def file_blobs(root):
+ return {name:hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+  for name in paths for raw in [(root/name).read_bytes()]}
+current_files=file_blobs(e.ROOT)
+unit_tree=e.sha(b'SYNTHETIC_UNIT_TREE\0'+json.dumps(current_files,sort_keys=True).encode())[:40]
+unit_source=e.sha(b'SYNTHETIC_UNIT_COMMIT\0'+unit_tree.encode())[:40]
+h_source,h_tree='754f1c883e5a94a7fc9e729af2605424f949ba33','b4fdef89583f6bab1c9c96cadb1fbe0c1e5d641f'
+h_files=file_blobs(historical)
+assert h_files==dict(zip(paths,('1672fbb4fb676ad69885043e46350f53334db0fc',
+ '99cf8d1a3f8a85b64e2785710a728964d5bd3f03','58486046a6bb5682a336a1578705ed973e7b4fc6')))
+assert source==('0'*40 if damage=='setup' else unit_source)
+# Only external Git-command IO is synthetic. Real schema_source_binding and
+# diagnostic_binding still parse/validate these finite identities and file bytes.
+git_answers={}
+for ref,root,tree,files in ((unit_source,e.ROOT,unit_tree,current_files),
+ (h_source,historical,h_tree,h_files)):
+ git_answers[('git','cat-file','commit',ref)]=('tree '+tree+'\n\nSYNTHETIC_UNIT_ONLY\n').encode()
+ git_answers[('git','-C',str(root),'rev-parse','HEAD')]=(ref+'\n').encode()
+ git_answers[('git','-C',str(root),'status','--porcelain','--untracked-files=all')]=b''
+ for name,blob in files.items():
+  git_answers[('git','rev-parse',ref+':'+name)]=(blob+'\n').encode()
+git_calls=[];unexpected_commands=[]
+def external_git(args,kwargs):
+ assert kwargs==dict(stdin=subprocess.DEVNULL,capture_output=True,timeout=40,env=None)
+ key=tuple(args)
+ git_calls.append(key)
+ if key==('git','cat-file','commit','0'*40):
+  return subprocess.CompletedProcess(args,128,b'',b'SYNTHETIC_MISSING_SOURCE')
+ if key not in git_answers:
+  unexpected_commands.append('UNEXPECTED_GIT_COMMAND')
+  raise AssertionError('UNEXPECTED_GIT_COMMAND')
+ return subprocess.CompletedProcess(args,0,git_answers[key],b'')
+if damage=='load':
+ module=e.ROOT/'tests/test_telegram_egress_migration.py'
+ module.rename(module.with_suffix('.unavailable'))
 pytest_imports=[]
 class NoPytest:
  def find_spec(self,fullname,path=None,target=None):
@@ -7578,8 +7633,11 @@ executor_error=OSError('SYNTHETIC_H_EXECUTOR_ERROR')
 executor_result=subprocess.CompletedProcess(['sh','scripts/test_telegram_egress_migration.sh',shard],
  0 if outcome=='success' else 23)
 def external_h(args,**kwargs):
+ if args[:1]==['git']:
+  return external_git(args,kwargs)
  if args!=executor_result.args:
-  return original_run(args,**kwargs)
+  unexpected_commands.append('UNEXPECTED_EXTERNAL_COMMAND')
+  raise AssertionError('UNEXPECTED_EXTERNAL_COMMAND')
  assert kwargs['cwd']==historical and kwargs['stdin']==subprocess.DEVNULL
  frame=sys._getframe(1)
  observed=frame.f_code.co_name=='run_historical_observed'
@@ -7614,6 +7672,7 @@ assert before==(dict(os.environ),sys.path[:],sys.gettrace())
 assert 'pytest' not in sys.modules
 public=reports/'build-observation.json'
 print(json.dumps({'calls':calls,'pytest_imports':pytest_imports,
+ 'git_calls':len(git_calls),'unexpected_commands':unexpected_commands,
  'result_identity':namespace.get('result') is executor_result,
  'exception_identity':raised is executor_error,
  'exception':None if raised is None else type(raised).__name__,
@@ -7643,8 +7702,10 @@ print(json.dumps({'calls':calls,'pytest_imports':pytest_imports,
     data = json.loads(result.stdout)
     print("STDLIB_HOST " + result.stdout.strip())
     assert data["pytest_imports"] == []
+    assert data["unexpected_commands"] == []
     observed = shard == "state" and damage != "load"
     prepared = observed and damage == "none"
+    assert data["git_calls"] == (12 if prepared else 1 if observed else 0)
     assert data["calls"] == [{"observer": observed, "prepared": prepared}]
     assert data["exception_identity"] == (outcome == "exception")
     assert data["exception"] == ("OSError" if outcome == "exception" else None)

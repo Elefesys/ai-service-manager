@@ -2,7 +2,34 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C6-M3.1-MATERIAL-CI-DIAG-R3 / 2026-10-16 UTC
+## Текущий статус — C6-M3.1-MATERIAL-CI-DIAG-R4 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all eight findings OPEN.**
+[C0 R4](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210115890),
+[R3 intake/new packaging finding](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210103047),
+[§15.15](tasks/M3_CONTRACT.md#1515-c6-m31-material-ci-diag-r4--diagnostic-unit-image-inputs--2026-10-16-utc).
+
+| Task / binding | Current source result / actual gate |
+|---|---|
+| C6-M3.1-MATERIAL-CI-DIAG-R4 | REVIEW on return, then HOLD. Branch c6/m3-1-material-ci-diag-r4; exact base/sole parent9cb1467c1705827a4e782421754850f5dee762ce, tree e0c1e5231cddfd25e44071990031371aaa16c482. One focused descendant; final head/tree/numstat in receipt |
+| R3 / DIAG-01 | Host correction source/unit accepted by C0; complete306538-byte pre-pytest prefix and entire shell byte-exact. Actual state/CI acceptance pending |
+| Main / PR34 | E933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011; PR34 OPEN/Draft c6/m3-1-material-compat/d810dde939f727085af15f7614eeddd36f4909b8 unchanged |
+| Unit inputs | One pinned test-only JSON, four exact H objects/231153 decoded bytes; fixed paths/lengths/blob checks, bounded decode. No Git/runtime history. Host uses finite external Git-command/H doubles with actual copied blobs and explicitly synthetic identities; real loader/binding/observer unchanged |
+| Observed before/after | Unchanged9cb source-only export:2 setup ERROR in1.35s, show/clone exit128. Corrected168-file development COPY layout without .git/usable Git:91 PASS/510 deselected in10.00s, JUnit0 failure/error/skip, no xfail; includes15 host+60 earlier invocation cases |
+| Restrictions / control | Empty inherited environment; PATH only sh/python3, Git lookup None, audit blocks Git;0 Git subprocess attempts. Cached locked deps only. Revised loader still detects exact a9 missing-pytest defect:6 FAIL/9 PASS. No skip/marker/collection filtering changes |
+| Preservation | Exact five-path scope; runtime prefix/SHA2563b1b9e4d… and shell7d1e08e… unchanged;168 other definitions/all host assertions/cases exact. Full§15.14 prefix569463 bytes/SHA256bd6f9cb9… preserved. Original11/C3/product/PG/migrations/Inbox-Job-inventories/frozen H-T-C-G-E/observer-P/privacy-ACK/limits/workflows/locks/budgets unchanged |
+| OPEN findings | C2-MAT-01/P1, C2-MAT-02/P2, C2-MAT-03/P1, C1-MAT-01/P1, C1-MAT-02/P2, C5-MATERIAL-01/P2, C0-DIAG-01/P1, C0-DIAG-02/P1. DIAG-01 source-fixed; no actual acceptance claimed |
+| Actual gates | Historical38850821014 remains4 SUCCESS/5 FAILURE, clean4 SUCCESS/5 SKIPPED; H cause UNKNOWN, Docker29 prep499.951432356s partial. C0 packaging intake before same Draft PR34 automatic CI; actual9+clean9/both complete state-P/retained-late-C/0012-PG/current-T→T2/PHOTO-browser then C1/C2/C5/later C8 required |
+
+C6 HOLD after canonical return; C3/C1/C2/C5/C8 HOLD. Packaging/unit evidence only;
+no install/services/Docker/build/PG/browser/Actions execution. No implementation
+INTEGRATED/VERIFIED; gate OFF. S/600/P720/remaining+480/S+1200/cleanup90/individual
+bounds/state25/browser25/foundation45/9+clean9 unchanged. No PR-head update/new PR/
+merge/dispatch/rerun/cancel/live operation. Native/A08/renewal/collector/VM/working
+DB/S3/sends/deploy/M4 unissued; IMPL-05/broad optimization DEFERRED. Earlier sections
+below preserve their historical statuses/receipts.
+
+## История — C6-M3.1-MATERIAL-CI-DIAG-R3 / 2026-10-16 UTC
 
 **MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all seven findings OPEN.**
 [C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6209721060),

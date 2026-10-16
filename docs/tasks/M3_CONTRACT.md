@@ -5456,3 +5456,97 @@ nominal S+1200/cleanup90/individual bounds/state25/browser25/foundation45 unchan
 PR34 Draft/BLOCKED; MATERIAL/M3 IN_PROGRESS, not INTEGRATED/VERIFIED; gate OFF.
 Native/A08/renewal/collector/live/VM/working DB/S3/sends/deploy/M4 unissued;
 IMPL-05/broad CI optimization DEFERRED.
+
+### 15.15. C6-M3.1-MATERIAL-CI-DIAG-R4 — diagnostic unit image inputs / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210115890),
+[C0-DIAG-02/P1 reproduction and R3 intake](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210103047).
+Branch `c6/m3-1-material-ci-diag-r4`; exact base/future sole parent
+`9cb1467c1705827a4e782421754850f5dee762ce`, tree
+`e0c1e5231cddfd25e44071990031371aaa16c482`, base parent a9f58a1….
+R3's stdlib host correction is source/unit accepted and preserved. Main/frozen
+E933ddd…/0011 and OPEN/Draft PR34 c6/m3-1-material-compat/d810dde… unchanged.
+One focused source descendant; exact final head/tree/numstat in canonical receipt.
+Entire contract through§15.14 preserved: **569463 bytes**, SHA256
+`bd6f9cb9cc6ef73edacfd9634fd415f9275d2e569ecee8cd4a6d8d311e51b582`.
+
+The ordinary units previously used git show and clone/commit/worktree even though
+the existing development image copies no .git/history. Only post-pytest diagnostic
+fixtures/tests change. The new `tests/fixtures/telegram_egress_h_source.json` is
+83297 bytes of versioned stdlib-readable zlib/base64 input data. Four exact frozen
+H files are verified against their actual Git objects during preparation; runtime
+tests read only this committed data, validate fixed paths/source/tree/decoded sizes/
+Git blobs, bound decompression and reject trailing/incomplete compressed data.
+
+| Frozen H754f1c… / tree b4fdef8… input | Decoded bytes | Git blob |
+|---|---:|---|
+| scripts/test_telegram_egress_migration.sh |6248|1672fbb4fb676ad69885043e46350f53334db0fc|
+| tests/test_telegram_egress_migration.py |84396|99cf8d1a3f8a85b64e2785710a728964d5bd3f03|
+| scripts/prepare_telegram_egress.py |139789|58486046a6bb5682a336a1578705ed973e7b4fc6|
+| infra/images.lock.env |720|1f14e1686acd3ffdde9986ec58352d0e03735af8|
+
+Total **231153 decoded bytes**; no reconstruction or current-source replacement.
+COPY tests already includes the fixture. invocation_units retains its original H
+helper/frame/launcher assertions. stdlib_host_checkout copies actual current files
+and those H bytes. Its real-loader child doubles only external H/Git-command IO;
+finite Git replies identify explicitly SYNTHETIC_UNIT source/tree values derived
+from actual copied blobs. Unexpected commands fail and are asserted absent.
+Real schema_source_binding/diagnostic_binding, runpy, observer/launcher/classifier
+and the whole loaded definitions namespace are not replaced. The child still uses
+python -S, records/refuses pytest imports and checks all15 original cases. Synthetic
+Git IO applies only to these units; both actual state lanes still require real Git
+source/tree/blob/clean validation. No runtime protocol/acceptance rule changes.
+
+**Observed packaging regression.** Separate unchanged9cb checkout and its complete
+source-only export were blob-checked (274 files); export has no .git. With Git
+available the two exact C0 nodes gave **2 setup ERROR in1.35s**, exit1: git show
+and git clone each exit128. Commands, from that export:
+
+```sh
+PYTHONPATH=backend/src:tests /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python -m pytest -q 'tests/test_telegram_egress_migration.py::test_invocation_h_launcher_original_frozen_functions_and_stream_bounds[exit-runtime]' 'tests/test_telegram_egress_migration.py::test_invocation_outer_stdlib_host_real_loader[state-none-success]' --tb=short
+```
+
+Correction ran in a fresh **168-file development COPY layout**: pyproject.toml,
+uv.lock, backend/, migrations/, alembic.ini, tests/, scripts/, contracts/ and only
+infra/postgres/ensure_m1_3_prerequisites.sh. Per-file byte/SHA256 manifest matches
+those inputs; no .git, uncopied docs/infra/image pins, parent checkout or history.
+Empty inherited environment; PATH contains only sh/python3 symlinks, Git lookup
+returns None, and the parent audit hook rejects any Git subprocess. PYTHONPATH is
+backend/src:tests; dependencies are the unchanged cached locked venv. Exact run,
+cwd c6-material-ci-diag-r4-evidence/copied-layout under the shared scratch root:
+
+```sh
+/usr/bin/env -i PATH=/workspace/scratch/65ac7d472387/c6-material-ci-diag-r4-evidence/restricted-bin PYTHONPATH=backend/src:tests PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 LANG=C.UTF-8 /workspace/scratch/65ac7d472387/c6-material-compat/.venv/bin/python /workspace/scratch/65ac7d472387/c6-material-ci-diag-r4-evidence/guarded_pytest.py -q tests/test_telegram_egress_migration.py -k 'invocation or material_shell or schema_entrypoint' --tb=short --junitxml=/workspace/scratch/65ac7d472387/c6-material-ci-diag-r4-evidence/copied-layout-results.xml
+```
+
+**91 PASS/510 deselected in10.00s**, JUnit91 tests/0 failure/0 error/0 skipped;
+no xfail/skip/filter changes. Includes all60 earlier invocation and15 stdlib-host
+cases: success/nonzero/original exception identity, one H invocation, setup/load
+INVALID, COMPLETE result/hash/ACK transfer, direct image/intent, privacy/bounds and
+restored environment/path/tracing. Actual Git subprocess attempts:0. Executables
+named docker are the existing synthetic fixture executables, not Docker/daemon.
+Supplemental loader control uses exact a9 shell/module bytes with the revised
+external unit nodes, still without Git: **6 FAIL/9 PASS in2.62s**, all six on the
+pytest import attempt. R3's missing-pytest regression remains effective.
+
+Ruff/format, compilation, diff/source/fixture/COPY audits PASS. All **306538 bytes**
+before test-only pytest import remain exact, SHA256
+`3b1b9e4d617d89da8268ba66d37e3097d188c1ca7504f8c161d170137062d6c9`.
+Entire shell blob7d1e08e…/SHA256145a8300… unchanged.168 other existing definitions,
+all original host assertions/cases, Original11, C3/product/PG, migrations/ORIGINAL17/
+OLD_CHECK4/0012←0011, Inbox/Job/inventory invariants, frozen H/T/C/G/E, generated
+observer6e254dda…, limits/HMAC/ACK/privacy/export/current P and all budgets remain
+unchanged. Exactly five allowed paths; no Dockerfile/workflow/dependency expansion.
+
+Packaging/unit evidence only; no install/service/Docker/build/PG/browser/Actions/
+live operation or new historical H cause. Historical38850821014 stays4 SUCCESS/
+5 FAILURE, clean4 SUCCESS/5 SKIPPED; H cause UNKNOWN, Docker29 prep499.951432356s
+partial. **Eight findings OPEN:** C2-MAT-01/02/03, C1-MAT-01/02, C5-MATERIAL-01,
+C0-DIAG-01/02. DIAG-01 source-fixed; actual state acceptance remains pending.
+C6 REVIEW then HOLD; C3/C1/C2/C5/C8 HOLD. C0 packaging intake before any update of
+the same Draft PR34; actual9+clean9/both full state-P/retained-late-C/0012-PG/
+current-T→T2/paired PHOTO-browser, C1/C2/C5 and later C8 still required. No PR-head
+update/new PR/merge/dispatch/rerun/cancel. S/600/P720/+480/S+1200/cleanup90 and
+individual/state25/browser25/foundation45 unchanged. MATERIAL/M3 IN_PROGRESS,
+not INTEGRATED/VERIFIED; PR34 Draft/BLOCKED; gate OFF. Unissued native/A08/renewal/
+collector/live/VM/working DB/S3/sends/deploy/M4 and deferred IMPL-05 unchanged.
