@@ -5,7 +5,65 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. C2-M3.1-MATERIAL-CURRENT-PROFILE-R4 — source return / 2026-10-16 UTC
+## 0. C2-M3.1-MATERIAL-SENT-LOCK-R5 — source return / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220709356),
+[C0 R4 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220674632),
+[contract§15.18](M3_CONTRACT.md#1518-c2-m31-material-sent-lock-r5--single-targetcontext-updates-and-typed-tenancy-identity--2026-10-16-utc).
+Separate c2/m3-1-material-sent-lock-r5; base/sole parent
+36240388fa580e563699c4dec3fd989cc2dd09f6/tree cb5c38e78a145184d8792f53702e102275fbb785.
+One focused descendant, full identity/numstat/commands in canonical receipt;
+REVIEW on return then C2 HOLD. Main/frozen E933ddd…/0011 and OPEN/Draft PR34
+c6/m3-1-material-compat at36240388 stay unchanged.
+
+Actual R4: CI38926368179/merge d3c39fa…,8 SUCCESS/1 FAILURE;
+clean8 SUCCESS/1 SKIPPED.1444 units PASS;797 PG PASS/2 FAIL. Original SENT
+diagnostic760 bytes: MessagingError→OperationalError→LockNotAvailable/55P03,
+material_apply:17→material_bind:40→turn_material:21. Blocking constraint/resource
+UNKNOWN, not an observed deadlock. Dedicated tenancy count23 PASS; pretty composite
+signature equality fails and later profile tail NOT RUN. Browser308/44 and both
+complete state lanes/clean PASS; historical browser cause UNKNOWN. Foundation
+post-PG downgrade/re-upgrade/contracts/wheel/storage/startup/HTTP tail NOT RUN.
+
+Pinned PostgreSQL18 source shows current-XID old tuple before equal-key shortcut;
+heap UPDATE creates a current-xmin version and RI lookup takes FOR KEY SHARE.
+The repeated target UPDATE explains a source path consistent with the actual frame;
+the exact FK remains inferred. A second repeated Conversation update would retain
+the same connection dependency. Source now combines canonical bind+final current
+into one target UPDATE, and changed SENT delivery1+material1 into one C+2 UPDATE.
+Shared context/invalidation stays one body; its ordinary/default behavior is C+1.
+SENT no-op/unmatched/quarantine uses original delivery+1, UNKNOWN unchanged.
+Two private signatures gain previous jsonb / delivery boolean(default false),
+with all132/23/2runtime/21private/7invoker/16SECDEF identities/profiles preserved.
+Tenancy expected fully qualified regprocedure signatures resolve to exact unique
+OIDs; the same OIDs select all privilege/owner/search_path profiles.
+
+Original single finish_send/arguments/3s/held connection FOR UPDATE/diagnostic exact;
+only post-success readbacks and retention of its existing historical-result read.
+Neighbor no-op SENT proves binding/zero effects; Message=max and C=max−1 overflow
+arms require22003 from shared context and exact41 data+actual metadata rollback.
+These PG cases are NOT RUN locally. Cached online-DDL test1 PASS/69 deselected/0.84s;
+Ruff check/format3 files, compile/diff/AST source audits PASS on3.12.14, not packaged
+3.13 (absent).131 expanded statements/42 tables/132 functions;127 other function
+profiles and53 other test definitions exact. No installs/services/runtime runs.
+Six paths only, all inside eight allowed. Contract592048-byte prefix through§15.17,
+SHA256 ad5697568bcd71639c06fbf827c97481c9e1149879a538518599866a72fb3604,
+applied0001–0011/ORIGINAL17/OLD_CHECK4/original11/product/frozen/runtime/frontend exact.
+
+C0 closed8: C1-R2-02 (C1-R3-01 alias), C2-MAT-02, C1-R3-03,
+C0-R3-01/02/04/05, C5-R3-01. OPEN3: C1-MAT-01/P1 (C1-R3-02 alias),
+C0-R3-03/P2, C2-MAT-01/P1. This source closes none; earlier scoped closures and
+all regression boundaries remain. C1/C3/C5/C6/C8 HOLD. C0 source intake before
+same PR normal automatic CI: full9+clean9/full foundation tail/dedicated ACL/SENT
+and both complete state lanes again, remaining owners then independent C8.
+MATERIAL/M3 IN_PROGRESS, gate OFF, Draft/BLOCKED, not INTEGRATED/VERIFIED.
+Normal P prep719.560822218s/rem0.439177782s and foundation43:11 do not authorize
+optimization. S/600/P720/fixed120/+480/S+1200/cleanup90/state25/browser25/foundation45
+and3s/60s/10s unchanged; no reset/subtraction/retry/budget increase/Actions/PR advance/
+new PR/merge/live/VM/working DB/S3/sends/deploy/native/A08/renewal/collector/M4.
+IMPL-05/broad optimization DEFERRED. Earlier returns below remain historical.
+
+## История — C2-M3.1-MATERIAL-CURRENT-PROFILE-R4 — source return / 2026-10-16 UTC
 
 [C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218233521),
 [C0 actual disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218176738),

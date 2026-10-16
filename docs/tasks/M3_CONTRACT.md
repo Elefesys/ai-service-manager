@@ -5741,3 +5741,148 @@ retry/budget increase, new PR/PR-head advance/merge/dispatch/rerun/cancel, insta
 new services/Docker/PG/browser runtime or live operation. VM/working DB/S3/sends/
 deploy/native/A08/P-A03-09/renewal/collector/M4 unissued; IMPL-05/broad optimization
 DEFERRED.
+
+### 15.18. C2-M3.1-MATERIAL-SENT-LOCK-R5 — single target/context updates and typed tenancy identity / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220709356),
+[C0 R4 actual disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220674632),
+[C2 R4 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220498853).
+Separate branch `c2/m3-1-material-sent-lock-r5`; exact base/sole parent
+`36240388fa580e563699c4dec3fd989cc2dd09f6`, tree
+`cb5c38e78a145184d8792f53702e102275fbb785`; ordered base parents
+`cb0e49af1a7ff263593373b41b116ef7d26c11c6`,
+`ef86965c4b4d747be5823034f81b1e187781f7b8`.
+One focused descendant; full head/tree/numstat/commands in the canonical receipt.
+Main/frozen E `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011 and
+PR34 OPEN/Draft `c6/m3-1-material-compat` at36240388 remain unchanged.
+The entire preceding592048-byte contract through§15.17 stays byte-exact,
+SHA256 `ad5697568bcd71639c06fbf827c97481c9e1149879a538518599866a72fb3604`.
+
+**Observed baseline; no new PostgreSQL execution.** CI38926368179/attempt1 tested
+merge `d3c39fa8977d86aa25f6ab9cc713a0c7f55d2f22`:8 SUCCESS/1 FAILURE,
+clean8 SUCCESS/1 SKIPPED. Foundation117058825254:1444 units PASS;
+797 PG PASS/2 FAIL. The original one-call SENT diagnostic is760 ASCII bytes/LF,
+chain_limited=false: MessagingError→OperationalError→LockNotAvailable/55P03;
+frames material_apply:17→material_bind:40→turn_material:21. Schema/table/constraint
+remain UNKNOWN. SENT failed at test line1018; UNKNOWN passed; subsequent SENT
+readback NOT RUN. No particular FK/resource/lock_timeout/deadlock was observed.
+The other failure is exact23 tenancy signature equality: composite type rendering
+omitted platform qualifiers, with the dedicated profile tail NOT RUN.
+
+**Source-supported RI cause and full closure.** Read the authoritative PostgreSQL18
+source at pinned `92d47d544bf64274b6a7aa8775f7b35bcf71f339`:
+[RI update gate1490–1495 and lookup426](https://github.com/postgres/postgres/blob/92d47d544bf64274b6a7aa8775f7b35bcf71f339/src/backend/utils/adt/ri_triggers.c#L1417-L1500),
+[heap UPDATE new xmin3874](https://github.com/postgres/postgres/blob/92d47d544bf64274b6a7aa8775f7b35bcf71f339/src/backend/access/heap/heapam.c#L3868-L3878),
+[slot raw-xmin check798–800](https://github.com/postgres/postgres/blob/92d47d544bf64274b6a7aa8775f7b35bcf71f339/src/backend/executor/execTuples.c#L785-L801).
+The FK update gate checks all/some NULL keys first, then current-transaction old
+tuple, then equal keys. The first UPDATE of the committed existing target sees
+an old xmin from another transaction: its unchanged non-NULL connection key can
+skip RI; new canonical keys still receive their normal checks. That UPDATE makes
+a new physical tuple with current xmin. The second current_material UPDATE sees
+that version as its old tuple: current-XID requires RI even for unchanged keys.
+The RI lookup uses FOR KEY SHARE, conflicting with the separately held connection
+FOR UPDATE. Thus the actual frame agrees with a concrete source path through the
+target's connection FK; that FK identity remains an inference, not exported fact.
+
+The same analysis also finds a second dependency after that first failure:
+turn_material's delivery C+1 followed by material_apply_context's material C+1
+updates the same Conversation twice. Its FK `(ws,connection,business)` can likewise
+recheck connection on the second current-XID tuple. A target-only correction would
+leave this source path. Both physical repetitions are removed for changed SENT.
+
+| Site / old path | Corrected source / preserved result |
+|---|---|
+| material_bind: canonical refs + original current; apply then updates current again | One target UPDATE stores validated canonical refs and the final folded current together. Provider/connection key and all identity/witness checks are unchanged. Original semantic current is carried privately for comparison/reason; no intermediate current is published |
+| material_apply: always writes changed current | Private p_previous=NULL retains ordinary apply unchanged; non-NULL binding path verifies stored current equals the recomputed fold, then uses the same Message/context/Audit/effect body without another target UPDATE. No-op still binds but returns NULL without counters/effect/Audit |
+| SENT trigger C+1 before binding, then shared C+1 | Under the same acquired C barrier, bind runs before the delivery UPDATE. A changed OUTBOUND first binding invokes shared context with delivery=true, performing Message+1 and one physical C+2 UPDATE, then the trigger returns. NULL/no-op/unmatched/quarantined bind falls through to the original delivery C+1; UNKNOWN retains its original path |
+| Shared material_apply_context | Only its C increment expression gains delivery2/ordinary1, with default false preserving all existing three-argument callers. Conversation/Message/Turn locks, Message+1, material_bump_turns, Escalation/shared invalidation body stay exact; per-fact context arithmetic remains delivery1+material1, invalidation once |
+| Tenancy catalog query/profile lookup | Catalog p.oid is compared to the closed23 fully qualified expected signatures resolved through regprocedure→OID, with duplicate OID refusal and exact set/count equality. Profiles look up by the same OID; no pretty-type-name/search_path comparison |
+
+Two necessary **private signature replacements**, not overload additions:
+`platform.material_apply(uuid,uuid,uuid)` →
+`platform.material_apply(uuid,uuid,uuid,jsonb)`;
+`platform.material_apply_context(uuid,uuid,uuid)` →
+`platform.material_apply_context(uuid,uuid,uuid,boolean)` (last argument DEFAULT false).
+Bind passes original semantic current; material_process passes NULL. Apply passes
+delivery=true only for non-NULL previous material and OUTBOUND, i.e. changed first
+SENT binding. Known bound outbound mutations pass NULL and retain context+1.
+The material_process fallback that detects a missed changed original/SENT binding
+still raises and rolls back. The two existing direct context callers retain default
+false. PRIVATE_FUNCTIONS and exactly these two tenancy profile entries are updated;
+old three-type apply signature is absent. Public wrappers/grants and private execute
+denials remain:23 additions/132 functions,2 runtime/21 private,7 invoker/16 SECDEF,
+same owner/search_path/PUBLIC/runtime profiles. No new capability or physical schema.
+
+The local shared-context change is a direct implementation dependency of the
+same RI gate: omitting it would preserve a reverse connection edge after C.
+Its body is byte-exact apart from the documented C increment/comment; no alternate
+invalidation path is introduced. Required order remains own Job→own Outbox→C→
+existing target→Message/Turn, with no new target/connection or foreign Job/Inbox lock
+after C. Changed refs check the own Message, held C and exact own valid-SENT Outbox;
+unchanged source FKs skip on the committed target's first UPDATE, nullable FKs retain
+MATCH SIMPLE behavior. Audit/effect point only to stable own target/Message/source;
+all RI, trigger, RLS and deferred consistency checks remain enabled and unchanged.
+
+One physical transaction still contains SENT, canonical binding/effective current,
+Message+1/C+2, shared Turn/context/Escalation, exactly one typed Audit/effect and Job
+completion. Any failure rolls back the complete atom. Existing all-or-none NULL,
+tenant/Client identity, write-once refs, quarantine/mismatch/UNKNOWN no-bind, sticky
+delete/uncertainty, effective grouping/readiness/late File, immutable private Inbox
+winning pair/results and five NULL mutation Job delivery fields remain. There is
+no deferred second apply/Job/ACK, mapper change, retry, prelock or constraint bypass.
+
+**Targeted regressions; awaiting actual CI.** The original SENT/UNKNOWN decorators,
+single finish_send/arguments/3s, separate connection FOR UPDATE and same-call bounded
+diagnostic scope are exact. Its first existing saved-result read is retained as
+historical for final full equality; no extra pre-finalizer SQL/probe/send. Added
+post-success readbacks assert exact Outbox outcome, full target binding/current,
+original Message text/current/version, C version, one source-linked typed Audit/effect
+and immutable DEFERRED_TARGET result. A neighboring equal-original SENT case keeps
+the same held blocker/3s and proves binding with Message1/C4/zero material effects;
+it exercises the trigger's NULL-result delivery fallback. Two overflow arms target
+Message=max and C=max−1: SQLSTATE22003 must originate in material_apply_context,
+with all41 data fingerprints plus actual ordered migration metadata unchanged,
+zero partial SENT/binding/current/context/effect/Audit/Job changes and historical
+result preserved. They add no positive retry or new provider send. R3 literal42,
+terminal/token/known-T/UTC/current/seed and six diagnostic tests remain exact.
+
+**Local evidence only.** Python3.12.14/Pydantic2.13.5 and cached Ruff0.16.7;
+required packaged3.13 interpreter is absent. Cached targeted existing online Alembic
+empty-parameter test:1 PASS/69 deselected in0.84s, compiling all131 expanded DDL
+operations without a DB. Ruff check/format3 changed Python files, compile/diff and
+AST/source audits PASS. Read-only AST-lifted existing source parser/inventories
+confirm42 tables,131 upgrade statements,132 functions,23 additions/2 runtime/21
+private/7 invoker/16 SECDEF and the exact typed tenancy map.127 complete surviving
+function profiles and all non-function DDL/column mappings are exact except the
+two typed identities in existing owner/REVOKE statements.53 other test definitions
+including decorators are byte-exact. These checks do not execute PostgreSQL, the
+new PG regressions, dedicated catalog/ACL tail or full product/state acceptance.
+
+Six changed paths inside the closed eight-path list:0012, named provenance PG and
+tenancy tests, and three task documents. The pure provenance and migration tests
+remain byte-exact. Applied0001–0011, ORIGINAL17/OLD_CHECK4, original11 and all other
+tracked blobs/modes are preserved: product/models/DTO/Worker/mapper, scripts/runtime/
+shell/frozen-H, workflows/Compose/pins/locks/dependencies and frontend. Revision
+0012←0011 and physical schema mapping are unchanged; no0013/new file/runner.
+
+**C0 actual statuses, not closures by this source.** Eight R4 closures remain:
+C1-R2-02 (C1-R3-01 alias), C2-MAT-02, C1-R3-03, C0-R3-01/02/04/05,
+C5-R3-01. Three remain OPEN: **C1-MAT-01/P1** (C1-R3-02 alias),
+**C0-R3-03/P2**, **C2-MAT-01/P1**. Earlier scoped closures and their regression
+matrix remain. Baseline browser308 Vitest/44 Playwright and clean PASS, both complete
+state lanes PASS; historical browser timeout cause UNKNOWN. Foundation downgrade/
+re-upgrade/contracts/wheel and subsequent storage/startup/HTTP smoke tail NOT RUN
+after PG exit1, clean SKIPPED. Other jobs' green evidence does not replace that tail.
+
+C0 source intake precedes one normal automatic CI on the same PR; full9+clean9,
+all foundation tail, exact dedicated tenancy/ACL/SENT atomicity and both complete
+state lanes are mandatory again after this correction. Source is REVIEW on return,
+then C2 HOLD; C1/C3/C5/C6/C8 HOLD. Remaining owner acceptance then independent C8.
+MATERIAL/M3 IN_PROGRESS, gate OFF, PR Draft/BLOCKED, not INTEGRATED/VERIFIED.
+Normal P prep719.560822218s left0.439177782s; foundation43:11 stopped before its tail.
+No optimization allowance follows. Original S/retained600/P720/fixed120/+480/S+1200/
+cleanup90/state25/browser25/foundation45 and individual3s/60s/10s remain unchanged.
+No clock reset/subtraction/retry/budget increase, installs/bootstrap/new services/
+Docker/PG/browser runtime/Actions operations/PR-head move/new PR/merge. Live/VM/
+working DB/S3/sends/deploy/native/A08/P-A03-09/renewal/collector/M4 unissued;
+IMPL-05/broad optimization DEFERRED.

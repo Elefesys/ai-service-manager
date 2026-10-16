@@ -543,8 +543,8 @@ PRIVATE_FUNCTIONS = (
     "platform.material_turn_usable(uuid,uuid)",
     "platform.material_identity(uuid,uuid,jsonb)",
     "platform.material_fold(uuid,uuid,uuid)",
-    "platform.material_apply(uuid,uuid,uuid)",
-    "platform.material_apply_context(uuid,uuid,uuid)",
+    "platform.material_apply(uuid,uuid,uuid,jsonb)",
+    "platform.material_apply_context(uuid,uuid,uuid,boolean)",
     "platform.material_bump_turns(uuid,uuid[],uuid)",
     "platform.material_bind(uuid,uuid,boolean,uuid)",
     "platform.material_process(platform.messaging_jobs)",
@@ -1184,7 +1184,7 @@ def _material() -> None:
         END IF;
         RETURN CASE WHEN t.undated_seen THEN 'ALREADY_UNCERTAIN' ELSE 'NOOP_CONTENT' END;
       END $$""")
-    op.execute("""CREATE FUNCTION platform.material_apply_context(ws uuid,p_message uuid,corr uuid) RETURNS void
+    op.execute("""CREATE FUNCTION platform.material_apply_context(ws uuid,p_message uuid,corr uuid,p_delivery boolean DEFAULT false) RETURNS void
       LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
       DECLARE cid uuid;
       BEGIN
@@ -1194,12 +1194,13 @@ def _material() -> None:
         PERFORM 1 FROM app.conversation_turns WHERE workspace_id=ws AND id IN
           (SELECT turn_id FROM app.conversation_turn_messages WHERE workspace_id=ws AND message_id=p_message) ORDER BY id FOR NO KEY UPDATE;
         UPDATE app.messages SET version=version+1 WHERE workspace_id=ws AND id=p_message;
-        UPDATE app.conversations SET version=version+1 WHERE workspace_id=ws AND id=cid;
+        -- Changed first SENT binding owns both delivery and material increments.
+        UPDATE app.conversations SET version=version+CASE WHEN p_delivery THEN 2 ELSE 1 END WHERE workspace_id=ws AND id=cid;
         PERFORM platform.material_bump_turns(ws,ARRAY[p_message],corr);
       END $$""")
-    op.execute("""CREATE FUNCTION platform.material_apply(ws uuid,p_target uuid,corr uuid) RETURNS jsonb
+    op.execute("""CREATE FUNCTION platform.material_apply(ws uuid,p_target uuid,corr uuid,p_previous jsonb) RETURNS jsonb
       LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
-      DECLARE t platform.message_material_targets%ROWTYPE; material jsonb; source uuid; reason text;
+      DECLARE t platform.message_material_targets%ROWTYPE; material jsonb; previous jsonb; source uuid; reason text;
         m app.messages%ROWTYPE; audit uuid; effect uuid; before_version bigint;
       BEGIN
         SELECT * INTO STRICT t FROM platform.message_material_targets WHERE workspace_id=ws AND id=p_target FOR UPDATE;
@@ -1207,15 +1208,21 @@ def _material() -> None:
         material:=CASE WHEN t.deleted THEN '{"state":"DELETED","content": null}'::jsonb
           WHEN t.undated_seen OR t.dated_conflict THEN '{"state":"ORDER_UNCERTAIN","content": null}'::jsonb
           WHEN t.candidate IS NOT NULL THEN platform.material_semantic(t.candidate) ELSE t.current_material END;
-        IF material=t.current_material THEN RETURN NULL; END IF;
+        previous:=coalesce(p_previous,t.current_material);
+        IF p_previous IS NOT NULL AND material IS DISTINCT FROM t.current_material THEN
+          RAISE EXCEPTION 'invalid bound material' USING ERRCODE='23514'; END IF;
+        IF material=previous THEN RETURN NULL; END IF;
         source:=coalesce(t.delete_receipt,t.undated_receipt,t.conflict_receipt,t.candidate_receipt);
         IF source IS NULL THEN RAISE EXCEPTION 'invalid material source' USING ERRCODE='23514'; END IF;
         SELECT * INTO STRICT m FROM app.messages WHERE workspace_id=ws AND id=t.message_id FOR NO KEY UPDATE;
         before_version:=m.version;
         reason:=CASE WHEN material->>'state'<>'VISIBLE' THEN material->>'state'
-          WHEN t.current_material->>'state'='ORDER_UNCERTAIN' THEN 'ORDER_RESTORED' ELSE 'CONTENT_CHANGED' END;
-        UPDATE platform.message_material_targets SET current_material=material WHERE workspace_id=ws AND id=t.id;
-        PERFORM platform.material_apply_context(ws,m.id,corr);
+          WHEN previous->>'state'='ORDER_UNCERTAIN' THEN 'ORDER_RESTORED' ELSE 'CONTENT_CHANGED' END;
+        -- Binding already persisted the final fold in its single target UPDATE.
+        IF p_previous IS NULL THEN
+          UPDATE platform.message_material_targets SET current_material=material WHERE workspace_id=ws AND id=t.id;
+        END IF;
+        PERFORM platform.material_apply_context(ws,m.id,corr,p_previous IS NOT NULL AND m.direction='OUTBOUND');
         INSERT INTO app.audit_events(workspace_id,actor_kind,actor_user_account_id,correlation_id,event_type,object_type,object_id,object_version,payload)
           VALUES(ws,'CHANNEL_EVENT',NULL,corr,'MESSAGE_MATERIAL_CHANGED','MESSAGE',m.id,before_version+1,
             jsonb_build_object('target_id',t.id,'source_receipt_id',source,'previous_version',before_version::text,'accepted_version',(before_version+1)::text,'reason',reason)) RETURNING audit_event_id INTO audit;
@@ -1242,7 +1249,7 @@ def _material() -> None:
       LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
       DECLARE m app.messages%ROWTYPE; t platform.message_material_targets%ROWTYPE; provider_id text; box uuid; n integer;
         c app.conversations%ROWTYPE; origin platform.inbox_events%ROWTYPE; p jsonb; source uuid; result jsonb; disposition text;
-        j platform.messaging_jobs%ROWTYPE;
+        j platform.messaging_jobs%ROWTYPE; previous jsonb;
       BEGIN
         SELECT * INTO STRICT m FROM app.messages WHERE workspace_id=ws AND id=p_message;
         SELECT * INTO STRICT c FROM app.conversations WHERE workspace_id=ws AND id=m.conversation_id FOR NO KEY UPDATE;
@@ -1274,11 +1281,15 @@ def _material() -> None:
             UPDATE platform.message_material_targets SET quarantined=true WHERE workspace_id=ws AND id=t.id; RETURN NULL;
           END IF;
         END LOOP;
+        previous:=jsonb_build_object('state','VISIBLE','content',CASE WHEN m.content_type='TEXT' THEN jsonb_build_object('kind','TEXT','text',m.text)
+          ELSE jsonb_build_object('kind','PHOTO','caption',m.text,'selected_file_id',m.image_file_id) END);
+        -- A second UPDATE would recheck unchanged FKs against a current-XID tuple.
         UPDATE platform.message_material_targets SET message_id=m.id,conversation_id=m.conversation_id,client_id=c.client_id,direction=m.direction,
           outbox_id=box,inbound_provider_id=CASE WHEN m.direction='INBOUND' THEN provider_id END,required_sent=CASE WHEN box IS NOT NULL THEN 'SENT' END,
-          current_material=jsonb_build_object('state','VISIBLE','content',CASE WHEN m.content_type='TEXT' THEN jsonb_build_object('kind','TEXT','text',m.text)
-            ELSE jsonb_build_object('kind','PHOTO','caption',m.text,'selected_file_id',m.image_file_id) END) WHERE workspace_id=ws AND id=t.id;
-        result:=platform.material_apply(ws,t.id,corr);
+          current_material=CASE WHEN t.deleted THEN '{"state":"DELETED","content": null}'::jsonb
+            WHEN t.undated_seen OR t.dated_conflict THEN '{"state":"ORDER_UNCERTAIN","content": null}'::jsonb
+            WHEN t.candidate IS NOT NULL THEN platform.material_semantic(t.candidate) ELSE previous END WHERE workspace_id=ws AND id=t.id;
+        result:=platform.material_apply(ws,t.id,corr,previous);
         IF result IS NULL THEN RETURN NULL; END IF;
         IF initial THEN
           SELECT * INTO origin FROM platform.inbox_events WHERE workspace_id=ws AND connection_id=m.connection_id
@@ -1423,7 +1434,7 @@ def _worker() -> None:
             IF outcome<>'IDENTITY_CONFLICT' THEN
               IF t.message_id IS NULL THEN outcome:='DEFERRED_TARGET';
               ELSE
-                result:=platform.material_apply(j.workspace_id,t.id,j.correlation_id);
+                result:=platform.material_apply(j.workspace_id,t.id,j.correlation_id,NULL);
                 IF result IS NOT NULL THEN changed:=array_append(changed,t.message_id); outcome:='APPLIED'; END IF;
               END IF;
             END IF;
@@ -1603,15 +1614,20 @@ def _shared() -> None:
     _replace(
         "turn_material(0)",
         (
-            "        IF TG_TABLE_NAME='file_objects' THEN",
+            "        UPDATE app.conversations SET version=version+1 WHERE workspace_id=ws AND id=conv;",
             """        IF TG_TABLE_NAME='outbox_events' THEN
           IF NEW.status='SENT' THEN
           SELECT correlation_id INTO STRICT corr FROM platform.messaging_jobs WHERE workspace_id=ws AND outbox_id=NEW.id;
-          -- Only an already existing target can bind; no new connection FK or foreign Job lock.
-          PERFORM platform.material_bind(ws,NEW.message_id,false,corr);
+          -- Changed binding includes delivery+material in one C UPDATE; no current-XID FK recheck.
+          -- Only an already existing target can bind; no new target or foreign Job lock.
+          IF platform.material_bind(ws,NEW.message_id,false,corr) IS NOT NULL THEN RETURN NEW; END IF;
           END IF;
         END IF;
-        IF TG_TABLE_NAME='file_objects' THEN
+        UPDATE app.conversations SET version=version+1 WHERE workspace_id=ws AND id=conv;""",
+        ),
+        (
+            "        IF TG_TABLE_NAME='file_objects' THEN",
+            """        IF TG_TABLE_NAME='file_objects' THEN
           IF platform.message_effective(ws,NEW.message_id)->>'image_availability' NOT IN ('ORIGINAL_READY','ORIGINAL_FAILED') THEN RETURN NEW; END IF;""",
         ),
     )

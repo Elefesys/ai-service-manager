@@ -993,7 +993,7 @@ async def test_exact_sent_binding_only_and_deferred_finalizer_without_connection
     mutation, _, _ = await process(
         h, raw(100002, 901, kind="EDIT", sender=OWNER, value="changed reply")
     )
-    assert (await saved_results(h, mutation))[0].code == "DEFERRED_TARGET"
+    assert (historical := await saved_results(h, mutation))[0].code == "DEFERRED_TARGET"
     t = (
         await query(
             h, "SELECT * FROM platform.message_material_targets WHERE provider_message_id='901'"
@@ -1027,6 +1027,212 @@ async def test_exact_sent_binding_only_and_deferred_finalizer_without_connection
     assert (target["message_id"] is not None) == (outcome == "SENT")
     assert (await traces(h))["effects"] == int(outcome == "SENT")
     assert (await saved_results(h, mutation))[0].code == "DEFERRED_TARGET"
+    assert await saved_results(h, mutation) == historical
+    message = (
+        await query(
+            h,
+            "SELECT m.*,platform.message_effective(m.workspace_id,m.id) AS current FROM app.messages m WHERE id=:id",
+            id=UUID(intent["message_id"]),
+        )
+    )[0]
+    box = (
+        await query(h, "SELECT * FROM app.outbox_events WHERE id=:id", id=UUID(intent["outbox_id"]))
+    )[0]
+    conversation = (await query(h, "SELECT * FROM app.conversations WHERE id=:id", id=cid))[0]
+    sent = outcome == "SENT"
+    assert box["status"] == outcome
+    assert box["provider_message_id"] == ("901" if sent else None)
+    assert message["version"] == 1 + int(sent) and message["text"] == "reply"
+    assert message["current"] == {
+        "schema_version": 1,
+        "state": "VISIBLE",
+        "content_type": "TEXT",
+        "text": "changed reply" if sent else "reply",
+        "image_availability": "NOT_APPLICABLE",
+        "changed": sent,
+    }
+    # Initial context1 + inbound1 + manual reply1 + delivery1 + changed fold1.
+    assert conversation["version"] == 4 + int(sent)
+    assert (target["connection_id"], target["provider_chat_id"], target["provider_message_id"]) == (
+        t["connection_id"],
+        t["provider_chat_id"],
+        t["provider_message_id"],
+    )
+    if sent:
+        assert (
+            target["workspace_id"],
+            target["message_id"],
+            target["conversation_id"],
+            target["client_id"],
+            target["direction"],
+            target["outbox_id"],
+            target["inbound_provider_id"],
+            target["required_sent"],
+        ) == (A, message["id"], cid, conversation["client_id"], "OUTBOUND", box["id"], None, "SENT")
+        assert target["current_material"] == {
+            "state": "VISIBLE",
+            "content": {"kind": "TEXT", "text": "changed reply"},
+        }
+        effects = await query(h, "SELECT * FROM platform.message_material_effects")
+        audits = await query(
+            h, "SELECT * FROM app.audit_events WHERE event_type='MESSAGE_MATERIAL_CHANGED'"
+        )
+        assert len(effects) == len(audits) == 1
+        effect, audit = effects[0], audits[0]
+        assert (
+            effect["workspace_id"],
+            effect["target_id"],
+            effect["message_id"],
+            effect["source_receipt_id"],
+            effect["audit_event_id"],
+            effect["previous_version"],
+            effect["accepted_version"],
+            effect["reason"],
+        ) == (
+            A,
+            t["id"],
+            message["id"],
+            mutation.receipt_id,
+            audit["audit_event_id"],
+            1,
+            2,
+            "CONTENT_CHANGED",
+        )
+        assert (
+            audit["workspace_id"],
+            audit["actor_kind"],
+            audit["actor_user_account_id"],
+            audit["object_type"],
+            audit["object_id"],
+            audit["object_version"],
+        ) == (A, "CHANNEL_EVENT", None, "MESSAGE", message["id"], 2)
+        assert audit["payload"] == {
+            "target_id": str(t["id"]),
+            "source_receipt_id": str(mutation.receipt_id),
+            "previous_version": "1",
+            "accepted_version": "2",
+            "reason": "CONTENT_CHANGED",
+        }
+    else:
+        assert target == t
+        assert await traces(h) == dict(effects=0, audits=0, files=0, fetches=0)
+
+
+async def test_sent_deferred_equal_original_binds_without_material_effect(material):
+    from test_m2_3_db_postgres import begin_observed, probe_worker, request
+
+    h = material
+    await process(h, raw())
+    cid = (await current(h))["conversation_id"]
+    intent = await request(h, cid, value="reply")
+    send_id = (
+        await query(
+            h,
+            "SELECT id FROM platform.messaging_jobs WHERE outbox_id=:id",
+            id=UUID(intent["outbox_id"]),
+        )
+    )[0]["id"]
+    send = await claim_exact(h, send_id)
+    permit = await begin_observed(h, send, await probe_worker(h, send))
+    mutation, _, _ = await process(h, raw(100002, 901, kind="EDIT", sender=OWNER, value="reply"))
+    historical = await saved_results(h, mutation)
+    assert historical[0].code == "DEFERRED_TARGET"
+    async with h.migrator.begin() as blocker:
+        await blocker.execute(
+            text("SELECT id FROM app.channel_connections WHERE id=:id FOR UPDATE"),
+            {"id": h.telegram_connection},
+        )
+        async with asyncio.timeout(3):
+            await h.kernel.finish_send(
+                send.job_id,
+                send.claim_token,
+                UUID(permit["attempt_id"]),
+                SendOutcome(OutcomeKind.SUCCESS, "901"),
+            )
+    target = (
+        await query(
+            h, "SELECT * FROM platform.message_material_targets WHERE provider_message_id='901'"
+        )
+    )[0]
+    assert target["message_id"] == UUID(intent["message_id"])
+    assert target["outbox_id"] == UUID(intent["outbox_id"]) and target["required_sent"] == "SENT"
+    assert target["current_material"] == {
+        "state": "VISIBLE",
+        "content": {"kind": "TEXT", "text": "reply"},
+    }
+    assert (
+        await query(
+            h, "SELECT version FROM app.messages WHERE id=:id", id=UUID(intent["message_id"])
+        )
+    )[0]["version"] == 1
+    assert (await current(h))["context_version"] == 4
+    assert await traces(h) == dict(effects=0, audits=0, files=0, fetches=0)
+    assert await saved_results(h, mutation) == historical
+
+
+@pytest.mark.parametrize("counter", ["message", "context"])
+async def test_sent_deferred_binding_counter_overflow_rolls_back_entire_atom(material, counter):
+    from test_m2_3_db_postgres import begin_observed, probe_worker, request
+    from test_m3_1_provenance_migrations import fingerprints
+
+    h = material
+    await process(h, raw())
+    cid = (await current(h))["conversation_id"]
+    intent = await request(h, cid, value="reply")
+    send_id = (
+        await query(
+            h,
+            "SELECT id FROM platform.messaging_jobs WHERE outbox_id=:id",
+            id=UUID(intent["outbox_id"]),
+        )
+    )[0]["id"]
+    send = await claim_exact(h, send_id)
+    permit = await begin_observed(h, send, await probe_worker(h, send))
+    mutation, _, _ = await process(
+        h, raw(100002, 901, kind="EDIT", sender=OWNER, value="changed reply")
+    )
+    historical = await saved_results(h, mutation)
+    assert historical[0].code == "DEFERRED_TARGET"
+    table, ident, version = (
+        ("app.messages", UUID(intent["message_id"]), 9223372036854775807)
+        if counter == "message"
+        else ("app.conversations", cid, 9223372036854775806)
+    )
+    await query(
+        h,
+        f"UPDATE {table} SET version=:version WHERE id=:id RETURNING id",
+        id=ident,
+        version=version,
+    )
+    async with h.migrator.connect() as c:
+        before = await fingerprints(c)
+        metadata = (
+            await c.execute(
+                text("SELECT version_num FROM platform.alembic_version ORDER BY version_num")
+            )
+        ).all()
+        assert len(before) == 41 and len(metadata) == 1
+    # Binding/current precede the shared Message+1 / delivery-and-material C+2.
+    # Either overflow must roll back the complete enclosing SENT atom.
+    with pytest.raises(DBAPIError) as rejected:
+        async with asyncio.timeout(3):
+            await h.kernel.finish_send(
+                send.job_id,
+                send.claim_token,
+                UUID(permit["attempt_id"]),
+                SendOutcome(OutcomeKind.SUCCESS, "901"),
+            )
+    assert rejected.value.orig.sqlstate == "22003"
+    assert "material_apply_context" in rejected.value.orig.diag.context
+    async with h.migrator.connect() as c:
+        assert await fingerprints(c) == before
+        assert (
+            await c.execute(
+                text("SELECT version_num FROM platform.alembic_version ORDER BY version_num")
+            )
+        ).all() == metadata
+    assert await saved_results(h, mutation) == historical
+    assert await traces(h) == dict(effects=0, audits=0, files=0, fetches=0)
 
 
 async def test_material_reclaim_nowait_skips_locked_candidate_and_old_token_cannot_apply(material):

@@ -2,7 +2,40 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C2-M3.1-MATERIAL-CURRENT-PROFILE-R4 / 2026-10-16 UTC
+## Текущий статус — C2-M3.1-MATERIAL-SENT-LOCK-R5 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; three distinct findings OPEN.**
+[C0 source task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220709356),
+[C0 R4 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220674632),
+[§15.18](tasks/M3_CONTRACT.md#1518-c2-m31-material-sent-lock-r5--single-targetcontext-updates-and-typed-tenancy-identity--2026-10-16-utc).
+
+| Task / binding | Current source result / actual gate |
+|---|---|
+| C2-M3.1-MATERIAL-SENT-LOCK-R5 | REVIEW on return, then HOLD. Separate branch c2/m3-1-material-sent-lock-r5, exact base/sole parent36240388fa580e563699c4dec3fd989cc2dd09f6/tree cb5c38e78a145184d8792f53702e102275fbb785; one focused descendant, full head/tree/numstat in receipt |
+| Main / PR34 | Main/frozen E933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011; OPEN/Draft PR34 c6/m3-1-material-compat stays36240388; no advancement |
+| Source cause / correction | Actual55P03/material_apply frame, exact FK UNKNOWN. Pinned PG18 current-XID RI path supports repeated target and C updates as connection lock edges. One target bind+final-current UPDATE; one shared changed-SENT C+2 UPDATE, ordinary/default C+1 and no-op/unmatched/UNKNOWN behavior preserved |
+| Private typed identities | Apply adds previous jsonb, context adds delivery boolean DEFAULT false; no new overload/capability.132 functions/23 additions/2 runtime/21 private/7 invoker/16 SECDEF, same owner/search_path/grants. Tenancy resolves closed full regprocedure signatures to unique OIDs and compares exact sets/profiles |
+| Regression source | Original single finish_send/3s/held connection FOR UPDATE/arguments/same-call diagnostic preserved; exact post-success SENT/current/version/Audit/effect/history readbacks. Neighbor no-op SENT plus Message/C overflow arms with intended22003 and41 data+actual metadata whole-atom rollback; PG NOT RUN locally |
+| Local checks | Existing online-DDL test1 PASS/69 deselected/0.84s; cached Ruff0.16.7 check/format3 modules, compile/diff/AST/source audits PASS.3.12.14, packaged3.13 absent;131 statements/42 tables/132 functions,127 other profiles and53 other test definitions exact; no install/bootstrap/services/runtime run |
+| Actual baseline | CI38926368179/attempt1, tested merge d3c39fa8977d86aa25f6ab9cc713a0c7f55d2f22:8 SUCCESS/1 FAILURE, clean8 SUCCESS/1 SKIPPED;1444 units PASS, PG797 PASS/2 FAIL. Browser308 Vitest/44 Playwright and both complete state lanes/clean PASS. Historical browser cause UNKNOWN |
+| CLOSED8 by C0 | C1-R2-02 (C1-R3-01 alias), C2-MAT-02, C1-R3-03, C0-R3-01/02/04/05, C5-R3-01. Earlier scoped closures/regression bridge remain |
+| OPEN3 | C1-MAT-01/P1 (C1-R3-02 alias), C0-R3-03/P2, C2-MAT-01/P1. No source self-closure or INTEGRATED/VERIFIED |
+| Remaining actual gates | C0 source intake then same PR normal automatic CI, full9+clean9, full foundation post-PG tail, dedicated tenancy profile/ACL/SENT atomicity and both complete state lanes again, remaining owners then independent C8. C1/C3/C5/C6/C8 HOLD |
+
+Contract prefix through§15.17 is exact592048 bytes/SHA256
+ad5697568bcd71639c06fbf827c97481c9e1149879a538518599866a72fb3604.
+Six changed paths inside eight allowed; applied0001–0011/ORIGINAL17/OLD_CHECK4,
+original11/product/DTO/Worker/mapper/frozen/runtime/scripts/workflows/Compose/pins/
+locks/frontend exact. Physical schema and0012←0011 unchanged. Foundation tail and
+clean gate were not reached after PG failure; other green jobs do not replace them.
+Gate OFF; normal P prep719.560822218s left0.439177782s, foundation43:11 is not full45min
+acceptance or optimization authority. S/600/P720/fixed120/+480/S+1200/cleanup90/state25/
+browser25/foundation45 and3s/60s/10s unchanged. No clock reset/subtraction/retry/budget
+increase/Actions operations/PR-head move/new PR/merge/live/VM/working DB/S3/sends/
+deploy/native/A08/P-A03-09/renewal/collector/M4. IMPL-05/broad optimization DEFERRED.
+Earlier sections retain their historical statements.
+
+## История — C2-M3.1-MATERIAL-CURRENT-PROFILE-R4 / 2026-10-16 UTC
 
 **MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; eleven distinct findings OPEN.**
 [C0 source task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6218233521),
