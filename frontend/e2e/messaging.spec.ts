@@ -269,27 +269,105 @@ test('@narrow Escalation runtime queue -> exact internal resolve and cancel; ina
   await page.reload();await expect(escQueue(page)).toBeVisible();expect(writes).toBe(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
 });
 
-test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key/body REPLAY and one decision',async({page})=>{
-  test.setTimeout(60000);const preset='esc_recovery';await signIn(page,preset);const v=await createEsc(page,preset);await openEsc(page,v);const before=await helper(preset,'escalation-stats');
-  let attempts=0,original:string|null=null,key:string|undefined,first:EscalationReceipt|undefined,identical=true;
-  let complete!:(result:SafeResult<number>)=>void;const committed=new Promise<SafeResult<number>>(r=>{complete=r;});const url=`${escPath(preset,v.escalation_id)}/resolve`;
-  await page.route(`**${url}`,async route=>{
-    attempts++;if(attempts>1){identical=identical&&original===route.request().postData()&&key===route.request().headers()['idempotency-key'];await safeContinue(route);return;}
-    original=route.request().postData();key=route.request().headers()['idempotency-key'];const real=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',()=>route.fetch({timeout:10000}));
-    if(real.ok){const parsed=await safeDiagnostic('MESSAGING_BODY_FAILED',async()=>parseEscalationReceipt(await real.value.json(),escContext(v),'RESOLVE',JSON.parse(original!) as EscalationBody));if(parsed.ok)first=parsed.value;else{complete(parsed);return;}}
-    const aborted=await safeDiagnostic('MESSAGING_ROUTE_ABORT_FAILED',()=>route.abort('failed'));complete(!real.ok?real:!aborted.ok?aborted:{ok:true,value:real.value.status()});
-  });
+// Only the committed200 recovery case uses this closed, payload-free record.
+function escalationRecoveryDiagnostic(value:Record<string,unknown>):string{
+  const prefix='E2E_ESCALATION_RECOVERY_R3:';
+  const fallback=prefix+'{"stage":"UNKNOWN","diagnostic_error":true}';
   try{
-    await escDetail(page).getByLabel('Внутренний ответ владельца').fill('  Сохранить точно\ne\u0301 🎨  ');await escDetail(page).getByRole('button',{name:'Сохранить внутренний ответ'}).click();expect(requireSafeResult(await committed)).toBe(200);
-    await expect(escDetail(page).getByText(/Результат решения неизвестен/)).toBeVisible();escDelta(before,await helper(preset,'escalation-stats'),1);
-    await page.context().clearCookies();await escDetail(page).getByRole('button',{name:'Проверить сессию для решения'}).click();await loginForm(page,preset);
-    await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();const token=await csrf(page.request);const rotate=await http(()=>page.request.post('/api/v1/auth/rotate',{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}));expect(rotate.status()).toBe(200);
-    const denied=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();expect((await denied).status()).toBe(403);
-    await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();const replayed=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();const response=await replayed;expect(response.status()).toBe(200);
+    const stages=['SETUP','FIRST_SUBMIT','COMMITTED','AMBIGUOUS','CLEAR_COOKIES','SESSION_RECOVERY','LOGIN','RETRY_ENABLED','ROTATE_SESSION','ROTATE','FIRST_RETRY_CLICK','FIRST_RETRY_RESPONSE','CSRF_RECOVERY','SECOND_RETRY_CLICK','SECOND_RETRY_RESPONSE','RECEIPT','ASSERTIONS','RELOAD','DONE','CLEANUP'];
+    const routes=['ENTERED','FETCH_PENDING','FETCH_FAILED','PARSE_PENDING','PARSED','PARSE_FAILED','ABORT_PENDING','ABORTED','ABORT_FAILED','CONTINUE_PENDING','CONTINUED','CONTINUE_FAILED'];
+    const closed=(v:unknown,allowed:string[])=>typeof v==='string'&&allowed.includes(v)?v:'UNKNOWN';
+    const boolean=(v:unknown)=>typeof v==='boolean'?v:null;
+    let truncated=false;
+    const count=(v:unknown)=>{if(typeof v!=='number'||!Number.isSafeInteger(v)||v<0)return null;if(v>99){truncated=true;return 99;}return v;};
+    const status=(v:unknown)=>typeof v==='number'&&Number.isInteger(v)&&v>=100&&v<=599?v:null;
+    const record:Record<string,unknown>={stage:closed(value.stage,stages),route_stage:closed(value.route_stage,routes)};
+    for(const key of ['attempts','resolve_requests','resolve_responses','resolve_failed','resolve_finished','session_requests','session_responses','login_requests','login_responses','detail_requests','detail_responses'])record[key]=count(value[key]);
+    for(const key of ['first_status','rotate_status','resolve_status','session_status','login_status','detail_status'])record[key]=status(value[key]);
+    for(const key of ['observers_attached','observer_error','route_is_post','first_fetch_ok','first_parse_ok','first_abort_ok','same_body','same_key','same_intent','retry_clicked','replay_clicked','observers_removed','cleanup_ok'])record[key]=boolean(value[key]);
+    for(const key of ['ui_before_retry','ui_failure']){
+      const input=value[key],ui=input&&typeof input==='object'?input as Record<string,unknown>:{};
+      record[key]=Object.fromEntries(['closed','read_ok','detail_present','detail_loading','retry_present','retry_disabled','recover_present','saving','login_present','auth_recovering'].map(k=>[k,boolean(ui[k])]));
+    }
+    record.truncated=truncated;
+    const output=prefix+JSON.stringify(record);
+    return Buffer.byteLength(output,'utf8')<=4096?output:prefix+'{"stage":"UNKNOWN","truncated":true}';
+  }catch{return fallback;}
+}
+
+test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key/body REPLAY and one decision',async({page})=>{
+  test.setTimeout(60000);const preset='esc_recovery';
+  let attempts=0,original:string|null=null,key:string|undefined,first:EscalationReceipt|undefined,identical=true;
+  const diagnostic:Record<string,unknown>={stage:'SETUP',observers_attached:false,observer_error:false,retry_clicked:false,replay_clicked:false};
+  let failed=false,primary:unknown,removeObservers=()=>{};
+  const sampleUI=async()=>{
+    const result=await safeDiagnostic('MESSAGING_HTTP_FAILED',async()=>{
+      if(page.isClosed())return {closed:true,read_ok:false};
+      return page.evaluate(()=>{
+        const detail=document.querySelector('[aria-label="Карточка запроса"]');
+        const buttons=Array.from(detail?.querySelectorAll('button')??[]);
+        const retry=buttons.find(b=>b.textContent==='Повторить исходное решение');
+        return {closed:false,read_ok:true,detail_present:!!detail,detail_loading:!!detail?.textContent?.includes('Читаем актуальный запрос…'),retry_present:!!retry,retry_disabled:retry?.disabled??null,recover_present:buttons.some(b=>b.textContent==='Проверить сессию для решения'),saving:!!detail?.textContent?.includes('Сохраняем решение…'),login_present:!!document.querySelector('#login'),auth_recovering:Array.from(document.querySelectorAll('h2')).some(h=>h.textContent==='Уточняем результат')};
+      });
+    });
+    return result.ok?result.value:{read_ok:false};
+  };
+  try{
+    await signIn(page,preset);const v=await createEsc(page,preset);await openEsc(page,v);const before=await helper(preset,'escalation-stats');
+    let complete!:(result:SafeResult<number>)=>void;const committed=new Promise<SafeResult<number>>(r=>{complete=r;});const url=`${escPath(preset,v.escalation_id)}/resolve`;
+    const classify=(request:import('@playwright/test').Request)=>{
+      const pathname=new URL(request.url()).pathname,method=request.method();
+      return method==='POST'&&pathname===url?'resolve':method==='GET'&&pathname==='/api/v1/auth/session'?'session':method==='POST'&&pathname==='/api/v1/auth/login'?'login':method==='GET'&&pathname===escPath(preset,v.escalation_id)?'detail':null;
+    };
+    const increment=(field:string)=>{diagnostic[field]=Math.min(100,Number(diagnostic[field])+1);};
+    for(const name of ['resolve','session','login','detail']){diagnostic[`${name}_requests`]=0;diagnostic[`${name}_responses`]=0;}
+    diagnostic.resolve_failed=0;diagnostic.resolve_finished=0;
+    const requested=(request:import('@playwright/test').Request)=>{try{const kind=classify(request);if(kind)increment(`${kind}_requests`);}catch{diagnostic.observer_error=true;}};
+    const responded=(response:import('@playwright/test').Response)=>{try{const kind=classify(response.request());if(kind){increment(`${kind}_responses`);diagnostic[`${kind}_status`]=response.status();}}catch{diagnostic.observer_error=true;}};
+    const requestFailed=(request:import('@playwright/test').Request)=>{try{if(classify(request)==='resolve')increment('resolve_failed');}catch{diagnostic.observer_error=true;}};
+    const requestFinished=(request:import('@playwright/test').Request)=>{try{if(classify(request)==='resolve')increment('resolve_finished');}catch{diagnostic.observer_error=true;}};
+    removeObservers=()=>{
+      let removalFailed=false;
+      for(const remove of [()=>page.off('request',requested),()=>page.off('response',responded),()=>page.off('requestfailed',requestFailed),()=>page.off('requestfinished',requestFinished)]){try{remove();}catch{removalFailed=true;}}
+      if(removalFailed)throw new Error('E2E_SAFE_FAILURE:MESSAGING_ROUTE_RELEASE_FAILED');
+    };
+    page.on('request',requested);page.on('response',responded);page.on('requestfailed',requestFailed);page.on('requestfinished',requestFinished);diagnostic.observers_attached=true;
+    await page.route(`**${url}`,async route=>{
+      diagnostic.route_stage='ENTERED';diagnostic.route_is_post=route.request().method()==='POST';
+      attempts++;if(attempts>1){
+        diagnostic.same_body=original===route.request().postData();diagnostic.same_key=key===route.request().headers()['idempotency-key'];
+        identical=identical&&original===route.request().postData()&&key===route.request().headers()['idempotency-key'];
+        diagnostic.route_stage='CONTINUE_PENDING';const continued=await safeDiagnostic('MESSAGING_ROUTE_CONTINUE_FAILED',()=>route.continue());diagnostic.route_stage=continued.ok?'CONTINUED':'CONTINUE_FAILED';requireSafeResult(continued);return;
+      }
+      original=route.request().postData();key=route.request().headers()['idempotency-key'];diagnostic.route_stage='FETCH_PENDING';const real=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',()=>route.fetch({timeout:10000}));
+      diagnostic.first_fetch_ok=real.ok;diagnostic.route_stage=real.ok?'PARSE_PENDING':'FETCH_FAILED';
+      if(real.ok){diagnostic.first_status=real.value.status();const parsed=await safeDiagnostic('MESSAGING_BODY_FAILED',async()=>parseEscalationReceipt(await real.value.json(),escContext(v),'RESOLVE',JSON.parse(original!) as EscalationBody));diagnostic.first_parse_ok=parsed.ok;diagnostic.route_stage=parsed.ok?'PARSED':'PARSE_FAILED';if(parsed.ok)first=parsed.value;else{complete(parsed);return;}}
+      diagnostic.route_stage='ABORT_PENDING';const aborted=await safeDiagnostic('MESSAGING_ROUTE_ABORT_FAILED',()=>route.abort('failed'));diagnostic.first_abort_ok=aborted.ok;diagnostic.route_stage=aborted.ok?'ABORTED':'ABORT_FAILED';complete(!real.ok?real:!aborted.ok?aborted:{ok:true,value:real.value.status()});
+    });
+    diagnostic.stage='FIRST_SUBMIT';await escDetail(page).getByLabel('Внутренний ответ владельца').fill('  Сохранить точно\ne\u0301 🎨  ');await escDetail(page).getByRole('button',{name:'Сохранить внутренний ответ'}).click();diagnostic.stage='COMMITTED';expect(requireSafeResult(await committed)).toBe(200);
+    diagnostic.stage='AMBIGUOUS';await expect(escDetail(page).getByText(/Результат решения неизвестен/)).toBeVisible();escDelta(before,await helper(preset,'escalation-stats'),1);
+    diagnostic.stage='CLEAR_COOKIES';await page.context().clearCookies();diagnostic.stage='SESSION_RECOVERY';await escDetail(page).getByRole('button',{name:'Проверить сессию для решения'}).click();diagnostic.stage='LOGIN';await loginForm(page,preset);
+    diagnostic.stage='RETRY_ENABLED';await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();diagnostic.stage='ROTATE_SESSION';const token=await csrf(page.request);diagnostic.stage='ROTATE';const rotate=await http(()=>page.request.post('/api/v1/auth/rotate',{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}));diagnostic.rotate_status=rotate.status();expect(rotate.status()).toBe(200);
+    diagnostic.ui_before_retry=await sampleUI();
+    const denied=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);void denied.catch(()=>{}); // Handle an early rejection; still await the original promise below.
+    diagnostic.stage='FIRST_RETRY_CLICK';await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();diagnostic.retry_clicked=true;diagnostic.stage='FIRST_RETRY_RESPONSE';expect((await denied).status()).toBe(403);
+    diagnostic.stage='CSRF_RECOVERY';await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();const replayed=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);void replayed.catch(()=>{});
+    diagnostic.stage='SECOND_RETRY_CLICK';await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();diagnostic.replay_clicked=true;diagnostic.stage='SECOND_RETRY_RESPONSE';const response=await replayed;expect(response.status()).toBe(200);
+    diagnostic.stage='RECEIPT';
     const saved=parseEscalationReceipt(requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>response.json())),escContext(v),'RESOLVE',JSON.parse(original!) as EscalationBody);expect(saved.outcome).toBe('REPLAY');expect(JSON.stringify(saved.result)===JSON.stringify(first?.result)).toBe(true);
+    diagnostic.stage='ASSERTIONS';
     await expect(escDetail(page).getByText('Сохранённый внутренний ответ')).toBeVisible();expect(attempts).toBe(3);expect(identical).toBe(true);escDelta(before,await helper(preset,'escalation-stats'),1);expect((await worker(preset,'stats')).calls).toBe(0);
-    await page.reload();await expect(escQueue(page)).toBeVisible();expect(attempts).toBe(3);
-  }finally{await page.unrouteAll({behavior:'wait'});original=null;key=undefined;first=undefined;}
+    diagnostic.stage='RELOAD';await page.reload();await expect(escQueue(page)).toBeVisible();expect(attempts).toBe(3);diagnostic.stage='DONE';
+  }catch(error){failed=true;primary=error;}
+  finally{
+    // No payload/error serialization; a cleanup failure cannot replace the primary.
+    const removed=await safeDiagnostic('MESSAGING_ROUTE_RELEASE_FAILED',async()=>removeObservers());diagnostic.observers_removed=removed.ok;
+    const cleaned=await safeDiagnostic('MESSAGING_ROUTE_RELEASE_FAILED',()=>page.unrouteAll({behavior:'wait'}));diagnostic.cleanup_ok=cleaned.ok;
+    original=null;key=undefined;first=undefined;diagnostic.attempts=attempts;diagnostic.same_intent=attempts>1?identical:null;
+    if((!removed.ok||!cleaned.ok)&&!failed){failed=true;diagnostic.stage='CLEANUP';try{requireSafeResult(!removed.ok?removed:cleaned);}catch(error){primary=error;}}
+    if(failed){diagnostic.ui_failure=await sampleUI();try{console.log(escalationRecoveryDiagnostic(diagnostic));}catch{/* Preserve the primary even if diagnostic output is unavailable. */}}
+  }
+  if(failed)throw primary;
 });
 
 test('Escalation valid200 plus failed GET offers only read recovery',async({page})=>{
