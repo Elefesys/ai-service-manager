@@ -11,12 +11,13 @@
 [accepted C3 intake](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208831490),
 [C6 diagnosis](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208328996),
 [§15.13 source/evidence](M3_CONTRACT.md#1513-c6-m31-material-ci-diag-r2--bounded-original-invocation-diagnostics--2026-10-16-utc).
-Separate branch `c6/m3-1-material-ci-diag-r2`, accepted base/sole parent
+Separate branch `c6/m3-1-material-ci-diag-r2`, accepted base
 `f0c111ac0b74695cc12444ccdf077314d06d2a9b`, tree
 `ca3f638b206b232a7a6cd8f1920e31580991b58b` (parent d810dde…).
 C3's seven-space correction and both real-string regression nodes are read-only.
 Main/frozen E933ddd…/0011 and existing PR34 branch/head d810dde… stay fixed.
-Final head/tree/numstat are in the canonical C6 receipt; source REVIEW then C6 HOLD.
+Two focused source commits; final immediate parent711934148b3921047501ff3e3c3b6e6ff34c74a4.
+Final head/tree/combined numstat are in the canonical receipt; source REVIEW then HOLD.
 
 Only H's current state invocation boundary and current P ordinary migration
 observation changed. Private startup ZIP preserves original H stdin execution,
@@ -36,8 +37,8 @@ are secondary to executor failure; success with invalid diagnostics fails a dist
 diagnostic gate after required cleanup. Original traces/source pairing/owned checks
 remain. All overhead consumes original clocks, without changing S/600/720/480/90.
 
-**Local source evidence:**59 new invocation cases PASS; focused combined195 PASS /
-390 deselected, includes those59. Actual isolated interpreter/frozen-function and
+**Local source evidence:**60 new invocation cases PASS; focused combined196 PASS /
+390 deselected, includes those60. Actual isolated interpreter/frozen-function and
 outer/P boundary seams use synthetic doubles only. Ruff/format/shell/embedded code,
 five-path/frozen-source/flow audit PASS.134 existing definitions are byte-exact;
 removing only diagnostics yields original P/outer ASTs. Full contract through§15.12

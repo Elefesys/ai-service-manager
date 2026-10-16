@@ -3401,15 +3401,17 @@ def diagnostic_export(config, target):
             target.parent.resolve() == target.parent and target.parent.stat().st_uid == os.getuid()
         )
         fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        created = diagnostic_identity(target)
         try:
+            info = os.fstat(fd)
+            created = [info.st_dev, info.st_ino, info.st_uid, stat.S_IMODE(info.st_mode)]
+            assert info.st_nlink == 1 and diagnostic_identity(target) == created
             with os.fdopen(fd, "wb", closefd=False) as stream:
                 stream.write(raw)
                 stream.flush()
                 os.fsync(fd)
         finally:
             os.close(fd)
-        assert diagnostic_identity(target)
+        assert diagnostic_identity(target) == created
         assert target.read_bytes() == raw
         return {
             "status": "COMPLETE",
@@ -7353,6 +7355,30 @@ def test_invocation_rejects_nonidentity_binding_before_persisting(invocation_uni
     with pytest.raises(AssertionError, match="^DIAGNOSTIC_BINDING"):
         diagnostic_new(directory, binding)
     assert list(directory.iterdir()) == []
+
+
+def test_invocation_export_rejects_new_inode_and_preserves_substituted_target(
+    invocation_units, monkeypatch
+):
+    f = invocation_units
+    config = f.config()
+    observer = InvocationDiagnostic(config, "P_MIGRATION")
+    observer.close()
+    target = f.root / "export.json"
+    original_sync = os.fsync
+
+    def substitute(fd):
+        raw = target.read_bytes()
+        target.rename(target.with_name("original-export.json"))
+        target.write_bytes(raw)
+        target.chmod(0o600)
+        original_sync(fd)
+
+    monkeypatch.setattr(os, "fsync", substitute)
+    assert diagnostic_export(config, target)["status"] == "INVALID"
+    # A failed exporter cannot unlink a foreign replacement, even when its
+    # authenticated content/owner/mode match the original.
+    assert target.read_bytes() == (f.root / "original-export.json").read_bytes()
 
 
 def test_invocation_unknown_message_and_finite_sqlstate_never_escape():

@@ -5232,14 +5232,15 @@ VM/working DB/S3/sends/deploy/M4 unissued; broad CI optimization/IMPL-05 DEFERRE
 [accepted C3 intake](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208831490),
 [C3 source receipt](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208752834),
 [historical C6 diagnosis](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6208328996).
-Separate branch/checkout `c6/m3-1-material-ci-diag-r2`, exact accepted base and sole
-parent `f0c111ac0b74695cc12444ccdf077314d06d2a9b`, tree
+Separate branch/checkout `c6/m3-1-material-ci-diag-r2`, exact accepted base `f0c111ac0b74695cc12444ccdf077314d06d2a9b`, tree
 `ca3f638b206b232a7a6cd8f1920e31580991b58b`; its parent is d810dde939f727085af15f7614eeddd36f4909b8.
 Main/frozen E remains933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011.
 Existing Draft PR34 remains on `c6/m3-1-material-compat`/d810dde; no PR-head update.
 The complete contract through§15.12 is preserved: **551663 bytes**, SHA256
 `0be54876bec43bc88348586ccf8e7b99571be02207ed9af9773fcd06ce75f050`.
-Only this section is appended; final head/tree/numstat appear in the canonical receipt.
+Only this section is appended. Two focused source commits retain the accepted base;
+the final immediate parent is711934148b3921047501ff3e3c3b6e6ff34c74a4. Final head/tree/
+combined numstat appear in the canonical receipt.
 
 D1 observes the **same original H invocation**, only in the two existing state
 shards. Image/intent still invoke their original shell directly. The current
@@ -5301,8 +5302,10 @@ They explain original invocations, not new product acceptance.
 
 The independent H ACK prevents a visible COMPLETE file whose last fsync failed
 from being accepted. In-process P additionally retains observer failure state.
-Failed exports remove their own partially created target when identity still
-matches. Diagnostics never claim COMPLETE solely from a parseable report or exit0.
+Export identity is anchored to the opened descriptor before copying and checked
+again afterward. Replaced copies are rejected; failure cleanup never removes a
+foreign replacement. Failed exports remove their own partial target when identity
+still matches. Diagnostics never claim COMPLETE solely from a parseable report or exit0.
 
 Executor failure remains primary. Setup/import failure runs the original H shell
 once without observation and records invalid diagnostics. Classifier/write/export/
@@ -5333,8 +5336,8 @@ sh -n scripts/test_telegram_egress_migration.sh
 git diff --check f0c111ac0b74695cc12444ccdf077314d06d2a9b
 ```
 
-Results: **59 new invocation cases PASS in7.46s; focused combined195 PASS /
-390 deselected in11.56s** (the59 are included, not additional unique cases).
+Results: **60 new invocation cases PASS in7.65s; focused combined196 PASS /
+390 deselected in13.02s** (the60 are included, not additional unique cases).
 Ruff/format, shell/embedded-Python/generated-launcher compilation and diff checks
 PASS. Units use real isolated Python subprocesses and the original frozen helper/
 build objects with synthetic local executable/test doubles; no daemon/PG operation.

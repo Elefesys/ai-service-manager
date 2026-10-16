@@ -12,13 +12,13 @@
 
 | Task / binding | Current source result / actual gate |
 |---|---|
-| C6-M3.1-MATERIAL-CI-DIAG-R2 | REVIEW on return, then HOLD. Branch c6/m3-1-material-ci-diag-r2; base/sole parent f0c111ac0b74695cc12444ccdf077314d06d2a9b, tree ca3f638b206b232a7a6cd8f1920e31580991b58b. Final head/tree/numstat in canonical receipt |
+| C6-M3.1-MATERIAL-CI-DIAG-R2 | REVIEW on return, then HOLD. Branch c6/m3-1-material-ci-diag-r2; accepted base f0c111ac0b74695cc12444ccdf077314d06d2a9b, tree ca3f638b206b232a7a6cd8f1920e31580991b58b. Two focused source commits; final immediate parent711934148b3921047501ff3e3c3b6e6ff34c74a4. Final head/tree/combined numstat in canonical receipt |
 | C3 accepted source | R2 seven-space correction/two original-string regression nodes preserved; C0 source/client intake accepted, actual0012 acceptance pending |
 | Main / PR34 | E933ddd…/0011; PR34 remains OPEN/Draft, c6/m3-1-material-compat / d810dde939f727085af15f7614eeddd36f4909b8. No head update/new PR/merge or CI execution here |
 | H observation | State-only private startup launcher executes original immutable H stdin. Original command/build objects, actual target/exit/timeout, separate observer/executor identities; no retry/probe/source rewrite. H cause still UNKNOWN |
 | P ordinary migration | Original e.command frame observation, closed source/tree/direction/revision; client vs server/explicit SQLSTATE distinction,30s and ACK86 unchanged |
 | Private evidence |0700/0600; authenticated closed report≤64KiB/16 records; classify≤16KiB per captured stream; no raw outputs/SQL/argv/env/credentials. H requires independent64-byte final ACK; invalid diagnostics cannot replace original executor failure |
-| Scoped evidence |59 new invocation cases PASS; combined195 PASS/390 deselected includes those59. Ruff/format/shell/embedded code/diff/source audit PASS. Synthetic doubles, no actual H/P/PG/Docker/browser gates |
+| Scoped evidence |60 new invocation cases PASS; combined196 PASS/390 deselected includes those60. Ruff/format/shell/embedded code/diff/source audit PASS. Synthetic doubles, no actual H/P/PG/Docker/browser gates |
 | Preservation | Full§15.12 prefix551663 bytes/SHA2560be54876…;134 existing definitions exact, P/outer AST exact after removing diagnostics. Original11, applied0001–0011/ORIGINAL17/OLD_CHECK4/0012←0011,10 columns/6 old/4 new/42 total/132 signatures, Inbox winning pair/five NULL delivery fields, frozen T/C/G/E/workflows/locks unchanged |
 | Historical CI |38850821014/attempt1 tested merge51fca8…/tree fb06ad7…, not this source:4 SUCCESS/5 FAILURE; clean4 SUCCESS/5 SKIPPED. H build before S/P opaque; Docker29 prep499.951432356s partial, full P and3 late C negatives not reached |
 | OPEN findings | C2-MAT-01/P1, C1-MAT-01/P1, C1-MAT-02/P2, C5-MATERIAL-01/P2, C2-MAT-02/P2, C2-MAT-03/P1. Source/unit evidence closes none |
