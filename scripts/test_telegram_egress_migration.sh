@@ -131,10 +131,29 @@ try:
         assert material['coordinator'] == source and material['historical'] == escalation['coordinator']
         assert material['cleanup']['state'] == 'PASS' and material['database']['populated_refusal'] == 'PASS'
         budget = material['prepare_budget']
+        ledger = json.loads((e.ROOT / 'reports/control-schema-ledger.json').read_text())
+        assert budget['version'] == 2 and budget['extension_seconds'] == 120
         assert budget['started_at'] == escalation['prepare_budget']['started_at']
-        assert budget['deadline'] == escalation['prepare_budget']['deadline'] == budget['started_at'] + 600
-        assert budget['issued_at'] >= escalation['started_at'] + escalation['total_seconds']
-        assert budget['charged_total_seconds'] < 600
+        assert budget['retained_deadline'] == escalation['prepare_budget']['deadline'] == ledger['deadline'] == budget['started_at'] + 600
+        assert budget['deadline'] == ledger['material_deadline'] == budget['started_at'] + 720
+        assert ledger['material_extension_seconds'] == 120
+        assert ledger['material_supervisor_deadline'] == ledger['material_deadline'] + 480
+        assert ledger['started_at'] == budget['started_at']
+        assert all(budget[key] == value for key, value in ledger['material_handoff'].items())
+        completion = budget['escalation_completion']
+        assert completion == ledger['escalation_completion']
+        assert completion['source'] == escalation['coordinator']
+        assert completion['tree'] == 'd0759acb9f83ec3f3e10d9c5d1325c937c343ee7'
+        assert completion['source_clean'] is True and completion['exit_code'] == 0 and completion['cleanup_state'] == 'PASS'
+        assert completion['owner_token'] == escalation['cleanup']['token'] == ledger['escalation_cleanup']['token']
+        assert completion['report_sha256'] == e.sha((e.ROOT / 'reports/retained-escalation/escalation-schema-phase.json').read_bytes())
+        assert completion['report_ended_at'] == escalation['started_at'] + escalation['total_seconds']
+        assert completion['report_ended_at'] <= completion['completed_at'] <= budget['issued_at'] <= budget['observed_at'] <= budget['preparation_ended_at'] < budget['deadline']
+        assert budget['owner_token'] == material['cleanup']['token'] == ledger['material_cleanup']['token']
+        assert budget['charged_seconds'] == budget['issued_at'] - budget['started_at']
+        assert budget['charged_at_observation'] == budget['observed_at'] - budget['started_at']
+        assert budget['charged_total_seconds'] == budget['preparation_ended_at'] - budget['started_at'] < 720
+        assert budget['remaining_seconds'] == budget['deadline'] - budget['preparation_ended_at']
         assert material['upgrade_ack_loss']['observed']['revision'] == '0012'
         assert material['upgrade_ack_loss']['recovery_source'] == source
         assert material['downgrade_ack_loss']['observed']['revision'] == '0011'
@@ -142,6 +161,9 @@ try:
         assert material['used_recovery']['source'] == source
         assert material['database']['refusal']['before_ddl'] and material['database']['refusal']['tables'] == 42
         admission['material_schema'] = {'source': source, 'revision': '0012', 'report': 'material-schema-phase.json'}
+        admission['material_budget'] = {'started_at': budget['started_at'], 'retained_deadline': budget['retained_deadline'],
+                                       'deadline': budget['deadline'], 'extension_seconds': 120,
+                                       'preparation_ended_at': budget['preparation_ended_at'], 'charged_total_seconds': budget['charged_total_seconds']}
     assert not e.command(['git', 'status', '--porcelain', '--untracked-files=all']).strip()
     print('TELEGRAM_EGRESS_MIGRATION_DISPOSABLE_PASS', flush=True)
 except BaseException as error:

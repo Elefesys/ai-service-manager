@@ -5,7 +5,60 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. C3-M3.1-MATERIAL-R1 — correction source / 2026-10-16 UTC
+## 0. C6-M3.1-MATERIAL-COMPAT-R2 — terminal720 source checkpoint / 2026-10-16 UTC
+
+[C0 accepted source/budget decision](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207691746)
+and [five-path assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207709114).
+Separate branch/checkout `c6/m3-1-material-compat-r2`, exact accepted base
+`e7f554772ad4dd697d38c88f4f6423b3d3895499`, tree
+`0242e71790e0fe441ebc55a6311c80f5681b218f`, sole parent
+`ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`. Main/frozen E933ddd…/0011 and
+the existing PR34 branch/head ef7b52… are preserved. Final source identity is in
+the single canonical PR34 C6 receipt; no self-SHA/status-only commit.
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all five findings OPEN.**
+C6 source is REVIEW on return, then C6 HOLD; no implementation VERIFIED claim.
+C3 R1 source was accepted by C0; its product PG/browser evidence is still required.
+
+Current coordinator retains the original S and retained S+600, full T positive,
+real120 timeout/export negatives, C/G/E, all archives/images/byte probes and late
+three C cleanup negatives. Only P preparation receives explicit S+720. This is the
+accepted120-second increase, not a600 optimization or a new clock at P. Version2
+private single-use request binds exact E/candidate/phase/uid/P owner, both absolute
+deadlines and saved successful E report/hash/owner/observed completion. P charges
+actual observation−S and full preparation-end−S, including G image verification;
+expiry/tamper/incomplete E refuse before runtime. Original frozen600 consumers,
+ownership/checkpoint/supervisor/cleanup functions remain byte-exact.
+
+[§15.11](M3_CONTRACT.md#1511-c0--terminal-material-preparation720-exception--2026-10-16-utc)
+appends the accepted exception without altering the existing contract prefix.
+P supervision remains remaining+480, nominal absolute bound S+1200; cleanup90,
+individual command bounds, state25/browser25/foundation45,9 jobs/clean9 unchanged.
+Measured old P handoff603.658495599/679.481488282s would leave116.341504401/
+40.518511718s under720 **before unmeasured P preparation**.720 is not proved
+sufficient/minimal; further failure returns BLOCKED to C0 without rerun/increase.
+
+Scoped units in the reused frozen/offline environment: **625 passed**; protocol
+nodes cover after600 admission, exact clock/private/source/owner/report refusal,
+full preparation/end720 and failure/owned cleanup, actual coordinator entrypoints
+and executed shell evidence gates. Static/immutability commands/results and exact
+head/tree/parents/five-path numstat are in the canonical receipt. No local actual
+PG/Docker/image builds/browser/CI execution or new dependencies/services.
+
+Accepted R1 companions are read-only: private Inbox token,10 columns on6 existing
+tables/42 total/132 signatures, P_COLUMNS/no-backfill, raw42 used55000 before DDL,
+unused reverse/ORIGINAL17/OLD_CHECK4. C6 changes no DDL/backend/frontend/other tests.
+
+Next C0 route: exact combined-source intake → move descendant into **the same**
+Draft PR34 → one normal automatic CI → C1/C2/C5 re-review; C8 after actual gates.
+Require9/9+clean9/9 on exact tested SHA/tree, both state lanes complete P preparation
+<720 from S and all retained negatives/cleanup within25min, actual0012
+catalog/migrations/recovery/refusal/security/races and paired PHOTO/browser proof.
+C2-MAT-02 remains OPEN until those lanes pass. No dispatch/rerun/new PR or update
+of the old PR34 head in this task. Gate OFF; C3/C1/C2/C5/C8 HOLD. No live/VM/working
+DB/S3/sends/deploy/native/renewal/collector/M4 or broad CI optimization/IMPL-05.
+
+## История — C3-M3.1-MATERIAL-R1 correction source / 2026-10-16 UTC
 
 [C0 R1](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6201238585).
 Base `ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`, tree

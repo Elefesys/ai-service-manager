@@ -2,7 +2,32 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C3-M3.1-MATERIAL-R1 source correction / 2026-10-16 UTC
+## Текущий статус — C6-M3.1-MATERIAL-COMPAT-R2 source checkpoint / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all five findings OPEN pending final
+source reviews and actual acceptance. C6 REVIEW on return, then HOLD.**
+[C0 intake/explicit terminal720 decision](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207691746),
+[C6 five-path task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207709114),
+[contract/evidence map§15.11](tasks/M3_CONTRACT.md#1511-c0--terminal-material-preparation720-exception--2026-10-16-utc).
+
+| Task / binding | Current source result / remaining gate |
+|---|---|
+| C6 branch/base | `c6/m3-1-material-compat-r2` from accepted C3 R1 `e7f554772ad4dd697d38c88f4f6423b3d3895499`; tree `0242e71790e0fe441ebc55a6311c80f5681b218f`; parent ef7b52… |
+| Main / existing PR34 | Frozen E933ddd…/0011; old PR34 head ef7b52… unchanged by C6. Final C6 head/tree/parent/numstat in one canonical PR34 receipt. No new PR/dispatch/rerun |
+| C2-MAT-02 | Explicit exception implemented: retained S+600 and P-only S+720 from original S; all preceding elapsed costs charged. Closed version2 private single-use handoff binds P owner and completed E source/report/hash/cleanup; final preparation charge<720. Finding remains OPEN pending both actual state lanes |
+| Bounds / preservation | P remaining+480 → nominal S+1200; shared cleanup90, individual commands, state25/browser25/foundation45,9 jobs/clean9 unchanged. Full T positives/120-timeout/export negatives, C/G/E frozen bodies/requests/ownership, source/image proofs and all3 late C cleanup negatives preserved |
+| R1 source companions | Read-only10-column/6-existing-table/42-table/132-signature inventory, private Inbox token, full P_COLUMNS/no-backfill/raw42 used55000-before-DDL/unused exact reverse/ORIGINAL17/OLD_CHECK4 |
+| Local evidence | Reused frozen/offline scoped egress+migration units:625 PASS. Targeted protocol/current coordinator/material entrypoint and executed shell gates cover refusal/no runtime, elapsed720 endpoints and primary/secondary/owned cleanup. Static/prefix/frozen checks and exact commands/results in canonical receipt |
+| Actual gates | PG/Docker/image builds/paired PHOTO/browser/CI NOT RUN here.720 sufficiency/minimality not established; no additional increase or retry authorized |
+| Next C0 route | Source intake → move combined descendant into same Draft PR34 → normal automatic CI9/9+clean9/9 on exact SHA/tree; both P prep<720 and retained negatives/cleanup within state25; actual product PG/PHOTO/browser; C1/C2/C5 re-review then C8 |
+
+Only assigned five paths changed with the substantive protocol correction;
+§15.11 appended after the complete immutable§15.10.4 prefix. Earlier evidence below
+remains bound to its historical sources. No implementation INTEGRATED/VERIFIED
+claim; C3/C1/C2/C5/C8 HOLD, C6 HOLD after canonical return. Gate OFF; no live/VM/
+working DB/S3/sends/deploy/native/renewal/collector/M4. IMPL-05 remains DEFERRED.
+
+## История — C3-M3.1-MATERIAL-R1 source correction / 2026-10-16 UTC
 
 **MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; findings OPEN pending C0 and actual
 acceptance. C3 HOLD after canonical return.**

@@ -5011,3 +5011,147 @@ review evidence, not an R1 test run. C2-MAT-02 budget remains **OPEN, C6 scope**
 C0 intake → assigned C6 descendant → existing PR34 automatic CI → C1/C2/C5 review
 and actual PG/browser acceptance. C3 HOLD after return. Gate OFF; native/latest-state,
 renewal/collector/P-A03-09/live/VM/working DB/S3/sends/deploy/M4 remain unissued.
+
+### 15.11. C0 — terminal MATERIAL preparation720 exception / 2026-10-16 UTC
+
+[Explicit C0 intake/decision](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207691746),
+[C6 implementation assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207709114),
+[C6 actual-budget analysis](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6207442994).
+This section is the narrow accepted override of the earlier blanket600/no-new-budget
+wording in §§12.8/13/14/15.7 **only for terminal MATERIAL admission/preparation**.
+It does not rewrite historical results, change any other budget or open IMPL-05.
+The entire existing contract through§15.10.4 is preserved byte-for-byte.
+
+#### 15.11.1. Decision, measured cause and unchanged execution
+
+One original monotonic start **S** remains established before T. H/predecessor
+execution stays before that ledger, exactly as in the accepted harness. Retained
+T/C/G/E keep **D_retained=S+600** and their original version1 requests/consumers.
+Only P admission/source/archive/build/reuse/image-probe preparation receives
+**D_material=S+720** from that same S. This is an explicit **120-second increase**
+of the terminal cumulative limit, not an optimization that satisfies600 and not a
+fresh720 allocated at P. Every preceding elapsed cost remains charged: full T
+positive, genuine120-second command-timeout negative, export negative, C/G/E
+preparation/runtime/supervision/report retention/owned cleanup and handoff costs.
+No clock reset/shift, nested fresh allowance or subtraction of those durations.
+
+Failed CI38793747628/attempt1, tested merge
+`d6f2bd1eeceaebebb7140940f6b6d23ab98ddb26`, analysed head
+`ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`, produced these actual facts:
+
+| Lane | Elapsed at P guard | Remaining600 | Remaining720 before P preparation |
+|---|---:|---:|---:|
+| normal |603.658495599s|−3.658495599s|116.341504401s|
+| Docker29 |679.481488282s|−79.481488282s|40.518511718s|
+
+Both E exits were0/cleanup PASS. P never started; its report was absent. Pre-C
+276.016/306.369s includes the two required full T negatives, not unexplained idle
+time. ZIP/source/timing bindings and the complete nonoverlapping decomposition
+are in the C6 analysis. That evidence belongs to the failed source above and
+does not certify C3 R1 or this C6 descendant.
+
+720 is **not a guaranteed fit, mathematically minimal value or general new budget**.
+Actual P preparation/runtime and the full state25min job remain separate gates.
+Failure at the amended bound returns BLOCKED to C0 with exact evidence; there is
+no authorization for another increase, automatic retry/rerun or assertion skip.
+C2-MAT-02 remains OPEN pending complete final normal and Docker29 execution.
+
+Sequence stays T positive → real timeout negative → export negative → C → G → E
+→ P → all three original C cleanup negatives. Source archives/images, byte probes,
+all frozen function bodies/selectors/requests, readiness/recovery/refusal cycles,
+failure retention and source-clean gates remain mandatory. `SchemaOwnership`,
+`RetainedCheckpoint`, supervisor/process-group termination and cleanup code do not
+change. Existing P supervision remains **remaining+480**, hence the nominal
+absolute terminal bound becomes **S+1200**. Shared owner cleanup90, individual
+build480/controller-start120/migration-probe30/drain60/normal-command40 and late
+C-negative supervisor480 remain. State25min/browser25min/foundation45min, nine
+jobs/clean9, existing pins/artifacts/Compose/dependencies remain unchanged. The
+supervisor bound alone does not guarantee that the complete job fits25min.
+
+#### 15.11.2. Closed P-only protocol and evidence gates
+
+The coordinator issues P only after successful E exit, final exact E source/clean
+verification, report retention and successful owned cleanup. It reads the retained
+E report, verifies phase/source/image tree, the original600 budget, completed
+used-refusal/timer evidence and cleanup owner, then records the observed completion
+after export/cleanup/worktree removal. The request is private0600/current uid,
+single-link, one-use and bound to the new P owner's nonce.
+
+| Version2 field | Exact semantics |
+|---|---|
+| `version`, `phase`, `historical`, `candidate` |2; MATERIAL_SCHEMA_0011_0012; frozen E933ddd…; actual checked-out final C6 descendant. R1 is the base, never substituted for final P. |
+| `uid`, `owner_token` | Exact current uid and admitted asm-material-schema-phase owner nonce/source/phase. |
+| `started_at`, `retained_deadline`, `deadline`, `extension_seconds` | Original S; exactly S+600; exactly S+720; fixed integer120. No tolerance extends admission. Stored deadline comparisons use addition from S, avoiding float-subtraction equality errors. |
+| `issued_at`, `charged_seconds` | Actual issue time and exactly issued_at−S, including all retained work. |
+| `escalation_completion` | Closed object: exact E source/tree, source_clean=true, exit_code=0, cleanup_state=PASS, E owner nonce, SHA256 of the retained E report, its ended-at and coordinator-observed completed-at. |
+
+The child independently rereads/hash-checks that retained report and its original
+S+600/source/phase/cleanup/image binding. Required order is E report end ≤ observed
+E completion ≤ P issue ≤ child observation. Missing/incomplete/failed E, stale or
+changed report, reset S, wrong phase/source/owner/extension/deadline, changed file
+device/inode/content or private-file guards, reused or exhausted requests refuse
+before P runtime. The request file is removed only after successful validation.
+
+At admission the child records `observed_at`, `charged_at_observation=observed_at−S`
+and the true handoff delay/remaining. Source/ancestry/daemon admission and every
+archive/build/reuse/probe use only remaining D_material. The separate frozen G
+development-image verification is inside this preparation. Final evidence records
+`preparation_ended_at`, `charged_total_seconds=preparation_ended_at−S` **<720**, both
+absolute deadlines, candidate preparation duration and image preparation duration.
+Preparation failure retains the actual stop/charge and primary/secondary/owned
+cleanup evidence. No P report claims PASS600.
+
+The outer shell cross-checks the material report against the coordinator handoff,
+same S, both deadlines,120 extension and supervisor bound, exact saved E report
+hash/owner/completion order, P owner and admission/final-preparation arithmetic.
+The original schema/recovery/42-table/cleanup checks still run. A unit/mocked
+protocol check is not actual PostgreSQL/catalog/timing acceptance.
+
+#### 15.11.3. C6 source checkpoint, tests and remaining gates
+
+Branch `c6/m3-1-material-compat-r2` starts from accepted C3 R1
+`e7f554772ad4dd697d38c88f4f6423b3d3895499`, tree
+`0242e71790e0fe441ebc55a6311c80f5681b218f`, sole parent
+`ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`. Main/frozen E remains
+`933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011. The existing Draft PR34 head is
+not changed by this source task. Final C6 head/tree/parent/numstat and verification
+are bound in one canonical PR34 receipt, without a self-SHA/status-only commit.
+
+Only five assigned existing paths change: current material coordinator/consumer/
+preparation/report and protocol units in `tests/test_telegram_egress_migration.py`,
+outer evidence gates in `scripts/test_telegram_egress_migration.sh`, this appended
+section, current handoff and task register. R1 inventory/used witnesses in the two
+other egress test files are read-only:10 columns/6 existing tables,4 new/42 total,
+132 signatures, private Inbox material_claim_token, full P_COLUMNS/no-backfill,
+used55000 before DDL/raw42 preservation, unused exact reverse and ORIGINAL17/
+OLD_CHECK4 remain. No new DDL/product/workflow/image/dependency capability.
+
+| Protocol requirement | Executable unit evidence in test_telegram_egress_migration.py |
+|---|---|
+| Valid after600/before720; fixed S/deadlines/delta; closed/private/source/owner/E/reuse failures | `test_material_budget_preserves_original_S_terminal720_private_binding_and_single_use` |
+| Changed inode/content or expiry during validation; exact fractional endpoint | `test_material_handoff_changed_or_expired_during_validation_cannot_be_consumed`; `test_material_budget_fractional_deadlines_use_stored_absolute_values` |
+| Missing request and early failure report; no runtime | `test_material_phase_early_failure_reports_budget_and_performs_no_runtime` |
+| Full source/archive/reuse/probe/G-probe charge; end720 refusal, strict just-before720 positive boundary; primary/cleanup behavior | `test_material_entrypoint_accounts_full_preparation_and_refuses_before_runtime` |
+| Actual current coordinator entry, original sequence/retained600 requests, E exit/source/report/cleanup refusal, expired P admission and late C-negative call | `test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720` |
+| Executed outer-shell report gates and tampered deadline/charge/E/owner/supervisor evidence | `test_material_shell_validates_original_S_completed_E_and_terminal720_report` |
+
+Scoped unit command in the existing frozen offline environment:
+`uv run --offline --frozen --no-sync pytest -q -m 'not integration' tests/test_telegram_egress.py tests/test_telegram_egress_migration.py`
+with UV_PROJECT_ENVIRONMENT selecting the existing environment: **625 passed**.
+Ruff/check/format, shell/embedded-Python compilation and exact scope/prefix/frozen
+source audits are recorded with their actual results in the canonical receipt.
+These local results do not certify runtime720 feasibility.
+
+Actual PostgreSQL/Docker/image builds/paired PHOTO/browser/CI execution are
+**NOT RUN in this source task**. No service/dependency installation, dispatch,
+rerun, new PR or push to the old PR34 branch. Five findings remain OPEN;
+MATERIAL/M3 IN_PROGRESS, implementation not INTEGRATED/VERIFIED. C6 HOLD after
+canonical return; C3/C1/C2/C5/C8 HOLD until C0 assignments.
+
+Next: C0 exact source intake → move the combined descendant into the same Draft
+PR34 → one normal automatic CI → C1/C2/C5 re-review final source/actual evidence;
+C8 follows required gates. Required:9/9+clean9/9 on exact tested SHA/tree, both
+normal/Docker29 full P preparation<720 from original S, complete retained negatives/
+owned cleanup within state25min, actual0012 migrations/catalog/42-table hashes/
+recovery/refusal/security/races and paired PHOTO/browser acceptance. Gate OFF;
+live/VM/working DB/S3/sends/deploy/native/renewal/collector/M4 remain unissued.
