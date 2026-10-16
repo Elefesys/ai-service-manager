@@ -2,7 +2,28 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C3-M3.1-MATERIAL source checkpoint / 2026-10-15 UTC
+## Текущий статус — C3-M3.1-MATERIAL-R1 source correction / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; findings OPEN pending C0 and actual
+acceptance. C3 HOLD after canonical return.**
+[C0 R1](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6201238585),
+[source and assertion map](tasks/M3_CONTRACT.md#15104-c3-m31-material-r1-correction--2026-10-16-utc).
+
+| Binding / correction | Current result |
+|---|---|
+| R1 branch / exact parent | `c3/m3-1-material-r1` / `ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`, tree `e4317cc6478b2c40669d96242c3adb89079ab46c` |
+| C2-MAT-01 / C1-MAT-01 | Three CASE fixes; immutable Inbox material_result/material_claim_token pair, exact winning replay; all Job delivery fields NULL. Only0012;10 columns/6 old tables,4 new/42 total,132 function signatures |
+| C1-MAT-02 / R3-T4 | Fresh input in old quiet window→T2; current-version sticky refusal after GROUP/MEDIA/late File/Resume; Telegram and CONTROLLED GUARDS/Escalation arms. Exact negative SQLSTATE/constraint/reason plus positive neighbor |
+| C5-MATERIAL-01 | Four finite PHOTO/private-S3 browser journeys with ordinary Worker mutation; loaded image, caption positive, replacement/type/delete, grant404, real delayed old HTTP response. Source proof written; actual paired execution NOT RUN |
+| Local evidence | Ruff/format9,79 targeted Python,68 browser-harness Python, typecheck,32 MessagingPanel tests PASS.121 PG cases collected only. No actual PG/Docker/browser/migration/race/catalog PASS |
+| Next gate | C0 source intake→assigned C6 descendant→same PR34 automatic CI and C1/C2/C5 review; C2-MAT-02 budget stays OPEN with C6 |
+| Boundaries | Gate OFF; no new PR/dispatch/rerun/PR34-branch push, native/renewal/live/VM/sends/deploy/M4 |
+
+Final SHA/tree/parents/changed paths/numstat are in the single canonical PR34 R1
+receipt. Frozen originals/0001–0011/normative§15.2–15.9 unchanged. Historical evidence
+below remains attached to its old checkpoint, not to this R1 implementation.
+
+## История — C3-M3.1-MATERIAL source checkpoint / 2026-10-15 UTC
 
 **MATERIAL/M3 IN_PROGRESS; C3 HOLD после source return. A03 NOT VERIFIED.**
 [C0 implementation](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336),

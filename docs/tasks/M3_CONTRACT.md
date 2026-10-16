@@ -4381,6 +4381,7 @@ A03/A08/acceptance впереди; M4/LLM/production/IMPL-05/CI optimization н�
 Выдача [C0 MATERIAL](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336), продолжение
 [после ограничения окружения](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195754984). Implementation source готов к
 C0 intake; **MATERIAL/M3 IN_PROGRESS, A03 NOT VERIFIED; C3 HOLD после возврата**.
+Текущая correction R1 от reviewed PR34 —§15.10.4; inventory§15.10.2 обновлён для неё.
 Принятый design§15.2–15.8 и assertion tables§15.9 не изменены. No-refetch policy,
 native/latest-state OPEN, renewal/collector/live и право merge/activation не расширены.
 
@@ -4419,14 +4420,14 @@ consumers are changed together. No realtime/TTL guarantee or replacement fetch i
 | P-A03-01 / §15.3/6 | `normalization.py`, `material.py`, `telegram/database.py`, 0012 validation/ingress | `tests/test_m3_1_provenance.py::test_p_a03_01_*`; `PG::test_full_codec_sql_python_parity_closed_null_matrix_and_immutable_sidecar`; `MIG::test_cutover_saved_v1_replay_precedes_new_field_parse_and_fresh_v1_refused`; `tests/test_m2_3_wire_postgres.py::test_material_authenticated_webhook_to_normal_worker_preserves_original` |
 | P-A03-02 / §15.7 | Provenance, target/effect/suppression composite FKs, immutable accepted versions, exact SENT binding | `PG::test_cross_binding_fk_null_bypasses_and_historical_effect_versions`; `PG::test_identity_conflict_does_not_poison_trusted_original_and_chat_isolation`; `PG::test_same_provider_id_across_workspace_and_connection_never_aliases`; `PG::test_exact_sent_binding_only_and_deferred_finalizer_without_connection_reverse` |
 | P-A03-03 / §15.3/4 | Bounded fold, private apply/context, per-target effects/Audit and per-batch Turn bump | `PG::test_known_order_per_commit_counters_and_sticky_turn[steps0…17]`; `PG::test_deferred_order_fold_has_no_domain_writes_before_original[steps0…17]`; `PG::test_mixed_delete_batch_sorted_unique_context_n_turn_once_and_late_original`; `PG::test_overflow_is_full_rollback_without_effect_or_audit` |
-| P-A03-04 / §15.4/6/7 | Normal claim/admission, terminal MATERIAL_PROCESSED, winning-claim replay, ordered barriers | `PG::test_rollback_and_lost_ack_restart_exact_terminal_replay`; `PG::test_real_barrier_recheck_and_postwait_claim_expiry`; `PG::test_original_and_material_workers_serialize_unknown_chat_without_deadlock`; `PG::test_material_reclaim_nowait_skips_locked_candidate_and_old_token_cannot_apply`; SENT test above |
-| P-A03-05 / §15.4/7 | Shared grouping/member/seal/snapshot/readiness, effective projection and File grant predicate | R3 nodes below; `PG::test_late_original_fetch_retains_winner_and_context_but_never_stale_image`; `tests/test_m3_1_provenance.py::test_r3_t1_v2_snapshot_keeps_photo_identity_but_consumes_current_text` |
+| P-A03-04 / §15.4/6/7 | Normal claim/admission, terminal MATERIAL_PROCESSED, winning-claim replay, ordered barriers | `PG::test_material_terminal_result_token_pair_is_closed_and_write_once`; `PG::test_material_token_requires_completed_verified_mutation`; `PG::test_material_off_edit_has_no_terminal_token_or_replay`; `PG::test_rollback_and_lost_ack_restart_exact_terminal_replay`; `PG::test_real_barrier_recheck_and_postwait_claim_expiry`; `PG::test_original_and_material_workers_serialize_unknown_chat_without_deadlock`; `PG::test_material_reclaim_nowait_skips_locked_candidate_and_old_token_cannot_apply`; SENT test above |
+| P-A03-05 / §15.4/7 | Shared grouping/member/seal/snapshot/readiness, effective projection and File grant predicate | R3 nodes below; `PG::test_known_turn_fresh_input_and_current_version_refusal_after_maintenance_file_resume[telegram/controlled-guard/controlled-escalation]`; `PG::test_late_original_fetch_retains_winner_and_context_but_never_stale_image`; `tests/test_m3_1_provenance.py::test_r3_t1_v2_snapshot_keeps_photo_identity_but_consumes_current_text` |
 | P-A03-06 / §15.4/9 | Same private `material_apply_context`, existing context→Escalation trigger, shared GUARDS admission | `PG::test_shared_body_guards_stale_admission_and_retained_dispatch`; `PG::test_shared_body_escalation_context_cancel_once_terminal_precedence_and_saved_replay`; `PG::test_shared_body_retains_expired_escalation_precedence`; retained CONTROL/GUARDS/Escalation suites remain candidate gates |
-| P-A03-07 / §15.4/7 | Required current DTO, paired OpenAPI/TS parser/panel, CHANNEL_EVENT Audit, current-only grant | `tests/test_m3_1_provenance.py::test_p_a03_07_*`; `PG::test_api_current_closed_history_and_same_workspace_wrong_client`; `PG::test_runtime_nonowner_force_rls_and_no_raw_table_or_private_function_access`; four scoped Vitest modules; `frontend/e2e/messaging.spec.ts` test “material edit and delete refresh the paired current projection and preserve original history” |
+| P-A03-07 / §15.4/7 | Required current DTO, paired OpenAPI/TS parser/panel, CHANNEL_EVENT Audit, current-only grant | `tests/test_m3_1_provenance.py::test_p_a03_07_*`; `PG::test_api_current_closed_history_and_same_workspace_wrong_client`; `PG::test_runtime_nonowner_force_rls_and_no_raw_table_or_private_function_access`; four scoped Vitest modules; `frontend/e2e/messaging.spec.ts` TEXT journey plus three “material PHOTO … normal Worker mutation and grant refusal” journeys and “material PHOTO delayed real old grant cannot restore image after semantic refresh” |
 | P-A03-08 / §15.6/7 | 0011→0012, immutable ORIGINAL/OLD_CHECK copies, first used refusal, current readiness0012 | `MIG::test_fresh_head_full42_columns_profiles_rls_and_no_unused_backfill`; `MIG::test_populated_0011_repeat_upgrade_and_exact_unused_reverse`; `MIG::test_owned_used_refusal_precedes_every_ddl_and_preserves_all42`; cutover node above; C6 source/schema compatibility still pending |
 | R3-T1/T2 | First original fold before File/grouping; typed PHOTO/file=NULL only with suppression proof | `PG::test_initial_photo_suppression_visible_snapshot_and_duplicate`: fresh-turn/existing-turn × R3-T1-text/R3-T2-photo, exact m2/C+2/effect/Audit/grouping/seal/V2 assertions |
 | R3-T3 | HIDDEN initial exclusion, newer restore without retroactive membership/FETCH | `PG::test_r3_t3_hidden_restore_and_t5_no_late_group_or_fetch` |
-| R3-T4 | Before-insert authority and deferred completeness, typed legacy member retained | `PG::test_r3_t4_invalid_first_suppression_rolls_back_entire_original_atom`: null-form, missing-proof, text-member, wrong-tenant/message/origin/effect, forged-basis and PENDING/FAILED File negatives; all42-table rollback fingerprints |
+| R3-T4 | Before-insert authority and deferred completeness, typed legacy member retained | `PG::test_r3_t4_invalid_first_suppression_rolls_back_entire_original_atom`: null-form, missing-proof, text-member, wrong-tenant/message/origin/effect, forged-basis and PENDING/FAILED File negatives; exact SQLSTATE/constraint/reason + intended function context, all42-table rollback fingerprints, same-claim positive neighboring atom after dropping the corruption trigger |
 | R3-T5 | Duplicate original/exact replay/maintenance; retained V1 decoder/snapshot/receipt/WINNER | R3-T1/T2/T3 nodes; `MIG::test_legacy_ineligible_photo_first_original_stays_suppressed_after_restore`; populated-cycle node; `tests/test_m3_1_provenance.py::test_r3_t5_saved_v1_decoder_does_not_adopt_new_member_form` |
 
 `PG` = `tests/test_m3_1_provenance_postgres.py`, `MIG` =
@@ -4442,7 +4443,7 @@ rewrite saved provider/route/Client rows or grant a production mutation capabili
 
 This inventory is expanded from migration Python/DDL, without a PostgreSQL connection.
 The full table projection is `P_COLUMNS` in the migration test: retained exact
-`E_COLUMNS` (38 tables/schema0011) plus4 tables and9 columns on6 existing tables.
+`E_COLUMNS` (38 tables/schema0011) plus4 tables and10 columns on6 existing tables.
 No prior projected column is removed/reordered. `app.messages` and `app.outbox_events`
 gain supporting unique keys only. All retained types/defaults/constraints/indexes/
 triggers/policies/ACLs are defined by immutable0001–0011; the successor delta is
@@ -4477,7 +4478,7 @@ indexes, triggers, policies, sequences), and is **NOT RUN**.
 | `platform.conversation_control_receipts` | `workspace_id, id, operation_namespace, operation, idempotency_key, conversation_id, client_id, actor_user_account_id, correlation_id, expected_generation, expected_context_version, previous_mode, accepted_mode, previous_generation, accepted_generation, context_version, activation_fence_seq, request_fingerprint, audit_event_id, audit_event_type, accepted_at, result, guard_profile` |
 | `platform.escalation_command_receipts` | `workspace_id, id, namespace, idempotency_key, escalation_id, conversation_id, client_id, actor_user_account_id, correlation_id, operation, expected_version, expected_control_generation, expected_context_version, accepted_version, accepted_status, accepted_context_version, request_fingerprint, audit_event_id, audit_event_type, accepted_at, result` |
 | `platform.file_object_uploads` | `workspace_id, id, file_id, job_id, claim_token, storage_key, mime_type, size_bytes, sha256, width, height, status, cleanup_claim_token, cleanup_lease_until, cleanup_attempts, next_check_at, last_checked_at, cleanup_outcome, version, created_at` |
-| `platform.inbox_events` | `workspace_id, id, connection_id, provider, bot_identity, external_connection_id, required_direction, event_id, normalized_event, event_fingerprint, correlation_id, received_at, status, result_code, message_id, completed_at, version, turn_ingress_at, turn_ingress_seq, turn_control_generation, turn_control_mode, turn_activation_fence_seq, material_result` |
+| `platform.inbox_events` | `workspace_id, id, connection_id, provider, bot_identity, external_connection_id, required_direction, event_id, normalized_event, event_fingerprint, correlation_id, received_at, status, result_code, message_id, completed_at, version, turn_ingress_at, turn_ingress_seq, turn_control_generation, turn_control_mode, turn_activation_fence_seq, material_result, material_claim_token` |
 | `platform.message_initial_suppressions` | `workspace_id, id, message_id, target_id, origin_inbox_id, effect_id, source_receipt_id, previous_version, accepted_version, initial_material, fold_witnesses, membership_disposition` |
 | `platform.message_material_effects` | `workspace_id, id, target_id, message_id, source_receipt_id, audit_event_id, event_type, previous_version, accepted_version, reason, accepted_at` |
 | `platform.message_material_targets` | `workspace_id, id, connection_id, provider_chat_id, provider_message_id, message_id, conversation_id, client_id, direction, outbox_id, inbound_provider_id, required_sent, quarantined, original_grouping_closed, origin_identity, deleted, undated_seen, max_edit_at, candidate, dated_conflict, delete_receipt, undated_receipt, candidate_receipt, conflict_receipt, current_material` |
@@ -4514,7 +4515,7 @@ suppression. Existing immutable original Message columns/capture/deadlines remai
 | Target | PK(ws,id), unique(ws,connection,chat,provider ID), partial unique(ws,Message); conditional full INBOUND/exact SENT OUTBOUND FK/NULL matrix; Conversation/Client and immutable Message identity; at most3 retained fold witnesses; same ws/connection/chat/target/kind/date/semantic witnesses; sticky delete/uncertainty/quarantine/excluded grouping; no foreign Job FK |
 | Effect/Audit | unique(source receipt,Message); target/message and source FK; immutable accepted_version=previous_version+1; exact Audit composite key incl event type/version/target/source; CHANNEL_EVENT/no user and closed payload/reason; no FK to mutable current Message.version |
 | Suppression/member | one proof per(ws,Message), previous1/accepted2, exact effect/source/origin FK; frozen initial state/witnesses/disposition; own first-original physical transaction authority; PHOTO/INBOUND/fileNULL exception only same-Message ELIGIBLE_VISIBLE proof; HIDDEN/INELIGIBLE never gain membership |
-| Inbox/receipt | retained old closed CHECK alternatives, separate codec2 queued EDIT/DELETE and MATERIAL_PROCESSED/NULL Message; complete sorted per-target result union, exact source/effect/Audit binding and immutable terminal results |
+| Inbox/receipt | retained old closed CHECK alternatives, separate codec2 queued EDIT/DELETE and MATERIAL_PROCESSED/NULL Message; complete sorted per-target result union + non-NULL private winning material_claim_token, exact source/effect/Audit binding and immutable terminal pair; legacy/NEW/PENDING pair NULL; outer CHECK IS TRUE excludes NULL bypass |
 
 The following is the complete successor schema DDL expansion (excluding function
 bodies, table security loop and locks already described); it is executable source,
@@ -4537,17 +4538,17 @@ ALTER TABLE platform.telegram_update_receipts ADD CONSTRAINT telegram_update_rec
           ('BUSINESS_MESSAGE','EDITED_BUSINESS_MESSAGE','DELETED_BUSINESS_MESSAGES') AND inbox_id IS NOT NULL) OR
           (result_code<>'QUEUED' AND inbox_id IS NULL))))) IS TRUE);
 
-ALTER TABLE platform.inbox_events ADD COLUMN material_result jsonb,
+ALTER TABLE platform.inbox_events ADD COLUMN material_result jsonb,ADD COLUMN material_claim_token uuid,
       ADD CONSTRAINT inbox_material_identity_key UNIQUE(workspace_id,id,connection_id,bot_identity,event_id),
       DROP CONSTRAINT inbox_events_check;
 
 ALTER TABLE platform.inbox_events ADD CONSTRAINT inbox_events_check CHECK(
-      (material_result IS NULL AND ((status='PENDING' AND result_code IS NULL AND message_id IS NULL AND completed_at IS NULL) OR
+      ((material_result IS NULL AND material_claim_token IS NULL AND ((status='PENDING' AND result_code IS NULL AND message_id IS NULL AND completed_at IS NULL) OR
        (status='PROCESSED' AND result_code IS NOT NULL AND result_code IN ('PROCESSED','DUPLICATE') AND message_id IS NOT NULL AND completed_at IS NOT NULL) OR
        (status='IGNORED' AND result_code IS NOT NULL AND result_code IN ('IGNORED_NATIVE_OWNER_MESSAGE','IGNORED_MESSAGE_EDITED','IGNORED_MESSAGE_DELETED','IGNORED_UNSUPPORTED') AND message_id IS NULL AND completed_at IS NOT NULL) OR
        (status='FAILED' AND result_code IS NOT NULL AND result_code IN ('MESSAGE_ID_CONFLICT','CONVERSATION_IDENTITY_CONFLICT','RETRY_EXHAUSTED','DEPENDENCY_TIMEOUT','DEPENDENCY_UNAVAILABLE','INVALID_INPUT') AND message_id IS NULL AND completed_at IS NOT NULL))) OR
       (status='PROCESSED' AND result_code='MATERIAL_PROCESSED' AND message_id IS NULL AND completed_at IS NOT NULL
-        AND platform.material_result_valid(material_result) IS TRUE));
+        AND material_claim_token IS NOT NULL AND platform.material_result_valid(material_result) IS TRUE)) IS TRUE);
 
 CREATE TABLE platform.telegram_provenance(
       receipt_id uuid PRIMARY KEY,codec smallint NOT NULL DEFAULT 2 CHECK(codec=2),
@@ -4906,7 +4907,7 @@ from a live catalog during upgrade:
 
 Downgrade takes the explicit ownership-table ACCESS EXCLUSIVE locks, then refuses
 with SQLSTATE55000 **before any DDL** if any receipt codec, sidecar, target, effect,
-suppression, material Inbox result/code, invalidated Turn, new member form/evidence,
+suppression, material Inbox result/token/code, invalidated Turn, new member form/evidence,
 material Audit or enabled material gate exists. Unused reversal restores the17
 fixed bodies and4 predecessor CHECKs, drops only owned0012 additions and never
 CASCADE/deletes history. Actual all42 row/catalog equality is pending integration.
@@ -4921,6 +4922,7 @@ CASCADE/deletes history. Actual all42 row/catalog equality is pending integratio
 | P/current C3 source checkpoint /0012 | Exact `P_COLUMNS`42 above; current Runtime/provisioner readiness accepts only0012; cross-pair source/schema refusal required |
 | Future renewal | No revision/source/profile assigned; never run concurrently with material preparation |
 
+Historical first-checkpoint handoff (superseded for R1 by §15.10.4):
 C6 receives exact accepted C3 head from a separate C0 issuance, works sequentially,
 and owns only `scripts/prepare_telegram_egress.py`, `scripts/test_telegram_egress.sh`,
 `scripts/test_telegram_egress_migration.sh`, `tests/test_telegram_egress.py`,
@@ -4931,7 +4933,7 @@ controllers/projections, failure ownership/cleanup and9-job clean-source gates.
 The old egress profile currently stops at0011; this checkpoint is intentionally
 handed off before a PR, since egress runs before backend integration in foundation.
 
-#### 15.10.3. Actual local evidence and mandatory deferred execution
+#### 15.10.3. Historical local evidence, 2026-10-15 checkpoint; deferred execution
 
 | Проверка этого source checkpoint | Фактический результат |
 |---|---|
@@ -4961,3 +4963,51 @@ Local environment has no PostgreSQL/browser services; no additional service
 installation was performed after the continuation. Unit/static/build evidence is
 not PostgreSQL, race, catalog, browser or account evidence. Full prior backend/browser
 suites were not requested locally. Existing main/design CI does not certify this code.
+
+
+#### 15.10.4. C3-M3.1-MATERIAL-R1 correction / 2026-10-16 UTC
+
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6201238585),
+[C0 findings/disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6201199649).
+Separate clean checkout/branch `c3/m3-1-material-r1`, exact parent/base
+`ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`, tree
+`e4317cc6478b2c40669d96242c3adb89079ab46c`; frozen E/main stays
+`933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011. Final head/tree/parents/numstat are in
+one canonical PR34 receipt. PR34 remains Draft; C3 does not update its C6 branch.
+Findings remain **OPEN pending C0 review and actual acceptance**, not CLOSED/VERIFIED.
+
+| Finding | Substantive R1 correction / executable proof |
+|---|---|
+| C2-MAT-01 | Parenthesize exactly two IF CASE expressions in telegram_validate_v2 and one in material_suppression_check. Predicates unchanged. Existing MIG fresh/populated/repeat/unused reverse and positive R3 suppression nodes remain actual PG gates. |
+| C1-MAT-01 | New nullable private Inbox material_claim_token uuid, no default/backfill. Closed result/token pair; verified V2 EDIT/DELETE only. Final admitted claim recheck precedes atomic Inbox pair + Job SUCCEEDED. All five retained Job delivery fields remain NULL; no fake send outcome or widening of0005. Replay joins exact Job/Inbox/provenance and stored token. New terminal-pair/pending/NEW/nonbinding/OFF negatives; populated MIG includes actual saved-V1 refusal; all saved-results positives assert NULL delivery fields. Restart/ACK-loss now asserts saved winning token, wrong Job/token refusal and historical result after a later deletion; reclaim test rejects the old token even after the new winner commits. |
+| C1-MAT-02 | New known-Turn test has three arms: real Telegram ingress/Worker, CONTROLLED same private apply body for GUARDS, CONTROLLED same body with real TEXT Escalation marker. Captured T is collecting; mutation preserves its member/origin/capture/deadlines; fresh input actually arrives before old quiet_at and creates T2. Real GROUP/MEDIA, late File WINNER, owner Takeover/Resume retain invalidation. Read predicates use fresh DB context/revision/Resume under C/Turn barriers, including pre-Resume matching generation/fence; T has no new consumer/guard/Escalation/outbox authority. CONTROLLED T2 supplies a positive ordinary producer neighbor. No row-edited authority or Telegram AI producer. |
+| R3-T4 discrimination | Each corruption maps to exact SQLSTATE + CHECK name or precise exception/context. Wrong identity uses P0002 from material_suppression_check lookup, not an arbitrary DB exception. Same claim/original successfully commits after only the corruption trigger is removed; all42 rollback remains checked before that positive neighbor. |
+| C5-MATERIAL-01 | Four finite PHOTO originals, real FetchTransfer/private TEST S3/File/WINNER. Three paired journeys load original, apply same-ref caption (new successful grant/load), then replacement/type change/delete through ordinary Worker.execute and canonical replay read. Current/history, loaded-image removal, old-file grant404, unchanged original/File/upload digests and File/FETCH counts are asserted. Fourth journey holds route.fetch's actual200 grant response, performs semantic mutation+refresh, then releases it unmodified and observes no image/request restoration. Component loaded-image test is supplementary. Already issued URL TTL remains explicit. |
+
+R1 storage inventory is **10 columns/6 existing tables,4 new/42 total tables,
+23 new+17 replaced/132 surviving function signatures**. Only one additional column
+relative to reviewed PR34. ORIGINAL17 and OLD_CHECK4 are byte-exact;0001–0011 and
+normative§15.2–15.9 unchanged. Unused downgrade drops token with result; used55000
+guard checks token before DDL. P_COLUMNS, no-backfill, current C6 source inventory
+and existing used-result witness include token. Token has no new child/FK cleanup
+edge: ordinary fixture deletion removes the owning Inbox, never clears its write-once
+pair separately. C6 coordinator/shell/budget/ownership code is not changed.
+
+| Command / local evidence | Result |
+|---|---|
+| `uv run --offline --frozen ruff check <changed Python paths>`; `ruff format --check <changed Python paths>` | PASS,9 changed Python files |
+| `uv run --offline --frozen pytest -q -m 'not integration' tests/test_m3_1_provenance.py tests/test_m2_4_browser_fixture.py tests/test_telegram_egress.py -k 'material or provenance or seed'` |79 passed,152 deselected; includes exact frozen17/4 and current inventory checks |
+| `uv run --offline --frozen pytest -q tests/test_m2_4_browser_fixture.py` |68 passed; includes retained finite actions/seed/PENDING boundary and new byte-provider/Worker/readback guards |
+| `npm --prefix frontend run typecheck` | PASS, includes e2e TypeScript |
+| `npm --prefix frontend test -- src/MessagingPanel.test.tsx` |32 passed; DOM/component evidence only |
+| `pytest --collect-only -q -m integration tests/test_m3_1_provenance_postgres.py tests/test_m3_1_provenance_migrations.py tests/test_m2_3_wire_postgres.py` via frozen offline uv |121 collected, not executed |
+| Cached pglast8.6/PostgreSQL18.6, no repository dependency | Both formerly failing expanded operations4/61 now parse; all131 top-level SQL operations parse. Four pre-existing standalone PL/pgSQL catalog/type-resolution limitations at66/67/70/77 are unchanged from exact base; not actual migration/PG execution. |
+| Diff/allowlist/original11/applied0001–0011/normative sections/ORIGINAL17/OLD_CHECK4/source signatures | PASS; original attachments = repository = manifest11; source count132 |
+
+Local PostgreSQL/Docker/paired browser/migration/catalog/concurrency/actual R3/
+private-S3 acceptance **NOT RUN**. No services installed, skip/xfail, alternative
+runner, workflow dispatch/rerun or new PR. Existing failed PR34 CI is historical
+review evidence, not an R1 test run. C2-MAT-02 budget remains **OPEN, C6 scope**.
+C0 intake → assigned C6 descendant → existing PR34 automatic CI → C1/C2/C5 review
+and actual PG/browser acceptance. C3 HOLD after return. Gate OFF; native/latest-state,
+renewal/collector/P-A03-09/live/VM/working DB/S3/sends/deploy/M4 remain unissued.

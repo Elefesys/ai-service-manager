@@ -37,7 +37,8 @@ P_COLUMNS = {
     + ("material_enabled",),
     "platform.telegram_update_receipts": E_COLUMNS["platform.telegram_update_receipts"]
     + ("codec",),
-    "platform.inbox_events": E_COLUMNS["platform.inbox_events"] + ("material_result",),
+    "platform.inbox_events": E_COLUMNS["platform.inbox_events"]
+    + ("material_result", "material_claim_token"),
     "app.conversation_turns": E_COLUMNS["app.conversation_turns"] + ("material_invalidated",),
     "app.conversation_turn_messages": E_COLUMNS["app.conversation_turn_messages"]
     + ("membership_form", "initial_suppression_id", "suppression_disposition"),
@@ -114,6 +115,20 @@ async def test_fresh_head_full42_columns_profiles_rls_and_no_unused_backfill(con
     m = migration()
     async with h.migrator.connect() as c:
         await assert_schema(c)
+        assert (
+            await c.execute(
+                text(
+                    "SELECT count(*) FROM platform.inbox_events WHERE material_result IS NOT NULL OR material_claim_token IS NOT NULL"
+                )
+            )
+        ).scalar_one() == 0
+        assert (
+            await c.execute(
+                text(
+                    "SELECT data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema='platform' AND table_name='inbox_events' AND column_name='material_claim_token'"
+                )
+            )
+        ).one() == ("uuid", "YES", None)
         for table in m.TABLES:
             assert (await c.execute(text(f"SELECT count(*) FROM {table}"))).scalar_one() == 0
         for signature in (*m.PUBLIC_FUNCTIONS, *m.PRIVATE_FUNCTIONS):
@@ -213,6 +228,13 @@ async def test_populated_0011_repeat_upgrade_and_exact_unused_reverse(control):
             async with h.migrator.connect() as c:
                 await assert_schema(c)
                 assert await fingerprints(c, legacy=True) == before
+                assert (
+                    await c.execute(
+                        text(
+                            "SELECT count(*) FROM platform.inbox_events WHERE material_result IS NOT NULL OR material_claim_token IS NOT NULL"
+                        )
+                    )
+                ).scalar_one() == 0
                 for table in migration().TABLES:
                     assert (
                         await c.execute(text(f"SELECT count(*) FROM {table}"))
@@ -224,6 +246,17 @@ async def test_populated_0011_repeat_upgrade_and_exact_unused_reverse(control):
                         )
                     )
                 ).scalar_one() == 0
+            with pytest.raises(DBAPIError) as invalid_legacy:
+                async with h.migrator.begin() as c:
+                    await c.execute(
+                        text("""UPDATE platform.inbox_events SET status='PROCESSED',result_code='MATERIAL_PROCESSED',completed_at=clock_timestamp(),
+                      material_claim_token=:token,material_result=jsonb_build_array(jsonb_build_object('ordinal',1,'code','IDENTITY_CONFLICT','target_id',NULL,'message_id',NULL,'effect_id',NULL,'audit_event_id',NULL,'previous_version',NULL,'accepted_version',NULL))
+                      WHERE event_id='102'"""),
+                        {"token": uuid4()},
+                    )
+                    await c.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+            assert invalid_legacy.value.orig.sqlstate == "23514"
+            assert invalid_legacy.value.orig.diag.message_primary == "V1 material completion"
             # Invalid V2-only marker never parses for an already saved V1 key.
             old = legacy_projection
             replay = await TelegramIngress(h.kernel, BOT).ingest(old, uuid4())

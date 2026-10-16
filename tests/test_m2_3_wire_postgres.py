@@ -672,7 +672,30 @@ async def test_material_authenticated_webhook_to_normal_worker_preserves_origina
                     id=str(value["update_id"]),
                 )
             )[0]["id"]
-            await h.kernel.process_inbox(await claim_exact(h, job))
+            claim = await claim_exact(h, job)
+            await h.worker.execute(claim)
+            terminal = (
+                await query(
+                    h,
+                    "SELECT j.*,i.material_result,i.material_claim_token FROM platform.messaging_jobs j JOIN platform.inbox_events i ON (i.workspace_id,i.id)=(j.workspace_id,j.inbox_id) WHERE j.id=:id",
+                    id=job,
+                )
+            )[0]
+            assert terminal["status"] == "SUCCEEDED" and terminal["error_code"] is None
+            assert all(
+                terminal[k] is None
+                for k in (
+                    "last_attempt_id",
+                    "last_claim_token",
+                    "last_outcome",
+                    "last_provider_message_id",
+                    "last_error_code",
+                )
+            )
+            assert terminal["material_claim_token"] == (
+                claim.claim_token if value is edited else None
+            )
+            assert (terminal["material_result"] is not None) == (value is edited)
         row = (
             await query(
                 h,

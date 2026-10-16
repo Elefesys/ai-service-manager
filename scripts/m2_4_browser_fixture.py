@@ -20,6 +20,8 @@ from provision_local_auth import (
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+MATERIAL_PHOTOS = ("replacement", "text", "delete", "late")
+
 ESCALATION_PRESETS = (
     "esc_happy",
     "esc_narrow",
@@ -55,6 +57,7 @@ ACTIONS = (
     "stats",
     "control-stats",
     "escalation-stats",
+    "material-stats",
     "downgrade",
     "disable",
     "restrict",
@@ -71,6 +74,7 @@ def validate_operation(preset, operation):
         "disable": ("inactive", "ctrl_inactive", "esc_happy", "esc_narrow"),
         "restrict": ("restricted", "ctrl_restricted", "esc_happy", "esc_narrow"),
         "escalation-stats": ESCALATION_PRESETS,
+        "material-stats": ("material",),
     }
     if operation in allowed and preset not in allowed[operation]:
         raise ProvisioningError("Invalid finite messaging state change")
@@ -295,7 +299,36 @@ async def inventory(connection):
                 if row["image_file_id"] == f"m24-image-{label}"
             },
         }
+        if preset == "material":
+            result[preset]["material_photos"] = {
+                label: {key: str(row[key]) for key in ("conversation_id", "message_id", "file_id")}
+                for label in MATERIAL_PHOTOS
+                for row in files
+                if row["image_file_id"] == f"m24-material-{label}-original"
+            }
+            if set(result[preset]["material_photos"]) != set(MATERIAL_PHOTOS):
+                raise ProvisioningError("Complete material PHOTO fixture required")
     return result
+
+
+async def material_stats(connection, params):
+    # Read-only disposable evidence. Digests never expose private paths/URLs or
+    # rewrite history; they include every original File and upload/WINNER field.
+    statements = {
+        "files": "SELECT count(*) FROM app.file_objects WHERE workspace_id=:ws",
+        "fetches": "SELECT count(*) FROM platform.messaging_jobs WHERE workspace_id=:ws AND kind='FETCH_IMAGE'",
+        "ready": "SELECT count(*) FROM app.file_objects WHERE workspace_id=:ws AND status='READY'",
+        "winners": "SELECT count(*) FROM platform.file_object_uploads WHERE workspace_id=:ws AND status='WINNER'",
+        "terminals": "SELECT count(*) FROM platform.inbox_events WHERE workspace_id=:ws AND result_code='MATERIAL_PROCESSED' AND material_claim_token IS NOT NULL",
+        "invalid_terminal": "SELECT count(*) FROM platform.inbox_events i JOIN platform.messaging_jobs j ON (j.workspace_id,j.inbox_id)=(i.workspace_id,i.id) WHERE i.workspace_id=:ws AND i.result_code='MATERIAL_PROCESSED' AND (i.material_claim_token IS NULL OR j.status<>'SUCCEEDED' OR j.error_code IS NOT NULL OR j.last_attempt_id IS NOT NULL OR j.last_claim_token IS NOT NULL OR j.last_outcome IS NOT NULL OR j.last_provider_message_id IS NOT NULL OR j.last_error_code IS NOT NULL)",
+        "history_digest": "SELECT encode(sha256(convert_to(coalesce(string_agg((to_jsonb(m)-'version')::text,E'\\n' ORDER BY m.id),''),'UTF8')),'hex') FROM app.messages m WHERE workspace_id=:ws",
+        "files_digest": "SELECT encode(sha256(convert_to(coalesce(string_agg(to_jsonb(f)::text,E'\\n' ORDER BY f.id),''),'UTF8')),'hex') FROM app.file_objects f WHERE workspace_id=:ws",
+        "uploads_digest": "SELECT encode(sha256(convert_to(coalesce(string_agg(to_jsonb(u)::text,E'\\n' ORDER BY u.id),''),'UTF8')),'hex') FROM platform.file_object_uploads u WHERE workspace_id=:ws",
+    }
+    return {
+        name: (await connection.execute(text(sql), params)).scalar_one()
+        for name, sql in statements.items()
+    }
 
 
 async def action(preset, operation):
@@ -309,6 +342,8 @@ async def action(preset, operation):
                 return await inventory(connection)
             owner = await identity(connection, preset)
             params = {"ws": owner.workspace_id, "actor": owner.user_account_id}
+            if operation == "material-stats":
+                return await material_stats(connection, params)
             if operation in {"stats", "control-stats", "escalation-stats"}:
                 statements = {
                     "messages": "SELECT count(*) FROM app.messages WHERE workspace_id=:ws AND direction='OUTBOUND'",

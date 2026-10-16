@@ -596,8 +596,8 @@ def _validation() -> None:
         l:=platform.telegram_validate_projection(bot,p->'legacy_v1'); d:=p->>'discriminator';
         IF d IS NULL OR d NOT IN ('NEW','EDIT','DELETE','LIFECYCLE','UNSUPPORTED') OR
           p->'update_id' IS DISTINCT FROM l->'update_id' OR p->'connection' IS DISTINCT FROM l->'external_connection_id'
-          OR l->>'kind' IS DISTINCT FROM CASE d WHEN 'NEW' THEN 'BUSINESS_MESSAGE' WHEN 'EDIT' THEN 'EDITED_BUSINESS_MESSAGE'
-            WHEN 'DELETE' THEN 'DELETED_BUSINESS_MESSAGES' WHEN 'LIFECYCLE' THEN 'BUSINESS_CONNECTION' ELSE 'UNSUPPORTED' END THEN
+          OR l->>'kind' IS DISTINCT FROM (CASE d WHEN 'NEW' THEN 'BUSINESS_MESSAGE' WHEN 'EDIT' THEN 'EDITED_BUSINESS_MESSAGE'
+            WHEN 'DELETE' THEN 'DELETED_BUSINESS_MESSAGES' WHEN 'LIFECYCLE' THEN 'BUSINESS_CONNECTION' ELSE 'UNSUPPORTED' END) THEN
           RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
         IF d IN ('NEW','EDIT') THEN
           e:=l->'event'; o:=p->'origin'; c:=p->'content';
@@ -636,7 +636,7 @@ def _validation() -> None:
           FOREACH k IN ARRAY ARRAY['message_id','sent_at','edited_at','chat_type','origin','content'] LOOP
             IF p->k IS DISTINCT FROM 'null'::jsonb THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='P2001'; END IF;
           END LOOP;
-          IF p->>'unsupported_reason' IS DISTINCT FROM CASE WHEN d='UNSUPPORTED' THEN 'NONBUSINESS' ELSE 'NONE' END
+          IF p->>'unsupported_reason' IS DISTINCT FROM (CASE WHEN d='UNSUPPORTED' THEN 'NONBUSINESS' ELSE 'NONE' END)
             OR (d='DELETE' AND (p->'chat_id' IS DISTINCT FROM l->'deleted_chat_id' OR jsonb_array_length(l->'deleted_message_ids')>100))
             OR (d<>'DELETE' AND p->>'chat_id' IS NOT NULL)
             OR (d='UNSUPPORTED' AND p->>'connection' IS NOT NULL) THEN
@@ -737,13 +737,13 @@ def _schema() -> None:
         (workspace_id IS NOT NULL AND connection_id IS NOT NULL AND ((result_code='QUEUED' AND kind IN
           ('BUSINESS_MESSAGE','EDITED_BUSINESS_MESSAGE','DELETED_BUSINESS_MESSAGES') AND inbox_id IS NOT NULL) OR
           (result_code<>'QUEUED' AND inbox_id IS NULL))))) IS TRUE)""")
-    op.execute("""ALTER TABLE platform.inbox_events ADD COLUMN material_result jsonb,
+    op.execute("""ALTER TABLE platform.inbox_events ADD COLUMN material_result jsonb,ADD COLUMN material_claim_token uuid,
       ADD CONSTRAINT inbox_material_identity_key UNIQUE(workspace_id,id,connection_id,bot_identity,event_id),
       DROP CONSTRAINT inbox_events_check""")
     op.execute(f"""ALTER TABLE platform.inbox_events ADD CONSTRAINT inbox_events_check CHECK(
-      (material_result IS NULL AND ({OLD_INBOX_CHECK})) OR
+      ((material_result IS NULL AND material_claim_token IS NULL AND ({OLD_INBOX_CHECK})) OR
       (status='PROCESSED' AND result_code='MATERIAL_PROCESSED' AND message_id IS NULL AND completed_at IS NOT NULL
-        AND platform.material_result_valid(material_result) IS TRUE))""")
+        AND material_claim_token IS NOT NULL AND platform.material_result_valid(material_result) IS TRUE)) IS TRUE)""")
     op.execute("""CREATE TABLE platform.telegram_provenance(
       receipt_id uuid PRIMARY KEY,codec smallint NOT NULL DEFAULT 2 CHECK(codec=2),
       bot_identity text NOT NULL,update_id text NOT NULL,workspace_id uuid,connection_id uuid,inbox_id uuid,
@@ -969,19 +969,23 @@ def _integrity() -> None:
         ELSIF TG_TABLE_NAME='telegram_provenance' THEN
           SELECT * INTO r FROM platform.telegram_update_receipts WHERE id=CASE WHEN TG_OP='DELETE' THEN OLD.receipt_id ELSE NEW.receipt_id END;
         ELSE
-          IF TG_OP='UPDATE' AND OLD.status<>'PENDING' AND NEW.material_result IS DISTINCT FROM OLD.material_result THEN
-            RAISE EXCEPTION 'immutable material result' USING ERRCODE='23514'; END IF;
+          IF TG_OP='UPDATE' AND OLD.status<>'PENDING' AND (NEW.material_result,NEW.material_claim_token) IS DISTINCT FROM (OLD.material_result,OLD.material_claim_token) THEN
+            RAISE EXCEPTION 'immutable material result/token' USING ERRCODE='23514'; END IF;
           SELECT * INTO r FROM platform.telegram_update_receipts WHERE workspace_id=CASE WHEN TG_OP='DELETE' THEN OLD.workspace_id ELSE NEW.workspace_id END AND inbox_id=CASE WHEN TG_OP='DELETE' THEN OLD.id ELSE NEW.id END;
         END IF;
         IF r.id IS NULL THEN
           IF TG_TABLE_NAME='inbox_events' THEN
-            IF TG_OP<>'DELETE' AND NEW.material_result IS NOT NULL THEN RAISE EXCEPTION 'missing V2 binding' USING ERRCODE='23514'; END IF;
+            IF TG_OP<>'DELETE' AND (NEW.material_result IS NOT NULL OR NEW.material_claim_token IS NOT NULL) THEN RAISE EXCEPTION 'missing V2 binding' USING ERRCODE='23514'; END IF;
           END IF;
           RETURN NULL;
         END IF;
         SELECT * INTO s FROM platform.telegram_provenance WHERE receipt_id=r.id;
         IF r.codec IS NULL THEN
-          IF s.receipt_id IS NOT NULL THEN RAISE EXCEPTION 'V1 sidecar' USING ERRCODE='23514'; END IF; RETURN NULL;
+          IF s.receipt_id IS NOT NULL THEN RAISE EXCEPTION 'V1 sidecar' USING ERRCODE='23514'; END IF;
+          IF EXISTS(SELECT 1 FROM platform.inbox_events WHERE workspace_id=r.workspace_id AND id=r.inbox_id
+            AND (material_result IS NOT NULL OR material_claim_token IS NOT NULL)) THEN
+            RAISE EXCEPTION 'V1 material completion' USING ERRCODE='23514'; END IF;
+          RETURN NULL;
         END IF;
         IF s.receipt_id IS NULL OR (s.codec,s.bot_identity,s.update_id,s.workspace_id,s.connection_id,s.inbox_id) IS DISTINCT FROM
           (r.codec,r.bot_identity,r.update_id,r.workspace_id,r.connection_id,r.inbox_id) OR
@@ -1339,8 +1343,8 @@ def _suppression() -> None:
             s.initial_material IS DISTINCT FROM t.current_material OR s.fold_witnesses IS DISTINCT FROM array_remove(ARRAY[t.delete_receipt,t.undated_receipt,t.candidate_receipt,t.conflict_receipt],NULL) OR
             s.source_receipt_id IS DISTINCT FROM coalesce(t.delete_receipt,t.undated_receipt,t.conflict_receipt,t.candidate_receipt) OR
             (s.initial_material->>'state'='VISIBLE' AND s.initial_material->'content'->>'kind'='PHOTO' AND s.initial_material->'content'->>'selected_file_id'=m.image_file_id) OR
-            s.membership_disposition IS DISTINCT FROM CASE WHEN s.initial_material->>'state'<>'VISIBLE' THEN 'HIDDEN'
-              WHEN origin.turn_ingress_seq IS NULL THEN 'INELIGIBLE_ORIGIN' ELSE 'ELIGIBLE_VISIBLE' END THEN
+            s.membership_disposition IS DISTINCT FROM (CASE WHEN s.initial_material->>'state'<>'VISIBLE' THEN 'HIDDEN'
+              WHEN origin.turn_ingress_seq IS NULL THEN 'INELIGIBLE_ORIGIN' ELSE 'ELIGIBLE_VISIBLE' END) THEN
             RAISE EXCEPTION 'invalid first-original suppression proof' USING ERRCODE='23514'; END IF;
           RETURN NEW;
         END IF;
@@ -1364,9 +1368,13 @@ def _worker() -> None:
     op.execute("""CREATE FUNCTION platform.material_processing_replay(p_job uuid,p_claim uuid) RETURNS jsonb
       LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
       SELECT jsonb_build_object('code','MATERIAL_PROCESSED','status','PROCESSED','inbox_id',i.id,'message_id',NULL)
-        FROM platform.messaging_jobs j JOIN platform.inbox_events i ON (i.workspace_id,i.id)=(j.workspace_id,j.inbox_id)
-        WHERE j.id=p_job AND j.kind='PROCESS_INBOX' AND j.status='SUCCEEDED' AND j.last_claim_token=p_claim
-          AND i.result_code='MATERIAL_PROCESSED' AND i.status='PROCESSED' $$""")
+        FROM platform.messaging_jobs j JOIN platform.inbox_events i
+          ON (i.workspace_id,i.id,i.connection_id)=(j.workspace_id,j.inbox_id,j.connection_id)
+        JOIN platform.telegram_provenance s ON (s.workspace_id,s.inbox_id,s.connection_id,s.bot_identity,s.update_id)
+          =(i.workspace_id,i.id,i.connection_id,i.bot_identity,i.event_id)
+        WHERE j.id=p_job AND j.kind='PROCESS_INBOX' AND j.status='SUCCEEDED' AND i.material_claim_token=p_claim
+          AND i.result_code='MATERIAL_PROCESSED' AND i.status='PROCESSED'
+          AND s.codec=2 AND s.material_enabled AND s.projection->>'discriminator' IN ('EDIT','DELETE') $$""")
     op.execute("""CREATE FUNCTION platform.material_process(j platform.messaging_jobs) RETURNS jsonb
       LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
       DECLARE s platform.telegram_provenance%ROWTYPE; i platform.inbox_events%ROWTYPE;
@@ -1431,9 +1439,9 @@ def _worker() -> None:
           results:=results||jsonb_build_array(result||jsonb_build_object('ordinal',ordinal));
         END LOOP;
         PERFORM platform.messaging_guard(j.id,j.claim_token);
-        UPDATE platform.inbox_events SET status='PROCESSED',result_code='MATERIAL_PROCESSED',material_result=results,completed_at=clock_timestamp(),version=version+1
+        UPDATE platform.inbox_events SET status='PROCESSED',result_code='MATERIAL_PROCESSED',material_result=results,material_claim_token=j.claim_token,completed_at=clock_timestamp(),version=version+1
           WHERE workspace_id=j.workspace_id AND id=j.inbox_id;
-        UPDATE platform.messaging_jobs SET status='SUCCEEDED',last_claim_token=j.claim_token,error_code=NULL,claim_token=NULL,lease_until=NULL,worker_id=NULL,
+        UPDATE platform.messaging_jobs SET status='SUCCEEDED',error_code=NULL,claim_token=NULL,lease_until=NULL,worker_id=NULL,
           completed_at=clock_timestamp(),version=version+1 WHERE id=j.id;
         RETURN jsonb_build_object('code','MATERIAL_PROCESSED','status','PROCESSED','inbox_id',j.inbox_id,'message_id',NULL);
       END $$""")
@@ -1672,7 +1680,7 @@ def downgrade() -> None:
       IF EXISTS(SELECT 1 FROM platform.telegram_update_receipts WHERE codec IS NOT NULL) OR
         EXISTS(SELECT 1 FROM platform.telegram_provenance) OR EXISTS(SELECT 1 FROM platform.message_material_targets) OR
         EXISTS(SELECT 1 FROM platform.message_material_effects) OR EXISTS(SELECT 1 FROM platform.message_initial_suppressions) OR
-        EXISTS(SELECT 1 FROM platform.inbox_events WHERE material_result IS NOT NULL OR result_code='MATERIAL_PROCESSED') OR
+        EXISTS(SELECT 1 FROM platform.inbox_events WHERE material_result IS NOT NULL OR material_claim_token IS NOT NULL OR result_code='MATERIAL_PROCESSED') OR
         EXISTS(SELECT 1 FROM app.conversation_turns WHERE material_invalidated) OR
         EXISTS(SELECT 1 FROM app.conversation_turn_messages WHERE membership_form IS NOT NULL OR initial_suppression_id IS NOT NULL) OR
         EXISTS(SELECT 1 FROM app.audit_events WHERE event_type='MESSAGE_MATERIAL_CHANGED') OR
@@ -1707,7 +1715,7 @@ def downgrade() -> None:
     op.execute("DROP TABLE platform.message_material_targets")
     op.execute("DROP TABLE platform.telegram_provenance")
     op.execute(
-        """ALTER TABLE platform.inbox_events DROP CONSTRAINT inbox_events_check,DROP CONSTRAINT inbox_material_identity_key,DROP COLUMN material_result"""
+        """ALTER TABLE platform.inbox_events DROP CONSTRAINT inbox_events_check,DROP CONSTRAINT inbox_material_identity_key,DROP COLUMN material_result,DROP COLUMN material_claim_token"""
     )
     op.execute(
         f"ALTER TABLE platform.inbox_events ADD CONSTRAINT inbox_events_check CHECK({OLD_INBOX_CHECK})"

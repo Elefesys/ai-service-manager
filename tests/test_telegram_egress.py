@@ -1459,7 +1459,7 @@ def test_material_inventory_is_source_derived_and_historical_projections_stay_cl
     assert profile["new_columns"] == {
         "platform.telegram_connection_state": ("material_enabled",),
         "platform.telegram_update_receipts": ("codec",),
-        "platform.inbox_events": ("material_result",),
+        "platform.inbox_events": ("material_result", "material_claim_token"),
         "app.conversation_turns": ("material_invalidated",),
         "app.conversation_turn_messages": (
             "membership_form",
@@ -1527,7 +1527,7 @@ def test_material_downgrade_keeps_exact_frozen_bodies_and_checks_and_all_used_gu
         "platform.message_material_targets",
         "platform.message_material_effects",
         "platform.message_initial_suppressions",
-        "material_result IS NOT NULL OR result_code='MATERIAL_PROCESSED'",
+        "material_result IS NOT NULL OR material_claim_token IS NOT NULL OR result_code='MATERIAL_PROCESSED'",
         "material_invalidated",
         "membership_form IS NOT NULL OR initial_suppression_id IS NOT NULL",
         "event_type='MESSAGE_MATERIAL_CHANGED'",

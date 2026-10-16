@@ -214,7 +214,16 @@ describe('one frozen intention and receipt-aware recovery',()=>{
 });
 
 describe('M3 material refresh',()=>{
-  it('clears displayed image and ignores a late grant after semantic version changes',async()=>{
+  it('removes an already displayed original image after material replacement',async()=>{
+    const original=photo();vi.mocked(messagingApi.messages).mockResolvedValue(page(original));
+    vi.mocked(messagingApi.grant).mockResolvedValue({url:'https://files.example/original?sig=loaded',expires_at:when});
+    setup();await ready();fireEvent.click(screen.getByRole('button',{name:'Открыть изображение'}));
+    const image=await screen.findByRole('img');fireEvent.load(image);expect(image).toBeVisible();
+    vi.mocked(messagingApi.messages).mockResolvedValue(page({...original,version:'2',current:{schema_version:1,state:'VISIBLE',content_type:'PHOTO',text:'replacement',image_availability:'MEDIA_REPLACED_UNAVAILABLE',changed:true}}));
+    fireEvent.click(screen.getByRole('button',{name:'Обновить сообщения'}));await screen.findByText('replacement');
+    expect(screen.queryByRole('img')).toBeNull();expect(screen.queryByRole('button',{name:'Открыть изображение'})).toBeNull();expect(messagingApi.grant).toHaveBeenCalledTimes(1);
+  });
+  it('ignores a pending late grant after semantic version changes',async()=>{
     const original=photo();vi.mocked(messagingApi.messages).mockResolvedValue(page(original));
     const late=deferred<Awaited<ReturnType<typeof messagingApi.grant>>>();
     vi.mocked(messagingApi.grant).mockImplementationOnce(()=>late.promise);

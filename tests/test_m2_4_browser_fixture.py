@@ -558,3 +558,135 @@ def test_material_harness_is_finite_and_uses_distinct_numeric_telegram_binding(h
         with pytest.raises(fixture.ProvisioningError):
             worker.validate_operation(preset, operation)
     assert all(v.bot_identity != fixture.bot("material") for v in worker.seed_events())
+
+
+def test_material_photo_actions_keep_original_reference_only_for_caption(harness):
+    from asm.telegram.normalization import normalize_update_v2
+
+    worker, fixture = harness.worker, harness.fixture
+    updates, chats = set(), set()
+    for label in fixture.MATERIAL_PHOTOS:
+        original = normalize_update_v2(
+            fixture.bot("material"), worker.material_photo_event(label, "original")
+        )
+        assert original.discriminator == "NEW" and original.content.kind == "PHOTO"
+        assert original.content.selected_file_id == f"m24-material-{label}-original"
+        chats.add(original.chat_id)
+        for step in ("caption", "change"):
+            action = f"material-{label}-{step}"
+            worker.validate_operation("material", action)
+            value = normalize_update_v2(fixture.bot("material"), worker.material_event(action))
+            assert value.chat_id == original.chat_id and value.update_id not in updates
+            updates.add(value.update_id)
+            if step == "caption":
+                assert value.content.selected_file_id == original.content.selected_file_id
+            elif label == "delete":
+                assert value.discriminator == "DELETE" and value.content is None
+            elif label == "text":
+                assert value.content.kind == "TEXT"
+            else:
+                assert (
+                    value.content.kind == "PHOTO"
+                    and value.content.selected_file_id != original.content.selected_file_id
+                )
+            with pytest.raises(worker.ProvisioningError):
+                worker.validate_operation("happy", action)
+    assert len(chats) == 4 and len(updates) == 8
+    fixture.validate_operation("material", "material-stats")
+    for label, step in (("arbitrary", "change"), ("replacement", "restore")):
+        with pytest.raises(worker.ProvisioningError):
+            worker.material_photo_event(label, step)
+    with pytest.raises(fixture.ProvisioningError):
+        fixture.validate_operation("happy", "material-stats")
+
+
+async def test_material_fixture_bytes_require_exact_telegram_original_permit(harness):
+    from io import BytesIO
+
+    from asm.files.models import FetchPermit
+    from asm.files.provider import ControlledImageProvider
+    from PIL import Image
+
+    worker = harness.worker
+    content = worker.controlled_images(ControlledImageProvider(environment="TEST"))
+    barrier = AsyncMock()
+    provider = worker.MaterialFixtureImageProvider(content, barrier)
+    values = {
+        name: uuid4()
+        for name in (
+            "job_id",
+            "claim_token",
+            "workspace_id",
+            "connection_id",
+            "file_id",
+            "message_id",
+            "conversation_id",
+        )
+    }
+    permit = FetchPermit(
+        **values,
+        provider="TELEGRAM",
+        bot_identity=worker.bot("material"),
+        external_connection_id=worker.route("material"),
+        image_file_id="m24-material-replacement-original",
+    )
+    chunks = [chunk async for chunk in provider.open_image(permit)]
+    assert Image.open(BytesIO(b"".join(chunks))).size == (23, 17)
+    barrier.assert_awaited_once()
+    for changes in (
+        {"provider": "CONTROLLED"},
+        {"bot_identity": "1"},
+        {"external_connection_id": "other"},
+        {"image_file_id": "m24-material-replacement-replacement"},
+    ):
+        with pytest.raises(worker.ProvisioningError):
+            _ = [chunk async for chunk in provider.open_image(permit.model_copy(update=changes))]
+    assert barrier.await_count == 1
+
+
+@pytest.mark.parametrize("terminal", [True, False])
+async def test_material_action_dispatches_worker_and_only_reads_terminal_afterwards(
+    harness, monkeypatch, terminal
+):
+    from contextlib import asynccontextmanager
+
+    worker = harness.worker
+    receipt = SimpleNamespace(code="ACCEPTED", job_id=uuid4(), inbox_id=uuid4())
+    claim = SimpleNamespace(job_id=receipt.job_id, claim_token=uuid4(), kind="PROCESS_INBOX")
+    ingress = AsyncMock(return_value=receipt)
+    monkeypatch.setattr(
+        worker, "TelegramIngress", lambda *args: SimpleNamespace(ingest_update=ingress)
+    )
+    dispatch = AsyncMock()
+
+    class Kernel:
+        claim_job = AsyncMock(return_value=claim)
+
+        @asynccontextmanager
+        async def _transaction(self):
+            async def execute(sql, params):
+                dispatch.assert_awaited_once_with(claim)
+                assert "material_processing_replay" in str(sql)
+                assert params == {"job": claim.job_id, "token": claim.claim_token}
+                return SimpleNamespace(
+                    scalar_one=lambda: (
+                        {"code": "MATERIAL_PROCESSED", "inbox_id": str(receipt.inbox_id)}
+                        if terminal
+                        else None
+                    )
+                )
+
+            yield SimpleNamespace(execute=execute)
+
+        async def process_inbox(self, *args):
+            pytest.fail("Mutation must dispatch ordinary Worker; readback must not reprocess")
+
+    if terminal:
+        assert await worker.material_action(
+            Kernel(), SimpleNamespace(execute=dispatch), "material-replacement-change"
+        ) == {"processed": 1, "replayed": 0}
+    else:
+        with pytest.raises(worker.ProvisioningError, match="Material completion required"):
+            await worker.material_action(
+                Kernel(), SimpleNamespace(execute=dispatch), "material-replacement-change"
+            )

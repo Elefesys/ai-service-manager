@@ -1549,7 +1549,7 @@ def material_source_profile():
                     changed[table] = changed.get(table, ()) + extra
     assert columns == P_COLUMNS, "MATERIAL_DDL_COLUMN_PROJECTION"
     assert set(additions) == set(module.TABLES) and len(additions) == 4
-    assert len(changed) == 6 and sum(map(len, changed.values())) == 9
+    assert len(changed) == 6 and sum(map(len, changed.values())) == 10
     functions = {}
     for path in sorted((root / "migrations/versions").glob("[0-9][0-9][0-9][0-9]_*.py")):
         assert path.name[:4] <= "0012", "MATERIAL_UNASSIGNED_REVISION"
@@ -1705,7 +1705,10 @@ async def material_no_backfill(c):
     for table, predicate in (
         ("platform.telegram_update_receipts", "codec IS NOT NULL"),
         ("platform.telegram_connection_state", "material_enabled"),
-        ("platform.inbox_events", "material_result IS NOT NULL"),
+        (
+            "platform.inbox_events",
+            "material_result IS NOT NULL OR material_claim_token IS NOT NULL",
+        ),
         ("app.conversation_turns", "material_invalidated"),
         (
             "app.conversation_turn_messages",
@@ -2094,7 +2097,7 @@ class TestEgressMaterialCompatibility:
             witness = (
                 "SELECT count(*) AS n FROM platform.message_material_targets"
                 if used == "target"
-                else "SELECT count(*) AS n FROM platform.inbox_events WHERE material_result IS NOT NULL AND result_code='MATERIAL_PROCESSED'"
+                else "SELECT count(*) AS n FROM platform.inbox_events WHERE material_result IS NOT NULL AND material_claim_token IS NOT NULL AND result_code='MATERIAL_PROCESSED'"
             )
         elif used == "suppression-member":
             await process(h, raw(100002, kind="EDIT", value="B"))

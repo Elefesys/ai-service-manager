@@ -5,7 +5,38 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. C3-M3.1-MATERIAL — source checkpoint для C0 / 2026-10-15 UTC
+## 0. C3-M3.1-MATERIAL-R1 — correction source / 2026-10-16 UTC
+
+[C0 R1](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6201238585).
+Base `ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`, tree
+`e4317cc6478b2c40669d96242c3adb89079ab46c`; separate branch
+`c3/m3-1-material-r1`. Only0012←0011; no new PR or push to the PR34 C6 branch.
+
+Three CASE grammar fixes and the accepted private Inbox winning token correct
+C2-MAT-01/C1-MAT-01 at source level. Result/token are a closed immutable pair;
+Job delivery fields remain NULL. Inventory is10 columns on6 old tables,4 new/42
+all tables,132 surviving signatures. Current C6 inventory/no-backfill/used-result
+companions updated; orchestration and budget untouched. Original17/CHECK4 and
+applied0001–0011 retained exactly.
+
+Known T→fresh T2 now has current-version checks after real maintenance, late File
+and Resume, with Telegram and two CONTROLLED producer arms. R3-T4 requires exact
+rejection plus same-claim positive neighbor. Four actual paired PHOTO journeys are
+written: real TEST bytes→FetchTransfer/private S3, caption eligibility, loaded-image
+invalidation and old-file grant refusal, unmodified real delayed grant response.
+No new product/frontend/public API capability.
+
+Evidence/precise node map: [§15.10.4](M3_CONTRACT.md#15104-c3-m31-material-r1-correction--2026-10-16-utc).
+Ruff/format9, targeted79 unit, complete browser-harness68 unit, typecheck and32
+MessagingPanel component tests PASS;121 PG tests collected only. Actual PG/Docker/
+S3/browser/migrations/races NOT RUN locally. Findings remain OPEN pending C0 and
+actual evidence; C2-MAT-02 budget remains C6's separate OPEN blocker.
+
+One canonical PR34 receipt binds final head/tree/parents/numstat. C3 HOLD after
+return; C0 accepts source then assigns C6 descendant for the same Draft PR34 and
+its normal automatic CI. No dispatch/rerun, activation, live/VM/sends/deploy/M4.
+
+## История — C3-M3.1-MATERIAL source checkpoint / 2026-10-15 UTC
 
 [Исходная выдача](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195028336),
 [продолжение source-first](https://github.com/Elefesys/ai-service-manager/pull/33#issuecomment-6195754984).

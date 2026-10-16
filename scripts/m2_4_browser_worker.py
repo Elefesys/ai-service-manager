@@ -18,7 +18,8 @@ from uuid import uuid4
 from asm.conversations.escalations import MARKER
 from asm.files.config import StorageSettings
 from asm.files.database import FileDatabase
-from asm.files.provider import ControlledImageProvider
+from asm.files.models import FetchPermit
+from asm.files.provider import ChannelImageProvider, ControlledImageProvider
 from asm.files.storage import S3ObjectStorage
 from asm.files.transfer import FetchTransfer
 from asm.foundation import DATABASE_SCHEMA_REVISION
@@ -27,17 +28,19 @@ from asm.messaging.database import MessagingDatabase
 from asm.messaging.models import EventKind, NormalizedEventV1, OutcomeKind
 from asm.messaging.worker import Worker
 from asm.telegram.database import TelegramIngress
-from m2_4_browser_fixture import ESCALATION_PRESETS, PRESETS, bot, route
+from m2_4_browser_fixture import ESCALATION_PRESETS, MATERIAL_PHOTOS, PRESETS, bot, route
 from PIL import Image
 from provision_local_auth import PrivateArgumentParser, ProvisioningError
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
+MATERIAL_ACTIONS = ("material-edit", "material-delete") + tuple(
+    f"material-{label}-{step}" for label in MATERIAL_PHOTOS for step in ("caption", "change")
+)
 ACTIONS = (
     "seed",
-    "material-edit",
-    "material-delete",
+    *MATERIAL_ACTIONS,
     "success",
     "unknown",
     "permanent",
@@ -55,7 +58,7 @@ def validate_operation(preset, operation):
     ):
         raise ProvisioningError("Invalid finite messaging runner action")
     if (operation.startswith("material-") and preset != "material") or (
-        preset == "material" and operation not in {"material-edit", "material-delete", "stats"}
+        preset == "material" and operation not in {*MATERIAL_ACTIONS, "stats"}
     ):
         raise ProvisioningError("Finite material browser action required")
     if operation.startswith("escalate-") and (
@@ -233,6 +236,31 @@ def controlled_images(provider):
             provider.register(bot(preset), f"m24-image-{label}", stream.getvalue())
     # No registered bytes for "failed": the actual FetchTransfer finalizes the
     # missing CONTROLLED reference as FAILED/INVALID_INPUT.
+    return stream.getvalue()
+
+
+class MaterialFixtureImageProvider:
+    """Finite TEST bytes for genuine TELEGRAM permits; no provider substitution.
+
+    FetchTransfer still validates bytes, uploads to disposable private S3 and
+    commits the real File/WINNER. No Telegram network client is constructed.
+    """
+
+    def __init__(self, content, barrier):
+        self.content, self.barrier = content, barrier
+
+    async def open_image(self, permit):
+        if (
+            type(permit) is not FetchPermit
+            or permit.provider != "TELEGRAM"
+            or permit.bot_identity != bot("material")
+            or permit.external_connection_id != route("material")
+            or permit.image_file_id
+            not in {f"m24-material-{label}-original" for label in MATERIAL_PHOTOS}
+        ):
+            raise ProvisioningError("Finite material original image permit required")
+        await self.barrier("material-image")
+        yield self.content
 
 
 async def drain(worker):
@@ -295,10 +323,67 @@ async def seed_material(kernel, worker, next_seed_claim):
             raise ProvisioningError("Fresh material browser Inbox required")
         await worker.execute(claim)
         processed += 1
+    for label in MATERIAL_PHOTOS:
+        receipt = await TelegramIngress(kernel, bot("material")).ingest_update(
+            material_photo_event(label, "original"), uuid4()
+        )
+        claim = await next_seed_claim("material-photo-seed")
+        if receipt.code != "ACCEPTED" or claim is None or claim.job_id != receipt.job_id:
+            raise ProvisioningError("Fresh material PHOTO Inbox required")
+        await worker.execute(claim)
+        fetch = await next_seed_claim("material-photo-fetch")
+        if (
+            fetch is None
+            or fetch.kind != "FETCH_IMAGE"
+            or fetch.workspace_id != receipt.workspace_id
+        ):
+            raise ProvisioningError("Canonical material PHOTO FETCH required")
+        await worker.execute(fetch)
+        processed += 1
     return processed
 
 
+def material_photo_event(label, step):
+    if label not in MATERIAL_PHOTOS or step not in {"original", "caption", "change"}:
+        raise ProvisioningError("Finite material PHOTO event required")
+    index = MATERIAL_PHOTOS.index(label)
+    chat = 7000014 + index
+    update = 120010 + index * 3 + ("original", "caption", "change").index(step)
+    if label == "delete" and step == "change":
+        return {
+            "update_id": update,
+            "deleted_business_messages": {
+                "business_connection_id": route("material"),
+                "chat": {"id": chat},
+                "message_ids": [501],
+            },
+        }
+    body = {
+        "business_connection_id": route("material"),
+        "chat": {"id": chat, "type": "private"},
+        "from": {"id": chat, "is_bot": False},
+        "message_id": 501,
+        "date": 1767323045,
+    }
+    if label == "text" and step == "change":
+        body["text"] = "Material current text"
+    else:
+        ref = f"m24-material-{label}-" + ("replacement" if step == "change" else "original")
+        body.update(
+            photo=[{"file_id": ref, "width": 23, "height": 17}], caption=f"Material {label} {step}"
+        )
+    if step != "original":
+        body["edit_date"] = 1767323065 + int(step == "change")
+    return {
+        "update_id": update,
+        "business_message" if step == "original" else "edited_business_message": body,
+    }
+
+
 def material_event(operation, *, alternate=False):
+    if operation in MATERIAL_ACTIONS[2:] and not alternate:
+        _, label, step = operation.split("-")
+        return material_photo_event(label, step)
     if operation not in {"original", "material-edit", "material-delete"} or (
         alternate and operation != "original"
     ):
@@ -345,8 +430,21 @@ async def material_action(kernel, worker, operation):
         if claim is None:
             raise ProvisioningError("Due material Inbox required")
         if claim.job_id == receipt.job_id:
-            result = await kernel.process_inbox(claim)
-            if result.code != "MATERIAL_PROCESSED":
+            await worker.execute(claim)
+            # This is a narrow terminal read AFTER ordinary Worker dispatch.
+            # A retry/pending result cannot masquerade as browser acceptance.
+            async with kernel._transaction() as connection:
+                result = (
+                    await connection.execute(
+                        text("SELECT platform.material_processing_replay(:job,:token)"),
+                        {"job": claim.job_id, "token": claim.claim_token},
+                    )
+                ).scalar_one()
+            if (
+                result is None
+                or result.get("code") != "MATERIAL_PROCESSED"
+                or result.get("inbox_id") != str(receipt.inbox_id)
+            ):
                 raise ProvisioningError("Material completion required")
             return {"processed": 1, "replayed": 0}
         if claim.kind != "PROCESS_TURN" or claim.step not in {"GROUP", "MEDIA", "TEST_CONSUME"}:
@@ -413,7 +511,10 @@ async def action(preset, operation):
                 else FixtureAdapter(preset, outcome, no_transaction)
             )
             provider = ControlledImageProvider(environment="TEST", barrier=no_transaction)
-            controlled_images(provider)
+            image_bytes = controlled_images(provider)
+            images = ChannelImageProvider(
+                provider, MaterialFixtureImageProvider(image_bytes, no_transaction)
+            )
             storage = S3ObjectStorage(settings)
             original_io = storage._io
 
@@ -422,7 +523,7 @@ async def action(preset, operation):
                 return await original_io(operation)
 
             storage._io = storage_io
-            transfer = FetchTransfer(FileDatabase(kernel), kernel, provider, storage)
+            transfer = FetchTransfer(FileDatabase(kernel), kernel, images, storage)
             worker = Worker(kernel, adapter, files=transfer)
             if operation == "seed":
                 for selected in PRESETS:

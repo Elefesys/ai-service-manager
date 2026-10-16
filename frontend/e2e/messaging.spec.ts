@@ -16,7 +16,7 @@ if(!envPath||!fixturePath||!inventoryPath||!passwordPath||!counterDir) throw new
 function privateJson(path:string) { try { return JSON.parse(readFileSync(path,'utf8')); } catch { throw new Error('E2E_SAFE_FAILURE:MESSAGING_FIXTURE_OUTPUT'); } }
 const fixtures:Record<string,{workspace_id:string;user_account_id:string;login:string}>=privateJson(fixturePath).messaging_fixtures;
 type Ref={conversation_id:string;message_id:string;file_id:string};
-type Inventory={conversation_id:string;client_id:string;alternate_conversation_id:string;alternate_client_id:string;connection_ids:string[];conversation_ids:string[];message_ids:string[];images:{ready:Ref;failed?:Ref;pending?:Ref}};
+type Inventory={conversation_id:string;client_id:string;alternate_conversation_id:string;alternate_client_id:string;connection_ids:string[];conversation_ids:string[];message_ids:string[];images:{ready:Ref;failed?:Ref;pending?:Ref};material_photos?:Record<string,Ref>};
 const inventory:Record<string,Inventory>=privateJson(inventoryPath), password=readFileSync(passwordPath,'utf8');
 const origin='http://127.0.0.1:8080';
 const path=(preset:string,suffix:string)=>`/api/v1/workspaces/${fixtures[preset].workspace_id}/${suffix}`;
@@ -33,14 +33,14 @@ async function loadedPrivateImage(image:Locator){
   await expect.poll(()=>privateImageValue(()=>image.evaluate(n=>(n as HTMLImageElement).naturalWidth))).toBe(23);
 }
 async function csrf(request:APIRequestContext) {const r=await http(()=>request.get('/api/v1/auth/session'));expect(r.status()).toBe(200);return (await json(r)).csrf_token as string;}
-async function helper(preset:string,action:string,runtime=false):Promise<Record<string,number|boolean>> {
+async function helper(preset:string,action:string,runtime=false):Promise<Record<string,number|boolean|string>> {
   const args=['compose','--env-file',envPath!,'-f','compose.yaml','-f','compose.browser.yaml','--profile','browser','run','--no-deps','--rm','-T','--user',`${process.getuid!()}:${process.getgid!()}`];
   if(runtime)args.push('-v',`${counterDir}:/run/m2-browser-counters:rw`);
   args.push(runtime?'browser-runtime':'browser-provision','python',runtime?'scripts/m2_4_browser_worker.py':'scripts/m2_4_browser_fixture.py','--preset',preset,'--action',action);
   const r=requireSafeResult(await safeDiagnostic('MESSAGING_FIXTURE_FAILED',()=>promisify(execFile)('docker',args,{cwd:resolve(process.cwd(),'..'),timeout:30000,maxBuffer:65536})));
   try{return JSON.parse(r.stdout);}catch{throw new Error('E2E_SAFE_FAILURE:MESSAGING_FIXTURE_OUTPUT');}
 }
-function oneCommand(before:Record<string,number|boolean>,after:Record<string,number|boolean>) {for(const key of ['messages','receipts','audit_events','outbox_events','jobs'])expect(Number(after[key])-Number(before[key])).toBe(1);}
+function oneCommand(before:Record<string,number|boolean|string>,after:Record<string,number|boolean|string>) {for(const key of ['messages','receipts','audit_events','outbox_events','jobs'])expect(Number(after[key])-Number(before[key])).toBe(1);}
 async function loginForm(page:Page,preset:string){await page.getByLabel('Логин').fill(fixtures[preset].login);await page.getByLabel('Пароль').fill(password);await page.getByRole('button',{name:'Войти',exact:true}).click();await expect(panel(page)).toBeVisible();}
 async function choose(page:Page,preset:string,id=inventory[preset].conversation_id){
   const ws=fixtures[preset].workspace_id;if(await page.getByLabel('Workspace',{exact:true}).inputValue()!==ws)await page.getByLabel('Workspace',{exact:true}).selectOption(ws);
@@ -76,7 +76,7 @@ async function changeControl(page:Page,preset:string,operation:ControlOperation,
   const receipt=parseControlReceipt(requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>r.json())),controlContext(preset),operation,body);expect(receipt.outcome).toBe('ACCEPTED');
   await expect(controlPanel(page).getByRole('button',{name:'Забрать управление'})).toBeEnabled();
 }
-function controlDelta(before:Record<string,number|boolean>,after:Record<string,number|boolean>,count:number){for(const key of ['control_receipts','control_audit_events'])expect(Number(after[key])-Number(before[key])).toBe(count);}
+function controlDelta(before:Record<string,number|boolean|string>,after:Record<string,number|boolean|string>,count:number){for(const key of ['control_receipts','control_audit_events'])expect(Number(after[key])-Number(before[key])).toBe(count);}
 
 test('@narrow CONTROLLED incoming text/private image -> exact keyboard reply -> Worker current delivery',async({page},info)=>{
   test.setTimeout(60000);await signIn(page,'happy');
@@ -236,7 +236,7 @@ async function openEsc(page:Page,v:EscalationView){
   await escQueue(page).getByRole('button',{name:'Обновить очередь'}).click();await expect(escQueue(page).getByText('Загружаем очередь…',{exact:true})).toHaveCount(0);
   await page.getByTestId(`escalation-${v.escalation_id}`).click();await expect(escDetail(page).getByText('Ожидается решение владельца',{exact:true})).toBeVisible();
 }
-function escDelta(before:Record<string,number|boolean>,after:Record<string,number|boolean>,count:number){
+function escDelta(before:Record<string,number|boolean|string>,after:Record<string,number|boolean|string>,count:number){
   for(const key of ['escalation_receipts','escalation_audit'])expect(Number(after[key])-Number(before[key])).toBe(count);
   for(const key of ['messages','receipts','audit_events','outbox_events','jobs','control_receipts','control_audit_events','escalations','escalation_timers'])expect(after[key]).toBe(before[key]);
 }
@@ -348,4 +348,86 @@ test('material edit and delete refresh the paired current projection and preserv
   await expect(row(page,original.message_id).getByRole('button',{name:'Открыть изображение'})).toHaveCount(0);
   const other=await http(()=>page.request.get(messages(preset,inventory[preset].alternate_conversation_id)));expect(other.status()).toBe(200);
   expect(parsePage(await json(other),parseMessage).items[0].current.text).toBe('Material original alternate');
+});
+
+async function materialPhoto(page:Page,label:string){
+  const preset='material',ref=inventory[preset].material_photos![label];
+  await page.goto('/');await loginForm(page,preset);await choose(page,preset,ref.conversation_id);
+  const r=await http(()=>page.request.get(messages(preset,ref.conversation_id)));expect(r.status()).toBe(200);
+  const original=parsePage(await json(r),parseMessage).items.find(m=>m.message_id===ref.message_id)!;
+  expect(original.version).toBe('1');expect(original.current.image_availability).toBe('ORIGINAL_READY');expect(original.file?.status).toBe('READY');
+  const before=await helper(preset,'material-stats');expect(before.files).toBe(4);expect(before.fetches).toBe(4);expect(before.ready).toBe(4);expect(before.winners).toBe(4);expect(before.invalid_terminal).toBe(0);
+  return {preset,ref,original,before};
+}
+async function materialRead(page:Page,ref:Ref){
+  const r=await http(()=>page.request.get(messages('material',ref.conversation_id)));expect(r.status()).toBe(200);
+  return parsePage(await json(r),parseMessage).items.find(m=>m.message_id===ref.message_id)!;
+}
+async function openMaterialImage(page:Page,ref:Ref){
+  const received=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===grantPath('material',ref));
+  await row(page,ref.message_id).getByRole('button',{name:'Открыть изображение'}).click();expect((await received).status()).toBe(200);
+  await loadedPrivateImage(row(page,ref.message_id).getByRole('img'));
+}
+function retainedMaterialHistory(before:Record<string,number|boolean|string>,after:Record<string,number|boolean|string>,terminals:number){
+  for(const key of ['files','fetches','ready','winners','history_digest','files_digest','uploads_digest'])expect(after[key]).toBe(before[key]);
+  expect(after.invalid_terminal).toBe(0);expect(Number(after.terminals)-Number(before.terminals)).toBe(terminals);
+}
+for(const label of ['replacement','text','delete']){
+  test(`material PHOTO ${label}: loaded private image, same-ref caption, normal Worker mutation and grant refusal`,async({page})=>{
+    test.setTimeout(90000);
+    const {preset,ref,original,before}=await materialPhoto(page,label);await openMaterialImage(page,ref);
+    expect(await worker(preset,`material-${label}-caption`)).toEqual({processed:1,replayed:0});await refresh(page);
+    const caption=await materialRead(page,ref);expect(caption.version).toBe('2');expect(caption.text).toBe(original.text);expect(caption.file).toEqual(original.file);
+    expect(caption.current).toEqual({schema_version:1,state:'VISIBLE',content_type:'PHOTO',text:`Material ${label} caption`,image_availability:'ORIGINAL_READY',changed:true});
+    // Positive eligibility after a semantic version change and a second real GET.
+    await openMaterialImage(page,ref);
+    expect(await worker(preset,`material-${label}-change`)).toEqual({processed:1,replayed:0});await refresh(page);
+    expect(await row(page,ref.message_id).getByRole('img').count()).toBe(0);
+    await expect(row(page,ref.message_id).getByRole('button',{name:'Открыть изображение'})).toHaveCount(0);
+    const changed=await materialRead(page,ref);expect(changed.version).toBe('3');expect(changed.text).toBe(original.text);expect(changed.content_type).toBe(original.content_type);expect(changed.file).toEqual(original.file);
+    expect(changed.current).toEqual(label==='delete'
+      ? {schema_version:1,state:'DELETED',content_type:null,text:null,image_availability:'HIDDEN',changed:true}
+      : {schema_version:1,state:'VISIBLE',content_type:label==='text'?'TEXT':'PHOTO',text:label==='text'?'Material current text':'Material replacement change',image_availability:label==='text'?'NOT_APPLICABLE':'MEDIA_REPLACED_UNAVAILABLE',changed:true});
+    if(label==='replacement')await expect(row(page,ref.message_id).getByText('Фото заменено, новое изображение недоступно.',{exact:true})).toBeVisible();
+    const token=await csrf(page.request);const denied=await http(()=>page.request.post(grantPath(preset,ref),{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}));expect(denied.status()).toBe(404);
+    retainedMaterialHistory(before,await helper(preset,'material-stats'),2);
+    expect(await worker(preset,`material-${label}-change`)).toEqual({processed:0,replayed:1});expect(await materialRead(page,ref)).toEqual(changed);
+    // Already issued signed URLs are TTL-limited capabilities. No assertion of
+    // atomic URL revocation or realtime invalidation is made by this journey.
+  });
+}
+
+test('material PHOTO delayed real old grant cannot restore image after semantic refresh',async({page})=>{
+  test.setTimeout(90000);
+  const {preset,ref,original,before}=await materialPhoto(page,'late');await openMaterialImage(page,ref);
+  await refresh(page);expect(await row(page,ref.message_id).getByRole('img').count()).toBe(0);
+  let release!:()=>void,observed!:(r:SafeResult<number>)=>void,finished!:(r:SafeResult<void>)=>void;
+  const held=new Promise<void>(resolve=>{release=resolve;}),arrived=new Promise<SafeResult<number>>(resolve=>{observed=resolve;}),delivered=new Promise<SafeResult<void>>(resolve=>{finished=resolve;});
+  let handled=false;
+  await page.route(`**${grantPath(preset,ref)}`,async route=>{
+    if(handled){await safeContinue(route);return;}handled=true;
+    const actual=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',()=>route.fetch());
+    observed(actual.ok?{ok:true,value:actual.value.status()}:actual);
+    await held;
+    // Pass the unmodified real backend HTTP response. Only delivery order is
+    // controlled; DTO, signed URL and backend decision are never fabricated.
+    if(actual.ok)finished(await safeDiagnostic('MESSAGING_ROUTE_RELEASE_FAILED',()=>route.fulfill({response:actual.value})));
+    else finished(actual);
+  });
+  try{
+    const browserResponse=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===grantPath(preset,ref));
+    await row(page,ref.message_id).getByRole('button',{name:'Открыть изображение'}).click();expect(requireSafeResult(await arrived)).toBe(200);
+    expect(await worker(preset,'material-late-change')).toEqual({processed:1,replayed:0});await refresh(page);
+    const current=await materialRead(page,ref);expect(current.version).toBe('2');expect(current.current.image_availability).toBe('MEDIA_REPLACED_UNAVAILABLE');expect(current.text).toBe(original.text);expect(current.file).toEqual(original.file);
+    let oldImageRequests=0;const imageRequested=(request:{resourceType():string})=>{if(request.resourceType()==='image')oldImageRequests++;};page.on('request',imageRequested);
+    release();requireSafeResult(await delivered);
+    const received=await browserResponse;expect(received.status()).toBe(200);requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>received.finished()));
+    // A browser task after the response lets fetch/React callbacks settle;
+    // the condition is the real old response, not an arbitrary sleep.
+    await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+    expect(await row(page,ref.message_id).getByRole('img').count()).toBe(0);expect(oldImageRequests).toBe(0);page.off('request',imageRequested);
+    await expect(row(page,ref.message_id).getByRole('button',{name:'Открыть изображение'})).toHaveCount(0);
+    const token=await csrf(page.request);const denied=await http(()=>page.request.post(grantPath(preset,ref),{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}));expect(denied.status()).toBe(404);
+    retainedMaterialHistory(before,await helper(preset,'material-stats'),1);
+  }finally{release();await page.unrouteAll({behavior:'wait'});}
 });

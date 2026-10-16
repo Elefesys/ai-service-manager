@@ -5190,3 +5190,40 @@ results; report any failure/timeout with its exact log. No workflow/Compose/runn
 dependency/budget edits, Actions dispatch/rerun, concurrent renewal or new service
 installation are part of this checkpoint. MATERIAL/M3 IN_PROGRESS, A03 NOT VERIFIED;
 C3 HOLD after source return, all further execution/activation follows C0 issuance.
+
+
+### MATERIAL-R1 correction /0012 — disposable proof, 2026-10-16
+
+[C0 R1](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6201238585)
+supersedes the first source-checkpoint handoff above. Exact R1 base is PR34 head
+`ef7b52d2d862e3d3e656ba56ccac8781e1d0a374`; branch `c3/m3-1-material-r1`.
+Result/token are stored atomically on Inbox (`material_claim_token uuid`, nullable),
+not as a delivery outcome on PROCESS_INBOX Job. Unused reverse returns0011;
+material token/result/codec/proof remain used55000 blockers before DDL. Used recovery
+requires compatible0012 source, not erasing history. Gate remains OFF outside tests.
+
+Existing disposable browser runner now seeds four finite Telegram PHOTO originals
+using exact DB-issued Telegram permits and a finite TEST byte provider. FetchTransfer
+performs the normal byte validation/private TEST S3 upload/WINNER completion; no
+Telegram network request or saved provider-row substitution. Existing CONTROLLED
+image/auth/CSRF/Console/control/Escalation fixtures and last PENDING image remain.
+Inventory must contain all four PHOTO refs; paired preconditions require four
+READY originals/four WINNERs and successful owner grant+actual image load.
+
+Finite runtime actions are `material-{replacement,text,delete,late}-{caption,change}`
+plus existing `material-edit`/`material-delete`; only preset `material` accepts them.
+Each accepted mutation executes ordinary Worker, then only reads canonical terminal
+replay. Read-only provisioner `material-stats` is limited to this preset and reports
+File/FETCH/READY/WINNER/terminal counts plus original/File/upload history digests.
+Caption uses the same ref; replacement bytes are not registered/fetched. Paired
+journeys check current/history, loaded-image removal and new grant404 for old File.
+A separate real old grant response is held until semantic refresh and released
+unmodified: it must not restore display. Issued URLs may still work until their
+existing TTL; no atomic revocation is promised. Existing disposable stack teardown
+owns new TEST objects; no working S3 or new cleanup runner is involved.
+
+R1 local static/unit/component checks passed, but actual PG/migration/private-S3/
+Playwright proof is NOT RUN here. Source/node/evidence map is M3_CONTRACT§15.10.4.
+C0 intake→C6 descendant (budget blocker C2-MAT-02 still OPEN)→same Draft PR34 automatic
+CI; no new PR, dispatch/rerun, live/VM/sends/deploy or service installation. C3 HOLD
+after the canonical PR34 receipt; activation remains a separate C0 decision.

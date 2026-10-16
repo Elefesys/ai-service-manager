@@ -100,6 +100,20 @@ async def process(h, value):
     assert receipt.code == "ACCEPTED" and receipt.result_code == "QUEUED"
     claim = await claim_exact(h, receipt.job_id)
     result = await h.kernel.process_inbox(claim)
+    pair = (
+        await query(
+            h,
+            "SELECT material_result,material_claim_token FROM platform.inbox_events WHERE id=:id",
+            id=receipt.inbox_id,
+        )
+    )[0]
+    if result.code == "MATERIAL_PROCESSED":
+        assert (
+            pair["material_result"] is not None
+            and pair["material_claim_token"] == claim.claim_token
+        )
+    else:
+        assert pair == {"material_result": None, "material_claim_token": None}
     return receipt, claim, result
 
 
@@ -137,7 +151,21 @@ async def saved_results(h, receipt):
     job = (await query(h, "SELECT * FROM platform.messaging_jobs WHERE id=:id", id=receipt.job_id))[
         0
     ]
-    assert job["status"] == "SUCCEEDED" and job["error_code"] is None and job["last_claim_token"]
+    assert job["status"] == "SUCCEEDED" and job["error_code"] is None
+    assert isinstance(row["material_claim_token"], UUID)
+    assert all(
+        job[key] is None
+        for key in (
+            "last_attempt_id",
+            "last_claim_token",
+            "last_outcome",
+            "last_provider_message_id",
+            "last_error_code",
+            "claim_token",
+            "lease_until",
+            "worker_id",
+        )
+    )
     return result
 
 
@@ -485,12 +513,37 @@ async def test_rollback_and_lost_ack_restart_exact_terminal_replay(material, pha
     await child_process(h, claim, phase)
     if phase == "process_before_commit":
         assert await current(h) == before and (await traces(h))["effects"] == 0
+        assert (
+            await query(
+                h,
+                "SELECT material_result,material_claim_token FROM platform.inbox_events WHERE id=:id",
+                id=rec.inbox_id,
+            )
+        )[0] == {"material_result": None, "material_claim_token": None}
     restarted = MessagingDatabase(h.runtime.engine)
     assert (await restarted.process_inbox(claim)).code == "MATERIAL_PROCESSED"
     assert (await restarted.process_inbox(claim)).code == "MATERIAL_PROCESSED"
     assert (await current(h))["version"] == 2 and (await traces(h))["effects"] == 1
-    with pytest.raises(MessagingError):
+    result = await saved_results(h, rec)
+    assert (
+        await query(
+            h,
+            "SELECT material_claim_token FROM platform.inbox_events WHERE id=:id",
+            id=rec.inbox_id,
+        )
+    )[0]["material_claim_token"] == claim.claim_token
+    with pytest.raises(MessagingError) as rejected:
         await restarted.process_inbox(claim.model_copy(update={"claim_token": uuid4()}))
+    assert rejected.value.code == Code.STALE_CLAIM
+    # The winning replay is historical after a later semantic transition too.
+    _, other_claim, _ = await process(h, raw(100003, kind="DELETE"))
+    with pytest.raises(MessagingError) as wrong_job:
+        await restarted.process_inbox(
+            other_claim.model_copy(update={"claim_token": claim.claim_token})
+        )
+    assert wrong_job.value.code == Code.STALE_CLAIM
+    assert (await restarted.process_inbox(claim)).code == "MATERIAL_PROCESSED"
+    assert await saved_results(h, rec) == result
 
 
 @pytest.mark.parametrize("barrier", ["connection", "conversation"])
@@ -740,8 +793,31 @@ async def test_r3_t4_invalid_first_suppression_rolls_back_entire_original_atom(
 
         async with h.migrator.connect() as c:
             before = await fingerprints(c)
-        with pytest.raises((DBAPIError, MessagingError)):
+        with pytest.raises(DBAPIError) as rejected:
             await h.kernel.process_inbox(claim)
+        expected = {
+            "null-form": ("23514", "conversation_turn_messages_check", None),
+            "missing-proof": ("23514", None, "invalid suppression member"),
+            "text-member": ("23514", "conversation_turn_messages_check", None),
+            "wrong-tenant": ("P0002", None, "query returned no rows"),
+            "wrong-message": ("P0002", None, "query returned no rows"),
+            "wrong-origin": ("P0002", None, "query returned no rows"),
+            "wrong-effect": ("P0002", None, "query returned no rows"),
+            "forged-basis": ("23514", None, "invalid first-original suppression proof"),
+            "pending-file": ("23514", None, "invalid initial suppression identity/file"),
+            "failed-file": ("23514", None, "invalid initial suppression identity/file"),
+        }[corruption]
+        fault = rejected.value.orig
+        assert fault.sqlstate == expected[0]
+        if expected[1]:
+            assert fault.diag.constraint_name == expected[1]
+        else:
+            assert fault.diag.message_primary == expected[2]
+            # NO_DATA_FOUND must come from the intended identity lookup, never
+            # an unrelated startup/terminal failure with the same SQLSTATE.
+            assert "material_suppression_check()" in fault.diag.context or (
+                corruption == "missing-proof" and "turn_member_check()" in fault.diag.context
+            )
         async with h.migrator.connect() as c:
             assert await fingerprints(c) == before
         assert not await query(h, "SELECT * FROM app.messages")
@@ -750,6 +826,15 @@ async def test_r3_t4_invalid_first_suppression_rolls_back_entire_original_atom(
         async with h.migrator.begin() as c:
             await c.execute(text(f"DROP TRIGGER aaa_test_material_corrupt ON {table}"))
             await c.execute(text("DROP FUNCTION platform.test_material_corrupt()"))
+    # Same original, same claim, same deferred fact: only corruption is removed.
+    # A general terminal failure must fail this positive neighboring atom.
+    assert (await h.kernel.process_inbox(claim)).code == "PROCESSED"
+    assert (await current(h))["current"]["text"] == "B"
+    assert await traces(h) == dict(effects=1, audits=1, files=0, fetches=0)
+    member = (await query(h, "SELECT * FROM app.conversation_turn_messages"))[0]
+    assert (
+        member["membership_form"] == "INITIAL_FOLD_SUPPRESSED" and member["initial_suppression_id"]
+    )
 
 
 async def test_cross_binding_fk_null_bypasses_and_historical_effect_versions(material):
@@ -950,6 +1035,17 @@ async def test_material_reclaim_nowait_skips_locked_candidate_and_old_token_cann
     assert fresh.claim_token != claim.claim_token
     await h.kernel.process_inbox(fresh)
     assert (await current(h))["version"] == 2 and (await traces(h))["effects"] == 1
+    assert (
+        await query(
+            h,
+            "SELECT material_claim_token FROM platform.inbox_events WHERE id=:id",
+            id=claim.inbox_id,
+        )
+    )[0]["material_claim_token"] == fresh.claim_token
+    assert (await h.kernel.process_inbox(fresh)).code == "MATERIAL_PROCESSED"
+    with pytest.raises(MessagingError) as rejected:
+        await h.kernel.process_inbox(claim)
+    assert rejected.value.code == Code.STALE_CLAIM
 
 
 @pytest.mark.parametrize("prior", ["PENDING", "CANCELLED", "RESOLVED"])
@@ -1076,3 +1172,373 @@ async def test_same_provider_id_across_workspace_and_connection_never_aliases(ma
     for old, new in zip(before, after, strict=True):
         assert new["version"] == old["version"] + int(old["connection_id"] == h.telegram_connection)
     assert (await traces(h))["effects"] == 1
+
+
+@pytest.mark.parametrize(
+    "change", ["token-null", "result-null", "token-change", "result-change", "null-code"]
+)
+async def test_material_terminal_result_token_pair_is_closed_and_write_once(material, change):
+    import json
+
+    h = material
+    rec, claim, _ = await process(h, raw(100002, kind="DELETE"))
+    saved = await saved_results(h, rec)
+    assert saved[0].code == "DEFERRED_TARGET"
+    changed = [{**saved[0].model_dump(mode="json"), "code": "IDENTITY_CONFLICT", "target_id": None}]
+    assignment = {
+        "token-null": "material_claim_token=NULL",
+        "result-null": "material_result=NULL",
+        "token-change": "material_claim_token=:token",
+        "result-change": "material_result=CAST(:result AS jsonb)",
+        "null-code": "result_code=NULL",
+    }[change]
+    with pytest.raises(DBAPIError) as caught:
+        async with h.migrator.begin() as c:
+            await c.execute(
+                text(f"UPDATE platform.inbox_events SET {assignment} WHERE id=:id"),
+                {"id": rec.inbox_id, "token": uuid4(), "result": json.dumps(changed)},
+            )
+            await c.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+    assert caught.value.orig.sqlstate == "23514"
+    if change in {"token-change", "result-change"}:
+        assert caught.value.orig.diag.message_primary == "immutable material result/token"
+    else:
+        assert caught.value.orig.diag.constraint_name == "inbox_events_check"
+    assert await saved_results(h, rec) == saved
+    assert (await h.kernel.process_inbox(claim)).code == "MATERIAL_PROCESSED"
+
+
+@pytest.mark.parametrize("source", ["pending-edit", "fresh-new", "controlled-no-binding"])
+@pytest.mark.parametrize("shape", ["token-only", "result-only", "paired-terminal"])
+async def test_material_token_requires_completed_verified_mutation(material, source, shape):
+    import json
+
+    from test_m2_1_models import event
+    from test_m2_1_postgres import ingest
+
+    h = material
+    rec = (
+        (await ingest(h, event()))
+        if source == "controlled-no-binding"
+        else await ingest_raw(h, raw(kind="EDIT" if source == "pending-edit" else "NEW"))
+    )
+    empty_refs = {
+        key: None
+        for key in (
+            "target_id",
+            "message_id",
+            "effect_id",
+            "audit_event_id",
+            "previous_version",
+            "accepted_version",
+        )
+    }
+    result = [{"ordinal": 1, "code": "IDENTITY_CONFLICT", **empty_refs}]
+    assignment = {
+        "token-only": "material_claim_token=:token",
+        "result-only": "material_result=CAST(:result AS jsonb)",
+        "paired-terminal": "material_result=CAST(:result AS jsonb),material_claim_token=:token,status='PROCESSED',result_code='MATERIAL_PROCESSED',completed_at=clock_timestamp()",
+    }[shape]
+    # The genuine pending edit alone is allowed to transition to the complete
+    # terminal pair. Exercise it through admitted processing, not direct DML.
+    if source == "pending-edit" and shape == "paired-terminal":
+        claim = await claim_exact(h, rec.job_id)
+        await h.worker.execute(claim)
+        assert (await saved_results(h, rec))[0].code == "DEFERRED_TARGET"
+        return
+    with pytest.raises(DBAPIError) as caught:
+        async with h.migrator.begin() as c:
+            await c.execute(
+                text(f"UPDATE platform.inbox_events SET {assignment} WHERE id=:id"),
+                {"id": rec.inbox_id, "token": uuid4(), "result": json.dumps(result)},
+            )
+            await c.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+    assert caught.value.orig.sqlstate == "23514"
+    if shape == "paired-terminal":
+        assert caught.value.orig.diag.message_primary == (
+            "missing V2 binding"
+            if source == "controlled-no-binding"
+            else "invalid mutation completion"
+        )
+    else:
+        assert caught.value.orig.diag.constraint_name == "inbox_events_check"
+    assert (
+        await query(
+            h,
+            "SELECT material_result,material_claim_token FROM platform.inbox_events WHERE id=:id",
+            id=rec.inbox_id,
+        )
+    )[0] == {"material_result": None, "material_claim_token": None}
+
+
+async def test_material_off_edit_has_no_terminal_token_or_replay(control):
+    h = control
+    rec = await ingest_raw(h, raw(kind="EDIT"))
+    assert (
+        rec.result_code == "IGNORED_MESSAGE_EDITED" and rec.inbox_id is None and rec.job_id is None
+    )
+    assert not await query(
+        h,
+        "SELECT * FROM platform.inbox_events WHERE material_claim_token IS NOT NULL OR material_result IS NOT NULL",
+    )
+    assert (
+        await query(
+            h,
+            "SELECT platform.material_processing_replay(:job,:token) AS saved",
+            job=uuid4(),
+            token=uuid4(),
+        )
+    )[0]["saved"] is None
+
+
+@pytest.mark.parametrize("arm", ["telegram", "controlled-guard", "controlled-escalation"])
+async def test_known_turn_fresh_input_and_current_version_refusal_after_maintenance_file_resume(
+    material, arm
+):
+    from asm.conversations.escalations import MARKER
+    from asm.files.database import FileDatabase
+    from test_m2_1_models import event
+    from test_m2_1_postgres import ingest
+    from test_m2_2_db_postgres import MANIFEST
+    from test_m3_1_control_postgres import execute, incoming, state
+    from test_m3_1_turns_postgres import turn_claim, wait_due
+
+    h = material
+    telegram_arm = arm == "telegram"
+    caption = MARKER if arm == "controlled-escalation" else "known original photo"
+
+    async def incoming_worker(number, *, photo=False, value=caption):
+        if telegram_arm:
+            rec = await ingest_raw(
+                h, raw(110000 + number, 600 + number, photo="F" if photo else None, value=value)
+            )
+        else:
+            rec = await ingest(
+                h,
+                event(
+                    event_id=f"r1-{number}",
+                    message_id=f"r1-{number}",
+                    text=value,
+                    image_file_id="F" if photo else None,
+                ),
+            )
+        claim = await claim_exact(h, rec.job_id)
+        await h.worker.execute(claim)
+        inbox = (
+            await query(h, "SELECT * FROM platform.inbox_events WHERE id=:id", id=rec.inbox_id)
+        )[0]
+        assert inbox["result_code"] == "PROCESSED"
+        member = (
+            await query(
+                h,
+                "SELECT * FROM app.conversation_turn_messages WHERE message_id=:id",
+                id=inbox["message_id"],
+            )
+        )[0]
+        return rec, member
+
+    if telegram_arm:
+        _, seed_member = await incoming_worker(0)
+        cid = seed_member["conversation_id"]
+    else:
+        cid, _, _ = await incoming(h)
+    await execute(h, cid, "RESUME", "r1-initial-resume")
+    rec, member = await incoming_worker(1, photo=True)
+    tid = member["turn_id"]
+    if arm == "controlled-escalation":
+        # Escalation requires an actual TEXT marker, not a PHOTO caption.
+        _, marker_member = await incoming_worker(3, value=MARKER)
+        assert marker_member["turn_id"] == tid
+    membership = await query(
+        h,
+        "SELECT * FROM app.conversation_turn_messages WHERE turn_id=:id ORDER BY message_id",
+        id=tid,
+    )
+    original = (await query(h, "SELECT * FROM app.conversation_turns WHERE id=:id", id=tid))[0]
+    origin = (await query(h, "SELECT * FROM platform.inbox_events WHERE id=:id", id=rec.inbox_id))[
+        0
+    ]
+    assert original["state"] == "COLLECTING" and original["ingress_control_mode"] == "AI"
+    if telegram_arm:
+        mutation = await ingest_raw(
+            h, raw(120001, 601, kind="EDIT", photo="F", value="edited caption")
+        )
+        winning = await claim_exact(h, mutation.job_id)
+        await h.worker.execute(winning)
+        assert (await saved_results(h, mutation))[0].code == "APPLIED"
+    else:
+        async with shared_controlled_apply(h, member["message_id"]) as apply:
+            await apply()
+    changed = (await query(h, "SELECT * FROM app.conversation_turns WHERE id=:id", id=tid))[0]
+    assert changed == {
+        **original,
+        "revision": original["revision"] + 1,
+        "material_invalidated": True,
+    }
+    # No synthetic ingress timestamp: this must really arrive within the old
+    # collecting window. Otherwise the test would only prove ordinary expiry.
+    _, new_member = await incoming_worker(2, value=caption)
+    assert original["first_ingress_at"] < new_member["turn_ingress_at"] < original["quiet_at"]
+    assert new_member["turn_id"] != tid
+    assert (
+        await query(
+            h,
+            "SELECT * FROM app.conversation_turn_messages WHERE message_id=:id",
+            id=member["message_id"],
+        )
+    )[0] == member
+    assert (await query(h, "SELECT * FROM platform.inbox_events WHERE id=:id", id=rec.inbox_id))[
+        0
+    ] == origin
+    sealed = (await query(h, "SELECT * FROM app.conversation_turns WHERE id=:id", id=tid))[0]
+    assert sealed["state"] == "WAITING_MEDIA"
+    for key in (
+        "member_count",
+        "first_ingress_at",
+        "last_ingress_at",
+        "quiet_at",
+        "hard_at",
+        "control_generation",
+        "ingress_control_mode",
+        "activation_fence_seq",
+    ):
+        assert sealed[key] == original[key]
+
+    # Ordinary GROUP for T2 and MEDIA for T, at their actual saved deadlines.
+    await wait_due(h, new_member["turn_id"])
+    await h.worker.execute(await turn_claim(h, new_member["turn_id"], "GROUP"))
+    await wait_due(h, tid, "MEDIA")
+    await h.worker.execute(await turn_claim(h, tid, "MEDIA"))
+
+    async def assert_current_refusal():
+        async with h.migrator.begin() as c:
+            now = (
+                (
+                    await c.execute(
+                        text("SELECT * FROM app.conversations WHERE id=:id FOR NO KEY UPDATE"),
+                        {"id": cid},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            turn = (
+                (
+                    await c.execute(
+                        text("SELECT * FROM app.conversation_turns WHERE id=:id FOR NO KEY UPDATE"),
+                        {"id": tid},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            resume = (
+                await c.execute(
+                    text(
+                        "SELECT id FROM platform.conversation_control_receipts WHERE conversation_id=:id AND operation='RESUME' AND accepted_generation=:gen"
+                    ),
+                    {"id": cid, "gen": now["control_generation"]},
+                )
+            ).scalar_one()
+            assert turn["state"] == "READY" and turn["material_invalidated"]
+            assert turn["revision"] >= changed["revision"]
+            # Fresh DB values, no pre-edit snapshot/claim or stale context.
+            facts = (
+                await c.execute(
+                    text(
+                        "SELECT platform.material_turn_usable(:ws,:tid),platform.conversation_turn_activation_matches(:ws,:tid),platform.guard_require_current(:ws,:tid,:resume,:version)"
+                    ),
+                    {"ws": A, "tid": tid, "resume": resume, "version": now["version"]},
+                )
+            ).one()
+            assert facts == (False, False, "STALE")
+        assert not await query(
+            h,
+            "SELECT * FROM platform.messaging_jobs WHERE turn_id=:id AND step IN ('GUARDED_TEXT','ESCALATE_OWNER','TEST_CONSUME')",
+            id=tid,
+        )
+        assert not await query(
+            h, "SELECT * FROM platform.turn_guard_receipts WHERE turn_id=:id", id=tid
+        )
+        assert not await query(h, "SELECT * FROM app.escalations WHERE turn_id=:id", id=tid)
+        assert not await query(
+            h,
+            "SELECT b.id FROM app.outbox_events b JOIN platform.messaging_jobs j ON (j.workspace_id,j.outbox_id)=(b.workspace_id,b.id) WHERE j.turn_id=:id",
+            id=tid,
+        )
+
+    # At this point generation/fence still match the original Resume. A normal
+    # current consumer is eligible on T2; only T's sticky invalidation differs.
+    now = await state(h, cid)
+    assert now["control_generation"] == original["control_generation"]
+    assert now["activation_fence_seq"] == original["activation_fence_seq"]
+    await assert_current_refusal()
+    if not telegram_arm:
+        step = "ESCALATE_OWNER" if arm == "controlled-escalation" else "GUARDED_TEXT"
+        positive = await turn_claim(h, new_member["turn_id"], step)
+        await h.worker.execute(positive)
+        result = (
+            await query(
+                h,
+                "SELECT turn_outcome FROM platform.messaging_jobs WHERE id=:id",
+                id=positive.job_id,
+            )
+        )[0]
+        assert result["turn_outcome"] == ("ESCALATED" if step == "ESCALATE_OWNER" else "ACCEPTED")
+    fetch_job = (
+        await query(
+            h,
+            "SELECT id FROM platform.messaging_jobs WHERE kind='FETCH_IMAGE' AND file_id=:id",
+            id=member["file_id"],
+        )
+    )[0]["id"]
+    fetch = await claim_exact(h, fetch_job)
+    files = FileDatabase(h.kernel)
+    upload = await files.prepare_upload(fetch, MANIFEST)
+    await files.finish_fetch(fetch.job_id, fetch.claim_token, upload.intent_id)
+    winner = (
+        await query(
+            h, "SELECT * FROM platform.file_object_uploads WHERE id=:id", id=upload.intent_id
+        )
+    )[0]
+    assert winner["status"] == "WINNER"
+    await assert_current_refusal()
+    await execute(h, cid, "TAKEOVER", "r1-takeover")
+    await execute(h, cid, "RESUME", "r1-resume-after-material")
+    await assert_current_refusal()
+    final = (await query(h, "SELECT * FROM app.conversation_turns WHERE id=:id", id=tid))[0]
+    for key in (
+        "member_count",
+        "first_ingress_at",
+        "last_ingress_at",
+        "quiet_at",
+        "hard_at",
+        "media_deadline_at",
+        "seal_time",
+        "closed_at",
+        "control_generation",
+        "ingress_control_mode",
+        "activation_fence_seq",
+    ):
+        assert final[key] == sealed[key]
+    assert (
+        await query(
+            h,
+            "SELECT * FROM app.conversation_turn_messages WHERE message_id=:id",
+            id=member["message_id"],
+        )
+    )[0] == member
+    assert (
+        await query(
+            h, "SELECT * FROM platform.file_object_uploads WHERE id=:id", id=upload.intent_id
+        )
+    )[0] == winner
+    assert (
+        await query(
+            h,
+            "SELECT * FROM app.conversation_turn_messages WHERE turn_id=:id ORDER BY message_id",
+            id=tid,
+        )
+        == membership
+    )
+    assert h.adapter.calls == 0
