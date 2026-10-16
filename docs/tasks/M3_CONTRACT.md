@@ -5550,3 +5550,88 @@ update/new PR/merge/dispatch/rerun/cancel. S/600/P720/+480/S+1200/cleanup90 and
 individual/state25/browser25/foundation45 unchanged. MATERIAL/M3 IN_PROGRESS,
 not INTEGRATED/VERIFIED; PR34 Draft/BLOCKED; gate OFF. Unissued native/A08/renewal/
 collector/live/VM/working DB/S3/sends/deploy/M4 and deferred IMPL-05 unchanged.
+
+### 15.16. C6-M3.1-MATERIAL-HARNESS-R5 — packaged inputs and saved V1 reader / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211450459),
+[C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211420811).
+Separate branch `c6/m3-1-material-harness-r5`, exact base/sole parent
+`d7cea5a2e9da7b384aeaf11dd41df3e1e4abcbff`, base tree
+`a471c98e16343cf9d17d4d184df88ed491184544`. One focused descendant; final head/tree/
+numstat in canonical PR34 receipt. PR34 remains OPEN/Draft on that base, main/frozen
+E `933ddd284ff5b77fb1aa88a4270ab0032bc499c9`/0011 unchanged. Entire contract through
+§15.15 preserved: **576446 bytes**, SHA256
+`76ed7dd2fe91834ad7884d07c0f95e76889875232981fcc29ab58d48e3b8a75e`.
+
+**Observed baseline.** CI38868575912/attempt1 tested merge
+`58542ff01cfbcd95f5247a901168e7525f5ef9f0` with matching tree:6 SUCCESS/3 FAILURE,
+clean6 SUCCESS/3 SKIPPED. Foundation116867029172 failed all11 preparation units
+at uncopied `/app/infra/images.lock.env` before preparation logic;1395 passed/799
+deselected. Both state reports fail at material_controller_fresh: ValidationError,
+material_schema_controller:1995→parse_snapshot:84, SQLSTATE NULL. C6 re-read these
+three job logs and both state reports, verified ZIP hashes/tested merge/all275
+source-P archive blobs. Actual missing field locations/payload were not exported.
+Separate clean d7 baseline and exact168-file COPY layout reproduced `[pass]`:
+**1 expected FAIL in0.95s**, same missing input,0 subprocess attempts. Executing the
+unchanged controller reader block on synthetic source-shaped ordinary/guarded raw
+inputs reproduces missing code/job_id; ordinary reader also rejects six guarded
+fields. Each matching reader accepts only the nonpersistent response envelope.
+
+**Narrow correction.** material_budget_fixture explicitly depends on the unchanged
+frozen_h_source fixture, reading its verified720-byte image pins before e.ROOT is
+substituted. The preparation unit writes those bytes into its disposable input.
+All11 cases/real entrypoint/assertions remain unchanged; no current infra/Git lookup.
+Pins equal current and frozen H blob1f14e1686acd3ffdde9986ec58352d0e03735af8.
+
+The fresh controller now calls material_saved_v1_snapshots. Its sole SELECT reads
+id/kind/step/turn_input for **every non-NULL input**, with no consumer/step filtering.
+Nonempty inventory and unique actual UUID Job identities are required. Closed
+PROCESS_TURN/TEST_CONSUME selects parse_snapshot; PROCESS_TURN/GUARDED_TEXT with
+CONTROLLED_GUARDS_V1 selects parse_guarded_snapshot. Only code=SNAPSHOT/actual Job id
+are added in memory. Stored JSON, all fields and snapshot_digest are preserved and
+checked; no schema_version or persisted code/job_id is accepted. Unknown/wrong
+kind/step/consumer, extra fields or malformed inputs fail. No digest recomputation,
+row update, permissive fallback or stale worker execution. Escalation keeps its own
+immutable snapshot; ESCALATE_OWNER is not a third turn_input form. Other controller,
+catalog/fingerprint/recovery/refusal/ownership/pairing assertions remain byte-exact.
+
+**Executed source/unit verification**, cached locked Python3.13.16 dependencies:
+
+| Exact selection in the development COPY layout | Result |
+|---|---|
+| All seven material_budget_fixture consumers, explicitly including the entire11-case preparation function |78 PASS|
+| Three new test functions calling the actual controller helper: mixed ordinary/guarded inventory, Job binding/raw decoder refusal,28 invalid-last-row cases, empty/duplicate identity |32 PASS|
+| Combined preceding two selections; all subprocess/network attempts denied by parent audit |**110 PASS in2.87s**,0 subprocess/network attempts|
+| Existing invocation/host-loader/material-shell/schema-entrypoint selector |**91 PASS/510 deselected in10.05s**|
+
+Both runs use the same exact168 copied files, no.git/history/current infra pins,
+env-i, PATH containing only sh/python3 and Git lookup None. Per-file SHA256 manifest
+`9082ccc0f52debb7cd5cd94d95c37f0842d91429798c248e0a19afbe3daa2c51` is in the receipt.
+JUnit:0 failure/error/skip; no xfails or marker/collection exclusions.15 material-shell
+cases overlap:201 executions,**186 distinct cases**, not201 independent cases.
+The91 run retains real python-S/runpy and finite external H/Git units,37 synthetic
+docker/38 Python/2 sh parent launches;0 real Git or network attempts. Audit restrictions
+apply to the parent; this is not an OS sandbox or real image/DB execution. Full
+commands/environment, baseline probe and manifest are in the canonical receipt.
+
+Ruff/format/compilation/diff/scope/source audits PASS. Pre-pytest runtime prefix
+306538 bytes/SHA2563b1b9e4d617d89da8268ba66d37e3097d188c1ca7504f8c161d170137062d6c9,
+whole shell blob7d1e08edcfc11d12c5e7067586ec0cd795e664c5, frozen-H JSON/decoder,
+original11, product/strict parsers/C3/applied migrations/0012←0011/ORIGINAL17/OLD_CHECK4,
+Inbox winning pair/five NULL Job fields/current-T→T2/PHOTO, frozen H/T/C/G/E,
+observer/ACK/privacy/bounds/workflows/pins/dependencies remain unchanged.
+
+C0 closed **C5-MATERIAL-01 and C0-DIAG-01** on scoped actual d7/merge58542ff evidence.
+**Seven distinct findings OPEN:** C2-MAT-01/02/03, C1-MAT-01/02, C0-DIAG-02
+(C1-R2-01 is its packaging counterexample), C1-R2-02. Units close none. Latest actual
+P preparation623.690022374s/688.934643093s is scoped PASS720, not PASS600/full-state.
+Original S/retained600/P720/remaining+480/nominal S+1200/cleanup90/individual bounds/
+state25/browser25/foundation45 unchanged; no retry/reset/subtraction/budget increase.
+Full product PG and both complete P/state lifecycles, used55000/used recovery/cutover/
+restart, retained positives/full120-timeout/export/all3 late-C negatives and9+clean9
+remain mandatory. C0 intake before C0 alone advances the same Draft PR for normal
+automatic CI; C1/C2 acceptance, applicable C5 bridge, later independent C8 follow.
+No new Docker/PG/browser/Actions/services/install/live/PR-head/new PR/merge operation.
+C6 HOLD after return; C3/C1/C2/C5/C8 HOLD. MATERIAL/M3 IN_PROGRESS, not INTEGRATED/
+VERIFIED; gate OFF. Native/A08/renewal/collector/M4 unissued; IMPL-05/broad optimization
+DEFERRED; VM/working DB/S3/sends/deploy remain unissued.

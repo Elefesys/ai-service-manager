@@ -1449,6 +1449,189 @@ def test_guards_inventory_is_exact_c_plus_one_and_old_sources_remain_frozen():
                 egress.schema_inventory(rev, changed)
 
 
+@pytest.fixture
+def material_saved_v1_inventory():
+    from types import SimpleNamespace
+
+    from test_m3_1_guards import snapshot as guarded
+    from test_m3_1_turns import snapshot as ordinary
+
+    rows = []
+    for index, (step, make) in enumerate(
+        [("TEST_CONSUME", ordinary), ("GUARDED_TEXT", guarded), ("TEST_CONSUME", ordinary)], 1
+    ):
+        value = make().model_dump(mode="json")
+        del value["code"], value["job_id"]
+        # Preserve stored spellings and digest, even when model serialization normalizes time.
+        value["members"][0]["ingress_at"] = "2026-10-12T12:00:00+00:00"
+        value["snapshot_digest"] = "abcdef"[index] * 64
+        rows.append(
+            {"id": UUID(int=100 + index), "kind": "PROCESS_TURN", "step": step, "turn_input": value}
+        )
+    queries = []
+
+    async def execute(statement):
+        queries.append(str(statement))
+        # The actual helper owns the query; reject filtering, writes or extra DB calls.
+        assert queries == [
+            "SELECT id,kind,step,turn_input FROM platform.messaging_jobs "
+            "WHERE turn_input IS NOT NULL ORDER BY id"
+        ]
+        return SimpleNamespace(mappings=lambda: SimpleNamespace(all=lambda: rows))
+
+    return SimpleNamespace(rows=rows, queries=queries, connection=SimpleNamespace(execute=execute))
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+async def test_material_saved_v1_reads_complete_inventory_with_real_job_envelopes(
+    material_saved_v1_inventory, reverse
+):
+    from asm.conversations.guards import GuardedTurnSnapshot, parse_guarded_snapshot
+    from asm.conversations.turns import TurnSnapshot, parse_snapshot
+    from pydantic import ValidationError
+    from test_telegram_egress_postgres import material_saved_v1_snapshots
+
+    f = material_saved_v1_inventory
+    if reverse:
+        f.rows.reverse()
+    before = copy.deepcopy(f.rows)
+    decoded = await material_saved_v1_snapshots(f.connection)
+    assert len(decoded) == len(before) == 3 and len(f.queries) == 1
+    assert f.rows == before
+    for row, snapshot in zip(f.rows, decoded, strict=True):
+        raw = row["turn_input"]
+        guarded = row["step"] == "GUARDED_TEXT"
+        reader = parse_guarded_snapshot if guarded else parse_snapshot
+        assert type(snapshot) is (GuardedTurnSnapshot if guarded else TurnSnapshot)
+        assert snapshot.job_id == row["id"] and snapshot.code == "SNAPSHOT"
+        assert snapshot.snapshot_digest == raw["snapshot_digest"]
+        assert set(type(snapshot).model_fields) == set(raw) | {"code", "job_id"}
+        assert "schema_version" not in raw and "code" not in raw and "job_id" not in raw
+        assert raw["members"][0]["ingress_at"].endswith("+00:00")
+        assert snapshot.model_dump(exclude={"code", "job_id"}) == reader(
+            {**raw, "code": "SNAPSHOT", "job_id": row["id"]}
+        ).model_dump(exclude={"code", "job_id"})
+        with pytest.raises(ValidationError) as caught:
+            reader(raw)
+        assert {(e["loc"], e["type"]) for e in caught.value.errors()} == {
+            (("code",), "missing"),
+            (("job_id",), "missing"),
+        }
+        if guarded:
+            with pytest.raises(ValidationError) as caught:
+                parse_snapshot({**raw, "code": "SNAPSHOT", "job_id": row["id"]})
+            assert len(caught.value.errors()) == 6
+            assert all(e["type"] == "extra_forbidden" for e in caught.value.errors())
+    assert f.rows == before
+
+
+@pytest.mark.parametrize(
+    "step,damage",
+    [
+        ("TEST_CONSUME", "kind"),
+        ("GUARDED_TEXT", "kind"),
+        ("TEST_CONSUME", "step_unknown"),
+        ("TEST_CONSUME", "step_group"),
+        ("TEST_CONSUME", "step_media"),
+        ("GUARDED_TEXT", "step_escalate"),
+        ("TEST_CONSUME", "wrong_reader"),
+        ("GUARDED_TEXT", "wrong_reader"),
+        ("TEST_CONSUME", "consumer"),
+        ("GUARDED_TEXT", "consumer"),
+        ("GUARDED_TEXT", "missing_consumer"),
+        ("TEST_CONSUME", "schema"),
+        ("GUARDED_TEXT", "null_schema"),
+        ("TEST_CONSUME", "code"),
+        ("GUARDED_TEXT", "code"),
+        ("TEST_CONSUME", "stored_job"),
+        ("GUARDED_TEXT", "foreign_job"),
+        ("TEST_CONSUME", "missing_job"),
+        ("TEST_CONSUME", "null_input"),
+        ("GUARDED_TEXT", "list_input"),
+        ("TEST_CONSUME", "missing_members"),
+        ("GUARDED_TEXT", "empty_members"),
+        ("TEST_CONSUME", "member_extra"),
+        ("TEST_CONSUME", "malformed_file"),
+        ("TEST_CONSUME", "digest"),
+        ("GUARDED_TEXT", "digest"),
+        ("GUARDED_TEXT", "guard_field"),
+        ("GUARDED_TEXT", "extra"),
+    ],
+)
+async def test_material_saved_v1_rejects_invalid_last_row_without_filter_or_mutation(
+    material_saved_v1_inventory, step, damage
+):
+    from pydantic import ValidationError
+    from test_telegram_egress_postgres import material_saved_v1_snapshots
+
+    f = material_saved_v1_inventory
+    row = copy.deepcopy(next(row for row in f.rows if row["step"] == step))
+    row["id"] = UUID(int=999)
+    value = row["turn_input"]
+    if damage == "kind":
+        row["kind"] = "PROCESS_INBOX"
+    elif damage.startswith("step_"):
+        row["step"] = {
+            "step_unknown": "OTHER",
+            "step_group": "GROUP",
+            "step_media": "MEDIA",
+            "step_escalate": "ESCALATE_OWNER",
+        }[damage]
+    elif damage == "wrong_reader":
+        row["step"] = "GUARDED_TEXT" if step == "TEST_CONSUME" else "TEST_CONSUME"
+    elif damage == "consumer":
+        value["consumer"] = "TURN_TEST_V1" if step == "TEST_CONSUME" else "UNKNOWN_V1"
+    elif damage == "missing_consumer":
+        del value["consumer"]
+    elif damage in {"schema", "null_schema"}:
+        value["schema_version"] = 2 if damage == "schema" else None
+    elif damage == "code":
+        value["code"] = "SNAPSHOT"
+    elif damage in {"stored_job", "foreign_job"}:
+        value["job_id"] = str(row["id"] if damage == "stored_job" else UUID(int=998))
+    elif damage == "missing_job":
+        row["id"] = None
+    elif damage in {"null_input", "list_input"}:
+        row["turn_input"] = None if damage == "null_input" else []
+    elif damage == "missing_members":
+        del value["members"]
+    elif damage == "empty_members":
+        value["members"] = []
+    elif damage == "member_extra":
+        value["members"][0]["current"] = {}
+    elif damage == "malformed_file":
+        del value["members"][1]["file"]["file_id"]
+    elif damage == "digest":
+        value["snapshot_digest"] = "invalid"
+    elif damage == "guard_field":
+        value["activation_fence_seq"] = "1"
+    else:
+        assert damage == "extra"
+        value["unknown"] = True
+    f.rows.append(row)  # Three valid rows precede the bad row; no partial inventory success.
+    before = copy.deepcopy(f.rows)
+    with pytest.raises((AssertionError, ValidationError)):
+        await material_saved_v1_snapshots(f.connection)
+    assert f.rows == before and len(f.queries) == 1
+
+
+@pytest.mark.parametrize("damage", ["empty", "duplicate_job"])
+async def test_material_saved_v1_requires_nonempty_unique_job_inventory(
+    material_saved_v1_inventory, damage
+):
+    from test_telegram_egress_postgres import material_saved_v1_snapshots
+
+    f = material_saved_v1_inventory
+    if damage == "empty":
+        f.rows.clear()
+    else:
+        f.rows.append(copy.deepcopy(f.rows[0]))
+    before = copy.deepcopy(f.rows)
+    with pytest.raises(AssertionError, match="MATERIAL_SAVED_V1_(EMPTY|JOB)"):
+        await material_saved_v1_snapshots(f.connection)
+    assert f.rows == before and len(f.queries) == 1
+
+
 def test_material_inventory_is_source_derived_and_historical_projections_stay_closed():
     from test_m3_2_escalations_migrations import E_COLUMNS
     from test_telegram_egress_postgres import material_source_profile

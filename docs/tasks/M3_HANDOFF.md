@@ -5,7 +5,50 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. C6-M3.1-MATERIAL-CI-DIAG-R4 — unit image packaging / 2026-10-16 UTC
+## 0. C6-M3.1-MATERIAL-HARNESS-R5 — source return / 2026-10-16 UTC
+
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211450459),
+[current C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211420811),
+[contract§15.16](M3_CONTRACT.md#1516-c6-m31-material-harness-r5--packaged-inputs-and-saved-v1-reader--2026-10-16-utc).
+Branch c6/m3-1-material-harness-r5; exact base/sole parent
+d7cea5a2e9da7b384aeaf11dd41df3e1e4abcbff/tree a471c98e16343cf9d17d4d184df88ed491184544.
+One focused descendant, full identity/numstat/commands/manifest in canonical receipt.
+PR34 OPEN/Draft c6/m3-1-material-compat stays on d7; main/E933ddd…/0011 unchanged.
+
+Explicit frozen_h_source dependency supplies verified packaged pins before e.ROOT
+substitution; all11 preparation cases/real entrypoint/assertions retained. Fresh
+saved-V1 helper reads the complete non-NULL Job inventory with real id/kind/step,
+dispatches only ordinary TEST_CONSUME or CONTROLLED_GUARDS_V1/GUARDED_TEXT, adds
+code/job_id in memory and preserves raw JSON/all fields/digest. Closed rejection,
+nonempty/count/unique identity checks; no persisted envelope/schema_version,
+Escalation turn_input form, DB updates or product decoder changes.
+
+Baseline exact168 COPY inputs: preparation[pass] **1 expected FAIL in0.95s**,0
+subprocesses; old actual reader block reproduces raw/envelope mismatch on synthetic
+ordinary/guarded inputs. Corrected same restricted layout: **110 PASS in2.87s**
+(78 affected fixture cases including all11,32 new actual-helper regressions), then
+**91 PASS/510 deselected in10.05s**.15 overlap,186 distinct cases;0 skips/xfails.
+No.git/usable Git/current pins; env-i/cached locked deps, parent audit forbids network,
+all subprocesses for110 and Git for91. Real python-S/runpy units remain unchanged;
+synthetic external H/Git/docker boundaries are unit evidence only.
+
+Exact six paths; Ruff/format/compile/source audits PASS. Full306538-byte runtime
+prefix, shell7d1e08e…, frozen-H JSON/validation, originals/product/migrations/C3,
+observer/ACK/privacy and budgets preserved. Entire§15.15 prefix576446 bytes/
+SHA25676ed7dd2… unchanged; append§15.16 only. Historical sections below are retained.
+
+C0 disposition closes C5-MATERIAL-01/C0-DIAG-01 on actual d7/merge58542ff. Seven OPEN:
+C2-MAT-01/02/03,C1-MAT-01/02,C0-DIAG-02 (alias C1-R2-01),C1-R2-02. CI38868575912:
+6 SUCCESS/3 FAILURE,clean6 SUCCESS/3 SKIPPED; two state failures reached fresh reader.
+Prep623.690022374s/688.934643093s is PASS720 only. Full product PG/both complete
+P-state/used55000/recovery/cutover/restart/retained/full120/export/all3 late-C/9+clean9
+still required. C0 intake → C0 PR advance/automatic CI → C1/C2/applicable C5/later C8.
+C6 HOLD after return; C3/C1/C2/C5/C8 HOLD. MATERIAL/M3 IN_PROGRESS,not INTEGRATED/
+VERIFIED; gate OFF. No PR-head/new PR/merge/Actions/Docker/PG/browser/live operations.
+All S/600/P720/+480/S+1200/cleanup90/state25/browser25/foundation45 bounds remain.
+Native/A08/renewal/collector/M4 unissued; IMPL-05/broad optimization DEFERRED.
+
+## История — C6-M3.1-MATERIAL-CI-DIAG-R4 — unit image packaging / 2026-10-16 UTC
 
 [C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210115890),
 [R3 intake/C0-DIAG-02](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210103047),

@@ -2,7 +2,34 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C6-M3.1-MATERIAL-CI-DIAG-R4 / 2026-10-16 UTC
+## Текущий статус — C6-M3.1-MATERIAL-HARNESS-R5 / 2026-10-16 UTC
+
+**MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; seven distinct findings OPEN.**
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211450459),
+[C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6211420811),
+[§15.16](tasks/M3_CONTRACT.md#1516-c6-m31-material-harness-r5--packaged-inputs-and-saved-v1-reader--2026-10-16-utc).
+
+| Task / binding | Current source result / actual gate |
+|---|---|
+| C6-M3.1-MATERIAL-HARNESS-R5 | REVIEW on return then HOLD. Branch c6/m3-1-material-harness-r5, exact base/sole parent d7cea5a2e9da7b384aeaf11dd41df3e1e4abcbff/tree a471c98e16343cf9d17d4d184df88ed491184544; one focused descendant, final identity/numstat in receipt |
+| Main / PR34 | Main/frozen E933ddd284ff5b77fb1aa88a4270ab0032bc499c9/0011; PR34 OPEN/Draft c6/m3-1-material-compat/d7cea5a… unchanged |
+| Unit inputs | Explicit verified frozen-H pins dependency before ROOT substitution; all11 real-entrypoint preparation cases/assertions preserved; no uncopied infra or Git dependency |
+| Saved V1 | Complete non-NULL Job inventory; closed ordinary/guarded reader, actual Job-id response envelope only in memory; stored JSON/all fields/digest/no schema preserved, no Escalation form or product changes |
+| Before / after | Exact d7 COPY baseline preparation[pass]:1 expected FAIL/0 subprocesses. Old controller block synthetic raw-input mismatch reproduced. Corrected110 PASS (78 fixture/32 helper cases), existing91 PASS;15 overlap/186 distinct;0 skip/xfail, restricted168-file layout |
+| Preserved | Six-path scope;306538-byte runtime/shell/frozen fixture and decoder/original11/C3/product/migrations/ORIGINAL17/OLD_CHECK4/Inbox/current-T/PHOTO/observer/ACK/privacy/budgets exact; full§15.15 prefix576446 bytes/SHA25676ed7dd2… unchanged |
+| CLOSED by C0 | C5-MATERIAL-01 and C0-DIAG-01, scoped actual d7/merge58542ff evidence; applicable regression bridge remains required |
+| Seven OPEN | C2-MAT-01/02/03,C1-MAT-01/02,C0-DIAG-02 (C1-R2-01 packaging alias),C1-R2-02. R5 units do not close findings |
+| Actual gates | CI38868575912/attempt1:6 SUCCESS/3 FAILURE,clean6 SUCCESS/3 SKIPPED. Prep623.690022374s/688.934643093s PASS720, not600/full-state. Full product PG/both complete P-state/used55000/recovery/cutover/restart/retained/full120/export/all3 late-C/9+clean9 pending |
+
+C0 intake before C0 advances same Draft PR34 for normal automatic CI; remaining
+C1/C2 acceptance, applicable C5 bridge, later independent C8. C6 HOLD after return;
+C3/C1/C2/C5/C8 HOLD. Source/unit evidence only; no new Docker/PG/browser/Actions/
+install/services/PR-head/new PR/merge/live operations. Gate OFF; not INTEGRATED/
+VERIFIED. Original S/retained600/P720/+480/S+1200/cleanup90/individual/state25/browser25/
+foundation45 unchanged. Native/A08/renewal/collector/M4 unissued; IMPL-05/broad
+optimization DEFERRED. VM/working DB/S3/sends/deploy unissued; history below preserved.
+
+## История — C6-M3.1-MATERIAL-CI-DIAG-R4 / 2026-10-16 UTC
 
 **MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; all eight findings OPEN.**
 [C0 R4](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6210115890),

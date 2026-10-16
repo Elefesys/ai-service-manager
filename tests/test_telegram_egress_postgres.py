@@ -1792,6 +1792,51 @@ async def material_runtime_fingerprint(c, old):
     return result, timers
 
 
+async def material_saved_v1_snapshots(c):
+    """Read every retained input using its Job envelope, without rewriting history."""
+    from asm.conversations.guards import parse_guarded_snapshot
+    from asm.conversations.turns import parse_snapshot
+
+    rows = (
+        (
+            await c.execute(
+                text(
+                    "SELECT id,kind,step,turn_input FROM platform.messaging_jobs "
+                    "WHERE turn_input IS NOT NULL ORDER BY id"
+                )
+            )
+        )
+        .mappings()
+        .all()
+    )
+    assert rows, "MATERIAL_SAVED_V1_EMPTY"
+    decoded, job_ids = [], set()
+    for row in rows:
+        job_id, value = row["id"], row["turn_input"]
+        assert isinstance(job_id, UUID) and job_id not in job_ids, "MATERIAL_SAVED_V1_JOB"
+        assert row["kind"] == "PROCESS_TURN", "MATERIAL_SAVED_V1_KIND"
+        assert isinstance(value, dict) and not {"schema_version", "code", "job_id"}.intersection(
+            value
+        ), "MATERIAL_SAVED_V1_STORAGE"
+        if row["step"] == "TEST_CONSUME":
+            assert "consumer" not in value, "MATERIAL_SAVED_V1_CONSUMER"
+            reader = parse_snapshot
+        else:
+            assert row["step"] == "GUARDED_TEXT", "MATERIAL_SAVED_V1_STEP"
+            assert value.get("consumer") == "CONTROLLED_GUARDS_V1", "MATERIAL_SAVED_V1_CONSUMER"
+            reader = parse_guarded_snapshot
+        stored = json.dumps(value, sort_keys=True)
+        # Retained SQL stores only input; code/job_id belong to its returned envelope.
+        snapshot = reader({**value, "code": "SNAPSHOT", "job_id": job_id})
+        assert snapshot.job_id == job_id and snapshot.snapshot_digest == value["snapshot_digest"]
+        assert set(type(snapshot).model_fields) == set(value) | {"code", "job_id"}
+        assert json.dumps(value, sort_keys=True) == stored, "MATERIAL_SAVED_V1_MUTATED"
+        decoded.append(snapshot)
+        job_ids.add(job_id)
+    assert len(decoded) == len(rows) == len(job_ids)
+    return tuple(decoded)
+
+
 async def material_schema_controller(action, state_path):
     """Explicit disposable LOCAL only. E fixtures remain in their own unchanged image."""
     from sqlalchemy.pool import NullPool
@@ -1977,23 +2022,7 @@ async def material_schema_controller(action, state_path):
                         )
                     ).one()
                     assert row == (2, False, None, 2)
-                    from asm.conversations.turns import parse_snapshot
-
-                    snapshots = (
-                        (
-                            await c.execute(
-                                text(
-                                    "SELECT turn_input FROM platform.messaging_jobs WHERE turn_input IS NOT NULL"
-                                )
-                            )
-                        )
-                        .scalars()
-                        .all()
-                    )
-                    assert snapshots and all("schema_version" not in value for value in snapshots)
-                    for value in snapshots:
-                        parse_snapshot(value)
-                    saved["saved_v1_reader"] = len(snapshots)
+                    saved["saved_v1_reader"] = len(await material_saved_v1_snapshots(c))
                 from asm.messaging.http_models import MessageResponse
 
                 async with runtime.tenancy.transaction(

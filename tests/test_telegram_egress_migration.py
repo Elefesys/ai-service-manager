@@ -11188,8 +11188,9 @@ def test_material_recovery_requires_observed_schema_database_seed_and_fresh_read
 
 
 @pytest.fixture
-def material_budget_fixture(tmp_path, monkeypatch):
+def material_budget_fixture(tmp_path, monkeypatch, frozen_h_source):
     original_root = e.ROOT
+    pins = frozen_h_source.files["infra/images.lock.env"]
     clock = [1000.0]
     monkeypatch.setattr(time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(e, "ROOT", tmp_path)
@@ -11260,6 +11261,7 @@ def material_budget_fixture(tmp_path, monkeypatch):
     return SimpleNamespace(
         root=tmp_path,
         original_root=original_root,
+        pins=pins,
         clock=clock,
         path=tmp_path / "budget.json",
         value=value,
@@ -11514,9 +11516,7 @@ def test_material_entrypoint_accounts_full_preparation_and_refuses_before_runtim
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     infra = f.root / "infra"
     infra.mkdir()
-    (infra / "images.lock.env").write_bytes(
-        (f.original_root / "infra/images.lock.env").read_bytes()
-    )
+    (infra / "images.lock.env").write_bytes(f.pins)
     operations, cleaned, runtime = [], [], []
     primary = e.EgressError("EGRESS_IMAGE_PROOF_FAILED")
     runtime_stop = RuntimeError("unit runtime boundary")
