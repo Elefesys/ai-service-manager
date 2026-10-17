@@ -5,7 +5,71 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. C2-M3.1-MATERIAL-SENT-LOCK-R5 — source return / 2026-10-16 UTC
+## 0. Текущий статус — MATERIAL принят; NATIVE-CONTEXT proposal / 2026-10-17 UTC
+
+[C0 postmerge acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6228792048)
+принимает MATERIAL **INTEGRATED/VERIFIED LOCAL/TEST**, все11 findings CLOSED.
+PR34 merged; exact accepted main `e205e22051bc06295758b504d84699652b176c15`,
+tree `85206b9c66ac151f3847aa39f46fb75663a18b91`.
+[CI38960113060 attempt1 push/main](https://github.com/Elefesys/ai-service-manager/actions/runs/38960113060):
+9 jobs и9 clean SUCCESS. [C8 independent PASS](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6223489359)
+проверил candidate/tested-merge с тем же tree. Старые R5 OPEN3/Draft/NOT RUN ниже —
+история source checkpoint; не current integration status. Merge не deployment,
+MATERIAL gate OFF; whole M3 IN_PROGRESS.
+
+**C3-M3.1-NATIVE-CONTEXT-CONTRACT-R1 — REVIEW / docs proposal; return затем HOLD.**
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6228802023),
+[contract§16](M3_CONTRACT.md#16-native-context--proposed).
+Отдельная `c3/m3-1-native-context-contract-r1`, sole parent accepted main выше;
+один docs commit. Full head/tree/numstat и verification limitation в canonical
+return, без отдельного self-SHA commit. Только M3_CONTRACT append§16, этот handoff
+и TASK_REGISTER. Prefix through§15.18 exact603955 bytes/SHA256
+`9643365fa8b534d6cf37a181c7c03ed76bd16b9d559016794b377b9a1eb1064b`.
+Applied0001–0012 frozen; successor revision/predecessor/reservation не назначены.
+
+Proposal: **live OWNER reconciliation + conservative observation barrier**.
+Сначала save immutable R/Audit/V+1 в HUMAN, затем existing explicit Resume атомарно
+выбирает свежую R и сохраняет relation с новым G/F. V2 native observations —
+сигналы сверки, не human transcript/Client inbound/delivery evidence.
+Новый сигнал N+1 закрывает admission в AI без guessed automatic takeover.
+Mandatory confirmation каждого Resume покрывает исходный no-update контрпример,
+если Owner передал договорённость; attestation не доказывает Telegram completeness.
+No native text resend через Console; no File/WINNER для unfetched native PHOTO.
+
+| Concrete proposal / owner next step | Binding |
+|---|---|
+| API/receipt | New GET human-context, GET observations, POST human-context/reconcile; strict CAS G/V/P/N/current-R/ingress checkpoint + namespace/hash/exact replay. Existing Resume three-field success contract/hash retained, new server guard and immutable R relation |
+| Data/context | Two needed private tables observations/reconciliations, C pointer+N, connection policy+P, control receipt nullable relation. V3 selected R+current bounded canonical tail; TEXT_ONLY/media unavailable/PARTIAL, UNRESOLVED blocks |
+| Serialization | Shared C barrier, no foreign Job/Inbox/Outbox/File locks after C; pending/unreviewed failed input guard. Lost ACK replays saved result, newer HUMAN/current R not overwritten; in-flight/UNKNOWN retained |
+| Compatibility | V1/V2 receipts/hash/snapshots unchanged; old native IGNORED never replayed/backfilled. Existing AI bootstrap hold; HUMAN/new C explicit reconciliation; PAUSED/reenable P+1, used downgrade refusal before DDL |
+| Evidence | NC01–NC20 finite manual traces map PG/API/browser assertions separately from bounded account observation. No runtime PASS; account cannot prove causality/completeness |
+| C0 D1 | Approve limited owner-confirmed available-context guarantee or require another proof source/explicit scope decision; no silent reduction A08/LOCKED |
+| C0 D2/D3 | Approve conservative AI hold including delayed/ambiguous/material observations; approve TEXT_ONLY/UNAVAILABLE boundary or issue native media scope |
+| C0 D4 → owner reviews | C1 exact API/error/Audit/security; C2 FK/RLS/lock/V3/checkpoint/rollout contract. C0 then assigns revision and exact write sets from§16.9 |
+| Implementation sequence after separate authorization | C2 schema/security contract → C3 backend/V3/guards + C1 paired contracts → C5 owner UI/recovery → C6 exact successor compatibility/readiness → C8 changed-risk review → C0 integration/CI; account/renewal/A12 separately |
+
+Source-backed reads covered AGENTS/IMPL-001/original11/manifest/supplied originals,
+applicable Spec/ADRs/MVP/Plan, control/normalizer/ingress/worker/context/material/
+Escalation/private-image/UI paths and existing PG/browser boundaries, plus C0/C8
+current receipts. All11 originals matched manifest/attachments before environment
+failure; final tree must preserve them unchanged.
+
+Local checkout/exec-server became unavailable after authoring. Final candidate
+prepared from exact GitHub base blobs; prefix/whole-tree allowlist/read-back/hash/
+whitespace/link checks are recorded in canonical return. **Local git diff --check
+for final candidate NOT RUN**; separate whitespace/conflict check is not presented
+as that command. Product tests/PG/Docker/Playwright/build/services/install/CI actions
+NOT RUN by docs scope. No new PR/main/old PR34 branch update, force, runtime or live action.
+
+C3 HOLD after return; C1/C2/C5/C6/C8 HOLD until separate C0 assignments.
+P-01/latest-human-context/A08 remains OPEN; P-05 renewal/collector, P-A03-09 account,
+M3-ACCEPTANCE/A12 OPEN. Native proposal/implementation not INTEGRATED/VERIFIED.
+Budgets S/600/P720/fixed120/+480/S+1200/cleanup90/state25/browser25/foundation45,
+individual3s/60s/10s unchanged; IMPL-05 DEFERRED. No M4/renewal/probe in this diff.
+
+<a id="0-c2-m31-material-sent-lock-r5--source-return--2026-10-16-utc"></a>
+
+## История — C2-M3.1-MATERIAL-SENT-LOCK-R5 — source return / 2026-10-16 UTC
 
 [C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220709356),
 [C0 R4 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220674632),

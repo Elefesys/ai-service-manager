@@ -2,7 +2,39 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C2-M3.1-MATERIAL-SENT-LOCK-R5 / 2026-10-16 UTC
+## Текущий статус — MATERIAL принят; C3 NATIVE-CONTEXT REVIEW / 2026-10-17 UTC
+
+**MATERIAL INTEGRATED/VERIFIED LOCAL/TEST; whole M3 IN_PROGRESS.**
+[C0 postmerge receipt](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6228792048),
+[C3 docs assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6228802023),
+[contract§16](tasks/M3_CONTRACT.md#16-native-context--proposed).
+
+| Task / binding | Current disposition |
+|---|---|
+| PR34 / accepted main | MERGED. `e205e22051bc06295758b504d84699652b176c15`; tree `85206b9c66ac151f3847aa39f46fb75663a18b91`; migration0012 integrated, applied0001–0012 frozen |
+| Actual CI / independent review | [CI38960113060 attempt1 push/main](https://github.com/Elefesys/ai-service-manager/actions/runs/38960113060),9 jobs +9 clean SUCCESS; [C8 PASS](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6223489359) on same candidate/tested tree |
+| MATERIAL findings | All11 CLOSED by C0. Historical OPEN3/NOT RUN/Draft blocks below are source history, not current gates |
+| C3-M3.1-NATIVE-CONTEXT-CONTRACT-R1 | **REVIEW / proposal**, then **C3 HOLD**. Separate `c3/m3-1-native-context-contract-r1`, exact sole parent accepted main; one substantive docs commit, full identity/numstat in canonical return |
+| Authorized diff | Exactly `docs/tasks/M3_CONTRACT.md` append§16, `docs/tasks/M3_HANDOFF.md` current block, `docs/TASK_REGISTER.md` current block/history labels. No code/tests/generated API/migrations/workflows/originals edits |
+| Mechanism proposed | Explicit live OWNER reconciliation in HUMAN, immutable R/Audit/V+1, then existing Resume selects R with CAS and G/F atom. New provider observation N causes conservative review hold without native HUMAN guess; source missing cannot be inferred complete |
+| Data/API/reader | Two private evidence tables; C pointer/N, connection policy/P, nullable Resume relation; new context read/observations/reconcile routes. V3 current R+bounded canonical tail, honest TEXT_ONLY/media unavailable; no Message/Outbox/File/send fabrication |
+| Security/recovery | Live auth/CSRF/tenant+Client relations, DB hash/key/CAS including ingress checkpoint; pending/failed gaps; exact replay never overwrites newer HUMAN/R or bumps again; retained UNKNOWN/in-flight |
+| Compatibility | V1/V2 hashes/receipts/snapshots retained, old IGNORED never backfilled/replayed; bootstrap H/AI, PAUSED/reenable P+1, used downgrade fail before DDL; revision/predecessor not assigned |
+| Evidence / limitation | Source/manifest/originals/accepted bindings inspected; NC01–NC20 manual traces only. Final prefix/tree/path/read-back/whitespace/link checks in receipt. Exec-server outage blocks final local `git diff --check` (NOT RUN); separate whitespace check, no runtime tests |
+| C0 decisions | D1 assurance/LOCKED/A08 scope; D2 conservative hold availability; D3 TEXT_ONLY media limit; D4 C1 API/security + C2 FK/RLS/serialization/V3 reviews, then exact owner scopes/revision |
+| Still OPEN | P-01/latest-human-context/A08, P-05 renewal/collector, P-A03-09 account evidence, M3-ACCEPTANCE/A12. Native design not accepted/integrated/verified by this source |
+| Other owners / next step | C1/C2/C5/C6/C8 HOLD pending separate C0 tasks. Next minimal work decision/reviews, C3 contract R2 only if needed; no new PR/runtime/probe/renewal/deploy |
+
+Contract prefix through§15.18 exact603955 bytes, SHA256
+`9643365fa8b534d6cf37a181c7c03ed76bd16b9d559016794b377b9a1eb1064b`.
+Merged MATERIAL is not VM deployment; gate OFF. No runtime/PG/browser/build/services/
+install/Actions operations, sends/account/VM/S3/expenses. Budgets S/600/P720/fixed120/
++480/S+1200/cleanup90/state25/browser25/foundation45 and3s/60s/10s unchanged.
+IMPL-05/broad optimization DEFERRED. Existing source evidence is preserved below.
+
+<a id="текущий-статус--c2-m31-material-sent-lock-r5--2026-10-16-utc"></a>
+
+## История — C2-M3.1-MATERIAL-SENT-LOCK-R5 / 2026-10-16 UTC
 
 **MATERIAL/M3 IN_PROGRESS; PR34 Draft/BLOCKED; three distinct findings OPEN.**
 [C0 source task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6220709356),

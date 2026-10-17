@@ -5886,3 +5886,572 @@ No clock reset/subtraction/retry/budget increase, installs/bootstrap/new service
 Docker/PG/browser runtime/Actions operations/PR-head move/new PR/merge. Live/VM/
 working DB/S3/sends/deploy/native/A08/P-A03-09/renewal/collector/M4 unissued;
 IMPL-05/broad optimization DEFERRED.
+
+## 16. NATIVE-CONTEXT — PROPOSED
+
+### 16.1. Выдача, accepted baseline и статус
+
+**C3-M3.1-NATIVE-CONTEXT-CONTRACT-R1, 2026-10-17 UTC: REVIEW / proposal; затем C3 HOLD.**
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6228802023).
+Ветка `c3/m3-1-native-context-contract-r1`; exact base/sole parent
+`e205e22051bc06295758b504d84699652b176c15`, base tree
+`85206b9c66ac151f3847aa39f46fb75663a18b91`. Один docs commit; full identity/numstat
+в canonical return, без self-SHA/status-only commit. Только три task documents.
+Existing prefix through§15.18 — exact603955 bytes, SHA256
+`9643365fa8b534d6cf37a181c7c03ed76bd16b9d559016794b377b9a1eb1064b`.
+
+[C0 postmerge](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6228792048)
+принял MATERIAL **INTEGRATED/VERIFIED LOCAL/TEST**, все11 findings CLOSED.
+PR34 merged; accepted main/tree выше. [CI38960113060 attempt1 push/main](https://github.com/Elefesys/ai-service-manager/actions/runs/38960113060)
+имеет9 jobs и9 clean SUCCESS; [C8 independent PASS](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6223489359)
+относится к candidate/tested-merge с тем же tree. Старые OPEN3/Draft/NOT RUN в§15.18
+исторические, не current disposition. Acceptance не означает VM deployment.
+
+**Весь§16 — PROPOSED; ничего не supersede-ит до отдельной приёмки C0.**
+Endpoint/DDL/guard/reader ниже ещё не реализованы. Applied0001–0012 frozen;
+следующая revision/predecessor/reservation не назначены. M3 IN_PROGRESS;
+P-01/latest-human-context/A08, P-05 renewal/collector, P-A03-09 account и
+M3-ACCEPTANCE/A12 OPEN. MATERIAL gate OFF по C0. Runtime tests/services/install/
+CI actions/account/API/VM/S3/sends/deploy этим return не выполнялись.
+
+### 16.2. Выбранный механизм и доказуемые пределы
+
+Рекомендуется **явный live OWNER reconciliation + observation review barrier**.
+Владелец сверяет canonical Console history и известную ему внешнюю переписку,
+сохраняет ограниченный текст актуальных договорённостей либо явно подтверждает
+достаточность canonical history. Immutable revision связывается с actor/CAS/
+observed epoch. Затем существующий explicit Resume атомарно выбирает эту revision
+и связывает с новым generation/fence. Save context сам не включает AI.
+Уже доставленный native текст не отправляется через Console повторно.
+
+| Вариант | Реальная гарантия | Выбор |
+|---|---|---|
+| Context-only native ingestion прямо в human transcript | Сохраняет только пришедшее в webhook | Не доказывает human origin, causal order или отсутствие пропусков; не решает no-update контрпример |
+| Только обязательный OWNER reconciliation | Authenticated OWNER утверждает context, в том числе без native update | Минимальный canonical источник; сервер проверяет identity/commit/CAS, но не истинность/полноту утверждения |
+| **Reconciliation + conservative observation barrier** | Предыдущее плюс запрет новых AI actions при известном несверенном сигнале | **Рекомендуется**; V2 sidecar остаётся observation, не вторым Message/transport engine |
+
+Три authority различны: trusted route/V2 receipt доказывает получение projection;
+`sender_id=approved owner` без bot/offline markers остаётся OWNER_CANDIDATE_ONLY;
+Workspace OWNER через live authenticated command подтверждает **свой текст**.
+Actor берётся из session/membership, provider sender/time — только из sidecar.
+Console actor не объявляется Telegram sender и не обязан совпадать с Telegram owner.
+Caller `is_human`, отсутствие marker, provider date/update_id/arrival/fence не proof.
+
+Гарантия после реализации: **каждый новый Resume при включённой policy требует
+свежего explicit confirmed context текущего HUMAN generation; известные
+несверенные observations и pending context input запрещают Resume/admission;
+fresh snapshot содержит выбранную R и current canonical данные**.
+Известный новый сигнал в AI закрывает дальнейший admission, но не меняет
+control_mode/G. UI показывает AI + «нужна сверка, новые действия остановлены»;
+Owner выполняет Takeover → reconciliation → Resume. Это availability tradeoff,
+не реализованный automatic native takeover.
+
+**D1, неустранимый остаток.** H1: после подтверждения/Resume native сообщения нет.
+H2: оно есть, но update отсутствует. DB/input сервера одинаковы; нельзя разрешить
+H1 и гарантированно остановить H2. Delayed pre-Resume и immediate post-Resume
+с одинаковыми полями также неразличимы (§15.5). Mandatory confirmation устраняет
+молчаливый Resume исходного контрпримера, **если Owner передал договорённость**;
+не доказывает полноту истории, истинность attestation или unseen post-Resume
+intervention. UI требует Takeover до внешней переписки; это операционная граница,
+не серверное обнаружение невидимого действия.
+
+Spec5.12/5.12.1, ADR026/180/267 (HUMAN suppression, explicit Resume/latest context,
+serialized admission) сохраняются. Если C0 требует безусловно полного Telegram
+history/causal native takeover, proposal недостаточен: нужен другой проверяемый
+источник origin/history/causal acknowledgement либо отдельное изменение scope.
+C3 LOCKED не меняет и A08 Console PASS не закрывает.
+
+Адресная proposed delta к§15.5 после принятия: owner-confirmed context становится
+resumable путём; нынешняя операционная HUMAN boundary дополняется server guard;
+добавляется conservative review hold без mode/G toggle. Не меняются causality
+limit, origin exclusions, terminal IGNORED replay, Client identity, UNKNOWN,
+transport hashes и MATERIAL. Никаких новых внешних provider фактов.
+
+### 16.3. Минимальная модель, provenance и media
+
+Обозначения: V=Conversation.version; G=control_generation; F=activation_fence_seq;
+N=human_observation_epoch; P=human_context_policy_epoch; R=current revision.
+N — локальный счётчик сигналов сверки, P — поколение включения policy connection.
+Это не provider watermark, control generation или доказательство полноты.
+Counters checked bigint без wrap/reset; bootstrap NULL N читается как0.
+
+| Proposed объект | Identity и необходимые данные |
+|---|---|
+| `app.channel_connections` additions | `human_context_policy` OFF_UNUSED/ON/PAUSED; `human_context_policy_epoch` initial0. Первый ON и reenable дают P+1; P не сбрасывается. Trusted provisioning authority, не owner toggle/GUC |
+| `app.conversations` additions | Nullable `human_observation_epoch`, `human_context_revision_id`. Existing rows NULL без history backfill; pointer/N только под C barrier |
+| New `platform.human_context_observations` | Immutable UUID, ws/C/Client/connection, epoch N>0, captured P/G, first V2 source receipt, class, semantic digest, accepted_at. UNIQUE(ws,C,N), UNIQUE(ws,C,digest). Typed preview читается из exact private sidecar; raw update не копируется |
+| New `platform.human_context_reconciliations` | Immutable revision UUID/no, ws/C/Client/actor, namespace/key/hash, previous R, expected G/V/P/N, accepted V=V+1, disposition/text/source_media/attestation, private reviewed_ingress_seq, Audit/time, exact result. Revision одновременно command receipt; отдельная receipt table не нужна |
+| Existing `conversation_control_receipts` additions | Nullable R ID/P/N, all NULL у retained rows/TAKEOVER, all non-NULL у new policy RESUME. Same-ws/C/Client/R relation. Existing V1 fingerprint/result/timestamps/guard_profile/fence неизменны |
+
+Compound FK связывает **тот же Client и C**, ws/connection/chat; Workspace alone
+недостаточно. Observation source: codec2, exact bot/update/ws/connection/chat
+из verified provenance. Previous/current R относится к той же C/Client.
+Resume relation проверяет R.expected G=previous G, R.accepted V=receipt.context V,
+R.P/N=saved P/N и confirmed disposition. Historical accepted counters не FK к
+mutable V/G/N/P. Supporting identity keys/closed new nullable variant сохраняют
+старые CHECK; old receipt rows не backfill-ятся.
+
+Обе новые tables ENABLE/FORCE RLS; runtime non-owner/non-BYPASSRLS, no direct
+SELECT/DML; PUBLIC revoked; narrow capabilities с pinned `pg_catalog,pg_temp`.
+Нет native Message table, общего event framework или пустых future tables.
+
+Observation digest отдельный от frozen V1/V2 hashes: prefix
+`asm:m3:human_observation:v1\n`, length-prefixed UTF-8 parts (NULL=`-1:\n`),
+ws,C,Client,connection,discriminator,chat,message ID (DELETE: canonical sorted unique
+ID array), exact origin markers/sender,sent_at,edited_at,typed content. Нет update_id,
+arrival/P/G/N/mode. JSON arrays/content — closed deterministic field order,
+exact Unicode; SQL/Python vectors обязательны. Same semantic event/new update_id
+создаёт новый transport receipt, но не второй mark/N. Distinct content/origin/date
+— новый сигнал, не overwrite/human chronological claim. DELETE batch один mark;
+existing MATERIAL effects per-target. Old V1/V2 key replay возвращается **до**
+новой branch, включая native IGNORED при gate OFF.
+
+Current projection = R pointer + effective canonical Messages + review status.
+R — отдельный OWNER_CONFIRMED_CONTEXT, не OUTBOUND Message и не model summary.
+UI отдельно показывает actor/time/coverage, candidates и настоящую переписку.
+Save context не создаёт Message/Client/identity/Inbox/Turn/member/File/FETCH/WINNER/
+Outbox/SEND Job; не меняет last_client_inbound_at и не является delivery evidence.
+
+| Material | Canonical treatment / предел |
+|---|---|
+| Native TEXT | Candidate preview; canonical только exact owner text после подтверждения, с actor/time команды, не provider sender/time |
+| Native PHOTO/caption | Caption preview; image_availability=NATIVE_UNAVAILABLE. Нет getFile/FETCH/S3/URL/File/WINNER. Owner может описать достаточный смысл текстом, но это не vision evidence |
+| Unsupported/ambiguous | Typed reason, нет usable media. OWNER_TEXT с достаточными фактами либо UNRESOLVED; непредставимый существенный материал запрещает Resume |
+| Native EDIT/DELETE | Новый mark/hold, old R immutable. New owner revision заменяет current text или отзывает его через UNRESOLVED; candidate не редактирует слова actor автоматически |
+| Canonical edit/delete | Existing0012 effective current, versions, sticky Turn invalidation/private-file guards. Mark не заменяет MATERIAL и не создаёт второго semantic V increment |
+| Correction/withdrawal R | Только HUMAN; если AI — сначала explicit Takeover. New revision/previous pointer/CAS, old receipts/Audit остаются; полного удаления evidence нет |
+
+Canonical private image доступен только existing live owner→same C/Message/File→
+effective ORIGINAL_READY→WINNER path. Observation/R не дают grant. Provider file IDs,
+raw JSON, storage keys, signed URLs и secrets не выходят в observation DTO/Audit/
+diagnostics; text/caption только в защищённых command/read/snapshot.
+
+### 16.4. Current reader и proposed API
+
+Fresh policy input получает closed private **TurnSnapshotV3**: retained V2
+members/current плюс `human_context` (R ID/no, actor/time, disposition/text,
+accepted V, confirmed G/P/N, source_media, coverage=OWNER_ASSERTED_TEXT_ONLY),
+`context_policy_epoch`, `human_observation_epoch`, linked Resume ID для guard,
+`recent_messages` и `history_truncated`. Recent tail — до16 canonical Messages,
+ordered(created_at,id), read17 для флага truncation; ID/version/direction/current/
+delivery/file refs через same0012 effective helper. Manual/automation origin
+берётся из existing receipt/Outbox.kind linkage; ambiguous legacy помечен
+LEGACY_UNATTRIBUTED, не human по одной OUTBOUND direction. IDs позволяют downstream
+не удвоить current members. Reader не выдаёт tail за полную историю; более ранние
+релевантные договорённости Owner явно включает в R. Это bounded M3 context input,
+не реализация M4 ContextBuilder.
+
+Snapshot под C/Turn фиксирует одну V, R/N/P и current canonical projection; digest
+покрывает весь saved JSON. New V3 bound —2,097,152 UTF-8 bytes canonical SQL JSON,
+до existing64 members и16 history rows, каждый текст с прежними bounds. При
+превышении — typed internal CONTEXT_TOO_LARGE и NOT_ALLOWED до consumer/action;
+текст молча не обрезается. Это новый payload bound, не увеличение существующих
+request/CI/time caps. SQL/Python vectors и C1 review нужны до реализации.
+V1/V2 saved snapshots/results/digests не переписываются и читаются прежними parsers.
+
+V3 `human_context` использует exact non-NULL current_revision shape ниже, без
+UNRESOLVED. `recent_messages` entry ровно `{message_id,version,direction,origin,
+created_at,current,delivery,file}`: IDs canonical UUID, version positive decimal,
+UTC6 time, current=existing MessageCurrent; delivery=existing nullable delivery DTO;
+file=NULL либо `{file_id,version,status}` с реальным FileObject, без grant/URL.
+Origin closed CLIENT_INBOUND/OWNER_MANUAL/CONTROLLED_AUTOMATION/LEGACY_UNATTRIBUTED,
+по canonical ingest/manual/guard receipt links. Для чтения usable content берётся
+только current, historical refs не оживляют hidden/replaced image.
+Дополнительные V3 поля `context_coverage=OWNER_ASSERTED_TEXT_ONLY` и ordered unique
+`context_limitations`: всегда PROVIDER_HISTORY_UNVERIFIED, плюс
+NATIVE_MEDIA_UNAVAILABLE при R.source_media=UNAVAILABLE. Эта причина объясняет
+PARTIAL отдельно от existing member-media readiness; no untyped reason string.
+
+`context_coverage` всегда OWNER_ASSERTED_TEXT_ONLY, никогда TELEGRAM_COMPLETE.
+`source_media=UNAVAILABLE` даёт PARTIAL/NATIVE_MEDIA_UNAVAILABLE; caption/owner
+description не делают фото доступным. PROVIDER_HISTORY_UNVERIFIED сохраняется
+даже при N=0. Existing COMPLETE относится только к доступности выбранных inputs,
+не полноте истории. UNRESOLVED не usable context. Owner text — domain evidence
+со своим происхождением, не override hard policies/permissions (Spec5.8–5.14).
+Snapshot не содержит storage key/signed URL и не запускает media/LLM I/O.
+
+New prefix: `/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}`.
+Existing `GET /control`, `POST /takeover`, `POST /resume` success DTO остаются
+strict прежними. Resume body сохраняет три existing expected fields: current R
+выбирается через V/G под DB lock, а не optional caller pointer/override.
+
+| Route | Closed shape / outcome |
+|---|---|
+| New `GET /human-context` | No query, live OWNER. `workspace_id,conversation_id,client_id,observed_at,control_mode,control_generation,context_version,policy,policy_epoch,observation_epoch,ingress_checkpoint,current_revision,review_status,resume_blockers,pending_context_input,has_failed_context_input,unreviewed_failed_context_input,manual_delivery`. No writes |
+| New `GET /human-context/observations` | limit1…100 default20, optional strict opaque cursor `{v:1,ws,C,Client,P,through_N,after_N}`. `items,next_cursor,through_epoch,current_epoch,observed_at`; ascending N, fixed through_N, no completeness promise |
+| New `POST /human-context/reconcile` | Strict body ниже, one Idempotency-Key, only HUMAN. R/Audit/V+1; G/mode/F unchanged. Exact ACCEPTED/REPLAY result; save не выполняет Resume |
+| Existing `POST /resume` | Existing body/client/G/V; после existing live gates/CAS новый guard§16.5. Atomic R selection→receipt relation→AI/G+1/Fnew, V0. V1 fingerprint/result сохранены; new error parser меняется парно |
+
+`ingress_checkpoint` — maximum committed same-connection/chat Inbox.turn_ingress_seq
+под C (0 если нет); это дополнительный **локальный read checkpoint**, не causal
+native proof. Нужен потому, что queued/failed ingress ещё может не увеличить V.
+Pending predicate и checkpoint читаются indexed EXISTS/ORDER LIMIT1, no full tenant
+scan. Новые NULL capture после cutover запрещены; retained NULL rows принадлежат
+старой истории. Reconcile CAS включает этот checkpoint; R сохраняет его как
+reviewed_ingress_seq. Saved R может подтвердить known FAILED gap только через
+OWNER_TEXT, не CANONICAL_SUFFICIENT. После Resume новый failed/unmaterialized Inbox
+с seq>R.checkpoint закрывает admission до новой сверки; retained NULL gaps
+обрабатываются при bootstrap, не объявляются отсутствующими. Fresh receipt replay
+не меняет checkpoint. Входные bytes не считаются человеческим native контекстом.
+
+Reconcile exact body (all fields required; unknown keys invalid):
+
+```json
+{
+  "expected_client_id": "<canonical UUID>",
+  "expected_control_generation": "<positive decimal bigint>",
+  "expected_context_version": "<positive decimal bigint>",
+  "expected_policy_epoch": "<positive decimal bigint>",
+  "expected_observation_epoch": "<nonnegative decimal bigint>",
+  "expected_ingress_checkpoint": "<nonnegative decimal bigint>",
+  "expected_revision_id": null,
+  "disposition": "OWNER_TEXT",
+  "text": "Согласовали другой вариант; прежний вариант больше не актуален.",
+  "source_media": "NONE",
+  "attestation": "REVIEWED_AVAILABLE_CONTEXT"
+}
+```
+
+R ID nullable/current; disposition CANONICAL_SUFFICIENT(text=NULL,source_media=NONE),
+OWNER_TEXT(nonempty exact Unicode≤4096 codepoints/16384 UTF-8 bytes), UNRESOLVED
+(NULL либо bounded text). source_media NONE/UNAVAILABLE; attestation literal выше.
+Attestation означает утверждение Owner о доступном ему контексте/существенных
+договорённостях, не proof чтения каждой страницы или полной внешней истории.
+
+Новое noncanonical observation после последнего selected Resume требует OWNER_TEXT
+с содержанием/объяснением нерелевантности либо UNRESOLVED, не CANONICAL_SUFFICIENT.
+При native PHOTO/unsupported в этом интервале NONE запрещён: description сохраняет
+UNAVAILABLE. Wholly canonical processed mutation может быть подтверждена
+CANONICAL_SUFFICIENT. Для no-update Owner сам сообщает о существенном media gap.
+Непереданный факт невозможно выявить schema validation. Последующий R — полный
+replacement текущего owner context: UI prefill/показывает предыдущий текст и явно
+предупреждает об отзыве/замене, не очищает договорённости автоматически.
+
+`current_revision` NULL либо exact `{revision_id,revision_no,previous_revision_id,
+actor_user_account_id,accepted_at,disposition,text,source_media,coverage,
+confirmed_generation,accepted_context_version,policy_epoch,observation_epoch,
+reviewed_ingress_checkpoint}`. Review status BOOTSTRAP_REQUIRED /
+CONFIRMATION_REQUIRED / CONFIRMED / UNRESOLVED / NEW_OBSERVATION / POLICY_PAUSED.
+Resume blockers — closed ordered applicable list POLICY_INACTIVE, HUMAN_REQUIRED,
+CONTEXT_INPUT_PENDING, CONTEXT_INPUT_UNRESOLVED, CONTEXT_CONFIRMATION_REQUIRED,
+CONTEXT_UNRESOLVED, CONTEXT_CHANGED, NEW_OBSERVATION. Product denial остаётся
+existing CONTROL gate. CONFIRMED в AI — accepted linked Resume, не право его повторить.
+Manual delivery flags прежние has_dispatching/has_unknown с manual scope.
+
+Observation item exact `{observation_id,epoch,classification,observed_at,source_kind,
+preview,coverage}`. Class NATIVE_CANDIDATE/AMBIGUOUS_NONCLIENT/CANONICAL_MUTATION/
+UNBOUND_MUTATION; kind NEW/EDIT/DELETE. Preview TEXT(text), PHOTO(caption,
+image_availability=NATIVE_UNAVAILABLE), UNSUPPORTED(reason), DELETE(target_count);
+coverage=PROVIDER_OBSERVATION_ONLY. No provider IDs/URLs. Cursor связан ws/C/Client;
+current_epoch>through_epoch требует fresh read, а не молчаливый «все просмотрены».
+
+Command result exact `{workspace_id,conversation_id,client_id,receipt_id,revision_id,
+revision_no,previous_revision_id,audit_event_id,control_generation,
+previous_context_version,accepted_context_version,policy_epoch,observation_epoch,
+reviewed_ingress_checkpoint,disposition,source_media,coverage,accepted_at}`.
+receipt_id=revision_id; V'=V+1, G unchanged. Text только в protected current read.
+Wrapper `{outcome:ACCEPTED|REPLAY,result}`; replay — saved result, не current pointer.
+
+Namespace HUMAN_CONTEXT_RECONCILE_V1, UNIQUE(ws,namespace,key); existing key ASCII
+`[A-Za-z0-9._:-]{1,128}`. DB SHA256 prefix `asm:m3:human_context_reconcile:v1\n`;
+length-prefixed UTF-8 parts: ws,actor,C,expected Client,G,V,P,N,ingress checkpoint,
+previous R,disposition,text,source_media,attestation. NULL=`-1:\n`;
+nonnull=`byte_length:value\n`, canonical decimals, exact Unicode без trim/NFC.
+Python/SQL vectors проверяют каждый field/NULL/empty. Caller hash не authority.
+
+Command order: strict headers/body → cookie/Origin/CSRF/live OWNER → key lock и
+saved exact replay/conflict → scope/live locks → post-wait policy/authority →
+CAS/semantic guards → writes → outer commit →200. Replay требует current OWNER и
+same relation, но предшествует новым product/policy/CAS guards; revoke→403.
+Same key changed body/actor→409 IDEMPOTENCY_KEY_CONFLICT; different key stale
+G/V/P/N/checkpoint/R→409 STALE_STATE; new reconcile in AI→409 HUMAN_REQUIRED.
+Reconcile доступен как Takeover без manual_send entitlement, включая PAUSED:
+save/withdraw context не покупка/отправка. Resume сохраняет existing active
+Business/connection/post-lock entitlement, structural failure/product/CAS precedence,
+затем новые guards. Missing/stale R→409 CONTEXT_CONFIRMATION_REQUIRED;
+UNRESOLVED→409 CONTEXT_UNRESOLVED; pending→409 CONTEXT_INPUT_PENDING;
+unreviewed failed gap→409 CONTEXT_INPUT_UNRESOLVED; PAUSED→409 CONTEXT_POLICY_PAUSED.
+Counters overflow fully rollback; new VERSION_EXHAUSTED, existing control G retains
+CONTROL_VERSION_EXHAUSTED. Остальные 401/403/404/413/415/422/429/500/503/no-store —
+existing conventions; request body/caps не расширяются.
+
+Audit: HUMAN_CONTEXT_RECONCILED, USER_ACCOUNT/live actor, object_type CONVERSATION,
+object_id C, object_version accepted V; payload ровно `{revision_id,
+previous_revision_id,disposition,source_media,control_generation,
+previous_context_version,accepted_context_version,policy_epoch,observation_epoch,
+reviewed_ingress_checkpoint}`. Без текста/hash/key/provider IDs. Typed composite
+R→Audit включает ws/C/actor/accepted V/event/revision identity, без circular
+Audit→R FK. Resume сохраняет один existing Audit; selected R хранится в receipt
+relation. Observation не USER_ACCOUNT Audit/CONVERSATION_TAKEN_OVER.
+
+UI: candidate/current/history отдельно; объяснение причины hold; «Сохранить
+сверенный контекст», затем отдельное explicit «Разрешить автоматику». Fresh GET
+определяет mode/R; receipt не optimistic current. Network/commit loss удерживает
+exact actor/ws/C/Client/key/body в памяти страницы; session/CSRF recovery и тот же
+POST. Valid200+failed GET повторяет только GET. New body/version — fresh intent
+после разрешения прежней неопределённости. Нет переноса в другой Workspace;
+revoke очищает protected views; late response предыдущего C отвергается.
+
+### 16.5. Closed transitions и Resume boundary
+
+Scope: known exact C/Client, policy ON (observations также в PAUSED).
+OFF_UNUSED сохраняет legacy behavior только до cutover; PAUSED запрещает
+new Resume/automation. Priority: auth/route/key replay → discriminator →
+NEW origin exclusions → candidate; EDIT/DELETE не приписываются человеку по from.
+`mark` означает first semantic observation+N+1, **V/G/F unchanged**.
+R acceptance даёт V+1, Resume G+1/Fnew. N проверяется отдельно в каждом admission;
+не искусственный context bump за candidate.
+
+| Event / before | Durable after | Resume/admission |
+|---|---|---|
+| No trusted route / mismatched C/Client / unknown chat | Existing reject/ignored;0 C/Client/mark из owner sender | Future C default HUMAN/needs bootstrap; history восполняет Owner |
+| Existing V1/V2 update key | Exact saved receipt/conflict,0 counters | Old ignored never reprocessed |
+| Fresh key, same observation digest | New transport receipt/sidecar; existing mark/N | Duplicate не инвалидирует подтверждение |
+| NEW own sender_business_bot или exact known outbound echo | Existing exclusion/IGNORED_ECHO;0 mark | No human/SENT/takeover; UNKNOWN unchanged |
+| NEW explicit other bot/sender_is_bot TRUE/offline TRUE | Automated exclusion;0 mark | Не human proof, no mode change; контекст других bots не обещан |
+| NEW owner candidate/ambiguous nonclient known private chat, markers absent | mark, old native/unsupported receipt,0 Message | HUMAN требует R; AI остаётся AI с review hold |
+| NEW unsupported/native sender_chat/ambiguous known chat | mark AMBIGUOUS_NONCLIENT + unavailable reason | OWNER_TEXT/UNRESOLVED; no false COMPLETE |
+| Fresh EDIT/DELETE known chat | One mark: all targets canonical→CANONICAL_MUTATION, иначе UNBOUND_MUTATION; MATERIAL queue/fold отдельно | Hold включает Client edit. Не проверять sender как human author; pending must settle |
+| Mutation worker applies later | Existing Message/V per-target/sticky Turn effects; no second mark | Hold автоматически не снимается; saved MATERIAL result immutable |
+| New eligible Client ingress | Existing Inbox/Job/C capture, no human mark | Pending blocks reconcile/Resume/admission; after success V+1, future post-F Turn только по valid activation |
+| Unseen native before Resume, no update | No DB mark | Mandatory confirmation даже N=0; Owner вводит факт |
+| Unseen native after Resume, no update | No DB change | Обнаружение не гарантировано, D1; отсутствие updates не completeness |
+| First delayed pre-Resume candidate arrives after Resume | Same mark as indistinguishable post-Resume event | Hold,0 G/F change; никакого causal guess |
+| New reconcile in AI |409 HUMAN_REQUIRED,0 writes | Сначала Takeover; save не скрытый control transition |
+| New reconcile in HUMAN, live auth/CAS G/V/P/N/checkpoint/R, pending=0 | Rnew+Audit/V+1, same G/F/N | Confirmed только CANONICAL_SUFFICIENT/OWNER_TEXT; UNRESOLVED blocks |
+| Replay R после newer R/Takeover/Resume | Exact saved result,0 changes | Не переносить fulfilled R поверх current state |
+| New Resume HUMAN, confirmed R with exact G/V/P/N/checkpoint, no pending/unreviewed gap | Existing receipt/Audit+R relation, G+1/Fnew,V0 | Только future eligible ingress; selection/activation one atom |
+| New Resume missing/stale R, UNRESOLVED, pending/gap or paused |409 explicit reason,0 writes | No override/force/legacy bypass; new Resume in AI тоже требует HUMAN/fresh R |
+| Fulfilled Resume replay, current уже HUMAN/другая R | Exact old result/relation,0 counters | Не снимает hold, не выдаёт новый G/F |
+| Takeover/new accepted manual intent | Existing HUMAN/G+1/F=NULL; manual V+1 | Prior R readable but stale для нового G. Exact replay0 |
+| Canonical Message/file/delivery changes between R and Resume | Existing V changes; R.accepted V stale | Fresh confirmation, включая Console-only |
+| Canonical change after Resume without human observation | Existing V/sticky guards/current reader | Old snapshot stale; fresh eligible work reads current. EDIT/DELETE имеет дополнительный mark выше |
+| DISPATCHING precedes mark/Takeover | Existing finish/recovery outcome | No recall/blind resend; only not-admitted work blocked |
+| PAUSED/reenable P+1/old codec worker | Saved replay only, no fresh permission | New HUMAN/R/Resume; restart/gate cannot bypass used barrier |
+
+`resume_ready` = live existing authority/product/CAS + mode HUMAN +
+R confirmed + R.expected G=G + R.accepted V=V + R.P=P + R.N=N +
+R.reviewed ingress=current checkpoint + pending=0 + no unreviewed failed gap.
+CAS body выбирает exact current R через V; every new revision changes V.
+Repeat Resume new key in AI не использует already-consumed R.
+
+`automation_ready` после Resume = policy ON, current linked Resume/R,
+mode AI/G=R.G+1=receipt.accepted G, F=receipt.F, current R pointer тот же,
+P/N equal saved, no pending/unreviewed failed input, valid claim/Turn revision/
+material usability/captured V и existing live authority/product gates.
+Обычный Client input после Resume ожидаемо увеличивает V: action сравнивает
+current V со своим snapshot/intent, **не** навечно с R.accepted V.
+Takeover/reconciliation/new Resume не оживляют old HUMAN/invalidated Turns.
+
+Pending — indexed EXISTS same connection/chat Inbox PENDING для eligible original
+или queued EDIT/DELETE, включая legacy; no foreign row lock после C.
+Failed gap виден Owner. R при OWNER_TEXT подтверждает известные на его checkpoint
+failed originals; mutation failure связывается также с captured observation N.
+Unreviewed failure после Resume: original seq>R.checkpoint или mutation mark>N;
+retained NULL originals/mutations без mark — bootstrap history, не новые capture.
+Новый eligible CLIENT_MESSAGE не может получить NULL ingress mark после cutover;
+EDIT/DELETE сохраняют собственную retained shape и не становятся original ingress.
+Old pending всегда должен settle до R; поэтому поздний terminal failure не может
+обойти guard «pending исчез». Никакого automatic retry/backfill или fabricated
+Client Message. Failure without content остаётся known limitation owner attestation.
+
+### 16.6. Atomicity, lock order, workers и recovery
+
+READ COMMITTED/physical-XID discipline, checks после waits. Нет HTTP/S3/LLM в txn.
+Lease/UI read/caller GUC/old receipt не authority. GET context — one consistent
+statement/snapshot, не смесь нескольких read moments; mutations recheck under C.
+
+| Path | Order / atom |
+|---|---|
+| Fresh observation | Update-key advisory → connection SHARE → known C NO KEY UPDATE → dedupe/new source receipt+sidecar+mark/N and optional own Inbox/Job. Source exists before FK validation; commit before ACK |
+| Reconcile/Resume | Existing live owner/workspace/user/membership → namespace/key advisory → Business SHARE → connection SHARE → billing only Resume → C NO KEY UPDATE. Recheck/CAS, immutable reads, own Audit/R/pointer. No Job/Inbox/Outbox/File/target lock after C |
+| Original/material worker | Own Job UPDATE → own Inbox NO KEY UPDATE → connection UPDATE → identity(original) → C → sorted targets → Messages → Turns; existing0012 atom. Mark captured at ingress, no duplication |
+| Send admission | Own Job → own Outbox → existing authority/Business/connection/billing → C→Turn; R/N/P/V/G/F recheck, DISPATCHING commit before external request |
+| SENT/UNKNOWN/file completion | Retained Job→Outbox→C→existing target→Message/Turn or Job→File/upload→C→Turn. Human-context helper adds no connection/foreign-source lock |
+| New V3 prepare/finalize/test consumer/Escalation producer | Own Job → required authority/Business/connection SHARE **before C** → C→Turn; common current guard. Existing acquired order не разворачивать |
+| Enable/pause | Connection UPDATE conflicts with fresh admission/reconcile/Resume connection SHARE; no mass C lock/reset. P change invalidates old confirmations; in-flight outcome remains |
+
+One physical C UPDATE for R pointer/bootstrap N/V+1; one for Resume G/F.
+R/Audit insert precedes pointer UPDATE; deferred consistency verifies complete
+atom at commit. Existing context hook cancels PENDING Escalation/CONTEXT_CHANGED
+without second V bump; existing EXPIRED/FINAL/replay precedence stays.
+R не resolve/send answer. N-only mark не вызывает material V hook: fresh
+Escalation creation checks barrier→NOT_ALLOWED, fresh resolve→STALE_STATE;
+cancel/exact winning replay сохраняются. Later R V+1 cancels PENDING normally.
+
+FK/trigger review C2 обязателен: R→C/Client/actor/Audit, C→R — stable identity;
+observation→immutable same-source provenance, no foreign worker Job lock.
+No FK to mutable version/epoch. KEY SHARE from new FK must match preheld compatible
+identity; no new connection edge inside SENT/file helpers. §15.18 lesson:
+second UPDATE same row can recheck unchanged FK due to current-XID tuple;
+review expanded SQL/trigger chain, not just Python order. Preserve changed-SENT
+single target update/single C+2, no-op delivery+1, UNKNOWN and private contracts.
+No disabled constraints, authority deferred until commit, added foreign prelocks,
+lock-timeout increases or weakening old concurrency assertions.
+
+Race outcomes: mark first→reconcile stale N; R first→later mark invalidates
+readiness; Resume first→later mark closes next admission without G guess;
+dispatch first→mark cannot recall already admitted request. Pending accepted
+before Resume blocks; later eligible Client keeps normal fence capture.
+Any insert/FK/counter/commit failure rolls back entire atom. Same-key advisory
+gives one winner; changed key old CAS loses. Commit response loss replays exact
+saved result, not regenerated timestamps/current state. Later HUMAN/R2 stays
+current when old R1/Resume receipt replays.
+
+Retained V1/V2 snapshot/receipt winning-token reads remain, but policy ON new
+automation requires V3 and linked R/N/P. Old pending unstarted work follows
+STALE/SUPERSEDED/NOT_ALLOWED terminal paths, no rewritten input/digest/new intent.
+Old worker source rejected by readiness/drain; DB gates still deny old capability
+calls. Shared guards cover prepare, accept, send-begin, Escalation create/resolve,
+recovery decision for **new** action; not veto of already-started send finalize.
+N/P hold does not require clearing/revising sticky material-invalidated Turn.
+Resumption needs new G/F, so old generations never regain eligibility.
+Effect-free TEST consumer stays effect-free; Telegram guarded automation remains
+prohibited by existing LOCAL/TEST CONTROLLED policy. No live AI activation.
+
+### 16.7. Rollout/compatibility proposal
+
+1. C0 accepts decisions/reviews then assigns exact predecessor/revision. If renewal
+   lands first, native inherits its accepted schema; otherwise reverse. Applied
+   0001–0012 unchanged; no preallocated next number or renaming older files.
+2. Drain old writers/workers/readers, upgrade and compatible source with exact
+   schema readiness; no mixed old claim. Preserve old-column exports, V1/V2
+   hashes/snapshots/receipts, UNKNOWN/private File/WINNER/history. Upgrade creates
+   no historical native mark/Message/Turn/send job.
+3. Initial OFF_UNUSED/P0, C fields NULL are not completeness. Enable requires paired
+   current MATERIAL reader/gate on Telegram plus new backend/UI/worker readiness.
+   Отключение требуемого MATERIAL consumer при used native policy требует PAUSED;
+   readiness/admission отказывают mismatched native ON/material OFF.
+   ON/P1 does not backfill history. Existing HUMAN requires first R; existing AI
+   without linked R immediately fails admission and shows BOOTSTRAP_REQUIRED:
+   Takeover→R→Resume. New C remains HUMAN.
+4. First R covers current canonical history + owner-entered external facts.
+   N0 means no fresh captured signals only. Old IGNORED keys replay without new
+   effect even if V2 sidecar has text. Old event without receipt is fresh observation,
+   not causal fresh-human proof; no high-water update_id/date drop. Old pending
+   Inbox processes normally, no retroactive post-F eligibility.
+5. Restart retains P/N/R. After ON, OFF_UNUSED cannot return: PAUSED blocks new
+   Resume/AI, retains observations/read/Takeover/manual/save/replay. Reenable P+1
+   requires HUMAN/new R/new Resume. Save while PAUSED is evidence, not confirmation
+   for a future P. Policy change trusted provisioning/operator path, no owner
+   HTTP toggle; C2/C6 define scoped receipt/Audit using existing provisioning style.
+6. P>0 is monotonic used marker. Used downgrade refuses before any DDL if activated
+   or if marks/R/Resume links/V3 snapshots exist. No deleting evidence to downgrade.
+   Unused reverse restores exact assigned predecessor definitions/ACL/inventory.
+   Used recovery compatible source PAUSED/forward fix, never old0012 over used schema.
+
+Minimal schema delta additionally needs bounded same-chat Inbox checkpoint/pending/
+failed indexes (not full tenant scans), supporting composite identity/Audit keys,
+private helpers and exact capability grants. New tables have immediate purpose.
+Gate disable/restart does not reclassify transport history or grant action permission.
+Future collector reads bounded markers, never replays IGNORED or infers completeness
+from zero. TEST renewal remains separate authenticated provisioning with actual
+valid interval/source/schema binding; this task does not renew or access accounts.
+
+### 16.8. Конечные manual traces и будущие assertions
+
+Это **ручной design analysis, не выполненные tests/PASS**. H/A=mode, T=fresh Turn,
+r=confirmed R; default ON/P1/no pending. Save R:V+1; Resume:G+1/Fnew; mark:N+1.
+Каждая строка требует конкретного assertion через actual PG/API/worker/browser
+path; количество tests не target. Old invariants/caps не ослаблять.
+
+| ID / before | Action → after | Достаточное LOCAL/TEST evidence и account предел |
+|---|---|---|
+| NC01 H,G7,V20,N0; native «согласовали другой вариант», update нет | Resume409; OWNER_TEXT→r1/V21; Resume→A/G8/Fnew; Client «да»→V22/Tnew | PG/API V3 содержит r1 text, linked G8/N0 и current history;0 native Message/Outbox/File/send. Browser explicit review. Account absence update не completeness |
+| NC02 H после Console SENT,G7,V20,N0 | CANONICAL_SUFFICIENT→V21; Resume→G8; future Client→T | Snapshot tail содержит real manual ID/current text/SENT,0 resend. Browser two steps. Положительный Console путь не закрывает A08 |
+| NC03 A/r1; pre-Resume delayed и post-Resume immediate с одинаковым V2 | Обе истории first arrival→N1/hold, same A/G/F | Two PG arms identical outcome,0 false takeover/SENT; account timing не устраняет неразличимость |
+| NC04 fresh native затем duplicates | First N1; same key replay N1; new update_id/same semantic digest N1; changed content N2 | Normal normalizer/ingest, exact receipt/hash conflict409,0 V/G/Message; no observation reprocessing |
+| NC05 A/r1, manual DISPATCHING/UNKNOWN | NEW own echo/other bot/offline TRUE excluded; absent markers candidate→hold | PG closed origin matrix; UNKNOWN unchanged/no adapter call. Account records particular markers only, не универсальность |
+| NC06 H, native PHOTO/caption/unsupported | NONE/CANONICAL shortcut refused; OWNER_TEXT+UNAVAILABLE→PARTIAL; UNRESOLVED→Resume409 | API/UI media label,0 File/FETCH/WINNER/grant/send, no false native COMPLETE; D3 media scope |
+| NC07 A/r1, unseen post-Resume native без update | DB unchanged; future Client может пройти current guard | Нельзя требовать PG «обнаружил невидимое». Explicit D1 limit/UI Takeover-before-native, account observation не доказательство |
+| NC08 A/r1, native EDIT/DELETE | Mark/hold; old R immutable; Takeover→H; replacement/withdraw R→V+1 | PG/API new selected text or UNRESOLVED, old receipt equality, no manufactured Message delete. No-update limit NC07 |
+| NC09 H/r1,V21, queued canonical edit/delete | Pending/mark blocks Resume; MATERIAL applies; fresh R/Resume не оживляет invalidated T | Existing provenance→guard bridge; current caption/replaced/deleted/private image correct, original per-target increments retained |
+| NC10 две вкладки H/G7/V20 | Different keys same CAS: one R/V21, other409. Same key: ACCEPTED/REPLAY one result; changed body/actor/P/N/checkpoint conflict | API two connections/observed lock, one Audit, browser reload/no silent intent retarget |
+| NC11 saved R/Resume, revoke while authority waits | Committed revoke denies new+replay403; foreign ws/wrong same-ws Client/R/cursor denied | RLS/compound FK/private grants/HTTP;0 leak/write; browser clears shared views |
+| NC12 reconcile vs mark | Mark first→stale N; R first→V+1 then N+1 makes R not ready; rollback ingress→no mark/N | Actual two-connection barrier, commit/rollback; no timing guess/new sleep/budget |
+| NC13 Resume vs Client/Edit/native ingress | Ingress first→N/checkpoint/pending guard; Resume first→G/F then mark hold or normal post-F Client capture | Both commit orders, capture immutable; date/update_id not causal proof |
+| NC14 captured worker vs mark/Takeover | Hold first→no action; DISPATCHING first→later finalize allowed | Real GUARDS prepare/accept/begin, effect ledger, no Telegram live send |
+| NC15 R response lost/crash/deferred failure | Before commit0; after commit replay one R/V/Audit; later R2 stays current on replayR1 | API/process boundary, exact result/timestamp, whole-atom rollback; browser valid200+GET failure read-only |
+| NC16 Resume response lost then Takeover | Replay old AI receipt; fresh GET still HUMAN/new G; fulfilled R cannot activate newer G | Existing browser recovery journey extended with R binding; no double G/V/F/Audit |
+| NC17 old V2 worker or invalidated Turn, enable/restart | Old terminal replay readable; fresh action refused; new post-F input V3 | Upgrade/worker tests, exact V1/V2 hashes/snapshots/files/UNKNOWN; readiness rejects mixed source |
+| NC18 DISPATCHING crash/UNKNOWN/late echo/R/Resume | UNKNOWN stays, no return PENDING; permitted late finalize retains protocol | Existing persistent send ledger/token equality; no blind resend, missing ACK not SENT |
+| NC19 existing H/A NULL state, enable/pause/reenable | AI bootstrap hold; H needs R; PAUSED blocks; P+1 fresh H/R/Resume; used downgrade refused before DDL | Finite migration/DB/UI test, exact old exports; no VM actions |
+| NC20 pending/failed input and >16 history | Pending blocks; failed gap requires OWNER_TEXT; new failed seq/mark beyond R blocks; truncated=true | PG/API checkpoint CAS/failed-gap guards, no fake complete/backfill; owner attestation remains limited |
+
+Additional assertions within these risks: all counter overflows roll whole atom
+back; FK/trigger/late commit failure; stale scope response; Escalation N/P barrier;
+post-wait product deny plus exact old replay; V3 byte-bound refusal without action.
+No broad suite repetition solely for counts.
+
+Account A08/P-A03-09 requires separate C0 assignment: bounded approved test dialog,
+current valid TEST interval/source/schema/route/account binding and observations
+TEXT/PHOTO/echo/offline/unsupported/edit/delete/missing update. Redacted metadata,
+no raw/private content. NOT OBSERVED≠NOT POSSIBLE/COMPLETE; one account/timing
+cannot prove universal provenance/completeness/causality. Renewal/collector/live
+probe not part of this diff or of claimed LOCAL/TEST implementation evidence.
+
+### 16.9. Sources и конкретная передача
+
+Read: AGENTS/IMPL-001, original11/manifest and supplied originals (all11 exact);
+applicable Spec5.8–5.14/5.12.1/18.5–18.9, ADR002–007/024–026/180/267,
+MVP GJ-G/J+variants, Roadmap M3/M4, Implementation Plan M3.1/M3.2.
+Retained M3 turns/context/control/guards/Escalation and MATERIAL§15.2–15.9/§15.18,
+handoff decisions/assertions/register, latest C0/C8 receipts. Historical prefix
+status is not reasserted as current.
+
+| Actual source на accepted base | Design consequence |
+|---|---|
+| `backend/src/asm/telegram/{normalization,database}.py`;0012 ingress | V1 replay before V2; native ignored+sidecar without Inbox/Job. New mark belongs fresh routed branch, not reprocessing old ignored |
+| `conversations/{control,http,http_models}.py`;0009/0010 CONTROL | Three-field Resume/live OWNER/product/CAS, no native guard. Separate accepted R V required before existing exact control receipt |
+| `conversations/{turns,guards,material,escalations}.py`;0012 shared/current helpers | V2 snapshot members/current, no native handoff. Explicit V3/R+bounded history needed; sticky guards retained |
+| `messaging/{database,worker,http_models,http_service}.py` | Winning-token replay, permit only after commit, UNKNOWN; same effective history reader. R/observation not transport outcome |
+| `files/{service,database}.py`;0012 files_read_manifest | Canonical ownership/current ORIGINAL_READY/WINNER, no native file authority |
+| `frontend/src/{ConversationControl.tsx,conversation-control-api.ts,MessagingPanel.tsx,messaging-api.ts}` | Strict parser/memory intent/receipt≠current, valid200 recovery read-only |
+| Control/guards/provenance PG/API tests; `frontend/e2e/conversation-control.spec.ts` | Actual two-tab/revoke/ingress-wait/stale/UNKNOWN/old Resume replay boundaries to extend narrowly |
+
+Следующие **proposed write sets**, не разрешение на код сейчас. New migration
+filename не присваивает revision/reservation; C0 выдаёт exact predecessor/paths.
+No framework, Telegram client method, M4 implementation or empty tables.
+
+| Slice / dependency / owner review | Minimal exact paths |
+|---|---|
+| C0 decisions → C3 contract R2 only if comments | `docs/tasks/M3_CONTRACT.md`, `docs/tasks/M3_HANDOFF.md`, `docs/TASK_REGISTER.md`; ближайший scope до runtime authorization |
+| C2 schema/security design with C3 after D1–D4 | Proposed new `migrations/versions/m3_native_context.py`, `tests/test_m3_1_native_context_migrations.py`; existing `tests/test_tenancy_postgres.py`. Two tables/additions/FKs/RLS/Audit, shared locks/capabilities, unused reverse/used refusal; no applied edits |
+| C3 backend + C1 API/security review after schema contract | New `backend/src/asm/conversations/native_context.py`, `backend/src/asm/conversations/native_context_http.py`, `backend/src/asm/conversations/native_context_http_models.py`; existing `backend/src/asm/conversations/control.py`, `backend/src/asm/conversations/http.py`, `backend/src/asm/conversations/http_models.py`, `backend/src/asm/conversations/turns.py`, `backend/src/asm/conversations/guards.py`, `backend/src/asm/conversations/escalations.py`; `backend/src/asm/tenancy/database.py`, `backend/src/asm/messaging/database.py`, `backend/src/asm/telegram/database.py`, `backend/src/asm/billing/models.py`, `backend/src/asm/foundation.py`, `contracts/openapi.json`. Route wiring is actually foundation.py; V2 normalizer/hash need no change |
+| Focused C3/C1 assertions | New `tests/test_m3_1_native_context.py`, `tests/test_m3_1_native_context_postgres.py`, `tests/test_m3_1_native_context_api_postgres.py`. Existing `tests/test_m3_1_control_postgres.py`, `tests/test_m3_1_control_api_postgres.py`, `tests/test_m3_1_guards_postgres.py`, `tests/test_m3_1_turns_postgres.py`, `tests/test_m3_2_escalations_postgres.py`, `tests/test_m3_2_escalations_api_postgres.py`; NC risks via actual capabilities |
+| C5 paired UI after accepted API, C1 errors review | New `frontend/src/HumanContextPanel.tsx`, `frontend/src/HumanContextPanel.test.tsx`, `frontend/src/human-context-api.ts`, `frontend/src/human-context-api.test.ts`. Existing `frontend/src/ConversationControl.tsx`, `frontend/src/conversation-control-api.ts`, `frontend/src/ConversationControl.test.tsx`, `frontend/src/conversation-control-api.test.ts`, `frontend/src/MessagingPanel.tsx`, `frontend/src/billing-api.ts`, `frontend/src/billing-api.test.ts`, `frontend/src/BillingPanel.tsx`, `frontend/src/BillingPanel.test.tsx`, `frontend/e2e/conversation-control.spec.ts` |
+| C6 with C2, after accepted runtime tree | `backend/src/asm/foundation.py`, `backend/src/asm/telegram/provisioning.py`, `scripts/prepare_telegram_egress.py`, `scripts/test_telegram_egress.sh`, `scripts/test_telegram_egress_migration.sh`, `tests/test_telegram_egress.py`, `tests/test_telegram_egress_migration.py`, `tests/test_telegram_egress_postgres.py`, `docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md`; exact successor profiles/readiness/policy lifecycle, no live/renewal/optimization |
+| C3/C5 actual browser fixture only if needed | `scripts/m2_4_browser_fixture.py`, `scripts/m2_4_browser_worker.py`, `tests/test_m2_4_browser_fixture.py`; same capabilities, no forged receipt/send |
+| C8 → C0 | Independent review completed changed-risk tree/evidence; C0 integration/actual CI, then separate account/renewal/A12 assignments. No agents launched by this docs task |
+
+Все paths в future write sets — exact; actual assignment C0 определяет разрешения.
+Current tests/profile restorers
+requiring exact successor head are added only after specific dependency inspection,
+not via wildcard. No modification of original11, frozen migration/functions or
+old lane assertions. Budgets S/600/P720/fixed120/+480/S+1200/cleanup90/state25/browser25/
+foundation45 and3s/60s/10s unchanged; IMPL-05/broad optimization DEFERRED.
+
+### 16.10. C0 decisions и verification disposition
+
+| ID | Recommended decision / unresolved acceptance |
+|---|---|
+| D1 assurance/scope | Accept owner-confirmed available context with explicit unseen/native completeness limit. If unconditional provider-complete/causal guarantee is required, reject this implementation scope and choose another evidence channel/explicit LOCKED decision. No silent A08/M3 reduction |
+| D2 availability | Conservative N/P hold without automatic HUMAN, including ambiguous/delayed/fresh EDIT/DELETE; mandatory R for every new HUMAN→Resume. UI exposes AI plus blocked reason; no date heuristic |
+| D3 media | TEXT_ONLY description with UNAVAILABLE/PARTIAL, UNRESOLVED blocks Resume. If A08 requires actual native image bytes, separate File/source/grant scope before closure |
+| D4 concrete implementation | C1/C2 approve exact command/error/Audit/FK/lock graph, V3 bound/checkpoints/failed-gap rules; C0 assigns predecessor/revision and owner allowlists. Current table is proposal, no runtime authorization |
+
+Source/manifest/accepted head/tree inspection выполнены на exact checkout до сбоя
+локальной среды. После authoring среда потеряла exec-server/filesystem connection;
+повторное восстановление не состоялось. Финальные документы подготовлены от exact
+GitHub base blobs с append-only prefix, read-back/hash/changed-path/whitespace/link
+проверками, перечисленными в canonical return. **Local git diff --check для final
+candidate NOT RUN** из-за environment failure; whitespace/conflict-marker check
+выполнен отдельно и не выдаётся за запуск git. Product runtime/PG/browser/build/
+services/install/CI actions NOT RUN by scope. Это reviewable proposal с явным
+ограничением verification, не native runtime PASS.
+
+Next minimal scope: C0 decision record + точечные C1 API/security и C2 schema/
+serialization reviews; C3 R2 только по конкретным замечаниям. Ни migration/runtime
+branch/PR, ни TEST interval/probe/deploy пока не выданы. C3 return REVIEW, затем
+HOLD; C1/C2/C5/C6/C8 HOLD до собственных назначений. P-01/A08/M3 остаются OPEN.
+
