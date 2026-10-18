@@ -2,7 +2,54 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — исправления тестов объединены; полный stock gate впереди / 2026-10-18 UTC
+## Текущий статус — stock105 PASS; C6 host/operator и C5 Console source-only / 2026-10-18 UTC
+
+[C0 acceptance6254556203](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6254556203).
+**C6/C5 ACTIVE; C1/C2/C3/C8 HOLD.** Existing planned contract§16.7/16.9 work;
+no new product requirement. M3 IN_PROGRESS.
+
+| Task / finding | Current status |
+|---|---|
+| Native DB/API/runtime, C2 DB-R3/R4, C3 runtime R1/PG-R2/R3 | INTEGRATED / VERIFIED LOCAL/TEST on full dedicated stock carrier |
+| C0-NC-CARRIER-01/P2 | CLOSED: Audit observer and11 formerly blocked runtime cases PASS |
+| C0-NC-CARRIER-02/P2 | CLOSED: actual distinct ordinary/marker Turn routes; both timezone cases PASS |
+| C3-NC-RUNTIME-01/P2 | CLOSED LOCAL/TEST: five-status UTC6/all-shape strict interoperability PASS |
+| C6 runner-R3 | INTEGRATED / VERIFIED scoped runner/catalog/cleanup retained |
+| C6-M3.1-NATIVE-CONTEXT-HOST-R1 | IN_PROGRESS/source-only; exact0013 host profile/readiness and policy operator; no activation |
+| C5-M3.1-NATIVE-CONTEXT-CONSOLE-R1 | IN_PROGRESS/source-only; accepted owner context/Resume flow and paired TS readers |
+| Whole host/Console integration, C8/full CI | NOT VERIFIED / separate next gate after both returns |
+| Whole M3/account/renewal/collector/A12 | IN_PROGRESS / later gates OPEN |
+
+Run39160997284/attempt1/job117774086948 SUCCESS/all13 steps SUCCESS.
+Exact5d98651d2c34314724a12283d1741e73594e16b8/treea1989f20284c201bfd58bafe12c174544f1eb3c1:
+105/105 (7+56+12+30),315 phase reports PASS,0skip/xfail/deselection;
+51 runner+130subtests PASS/5.130s; native549.027s/receipt579.043s within20m.
+C0 independently checked288 source bytes/modes, all105 ordered IDs/98 guarded
+resets/actual LOGIN roles, fresh167 functions/45 tables/635 columns/ACL, cleanup/
+finalclean. Full profile c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411.
+Artifact12149291601,38 files,3034275 bytes,expires2026-10-25;
+ZIP SHA25606553fcec3c0b6408c9061bcf4305b03721c0fad80ee5823a389523c0879f6a8.
+Historical39154853068 FAIL92/105 retained. Approval6254432619 consumed once;
+execution stays5d98651, no further ref/run permission. Current foundation0012
+refusal on actual0013 is retained historical evidence, not new-host acceptance.
+
+New docs-only preparation sole parent5d98651; only HANDOFF/register,
+286 other leaves unchanged. Full exact tasks/allowlists are current HANDOFF§0.2/§0.3.
+Branches c0/m3-1-native-context-host-console-r1,
+c6/m3-1-native-context-host-r1, c5/m3-1-native-context-console-r1 use the same
+new exact prepared SHA/tree supplied in canonical comments; no moving sibling base.
+C6 explicitly owns the two named readiness-test exceptions plus appended host
+cases; all other current native cases/assertions frozen. C5 owns TS/UI/browser
+fixture source only. Both retain old behavior and report actual local verification;
+source-only cannot be reported as actual PG/browser/host rollout PASS.
+
+Main e205e22051bc06295758b504d84699652b176c15/schema0012, PR34 closed/merged unchanged.
+No services/PG/browser/Actions/execution ref/full CI/new PR/VM/provider/S3/LLM/
+live/deploy/renewal/other agents in these tasks. No0014/applied migration changes.
+C0 combines/reviews then assigns C8/real gates; user owns merge.
+Contract9/Q01/MATERIAL11/prior closures/D1/D2/D3 and caps preserved; M4 out.
+
+## История — Текущий статус — исправления тестов объединены; полный stock gate впереди / 2026-10-18 UTC
 
 [C0 source acceptance6254398312](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6254398312).
 C2 DB-R4 d694e24638ae133fe9412b3f7cde73acb0089be3 и C3 PG-R3

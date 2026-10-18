@@ -5,7 +5,306 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий шаг C0 — полный stock после двух исправлений тестов / 2026-10-18 UTC
+## 0. Текущая выдача C0 — stock105 PASS; C6 host/operator и C5 Console / 2026-10-18 UTC
+
+[C0 actual acceptance6254556203](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6254556203).
+**C6 и C5 ACTIVE по двум source-only задачам ниже; C1/C2/C3/C8 HOLD.**
+Это уже предусмотренные контрактом§16.7/16.9 части выбранной функции.
+Новых требований к продукту нет. Native DB/API/runtime slice INTEGRATED/VERIFIED
+LOCAL/TEST; whole host/Console application integration not yet accepted; M3 IN_PROGRESS.
+
+### 0.1. Actual accepted checkpoint
+
+Run39160997284/attempt1/job117774086948 SUCCESS, all13 steps SUCCESS:
+source **5d98651d2c34314724a12283d1741e73594e16b8**,
+tree **a1989f20284c201bfd58bafe12c174544f1eb3c1**,
+ordered parents C2 d694e24638ae133fe9412b3f7cde73acb0089be3 then
+C3 e4ac5afa12174317b39097de042f131f5820cb74.
+**105/105 PASS =7 source+56 DB+12 API+30 runtime**;315 phase reports PASS,
+0skip/xfail/deselection. Runner51+130subtests PASS/5.130s.
+Native549.027s,receipt579.043s within20m. Approval6254432619 CONSUMED ONCE;
+execution ref stays5d98651, no further ref/run permission.
+
+C0-NC-CARRIER-01/02 and C3-NC-RUNTIME-01 CLOSED LOCAL/TEST.
+Actual full Audit observer/10 terminal boundary cases+ACK-loss recovery now PASS.
+Actual five-status UTC6 history in both timezones/all shapes, strict parsers/
+digests/storage/Outbox invariance and unchanged old cases PASS.
+Historical39154853068 FAIL92/105 retained; no result erased.
+
+Artifact12149291601,38 files/3034275 bytes,expires2026-10-25;
+ZIP SHA25606553fcec3c0b6408c9061bcf4305b03721c0fad80ee5823a389523c0879f6a8.
+C0 independently checked all288 archived source bytes/modes, source tar
+c891811cff4ed9144eff07604cf94887f3342a221741f22a1650f56b065606b3 and manifest
+c2053a6ac06da85c914d218ee063d8b32cf8f0e0172c8be8238a92ac41448ac0.
+Exact105 ordered node IDs/hash9881ab5a77aca51a7d6c66737c352055cd4f037acf156e55f265cedeabb24b1a,
+98 guarded resets/current shared fixture, actual LOGIN roles/owned resources,
+complete catalog, cleanup and final clean tree independently verified.
+Actual PG18.6/vector0.8.6/btree_gist1.8/Python3.13.16/uv0.10.0/Docker28.0.4;
+57 frozen external distributions, all catalog/carrier/process exits0.
+
+Independent full profile **c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411**:
+167 typed functions/unique OIDs including verifier,45 tables/635 columns/ACL exact.
+Nonfunction57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370;
+verifier527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac.
+This tested source still deliberately refuses0013 at foundation readiness.
+C6 must pair that boundary and retain explicit incompatible-reader evidence;
+C5 adds the existing specified owner flow. Neither task may activate the feature.
+
+This preparation is docs-only, sole parent5d98651; only HANDOFF/register differ,
+286 other leaves exact/288 total. Exact new SHA/tree and branches are supplied
+by canonical C0 task bindings. Do not start from a moving sibling branch.
+C0 preparation branch c0/m3-1-native-context-host-console-r1.
+
+### 0.2. C6 exact source task
+
+**C6-M3.1-NATIVE-CONTEXT-HOST-R1 — paired schema/readiness and LOCAL/TEST policy operator; source-only.**
+
+Repository Elefesys/ai-service-manager. Branch c6/m3-1-native-context-host-r1.
+Start only from the exact C0 preparation SHA/tree in this task's binding; its sole
+parent is the accepted stock source5d98651d2c34314724a12283d1741e73594e16b8.
+Separate clean checkout; exact commit/tree/original11=canon=SOURCE_MANIFEST.
+Read current HANDOFF/REGISTER/AGENTS/IMPL-001, applicable Spec5.8–5.14/18.5–18.9,
+ADR002–007/024–026/180/266/267, MVP GJ-G/J, Roadmap/Plan M3 and accepted
+M3_CONTRACT§16–16.20, especially§16.7/16.7.1/16.9/16.15.
+This is the already planned host/operator completion of native context, not a
+new feature or authorization to activate it. C5 has disjoint Console work.
+
+**Exact write set, existing paths only:**
+- backend/src/asm/foundation.py
+- backend/src/asm/telegram/provisioning.py
+- scripts/provision_telegram_test.py
+- scripts/prepare_telegram_egress.py
+- scripts/test_telegram_egress.sh
+- scripts/test_telegram_egress_migration.sh
+- tests/test_foundation.py
+- tests/test_m2_3_setup.py
+- tests/test_telegram_egress.py
+- tests/test_telegram_egress_migration.py
+- tests/test_telegram_egress_postgres.py
+- tests/test_m3_1_native_context_postgres.py — only readiness subpart of
+  test_fresh_catalog_exact_security_and_foundation_fail_closed; other bytes frozen.
+- tests/test_m3_1_native_context_runtime_postgres.py — only
+  test_python_foundation0012_still_refuses_actual_native0013 and append focused
+  actual PG host/policy-wrapper cases; all other current definitions frozen.
+- docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md
+
+C0 explicitly includes the actual operator CLI and paired foundation/setup/native
+readiness tests found in source. No other path without a concrete C0 finding.
+Do not edit C0 docs, contract, SQL/migrations0001–0013, native backend/API/parsers,
+OpenAPI, C5 frontend/browser fixtures, CI/stock runner/deps/locks/compose/images.
+No0014 and no used0013 in-place reapplication.
+
+1. Pair current application/provisioning readiness with exact schema0013, preserving
+the frozen tenancy.v1 revision0003 and role/PG18/vector0.8.6 fail-closed checks.
+API/Worker/Scheduler must use the same accepted schema boundary before admission.
+Keep historical0012 MATERIAL profile/reader/recovery semantics exact and introduce
+a distinct0013 native profile (167 typed functions/unique OIDs,45 tables/635 ordered
+columns, exact bodies/security/ACL). Do not wildcard revisions or widen a legacy
+profile. Current material_source_profile scans all migration files and refuses0013:
+bound the retained0012 source inventory explicitly, preserving its132 functions/
+42 tables/all assertions, then validate the separate native successor. The historical
+source/image-switch helper remains0007-only; do not turn it into a generic DDL switch.
+
+2. Implement commit_native_context_policy through the already accepted capability
+platform.human_context_policy_command(uuid,uuid,text,text,text,bigint,jsonb,jsonb)
+only. Strict closed ENABLE/PAUSE request, key/CAS/binding/source profile and result
+per§16.7.1; exact actual session_user=asm_migrator, LOCAL/TEST DB and READ COMMITTED.
+No runtime/owner HTTP toggle, direct policy/receipt/Audit DML, auto-enable, billing
+initialization/renewal, provider discovery/probe/setWebhook or external HTTP in the
+native-policy path. Existing explicit Telegram setup behavior stays separate.
+Use bounded redacted diagnostics; no secret/key/hash/provider/raw-body logging.
+
+Before a policy mutation, host must verify clean C0-approved source/tree, exact
+installed0013 catalog and matching approved API/Worker/Scheduler/Console profile.
+Drained old processes is explicit operator attestation, never inferred DB knowledge.
+Missing/unpaired C5 profile refuses; this task cannot claim Console readiness from
+the starting tree. Do not accept a caller trusted=true assertion in place of actual
+source/catalog/binding checks. Wire an explicit operator invocation in the existing
+CLI/host surfaces as needed; none may run automatically on start/migration/health.
+After exact old-key replay, read current policy separately; historical accepted ON
+must not overwrite/enable a currently PAUSED policy. Preserve previous accepted
+receipt when current-read fails; retry read, not manufacture a fresh command.
+
+3. Add narrow unit/PG evidence carriers for the host boundary: exact0013 readiness
+positive and mismatched0012/unsafe role failures, absent/mixed source or Console
+profile refusal before mutation, no external calls, strict policy DTO/rollback/
+commit-before-result, ENABLE/no-op/PAUSE/CAS/conflict, committed ENABLE→later PAUSE→
+old replay with current PAUSED, retained no-op counters/Audit/receipt semantics.
+Use real SQL capabilities for successful authority. Negative DML seams must be
+explicit; no fabricated accepted receipt/permission/current state.
+
+**Explicit readiness-test exception:** the two existing native PG tests currently
+prove deliberate0012 refusal. Pair new0013 positive with explicit retained0012
+reader refusal; do not simply delete the negative or relabel an old PASS. Preserve
+their catalog/security assertions and all existing105 node IDs. The original C2/
+C3 byte-prefix freeze is relaxed ONLY inside those two named readiness definitions
+for this assigned change; every other current test/fixture/assertion stays exact.
+New focused cases may be appended; existing source/runtime cases cannot be removed,
+skipped, xfailed or reduced. Keep distinct historical profiles/pins/evidence.
+
+4. Update the runbook with concrete prepare/check/drain/upgrade/pair/operator/
+current-read/PAUSED recovery order, bounds and separate account authorization.
+No command is execution permission. Existing S600/P720/fixed120/+480/S+1200,
+cleanup90,state25,browser25,foundation45,stock20m and request3s/60s/10s unchanged.
+No CI optimization or new product requirement.
+
+**Allowed local verification:** current clean checkout imports and existing frozen
+Python3.13; compile/Ruff/format/mypy changed Python; complete relevant unit modules
+(test_foundation,test_m2_3_setup,test_telegram_egress,test_telegram_egress_migration);
+full four-module native collect-only and relevant host-PG collect-only, no service.
+Report exact commands/results/added node IDs and untouched old assertions/profiles.
+Do not rerun unrelated unchanged suites just for counts. If runtime evidence needs
+another path/profile change, report precise dependency to C0, do not expand silently.
+
+**NOT authorized:** PG/Docker/services/lab startup/reuse/cleanup, Actions/execution
+ref/dispatch/rerun/full CI, new PR/main/VM/provider/S3/LLM/live/deploy/renewal or
+other chat/agent launches. Source task does not execute operator policy commands.
+Return REVIEW→C6 HOLD with exact commit/tree/parent, actual local evidence and
+PG/operator/host rollout NOT RUN; source-only is not VERIFIED. Normal FF with
+expected prepared head/force=false, no amend/rebase/force. C0 integrates C5/C6,
+reviews readiness exceptions and separately authorizes required real gates.
+User owns merge.
+
+### 0.3. C5 exact source task
+
+**C5-M3.1-NATIVE-CONTEXT-CONSOLE-R1 — owner context review and explicit Resume; source-only.**
+
+Repository Elefesys/ai-service-manager. Branch c5/m3-1-native-context-console-r1.
+Start only from the exact C0 preparation SHA/tree in this binding; its sole parent
+is accepted stock source5d98651d2c34314724a12283d1741e73594e16b8. Separate clean
+checkout; exact HEAD/tree and supplied original11=canon=SOURCE_MANIFEST. Read
+current HANDOFF/REGISTER/AGENTS/IMPL-001; applicable Spec5.8–5.14/18.5–18.9,
+ADR002–007/024–026/180/266/267, MVP GJ-G/J and Plan/Roadmap M3; M3_CONTRACT§16–16.20.
+The accepted current Python models/OpenAPI at this exact source define wire truth.
+C6 has disjoint host/schema/operator work; do not follow its moving branch.
+
+**New paths allowed:**
+- frontend/src/HumanContextPanel.tsx
+- frontend/src/HumanContextPanel.test.tsx
+- frontend/src/human-context-api.ts
+- frontend/src/human-context-api.test.ts
+
+**Existing paths allowed, only paired native-context integration:**
+- frontend/src/ConversationControl.tsx
+- frontend/src/conversation-control-api.ts
+- frontend/src/ConversationControl.test.tsx
+- frontend/src/conversation-control-api.test.ts
+- frontend/src/MessagingPanel.tsx
+- frontend/src/MessagingPanel.test.tsx
+- frontend/src/App.test.tsx
+- frontend/src/style.css — only necessary panel styles; no global redesign.
+- frontend/src/escalation-api.ts
+- frontend/src/escalation-api.test.ts
+- frontend/src/escalation-fixtures.test-helper.ts
+- frontend/src/EscalationsPanel.tsx
+- frontend/src/EscalationsPanel.test.tsx
+- frontend/src/billing-api.ts
+- frontend/src/billing-api.test.ts
+- frontend/src/BillingPanel.tsx
+- frontend/src/BillingPanel.test.tsx
+- frontend/e2e/conversation-control.spec.ts
+- scripts/m2_4_browser_fixture.py
+- scripts/m2_4_browser_worker.py
+- tests/test_m2_4_browser_fixture.py
+
+The last three are only for the existing synthetic browser carrier through real
+accepted capabilities; no forged reconciliation/Resume/send receipt or successful
+authority DML. C0 explicitly includes affected MessagingPanel/App tests and scoped
+styles. No backend/API/OpenAPI/SQL, host/operator, contract/C0 docs, manifests/locks,
+CI/runner, new dependency or unrelated UI change. If another path is necessary,
+return the exact integration reason to C0 first.
+
+1. Implement strict parsers for the three accepted human-context routes:
+GET state, GET observations(limit/cursor), POST reconcile. Closed object keys/
+unions/cross-field invariants exactly pair Python/OpenAPI; canonical UUID/decimal
+strings, UTC6 timestamps, nullable keys, scalar Unicode/no NUL/surrogates and exact
+TEXT/PHOTO/UNSUPPORTED/DELETE preview rules. Preserve ordered blockers and current/
+through epochs/cursor bounds and scope. Reject malformed/unknown responses closed;
+no coercion, trimming/normalization, silent truncation or generic JSON fallback.
+Do not request backend fields/endpoints absent from the accepted source.
+
+POST keeps exact actor/ws/C/Client/key/body and full CAS, including P/N/checkpoint/
+input hash/current revision. Measure the entire serialized UTF-8 JSON body <=4096
+bytes including envelope/escaping, not text length alone. Expose usable size/error
+feedback without hashes/counters/internal protocol in the product flow. Three
+dispositions OWNER_TEXT/CANONICAL_SUFFICIENT/UNRESOLVED, explicit attestation and
+source_media NONE/UNAVAILABLE; render the applicable choices/limitations honestly.
+
+2. Owner UI shows current saved full context separately from editable replacement
+and provider observations. Prefill current text but require explicit replacement/
+withdrawal confirmation; omitted old facts are not merged back. Save action
+«Сохранить сверенный контекст» is separate from «Разрешить автоматику».
+Save does not Resume/Takeover/send; resumed AI state does not claim an AI answer.
+Explain Takeover before native discussion, unavailable photo/content, text-only
+owner assertion and the inability to prove completeness/causality from N0/no updates.
+Native observation is a signal, not a proven owner agreement. No synthetic Message,
+Outbox, File/FETCH/vision or M4 behavior.
+
+Render policy OFF_UNUSED/ON/PAUSED, review/coverage/resume blockers and
+automation_work IDLE/WAITING_CONTEXT/OPERATOR_REQUIRED in understandable language.
+IDLE is not proof that an old request was answered; terminal hold is not a retry/
+restart/new-send button. PAUSED blocks new Resume but permits allowed review/save/
+Takeover/manual work. Preserve existing manual DISPATCHING/UNKNOWN visibility and
+all product/billing authorization. Context confirmation never grants send permission.
+
+3. Memory-only request recovery bound to actor/ws/C/Client. Lost commit/network ACK:
+same key/body after session/CSRF recovery; no silent new intent/rebase/repost.
+Valid200 or saved replay + failed current GET retries only GET. Current GET, not
+historical acceptance, determines displayed R/mode/allowed actions. R1 replay after
+R2 leaves current R2. Two-tab stale CAS refreshes and requires a fresh explicit
+choice; late response from old scope cannot repopulate the new view. Revocation
+clears protected view. Cursor-stale refreshes first page; pagination/reading is not
+attestation. No local/session storage of private context or automatic background POST.
+
+4. Pair existing control error parser/UI with all accepted native409 codes while
+retaining exact BILLING_STATE_UNAVAILABLE/state_reason503. Pair Escalation strict
+reader with nullable context_hold and reason/P/N/coverage; hold cannot claim current
+can_resolve=true or rewrite status/validity/cancel/replay semantics. Pair both Audit
+variants HUMAN_CONTEXT_RECONCILED and HUMAN_CONTEXT_POLICY_COMMANDED, exact actor/
+payload/object-version invariants and safe readable labels; no owner policy toggle.
+Retain old closed variants and response/error strictness.
+
+5. Focused Vitest/API/component tests cover body4096/4097 including Unicode/escaping,
+all dispositions/preview unions, stale/foreign/malformed projection/cursor, both
+policy states/hold/unknown visibility, old replay/new current, valid200+GET failure,
+session/CSRF/Owner revoke and cross-scope late responses, full replacement and
+separate explicit Resume. Preserve existing assertions/cases, add only meaningful
+new risks. Extend existing browser control spec and synthetic fixtures for actual
+Takeover→reconcile→Resume, replacement/stale tabs/replay/hold, through real API/
+capabilities. Real browser/PG execution is a later paired C0 gate; mocks are not it.
+
+**Local verification allowed:** existing frozen Node24/npm dependency environment,
+typecheck, complete impacted Vitest files and frontend build with generated output
+outside the checkout or cleaned before return; no package/lock changes. Current
+frozen Python3.13 imports/compile/Ruff/mypy and complete browser-fixture unit module
+if changed; full Playwright collection/list only (not service/browser execution).
+Report exact commands/results and which scenarios are mocks versus future actual
+carrier assertions. Do not rerun unrelated suites simply to increase counts.
+
+**NOT authorized:** PG/Docker/service/lab startup/reuse/cleanup, real browser/API/
+provider/account/VM calls, Actions/execution ref/dispatch/rerun/full CI/new PR/main/
+deploy/renewal, other chats/agents. No source-only evidence promoted to E2E VERIFIED.
+All caps and Contract9/Q01/MATERIAL11/D1/D2/D3 constraints retained.
+Return REVIEW→C5 HOLD: exact source commit/tree/sole parent/branch, changed files/
+wire mappings, actual local results, retained cases and PG/browser NOT RUN.
+Normal FF with expected prepared head/force=false, no amend/rebase/force. C0 reviews
+combined C5+C6 source and then assigns independent C8/real integration gates.
+User owns merge.
+
+### 0.4. Retained integration boundary
+
+C0 reviews exact C5/C6 returns, consolidates their disjoint write sets and assigns
+independent C8/required actual integration gates. Current stock PASS covers the
+accepted DB/API/runtime source; it cannot be transferred automatically to new
+host/Console code. No executor starts services/PG/browser/Actions or accesses VM/
+provider/account under these source-only tasks. No new product scope or blanket
+test rewrites. Main e205e22051bc06295758b504d84699652b176c15/schema0012 and PR34
+closed/merged unchanged; execution remains accepted5d98651. No0014/applied edits.
+Contract9/Q01/MATERIAL11 and prior closures/D1/D2/D3/budgets retained.
+Account/A08/P01/P05/TEST renewal/collector/A12 later; M4 out/IMPL-05 deferred.
+User owns merge.
+
+## История — 0. Текущий шаг C0 — полный stock после двух исправлений тестов / 2026-10-18 UTC
 
 [C0 source acceptance6254398312](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6254398312).
 **C2 DB-R4 и C3 PG-R3 INTEGRATED source; C1/C2/C3/C5/C6/C8 HOLD.**
