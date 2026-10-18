@@ -5,7 +5,178 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий статус — NATIVE-CONTEXT R2 REVIEW / 2026-10-18 UTC
+## 0. Текущая выдача C0 — C2-M3.1-NATIVE-CONTEXT-DB-R1 / 2026-10-18 UTC
+
+**NATIVE-CONTEXT R2 принят в contract/design scope. C2 получает реализацию DB protocol,
+первый ограниченный checkpoint; остальные авторы HOLD.**
+[C0 acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6246954666),
+[C1 R2 PASS](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6246639567),
+[C2 R2 PASS](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6246768008).
+Все9 contract findings CLOSED, Q01 RESOLVED; aliases coverage — один finding.
+Это не runtime/PG/account PASS. M3 IN_PROGRESS; P-01/A08, renewal/collector/account/A12 OPEN.
+
+### 0.1. Принятый источник, очередь и следующий checkpoint
+
+Accepted contract: **0cdd66cc135c8797224e8dc0e87bc3280ad446c1**,
+tree **11335a808d4468c78af17501849c52202b811ff7**; sole parent
+315c42e2ef03ace056279fe019efef5100665c7c. Runtime main остаётся
+**e205e22051bc06295758b504d84699652b176c15**, tree85206b9c66ac151f3847aa39f46fb75663a18b91,
+schema0012. MATERIAL INTEGRATED/VERIFIED LOCAL/TEST/all11 CLOSED сохраняется.
+
+Старт — **exact C0 preparation commit**, sole parent которого равен accepted R2.
+Он меняет только этот handoff и docs/TASK_REGISTER.md; полный SHA/tree публикуются
+в canonical C0 task PR34. C0 создаёт отдельную ветку **c2/m3-1-native-context-db**
+на этом commit. C2 продолжает её в отдельном checkout обычными fast-forward commits;
+не начинать от main/старого R1 и не менять C3 contract branch.
+Shared disk/память другого чата не предполагаются.
+
+**C0 назначил revision0013/down_revision0012**,
+path migrations/versions/0013_native_context.py. Applied0001–0012 frozen.
+Reservation0013 принадлежит этому native slice; renewal не получает competing head.
+При изменении accepted main/schema или конфликте reservation сообщить C0 до публикации,
+без rebase/force/переименования применённых revisions.
+
+M3_CONTRACT R2 целиком frozen: **714947 UTF-8 bytes**,
+SHA256 **d032a4b699767f58f60288fbe17808b69bf98627d8c11acb8df2c9a439ae8346**,
+blob ef2df1e6ba8369fc2d3321e4b6c44ee98a0e42a7.
+Through§15.18 по-прежнему603955 bytes/SHA2569643365fa8b534d6cf37a181c7c03ed76bd16b9d559016794b377b9a1eb1064b.
+PROPOSED/OPEN/unassigned в exact§16 — история фазы review; текущая выдача заменяет
+эти статусы/резервацию, technical decisions R2 не меняются. Evidence append после
+R2 разрешён только вместе с содержательным DB кодом, не вместо него.
+
+Порядок зависимостей: C2 DB checkpoint → C0 source/DB intake → отдельные C3 backend/API/
+worker/paired Audit-V3 consumers и C6 exact source/schema compatibility scopes →
+C5 Console → C8/CI/integration → отдельные renewal/collector/account/A12.
+Это порядок подготовки, не разрешение начать следующие роли.
+DB checkpoint отдельно **не merge-ready и не deployable**: current foundation
+ожидает0012, current Python/TS readers не V3. Readiness на0013 должна fail closed
+до coherent paired source. Не поднимать readiness version/ослаблять profile для
+обхода этой зависимости. C0 откроет новый PR после source intake и готовности
+согласованного состава; gates перед merge сохраняются, merge за пользователем.
+
+### 0.2. Точная write allowlist — пять paths
+
+| Path | Разрешённая цель |
+|---|---|
+| migrations/versions/0013_native_context.py (NEW) | Вся DDL/SQL delta R2:3 private tables, supporting existing columns/keys/indexes, RLS/ACL/typed Audit, complete DB commands/readers/guards/recovery, exact predecessor restore |
+| tests/test_m3_1_native_context_migrations.py (NEW) | Real PG migration/catalog/RLS/FK/unused reverse/used refusal-before-DDL и exact source inventory; SQL/pure contract checks при необходимости |
+| tests/test_m3_1_native_context_postgres.py (NEW) | Focused actual runtime-role capabilities/transactions/read races/coverage/replay/WAIT/policy/rollback tests; synthetic disposable LOCAL/TEST only |
+| tests/test_tenancy_postgres.py (EXISTING) | Только точная0013 native inventory/typed Audit/privilege/constraint delta; сохранить прежние assertions и historical profiles, no wildcard/skip |
+| docs/tasks/M3_CONTRACT.md (EXISTING) | Append§16.11+ после всего frozen R2: exact implemented SQL signatures/columns/source linkage/indices/result schemas, evidence/limitations и handoff; не менять принятую семантику |
+
+Это permission, не требование менять каждый path. C0 owns HANDOFF/TASK_REGISTER/AGENTS.
+Backend modules/HTTP/OpenAPI/TS/frontend/host provisioning/foundation/readiness scripts/
+CI/workflows/Compose/images/dependencies/lockfiles/original11/manifest и applied migrations
+не выданы. Новый path — concrete proposed diff/reason C0 до применения.
+Не исправлять unrelated suite failures молчаливым расширением scope.
+
+### 0.3. Реализуемый результат и обязательные границы
+
+Полный DB protocol§16 в0013, без пустых future stubs. Три private tables и Job marker
+должны обслуживаться реальными SQL capabilities/tests; private policy command
+не заменяется direct test UPDATE policy. Initial OFF_UNUSED/P0 сохраняет old paths,
+все new capabilities fail closed при неподходящей authority/source/schema/policy.
+
+1. Exact stable ws+C+Client/connection/chat/source/actor/Audit identities,
+   immutable observation/reconciliation/policy receipt, source→mark linkage для
+   **каждого** fresh-key duplicate. First source witness alone недостаточен.
+   Supporting association columns/keys/indexes допускаются в0013; новых generic
+   frameworks/tables сверх трёх не выдаётся. NOT NULL/closed IS TRUE variants,
+   no partial-NULL bypass, no FK к current counters/claim token.
+2. FORCE RLS/private ACL/nonowner runtime; PUBLIC revoke; exact regprocedure/OID/
+   owner/search_path/volatility/full-body/callee inventory. Live OWNER commands,
+   separate token-only work replay и real session_user=asm_migrator policy command
+   имеют разные authority. Private stable projections/hash/effective formatters
+   не доступны произвольным runtime SELECT/EXECUTE.
+3. R/Audit/pointer атомарны: C/actor→Audit→R→один C pointer/N/V UPDATE.
+   Resume выбирает R и пишет historical links в одной transaction с existing G/F;
+   replay не восстанавливает pointer/mode. OFF_UNUSED fresh legacy NULL relation
+   и retained receipts сохраняются; new used-policy nullable bypass запрещён.
+4. Exact STABLE C/Turn one-SELECT projection, без VOLATILE descendants/expressions/
+   policies. После authority/connection/C/Turn waits — отдельный SQL command;
+   post-write read — следующий command. Frozen message_effective и own-write
+   invariant helpers сохраняются; no DML-CTE snapshot shortcut.
+5. Same-chat pending/failed/unsequenced classifier, protected input hash/CAS,
+   ordered distinct gap digest≤1024/probe1025. Pending→FAILED Job/Inbox-only race
+   видит одно из состояний. Indexed source linkage/union/pending/checkpoint,
+   без full tenant/history scan и без foreign Job/Inbox locks.
+   No-C MATERIAL queue/defer/fold/initial suppression сохраняется; NULL не no gap,
+   old IGNORED не backfill. Successful captured Client/duplicate не новый gap.
+6. Coverage guard на R/Resume/prepare/accept/begin/Escalation/TEST: latest17 из
+   всех canonical Messages, OWNER_TEXT отдельно полностью, current+saved input.
+   Normal Client после Resume не сравнивается навечно с R.accepted V/checkpoint.
+   Own accepted outbound eviction отказывает до permit,0 adapter call.
+   V3 final-body digest/bounds/exact schema type/SQL validators/counts, V1/V2
+   bytes/results unchanged. Python/TS парные consumers — последующая выдача.
+7. Dedicated CONTEXT_WAIT не проходит generic terminal rejection/reschedule
+   path. Same Job/intent/Turn revision,5 claims/15min/30s/backoff≤60 и due<deadline;
+   commit-before-outcome, saved wait replay никогда не permit. Marker CHECK
+   корректен на каждом UPDATE; next claim/reclaim/maintenance/early turn_supersede/
+   stale/product/terminal exits не оставляют ложный WAITING_CONTEXT.
+   Exhaustion/permanent hold видимы, no revival/new key/revision/budget reset.
+8. Full lock graph включая implicit RI/own-XID: connection before C для fresh
+   RESOLVE и admissions; completion/SENT/File не получает connection dependency.
+   Retained FINAL/EXPIRED/replay/cancel/timers/assignee/CAS/overflow priority.
+   В нормальном Takeover→R recovery первый G change может уже cancel E; R не
+   закрывает terminal повторно. Context_hold read/list uses waiting V.
+9. Replayable policy ENABLE/PAUSE/no-op, trusted session_user, source/schema/
+   binding/CAS/key/hash/typed Audit и caps. Lost enable ACK→newer pause→old replay
+   оставляет PAUSED/P. No-op different keys допустимы без counter bump.
+   Fresh ENABLE использует existing post-wait billing locks/clock; PAUSE не
+   зависит от expired send entitlement. SQL command tests разрешены только
+   в disposable synthetic DB с фактическим migration actor/profile; fabricated
+   application readiness/profile PASS запрещён. Host operator runner ещё не выдан.
+10. Exact upgrade0012→0013, repeat/current-head no-op и populated preservation;
+    unused reverse exact0012 inventory/bodies/ACL/data. Used refusal55000 до
+    любого DDL по all native used markers, включая receipts/Jobs/V3; old0012
+    transport history сама по себе не native usage. Counter/FK/Audit/commit failure
+    whole rollback; changed-SENT single target/one C+2, no-op+1,UNKNOWN/private
+    File/WINNER сохранились. Old assertions/caps не ослаблять.
+
+Прочитать current AGENTS/IMPL-001, Spec/ADR/MVP/M3–M4 sources и весь accepted§16,
+оба PASS и C0 acceptance; для effective SQL реальная0009→0010→0011→0012 replacement
+chain обязательна. LLМ не authority для critical state; D1/D2/D3 limits не меняются.
+Если concrete implementation выявит contradiction — exact trace/diff C0, не
+молчаливое новое semantic решение.
+
+### 0.4. Проверка и возврат
+
+Разрешены focused unit/source checks, Python3.13/Ruff/format и реальные PG18 checks
+этого DB slice в **собственных disposable asm_local/asm_test**. Existing pinned
+локальный test setup/locked dependencies допустимы без изменения manifests;
+нет платных внешних API/production данных. Shared/live/VM DB-S3 запрещены.
+При недоступном PG вернуть законченный source/patch и явный NOT RUN; не выдавать
+manual trace/mock за PG PASS и не расширять scope для green.
+
+Достаточное evidence: fresh/populated/repeat upgrade; unused reverse/used refusal
+before DDL; exact45-table successor при трёх additions и exact functions inventory,
+tenant/same-ws wrong Client/R/source/Audit/NULL negatives; FORCE RLS/private ACL;
+0/1/1024/1025 distinct gaps/overlap/dedup/bounded lookup на большой unrelated history;
+two-connection post-wait snapshot/resolve/admission; full R/policy/WAIT ACK replay/
+reclaim/supersede/exhaustion; actual coverage/own OUTBOUND; rollback/overflow и
+V1/V2/V3 SQL digest/types/counts. Не прогонять broad suites ради количества;
+применимые retained regression cases можно выполнить адресно, не изменяя gates.
+
+Не запускать Actions dispatch/rerun/cancel/new PR/full CI, HTTP/Playwright/весь Docker
+application stack, host operator/VM/Telegram API/account/sends/deploy/renewal.
+Материализация synthetic fixtures не разрешает fabricated receipts/paid state.
+DB fixtures используют легитимные existing auth/provisioning primitives и реальные
+capabilities; targeted fault injection не disable/skip constraints.
+
+Публикация только normal FF c2/m3-1-native-context-db с expected-head check;
+один focused delivery commit предпочтителен, законченные checkpoints допустимы.
+No main/C3 branch/old PR34 branch/amend/rebase/force/new PR. C0 intake перед PR.
+Return в PR34: full SHA/tree/parent, exact diff/allowlist, capability+index+RLS catalog,
+closure assertions→actual commands/results, failure limits, API/C3/C6 interface
+handoff и следующий minimal scope. **REVIEW / DB checkpoint, не INTEGRATED/VERIFIED
+native runtime**, затем C2 HOLD. C0 выдаёт зависимую работу отдельно.
+
+Budgets S/600/P720/fixed120/+480/S+1200/cleanup90/state25/browser25/foundation45/
+3s/60s/10s и worker caps unchanged. IMPL-05 DEFERRED; M4 вне scope.
+
+<a id="0-текущий-статус--native-context-r2-review--2026-10-18-utc"></a>
+
+## История — NATIVE-CONTEXT R2 REVIEW / 2026-10-18 UTC
 
 [C0 R2 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6245868587),
 [C0 consolidated decisions](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6245858507),

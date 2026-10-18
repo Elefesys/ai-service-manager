@@ -2,7 +2,65 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C3 NATIVE-CONTEXT R2 REVIEW / 2026-10-18 UTC
+## Текущий статус — NATIVE-CONTEXT contract ACCEPTED; C2 DB-R1 / 2026-10-18 UTC
+
+[C0 acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6246954666),
+[C1 PASS](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6246639567),
+[C2 PASS](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6246768008).
+**Все9 distinct contract findings CLOSED; C2-NC-Q01 RESOLVED.**
+C0-NC-CONTEXT-01=C1-NC-01=C2-NC-01 — один coverage finding.
+C1-NC-02/03/04,C2-NC-02/03/04/05 и C0-NC-DOC-01 закрыты в contract scope.
+Future implementation assertions не выполнены этим решением.
+
+| Task / boundary | Current status / owner |
+|---|---|
+| C3-M3.1-NATIVE-CONTEXT-CONTRACT-R2 | ACCEPTED contract/design; C3 HOLD |
+| C1/C2 CONTRACT-REVIEW-R2 | COMPLETE/PASS accepted; C1 HOLD, C2 получает отдельную DB выдачу |
+| C2-M3.1-NATIVE-CONTEXT-DB-R1 | IN_PROGRESS после exact C0 task; единственный implementation author, [действующий scope](tasks/M3_HANDOFF.md#0-текущая-выдача-c0--c2-m31-native-context-db-r1--2026-10-18-utc) |
+| Native backend/API/worker, source/schema host integration, Console | TODO/HOLD; отдельные C3/C6/C5 scopes после C0 DB intake |
+| Native C8/CI/integration/account | TODO/HOLD; DB checkpoint не merge-ready/deployable; mandatory gates не отменены |
+| MATERIAL/runtime main | INTEGRATED/VERIFIED LOCAL/TEST/all11 CLOSED; e205e22051bc06295758b504d84699652b176c15/schema0012 unchanged |
+| Whole M3 | IN_PROGRESS; P-01/A08/P-05 renewal/collector/account/A12 OPEN; native runtime NOT VERIFIED/account NOT OBSERVED |
+
+Reviewed contract0cdd66cc135c8797224e8dc0e87bc3280ad446c1,
+tree11335a808d4468c78af17501849c52202b811ff7.
+C0 preparation sole parent — этот R2; только HANDOFF и этот реестр меняются.
+Actual full continuation SHA/tree — в canonical C0 PR34 assignment.
+Branch **c2/m3-1-native-context-db**, отдельный checkout/normal FF; C3 branch frozen.
+Migration reservation **0013_native_context.py /0013←0012**; applied0001–0012 frozen,
+renewal не назначать competing0013. При drift/conflict — C0 до публикации.
+
+Exact write permission **5 paths**, полное содержание/проверки в handoff§0:
+migrations/versions/0013_native_context.py (new),
+tests/test_m3_1_native_context_migrations.py (new),
+tests/test_m3_1_native_context_postgres.py (new),
+tests/test_tenancy_postgres.py (native inventory/security delta only),
+docs/tasks/M3_CONTRACT.md (append§16.11+ with substantive implementation only).
+C0 owns HANDOFF/REGISTER/AGENTS; backend/API/OpenAPI/UI/readiness/scripts/workflows/
+dependencies/original11/applied migrations вне scope.
+R2 contract **714947 bytes/SHA256d032a4b699767f58f60288fbe17808b69bf98627d8c11acb8df2c9a439ae8346**
+побайтно frozen; PROPOSED/OPEN/unassigned ниже — исторический reviewed state,
+текущая C0 выдача заменяет статусы, не technical semantics.
+
+D4 choices accepted: private3 tables, same-Job token/result markers, stable snapshot
+projection и1024-gap/probe1025 fail-closed bound. Обязательны indexable source→old mark
+для duplicates, early supersede/terminal marker cleanup, один first Escalation cancel
+(Takeover уже может его выполнить), actual callee/policy snapshot discipline.
+D1/D2/D3 limits/latest canonical-state obligation сохранены; no M4 summary/native vision.
+Huge/unrepresentable context → manual/UNRESOLVED, no deletion/cap increase bypass.
+
+Current foundation/source всё ещё0012; DB0013 checkpoint **не включать** с неподходящим
+runtime и не ослаблять readiness. C2 разрешены focused source/unit/realPG18 synthetic
+disposable checks и publication task branch; no CI/new PR/HTTP/browser/host operator/
+account/VM/working DB-S3/sends/deploy/renewal. Следующий coherent source и PR/gates
+назначает C0; никакого implied merge/deployment. Budget/worker caps unchanged,
+IMPL-05 DEFERRED; M4 не выдан. Return REVIEW/DB checkpoint→C2 HOLD.
+
+Historical R2 review/current-status snapshot ниже сохранён;9 OPEN в нём не current.
+
+<a id="текущий-статус--c3-native-context-r2-review--2026-10-18-utc"></a>
+
+## История — C3 NATIVE-CONTEXT R2 REVIEW / 2026-10-18 UTC
 
 **C3-M3.1-NATIVE-CONTEXT-CONTRACT-R2 — REVIEW / docs proposal → HOLD после return.**
 [C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6245868587),
