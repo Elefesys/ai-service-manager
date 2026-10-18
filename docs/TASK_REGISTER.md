@@ -2,7 +2,94 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — stock DB VERIFIED; C3 native runtime R1 / 2026-10-18 UTC
+## Текущий статус — C3 REVIEW; C1 review и C2 UTC6 R3 ACTIVE / 2026-10-18 UTC
+
+[C0 disposition6252562993](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252562993)
+по [C3 return6252466443](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252466443).
+**C3 source/scope ACCEPTED FOR REVIEW. Один новый C3-NC-RUNTIME-01/P2 OPEN.**
+C1 и C2 ACTIVE по отдельным canonical tasks; C3/C5/C6/C8 HOLD.
+M3 IN_PROGRESS; native application/runtime NOT VERIFIED; actual new PG NOT RUN.
+
+| Task / finding | Current state |
+|---|---|
+| C3-M3.1-NATIVE-CONTEXT-RUNTIME-R1 | REVIEW; exact source accepted for independent review, no application integration/verification; C3 HOLD |
+| C3-NC-RUNTIME-01/P2 | OPEN: raw SQL recent.delivery.completed_at fails strict UTC6 DTO; producer + paired nested validator correction assigned to C2 |
+| C2-M3.1-NATIVE-CONTEXT-DB-R3 | IN_PROGRESS; exactly four existing paths; two semantic SQL bodies + generated verifier, focused regressions, append-only contract receipt |
+| C1-M3.1-NATIVE-CONTEXT-RUNTIME-REVIEW-R1 | IN_PROGRESS; independent read-only review of exact C3 SHA, no repository write paths |
+| C1-NC-DB-01/P2; C1-NC-DB-02/P2 | CLOSED; retained Resume priority/mapping correction and stock evidence |
+| C0-NC-RUNNER-01/P2 | CLOSED; explicit TEST child, real Settings checks and actual foundation refusal PASS |
+| C2 DB-R2 / C6 runner R2 | Retained INTEGRATED/VERIFIED scoped DB/runner checkpoint bde0c48…; corrected SQL will require new evidence |
+| New API/runtime PG carriers | 28 collected only (12 API + 16 runtime); actual execution NOT RUN, C3 environment BLOCKED |
+| C5/C6/C8 | HOLD; coherent host/schema/operator, TS/UI and final integration gates need later exact assignments |
+| Contract R2 / MATERIAL | Contract 9 CLOSED, Q01 RESOLVED; MATERIAL 11 INTEGRATED/VERIFIED LOCAL/TEST |
+| Whole M3 / native application | IN_PROGRESS / NOT VERIFIED; A08/P01/P05/account/renewal/collector/A12 OPEN |
+
+C3 source **225879990011f2e41f4c38e46308ffdd976a7393**,
+tree **57009c4990345768badb912c1c3ff0818edb4650**, sole parent
+**ad1e28fc69179398a9dc6ca31ee91c32cdf512d3**.
+22 paths, 16 existing + 6 authorized NEW, +6162/−1092; 288 blobs, 266 unchanged.
+C0 reconstructed all bytes/modes and exact commit/tree; clean/diff --check PASS.
+Source tar SHA256 **6c53901982fe6836534efe603f0608754afc8048eb3b3c9c00a2bec36bd71af2**.
+C0 local **222 PASS / 10.62s**, no skip/xfail; Mypy 64/Ruff+format 69/current-source
+OpenAPI --check PASS. PG **28 collected only / 7.60s**. An initial C0 export used an
+old editable package; verified current PYTHONPATH fixed comparison, no product defect.
+
+One P2 combines new native projection raw b.completed_at and its overly broad nested
+V3 SQL validator. C0 verified PostgreSQL REL_18_6 serialization source and strict
+re-signed Python regression; no actual PG observation is claimed. Reachable completed
+manual delivery → recent tail → R/Resume/new Turn rejects V3 before consume/send.
+Existing strict real-wrapper UTC6 regression remains unmodified/collected.
+
+C0 explicitly authorizes correction inside **unmerged0013←0012**, no0014.
+C2 write paths ONLY migrations/versions/0013_native_context.py,
+tests/test_m3_1_native_context_migrations.py, tests/test_m3_1_native_context_postgres.py,
+docs/tasks/M3_CONTRACT.md append-only§16.19+. Preserve contract756397-byte prefix
+SHA256 **e7f3796fcff8640ffca203266ecf7b5988f7ab1bd24850b12e923122abf5d281**.
+Only human_context_projection and nested completed_at validation in
+human_context_snapshot_valid may change semantically, plus deterministic
+human_context_schema_profile generation. 167 functions/45 tables/955 commands,
+35 additions/18 replacements, nonfunction
+**57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370**
+and all other bodies/DDL/ACL/roles/RLS frozen. Preserve original 57 cases and C3 28 files;
+append meaningful regressions; no shared parser widening or source-freeze weakening.
+Applied0001–0012 and ORIGINAL bodies frozen. No in-place change of a used0013 DB;
+fresh owned LOCAL/TEST only. P2 remains OPEN pending C0 source + actual corrected
+PG/interop acceptance. Full task detail in current HANDOFF§0 and canonical PR34 tasks.
+
+C0 preparation has sole parent225879990011f2e41f4c38e46308ffdd976a7393;
+ONLY HANDOFF/REGISTER change, 286 other blobs/modes exact. Full preparation SHA/tree
+and published task links are in canonical C0 PR34 comments after creation.
+
+| Branch | Exact purpose / start |
+|---|---|
+| c0/m3-1-native-context-runtime-followup-r1 | Current docs-only instruction snapshot |
+| c2/m3-1-native-context-db-r3 | Same prepared start; correction owner C2 |
+| c1/m3-1-native-context-runtime-review-r1 | Code target225879990011f2e41f4c38e46308ffdd976a7393/tree57009c4990345768badb912c1c3ff0818edb4650; read current instructions separately |
+| c3/m3-1-native-context-runtime-r1 | Returned2258799; C3 HOLD |
+
+[Retained stock acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251867599):
+source **bde0c48af74f23cd6430fc669ea4635e21aa68c6** /
+tree **f2be86c21f754e7997aa4a04ee07d0952fefe940**;
+[run39141370282/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/39141370282)
+SUCCESS57/57 native (5 source + 52 PG), 40 runner + 78 subtests, full catalog/roles/
+reset/cleanup/clean and actual foundation0013 refusal PASS. Historical first run
+39136349844 remains FAIL56/57. This checkpoint does not prove new wrappers or future
+corrected SQL; consumed approval grants no repeated execution.
+
+Main **e205e22051bc06295758b504d84699652b176c15/schema0012** unchanged;
+execution ref remainsbde0c48…; PR34 closed/merged. Foundation delta only two route
+wiring lines; readiness0012/Settings/serve unchanged. Original 11, frontend,
+runner/workflow/operator, dependencies/locks and all fixed caps preserved.
+
+C0 first consolidates C1+C2 returns, then separately assigns complete native + new
+API/runtime stock execution and independent changed catalog. C6 host/schema/operator,
+C5 TS/UI, C8/full CI/user merge remain later. D1/D2/D3 limits retained; M4 outside scope,
+IMPL-05 DEFERRED. No Actions/ref movement/full CI/new PR/VM/provider/live/deploy/renewal
+or other chat/agent launch. Earlier sections are history, not active assignments.
+
+<a id="текущий-статус--stock-db-verified-c3-native-runtime-r1--2026-10-18-utc"></a>
+
+## История — stock DB VERIFIED; C3 native runtime R1 / 2026-10-18 UTC
 
 [C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251867599) и [source approval](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251780231).
 **Все три текущих DB/runner P2 CLOSED; C3 implementation ACTIVE по canonical task.**
