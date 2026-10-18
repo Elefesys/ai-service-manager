@@ -100,7 +100,7 @@ def catalog_fixture():
             + body
             + "$$"
         )
-        row.update(runtime_execute=False, acl=[["asm_migrator", "asm_migrator", "EXECUTE", True]])
+        row.update(runtime_execute=False, acl=[["asm_migrator", "asm_migrator", "EXECUTE", False]])
         functions[row["signature"]] = row
     rows, resolved = [], {}
     for oid, (sig, source) in enumerate(functions.items(), 100):
@@ -282,6 +282,12 @@ class OwnershipGuards(unittest.TestCase):
                 container["State"][key] = value
                 self.assert_refuses_all_destructive_calls(lease, container, volume)
 
+    def test_stopped_container_with_foreign_retained_port_refuses_cleanup(self):
+        lease, container, volume = owned_fixture()
+        container["State"].update(Running=False, Pid=0)
+        container["NetworkSettings"]["Ports"]["5432/tcp"][0]["HostPort"] = "5432"
+        self.assert_refuses_all_destructive_calls(lease, container, volume)
+
     def test_foreign_volume_refuses_all_removals(self):
         for key, value in (
             ("Name", "foreign"),
@@ -348,6 +354,9 @@ class CatalogGuards(unittest.TestCase):
         verifier = expected["functions"][lane.PROFILE]
         self.assertEqual(verifier["body_sha256"], lane.sha256(verifier["body"].encode()))
         self.assertIn("WITH expected(signature,body_hash", verifier["body"])
+        for row in expected["functions"].values():
+            self.assertIn(["asm_migrator", "asm_migrator", "EXECUTE", False], row["acl"])
+            self.assertTrue(all(grant[3] is False for grant in row["acl"]))
 
     def test_typed_overloads_defaults_and_table_outputs_are_distinct(self):
         sql = "CREATE FUNCTION platform.example(p_id uuid, p_flag boolean DEFAULT false) RETURNS TABLE(item_id uuid, seen_at timestamptz) LANGUAGE sql STABLE STRICT SET search_path=pg_catalog,pg_temp AS $$ SELECT p_id,now() $$"

@@ -391,7 +391,9 @@ def source_catalog(root):
     )
     for sig, row in functions.items():
         row["runtime_execute"] = sig in runtime
-        row["acl"] = [["asm_migrator", "asm_migrator", "EXECUTE", True]]
+        # PG18 acldefault stores no owner grant-option bits; ownership supplies
+        # those rights implicitly (postgres REL_18_STABLE, acl.c/acldefault).
+        row["acl"] = [["asm_migrator", "asm_migrator", "EXECUTE", False]]
         if sig in runtime:
             row["acl"].append(["asm_migrator", "asm_runtime", "EXECUTE", False])
     return {
@@ -782,7 +784,7 @@ def validate_container(lease, container, *, live=True):
             not lease.get("pid") or state["Pid"] == lease["pid"], "Foreign running PID at cleanup"
         )
     ports = container["NetworkSettings"].get("Ports") or {}
-    if live or lease.get("port") and state["Running"]:
+    if live or lease.get("port") and ports.get("5432/tcp"):
         require(
             ports == {"5432/tcp": [{"HostIp": "127.0.0.1", "HostPort": str(lease["port"])}]},
             "Foreign server host/port mapping",
