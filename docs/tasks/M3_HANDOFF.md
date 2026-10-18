@@ -5,7 +5,91 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущая выдача C0 — исправления двух test carriers после stock FAIL / 2026-10-18 UTC
+## 0. Текущий шаг C0 — полный stock после двух исправлений тестов / 2026-10-18 UTC
+
+[C0 source acceptance6254398312](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6254398312).
+**C2 DB-R4 и C3 PG-R3 INTEGRATED source; C1/C2/C3/C5/C6/C8 HOLD.**
+Это исправления двух test carriers; новых product requirements нет.
+Native application/runtime NOT VERIFIED; M3 IN_PROGRESS.
+
+### 0.1. Exact accepted source and C0 checks
+
+| Source | Commit / tree |
+|---|---|
+| C2 DB-R4 | d694e24638ae133fe9412b3f7cde73acb0089be3 / eb5d76dbd05d2390775887409ccd6743237f49cd |
+| C3 PG-R3 | e4ac5afa12174317b39097de042f131f5820cb74 / b80ea2d7b3fac2ade38b47edb5e9475db86a95ef |
+| Shared sole parent | a2678ce605e2dcc1c4789d0e1285cf5ec616c336 / 551404ae860d335951b0073b2367f92aa847cb84 |
+| Previous actual stock source | 2fc3f1491321456e280c01852c7747e0ffdf9139 / 127e40091cf40cf8602c89eaf72833bae84d6044 |
+
+This C0 consolidation has ordered parents C2 then C3 above. Against shared start,
+only their two disjoint PG files (+43/−3) and these two C0 docs change;
+all other284 blobs/modes remain exact,288 total. Exact final SHA/tree/archive
+are bound by the separate canonical C0 execution approval, not this document.
+
+C2 modifies only native_manual_delivery_history and its UTC6 timezone test.
+Real ordinary post-Resume Turn obtains BASE/GUARDED; a distinct real marker Turn
+then obtains ESCALATE_OWNER. Correct Job routes and distinct Turns are asserted.
+Actual owner-created SENT/FAILED/UNKNOWN/PENDING/DISPATCHING history, both
+UTC and Asia/Novosibirsk, strict untouched parsers/digests/full history,
+saved input/whole Outbox invariance and zero adapter calls remain.
+C3 changes only runtime_effects Audit order key id→audit_event_id; SELECT *
+full-row Audit comparison and all other helper/test bytes are preserved.
+No production workaround, fabricated receipt/Job, reduced assertions or new cases.
+
+C0 independently verified all288 remote source bytes/modes for each return,
+287 unchanged leaves each, exact parent/tree and intended combined source.
+Old121779-byte C2 prefix SHA256987ce8de6655236b6872f483b1cf3084640f8fb804232c98a905d573a329d12d
+and12965-byte C3 prefix SHA25630fc57c7a69521130faedc48da7d8d90766d7e9deb940a691fc4ce03da746a1f
+are unchanged; only the three assigned AST definitions differ and all prior
+assertions remain. Full contract769072 bytes/SHA256fe2eb4ef2469ccb14b7147017c3c81066cde1b8a6ad60acbf73922a15e3ace5f
+and original11=canon=manifest verified. No migration/backend/runner/workflow change.
+
+Actual local combined compile/Ruff/format2/whitespace PASS; Python3.13.14,
+current checkout imports and57 frozen external distributions verified.
+Complete four-module collection105 in3.65s =7 source+56 DB+12 API+30 runtime,
+shared actual FixtureDefs/reset guards and all98 PG consumers verified.
+Ordered LF node-list SHA2569881ab5a77aca51a7d6c66737c352055cd4f037acf156e55f265cedeabb24b1a unchanged.
+Fresh source catalog equals accepted source exactly:167 functions/45 tables/
+635 columns; all10 observer table/key pairs exist. These are source checks,
+not actual PG PASS; no local PG/services or unchanged full suite run for counts.
+
+### 0.2. Required single corrected execution
+
+C0 next publishes a separate exact one-use approval for one normal FF,
+force=false, of c0/m3-1-native-context-db-stock-r1 from exact
+2fc3f1491321456e280c01852c7747e0ffdf9139 to this final reviewed C0 source.
+Previous approval6253600648 is consumed and supplies no retry permission.
+Existing push-only workflow/stock digest/extensions/roles/dependencies and
+20-minute whole-job cap are unchanged. No source amendment during execution.
+
+Run all105 native cases/all phases with0skip/xfail/deselection and full51 runner
+tests+130subtests. Independently verify the exact archive/manifest, owned image/
+container/volume/URL, actual LOGIN roles/98 guarded resets, fresh0013 catalog
+(all167 typed functions/unique OIDs including verifier,45 tables/635 columns/
+nonfunction/security/ACL), foundation0013 refusal, owned cleanup and clean tree.
+Expected unchanged SQL full profile c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411
+must be independently measured again, not accepted from a declared digest.
+Nonfunction57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370;
+verifier527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac.
+
+C0-NC-CARRIER-01/P2 and02/P2 stay OPEN/source-addressed until actual corrected
+full evidence; C3-NC-RUNTIME-01/P2 stays OPEN for complete five-status UTC6
+projection/BASE/GUARDED/unsigned escalation interoperability.
+Historical39154853068 FAIL92/105 remains; earlier C6 runner/catalog/cleanup
+acceptance is retained but does not prove the13 formerly blocked scenarios.
+On failure retain evidence and issue a narrow finding; no retry/selected rerun,
+cap extension, dispatch, used0013 reuse or unproven lab repair/cleanup.
+
+### 0.3. Retained gates
+
+No full CI/new PR/main/VM/provider/S3/LLM/live/deploy/renewal in this execution.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012; PR34 closed/merged.
+No0014/applied0001–12 edit. Host/schema/operator, C5, C8/full integration,
+account/renewal/collector/A08/P01/P05/A12 remain later separate gates.
+C1-NC-DB-01/02/C0-NC-RUNNER-01 and Contract9/Q01/MATERIAL11 prior closures,
+D1/D2/D3 and every prior budget remain. M4 out, IMPL-05 deferred; user owns merge.
+
+## История — 0. Текущая выдача C0 — исправления двух test carriers после stock FAIL / 2026-10-18 UTC
 
 **C2/C3 ACTIVE только по двум source-only исправлениям ниже; C1/C5/C6/C8 HOLD.**
 [C0 actual disposition6253741115](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253741115).

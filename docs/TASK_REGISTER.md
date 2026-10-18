@@ -2,7 +2,49 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — stock FAIL; два адресных исправления тестов / 2026-10-18 UTC
+## Текущий статус — исправления тестов объединены; полный stock gate впереди / 2026-10-18 UTC
+
+[C0 source acceptance6254398312](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6254398312).
+C2 DB-R4 d694e24638ae133fe9412b3f7cde73acb0089be3 и C3 PG-R3
+e4ac5afa12174317b39097de042f131f5820cb74 INTEGRATED source.
+**C1/C2/C3/C5/C6/C8 HOLD. M3 IN_PROGRESS; native application/runtime NOT VERIFIED.**
+No new product scope: two PG files,+43/−3; only assigned two C2 definitions
+and one C3 Audit key. Complete old prefixes/AST/assertions/105 node IDs retained.
+C0 merge ordered parents C2 then C3; exact final SHA/tree is in canonical approval.
+Only accepted source plus HANDOFF/register;284 other leaves unchanged,288 total.
+
+| Finding / gate | Current status |
+|---|---|
+| C0-NC-CARRIER-01/P2 | OPEN/source-addressed: Audit order key corrected |
+| C0-NC-CARRIER-02/P2 | OPEN/source-addressed: distinct ordinary/marker Turns |
+| C3-NC-RUNTIME-01/P2 | OPEN: full corrected UTC6 actual matrix pending |
+| C6 runner-R3 | Prior INTEGRATED/VERIFIED scoped runner/catalog/cleanup retained |
+| Corrected whole stock | NOT RUN; separate exact one-use C0 approval required |
+| Host/schema/operator/C5/C8 | HOLD; foundation deliberately remains0012 |
+| Whole M3 / account/renewal/collector/A12 | IN_PROGRESS / later gates OPEN |
+
+C0 source audit:288 remote blobs/modes per return,287 other leaves unchanged;
+original11/contract769072/57 frozen distributions/current imports exact.
+Compile/Ruff/format2/whitespace PASS.105 collect-only in3.65s =7+56+12+30;
+all98 actual PG fixture consumers guarded; ordered LF inventorySHA256
+9881ab5a77aca51a7d6c66737c352055cd4f037acf156e55f265cedeabb24b1a unchanged.
+Fresh source catalog identical to accepted167 functions/45 tables/635 columns,
+all10 observer table/key pairs checked; no local PG/service or full-suite recount.
+
+Next: one separately approved full existing stock workflow from execution
+2fc3f1491321456e280c01852c7747e0ffdf9139; old approval6253600648 consumed.
+Full105 cases/all phases and51 runner+130subtests, fresh independent catalog,
+actual LOGIN roles/reset/ownership, cleanup/clean source required;20m cap retained.
+Historical39154853068 FAIL92/105 and artifact12146143735 remain historical facts.
+Expected unchanged SQL full profile c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411
+must be measured again. No automatic closure from source checks.
+
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 and PR34 closed/merged
+unchanged; no0014/applied migration edit, full CI/new PR/VM/live/deploy/renewal.
+All prior closures/Contract9/Q01/MATERIAL11/D1/D2/D3/budgets retained.
+Exact scope in current HANDOFF§0. User owns merge.
+
+## История — Текущий статус — stock FAIL; два адресных исправления тестов / 2026-10-18 UTC
 
 [C0 disposition6253741115](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253741115).
 **C2/C3 ACTIVE по source-only corrections; C1/C5/C6/C8 HOLD.**
