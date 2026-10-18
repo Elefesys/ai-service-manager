@@ -1,4 +1,4 @@
-"""Stdlib unit refusal proofs; these are never PostgreSQL runtime evidence."""
+"""Runner refusal and real Settings regressions; never PostgreSQL runtime evidence."""
 
 import copy
 import json
@@ -505,6 +505,68 @@ class CatalogGuards(unittest.TestCase):
         ):
             with self.assertRaises(lane.Refusal):
                 lane.compare_roles(roles, memberships, owned)
+
+
+class ChildSettingsConfiguration(unittest.TestCase):
+    def assert_test_settings(self, parent):
+        from asm import foundation
+        from pydantic import ValidationError
+
+        with patch.dict(os.environ, parent, clear=True):
+            child = lane.child_environment(Path("/synthetic/native/private"))
+            self.assertEqual(dict(os.environ), parent)
+        self.assertTrue(all(key not in child for key in (*lane.SECRET_ENV, "GITHUB_TOKEN")))
+        synthetic_url = "postgresql+psycopg://asm_runtime:synthetic-only@settings-regression.invalid:65432/asm_test"
+        # The fixture adds only a synthetic URL, never an engine or an owned DB.
+        child["ASM_DATABASE_URL"] = synthetic_url
+        with (
+            patch.dict(os.environ, child, clear=True),
+            patch.object(
+                foundation,
+                "create_async_engine",
+                side_effect=AssertionError("No engine in Settings regression"),
+            ) as engine,
+            patch(
+                "socket.getaddrinfo", side_effect=AssertionError("No DNS in Settings regression")
+            ),
+            patch(
+                "socket.socket.connect",
+                side_effect=AssertionError("No network in Settings regression"),
+            ),
+        ):
+            settings = foundation.Settings()
+            self.assertEqual(settings.environment, "TEST")
+            self.assertEqual(settings.database_url.get_secret_value(), synthetic_url)
+            # The unchanged foundation must still reject a missing environment.
+            del os.environ["ASM_ENVIRONMENT"]
+            with self.assertRaises(ValidationError) as missing:
+                foundation.Settings()
+            self.assertEqual(
+                [
+                    (row["loc"], row["type"])
+                    for row in missing.exception.errors(include_input=False)
+                ],
+                [(("environment",), "missing")],
+            )
+        engine.assert_not_called()
+
+    def test_real_settings_validates_test_without_parent_environment(self):
+        self.assert_test_settings({})
+
+    def test_real_settings_remains_test_with_non_test_parent_environment(self):
+        for environment in ("LOCAL", "PRODUCTION"):
+            with self.subTest(parent_environment=environment):
+                self.assert_test_settings(
+                    {
+                        "ASM_ENVIRONMENT": environment,
+                        "ASM_DATABASE_URL": "foreign-invalid-url",
+                        "ASM_MIGRATION_DATABASE_URL": "foreign-migrator",
+                        "ASM_NATIVE_TEST_ADMIN_URL": "foreign-admin",
+                        "ASM_NATIVE_TEST_ALLOW_RESET": "1",
+                        "ASM_AUTH_ORIGINS": "hostile-invalid-json",
+                        "GITHUB_TOKEN": "synthetic-parent-token",
+                    }
+                )
 
 
 class ExecutionEvidence(unittest.TestCase):

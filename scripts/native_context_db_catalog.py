@@ -1220,6 +1220,7 @@ def child_environment(private):
     )
     env = {key: os.environ[key] for key in keep if key in os.environ}
     env.update(
+        ASM_ENVIRONMENT="TEST",
         PYTHONDONTWRITEBYTECODE="1",
         PYTEST_DISABLE_PLUGIN_AUTOLOAD="1",
         PYTHONPATH=os.pathsep.join(str(ROOT / path) for path in ("backend/src", "tests", ".")),
