@@ -345,7 +345,7 @@ async def runtime_effects(h, claim):
         "app.messages": "id",
         "app.conversation_turns": "id",
         "app.escalations": "id",
-        "app.audit_events": "id",
+        "app.audit_events": "audit_event_id",
         "app.file_objects": "id",
         "platform.file_object_uploads": "id",
         "platform.turn_guard_receipts": "job_id",
