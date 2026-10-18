@@ -10,6 +10,7 @@ import argparse
 import ast
 import hashlib
 import importlib.metadata
+import inspect
 import json
 import os
 import re
@@ -32,6 +33,8 @@ EXECUTION_REF = "refs/heads/c0/m3-1-native-context-db-stock-r1"
 MODULES = (
     "tests/test_m3_1_native_context_migrations.py",
     "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_api_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
 )
 SECRET_ENV = (
     "ASM_NATIVE_TEST_ALLOW_RESET",
@@ -1253,19 +1256,62 @@ def validate_collection(nodes, deselected, reports, exit_code):
     require(nodes and len(set(nodes)) == len(nodes), "No tests/duplicate test node IDs")
     require(
         {n.split("::", 1)[0] for n in nodes} == set(MODULES),
-        "Full two-module collection is required",
+        "Full four-module collection is required",
     )
     require(not deselected, "Deselected tests are forbidden")
+    required_phases = {(node, phase) for node in nodes for phase in ("setup", "call", "teardown")}
+    reported_phases = [(row["nodeid"], row["when"]) for row in reports]
+    require(
+        len(reported_phases) == len(set(reported_phases))
+        and set(reported_phases) <= required_phases
+        and all(row["outcome"] in ("passed", "failed", "skipped") for row in reports),
+        "Duplicate/foreign/unknown test phase reports are forbidden",
+    )
     require(
         not any(r["outcome"] == "skipped" or r["xfail"] for r in reports),
         "Skip/xfail cannot produce PASS",
     )
     if exit_code == 0:
-        passed = {r["nodeid"] for r in reports if r["when"] == "call" and r["outcome"] == "passed"}
         require(
-            passed == set(nodes) and not any(r["outcome"] == "failed" for r in reports),
+            set(reported_phases) == required_phases
+            and all(row["outcome"] == "passed" for row in reports),
             "Incomplete test execution cannot produce PASS",
         )
+
+
+def require_native_fixture_guards(items, test_module, reset):
+    native = inspect.unwrap(test_module.native)
+    require(
+        getattr(native, "__globals__", None) is vars(test_module)
+        and Path(native.__code__.co_filename).resolve() == ROOT / MODULES[1]
+        and native.__globals__.get("reset_disposable") is reset,
+        "Native fixture must resolve the guarded disposable reset",
+    )
+    consumers = {}
+    for path in MODULES[1:]:
+        module = sys.modules.get(Path(path).stem)
+        require(
+            module is not None
+            and Path(module.__file__).resolve() == ROOT / path
+            and getattr(module, "native", None) is test_module.native,
+            "PG module must import the same native fixture: " + path,
+        )
+        selected = [item for item in items if item.nodeid.split("::", 1)[0] == path]
+        require(selected, "Missing guarded PG module: " + path)
+        for item in selected:
+            definitions = item._fixtureinfo.name2fixturedefs.get("native", ())
+            require(
+                item.module is module
+                and definitions
+                and inspect.unwrap(definitions[-1].func) is native,
+                "PG node must resolve the shared guarded native fixture: " + item.nodeid,
+            )
+        consumers[path] = [item.nodeid for item in selected]
+    return {
+        "reset_entry_point": MODULES[1] + "::reset_disposable",
+        "native_fixture": MODULES[1] + "::native",
+        "per_module": consumers,
+    }
 
 
 def carrier(private, evidence, lease, commands):
@@ -1308,6 +1354,10 @@ def carrier(private, evidence, lease, commands):
             # A guard around the unchanged destructive fixture entry point. It
             # adds refusal checks; assertions, SQL, cases and markers are intact.
             test_module.reset_disposable = checked_reset
+            write_json(
+                evidence / "fixture-guards.json",
+                require_native_fixture_guards(session.items, test_module, checked_reset),
+            )
 
         @pytest.hookimpl(tryfirst=True)
         def pytest_runtest_setup(self, item):
@@ -1367,6 +1417,10 @@ def carrier(private, evidence, lease, commands):
             evidence / "collection.json",
             {
                 "modules": MODULES,
+                "per_module": {
+                    path: [node for node in nodes if node.split("::", 1)[0] == path]
+                    for path in MODULES
+                },
                 "nodeids": nodes,
                 "deselected": deselected,
                 "count": len(nodes),
