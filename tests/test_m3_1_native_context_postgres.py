@@ -2913,7 +2913,8 @@ async def native_manual_delivery_history(h):
         )
     await reconcile(h, cid)
     await control(h, cid)
-    await incoming(h, 2, text="CONTROLLED ESCALATION TEST")
+    _, _, same = await incoming(h, 2, text="Ordinary post-Resume UTC6 history")
+    assert same == cid
     turn = await current_turn(h, cid)
     await seal(h, turn["id"])
     return cid, await current_turn(h, cid), expected
@@ -2940,6 +2941,15 @@ async def test_completed_manual_delivery_history_utc6_before_v3_digest(native, t
 
     h = native
     cid, turn, expected = await native_manual_delivery_history(h)
+    assert [
+        row["step"]
+        for row in await query(
+            h,
+            "SELECT step FROM platform.messaging_jobs WHERE turn_id=:t AND turn_revision=:r AND step IN ('TEST_CONSUME','GUARDED_TEXT','ESCALATE_OWNER') ORDER BY step",
+            t=turn["id"],
+            r=turn["revision"],
+        )
+    ] == ["GUARDED_TEXT", "TEST_CONSUME"]
     boxes_before = await query(h, "SELECT to_jsonb(o) AS v FROM app.outbox_events o ORDER BY id")
     async with h.migrator.begin() as c:
         await c.execute(text("SELECT set_config('TimeZone',:tz,true)"), {"tz": timezone})
@@ -2950,6 +2960,7 @@ async def test_completed_manual_delivery_history_utc6_before_v3_digest(native, t
             )
         ).scalar_one()
     sources = {"projection": projection["_recent_messages"]}
+    saved_inputs = {}
     for shape, step, sql, parse in (
         ("BASE", "TEST_CONSUME", "SELECT platform.turn_execute(:job,:claim)", parse_snapshot),
         (
@@ -2981,8 +2992,26 @@ async def test_completed_manual_delivery_history_utc6_before_v3_digest(native, t
             )
             == body
         )
+        saved_inputs[claim.job_id] = body
         sources[shape] = snapshot["recent_messages"]
-    claim = await work_for(h, turn, "ESCALATE_OWNER")
+    # Admit the marker only after both ordinary-Turn inputs have been checked.
+    # The scheduler, not test DML, creates its distinct escalation route.
+    _, _, same = await incoming(h, 3, text="CONTROLLED ESCALATION TEST")
+    assert same == cid
+    escalation_turn = await current_turn(h, cid)
+    assert escalation_turn["id"] != turn["id"]
+    await seal(h, escalation_turn["id"])
+    escalation_turn = await current_turn(h, cid)
+    assert [
+        row["step"]
+        for row in await query(
+            h,
+            "SELECT step FROM platform.messaging_jobs WHERE turn_id=:t AND turn_revision=:r AND step IN ('TEST_CONSUME','GUARDED_TEXT','ESCALATE_OWNER') ORDER BY step",
+            t=escalation_turn["id"],
+            r=escalation_turn["revision"],
+        )
+    ] == ["ESCALATE_OWNER", "TEST_CONSUME"]
+    claim = await work_for(h, escalation_turn, "ESCALATE_OWNER")
     escalated = await native_worker_at_timezone(
         h, claim, "SELECT platform.escalation_request_for_turn(:job,:claim)", timezone
     )
@@ -2992,6 +3021,10 @@ async def test_completed_manual_delivery_history_utc6_before_v3_digest(native, t
         "SELECT request_snapshot FROM app.escalations WHERE id=:id",
         id=UUID(escalated["escalation_id"]),
     )
+    assert escalation["schema_version"] == 3
+    assert "snapshot_digest" not in escalation and "consumer" not in escalation
+    assert escalation["turn_id"] == str(escalation_turn["id"])
+    assert escalation["source_job_id"] == str(claim.job_id)
     assert (
         await scalar(
             h,
@@ -3006,6 +3039,13 @@ async def test_completed_manual_delivery_history_utc6_before_v3_digest(native, t
         assert actual == expected, shape
         for delivery in actual.values():
             assert DeliveryResponse.model_validate(delivery).model_dump(mode="json") == delivery
+    for job_id, body in saved_inputs.items():
+        assert (
+            await scalar(
+                h, "SELECT turn_input FROM platform.messaging_jobs WHERE id=:id", id=job_id
+            )
+            == body
+        )
     assert (
         await query(h, "SELECT to_jsonb(o) AS v FROM app.outbox_events o ORDER BY id")
         == boxes_before
