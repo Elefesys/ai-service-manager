@@ -1262,7 +1262,8 @@ def _projection() -> None:
             WHEN b.kind='SEND_GUARDED_TEXT' THEN 'CONTROLLED_AUTOMATION' ELSE 'LEGACY_UNATTRIBUTED' END,
           'created_at',to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
           'current',platform.human_context_effective(m,mt.current_material,f.status),
-          'delivery',CASE WHEN b.id IS NOT NULL THEN jsonb_build_object('status',b.status,'error_code',b.error_code,'completed_at',b.completed_at,'version',b.version::text) END,
+          'delivery',CASE WHEN b.id IS NOT NULL THEN jsonb_build_object('status',b.status,'error_code',b.error_code,
+            'completed_at',to_char(b.completed_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),'version',b.version::text) END,
           'file',CASE WHEN f.id IS NOT NULL THEN jsonb_build_object('file_id',f.id,'version',f.version::text,'status',f.status) END) AS value
         FROM (SELECT * FROM tail ORDER BY created_at DESC,id DESC LIMIT 16) m
         LEFT JOIN platform.message_material_targets mt ON (mt.workspace_id,mt.message_id)=(m.workspace_id,m.id)
@@ -1733,9 +1734,14 @@ def _snapshot_validation() -> None:
             OR (row->>'direction'='OUTBOUND' AND (row->>'origin'='CLIENT_INBOUND' OR row->'file'<>'null'::jsonb))) IS NOT FALSE THEN RETURN false; END IF;
           IF row->'delivery'<>'null'::jsonb THEN
             value:=row->'delivery';
+            IF value->'completed_at'<>'null'::jsonb THEN
+              IF (jsonb_typeof(value->'completed_at')<>'string'
+                OR value->>'completed_at' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{6}Z$') IS NOT FALSE THEN RETURN false; END IF;
+              IF (NOT isfinite((value->>'completed_at')::timestamptz)
+                OR to_char((value->>'completed_at')::timestamptz AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+                  IS DISTINCT FROM value->>'completed_at') IS NOT FALSE THEN RETURN false; END IF;
+            END IF;
             IF (((value->>'status' IN ('SENT','FAILED','UNKNOWN'))<>(value->'completed_at'<>'null'::jsonb))
-              OR (value->'completed_at'<>'null'::jsonb AND (jsonb_typeof(value->'completed_at')<>'string'
-                OR value->>'completed_at' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}' OR NOT isfinite((value->>'completed_at')::timestamptz)))
               OR NOT (value->'error_code'='null'::jsonb OR (jsonb_typeof(value->'error_code')='string' AND value->>'error_code' IN
                 ('INVALID_INPUT','NOT_ALLOWED','RETRY_EXHAUSTED','DEPENDENCY_TIMEOUT','DEPENDENCY_UNAVAILABLE','UNKNOWN_EXTERNAL_RESULT')))
               OR (value->>'status'='SENT' AND value->'error_code'<>'null'::jsonb)

@@ -7518,3 +7518,148 @@ REGISTER/originals/applied migrations не меняются. Actions/full CI/new
 stack/browser/VM/shared DB/TG API/S3/LLM/real sends/deploy/renewal не выполнялись.
 M4 вне scope, IMPL-05 DEFERRED, P-01/A08/P-05/renewal/collector/account/A12 OPEN;
 caps и budgets прежние. После canonical PR34 REVIEW correction return **C2 HOLD**.
+
+### 16.19. C2 DB-R3 — UTC6 delivery producer и paired validator / 2026-10-18 UTC
+
+Выдача **C2-M3.1-NATIVE-CONTEXT-DB-R3**:
+[C0 task6252646811](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252646811),
+[C0 disposition6252562993](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252562993),
+[C3 finding6252466443](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252466443).
+**REVIEW correction / C3-NC-RUNTIME-01/P2 addressed in source, не CLOSED**.
+Actual corrected PG/interop evidence — **NOT RUN / environment BLOCKED**.
+C0 consolidates C1 independent review и этот return перед следующей выдачей.
+
+Exact separate-checkout start **73eaeed87cb8c9caf7a6256ba8c246f25e059621**,
+tree **4a02292219cb9219a56772a7a7c7be0ece7e0039**, sole parent
+225879990011f2e41f4c38e46308ffdd976a7393/tree57009c4990345768badb912c1c3ff0818edb4650.
+Branch `c2/m3-1-native-context-db-r3`; normal FF/expected head, no amend/rebase/force.
+Current source includes frozen C3 consumers, not a native application acceptance.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 и execution checkpoint
+bde0c48af74f23cd6430fc669ea4635e21aa68c6 остаются отдельными frozen refs.
+PR34 closed/merged используется только как coordination history.
+
+Изменены только четыре выданных existing paths:0013, два native test modules,
+этот append§16.19+. Полный **756397-byte** prefix/SHA256
+**e7f3796fcff8640ffca203266ecf7b5988f7ab1bd24850b12e923122abf5d281** сохранён
+byte-for-byte, включая прежние receipts и их historical scope/status.
+0013←0012 unmerged/unreleased; no0014. Это не in-place upgrade/reapplication
+использованной0013 DB; будущая проверка требует fresh owned disposable DB.
+
+**Producer.** Только native `human_context_projection` recent.delivery.completed_at
+теперь использует `to_char(b.completed_at AT TIME ZONE 'UTC',
+'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`. SQL NULL остаётся JSON null. Status/error/version
+и остальные поля/порядок recent tail прежние. Canonical UTC6 появляется **до**
+обычного final V3 digest; snapshot/digest producers и Python parsers не менялись.
+Нет Python post-read normalization/re-signing или mutation historical bytes.
+Похожий raw delivery expression внутри ORIGINAL messaging_read_messages сохранён.
+
+**Paired validator.** Только nested recent.delivery.completed_at в
+`human_context_snapshot_valid` получает отдельную lexical phase: JSON string,
+ровно четыре ASCII digits года, fixed-width date/time, шесть fractional digits,
+uppercase T/Z, без offset/пробелов. Только после этого выполняются finite check
+и exact UTC6 round-trip comparison. Invalid calendar отвергается существующим
+fail-closed exception handler; normalized 24:00/leap-second spelling не проходит
+round-trip. Closed keys/null/status/error/type/version checks, member ingress_at,
+private V1/V2 codecs, accepted_at/created_at и все прочие predicates прежние.
+Не добавлены helper capabilities/signatures/DDL/ACL/locks/side effects/caps.
+
+| New regression node | Обязательное assertion / тип evidence |
+|---|---|
+| `test_utc6_delivery_vectors_preserve_strict_python_dto_and_resigned_v3` в source module | **Executed codec-only PASS**:5 canonical timestamps incl zero/fraction/leap/min/max year и34 noncanonical/calendar/type negatives; unchanged DeliveryResponse + complete re-signed BASE/GUARDED V3; no input normalization/mutation |
+| `test_completed_manual_delivery_history_utc6_before_v3_digest[UTC]` / `[Asia/Novosibirsk]` в PG module | **Collected/NOT RUN**: live owner request → actual claim/permit/finish capabilities создают SENT/FAILED/UNKNOWN, плюс actual PENDING/DISPATCHING; current projection → full R/Resume/new Turn → actual BASE/GUARDED/Escalation snapshots; exact status/error/version/null/UTC6, strict Python parse unchanged, SQL/Python digest equality, stored inputs и Outbox unchanged by reads/parsers |
+| `test_recent_delivery_utc6_resigned_vectors_all_shapes[UTC]` / `[Asia/Novosibirsk]` в PG module | **Collected/NOT RUN**: actual captured producer expression при deterministic zero/fraction/NULL instants; all5 positive/34 negative timestamps и closed pairing/type cases в BASE/GUARDED/ESCALATION; BASE/GUARDED re-signed by PG, ESCALATION сохраняет свой closed unsigned request shape |
+| `test_r3_preserves_r2_sql_except_utc6_bodies_and_generated_profile` в source module | **Executed source-only PASS**: exact R2 command sequence, кроме двух назначенных AS$$…$$ bodies и generated verifier; обратная замена ровно2 hash entries восстанавливает R2 verifier body |
+
+Source module: `tests/test_m3_1_native_context_migrations.py`.
+PG module: `tests/test_m3_1_native_context_postgres.py`.
+Actual manual outcomes в новом carrier — явно заданные LOCAL/TEST transport seams
+через реальные begin/finish capabilities, не provider send. Нет direct DML для
+успешных состояний/completed_at/receipt/permit. Deterministic timestamp vectors
+исполняют captured expression/validator, не создают fake stored delivery/receipt.
+FAILED/UNKNOWN не превращаются в SENT; carrier не вызывает adapter.
+
+Frozen C3 node
+`tests/test_m3_1_native_context_runtime_postgres.py::test_python_native_v3_completed_delivery_history_is_contract_utc6`
+и оба C3 API/runtime modules **не изменены**. Все28 current cases collected;
+их execution/RED→GREEN не заявлены. Сохранены57 прежних native cases и их
+substantive assertions/setup/teardown/reset guards. PG module **121779-byte**
+prefix byte-exact; единственная изменённая baseline source-test AST — разрешённый
+R1/R2 freeze carrier. Он учитывает новый validator body, сохраняет восстановление
+R1 verifier; companion R2 freeze оставляет Resume reason и все остальные SQL
+байты неизменными. Existing Resume priority/mapping и их PG regressions сохранены.
+
+### 16.20. DB-R3 source identity, verification и PG limitation
+
+Independent frozen `scripts/native_context_db_catalog.py::source_catalog` и
+capture_source выполнены только как source expansion/comparison. Counts прежние:
+**955 expanded commands /167 functions /45 tables /35 additions /18 replacements**;
+0013 **198 op batches /53 final definitions**,3 private tables/132 baseline profiles.
+Nonfunction DDL и все metadata/args/returns/owner/ACL/runtime grants/roles/source
+columns byte-exact относительно approved DB-R2;164 effective functions unchanged.
+Original11 совпали с SOURCE_MANIFEST и attached originals; applied0001–0012 SHA256
+и все19 ORIGINAL совпали, включая unused reverse restoration bodies.
+
+Captured **source body** SHA256 — не installed full-profile hashes:
+
+| Function | Corrected AS$$…$$ SHA256 |
+|---|---|
+| human_context_projection(uuid,uuid,timestamptz) | `8d38da64c526acb61365aa06eb293d117e1d8af93b598b5a507da3a23bc17b51` |
+| human_context_snapshot_valid(jsonb,text) | `21492e85adeaf186bce6bbfdde7b89c8e70762c56f8ec28c6da54b3a5327f49c` |
+| human_context_schema_profile() — deterministic generation | `527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac` |
+
+Normalized R2/R3 op sequence SHA256 с исключением только этих3 bodies:
+`d077fd534f42eaf3ff5990630ad830d81d7d3727ae91042ff9cfefa6e764a6b4`.
+Nonfunction expected catalog SHA256 по-прежнему
+`57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370`.
+Historical stock full profilec8a335b808f11b0c6f3d784731ddc95bf1023e6f1881aff5448659388f927a7a
+и verifierd485135e… не current corrected expected values. **Actual new installed
+full digest неизвестен до разрешённого PG run**, с independent comparison всех167
+definitions включая verifier, actual roles/ACL/RLS/catalog и approved source.
+
+Использован existing frozen uv.lock environment, **Python3.13.14**. Explicit
+`PYTHONPATH=<R3 checkout>/backend/src`; проверен actual asm.foundation.__file__
+в intended R3 checkout, без прежнего editable-source import. Deps/lock unchanged.
+Фактически выполнены из этого checkout:
+
+```text
+python -m pytest -q tests/test_m3_1_native_context_migrations.py
+python -m pytest -q tests/test_m3_1_native_context.py tests/test_m3_1_turns.py tests/test_m3_1_guards.py tests/test_m3_2_escalations.py tests/test_m3_1_provenance.py
+python -m pytest --collect-only -q tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py tests/test_m3_1_native_context_api_postgres.py tests/test_m3_1_native_context_runtime_postgres.py
+python -m ruff check migrations/versions/0013_native_context.py tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py
+python -m ruff format --check migrations/versions/0013_native_context.py tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py
+python -m compileall -q migrations/versions/0013_native_context.py tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py
+git diff --check
+```
+
+**7 source/codec PASS;222 focused Python PASS;91 collected=63 native(7 source+56 PG)
++28 frozen C3 API/runtime.** No skip/xfail/deselection. Ruff/format/compile/diff PASS.
+Source/codec checks и collection не PostgreSQL/HTTP-with-DB evidence.
+
+**PG NOT RUN / BLOCKED.** Stock PG/container runtime недоступен: postgres/pg_ctl/
+initdb/psql и Docker/Podman/nerdctl отсутствуют в PATH, runtime sockets отсутствуют;
+euid0/uid_map0→0/count1. Read-only поиск известного прежнего lab resource обнаружил
+сохранённые PG18.1 binaries вне PATH. Без пересборки были предприняты две свежие
+изолированные startup attempts, не старый used0013 data directory. Сборка содержит
+прежние3 startup UID0 exceptions в initdb/main/pg_ctl под explicit
+C2_DISPOSABLE_USERNS_ONLY; их source hashes проверены. **Это не stock parity.**
+
+Lab ownership gate остановил подготовку до CREATE asm_test/bootstrap/roles/reset/
+migrations. Первое сравнение IP использовало inet::text с /32; после исправления
+только локального контроллера на host(inet_server_addr()) data directory/loopback/
+port/system identifier прошли, но /proc/<namespace-local postmaster PID>/exe не
+сопоставился с expected executable. Контроллер завершился с ошибкой; PG payload
+не запускался. Нормальный pg_ctl cleanup не аттестован: тот же ownership gate
+остановил cleanup controller. Это environment/ownership BLOCKED, не новый product
+finding и не разрешение ослабить reset guard. Старый used lab data не открывался,
+установки/пересборки не было. Actual corrected SQLSTATE/completed-delivery rows/
+PG RED→GREEN/installed catalog остаются NOT RUN. Historical stock bde0c48/
+run39141370282 PASS57/57 сохраняет только свой checkpoint-specific scope.
+Ни новые4 PG cases, ни frozen28 wrappers не получают PASS из прежнего run.
+
+Backend/foundation/Python Timestamp/OpenAPI/TS/UI/runner/workflow/bootstrap/images/
+deps/locks/operator/C0 docs/applied migrations/originals не изменены. Main/execution
+refs/Actions/full CI/new PR/VM/shared DB/provider/S3/LLM/live sends/deploy/renewal
+не затронуты. M3/native application NOT VERIFIED; D1/D2/D3/A08/P01/P05/renewal/
+collector/account/A12 и later gates сохраняются; M4 out, IMPL-05 DEFERRED, caps
+прежние. C0 source review и actual corrected PG/interop нужны для CLOSED.
+После canonical PR34 REVIEW return **C2 HOLD**; C0 consolidates, user owns merge.

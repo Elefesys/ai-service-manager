@@ -2856,3 +2856,283 @@ async def test_worker_new_observation_keeps_permanent_hold_reason(native):
     assert await scalar(h, "SELECT count(*) FROM platform.turn_consumer_receipts") == 0
     assert await scalar(h, "SELECT count(*) FROM app.escalations") == 0
     assert h.adapter.calls == 0 and not h.adapter.ledger.exists()
+
+
+async def native_manual_delivery_history(h):
+    """Real capabilities; explicit transport outcomes are TEST seams, not provider I/O."""
+    from asm.billing.validation import timestamp
+
+    h.kernel = MessagingDatabase(h.runtime.engine, environment="TEST")
+    _, _, cid = await incoming(h)
+    await policy(h)
+    expected = {}
+    for status in ("SENT", "FAILED", "UNKNOWN", "PENDING", "DISPATCHING"):
+        async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
+            manual = await unit.messaging_request_text(
+                cid, "Manual history " + status, "utc6-history-" + status
+            )
+        outbox = UUID(manual["outbox_id"])
+        if status != "PENDING":
+            claim = await claim_job(
+                h,
+                await scalar(
+                    h, "SELECT id FROM platform.messaging_jobs WHERE outbox_id=:id", id=outbox
+                ),
+            )
+            permit = await h.kernel.begin_send(claim)
+            assert permit.code == "PERMITTED"
+            if status != "DISPATCHING":
+                outcome = {
+                    "SENT": SendOutcome(OutcomeKind.SUCCESS, "utc6-manual-sent"),
+                    "FAILED": SendOutcome(
+                        OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED
+                    ),
+                    "UNKNOWN": SendOutcome(
+                        OutcomeKind.UNKNOWN, error_code=Code.UNKNOWN_EXTERNAL_RESULT
+                    ),
+                }[status]
+                finished = await h.kernel.finish_send(
+                    claim.job_id, claim.claim_token, permit.attempt_id, outcome
+                )
+                assert finished.status == status
+        row = (
+            await query(
+                h,
+                "SELECT status,error_code,completed_at,version FROM app.outbox_events WHERE id=:id",
+                id=outbox,
+            )
+        )[0]
+        assert row["status"] == status
+        # Expected text comes from the stored instant, never from normalizing or
+        # re-signing a produced snapshot. No completed_at/state DML is used.
+        expected[manual["message_id"]] = dict(
+            status=row["status"],
+            error_code=row["error_code"],
+            completed_at=timestamp(row["completed_at"]) if row["completed_at"] else None,
+            version=str(row["version"]),
+        )
+    await reconcile(h, cid)
+    await control(h, cid)
+    await incoming(h, 2, text="CONTROLLED ESCALATION TEST")
+    turn = await current_turn(h, cid)
+    await seal(h, turn["id"])
+    return cid, await current_turn(h, cid), expected
+
+
+async def native_worker_at_timezone(h, claim, sql, timezone):
+    async with h.runtime.engine.begin() as c:
+        await c.execute(text("SELECT set_config('TimeZone',:tz,true)"), {"tz": timezone})
+        assert (await c.execute(text("SHOW TimeZone"))).scalar_one() == timezone
+        await c.execute(
+            text("SELECT platform.messaging_admit(:job,:claim)"),
+            {"job": claim.job_id, "claim": claim.claim_token},
+        )
+        return (
+            await c.execute(text(sql), {"job": claim.job_id, "claim": claim.claim_token})
+        ).scalar_one()
+
+
+@pytest.mark.parametrize("timezone", ["UTC", "Asia/Novosibirsk"])
+async def test_completed_manual_delivery_history_utc6_before_v3_digest(native, timezone):
+    from asm.conversations.guards import parse_guarded_snapshot
+    from asm.conversations.turns import native_jsonb, parse_snapshot
+    from asm.messaging.http_models import DeliveryResponse
+
+    h = native
+    cid, turn, expected = await native_manual_delivery_history(h)
+    boxes_before = await query(h, "SELECT to_jsonb(o) AS v FROM app.outbox_events o ORDER BY id")
+    async with h.migrator.begin() as c:
+        await c.execute(text("SELECT set_config('TimeZone',:tz,true)"), {"tz": timezone})
+        projection = (
+            await c.execute(
+                text("SELECT platform.human_context_projection(:ws,:cid,clock_timestamp())"),
+                {"ws": A, "cid": cid},
+            )
+        ).scalar_one()
+    sources = {"projection": projection["_recent_messages"]}
+    for shape, step, sql, parse in (
+        ("BASE", "TEST_CONSUME", "SELECT platform.turn_execute(:job,:claim)", parse_snapshot),
+        (
+            "GUARDED",
+            "GUARDED_TEXT",
+            "SELECT platform.guard_turn_prepare(:job,:claim)",
+            parse_guarded_snapshot,
+        ),
+    ):
+        claim = await work_for(h, turn, step)
+        snapshot = await native_worker_at_timezone(h, claim, sql, timezone)
+        assert snapshot["schema_version"] == 3
+        body = {k: v for k, v in snapshot.items() if k not in ("code", "job_id")}
+        assert (
+            snapshot["snapshot_digest"]
+            == hashlib.sha256(
+                native_jsonb({k: v for k, v in body.items() if k != "snapshot_digest"})
+            ).hexdigest()
+        )
+        before = json.dumps(snapshot, sort_keys=True)
+        parsed = parse(snapshot)  # Strict current Python parser; no normalization/re-sign.
+        assert json.dumps(snapshot, sort_keys=True) == before
+        for message in parsed.recent_messages:
+            if message.message_id in expected:
+                assert message.delivery.model_dump(mode="json") == expected[message.message_id]
+        assert (
+            await scalar(
+                h, "SELECT turn_input FROM platform.messaging_jobs WHERE id=:id", id=claim.job_id
+            )
+            == body
+        )
+        sources[shape] = snapshot["recent_messages"]
+    claim = await work_for(h, turn, "ESCALATE_OWNER")
+    escalated = await native_worker_at_timezone(
+        h, claim, "SELECT platform.escalation_request_for_turn(:job,:claim)", timezone
+    )
+    assert escalated["code"] == "ESCALATED"
+    escalation = await scalar(
+        h,
+        "SELECT request_snapshot FROM app.escalations WHERE id=:id",
+        id=UUID(escalated["escalation_id"]),
+    )
+    assert (
+        await scalar(
+            h,
+            "SELECT platform.human_context_snapshot_valid(CAST(:s AS jsonb),'ESCALATION')",
+            s=json.dumps(escalation),
+        )
+        is True
+    )
+    sources["ESCALATION"] = escalation["recent_messages"]
+    for shape, recent in sources.items():
+        actual = {m["message_id"]: m["delivery"] for m in recent if m["message_id"] in expected}
+        assert actual == expected, shape
+        for delivery in actual.values():
+            assert DeliveryResponse.model_validate(delivery).model_dump(mode="json") == delivery
+    assert (
+        await query(h, "SELECT to_jsonb(o) AS v FROM app.outbox_events o ORDER BY id")
+        == boxes_before
+    )
+    assert h.adapter.calls == 0 and not h.adapter.ledger.exists()
+
+
+@pytest.mark.parametrize("timezone", ["UTC", "Asia/Novosibirsk"])
+async def test_recent_delivery_utc6_resigned_vectors_all_shapes(native, timezone):
+    """Validator/serializer vectors only; no candidate is persisted as a receipt/permit."""
+    import re
+
+    from test_m3_1_native_context import snapshot as protocol_snapshot
+    from test_m3_1_native_context_migrations import UTC6_INVALID_TIMESTAMPS, UTC6_VALID_TIMESTAMPS
+
+    h = native
+    module, _ = source_statements()
+    projection = module.FUNCTIONS["platform.human_context_projection(uuid,uuid,timestamptz)"]
+    expression = re.search(r"'completed_at',(to_char\(b.completed_at.*?\)),'version'", projection)[
+        1
+    ]
+    signed_sql = text("""WITH body AS (SELECT CAST(:b AS jsonb)-'snapshot_digest' AS v), signed AS
+      (SELECT CASE WHEN :shape='ESCALATION' THEN v ELSE v||jsonb_build_object(
+        'snapshot_digest',encode(sha256(convert_to(v::text,'UTF8')),'hex')) END AS v FROM body)
+      SELECT v AS body,platform.human_context_snapshot_valid(v,:shape) AS valid FROM signed""")
+    async with h.migrator.begin() as c:
+        await c.execute(text("SELECT set_config('TimeZone',:tz,true)"), {"tz": timezone})
+        assert (await c.execute(text("SHOW TimeZone"))).scalar_one() == timezone
+        # Evaluate the actual captured producer expression at deterministic zero/
+        # fractional instants and NULL. This is not a fabricated stored delivery.
+        for instant, expected in (
+            (None, None),
+            ("2030-01-01T07:00:00+07:00", "2030-01-01T00:00:00.000000Z"),
+            ("2032-02-29T16:59:59.123400-07:00", "2032-02-29T23:59:59.123400Z"),
+            ("2000-02-29T12:34:56.999999Z", "2000-02-29T12:34:56.999999Z"),
+        ):
+            assert (
+                await c.execute(
+                    text(
+                        "SELECT "
+                        + expression
+                        + " FROM (SELECT CAST(:v AS timestamptz) AS completed_at) b"
+                    ),
+                    {"v": instant},
+                )
+            ).scalar_one() == expected
+        for shape in ("BASE", "GUARDED", "ESCALATION"):
+            value = protocol_snapshot(guarded=shape != "BASE")
+            source_job = value.pop("job_id")
+            value.pop("code")
+            if shape == "ESCALATION":
+                value.pop("consumer")
+                value.pop("snapshot_digest")
+                value.update(
+                    source_job_id=source_job,
+                    source_claim_token=str(uuid4()),
+                    source_job_kind="PROCESS_TURN",
+                    source_job_step="ESCALATE_OWNER",
+                )
+            value["recent_messages"] = [
+                dict(
+                    message_id=str(UUID(int=51)),
+                    version="1",
+                    direction="OUTBOUND",
+                    origin="OWNER_MANUAL",
+                    created_at=UTC6_VALID_TIMESTAMPS[0],
+                    current=copy.deepcopy(value["members"][0]["current"]),
+                    delivery={},
+                    file=None,
+                )
+            ]
+
+            async def valid(delivery):
+                candidate = copy.deepcopy(value)
+                candidate["recent_messages"][0]["delivery"] = delivery
+                result = (
+                    (await c.execute(signed_sql, {"b": json.dumps(candidate), "shape": shape}))
+                    .mappings()
+                    .one()
+                )
+                # BASE/GUARDED are fully re-signed by PG; ESCALATION has the
+                # contract's closed unsigned request shape, never an extra key.
+                assert ("snapshot_digest" in result["body"]) == (shape != "ESCALATION")
+                return result["valid"]
+
+            delivery = dict(status="SENT", error_code=None, completed_at=None, version="2")
+            for moment in UTC6_VALID_TIMESTAMPS:
+                assert await valid(dict(delivery, completed_at=moment)) is True, (shape, moment)
+            for moment in UTC6_INVALID_TIMESTAMPS:
+                assert await valid(dict(delivery, completed_at=moment)) is False, (shape, moment)
+            for status, error in (
+                ("PENDING", None),
+                ("PENDING", "DEPENDENCY_TIMEOUT"),
+                ("DISPATCHING", None),
+                ("SENT", None),
+                ("FAILED", "NOT_ALLOWED"),
+                ("UNKNOWN", "UNKNOWN_EXTERNAL_RESULT"),
+            ):
+                completed = status in ("SENT", "FAILED", "UNKNOWN")
+                current = dict(
+                    delivery,
+                    status=status,
+                    error_code=error,
+                    completed_at=UTC6_VALID_TIMESTAMPS[0] if completed else None,
+                )
+                assert await valid(current) is True, (shape, status)
+                assert (
+                    await valid(
+                        dict(current, completed_at=None if completed else UTC6_VALID_TIMESTAMPS[0])
+                    )
+                    is False
+                ), (shape, status)
+            for change in (
+                dict(status="FAILED"),
+                dict(status="UNKNOWN"),
+                dict(error_code="NOT_ALLOWED"),
+                dict(error_code="BOGUS"),
+                dict(error_code=True),
+                dict(status=None),
+                dict(status="BOGUS"),
+                dict(version=2),
+                dict(version=True),
+                dict(version="02"),
+                dict(extra=True),
+            ):
+                assert (
+                    await valid(dict(delivery, completed_at=UTC6_VALID_TIMESTAMPS[0]) | change)
+                    is False
+                ), (shape, change)
+            assert await valid({k: v for k, v in delivery.items() if k != "completed_at"}) is False
