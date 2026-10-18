@@ -1,6 +1,9 @@
 """Runner refusal and real Settings regressions; never PostgreSQL runtime evidence."""
 
+import asyncio
 import copy
+import importlib
+import inspect
 import json
 import os
 import subprocess
@@ -8,9 +11,25 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from scripts import native_context_db_catalog as lane
+
+REQUIRED_MODULES = (
+    "tests/test_m3_1_native_context_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_api_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+)
+
+
+def complete_reports(nodes):
+    return [
+        dict(nodeid=node, when=phase, outcome="passed", xfail=False)
+        for node in nodes
+        for phase in ("setup", "call", "teardown")
+    ]
 
 
 def owned_fixture():
@@ -645,16 +664,16 @@ class ExecutionEvidence(unittest.TestCase):
         self.assertEqual(lane.exception_sqlstates(None), [])
 
     def test_future_regressions_are_collected_without_a_fixed_total(self):
-        nodes = [lane.MODULES[0] + "::test_source", lane.MODULES[1] + "::test_new_regression"]
-        reports = [dict(nodeid=n, when="call", outcome="passed", xfail=False) for n in nodes]
+        nodes = [module + "::test_new_regression" for module in REQUIRED_MODULES]
+        reports = complete_reports(nodes)
         lane.validate_collection(nodes, [], reports, 0)
         nodes.append(lane.MODULES[1] + "::test_another_regression")
-        reports.append(dict(nodeid=nodes[-1], when="call", outcome="passed", xfail=False))
+        reports.extend(complete_reports(nodes[-1:]))
         lane.validate_collection(nodes, [], reports, 0)
 
     def test_skip_xfail_no_tests_deselection_and_incomplete_execution_cannot_pass(self):
-        nodes = [lane.MODULES[0] + "::test_source", lane.MODULES[1] + "::test_db"]
-        good = [dict(nodeid=n, when="call", outcome="passed", xfail=False) for n in nodes]
+        nodes = [module + "::test_case" for module in REQUIRED_MODULES]
+        good = complete_reports(nodes)
         cases = [([], [], [], 5), (nodes, ["deselected"], good, 0), (nodes, [], good[:-1], 0)]
         for key, value in (("outcome", "skipped"), ("xfail", True)):
             reports = copy.deepcopy(good)
@@ -750,6 +769,296 @@ class ExecutionEvidence(unittest.TestCase):
         self.assertNotIn("${{", job_env)
         self.assertIn('TASK_ROOT="$RUNNER_TEMP/native-context-db"', text)
         self.assertIn('>> "$GITHUB_ENV"', text)
+
+
+class FourModuleCollection(unittest.TestCase):
+    def setUp(self):
+        self.nodes = [module + "::test_case" for module in REQUIRED_MODULES]
+        self.reports = complete_reports(self.nodes)
+
+    def test_omitting_api_or_runtime_fails_even_with_all_remaining_reports_passed(self):
+        for omitted in REQUIRED_MODULES[2:]:
+            with self.subTest(omitted=omitted), self.assertRaises(lane.Refusal):
+                nodes = [node for node in self.nodes if not node.startswith(omitted + "::")]
+                lane.validate_collection(nodes, [], complete_reports(nodes), 0)
+
+    def test_missing_setup_call_or_teardown_report_cannot_pass(self):
+        for index, row in enumerate(self.reports):
+            with self.subTest(node=row["nodeid"], phase=row["when"]):
+                with self.assertRaises(lane.Refusal):
+                    lane.validate_collection(
+                        self.nodes, [], self.reports[:index] + self.reports[index + 1 :], 0
+                    )
+
+    def test_failed_setup_call_or_teardown_cannot_pass(self):
+        for phase in ("setup", "call", "teardown"):
+            with self.subTest(phase=phase):
+                reports = copy.deepcopy(self.reports)
+                next(row for row in reports if row["when"] == phase)["outcome"] = "failed"
+                with self.assertRaises(lane.Refusal):
+                    lane.validate_collection(self.nodes, [], reports, 0)
+                # A real nonzero pytest result remains a whole-run failure.
+                lane.validate_collection(self.nodes, [], reports, 1)
+
+    def test_duplicate_nodes_reports_foreign_nodes_and_unknown_phases_refuse(self):
+        for case in ("duplicate_node", "duplicate_report", "foreign_node", "phase", "outcome"):
+            with self.subTest(case=case), self.assertRaises(lane.Refusal):
+                nodes, reports = list(self.nodes), copy.deepcopy(self.reports)
+                if case == "duplicate_node":
+                    nodes.append(nodes[-1])
+                elif case == "duplicate_report":
+                    reports.append(dict(reports[-1]))
+                elif case == "foreign_node":
+                    reports.append(dict(reports[-1], nodeid=nodes[-1] + "_uncollected"))
+                elif case == "phase":
+                    reports.append(dict(reports[-1], when="unknown"))
+                else:
+                    reports[-1]["outcome"] = "unknown"
+                lane.validate_collection(nodes, [], reports, 0)
+
+    def test_skip_or_xfail_in_any_phase_cannot_pass(self):
+        for phase in ("setup", "call", "teardown"):
+            for key, value in (("outcome", "skipped"), ("xfail", True)):
+                with self.subTest(phase=phase, field=key), self.assertRaises(lane.Refusal):
+                    reports = copy.deepcopy(self.reports)
+                    next(row for row in reports if row["when"] == phase)[key] = value
+                    lane.validate_collection(self.nodes, [], reports, 0)
+
+
+class CarrierFixtureGuards(unittest.TestCase):
+    """Real imported fixture bodies, mocked pytest/resources; no service or SQL."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.private, self.evidence = self.root / "private", self.root / "evidence"
+        self.private.mkdir()
+        self.evidence.mkdir()
+        self.modules = {path: importlib.import_module(Path(path).stem) for path in REQUIRED_MODULES}
+        self.db = self.modules[REQUIRED_MODULES[1]]
+        self.original_reset = self.db.reset_disposable
+        self.nodes = [path + "::test_case" for path in REQUIRED_MODULES]
+        self.lease = {
+            "source_sha": "b" * 40,
+            "port": 34567,
+            "passwords": {key: "synthetic-" + key for key in ("admin", "runtime", "migrator")},
+        }
+        self.commands = Mock(passwords=())
+
+    def items(self):
+        items = []
+        for node in self.nodes:
+            path = node.split("::", 1)[0]
+            module = self.modules[path]
+            definitions = (
+                {"native": (SimpleNamespace(func=inspect.unwrap(module.native)),)}
+                if path in REQUIRED_MODULES[1:]
+                else {}
+            )
+            items.append(
+                SimpleNamespace(
+                    nodeid=node,
+                    module=module,
+                    _fixtureinfo=SimpleNamespace(name2fixturedefs=definitions),
+                )
+            )
+        return items
+
+    def run_carrier(self, *, action=None, exit_code=0, items=None, reports=None):
+        def pytest_main(argv, *, plugins):
+            self.argv = argv
+            audit = plugins[0]
+            audit.pytest_collection_finish(
+                SimpleNamespace(items=self.items() if items is None else items)
+            )
+            if action:
+                action(audit)
+            for row in complete_reports(self.nodes) if reports is None else reports:
+                report = SimpleNamespace(
+                    **{key: value for key, value in row.items() if key != "xfail"},
+                    duration=0.001,
+                    failed=row["outcome"] == "failed",
+                    longrepr="synthetic runner failure",
+                )
+                if row["xfail"]:
+                    report.wasxfail = "synthetic xfail"
+                audit.pytest_runtest_logreport(report)
+            return exit_code
+
+        try:
+            with patch("pytest.main", side_effect=pytest_main):
+                return lane.carrier(self.private, self.evidence, self.lease, self.commands)
+        finally:
+            self.assertIs(self.db.reset_disposable, self.original_reset)
+
+    def enter_native(self, path):
+        # The actual async fixture executes to_thread(reset_disposable). Its
+        # first psycopg.connect is blocked below, before any SQL or migration.
+        generator = inspect.unwrap(self.modules[path].native)(SimpleNamespace(), self.root)
+        return asyncio.run(generator.__anext__())
+
+    def test_four_complete_paths_and_future_api_runtime_cases_are_used(self):
+        for path in REQUIRED_MODULES[2:]:
+            self.nodes.append(path + "::test_future_c3_case[appended]")
+        self.assertEqual(self.run_carrier(), 0)
+        self.assertEqual(tuple(self.argv[:4]), REQUIRED_MODULES)
+        self.assertFalse(any(arg in self.argv for arg in ("-k", "-m", "--deselect")))
+        collection = json.loads((self.evidence / "collection.json").read_text())
+        self.assertEqual(collection["nodeids"], self.nodes)
+        self.assertEqual(
+            collection["per_module"],
+            {
+                path: [node for node in self.nodes if node.startswith(path + "::")]
+                for path in REQUIRED_MODULES
+            },
+        )
+        self.assertEqual(collection["count"], 6)
+        self.assertFalse(collection["fixed_total_required"])
+        guards = json.loads((self.evidence / "fixture-guards.json").read_text())
+        self.assertEqual(guards["reset_entry_point"], REQUIRED_MODULES[1] + "::reset_disposable")
+        self.assertEqual(
+            guards["per_module"], {p: collection["per_module"][p] for p in REQUIRED_MODULES[1:]}
+        )
+        results = json.loads((self.evidence / "test-results.json").read_text())
+        self.assertEqual(len(results["reports"]), 18)
+
+    def test_collection_hook_rejects_missing_api_or_runtime_before_any_fixture(self):
+        for omitted in REQUIRED_MODULES[2:]:
+            with self.subTest(omitted=omitted):
+                self.nodes = [path + "::test_case" for path in REQUIRED_MODULES if path != omitted]
+                with (
+                    patch(
+                        "psycopg.connect", side_effect=AssertionError("No connection")
+                    ) as connect,
+                    self.assertRaises(lane.Refusal),
+                ):
+                    self.run_carrier()
+                connect.assert_not_called()
+                collection = json.loads((self.evidence / "collection.json").read_text())
+                self.assertEqual(collection["per_module"][omitted], [])
+                self.assertEqual(collection["count"], 3)
+
+    def test_all_pg_consumers_call_same_guard_before_real_reset_entry_point(self):
+        events = []
+
+        def source(*args):
+            events.append("source")
+
+        def owner(*args):
+            events.append("owner")
+            lease, container, volume = owned_fixture()
+            lane.validate_container(lease, container)
+            lane.validate_volume(lease, volume)
+            return {"unit_mock": True}
+
+        def blocked_connect(*args, **kwargs):
+            events.append("reset_entry")
+            raise RuntimeError("blocked first connection; no SQL")
+
+        def exercise(audit):
+            for path in REQUIRED_MODULES[1:]:
+                with self.subTest(module=path):
+                    self.assertIs(self.modules[path].native, self.db.native)
+                    self.assertIs(self.db.reset_disposable.__wrapped__, self.original_reset)
+                    with self.assertRaisesRegex(RuntimeError, "blocked first connection"):
+                        self.enter_native(path)
+
+        with (
+            patch.dict(os.environ, lane.urls(self.lease)),
+            patch.object(lane, "require_source", side_effect=source),
+            patch.object(lane, "verify_server", side_effect=owner),
+            patch("psycopg.connect", side_effect=blocked_connect) as connect,
+            patch("asyncio.create_subprocess_exec", side_effect=AssertionError("No migration")),
+        ):
+            self.assertEqual(self.run_carrier(action=exercise), 0)
+        self.assertEqual(events, ["source", "owner", "reset_entry"] * 3)
+        self.assertEqual(connect.call_count, 3)
+        proofs = json.loads((self.evidence / "before-reset-proofs.json").read_text())
+        self.assertEqual([row["reset"] for row in proofs], [1, 2, 3])
+
+    def test_each_pg_consumer_refuses_source_url_and_owner_drift_before_reset(self):
+        for path in REQUIRED_MODULES[1:]:
+            for guard in ("source", "url", "owner"):
+                with self.subTest(module=path, guard=guard):
+                    env = lane.urls(self.lease)
+                    if guard == "url":
+                        env["ASM_NATIVE_TEST_ALLOW_RESET"] = "foreign"
+                    with (
+                        patch.dict(os.environ, env),
+                        patch.object(
+                            lane,
+                            "require_source",
+                            side_effect=lane.Refusal("source drift") if guard == "source" else None,
+                        ) as source,
+                        patch.object(
+                            lane,
+                            "verify_server",
+                            side_effect=lane.Refusal("owner drift") if guard == "owner" else None,
+                        ) as owner,
+                        patch(
+                            "psycopg.connect", side_effect=AssertionError("No connection")
+                        ) as connect,
+                        patch(
+                            "asyncio.create_subprocess_exec",
+                            side_effect=AssertionError("No migration"),
+                        ),
+                    ):
+
+                        def exercise(audit):
+                            self.enter_native(path)
+
+                        with self.assertRaises(lane.Refusal):
+                            self.run_carrier(action=exercise)
+                    source.assert_called_once_with(lane.ROOT, self.lease["source_sha"])
+                    if guard in ("source", "url"):
+                        owner.assert_not_called()
+                    else:
+                        owner.assert_called_once_with(self.lease, self.commands)
+                    connect.assert_not_called()
+
+    def test_import_alias_or_resolved_fixture_drift_refuses_before_reset(self):
+        for path in REQUIRED_MODULES[2:]:
+            with self.subTest(module=path, drift="imported alias"):
+                items = self.items()
+                with patch.object(self.modules[path], "native", object()):
+                    with self.assertRaises(lane.Refusal):
+                        self.run_carrier(items=items)
+        for path in REQUIRED_MODULES[1:]:
+            for drift in ("override", "absent"):
+                with self.subTest(module=path, drift=drift):
+                    items = self.items()
+                    item = next(item for item in items if item.nodeid.startswith(path + "::"))
+                    definitions = item._fixtureinfo.name2fixturedefs
+                    if drift == "absent":
+                        definitions.clear()
+                    else:
+                        definitions["native"] = (SimpleNamespace(func=lambda: None),)
+                    with self.assertRaises(lane.Refusal):
+                        self.run_carrier(items=items)
+
+    def test_reset_restored_and_failure_evidence_retained_on_exception_or_nonzero(self):
+        for failure in ("exception", "nonzero"):
+            with self.subTest(failure=failure):
+
+                def action(audit):
+                    self.assertIsNot(self.db.reset_disposable, self.original_reset)
+                    if failure == "exception":
+                        raise RuntimeError("synthetic pytest exception")
+
+                reports = complete_reports(self.nodes)
+                reports[-1]["outcome"] = "failed"
+                if failure == "exception":
+                    with self.assertRaisesRegex(RuntimeError, "synthetic pytest exception"):
+                        self.run_carrier(action=action)
+                else:
+                    self.assertEqual(
+                        self.run_carrier(action=action, exit_code=7, reports=reports), 7
+                    )
+                result = json.loads((self.evidence / "test-results.json").read_text())
+                self.assertEqual(result["pytest_exit"], 1 if failure == "exception" else 7)
+                collection = json.loads((self.evidence / "collection.json").read_text())
+                self.assertEqual(collection["nodeids"], self.nodes)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,89 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущая выдача C0 — native PG carriers и runner R3 / 2026-10-18 UTC
+## 0. Текущий шаг C0 — общий stock-прогон native DB/API/runtime / 2026-10-18 UTC
+
+**C3 PG-R2 и C6 runner-R3 приняты по исходному коду и интегрированы в этот checkpoint.**
+[C0 source acceptance6253565474](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253565474).
+C1/C2/C3/C5/C6/C8 HOLD; следующий шаг выполняет C0: отдельное точное разрешение
+одного прогона существующего stock workflow. Этот документ сам по себе не
+разрешает перемещение execution ref, повторный запуск или новые изменения.
+
+### 0.1. Что принято и что пока не проверено
+
+| Source | Exact accepted commit / tree |
+|---|---|
+| C3 runtime PG additions | 33146375886f99f6eeff7db4ab92f0e162e6520e /43156c62b869d674de5a201d2a3a2dee32d4e025 |
+| C6 complete runner | 397389b77f331ef78c5cafe37feffe42959e136f /4748746ffc95fc1f6b932ac4c8a5bee4d9c54a24 |
+| Shared sole parent | 64e6a13f52904507368f88f981947d5d41250c08 /7c9948c3205475d2d1f0211bc0e59062b77fe3f3 |
+| Retained C2 UTC6 correction | 15a8ea7a12f01644250315e26d3d6c5cc487b59e |
+
+This C0 merge has ordered parents C3 then C6 above; only their3 disjoint source
+paths plus HANDOFF/register differ from64e6. The full created commit/tree is
+bound by the canonical C0 approval. No source invention, conflict correction,
+production/SQL/API/contract or workflow change is included in this consolidation.
+
+C3 adds14 PG cases for the three already assigned gaps: five remaining terminal
+boundaries × HOLD/exhaustion; committed guarded send-begin ACK loss with work
+replay miss and real UNKNOWN recovery; PostgreSQL JSONB bytes/hash and real
+saved Unicode/native/material/private File inputs. Original12965-byte runtime
+prefix SHA25630fc57c7a69521130faedc48da7d8d90766d7e9deb940a691fc4ce03da746a1f
+and all32 original AST nodes are unchanged. No successful authority/receipt/
+UNKNOWN DML; negative Job budget/lease seams are explicit.
+
+C6 includes all four complete modules and every setup/call/teardown, rejects
+omissions/skips/xfail/deselection/duplicate reports, and proves the same guarded
+native reset for all PG fixture consumers. No fixed test-count ceiling.
+Existing40 runner tests/78 subtests retained;11 tests/52 subtests added.
+
+C0 actual local combined-source evidence: **58 PASS +130 subtests /7.62s**
+(51 runner+7 source), Ruff/format3 and compile/whitespace PASS.
+**105 collected only /5.77s =7 source+56 DB PG+12 API PG+30 runtime PG**.
+All previous91 retained. Real collected FixtureDefs for all98 PG consumers
+resolve to the shared fixture/reset. Ordered LF node-list SHA256
+9881ab5a77aca51a7d6c66737c352055cd4f037acf156e55f265cedeabb24b1a.
+Python3.13.14/current imports/57 frozen external distributions and all original11
+attachments=canon=manifest verified. No local PG/service started.
+
+**Actual corrected PG/stock/interop NOT RUN at this preparation.**
+**C3-NC-RUNTIME-01/P2 OPEN / addressed in source. Native runtime NOT VERIFIED.**
+No new confirmed production finding in this source review.
+
+### 0.2. One intended actual gate; execution requires the separate exact approval
+
+C0 will bind exactly this final source SHA/tree and one normal force=false FF of
+c0/m3-1-native-context-db-stock-r1 from
+**bde0c48af74f23cd6430fc669ea4635e21aa68c6**. Previous approval6251780231 is consumed.
+Existing push-only workflow, exact stock image/extensions/roles/dependencies and
+20-minute whole-job cap are frozen. Run the full final105 carrier, full51 runner
+tests, independently rebuilt fresh0013 catalog and owned cleanup/clean-source.
+No selected subset, retry/rerun/dispatch/cap increase or amendment during the run.
+
+Independent catalog must compare all167 typed functions/OIDs including verifier,
+45 tables/columns/security/ACL/nonfunction data. Corrected source body hashes:
+projection8d38da64c526acb61365aa06eb293d117e1d8af93b598b5a507da3a23bc17b51;
+validator21492e85adeaf186bce6bbfdde7b89c8e70762c56f8ec28c6da54b3a5327f49c;
+verifier527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac.
+Nonfunction57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370
+is unchanged; new installed full profile remains unknown until measured.
+No reuse/reapplication of a used0013 DB or unproven C2 lab resources.
+
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 and PR34 closed/merged
+remain unchanged. Foundation must still refuse0013; host/schema pairing, C5/C8,
+A08/P01/P05/account/renewal/collector/A12 are separate later gates.
+Contract9/Q01 and MATERIAL11 closures, D1/D2/D3 and all existing caps retained.
+M3 IN_PROGRESS; M4 out; IMPL-05/CI optimization DEFERRED. User owns merge.
+
+### 0.3. Scope visibility
+
+These returns implement verification already assigned after C1 review; they add
+no new product behavior. Native owner reconciliation remains the earlier chosen
+mechanism for resuming from current human context. Any later material expansion
+or new owner action must be explained explicitly, with its reason and effect;
+test/run numbers are evidence, not additional product goals.
+
+
+## История — 0. Текущая выдача C0 — native PG carriers и runner R3 / 2026-10-18 UTC
 
 **C3 и C6 ACTIVE только по новым source-only задачам; C1/C2/C5/C8 HOLD.**
 [C0 disposition6253081736](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253081736) принимает

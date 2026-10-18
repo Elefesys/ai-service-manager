@@ -2,7 +2,57 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C1/C2 приняты; C3 PG tests и C6 runner R3 ACTIVE / 2026-10-18 UTC
+## Текущий статус — native source объединён; один stock gate впереди / 2026-10-18 UTC
+
+[C0 source acceptance6253565474](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253565474).
+**C1/C2/C3/C5/C6/C8 HOLD. C0 готовит отдельное точное разрешение одного stock-прогона.**
+M3 IN_PROGRESS; actual corrected PG/interop NOT RUN at preparation.
+Native application/runtime NOT VERIFIED; C3-NC-RUNTIME-01/P2 remains OPEN.
+
+| Task / gate | Current state |
+|---|---|
+| C3-M3.1-NATIVE-CONTEXT-RUNTIME-PG-R2 | INTEGRATED source;14 appended PG cases, old16 runtime cases untouched; C3 HOLD |
+| C6-M3.1-NATIVE-CONTEXT-DB-STOCK-RUNNER-R3 | INTEGRATED source; four full modules, complete phase evidence and shared reset guard; C6 HOLD |
+| C3 runtime R1 / C2 DB-R3 | INTEGRATED source; actual combined PG/interop pending |
+| C3-NC-RUNTIME-01/P2 | OPEN / addressed in source; actual UTC6/strict Python acceptance required |
+| Combined local evidence | 58 PASS+130 subtests; Ruff/format3/compile/whitespace PASS |
+| Final complete collection | 105 only =7 source+56 DB PG+12 API PG+30 runtime PG; all91 prior nodes retained |
+| Corrected stock run | NOT RUN; requires separate exact one-use C0 approval |
+| C1-NC-DB-01/02; C0-NC-RUNNER-01 | CLOSED; historical scoped evidence retained |
+| Host/schema pairing, operator/C5/C8 | HOLD / later gate; foundation readiness remains0012 |
+| Whole M3 | IN_PROGRESS; A08/P01/P05/account/renewal/collector/A12 OPEN |
+
+C3 accepted33146375886f99f6eeff7db4ab92f0e162e6520e,
+tree43156c62b869d674de5a201d2a3a2dee32d4e025: one path+783/−0,
+12965-byte original prefix and all32 original AST nodes exact.
+C6 accepted397389b77f331ef78c5cafe37feffe42959e136f,
+tree4748746ffc95fc1f6b932ac4c8a5bee4d9c54a24: two paths+371/−8,
+40 old runner tests/78 subtests retained;11 tests/52 subtests added.
+Both sole parents64e6a13f52904507368f88f981947d5d41250c08.
+C0 merge ordered parents C3 then C6;3 source paths+1154/−8 plus2 C0 docs,
+283 other blobs/modes unchanged,288 total. Exact commit/tree in canonical approval.
+
+C0 local58 PASS+130 subtests/7.62s;105 collected/5.77s, not PG execution.
+Actual collected98 PG FixtureDefs share one guarded native fixture/reset.
+Node-list SHA256 (LF terminated)9881ab5a77aca51a7d6c66737c352055cd4f037acf156e55f265cedeabb24b1a.
+Python3.13.14,57 frozen external distributions, current imports, all11 originals verified.
+No new product scope or confirmed production finding; only assigned evidence preparation.
+
+The future run must use one unchanged20m stock job, all105 final cases and full51
+runner tests, independent167-function/45-table fresh catalog and owned cleanup.
+Execution branch staysbde0c48af74f23cd6430fc669ea4635e21aa68c6 until exact approval;
+historical39141370282 SUCCESS57/57 verifies onlybde0c48, approval6251780231 consumed.
+Corrected full installed profile unknown. Full contract769072 bytes SHA256
+fe2eb4ef2469ccb14b7147017c3c81066cde1b8a6ad60acbf73922a15e3ace5f unchanged.
+No service/lab reuse, source amendment, selected retry, full CI/new PR/main/VM/
+provider/send/deploy/renewal or readiness expansion is authorized by this register.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012; PR34 closed/merged.
+Contract9/Q01, MATERIAL11, D1/D2/D3 and caps retained; M4 out, IMPL-05 deferred.
+User owns merge. Later material scope or owner workflow changes must be explained
+explicitly; test/run counts are evidence and do not define product scope.
+
+
+## История — Текущий статус — C1/C2 приняты; C3 PG tests и C6 runner R3 ACTIVE / 2026-10-18 UTC
 
 [C0 disposition6253081736](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253081736) принимает
 [C1 scoped review](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252871772) и
