@@ -690,3 +690,111 @@ async def test_material_action_dispatches_worker_and_only_reads_terminal_afterwa
             await worker.material_action(
                 Kernel(), SimpleNamespace(execute=dispatch), "material-replacement-change"
             )
+
+
+def test_native_presets_keep_old_seed_cap_and_never_provision_reconciliation(harness):
+    fixture, worker = harness.fixture, harness.worker
+    assert fixture.NATIVE_PRESETS == ("native_happy", "native_narrow")
+    events = list(worker.seed_events())
+    assert len(events) < 128 and events[-1].image_file_id == "m24-image-pending"
+    for preset in fixture.NATIVE_PRESETS:
+        own = [e for e in events if e.bot_identity == fixture.bot(preset)]
+        assert len(own) == 2 and all(e.image_file_id is None for e in own)
+        assert {e.chat_id for e in own} == {f"m24-{preset}-main", f"m24-{preset}-alternate"}
+        for action in ("native-stats", "native-enable", "native-pause", "downgrade"):
+            fixture.validate_operation(preset, action)
+    for action in ("native-stats", "native-enable", "native-pause"):
+        with pytest.raises(fixture.ProvisioningError):
+            fixture.validate_operation("happy", action)
+
+
+@pytest.mark.parametrize("source", [None, "", "a" * 39, "a" * 41, "A" * 40, True, "a" * 40 + "\n"])
+async def test_native_policy_requires_exact_source_before_database(harness, monkeypatch, source):
+    def forbidden(*args, **kwargs):
+        pytest.fail("Unexpected database construction")
+
+    monkeypatch.setattr(harness.fixture, "create_async_engine", forbidden)
+    with pytest.raises(harness.fixture.ProvisioningError):
+        await harness.fixture.action("native_happy", "native-enable", source)
+    with pytest.raises(harness.fixture.ProvisioningError):
+        await harness.fixture.action("native_happy", "native-stats", "a" * 40)
+
+
+@pytest.mark.parametrize("operation", ["native-enable", "native-pause"])
+async def test_native_policy_carrier_uses_catalog_binding_and_actual_capability_only(
+    harness, operation
+):
+    fixture = harness.fixture
+    ws, business, connection = uuid4(), uuid4(), uuid4()
+    row = dict(
+        id=connection,
+        business_id=business,
+        provider="CONTROLLED",
+        bot_identity=fixture.bot("native_happy"),
+        external_connection_id=fixture.route("native_happy"),
+        human_context_policy="ON",
+        human_context_policy_epoch=1,
+    )
+    profile = dict(schema_revision="0013", valid=True, profile_sha256="b" * 64)
+    db = SimpleNamespace(
+        execute=AsyncMock(
+            side_effect=[
+                SimpleNamespace(mappings=lambda: SimpleNamespace(one=lambda: row)),
+                SimpleNamespace(scalar_one=lambda: profile),
+                None,
+            ]
+        )
+    )
+    result = await fixture.native_policy(db, {"ws": ws}, "native_happy", operation, "a" * 40)
+    assert result == {"command_completed": True}
+    calls = db.execute.await_args_list
+    assert len(calls) == 3 and all(str(c.args[0]).startswith("SELECT ") for c in calls)
+    assert str(calls[2].args[0]).startswith("SELECT platform.human_context_policy_command(")
+    params = calls[2].args[1]
+    assert params["ws"] == ws and params["id"] == connection
+    assert params["op"] == operation.removeprefix("native-").upper()
+    assert params["policy"] == "ON" and params["epoch"] == 1
+    assert json.loads(params["binding"]) == {
+        "business_id": str(business),
+        "provider": "CONTROLLED",
+        "bot_identity": row["bot_identity"],
+        "external_connection_id": row["external_connection_id"],
+        "owner_user_id": None,
+    }
+    assert json.loads(params["profile"]) == {
+        "source_tree": "a" * 40,
+        "schema_revision": "0013",
+        "profile_sha256": "b" * 64,
+        "drain_confirmed": True,
+    }
+    assert "reconcile" not in str(calls[2].args[0])
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"valid": False},
+        {"valid": 1},
+        {"schema_revision": "0012"},
+        {"profile_sha256": "A" * 64},
+        {"extra": True},
+    ],
+)
+async def test_native_policy_rejects_bad_catalog_before_capability(harness, patch):
+    db = SimpleNamespace(
+        execute=AsyncMock(
+            side_effect=[
+                SimpleNamespace(mappings=lambda: SimpleNamespace(one=lambda: {})),
+                SimpleNamespace(
+                    scalar_one=lambda: (
+                        dict(schema_revision="0013", valid=True, profile_sha256="b" * 64) | patch
+                    )
+                ),
+            ]
+        )
+    )
+    with pytest.raises(harness.fixture.ProvisioningError):
+        await harness.fixture.native_policy(
+            db, {"ws": uuid4()}, "native_happy", "native-enable", "a" * 40
+        )
+    assert db.execute.await_count == 2

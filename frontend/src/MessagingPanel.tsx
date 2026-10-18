@@ -1,3 +1,4 @@
+import { HumanContextPanel, type HumanContextIntent } from './HumanContextPanel';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Session } from './api';
 import { EscalationContext } from './escalation-api';
@@ -36,6 +37,8 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   const messagesState = useRef(view.messages.items);
   messagesState.current = view.messages.items;
   const intent = useRef<Intent | null>(null);
+  const humanIntent=useRef<HumanContextIntent|null>(null);
+  const [nativeRefresh,setNativeRefresh]=useState(0);
   const controlIntent = useRef<ControlIntent | null>(null);
   const [controlRefresh, refreshControl] = useState(0);
   const [, redraw] = useState(0);
@@ -83,7 +86,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         return { ...v, conversations: { items: merge(cursor === null ? [] : v.conversations.items ?? [], p.items, x => x.conversation_id), cursor: p.next_cursor, busy: false, error: '' } };
       });
       if (kind === 'conversations' && !selection.current.id && page.items.length) {
-        const p = intent.current ?? controlIntent.current;
+        const p = intent.current ?? controlIntent.current ?? humanIntent.current;
         const original = p && sameActor(p) ? (page.items as Conversation[]).find(v => v.conversation_id === p.conversation) : undefined;
         choose((original ?? (page.items as Conversation[])[0]).conversation_id);
       }
@@ -141,6 +144,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
       p.phase = 'confirmed'; p.receipt = Object.freeze(receipt); changed();
       update({ receipt, draft: '', notice: 'Намерение принято сервером. Это ещё не доставка.' });
       refreshControl(n => n + 1);
+      setNativeRefresh(n => n + 1);
       // The receipt is final even if this read fails. Never put the GET in the
       // POST recovery catch: only reads may follow a valid 202.
       void history(id);
@@ -166,7 +170,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (!session || !current() || intent.current || controlIntent.current || !view.selected || reading.current.messages) return;
+    if (!session || !current() || intent.current || controlIntent.current || humanIntent.current || !view.selected || reading.current.messages) return;
     try { exactManualText(view.draft); } catch { update({ notice: 'Введите 1–4096 символов Unicode: не только пробелы, без NUL и одиночных суррогатов.' }); return; }
     const p: Intent = { actor: session.user_account_id, workspace, conversation: view.selected, body: Object.freeze({ text: view.draft }), key: crypto.randomUUID(), phase: 'uncertain', ambiguous: false, failedSession: session };
     intent.current = p; void send(p);
@@ -201,8 +205,11 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
 
   const p = intent.current, detached = p && (!matching || !owner || view.denied);
   const selected = view.conversations.items?.find(c => c.conversation_id === view.selected);
-  return <ConversationControl session={owner && !view.denied ? session : null} context={selected ? { workspace, conversation: selected.conversation_id, client: selected.client_id } : null}
-    intent={controlIntent} manualPending={() => !!intent.current} refresh={controlRefresh} accepted={() => void history()}
+  return <HumanContextPanel session={owner && !view.denied ? session : null} context={selected ? {workspace,conversation:selected.conversation_id,client:selected.client_id}:null}
+    intent={humanIntent} blocked={()=>!!intent.current||!!controlIntent.current} refresh={nativeRefresh} accepted={()=>{refreshControl(n=>n+1);void history();}}
+    recover={()=>{interruptSend();recover();}} expired={()=>{interruptSend();expired();}} accessDenied={()=>{authorization(new MessagingError(403,'ACCESS_DENIED'));}}>
+    {(humanContext,contextPending,humanState)=><ConversationControl humanState={humanState} contextChanged={()=>setNativeRefresh(n=>n+1)} session={owner && !view.denied ? session : null} context={selected ? { workspace, conversation: selected.conversation_id, client: selected.client_id } : null}
+    intent={controlIntent} manualPending={() => !!intent.current||!!humanIntent.current} refresh={controlRefresh} accepted={() => {setNativeRefresh(n=>n+1);void history();}}
     recover={() => { interruptSend(); recover(); }} expired={() => { interruptSend(); expired(); }} accessDenied={() => { authorization(new MessagingError(403,'ACCESS_DENIED')); }}>
     {(control, controlPending) => <>
     {detached && <section className="panel alert" aria-label="Незавершённый ответ"><p role="status">В прежнем контексте осталось намерение ответа. Оно не переносится и не отправляется в этом контексте.</p><button onClick={discard}>Завершить ответ без повтора</button></section>}
@@ -224,7 +231,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
       <section aria-label="История сообщений"><div className="billing-heading"><h3>История сообщений</h3><button className="secondary" disabled={!view.selected || view.messages.busy || p?.phase === 'sending'} onClick={() => void history()}>Обновить сообщения</button></div>
         {!view.selected && <p>Выберите диалог.</p>}
         {selected && <p className="muted">Окно ответа: {selected.reply_window_expires_at ?? 'Нет отметки Telegram'}. Текущее разрешение проверяет сервер.</p>}
-        {control}
+        {control}{humanContext}
         {ownerDecision?.workspace===workspace&&ownerDecision.conversation===selected?.conversation_id&&ownerDecision.client===selected.client_id&&<p role="status" className="notice">По этому диалогу сохранено внутреннее решение владельца. Обновите сообщения и режим перед следующим действием; решение не является отправкой клиенту.</p>}
         {view.messages.busy && <p role="status">Загружаем сообщения…</p>}{view.messages.error && <p role="alert">{view.messages.error}</p>}
         {view.messages.items?.length === 0 && <p>Сообщений пока нет.</p>}
@@ -248,7 +255,7 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
         {view.messages.cursor && <button disabled={view.messages.busy || p?.phase === 'sending'} onClick={() => void history(view.selected, view.messages.cursor)}>Ещё сообщения</button>}
         {view.messages.items !== null && view.messages.cursor === null && !view.messages.busy && <p className="muted">Начало истории.</p>}
         <p className="muted">Изменения появляются после обновления сообщений. Уже выданная ссылка действует до истечения срока. «Канал принял» не означает получение или прочтение клиентом. UNKNOWN не отправляется повторно.</p>
-        {view.selected && <form className="form reply-form" onSubmit={submit}><label htmlFor="manual-reply">Ручной текстовый ответ</label><textarea id="manual-reply" rows={4} value={matching && p && p.phase !== 'confirmed' ? p.body.text : view.draft} onChange={e => update({ draft: e.target.value })} disabled={!!p || controlPending} aria-describedby="reply-help" /><p id="reply-help" className="muted">1–4096 символов Unicode. Пробелы и переносы сохраняются; Enter добавляет строку.</p><button type="submit" disabled={!!p || controlPending || view.messages.busy}>Проверить и отправить</button></form>}
+        {view.selected && <form className="form reply-form" onSubmit={submit}><label htmlFor="manual-reply">Ручной текстовый ответ</label><textarea id="manual-reply" rows={4} value={matching && p && p.phase !== 'confirmed' ? p.body.text : view.draft} onChange={e => update({ draft: e.target.value })} disabled={!!p || controlPending || contextPending} aria-describedby="reply-help" /><p id="reply-help" className="muted">1–4096 символов Unicode. Пробелы и переносы сохраняются; Enter добавляет строку.</p><button type="submit" disabled={!!p || controlPending || contextPending || view.messages.busy}>Проверить и отправить</button></form>}
         {view.notice && <p role="status">{view.notice}</p>}
         {view.receipt && <p className="muted">Принятие намерения: {view.receipt.accepted_at}. Текущее состояние — в истории, даже если сообщение находится на другой странице.</p>}
         {matching && p && <div className="notice" aria-live="polite">
@@ -261,5 +268,6 @@ export function MessagingPanel({ session, workspace, recover, expired, accessDen
       </section></div>
     </section>)}
   </>}
-  </ConversationControl>;
+  </ConversationControl>}
+  </HumanContextPanel>;
 }

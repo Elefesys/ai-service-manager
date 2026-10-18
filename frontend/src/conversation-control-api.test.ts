@@ -31,7 +31,7 @@ describe('accepted CONTROL DTOs and identity',()=>{
     for(const receipt of [{result:controlReceipt().result},{...controlReceipt(),extra:true},{...controlReceipt(),outcome:['ACCEPTED']}])expect(()=>parseControlReceipt(receipt,controlContext(),'RESUME',controlBody())).toThrow(ControlError);
   });
   it('keeps strict control errors and structural503 separate',()=>{
-    for(const code of ['STALE_STATE','IDEMPOTENCY_KEY_CONFLICT','CONTROL_VERSION_EXHAUSTED','NOT_ALLOWED'])expect(parseControlError({error:{code}},409).code).toBe(code);
+    for(const code of ['STALE_STATE','IDEMPOTENCY_KEY_CONFLICT','CONTROL_VERSION_EXHAUSTED','NOT_ALLOWED','CONTEXT_POLICY_INACTIVE','CONTEXT_POLICY_PAUSED','HUMAN_REQUIRED','CONTEXT_CONFIRMATION_REQUIRED','CONTEXT_UNRESOLVED','CONTEXT_INPUT_PENDING','CONTEXT_INPUT_UNRESOLVED','CONTEXT_COVERAGE_REQUIRED'])expect(parseControlError({error:{code}},409).code).toBe(code);
     expect(parseControlError({error:{code:'BILLING_STATE_UNAVAILABLE',state_reason:'REVISION_INVALID'}},503).stateReason).toBe('REVISION_INVALID');
     for(const [body,status] of [[{error:{code:'NOT_ALLOWED',state_reason:null}},409],[{error:{code:'BILLING_STATE_UNAVAILABLE'}},503],[{error:{code:'BILLING_STATE_UNAVAILABLE',state_reason:['REVISION_INVALID']}},503],[{error:{code:'STALE_STATE'}},200],[{error:{code:'INVALID_RESPONSE'}},500],[{error:{code:'UNAVAILABLE'},extra:true},503]] as const)expect(()=>parseControlError(body,status)).toThrow(ControlError);
   });

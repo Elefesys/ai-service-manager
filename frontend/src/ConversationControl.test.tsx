@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConversationControl, ControlIntent } from './ConversationControl';
 import { ControlError, ControlReceipt, ControlState, controlApi } from './conversation-control-api';
 import { controlBody, controlContext, controlReceipt, controlState, deferred, id, session } from './messaging-fixtures.test-helper';
+import type { HumanContextState } from './human-context-api';
 
 beforeEach(()=>{
   vi.spyOn(controlApi,'read').mockImplementation(async context=>controlState(context));
@@ -17,6 +18,21 @@ function setup(){
 const ready=()=>waitFor(()=>expect(screen.getByRole('button',{name:'Разрешить автоматику'})).toBeEnabled());
 const resume=async()=>{await ready();await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Разрешить автоматику'}));});};
 const current=()=>screen.findByText('Операция подтверждена. Текущее состояние получено.');
+
+describe('native context is reviewed before a separate explicit Resume',()=>{
+  const native=(paused=false):HumanContextState=>({...controlState(),policy:paused?'PAUSED':'ON',policy_epoch:'1',observation_epoch:'0',ingress_checkpoint:'0',input_state_hash:'a'.repeat(64),input_gap_limit_exceeded:false,has_unsequenced_context_input:false,current_revision:null,review_status:paused?'POLICY_PAUSED':'BOOTSTRAP_REQUIRED',context_blockers:paused?['POLICY_PAUSED','CONTEXT_CONFIRMATION_REQUIRED']:['CONTEXT_CONFIRMATION_REQUIRED'],resume_blockers:paused?['POLICY_PAUSED','CONTEXT_CONFIRMATION_REQUIRED']:['CONTEXT_CONFIRMATION_REQUIRED'],coverage_status:'UNCONFIRMED',history_truncated:false,pending_context_input:false,has_failed_context_input:false,unreviewed_failed_context_input:false,automation_work:{state:'IDLE',reason:null,job_id:null,turn_id:null,observed_at:controlState().observed_at}});
+  it('AI with a native hold is a saved mode, not a claim that new actions are allowed',async()=>{vi.mocked(controlApi.read).mockResolvedValue({...controlState(),control_mode:'AI'});const v=setup();v.rerender(<ConversationControl {...v.props} humanState={{...native(true),control_mode:'AI',resume_blockers:['POLICY_PAUSED','HUMAN_REQUIRED','CONTEXT_CONFIRMATION_REQUIRED']}}/>);await screen.findByText('Сохранён режим AI; новые действия требуют сверки');expect(screen.queryByText('Автоматика разрешена',{exact:true})).toBeNull();expect(screen.getByRole('button',{name:'Разрешить автоматику'})).toBeDisabled();expect(controlApi.command).not.toHaveBeenCalled();});
+  it.each([null,native(),native(true)])('withholds Resume for unread/bootstrap/paused state but preserves explicit Takeover %#',async humanState=>{
+    const v=setup();v.rerender(<ConversationControl {...v.props} humanState={humanState}/>);
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Забрать управление'})).toBeEnabled());expect(screen.getByRole('button',{name:'Разрешить автоматику'})).toBeDisabled();fireEvent.click(screen.getByRole('button',{name:'Забрать управление'}));await current();expect(vi.mocked(controlApi.command).mock.calls[0][1]).toBe('TAKEOVER');
+  });
+  it('a newly read allowed context never resumes automatically and must match the fresh control tuple',async()=>{
+    const v=setup(),s:HumanContextState={...native(),review_status:'CONFIRMED',coverage_status:'OWNER_TEXT',context_blockers:[],resume_blockers:[],current_revision:{revision_id:id(70),revision_no:'1',previous_revision_id:null,actor_user_account_id:session().user_account_id,accepted_at:controlState().observed_at,disposition:'OWNER_TEXT',text:'Reviewed context',source_media:'NONE',coverage:'OWNER_ASSERTED_TEXT_ONLY',confirmed_generation:controlState().control_generation,accepted_context_version:controlState().context_version,policy_epoch:'1',observation_epoch:'0',reviewed_ingress_checkpoint:'0',reviewed_input_state_hash:'a'.repeat(64)}};v.rerender(<ConversationControl {...v.props} humanState={null}/>);await waitFor(()=>expect(controlApi.read).toHaveBeenCalled());v.rerender(<ConversationControl {...v.props} humanState={{...s,context_version:'1'}}/>);expect(screen.getByRole('button',{name:'Разрешить автоматику'})).toBeDisabled();v.rerender(<ConversationControl {...v.props} humanState={s}/>);await ready();expect(controlApi.command).not.toHaveBeenCalled();await resume();await current();expect(controlApi.command).toHaveBeenCalledTimes(1);
+  });
+  it.each(['CONTEXT_POLICY_INACTIVE','CONTEXT_POLICY_PAUSED','HUMAN_REQUIRED','CONTEXT_CONFIRMATION_REQUIRED','CONTEXT_UNRESOLVED','CONTEXT_INPUT_PENDING','CONTEXT_INPUT_UNRESOLVED','CONTEXT_COVERAGE_REQUIRED'])('native refusal %s refreshes context without retrying or impersonating acceptance',async code=>{
+    vi.mocked(controlApi.command).mockRejectedValueOnce(new ControlError(409,code));const v=setup(),contextChanged=vi.fn();v.rerender(<ConversationControl {...v.props} contextChanged={contextChanged}/>);await resume();await screen.findByText(/Сверьте доступный контекст владельца/);expect(contextChanged).toHaveBeenCalledTimes(1);expect(v.props.accepted).not.toHaveBeenCalled();expect(controlApi.command).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('current control and explicit actions',()=>{
   it('mount/refresh are read-only; OWNER role, independent of frozen permissions',async()=>{

@@ -60,3 +60,9 @@ nav { display: flex; gap: 22px; border-bottom: 1px solid #cdd4de; padding-bottom
 .escalation-detail .exact-answer { white-space: pre-wrap; }
 .escalations :focus-visible { outline: 3px solid #2460a5; outline-offset: 3px; }
 @media (max-width: 520px) { .escalation-detail dl { grid-template-columns: 1fr; } .escalation-detail dd { margin-bottom: .4rem; } }
+
+.human-context { margin-block: 1rem; padding: 1rem; border: 1px solid var(--border, #d9e0e7); border-radius: .75rem; min-width: 0; }
+.human-context textarea, .human-context select { max-width: 100%; }
+.human-context .exact-answer { white-space: pre-wrap; overflow-wrap: anywhere; }
+.human-context label { display: block; margin-block: .5rem; }
+.human-context input[type=checkbox] { width: auto; margin-right: .5rem; }

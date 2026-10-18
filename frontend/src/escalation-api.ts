@@ -1,3 +1,4 @@
+import { parseContextHold, type ContextHold } from './human-context-api';
 // Four accepted owner routes (M3_CONTRACT §14.5/14.16). Receipts are historical.
 export type EscalationStatus = 'PENDING' | 'RESOLVED' | 'CANCELLED' | 'EXPIRED';
 export type StatusFilter = EscalationStatus | 'ALL';
@@ -17,7 +18,7 @@ export type EscalationView = {
   maintenance: 'SCHEDULED' | 'COMPLETE' | 'FAILED';
   resolution: { answer_text: string; actor_user_account_id: string; completed_at: string } | null;
   closure: { reason: ClosureReason; actor_user_account_id: string | null; completed_at: string } | null;
-  can_resolve: boolean; can_cancel: boolean;
+  context_hold: ContextHold | null; can_resolve: boolean; can_cancel: boolean;
 };
 export type EscalationPage = { items: EscalationView[]; next_cursor: string | null; observed_at: string };
 export type EscalationReceipt = { outcome: 'ACCEPTED' | 'REPLAY'; result: {
@@ -46,7 +47,7 @@ export function exactAnswer(value: unknown): string {
   return value;
 }
 export function parseEscalation(value: unknown, workspace: string, expected?: Partial<Omit<EscalationContext,'workspace'>>): EscalationView {
-  const v = object(value,['workspace_id','escalation_id','conversation_id','client_id','turn_id','assignee_user_account_id','reason','question','policy','version','status','bound_context','current_context','validity','waiting','created_at','due_at','second_reminder_at','expires_at','observed_at','reminders','maintenance','resolution','closure','can_resolve','can_cancel']);
+  const v = object(value,['workspace_id','escalation_id','conversation_id','client_id','turn_id','assignee_user_account_id','reason','question','policy','version','status','bound_context','current_context','validity','waiting','created_at','due_at','second_reminder_at','expires_at','observed_at','reminders','maintenance','resolution','closure','context_hold','can_resolve','can_cancel']);
   if (!['workspace_id','escalation_id','conversation_id','client_id','turn_id','assignee_user_account_id'].every(k=>uuid(v[k])) || v.workspace_id !== workspace || (expected?.escalation !== undefined && v.escalation_id !== expected.escalation) || (expected?.conversation !== undefined && v.conversation_id !== expected.conversation) || (expected?.client !== undefined && v.client_id !== expected.client)) invalid();
   const bound = object(v.bound_context,['turn_revision','control_generation','context_version','fingerprint']);
   const current = object(v.current_context,['control_mode','control_generation','context_version']);
@@ -58,6 +59,7 @@ export function parseEscalation(value: unknown, workspace: string, expected?: Pa
     if (r.ordinal !== i+1 || r.due_at !== v[i===0?'due_at':'second_reminder_at'] || (r.recorded_at !== null && !timestamp(r.recorded_at))) invalid();
   });
   const pending=v.status==='PENDING', active=pending&&v.validity==='CURRENT';
+  if(v.context_hold!==null){try{parseContextHold(v.context_hold);}catch{invalid();}if(!active||v.can_resolve)invalid();}
   if (v.version !== (pending?'1':'2') || (v.validity==='TERMINAL')===pending || v.waiting !== (active?'WAITING_FOR_HUMAN':null) || (v.resolution !== null)!==(v.status==='RESOLVED') || (v.closure !== null)!==oneOf(v.status,['CANCELLED','EXPIRED']) || !(String(v.created_at)<String(v.due_at)&&String(v.due_at)<String(v.second_reminder_at)&&String(v.second_reminder_at)<String(v.expires_at)) || (v.can_resolve&&!active) || (v.can_cancel&&(!pending||!oneOf(v.validity,['CURRENT','ASSIGNEE_REVOKED'])||String(v.observed_at)>=String(v.expires_at)))) invalid();
   if (v.resolution !== null) {
     const r=object(v.resolution,['answer_text','actor_user_account_id','completed_at']);

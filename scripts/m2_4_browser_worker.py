@@ -28,7 +28,14 @@ from asm.messaging.database import MessagingDatabase
 from asm.messaging.models import EventKind, NormalizedEventV1, OutcomeKind
 from asm.messaging.worker import Worker
 from asm.telegram.database import TelegramIngress
-from m2_4_browser_fixture import ESCALATION_PRESETS, MATERIAL_PHOTOS, PRESETS, bot, route
+from m2_4_browser_fixture import (
+    ESCALATION_PRESETS,
+    MATERIAL_PHOTOS,
+    NATIVE_PRESETS,
+    PRESETS,
+    bot,
+    route,
+)
 from PIL import Image
 from provision_local_auth import PrivateArgumentParser, ProvisioningError
 from sqlalchemy import text
@@ -219,7 +226,7 @@ def seed_events():
                 )
             for index in range(1, 27):
                 yield event(preset, f"history-{index}")
-        if preset not in ESCALATION_PRESETS:
+        if preset not in ESCALATION_PRESETS + NATIVE_PRESETS:
             yield event(preset, "ready-image", image="ready")
         if preset == "happy":
             yield event(preset, "failed-image", image="failed")
