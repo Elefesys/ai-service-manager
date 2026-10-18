@@ -2,7 +2,62 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — MATERIAL принят; C3 NATIVE-CONTEXT REVIEW / 2026-10-17 UTC
+## Текущий статус — C3 NATIVE-CONTEXT R2 REVIEW / 2026-10-18 UTC
+
+**C3-M3.1-NATIVE-CONTEXT-CONTRACT-R2 — REVIEW / docs proposal → HOLD после return.**
+[C0 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6245868587),
+[C0 dispositions/design choices](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6245858507),
+[C1 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6245768491),
+[C2 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6245810317),
+[contract§16](tasks/M3_CONTRACT.md#16-native-context--proposed).
+C1/C2 COMPLETE/CHANGES_REQUESTED accepted→HOLD; C5/C6/C8 HOLD.
+
+| Binding / task | Current disposition |
+|---|---|
+| Correction parent/tree | `315c42e2ef03ace056279fe019efef5100665c7c` / `348519b752e05aae7d410f4a97ac7685ac77e8e0`, reviewed proposal baseline |
+| Branch/publication | `c3/m3-1-native-context-contract-r1`, one ordinary fast-forward commit; sole parent above; exact published identity/statistics in canonical PR34 return. No amend/rebase/force/new PR |
+| Write scope | Exactly `docs/tasks/M3_CONTRACT.md` proposed§16, `docs/tasks/M3_HANDOFF.md`, this register; history preserved. No code/tests/OpenAPI/migration/source-original edits |
+| Accepted runtime | MATERIAL INTEGRATED/VERIFIED LOCAL/TEST/all11 CLOSED; main `e205e22051bc06295758b504d84699652b176c15`, tree `85206b9c66ac151f3847aa39f46fb75663a18b91`; CI38960113060 attempt1 push/main9+clean9 SUCCESS unchanged |
+| R2 concrete choices | Mandatory coverage guard/tail eviction hold; STABLE same-snapshot classification/own-write separation; same-Job bounded pending recheck; closed policy/read/errors/body/cursor; Escalation hold+pre-C connection lock; replayable LOCAL/TEST policy receipt; explicit pre-C/NULL bootstrap |
+| Minimal data delta proposed | Two context evidence tables + one immediate policy command receipt; C/connection/control links and Job wait marker. Exact full FK/RLS/ACL/signature/typed Audit obligations; no generic framework |
+| Status limit | Native contract PROPOSED/NOT ACCEPTED; implementation NOT VERIFIED. Nine findings and one clarification below OPEN despite addressed proposal |
+
+| Finding / full alias / severity | Current disposition / R2 correction |
+|---|---|
+| C0-NC-CONTEXT-01 = C1-NC-01 = C2-NC-01 / P1 | OPEN;§16.4/16.5 coverage_ok every admission, full handoff/replacement; NC01/02/08/20 |
+| C1-NC-02 / P2 | OPEN;§16.5.1 closed matrix/precedence/legacy NULL variant; NC10/16/19 |
+| C1-NC-03 / P2 | OPEN;§16.4 exact4096 total body/Unicode/cursor/preview/wire; NC06/10/11/20 |
+| C1-NC-04 / P2 | OPEN;§16.6.3 Escalation context_hold/read/list/strict UI; NC14/19 |
+| C2-NC-02 / P1 | OPEN;§16.6.1 post-wait one snapshot/terminal retry/own writes; NC12/13 |
+| C2-NC-03 / P2 | OPEN;§16.6.2 durable WAIT/reclaim/visible exhaustion; NC14/15/18 |
+| C2-NC-04 / P2 | OPEN;§16.6.3 RESOLVE connection before C/retained terminal priority; NC11/14/19 |
+| C2-NC-05 / P2 | OPEN;§16.7.1 trusted policy command+receipt/CAS/hash/Audit/replay; NC15/19 |
+| C0-NC-DOC-01 / P3 | OPEN pending C0 intake; EOF corrected, actual R2 git diff --check and three-doc integrity in return |
+| C2-NC-Q01 / clarification | OPEN;§16.6.1 MATERIAL no-C queue/defer, failed/unsequenced bootstrap; NC09/13/19/20 |
+
+C0 D1/D2/D3 accepted limited design choices, не acceptance всего контракта.
+Next minimal scope — C0 intake + targeted C1/C2 rereview of concrete R2; D4 schema/
+wire/recovery/1024-gap-bound/policy-carrier review перед отдельным runtime assignment.
+Applied0001–0012 frozen; successor revision/predecessor/reservation unassigned.
+Frozen through§15.18 exact603955 bytes, SHA256
+`9643365fa8b534d6cf37a181c7c03ed76bd16b9d559016794b377b9a1eb1064b`.
+
+Source-backed inspection/manual finite traces only; original11/manifest/supplied
+originals rechecked; actual R2 `git diff --check` **EXIT0**; prefix/3-path/links PASS,
+69 future paths=57 existing+12 proposed new. Full verification/identity in canonical
+return. Historical R1 C3 NOT RUN (exec outage) и C0 EOF EXIT2
+remain historical facts. Product pytest/PG/Docker/Playwright/build/services/install/
+CI actions/operator commands/account/VM/Telegram API/working DB/S3/sends/renewal/
+deploy/expenses NOT RUN. No new PR/main/old PR34 branch mutation.
+
+Whole M3 IN_PROGRESS; P-01/latest-human-context/A08, P-05 renewal/collector,
+P-A03-09 account и M3-ACCEPTANCE/A12 OPEN. Gate OFF; merge не deployment.
+Budgets S/600/P720/fixed120/+480/S+1200/cleanup90/state25/browser25/foundation45/
+3s/60s/10s и worker caps unchanged; IMPL-05 DEFERRED, M4 вне scope.
+
+<a id="текущий-статус--material-принят-c3-native-context-review--2026-10-17-utc"></a>
+
+## История — C3 NATIVE-CONTEXT R1 REVIEW / 2026-10-17 UTC
 
 **MATERIAL INTEGRATED/VERIFIED LOCAL/TEST; whole M3 IN_PROGRESS.**
 [C0 postmerge receipt](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6228792048),

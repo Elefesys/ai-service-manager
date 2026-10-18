@@ -5,7 +5,61 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий статус — MATERIAL принят; NATIVE-CONTEXT proposal / 2026-10-17 UTC
+## 0. Текущий статус — NATIVE-CONTEXT R2 REVIEW / 2026-10-18 UTC
+
+[C0 R2 assignment](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6245868587),
+[C0 consolidated decisions](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6245858507),
+[C1 CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6245768491),
+[C2 CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6245810317).
+**C3-M3.1-NATIVE-CONTEXT-CONTRACT-R2: REVIEW / docs proposal → HOLD после return.**
+C1/C2 review COMPLETE/CHANGES_REQUESTED accepted→HOLD; C5/C6/C8 HOLD.
+Все9 distinct findings + C2-NC-Q01 остаются OPEN до C0 rereview, addressed in proposal;
+full alias mapping и finite traces — [contract§16.10](M3_CONTRACT.md#1610-review-mapping-принятые-choices-и-предел-evidence)
+и [единый реестр](../TASK_REGISTER.md). Ни одного runtime finding не объявлено CLOSED.
+
+Exact correction base/sole parent `315c42e2ef03ace056279fe019efef5100665c7c`, tree
+`348519b752e05aae7d410f4a97ac7685ac77e8e0` — reviewed proposal, не integrated runtime.
+Один normal fast-forward commit на `c3/m3-1-native-context-contract-r1`, отдельный
+checkout; ровно M3_CONTRACT proposed§16, M3_HANDOFF, TASK_REGISTER. Prefix through§15.18
+603955 bytes/SHA256 `9643365fa8b534d6cf37a181c7c03ed76bd16b9d559016794b377b9a1eb1064b` frozen.
+Applied0001–0012 frozen; revision/predecessor/reservation не назначены.
+
+| Concrete R2 correction | Owner handoff / bound |
+|---|---|
+| Coverage | CANONICAL_SUFFICIENT только при full canonical tail≤16 на Resume и каждом fresh admission; eviction→CONTEXT_COVERAGE_REQUIRED. Full OWNER_TEXT включается независимо в каждый V3; replacement/withdrawal explicit, old replay не возвращает pointer |
+| Read/classification | Один post-wait STABLE SELECT/direct projection, без nested VOLATILE message_effective; old helper own-write behavior сохранён. Pending/failed/NULL/checkpoint/input-state hash coherent. Unsequenced/pre-C terminal evidence acknowledged через bounded gap digest/OWNER_TEXT |
+| Temporary pending | Same durable Job CONTEXT_WAIT→READY в прежних5claims/15min/30s/backoff; без terminal result receipt/нового intent. Exhaustion/permanent hold→видимый OPERATOR_REQUIRED; DISPATCHING/UNKNOWN completion unchanged |
+| Policy/wire | Closed OFF_UNUSED/P0/ON/PAUSED/P+1 matrix, ordered errors, HUMAN_REQUIRED, fresh legacy NULL-link Resume. Total serialized body4096, exact validators/cursor/preview/no-store и paired Python/OpenAPI/TS |
+| Escalation | Fresh resolve connection SHARE до C; typed context_hold read/list/can_resolve=false. Validity/timer/cancel/FINAL/EXPIRED/winning replay прежние; later R V+1 cancel once |
+| Policy command | Concrete asm_migrator session_user LOCAL/TEST capability; minimal third private receipt carrier, key/hash/CAS/Audit/no-op/overflow. Lost enable ACK→newer pause→old replay не включает policy |
+| Evidence/handoff | NC01–20 обновлены с finite orders; exact future messaging worker/results/errors, V3 validators и Escalation API/models/TS/panel/tests включены в§16.9. Это proposed future paths, не разрешение writes сейчас |
+
+C0 D1/D2/D3 выбраны с пределами: owner-confirmed доступный handoff, conservative
+hold, native TEXT_ONLY/UNAVAILABLE/PARTIAL. Unseen/unreported native facts/provider
+completeness/causal takeover не доказаны; A08 не сокращён. D4: targeted C1 API/wire/
+UI и C2 snapshot/locks/FK/recovery/policy receipt/1024-gap-bound rereview, затем C0
+отдельно назначает schema/runtime scopes. Никакого M4 summary/retrieval.
+
+Original11 repository=manifest=supplied originals проверены заново; frozen prefix,
+three-path diff и links проверены;69 future paths=57 existing+12 proposed new.
+Actual `git diff --check` для R2 **EXIT0**; full commit/tree/parent/stats в canonical
+return. R1 exec outage/NOT RUN
+и actual C0 R1 EOF EXIT2 сохранены как история ниже, не переписаны в прежний PASS.
+Только source inspection и finite manual traces; product tests/PG/browser/build/
+services/install/Actions/VM/Telegram API/working DB/S3/sends/operator command/
+renewal/deploy/expenses NOT RUN by scope. No new PR/main/old PR34 branch changes.
+
+MATERIAL **INTEGRATED/VERIFIED LOCAL/TEST**, all11 CLOSED; accepted runtime main
+`e205e22051bc06295758b504d84699652b176c15`, tree `85206b9c66ac151f3847aa39f46fb75663a18b91`;
+prior push/main CI38960113060 attempt1 9jobs+9clean SUCCESS unchanged. Gate OFF,
+merge≠VM deployment. Whole M3 IN_PROGRESS; P-01/latest-human-context/A08,
+P-05 renewal/collector, P-A03-09 account и M3-ACCEPTANCE/A12 OPEN.
+Budgets S/600/P720/fixed120/+480/S+1200/cleanup90/state25/browser25/foundation45/
+3s/60s/10s unchanged; IMPL-05 DEFERRED. Next: C0 intake → C1/C2 rereview.
+
+<a id="0-текущий-статус--material-принят-native-context-proposal--2026-10-17-utc"></a>
+
+## История — NATIVE-CONTEXT R1 proposal / 2026-10-17 UTC
 
 [C0 postmerge acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6228792048)
 принимает MATERIAL **INTEGRATED/VERIFIED LOCAL/TEST**, все11 findings CLOSED.
