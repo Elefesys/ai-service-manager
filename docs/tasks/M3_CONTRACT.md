@@ -7030,3 +7030,368 @@ browser25/foundation45/3s/60s/10s и existing worker caps unchanged; IMPL-05 DEF
 M4 не выдан. Next minimal scope: C0 intake → targeted C1/C2 contract rereview →
 отдельное runtime/revision authorization. **C3 REVIEW / docs proposal → HOLD**;
 C1/C2/C5/C6/C8 HOLD. No new PR/main/old PR34 branch mutation.
+
+
+### 16.11. C2 DB implementation checkpoint — 0013 / 2026-10-18 UTC
+
+Источник выдачи — [C0 C2-M3.1-NATIVE-CONTEXT-DB-R1](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6247002446).
+Ветка `c2/m3-1-native-context-db` продолжает exact preparation
+`9cebc175959eba565dcd7b979a91d04423fa94fa` (tree
+`8ab4f9a690798f010013d907b6eee0f29fd43eab`), sole parent которого — accepted
+R2 `0cdd66cc135c8797224e8dc0e87bc3280ad446c1`. Нормы §§16.1–16.10 не изменены.
+Весь предшествующий файл frozen:714947 UTF-8 bytes,
+SHA256 d032a4b699767f58f60288fbe17808b69bf98627d8c11acb8df2c9a439ae8346.
+
+Это **REVIEW / DB checkpoint**: реализация SQL, DDL и отдельная synthetic DB lane.
+Точный delivery commit/tree/parent, tested tree, команды и итоговые результаты —
+в одном canonical C2 receipt PR34. Этот append не меняет TASK_REGISTER и не
+объявляет native runtime INTEGRATED/VERIFIED. Accepted main остаётся
+`e205e22051bc06295758b504d84699652b176c15`, schema0012. Foundation/readiness
+по-прежнему ожидает0012 и **отказывает на0013**. Python/TS/API/Console и host
+operator ещё не paired; checkpoint отдельно не merge-ready/deployable.
+
+`migrations/versions/0013_native_context.py`: revision0013/down_revision0012,
+один successor head; applied0001–0012 не меняются. Файл содержит literal effective
+0012 originals для точного reverse, fixed132 predecessor function body profiles,
+fixed59 predecessor runtime signatures и fixed45-table successor column inventory.
+После upgrade app/platform имеют **45 tables и167 functions**:3 tables/35 functions
+добавлены,18 existing functions заменены; existing grants сохранены.
+Extension-owned functions не выдаются за app/platform inventory.
+
+Три новые таблицы принадлежат asm_migrator, ENABLE+FORCE RLS,
+policy `native_migrator TO asm_migrator USING(true) WITH CHECK(true)`;
+PUBLIC/asm_runtime не имеют SELECT/DML. BEFORE UPDATE вызывает retained
+`turn_immutable`; deferred consistency сохраняет Audit/receipt/source atoms.
+Колонки в фактическом порядке, без неявного сокращения:
+
+| Таблица | Exact columns |
+|---|---|
+| `platform.human_context_observations` | `workspace_id,id,conversation_id,client_id,connection_id,provider_chat_id,epoch,policy_epoch,control_generation,first_source_receipt_id,classification,semantic_digest,accepted_at` |
+| `platform.human_context_reconciliations` | `workspace_id,id,conversation_id,client_id,connection_id,provider_chat_id,actor_user_account_id,namespace,idempotency_key,request_fingerprint,correlation_id,previous_revision_id,revision_no,expected_generation,expected_context_version,accepted_context_version,policy_epoch,observation_epoch,reviewed_ingress_seq,reviewed_input_state_hash,reviewed_gap_digest,reviewed_gap_overflow,disposition,context_text,source_media,attestation,audit_event_id,event_type,accepted_at,result` |
+| `platform.human_context_policy_receipts` | `workspace_id,id,connection_id,business_id,provider,bot_identity,external_connection_id,owner_user_id,actor_db_role,namespace,idempotency_key,request_fingerprint,operation,expected_policy,expected_policy_epoch,accepted_policy,accepted_policy_epoch,change,source_profile,audit_event_id,event_type,accepted_at,result` |
+
+Supporting delta существующих таблиц:
+
+| Таблица | Added columns |
+|---|---|
+| `app.audit_events` | `native_revision_id,native_policy_receipt_id,native_connection_id,native_conversation_id` |
+| `app.channel_connections` | `human_context_policy,human_context_policy_epoch` |
+| `app.conversations` | `human_observation_epoch,human_context_revision_id` |
+| `platform.inbox_events` | `human_context_source_receipt_id,human_context_observation_id` |
+| `platform.messaging_jobs` | `context_block_reason,context_wait_claim_token,context_wait_result` |
+| `platform.conversation_control_receipts` | `human_context_revision_id,human_context_policy_epoch,human_observation_epoch` |
+| `platform.telegram_provenance` | `human_context_observation_id` |
+
+Audit columns generated STORED, из discriminator/object/payload, не caller identity.
+Control native relation: либо все R/P/N NULL для retained/OFF_UNUSED paths, либо
+все non-NULL для fresh used-policy Resume. BEFORE INSERT проверяет actual locked
+connection policy/current selected R; historical NULL receipt после ENABLE не
+становится недействительным и не backfill-ится. TAKEOVER links всегда NULL.
+
+Stable compound keys связывают ws/C/Client/connection/chat; R predecessor — same C
+и Client, actor — membership плюс live OWNER command gate. Audit R FK включает
+ws/audit/C/event/V/actor/revision; policy FK — ws/audit/connection/event/P/receipt.
+Policy binding FK — exact ws/connection/Business/provider/bot/external binding.
+Ни R accepted counters, ни policy P, ни saved claim token не ссылаются FK на mutable
+current counters/token. C pointer FK deferred same ws/C/Client; native BEFORE UPDATE
+проверяет previous R/current G/V/N и один pointer/N/V+1 atom.
+
+Observation FK указывает stable C identity. First source FK deferred; **каждая**
+fresh transport receipt через provenance имеет observation association, включая
+semantic duplicate с новым update_id. Inbox хранит собственные source receipt/mark,
+а consistency сверяет exact Inbox/connection/source projection/digest. Старые
+codec=NULL, old IGNORED и OFF_UNUSED histories остаются NULL. Native no-C event не
+создаёт C/Client/mark; MATERIAL queue/defer/fold сохраняется, его terminal
+unsequenced input остаётся известным gap после появления C.
+
+### 16.12. SQL surface и authority
+
+Все35 additions — SECURITY DEFINER/owner asm_migrator,
+`search_path=pg_catalog,pg_temp`, PUBLIC EXECUTE revoked. Полная подпись, return,
+volatility и runtime grant:
+
+| Exact regprocedure | Returns | Volatility | asm_runtime EXECUTE |
+|---|---|---|---|
+| `platform.human_context_hash(text,text[])` | `bytea` | IMMUTABLE | NO |
+| `platform.human_context_text_valid(text)` | `boolean` | IMMUTABLE | NO |
+| `platform.human_context_decimal(jsonb,boolean)` | `boolean` | IMMUTABLE | NO |
+| `platform.human_context_uuid(jsonb)` | `boolean` | IMMUTABLE | NO |
+| `platform.human_context_revision_json(platform.human_context_reconciliations)` | `jsonb` | STABLE | NO |
+| `platform.human_context_effective(app.messages,jsonb,text)` | `jsonb` | STABLE | NO |
+| `platform.human_context_projection(uuid,uuid,timestamptz)` | `jsonb` | STABLE | NO |
+| `platform.human_context_turn_projection(uuid,uuid,timestamptz)` | `jsonb` | STABLE | NO |
+| `platform.human_context_reason(jsonb,boolean)` | `text` | IMMUTABLE | NO |
+| `platform.human_context_observation_digest(uuid,uuid,uuid,uuid,jsonb)` | `bytea` | IMMUTABLE | NO |
+| `platform.human_context_preview(jsonb)` | `jsonb` | IMMUTABLE | NO |
+| `platform.human_context_observe(platform.telegram_update_receipts,jsonb)` | `uuid` | VOLATILE | NO |
+| `platform.human_context_read(uuid)` | `jsonb` | VOLATILE | YES |
+| `platform.human_context_observations(uuid,integer,jsonb)` | `jsonb` | VOLATILE | YES |
+| `platform.human_context_reconcile_result(platform.human_context_reconciliations)` | `jsonb` | STABLE | NO |
+| `platform.human_context_reconcile(uuid,text,jsonb)` | `jsonb` | VOLATILE | YES |
+| `platform.human_context_current_valid(jsonb)` | `boolean` | IMMUTABLE | NO |
+| `platform.human_context_snapshot_valid(jsonb,text)` | `boolean` | STABLE | NO |
+| `platform.human_context_admission(uuid,uuid,jsonb)` | `text` | VOLATILE | NO |
+| `platform.human_context_work_valid(platform.messaging_jobs)` | `boolean` | STABLE | NO |
+| `platform.human_context_work_replay(uuid,uuid)` | `jsonb` | STABLE | YES |
+| `platform.human_context_wait(uuid,uuid,text)` | `jsonb` | VOLATILE | NO |
+| `platform.human_context_test_prelock(platform.messaging_jobs)` | `void` | VOLATILE | NO |
+| `platform.human_context_test_guard(platform.messaging_jobs,jsonb)` | `text` | VOLATILE | NO |
+| `platform.human_context_snapshot_check(jsonb,text)` | `text` | STABLE | NO |
+| `platform.human_context_basic_current(uuid,uuid,uuid,bigint)` | `text` | VOLATILE | NO |
+| `platform.human_context_escalation_hold(uuid,uuid,timestamptz)` | `jsonb` | STABLE | NO |
+| `platform.human_context_policy_result(platform.human_context_policy_receipts)` | `jsonb` | STABLE | NO |
+| `platform.human_context_policy_command(uuid,uuid,text,text,text,bigint,jsonb,jsonb)` | `jsonb` | VOLATILE | NO |
+| `platform.human_context_policy_guard()` | `trigger` | VOLATILE | NO |
+| `platform.human_context_integrity()` | `trigger` | VOLATILE | NO |
+| `platform.human_context_consistent()` | `trigger` | VOLATILE | NO |
+| `platform.human_context_work_lookup(uuid,uuid)` | `jsonb` | STABLE | NO |
+| `platform.human_context_stale()` | `jsonb` | STABLE | NO |
+| `platform.human_context_schema_profile()` | `jsonb` | STABLE | NO |
+
+Четыре runtime grants имеют разные authority:
+
+- `human_context_read(C)` и `human_context_observations(C,limit,decoded_cursor)`:
+  trusted tenant transaction, READ COMMITTED/physical XID, live authenticated OWNER.
+  ws/actor не принимаются из DTO. Current read — exact closed DTO §16.4; private
+  `_gap_digest,_gap_count,_noncanonical,_unavailable,_recent_messages,_resume_receipt_id`
+  удаляются. Read ничего не подтверждает и не пишет.
+- `human_context_reconcile(C,key,body)`: тот же live OWNER; exact body §16.4,
+  ASCII key1…128, canonical UUID/LimitDecimal/hash, no trim/NFC. Wrapper
+  `{outcome:ACCEPTED|REPLAY,result}`. Result exact keys:
+  `workspace_id,conversation_id,client_id,receipt_id,revision_id,revision_no,previous_revision_id,audit_event_id,control_generation,previous_context_version,accepted_context_version,policy_epoch,observation_epoch,reviewed_ingress_checkpoint,reviewed_input_state_hash,disposition,source_media,coverage,accepted_at`.
+  receipt_id=revision_id; IDs UUID, counters decimal strings, time UTC6.
+- `human_context_work_replay(job,claim)`: отдельный token-only lookup без owner/
+  worker admission. Exact latest saved scheduling result либо P2001/STALE_CLAIM.
+  Он никогда не выдаёт send permit. UUID possession — узкая replay authority,
+  не доступ к произвольным Jobs/таблицам.
+
+Policy signature получает ws/connection/operation/key/expected policy/P/binding/
+profile в порядке §16.7.1. EXECUTE только migrator; первой проверкой остаётся
+**session_user=asm_migrator**, current_database asm_local|asm_test, затем isolation/
+closed input/installed profile. SECURITY DEFINER current_user и spoofed actor GUC
+не заменяют login. Host runner в этом checkpoint не создан.
+
+Owner errors — P2401 с closed codes §16.4–16.5; RESOLVE сохраняет P2501/
+STALE_STATE и retained priorities; policy — P2601 с closed operator codes §16.7.1.
+Worker structural errors сохраняют P2001; context scheduling — typed JSON result,
+а не generic terminal reject. Парные Python enum/error readers ещё нужны.
+
+Observation page возвращает ровно `items,next_cursor,through_epoch,current_epoch,observed_at`.
+SQL получает **decoded** strict object, а `next_cursor` отдаёт opaque string:
+unpadded Base64URL UTF-8 JSON, order `v,ws,C,Client,P,through_N,after_N`, без пробелов.
+Page items ровно `observation_id,epoch,classification,observed_at,source_kind,preview,coverage`;
+coverage=PROVIDER_OBSERVATION_ONLY. Preview — TEXT/PHOTO/UNSUPPORTED/DELETE closed
+variant §16.4. Ascending N, fixed through_N; subsequent new N не расширяет страницу.
+P mismatch→CONTEXT_CURSOR_STALE, cross-ws→ACCESS_DENIED, wrong C/Client→NOT_FOUND,
+invalid bounds/shape→INVALID_REQUEST. C3 проверяет исходные cursor bytes/length/
+canonical codec до SQL: decoded jsonb не хранит исходный byte spelling.
+
+### 16.13. Snapshot, bounded classifier и writes
+
+`human_context_projection(ws,C,clock)` и `human_context_turn_projection(ws,T,clock)` —
+SQL STABLE, один SELECT; helpers effective/revision/hash не VOLATILE. Сама проекция
+не получает locks/clock_timestamp: clock передаёт caller. Effective RLS под
+asm_migrator — constant migrator policies. В core нет retained VOLATILE
+message_effective/material_turn_usable. Retained message_effective и own-write
+invariant helpers **остаются прежними VOLATILE** для видимости уже сделанных writes.
+
+Caller делает authority/Business/Connection/C/Turn waits, затем отдельный SELECT
+projection/admission; own post-write reads — следующий SQL command. Ни DML CTE,
+ни cached pre-wait PL/pgSQL row не заменяют classifier. Reader/query clock один.
+Job/Inbox-only PENDING→FAILED меняет input hash без фиктивного C/N/V bump;
+projection видит old complete snapshot либо new complete snapshot. Чужие Jobs/
+Inbox для этого не блокируются.
+
+Explicit indices (помимо supporting UNIQUE/FK keys):
+
+| Index | Keys / partial predicate |
+|---|---|
+| native_inbox_checkpoint_idx | ws,connection,chat expression,turn_ingress_seq DESC; CLIENT_MESSAGE + seq non-NULL |
+| native_inbox_pending_idx | ws,connection,chat expression,id; PENDING + relevant kind |
+| native_inbox_failed_idx | ws,connection,chat expression,id; FAILED + relevant kind |
+| native_inbox_unsequenced_idx | ws,connection,chat expression,id; terminal + relevant + unsequenced |
+| native_source_observation_idx | ws,observation,receipt; observation non-NULL |
+| native_job_work_idx | ws,turn,context reason,available_at,id; context reason non-NULL |
+
+Relevant = CLIENT_MESSAGE/MESSAGE_EDITED/MESSAGE_DELETED. Unsequenced = Client
+seq=NULL либо mutation observation=NULL. Pending/failed/unsequenced flags имеют
+отдельные indexed EXISTS. Failed и unsequenced probes берут каждый ordered≤1025
+IDs; UNION DISTINCT берёт ordered≤1025. Gap digest содержит ordered exact tuples
+`[Inbox UUID,source receipt UUID|null,kind,status,result_code,seq string|null,observation UUID|null]`.
+≤1024→digest, probe1025→overflow и digest NULL. Input hash length-prefix закрывает
+ws/C/Client/connection/chat/checkpoint/pending/gap digest/overflow, включая NULL
+sentinel. Seq holes не интерпретируются как неизвестные provider сообщения.
+
+Latest17 canonical Messages по existing chronological index определяют truncation;
+выдаются последние16 в ascending order. OWNER_TEXT включён полностью независимо
+от tail; CANONICAL_SUFFICIENT требует whole history≤16 на каждом fresh action.
+Source associations и first-source preview не создают второй transcript/Message/
+File/FETCH. Фото не становится доступным по caption/Owner assertion.
+
+Reconcile: live actor→namespace/key→Business SHARE→Connection SHARE→C NO KEY UPDATE
+→одна CAS projection G/V/P/N/checkpoint/input hash/previous R→Audit→R→один C UPDATE.
+Save только HUMAN; PAUSED save разрешён; pending запрещён; overflow gap нельзя
+подтвердить; известный gap/noncanonical требует OWNER_TEXT либо UNRESOLVED.
+Exact historical replay возвращается до fresh CAS, не меняет pointer/mode/G/V.
+R text — полная replacement revision. Bootstrap NULL N становится0 в том же C atom.
+
+Resume сохраняет existing product/CAS/G-overflow priority, затем native guard;
+выбирает R и пишет historical R/P/N в одной transaction с existing AI/G+1/Fnew.
+Result/fingerprint старого control command не расширены. Обычный captured Client
+после Resume не сравнивается навечно с R.accepted V/checkpoint. Новые N/P/known
+unreviewed gap/coverage block закрывают admission без automatic mode/G change.
+
+Fresh RESOLVE берёт Connection SHARE **до C/E**, после ожидания перечитывает native
+hold отдельным SQL command. Retained FINAL/EXPIRED/replay/CANCEL/timer/assignee/CAS/
+overflow priority остаётся. Read/list используют waiting V и один clock/query;
+context_hold не меняет E validity/status/timers. Takeover первым G-change может
+cancel Pending E; следующий R/V+1 не отменяет terminal E повторно.
+Completion/SENT/File не получили Connection edge или FK к mutable native counters.
+
+### 16.14. V3 и durable context scheduling
+
+Used-policy inputs — exact V3 §16.4, с current R/P/N/selected Resume/history/coverage/
+limitations. Guarded additions входят **до** final-body digest. Bound2,097,152 bytes
+по canonical SQL jsonb body без snapshot_digest;64 members/16 history, никаких
+silent truncations текста. SQL validators dispatch exact integer3, reject bool/
+float/NULL/unknown keys/invalid unions/counters/UUID/time/current/file/delivery/
+coverage pair/order/duplicate history IDs. V1/V2 saved bytes/results не переписаны;
+OFF_UNUSED paths сохраняют legacy shapes и validations. TEST V3 counts используют
+current image availability, включая READY/PENDING, а не старый fallback parser.
+
+Шесть boundaries: guard prepare/accept/send-begin, Escalation producer,
+TEST prepare/finalize. Только pending без permanent blocker даёт CONTEXT_WAIT.
+Dedicated path сохраняет same Job/Turn/revision/intent; никакого нового key/Job
+для восстановления.5 claims,15min first_started_at,30s lease, capped random backoff≤60,
+due строго до budget deadline. Нет adapter/provider вызова в wait path.
+
+Scheduling JSON ровно `code,job_id,turn_id,turn_revision,outbox_id,status,reason,available_at,recorded_at`.
+CONTEXT_WAIT/READY/CONTEXT_INPUT_PENDING имеет UTC6 available_at и NULL completed;
+CONTEXT_WAIT_EXHAUSTED/DEAD/RETRY_EXHAUSTED и CONTEXT_HOLD/DEAD/NOT_ALLOWED имеют
+available_at=NULL в result. PROCESS_TURN permanent/exhausted outcome=FAILED;
+SEND terminalizes только свой PENDING Outbox с одним delivery V+1, до attempt/permit.
+
+Private Job CHECK — closed nullable variants IS TRUE на **каждом UPDATE**. Saved
+result/token pair immutable для одного token. Next claim удаляет старую pair уже
+на первом RUNNING UPDATE; pending reason остаётся truthful до actual classification.
+Scheduler exhaustion/recover-expired без admitted token сохраняет reason, но pair
+NULL, не переписывает old token результатом новой maintenance transaction.
+Early turn_supersede/terminal/product exits удаляют obsolete native marker. Latest
+current-G work projection: WAITING_CONTEXT либо OPERATOR_REQUIRED; permanent имеет
+приоритет; unrelated old G Jobs не оживают после нового R/Resume.
+
+Клиентский код обязан commit **до** возврата scheduling outcome и отдельно
+обрабатывать work replay без worker admission. Winning guard/consumer/E replay
+идёт первым; native scheduling replay — перед новым admission; ни один replay не
+выдаёт новый permit. Current Python readers этого протокола ещё не поддерживают.
+
+### 16.15. Policy profile и migration lifecycle
+
+ENABLE/PAUSE/no-op, source binding, body fingerprint, typed Audit и CAS следуют
+§16.7.1. Fresh ENABLE использует existing post-wait TEST/manual-send availability;
+PAUSE и exact historical replay не зависят от expired entitlement. PAUSED reenable
+увеличивает P, pause/no-op его не увеличивают; used policy не возвращается OFF_UNUSED.
+Lost ENABLE ACK→new PAUSE→old ENABLE replay оставляет PAUSED. Material disable
+при ON rejected: сначала явный PAUSE. Policy command не получает C/Job/Inbox locks.
+Telegram state SHARE удерживает paired MATERIAL gate до commit без reverse C edge.
+
+`human_context_schema_profile()` возвращает ровно
+`{schema_revision:"0013",valid:boolean,profile_sha256:<hex64>}`. `valid` сравнивает
+exact full signatures/OIDs/body hashes/language/security_definer/volatility/owner/
+search_path/runtime/PUBLIC grants, native tables/RLS/private ACL, runtime role,
+45 column lists и fixed ordered DDL catalog. Nonfunction catalog SHA256:
+`57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370`.
+В него входят columns/types/defaults/generated, constraints/validation, indices,
+policies, enabled triggers, relation owner/RLS/ACL, immutable sequence configuration,
+schema ACL и pinned vector0.8.6/btree_gist1.8. Mutable rows/sequence last_value
+не включены. Serialization выполняется с **pinned** pg_catalog,pg_temp; digest из
+произвольного search_path не является тем же profile.
+
+Profile function проверяет свою metadata/ACL, но не может надёжно доказать
+неизменность собственного исполняемого body. Full profile_sha256 включает и его
+body. **C6 trusted runner обязан независимо сверить все167 function definitions,
+включая profile function, и clean C0-approved source tree/paired process profiles**;
+сам boolean из DB не заменяет source authority. Profile — DB-only inventory, не
+выдуманная visibility drain/API/worker/Console binaries. Tests передают реальную
+Git tree identity своей source snapshot, не deployment/readiness PASS.
+
+Unused downgrade получает table locks, затем проверяет all native usage **до DDL**:
+P>0/policy, C N/pointer,3 receipt/observation tables, source/Inbox/control associations,
+Job reason/token/result/V3 input, Esc V3 и native Audit. Любой used marker→55000,
+никаких частичных DROP/restore. Legacy0012 codec2 history без native usage не блокирует
+reverse. Unused path восстанавливает exact effective0012 function bodies/grants/
+constraints/catalog/data; drops35 additions/3 tables/columns/indices/triggers. Не
+удалять used evidence ради downgrade. Applied source SHA freeze — в migration tests.
+
+### 16.16. Evidence carriers, ограничения и передача
+
+Focused commands, выполняемые на одном итоговом tree; фактический PASS/count/time
+публикуется только canonical C2 receipt после выполнения:
+
+```text
+python -m pytest -q tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py
+ruff check migrations/versions/0013_native_context.py tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py tests/test_tenancy_postgres.py
+ruff format --check migrations/versions/0013_native_context.py tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py tests/test_tenancy_postgres.py
+python -m py_compile migrations/versions/0013_native_context.py tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py tests/test_tenancy_postgres.py
+```
+
+Python3.13.14, frozen uv.lock dependencies. Real PG18.1, vector0.8.6, btree_gist1.8,
+actual asm_runtime nonowner/NOINHERIT/NOBYPASSRLS and actual asm_migrator login.
+Owned loopback-only disposable asm_test, reset между cases через explicit admin
+opt-in; никакой shared/live/VM DB. Среда поддерживает только UID0 user namespace:
+локальная сборка PG имеет **три startup root-check изменения** в initdb/main/pg_ctl,
+ограниченные explicit lab environment flag; SQL/MVCC/RI не менялись. Это не stock
+container/runtime image parity. Source archive SHA проверен; build delta/evidence
+сохранены отдельно. C6 воспроизводит на штатном pinned LOCAL/TEST setup до integration.
+
+Tests reset requires `ASM_NATIVE_TEST_ALLOW_RESET=1` и loopback admin URL к postgres;
+runtime/migration URL — тот же host/port и asm_test, actual distinct logins. Fixture
+не ослабляет readiness gate. Она использует existing authenticated tenancy, legitimate
+TEST provisioning/real capabilities, не fake paid state/Receipt/permit. Native policy
+не задаётся direct UPDATE. Max counters/shortened lease/aged budget — явно отмеченные
+negative fault injections; constraint disabling/skip/retry-budget extension отсутствуют.
+Неверные negative INSERT и временный deferred failure trigger всегда rolled back/
+удалены; это не durable synthetic acceptance evidence.
+
+| Assertion family | Executable carrier в новых tests |
+|---|---|
+| fresh45/167, exact OIDs/owner/ACL/FORCE RLS, foundation rejects0013 | fresh_catalog + retained_tenancy_security_surface; existing tenancy assertions сохранены, добавлена exact0013 delta |
+| populated/repeat upgrade,2 unused reverse cycles, full0012 catalog/data/V1/V2/UNKNOWN/WINNER | populated_v1_v2_unknown_winner_repeat_upgrade_and_exact_unused_reverse |
+| 55000 before DDL; body/ACL/index/constraint/RLS/metadata drift | used_refusal_before_any_ddl_and_policy_profile_drift + catalog_constraint_index_and_rls_drift_fail_closed |
+| R replacement/replay/Resume/V3/UTF-8+NULL fingerprint | reconcile_resume_v3 + hash_vectors_actual_reconcile_fingerprint_and_closed_body |
+| all six pending boundaries, exact ACK replay, one continuation,0 adapter | pending_same_job_wait_replay_and_single_continuation[6] |
+| own OUTBOUND eviction; canonical coverage vs full Owner text | canonical_coverage_and_own_accepted_outbound_eviction |
+| fresh-key duplicate→same mark/all source links; exclusions/media/preview | native_observation_duplicate_source_links_previews_and_exclusions |
+| one snapshot pending→FAILED, protected CAS without C bump | job_inbox_only_failure_snapshot_and_input_hash_cas |
+| distinct gap0/1/1024/1025, failed/unsequenced overlap, no-C real deferred history | pre_c_unsequenced_failed_overlap_and_gap_cap[4] |
+| indexed access on2400 unrelated real-ingress pending rows + captured duplicates | indexed_projection_ignores_large_unrelated_pending_history; exact installed projection EXPLAIN ANALYZE, no planner-forcing GUC |
+| old0007 NULL pending + old0012 IGNORED no backfill | legacy_null_ingress_and_old_ignored_key_are_not_backfilled |
+| live5-claim exhaustion/maintenance/supersede; rollback/recover-expired same Job/budget | wait_live_exhaustion + scheduler_exhaustion + material_supersede + wait_rollback_running_expiry_recovery_preserves_same_budget |
+| E waiting V/hold/read-list/RESOLVE/CANCEL/replay/Takeover once; real lock waits | escalation_* + resolve_waits_for_worker_connection_before_c_and_rechecks_after_wait + takeover_then_reconcile_cancels_pending_escalation_only_once |
+| both policy/admission lock orders and post-wait PAUSE refusal | policy_admission_both_connection_lock_orders[2] |
+| private source/actor/Audit/NULL links; actual deferred COMMIT failure + retry once | same_workspace_client_revision_source_and_null_link_negatives + compound_source_actor_audit_links_and_late_commit_rollback + policy_audit_commit_failure |
+| V/G/P/N upper-bound no wrap/whole rollback; real expired TEST pause/login defense | checked_conversation_overflow + policy_epoch_max + observation_epoch_max + policy_actual_login_guard_and_pause_after_real_test_expiry |
+| strict re-signed SQL V3 negative types/shapes/size; actual READY File/counts | strict_v3_sql_shapes_digest_types_and_capacity + native_file_winner_completion_and_v3_consumer_counts |
+| changed-SENT one target/one physical C+2; no-op+1; UNKNOWN; exact echo exclusion; no completion Connection edge | completion_without_connection_edge_and_exact_physical_fold[3] + native_file_winner_completion |
+
+Наблюдение N создаётся реальным Telegram V2 ingress, тогда как retained Escalation
+producer остаётся CONTROLLED-only. Поэтому N-classifier и native E bridge проверены
+композиционно: real Telegram N/common STABLE classifier плюс real CONTROLLED E/P/
+locks/replay. End-to-end Telegram N→CONTROLLED E не сфабрикован; producer gate не
+расширялся. R revision_no=max guard проверен source; легитимная max-length immutable
+R chain не создавалась. Никакая finite lane не доказывает все interleavings или
+полноту provider history; D1/D2/D3 и Owner assertion boundary сохраняются.
+
+Далее C0 выполняет source/DB intake этого SHA. Только отдельная выдача разрешает
+C3 paired V3/errors/API/worker/Audit consumers и C6 independent exact source/schema/
+role/readiness/operator compatibility; затем C5 Console и C8/integration/CI.
+C3 интегрирует trusted wrappers, strict cursor bytes и commit-before-outcome, не
+пускает V3 через V1 fallback и не превращает WAIT replay в permit. C6 сохраняет
+fail-closed mixed profiles и проверяет реальные approved source/drain, не TEST
+assertion из DB fixture. До coherent paired source foundation остаётся0012.
+
+Backend/HTTP/OpenAPI/TS/foundation/host provisioning/workflows/dependencies/original11
+этим checkpoint не менялись. HTTP/browser/Actions/new PR/full CI/VM/TG API/S3/LLM/
+account/sends/deploy/renewal не выполнялись. M4 вне scope, IMPL-05 DEFERRED,
+P-01/A08/renewal/collector/account/A12 OPEN; budgets/worker caps не расширялись.
+После canonical return C2 HOLD; integration/приёмка — C0, merge — пользователь.
