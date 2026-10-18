@@ -208,7 +208,13 @@ async def test_worker_secondary_failure_keeps_primary_as_cause(operation):
     async def stale(*args):
         raise secondary
 
-    db = SimpleNamespace(process_inbox=fail, process_turn=fail, retry=stale, finish_send=fail)
+    db = SimpleNamespace(
+        process_inbox=fail,
+        process_turn=fail,
+        retry=stale,
+        finish_send=fail,
+        replay_context_work=stale,
+    )
     worker = Worker(db, ControlledAdapter(environment="TEST"))
     if operation == "send":
         calls = 0

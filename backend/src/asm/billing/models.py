@@ -308,6 +308,92 @@ class MessageMaterialAudit(StrictModel):
         return self
 
 
+class HumanContextReconciledPayload(StrictModel):
+    revision_id: CanonicalUUID
+    previous_revision_id: CanonicalUUID | None
+    disposition: Literal["OWNER_TEXT", "CANONICAL_SUFFICIENT", "UNRESOLVED"]
+    source_media: Literal["NONE", "UNAVAILABLE"]
+    control_generation: PositiveDecimal
+    previous_context_version: PositiveDecimal
+    accepted_context_version: PositiveDecimal
+    policy_epoch: PositiveDecimal
+    observation_epoch: LimitDecimal
+    reviewed_ingress_checkpoint: LimitDecimal
+
+    @model_validator(mode="after")
+    def transition(self) -> Self:
+        if (
+            int(self.accepted_context_version) != int(self.previous_context_version) + 1
+            or self.revision_id == self.previous_revision_id
+            or (self.disposition == "CANONICAL_SUFFICIENT" and self.source_media != "NONE")
+        ):
+            raise ValueError("Invalid reconciliation audit")
+        return self
+
+
+class HumanContextReconciledAudit(ControlAuditBase):
+    event_type: Literal["HUMAN_CONTEXT_RECONCILED"]
+    payload: HumanContextReconciledPayload
+
+    @model_validator(mode="after")
+    def accepted_version(self) -> Self:
+        if self.object_version != self.payload.accepted_context_version:
+            raise ValueError("Invalid reconciliation audit version")
+        return self
+
+
+class HumanContextPolicyPayload(StrictModel):
+    receipt_id: CanonicalUUID
+    operation: Literal["ENABLE", "PAUSE"]
+    change: Literal["ENABLED", "PAUSED", "UNCHANGED"]
+    previous_policy: Literal["OFF_UNUSED", "ON", "PAUSED"]
+    accepted_policy: Literal["ON", "PAUSED"]
+    previous_policy_epoch: LimitDecimal
+    accepted_policy_epoch: PositiveDecimal
+
+    @model_validator(mode="after")
+    def transition(self) -> Self:
+        previous, accepted = int(self.previous_policy_epoch), int(self.accepted_policy_epoch)
+        if (self.previous_policy == "OFF_UNUSED") != (previous == 0):
+            raise ValueError("Invalid previous policy")
+        if self.operation == "ENABLE":
+            expected = (
+                ("UNCHANGED", "ON", previous)
+                if self.previous_policy == "ON"
+                else ("ENABLED", "ON", previous + 1)
+            )
+        elif self.previous_policy == "OFF_UNUSED":
+            raise ValueError("Invalid pause")
+        else:
+            expected = (
+                "PAUSED" if self.previous_policy == "ON" else "UNCHANGED",
+                "PAUSED",
+                previous,
+            )
+        if (self.change, self.accepted_policy, accepted) != expected:
+            raise ValueError("Invalid policy audit transition")
+        return self
+
+
+class HumanContextPolicyAudit(StrictModel):
+    audit_event_id: CanonicalUUID
+    occurred_at: Timestamp
+    correlation_id: CanonicalUUID
+    object_type: Literal["CHANNEL_CONNECTION"]
+    object_id: CanonicalUUID
+    object_version: PositiveDecimal
+    event_type: Literal["HUMAN_CONTEXT_POLICY_COMMANDED"]
+    actor_kind: Literal["LOCAL_PROVISIONER"]
+    actor_user_account_id: None
+    payload: HumanContextPolicyPayload
+
+    @model_validator(mode="after")
+    def accepted_version(self) -> Self:
+        if self.object_version != self.payload.accepted_policy_epoch:
+            raise ValueError("Invalid policy audit version")
+        return self
+
+
 AuditItem = Annotated[
     ProvisionAudit
     | ContactAudit
@@ -315,7 +401,9 @@ AuditItem = Annotated[
     | ConversationTakenOverAudit
     | ConversationResumedAudit
     | EscalationDecidedAudit
-    | MessageMaterialAudit,
+    | MessageMaterialAudit
+    | HumanContextReconciledAudit
+    | HumanContextPolicyAudit,
     Field(discriminator="event_type"),
 ]
 

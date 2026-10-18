@@ -63,7 +63,21 @@ class ControlCommandResponse(StrictModel):
 
 
 class ControlErrorDetail(StrictModel):
-    code: CommonCode | Literal["NOT_ALLOWED", "CONTROL_VERSION_EXHAUSTED"]
+    code: (
+        CommonCode
+        | Literal[
+            "NOT_ALLOWED",
+            "CONTROL_VERSION_EXHAUSTED",
+            "CONTEXT_POLICY_INACTIVE",
+            "CONTEXT_POLICY_PAUSED",
+            "HUMAN_REQUIRED",
+            "CONTEXT_CONFIRMATION_REQUIRED",
+            "CONTEXT_UNRESOLVED",
+            "CONTEXT_INPUT_PENDING",
+            "CONTEXT_INPUT_UNRESOLVED",
+            "CONTEXT_COVERAGE_REQUIRED",
+        ]
+    )
 
 
 class ControlErrorResponse(StrictModel):

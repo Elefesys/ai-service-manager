@@ -6,6 +6,7 @@ from pydantic import Field, field_validator, model_validator
 
 from asm.billing.models import CommonCode, StrictModel
 from asm.billing.validation import CanonicalUUID, PositiveDecimal, Timestamp
+from asm.conversations.native_context_http_models import EscalationContextHold
 
 Operation = Literal["RESOLVE", "CANCEL"]
 Status = Literal["PENDING", "RESOLVED", "CANCELLED", "EXPIRED"]
@@ -121,6 +122,7 @@ class EscalationView(StrictModel):
     maintenance: Literal["SCHEDULED", "COMPLETE", "FAILED"]
     resolution: EscalationResolution | None
     closure: EscalationClosure | None
+    context_hold: EscalationContextHold | None
     can_resolve: bool
     can_cancel: bool
 
@@ -138,6 +140,7 @@ class EscalationView(StrictModel):
             or [r.due_at for r in self.reminders] != [self.due_at, self.second_reminder_at]
             or not self.created_at < self.due_at < self.second_reminder_at < self.expires_at
             or (self.can_resolve and not current)
+            or (self.context_hold is not None and (not current or self.can_resolve))
             or (
                 self.can_cancel
                 and (

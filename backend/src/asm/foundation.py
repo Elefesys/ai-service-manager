@@ -139,6 +139,7 @@ def create_app(
 ) -> FastAPI:
     from asm.conversations.escalation_http import install_escalations
     from asm.conversations.http import install_control
+    from asm.conversations.native_context_http import install_native_context
     from asm.files.config import StorageSettings
     from asm.files.storage import S3ObjectStorage
     from asm.messaging.database import MessagingDatabase
@@ -210,6 +211,7 @@ def create_app(
         telegram=TelegramRefresher(telegram_client) if telegram_client is not None else None,
     )
     install_control(app, auth, config)
+    install_native_context(app, auth, config)
     install_escalations(app, auth, config)
     install_webhook(
         app,

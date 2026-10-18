@@ -1,14 +1,80 @@
 """Private typed kernel results, not new messaging HTTP DTOs."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator
+
+from asm.billing.validation import MAX_BIGINT, Timestamp
 
 
 class Result(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, hide_input_in_errors=True)
+
+
+ContextPermanentReason = Literal[
+    "CONTEXT_POLICY_PAUSED",
+    "CONTEXT_CONFIRMATION_REQUIRED",
+    "CONTEXT_UNRESOLVED",
+    "NEW_OBSERVATION",
+    "CONTEXT_INPUT_UNRESOLVED",
+    "CONTEXT_COVERAGE_REQUIRED",
+    "CONTEXT_TOO_LARGE",
+]
+
+
+class ContextWorkResultBase(Result):
+    """Historical scheduling decision, never an action or a send permit."""
+
+    job_id: UUID
+    turn_id: UUID
+    turn_revision: int = Field(gt=0, le=MAX_BIGINT, strict=True)
+    outbox_id: UUID | None
+    recorded_at: Timestamp
+
+    @field_validator("job_id", "turn_id", "outbox_id", mode="before")
+    @classmethod
+    def canonical_identity(cls, value: object) -> object:
+        if (
+            value is not None
+            and type(value) is not UUID
+            and (type(value) is not str or str(UUID(value)) != value)
+        ):
+            raise ValueError("Invalid context work identity")
+        return value
+
+
+class ContextWait(ContextWorkResultBase):
+    code: Literal["CONTEXT_WAIT"]
+    status: Literal["READY"]
+    reason: Literal["CONTEXT_INPUT_PENDING"]
+    available_at: Timestamp
+
+
+class ContextWaitExhausted(ContextWorkResultBase):
+    code: Literal["CONTEXT_WAIT_EXHAUSTED"]
+    status: Literal["DEAD"]
+    reason: Literal["CONTEXT_WAIT_EXHAUSTED"]
+    available_at: None
+
+
+class ContextHold(ContextWorkResultBase):
+    code: Literal["CONTEXT_HOLD"]
+    status: Literal["DEAD"]
+    reason: ContextPermanentReason
+    available_at: None
+
+
+ContextWorkResult = Annotated[
+    ContextWait | ContextWaitExhausted | ContextHold, Field(discriminator="code")
+]
+CONTEXT_WORK_CODES = frozenset(("CONTEXT_WAIT", "CONTEXT_WAIT_EXHAUSTED", "CONTEXT_HOLD"))
+_context_work: TypeAdapter[ContextWorkResult] = TypeAdapter(ContextWorkResult)
+
+
+def parse_context_work(value: object) -> ContextWait | ContextWaitExhausted | ContextHold:
+    return _context_work.validate_python(value)
 
 
 class InboxReceipt(Result):

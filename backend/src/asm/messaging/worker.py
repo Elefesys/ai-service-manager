@@ -14,7 +14,7 @@ from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import OutcomeKind, SendOutcome
-from asm.messaging.results import JobClaim, SendPermit, TurnJobClaim
+from asm.messaging.results import ContextWorkResultBase, JobClaim, SendPermit, TurnJobClaim
 
 if TYPE_CHECKING:
     from asm.files.transfer import CleanupSweep, FetchTransfer
@@ -57,9 +57,27 @@ class Worker:
                 raise secondary from primary
 
     async def _retry_error(self, claim: JobClaim, primary: Exception) -> None:
+        if isinstance(claim, TurnJobClaim) and claim.step in (
+            "TEST_CONSUME",
+            "GUARDED_TEXT",
+            "ESCALATE_OWNER",
+        ):
+            if await self._replay_context(claim, primary):
+                return
         try:
             await self.database.retry(claim, Code.DEPENDENCY_UNAVAILABLE)
         except (SQLAlchemyError, MessagingError) as secondary:
+            raise secondary from primary
+
+    async def _replay_context(self, claim: JobClaim, primary: Exception) -> bool:
+        try:
+            await self.database.replay_context_work(claim.job_id, claim.claim_token)
+            return True
+        except MessagingError as miss:
+            if miss.code != Code.STALE_CLAIM:
+                raise miss from primary
+            return False
+        except SQLAlchemyError as secondary:
             raise secondary from primary
 
     async def _finish_turn(self, claim: JobClaim, result: ConsumerResult) -> None:
@@ -74,6 +92,8 @@ class Worker:
                     raise miss from primary
             except SQLAlchemyError as secondary:
                 raise secondary from primary
+            if await self._replay_context(claim, primary):
+                return
             # No committed receipt. A second mutation must still pass fresh live
             # claim/XID admission; an expired/reclaimed token cannot finalize.
             try:
@@ -110,7 +130,12 @@ class Worker:
                     # leaves further attempts to ordinary reclaim/admission.
                     try:
                         await self.database.replay_escalation(claim.job_id, claim.claim_token)
-                    except (SQLAlchemyError, MessagingError) as secondary:
+                    except MessagingError as miss:
+                        if miss.code != Code.STALE_CLAIM:
+                            raise miss from primary
+                        if not await self._replay_context(claim, primary):
+                            raise miss from primary
+                    except SQLAlchemyError as secondary:
                         raise secondary from primary
                 return
             try:
@@ -128,6 +153,8 @@ class Worker:
                     await self._retry_error(claim, error)
                     return
                 raise
+            if isinstance(snapshot, ContextWorkResultBase):
+                return
             if isinstance(snapshot, GuardedTurnSnapshot):
                 await self.database.checkpoint("guard_before_consume")
                 guarded_result = consume_guarded(snapshot)
@@ -154,7 +181,14 @@ class Worker:
         # conservatively marks the durable DISPATCHING attempt UNKNOWN.
         if claim.kind == "SEND_GUARDED_TEXT":
             # This private path refuses TELEGRAM before any rights probe/I/O.
-            permit = await self.database.begin_guarded_send(claim)
+            try:
+                permit = await self.database.begin_guarded_send(claim)
+            except SQLAlchemyError as primary:
+                if await self._replay_context(claim, primary):
+                    return
+                # A missing wait receipt may conceal committed DISPATCHING.
+                # Never repeat begin/the external request; scheduler owns UNKNOWN.
+                raise
             probe = None
         else:
             probe = await self.database.telegram_probe(claim)
@@ -216,6 +250,8 @@ class Worker:
                     raise miss from primary
             except SQLAlchemyError as secondary:
                 raise secondary from primary
+            if await self._replay_context(claim, primary):
+                return
             # A proven missing receipt permits only fresh live admission, never
             # a repeated computation or transport call.
             try:

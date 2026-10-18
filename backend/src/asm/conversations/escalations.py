@@ -23,7 +23,7 @@ from asm.conversations.escalation_http_models import (
     StatusFilter,
 )
 from asm.messaging.models import command_key
-from asm.messaging.results import JobClaim, Result
+from asm.messaging.results import ContextWorkResult, JobClaim, Result
 from asm.tenancy import TenantUnitOfWork
 from asm.tenancy.types import MembershipRole
 
@@ -307,5 +307,5 @@ class EscalationService:
 
     async def request_for_turn(
         self, claim: JobClaim
-    ) -> EscalationCreationResult | EscalationProgress:
+    ) -> EscalationCreationResult | EscalationProgress | ContextWorkResult:
         return await self.database.request_escalation(claim)
