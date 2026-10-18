@@ -5,7 +5,160 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущая выдача C0 — stock runner R2 после одного FAIL / 2026-10-18 UTC
+## 0. Текущая выдача C0 — native runtime R1 после stock DB PASS / 2026-10-18 UTC
+
+**C3 ACTIVE по exact canonical task PR34; C1/C2/C5/C6/C8 HOLD.**
+[C0 actual disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251867599): C0-NC-RUNNER-01/P2 CLOSED;
+C1-NC-DB-01/02 CLOSED. DB/runner checkpoint VERIFIED LOCAL/TEST.
+Native application/runtime NOT VERIFIED; M3 IN_PROGRESS.
+
+### 0.1. Принятый checkpoint и evidence
+
+C6 R2 **bde0c48af74f23cd6430fc669ea4635e21aa68c6**,
+tree **f2be86c21f754e7997aa4a04ee07d0952fefe940**, sole parent
+**e7c2730bd61f0fd9f023a226700c9a81f4b12beb**. Только2 source paths,+64/−1:
+runner explicit child TEST + real Settings regressions;280 other blobs/modes unchanged.
+C0 verified all282 bytes/modes, exact tree/archive; all38 prior test ASTs retained.
+Local45 tests+78subtests/Ruff/format/whitespace PASS; local evidence не PG.
+
+[Approval](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251780231) consumed once by normal FF execution ref
+bbc3d42a5cd13736928a6a57f02e299a9c92a0a4→bde0c48….
+[Run39141370282/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/39141370282):
+**SUCCESS,57/57 native PASS** (5 source+52 actual PG),0skip/xfail/deselection;
+runner40 tests+78subtests PASS/2.50s. JUnit40 testcase elements;118 includes subtests.
+Job117716323052 all13 steps SUCCESS; payload329.164s,receipt358.535s within20m.
+Actual unchanged foundation Settings constructs TEST and RuntimeDatabase.check()
+rejects0013 in test_fresh_catalog_exact_security_and_foundation_fail_closed PASS.
+C0-NC-RUNNER-01 CLOSED; complete stock DB carrier gap closed. All5 C2 corrected
+Resume PG cases PASS again. Historical run39136349844 remains FAIL56/57,
+foundation refusal then NOT REACHED; no rerun/reclassification.
+
+Unchanged pinned stock PG18.6/vector0.8.6/btree_gist1.8; Python3.13.16/uv0.10.0/
+frozen deps/Docker28.0.4. Actual asm_runtime+asm_migrator LOGIN,0memberships/
+runtime ownership;52 revalidated pre-reset proofs, owned cleanup/clean source PASS.
+Independent167 typed functions/unique OIDs incl executable verifier and45tables/
+ordered catalog PASS. Full profile
+**c8a335b808f11b0c6f3d784731ddc95bf1023e6f1881aff5448659388f927a7a**;
+nonfunction **57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370**;
+verifier body **d485135ecccf986a2b16e71dd451f95508847bb455f8fbf987cf5092ec5de8a6**.
+
+[Artifact12142480040](https://github.com/Elefesys/ai-service-manager/actions/runs/39141370282/artifacts/12142480040):
+2932595 bytes/37 files,expires2026-10-25,ZIP SHA256
+**a1177528f52e11d26e769a4d1da865944415018277d0ce6e2ad898a76d7e1406**.
+C0 independently verified all archived source bytes/modes/manifest, full source
+expansion/installed bodies/OIDs/ACL/catalog, all test phases/JUnit/roles/cleanup.
+Source tar SHA256 **c1031b8dcd64372047dafce60c069b60f0e89e2d825cd9b3132e6f72daa4bbb2**;
+manifest **315a8f29df3a9ec3b12a6f949ae9f43f6d36224d88c8fcfc3c60c8e8284bc6ba**.
+Green DB scope не доказывает paired API/worker/host/Console readiness.
+
+### 0.2. Repository / branch / exact start
+
+Repository Elefesys/ai-service-manager. C0 docs-only preparation is a sole-parent
+descendant of **bde0c48af74f23cd6430fc669ea4635e21aa68c6** and changes ONLY
+docs/tasks/M3_HANDOFF.md and docs/TASK_REGISTER.md;280 code blobs/modes unchanged.
+Full prepared start SHA/tree supplied by canonical C0 task in PR34. Branches:
+- coordination c0/m3-1-native-context-runtime-prep-r1;
+- task **c3/m3-1-native-context-runtime-r1**, identical prepared start.
+
+Separate checkout, verify exact full HEAD/tree; normal FF with expected head,
+no amend/rebase/force. Do not assume other chats' disk/environment/memory.
+Main remains **e205e22051bc06295758b504d84699652b176c15/schema0012**.
+Execution c0/m3-1-native-context-db-stock-r1 and C6 R2 delivery stay bde0c48…;
+old C0 candidate bbc3d42…/C2/C6 deliveries remain frozen; PR34 closed/merged.
+No execution permission is conveyed by the new task branch.
+
+### 0.3. C3 implementation scope
+
+**C3-M3.1-NATIVE-CONTEXT-RUNTIME-R1 — реализация Python/API/V3/worker/Audit на принятом DB checkpoint.**
+
+Сначала прочитать AGENTS, актуальные HANDOFF§0/TASK_REGISTER/IMPL-001; original11 и SOURCE_MANIFEST; Spec5.8–5.14/5.12.1/18.5–18.9/24.7, ADR002–007/024–026/180/266/267, MVP GJ-G/J+variants, Roadmap M3/M4, Implementation Plan M3.1/M3.2; accepted M3_CONTRACT§16 целиком, включая DB§16.11–16.18 и MATERIAL§15.2–15.9/§15.18. Заголовок PROPOSED/исторические статусы в frozen contract не отменяют последующую приёмку C0. Норма — принятый exact contract и actual0013; C1 consumer handoff6249871164 уточняет реальные paths, а не разрешает расширить protocol.
+
+**Разрешённый результат:** coherent source checkpoint всех Python consumers, трёх native routes, retained Resume errors, Escalation projections и Python Audit/OpenAPI. Это ещё не merge/deploy/runtime readiness acceptance. C6 затем отдельной выдачей pair-ит exact host/source/schema/operator profiles; C5 после accepted API pair-ит TS/UI. Не делать частичный V3 через legacy parser и не объявлять готовность всего приложения.
+
+**Write allowlist — существующие31 пути:**
+```text
+backend/src/asm/conversations/control.py
+backend/src/asm/conversations/http.py
+backend/src/asm/conversations/http_models.py
+backend/src/asm/conversations/turns.py
+backend/src/asm/conversations/guards.py
+backend/src/asm/conversations/material.py
+backend/src/asm/conversations/escalations.py
+backend/src/asm/conversations/escalation_http.py
+backend/src/asm/conversations/escalation_http_models.py
+backend/src/asm/tenancy/database.py
+backend/src/asm/messaging/database.py
+backend/src/asm/messaging/worker.py
+backend/src/asm/messaging/results.py
+backend/src/asm/messaging/errors.py
+backend/src/asm/telegram/database.py
+backend/src/asm/billing/models.py
+backend/src/asm/billing/service.py
+backend/src/asm/billing/queries.py
+backend/src/asm/billing/validation.py
+backend/src/asm/foundation.py
+contracts/openapi.json
+tests/test_m3_1_control_postgres.py
+tests/test_m3_1_control_api_postgres.py
+tests/test_m3_1_guards_postgres.py
+tests/test_m3_1_turns_postgres.py
+tests/test_m3_2_escalations_postgres.py
+tests/test_m3_2_escalations_api_postgres.py
+tests/test_m3_1_turns.py
+tests/test_m3_1_guards.py
+tests/test_m3_2_escalations.py
+tests/test_m3_1_provenance_postgres.py
+```
+
+**NEW6 путей (создавать только реально используемые):**
+```text
+backend/src/asm/conversations/native_context.py
+backend/src/asm/conversations/native_context_http.py
+backend/src/asm/conversations/native_context_http_models.py
+tests/test_m3_1_native_context.py
+tests/test_m3_1_native_context_api_postgres.py
+tests/test_m3_1_native_context_runtime_postgres.py
+```
+
+Новый runtime PG carrier отделён от уже принятого DB carrier. `tests/test_m3_1_native_context_postgres.py` и `test_m3_1_native_context_migrations.py` полностью frozen: все57, включая actual foundation0013 refusal. Не переименовывать прежний файл как новый и не ослаблять fixtures/assertions. Existing allowlisted tests менять лишь для точного нового DTO/consumer contract и добавленных regressions, сохраняя retained assertions/scenarios; не массово обновлять expectations ради зелёного результата.
+
+**Обязательные implementation boundaries:**
+
+1. `GET /human-context`, `GET /human-context/observations`, `POST /human-context/reconcile` под существующим workspace/conversation prefix. Live OWNER/session/relation/UOW, cookie/CSRF, exact query/key/If-Match/body порядок, strict shared primitives/closed unions/nullable keys по§16.4. Реальные raw-body4096 bytes, headers16384/body3s/request10s остаются; новый route не наследует messages65536. Reconcile не требует manual-send entitlement, не делает Resume/Takeover/send; PAUSED HUMAN save допустим. Все writes через назначенные capabilities, commit до200. Missing/wrong same-ws Client/R relation не раскрывается. Full body/key/actor historical replay first после live authority, без current-state optimism.
+
+2. Canonical observation cursor≤1024 encoded ASCII bytes: exact unpadded Base64URL, strict UTF-8 JSON с duplicate-key rejection и exact ordered keys `v,ws,C,Client,P,through_N,after_N`; re-encode byte-equal, v строго int1. Передавать SQL decoded closed object; ws/C/Client/P/through/after relations и snapshot bounds остаются DB authority. Новый typed codec не должен расширить существующие billing cursor contracts. Unknown/duplicate/empty query422; P mismatch409 CONTEXT_CURSOR_STALE; scope403/404 как§16.4. Никаких provider IDs/raw JSON/private pointers в page/Audit.
+
+3. Exact snapshot dispatch: absent schema_version→retained V1; integer2→V2; integer3→V3; bool/float/unknown/null/extra rejected. Pair `parse_snapshot`, `parse_guarded_snapshot`, exact `consume_guarded` type allowlist, TEST `consume`/finalize counts и Escalation validator. Полные typed R+recent history, current/material/File/WINNER semantics, exact body/digest/2,097,152-byte bound/64 members/16 history и strict ordering/IDs. OWNER_TEXT целиком, без trim/NFC/truncation. V1/V2 saved bytes/results/counts не менять; V3 READY/PENDING counts по current image availability. Существующие V2 normalizer/hash не редактировать.
+
+4. Все три closed ContextWorkResult variants, permanent reasons и CONTEXT_INPUT_PENDING. Шесть boundaries: guard prepare/accept/send-begin, Escalation producer, TEST prepare/finalize. Persist/commit scheduling до return/continuation; zero adapter calls при WAIT/HOLD/exhausted. Existing accepted/creation/consumer replay first; затем token-only `human_context_work_replay` на trusted short physical transaction **без messaging_admit, новой lease/owner impersonation**; оба misses — только retained bounded fresh path. Send-begin ACK loss остаётся DISPATCHING/UNKNOWN recovery, не новый внешний вызов. No internal polling/retry loop/new Job/intent/revision;5claims/15min/30s/backoff≤60, same identity и failure-preserving commit semantics. Late/losing token после clear/maintenance не resurrect work.
+
+5. Resume сохраняет exact three-field body/fingerprint/receipt и прежние product/CAS/overflow/replay priorities. Closed P2401 mapping отражает corrected SQL: applicable PAUSED→HUMAN_REQUIRED→remaining context; CONTEXT_CHANGED/NEW_OBSERVATION в public Resume→CONTEXT_CONFIRMATION_REQUIRED. Raw read arrays и worker NEW_OBSERVATION не переименовывать. Никакого force/optional R/legacy bypass при used policy.
+
+6. Escalation nullable `context_hold` в каждом read/list item и `can_resolve` с hold; read same snapshot/waiting V. Retain validity/FINAL/EXPIRED/timer/CANCEL/replay/Takeover-once/RESOLVE precedence; context не становится новым lifecycle и не меняет CONTROLLED-only producer gate. Completion/SENT/File не получает connection lock. Current automation_work projection типизирована, DEAD не оживляется и не обещает queued continuation.
+
+7. Python Audit closed variants HUMAN_CONTEXT_RECONCILED и HUMAN_CONTEXT_POLICY_COMMANDED: actual typed actor/object_version/payload, модели+service+queries; protected text/digest/provider IDs не попадают в public Audit. Согласовать exact Python/OpenAPI ошибки/nullable/variants; TS/UI получает отдельную следующую выдачу, checkpoint unpaired до неё.
+
+**Shared entrypoint authorization узкая:** `foundation.py` только import/install native routes в existing create_app. `DATABASE_SCHEMA_REVISION="0012"`, Settings/AuthSettings, RuntimeDatabase.check/serve/readiness/timeouts остаются byte/behavior-identical; не monkeypatch и не disable в production path. Это намеренно сохраняет0013 readiness refusal до C6 coherent host/schema pairing. API/worker PG tests могут использовать реальные модульные installers/DB wrappers и owned native fixture, но не называют это startup/readiness/full-stack PASS. Frozen old carrier проверяет отказ и после этой работы.
+
+**Verification:** exact diff/scope/whitespace; locked Python3.13/frozen deps; Ruff/format и relevant strict typing; focused meaningful new unit/API/PG regressions плюс затронутые retained consumers. Проверить regenerated OpenAPI against real create_app, не ручная подмена snapshot. Сохранить authority negative cases (revoke/cross-ws/same-ws-other-Client), duplicate/unknown JSON/raw-byte caps/cursor bytes, whole-field hash vectors, stale G/V/P/N/input/R, replay after newer state, commit-failure rollback/no optimistic result, strict re-signed V3 negatives, real wrapper WAIT commit+lost ACK+single continuation+0adapter, old V1/V2/UNKNOWN/File и Escalation paths. Все6 scheduling boundaries — mapping к executable wrapper assertions. Counts не заменяют semantics.
+
+PG только свой disposable LOCAL/TEST asm_test с actual asm_runtime/asm_migrator LOGIN, nonowner/NOBYPASSRLS, unchanged source/role/reset guards и explicit owned reset opt-in. Указать реальную среду/патчи/версии; labPG не stock parity. Если требуемая среда недоступна, оставить executable carrier и честный NOT RUN/BLOCKED, без install/probe loops, skip/xfail/fixture bypass/ложного PASS. Полный принятый DB57 runner разрешён C0 отдельно; **не двигать execution ref и не запускать Actions**. Никакого full CI/new PR/main/VM/provider/S3/LLM/send/deploy/renewal; fake платные состояния/receipt/permit запрещены. Instrumented adapters в tests — только наблюдаемый test seam, не live evidence.
+
+**Frozen:** миграции0001–0013, tenancy security contract/SQL profiles, native57/stock runner/workflow/bootstrap/images/compose/deps/locks/CI/operator/frontend, original11/full M3 contract756397 bytes SHA256e7f3796fcff8640ffca203266ecf7b5988f7ab1bd24850b12e923122abf5d281. No0014. C0 docs вне write scope. При конкретной несовместимости outside allowlist — exact evidence/path/minimal request в return, без самостоятельного расширения. Существующие S600/P720/fixed120/+480/S+1200/cleanup90/state25/browser25/foundation45 и3s/60s/10s unchanged; M4out, IMPL-05DEFERRED.
+
+**Return REVIEW → C3 HOLD:** full commit/tree/parent(s), exact path diff/clean source, requirement→implementation→node-ID table (особенно6 worker boundaries/replay/commit и3 routes), actual commands/counts/time/limitations, generated OpenAPI comparison, retained V1/V2 и proof, что foundation schema0012 по-прежнему отвергает DB0013, real PG vs mock/collection clearly separate, new OPEN findings and concrete C1/C6/C5 handoff. C0 принимает; затем scoped C1 security/API review, C6 host/operator и C5 UI; C8/full integration CI/user merge позже. Не запускать другие чаты/агентов. D1/D2/D3 сохраняют принятые пределы; A08/P01/P05/account/renewal/collector/A12 OPEN, M3 IN_PROGRESS.
+
+### 0.4. Retained acceptance boundary
+
+All9 contract findings/Q01 and MATERIAL11 closures retained. Native application
+remains NOT VERIFIED; current checkpoint is not merge-ready/deployable.
+C0 accepts returned exact source before issuing C1 review/C6 host/operator/C5 UI.
+Only coherent reviewed composition receives later C8/full integration CI; user merges.
+No automatic stock rerun or full CI. Previous assignments below are history.
+
+<a id="0-текущая-выдача-c0--stock-runner-r2-после-одного-fail--2026-10-18-utc"></a>
+
+## История — stock runner R2 после одного FAIL / 2026-10-18 UTC
 
 **C6 ACTIVE: исправить только явный TEST environment дочернего runner.**
 C1/C2/C3/C5/C8 HOLD. Оба C1 DB P2 CLOSED; один C0-NC-RUNNER-01/P2 OPEN.

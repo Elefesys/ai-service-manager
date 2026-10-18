@@ -2,7 +2,68 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — stock DB FAIL; C6 runner R2 / 2026-10-18 UTC
+## Текущий статус — stock DB VERIFIED; C3 native runtime R1 / 2026-10-18 UTC
+
+[C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251867599) и [source approval](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251780231).
+**Все три текущих DB/runner P2 CLOSED; C3 implementation ACTIVE по canonical task.**
+M3 IN_PROGRESS; native application/runtime NOT VERIFIED. DB checkpoint evidence
+не является acceptance Python/API/worker/host/Console или разрешением merge/deploy.
+
+| Task / finding | Current state |
+|---|---|
+| C1-NC-DB-01/P2; C1-NC-DB-02/P2 | CLOSED; corrected priority/Resume mapping confirmed again by all5 stock regressions |
+| C0-NC-RUNNER-01/P2 | CLOSED: explicit TEST child +real Settings tests +actual foundation0013 refusal PASS |
+| C2-M3.1-NATIVE-CONTEXT-DB-R2 | INTEGRATED in C0 checkpoint; VERIFIED scoped stock DB; C2 HOLD |
+| C6-M3.1-NATIVE-CONTEXT-DB-STOCK-RUNNER-R2 | INTEGRATED/VERIFIED scoped; COMPLETE/HOLD |
+| C6 runner R1 / first run39136349844 | Historical source superseded; actual FAIL56/57 remains FAIL |
+| Corrected run39141370282/attempt1 | SUCCESS:57/57 native,40runner+78subtests,167functions/45tables/cleanup/clean PASS |
+| C3-M3.1-NATIVE-CONTEXT-RUNTIME-R1 | IN_PROGRESS; Python/API/V3/worker/Audit, exact37-path allowlist in HANDOFF§0/canonical task |
+| C1/C2/C5/C6/C8 | HOLD; C1 source review,C6 host/operator,C5 TS/UI,C8/full CI later exact assignments |
+| Contract R2 / MATERIAL | Contract9 CLOSED/Q01 RESOLVED; MATERIAL11 INTEGRATED/VERIFIED LOCAL/TEST |
+| Whole M3 / native application | IN_PROGRESS / NOT VERIFIED; A08/P01/P05/account/renewal/collector/A12 OPEN |
+
+Executed source **bde0c48af74f23cd6430fc669ea4635e21aa68c6**,
+tree **f2be86c21f754e7997aa4a04ee07d0952fefe940**, sole parente7c2730… .
+[Run39141370282](https://github.com/Elefesys/ai-service-manager/actions/runs/39141370282),
+job117716323052: all13 steps SUCCESS;57native=5source+52actualPG,0skip/xfail/deselection.
+Runner40 testcases+78subtests (JUnit tests118 includes subtests),2.50s.
+Payload329.164s; receipt358.535s within unchanged20m. Actual Settings TEST and
+RuntimeDatabase.check schema0013 refusal reached/PASS; first run remains FAIL.
+
+Pinned stock PG18.6/vector0.8.6/btree_gist1.8; Python3.13.16/uv0.10.0/frozen lock.
+Actual logins/roles/52reset proofs/independent167 unique functions+45tables/catalog/
+owned cleanup/clean source PASS. All282 archived bytes/modes matched C0-approved source.
+Full profilec8a335b808f11b0c6f3d784731ddc95bf1023e6f1881aff5448659388f927a7a,
+nonfunction57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370,
+verifier bodyd485135ecccf986a2b16e71dd451f95508847bb455f8fbf987cf5092ec5de8a6.
+
+[Artifact12142480040](https://github.com/Elefesys/ai-service-manager/actions/runs/39141370282/artifacts/12142480040),
+2932595bytes/37files,expires2026-10-25; ZIP SHA256
+a1177528f52e11d26e769a4d1da865944415018277d0ce6e2ad898a76d7e1406.
+Source tarc1031b8dcd64372047dafce60c069b60f0e89e2d825cd9b3132e6f72daa4bbb2;
+manifest315a8f29df3a9ec3b12a6f949ae9f43f6d36224d88c8fcfc3c60c8e8284bc6ba.
+Full evidence/scope:[HANDOFF§0](tasks/M3_HANDOFF.md#0-текущая-выдача-c0--native-runtime-r1-после-stock-db-pass--2026-10-18-utc).
+
+C0 preparation sole parentbde0c48…; ONLY HANDOFF/REGISTER changed,280 source blobs
+unchanged. Full prepared start SHA/tree in canonical PR34 task. Branches:
+c0/m3-1-native-context-runtime-prep-r1 and c3/m3-1-native-context-runtime-r1.
+C3 exact31 existing+6NEW paths, including three native modules and separate
+unit/API/runtime PG carriers. Existing native57/SQL/runner/workflow unchanged.
+Shared foundation.py authorized ONLY route wiring; schema0012/Settings/readiness
+remain unchanged until separate C6 coherent host/schema pairing. OpenAPI generated;
+TS/UI still later/unpaired. Source checkpoint is not application rollout.
+
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 unchanged;
+execution and C6R2=bde0c48… frozen; old candidatebbc3d42…/deliveries historical.
+No0014/applied migration edits; full contract756397bytes/SHA256
+e7f3796fcff8640ffca203266ecf7b5988f7ab1bd24850b12e923122abf5d281/original11 frozen.
+C3 return REVIEW→HOLD; C0 review then separately scoped C1/C6/C5, C8/full CI/user merge.
+No Actions/new PR/full CI/VM/provider/send/deploy/renewal/other agent launches.
+D1/D2/D3 limits and all caps retained;M4out,IMPL-05DEFERRED. Earlier blocks are history.
+
+<a id="текущий-статус--stock-db-fail-c6-runner-r2--2026-10-18-utc"></a>
+
+## История — stock DB FAIL; C6 runner R2 / 2026-10-18 UTC
 
 [C0 source approval](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251106119),
 [actual run disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251192609).
