@@ -5,7 +5,196 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий шаг C0 — общий stock-прогон native DB/API/runtime / 2026-10-18 UTC
+## 0. Текущая выдача C0 — исправления двух test carriers после stock FAIL / 2026-10-18 UTC
+
+**C2/C3 ACTIVE только по двум source-only исправлениям ниже; C1/C5/C6/C8 HOLD.**
+[C0 actual disposition6253741115](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253741115).
+Это исправление тестов уже выбранной функции; новых product requirements нет.
+Native application/runtime NOT VERIFIED; M3 IN_PROGRESS.
+
+### 0.1. Проверенный actual result и границы принятия
+
+Run39154853068/attempt1, job117755853170, source
+**2fc3f1491321456e280c01852c7747e0ffdf9139**,
+tree **127e40091cf40cf8602c89eaf72833bae84d6044**: **FAIL92/105**.
+All105 called,105 setup+105 teardown PASS;315 phase reports,0skip/xfail/deselection.
+Per-module source7/7, DB54/56, API12/12, runtime19/30.
+Runner51+130subtests PASS; native542.983s/receipt573.957s within unchanged20m.
+Approval6253600648 consumed once; execution ref stays2fc3f14, no retry permission.
+
+Artifact12146143735 (39 files,3238146 bytes, expires2026-10-25), ZIP SHA256
+0dddf0eae3fd9837ca56c1e745cba4c89f99c4917b2c4ebbe2f0d927918e2a05.
+C0 independently checked all288 source bytes/modes, exact archive
+ccf625cec399d7c404475f019cb86bbcc2f3a3054eb58eff327fa46b5b9de391
+and manifest8de5124772a6f3627d11a6fae160a0f8621645de709619af43994e54a092dad3.
+Actual PG18.6/vector0.8.6/btree_gist1.8/Python3.13.16/uv0.10.0;
+actual LOGIN roles,98 guarded resets, shared fixture/source/resource guards,
+foundation0013 refusal, independent catalog, owned cleanup and final clean tree PASS.
+
+Independent corrected full profile now VERIFIED for exact source:
+**c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411**.
+All167 typed functions/unique OIDs incl verifier,45 tables/635 columns/ACL exact.
+Nonfunction57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370;
+verifier body527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac.
+C6 runner-R3 INTEGRATED/VERIFIED scoped runner/catalog/cleanup; C6 HOLD.
+Whole carrier FAIL is retained, not promoted to application verification.
+
+### 0.2. Two test findings; original runtime gate stays open
+
+| Finding | Actual cause / owner |
+|---|---|
+| C0-NC-CARRIER-01/P2 OPEN | C3 runtime_effects orders Audit by nonexistent id; actual audit_event_id. SQLSTATE42703 blocks10 terminal cases+1 ACK-loss case before target assertions |
+| C0-NC-CARRIER-02/P2 OPEN | C2 manual history uses escalation marker, then requests GUARDED_TEXT; deliberate scheduler chooses ESCALATE_OWNER. Both timezone cases blocked |
+| C3-NC-RUNTIME-01/P2 OPEN | UTC6 source addressed and strict C3 wrapper/vector pairs now PASS; complete five-status multi-shape carrier still blocked, so full closure withheld |
+
+Actual positives also include all12 API and all16 original runtime cases,
+server JSONB vectors and both Unicode/native/material/private File cases.
+No new production bug is established by the13 fixture failures. Fix the test
+setup/observer, retain all assertions; do not alter production to satisfy tests.
+
+This docs-only preparation is a sole-parent descendant of2fc3f14; only
+HANDOFF/register change,286 other blobs/modes exact. Canonical task bindings
+supply full new SHA/tree. C0 source branch
+c0/m3-1-native-context-stock-followup-r1; both task branches start there.
+
+### 0.3. C2 exact correction task
+
+**C2-M3.1-NATIVE-CONTEXT-DB-R4 — исправить только UTC6 test fixture; source-only.**
+
+Repository Elefesys/ai-service-manager; branch **c2/m3-1-native-context-db-r4**.
+Start from the exact new C0 docs-only preparation SHA/tree in this task's binding;
+its sole parent is **2fc3f1491321456e280c01852c7747e0ffdf9139**.
+Separate clean checkout; verify HEAD/tree and original11 against supplied
+project_sources/SOURCE_MANIFEST. Read current HANDOFF/REGISTER, AGENTS/IMPL-001,
+applicable Spec/ADR/MVP/Roadmap/Plan and contract§16–16.20. No other chat/agent.
+
+**Only write path: tests/test_m3_1_native_context_postgres.py.**
+Only these two existing definitions may change:
+- native_manual_delivery_history;
+- test_completed_manual_delivery_history_utc6_before_v3_digest.
+
+Finding C0-NC-CARRIER-02/P2: both timezone cases failed in run39154853068 at
+work_for(...,"GUARDED_TEXT"), no matching Job. The helper's exact escalation marker
+selects ESCALATE_OWNER, deliberately excluding GUARDED_TEXT. This is a fixture
+mistake; do not change scheduler/backend/SQL/contract or insert a Job by hand.
+
+Prepare a legitimate ordinary post-Resume Turn for BASE and GUARDED. After their
+saved snapshots and strict unchanged parser/digest/storage checks, admit a distinct
+real marker message through the existing capabilities, seal its new Turn and use
+its actual ESCALATE_OWNER Job. Assert the new Turn is distinct and expected Jobs
+exist on their respective Turns. Keep the same actual owner-created five-status
+manual history: SENT/FAILED/UNKNOWN/PENDING/DISPATCHING; both UTC and
+Asia/Novosibirsk; projection+BASE+GUARDED+closed unsigned ESCALATION complete
+expected history, null/UTC6/status/error/version, no normalization/re-signing
+produced bodies, stored-input and whole Outbox invariance, zero adapter calls.
+Follow the now actual-PASS separate ordinary→marker sequence in the C3 Unicode
+File scenario as a reference, without editing its file. No generic fixture rewrite.
+
+Keep the entire **121779-byte** old prefix SHA256
+**987ce8de6655236b6872f483b1cf3084640f8fb804232c98a905d573a329d12d** byte-exact,
+all52 original DB PG cases, new validator-vector pair and all other definitions/
+imports/assertions. In particular native_worker_at_timezone is frozen.
+Starting file134337 bytes, SHA256
+77e908893e23ee3489fd38075a210eec715d00cbcece6aba189b81074ac4a031.
+All existing56 DB node IDs and complete105 four-module node IDs remain unchanged.
+No deleting/skipping/xfail/param reduction or weakening assertions to get green.
+
+Local verification only: existing frozen Python3.13 environment, explicit current
+checkout PYTHONPATH and actual import check; source compile, Ruff/format this
+one file, exact two-definition AST/prefix/diff audit; complete four-module
+collect-only, no subset, still105 IDs (7+56+12+30). Ordered LF node-list SHA256
+9881ab5a77aca51a7d6c66737c352055cd4f037acf156e55f265cedeabb24b1a.
+Source-check routing against the accepted scheduler; collection is not PG PASS.
+No unchanged full suite rerun just for counts.
+
+All other287 blobs/modes frozen: migrations0013 and applied0001–0012, source tests,
+C3 runtime/API PG, backend/foundation0012/strict parsers, contract769072 bytes/
+SHA256fe2eb4ef2469ccb14b7147017c3c81066cde1b8a6ad60acbf73922a15e3ace5f,
+runner/workflows/deps/locks/operator/frontend/C0 docs. No0014.
+
+**No PG/Docker/service/lab startup, cleanup or reuse; no Actions/ref movement/
+dispatch/rerun/full CI/new PR/main/VM/provider/S3/LLM/live/deploy/renewal.**
+The execution branch stays2fc3f14 and approval6253600648 is consumed. No used0013
+reapplication; later full corrected stock run needs separate C0 approval.
+If another change is needed, return the exact finding; do not expand this scope.
+
+Return REVIEW→C2 HOLD: exact commit/tree/sole parent/branch, one-path diff and
+two changed AST definitions, preserved prefix/other cases, legitimate route/
+Turn/Job mapping and retained assertions, actual local commands/results and
+PG NOT RUN. Finding remains OPEN until corrected full execution accepted.
+Normal FF with expected prepared head, force=false; no amend/rebase/force.
+C3 has a disjoint one-helper correction. C0 consolidates both returns; user owns merge.
+
+### 0.4. C3 exact correction task
+
+**C3-M3.1-NATIVE-CONTEXT-RUNTIME-PG-R3 — исправить имя ключа Audit в test helper; source-only.**
+
+Repository Elefesys/ai-service-manager; branch
+**c3/m3-1-native-context-runtime-pg-r3**. Start from the exact new C0 docs-only
+preparation SHA/tree in this task's binding, sole parent
+**2fc3f1491321456e280c01852c7747e0ffdf9139**.
+Separate clean checkout, exact HEAD/tree. Read current HANDOFF/REGISTER,
+AGENTS/IMPL-001, relevant originals/manifest and contract§16–16.20.
+Verify supplied project_sources byte-exact. No other chat/agent.
+
+**Only write path: tests/test_m3_1_native_context_runtime_postgres.py.**
+**Only allowed change: runtime_effects() table-order map entry for app.audit_events,
+from id to the actual audit_event_id.** The complete full-row Audit comparison
+must remain. All other mapping entries, SQL loop/helper behavior and test bodies
+are frozen; do not remove Audit rows from runtime_effects.
+
+Finding C0-NC-CARRIER-01/P2:10 terminal matrix cases plus1 committed ACK-loss case
+failed before their intended actions because SELECT * FROM app.audit_events
+ORDER BY id raises42703. Exact source and installed catalog use composite
+(workspace_id,audit_event_id); no id column. This is a test observer defect.
+Verify every other listed table/order key against the accepted source catalog,
+so the helper reaches its assertions; report any distinct mismatch before edits.
+
+Starting file48090 bytes /SHA256
+7e57727b6f7ee7c9f590a860a3ba108946579e97ed7da4a09f69305681df9417.
+Retain entire **12965-byte** original prefix SHA256
+**30fc57c7a69521130faedc48da7d8d90766d7e9deb940a691fc4ce03da746a1f** and all32
+original AST nodes. Apart from runtime_effects AST, every existing definition,
+fixture/import/helper/decorator/assertion is exact. All30 runtime cases and all105
+combined node IDs unchanged; no skip/xfail/subset/parameter/assertion reduction.
+No production/schema/backend behavior changes or fabricated evidence.
+
+Use existing frozen Python3.13; verify current import paths with explicit
+PYTHONPATH. Source compile, Ruff/format one file, exact one-helper AST/one-line
+diff/prefix audit and static all-table/key schema check; complete four-module
+collect-only still105=7+56+12+30. Ordered LF node-list SHA256
+9881ab5a77aca51a7d6c66737c352055cd4f037acf156e55f265cedeabb24b1a.
+No PG PASS claim from source/collection. Do not rerun unchanged suites for counts.
+
+Other287 blobs/modes frozen, including C2 DB/source/API tests, migrations,
+backend/foundation readiness0012/strict parsers, full contract769072 bytes/
+SHA256fe2eb4ef2469ccb14b7147017c3c81066cde1b8a6ad60acbf73922a15e3ace5f,
+runner/workflow/deps/locks/operator/frontend and C0 docs.
+**No PG/Docker/service/lab/cleanup, Actions/ref move/dispatch/rerun/full CI/
+new PR/main/VM/provider/S3/LLM/live/deploy/renewal.** Approval6253600648 consumed;
+execution stays2fc3f14. C0 later reviews both corrected sources and separately
+authorizes one full corrected stock run; no used0013 reapplication.
+
+Return REVIEW→C3 HOLD with exact commit/tree/sole parent/branch/clean source,
+one-line mapping change, all other AST/prefix/node IDs exact, source schema key
+cross-check and actual local results, PG NOT RUN. Finding stays OPEN until actual
+corrected full run. Normal FF/expected head, no amend/rebase/force.
+C2 has disjoint UTC6 fixture correction; do not follow or edit its branch.
+User owns merge.
+
+### 0.5. Retained gates
+
+C0 reviews both returns and consolidates once before a separate exact full-stock
+approval. Existing105 cases and51 runner tests remain; no new product scope,
+selective retry, cap extension, source patch during a run or hidden PG execution.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 and PR34 closed/merged
+unchanged. No0014/applied migration edits/used0013 reapplication.
+Host/schema readiness/operator/C5/C8/account/renewal/collector/A08/P01/P05/A12
+remain later gates; M4 out, IMPL-05/CI optimization deferred.
+Contract9/Q01/MATERIAL11, D1/D2/D3 and all prior budgets preserved. User owns merge.
+
+
+## История — 0. Текущий шаг C0 — общий stock-прогон native DB/API/runtime / 2026-10-18 UTC
 
 **C3 PG-R2 и C6 runner-R3 приняты по исходному коду и интегрированы в этот checkpoint.**
 [C0 source acceptance6253565474](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253565474).

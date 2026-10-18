@@ -2,7 +2,62 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — native source объединён; один stock gate впереди / 2026-10-18 UTC
+## Текущий статус — stock FAIL; два адресных исправления тестов / 2026-10-18 UTC
+
+[C0 disposition6253741115](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253741115).
+**C2/C3 ACTIVE по source-only corrections; C1/C5/C6/C8 HOLD.**
+Новых требований к функции нет; это две ошибки test setup/observer.
+M3 IN_PROGRESS; native application/runtime NOT VERIFIED.
+
+| Task / finding | Current status |
+|---|---|
+| C3 runtime R1 / C2 DB-R3 / C3 PG-R2 | INTEGRATED source; actual combined evidence incomplete |
+| C6 runner-R3 | INTEGRATED / VERIFIED scoped runner/catalog/cleanup; C6 HOLD |
+| C0-NC-CARRIER-01/P2 | OPEN; wrong Audit ordering column blocks11 C3 cases |
+| C0-NC-CARRIER-02/P2 | OPEN; escalation-marker fixture requests missing guarded Job;2 C2 cases |
+| C3-NC-RUNTIME-01/P2 | OPEN/source-addressed; positive UTC6 wrapper+vectors PASS, full matrix blocked |
+| C2-M3.1-NATIVE-CONTEXT-DB-R4 | IN_PROGRESS; one PG file, only manual-history helper and timezone test |
+| C3-M3.1-NATIVE-CONTEXT-RUNTIME-PG-R3 | IN_PROGRESS; one runtime PG file, only runtime_effects Audit map value |
+| Corrected full stock retry | NOT AUTHORIZED; requires both returns, C0 review/consolidation and exact new approval |
+| Host/schema/operator/C5/C8 | HOLD; readiness remains0012 |
+| Whole M3 | IN_PROGRESS; A08/P01/P05/account/renewal/collector/A12 OPEN |
+
+Actual run39154853068/attempt1/job117755853170 on
+2fc3f1491321456e280c01852c7747e0ffdf9139/tree127e40091cf40cf8602c89eaf72833bae84d6044:
+**FAIL92/105** =source7PASS, DB54PASS/2FAIL, API12PASS, runtime19PASS/11FAIL.
+All105 called,105 setup+105 teardown PASS;0skip/xfail/deselection.
+Runner51 tests+130subtests PASS. Native542.983s,receipt573.957s within20m.
+Exact source, actual LOGIN roles/98 guarded resets, independent catalog,
+foundation0013 refusal, owned cleanup and clean source PASS; whole-run FAIL retained.
+Strict UTC6 wrapper, two UTC6 vector cases and three new JSONB/Unicode cases PASS
+do not stand in for the13 blocked scenarios.
+
+C0 artifact12146143735:39 files/3238146 bytes, ZIP SHA256
+0dddf0eae3fd9837ca56c1e745cba4c89f99c4917b2c4ebbe2f0d927918e2a05.
+All288 bytes/modes and source/manifest hashes exact. Fresh independent167 typed
+function/OID/45 table/635 column/security/ACL comparison PASS.
+Corrected installed full profile
+c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411;
+nonfunction57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370.
+C0 source review missed the two test fixture mistakes; no production change is
+authorized to work around them.
+
+New C0 docs-only preparation sole parent2fc3f14; only HANDOFF/register,
+286 other blobs/modes unchanged. Exact SHA/tree in the canonical tasks.
+Branches: c0/m3-1-native-context-stock-followup-r1;
+c2/m3-1-native-context-db-r4; c3/m3-1-native-context-runtime-pg-r3.
+Full exact scopes are in current HANDOFF§0.3/§0.4. Retain all105 node IDs,
+C2 old121779-byte prefix and C3 old12965-byte prefix, all assertions and other ASTs.
+All production/SQL/contract/runner/workflow/lock/original11 files remain frozen.
+No PG/services/lab/Actions/execution ref/full CI/new PR/main/VM/live/renewal in tasks.
+
+Execution remains2fc3f14; approval6253600648 consumed, no retry.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012; PR34 closed/merged.
+C1-NC-DB-01/02 and C0-NC-RUNNER-01 prior closures retained; Contract9/Q01,
+MATERIAL11, D1/D2/D3 and caps unchanged. M4 out, IMPL-05 deferred; user owns merge.
+
+
+## История — Текущий статус — native source объединён; один stock gate впереди / 2026-10-18 UTC
 
 [C0 source acceptance6253565474](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253565474).
 **C1/C2/C3/C5/C6/C8 HOLD. C0 готовит отдельное точное разрешение одного stock-прогона.**
