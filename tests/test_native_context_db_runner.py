@@ -673,6 +673,13 @@ class ExecutionEvidence(unittest.TestCase):
             if "uses:" in line:
                 self.assertRegex(line, r"uses: (?:actions|astral-sh)/[a-z-]+@[0-9a-f]{40}")
 
+    def test_job_env_does_not_use_runner_context_before_a_runner_exists(self):
+        text = (lane.ROOT / ".github/workflows/native-context-db.yml").read_text()
+        job_env = text.split("    env:\n", 1)[1].split("    steps:\n", 1)[0]
+        self.assertNotIn("${{", job_env)
+        self.assertIn('TASK_ROOT="$RUNNER_TEMP/native-context-db"', text)
+        self.assertIn('>> "$GITHUB_ENV"', text)
+
 
 if __name__ == "__main__":
     unittest.main()

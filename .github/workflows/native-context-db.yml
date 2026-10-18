@@ -16,19 +16,20 @@ jobs:
       contents: read
     env:
       PYTHONDONTWRITEBYTECODE: '1'
-      UV_PROJECT_ENVIRONMENT: ${{ runner.temp }}/native-context-db/venv
-      UV_CACHE_DIR: ${{ runner.temp }}/native-context-db/uv-cache
-      RUFF_CACHE_DIR: ${{ runner.temp }}/native-context-db/ruff-cache
-      NATIVE_ROOT: ${{ runner.temp }}/native-context-db
     steps:
       - name: Start whole-job budget and evidence directory
         shell: bash
         run: |
           set -euo pipefail
           umask 077
-          mkdir -p "$NATIVE_ROOT/evidence"
-          date +%s > "$NATIVE_ROOT/job-start"
-          echo 'Preparation started; no database has been created.' > "$NATIVE_ROOT/evidence/preparation.txt"
+          TASK_ROOT="$RUNNER_TEMP/native-context-db"
+          mkdir -p "$TASK_ROOT/evidence"
+          date +%s > "$TASK_ROOT/job-start"
+          echo 'Preparation started; no database has been created.' > "$TASK_ROOT/evidence/preparation.txt"
+          printf '%s\n' "NATIVE_ROOT=$TASK_ROOT" \
+            "UV_PROJECT_ENVIRONMENT=$TASK_ROOT/venv" \
+            "UV_CACHE_DIR=$TASK_ROOT/uv-cache" \
+            "RUFF_CACHE_DIR=$TASK_ROOT/ruff-cache" >> "$GITHUB_ENV"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.sha }}
