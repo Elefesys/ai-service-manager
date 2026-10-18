@@ -501,8 +501,14 @@ async def test_fresh_catalog_exact_security_and_foundation_fail_closed(native):
         assert sqlstate(denied) == "42501"
     runtime = RuntimeDatabase(Settings())
     try:
-        with pytest.raises(RuntimeError, match="schema"):
-            await runtime.check()
+        await runtime.check()  # paired native0013 application boundary
+        # Explicit historical-reader negative, not a readiness bypass.
+        from asm import foundation
+
+        with pytest.MonkeyPatch.context() as old_reader:
+            old_reader.setattr(foundation, "DATABASE_SCHEMA_REVISION", "0012")
+            with pytest.raises(RuntimeError, match="schema"):
+                await runtime.check()
     finally:
         await runtime.close()
     assert (await scalar(h, "SELECT platform.human_context_schema_profile()"))["valid"] is True
