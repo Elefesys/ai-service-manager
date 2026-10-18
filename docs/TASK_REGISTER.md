@@ -2,7 +2,58 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — NATIVE-CONTEXT contract ACCEPTED; C2 DB-R1 / 2026-10-18 UTC
+## Текущий статус — NATIVE-CONTEXT DB-R1 REVIEW; C1/C6 independent checks / 2026-10-18 UTC
+
+[C0 intake](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6249640362),
+[C2 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6248340477).
+**Source identity/scope PASS; DB implementation REVIEW, runtime NOT VERIFIED.**
+C2 reported51 PG/source cases на lab PG с изменёнными startup root checks:
+stock pinned reproduction ещё OPEN. Это disclosed evidence limit, не установленный
+SQL bug. C04 source-only assertions/AST/predecessor checks не являются PG run.
+
+| Task | Status / authority |
+|---|---|
+| C2-M3.1-NATIVE-CONTEXT-DB-R1 | REVIEW / C2 HOLD; frozen0268331e5b57f87e7f51f3973610cb83477662e8 |
+| C1-M3.1-NATIVE-CONTEXT-DB-REVIEW-R1 | IN_PROGRESS по exact C0 task; read-only SQL/contract/ABI review |
+| C6-M3.1-NATIVE-CONTEXT-DB-REPRO-R1 | IN_PROGRESS по exact C0 task; independent catalog + stock focused reproduction |
+| C3 backend/API/worker/Audit-V3, C6 host/readiness implementation, C5 Console | TODO/HOLD до C0 disposition двух reviews; не начинать по этому source intake |
+| C8/CI/native integration/account | TODO/HOLD; checkpoint не merge-ready/deployable |
+| Accepted contract R2 | ACCEPTED design; все9 CLOSED/Q01 RESOLVED сохраняются, implementation evidence отдельно |
+| MATERIAL/main | INTEGRATED/VERIFIED LOCAL/TEST/all11 CLOSED; e205e22051bc06295758b504d84699652b176c15/schema0012 |
+| Whole M3 | IN_PROGRESS; native runtime/P-01/A08/P-05/renewal/collector/account/A12 OPEN |
+
+[Полные две выдачи и критерии](tasks/M3_HANDOFF.md#0-текущая-выдача-c0--независимая-проверка-native-context-db-r1--2026-10-18-utc).
+Review/test target0268331e5b57f87e7f51f3973610cb83477662e8,
+tree3f2f8416f6d286cca7e826b1272f450c0e5a0907,
+sole parent9cebc175959eba565dcd7b979a91d04423fa94fa.
+C0 coordination preparation sole parent0268331 меняет только HANDOFF/REGISTER;
+ветка c0/m3-1-native-context-db-review-r1, exact preparation identity в C0 tasks.
+**Preparation с инструкциями не заменяет review/test target.**
+c2/m3-1-native-context-db frozen; C1/C6 отдельные local review branches/checkouts,
+write allowlist EMPTY, no remote branches/commits/PR; после каждого return reviewer HOLD.
+
+Delivery5 paths,+7624/−0,278 blobs/273 unchanged, applied0001–0012/original11 frozen.
+0013←0012 reservation сохранена. Full R2 prefix714947/SHA256
+d032a4b699767f58f60288fbe17808b69bf98627d8c11acb8df2c9a439ae8346 exact;
+append§16.11–16.16 не меняет accepted semantics. Full delivery contract745994 bytes
+заморожен на время reviews. Права на исправление C2 выдаст C0 отдельно по findings.
+
+C6 разрешены own disposable stock pinned DB/frozen Python3.13 и focused51 carrier,
+не whole stack/full CI/Actions/VM/live/API/browser/sends. DROP/RESET только созданной
+для этой проверки asm_test после проверки владения host/port/process/volume.
+No root-check patch/role spoof/source or gate edits. Если stock setup недоступен,
+BLOCKED/PG NOT RUN + actual blocker/minimal proposal; required proof остаётся OPEN.
+Independent167 definitions including profile body + exact nonfunction catalog;
+DB valid=true не доказывает trusted source/drain/process readiness.
+
+Следующее C0 решение: correction либо paired C3/C6 → C5 → C8/CI/integration.
+Main не менять; no deploy/merge implication. Все budgets/caps unchanged,
+IMPL-05 DEFERRED; M4 вне scope. Историческая DB выдача ниже завершена возвратом,
+её ACTIVE/IN_PROGRESS не текущий статус.
+
+<a id="текущий-статус--native-context-contract-accepted-c2-db-r1--2026-10-18-utc"></a>
+
+## История — NATIVE-CONTEXT contract ACCEPTED; C2 DB-R1 выдача / 2026-10-18 UTC
 
 [C0 acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6246954666),
 [C1 PASS](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6246639567),

@@ -5,7 +5,174 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущая выдача C0 — C2-M3.1-NATIVE-CONTEXT-DB-R1 / 2026-10-18 UTC
+## 0. Текущая выдача C0 — независимая проверка NATIVE-CONTEXT DB-R1 / 2026-10-18 UTC
+
+**C2 DB-R1: REVIEW/HOLD. C0 source intake PASS по identity/scope; DB/runtime ещё
+не VERIFIED. C1 и C6 получают две ограниченные проверки, код заморожен.**
+[C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6249640362),
+[C2 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6248340477),
+[исходная выдача](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6247002446).
+Ни один review не разрешает C3/C5/runtime/host integration до решения C0.
+
+### 0.1. Два источника с разными назначениями
+
+**Единственный review/test target:0268331e5b57f87e7f51f3973610cb83477662e8**,
+tree **3f2f8416f6d286cca7e826b1272f450c0e5a0907**, sole parent
+9cebc175959eba565dcd7b979a91d04423fa94fa/tree8ab4f9a690798f010013d907b6eee0f29fd43eab.
+Ветка c2/m3-1-native-context-db заморожена на этом delivery.
+C0 preparation с sole parent0268331 меняет только данный handoff и TASK_REGISTER;
+он хранит инструкции, **не заменяет exact review/test target**. Полные SHA/tree
+этого preparation — в canonical C0 tasks PR34; ветка c0/m3-1-native-context-db-review-r1.
+Не тестировать автоматически более новый branch tip вместо указанного target.
+
+Runtime main e205e22051bc06295758b504d84699652b176c15,
+tree85206b9c66ac151f3847aa39f46fb75663a18b91/schema0012.
+Reservation0013/down0012 сохранена; applied0001–0012 frozen.
+Contract/design R2 accepted0cdd66c/all9 CLOSED/Q01 RESOLVED не означает SQL PASS.
+MATERIAL/all11 INTEGRATED/VERIFIED LOCAL/TEST остаётся принятым.
+
+Проверенный delivery delta от preparation9cebc17:5 paths,+7624/−0,3 new,
+278 blobs total/273 unchanged. Native migration+4302,source tests+188,PG tests+2685,
+tenancy+84,contract appendix+365. Full R2 prefix714947/SHA256
+d032a4b699767f58f60288fbe17808b69bf98627d8c11acb8df2c9a439ae8346 frozen;
+full delivery contract745994 bytes/blob84166e925b3aa3eef39882baaaf4ff20132802df.
+Все11 originals exact attachments/manifest. C0 source-only4 assertions/AST/frozen
+predecessor expansion не являются Python3.13/pytest/PG run.
+
+### 0.2. Общие границы двух проверок
+
+- AGENTS, актуальные architecture Spec/ADR/MVP/Roadmap/Implementation Plan и
+  IMPL-001 остаются authority. Spec5.8/5.12/5.12.1/24.7, ADR002–006/026/267,
+  contract§16 целиком, C0 acceptance и C2 appendix§16.11–16.16 обязательны.
+  Original sources не менять; локальный диск/окружение другого чата не предполагаются.
+- Отдельные isolated checkouts на exact0268331. C1 local branch
+  c1/m3-1-native-context-db-review-r1; C6 local branch
+  c6/m3-1-native-context-db-repro-r1. Remote ветки/коммиты/PR не создавать.
+- **Write allowlist tracked files: EMPTY.** Scratch probes/logs вне checkout
+  допустимы; не исправлять implementation/tests/docs/manifests/source profiles для green.
+  Любое обнаруженное противоречие — finding с exact path/line/trace и минимальным
+  предложением C0. C2 остаётся автором возможного исправления после новой выдачи.
+- Read scope: все5 delivery paths, effective0001–0012 chain, callers/tenant and worker
+  factories, existing runtime/tenancy/regression tests, pinned infra и текущие readers.
+  Считать динамические SQL replacements по фактически развёрнутым строкам.
+- No Actions dispatch/rerun/cancel/new PR/full CI, whole application stack/HTTP/browser,
+  account/VM/shared DB/S3/Telegram/LLM/provider API/real sends/expenses/deploy/renewal.
+  No force/amend/rebase/main/C2/C3/old PR34 branch mutation. Чужие процессы не трогать.
+- Перед return сверить source HEAD/tree/clean status и fresh main/C2 ref.
+  Если source/main/reservation изменились — сообщить C0, не переносить PASS на другой SHA.
+  Один canonical receipt PR34 на задачу; после return соответствующий reviewer HOLD.
+
+### 0.3. C1-M3.1-NATIVE-CONTEXT-DB-REVIEW-R1 — read-only SQL/contract review
+
+C1 проверяет реализацию независимо от авторского PASS. В этой выдаче не нужны
+повтор full/PG suites или запуск приложения; источник результата — inspection и
+ограниченные source-only probes, явно отмеченные как таковые.
+
+1. Closed SQL wire/schema/error priority по accepted§16: exact OWNER/body/cursor/
+   reply shapes; reject unknown/NULL/type variants; V3 final-body digest/2MiB/64/16/
+   decimal/UUID/UTC/coverage. Ordinary Client growth после Resume, own OUTBOUND
+   eviction, OWNER_TEXT full replacement; retained V1/V2/UNKNOWN bytes/semantics.
+2. Authority: actual live OWNER/trusted transaction, same-ws wrong Client/actor/
+   R/source/Audit negatives, SECURITY DEFINER/search_path/PUBLIC/runtime grants,
+   private3 FORCE RLS tables, token-only replay без permit, policy actual session_user.
+   Проверить command gates отдельно от table constraints и tests privileged fixtures.
+3. Stable one-snapshot classifier после waits, actual direct/transitive callees,
+   RLS/expressions и own-write separation. Pending→FAILED Job/Inbox-only race;
+   source→mark для каждого fresh-key duplicate, no-C/old NULL/IGNORED, distinct
+   gaps≤1024/probe1025, index predicates/bounded access без скрытого full-history scan.
+4. R/Audit/pointer atom, FK/RI/implicit locks/no mutable-counter FK; Resume
+   historical R/P/N; RESOLVE Connection-before-C/E и retained priority; completion/
+   SENT/File без нового Connection edge, changed SENT one target/one C+2.
+5. Все6 WAIT boundaries и все early exits: immediate CHECK на каждом UPDATE,
+   commit-before-outcome contract, current/latest-token replay, reclaim/recover/
+   supersede/maintenance/5claims/15min/30s/backoff60/exhaustion/visible work.
+   Same Job/intent/Turn; no permit/attempt/adapter call при pending/permanent hold.
+6. Policy ENABLE/PAUSE/no-op/CAS/hash/expired entitlement/lost ACK, schema/profile
+   trust boundary; exact unused reverse и used55000 before DDL. Полнота executable
+   cases: отличать source assertions/composed proof от actual PG/E2E.
+7. Paired C3 ABI: назвать точные существующие Python/HTTP/worker/Audit consumers,
+   которым нужны V3/closed errors/strict cursor/commit handling. Это handoff proposal,
+   не разрешение менять backend и не finding само по себе о намеренно unpaired0012.
+
+Return: PASS либо CHANGES_REQUESTED с stable finding ID/severity/path/line/trace,
+ожидаемым/фактическим поведением, scope/limits и minimal correction. Не закрывать
+native runtime/A08/M3 и не подменять independent review доверием к51 author tests.
+
+### 0.4. C6-M3.1-NATIVE-CONTEXT-DB-REPRO-R1 — stock DB/catalog evidence
+
+Конкретный gap: C2 actual51 run выполнен на PG18.1 с тремя изменёнными startup root
+checks. Он не доказывает stock pinned parity. C6 сначала проверяет доступность
+штатного собственного disposable setup; не тратит повторный цикл на patched-root
+build. Baseline DB_IMAGE из exact infra/images.lock.env:
+pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a.
+Python3.13 + frozen uv.lock; extensions vector0.8.6/btree_gist1.8.
+Нельзя заменять digest/tag/dependencies, root-checks/permissions/role identity.
+
+Разрешён запуск только собственного DB container/LOCAL-TEST DB и focused Python
+tests, без всего Compose stack. Исходники checkout остаются untouched. Временные
+loopback bindings/bootstrap env/secret values/volumes/processes создаёт и убирает
+только C6; cleanup только собственных ресурсов. Credentials не публиковать.
+
+Fixture destructive по своему назначению: reset_disposable DROP DATABASE asm_test.
+**Перед запуском установить, что host/port/server/process/volume принадлежат этой
+проверке**, и только тогда ASM_NATIVE_TEST_ALLOW_RESET=1 и loopback admin URL к postgres.
+Это не разрешение reset существующей asm_test/asm_local другого задания. Реальные
+distinct LOGIN asm_runtime(nonowner/NOINHERIT/NOBYPASSRLS) и asm_migrator обязательны;
+не SET ROLE вместо session_user, не disable RLS/constraints, не fake paid state.
+
+Выполнить один focused итоговый run на exact clean0268331/tree3f2f…:
+python -m pytest -q tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py
+Ожидаемый carrier —51 cases из C2 return; фиксировать actual collected/pass/fail/skip.
+No skip/xfail/retry/timeout/cap expansion для green. Не запускать полный foundation.
+Не менять тесты ради green; конкретный failure возвращать C0 со stage/SQLSTATE/trace.
+
+Независимо проверить:
+- fresh/populated/repeat0012→0013,45 tables/167 functions; actual pinned engine/
+  extension versions; unused exact reverse и used55000 before DDL без удаления evidence;
+- из trusted source chain построить expected function inventory/bodies/owners/
+  volatility/search_path/ACL; сверить все167 installed definitions, включая body
+  human_context_schema_profile(). Недостаточно SELECT profile.valid=true или
+  саморавенства двух значений, полученных от проверяемого DB function;
+- точный nonfunction catalog (columns/generated/constraints/indices/triggers/RLS/
+  policies/sequences/schema ACL/extensions) и role membership/no inherited bypass;
+  заявленные hashes сверять с independently computed values и описать serialization;
+- security/replay/lock/coverage cases выполняются реальными actors и транзакциями.
+  Current foundation0012 должна по-прежнему отвергать0013: это expected checkpoint
+  limit; не повышать version, не skip и не fabricate source/drain/ready attestation.
+
+C2 reference hashes: full profile
+11e26ca71164fed6b7ed5ccd29fccc432f9a4e9f78747d4ae51e377cc5365c94,
+nonfunction catalog57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370.
+Совпадение hash не заменяет независимую body/source проверку.
+
+Если штатная среда недоступна: закончить доступный source/catalog-definition review,
+вернуть **BLOCKED / PG NOT RUN**, actual capability error и конкретный minimal
+reproduction plan/proposed diff для C0. Не копировать PASS C2, не patch PostgreSQL,
+не подключаться к VM/shared DB и не запускать самовольно Actions/full CI.
+Stock reproduction остаётся OPEN до реального выполнения; это не SQL failure.
+
+Return: exact HEAD/tree/clean status, engine/image/deps/extensions/role identities
+без секретов, команды/actual durations/results, independent manifest comparison,
+raw log hashes/available evidence links, ограничения и setup cleanup. Затем C6 HOLD.
+Это DB-only proof; C6 source/schema/host/readiness/operator implementation отдельная
+будущая выдача после решения C0, не scope этого review.
+
+### 0.5. Следующее решение и сохранённые границы
+
+После C1/C6 returns C0 consolidates findings: при необходимости C2 correction,
+иначе отдельные paired C3 backend/API/worker/Audit-V3 и C6 compatibility scopes,
+затем C5 Console → C8/integration/CI → renewal/collector/account/A12.
+C8 independent whole candidate review и штатные gates/user merge сохраняются.
+Никакого implied deploy или ENABLE policy на рабочем окружении.
+
+P-01/A08/P-05/renewal/collector/account/A12 OPEN, whole M3 IN_PROGRESS;9 contract
+findings CLOSED/Q01 RESOLVED — только contract. D1/D2/D3 provider limits не сняты.
+Budgets S/600/P720/fixed120/+480/S+1200/cleanup90/state25/browser25/foundation45/
+3s/60s/10s и worker caps unchanged; IMPL-05 DEFERRED, M4 вне scope.
+
+<a id="0-текущая-выдача-c0--c2-m31-native-context-db-r1--2026-10-18-utc"></a>
+
+## История — C2-M3.1-NATIVE-CONTEXT-DB-R1 выдача / 2026-10-18 UTC
 
 **NATIVE-CONTEXT R2 принят в contract/design scope. C2 получает реализацию DB protocol,
 первый ограниченный checkpoint; остальные авторы HOLD.**
