@@ -2,7 +2,95 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C3 REVIEW; C1 review и C2 UTC6 R3 ACTIVE / 2026-10-18 UTC
+## Текущий статус — C1/C2 приняты; C3 PG tests и C6 runner R3 ACTIVE / 2026-10-18 UTC
+
+[C0 disposition6253081736](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253081736) принимает
+[C1 scoped review](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252871772) и
+[C2 UTC6 source correction](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252983496).
+**C3/C6 ACTIVE только по новым source-only задачам; C1/C2/C5/C8 HOLD.**
+**Один C3-NC-RUNTIME-01/P2 OPEN / addressed in source. Actual corrected PG NOT RUN.**
+M3 IN_PROGRESS; native application/runtime NOT VERIFIED.
+
+| Task / finding | Current state |
+|---|---|
+| C1-M3.1-NATIVE-CONTEXT-RUNTIME-REVIEW-R1 | COMPLETE / scoped source PASS accepted; no additional confirmed finding; C1 HOLD |
+| C3-M3.1-NATIVE-CONTEXT-RUNTIME-R1 | INTEGRATED in consolidated C0 source checkpoint; actual runtime verification pending |
+| C2-M3.1-NATIVE-CONTEXT-DB-R3 | INTEGRATED in consolidated C0 source checkpoint; correction source accepted, actual PG pending; C2 HOLD |
+| C3-NC-RUNTIME-01/P2 | OPEN / addressed in source; closes only after actual corrected PG/interop accepted by C0 |
+| C3-M3.1-NATIVE-CONTEXT-RUNTIME-PG-R2 | IN_PROGRESS; append-only one runtime PG test file for three C1 evidence gaps |
+| C6-M3.1-NATIVE-CONTEXT-DB-STOCK-RUNNER-R3 | IN_PROGRESS; two runner/test paths, complete four-module coverage and retained guards |
+| Current new PG evidence | 91 collected only =7 source+56 DB PG+12 API PG+16 runtime PG; actual corrected execution NOT RUN |
+| C1-NC-DB-01/02; C0-NC-RUNNER-01 | CLOSED; prior accepted source/stock evidence retained |
+| C5/C8 and C6 host/schema/operator work | HOLD / later gates after consolidated reviewed source and actual stock evidence |
+| Contract R2 / MATERIAL | Contract9 CLOSED/Q01 RESOLVED; MATERIAL11 INTEGRATED/VERIFIED LOCAL/TEST |
+| Whole M3 | IN_PROGRESS; A08/P01/P05/account/renewal/collector/A12 OPEN |
+
+Accepted C2 head **15a8ea7a12f01644250315e26d3d6c5cc487b59e**,
+tree **3fc15bdb8c9d475c94c94e5e12cce2b059fedfc6**, sole parent
+**73eaeed87cb8c9caf7a6256ba8c246f25e059621** /tree4a02292219cb9219a56772a7a7c7be0ece7e0039.
+C1 reviewed immutable **225879990011f2e41f4c38e46308ffdd976a7393** /
+tree57009c4990345768badb912c1c3ff0818edb4650, not the later C2 correction.
+
+C0 independently verified4 paths,+564/−5, all288 bytes/modes/commit/tree,
+284 unchanged blobs, clean/diff PASS. Source tar SHA256
+**cad5d1705b2754abc7ddfa59fdeafc712653609bd9fd228b679746d28452bb32**.
+Actual local **47 PASS+78 subtests /4.35s** (7 source/codec+40 runner),
+Ruff/format3 PASS; **91 collected only /4.73s**. Python3.13.14/57 frozen external
+distributions and actual import path verified. C2's222 and C1's38 targeted cases/
+10 literal vectors remain separately attributed source evidence, not PG.
+
+Only UTC6 projection + paired nested validator + generated profile bodies changed;
+164 other functions and all signatures/metadata/ACL/nonfunction DDL/columns unchanged.
+955 commands/167 functions/45 tables;0013=198 batches/53 final definitions,
+35 additions/18 replacements. Source body hashes:
+projection8d38da64c526acb61365aa06eb293d117e1d8af93b598b5a507da3a23bc17b51;
+validator21492e85adeaf186bce6bbfdde7b89c8e70762c56f8ec28c6da54b3a5327f49c;
+verifier527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac.
+Nonfunction57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370
+retained; new installed full profile unknown pending actual comparison.
+
+Original11/19 ORIGINAL/applied0001–0012 retained. Contract old756397-byte prefix exact,
+new full769072 bytes/SHA256
+**fe2eb4ef2469ccb14b7147017c3c81066cde1b8a6ad60acbf73922a15e3ace5f** frozen.
+Old121779-byte native PG prefix and all28 C3 cases unchanged. New C3 task explicitly
+authorizes only append to runtime PG file, preserving12965-byte prefix/SHA256
+30fc57c7a69521130faedc48da7d8d90766d7e9deb940a691fc4ce03da746a1f.
+
+C2 lab attempts stopped before asm_test/bootstrap/roles/reset/migrations/pytest
+at ownership checks; normal cleanup not attested. No PG/stock/cleanup PASS claimed.
+New tasks do not authorize further lab startup/reuse/repair/cleanup or guard bypass.
+
+C3 fills three concrete actual-evidence gaps: remaining boundary HOLD/exhaustion,
+committed send-begin ACK loss/work-replay miss/conservative UNKNOWN, and actual
+SQL→Python JSONB/digest including Unicode/material/File. No new product defect ID.
+C6 extends existing two-module runner to all four complete modules and proves
+guarded shared reset/failure propagation; workflow, image, deps,20m cap unchanged.
+Starting91 must grow with appended C3 cases; no fixed ceiling or selected subset.
+Full exact scope in current HANDOFF§0 and canonical PR34 tasks.
+
+| Branch | Purpose / exact base |
+|---|---|
+| c0/m3-1-native-context-pg-prep-r1 | C0 docs-only descendant of15a8ea7a; full preparation SHA/tree in canonical tasks |
+| c3/m3-1-native-context-runtime-pg-r2 | Same prepared SHA/tree; one append-only test path |
+| c6/m3-1-native-context-db-stock-runner-r3 | Same prepared SHA/tree; two existing runner/test paths |
+| c2/m3-1-native-context-db-r3 | Returned15a8ea7a; HOLD |
+| c1/m3-1-native-context-runtime-review-r1 | Reviewed2258799; HOLD |
+
+C0 preparation changes ONLY HANDOFF/REGISTER,286 other blobs/modes exact.
+C0 consolidates both returns before separate actual stock execution approval.
+Main **e205e22051bc06295758b504d84699652b176c15/schema0012**, execution
+**bde0c48af74f23cd6430fc669ea4635e21aa68c6** unchanged; PR34 closed/merged.
+No current Actions/ref movement/service startup/full CI/new PR/VM/provider/live/deploy.
+
+Historical run39141370282 SUCCESS57/57,40 runner+78 subtests/catalog/roles/reset/
+cleanup/source PASS stays scoped to bde0c48; old39136349844 remains FAIL.
+C6 later host/source/schema/operator pairing, C5 TS/UI, C8/full CI/user merge pending;
+foundation0012 refusal retained. D1/D2/D3/caps retained, M4 out/IMPL-05 DEFERRED.
+No0014 or in-place reapplication to used0013 DB. Earlier blocks are historical.
+
+<a id="текущий-статус--c3-review-c1-review-и-c2-utc6-r3-active--2026-10-18-utc"></a>
+
+## История — C3 REVIEW; C1 review и C2 UTC6 R3 ACTIVE / 2026-10-18 UTC
 
 [C0 disposition6252562993](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252562993)
 по [C3 return6252466443](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252466443).

@@ -5,7 +5,207 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущая выдача C0 — C1 review и C2 UTC6 R3 / 2026-10-18 UTC
+## 0. Текущая выдача C0 — native PG carriers и runner R3 / 2026-10-18 UTC
+
+**C3 и C6 ACTIVE только по новым source-only задачам; C1/C2/C5/C8 HOLD.**
+[C0 disposition6253081736](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6253081736) принимает
+[C1 scoped review](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252871772) и
+[C2 DB-R3 source correction](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252983496).
+C3 runtime R1 и C2 DB-R3 включены в консолидированный C0 source checkpoint.
+**Это source integration, не native application/runtime VERIFIED.**
+**C3-NC-RUNTIME-01/P2 OPEN / addressed in source** до actual corrected PG/interop.
+Новых подтверждённых product findings по C1 review нет.
+
+### 0.1. Принятые exact sources и проверка C0
+
+| Binding / evidence | Exact value |
+|---|---|
+| C1 read-only review target | **225879990011f2e41f4c38e46308ffdd976a7393**, tree **57009c4990345768badb912c1c3ff0818edb4650** |
+| C1 separate instructions | **73eaeed87cb8c9caf7a6256ba8c246f25e059621**, tree **4a02292219cb9219a56772a7a7c7be0ece7e0039** |
+| Accepted C2 delivery / tree | **15a8ea7a12f01644250315e26d3d6c5cc487b59e** / **3fc15bdb8c9d475c94c94e5e12cce2b059fedfc6** |
+| C2 sole parent | **73eaeed87cb8c9caf7a6256ba8c246f25e059621** |
+| C2 source delta | 4 existing paths,+564/−5;288 blobs,284 other bytes/modes unchanged |
+| C0 source identity | Independently fetched4 blobs; all288 bytes/modes, exact commit/tree/archive, clean/diff --check PASS |
+| Source tar SHA256 | **cad5d1705b2754abc7ddfa59fdeafc712653609bd9fd228b679746d28452bb32** |
+| Actual C0 local checks | **47 PASS +78 subtests /4.35s** =7 native source/codec +40 runner; Ruff/format3 files PASS |
+| Actual C0 collection | **91 collected only /4.73s** =7 source +56 DB PG +12 API PG +16 runtime PG |
+| Full frozen contract | **769072 bytes**, SHA256 **fe2eb4ef2469ccb14b7147017c3c81066cde1b8a6ad60acbf73922a15e3ace5f** |
+
+C0 verified intended asm.foundation import path, Python3.13.14 and57 installed
+external distributions against frozen uv.lock. Original11=repository=manifest=
+attached originals exact. C0 did not rerun unchanged222 local suite after prior
+C0 PASS on2258799; C2 reports222 PASS on its corrected tree. C1 independently reports
+38 targeted unit/ASGI cases and10 source-derived literal vectors; those are not PG.
+No source/local/mock/collection count is actual PostgreSQL or application acceptance.
+
+C2 changed only0013, two native source/DB tests and contract append§16.19–16.20.
+Old756397-byte contract prefix/SHA256e7f3796fcff8640ffca203266ecf7b5988f7ab1bd24850b12e923122abf5d281
+preserved; append12675 bytes. Original121779-byte native PG module prefix exact;
+all52 old PG nodes retained. Four original source-test ASTs exact; only authorized
+R1/R2 freeze carrier adapted and paired with exact R2 freeze. All28 C3 PG cases,
+backend, foundation, API/OpenAPI, frontend, runner/workflow/locks unchanged.
+
+### 0.2. UTC6 correction and remaining actual gate
+
+Producer human_context_projection now serializes nested delivery.completed_at in
+UTC6 before ordinary V3 digest; NULL remains null. Nested snapshot validator checks
+exact lexical shape before cast, finite/calendar round-trip and preserved closed
+status/error/null/type relations. Python Timestamp/V3, member ingress_at, other
+timestamps, old snapshots/receipts and ORIGINAL restoration bodies unchanged.
+
+Independent expansion:955 commands,167 functions/45 tables;0013=198 op batches/
+53 final definitions;35 additions/18 replacements. Exactly3 changed bodies:
+- projection **8d38da64c526acb61365aa06eb293d117e1d8af93b598b5a507da3a23bc17b51**;
+- nested validator **21492e85adeaf186bce6bbfdde7b89c8e70762c56f8ec28c6da54b3a5327f49c**;
+- generated verifier **527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac**.
+All164 other function bodies, signatures/metadata/ACL, nonfunction DDL/columns,
+all19 ORIGINAL and applied0001–0012 exact. Nonfunction expected catalog
+**57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370** retained.
+New installed full profile is unknown until actual source→installed comparison.
+Old stock full profilec8a335b8… must not be reused as corrected expected result.
+
+C3-NC-RUNTIME-01 remains OPEN. C2's new SENT/FAILED/UNKNOWN/incomplete/timezone/
+calendar carriers and the unchanged strict C3 completed-delivery wrapper case
+are collected, **NOT RUN** on corrected SQL. C2 lab ownership checks stopped before
+asm_test/bootstrap/roles/reset/migrations/pytest. Two lab startup attempts are
+disclosed, normal cleanup not attested; C0 does not transfer a cleanup/stock PASS.
+New tasks do not authorize repairing, starting, reusing or cleaning unproven lab
+resources. No used0013 DB in-place reapplication; future execution fresh owned DB.
+
+### 0.3. Why these two disjoint source tasks precede execution
+
+Existing runner selects only the two native DB modules. A run now would omit
+all28 C3 API/runtime cases. C6 must include all four complete modules and retain
+the same guarded reset/source/ownership/role/catalog/cleanup/TEST/budget boundary.
+
+C1 explicitly identified three actual-evidence gaps, without a new product defect:
+remaining five boundary HOLD/exhaustion cases, committed guarded send-begin
+ACK loss with scheduling replay miss, and SQL→Python JSONB/digest edge vectors
+and native material/File shapes. C3 adds focused PG carriers for those gaps,
+keeping every existing case intact. Production logic does not change.
+
+Current91 is a starting inventory, not a fixed total. New C3 cases must appear in
+the final four-module collection and execution automatically. No lowering counts,
+selection, xfail/skip or reclassification of collection as PASS.
+
+### 0.4. Repository, branches and starts
+
+Repository **Elefesys/ai-service-manager**. New C0 preparation is a sole-parent
+descendant of **15a8ea7a12f01644250315e26d3d6c5cc487b59e**, changing ONLY
+docs/tasks/M3_HANDOFF.md and docs/TASK_REGISTER.md;286 other blobs/modes unchanged.
+Canonical tasks provide the full created preparation commit/tree.
+
+| Branch | Purpose / start |
+|---|---|
+| c0/m3-1-native-context-pg-prep-r1 | New current C0 instruction/source checkpoint |
+| c3/m3-1-native-context-runtime-pg-r2 | Same new prepared SHA/tree; append-only runtime PG tests |
+| c6/m3-1-native-context-db-stock-runner-r3 | Same new prepared SHA/tree; only runner + runner tests |
+| c2/m3-1-native-context-db-r3 | Returned15a8ea7a; C2 HOLD |
+| c1/m3-1-native-context-runtime-review-r1 | Reviewed2258799; C1 HOLD |
+
+Each executor uses a separate clean checkout and exact base, normal FF/expected head,
+no amend/rebase/force. No assumptions about another chat's disk/environment/memory.
+C3 and C6 do not follow or edit each other's branches; C0 later consolidates.
+Main **e205e22051bc06295758b504d84699652b176c15/schema0012** and execution
+**bde0c48af74f23cd6430fc669ea4635e21aa68c6** remain unchanged; PR34 closed/merged.
+
+Read current HANDOFF§0/TASK_REGISTER, AGENTS/IMPL-001, original11/SOURCE_MANIFEST,
+applicable original Spec5.8–5.14/5.12.1/18.5–18.9/24.7, ADR002–007/024–026/180/266/267,
+MVP GJ-G/J+variants, Roadmap/Plan M3.1/M3.2, accepted full contract§16 through§16.20
+and MATERIAL boundaries. Historical proposed/status headings do not override
+subsequent exact C0 acceptance. Source tasks below grant no actual PG/Actions run.
+
+### 0.5. C3 test-only task
+
+**C3-M3.1-NATIVE-CONTEXT-RUNTIME-PG-R2 — test-only evidence gaps, no runtime correction.**
+
+Repository Elefesys/ai-service-manager. Branch **c3/m3-1-native-context-runtime-pg-r2** starts at the exact C0 docs-only preparation SHA/tree in the canonical task, sole parent **15a8ea7a12f01644250315e26d3d6c5cc487b59e**. Separate clean checkout, verify full HEAD/tree; normal FF/expected head, no amend/rebase/force. C1 reviewed2258799; the prepared source also contains C0-reviewed C2 UTC6 correction. Do not revert it or follow moving C6 head.
+
+**One existing write path only:** tests/test_m3_1_native_context_runtime_postgres.py.
+**Append-only:** preserve the entire12965-byte prefix SHA256 **30fc57c7a69521130faedc48da7d8d90766d7e9deb940a691fc4ce03da746a1f**, all16 existing runtime node IDs/AST/assertions/fixtures. Add new helpers/tests below it; local imports inside appended helpers/tests are allowed. Existing12 API cases,63 native source/DB cases, backend, SQL, contract, foundation, runner/workflow and all other files are frozen. No new files or refactoring of retained tests.
+
+These are three concrete evidence gaps identified by C1; no additional confirmed product finding is asserted. The goal is executable actual-PG coverage on the existing guarded native fixture, for later consolidated stock execution:
+
+1. **Terminal scheduling at every boundary.** Existing prepare tests cover HOLD and exhausted. Add the remaining five boundaries (accept, send-begin, escalation, test_prepare, test_finalize) × both variants. Use actual Python wrapper/Worker and SQL, with reachable capability-built saved inputs/receipts where required. Assert persisted terminal Job/result and token identity, no fresh lease/admission on historical replay, no adapter/send/new Job/intent/revision, unchanged attempts/first_started budget except the stated terminal transition, OPERATOR_REQUIRED then existing Takeover projection/DEAD non-revival. Respect saved acceptance/consumer/creation receipt precedence: select a state that actually reaches the intended boundary; never change production precedence to satisfy a test. Negative exhaustion injection may reuse the existing explicit test pattern, not fabricate successful authority/receipts.
+
+2. **Committed guarded send-begin ACK loss with work-replay miss.** Drive actual begin to durable DISPATCHING/permit commit, inject loss after commit before the caller receives the permit, and execute the real Worker exception/replay path. Prove one begin, no returned permit/no adapter call/no blind second begin, work scheduling replay miss rather than a synthetic WAIT receipt, and persisted same Outbox/attempt. Exercise existing expiry/recovery capability to reach conservative UNKNOWN, with no resend/recreated intent and retained history. Any clock/expiry/transport seam must be explicit and bounded; never directly DML a successful permit/receipt or UNKNOWN outcome. Keep the original six WAIT-hit ACK-loss cases unchanged; this new case covers the distinct no-receipt path.
+
+3. **Actual PostgreSQL JSONB → strict Python bytes/digest compatibility.** Add a finite table of independent closed-domain vectors comparing actual PostgreSQL jsonb::text UTF8 bytes/hash with native_jsonb: UTF8 key-length/order ties, Cyrillic, combining/astral Unicode, U+2028/2029, quote/backslash/control escaping, signed bigint endpoints, nested arrays/objects/null/bool. No float/Decimal/domain widening. Compare server bytes/hash directly; do not generate the expected result with the same Python implementation. Add capability-built BASE/GUARDED V3 snapshots with full Unicode OWNER_TEXT/current material/private File variants using existing permitted fixture/capabilities, then parse unchanged and compare persisted body/digest. Escalation request snapshot has its accepted closed unsigned shape: validate/compare its canonical body without inventing a digest field. Vector-only SELECTs must be labelled separately from capability-built saved evidence and must never fabricate stored production receipts. Reuse existing retained File/material scenario setup; no S3/provider I/O.
+
+Use a few bounded fixtures/vector loops rather than one DB reset per literal vector. Reuse the unchanged native fixture/reset and actual asm_runtime/migrator behavior; do not introduce a second destructive entry point, bypass readiness, or use owner/superuser as application runtime. Preserve all caps, fixed waits,5 claims/15min/30s/backoff≤60, strict V1/V2/V3 parsers, UNKNOWN semantics and CONTROLLED-only scope. No artificial waits or unbounded polling.
+
+**Verification now is source-only:** locked Python3.13/frozen existing dependencies, verify actual imported module path with explicit checkout PYTHONPATH; Ruff/format for the changed module; compile without checkout caches; collect the complete four modules (migrations, native DB, API PG, runtime PG) with no -k/-m/deselection/skips/xfail. Record node IDs and per-module counts, preserve all previous91 and report additions. Read/check that assertions reach real wrappers/SQL; use targeted source/unit checks only if needed for a concrete risk. Collection is NOT RUN, never PG PASS.
+
+**Do not start PG, Docker, services, lab builds or cleanup controllers in this task.** The disclosed C2 lab ownership blocker is not a request to repair/bypass it or reuse a used0013 DB. Do not mutate execution ref, dispatch/rerun/cancel Actions, run full CI, create PR, change main/VM/shared DB/provider/S3/LLM/live send/deploy/renewal or launch other chats/agents. C6 separately extends the stock runner; C0 will consolidate/review both returns and separately authorize actual execution.
+
+Return **REVIEW → C3 HOLD** with exact full commit/tree/parent, one-path append-only diff, old prefix/AST hashes and clean checkout, each gap→new node/assertion/real-vs-seam mapping, exact local commands/results/full collection delta, remaining NOT RUN. Any concrete production defect is a finding for C0 with minimal reproduction/owner/scope; do not fix it within this test-only task. C3-NC-RUNTIME-01 stays OPEN until actual corrected PG/interop acceptance. User owns merge.
+
+### 0.6. C6 runner task
+
+**C6-M3.1-NATIVE-CONTEXT-DB-STOCK-RUNNER-R3 — four-module carrier, source-only preparation.**
+
+Repository Elefesys/ai-service-manager. Branch **c6/m3-1-native-context-db-stock-runner-r3** starts at the exact C0 docs-only preparation SHA/tree in the canonical task, sole parent **15a8ea7a12f01644250315e26d3d6c5cc487b59e**. Separate clean checkout, full HEAD/tree verification; normal FF/expected head, no amend/rebase/force. C3 separately appends runtime PG cases; do not follow or edit that branch.
+
+**Exactly two existing write paths:**
+1. scripts/native_context_db_catalog.py.
+2. tests/test_native_context_db_runner.py.
+
+Current runner MODULES selects only native migration/source and native DB tests. It would omit the12 API and16 runtime cases. Extend the closed required module set to exactly these four complete files:
+- tests/test_m3_1_native_context_migrations.py;
+- tests/test_m3_1_native_context_postgres.py;
+- tests/test_m3_1_native_context_api_postgres.py;
+- tests/test_m3_1_native_context_runtime_postgres.py.
+
+Current approved source collects91 =7 source+56 DB PG+12 API PG+16 runtime PG. This is a starting inventory, **not a fixed total or ceiling**: later C3 append-only cases must be included automatically on the final consolidated source. No selected node subset, -k/-m filtering, deselection, skip/xfail, exclusion by marker or two-module fallback. Require every collected node's setup/call/teardown result and whole-run failure propagation; keep complete node-ID/per-module evidence, fail if any required module is absent. A PASS must contain all final collected nodes, not merely the starting91.
+
+Preserve the existing single reset entry point in test_m3_1_native_context_postgres and prove that API/runtime imported native fixtures still resolve to that same guarded function. All resets must retain fresh source identity/clean checkout, owned Docker container+volume+image/labels/port/PID/start/system identifier, child URL/role/ownership guards and explicit reset opt-in before destructive action. If minimal guard wiring changes are necessary to support imported fixtures, they must strengthen or preserve the same boundary; no test-file monkeypatch that changes assertions or SQL, no new reset route. Keep restoration on exceptions. Include meaningful source-level/runner-unit coverage for four-module omissions and guard wiring, not only a self-asserted MODULES count.
+
+Retain actual child ASM_ENVIRONMENT=TEST and real Settings construction tests (C0-NC-RUNNER-01 closed), current explicit PYTHONPATH/clean environment, actual LOGIN asm_runtime and asm_migrator with no inheritance/ownership, source archive/manifest, final clean checks, redaction, owned cleanup/failure receipts and current independent fresh catalog. Independent comparison must still cover all167 exact typed definitions/unique OIDs including generated verifier,45 tables/columns/nonfunction/security/ACL. Source expansion must read the approved corrected SQL, not hardcode old profile/body hashes or trust only installed self-report.
+
+Approved R3 source body hashes:
+projection **8d38da64c526acb61365aa06eb293d117e1d8af93b598b5a507da3a23bc17b51**;
+nested validator **21492e85adeaf186bce6bbfdde7b89c8e70762c56f8ec28c6da54b3a5327f49c**;
+verifier **527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac**.
+Nonfunction **57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370** unchanged. New installed full digest remains unknown until an authorized actual run. No unrelated catalog/parser/guard rewrite is allowed.
+
+Retain all40 existing runner tests and78 substantive subtests. Narrow adaptations to existing two-module collection fixtures/messages are allowed only to express the four-module requirement while keeping all prior failure assertions; add negative cases for omitting either API/runtime (even if remaining tests pass), partial/deselected/skipped/xfail/duplicate/failing setup or teardown, and future added cases being included. Verify guarded reset calls for all PG consumers and failure cleanup without starting any real service. Do not weaken source/event/ref/ownership matching, fixed budgets or cleanup gates to make mocks green.
+
+**Frozen outside these two paths:** scripts/test_native_context_db.sh, .github/workflows/native-context-db.yml and all other workflows, exact stock pgvector image digest/extensions, Python/uv/deps/locks, bootstrap/roles, application/foundation/backend, all migrations/contract, all91 current source/DB/API/runtime cases and C0 docs. The workflow's single execution branch and20-minute whole-job cap remain unchanged; no schedule/dispatch/new lane, timeout/retry increase, install workaround or readiness0013 change.
+
+Run locked Python3.13/frozen existing environment, verify intended module paths; full runner unit suite plus applicable source/catalog checks, Ruff/format only changed files, whitespace/clean-source and complete four-module collect-only to prove inclusion. Report exact commands/counts and all retained assertions. These local tests/mocks/collection are not PG/stock acceptance.
+
+**No actual execution in this task:** do not start Docker/PG/lab/services, inspect/reuse/clean C2's unproven lab resources, change execution ref, dispatch/rerun/cancel Actions, run full CI, create PR or touch main/VM/shared DB/provider/S3/LLM/live/deploy/renewal. Previous one-use stock approval is consumed. C0 must first review this return and C3 PG additions, consolidate one immutable source, then issue a separate exact execution approval. No other chats/agents.
+
+Return **REVIEW → C6 HOLD** with exact commit/tree/parent/two-path diff/clean checkout, retained40+78 assertion mapping and new negatives, full collection/per-module/guard evidence, actual local results and NOT RUN stock status. New failures outside this narrow runner change go to C0 as findings, not scope expansion. User owns merge.
+
+### 0.7. Later gate and retained limits
+
+C0 accepts both exact returns, checks disjoint diffs and existing cases, combines
+one immutable source and reviews full collection/runner safeguards before a
+separate exact stock execution approval. Until then execution ref is frozen.
+Eventual actual run must cover full final native+API+runtime collection, corrected
+UTC6 interoperability, added C3 cases, independent167/45 catalog including verifier,
+actual LOGIN roles/reset proofs, owned cleanup and clean source. Report new installed
+profile from actual PG serialization; retain all failing evidence and no rerun waiver.
+
+[Historical stock acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251867599) remains scoped
+to bde0c48 and run39141370282/attempt1 SUCCESS57/57 (5 source+52 PG),40 runner+78 subtests.
+C1-NC-DB-01/02 and C0-NC-RUNNER-01 CLOSED. First39136349844 remains FAIL56/57.
+Old one-use approval consumed; no stock evidence transfers to the corrected/new code.
+
+C6 coherent host/source/schema/operator pairing is a later task, distinct from runner
+work. Foundation0012 refusal remains; C5 TS/UI, C8/full integration CI and user merge
+remain later gates. Whole native application/runtime NOT VERIFIED; M3 IN_PROGRESS.
+Contract9 CLOSED/Q01 RESOLVED and MATERIAL11 INTEGRATED/VERIFIED LOCAL/TEST retained.
+D1 provider completeness/causality unverified; D2 conservative holds; D3
+TEXT_ONLY/UNAVAILABLE/PARTIAL retained. A08/P01/P05/renewal/collector/account/A12 OPEN;
+M4 out, IMPL-05 DEFERRED. All source/state/browser/foundation/request/worker caps
+unchanged. No0014/applied migration edits, main/new PR/full CI/VM/shared DB/provider/
+S3/LLM/live send/deploy/renewal/other chat-agent launch. Earlier sections are history.
+
+<a id="0-текущая-выдача-c0--c1-review-и-c2-utc6-r3--2026-10-18-utc"></a>
+
+## История — C1 review и C2 UTC6 R3 / 2026-10-18 UTC
 
 **C1 и C2 ACTIVE по отдельным canonical tasks PR34; C3/C5/C6/C8 HOLD.**
 [C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6252562993)
