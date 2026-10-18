@@ -3,6 +3,7 @@
 import ast
 import hashlib
 import importlib.util
+import json
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -186,3 +187,39 @@ APPLIED_SHA256 = {
     "migrations/versions/0011_escalations.py": "0985edb566dc91f2d152071a7aa8b3745fc34e843f8e7897070db33e6fe7fce9",
     "migrations/versions/0012_message_provenance.py": "5e6f448b3ef20d7f45499c0a008713a406f5c79b900f1ab06864a6b205c5350a",
 }
+
+
+def test_r2_preserves_r1_sql_except_two_bodies_and_generated_profile():
+    """Freeze R1 SQL/metadata/DDL/grants; the paired PG carriers test semantics."""
+    module, commands = source_statements()
+    historical_r1_bodies = {
+        "platform.human_context_projection(uuid,uuid,timestamptz)": "5a8c60036a0b8541a7b20b912485a2c0a00fc76ddd2d3e3476a4edfdd7b15830",
+        "platform.human_context_reason(jsonb,boolean)": "6cc0081a0955a6a8398ae1b75aa7c45df2078e5392bef79b3b1884ca36286ed1",
+        "platform.human_context_schema_profile()": "225049e113b6a9b146557491aea001a48b262d7b51aba8e2112e70c479305966",
+    }
+    normalized = list(commands)
+    bodies = {}
+    for signature, old_digest in historical_r1_bodies.items():
+        sql = module.FUNCTIONS[signature]
+        body = re.search(r"AS \$\$(.*)\$\$", sql, re.S)[1]
+        bodies[signature] = body
+        assert hashlib.sha256(body.encode()).hexdigest() != old_digest
+        assert commands.count(sql) == 1
+        normalized[commands.index(sql)] = sql.replace("AS $$" + body + "$$", "AS $$<R2 body>$$")
+    assert len(commands) == 198 and len(module.FUNCTIONS) == 53
+    assert (
+        hashlib.sha256(
+            json.dumps(normalized, ensure_ascii=False, separators=(",", ":")).encode()
+        ).hexdigest()
+        == "f7871bab01f97ef034b1615e251d385575efaaa31d89325dd0729407803a85a7"
+    )
+    profile_signature = "platform.human_context_schema_profile()"
+    profile_body = bodies[profile_signature]
+    for signature, body in bodies.items():
+        if signature != profile_signature:
+            digest = hashlib.sha256(body.encode()).hexdigest()
+            assert profile_body.count(digest) == 1
+            profile_body = profile_body.replace(digest, historical_r1_bodies[signature])
+    assert (
+        hashlib.sha256(profile_body.encode()).hexdigest() == historical_r1_bodies[profile_signature]
+    )

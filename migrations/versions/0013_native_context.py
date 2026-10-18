@@ -1341,9 +1341,9 @@ def _projection() -> None:
           WHEN 'CONTEXT_INPUT_UNRESOLVED' THEN 'INPUT_UNRESOLVED' WHEN 'CONTEXT_COVERAGE_REQUIRED' THEN 'COVERAGE_REQUIRED'
           WHEN 'CONTEXT_INPUT_PENDING' THEN 'INPUT_PENDING' ELSE 'CONFIRMED' END,
         'context_blockers',b.value,'resume_blockers',CASE WHEN s.policy='OFF_UNUSED' THEN '[]'::jsonb ELSE
-          (SELECT coalesce(jsonb_agg(v ORDER BY n),'[]'::jsonb) FROM (
-            SELECT value AS v,ordinality*2 AS n FROM jsonb_array_elements(b.value) WITH ORDINALITY
-            UNION ALL SELECT to_jsonb('HUMAN_REQUIRED'::text),5 WHERE s.control_mode='AI') q) END,
+          (CASE WHEN b.value ? 'POLICY_PAUSED' THEN '["POLICY_PAUSED"]'::jsonb ELSE '[]'::jsonb END)
+          || (CASE WHEN s.control_mode='AI' THEN '["HUMAN_REQUIRED"]'::jsonb ELSE '[]'::jsonb END)
+          || (b.value-'POLICY_PAUSED') END,
         'history_truncated',s.truncated,'coverage_status',s.coverage,'pending_context_input',s.pending,
         'has_failed_context_input',s.failed,'unreviewed_failed_context_input',s.failed AND s.unreviewed,
         'automation_work',coalesce((SELECT jsonb_build_object('state',CASE WHEN status='DEAD' OR context_block_reason<>'CONTEXT_INPUT_PENDING' THEN 'OPERATOR_REQUIRED' ELSE 'WAITING_CONTEXT' END,
@@ -1387,7 +1387,8 @@ def _projection() -> None:
       LANGUAGE sql IMMUTABLE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $$
       SELECT CASE coalesce((CASE WHEN resume THEN projection->'resume_blockers' ELSE projection->'context_blockers' END)->>0,'CURRENT')
         WHEN 'POLICY_INACTIVE' THEN 'CURRENT' WHEN 'POLICY_PAUSED' THEN 'CONTEXT_POLICY_PAUSED'
-        WHEN 'CONTEXT_CHANGED' THEN 'CONTEXT_CONFIRMATION_REQUIRED' ELSE
+        WHEN 'CONTEXT_CHANGED' THEN 'CONTEXT_CONFIRMATION_REQUIRED'
+        WHEN 'NEW_OBSERVATION' THEN CASE WHEN resume THEN 'CONTEXT_CONFIRMATION_REQUIRED' ELSE 'NEW_OBSERVATION' END ELSE
         coalesce((CASE WHEN resume THEN projection->'resume_blockers' ELSE projection->'context_blockers' END)->>0,'CURRENT') END $$""")
 
 

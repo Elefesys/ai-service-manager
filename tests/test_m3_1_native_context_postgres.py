@@ -2683,3 +2683,176 @@ async def test_policy_actual_login_guard_and_pause_after_real_test_expiry(native
     with pytest.raises(DBAPIError) as expired:
         await policy(h, connection)
     assert sqlstate(expired) == "P2601" and "POLICY_PREREQUISITE_FAILED" in str(expired.value)
+
+
+async def native_exports(h):
+    """All 45 table rows/columns plus the ingress sequence, before a rejected command."""
+    result = {}
+    for table, columns in migration().NATIVE_COLUMNS.items():
+        rows = await query(
+            h,
+            "SELECT to_jsonb(r) AS v FROM (SELECT " + ",".join(columns) + " FROM " + table + ") r",
+        )
+        values = sorted(json.dumps(row["v"], sort_keys=True, separators=(",", ":")) for row in rows)
+        result[table] = (len(values), hashlib.sha256("\n".join(values).encode()).hexdigest())
+    result["platform.turn_ingress_seq"] = (
+        await query(h, "SELECT last_value,is_called FROM platform.turn_ingress_seq")
+    )[0]
+    return result
+
+
+async def resume_rejected_without_writes(h, cid, reason, *, actor=UA, stale=False):
+    p = await read(h, cid)
+    before = await native_exports(h)
+    with pytest.raises(DBAPIError) as rejected:
+        await owner(
+            h,
+            "SELECT platform.conversation_control_execute(:c,:client,'RESUME',:key,:g,:v)",
+            actor=actor,
+            c=cid,
+            client=UUID(p["client_id"]),
+            key=str(uuid4()),
+            g=int(p["control_generation"]) - int(stale),
+            v=int(p["context_version"]),
+        )
+    assert sqlstate(rejected) == "P2401" and reason in str(rejected.value)
+    assert await native_exports(h) == before
+    assert h.adapter.calls == 0 and not h.adapter.ledger.exists()
+
+
+@pytest.mark.parametrize(
+    "case", ["legacy_ai_missing_r", "on_ai_stale_r", "paused_ai_stale_r_pending"]
+)
+async def test_resume_semantic_priority_before_filtered_context_reasons(native, case):
+    h = native
+    if case == "legacy_ai_missing_r":
+        _, _, cid = await incoming(h)
+        unused_human = await read(h, cid)
+        assert unused_human["policy"] == "OFF_UNUSED" and unused_human["control_mode"] == "HUMAN"
+        assert unused_human["context_blockers"] == ["POLICY_INACTIVE"]
+        assert unused_human["resume_blockers"] == []
+        await control(h, cid)
+        unused_ai = await read(h, cid)
+        assert unused_ai["control_mode"] == "AI" and unused_ai["resume_blockers"] == []
+        assert unused_ai["context_blockers"] == ["POLICY_INACTIVE"]
+        await policy(h)
+        expected_context = ["CONTEXT_CONFIRMATION_REQUIRED"]
+        expected_resume = ["HUMAN_REQUIRED", *expected_context]
+        expected_review = "BOOTSTRAP_REQUIRED"
+    else:
+        cid, _, _ = await activate(h)
+        await policy(h, operation="PAUSE")
+        await policy(h)  # P2 makes the legitimate R(P1) stale; no fixture UPDATE.
+        expected_context = ["CONTEXT_CHANGED"]
+        expected_resume = ["HUMAN_REQUIRED", *expected_context]
+        expected_review = "CONFIRMATION_REQUIRED"
+        if case == "paused_ai_stale_r_pending":
+            await policy(h, operation="PAUSE")
+            pending = await duplicate_pending(h, message=1)
+            assert pending.job_id is not None
+            expected_context = ["POLICY_PAUSED", "CONTEXT_CHANGED", "CONTEXT_INPUT_PENDING"]
+            expected_resume = [
+                "POLICY_PAUSED",
+                "HUMAN_REQUIRED",
+                "CONTEXT_CHANGED",
+                "CONTEXT_INPUT_PENDING",
+            ]
+            expected_review = "POLICY_PAUSED"
+    p = await read(h, cid)
+    assert p["control_mode"] == "AI"
+    assert p["context_blockers"] == expected_context and p["resume_blockers"] == expected_resume
+    assert p["review_status"] == expected_review
+    if case == "legacy_ai_missing_r":
+        assert p["policy_epoch"] == "1" and p["current_revision"] is None
+        assert p["pending_context_input"] is False
+    reason = "CONTEXT_POLICY_PAUSED" if p["policy"] == "PAUSED" else "HUMAN_REQUIRED"
+    await resume_rejected_without_writes(h, cid, reason)
+    # Retained authority and CAS checks still win over native policy/HUMAN_REQUIRED.
+    await resume_rejected_without_writes(h, cid, "ACCESS_DENIED", actor=PROVIDER, stale=True)
+    await resume_rejected_without_writes(h, cid, "STALE_STATE", stale=True)
+    await control(h, cid, "TAKEOVER")
+    human = await read(h, cid)
+    assert human["control_mode"] == "HUMAN"
+    assert human["context_blockers"] == expected_context
+    assert human["resume_blockers"] == expected_context
+    assert human["review_status"] == expected_review
+
+
+async def test_resume_new_observation_maps_to_confirmation_without_writes(native):
+    h = native
+    _, _, cid = await incoming(h, provider="TELEGRAM")
+    await policy(h, h.telegram_connection)
+    saved = await reconcile(h, cid)
+    before = await read(h, cid)
+    assert before["control_mode"] == "HUMAN" and before["policy"] == "ON"
+    assert before["observation_epoch"] == "0" and before["resume_blockers"] == []
+    assert before["current_revision"]["disposition"] == "OWNER_TEXT"
+    observed = await incoming(
+        h, 11, provider="TELEGRAM", sender=OWNER, process=False, value="Native owner agreement."
+    )
+    assert observed.job_id is None
+    p = await read(h, cid)
+    assert p["observation_epoch"] == "1" and p["pending_context_input"] is False
+    for field in (
+        "control_mode",
+        "control_generation",
+        "context_version",
+        "ingress_checkpoint",
+        "policy_epoch",
+        "current_revision",
+    ):
+        assert p[field] == before[field], field
+    assert p["current_revision"]["revision_id"] == saved["result"]["revision_id"]
+    assert p["context_blockers"] == p["resume_blockers"] == ["NEW_OBSERVATION"]
+    assert p["review_status"] == "NEW_OBSERVATION"
+    reasons = await scalar(
+        h,
+        "SELECT jsonb_build_array(platform.human_context_reason(p,true),platform.human_context_reason(p,false)) FROM (SELECT platform.human_context_projection(:ws,:c,clock_timestamp()) AS p) q",
+        ws=A,
+        c=cid,
+    )
+    assert reasons == ["CONTEXT_CONFIRMATION_REQUIRED", "NEW_OBSERVATION"]
+    await resume_rejected_without_writes(h, cid, "CONTEXT_CONFIRMATION_REQUIRED")
+
+
+async def test_worker_new_observation_keeps_permanent_hold_reason(native):
+    h = native
+    cid, _, _ = await activate(h, provider="TELEGRAM")
+    await incoming(h, 2, provider="TELEGRAM")
+    turn = await current_turn(h, cid)
+    await seal(h, turn["id"])
+    turn = await current_turn(h, cid)
+    claim = await work_for(h, turn, "TEST_CONSUME")
+    snapshot = await worker(h, claim, "SELECT platform.turn_execute(:job,:claim)")
+    assert snapshot["schema_version"] == 3
+    before = await read(h, cid)
+    assert before["control_mode"] == "AI" and before["context_blockers"] == []
+    observed = await incoming(
+        h, 11, provider="TELEGRAM", sender=OWNER, process=False, value="Native owner changed terms."
+    )
+    assert observed.job_id is None
+    p = await read(h, cid)
+    assert p["observation_epoch"] == "1" and p["pending_context_input"] is False
+    for field in (
+        "context_version",
+        "control_generation",
+        "ingress_checkpoint",
+        "current_revision",
+    ):
+        assert p[field] == before[field], field
+    assert p["context_blockers"] == ["NEW_OBSERVATION"]
+    held = await worker(h, claim, "SELECT platform.turn_execute(:job,:claim)")
+    assert held["code"] == "CONTEXT_HOLD" and held["reason"] == "NEW_OBSERVATION"
+    assert held["status"] == "DEAD" and held["job_id"] == str(claim.job_id)
+    assert await replay(h, claim) == held
+    job = (await query(h, "SELECT * FROM platform.messaging_jobs WHERE id=:j", j=claim.job_id))[0]
+    assert job["status"] == "DEAD" and job["turn_outcome"] == "FAILED"
+    assert job["context_block_reason"] == "NEW_OBSERVATION" and job["error_code"] == "NOT_ALLOWED"
+    assert (
+        job["context_wait_result"] == held and job["context_wait_claim_token"] == claim.claim_token
+    )
+    assert await scalar(h, "SELECT count(*) FROM app.outbox_events") == 0
+    assert await scalar(h, "SELECT count(*) FROM platform.turn_guard_receipts") == 0
+    assert await scalar(h, "SELECT count(*) FROM platform.turn_consumer_receipts") == 0
+    assert await scalar(h, "SELECT count(*) FROM app.escalations") == 0
+    assert h.adapter.calls == 0 and not h.adapter.ledger.exists()

@@ -7395,3 +7395,126 @@ Backend/HTTP/OpenAPI/TS/foundation/host provisioning/workflows/dependencies/orig
 account/sends/deploy/renewal не выполнялись. M4 вне scope, IMPL-05 DEFERRED,
 P-01/A08/renewal/collector/account/A12 OPEN; budgets/worker caps не расширялись.
 После canonical return C2 HOLD; integration/приёмка — C0, merge — пользователь.
+
+### 16.17. C2 DB-R2 — две Resume corrections / 2026-10-18 UTC
+
+Выдача **C2-M3.1-NATIVE-CONTEXT-DB-R2**:
+[C0 task](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6250070764),
+[C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6250016242),
+[C1 two P2](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6249871164).
+Source correction — **REVIEW / addressed, не CLOSED**. Stock PostgreSQL evidence
+для corrected candidate — **PG NOT RUN**. C0 выполняет intake/rereview и объединяет
+delta с separately prepared C6 runner до отдельно разрешённого stock job.
+
+Exact start **b7e9d9e7663c281a86d86711c1e51f2de376dcac**,
+tree **cd63be6e28c3b774bbddc0c9c46e694d9d7f1398**; sole parent
+6a244ceed01388d85ecdd47fd373c6547fd34654, treeb97e1c8964cc493b81976ddb349dba3ec03266c4.
+Runtime source start совпадает с R1 delivery0268331e5b57f87e7f51f3973610cb83477662e8;
+C0 preparation меняет только HANDOFF/REGISTER. Новая отдельная ветка
+`c2/m3-1-native-context-db-r2`; старая `c2/m3-1-native-context-db` frozen.
+0013←0012 остаётся unmerged/unreleased successor; applied0001–0012 frozen, no0014.
+Runtime main — e205e22051bc06295758b504d84699652b176c15/schema0012.
+
+Ровно четыре existing write paths:0013 migration, два native test modules и этот
+append. Весь прежний contract prefix **745994 UTF-8 bytes / SHA256
+4c0187790c2e00a64a343173663072e4e51765a2aa922bc480681473dcef8886** сохранён
+byte-for-byte, включая исторические R1 evidence/ограничения§16.11–16.16.
+
+**C1-NC-DB-01/P2.** `human_context_projection` собирает used-policy Resume array
+явно: applicable POLICY_PAUSED → HUMAN_REQUIRED только в AI → остальные context
+reasons в уже определённом порядке. Удаление POLICY_PAUSED из остатка JSONB array
+сохраняет порядок других reasons. Filtered ordinality больше не задаёт priority.
+OFF_UNUSED по-прежнему возвращает[]; HUMAN не получает HUMAN_REQUIRED.
+`context_blockers`/`review_status` прежние; command использует тот же первый blocker.
+Retained authority/product/availability/CAS/G-overflow checks стоят до native layer;
+их bodies/приоритет, grants/locks и replay paths этой correction не меняются.
+
+**C1-NC-DB-02/P2.** `human_context_reason(...,true)` преобразует NEW_OBSERVATION
+в CONTEXT_CONFIRMATION_REQUIRED. При `resume=false` сохраняется NEW_OBSERVATION
+для permanent worker HOLD и общего Escalation context_hold classifier. Остальные
+mappings прежние. Raw read arrays/review status не преобразуются; C3 public Resume
+enum не расширяется. CONTROLLED-only Escalation producer gate сохранён.
+
+Добавленные executable PG cases (module `tests/test_m3_1_native_context_postgres.py`):
+
+| Finding / node ID | Legitimate state и обязательное assertion; execution NOT RUN |
+|---|---|
+| DB-01: `test_resume_semantic_priority_before_filtered_context_reasons[legacy_ai_missing_r]` | Real CONTROLLED ingress → legacy OFF_UNUSED Resume → AI → ENABLE ON/P1/R=NULL/settled; exact [HUMAN_REQUIRED,CONTEXT_CONFIRMATION_REQUIRED], Resume P2401/HUMAN_REQUIRED; OFF_UNUSED[] в H и AI |
+| DB-01: `test_resume_semantic_priority_before_filtered_context_reasons[on_ai_stale_r]` | Actual R+Resume → PAUSE → ENABLE/P2; exact [HUMAN_REQUIRED,CONTEXT_CHANGED], fresh Resume HUMAN_REQUIRED |
+| DB-01: `test_resume_semantic_priority_before_filtered_context_reasons[paused_ai_stale_r_pending]` | Тот же stale R → PAUSE → real unprocessed duplicate ingress; exact [POLICY_PAUSED,HUMAN_REQUIRED,CONTEXT_CHANGED,CONTEXT_INPUT_PENDING], Resume CONTEXT_POLICY_PAUSED |
+| DB-02: `test_resume_new_observation_maps_to_confirmation_without_writes` | TELEGRAM HUMAN/ON/current OWNER_TEXT R(N0) → real OWNER NEW/N1; unchanged V/G/checkpoint/P/R, no pending; raw NEW_OBSERVATION, true/false mapping, current-CAS Resume P2401/CONTEXT_CONFIRMATION_REQUIRED |
+| DB-02: `test_worker_new_observation_keeps_permanent_hold_reason` | Legal TELEGRAM R+Resume → real Client Turn/TEST_CONSUME claim/V3 snapshot → OWNER NEW/N1 only → actual turn_execute CONTEXT_HOLD/NEW_OBSERVATION, DEAD/FAILED, saved token-only work replay,0 Outbox/guard/consumer/E rows и adapter calls |
+
+Все три DB-01 cases также проверяют retained ACCESS_DENIED выше stale CAS,
+STALE_STATE выше native error, затем real TAKEOVER/HUMAN без HUMAN_REQUIRED и
+неизменный context/review order. Rejected Resume проверяет все45 table row/column
+exports и last_value/is_called ingress sequence до/после:0 committed row writes/
+sequence consumption/adapter calls. В новых cases нет direct fixture UPDATE
+N/P/G/R, отключения constraints или fabrication R/Resume/permit. Worker carrier
+использует настоящий TELEGRAM TEST consumer; Telegram→CONTROLLED E2E не заявляется.
+
+### 16.18. DB-R2 source checks, профиль и оставшийся stock gate
+
+Existing51 baseline cases/assertions сохранены: PG module113642-byte prefix
+неизменён, AST всех четырёх прежних source tests совпадает. Добавлены пять PG cases
+и один source freeze test. Collection: **57 =5 source +52 PG**, без skip/xfail.
+Добавленный source node:
+`tests/test_m3_1_native_context_migrations.py::test_r2_preserves_r1_sql_except_two_bodies_and_generated_profile`.
+Он фиксирует последовательность всех198 `op.execute` batches, исключая только
+AS$$…$$ bodies двух назначенных функций и неизбежного generated profile; metadata,
+остальные50 final functions, DDL/grants сохраняются. SHA256 canonical JSON этой
+нормализованной R1/R2 последовательности:
+`f7871bab01f97ef034b1615e251d385575efaaa31d89325dd0729407803a85a7`.
+Обратная замена только двух generated body-hash entries восстанавливает exact R1
+profile source body: других изменений verifier mechanics нет.
+Это source comparison, **не исполнение SQL в PostgreSQL**.
+
+Фактически доступны Python3.13.14 и existing frozen uv.lock environment. Команды
+из repo root (python — этот locked interpreter):
+
+```text
+python -m pytest -q tests/test_m3_1_native_context_migrations.py
+python -m pytest --collect-only -q tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py
+python -m ruff check migrations/versions/0013_native_context.py tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py
+python -m ruff format --check migrations/versions/0013_native_context.py tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py
+python -m compileall -q migrations/versions/0013_native_context.py tests/test_m3_1_native_context_migrations.py tests/test_m3_1_native_context_postgres.py
+git diff --check
+```
+
+Результаты: **5 source PASS**, **57 collected**, Ruff PASS/3 files formatted,
+compile PASS, diff whitespace PASS. Original11 совпали с SOURCE_MANIFEST и actual
+project source attachments byte-for-byte; applied12 SHA256 и все19 ORIGINAL
+совпали с effective predecessor. Source inventories прежние:3 private tables/
+45 tables/167 total function definitions,35 additions/18 replacements,53 final
+0013 bodies/132 baseline profiles. Новых paths/DDL/grants/budgets нет.
+
+Ровно три captured **source body SHA256**, не installed catalog hashes:
+
+| Full signature | Corrected source AS$$…$$ SHA256 |
+|---|---|
+| `platform.human_context_projection(uuid,uuid,timestamptz)` | `2ad43cb844a4676fe4d9bc0e5fe8d0d30736e5f306aa7ce5bbab12a32528e4c1` |
+| `platform.human_context_reason(jsonb,boolean)` | `799072de08ee913f09c11686e9a8300e55602ae7d5bf3f8610bb1a35a6d2cb19` |
+| `platform.human_context_schema_profile()` | `d485135ecccf986a2b16e71dd451f95508847bb455f8fbf987cf5092ec5de8a6` |
+
+Nonfunction expected catalog SHA256 остаётся
+`57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370`.
+Сгенерированный profile body автоматически содержит новые body hashes двух
+функций; self-body по-прежнему требует independent source→installed comparison.
+R1 full profile11e26c… и verifier body225049… — только исторические значения.
+**Corrected installed full profile digest пока неизвестен: его измеряет future
+stock run** с pinned search_path и independent comparison всех167 definitions,
+включая verifier. Source hashes не подменяют этот результат или host readiness.
+
+**PG NOT RUN.** Fresh environment probe: docker/podman/nerdctl/containerd/postgres/
+pg_ctl/initdb/psql отсутствуют в PATH; Docker/Podman sockets отсутствуют; euid0,
+uid_map `0 0 1`. Доступного unchanged stock PostgreSQL18 нет. Старую lab сборку
+с startup UID0 patches не запускали/не пересобирали. Миграции/PG carriers/current
+catalog/installed profile в этой R2 задаче не исполнялись; collection не PG PASS.
+C6 готовит отдельный stock runner; baseline51 остаётся историческим author
+evidence, новые findings не CLOSED до C0 rereview/stock evidence.
+
+Foundation/backend/HTTP/OpenAPI/UI/host/infra/workflows/deps/locks/tenancy/HANDOFF/
+REGISTER/originals/applied migrations не меняются. Actions/full CI/new PR/whole
+stack/browser/VM/shared DB/TG API/S3/LLM/real sends/deploy/renewal не выполнялись.
+M4 вне scope, IMPL-05 DEFERRED, P-01/A08/P-05/renewal/collector/account/A12 OPEN;
+caps и budgets прежние. После canonical PR34 REVIEW correction return **C2 HOLD**.
