@@ -2,7 +2,63 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — NATIVE-CONTEXT DB-R1 REVIEW; C1/C6 independent checks / 2026-10-18 UTC
+## Текущий статус — DB-R2 correction и stock runner preparation / 2026-10-18 UTC
+
+[C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6250016242) принял
+[C1 CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6249871164)
+и [C6 BLOCKED/PG NOT RUN](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6249901315).
+**Два implementation P2 OPEN; stock evidence OPEN.** Source-only/catalog-definition
+PASS не является installed PG или runtime acceptance.
+
+| Task / finding | Current state |
+|---|---|
+| C1-NC-DB-01/P2 | OPEN: semantic priority HUMAN_REQUIRED, filtered ordinality неверна |
+| C1-NC-DB-02/P2 | OPEN: Resume-only NEW_OBSERVATION→CONTEXT_CONFIRMATION_REQUIRED; worker reason сохраняется |
+| C1-M3.1-NATIVE-CONTEXT-DB-REVIEW-R1 | Review COMPLETE/CHANGES_REQUESTED accepted; C1 HOLD |
+| C6-M3.1-NATIVE-CONTEXT-DB-REPRO-R1 | BLOCKED environment/PG NOT RUN; source scope принят; old task C6 HOLD |
+| C2-M3.1-NATIVE-CONTEXT-DB-R2 | IN_PROGRESS по exact task; четыре scoped paths, findings пока OPEN |
+| C6-M3.1-NATIVE-CONTEXT-DB-STOCK-RUNNER-R1 | IN_PROGRESS по exact task; четыре NEW runner/workflow/test paths, execution NOT RUN |
+| Stock run on combined corrected source | TODO/HOLD до C0 review обоих source returns; один future job20min |
+| C3/C5/C8; C6 paired host/readiness implementation | HOLD; backend/API/V3/Audit/Console/operator не выданы |
+| Contract R2 / MATERIAL | Все9 contract findings CLOSED/Q01 RESOLVED; MATERIAL all11 INTEGRATED/VERIFIED LOCAL/TEST |
+| Whole M3 / native runtime | IN_PROGRESS / NOT VERIFIED; P-01/A08/P-05/renewal/collector/account/A12 OPEN |
+
+Общий task start — C0 preparation с sole parent6a244ceed01388d85ecdd47fd373c6547fd34654,
+treeb97e1c8964cc493b81976ddb349dba3ec03266c4. Preparation меняет только HANDOFF/REGISTER;
+полные SHA/tree в canonical C0 tasks. Ветка c0/m3-1-native-context-db-followup-r1.
+Новые task branches c2/m3-1-native-context-db-r2 и c6/m3-1-native-context-db-stock-runner-r1
+созданы на этом start; отдельные checkouts, normal FF/expected-head. Старые reviewed
+0268331 DB source и6a244ce instructions refs frozen. Код start соответствует0268331,
+runtime main e205e22051bc06295758b504d84699652b176c15/schema0012 unchanged.
+
+[Полные scopes/criteria](tasks/M3_HANDOFF.md#0-текущая-выдача-c0--native-context-db-r2-и-stock-runner--2026-10-18-utc).
+C2 allowlist:0013_native_context.py, два native test modules, append contract§16.17+.
+C6 allowlist:NEW .github/workflows/native-context-db.yml,
+scripts/test_native_context_db.sh,scripts/native_context_db_catalog.py,
+tests/test_native_context_db_runner.py. Disjoint paths; ни один исполнитель не
+меняет HANDOFF/REGISTER, applied12/original11/deps/locks/ci.yml/ci.sh/runtime gates.
+
+Contract full745994-byte prefix/SHA256
+4c0187790c2e00a64a343173663072e4e51765a2aa922bc480681473dcef8886 frozen.
+0013←0012 — исправляемый unmerged/unreleased successor, не новая0014.
+R1 full profile11e26c… исторический; после body correction independently derive
+corrected expected/installed profile. Nonfunction57e03f… должен сохраниться.
+
+C6 source submission не запускает Actions: workflow push filter только future
+c0/m3-1-native-context-db-stock-r1. C6 execution branch не создаёт.
+C0 после двух returns/rereview объединяет deltas, фиксирует exact combined SHA/tree,
+проверяет runner и запускает один isolated hosted stock job20min.
+Fresh own DB/reset ownership/real LOGIN/full167+catalog/clean-source/artifacts/
+owned cleanup обязательны. Нет повторного patched-root build, shared DB или
+подмены PG NOT RUN. Full CI/C8/user merge не отменены.
+
+C2/C6 возвращают REVIEW source → HOLD; addressed findings не CLOSED.
+Existing budgets/caps unchanged, IMPL-05 DEFERRED/M4 вне scope.
+Ниже historical R1 review assignment; его ACTIVE C1/C6 не current.
+
+<a id="текущий-статус--native-context-db-r1-review-c1c6-independent-checks--2026-10-18-utc"></a>
+
+## История — NATIVE-CONTEXT DB-R1 REVIEW; C1/C6 independent checks / 2026-10-18 UTC
 
 [C0 intake](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6249640362),
 [C2 return](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6248340477).

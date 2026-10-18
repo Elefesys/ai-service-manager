@@ -5,7 +5,202 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущая выдача C0 — независимая проверка NATIVE-CONTEXT DB-R1 / 2026-10-18 UTC
+## 0. Текущая выдача C0 — NATIVE-CONTEXT DB-R2 и stock runner / 2026-10-18 UTC
+
+**DB-R1 CHANGES_REQUESTED: два P2 OPEN. C2 получает correction, C6 — подготовку
+штатного standalone DB runner. Execution пока HOLD; C1/C3/C5/C8 HOLD.**
+[C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6250016242),
+[C1 findings](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6249871164),
+[C6 source PASS / PG NOT RUN](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6249901315).
+Это две disjoint source задачи от общего preparation, не принятие DB/runtime.
+
+### 0.1. Общий start и очередь
+
+C0 preparation имеет sole parent **6a244ceed01388d85ecdd47fd373c6547fd34654**,
+treeb97e1c8964cc493b81976ddb349dba3ec03266c4. Он меняет только HANDOFF/REGISTER.
+Полные start SHA/tree публикуются в canonical C0 tasks PR34; обе новые ветки C0
+создаёт на одном exact start:
+- C2: **c2/m3-1-native-context-db-r2**.
+- C6: **c6/m3-1-native-context-db-stock-runner-r1**.
+Coordination branch: c0/m3-1-native-context-db-followup-r1.
+Отдельные checkouts; normal FF/expected-head check на своей ветке. Старые C2 DB-R1
+и C0 review branches frozen. Shared disk/память других чатов не предполагаются.
+
+Runtime source в start совпадает с reviewed
+**0268331e5b57f87e7f51f3973610cb83477662e8 /3f2f8416f6d286cca7e826b1272f450c0e5a0907**;
+поверх него только C0 coordination docs. Runtime main
+e205e22051bc06295758b504d84699652b176c15/schema0012 unchanged.
+**0013←0012** остаётся unmerged/unreleased successor;0001–0012 frozen.
+Коррекция0013 до integration не создаёт0014 и не обновляет существующую used DB
+подменой исходника: любые execution proofs используют новую собственную test DB.
+
+Full delivery contract **745994 UTF-8 bytes**, SHA256
+**4c0187790c2e00a64a343173663072e4e51765a2aa922bc480681473dcef8886** frozen как prefix.
+Accepted R2 prefix714947/SHA256d032a4b699767f58f60288fbe17808b69bf98627d8c11acb8df2c9a439ae8346
+и original11/applied12 неизменны. Author R1 appendix остаётся историей, не current PASS.
+
+### 0.2. C2-M3.1-NATIVE-CONTEXT-DB-R2 — четыре write paths
+
+1. migrations/versions/0013_native_context.py — только две semantic corrections
+   и неизбежная source-derived profile body delta.
+2. tests/test_m3_1_native_context_migrations.py — узкие source/semantic regression
+   assertions; существующие predecessor/security/freeze assertions сохранить.
+3. tests/test_m3_1_native_context_postgres.py — реальные PG regression carriers,
+   existing51 baseline и scoped primitives сохранить; no fake state/skip.
+4. docs/tasks/M3_CONTRACT.md — append§16.17+ после полного745994-byte prefix:
+   correction trace, changed bodies, tests/actual limits, future stock handoff.
+
+Никаких tenancy/backend/API/OpenAPI/UI/host/foundation/infra/scripts/workflows/
+deps/locks/AGENTS/HANDOFF/REGISTER/originals/applied revisions edits.
+Нельзя расширить Resume enum или изменить R2 semantics под ошибочный SQL.
+
+**C1-NC-DB-01/P2 OPEN:** used-policy resume_blockers должен сохранять fixed
+semantic order: applicable POLICY_PAUSED → HUMAN_REQUIRED(if AI) → остальные
+context reasons в contract order. Current ordinality уже filtered array не даёт
+semantic rank. context_blockers/review_status не менять. OFF_UNUSED остаётся[],
+HUMAN не получает HUMAN_REQUIRED. Fresh Resume использует тот же первый blocker
+после retained authority/product/availability/CAS/G-overflow priorities.
+
+Regression carriers должны включать:
+- legacy OFF_UNUSED Resume→AI→ENABLE ON/P1/R=NULL, settled input: read
+  [HUMAN_REQUIRED,CONTEXT_CONFIRMATION_REQUIRED]; fresh Resume→HUMAN_REQUIRED;
+- used ON+AI+stale R: HUMAN_REQUIRED раньше CONTEXT_CHANGED;
+- simultaneous PAUSED+AI+stale R+pending: read
+  [POLICY_PAUSED,HUMAN_REQUIRED,CONTEXT_CHANGED,CONTEXT_INPUT_PENDING]
+  при этих единственных применимых predicates; command→CONTEXT_POLICY_PAUSED;
+- retained OFF_UNUSED[] и HUMAN без HUMAN_REQUIRED, product/CAS priority без изменения.
+Достигать state реальными existing commands/ingress, не direct fixture UPDATE
+N/P/G/R или disable constraints.
+
+**C1-NC-DB-02/P2 OPEN:** human_context_reason(...,resume=true) mapping
+NEW_OBSERVATION→CONTEXT_CONFIRMATION_REQUIRED. resume=false сохраняет
+NEW_OBSERVATION для worker permanent hold/E context_hold. CONTEXT_CHANGED и
+другие прежние mappings не менять. Carrier: TELEGRAM HUMAN/ON/current R N0,
+native OWNER NEW→N1 без V/G/checkpoint/pending delta, fresh current-CAS Resume
+даёт P2401/CONTEXT_CONFIRMATION_REQUIRED и0 writes. Проверить raw blocker и
+non-resume reason; actual worker после legal Resume→N-only observation остаётся
+permanent HOLD/NEW_OBSERVATION, без нового permit/adapter call.
+CONTROLLED-only Escalation producer gate не расширять ради fake E2E.
+
+Три таблицы/45 tables/167 functions/35 additions/18 replacements/grants/DDL и
+nonfunction catalog hash57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370
+сохраняются. Меняются semantic bodies и generated verifier body/full profile hash.
+R1 full profile11e26c… и profile body225049… исторические, не expected corrected values.
+Не hardcode новое значение по предположению/старому report; actual installed hash
+получит следующий stock run. No changes to BASELINE original bodies/applied hashes.
+
+Разрешены focused source/Ruff/format/Python3.13 checks при доступности locked env,
+source-only probes с честной маркировкой при отсутствии. PG execution только на
+доступном неизменённом stock PG18 own disposable; не воспроизводить patched-root
+build, не тратить работу на повтор known unavailable setup. Если PG нет — закончить
+code + regression carriers и вернуть **PG NOT RUN**, это ожидаемая dependency на
+C6 standalone runner. No Actions/full CI/new PR/whole stack/HTTP/browser/VM/live.
+Return: REVIEW correction, exact SHA/tree/parent/4-path diff, mapping каждого P2,
+actual commands/results/limits и full prefix hashes. **Addressed≠CLOSED; затем C2 HOLD.**
+
+### 0.3. C6-M3.1-NATIVE-CONTEXT-DB-STOCK-RUNNER-R1 — четыре NEW paths
+
+1. .github/workflows/native-context-db.yml — один focused hosted job, default CI untouched.
+2. scripts/test_native_context_db.sh — owned DB/bootstrap/reset guard/frozen env/
+   exact source/run/evidence/cleanup orchestration.
+3. scripts/native_context_db_catalog.py — independent source-derived functions/
+   installed roles/full catalog comparator, включая verifier executable body.
+4. tests/test_native_context_db_runner.py — адресные unit regressions для отказа
+   при чужом resource/source mismatch и повреждённом/missing/extra catalog.
+   Эти guard tests не являются PostgreSQL evidence.
+
+Нет edits C2 files/contract/foundation/ci.yml/ci.sh/Compose/images/deps/lockfiles/
+host provisioning/AGENTS/HANDOFF/REGISTER. C6 может читать reusable existing scripts,
+но не менять их для этой lane. Код verifier должен работать с actual C2 corrected
+candidate после C0 integration, без baked-in0268331 или R1 full profile hash.
+
+**Подготовка source сейчас; Actions execution не выдано.**
+Workflow trigger ровно push branch **c0/m3-1-native-context-db-stock-r1**,
+без wildcard/main/pull_request/workflow_dispatch/schedule. Эту branch C6 не создаёт/
+не обновляет. Normal FF своей preparation branch не запускает workflow.
+Один job ubuntu-24.04, timeout-minutes20 на весь job, contents:read,
+persist-credentials:false; pinned action commits, no repository/org secrets.
+Checkout actual event SHA с .git; никаких dirty/staged подмен. C0 отдельно фиксирует
+approved combined SHA/tree перед event и сверяет checkout evidence после run;
+саморавенство runner HEAD/event не выдаётся за C0 approval.
+
+Runtime: exact DB_IMAGE из infra/images.lock.env
+pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a,
+неизменённый infra/postgres/bootstrap.sh, actual PG18/vector0.8.6/btree_gist1.8,
+distinct asm_runtime(nonowner/NOINHERIT/NOBYPASSRLS/etc)/asm_migrator LOGIN.
+Python3.13/frozen uv.lock; existing locked images/tool versions не повышать.
+Если нужны setup actions — официальные exact commit pins, actual versions/logs;
+никаких arbitrary dependency updates. Git нужен carrier source_tree_identity.
+
+Только один own DB container/fresh volume/loopback ephemeral port, unique labels/
+IDs; не весь Compose stack. До reset permission проверить ownership labels,
+container ID/image digest/PID/server identity/volume/mount/host-port и real login
+roles. Secrets temporary0600, не печатать inspect.Env/URLs/passwords/.env в logs.
+Нет чужих mounts/Docker prune/global cleanup. ASM_NATIVE_TEST_ALLOW_RESET=1 и три
+URLs передаются только isolated child carrier после проверки ownership; переменные
+не экспортировать в shared/full-CI lane. Resettable asm_test именно новая own DB.
+
+Focused payload на clean combined source: прежние два native modules целиком,
+включая будущие C2 regressions, и отдельные runner guard unit tests.
+Нет pytest -k/masking/no-collection-pass, skip/xfail/retry/увеличения caps.
+Сохранить collected node IDs, actual pass/fail/skip/count/JUnit/duration/SQLSTATE;
+51 — R1 historical baseline, corrected total обязан включать новые cases.
+Реальный failure вернуть как failure, не менять тесты/source для green.
+
+До и после payload HEAD/tree/clean-source check (tracked+untracked); logs/artifacts/
+venv/cache вне checkout. Identity actual event SHA/tree и git archive/source hash
+в evidence. Temporary index tests не должен менять trusted checkout. Сохранить
+failure diagnostics без секретов; artifact upload always где runner ещё доступен.
+Cleanup только still-matching owned IDs/labels/volume; отказ foreign cleanup
+проверяется unit tests. Job timeout не повод reset budget или скрыть failure.
+
+После carrier reset cycles создать/выбрать fresh own0013 checkpoint и независимо
+сверить167 source signatures→unique installed OIDs, exact bodies/args/returns/
+language/volatility/secdef/owner/proconfig/ACL + zero runtime memberships.
+Expected строить из trusted full0001–0013 expansion; не из installed body и не
+только declared BASELINE dict. Include profile function body. Reject extra/missing/
+modified functions, runtime grant/owner/role drift; при unsupported parser syntax
+fail closed, без silent omission. Number OIDs process-local, comparison через
+full signatures, не constant numeric OID values.
+
+Full nonfunction catalog:45 tables/ordered columns/types/defaults/generated/
+constraints/validation/indices/RLS/policies/triggers/enabled/relations/schema ACL/
+immutable sequences/extensions. Independent PG query с pinned search_path/order/
+jsonb::text/UTF-8, без вызова checked verifier для построения expected snapshot;
+compare trusted nonfunction hash и independent full digest к declared result только
+после source-body validation. Raw catalog/manifests/query/hash normalization сохранять.
+C6 R1 embedded probes/query — исходный материал для review, не заранее trusted runner.
+
+Минимальные meaningful unit negatives: source mismatch до DB reset; foreign labels/
+IDs/mount/host mismatch не разрешают destructive action/cleanup; missing/extra/
+body-changed verifier и role/ACL mismatch не PASS. Mocked Docker/catalog inputs —
+unit evidence, не stock PG. Code/static tests можно выполнять locally; actual stock
+run в этой source-preparation задаче **NOT RUN**, no fake PASS.
+
+Return: REVIEW runner source, exact SHA/tree/parent/4-path diff, workflow trigger/
+permission/cap inspection, actual local checks/limitations, usage/evidence schema/
+cleanup trace и готовность к C0 composition с corrected C2 source. Затем **C6 HOLD**.
+
+### 0.4. C0 gate и сохранённые ограничения
+
+После обоих source returns C0 intake/rereview findings, объединяет disjoint deltas
+в один candidate, проверяет clean exact code/tree и workflow, фиксирует source
+approval и только затем запускает один адресный stock job через reserved branch.
+Исправление двух P2 и author source checks сами по себе не закрывают PG gap.
+Full CI/C8/user merge сохраняются для позже coherent backend/API/worker/Audit-V3/
+C6 source-schema/operator/C5 Console. Foundation0012 пока reject0013.
+
+Не запускать чужие задачи/чаты/агенты. No main/old refs/amend/rebase/force/new PR/
+dispatch/rerun/cancel/VM/Telegram/working DB/S3/LLM/sends/deploy/renewal.
+Все9 contract findings CLOSED/Q01 RESOLVED и MATERIAL/all11 остаются принятыми.
+Native/P-01/A08/P-05/renewal/collector/account/A12 OPEN; M3 IN_PROGRESS.
+Existing S/600/P720/fixed120/+480/S+1200/cleanup90/state25/browser25/foundation45/
+3s/60s/10s и worker5claims/15min/30s/backoff60 unchanged.
+Новый standalone job20min не пересматривает эти limits; IMPL-05 DEFERRED, M4 вне scope.
+
+<a id="0-текущая-выдача-c0--независимая-проверка-native-context-db-r1--2026-10-18-utc"></a>
+
+## История — независимая проверка NATIVE-CONTEXT DB-R1 / 2026-10-18 UTC
 
 **C2 DB-R1: REVIEW/HOLD. C0 source intake PASS по identity/scope; DB/runtime ещё
 не VERIFIED. C1 и C6 получают две ограниченные проверки, код заморожен.**
