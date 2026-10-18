@@ -2,7 +2,71 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — DB-R2 correction и stock runner preparation / 2026-10-18 UTC
+## Текущий статус — stock DB FAIL; C6 runner R2 / 2026-10-18 UTC
+
+[C0 source approval](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251106119),
+[actual run disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251192609).
+**Два C1 DB P2 CLOSED. Один C0-NC-RUNNER-01/P2 OPEN; C6 correction ACTIVE.**
+M3 IN_PROGRESS; native runtime NOT VERIFIED. Stock environment gap воспроизведения
+снят, но complete carrier/foundation gate остаётся BLOCKED из-за child configuration.
+
+| Task / finding | Current state |
+|---|---|
+| C1-NC-DB-01/P2 | CLOSED: C0 source review +3 stock PG priority/no-write cases |
+| C1-NC-DB-02/P2 | CLOSED: Resume mapping +worker permanent HOLD stock PG cases |
+| C2-M3.1-NATIVE-CONTEXT-DB-R2 | INTEGRATED in C0 test candidate bbc3d42…; corrections verified scoped; C2 HOLD |
+| C6-M3.1-NATIVE-CONTEXT-DB-STOCK-RUNNER-R1 | REVIEW/CHANGES_REQUESTED after actual stock run; old task COMPLETE/HOLD |
+| C0-NC-RUNNER-01/P2 | OPEN: isolated child lacks ASM_ENVIRONMENT=TEST; foundation check not reached |
+| C6-M3.1-NATIVE-CONTEXT-DB-STOCK-RUNNER-R2 | IN_PROGRESS; exactly2 runner/test paths; source-only correction |
+| Stock run39136349844/attempt1 | FAIL:56/57 native PASS;38 runner tests+76 subtests PASS; independent167/45 catalog PASS |
+| Corrected stock run | TODO/HOLD until C0 reviews exact C6 R2; no automatic retry |
+| C1/C2/C3/C5/C8; C6 host/operator | HOLD; next backend/API/UI/source-schema work not issued |
+| Contract R2 / MATERIAL | Contract9 CLOSED/Q01 RESOLVED; MATERIAL11 INTEGRATED/VERIFIED LOCAL/TEST |
+| Whole M3 / native runtime | IN_PROGRESS / NOT VERIFIED; A08/P01/P05/renewal/collector/account/A12 OPEN |
+
+Combined tested **bbc3d42a5cd13736928a6a57f02e299a9c92a0a4**,
+tree**f34ac327244a323697a602ea5fdab752f213fdb3**, parents C2
+861bdf4f77f907768b073eab1daa24cce59f9d3a and C6
+4ccbb40a69b74dca0bef730d82ac425309ee7554; exact union of their8 paths.
+All282 source blobs/modes, archive and manifest verified. Candidate/execution branches
+remain bbc3d42…; main e205e22051bc06295758b504d84699652b176c15/schema0012 unchanged.
+
+Actual stock PG18.6/vector0.8.6/btree_gist1.8,Python3.13.16/uv0.10.0/frozen deps.
+Run39136349844 job117701524374: carrier232.906s/exit1, catalog exit0, owned cleanup/
+clean source PASS, receipt260.532s within20m. All5 new C2 PG cases PASS. Only failure:
+test_fresh_catalog_exact_security_and_foundation_fail_closed at Settings() missing
+environment; intended schema0013 RuntimeDatabase.check refusal NOT REACHED.
+C0 non-DB reproduction confirms exact child omission; explicit TEST validates.
+No SQL defect inferred from this configuration failure;56/57 is not aggregate PASS.
+
+Artifact12140326093,2935013 bytes, SHA256
+d043652088e71f026198022f80c3f53b0068e8510f9364481efd21a2263519d6;
+[run and artifact](https://github.com/Elefesys/ai-service-manager/actions/runs/39136349844),
+retention2026-10-25. Full corrected installed profile
+c8a335b808f11b0c6f3d784731ddc95bf1023e6f1881aff5448659388f927a7a;
+nonfunction57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370.
+Full artifact/source/OID/role/failure evidence and scope are in
+[HANDOFF§0](tasks/M3_HANDOFF.md#0-текущая-выдача-c0--stock-runner-r2-после-одного-fail--2026-10-18-utc).
+
+New C0 preparation has sole parentbbc3d42… and only HANDOFF/REGISTER delta;
+canonical task supplies full start SHA/tree. Branches:
+c0/m3-1-native-context-db-stock-followup-r1 and
+c6/m3-1-native-context-db-stock-runner-r2, same start.
+C6 write allowlist ONLY scripts/native_context_db_catalog.py and
+tests/test_native_context_db_runner.py. Explicit TEST child +real Settings config
+regression; preserve reset/secret exclusion and all ownership/source guards.
+Native57 cases/SQL/foundation/contracts/workflow/locks/pins/applied12/original11 frozen.
+Current full contract756397 bytes SHA256
+e7f3796fcff8640ffca203266ecf7b5988f7ab1bd24850b12e923122abf5d281 unchanged.
+
+C6 returns REVIEW then HOLD; C0 separately reviews and authorizes one corrected
+full stock run with unchanged20m cap. No Actions/full CI/new PR/VM/provider/live/
+renewal/deploy in this source task. C8/full CI/user merge still later gates.
+M4 out, IMPL-05 DEFERRED; no other limits changed. Prior assignments below are history.
+
+<a id="текущий-статус--db-r2-correction-и-stock-runner-preparation--2026-10-18-utc"></a>
+
+## История — DB-R2 correction и stock runner preparation / 2026-10-18 UTC
 
 [C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6250016242) принял
 [C1 CHANGES_REQUESTED](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6249871164)

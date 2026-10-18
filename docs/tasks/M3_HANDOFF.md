@@ -5,7 +5,132 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущая выдача C0 — NATIVE-CONTEXT DB-R2 и stock runner / 2026-10-18 UTC
+## 0. Текущая выдача C0 — stock runner R2 после одного FAIL / 2026-10-18 UTC
+
+**C6 ACTIVE: исправить только явный TEST environment дочернего runner.**
+C1/C2/C3/C5/C8 HOLD. Оба C1 DB P2 CLOSED; один C0-NC-RUNNER-01/P2 OPEN.
+[Source approval](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251106119),
+[actual run disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6251192609).
+Native runtime NOT VERIFIED; M3 IN_PROGRESS. Следующая выдача не запускает Actions.
+
+### 0.1. Принятый source и actual stock evidence
+
+C2 DB-R2 **861bdf4f77f907768b073eab1daa24cce59f9d3a**,
+treefcbdb5c8e1acb889860ed46f6b7c2bb7e14275ae; C6 runner R1
+**4ccbb40a69b74dca0bef730d82ac425309ee7554**,
+tree18f0150f89b4d9ac82a9cae02ccad45fcec175be.
+C0 exact disjoint composition **bbc3d42a5cd13736928a6a57f02e299a9c92a0a4**,
+tree**f34ac327244a323697a602ea5fdab752f213fdb3**; parents C2 then C6.
+Все282 blobs/modes проверены; исходники обоих returns не редактировались.
+
+[Run39136349844/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/39136349844),
+job117701524374: **FAIL**. Native57 collected,56PASS/1FAIL,0skip/xfail/deselection;
+52 PG setups/reset proofs, все setup/teardown PASS. Все5 новых C2 PG cases PASS.
+Runner38 tests+76 subtests PASS. JUnit suite tests114 включает subtests;
+это38 testcase elements, не114 независимых тестов. Carrier232.906s;
+receipt whole-job elapsed260.532s в20m cap. Повтора не было.
+
+Stock unchanged pinned PG18.6/vector0.8.6/btree_gist1.8; Python3.13.16/uv0.10.0/
+frozen lock/Docker28.0.4. Real asm_runtime/asm_migrator LOGIN, zero memberships/
+runtime ownership; independent installed167 unique OIDs/full typed functions incl
+executable verifier,45 tables/full catalog PASS. Owned cleanup и clean source PASS.
+Actual full profile **c8a335b808f11b0c6f3d784731ddc95bf1023e6f1881aff5448659388f927a7a**,
+nonfunction **57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370**,
+verifier body **d485135ecccf986a2b16e71dd451f95508847bb455f8fbf987cf5092ec5de8a6**.
+
+Artifact12140326093,2935013 bytes, ZIP SHA256
+**d043652088e71f026198022f80c3f53b0068e8510f9364481efd21a2263519d6**,
+[38-file archive](https://github.com/Elefesys/ai-service-manager/actions/runs/39136349844/artifacts/12140326093),
+retention2026-10-25. C0 verified all282 archived source bytes/modes, expected-source
+manifest vs own approved-source expansion, installed definitions/catalog and cleanup.
+Source archive SHA256 **e2e7ae6b9566ec6d3795b8f2f3a7546adf61bbef34a88c550608c20b295f51d3**;
+manifest **906c10fe269148d730332e7ddcd0458731c5e6ed850be67f2028fd50d16e0fff**.
+Evidence is checkpoint-specific; installed DB/profile PASS is not application/host readiness.
+
+C1-NC-DB-01 CLOSED: source fixed priority +3 real PG cases incl retained OFF_UNUSED/
+HUMAN/authority/CAS/no-write semantics. C1-NC-DB-02 CLOSED: resume-only mapping +
+N-only Resume/no writes and worker permanent HOLD/replay cases. C2 HOLD.
+The complete native carrier is still not PASS because its foundation check was not reached.
+
+### 0.2. C0-NC-RUNNER-01/P2 — exact failure
+
+Only failed node:
+tests/test_m3_1_native_context_postgres.py::test_fresh_catalog_exact_security_and_foundation_fail_closed.
+At line502 RuntimeDatabase(Settings()) raises ValidationError: environment missing.
+Catalog/ACL/RLS assertions before it passed; RuntimeDatabase.check() and its expected
+schema0013 rejection were NOT REACHED. No SQLSTATE; no new confirmed SQL finding.
+
+scripts/native_context_db_catalog.py::child_environment builds an explicit allowlist
+without ASM_ENVIRONMENT; child() then adds only owned reset opt-in/three URLs.
+The unchanged Settings requires LOCAL/TEST. C0 reproduced without DB I/O:
+exact current child + synthetic valid runtime URL → missing environment;
+explicit ASM_ENVIRONMENT=TEST → Settings validates TEST.
+Do not fix this by weakening Settings, changing foundation schema gate or test assertion.
+
+### 0.3. C6-M3.1-NATIVE-CONTEXT-DB-STOCK-RUNNER-R2
+
+Repository Elefesys/ai-service-manager. C0 preparation has sole parent
+**bbc3d42a5cd13736928a6a57f02e299a9c92a0a4** and changes only HANDOFF/REGISTER.
+Full start SHA/tree is in canonical C0 task PR34. C0 creates:
+- coordination branch c0/m3-1-native-context-db-stock-followup-r1;
+- task branch **c6/m3-1-native-context-db-stock-runner-r2**, same exact start.
+Separate checkout; normal FF/expected-head, no rebase/amend/force.
+Current execution/candidate branches remain frozen at bbc3d42… until a later C0 decision.
+Old C2/C6 delivery refs remain frozen. Do not assume another chat's disk/environment.
+
+Exactly TWO existing write paths:
+1. scripts/native_context_db_catalog.py.
+2. tests/test_native_context_db_runner.py.
+
+Explicitly pin **ASM_ENVIRONMENT=TEST** in the isolated child configuration.
+Do not copy the parent's arbitrary ASM/application/provider configuration.
+Preserve no parent reset opt-in/URLs and grant owned URLs only after source/resource
+guards. TEST is a local fixture setting, not a production or account permission.
+
+Add a meaningful regression using the real unchanged foundation Settings construction
+under the produced child environment and a clearly synthetic valid runtime URL, with
+no engine connection or DB I/O. Cover parent environment absent and hostile/non-TEST;
+child must remain TEST. Retain all38 existing guard cases/subcases and secret/reset/
+foreign-source/resource negatives; do not replace real Settings with a permissive mock.
+Use available locked Python3.13/frozen deps. If unavailable, return exact limitation;
+do not skip/xfail/mask the new test or claim PG proof from configuration validation.
+
+Do not edit native tests/0013/contract/foundation/AuthSettings/.github workflows/
+bootstrap/images/deps/locks/ci.yml/ci.sh/tenancy/backend/frontend/operator files.
+Keep total57 native carriers, including intended foundation fail-closed assertion,
+unchanged. No 0014, applied0001–0012/original11 and accepted contract prefix changes.
+Current full contract756397 bytes/SHA256
+e7f3796fcff8640ffca203266ecf7b5988f7ab1bd24850b12e923122abf5d281 is frozen.
+
+Source checks: targeted runner unit suite and new actual Settings negative/positive
+configuration test, Ruff check/format, whitespace, exact two-path scope, clean checkout.
+PG/Actions execution is not part of this correction task. No install/probe loop for
+known missing stock Docker; source correction is sufficient for REVIEW return.
+Do not create/update execution branch, dispatch/rerun/cancel, run full CI/new PR,
+access VM/shared DB/provider/S3/LLM/sends/renewal/deploy or launch another chat/agent.
+
+Return exact commit/tree/parent/two-path diff; root-cause/fix/node-ID mapping, actual
+commands/results/limitations, unchanged reset/ownership guards and all source freezes.
+Return **REVIEW → C6 HOLD**; addressed runner finding remains OPEN until C0 acceptance.
+
+### 0.4. Next gate and retained boundaries
+
+C0 rereviews R2, binds one corrected candidate SHA/tree, then separately authorizes
+one fresh full57-native+runner stock job on that corrected source. Keep20m whole-job
+cap; no selective -k/retries/skip/no-tests PASS, no cap reset or source amendment
+during a run. Previous run stays FAIL; no automatic retry and no false aggregate PASS.
+Full carrier including actual foundation0013 refusal must pass before this gap closes.
+
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 remains unchanged.
+C3 backend/API/V3/worker/Audit, C6 paired host/operator, C5 UI, C1/C8 integration reviews
+remain HOLD until the current stock gap is resolved and exact next scopes are issued.
+All9 contract findings/Q01 and MATERIAL11 closures retained. D1 provider completeness/
+D2 conservative holds/D3 text-only limits, A08/P01/P05/renewal/collector/account/A12 OPEN;
+M3 IN_PROGRESS, M4 out, IMPL-05 DEFERRED. Existing budgets/caps unchanged.
+
+<a id="0-текущая-выдача-c0--native-context-db-r2-и-stock-runner--2026-10-18-utc"></a>
+
+## История — NATIVE-CONTEXT DB-R2 и stock runner / 2026-10-18 UTC
 
 **DB-R1 CHANGES_REQUESTED: два P2 OPEN. C2 получает correction, C6 — подготовку
 штатного standalone DB runner. Execution пока HOLD; C1/C3/C5/C8 HOLD.**
