@@ -2,7 +2,95 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C6 CI-R3/C1 CI-R1 INTEGRATED; C0 RUN3 / 2026-10-19 UTC
+## Текущий статус — RUN3 blocked; C2/C6 source diagnostics / 2026-10-19 UTC
+
+[C0 final RUN3 disposition6268965488](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6268965488).
+**RUN3 completed9 SUCCESS/foundation CANCELLED; PR35 Draft/BLOCKED.
+CI-03/04/05 CLOSED LOCAL/TEST. CI-06 generic PG and CI-07 foundation budget OPEN.
+C2 generic-PG and C6 foundation diagnostic tasks ACTIVE/source-only.
+C1/C3/C5/C8 and prior implementation tasks HOLD. M3 IN_PROGRESS.**
+
+Frozen PR35 candidate59c9fce52bdaae54f50cdb847a378d47f75c642b,
+treec5941d30aba59fe68f07b86f96c1cd8ae9c55c9a. Actual RUN3 tested merge
+b6cf7fb41297c18ad72da0e22f9694083f76737a,ordered parents
+[e205e22051bc06295758b504d84699652b176c15,59c9fce52bdaae54f50cdb847a378d47f75c642b].
+Run39256948310/attempt1;approval6267864984 CONSUMED ONCE. No next run
+authorized. Main e205e220/schema0012 and stockaf7482d unchanged.
+
+C0 verified all10 actual checkout logs,9 ZIP hashes/sizes,9 current source
+archives/all292 bytes+modes and2 frozen-P archives/all275 bytes+modes.
+All9 successful clean-source gates PASS. Foundation clean step SKIPPED,
+although its archived worktree status is empty and source bytes/modes exact.
+
+Native118074514069 SUCCESS: actual stale advisory89aef741 from original event,
+actual HEAD/GITHUB_SHA=b6cf7fb and parents [main,candidate] exact. All4
+entrypoint diagnostics PASS,payload digest
+8d834a1867f756f010f7b475282cddd78b2dbd427e565abc25656cbb3f79a99d.
+This confirms RUN3 admission; missing RUN2 webhook is still not reconstructed.
+Full112/112,336 phases,105 reset proofs,259runner+130subtests,full catalog
+167/45/635/roles/ACL/body verifier and owned cleanup/source clean PASS.
+Carrier596.031864702s,receipt652.391312361s,within unchanged caps.
+C6 CI-R3 INTEGRATED/VERIFIED LOCAL/TEST for its bounded corrections.
+
+Foundation real development image:1999unit PASS+130subtests,907deselected,
+215.35s;real Git fixtures/strict25-route auth inventory pass. Ruff160/mypy64
+PASS. CI-04 actual git prerequisite and CI-05 inventory correction verified.
+Browser398frontend/14files+54Playwright45desktop+9narrow PASS; all4 image/
+intent shards PASS. Both current durable lanes full6 lifecycles/45-table
+before=after/UNKNOWN/wire1/Console/source images PASS. Both complete state
+lanes retainedH/T/C/G/E/frozenP0012/T2/lateC3/owned cleanup PASS;P preparation
+668.224612098s normal and703.116810121s Docker29 under unchanged720.
+CI-01/02 closures retained.
+
+Foundation118074513375 runs13:03:39→13:48:55Z;main step cancelled13:48:51Z
+at the45min boundary. Build/durable ends near13:21:05Z;checks13:21:11Z;
+units finish13:24:59Z;partition13:25:31Z;generic802 selected13:25:39Z.
+First FAIL13:26:51Z. Actual ordered prefix755=667PASS+88FAIL across14modules;
+47 remain without terminal outcome. No completed generic summary/JUnit/
+tracebacks survived. Migration/base→head/contracts/wheels/service/HTTP
+tail NOT REACHED. This is not a passing suite stopped only after completion.
+
+| Finding/task | Disposition |
+|---|---|
+| CI-03/04/05 | CLOSED / VERIFIED LOCAL/TEST bounded corrections |
+| CI-06/P2 | OPEN: generic802 current compatibility;88 observed FAIL,47 UNKNOWN |
+| CI-07/P2 | OPEN: foundation45min budget and lost interruption diagnostics |
+| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-DIAG-R1 | ACTIVE source-only report/proposal; no code fix |
+| C6-M3.1-NATIVE-CONTEXT-FOUNDATION-DIAG-R1 | ACTIVE source-only report/proposal; no workflow fix |
+| Whole native integration/PR35/M3 | BLOCKED pending full gates; no merge |
+
+Source observations:check_backend upgrades0013;old ingress helper converts
+codec2 only for0012;old exact42-table/Audit/TRUNCATE inventories and strict
+0012 historical profile/reverse helpers need careful successor pairing.
+These are source evidence/hypotheses,not missing actual exception traces.
+Do not attribute all88 to one cause or alter production authority to satisfy
+stale fixtures. All802 current/historical coverage must remain.
+
+Foundation artifact12191528180/SHA256
+e651e1120877459883c1e282b45036f95da748b8cbac6947dabd95ec58c37cf2;
+native12188761326/SHA256
+ffcff8403820e12694d1027ce31cad907deb6cae6aeedd11a4e578f0c9142961.
+Full failed-module counts/actual88 IDs recoverable from ci.log; exact802
+ordered inventory is in native partition-generic-pg.json. The47 are UNKNOWN.
+
+New preparation changes only HANDOFF/register,sole parent59c9fce;290
+protected leaves exact. Exact preparation SHA/tree in task comments.
+New branches c0/m3-1-native-context-ci-r4,
+c2/m3-1-native-context-generic-pg-diag-r1 and
+c6/m3-1-native-context-foundation-diag-r1 start from this same base.
+PR35/execution and prior C0-CI-R3 stay59c9fce;accepted owner refs stay fixed.
+
+Only two new diagnostic reports may be produced. C0 independently accepts
+proposed write sets and issues future bounded implementation/runtime scopes.
+No new PG/Docker/browser/Actions,cap increase,blanket0012 rerouting,
+skips/retries,source gate weakening or new PR. All clocks/caps/D1/D2/D3
+unchanged;IMPL-05 broad optimization DEFERRED;account/A08/P01/P05/
+renewal/collector/A12/M4 later. User owns merge.
+
+Полные exact scopes/verification: M3_HANDOFF§0.1(C2),§0.2(C6).
+
+
+## История — Текущий статус — C6 CI-R3/C1 CI-R1 INTEGRATED; C0 RUN3 / 2026-10-19 UTC
 
 [C0 review6267813855](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6267813855)
 accepts [C6 return6267631802](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6267631802)

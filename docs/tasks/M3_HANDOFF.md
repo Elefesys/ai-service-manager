@@ -5,7 +5,138 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий шаг C0 — C6 CI-R3/C1 CI-R1 приняты; ordinary CI RUN3 / 2026-10-19 UTC
+## 0. Текущий шаг C0 — RUN3 blocked; C2/C6 диагностика foundation / 2026-10-19 UTC
+
+[C0 final RUN3 disposition6268965488](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6268965488).
+**RUN3 completed9 SUCCESS/foundation CANCELLED; PR35 Draft/BLOCKED.
+CI-03/04/05 CLOSED LOCAL/TEST. CI-06 generic PG and CI-07 foundation budget OPEN.
+C2 generic-PG and C6 foundation diagnostic tasks ACTIVE/source-only.
+C1/C3/C5/C8 and prior implementation tasks HOLD. M3 IN_PROGRESS.**
+
+Frozen PR35 candidate59c9fce52bdaae54f50cdb847a378d47f75c642b,
+treec5941d30aba59fe68f07b86f96c1cd8ae9c55c9a. Actual RUN3 tested merge
+b6cf7fb41297c18ad72da0e22f9694083f76737a,ordered parents
+[e205e22051bc06295758b504d84699652b176c15,59c9fce52bdaae54f50cdb847a378d47f75c642b].
+Run39256948310/attempt1;approval6267864984 CONSUMED ONCE. No next run
+authorized. Main e205e220/schema0012 and stockaf7482d unchanged.
+
+C0 verified all10 actual checkout logs,9 ZIP hashes/sizes,9 current source
+archives/all292 bytes+modes and2 frozen-P archives/all275 bytes+modes.
+All9 successful clean-source gates PASS. Foundation clean step SKIPPED,
+although its archived worktree status is empty and source bytes/modes exact.
+
+Native118074514069 SUCCESS: actual stale advisory89aef741 from original event,
+actual HEAD/GITHUB_SHA=b6cf7fb and parents [main,candidate] exact. All4
+entrypoint diagnostics PASS,payload digest
+8d834a1867f756f010f7b475282cddd78b2dbd427e565abc25656cbb3f79a99d.
+This confirms RUN3 admission; missing RUN2 webhook is still not reconstructed.
+Full112/112,336 phases,105 reset proofs,259runner+130subtests,full catalog
+167/45/635/roles/ACL/body verifier and owned cleanup/source clean PASS.
+Carrier596.031864702s,receipt652.391312361s,within unchanged caps.
+C6 CI-R3 INTEGRATED/VERIFIED LOCAL/TEST for its bounded corrections.
+
+Foundation real development image:1999unit PASS+130subtests,907deselected,
+215.35s;real Git fixtures/strict25-route auth inventory pass. Ruff160/mypy64
+PASS. CI-04 actual git prerequisite and CI-05 inventory correction verified.
+Browser398frontend/14files+54Playwright45desktop+9narrow PASS; all4 image/
+intent shards PASS. Both current durable lanes full6 lifecycles/45-table
+before=after/UNKNOWN/wire1/Console/source images PASS. Both complete state
+lanes retainedH/T/C/G/E/frozenP0012/T2/lateC3/owned cleanup PASS;P preparation
+668.224612098s normal and703.116810121s Docker29 under unchanged720.
+CI-01/02 closures retained.
+
+Foundation118074513375 runs13:03:39→13:48:55Z;main step cancelled13:48:51Z
+at the45min boundary. Build/durable ends near13:21:05Z;checks13:21:11Z;
+units finish13:24:59Z;partition13:25:31Z;generic802 selected13:25:39Z.
+First FAIL13:26:51Z. Actual ordered prefix755=667PASS+88FAIL across14modules;
+47 remain without terminal outcome. No completed generic summary/JUnit/
+tracebacks survived. Migration/base→head/contracts/wheels/service/HTTP
+tail NOT REACHED. This is not a passing suite stopped only after completion.
+
+| Finding/task | Disposition |
+|---|---|
+| CI-03/04/05 | CLOSED / VERIFIED LOCAL/TEST bounded corrections |
+| CI-06/P2 | OPEN: generic802 current compatibility;88 observed FAIL,47 UNKNOWN |
+| CI-07/P2 | OPEN: foundation45min budget and lost interruption diagnostics |
+| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-DIAG-R1 | ACTIVE source-only report/proposal; no code fix |
+| C6-M3.1-NATIVE-CONTEXT-FOUNDATION-DIAG-R1 | ACTIVE source-only report/proposal; no workflow fix |
+| Whole native integration/PR35/M3 | BLOCKED pending full gates; no merge |
+
+Source observations:check_backend upgrades0013;old ingress helper converts
+codec2 only for0012;old exact42-table/Audit/TRUNCATE inventories and strict
+0012 historical profile/reverse helpers need careful successor pairing.
+These are source evidence/hypotheses,not missing actual exception traces.
+Do not attribute all88 to one cause or alter production authority to satisfy
+stale fixtures. All802 current/historical coverage must remain.
+
+Foundation artifact12191528180/SHA256
+e651e1120877459883c1e282b45036f95da748b8cbac6947dabd95ec58c37cf2;
+native12188761326/SHA256
+ffcff8403820e12694d1027ce31cad907deb6cae6aeedd11a4e578f0c9142961.
+Full failed-module counts/actual88 IDs recoverable from ci.log; exact802
+ordered inventory is in native partition-generic-pg.json. The47 are UNKNOWN.
+
+New preparation changes only HANDOFF/register,sole parent59c9fce;290
+protected leaves exact. Exact preparation SHA/tree in task comments.
+New branches c0/m3-1-native-context-ci-r4,
+c2/m3-1-native-context-generic-pg-diag-r1 and
+c6/m3-1-native-context-foundation-diag-r1 start from this same base.
+PR35/execution and prior C0-CI-R3 stay59c9fce;accepted owner refs stay fixed.
+
+Only two new diagnostic reports may be produced. C0 independently accepts
+proposed write sets and issues future bounded implementation/runtime scopes.
+No new PG/Docker/browser/Actions,cap increase,blanket0012 rerouting,
+skips/retries,source gate weakening or new PR. All clocks/caps/D1/D2/D3
+unchanged;IMPL-05 broad optimization DEFERRED;account/A08/P01/P05/
+renewal/collector/A12/M4 later. User owns merge.
+
+### 0.1. C2 generic PostgreSQL diagnostic
+
+C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-DIAG-R1 — explain all generic PG failure families and propose a bounded successor-compatible repair; source-only.
+
+Branch c2/m3-1-native-context-generic-pg-diag-r1.
+Only new report docs/tasks/M3_NATIVE_CONTEXT_GENERIC_PG_DIAG.md may be added.
+
+Observed: foundation118074513375 selected exact generic802 after current head0013; logs retain exact ordered first755 results=667PASS+88FAIL,47 without terminal outcome. Earliest FAIL13:26:51Z, far before13:48:51Z cancellation. Fourteen failing modules and counts are in C0 disposition6268965488. Foundation artifact12191528180/SHA256e651e1120877459883c1e282b45036f95da748b8cbac6947dabd95ec58c37cf2 contains ci.log/source.tar.gz; native artifact12188761326/SHA256ffcff8403820e12694d1027ce31cad907deb6cae6aeedd11a4e578f0c9142961 contains full ordered partition/catalog/source evidence. No generic traceback/JUnit/terminal summary survived; do not invent one.
+
+Required diagnostic:
+1. Independently validate source/artifact bindings and extract all88 failed nodeids,47 without terminal outcome and full802 inventory; preserve all IDs and mark the47 UNKNOWN, not PASS/unexecuted assumptions.
+2. Map every failed nodeid to its shared fixture/helper, actual intended schema phase and relevant current SQL/ABI/assertion. Separate evidence-supported source incompatibilities, plausible hypotheses and unresolved production-risk cases. Include exact path/function/line references and proposed owner for each group; no blanket claim that all88 are stale tests.
+3. Inspect known source seams: ingress() only converts raw projections to codec2 when revision==0012; old exact table/column/grant/generated Audit inventories versus current0013; transactional TRUNCATE lists versus new foreign-key references; older migration/reverse/refusal functions operating on an upgraded database; TestEgressMaterialCompatibility exact0012 profile and all retained material/turn/control/security assertions. Trace transitive imports across all14 reported modules and remaining47, not only the first failure.
+4. Define the smallest coherent repair boundaries. Current generic tests must actually cover accepted0013 behavior with native gate OFF where appropriate; historical0012 and predecessor assertions remain pinned to their exact intended source/schema and retain every refusal/data/tenant/security assertion. Do not propose running all802 solely on frozen P to hide current regressions. Distinguish a necessary fixture adaptation from a production behavior change requiring separate contract review.
+5. Produce an exact proposed file/function write-set with C2/C3/C1/C6 ownership, dependencies and validation plan: focused RED→GREEN cases per failure family, complete generic802, full native112/336/105 and167/45/635 profile retained, no missing historical coverage. State which unresolved assumptions require a separately authorized bounded PostgreSQL diagnostic before implementation. Source-only reasoning cannot close CI-06.
+6. Include the full observed88 IDs and47 UNKNOWN IDs (or exact reproducible extraction with hashes), a coverage mapping that preserves all802 and a concise recommended next sequence. C6 separately owns timing/evidence-retention proposal; no CI edits here.
+
+Repository Elefesys/ai-service-manager. Exact shared docs preparation SHA/tree is provided in the canonical C0 task comment; sole parent is frozen PR35 candidate59c9fce52bdaae54f50cdb847a378d47f75c642b/treec5941d30aba59fe68f07b86f96c1cd8ae9c55c9a. Actual completed RUN3 merge b6cf7fb41297c18ad72da0e22f9694083f76737a with ordered parents [e205e22051bc06295758b504d84699652b176c15,59c9fce52bdaae54f50cdb847a378d47f75c642b]; run39256948310/attempt1. Main/schema0012 and stockaf7482dede085bc033e3fee34f9a2425124351ee frozen. Read AGENTS/current HANDOFF/register, canonical Spec/ADR/MVP/Plan M3 and M3_CONTRACT§16–16.20 plus C0 final disposition6268965488. Separate clean checkout; no shared disk/cache assumption. C1/C3/C5/C8 and completed implementation tasks HOLD.
+
+This is source-only diagnostic/proposal work, not authorization to alter implementation or execution gates. Do not change production/API/SQL/migrations/contracts/tests/workflows/scripts/Compose/pins/locks/original11/HANDOFF/register or any existing tracked bytes/modes. No PG/Docker/build/run/browser/Actions/service/provider/VM/deployment/account/Telegram/S3/LLM/renewal, no other agents/chats, new PR, dispatch/rerun/retry/cancel/merge or main/PR35/stock/old refs movement. Only own isolated task ref may move with expected-base lease after the report is verified. No resets/extensions/charging subtraction, weakening assertions, skips/xfails/filters, historical-only substitution for current generic evidence or broad IMPL-05 optimization. Report limitations truthfully; original exception details are absent.
+
+Read-only GitHub metadata/log/artifact retrieval and local source/AST/data analysis are allowed. Local compile/unit probes only where necessary for a concrete source inference, explicitly labelled constructed rather than actual DB evidence; collect-only may use frozen Python3.13/uv.lock with fixture setup prohibited. Do not create redundant tests for the diagnostic document. Verify every existing292 leaves byte/mode-exact, original11=manifest=repo, exact new-file diff/parent/tree and final clean source pairing all4/167functions/45tables/635columns. Return one REVIEW comment on PR34 with full commit/tree/sole parent, report path, precise commands/exits/evidence hashes/limitations, then HOLD. C0 accepts the proposal and separately issues bounded implementation/runtime scopes; no execution permission is created by a report.
+
+### 0.2. C6 foundation budget diagnostic
+
+C6-M3.1-NATIVE-CONTEXT-FOUNDATION-DIAG-R1 — account for foundation time and propose interruption-safe evidence plus a narrow execution-boundary repair; source-only.
+
+Branch c6/m3-1-native-context-foundation-diag-r1.
+Only new report docs/tasks/M3_NATIVE_CONTEXT_FOUNDATION_BUDGET_DIAG.md may be added.
+
+Observed RUN3 foundation118074513375 job13:03:39→13:48:55Z;45min workflow cap, main step cancelled13:48:51Z. Build/frontend then full normal durable6 lifecycles finish near13:21:05Z; checks start13:21:11Z,1999units+130subtests finish13:24:59Z(215.35s),full partition907=802+105 complete13:25:31Z,generic802 selected13:25:39Z. By interruption755terminal outcomes=667PASS+88FAIL;47UNKNOWN. First FAIL13:26:51Z. Migration/contracts/wheels/service/HTTP tail NOT REACHED; clean gate SKIPPED. Native and other8 jobs SUCCESS. C2 separately owns the88-failure source taxonomy, not C6.
+
+Required diagnostic/proposal:
+1. Reconstruct measured phase timing from actual job log and artifact12191528180 digest e651e1120877459883c1e282b45036f95da748b8cbac6947dabd95ec58c37cf2, source scripts and step metadata. Clearly separate observed durations from unknown remaining47/tail cost and any estimates. Compare relevant prior accepted/failing evidence only at exact sources; no invented full-run duration or benchmark.
+2. Explain why failure tracebacks/structured progress are lost: generic pytest emits detail at terminal summary, docker compose run --rm and temporary partition storage, cancelled main pipe. Propose a minimal safe way to retain per-case outcomes/durations and bounded sanitized failure details as they occur, preserve original exit/cancellation/cleanup semantics and archive them via always steps. Do not dump locals, full environment, credentials, DSNs or arbitrary SQL/event payloads. No fail-fast/filter/skipping can replace the complete gate.
+3. Propose the smallest execution-boundary change needed for complete foundation work within existing per-job caps. Consider isolating the entire normal durable lifecycle gate from the long unit/generic/migration/reproducibility/service gate, with exact dependency/required-job/source/owned-resource/cleanup/evidence bindings. This is a proposal only; do not implement a job split, remove duplicate coverage or increase45. Explain why the proposed path preserves all existing normal and Docker29 scenarios, current generic802/native112 and full tail. If another minimal option is better, compare it using actual evidence.
+4. List exact proposed paths/functions and transitive guards: ci.yml and same-commit reusable identity/input hashes, native CI_INPUT_SHA256/negative source tests if affected, development image workflow copies, existing entrypoint callers, reports locations and clean-source checks. Any changed required-job count/branch-protection dependency is explicit and requires C0 acceptance; current10-job contract is not silently rewritten.
+5. Retain native20min/payload1080s, foundation45, state/browser25, all originalS/600/P720/fixed120/supervisorS+1200/cleanup90 and individual caps. Do not reset clocks or share/adopt resources between jobs. No broad optimization/caching/parallel test execution, image/pin/lock work or retries; IMPL-05 stays DEFERRED.
+6. Provide a concrete minimal proposal, validation commands/gates and rollback impact; identify actual diagnostic/CI execution still needed. Timing repair cannot claim to fix the88 PostgreSQL failures or close CI-07 without complete later runtime evidence.
+
+Repository Elefesys/ai-service-manager. Exact shared docs preparation SHA/tree is provided in the canonical C0 task comment; sole parent is frozen PR35 candidate59c9fce52bdaae54f50cdb847a378d47f75c642b/treec5941d30aba59fe68f07b86f96c1cd8ae9c55c9a. Actual completed RUN3 merge b6cf7fb41297c18ad72da0e22f9694083f76737a with ordered parents [e205e22051bc06295758b504d84699652b176c15,59c9fce52bdaae54f50cdb847a378d47f75c642b]; run39256948310/attempt1. Main/schema0012 and stockaf7482dede085bc033e3fee34f9a2425124351ee frozen. Read AGENTS/current HANDOFF/register, canonical Spec/ADR/MVP/Plan M3 and M3_CONTRACT§16–16.20 plus C0 final disposition6268965488. Separate clean checkout; no shared disk/cache assumption. C1/C3/C5/C8 and completed implementation tasks HOLD.
+
+This is source-only diagnostic/proposal work, not authorization to alter implementation or execution gates. Do not change production/API/SQL/migrations/contracts/tests/workflows/scripts/Compose/pins/locks/original11/HANDOFF/register or any existing tracked bytes/modes. No PG/Docker/build/run/browser/Actions/service/provider/VM/deployment/account/Telegram/S3/LLM/renewal, no other agents/chats, new PR, dispatch/rerun/retry/cancel/merge or main/PR35/stock/old refs movement. Only own isolated task ref may move with expected-base lease after the report is verified. No resets/extensions/charging subtraction, weakening assertions, skips/xfails/filters, historical-only substitution for current generic evidence or broad IMPL-05 optimization. Report limitations truthfully; original exception details are absent.
+
+Read-only GitHub metadata/log/artifact retrieval and local source/AST/data analysis are allowed. Local compile/unit probes only where necessary for a concrete source inference, explicitly labelled constructed rather than actual DB evidence; collect-only may use frozen Python3.13/uv.lock with fixture setup prohibited. Do not create redundant tests for the diagnostic document. Verify every existing292 leaves byte/mode-exact, original11=manifest=repo, exact new-file diff/parent/tree and final clean source pairing all4/167functions/45tables/635columns. Return one REVIEW comment on PR34 with full commit/tree/sole parent, report path, precise commands/exits/evidence hashes/limitations, then HOLD. C0 accepts the proposal and separately issues bounded implementation/runtime scopes; no execution permission is created by a report.
+
+## История — 0. Текущий шаг C0 — C6 CI-R3/C1 CI-R1 приняты; ordinary CI RUN3 / 2026-10-19 UTC
 
 [C0 review6267813855](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6267813855)
 accepts [C6 return6267631802](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6267631802)
