@@ -1728,9 +1728,195 @@ def test_material_egress_current_revision_and_runtime_only_narrow_wrappers():
     from asm.foundation import DATABASE_SCHEMA_REVISION
     from test_telegram_egress_postgres import canonical_fingerprint
 
-    assert DATABASE_SCHEMA_REVISION == "0012"
+    assert DATABASE_SCHEMA_REVISION == "0013"
     assert inspect.signature(canonical_fingerprint).parameters["revision"].default == "0012"
     shell = (egress.ROOT / "scripts/test_telegram_egress.sh").read_text()
-    assert "'expected_revision': '0012'" in shell
+    assert "'expected_revision': '0013'" in shell
     # The source/image-switch production helper is still historical0007-only.
     assert 'heads == [b"0007"]' in inspect.getsource(egress.migration_source)
+
+
+def test_native_profile_is_separate_from_exact_historical_material_inventory():
+    from test_telegram_egress_postgres import material_source_profile
+
+    old = material_source_profile()
+    native = egress.native_source_profile()
+    assert len(old["functions"]) == 132 and len(old["columns"]) == 42
+    assert len(native["functions"]) == 167 and len(native["columns"]) == 45
+    assert sum(map(len, native["columns"].values())) == 635
+    assert set(old["columns"]) == egress.SCHEMA_TABLES["0012"]
+    assert set(native["columns"]) == egress.SCHEMA_TABLES["0013"]
+    with pytest.raises(egress.EgressError, match="DATABASE_TABLES"):
+        egress.schema_inventory("0012", native["columns"])
+    with pytest.raises(egress.EgressError, match="DATABASE_TABLES"):
+        egress.schema_inventory("0013", old["columns"])
+
+
+@pytest.fixture
+def native_source_checkout(tmp_path, monkeypatch):
+    """Toy Git source identity only; the Console placeholders are not C5 acceptance."""
+    import shutil
+    import subprocess
+
+    from asm.telegram import provisioning
+
+    from scripts import native_context_db_catalog as runner
+
+    root = tmp_path / "source"
+    root.mkdir()
+    for name in {
+        "scripts/native_context_db_catalog.py",
+        "backend/src/asm/telegram/provisioning.py",
+    } | {path for paths in provisioning.NATIVE_COMPONENTS.values() for path in paths}:
+        destination = root / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if (egress.ROOT / name).exists():
+            shutil.copyfile(egress.ROOT / name, destination)
+        else:
+            destination.write_text("UNIT ONLY CONSOLE PLACEHOLDER\n")
+    shutil.copytree(egress.ROOT / "migrations/versions", root / "migrations/versions")
+
+    def git(*args):
+        return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
+
+    git("init", "-q")
+    git("add", ".")
+    git(
+        "-c",
+        "user.name=Unit",
+        "-c",
+        "user.email=unit@example.invalid",
+        "commit",
+        "-qm",
+        "source fixture",
+    )
+    monkeypatch.setattr(egress, "ROOT", root)
+    monkeypatch.setattr(runner, "ROOT", root)
+    monkeypatch.setattr(
+        provisioning, "__file__", str(root / "backend/src/asm/telegram/provisioning.py")
+    )
+    approved = egress.native_host_profile(git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}"))
+    return root, git, approved
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "dirty",
+        "assume_unchanged",
+        "tree",
+        "head",
+        "component",
+        "missing_console",
+        "mode",
+        "runner",
+    ],
+)
+def test_native_host_checks_actual_clean_git_bytes_and_all_component_profiles(
+    native_source_checkout, damage
+):
+    from asm.telegram import provisioning
+
+    root, git, approved = native_source_checkout
+    path = root / "frontend/src/HumanContextPanel.tsx"
+    if damage in {"dirty", "assume_unchanged"}:
+        if damage == "assume_unchanged":
+            git("update-index", "--assume-unchanged", str(path.relative_to(root)))
+        path.write_text(path.read_text() + "DRIFT")
+    elif damage == "tree":
+        approved["tree"] = "0" * 40
+    elif damage == "head":
+        approved["commit"] = "0" * 40
+    elif damage == "component":
+        approved["components"]["worker"] = "0" * 64
+    elif damage == "mode":
+        path.chmod(0o755)
+    elif damage == "runner":
+        (root / "scripts/native_context_db_catalog.py").write_text(
+            "raise AssertionError('must not execute')\n"
+        )
+    elif damage == "missing_console":
+        git("rm", "-q", str(path.relative_to(root)))
+        git(
+            "-c",
+            "user.name=Unit",
+            "-c",
+            "user.email=unit@example.invalid",
+            "commit",
+            "-qm",
+            "unpaired source fixture",
+        )
+        approved.update(commit=git("rev-parse", "HEAD"), tree=git("rev-parse", "HEAD^{tree}"))
+        # Keep the other three profiles correct: absence of Console, rather than
+        # an unrelated stale API digest, must be what prevents pairing.
+        import hashlib
+
+        from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
+
+        from scripts import native_context_db_catalog as runner
+
+        _, manifest = runner.require_source(root, approved["commit"])
+        entries = {entry["path"]: entry for entry in manifest}
+        for role, paths in provisioning.NATIVE_COMPONENTS.items():
+            if role == "console":
+                continue
+            material = {
+                "role": role,
+                "source_tree": approved["tree"],
+                "schema_revision": "0013",
+                "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
+                "files": {name: entries[name] for name in paths},
+            }
+            approved["components"][role] = hashlib.sha256(
+                json.dumps(material, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+    approval = provisioning.NativeHostApproval.model_validate(approved)
+    if damage is None:
+        _, profile = provisioning.native_host_source(approval)
+        assert len(profile["functions"]) == 167 and len(profile["columns"]) == 45
+    else:
+        with pytest.raises(provisioning.ProvisioningError, match="^POLICY_PREREQUISITE_FAILED$"):
+            provisioning.native_host_source(approval)
+
+
+async def test_native_installed_catalog_missing_function_refuses_before_self_report_or_mutation():
+    from types import SimpleNamespace
+
+    from asm.telegram import provisioning
+
+    from scripts import native_context_db_catalog as runner
+
+    expected = egress.native_source_profile()
+    statements = []
+
+    class Connection:
+        async def execute(self, statement, params=None):
+            sql = str(statement)
+            statements.append(sql)
+            if sql.startswith("SET LOCAL "):
+                return None
+            if sql == "SHOW server_version_num":
+                return SimpleNamespace(scalar_one=lambda: "180006")
+            if "version_num" in sql:
+                return SimpleNamespace(scalar_one=lambda: "0013")
+            if sql == runner.CATALOG_SQL:
+                return SimpleNamespace(one=lambda: ("{}", "{}"))
+            if sql == runner.FUNCTION_SQL:
+                return SimpleNamespace(mappings=lambda: SimpleNamespace(all=lambda: []))
+            if "FROM unnest" in sql:
+                return SimpleNamespace(
+                    mappings=lambda: SimpleNamespace(
+                        all=lambda: [
+                            {"signature": name, "oid": i + 1}
+                            for i, name in enumerate(sorted(expected["functions"]))
+                        ]
+                    )
+                )
+            assert sql.startswith("SELECT 1 FROM pg_class")
+            return SimpleNamespace(all=lambda: [])
+
+    with pytest.raises(provisioning.ProvisioningError, match="POLICY_PREREQUISITE_FAILED"):
+        await provisioning.native_catalog_profile(Connection(), runner, expected)
+    assert "SELECT platform.human_context_schema_profile()" not in statements
+    assert not any("human_context_policy_command(" in sql for sql in statements)

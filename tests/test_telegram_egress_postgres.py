@@ -1552,8 +1552,15 @@ def material_source_profile():
     assert set(additions) == set(module.TABLES) and len(additions) == 4
     assert len(changed) == 6 and sum(map(len, changed.values())) == 10
     functions = {}
-    for path in sorted((root / "migrations/versions").glob("[0-9][0-9][0-9][0-9]_*.py")):
-        assert path.name[:4] <= "0012", "MATERIAL_UNASSIGNED_REVISION"
+    paths = [
+        path
+        for path in sorted((root / "migrations/versions").glob("[0-9][0-9][0-9][0-9]_*.py"))
+        if path.name[:4] <= "0012"
+    ]
+    assert [path.name[:4] for path in paths] == [f"{n:04d}" for n in range(1, 13)], (
+        "MATERIAL_UNASSIGNED_REVISION"
+    )
+    for path in paths:
         _, sql = material_ddl_operations(path)
         for statement in sql:
             definition = material_function_source(statement)

@@ -5,7 +5,211 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущая выдача C0 — два исправления frontend-проверок C5 / 2026-10-19 UTC
+## 0. Текущий шаг C0 — C5+C6 source integration; независимое C8 review / 2026-10-19 UTC
+
+[C0 acceptance6260443971](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260443971).
+**C8 ACTIVE/read-only source review; C1/C2/C3/C5/C6 HOLD.**
+C5 CONSOLE-R1/R2 и C6 HOST-R1 INTEGRATED source на общем C0 checkpoint.
+Whole host/Console runtime NOT VERIFIED; M3 IN_PROGRESS. Это предусмотренная
+независимая проверка уже реализованной функции, без нового product scope.
+
+### 0.1. Принятые исправления и объединённые исходники
+
+| Item | Current disposition |
+|---|---|
+| C0-NC-UI-01/P2 | CLOSED LOCAL/TEST: Response/APIResponse type pairing; browser emitted JS unchanged |
+| C0-NC-UI-02/P2 | CLOSED LOCAL/TEST: two submits reach connected form; one frozen intent/request; complete replacement/current-read assertions PASS |
+| C5 CONSOLE-R1/R2 | INTEGRATED source; required frontend checks independently PASS |
+| C6 HOST-R1 | INTEGRATED source; reviewed host/readiness/operator code and checked C6 unit evidence; actual paired gate pending |
+| C8 independent source review | IN_PROGRESS; exact assignment below |
+| Actual unified host/PG/browser/full integration/account | NOT VERIFIED / separate C0 gates |
+
+C5 final208dd68959d9ee15e4ba9a746cac38d0f1806935/tree
+b436c1bcb11e0e22c4ca0553dd8527dfc26a0b88, sole parentc5605521b8b730a3bd1c20b6160e4fb4afe8d204.
+R2 changes exactly2 test paths,+31/−5; all290 other leaves retained.
+C0 independently checked all292 remote/local bytes/modes. The browser change is
+type-only: emitted JS SHA256ce4b903701565f1070bfd99e07bd374e9fb00c4360beba6d91fa6c3343bc20d1
+matches before/after with TypeScript5.9.3. The amended callback retains/strengthens
+both confirmations, full CAS, one immutable intent/request, no CONTROL/send,
+pending state and fresh current read after receipt. Historical R1 RED retained.
+
+C0 actual checks on exact C5 final: Node24.19.0/npm11.9.0 locked167 packages,
+typecheck PASS; complete10 Vitest files359/359 PASS in6.24s,0fail/skip;
+build PASS40modules/1.08s; full Playwright list54=45desktop+9narrow PASS.
+List-only inputs are inert private synthetic files, not browser/PG evidence.
+C0 logs SHA256: typecheckb24fec26336d05929eedd0e048a02eb5099df83b5021c72ba8f3180c98015940;
+Vitestca46ddf257d9c4ab2ab96afd3de80ad2fadf3a01e7f28effdfe61f90f05a0b24;
+builddd1207206d752c7851c04aff9cacfeac983e54abb1284b55f990eaba918592f9;
+listf4c9bf73b970fceb83efcbd0d0f2da54815e1cd59c6b3ae17c4907b3d509d979.
+
+C0 combined commit has ordered parents C5 final208dd68959d9ee15e4ba9a746cac38d0f1806935
+then C6 HOST-R1 9bd76b30069617ceadf5e35de046505255600cca
+(tree8124ef7664434a2e999502daff4b1f5d856bab0f). All24 C5 and12 C6 implementation/
+test/runbook path blobs are exact returns; no additional implementation edit.
+Only C0 HANDOFF/register are changed by consolidation. Relative to common
+prepared8d1ba99:38paths including2 coordination docs;292 leaves,254 old leaves exact.
+Original11=canon=SOURCE_MANIFEST; full contract SHA256
+fe2eb4ef2469ccb14b7147017c3c81066cde1b8a6ad60acbf73922a15e3ace5f;
+SQL/API/OpenAPI/dependencies/locks/CI/runner frozen. Full final SHA/tree in canonical
+C0 acceptance/task binding; branches c0/m3-1-native-context-host-console-r2 and
+c8/m3-1-native-context-host-console-r1. No moving sibling base.
+
+C6 report digests previously independently checked:863unit=36foundation+82setup+
+144egress+601migration,0fail/error/skip;112nativecollection/20hostcollection.
+These are C6 report evidence, not a fresh combined-source execution.
+All prior105 ordered IDs/hash9881ab5a77aca51a7d6c66737c352055cd4f037acf156e55f265cedeabb24b1a
+retained;7 host cases added. Native profilec045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411,
+167typedfunctions/45tables/635columns unchanged. Runtime private verifier body
+527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac remains pinned.
+Actual new readiness/operator integration is not inferred from old stock PASS.
+
+### 0.2. C8 exact independent task
+
+**C8-M3.1-NATIVE-CONTEXT-HOST-CONSOLE-R1 — independent source/security/recovery review; read-only.**
+
+Repository Elefesys/ai-service-manager. Branch c8/m3-1-native-context-host-console-r1.
+Start only from the exact C0 combined SHA/tree in the canonical task binding.
+Ordered parents: C5 208dd68959d9ee15e4ba9a746cac38d0f1806935 then
+C6 9bd76b30069617ceadf5e35de046505255600cca. C0 branch:
+c0/m3-1-native-context-host-console-r2. Separate clean checkout; no moving sibling
+base or assumption of shared files/dependencies. C5/C6 are INTEGRATED source,
+not whole runtime VERIFIED. C1/C2/C3/C5/C6 HOLD.
+
+Read current HANDOFF/REGISTER, AGENTS, IMPL-001; supplied original11 and exact
+SOURCE_MANIFEST; applicable Spec5.8–5.14/5.12.1/18.5–18.9, ADR002–007/024–026/
+180/266/267, MVP GJ-G/J and variants, Roadmap/Plan M3. M3_CONTRACT§16–16.20 and
+retained MATERIAL§15; current C0 acceptance6260443971, review6260097657,
+C5 return6260302288, C6 return6255240519 and stock acceptance6254556203.
+
+**Read scope:** all code/contracts needed to assess the combined changed risk.
+Primary implementation delta is the exact36 paths in the C5/C6 returns:
+C6 foundation/provisioning/operator helpers/runbook/readiness+host tests;
+C5 HumanContextPanel/API and tests, ConversationControl/Messaging, Escalations/
+Audit consumers and tests/styles, browser control spec and three fixture files.
+Only two additional paths are C0 HANDOFF/register. All original SQL/API/OpenAPI,
+dependencies/locks, CI/runner and the prior accepted DB/runtime slice are frozen.
+
+**Write scope:** no tracked repository source, tests, contracts, docs, locks,
+workflow, branch ref or PR metadata edits. External scratch notes/probes/reports
+and caches only; final checkout must remain exact/clean. Report findings with
+specific path/function, violated existing requirement, reproducer/finite trace,
+impact, severity and proposed owner. Do not silently fix the implementation,
+create a new acceptance rule or reopen prior findings without a concrete new defect.
+
+1. Verify provenance and pairing. Compare exact ordered parents, all292 source
+bytes/modes and the36 returned implementation paths; C0 changed only two docs.
+Original11=canon=manifest and frozen contract/API/SQL/locks remain exact.
+Verify actual imports from this checkout, not an old editable install/pyc.
+Exercise pure source functions native_host_profile(approved_commit,approved_tree)
+and native_host_source(NativeHostApproval): real clean unified Git source,
+all api/worker/scheduler/console components,167 functions/45 tables/635 columns.
+This source proof does not approve deployed binaries, drain or policy activation.
+No full private approval object/request/credential output.
+
+2. Runtime/host review: exact0013 readiness before API admission and Worker/
+Scheduler work, actual safe runtime role,3s bound, pinned catalog verifier body/
+metadata/ACL before executing its catalog-only SELECT. Runtime must not receive
+EXECUTE on the private migrator capability. Independently inspect how full source/
+installed function OIDs/definitions/columns/ACL/roles are checked; no trust in a
+self-reported digest alone. Keep historical0012 material132functions/42tables
+and historical0007 switch separate. Both named readiness test exceptions retain
+explicit old0012 refusal, and all other old native definitions/assertions remain.
+
+3. Operator review: closed LOCAL/TEST DTO, actual session_user=current_user
+asm_migrator/READ COMMITTED/database, approved clean source/components and real
+scoped binding/catalog checks; explicit drain attestation is not process discovery.
+Only the accepted capability mutates policy/receipt/Audit; CAS/full fingerprint,
+no-op, PAUSE/reenable and bounded work must retain contract semantics. Validated
+receipt escapes only after commit; failed separate current read preserves it.
+Old source-tree replay requires stored request evidence; a fresh old-tree command
+must fail. Saved ENABLE receipt must not overwrite current PAUSED. Read-only retry
+must not create a new key/POST. Private file/lock/symlink/ownership/diagnostic
+handling; no Telegram HTTP, billing initialization, implicit activation or renewal.
+
+4. Console review against accepted Python/OpenAPI: exact closed unions/fields/
+timestamps/UUID/decimal/Unicode/preview/cursor/scope checks; complete serialized
+UTF-8 body <=4096, full CAS and receipt binding. Separate saved full context,
+replacement and provider observations; explicit replacement+attestation and
+separate Resume. OFF_UNUSED/ON/PAUSED and conservative coverage/hold/UNKNOWN
+display must preserve manual work/product authorization. Memory-only intent is
+actor/ws/C/Client bound; two-tab stale CAS, lost ACK/session/CSRF, old receipt vs
+new current R, valid200+failed GET, revoke and late cross-scope responses must not
+grant authority, expose old context or automatically POST. Audit/context_hold/
+control-error pairing remains strict; no owner policy toggle, fake completeness
+or M4/native image authority. Check C0-NC-UI-01/02 closure without weakening tests.
+
+5. Browser carrier review is source-only: finite native_happy/native_narrow
+fixtures use the real SQL capability, not successful authority DML/fake receipts;
+existing pending-image fixture stays genuinely pending and last;127 seed events
+remain below128. All54 browser cases/assertions retained, real network/drop/delay
+seams are distinguished from mocked successful business results. Native cases
+require the later clean-source paired stack; no host rollout claim from fixture
+source_tree/drain fields. Review compatibility with existing full-suite collection.
+
+**Local checks permitted/required for this source review:**
+- Isolated Node24/npm environment from exact package-lock (npm ci --ignore-scripts
+  --no-audit --no-fund allowed if absent). No upgrades/new library/global install/
+  browser download. Typecheck; complete10 files below; external frontend build;
+  full Playwright list54=45desktop+9narrow. Use only inert external private
+  list-input files described in the preceding C5 R2 task, never account credentials.
+- Existing or isolated restored Python3.13 environment from frozen uv.lock/dev
+  dependencies using the locked uv toolchain; no dependency re-resolution/lock
+  edits or global installs. Record exact interpreter/distributions/import paths.
+  Compile and Ruff/check-format for the13 changed Python paths; mypy backend/src.
+- Complete four directly affected Python unit modules:
+  tests/test_foundation.py, tests/test_m2_3_setup.py,
+  tests/test_telegram_egress.py, tests/test_m2_4_browser_fixture.py.
+  Current expected collection345=36+82+144+83. Do not rerun the unchanged601-case
+  migration unit module just for counts; its same-source C6 evidence is retained.
+- Full native four-module collection only:7source+56DB+12API+37runtime=112.
+  Use current native_context_db_catalog.MODULES and independently verify all105
+  PG-fixture consumers use the guarded current shared native fixture/reset;
+  all prior105 IDs/order retained (7 new host cases appended).
+  Host PG collection20 using the same full class collector as C6:
+  python -m pytest tests/test_telegram_egress_postgres.py --collect-only -q
+  -o 'python_classes=Test* TelegramEgress*'.
+  No test selection may execute an actual PG/service fixture.
+- Source catalog/profile and frozen-input checks are local only, no DB connection.
+  Keep caches/builds/logs/basetemp outside checkout. If a required runtime cannot
+  be restored, report the exact unavailable check; do not substitute syntax-only
+  probes, another Python major/minor, mock PG or a PASS from another commit.
+
+Exact frontend test scope:
+npm run test -- src/HumanContextPanel.test.tsx src/human-context-api.test.ts
+src/ConversationControl.test.tsx src/conversation-control-api.test.ts
+src/MessagingPanel.test.tsx src/messaging-api.test.ts
+src/EscalationsPanel.test.tsx src/escalation-api.test.ts
+src/BillingPanel.test.tsx src/billing-api.test.ts
+
+**Not authorized:** policy CLI check/commit/current (even check reaches DB),
+PG/Docker/service/lab/resource inspection/start/reuse/cleanup, real browser/API/
+provider/account/VM/S3/LLM calls, Actions/execution-ref/dispatch/rerun/full CI/new PR/
+main/merge/deploy/live/renewal, other chats/agents. No skip/retry/sleep/budget changes.
+Preserve S600/P720/fixed120/+480/S+1200/cleanup90/state25/browser25/foundation45/
+stock20m/request3s60s10s and all prior Contract9/Q01/MATERIAL11/D1/D2/D3 constraints.
+
+Return one independent REVIEW comment on PR34 then C8 HOLD: exact inspected
+SHA/tree/parents, source/evidence comparisons, actual commands/exits/counts,
+risk-by-risk disposition, actionable findings (or no findings) and explicit
+NOT RUN actual PG/browser/host rollout. A source-only PASS does not close those
+gates or the whole M3. C0 owns disposition and the next exact actual gate;
+user owns merge. No new product scope.
+
+
+### 0.3. Remaining execution boundaries
+
+Accepted stock105 source5d98651d2c34314724a12283d1741e73594e16b8/tree
+a1989f20284c201bfd58bafe12c174544f1eb3c1/run39160997284/attempt1 remains
+INTEGRATED/VERIFIED LOCAL/TEST for that DB/API/runtime slice only:
+all315 phases/51runner+130subtests/98guardedresets/catalog/cleanup/clean PASS.
+C0-NC-CARRIER-01/02 and C3-NC-RUNTIME-01 CLOSED LOCAL/TEST retained.
+Approval6254432619 CONSUMED ONCE; execution ref still5d98651; no new run/ref permission.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 and PR34 closed/merged.
+C0 reviews C8 then authorizes the next exact actual paired gate separately.
+C8/full integration/account/A08/P01/P05/renewal/collector/A12 remain their own
+gates; whole M3 IN_PROGRESS, M4 out, broad CI optimization DEFERRED.
+
+## История — 0. Текущая выдача C0 — два исправления frontend-проверок C5 / 2026-10-19 UTC
 
 [C0 review6260097657](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260097657).
 **C5 CONSOLE-R2 ACTIVE/source-only; C6/C1/C2/C3/C8 HOLD.**

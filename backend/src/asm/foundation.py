@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import hashlib
 import json
 import signal
 from collections.abc import AsyncIterator
@@ -14,7 +15,7 @@ from pydantic_settings import SettingsConfigDict
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError, SQLAlchemyError
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from asm import __version__
 from asm.auth.config import AuthSettings
@@ -32,7 +33,80 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0012"
+DATABASE_SCHEMA_REVISION = "0013"
+NATIVE_CONTEXT_PROFILE_SHA256 = "c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411"
+NATIVE_PROFILE_BODY_SHA256 = "527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac"
+
+
+async def native_schema_readiness(connection: AsyncConnection) -> None:
+    """Pin the verifier itself before consulting its closed full-catalog result.
+
+    The separate operator additionally compares every definition against clean
+    approved source. Runtime images contain the accepted migrations, not Git or
+    the host's process/Console approval and drain attestation.
+    """
+    row = (
+        (
+            await connection.execute(
+                text("""
+                SELECT p.prosrc AS body, p.proowner::regrole::text AS owner,
+                    p.prosecdef, p.provolatile::text, p.proisstrict, p.proconfig,
+                    l.lanname, p.prokind::text, p.pronargs,
+                    p.prorettype::regtype::text AS result,
+                    has_function_privilege('asm_runtime',p.oid,'EXECUTE') AS runtime,
+                    EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
+                        WHERE grantee=0) AS public
+                FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
+                WHERE p.oid=to_regprocedure('platform.human_context_schema_profile()')
+            """)
+            )
+        )
+        .mappings()
+        .one()
+    )
+    if hashlib.sha256(row["body"].encode()).hexdigest() != NATIVE_PROFILE_BODY_SHA256 or tuple(
+        row[k]
+        for k in (
+            "owner",
+            "prosecdef",
+            "provolatile",
+            "proisstrict",
+            "proconfig",
+            "lanname",
+            "prokind",
+            "pronargs",
+            "result",
+            "runtime",
+            "public",
+        )
+    ) != (
+        "asm_migrator",
+        True,
+        "s",
+        False,
+        ["search_path=pg_catalog, pg_temp"],
+        "sql",
+        "f",
+        0,
+        "jsonb",
+        False,
+        False,
+    ):
+        raise RuntimeError("Native database profile mismatch")
+    # The capability remains private to the migrator. Its pinned SQL body is a
+    # catalog-only SELECT, readable/executable by runtime without EXECUTE grants.
+    await connection.execute(text("SET LOCAL search_path=pg_catalog,pg_temp"))
+    declared = (await connection.execute(text(row["body"]))).scalar_one()
+    if (
+        declared
+        != {
+            "schema_revision": "0013",
+            "valid": True,
+            "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
+        }
+        or type(declared.get("valid")) is not bool
+    ):
+        raise RuntimeError("Native database profile mismatch")
 
 
 class Settings(AuthSettings):
@@ -80,7 +154,13 @@ class RuntimeDatabase:
                     (
                         await connection.execute(
                             text("""
-                    SELECT rolname, rolsuper, rolbypassrls,
+                    SELECT rolname, rolsuper, rolbypassrls, rolinherit,
+                        rolcreaterole, rolcreatedb, rolreplication,
+                        current_user <> session_user AS assumed_role,
+                        EXISTS(SELECT 1 FROM pg_auth_members WHERE member=pg_roles.oid) AS membership,
+                        EXISTS(SELECT 1 FROM pg_database WHERE datdba=pg_roles.oid) AS owns_database,
+                        EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                            WHERE n.nspname IN ('app','platform') AND c.relowner=pg_roles.oid) AS owns_relation,
                         has_schema_privilege(current_user, 'app', 'CREATE') AS app_ddl,
                         has_schema_privilege(current_user, 'platform', 'CREATE') AS platform_ddl
                     FROM pg_roles WHERE rolname = current_user
@@ -91,7 +171,21 @@ class RuntimeDatabase:
                     .one()
                 )
                 if role["rolname"] != "asm_runtime" or any(
-                    role[key] for key in ("rolsuper", "rolbypassrls", "app_ddl", "platform_ddl")
+                    role[key]
+                    for key in (
+                        "rolsuper",
+                        "rolbypassrls",
+                        "rolinherit",
+                        "rolcreaterole",
+                        "rolcreatedb",
+                        "rolreplication",
+                        "assumed_role",
+                        "membership",
+                        "owns_database",
+                        "owns_relation",
+                        "app_ddl",
+                        "platform_ddl",
+                    )
                 ):
                     raise RuntimeError("Unsafe runtime database role")
                 version = (
@@ -111,6 +205,7 @@ class RuntimeDatabase:
                     or int(server) // 10000 != 18
                 ):
                     raise RuntimeError("Database capability/schema mismatch")
+                await native_schema_readiness(connection)
 
     async def close(self) -> None:
         await self.engine.dispose()
@@ -170,6 +265,10 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
+            if isinstance(db, RuntimeDatabase):
+                # Same exact source/schema boundary as Worker/Scheduler, before
+                # ASGI admits business requests. Health stubs remain unit-only.
+                await db.check()
             yield
         finally:
             if telegram_client is not None:

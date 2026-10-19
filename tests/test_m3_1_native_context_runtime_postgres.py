@@ -332,8 +332,13 @@ async def test_python_foundation0012_still_refuses_actual_native0013(native_runt
     settings = Settings(environment="TEST", database_url=SecretStr(os.environ["ASM_DATABASE_URL"]))
     db = RuntimeDatabase(settings)
     try:
-        with pytest.raises(RuntimeError, match="Database capability/schema mismatch"):
-            await db.check()
+        await db.check()  # new exact0013 reader succeeds before retaining old0012 refusal
+        from asm import foundation
+
+        with pytest.MonkeyPatch.context() as old_reader:
+            old_reader.setattr(foundation, "DATABASE_SCHEMA_REVISION", "0012")
+            with pytest.raises(RuntimeError, match="Database capability/schema mismatch"):
+                await db.check()
     finally:
         await db.close()
 
@@ -1119,3 +1124,221 @@ async def test_python_capability_saved_base_unicode_current_material_and_private
     assert await scalar(h, "SELECT count(*) FROM platform.turn_guard_receipts") == 0
     assert await scalar(h, "SELECT count(*) FROM platform.turn_consumer_receipts") == 0
     assert h.adapter.calls == h.adapter.effects == 0 and not h.adapter.ledger.exists()
+
+
+# HOST-R1 additions. Successful authority below always comes from the real SQL
+# capability on the future C0-consolidated, C5-paired source. Source collection is
+# not permission to execute these carriers or activate an operator policy.
+async def native_host_request(h, *, operation="ENABLE", key="host-enable", expected=None):
+    from pathlib import Path
+
+    from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
+    from asm.telegram.provisioning import NativeHostApproval, NativePolicyRequest
+
+    from scripts import prepare_telegram_egress as host
+
+    root = Path(__file__).resolve().parents[1]
+    commit = host.command(["git", "-C", str(root), "rev-parse", "HEAD"]).decode().strip()
+    tree = host.command(["git", "-C", str(root), "rev-parse", "HEAD^{tree}"]).decode().strip()
+    # This is an actual test-source binding, not a deployment/C0 approval claim.
+    # It deliberately refuses a standalone C6 tree without the C5 source files.
+    approval = NativeHostApproval.model_validate(host.native_host_profile(commit, tree))
+    row = (await query(h, "SELECT * FROM app.channel_connections WHERE id=:id", id=CA))[0]
+    policy, epoch = expected or (row["human_context_policy"], row["human_context_policy_epoch"])
+    request = NativePolicyRequest.model_validate(
+        {
+            "environment": "TEST",
+            "workspace_id": str(row["workspace_id"]),
+            "connection_id": str(CA),
+            "operation": operation,
+            "key": key,
+            "expected_policy": policy,
+            "expected_policy_epoch": str(epoch),
+            "expected_binding": {
+                "business_id": str(row["business_id"]),
+                "provider": row["provider"],
+                "bot_identity": row["bot_identity"],
+                "external_connection_id": row["external_connection_id"],
+                "owner_user_id": None,
+            },
+            "source_profile": {
+                "source_tree": tree,
+                "schema_revision": "0013",
+                "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
+                "drain_confirmed": True,
+            },
+        }
+    )
+    return request, approval
+
+
+async def native_host_policy_state(h):
+    return (
+        await scalar(h, "SELECT to_jsonb(c) FROM app.channel_connections c WHERE id=:id", id=CA),
+        await scalar(h, "SELECT count(*) FROM platform.human_context_policy_receipts"),
+        await scalar(
+            h,
+            "SELECT count(*) FROM app.audit_events WHERE event_type='HUMAN_CONTEXT_POLICY_COMMANDED'",
+        ),
+        await scalar(h, "SELECT count(*) FROM app.messages"),
+        await scalar(h, "SELECT count(*) FROM app.outbox_events"),
+        await scalar(h, "SELECT count(*) FROM platform.messaging_jobs"),
+    )
+
+
+async def test_native_host_policy_enable_noop_pause_old_replay_and_current(native_runtime):
+    from asm.telegram.provisioning import commit_native_context_policy
+
+    h = native_runtime
+    url = os.environ["ASM_MIGRATION_DATABASE_URL"]
+    request, approval = await native_host_request(h)
+    enabled = await commit_native_context_policy(request, url, approval)
+    assert enabled.receipt.outcome == "ACCEPTED"
+    assert enabled.receipt.result.change == "ENABLED"
+    assert enabled.current.policy == "ON" and enabled.current.policy_epoch == "1"
+    before = await native_host_policy_state(h)
+    noop_request, approval = await native_host_request(h, key="host-noop")
+    noop = await commit_native_context_policy(noop_request, url, approval)
+    assert noop.receipt.result.change == "UNCHANGED"
+    after = await native_host_policy_state(h)
+    assert after[0] == before[0] and after[1:3] == (before[1] + 1, before[2] + 1)
+    assert after[3:] == before[3:]
+    pause_request, approval = await native_host_request(h, operation="PAUSE", key="host-pause")
+    paused = await commit_native_context_policy(pause_request, url, approval)
+    assert paused.receipt.result.change == "PAUSED"
+    assert paused.current.policy == "PAUSED" and paused.current.policy_epoch == "1"
+    before_replay = await native_host_policy_state(h)
+    replay = await commit_native_context_policy(request, url, approval)
+    assert replay.receipt.outcome == "REPLAY" and replay.receipt.result == enabled.receipt.result
+    assert replay.receipt.result.accepted_policy == "ON"
+    assert replay.current.policy == "PAUSED" and replay.current.policy_epoch == "1"
+    assert await native_host_policy_state(h) == before_replay
+    pause_noop, approval = await native_host_request(h, operation="PAUSE", key="host-pause-noop")
+    result = await commit_native_context_policy(pause_noop, url, approval)
+    assert result.receipt.result.change == "UNCHANGED"
+    after_noop = await native_host_policy_state(h)
+    assert after_noop[0] == before_replay[0]
+    assert after_noop[1:3] == (before_replay[1] + 1, before_replay[2] + 1)
+    assert after_noop[3:] == before_replay[3:]
+    again, approval = await native_host_request(h, key="host-reenable")
+    resumed_policy = await commit_native_context_policy(again, url, approval)
+    assert resumed_policy.current.policy == "ON" and resumed_policy.current.policy_epoch == "2"
+    assert resumed_policy.receipt.result.change == "ENABLED"
+    assert h.adapter.calls == h.adapter.effects == 0
+
+
+@pytest.mark.parametrize("conflict", ["stale", "key"])
+async def test_native_host_policy_wrong_cas_and_key_conflict_roll_back(native_runtime, conflict):
+    from asm.telegram.provisioning import ProvisioningError, commit_native_context_policy
+
+    h = native_runtime
+    url = os.environ["ASM_MIGRATION_DATABASE_URL"]
+    request, approval = await native_host_request(h)
+    enabled = await commit_native_context_policy(request, url, approval)
+    assert enabled.receipt.outcome == "ACCEPTED"
+    before = await native_host_policy_state(h)
+    if conflict == "stale":
+        bad = request.model_copy(update={"key": "host-stale-fresh"})
+        error = "STALE_STATE"
+    else:
+        bad, approval = await native_host_request(h, operation="PAUSE", key=request.key)
+        error = "IDEMPOTENCY_KEY_CONFLICT"
+    with pytest.raises(ProvisioningError, match="^" + error + "$"):
+        await commit_native_context_policy(bad, url, approval)
+    assert await native_host_policy_state(h) == before
+
+
+async def test_native_host_policy_actual_runtime_session_cannot_mutate(native_runtime):
+    from asm.telegram.provisioning import ProvisioningError, native_policy_identity
+
+    h = native_runtime
+    before = await native_host_policy_state(h)
+    async with h.runtime.engine.begin() as connection:
+        assert (await connection.execute(text("SELECT session_user"))).scalar_one() == "asm_runtime"
+        with pytest.raises(ProvisioningError, match="^ACCESS_DENIED$"):
+            await native_policy_identity(connection, "TEST")
+    assert await native_host_policy_state(h) == before
+
+
+async def test_native_host_policy_catalog_drift_refuses_without_new_authority(native_runtime):
+    from asm.telegram.provisioning import (
+        ProvisioningError,
+        native_catalog_profile,
+        native_host_source,
+    )
+
+    h = native_runtime
+    _, approval = await native_host_request(h)
+    runner, source = native_host_source(approval)
+    before = await native_host_policy_state(h)
+    # Explicit negative DDL seam inside one rollback-only transaction. It creates
+    # no successful receipt/permission, and never reapplies a used migration.
+    async with h.migrator.connect() as connection:
+        transaction = await connection.begin()
+        try:
+            await connection.execute(
+                text("ALTER FUNCTION platform.human_context_schema_profile() RESET search_path")
+            )
+            with pytest.raises(ProvisioningError, match="^POLICY_PREREQUISITE_FAILED$"):
+                await native_catalog_profile(connection, runner, source)
+        finally:
+            await transaction.rollback()
+    assert await native_host_policy_state(h) == before
+    async with h.migrator.begin() as connection:
+        from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
+
+        assert (
+            await native_catalog_profile(connection, runner, source)
+            == NATIVE_CONTEXT_PROFILE_SHA256
+        )
+
+
+async def test_native_host_committed_receipt_survives_current_failure_then_read_only_retry(
+    native_runtime, monkeypatch
+):
+    from asm.telegram import provisioning
+
+    h = native_runtime
+    request, approval = await native_host_request(h, key="host-current-loss")
+    url = os.environ["ASM_MIGRATION_DATABASE_URL"]
+    read_current = provisioning.read_native_context_policy
+
+    async def lost_current(*args):
+        # A separate real connection sees the authoritative commit already.
+        assert await scalar(h, "SELECT count(*) FROM platform.human_context_policy_receipts") == 1
+        raise OSError("explicit post-commit current-read loss seam")
+
+    with monkeypatch.context() as failure:
+        failure.setattr(provisioning, "read_native_context_policy", lost_current)
+        accepted = await provisioning.commit_native_context_policy(request, url, approval)
+    assert accepted.receipt.outcome == "ACCEPTED" and accepted.current is None
+    before = await native_host_policy_state(h)
+    current = await read_current(request, url, approval)
+    assert current.policy == "ON" and current.policy_epoch == "1"
+    assert await native_host_policy_state(h) == before
+    assert accepted.receipt.result.receipt_id == str(
+        (await query(h, "SELECT id FROM platform.human_context_policy_receipts"))[0]["id"]
+    )
+
+
+async def test_native_host_unreadable_result_rolls_back_real_capability(
+    native_runtime, monkeypatch
+):
+    from asm.telegram import provisioning
+
+    h = native_runtime
+    request, approval = await native_host_request(h, key="host-result-rollback")
+    before = await native_host_policy_state(h)
+
+    def unreadable(*args, **kwargs):
+        # Negative DTO/transport seam after the actual capability, not a forged
+        # accepted result. The host must roll back state/Audit/receipt together.
+        raise ValueError("explicit result decoding failure seam")
+
+    with monkeypatch.context() as failure:
+        failure.setattr(provisioning.NativePolicyReceipt, "model_validate", unreadable)
+        with pytest.raises(provisioning.ProvisioningError, match="^UNAVAILABLE$"):
+            await provisioning.commit_native_context_policy(
+                request, os.environ["ASM_MIGRATION_DATABASE_URL"], approval
+            )
+    assert await native_host_policy_state(h) == before

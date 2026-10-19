@@ -2,7 +2,57 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C5 исправляет два frontend-теста; C6 HOLD / 2026-10-19 UTC
+## Текущий статус — C5+C6 INTEGRATED source; C8 independent review / 2026-10-19 UTC
+
+[C0 acceptance6260443971](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260443971).
+**C8 ACTIVE/read-only source review; C1/C2/C3/C5/C6 HOLD. M3 IN_PROGRESS.**
+Независимая проверка общего source checkpoint; новых требований к продукту нет.
+
+| Task / finding | Current status |
+|---|---|
+| Native DB/API/runtime stock5d98651 | Prior INTEGRATED / VERIFIED LOCAL/TEST retained for that source |
+| C0-NC-CARRIER-01/02; C3-NC-RUNTIME-01 | CLOSED LOCAL/TEST retained |
+| C0-NC-UI-01/P2 | CLOSED LOCAL/TEST: proper Response/APIResponse type; browser JS exact |
+| C0-NC-UI-02/P2 | CLOSED LOCAL/TEST: connected double submit, one frozen intent/request, full replacement/current-read proof |
+| C5 CONSOLE-R1/R2 | INTEGRATED source; C0 required frontend checks PASS; C5 HOLD |
+| C6 HOST-R1 | INTEGRATED source; reviewed source/evidence; C6 HOLD pending actual paired gate |
+| C8-M3.1-NATIVE-CONTEXT-HOST-CONSOLE-R1 | IN_PROGRESS/read-only; exact source/evidence/local verification task in HANDOFF§0.2 |
+| Actual unified host/PG/browser/full integration | NOT VERIFIED / separate C0 gate after C8 |
+| M3/account/A08/renewal/collector/A12 | IN_PROGRESS / later gates OPEN |
+
+Combined source ordered parents C5 208dd68959d9ee15e4ba9a746cac38d0f1806935/tree
+b436c1bcb11e0e22c4ca0553dd8527dfc26a0b88 then C6
+9bd76b30069617ceadf5e35de046505255600cca/tree8124ef7664434a2e999502daff4b1f5d856bab0f.
+All24 C5/12 C6 implementation/test/runbook blobs exact; only2 C0 docs updated.
+292 leaves;36 implementation/test/runbook paths+2 coordination docs versus common8d1ba99,
+254 old leaves unchanged. Original11/contract/SQL/API/locks/CI frozen.
+Full final SHA/tree in canonical C0 task binding; branches
+c0/m3-1-native-context-host-console-r2 and c8/m3-1-native-context-host-console-r1.
+
+C5 R2 sole parentc5605521b8b730a3bd1c20b6160e4fb4afe8d204; exactly2files,+31/−5,
+290 other leaves retained. C0 verified all292 bytes/modes, independently repeated
+typecheck PASS,359Vitest/10files PASS/6.24s, build PASS40modules, full list54=
+45desktop+9narrow PASS. Node24.19.0/npm11.9.0 frozen167packages; no lock changes.
+Historical R1 typecheck2errors/Vitest358PASS1FAIL retained.
+C6 checked report863unit/112nativecollection/20hostcollection is not a new
+combined execution; old105 ordered IDs/assertions retained. Actual host/operator/
+new runtime readiness and real browser integration NOT RUN.
+
+C8 may perform exact source/profile review, frozen Node checks and four affected
+Python unit modules345expected,13changed-Python static checks, native112/host20
+collection only. No repository source writes or actual PG/Docker/services/browser/
+API/Actions/execution-ref/full CI/new PR/main/live/VM/deploy/renewal/agents.
+Pure unified source/component pairing is not activation or deployed-process proof.
+
+Prior actual run39160997284/attempt1 on5d98651d2c34314724a12283d1741e73594e16b8:
+105/105/all315phases/51runner+130subtests/98resets/catalog/cleanup/clean PASS.
+Approval6254432619 consumed once; execution stays5d98651, no next run/ref permission.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012; PR34 closed/merged unchanged.
+Contract9/Q01/MATERIAL11/D1/D2/D3/allcaps retained; M4 out.
+Next: C8 return→C0 disposition→separately authorized actual paired gates.
+User owns merge.
+
+## История — Текущий статус — C5 исправляет два frontend-теста; C6 HOLD / 2026-10-19 UTC
 
 [C0 review6260097657](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260097657).
 **C5 CONSOLE-R2 ACTIVE/source-only; C6/C1/C2/C3/C8 HOLD. M3 IN_PROGRESS.**
