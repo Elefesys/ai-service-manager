@@ -5,7 +5,86 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий шаг C0 — HOST-R2 принят, paired stock112 PASS; CI integration / 2026-10-19 UTC
+## 0. Текущий шаг C0 — CI-R1 source принят; первый ordinary PR/CI / 2026-10-19 UTC
+
+[C6 return6264502649](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6264502649)
+accepted by [C0 review6264669308](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6264669308).
+**C6 CI-R1 INTEGRATED source; C0 prepares first ordinary PR/CI gate.
+C1/C2/C3/C5/C6/C8 HOLD. M3 IN_PROGRESS.**
+
+Accepted CI implementation1fa070b99ae559923b29b361e51feb3e2fa2ba06, tree
+aeee18671729617209da3ff23fec0337e7b95660, sole parent1b6571fa2251b8cba052382bb04ac5f8479d5a62.
+Six allowed paths,+968/-29;286 other leaves exact. New mandatory reusable
+native job retains all9 ordinary jobs, caps, pins and actual merge/main source.
+Generic PG routes only the3 complete native modules away from shared Compose;
+development COPY adds only2 actual workflow inputs. No product scope change.
+
+C0 verified all292 remote bytes/modes, original11/manifest/contract, all11 C6
+evidence hashes and292-file source archive. Independent development projection:
+9 COPY inputs/182 exact files;134 runner cases+130 subtests PASS, Python3.13.12,
+58 frozen versions. Production collect-only preflight:907=802 generic+105 native
+PG, disjoint/full union/order;112 carrier=7source+56DB+12API+37runtime,105 actual
+guarded consumers, historic105 prefix exact. All3 inventory hashes match C6.
+Existing51 tests/assertions and ownership/catalog/reset/carrier AST retained;
+83 additions. YAML/20 shell blocks/pins/caps/changed-Python Ruff/format PASS.
+Pure source pairing4 components/167functions/45tables/635columns PASS.
+
+| Task / gate | Current disposition |
+|---|---|
+| C6-M3.1-NATIVE-CONTEXT-CI-R1 | INTEGRATED source; source/unit blocker resolved |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN1 | PREPARED; exact one-use PR/CI approval follows |
+| Actual ordinary CI/browser/PG on current candidate | NOT RUN; no runtime acceptance yet |
+| Accepted stock112 on af7482d; C8-NC-HOST-01 | Retained VERIFIED LOCAL/TEST / CLOSED |
+| M3/account/A08/P01/P05/renewal/collector/A12 | IN_PROGRESS / later gates OPEN; M4 out |
+
+C0 preparation is a docs-only child of1fa070b; exact SHA/tree/PR binding in the
+canonical C0 execution comment. Only HANDOFF/register change;290 other leaves
+remain exact to accepted source. C0 branch c0/m3-1-native-context-ci-r1;
+C6 return branch stays1fa070b. Main e205e22051bc06295758b504d84699652b176c15/schema0012
+and stock execution refaf7482dede085bc033e3fee34f9a2425124351ee unchanged.
+Approval6262637585 CONSUMED; old stock evidence is not current ordinary CI proof.
+Full integration requires real10-job execution, including native and browser.
+User owns merge. D1/D2/D3/caps/previous closures retained; IMPL-05 DEFERRED.
+
+### 0.1. C0-M3.1-NATIVE-CONTEXT-CI-RUN1 — first ordinary PR gate
+
+C0 first publishes an exact one-use execution comment with full candidate
+SHA/tree/sole parent and current main SHA. Only then open one same-repository
+draft PR from c0/m3-1-native-context-ci-r1 to main. This admits one automatic
+pull_request/opened run, attempt1. No main/stock-execution-ref move, dispatch,
+rerun/retry, concurrent source mutation or merge. C6 source-only task is complete.
+
+The candidate includes the previously reviewed native SQL/API/runtime/host/Console
+slice and this CI wiring. CI-R1's own implementation remains the exact6-path delta;
+opening the integration PR introduces no new product requirement. Confirm actual
+GitHub merge SHA, ordered parents[current main,candidate], and tree equal candidate.
+Every job must verify this same merged source, including the reusable native job.
+
+Required actual evidence:
+- All9 existing jobs plus1 mandatory native job complete successfully, none
+  absent/skipped/continued on error; every retained clean-source gate passes.
+- Foundation: full unfiltered unit suite, dynamic exact generic802 PG inventory,
+  complete before/after migrations, contracts, deterministic wheels and service
+  smoke. All existing commands remain; no permission to bypass/reset a gate.
+- Native: real same-repository-pr-merge admission and payload/source identity;
+  complete current112/336 phases,105 guarded resets,134 runner+130 subtests,
+  fresh typed catalog167/45/635, roles/ACL/verifier, owned logs/cleanup and final
+  clean source. Counts are current expected inventories, not a truncation rule.
+- Real browser full54=45desktop+9narrow inventory and full frontend suite; both
+  complete migration-state lanes, Docker29 compatibility, image/intent shards.
+- Verify actual source archives/manifests, run/attempt/job identities, exits and
+  artifacts. Preserve failures as observed evidence; do not claim mocks or
+  collection as PG/browser execution.
+- Keep whole native20min/payload1080s, foundation45/browser25/state25 and every
+  existing budget. Resource lifecycle only on disposable owned Actions runners;
+  no VM, live Telegram/provider/account/S3/LLM calls, deployment or renewal.
+
+C0 inspects results and issues a bounded disposition. A failing/missing gate blocks
+runtime acceptance and user merge; no automatic retry, budget increase, broad CI
+optimization or reopening of unrelated accepted findings. A08/renewal/collector/
+account/A12 and deployment remain separately scoped after this integration gate.
+
+## История — 0. HOST-R2 принят, paired stock112 PASS; CI integration / 2026-10-19 UTC
 
 [C0 acceptance6262637585](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6262637585);
 [C0 stock acceptance6262882269](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6262882269).
