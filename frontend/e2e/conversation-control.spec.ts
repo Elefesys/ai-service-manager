@@ -2,7 +2,7 @@
 // Worker journeys extend messaging.spec so its seeded PENDING image is observed
 // before any shared worker drain. Native cases also use owner reconcile and the
 // finite TEST policy capability; they never drain the shared worker.
-import { expect, test, type APIRequestContext, type APIResponse, type Page, type Route } from '@playwright/test';
+import { expect, test, type APIRequestContext, type APIResponse, type Page, type Response, type Route } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -23,7 +23,7 @@ const path=(preset:string,route='control',alternate=false)=>{const c=context(pre
 const region=(page:Page)=>page.getByRole('region',{name:'Управление диалогом',exact:true});
 const body=(s:ControlState):ControlBody=>({expected_client_id:s.client_id,expected_control_generation:s.control_generation,expected_context_version:s.context_version});
 const http=async(operation:()=>Promise<APIResponse>)=>requireSafeResult(await safeDiagnostic('MESSAGING_HTTP_FAILED',operation));
-const json=async(response:APIResponse)=>requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>response.json()));
+const json=async(response:APIResponse|Response)=>requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>response.json()));
 const proceed=async(route:Route)=>requireSafeResult(await safeDiagnostic('MESSAGING_ROUTE_CONTINUE_FAILED',()=>route.continue()));
 async function csrf(request:APIRequestContext){const r=await http(()=>request.get('/api/v1/auth/session'));expect(r.status()).toBe(200);return (await json(r)).csrf_token as string;}
 async function state(request:APIRequestContext,preset:string,alternate=false){const r=await http(()=>request.get(path(preset,'control',alternate)));expect(r.status()).toBe(200);return parseControlState(await json(r),context(preset,alternate));}
