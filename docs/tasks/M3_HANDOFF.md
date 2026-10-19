@@ -5,7 +5,180 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий шаг C0 — C5+C6 source integration; независимое C8 review / 2026-10-19 UTC
+## 0. Текущий шаг C0 — C8 review принято; точечное исправление C6 HOST-R2 / 2026-10-19 UTC
+
+[C8 return6260761693](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260761693);
+[C0 disposition6260873892](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260873892).
+**C6 HOST-R2 ACTIVE/source-only; C1/C2/C3/C5/C8 HOLD.**
+C8 independent review COMPLETE, outcome CHANGES REQUESTED: один подтверждённый P2.
+C5 CONSOLE-R1/R2 и C6 HOST-R1 остаются INTEGRATED source; whole host/Console runtime
+NOT VERIFIED. M3 IN_PROGRESS. Исправляется соответствие уже принятому command-key
+contract, без новой функции или расширения M3.
+
+### 0.1. Disposition and evidence
+
+| Task / finding | Current disposition |
+|---|---|
+| C8-M3.1-NATIVE-CONTEXT-HOST-CONSOLE-R1 | Review COMPLETE; CHANGES REQUESTED, one confirmed P2; C8 HOLD |
+| C8-NC-HOST-01/P2 | OPEN; NativePolicyRequest uses narrower billing key grammar; owner C6 |
+| C6-M3.1-NATIVE-CONTEXT-HOST-R2 | IN_PROGRESS/source-only; exact two-path correction below |
+| C5 CONSOLE-R1/R2; C6 HOST-R1 | Prior INTEGRATED source retained |
+| C0-NC-UI-01/02 | CLOSED LOCAL/TEST retained |
+| Prior native DB/carrier/runtime findings | Prior acceptance6254556203 and closures retained |
+| Actual unified host/PG/browser/full integration/account | NOT VERIFIED; separate C0 gates after correction |
+
+Exact reviewed combined source2b1d3cac2c453e1d35242c2c682442625aeefdd9/tree
+663277ba89db5aaa743cfd653227dab502fb0593, ordered parents C5
+208dd68959d9ee15e4ba9a746cac38d0f1806935 then C6
+9bd76b30069617ceadf5e35de046505255600cca. C0 freshly checked all292 remote/local
+bytes/modes, exact parents/tree and clean status; C8 made no tracked source change.
+
+C8 found NativePolicyRequest.key:CapabilityKey, whose billing grammar requires
+lowercase first letter and forbids uppercase anywhere. M3_CONTRACT§16.7.1 and
+frozen0013 policy RPC/receipt CHECK use existing ASCII[A-Za-z0-9._:-]{1,128},
+matching asm.messaging.models.command_key. Valid uppercase/digit/punctuation
+requests are rejected before source/DB checks. Saved-key replay likewise fails
+DTO validation before receipt lookup; this recovery impact is a source trace,
+not an actual PG replay execution. Changing the key is not recovery.
+
+C0 actual pure probe on exact2b1d3cac with Python3.13.12/verified local imports:
+same9 vectors reproduce4 mismatches;128 single-ASCII vectors give66 allowed by
+contract/codec versus26 by host DTO,40 manifestations of the same defect.
+No SQL/CLI/service call. Probe SHA256
+dbf890293c791f864a6541f9df6762fb6a54ee21a764c6224dc8c1b064402291.
+This is RED discrepancy confirmation, not a corrected-source PASS.
+
+C0 checked all8 C8 published evidence hashes and report contents. C8 actual:
+345/345 Python=36foundation+82setup+144egress+83browser-fixture,0fail/error/skip;
+359/359 frontend/10files; typecheck/build PASS; full list54=45desktop+9narrow;
+compile/Ruff/format13 PASS; mypy64 PASS; native112 and host20 collection only.
+All105 PG consumers use the current guarded fixture; old105 ID order hash
+9881ab5a77aca51a7d6c66737c352055cd4f037acf156e55f265cedeabb24b1a retained.
+C8 pure real clean source pairing: api/worker/scheduler/console,167functions/
+45tables/635columns, private verifier body527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac.
+These are verified C8 report artifacts, not new C0 suite executions. Independent
+review has no additional actionable finding in the other reviewed risks.
+Actual installed catalog/readiness/operator/browser/rollout was NOT RUN.
+
+C8 evidence SHA256: units.xml7e38015a6a92972847a57ffc88a7c0c6b7bd28a2cf8525e743375a8c0fb4dc01;
+Vitest9d15efa4b8da8e57bfcd3222038dffc299bb0349edfd09668837cf4ccf860be8;
+native collectionf5ddb680c895ab5e0a1c9379b60cd38ca246041b9fc2e759ddd2d88441da89fa.
+Complete inventory/commands and limits in the exact C8 return/C0 disposition.
+
+New preparation is docs-only, sole parent2b1d3cac; only HANDOFF/register differ,
+290 other leaves unchanged/292 total. Full new SHA/tree is in the canonical C0
+task comment; branches c0/m3-1-native-context-host-r2 and c6/m3-1-native-context-host-r2.
+No implementation fix has been applied by this preparation. Original11=canon=
+SOURCE_MANIFEST; full contract SHA256fe2eb4ef2469ccb14b7147017c3c81066cde1b8a6ad60acbf73922a15e3ace5f;
+all SQL/API/frontend/locks/CI/runner unchanged. Native profile remains
+c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411.
+
+### 0.2. Exact C6 correction task
+
+**C6-M3.1-NATIVE-CONTEXT-HOST-R2 — correct C8-NC-HOST-01/P2; source-only.**
+
+Repository Elefesys/ai-service-manager. Branch c6/m3-1-native-context-host-r2.
+Start from the exact C0 preparation SHA/tree in the canonical task comment.
+Its sole parent is reviewed combined source2b1d3cac2c453e1d35242c2c682442625aeefdd9,
+tree663277ba89db5aaa743cfd653227dab502fb0593. The preparation changes only
+HANDOFF/register; all290 implementation/other leaves remain exact. C0 branch:
+c0/m3-1-native-context-host-r2. Separate clean checkout; do not start from the
+old standalone C6 branch or a moving sibling. No shared-disk/dependency assumption.
+
+Read current HANDOFF/REGISTER, AGENTS, IMPL-001, original11/SOURCE_MANIFEST and
+applicable Spec/ADR/MVP/Plan M3; M3_CONTRACT§16.7.1 and retained§16–16.20.
+Read C8 return6260761693 and C0 disposition6260873892; retain acceptance6260443971,
+C5 return6260302288, C6 return6255240519 and stock acceptance6254556203.
+C8 review COMPLETE/HOLD; C1/C2/C3/C5/C8 HOLD. C5/C6 R1 source integration retained;
+whole host/Console runtime remains NOT VERIFIED. No new product requirement.
+
+**Only two existing paths may change:**
+- backend/src/asm/telegram/provisioning.py — NativePolicyRequest.key validation
+  and the necessary import/local validator only.
+- tests/test_m2_3_setup.py — focused command-key regressions and a local helper
+  only if required. Retain every existing case/assertion and old behavior.
+
+C8-NC-HOST-01/P2: the billing CapabilityKey currently requires a lowercase first
+letter and excludes uppercase anywhere. Accepted command grammar is exact
+ASCII [A-Za-z0-9._:-]{1,128}, already implemented by asm.messaging.models.command_key
+and frozen0013 policy RPC/receipt CHECK. C0 independently reproduced all4 reported
+valid-key rejections and confirmed the existing source/recovery requirement.
+
+Use strict existing command-key validation for this DTO (reuse the existing
+codec with bounded validation-error translation as needed), exact fullmatch.
+Keep repr=False, hide_input_in_errors, strict/frozen/extra-forbid model behavior,
+and the same key bytes through JSON cloning/commit/current/replay. No trim,
+case conversion, Unicode normalization, generated prefix, alternate key or retry.
+Do not edit/widen shared billing CapabilityKey or the shared messaging codec.
+All surrounding source/catalog/binding/role/drain/CAS/fingerprint/receipt/current
+checks and time bounds remain intact. No SQL or new DTO/API contract.
+
+Regression evidence must cover valid lowercase, uppercase/mixed case,
+digit-leading canonical UUID, each allowed punctuation at the first position,
+one-character boundary and128-character uppercase key. Preserve the value
+exactly after Python/JSON validation and the immutable clone used by host paths.
+Exercise key preservation through an existing unit host-RPC/recovery seam with
+a formerly rejected valid key; do not add a fake successful PG claim.
+Reject empty,129 characters, embedded/leading/trailing whitespace including
+terminal newline, non-ASCII, forbidden ASCII and non-string/coercible inputs.
+Check private key canaries remain absent from repr/bounded errors. Existing
+saved-receipt replay/current-failure/CAS/redaction tests must remain meaningful.
+Keep the pre-fix reproducer as RED evidence; new tests must fail on the reviewed
+parent for the actual grammar mismatch and pass on the correction.
+
+**Required bounded local verification on the final published source:**
+1. Python3.13 and frozen uv.lock/dev, uv0.10.0. Existing isolated environment or
+   isolated frozen restore is allowed; no dependency re-resolution/lock edits,
+   global installs or different Python minor. Record versions and actual import
+   paths from this checkout. External caches/logs/pycache/pytest basetemp only.
+2. Compile, Ruff and check-format for the two changed Python files; mypy backend/src.
+3. Complete tests/test_m2_3_setup.py and tests/test_telegram_egress.py:
+   baseline226=82+144 plus explicitly counted new vectors;0fail/error/skip.
+   Include the new key tests in these complete modules. No need to rerun unchanged
+   frontend/foundation/browser-fixture/601 migration unit suites solely for counts.
+4. Collection only: current native_context_db_catalog.MODULES112=7+56+12+37,
+   same105 guarded PG fixture consumers and exact old105 ID order retained;
+   tests/test_telegram_egress_postgres.py20 with --collect-only -q
+   -o 'python_classes=Test* TelegramEgress*'. No PG/service fixture execution.
+5. On a clean final checkout, pure native_host_profile(final_commit,final_tree)
+   then native_host_source(NativeHostApproval) must pair all4 source components
+   and unchanged native167functions/45tables/635columns. Do not print the private
+   approval/request. This proves source pairing only, not drain/deployed processes.
+6. Verify exact diff/allowed paths, all290 other leaves/modes, original11 and
+   full frozen contract/SQL/API/frontend/locks/CI/runner. No weakening, skips,
+   retries, sleeps, enlarged budgets or assertions removed.
+
+If a required runtime cannot be restored, report exact NOT RUN rather than use
+an old commit PASS, syntax-only substitute or alternate Python minor.
+Unchanged C8 checks remain retained evidence at2b1d3cac, not fresh R2 execution.
+
+**Not authorized in this task:** any other source/tests/docs/contract/OpenAPI/
+migration/lock/workflow edits; policy CLI check/commit/current (even check reaches
+DB); PG/Docker/service/lab/resource inspection/start/reuse/cleanup; real browser/
+API/provider/account/VM/S3/LLM; Actions/execution-ref/dispatch/rerun/full CI/new PR/
+main/merge/deploy/live/renewal/other chats/agents. Do not move prior C0/C8 refs.
+No0014 or applied migration edits. Preserve Contract9/Q01/MATERIAL11/D1/D2/D3,
+S600/P720/fixed120/+480/S+1200/cleanup90/state25/browser25/foundation45/stock20m/
+request3s60s10s and prior worker caps. No new acceptance rule or feature.
+
+Publish only the task branch through GitHub, then return one REVIEW comment to
+PR34 with exact commit/tree/parent, two-path diff, retained leaves/contract proof,
+pre-fix RED/new regression results, full commands/exits/counts/import paths and
+explicit actual PG/browser/host rollout NOT RUN. Do not update C0 docs, PR body,
+other task comments or remote refs. Then C6 HOLD. C0 owns review, closure and the
+next separately authorized actual paired gate; user owns merge.
+
+### 0.3. Remaining boundaries
+
+Prior stock105 run39160997284/attempt1 remains VERIFIED LOCAL/TEST only for
+5d98651d2c34314724a12283d1741e73594e16b8/treea1989f20284c201bfd58bafe12c174544f1eb3c1.
+Approval6254432619 CONSUMED ONCE; execution branch stays5d98651, no new run/ref
+permission. Main e205e22051bc06295758b504d84699652b176c15/schema0012; PR34 closed/merged.
+C0 reviews the correction before issuing the next exact actual paired gate.
+Account/A08/P01/P05/renewal/collector/A12 remain later gates; M4 out, broad
+CI optimization DEFERRED. User owns merge.
+
+## История — 0. Текущий шаг C0 — C5+C6 source integration; независимое C8 review / 2026-10-19 UTC
 
 [C0 acceptance6260443971](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260443971).
 **C8 ACTIVE/read-only source review; C1/C2/C3/C5/C6 HOLD.**

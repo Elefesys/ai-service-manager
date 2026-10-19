@@ -2,7 +2,59 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C5+C6 INTEGRATED source; C8 independent review / 2026-10-19 UTC
+## Текущий статус — C8 review принято; C6 исправляет command-key validation / 2026-10-19 UTC
+
+[C8 review6260761693](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260761693);
+[C0 disposition6260873892](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260873892).
+**C6 HOST-R2 ACTIVE/source-only; C1/C2/C3/C5/C8 HOLD. M3 IN_PROGRESS.**
+Один дефект соответствия уже принятому контракту, без нового product scope.
+
+| Task / finding | Current status |
+|---|---|
+| C8-M3.1-NATIVE-CONTEXT-HOST-CONSOLE-R1 | Review COMPLETE; CHANGES REQUESTED, one confirmed P2; C8 HOLD |
+| C8-NC-HOST-01/P2 | OPEN; host policy key grammar narrower than existing command contract; owner C6 |
+| C6-M3.1-NATIVE-CONTEXT-HOST-R2 | IN_PROGRESS/source-only; exact two-path task in HANDOFF§0.2 |
+| C5 CONSOLE-R1/R2; C6 HOST-R1 | Prior INTEGRATED source retained |
+| C0-NC-UI-01/02 | CLOSED LOCAL/TEST retained |
+| Native stock5d98651 and prior carrier/runtime closures | INTEGRATED / VERIFIED LOCAL/TEST for that source retained |
+| Actual unified host/PG/browser/full integration | NOT VERIFIED / separate C0 gate after correction |
+| M3/account/A08/renewal/collector/A12 | IN_PROGRESS / later gates OPEN |
+
+C8 reviewed exact2b1d3cac2c453e1d35242c2c682442625aeefdd9/tree
+663277ba89db5aaa743cfd653227dab502fb0593; ordered parents C5
+208dd68959d9ee15e4ba9a746cac38d0f1806935 then C6
+9bd76b30069617ceadf5e35de046505255600cca. C0 verified all292 bytes/modes/parents/
+tree and clean source, then independently reproduced the key defect with3.13.12:
+4/9 vector mismatches;66 valid single-ASCII keys versus26 accepted by host DTO.
+Probe SHA256dbf890293c791f864a6541f9df6762fb6a54ee21a764c6224dc8c1b064402291.
+No DB/CLI called. Saved-request recovery impact is source trace, not actual replay.
+
+C0 checked8 C8 evidence hashes/XML/logs/collection:345 Python PASS(36+82+144+83),
+359 frontend PASS/10files, typecheck/build PASS, full Playwright list54=45+9,
+compile/Ruff/format13 and mypy64 PASS; native112/host20 collection only.
+Pure paired source167functions/45tables/635columns/all4 components PASS.
+These are C8 suite executions, not new C0 reruns; actual PG/browser/rollout NOT RUN.
+C8 review found one actionable new P2; other reviewed areas and prior closures retained.
+
+New docs-only preparation has sole parent2b1d3cac; only HANDOFF/register,
+290 other leaves exact/292 total. Full new SHA/tree in canonical C0 task;
+c0/m3-1-native-context-host-r2 and c6/m3-1-native-context-host-r2.
+C6 may change only provisioning.py NativePolicyRequest key validation/import and
+tests/test_m2_3_setup.py regressions. Shared billing/messaging/SQL/API/frontend/
+contracts/locks/CI/runner frozen. Strict key bytes/repr/redaction and recovery
+semantics retained. Required local two-unit-module baseline226+new cases,
+two-file static checks/mypy64, native112/host20 collection, clean pure source pairing.
+Unchanged C8 suites are retained at reviewed source; no repeated unrelated suites.
+
+Old stock105/run39160997284 applies only to5d98651d2c34314724a12283d1741e73594e16b8.
+Approval6254432619 consumed once; execution5d98651 unchanged.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012; PR34 closed/merged.
+No actual PG/services/browser/Actions/full CI/new PR/VM/live/deploy/renewal.
+Contract9/Q01/MATERIAL11/D1/D2/D3/allcaps retained; M4 out.
+Next: C6 correction→C0 review/closure→separately authorized actual paired gate.
+User owns merge.
+
+## История — Текущий статус — C5+C6 INTEGRATED source; C8 independent review / 2026-10-19 UTC
 
 [C0 acceptance6260443971](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260443971).
 **C8 ACTIVE/read-only source review; C1/C2/C3/C5/C6 HOLD. M3 IN_PROGRESS.**
