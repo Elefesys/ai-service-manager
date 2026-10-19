@@ -19,7 +19,7 @@ Product scope не меняется; broad CI optimization/IMPL-05 остаёт�
 | C6 HOST-R2 | INTEGRATED source; C0 independent278/278 unit PASS |
 | Native DB/API/runtime/operator carrier | VERIFIED LOCAL/TEST on af7482d;112/112 actual PASS |
 | C8 independent source review | COMPLETE/HOLD; only actionable finding closed |
-| C6-M3.1-NATIVE-CONTEXT-CI-R1 | IN_PROGRESS/source-only; connect mandatory owned native job to ordinary CI |
+| C6-M3.1-NATIVE-CONTEXT-CI-R1 | IN_PROGRESS/source-only; same task, six-path scope including development workflow input |
 | Unified browser/full ordinary CI/deployed host | NOT VERIFIED; next exact C0 execution after CI-R1 review |
 | Account/A08/P01/P05/renewal/collector/A12 | Later gates OPEN; M4 out |
 
@@ -49,8 +49,22 @@ The native workflow currently triggers only on the special C0 stock ref. CI-R1
 must route these 105 complete cases through a mandatory owned native job and
 retain all 802 ordinary cases and all 9 existing jobs. No reset bypass or skips.
 
-New C0 preparation is docs-only with sole parent af7482d; exact SHA/tree in the
-canonical task comment. Only HANDOFF/register differ;290 other leaves exact.
+[C6 blocker6263355900](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6263355900)
+accepted by [C0 scope disposition6263490094](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6263490094).
+C6 returned unchanged75182546af178c5749d46fc6bb0c67befc665f0c/tree
+7eec2f17159ede4f252c78fa23cb6b7c5b9a070d: CI implementation not yet written.
+Development checks image lacks workflow source read by two retained unit tests.
+C0 independently rebuilt8 COPY inputs/180 exact files: both tests FAIL with
+FileNotFoundError; adding only two actual workflow files/182 files gives2 PASS.
+C0 checked9 C6 evidence hashes; C6 baseline51 cases+130 subtests PASS retained.
+This is source/unit projection evidence, not Docker or ordinary full-CI execution.
+Same CI-R1 scope extends to6 paths: only one development-stage COPY is added to
+infra/Dockerfile.backend; runtime/toolchain/pins/locks/Compose stay frozen.
+The final complete runner suite must also pass against final development inputs.
+
+Continuation C0 preparation is docs-only with sole parent
+75182546af178c5749d46fc6bb0c67befc665f0c; exact SHA/tree in the canonical task
+comment. Only HANDOFF/register differ;290 other leaves equal accepted af7482d.
 Branches c0/m3-1-native-context-ci-r1 and c6/m3-1-native-context-ci-r1.
 Main e205e22051bc06295758b504d84699652b176c15/schema0012 and closed/merged PR34
 remain unchanged. Prior stock105/5d98651 and approvals retained as history only.
@@ -81,13 +95,23 @@ Read current HANDOFF/register, AGENTS, canonical Spec/ADR/MVP/Plan M3,
 M3_CONTRACT §16–16.20 and this C0 acceptance. No shared checkout or cache assumption.
 C1/C2/C3/C5/C8 HOLD; C6 is active only for this bounded task.
 
-Only these 5 existing files may change:
+Only these 6 existing files may change (same CI-R1; C0 disposition6263490094):
 
 - .github/workflows/ci.yml
 - .github/workflows/native-context-db.yml
 - scripts/check_backend.sh
 - scripts/native_context_db_catalog.py
 - tests/test_native_context_db_runner.py
+- infra/Dockerfile.backend — development-stage COPY below only
+
+The sixth path is limited to adding this exact input before development CMD:
+
+```dockerfile
+COPY .github/workflows/ci.yml .github/workflows/native-context-db.yml ./.github/workflows/
+```
+
+No other Dockerfile line/stage/pin/toolchain change. Preserve unfiltered generic
+unit selection and actual workflow-source assertions; no synthetic file inputs.
 
 Required behavior:
 1. Ordinary pull_request-to-main and push-to-main verification must contain a
@@ -137,6 +161,11 @@ Bounded local verification only:
   cleanup failure propagation. Mock seams are local unit evidence only.
 - YAML parse, pinned actions/permissions/caps and shell syntax for both workflows
   and check_backend.sh; verify reusable event semantics from workflow source.
+- Independently project the final development COPY inputs using actual committed
+  bytes/modes, including both workflows, and run the complete final runner unit
+  module there: retained51 cases/130 subtests plus additions. No fake inputs or
+  skips; demonstrate the source tests read the copied files and runtime/toolchain
+  Dockerfile lines remain exact. File/unit proof is not Docker/full-CI evidence.
 - Collection-only full native MODULES112/105 shared guarded consumers, retained
   old105 ordered prefix; collect the generic integration partition and prove
   disjoint PG execution sets and complete union (current907=802+105).
@@ -147,7 +176,8 @@ Bounded local verification only:
   components: 167functions/45tables/635columns on the published final source.
 
 Do not edit product code, test fixtures/migrations/DDL, public contracts, locks,
-images, Compose, other tests/docs or shared runtime settings. If these5 paths
+base image pins, Compose, other tests/docs or shared runtime settings. The sole
+Dockerfile exception is the exact development COPY above. If these6 paths
 cannot preserve the complete gate, return a precise blocker before expanding.
 No PG/Docker/services/resource inspection/start/reuse/cleanup, browser/provider/
 account/VM/S3/LLM/policy CLI, Actions/dispatch/rerun/execution-ref/new PR/full CI/
@@ -156,7 +186,7 @@ not authorize execution of the newly admitted routes. C0 will inspect the source
 and issue the exact first ordinary CI/PR execution separately; user owns merge.
 
 Publish only the task branch and one REVIEW return to PR34 with exact commit/
-tree/parent,5-path diff, source/inventory/guard proof, full actual commands/exits/
+tree/parent,6-path allowlist diff, source/inventory/guard proof, full actual commands/exits/
 counts and explicit actual PG/browser/Actions NOT RUN. Then C6 HOLD. No task
 comment/PR-body/C0-doc/other-ref changes. Existing findings stay closed unless
 new contrary evidence is actually demonstrated.

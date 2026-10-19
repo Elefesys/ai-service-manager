@@ -16,7 +16,7 @@ Product scope не меняется; broad CI optimization/IMPL-05 остаёт�
 | C6 HOST-R2 | INTEGRATED source; C0 independent278/278 unit PASS |
 | Native DB/API/runtime/operator carrier | VERIFIED LOCAL/TEST on af7482d;112/112 actual PASS |
 | C8 independent source review | COMPLETE/HOLD; only actionable finding closed |
-| C6-M3.1-NATIVE-CONTEXT-CI-R1 | IN_PROGRESS/source-only; connect mandatory owned native job to ordinary CI |
+| C6-M3.1-NATIVE-CONTEXT-CI-R1 | IN_PROGRESS/source-only; same task, six-path scope including development workflow input |
 | Unified browser/full ordinary CI/deployed host | NOT VERIFIED; next exact C0 execution after CI-R1 review |
 | Account/A08/P01/P05/renewal/collector/A12 | Later gates OPEN; M4 out |
 
@@ -46,14 +46,28 @@ The native workflow currently triggers only on the special C0 stock ref. CI-R1
 must route these 105 complete cases through a mandatory owned native job and
 retain all 802 ordinary cases and all 9 existing jobs. No reset bypass or skips.
 
-New C0 preparation is docs-only with sole parent af7482d; exact SHA/tree in the
-canonical task comment. Only HANDOFF/register differ;290 other leaves exact.
+[C6 blocker6263355900](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6263355900)
+accepted by [C0 scope disposition6263490094](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6263490094).
+C6 returned unchanged75182546af178c5749d46fc6bb0c67befc665f0c/tree
+7eec2f17159ede4f252c78fa23cb6b7c5b9a070d: CI implementation not yet written.
+Development checks image lacks workflow source read by two retained unit tests.
+C0 independently rebuilt8 COPY inputs/180 exact files: both tests FAIL with
+FileNotFoundError; adding only two actual workflow files/182 files gives2 PASS.
+C0 checked9 C6 evidence hashes; C6 baseline51 cases+130 subtests PASS retained.
+This is source/unit projection evidence, not Docker or ordinary full-CI execution.
+Same CI-R1 scope extends to6 paths: only one development-stage COPY is added to
+infra/Dockerfile.backend; runtime/toolchain/pins/locks/Compose stay frozen.
+The final complete runner suite must also pass against final development inputs.
+
+Continuation C0 preparation is docs-only with sole parent
+75182546af178c5749d46fc6bb0c67befc665f0c; exact SHA/tree in the canonical task
+comment. Only HANDOFF/register differ;290 other leaves equal accepted af7482d.
 Branches c0/m3-1-native-context-ci-r1 and c6/m3-1-native-context-ci-r1.
 Main e205e22051bc06295758b504d84699652b176c15/schema0012 and closed/merged PR34
 remain unchanged. Prior stock105/5d98651 and approvals retained as history only.
 Contract9/Q01/MATERIAL11, all prior closures/D1/D2/D3/caps retained. User owns merge.
 
-Exact C6 five-path task and limits: M3_HANDOFF§0.1.
+Exact C6 six-path continuation and limits: M3_HANDOFF§0.1; same task and branches.
 
 ## История — Текущий статус — C8 review принято; C6 исправляет command-key validation / 2026-10-19 UTC
 
