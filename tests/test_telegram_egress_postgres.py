@@ -825,6 +825,50 @@ async def canonical_fingerprint(connection, *, revision="0012"):
     return fingerprint
 
 
+async def current_durable_fingerprint(connection):
+    revision = "0013"
+    tables = (
+        await connection.execute(
+            text(
+                "SELECT n.nspname,c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+                "WHERE n.nspname IN ('app','platform') AND c.relkind='r' ORDER BY n.nspname,c.relname"
+            )
+        )
+    ).all()
+    # The held after command runs this file directly, without pytest's root
+    # pythonpath. Load the exact checked-out guard in both entrypoints.
+    schema_inventory = runpy.run_path(
+        str(Path(__file__).resolve().parents[1] / "scripts/prepare_telegram_egress.py")
+    )["schema_inventory"]
+
+    assert (
+        await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
+    ).scalar_one() == revision
+    assert len(tables) == 45, "E05_CURRENT_NATIVE_TABLES"
+    schema_inventory(revision, (namespace + "." + table for namespace, table in tables))
+    fingerprint = {}
+    for namespace, table in tables:
+        assert re.fullmatch(r"[a-z_][a-z_0-9]*", namespace)
+        assert re.fullmatch(r"[a-z_][a-z_0-9]*", table)
+        rows = (
+            (
+                await connection.execute(
+                    text(f'SELECT to_jsonb(t) FROM "{namespace}"."{table}" AS t')
+                )
+            )
+            .scalars()
+            .all()
+        )
+        # Stable multiset comparison covers UUIDs, statuses, receipts,
+        # timestamps, fingerprints, exact text bytes and Console state.
+        canonical = sorted(json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows)
+        fingerprint[namespace + "." + table] = {
+            "count": len(rows),
+            "sha256": hashlib.sha256("\n".join(canonical).encode()).hexdigest(),
+        }
+    return fingerprint
+
+
 def migration_storage():
     # Explicit test CA, never verify=False. Both API and S3 remain on real HTTPS.
     previous = os.environ.get("AWS_CA_BUNDLE")
@@ -946,7 +990,7 @@ async def durable_local():
                 )
         async with migrator.connect() as connection:
             await connection.execute(text("SET TRANSACTION READ ONLY"))
-            empty = await canonical_fingerprint(connection)
+            empty = await current_durable_fingerprint(connection)
             assert empty["platform.alembic_version"]["count"] == 1
             if lifecycle in {"fresh", "migration"}:
                 assert not catalog_file.exists(), "E05_FRESH_CATALOG_RECEIPT_MUST_BE_ABSENT"
@@ -1039,7 +1083,7 @@ async def durable_local():
         seeded_local = True
         async with migrator.connect() as connection:
             await connection.execute(text("SET TRANSACTION READ ONLY"))
-            seeded = await canonical_fingerprint(connection)
+            seeded = await current_durable_fingerprint(connection)
             catalog = {
                 name: seeded[name]
                 for name in (
@@ -1149,7 +1193,7 @@ async def durable_local():
                 await connection.execute(
                     text("DELETE FROM platform.user_accounts WHERE id=:id"), {"id": UA}
                 )
-                cleaned = await canonical_fingerprint(connection)
+                cleaned = await current_durable_fingerprint(connection)
                 assert {name: cleaned[name] for name in catalog} == catalog
                 assert all(
                     row["count"] == 0
@@ -1190,7 +1234,7 @@ async def durable_snapshot():
             )
             identity = await database_identity(connection)
             require_same_database(identity, target["database_identity"])
-            fingerprint = await canonical_fingerprint(connection)
+            fingerprint = await current_durable_fingerprint(connection)
             assert fingerprint["app.outbox_events"]["count"] == 1
             assert fingerprint["platform.messaging_command_receipts"]["count"] == 1
             assert fingerprint["platform.auth_credentials"]["count"] == 1

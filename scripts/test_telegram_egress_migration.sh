@@ -47,7 +47,9 @@ try:
     assert fault in {'intent', 'image', 'state'}, 'MIGRATION_KNOWN_SHARD_REQUIRED'
     admission['stage'] = 'observe_source'
     source = e.command(['git', 'rev-parse', 'HEAD']).decode().strip()
+    source_tree = e.command(['git', 'rev-parse', 'HEAD^{tree}']).decode().strip()
     admission['observed_source'] = source
+    admission['observed_tree'] = source_tree
     admission['stage'] = 'source_check'
     e.source_check(source)
     assert not (e.ROOT / '.env').exists(), 'MIGRATION_FRESH_RUNNER_REQUIRED'
@@ -157,13 +159,22 @@ try:
         assert len(escalation['database']['timers']) == 3
         admission['escalation_schema'] = {'source': escalation['coordinator'], 'revision': '0011', 'report': 'retained-escalation/escalation-schema-phase.json'}
         material = json.loads((e.ROOT / 'reports/material-schema-phase.json').read_text())
+        frozen_p = 'e205e22051bc06295758b504d84699652b176c15'
+        frozen_p_tree = '85206b9c66ac151f3847aa39f46fb75663a18b91'
         observed_p = material['migration_diagnostics']
         assert observed_p['status'] == 'COMPLETE', 'P_DIAGNOSTIC_VALIDATION_FAILED'
         assert observed_p['sha256'] == e.sha((e.ROOT / 'reports/migration-P-observation.json').read_bytes()), 'P_DIAGNOSTIC_REPORT_CHANGED'
-        assert material['coordinator'] == source and material['historical'] == escalation['coordinator']
+        assert material['coordinator'] == frozen_p and material['historical'] == escalation['coordinator']
         assert material['cleanup']['state'] == 'PASS' and material['database']['populated_refusal'] == 'PASS'
         budget = material['prepare_budget']
         ledger = json.loads((e.ROOT / 'reports/control-schema-ledger.json').read_text())
+        assert ledger['candidate'] == ledger['observed_source'] == source
+        assert ledger['material_sources']['coordinator']['sha'] == source
+        assert ledger['material_sources']['coordinator']['tree'] == source_tree
+        executor = ledger['material_sources']['executor']
+        assert executor['sha'] == frozen_p and executor['tree'] == frozen_p_tree and executor['clean'] is True
+        assert executor['parents'] == [escalation['coordinator'], 'f78ff5c1d9996760d6d5e78d15a2c7a8148bab5f']
+        assert ledger['material_exit'] == 0 and ledger['material_handoff']['candidate'] == frozen_p
         assert budget['version'] == 2 and budget['extension_seconds'] == 120
         assert budget['started_at'] == escalation['prepare_budget']['started_at']
         assert budget['retained_deadline'] == escalation['prepare_budget']['deadline'] == ledger['deadline'] == budget['started_at'] + 600
@@ -187,12 +198,13 @@ try:
         assert budget['charged_total_seconds'] == budget['preparation_ended_at'] - budget['started_at'] < 720
         assert budget['remaining_seconds'] == budget['deadline'] - budget['preparation_ended_at']
         assert material['upgrade_ack_loss']['observed']['revision'] == '0012'
-        assert material['upgrade_ack_loss']['recovery_source'] == source
+        assert material['upgrade_ack_loss']['recovery_source'] == frozen_p
         assert material['downgrade_ack_loss']['observed']['revision'] == '0011'
         assert material['downgrade_ack_loss']['recovery_source'] == escalation['coordinator']
-        assert material['used_recovery']['source'] == source
+        assert material['used_recovery']['source'] == frozen_p
         assert material['database']['refusal']['before_ddl'] and material['database']['refusal']['tables'] == 42
-        admission['material_schema'] = {'source': source, 'revision': '0012', 'report': 'material-schema-phase.json'}
+        admission['material_schema'] = {'coordinator_source': source, 'source': frozen_p, 'source_tree': frozen_p_tree,
+                                       'revision': '0012', 'report': 'material-schema-phase.json'}
         admission['material_budget'] = {'started_at': budget['started_at'], 'retained_deadline': budget['retained_deadline'],
                                        'deadline': budget['deadline'], 'extension_seconds': 120,
                                        'preparation_ended_at': budget['preparation_ended_at'], 'charged_total_seconds': budget['charged_total_seconds']}
