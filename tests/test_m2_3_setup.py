@@ -921,3 +921,145 @@ async def test_native_historical_source_tree_only_allows_stored_request_replay(c
         with pytest.raises(setup.ProvisioningError, match="^" + code + "$"):
             await setup.native_policy_request_source(Connection(), request, native_approval())
     assert len(statements) == (0 if case == "current" else 1)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        pytest.param("lowercase.key-09_:k", id="lowercase"),
+        pytest.param("UPPERCASE", id="uppercase"),
+        pytest.param("mIxEd.Case-09_:K", id="mixed_case"),
+        pytest.param(str(WS), id="digit_uuid"),
+        pytest.param(".Dot", id="dot_first"),
+        pytest.param("_Under", id="underscore_first"),
+        pytest.param(":Colon", id="colon_first"),
+        pytest.param("-Dash", id="dash_first"),
+        pytest.param("a", id="one_lower"),
+        pytest.param("Z", id="one_upper"),
+        pytest.param("0", id="one_digit"),
+        pytest.param(".", id="one_dot"),
+        pytest.param("_", id="one_underscore"),
+        pytest.param(":", id="one_colon"),
+        pytest.param("-", id="one_dash"),
+        pytest.param("U" * 128, id="upper_128"),
+    ],
+)
+def test_native_command_key_preserves_exact_python_json_and_host_clone(key):
+    request = native_request(key=key)
+    payload = request.model_dump(mode="json")
+    from_python = setup.NativePolicyRequest.model_validate(payload)
+    from_json = setup.NativePolicyRequest.model_validate_json(json.dumps(payload))
+    # This is the immutable request clone used by both host paths before await.
+    clone = setup.NativePolicyRequest.model_validate_json(request.model_dump_json())
+    for candidate in (request, from_python, from_json, clone):
+        assert candidate.key == key and candidate.key.encode("ascii") == key.encode("ascii")
+        assert json.loads(candidate.model_dump_json())["key"] == key
+        assert "key=" not in repr(candidate)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("U" * 129, id="over_128"),
+        pytest.param(" HOST_R2_PRIVATE_KEY_CANARY", id="leading_space"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY ", id="trailing_space"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY middle", id="embedded_space"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\n", id="terminal_newline"),
+        pytest.param("\nHOST_R2_PRIVATE_KEY_CANARY", id="leading_newline"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\nmiddle", id="embedded_newline"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\t", id="tab"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\r", id="carriage_return"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\f", id="form_feed"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\v", id="vertical_tab"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARYЖ", id="non_ascii"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\u0301", id="combining_mark"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\u00a0", id="nonbreaking_space"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY/", id="slash"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\\", id="backslash"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY+", id="plus"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY@", id="at"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\0", id="nul"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\x7f", id="del"),
+        pytest.param(None, id="none"),
+        pytest.param(True, id="true"),
+        pytest.param(False, id="false"),
+        pytest.param(123, id="integer"),
+        pytest.param(1.0, id="float"),
+        pytest.param(b"HOST_R2_PRIVATE_KEY_CANARY", id="bytes"),
+        pytest.param(bytearray(b"HOST_R2_PRIVATE_KEY_CANARY"), id="bytearray"),
+        pytest.param(WS, id="uuid_object"),
+        pytest.param(["HOST_R2_PRIVATE_KEY_CANARY"], id="list"),
+        pytest.param({"key": "HOST_R2_PRIVATE_KEY_CANARY"}, id="object"),
+    ],
+)
+def test_native_command_key_rejects_noncanonical_input_with_bounded_errors(key):
+    from pydantic import ValidationError
+
+    payload = native_request().model_dump(mode="json")
+    payload["key"] = key
+    validators = [lambda: setup.NativePolicyRequest.model_validate(payload)]
+    if not isinstance(key, (bytes, bytearray, UUID)):
+        validators.append(
+            lambda: setup.NativePolicyRequest.model_validate_json(json.dumps(payload))
+        )
+    for validate in validators:
+        with pytest.raises(ValidationError) as caught:
+            validate()
+        assert [item["loc"] for item in caught.value.errors(include_input=False)] == [("key",)]
+        assert "HOST_R2_PRIVATE_KEY_CANARY" not in str(caught.value)
+        assert "HOST_R2_PRIVATE_KEY_CANARY" not in repr(caught.value)
+        assert len(str(caught.value)) < 512
+
+
+def test_native_command_key_private_canary_stays_hidden_and_frozen_after_clone():
+    from pydantic import ValidationError
+
+    key = "HOST_R2_PRIVATE_KEY_CANARY"
+    request = native_request(key=key)
+    clone = setup.NativePolicyRequest.model_validate_json(request.model_dump_json())
+    for candidate in (request, clone):
+        assert candidate.key == key and key not in repr(candidate)
+        with pytest.raises(ValidationError) as frozen:
+            candidate.key = key
+        assert [item["type"] for item in frozen.value.errors(include_input=False)] == [
+            "frozen_instance"
+        ]
+        # The host clones/validates input rather than assigning frozen fields.
+        # Check bounded input errors, including a whole-request CAS error.
+        payload = candidate.model_dump(mode="json")
+        payload["expected_policy_epoch"] = "1"
+        with pytest.raises(ValidationError) as caught:
+            setup.NativePolicyRequest.model_validate(payload)
+        assert key not in str(caught.value) and key not in repr(caught.value)
+        assert len(str(caught.value)) < 512
+        assert candidate.key == key
+
+
+def native_command_key_request(monkeypatch):
+    original = native_request
+    key = "1_HOST_R2_Private-Key:CANARY"
+
+    def keyed_request(**updates):
+        return original(**dict(updates, key=key))
+
+    monkeypatch.setattr(sys.modules[__name__], "native_request", keyed_request)
+    return key
+
+
+@pytest.mark.parametrize("mode", ["accepted", "replay_paused", "current_error"])
+async def test_native_command_key_survives_existing_host_rpc_and_recovery(monkeypatch, mode):
+    # Reuse every existing transaction/RPC/commit/current assertion with the
+    # formerly rejected key. These remain unit doubles, never PG authority.
+    native_command_key_request(monkeypatch)
+    await test_native_policy_transaction_boundary_and_read_after_commit(monkeypatch, mode)
+
+
+async def test_native_command_key_survives_saved_receipt_and_read_only_retry(monkeypatch, tmp_path):
+    key = native_command_key_request(monkeypatch)
+    await test_native_cli_preserves_private_acceptance_and_retries_only_current(
+        monkeypatch, tmp_path
+    )
+    saved = json.loads((tmp_path / "private" / "receipt.json").read_bytes())
+    assert saved["request"]["key"] == key
+    assert saved["current"] == {"policy": "PAUSED", "policy_epoch": "1"}

@@ -19,9 +19,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from asm.billing.validation import CanonicalUUID, CapabilityKey, LimitDecimal, Timestamp
+from asm.billing.validation import CanonicalUUID, LimitDecimal, Timestamp
 from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_CONTEXT_PROFILE_SHA256
-from asm.messaging.models import identifier
+from asm.messaging.errors import MessagingError
+from asm.messaging.models import command_key, identifier
 
 
 class ProvisioningError(RuntimeError):
@@ -363,11 +364,19 @@ class NativePolicyRequest(NativeOperatorModel):
     workspace_id: CanonicalUUID
     connection_id: CanonicalUUID
     operation: Literal["ENABLE", "PAUSE"]
-    key: CapabilityKey = Field(repr=False)
+    key: str = Field(repr=False)
     expected_policy: Literal["OFF_UNUSED", "ON", "PAUSED"]
     expected_policy_epoch: LimitDecimal
     expected_binding: NativePolicyBinding = Field(repr=False)
     source_profile: NativeSourceProfile = Field(repr=False)
+
+    @field_validator("key")
+    @classmethod
+    def valid_command_key(cls, value: str) -> str:
+        try:
+            return command_key(value)
+        except MessagingError:
+            raise ValueError("Invalid command key") from None
 
     @model_validator(mode="after")
     def coherent_cas(self) -> Self:
