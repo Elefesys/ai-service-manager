@@ -17,6 +17,7 @@ COPY tests ./tests
 COPY scripts ./scripts
 COPY contracts ./contracts
 COPY infra/postgres/ensure_m1_3_prerequisites.sh ./infra/postgres/ensure_m1_3_prerequisites.sh
+COPY .github/workflows/ci.yml .github/workflows/native-context-db.yml ./.github/workflows/
 CMD ["sh", "scripts/check_backend.sh"]
 
 FROM toolchain AS runtime

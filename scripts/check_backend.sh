@@ -6,7 +6,7 @@ mypy backend/src
 pytest -q --durations=20 -m 'not integration'
 alembic upgrade head
 alembic upgrade head
-pytest -v --durations=20 -m integration
+python scripts/native_context_db_catalog.py generic-integration
 alembic downgrade base
 alembic upgrade head
 python scripts/export_contracts.py --check

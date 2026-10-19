@@ -19,6 +19,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
 import xml.etree.ElementTree as ET
@@ -30,12 +31,29 @@ DB_IMAGE = (
 )
 NONFUNCTION_SHA256 = "57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370"
 EXECUTION_REF = "refs/heads/c0/m3-1-native-context-db-stock-r1"
+REPOSITORY = "Elefesys/ai-service-manager"
+REPOSITORY_ID = 1369650588
 MODULES = (
     "tests/test_m3_1_native_context_migrations.py",
     "tests/test_m3_1_native_context_postgres.py",
     "tests/test_m3_1_native_context_api_postgres.py",
     "tests/test_m3_1_native_context_runtime_postgres.py",
 )
+# Only these complete destructive modules leave generic PG execution. Keep this
+# independent of MODULES so dropping a carrier module cannot shrink the gate.
+PG_MODULES = (
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_api_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+)
+# Bind the actual inputs, including all nine unchanged ordinary jobs and their
+# default merge/main checkout, unconditional same-commit reusable call, pinned
+# owned lane and exact generic command. No fallback/embedded workflow is used.
+CI_INPUT_SHA256 = {
+    ".github/workflows/ci.yml": "475e9c7dc32bed8d0b5ab12260b1ab698835f634eb8c4b089d7c53c0af6d130d",
+    ".github/workflows/native-context-db.yml": "ff43d2470b56d26cf9c616cad5bc570e31634a19d97bdec4f28e73a205e049fd",
+    "scripts/check_backend.sh": "bd836b9afaf76ffc5e612f33e3662eef4671665b4147f4ef39247b402bb262ee",
+}
 SECRET_ENV = (
     "ASM_NATIVE_TEST_ALLOW_RESET",
     "ASM_NATIVE_TEST_ADMIN_URL",
@@ -652,6 +670,142 @@ def git_bytes(root, *argv):
     return subprocess.check_output(["git", *argv], cwd=root, timeout=10, stderr=subprocess.PIPE)
 
 
+def require_ci_inputs():
+    for path, expected in CI_INPUT_SHA256.items():
+        require(sha256((ROOT / path).read_bytes()) == expected, "CI gate input drift: " + path)
+
+
+def event_identity(env, payload, head, tree, parents):
+    """Test-source admission only; never deployment approval or process drain."""
+    require(isinstance(payload, dict), "Event payload must be an object")
+    require(
+        env.get("GITHUB_ACTIONS") == "true"
+        and env.get("GITHUB_REPOSITORY") == REPOSITORY
+        and env.get("GITHUB_REPOSITORY_ID") == str(REPOSITORY_ID),
+        "Only the actual repository Actions context is admitted",
+    )
+
+    def repository(value):
+        require(
+            isinstance(value, dict)
+            and value.get("full_name") == REPOSITORY
+            and type(value.get("id")) is int
+            and value["id"] == REPOSITORY_ID
+            and value.get("fork") is False,
+            "Event repository identity mismatch",
+        )
+
+    def commit(value):
+        require(
+            isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value),
+            "Invalid event commit identity",
+        )
+        return value
+
+    repository(payload.get("repository"))
+    for key in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT"):
+        require(re.fullmatch(r"[1-9][0-9]*", env.get(key, "")), "Invalid Actions run/attempt")
+    require(commit(env.get("GITHUB_SHA")) == commit(head), "Event SHA differs from HEAD")
+    commit(tree)
+    identity = {
+        "repository": REPOSITORY,
+        "repository_id": REPOSITORY_ID,
+        "event": env.get("GITHUB_EVENT_NAME"),
+        "ref": env.get("GITHUB_REF"),
+        "run_id": env["GITHUB_RUN_ID"],
+        "attempt": env["GITHUB_RUN_ATTEMPT"],
+        "head": head,
+        "tree": tree,
+        "event_identity_is_c0_approval": False,
+    }
+    if identity["event"] == "push":
+        require(
+            identity["ref"] in (EXECUTION_REF, "refs/heads/main")
+            and payload.get("ref") == identity["ref"]
+            and payload.get("deleted") is False
+            and payload.get("base_ref") is None
+            and not env.get("GITHUB_BASE_REF")
+            and not env.get("GITHUB_HEAD_REF"),
+            "Only the stock or actual main push is admitted",
+        )
+        require(
+            commit(payload.get("after")) == head
+            and isinstance(payload.get("head_commit"), dict)
+            and commit(payload["head_commit"].get("id")) == head,
+            "Push payload source mismatch",
+        )
+        identity["route"] = "stock-push" if identity["ref"] == EXECUTION_REF else "main-push"
+    elif identity["event"] == "pull_request":
+        pr = payload.get("pull_request")
+        require(
+            isinstance(pr, dict)
+            and payload.get("action") in ("opened", "reopened", "synchronize")
+            and type(payload.get("number")) is int
+            and payload["number"] > 0
+            and type(pr.get("number")) is int
+            and pr.get("number") == payload["number"]
+            and pr.get("state") == "open"
+            and pr.get("merged") is False,
+            "Only an actual open PR verification event is admitted",
+        )
+        base, branch = pr.get("base"), pr.get("head")
+        require(isinstance(base, dict) and isinstance(branch, dict), "Missing PR source/target")
+        repository(base.get("repo"))
+        repository(branch.get("repo"))
+        require(
+            base.get("ref") == env.get("GITHUB_BASE_REF") == "main"
+            and isinstance(branch.get("ref"), str)
+            and branch["ref"]
+            and branch["ref"] == env.get("GITHUB_HEAD_REF")
+            and identity["ref"] == f"refs/pull/{payload['number']}/merge",
+            "PR ref/base/head mismatch",
+        )
+        base_sha, head_sha = commit(base.get("sha")), commit(branch.get("sha"))
+        require(
+            parents == [base_sha, head_sha]
+            and head not in (base_sha, head_sha)
+            and (pr.get("merge_commit_sha") is None or pr["merge_commit_sha"] == head),
+            "PR checkout is not the exact base/head merge",
+        )
+        identity.update(
+            route="same-repository-pr-merge",
+            pr_number=payload["number"],
+            action=payload["action"],
+            base_ref=base["ref"],
+            head_ref=branch["ref"],
+            base_sha=base_sha,
+            head_sha=head_sha,
+            merge_parents=parents,
+        )
+    else:
+        raise Refusal("Unsupported event; reusable calls must retain their actual caller event")
+    return identity
+
+
+def admit_event():
+    require_ci_inputs()
+    tree, manifest = require_source(ROOT, os.environ.get("GITHUB_SHA", ""))
+    # cat-file reads the actual commit headers even at checkout fetch-depth: 1;
+    # rev-list/show ancestry can hide parents at a shallow boundary.
+    headers = git_bytes(ROOT, "cat-file", "-p", "HEAD").decode().split("\n\n", 1)[0].splitlines()
+    require([row[5:] for row in headers if row.startswith("tree ")] == [tree], "HEAD tree drift")
+    parents = [row[7:] for row in headers if row.startswith("parent ")]
+
+    def unique_object(pairs):
+        value = dict(pairs)
+        require(len(value) == len(pairs), "Duplicate event payload keys")
+        return value
+
+    try:
+        raw = Path(os.environ["GITHUB_EVENT_PATH"]).read_bytes()
+        payload = json.loads(raw, object_pairs_hook=unique_object)
+    except (KeyError, OSError, ValueError, UnicodeError):
+        raise Refusal("Missing or malformed actual event payload") from None
+    identity = event_identity(os.environ, payload, os.environ["GITHUB_SHA"], tree, parents)
+    identity["event_payload_sha256"] = sha256(raw)
+    return identity, manifest
+
+
 def require_source(root, expected_sha):
     require(
         re.fullmatch(r"[0-9a-f]{40}", expected_sha) is not None, "Invalid event source identity"
@@ -979,6 +1133,20 @@ def load_lease(private):
     return lease
 
 
+def require_event_lease(private, identity):
+    if not (private / "state.json").exists():
+        return
+    lease = load_lease(private)
+    require(
+        lease["source_sha"] == identity["head"]
+        and lease["tree"] == identity["tree"]
+        and lease["labels"]["asm.c6.source"] == identity["head"]
+        and lease["labels"]["asm.c6.tree"] == identity["tree"]
+        and lease["labels"]["asm.c6.run"] == identity["run_id"] + ":" + identity["attempt"],
+        "Lease differs from admitted source/tree/run/attempt",
+    )
+
+
 def inspect_if_present(commands, kind, identity):
     code, raw = commands.run(
         ["docker", kind, "inspect", identity], quiet=True, check=False, limit=10
@@ -1215,6 +1383,11 @@ def child_environment(private):
         "LC_ALL",
         "SYSTEMROOT",
         "GITHUB_SHA",
+        "GITHUB_ACTIONS",
+        "GITHUB_EVENT_PATH",
+        "GITHUB_REPOSITORY_ID",
+        "GITHUB_BASE_REF",
+        "GITHUB_HEAD_REF",
         "GITHUB_RUN_ID",
         "GITHUB_RUN_ATTEMPT",
         "GITHUB_REPOSITORY",
@@ -1312,6 +1485,191 @@ def require_native_fixture_guards(items, test_module, reset):
         "native_fixture": MODULES[1] + "::native",
         "per_module": consumers,
     }
+
+
+def integration_arguments():
+    return ["-v", "--durations=20", "-m", "integration", *("--ignore=" + p for p in PG_MODULES)]
+
+
+def collect_partition(mode, destination):
+    """Fresh-process collection only; the hook refuses any fixture execution."""
+    import pytest
+
+    require(not os.environ.get("PYTEST_ADDOPTS"), "External pytest selection is forbidden")
+    os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    inventory = {
+        "nodeids": [],
+        "integration_nodeids": [],
+        "native_fixture_nodes": [],
+        "deselected": [],
+    }
+
+    class Inventory:
+        def pytest_collection_finish(self, session):
+            for item in session.items:
+                inventory["nodeids"].append(item.nodeid)
+                if item.get_closest_marker("integration"):
+                    inventory["integration_nodeids"].append(item.nodeid)
+                require(
+                    not any(item.get_closest_marker(m) for m in ("skip", "skipif", "xfail")),
+                    "Skipped/xfail partition member: " + item.nodeid,
+                )
+                definitions = item._fixtureinfo.name2fixturedefs.get("native", ())
+                if definitions:
+                    function = inspect.unwrap(definitions[-1].func)
+                    if Path(function.__code__.co_filename).resolve() == ROOT / MODULES[1]:
+                        inventory["native_fixture_nodes"].append(item.nodeid)
+            if mode == "collect-native":
+                module = sys.modules["test_m3_1_native_context_postgres"]
+                inventory["fixture_guards"] = require_native_fixture_guards(
+                    session.items, module, module.reset_disposable
+                )
+
+        def pytest_deselected(self, items):
+            inventory["deselected"].extend(item.nodeid for item in items)
+
+        def pytest_runtest_setup(self, item):
+            raise Refusal("Partition inventory must never execute fixtures")
+
+    selection = (
+        list(MODULES)
+        if mode == "collect-native"
+        else integration_arguments()
+        if mode == "collect-generic-pg"
+        else ["-m", "integration"]
+    )
+    code = 1
+    try:
+        code = int(
+            pytest.main(
+                [
+                    *selection,
+                    "--collect-only",
+                    "-q",
+                    "-p",
+                    "pytest_asyncio.plugin",
+                    "-p",
+                    "no:cacheprovider",
+                ],
+                plugins=[Inventory()],
+            )
+        )
+        return code
+    finally:
+        write_json(destination, {**inventory, "collection_exit": code})
+
+
+def validate_partition(all_pg, native, generic):
+    require(tuple(MODULES[1:]) == PG_MODULES, "Native carrier lost a complete PG module")
+    for inventory in (all_pg, native, generic):
+        nodes = inventory["nodeids"]
+        require(
+            inventory["collection_exit"] == 0 and nodes and len(nodes) == len(set(nodes)),
+            "Failed/empty/duplicate partition collection",
+        )
+    a, n, g = (set(i["nodeids"]) for i in (all_pg, native, generic))
+    pg = set(native["integration_nodeids"])
+    source = n - pg
+    require(
+        not native["deselected"]
+        and {node.split("::", 1)[0] for node in n} == set(MODULES)
+        and {node.split("::", 1)[0] for node in pg} == set(PG_MODULES)
+        and {node.split("::", 1)[0] for node in source} == {MODULES[0]},
+        "Incomplete native inventory or unexpected integration markers",
+    )
+    require(
+        a == set(all_pg["integration_nodeids"])
+        and g == set(generic["integration_nodeids"])
+        and pg == {node for node in a if node.split("::", 1)[0] in PG_MODULES}
+        and pg == set(native["native_fixture_nodes"]) == set(all_pg["native_fixture_nodes"])
+        and not generic["native_fixture_nodes"]
+        and not (pg & g)
+        and a == pg | g
+        and generic["nodeids"] == [node for node in all_pg["nodeids"] if node not in pg]
+        and set(all_pg["deselected"]) == set(generic["deselected"])
+        and source <= set(all_pg["deselected"]),
+        "Lost/foreign PG cases or native fixture escaped the exact three-module partition",
+    )
+    return {
+        "result": "PASS",
+        "all_pg": len(a),
+        "generic_pg": len(g),
+        "native_pg": len(pg),
+        "native_source": len(source),
+        "native_total": len(n),
+        "excluded_modules": PG_MODULES,
+        "disjoint_pg_sets_and_complete_union": True,
+        "fixed_total_required": False,
+        "inventory_sha256": {
+            key: sha256(json.dumps(value, sort_keys=True).encode())
+            for key, value in (("all", all_pg), ("native", native), ("generic", generic))
+        },
+    }
+
+
+def prove_partition(private, evidence, commands, env):
+    require_ci_inputs()
+    inventories = []
+    for name in ("all-pg", "native", "generic-pg"):
+        path = private / ("partition-" + name + ".json")
+        code, _ = commands.run(
+            [
+                sys.executable,
+                "scripts/native_context_db_catalog.py",
+                "collect-" + name,
+                "--inventory",
+                str(path),
+            ],
+            env=env,
+            check=False,
+        )
+        if path.exists():
+            value = json.loads(path.read_text())
+            write_json(evidence / path.name, value)
+        require(code == 0 and path.is_file(), "Partition collection failed: " + name)
+        inventories.append(value)
+    proof = validate_partition(*inventories)
+    write_json(evidence / "integration-partition.json", proof)
+    return proof, inventories[2]["nodeids"]
+
+
+def generic_integration():
+    import pytest
+
+    require(
+        not any(key in os.environ for key in SECRET_ENV[:2]),
+        "Generic checks must never receive native reset/admin credentials",
+    )
+    require(not os.environ.get("PYTEST_ADDOPTS"), "External pytest selection is forbidden")
+    os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    with tempfile.TemporaryDirectory(prefix="asm-integration-partition-") as directory:
+        work = external_directory(directory)
+        try:
+            proof, expected = prove_partition(
+                work, work, Commands(work, work, time.time() + 180), dict(os.environ)
+            )
+        except Exception:
+            # The foundation job already publishes stdout/stderr in ci.log.
+            # Keep collection diagnostics there before the temporary files go.
+            for path in sorted(work.iterdir()):
+                if path.suffix in (".json", ".log"):
+                    print(path.name + "\n" + redact(path.read_text(errors="replace")), flush=True)
+            raise
+        print(json.dumps(proof, sort_keys=True), flush=True)
+
+        class ExactGeneric:
+            def pytest_collection_finish(self, session):
+                require(
+                    [item.nodeid for item in session.items] == expected,
+                    "Actual generic PG execution differs from the proven partition",
+                )
+
+        # Retain the original pytest verbosity/durations/marker and exit code.
+        return int(
+            pytest.main(
+                [*integration_arguments(), "-p", "pytest_asyncio.plugin"], plugins=[ExactGeneric()]
+            )
+        )
 
 
 def carrier(private, evidence, lease, commands):
@@ -1532,7 +1890,10 @@ def child(mode, private, evidence):
         not any(key in os.environ for key in SECRET_ENV),
         "Child reset credentials must originate in its private lease",
     )
+    identity, _ = admit_event()
+    require_event_lease(private, identity)
     lease = load_lease(private)
+    require(lease["source_sha"] == identity["head"], "Lease differs from admitted event source")
     require_source(ROOT, lease["source_sha"])
     commands = Commands(
         private, evidence, lease["deadline"], tuple(lease["passwords"].values()), mode
@@ -1563,16 +1924,14 @@ def run_lane(private, evidence):
         "result": "FAIL",
     }
     result = 1
+    admitted = False
     try:
-        require(
-            os.environ.get("GITHUB_EVENT_NAME") == "push"
-            and os.environ.get("GITHUB_REF") == EXECUTION_REF
-            and os.environ.get("GITHUB_REPOSITORY") == "Elefesys/ai-service-manager",
-            "Only the dedicated C0 push event is authorized",
-        )
+        identity, manifest = admit_event()
+        require(not (private / "state.json").exists(), "Run must start without retained resources")
+        admitted = True
+        receipt.update(admission="PASS", source_identity=identity)
         require(sys.version_info[:2] == (3, 13), "Python 3.13 required; no patched runtime")
-        source_sha = os.environ["GITHUB_SHA"]
-        tree, manifest = require_source(ROOT, source_sha)
+        source_sha, tree = identity["head"], identity["tree"]
         require(
             external_directory(os.environ["UV_PROJECT_ENVIRONMENT"]) == Path(sys.prefix).resolve(),
             "Frozen external project venv required",
@@ -1585,12 +1944,7 @@ def run_lane(private, evidence):
         write_json(
             evidence / "source-identity.json",
             {
-                "head": source_sha,
-                "tree": tree,
-                "event": "push",
-                "ref": EXECUTION_REF,
-                "run_id": os.environ["GITHUB_RUN_ID"],
-                "attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+                **identity,
                 "run_url": "https://github.com/Elefesys/ai-service-manager/actions/runs/"
                 + os.environ["GITHUB_RUN_ID"],
                 "source_archive_sha256": sha256(source_archive),
@@ -1607,16 +1961,12 @@ def run_lane(private, evidence):
             "Locked uv version required",
         )
         _, git_version = commands.run(["git", "--version"])
-        _, docker_version = commands.run(
-            ["docker", "version", "--format", "{{json .Server.Version}}"]
-        )
         write_json(
             evidence / "versions.json",
             {
                 "python": sys.version,
                 "uv": uv_version.decode().strip(),
                 "git": git_version.decode().strip(),
-                "docker_server": json.loads(docker_version),
                 "distributions": sorted(
                     (distribution.metadata["Name"], distribution.version)
                     for distribution in importlib.metadata.distributions()
@@ -1671,7 +2021,15 @@ def run_lane(private, evidence):
         sanitize_file(private, evidence, "runner-unit.xml", ())
         require(unit_code == 0, "Runner negative unit checks failed")
         require_unit_junit(private / "runner-unit.xml")
+        prove_partition(private, evidence, commands, unit_env)
         require_source(ROOT, source_sha)
+        _, docker_version = commands.run(
+            ["docker", "version", "--format", "{{json .Server.Version}}"]
+        )
+        versions = json.loads((evidence / "versions.json").read_text())
+        write_json(
+            evidence / "versions.json", {**versions, "docker_server": json.loads(docker_version)}
+        )
         create_database(private, evidence, commands, source_sha, tree)
         receipt["stock_db"] = "CREATED_AND_OWNERSHIP_VERIFIED"
         for mode in ("carrier", "catalog"):
@@ -1690,12 +2048,14 @@ def run_lane(private, evidence):
         result = 0
     except Exception:
         passwords = ()
-        if (private / "state.json").exists():
+        if admitted and (private / "state.json").exists():
             passwords = tuple(load_lease(private)["passwords"].values())
         (evidence / "runner-error.log").write_text(redact(traceback.format_exc(), passwords))
     finally:
         try:
-            collect_owned_logs(private, evidence)
+            if admitted:
+                require_event_lease(private, identity)
+                collect_owned_logs(private, evidence)
         except Exception:
             receipt.update(result="FAIL", owned_log_capture="REFUSED_OR_FAILED")
             result = 1
@@ -1703,11 +2063,17 @@ def run_lane(private, evidence):
                 redact(traceback.format_exc(), commands.passwords)
             )
         try:
-            cleanup(private, evidence)
-            final_tree, _ = require_source(ROOT, os.environ.get("GITHUB_SHA", ""))
-            receipt.update(
-                clean_tracked_and_untracked_after=True, final_tree=final_tree, owned_cleanup="PASS"
-            )
+            if admitted:
+                require_event_lease(private, identity)
+                cleanup(private, evidence)
+                final_tree, _ = require_source(ROOT, os.environ.get("GITHUB_SHA", ""))
+                receipt.update(
+                    clean_tracked_and_untracked_after=True,
+                    final_tree=final_tree,
+                    owned_cleanup="PASS",
+                )
+            else:
+                receipt.update(admission="REFUSED", owned_cleanup="NOT_ATTEMPTED_EVENT_REFUSED")
         except Exception:
             receipt.update(result="FAIL", owned_cleanup="REFUSED_OR_FAILED")
             result = 1
@@ -1723,8 +2089,27 @@ def run_lane(private, evidence):
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("run", "carrier", "catalog", "cleanup"))
+    parser.add_argument(
+        "mode",
+        choices=(
+            "run",
+            "carrier",
+            "catalog",
+            "cleanup",
+            "generic-integration",
+            "collect-all-pg",
+            "collect-native",
+            "collect-generic-pg",
+        ),
+    )
+    parser.add_argument("--inventory", type=Path)
     args = parser.parse_args()
+    if args.mode.startswith("collect-"):
+        require(args.inventory is not None, "Collection output path required")
+        return collect_partition(args.mode, external_directory(args.inventory))
+    require(args.inventory is None, "Inventory output is collection-only")
+    if args.mode == "generic-integration":
+        return generic_integration()
     work = external_directory(os.environ["NATIVE_ROOT"])
     private, evidence = work / "private", work / "evidence"
     require(
@@ -1744,6 +2129,8 @@ def main():
     if args.mode == "run":
         return run_lane(private, evidence)
     if args.mode == "cleanup":
+        identity, _ = admit_event()
+        require_event_lease(private, identity)
         cleanup(private, evidence)
         return 0
     try:

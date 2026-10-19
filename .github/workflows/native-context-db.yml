@@ -1,6 +1,7 @@
 name: Native context DB (owned stock lane)
 
 on:
+  workflow_call:
   push:
     branches: [c0/m3-1-native-context-db-stock-r1]
 
@@ -9,7 +10,6 @@ permissions:
 
 jobs:
   native-context-db:
-    if: github.repository == 'Elefesys/ai-service-manager'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

@@ -14,6 +14,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import pytest
+
 from scripts import native_context_db_catalog as lane
 
 REQUIRED_MODULES = (
@@ -639,6 +641,12 @@ class ExecutionEvidence(unittest.TestCase):
                         patch.object(lane, "require_source", return_value=("e" * 40, [])),
                         patch.object(lane, "git_bytes", return_value=b"mock source archive"),
                         patch.object(
+                            lane,
+                            "admit_event",
+                            return_value=({"head": "b" * 40, "tree": "e" * 40}, []),
+                        ),
+                        patch.object(lane, "prove_partition", return_value=({}, [])),
+                        patch.object(
                             lane, "source_catalog", return_value={"functions": {}, "columns": {}}
                         ),
                         patch.object(lane.importlib.metadata, "distributions", return_value=[]),
@@ -1059,6 +1067,546 @@ class CarrierFixtureGuards(unittest.TestCase):
                 self.assertEqual(result["pytest_exit"], 1 if failure == "exception" else 7)
                 collection = json.loads((self.evidence / "collection.json").read_text())
                 self.assertEqual(collection["nodeids"], self.nodes)
+
+
+def ci_event(tmp_path, route):
+    repository = {"full_name": lane.REPOSITORY, "id": lane.REPOSITORY_ID, "fork": False}
+    env = {
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_REPOSITORY": lane.REPOSITORY,
+        "GITHUB_REPOSITORY_ID": str(lane.REPOSITORY_ID),
+        "GITHUB_EVENT_NAME": "push",
+        "GITHUB_REF": lane.EXECUTION_REF if route == "stock-push" else "refs/heads/main",
+        "GITHUB_SHA": "b" * 40,
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "2",
+        "GITHUB_EVENT_PATH": str(tmp_path / "event.json"),
+        "UV_PROJECT_ENVIRONMENT": str(Path(lane.sys.prefix).resolve()),
+        "UV_CACHE_DIR": str(tmp_path / "uv-cache"),
+        "RUFF_CACHE_DIR": str(tmp_path / "ruff-cache"),
+    }
+    payload = {
+        "repository": repository,
+        "ref": env["GITHUB_REF"],
+        "after": env["GITHUB_SHA"],
+        "head_commit": {"id": env["GITHUB_SHA"]},
+        "deleted": False,
+        "base_ref": None,
+    }
+    if route == "same-repository-pr-merge":
+        env.update(
+            GITHUB_EVENT_NAME="pull_request",
+            GITHUB_REF="refs/pull/42/merge",
+            GITHUB_BASE_REF="main",
+            GITHUB_HEAD_REF="candidate",
+        )
+        payload = {
+            "repository": repository,
+            "action": "synchronize",
+            "number": 42,
+            "pull_request": {
+                "number": 42,
+                "state": "open",
+                "merged": False,
+                "merge_commit_sha": env["GITHUB_SHA"],
+                "base": {"ref": "main", "sha": "c" * 40, "repo": copy.deepcopy(repository)},
+                "head": {"ref": "candidate", "sha": "d" * 40, "repo": copy.deepcopy(repository)},
+            },
+        }
+    return env, payload
+
+
+def exercise_ci_lane(
+    tmp_path,
+    env,
+    payload,
+    *,
+    parents=None,
+    raw=None,
+    carrier_exit=0,
+    catalog_exit=0,
+    cleanup_failure=False,
+    partition_failure=False,
+    retained_state=False,
+):
+    """Real JSON/admission/source-input checks; every command/resource is mocked."""
+    private, evidence = tmp_path / "private", tmp_path / "evidence"
+    private.mkdir(mode=0o700)
+    evidence.mkdir(mode=0o700)
+    if retained_state:
+        (private / "state.json").write_text("Unadopted private state")
+    (tmp_path / "job-start").write_text(str(int(time.time())))
+    Path(env["GITHUB_EVENT_PATH"]).write_text(json.dumps(payload) if raw is None else raw)
+    commands = Mock(passwords=())
+
+    def command(argv, **kwargs):
+        if argv == ["uv", "--version"]:
+            return 0, b"uv 0.10.0\n"
+        if argv[:2] == ["docker", "version"]:
+            return 0, b'"unit-only"'
+        if "pytest" in argv:
+            (private / "runner-unit.xml").write_text(
+                '<testsuites><testsuite><testcase name="guard"/></testsuite></testsuites>'
+            )
+        if argv[-1] == "carrier":
+            return carrier_exit, b"unit-only carrier"
+        if argv[-1] == "catalog":
+            return catalog_exit, b"unit-only catalog"
+        return 0, b"unit-only command"
+
+    commands.run.side_effect = command
+    parent_lines = ["c" * 40, "d" * 40] if parents is None else parents
+    headers = (
+        "tree "
+        + "e" * 40
+        + "\n"
+        + "".join("parent " + p + "\n" for p in parent_lines)
+        + "\nunit-only commit"
+    ).encode()
+    with (
+        patch.dict(os.environ, env, clear=True),
+        patch.object(lane, "require_source", return_value=("e" * 40, [])),
+        patch.object(
+            lane,
+            "git_bytes",
+            side_effect=lambda root, *args: (
+                headers if args == ("cat-file", "-p", "HEAD") else b"unit-only archive"
+            ),
+        ) as git,
+        patch.object(lane, "Commands", return_value=commands),
+        patch.object(lane, "source_catalog", return_value={"functions": {}, "columns": {}}),
+        patch.object(lane.importlib.metadata, "distributions", return_value=[]),
+        patch.object(
+            lane,
+            "prove_partition",
+            side_effect=lane.Refusal("partition failure") if partition_failure else None,
+        ) as partition,
+        patch.object(lane, "create_database") as create,
+        patch.object(lane, "collect_owned_logs") as logs,
+        patch.object(
+            lane,
+            "cleanup",
+            side_effect=lane.Refusal("cleanup failure") if cleanup_failure else None,
+        ) as cleanup,
+    ):
+        result = lane.run_lane(private, evidence)
+    return SimpleNamespace(
+        result=result,
+        receipt=json.loads((evidence / "receipt.json").read_text()),
+        evidence=evidence,
+        commands=commands,
+        create=create,
+        logs=logs,
+        cleanup=cleanup,
+        partition=partition,
+        git=git,
+    )
+
+
+@pytest.mark.parametrize("route", ("stock-push", "main-push", "same-repository-pr-merge"))
+def test_ci_actual_event_identity_and_archive_are_never_relabelled(tmp_path, route):
+    env, payload = ci_event(tmp_path, route)
+    probe = exercise_ci_lane(tmp_path, env, payload)
+    assert probe.result == 0
+    identity = json.loads((probe.evidence / "source-identity.json").read_text())
+    assert identity["route"] == route
+    assert identity["event"] == env["GITHUB_EVENT_NAME"]
+    assert identity["ref"] == env["GITHUB_REF"]
+    assert (identity["head"], identity["tree"], identity["run_id"], identity["attempt"]) == (
+        env["GITHUB_SHA"],
+        "e" * 40,
+        "123",
+        "2",
+    )
+    assert identity["source_archive_sha256"] == lane.sha256(
+        (probe.evidence / "source.tar").read_bytes()
+    )
+    assert identity["event_payload_sha256"] == lane.sha256(
+        Path(env["GITHUB_EVENT_PATH"]).read_bytes()
+    )
+    assert identity["event_identity_is_c0_approval"] is False
+    assert probe.receipt["source_identity"]["event"] == identity["event"]
+    probe.git.assert_any_call(lane.ROOT, "cat-file", "-p", "HEAD")
+    probe.create.assert_called_once()
+    probe.cleanup.assert_called_once()
+    if route == "same-repository-pr-merge":
+        assert identity["merge_parents"] == [
+            payload["pull_request"][key]["sha"] for key in ("base", "head")
+        ]
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    (
+        ("GITHUB_ACTIONS", "false"),
+        ("GITHUB_REPOSITORY", "foreign/repo"),
+        ("GITHUB_REPOSITORY_ID", "1"),
+        ("GITHUB_EVENT_NAME", "workflow_call"),
+        ("GITHUB_EVENT_NAME", "workflow_dispatch"),
+        ("GITHUB_EVENT_NAME", "pull_request_target"),
+        ("GITHUB_REF", "refs/heads/other"),
+        ("GITHUB_REF", "refs/tags/main"),
+        ("GITHUB_RUN_ID", "0"),
+        ("GITHUB_RUN_ATTEMPT", "01"),
+        ("GITHUB_RUN_ATTEMPT", "١"),
+        ("GITHUB_SHA", "a" * 40),
+        ("GITHUB_BASE_REF", "main"),
+        ("GITHUB_HEAD_REF", "candidate"),
+    ),
+)
+def test_ci_bad_event_context_refuses_all_commands_and_resource_recovery(tmp_path, key, value):
+    env, payload = ci_event(tmp_path, "stock-push")
+    env[key] = value
+    probe = exercise_ci_lane(tmp_path, env, payload)
+    assert probe.result != 0 and probe.receipt["admission"] == "REFUSED"
+    assert probe.receipt["owned_cleanup"] == "NOT_ATTEMPTED_EVENT_REFUSED"
+    for mock in (probe.commands.run, probe.create, probe.logs, probe.cleanup, probe.partition):
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "change",
+    (
+        "repository",
+        "repository-id",
+        "fork",
+        "push-ref",
+        "push-after",
+        "push-head",
+        "deleted",
+        "pr-base",
+        "pr-env-base",
+        "pr-head",
+        "pr-head-repository",
+        "pr-base-repository",
+        "pr-ref",
+        "pr-number",
+        "pr-state",
+        "pr-action",
+        "pr-merge",
+        "pr-head-sha",
+        "pr-base-sha",
+    ),
+)
+def test_ci_payload_target_and_merge_mismatch_refuses_before_docker(tmp_path, change):
+    env, payload = ci_event(
+        tmp_path, "same-repository-pr-merge" if change.startswith("pr-") else "main-push"
+    )
+    pr = payload.get("pull_request", {})
+    if change == "repository":
+        payload["repository"]["full_name"] = "foreign/repo"
+    elif change == "repository-id":
+        payload["repository"]["id"] = True
+    elif change == "fork":
+        payload["repository"]["fork"] = True
+    elif change == "push-ref":
+        payload["ref"] = lane.EXECUTION_REF
+    elif change == "push-after":
+        payload["after"] = "a" * 40
+    elif change == "push-head":
+        payload["head_commit"]["id"] = "a" * 40
+    elif change == "deleted":
+        payload["deleted"] = True
+    elif change == "pr-base":
+        pr["base"]["ref"] = "other"
+    elif change == "pr-env-base":
+        env["GITHUB_BASE_REF"] = "other"
+    elif change == "pr-head":
+        env["GITHUB_HEAD_REF"] = "other"
+    elif change == "pr-head-repository":
+        pr["head"]["repo"]["full_name"] = "fork/repo"
+    elif change == "pr-base-repository":
+        pr["base"]["repo"]["id"] = 1
+    elif change == "pr-ref":
+        env["GITHUB_REF"] = "refs/pull/42/head"
+    elif change == "pr-number":
+        payload["number"] = "42"
+    elif change == "pr-state":
+        pr["state"] = "closed"
+    elif change == "pr-action":
+        payload["action"] = "closed"
+    elif change == "pr-merge":
+        pr["merge_commit_sha"] = "a" * 40
+    elif change == "pr-head-sha":
+        pr["head"]["sha"] = "a" * 40
+    elif change == "pr-base-sha":
+        pr["base"]["sha"] = "a" * 40
+    probe = exercise_ci_lane(tmp_path, env, payload)
+    assert probe.result != 0 and probe.receipt["admission"] == "REFUSED"
+    for mock in (probe.commands.run, probe.create, probe.logs, probe.cleanup):
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "parents",
+    ([], ["d" * 40], ["d" * 40, "c" * 40], ["c" * 40, "a" * 40], ["c" * 40, "d" * 40, "a" * 40]),
+)
+def test_ci_real_commit_headers_must_bind_both_ordered_merge_parents(tmp_path, parents):
+    env, payload = ci_event(tmp_path, "same-repository-pr-merge")
+    probe = exercise_ci_lane(tmp_path, env, payload, parents=parents)
+    assert probe.result != 0
+    probe.commands.run.assert_not_called()
+    probe.cleanup.assert_not_called()
+
+
+@pytest.mark.parametrize("raw", ("{}", "[]", "{", '{"repository":{},"repository":{}}', "null"))
+def test_ci_malformed_actual_event_payload_refuses_without_resources(tmp_path, raw):
+    env, payload = ci_event(tmp_path, "main-push")
+    probe = exercise_ci_lane(tmp_path, env, payload, raw=raw)
+    assert probe.result != 0 and probe.receipt["admission"] == "REFUSED"
+    for mock in (probe.commands.run, probe.create, probe.logs, probe.cleanup):
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize("carrier,catalog,cleanup", ((7, 0, False), (0, 9, False), (0, 0, True)))
+def test_ci_admitted_routes_keep_payload_and_cleanup_failures(tmp_path, carrier, catalog, cleanup):
+    env, payload = ci_event(tmp_path, "same-repository-pr-merge")
+    probe = exercise_ci_lane(
+        tmp_path, env, payload, carrier_exit=carrier, catalog_exit=catalog, cleanup_failure=cleanup
+    )
+    assert probe.result != 0 and probe.receipt["result"] == "FAIL"
+    assert probe.receipt["carrier_exit"] == carrier and probe.receipt["catalog_exit"] == catalog
+    probe.cleanup.assert_called_once()
+
+
+def test_ci_partition_failure_stops_before_first_docker_command(tmp_path):
+    env, payload = ci_event(tmp_path, "main-push")
+    probe = exercise_ci_lane(tmp_path, env, payload, partition_failure=True)
+    assert probe.result != 0
+    assert all(call.args[0][0] != "docker" for call in probe.commands.run.call_args_list)
+    probe.create.assert_not_called()
+    probe.cleanup.assert_called_once()
+
+
+def test_ci_run_never_adopts_retained_state_even_with_the_same_event(tmp_path):
+    env, payload = ci_event(tmp_path, "main-push")
+    probe = exercise_ci_lane(tmp_path, env, payload, retained_state=True)
+    assert probe.result != 0 and probe.receipt["admission"] == "REFUSED"
+    for mock in (probe.commands.run, probe.create, probe.logs, probe.cleanup):
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "field", (None, "source_sha", "tree", "asm.c6.source", "asm.c6.tree", "asm.c6.run")
+)
+def test_ci_child_and_recovery_lease_bind_source_tree_run_and_attempt(tmp_path, field):
+    identity = {"head": "b" * 40, "tree": "e" * 40, "run_id": "123", "attempt": "2"}
+    lease = {
+        "name": "asm-native-" + "a" * 32,
+        "bootstrap": str(lane.ROOT / "infra/postgres/bootstrap.sh"),
+        "source_sha": identity["head"],
+        "tree": identity["tree"],
+        "labels": {
+            "asm.c6.source": identity["head"],
+            "asm.c6.tree": identity["tree"],
+            "asm.c6.run": "123:2",
+        },
+    }
+    if field:
+        (lease["labels"] if field.startswith("asm.") else lease)[field] = "foreign"
+    lane.private_json(tmp_path / "state.json", lease)
+    with patch.object(lane, "Commands") as commands:
+        if field:
+            with pytest.raises(lane.Refusal):
+                lane.require_event_lease(tmp_path, identity)
+        else:
+            lane.require_event_lease(tmp_path, identity)
+    commands.assert_not_called()
+
+
+@pytest.mark.parametrize("mode", ("cleanup", "carrier", "catalog"))
+def test_ci_secondary_entrypoints_cannot_adopt_resources_for_bad_event(tmp_path, mode):
+    with (
+        patch.dict(os.environ, {"NATIVE_ROOT": str(tmp_path)}, clear=True),
+        patch.object(lane.sys, "argv", ["runner", mode]),
+        patch.object(lane.signal, "signal"),
+        patch.object(lane, "admit_event", side_effect=lane.Refusal("bad actual event")),
+        patch.object(lane, "cleanup") as cleanup,
+        patch.object(lane, "load_lease") as lease,
+        patch.object(lane, "verify_server") as server,
+    ):
+        with pytest.raises(lane.Refusal):
+            if mode == "cleanup":
+                lane.main()
+            else:
+                lane.child(mode, tmp_path, tmp_path)
+    for mock in (cleanup, lease, server):
+        mock.assert_not_called()
+
+
+def partition_fixture():
+    native = [path + "::test_case" for path in REQUIRED_MODULES]
+    generic = ["tests/test_tenancy_postgres.py::test_old", "tests/test_other_postgres.py::test_new"]
+
+    def inventory(nodes, pg, fixtures, deselected):
+        return {
+            "collection_exit": 0,
+            "nodeids": nodes,
+            "integration_nodeids": pg,
+            "native_fixture_nodes": fixtures,
+            "deselected": deselected,
+        }
+
+    return (
+        inventory(generic + native[1:], generic + native[1:], native[1:], native[:1]),
+        inventory(native, native[1:], native[1:], []),
+        inventory(generic, generic[:], [], native[:1]),
+    )
+
+
+def test_ci_partition_uses_exact_modules_dynamic_ids_and_separate_source_tests():
+    assert lane.PG_MODULES == REQUIRED_MODULES[1:]
+    a, n, g = partition_fixture()
+    assert lane.validate_partition(a, n, g)["native_source"] == 1
+    for inventory in (a, n):
+        for key in ("nodeids", "integration_nodeids", "native_fixture_nodes"):
+            inventory[key].append(REQUIRED_MODULES[3] + "::test_future_case[new]")
+    proof = lane.validate_partition(a, n, g)
+    assert (proof["all_pg"], proof["generic_pg"], proof["native_pg"], proof["native_total"]) == (
+        6,
+        2,
+        4,
+        5,
+    )
+    assert proof["disjoint_pg_sets_and_complete_union"] and proof["fixed_total_required"] is False
+
+
+@pytest.mark.parametrize(
+    "change",
+    (
+        "lost-generic",
+        "lost-native",
+        "module",
+        "duplicate",
+        "exit",
+        "foreign",
+        "marker",
+        "skip-selection",
+        "fixture-escape",
+        "fixture-loss",
+        "generic-order",
+        "source-marker",
+    ),
+)
+def test_ci_partition_refuses_lost_cases_modules_markers_and_fixture_escape(change):
+    a, n, g = partition_fixture()
+    if change == "lost-generic":
+        g["nodeids"].pop()
+    elif change == "lost-native":
+        n["nodeids"].pop()
+    elif change == "duplicate":
+        g["nodeids"].append(g["nodeids"][0])
+    elif change == "exit":
+        a["collection_exit"] = 2
+    elif change == "foreign":
+        g["nodeids"].append("tests/test_foreign.py::test_x")
+    elif change == "marker":
+        n["integration_nodeids"].pop()
+    elif change == "skip-selection":
+        n["deselected"].append("test_hidden")
+    elif change == "fixture-escape":
+        g["native_fixture_nodes"].append(g["nodeids"][0])
+    elif change == "fixture-loss":
+        a["native_fixture_nodes"].pop()
+    elif change == "generic-order":
+        g["nodeids"].reverse()
+    elif change == "source-marker":
+        n["integration_nodeids"].append(n["nodeids"][0])
+    with patch.object(
+        lane, "MODULES", REQUIRED_MODULES[:-1] if change == "module" else REQUIRED_MODULES
+    ):
+        with pytest.raises(lane.Refusal):
+            lane.validate_partition(a, n, g)
+
+
+def test_ci_collection_is_collect_only_and_hook_blocks_fixture_execution(tmp_path):
+    def collect(argv, *, plugins):
+        assert "--collect-only" in argv
+        with pytest.raises(lane.Refusal, match="never execute fixtures"):
+            plugins[0].pytest_runtest_setup(object())
+        return 2
+
+    path = tmp_path / "inventory.json"
+    with patch.dict(os.environ, {}, clear=True), patch("pytest.main", side_effect=collect):
+        assert lane.collect_partition("collect-all-pg", path) == 2
+    assert json.loads(path.read_text())["collection_exit"] == 2
+
+
+def test_ci_failed_partition_collection_cannot_proceed(tmp_path):
+    commands = Mock()
+    commands.run.return_value = (2, b"collection error")
+    with pytest.raises(lane.Refusal):
+        lane.prove_partition(tmp_path, tmp_path, commands, {})
+    assert commands.run.call_count == 1
+
+
+@pytest.mark.parametrize("bad_selection", (False, True))
+def test_ci_actual_generic_execution_must_match_proven_inventory(tmp_path, bad_selection):
+    expected = partition_fixture()[2]["nodeids"]
+
+    def execute(argv, *, plugins):
+        assert argv[:4] == ["-v", "--durations=20", "-m", "integration"]
+        assert (
+            tuple(arg.removeprefix("--ignore=") for arg in argv if arg.startswith("--ignore="))
+            == REQUIRED_MODULES[1:]
+        )
+        items = [
+            SimpleNamespace(nodeid=node) for node in (expected[:-1] if bad_selection else expected)
+        ]
+        plugins[0].pytest_collection_finish(SimpleNamespace(items=items))
+        return 7
+
+    with (
+        patch.dict(
+            os.environ,
+            {
+                "ASM_DATABASE_URL": "ordinary-runtime",
+                "ASM_MIGRATION_DATABASE_URL": "ordinary-migrator",
+            },
+            clear=True,
+        ),
+        patch.object(lane, "prove_partition", return_value=({}, expected)),
+        patch("pytest.main", side_effect=execute),
+    ):
+        if bad_selection:
+            with pytest.raises(lane.Refusal):
+                lane.generic_integration()
+        else:
+            assert lane.generic_integration() == 7
+
+
+@pytest.mark.parametrize("key", (*lane.SECRET_ENV[:2], "PYTEST_ADDOPTS"))
+def test_ci_generic_selection_never_receives_reset_admin_or_subset_flags(key):
+    with (
+        patch.dict(os.environ, {key: "forbidden"}, clear=True),
+        patch.object(lane, "prove_partition") as collect,
+    ):
+        with pytest.raises(lane.Refusal):
+            lane.generic_integration()
+    collect.assert_not_called()
+
+
+@pytest.mark.parametrize("path", tuple(lane.CI_INPUT_SHA256))
+def test_ci_guard_reads_actual_inputs_and_refuses_absent_or_changed_gate(tmp_path, path):
+    lane.require_ci_inputs()
+    for relative in lane.CI_INPUT_SHA256:
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes((lane.ROOT / relative).read_bytes())
+    changed = tmp_path / path
+    original = changed.read_bytes()
+    changed.write_bytes(
+        original.replace(b"native-context-db", b"missing-native-gate", 1)
+        if "workflows" in path
+        else original.replace(b" generic-integration", b" generic-integration -k subset")
+    )
+    assert changed.read_bytes() != original
+    with patch.object(lane, "ROOT", tmp_path):
+        with pytest.raises(lane.Refusal):
+            lane.require_ci_inputs()
+        changed.unlink()
+        with pytest.raises(FileNotFoundError):
+            lane.require_ci_inputs()
 
 
 if __name__ == "__main__":
