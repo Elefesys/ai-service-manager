@@ -5,7 +5,107 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий шаг C0 — ordinary CI FAILED; C6 CI-R2 / 2026-10-19 UTC
+## 0. Текущий шаг C0 — CI-R2 source принят; ordinary CI RUN2 / 2026-10-19 UTC
+
+[C6 return6266094297](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6266094297)
+accepted by [C0 review6266253490](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6266253490).
+**C6 CI-R2 INTEGRATED source; C0 prepares ordinary CI RUN2.
+C1/C2/C3/C5/C6/C8 HOLD. M3 IN_PROGRESS.**
+
+Accepted source62a85024fbebe53b8e0b5b86dc876dcbf538154f,
+treea8572e8fe2ee7646f85922f7f186e298632e6018,
+sole parentdac24364ca2daea082a05d6e92d4809e2ab9725c.
+Exactly4 allowed test/launcher paths,+977/-74;288 protected leaves exact.
+Both CI findings are corrected in source; their actual runtime closure awaits RUN2.
+
+C0 verified all292 remote bytes/modes, original11/manifest/contract,
+54 evidence-manifest entries/12 published hashes and exact source archive.
+Independent two-module units798/798 PASS/62.59s; all745 previous IDs retained,
+53 additions,0skip/xfail/failure/error. Python3.13.12/58 locked distributions;
+Ruff/check-format/compile/launcher shell+heredoc PASS. All4 current durable
+calls now use separate exact0013/45-table fingerprints; held-state functions
+differ only in those4 call targets. Historical canonical_fingerprint is exact.
+Coordinator differs only in MATERIAL dispatch; accepted P runs from exact
+commit/tree/parents/275-byte+mode-checked checkout. Frozen phase/budget/recovery/
+ownership/cleanup/workspace bodies retained. Same clock S/caps/error discipline.
+
+C0 additionally validated the new report reader against authentic accepted P
+main run38960113060/artifact12072813317. ZIP/source archives275 files and P
+identity verified; current source-derived image proofs accepted the real report.
+This is offline historical-evidence checking, not new runtime execution.
+Generated P header imports real0012 without revision override; expected image
+source inventories78runtime/168development. Current pure source pairing all4
+components/167 functions/45 tables/635 columns PASS. Production collect-only
+907=802+105,112=7source+105PG/105 guarded consumers; every ordered ID equals
+C6 and actual RUN1 inventories. Three files byte-equal C6; no fixture executed.
+
+| Task / finding / gate | Current disposition |
+|---|---|
+| C6-M3.1-NATIVE-CONTEXT-CI-R2 | INTEGRATED source |
+| C0-NC-CI-01/P2 | Fixed in source; actual durable closure PENDING RUN2 |
+| C0-NC-CI-02/P2 | Fixed in source; actual complete state closure PENDING RUN2 |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN1 | Historical FAILURE6SUCCESS/4FAILURE; approval consumed |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN2 | PREPARED; separate exact one-use execution comment follows |
+| Actual corrected full CI | NOT RUN at preparation; acceptance PENDING |
+| Prior native/browser slices and other closures | Retained on their exact tested sources |
+
+Preparation is a docs-only child of62a85024; exact SHA/tree in C0 execution
+comment. Only HANDOFF/register change;290 other leaves exact. C0 prepares on
+c0/m3-1-native-context-ci-r2; C6 return branch stays62a85024.
+PR35 currently uses c0/m3-1-native-context-ci-r1 atd5e0fe586179dfc22084c80562abec0796e88cbe.
+Moving that PR head requires the new exact execution binding and triggers
+one pull_request/synchronize run. Keep one existing Draft PR; no new PR.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 and stock execution
+af7482dede085bc033e3fee34f9a2425124351ee stay unchanged.
+User owns merge; D1/D2/D3/all caps/previous closures retained.
+IMPL-05 DEFERRED; account/A08/P01/P05/renewal/collector/A12/M4 later.
+
+### 0.1. C0-M3.1-NATIVE-CONTEXT-CI-RUN2 — corrected ordinary PR gate
+
+After exact source review and this docs-only preparation, C0 publishes one
+new approval binding full candidate SHA/tree/sole parent62a85024, expected old
+PR35 headd5e0fe58, and frozen main e205e220. Then one leased fast-forward of
+c0/m3-1-native-context-ci-r1 to that prepared source admits a single automatic
+pull_request/synchronize run, attempt1. No rerun of39235044613, workflow dispatch,
+second mutation during execution, new PR, main/stock-ref move, cancellation,
+merge or deployment. Old approval6264718588 stays CONSUMED and is not reused.
+
+Record the actual new GitHub merge SHA and ordered parents[main,new candidate],
+require merge tree equal candidate, then bind every actual job/archive to that
+source. Metadata head_sha alone does not establish the tested merge.
+
+Required acceptance:
+- All10 ordinary jobs and retained clean-source gates succeed. No skipped,
+  absent, cancelled, continued-on-error or filtered mandatory work.
+- Foundation/Docker29: all six current durable lifecycles complete on exact
+  current0013/45-table fingerprints; UNKNOWN/receipts/Console/wire/identity and
+  teardown assertions retained. All original direct-wire assertions execute.
+- Both state lanes: current coordinator truthfully reports itself; complete
+  E0011→frozen P0012 executes unchanged from exact e205e220/tree85206b9c.
+  Full42 tables/132 functions/readers/cycles/ACK-loss/recovery/used-refusal/
+  cutover/restart, prior H/T/C/G/E and all T2+lateC3 negatives complete.
+  Inspect actual P archives/images/reports/diagnostics/owners/cleanup and clock.
+- Foundation must reach its formerly blocked full unfiltered unit suite,
+  exact generic802 PG inventory, full migration before/after lifecycle,
+  contract export, deterministic wheel comparison and service/HTTP smoke.
+- Native must independently pass current112/336 phases/105 guarded resets,
+ 134 runner+130subtests, complete167/45/635 catalog/ACL/verifier, actual PR
+  merge admission/owned cleanup/source clean. Historical P is not native proof.
+- Full frontend and54 Playwright45desktop+9narrow execute again; four image/
+  intent shards remain required. Counts describe complete current inventories,
+  never permission to drop cases.
+- Preserve whole native20min/payload1080s, foundation45/browser25/state25,
+  original S+600/P+720/fixed120/supervisorS+1200/cleanup90 and all other caps.
+  Measure actual new replay/checkout/export cost; no budget extension/reset,
+  elapsed subtraction, retry or broad optimization.
+- All resources limited to the existing disposable Actions LOCAL/TEST jobs.
+  No VM/deployed host/account/Telegram/provider/S3/LLM/renewal work.
+
+C0 inspects actual results before closing CI-01/02 or accepting whole integration.
+A new failure remains evidence and leads to a bounded disposition; no automatic
+retry or unrelated reopening. At preparation there is no new runtime execution.
+
+## История — 0. Текущий шаг C0 — ordinary CI FAILED; C6 CI-R2 / 2026-10-19 UTC
 
 [C0 failure disposition6265446311](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6265446311).
 **PR35 Draft/BLOCKED; run39235044613/attempt1 completed:6 SUCCESS,4 FAILURE.

@@ -2,7 +2,64 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — ordinary CI FAILED; C6 CI-R2 / 2026-10-19 UTC
+## Текущий статус — CI-R2 INTEGRATED source; C0 ordinary CI RUN2 / 2026-10-19 UTC
+
+[C6 return6266094297](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6266094297)
+accepted by [C0 review6266253490](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6266253490).
+**C6 CI-R2 INTEGRATED source; C0 prepares ordinary CI RUN2.
+C1/C2/C3/C5/C6/C8 HOLD. M3 IN_PROGRESS.**
+
+Accepted source62a85024fbebe53b8e0b5b86dc876dcbf538154f,
+treea8572e8fe2ee7646f85922f7f186e298632e6018,
+sole parentdac24364ca2daea082a05d6e92d4809e2ab9725c.
+Exactly4 allowed test/launcher paths,+977/-74;288 protected leaves exact.
+Both CI findings are corrected in source; their actual runtime closure awaits RUN2.
+
+C0 verified all292 remote bytes/modes, original11/manifest/contract,
+54 evidence-manifest entries/12 published hashes and exact source archive.
+Independent two-module units798/798 PASS/62.59s; all745 previous IDs retained,
+53 additions,0skip/xfail/failure/error. Python3.13.12/58 locked distributions;
+Ruff/check-format/compile/launcher shell+heredoc PASS. All4 current durable
+calls now use separate exact0013/45-table fingerprints; held-state functions
+differ only in those4 call targets. Historical canonical_fingerprint is exact.
+Coordinator differs only in MATERIAL dispatch; accepted P runs from exact
+commit/tree/parents/275-byte+mode-checked checkout. Frozen phase/budget/recovery/
+ownership/cleanup/workspace bodies retained. Same clock S/caps/error discipline.
+
+C0 additionally validated the new report reader against authentic accepted P
+main run38960113060/artifact12072813317. ZIP/source archives275 files and P
+identity verified; current source-derived image proofs accepted the real report.
+This is offline historical-evidence checking, not new runtime execution.
+Generated P header imports real0012 without revision override; expected image
+source inventories78runtime/168development. Current pure source pairing all4
+components/167 functions/45 tables/635 columns PASS. Production collect-only
+907=802+105,112=7source+105PG/105 guarded consumers; every ordered ID equals
+C6 and actual RUN1 inventories. Three files byte-equal C6; no fixture executed.
+
+| Task / finding / gate | Current disposition |
+|---|---|
+| C6-M3.1-NATIVE-CONTEXT-CI-R2 | INTEGRATED source |
+| C0-NC-CI-01/P2 | Fixed in source; actual durable closure PENDING RUN2 |
+| C0-NC-CI-02/P2 | Fixed in source; actual complete state closure PENDING RUN2 |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN1 | Historical FAILURE6SUCCESS/4FAILURE; approval consumed |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN2 | PREPARED; separate exact one-use execution comment follows |
+| Actual corrected full CI | NOT RUN at preparation; acceptance PENDING |
+| Prior native/browser slices and other closures | Retained on their exact tested sources |
+
+Preparation is a docs-only child of62a85024; exact SHA/tree in C0 execution
+comment. Only HANDOFF/register change;290 other leaves exact. C0 prepares on
+c0/m3-1-native-context-ci-r2; C6 return branch stays62a85024.
+PR35 currently uses c0/m3-1-native-context-ci-r1 atd5e0fe586179dfc22084c80562abec0796e88cbe.
+Moving that PR head requires the new exact execution binding and triggers
+one pull_request/synchronize run. Keep one existing Draft PR; no new PR.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 and stock execution
+af7482dede085bc033e3fee34f9a2425124351ee stay unchanged.
+User owns merge; D1/D2/D3/all caps/previous closures retained.
+IMPL-05 DEFERRED; account/A08/P01/P05/renewal/collector/A12/M4 later.
+
+Exact execution boundaries: M3_HANDOFF§0.1; all implementation chats HOLD.
+
+## История — Текущий статус — ordinary CI FAILED; C6 CI-R2 / 2026-10-19 UTC
 
 [C0 failure disposition6265446311](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6265446311).
 **PR35 Draft/BLOCKED; run39235044613/attempt1 completed:6 SUCCESS,4 FAILURE.
