@@ -5,7 +5,132 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий шаг C0 — CI-R2 source принят; ordinary CI RUN2 / 2026-10-19 UTC
+## 0. Текущий шаг C0 — RUN2 FAILED; C6/C1 точечные CI-исправления / 2026-10-19 UTC
+
+[C0 final RUN2 disposition6266843739](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6266843739).
+**PR35 Draft/BLOCKED; RUN2 completed8 SUCCESS/2 FAILURE.
+C6 CI-R3 and C1 CI-R1 ACTIVE/source-only; C2/C3/C5/C8 HOLD. M3 IN_PROGRESS.**
+
+Frozen PR35 candidate45253120875ba8107035c1eb27427cdc6f30364e,
+treec250ae01ad5b41f387f1a624dd6a93f51716e4a5; actual tested merge
+89aef741a79cf1285d7321666dfa9e0d22ec3a0e, ordered parents
+[e205e22051bc06295758b504d84699652b176c15,45253120875ba8107035c1eb27427cdc6f30364e].
+Run39246355268/attempt1 automatic synchronize; all10 checkout logs exact.
+Approval6266348523 CONSUMED ONCE. No retry/rerun/dispatch/cancel/merge.
+
+| Task / finding / gate | Current disposition |
+|---|---|
+| C6-M3.1-NATIVE-CONTEXT-CI-R2 | INTEGRATED and VERIFIED LOCAL/TEST for its bounded pairing corrections |
+| C0-NC-CI-01/P2 | CLOSED: current0013 durable route; all6 lifecycles in foundation+Docker29 |
+| C0-NC-CI-02/P2 | CLOSED: complete frozen P0012 MATERIAL replay in both state lanes |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN2 | FAILED8SUCCESS/2FAILURE; full integration BLOCKED |
+| C0-NC-CI-03/P2 | OPEN: native PR admission refuses before resources; actual webhook operands missing |
+| C0-NC-CI-04/P2 | OPEN: development/checks image has no git |
+| C0-NC-CI-05/P2 | OPEN: exact auth owner-route test omits3 accepted native endpoints |
+| C6-M3.1-NATIVE-CONTEXT-CI-R3 | IN_PROGRESS/source-only;3 files; CI-03/04 |
+| C1-M3.1-NATIVE-CONTEXT-CI-R1 | IN_PROGRESS/source-only;1 file; CI-05 |
+| Current native112/336/105/catalog | NOT RUN in RUN2; prior RUN1 proof retained on its own merge |
+| Generic802 PG/contracts/reproducibility/service smoke | NOT REACHED after failing full units |
+
+C0 verified all9 ZIP digests,8 current archives/all292 bytes+modes and2 frozen-P
+archives/all275 bytes+modes. Both actual MATERIAL reports pass the new reader:
+correct current coordinator versus exact P, images/diagnostics/ACK-loss/recovery/
+callers/owners/cleanup/clock. Full H/T/C/G/E/P and T2+lateC3 complete.
+Preparation normal712.921579s(7.078421s remaining),Docker29697.971276s
+(22.028724s remaining),within unchanged720;cleanup PASS. Both durable lanes
+complete all6 lifecycles/full45-table before=after hashes,UNKNOWN/wire1/Console,
+4 source image proofs each. Browser398 frontend/14files+54 Playwright45desktop+
+9narrow and all4 image/intent shards PASS. Eight successful clean-source steps PASS.
+
+Foundation full units:1858passed/7failed/9errors,907deselected,130subtests PASS.
+Six SourceGuards failures+nine host Git fixture setup errors are FileNotFoundError
+for git in development image. One other failure is tests/test_auth_contract.py:62:
+actual25 owner routes versus22 expected; exact missing3 human-context routes.
+C0 reproduced that RED offline; full generated OpenAPI already equals snapshot.
+Frozen auth.v1 remains7 endpoints/schema0003. Foundation clean step was skipped;
+its archived worktree status is empty and all source bytes/modes verified.
+
+Native fails event_identity before commands/resources; cleanup entrypoint repeats
+the refusal. Receipt REFUSED/NOT_RUN,carrier+catalog null,cleanup NOT_ATTEMPTED.
+Actual Git merge parents/tree are correct. Source-only9-case matrix reproduces
+the refusal by changing only an optional merge_commit_sha snapshot to the previous
+merge; exact failed webhook operand is UNKNOWN because diagnostics omitted it.
+Preserve actual event base/head/parents/ref/repository/HEAD authority; add safe
+per-predicate evidence. Never substitute a later REST response for the event.
+
+This preparation changes only HANDOFF/register,sole parent45253120;290 other
+leaves exact. Exact prepared SHA/tree in canonical task comments. New isolated
+C0 c0/m3-1-native-context-ci-r3, C6 c6/m3-1-native-context-ci-r3 and
+C1 c1/m3-1-native-context-ci-r1 all start from that exact preparation.
+PR35/c0-CI-R1 and c0-CI-R2 stay45253120;C6-CI-R2 stays62a85024.
+No source implementation fix or next runtime execution is included in preparation.
+C0 independently reviews both disjoint returns before combining and issuing a
+fresh exact next CI binding. User owns merge; keep one existing Draft PR.
+
+Main e205e220/schema0012,stockaf7482d and previous closures/D1/D2/D3/all caps
+unchanged. No broad optimization/IMPL-05; account/A08/P01/P05/renewal/collector/
+A12/M4 later. Exact task scopes follow; no other chats or agents activated.
+
+### 0.1. C6-M3.1-NATIVE-CONTEXT-CI-R3
+
+C6-M3.1-NATIVE-CONTEXT-CI-R3 — ordinary PR event admission, bounded failure evidence and development git; source-only.
+
+Repository Elefesys/ai-service-manager. Start from the full C0 docs-preparation SHA/tree in the canonical task comment, sole parent frozen RUN2 candidate45253120875ba8107035c1eb27427cdc6f30364e/treec250ae01ad5b41f387f1a624dd6a93f51716e4a5. Separate clean checkout/branch c6/m3-1-native-context-ci-r3; no shared checkout/cache assumptions. Read AGENTS, current HANDOFF/register, canonical Spec/ADR/MVP/Plan M3 and M3_CONTRACT§16–16.20. C1 separately owns the one-file CI-R1 route-inventory correction; C2/C3/C5/C8 HOLD. C6 only this bounded task.
+
+Observed basis: RUN2/39246355268 attempt1, native job118039117478. Actual checkout and same-commit workflow use merge89aef741a79cf1285d7321666dfa9e0d22ec3a0e; raw Git parents are exactly [e205e22051bc06295758b504d84699652b176c15,45253120875ba8107035c1eb27427cdc6f30364e], treec250ae01ad5b41f387f1a624dd6a93f51716e4a5. event_identity refuses the combined “PR checkout is not the exact base/head merge” predicate before commands/resources. Cleanup entrypoint repeats the refusal. Actual receipt: admission REFUSED, stock_db NOT_RUN, carrier/catalog null, owned_cleanup NOT_ATTEMPTED_EVENT_REFUSED;5.123185s. Artifact12183930672/1981bytes/SHA2562b9d9e85ff73bc42482ddde1af1d337f0496142d83dc48b185fb2e462d3f592b.
+
+Evidence limit: the lane retained neither the actual event identity operands nor the exact failed subcondition. C0 independently reproduced the same refusal with correct actual HEAD/tree/ordered parents and only the previous non-null advisory merge_commit_sha substituted. Fresh/None values pass; all wrong/reversed/missing/extra actual parents refuse. This is synthetic predicate isolation, not the recovered RUN2 webhook. Do not claim its exact field value as observed. A post-event REST PR read is not the original event.
+
+Additional confirmed basis: foundation job118039116598 reached full unfiltered units and reported6 SourceGuards failures plus9 real Git fixture setup errors because the development image has no git executable. Final RUN2 is8 SUCCESS/2 FAILURE; both prior CI-R2 routing defects CLOSED. Final C0 disposition6266843739 is authoritative; original webhook limitation above remains.
+
+Only these3 existing files may change:
+- scripts/native_context_db_catalog.py
+- tests/test_native_context_db_runner.py
+- infra/Dockerfile.backend — development-stage git availability only
+
+Required behavior:
+1. Preserve admission authority: actual GITHUB_SHA==checked-out HEAD, clean all tracked bytes/modes/tree, actual Git commit headers even at fetch-depth1, exactly two ordered parents matching the actual event's base/head, same repository name+numeric ID/non-fork, open unmerged PR-to-main/ref/number/base/head/action identity, genuine Actions run/attempt. Wrong actual parents, stale event base/head, wrong source/ref/repository, malformed/duplicate payload, forks and unsupported events must refuse before any command/resource/cleanup adoption. Stock/main push routes and source leases remain exact.
+2. Correct only the documented PR snapshot compatibility issue. GitHub documents GITHUB_SHA as the PR merge-branch commit and mergeability/test-merge metadata as asynchronously computed. The additional optional pull_request.merge_commit_sha snapshot must not override independently proven actual event source/HEAD/ordered-parent identity. Handle a missing/null or well-formed stale advisory value without rejecting an otherwise exact current merge; preserve it truthfully as advisory diagnostic data, never as tested source. Invalid types/formats must remain explicit and tested. Never substitute fresh REST values into the original event, retry/poll GitHub, relabel a PR as stock, trust head_sha alone, remove actual parent checks or allow a stale base/head event.
+3. Split admission diagnostics so a failure identifies the actual predicate. Retain a small structured allowlist of safe source/run/attempt/ref/PR/validated SHA and parent operands, payload digest and closed failure reason on success and refusal, including secondary cleanup entrypoint. Do not dump the full event, PR text, environment, tokens, credentials, arbitrary malformed values or URLs. Diagnostic write errors must not hide the original refusal or authorize resources. Retain zero resource work after refusal; avoid presenting NOT_ATTEMPTED cleanup as PASS.
+4. Provide the real git executable in the development/checks stage used by the unchanged full unit command. Use a minimal development-only install under the existing pinned base/toolchain; no package upgrade, image/pin/lock change or git addition to runtime/shared toolchain stages. Preserve the exact runtime stage and existing development COPY/CMD/workflow inputs. Do not copy a host binary or replace real Git fixtures with mocks/skips; no claim of image execution from a source-only check.
+5. Preserve all ownership/nonces/leases/retained-state refusal/isolated child credentials/105 reset guards, complete112 carrier and336 phase accounting, catalog167/45/635, full generic/native partition, source archive fidelity, primary/secondary error handling, owned-only cleanup and all unchanged caps. No DB, production, schema, workflow, launcher, partition, budget or other compatibility-harness change; Dockerfile changes are confined to the development git prerequisite above.
+
+Bounded verification:
+- Frozen Python3.13/uv.lock development environment; compile/Ruff/check-format the2 changed Python paths; inspect Dockerfile stage boundaries and prove runtime/shared toolchain, pins/locks and every unrelated line remain exact.
+- Full existing tests/test_native_context_db_runner.py unit suite, all prior134 cases/130 subtests retained except explicitly justified replacement of the advisory-only rejection fixture; no weaker actual-source admission assertion. Add meaningful regression cases for opened/reopened/synchronize with current/null/stale advisory, actual parent/base/head/env/source drift, malformed optional value, failed operands/diagnostic redaction/diagnostic write failure and secondary entrypoints. Check before any resource command, not just return codes.
+- Source-only RED on unchanged base for the stale advisory/current exact merge case, then GREEN. Label constructed fixtures accurately; do not invent raw RUN2 payload. If evidence reveals a different cause or a necessary wider scope, return a precise blocker before expanding.
+- Execute the full existing native runner unit module and all9 parametrizations of the existing real-Git host source fixture in tests/test_telegram_egress.py; git must be a real executable. Existing actual image failures establish the missing prerequisite; Docker build/run is NOT authorized here and is deferred to the next separately bound CI. Do not add redundant tests that merely match an install line.
+- Collect-only production partition907=802+105,112=7source+105PG; retain all ordered IDs/fixture guards with no fixture execution. Pure source pairing on final published source for all4 components/167functions/45tables/635columns.
+- Exact3-path diff,289 protected leaves byte/mode-exact to preparation, including all CI-R2 fixes, workflows/check_backend/launcher/Compose/locks/production/API/Console/migrations/contracts/original11. Publish exact command/exits/counts/source/evidence hashes.
+
+Return only isolated task branch and one REVIEW comment in PR34, full commit/tree/sole parent, diff and evidence/limitations; then HOLD. No actual PG/Docker/browser/Actions or services, new PR, PR35 head/main/stock/old C0 or C6 ref movement, rerun/dispatch/retry/cancel/merge/VM/deploy/account/provider/Telegram/S3/LLM/renewal, other agents/chats or broadened optimization. PR35 remains frozen at45253120; C0 independently reviews C6 and C1's disjoint returns before a separately bound future run. User owns merge.
+
+Primary platform references:
+https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request
+https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request
+
+### 0.2. C1-M3.1-NATIVE-CONTEXT-CI-R1
+
+C1-M3.1-NATIVE-CONTEXT-CI-R1 — update the exact auth-consumer owner-route inventory for accepted native context; source-only.
+
+Repository Elefesys/ai-service-manager. Separate clean checkout/branch c1/m3-1-native-context-ci-r1 from the exact C0 preparation SHA/tree in the canonical task comment; sole parent frozen PR35 RUN2 candidate45253120875ba8107035c1eb27427cdc6f30364e/treec250ae01ad5b41f387f1a624dd6a93f51716e4a5. Read AGENTS/current HANDOFF/register, canonical Spec/ADR/MVP/Plan M3, M3_CONTRACT§16–16.20 and C0 disposition6266843739. C6 separately owns CI-R3; C2/C3/C5/C8 HOLD. No shared checkout/cache assumption.
+
+Observed C0-NC-CI-05/P2: RUN2/39246355268 foundation118039116598 fails tests/test_auth_contract.py:62 because the explicit expected owner-route list omits three already accepted native routes. C0 independently reproduced the exact failure offline; actual inventory25 versus expected22, exactly3 additions and no test-only extras. Full generated OpenAPI is byte-for-byte equal to contracts/openapi.json. This is a test inventory correction, not API/contract/schema implementation.
+
+Only tests/test_auth_contract.py may change. Add an explicit native-context route list containing exactly:
+- GET /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/human-context
+- GET /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/human-context/observations
+- POST /api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/human-context/reconcile
+
+Include it in the existing exact sorted inventory comparison. Preserve every previous auth/billing/messaging/control/escalation route and all frozen auth.v1 assertions:7 endpoints,schema0003/down0002,LOCAL/TEST,error codes/session/password policy/production and Ops disabled. Keep complete byte-for-byte generated OpenAPI equality and OfflineDatabase's refusal of DB access. No filtering out native paths, subset/superset comparison, runtime-derived expected list, skip/xfail, broad snapshots regeneration or relaxed assertions.
+
+Verification: frozen Python3.13/uv.lock environment; reproduce the original single test RED before change, then run the full tests/test_auth_contract.py and tests/test_auth_unit.py modules GREEN. Compile/Ruff/check-format the changed file; run the existing read-only contract export --check and verify contracts/auth.v1.json/contracts/openapi.json plus every other tracked file unchanged. No new redundant tests required; the retained exact inventory/snapshot assertion is the regression gate. Preserve canonical sources/original11 and pure source pairing all4 components/167functions/45tables/635columns on the final published source. Exact1-file diff,291 other leaves byte/mode-exact to preparation. Publish precise commands/exits/counts/hashes/limitations.
+
+No production/API/frontend/migration/contract/Docker/workflow/lock/runner or other test changes. If any accepted route or generated snapshot actually differs from the above evidence, stop with a precise blocker before expanding. Unit/contract checks use existing offline seams only; no DB/service/Docker/browser/Actions/network provider/API calls.
+
+Publish only isolated task branch and one REVIEW return in PR34 with full commit/tree/sole parent,1-file diff,evidence/source hashes and remaining limitations; then HOLD. No new PR, PR35/main/stock/old source-ref move, rerun/dispatch/retry/cancel/merge/VM/deploy/Telegram/account/S3/LLM/renewal, other agents/chats or broad cleanup. C0 reviews both disjoint C1/C6 returns before integration and a separately bound next CI; user owns merge. Whole M3 IN_PROGRESS; previous closures/all caps and later scopes retained.
+
+## История — 0. Текущий шаг C0 — CI-R2 source принят; ordinary CI RUN2 / 2026-10-19 UTC
 
 [C6 return6266094297](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6266094297)
 accepted by [C0 review6266253490](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6266253490).

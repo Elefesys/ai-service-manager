@@ -2,7 +2,75 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — CI-R2 INTEGRATED source; C0 ordinary CI RUN2 / 2026-10-19 UTC
+## Текущий статус — RUN2 FAILED; C6 CI-R3/C1 CI-R1 / 2026-10-19 UTC
+
+[C0 final RUN2 disposition6266843739](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6266843739).
+**PR35 Draft/BLOCKED; RUN2 completed8 SUCCESS/2 FAILURE.
+C6 CI-R3 and C1 CI-R1 ACTIVE/source-only; C2/C3/C5/C8 HOLD. M3 IN_PROGRESS.**
+
+Frozen PR35 candidate45253120875ba8107035c1eb27427cdc6f30364e,
+treec250ae01ad5b41f387f1a624dd6a93f51716e4a5; actual tested merge
+89aef741a79cf1285d7321666dfa9e0d22ec3a0e, ordered parents
+[e205e22051bc06295758b504d84699652b176c15,45253120875ba8107035c1eb27427cdc6f30364e].
+Run39246355268/attempt1 automatic synchronize; all10 checkout logs exact.
+Approval6266348523 CONSUMED ONCE. No retry/rerun/dispatch/cancel/merge.
+
+| Task / finding / gate | Current disposition |
+|---|---|
+| C6-M3.1-NATIVE-CONTEXT-CI-R2 | INTEGRATED and VERIFIED LOCAL/TEST for its bounded pairing corrections |
+| C0-NC-CI-01/P2 | CLOSED: current0013 durable route; all6 lifecycles in foundation+Docker29 |
+| C0-NC-CI-02/P2 | CLOSED: complete frozen P0012 MATERIAL replay in both state lanes |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN2 | FAILED8SUCCESS/2FAILURE; full integration BLOCKED |
+| C0-NC-CI-03/P2 | OPEN: native PR admission refuses before resources; actual webhook operands missing |
+| C0-NC-CI-04/P2 | OPEN: development/checks image has no git |
+| C0-NC-CI-05/P2 | OPEN: exact auth owner-route test omits3 accepted native endpoints |
+| C6-M3.1-NATIVE-CONTEXT-CI-R3 | IN_PROGRESS/source-only;3 files; CI-03/04 |
+| C1-M3.1-NATIVE-CONTEXT-CI-R1 | IN_PROGRESS/source-only;1 file; CI-05 |
+| Current native112/336/105/catalog | NOT RUN in RUN2; prior RUN1 proof retained on its own merge |
+| Generic802 PG/contracts/reproducibility/service smoke | NOT REACHED after failing full units |
+
+C0 verified all9 ZIP digests,8 current archives/all292 bytes+modes and2 frozen-P
+archives/all275 bytes+modes. Both actual MATERIAL reports pass the new reader:
+correct current coordinator versus exact P, images/diagnostics/ACK-loss/recovery/
+callers/owners/cleanup/clock. Full H/T/C/G/E/P and T2+lateC3 complete.
+Preparation normal712.921579s(7.078421s remaining),Docker29697.971276s
+(22.028724s remaining),within unchanged720;cleanup PASS. Both durable lanes
+complete all6 lifecycles/full45-table before=after hashes,UNKNOWN/wire1/Console,
+4 source image proofs each. Browser398 frontend/14files+54 Playwright45desktop+
+9narrow and all4 image/intent shards PASS. Eight successful clean-source steps PASS.
+
+Foundation full units:1858passed/7failed/9errors,907deselected,130subtests PASS.
+Six SourceGuards failures+nine host Git fixture setup errors are FileNotFoundError
+for git in development image. One other failure is tests/test_auth_contract.py:62:
+actual25 owner routes versus22 expected; exact missing3 human-context routes.
+C0 reproduced that RED offline; full generated OpenAPI already equals snapshot.
+Frozen auth.v1 remains7 endpoints/schema0003. Foundation clean step was skipped;
+its archived worktree status is empty and all source bytes/modes verified.
+
+Native fails event_identity before commands/resources; cleanup entrypoint repeats
+the refusal. Receipt REFUSED/NOT_RUN,carrier+catalog null,cleanup NOT_ATTEMPTED.
+Actual Git merge parents/tree are correct. Source-only9-case matrix reproduces
+the refusal by changing only an optional merge_commit_sha snapshot to the previous
+merge; exact failed webhook operand is UNKNOWN because diagnostics omitted it.
+Preserve actual event base/head/parents/ref/repository/HEAD authority; add safe
+per-predicate evidence. Never substitute a later REST response for the event.
+
+This preparation changes only HANDOFF/register,sole parent45253120;290 other
+leaves exact. Exact prepared SHA/tree in canonical task comments. New isolated
+C0 c0/m3-1-native-context-ci-r3, C6 c6/m3-1-native-context-ci-r3 and
+C1 c1/m3-1-native-context-ci-r1 all start from that exact preparation.
+PR35/c0-CI-R1 and c0-CI-R2 stay45253120;C6-CI-R2 stays62a85024.
+No source implementation fix or next runtime execution is included in preparation.
+C0 independently reviews both disjoint returns before combining and issuing a
+fresh exact next CI binding. User owns merge; keep one existing Draft PR.
+
+Main e205e220/schema0012,stockaf7482d and previous closures/D1/D2/D3/all caps
+unchanged. No broad optimization/IMPL-05; account/A08/P01/P05/renewal/collector/
+A12/M4 later. Exact task scopes follow; no other chats or agents activated.
+
+Полные выдачи и критерии: M3_HANDOFF§0.1(C6),§0.2(C1).
+
+## История — Текущий статус — CI-R2 INTEGRATED source; C0 ordinary CI RUN2 / 2026-10-19 UTC
 
 [C6 return6266094297](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6266094297)
 accepted by [C0 review6266253490](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6266253490).
