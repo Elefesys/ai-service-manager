@@ -5,7 +5,163 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий шаг C0 — C8 review принято; точечное исправление C6 HOST-R2 / 2026-10-19 UTC
+## 0. Текущий шаг C0 — HOST-R2 принят, paired stock112 PASS; CI integration / 2026-10-19 UTC
+
+[C0 acceptance6262637585](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6262637585);
+[C0 stock acceptance6262882269](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6262882269).
+**C6 CI-R1 ACTIVE/source-only; C1/C2/C3/C5/C8 HOLD. M3 IN_PROGRESS.**
+Текущая работа — подключение уже написанных проверок к обычному CI.
+Product scope не меняется; broad CI optimization/IMPL-05 остаётся DEFERRED.
+
+| Task / finding | Current disposition |
+|---|---|
+| C8-NC-HOST-01/P2 | CLOSED LOCAL/TEST; exact existing command-key contract restored |
+| C6 HOST-R2 | INTEGRATED source; C0 independent278/278 unit PASS |
+| Native DB/API/runtime/operator carrier | VERIFIED LOCAL/TEST on af7482d;112/112 actual PASS |
+| C8 independent source review | COMPLETE/HOLD; only actionable finding closed |
+| C6-M3.1-NATIVE-CONTEXT-CI-R1 | IN_PROGRESS/source-only; connect mandatory owned native job to ordinary CI |
+| Unified browser/full ordinary CI/deployed host | NOT VERIFIED; next exact C0 execution after CI-R1 review |
+| Account/A08/P01/P05/renewal/collector/A12 | Later gates OPEN; M4 out |
+
+Accepted implementation af7482dede085bc033e3fee34f9a2425124351ee, tree
+212f753f0cfc21ea53fab103349bb8e4d36971c6, sole parent0d3d089727fe6652b80c2695ab4d394044460a08.
+C0 checked all 292 remote bytes/modes, two-path+154/-3,290 protected leaves,
+old setup-test prefix, original11/manifest/full contract unchanged. Actual C0
+Python 3.13.12 setup+egress278 PASS/8.44s,128 ASCII/66 valid/0 mismatch, pure source
+pairing: 4 components/167functions/45tables/635columns. All 10 C6 evidence hashes
+and 19 old-pattern RED failures/33passes checked. Unchanged C8/frontend evidence
+remains tied to2b1d3cac; it is not fresh af7482d frontend/browser execution.
+
+Actual [run39220536676/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/39220536676),
+job117954530143, exact af7482d/tree above:112/112=7source +56DB+12API+37runtime,
+all 336 phases PASS,105 guarded reset proofs;51 runner tests+130subtests PASS.
+Independent installed 167 typed functions/45tables/635columns, roles/ACL/private
+verifier, full source archive and owned cleanup/final clean source all PASS.
+Native carrier 687.740s; whole receipt
+720.597s within unchanged20 min.
+Profile c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411 retained.
+Approval6262637585 CONSUMED ONCE; execution ref now af7482d. No rerun/ref permission.
+
+Integration wiring blocker confirmed from source and collection, not a full-CI
+failure claim: check_backend.sh selects907 PG cases=802 ordinary+105 owned-native;
+Compose checks has neither native reset opt-in nor owned-host administrator URL.
+The native workflow currently triggers only on the special C0 stock ref. CI-R1
+must route these 105 complete cases through a mandatory owned native job and
+retain all 802 ordinary cases and all 9 existing jobs. No reset bypass or skips.
+
+New C0 preparation is docs-only with sole parent af7482d; exact SHA/tree in the
+canonical task comment. Only HANDOFF/register differ;290 other leaves exact.
+Branches c0/m3-1-native-context-ci-r1 and c6/m3-1-native-context-ci-r1.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 and closed/merged PR34
+remain unchanged. Prior stock105/5d98651 and approvals retained as history only.
+Contract9/Q01/MATERIAL11, all prior closures/D1/D2/D3/caps retained. User owns merge.
+
+### 0.1. Exact C6 CI integration task
+
+C6-M3.1-NATIVE-CONTEXT-CI-R1 — connect the accepted native carrier to ordinary integration CI; source-only.
+
+Why this task exists: scripts/check_backend.sh currently executes unfiltered
+pytest -m integration, which collects the 105 native PG cases. Their real shared
+reset_disposable requires ASM_NATIVE_TEST_ALLOW_RESET=1, a private administrator
+URL to postgres and the same 127.0.0.1 owned cluster as runtime/migrator. The
+ordinary compose checks service has neither reset variable and uses postgres-test,
+not the dedicated owned host lane. The separate native workflow currently runs
+only on c0/m3-1-native-context-db-stock-r1. Consequently the native carrier must
+be wired as a separate mandatory job before ordinary full CI can be accepted.
+Independent C0 collection on af7482d confirms 907 selected integration cases:
+802 retained generic PG cases plus105 native PG cases, no fixture execution.
+This is source-confirmed integration wiring, not an executed full-CI failure,
+new product functionality, or the deferred broad CI optimization/IMPL-05.
+
+Repository Elefesys/ai-service-manager. Separate task branch
+c6/m3-1-native-context-ci-r1 from the exact preparation SHA/tree in this comment.
+C0 preparation changes only docs/tasks/M3_HANDOFF.md and docs/TASK_REGISTER.md;
+all 290 other leaves equal accepted af7482dede085bc033e3fee34f9a2425124351ee.
+Read current HANDOFF/register, AGENTS, canonical Spec/ADR/MVP/Plan M3,
+M3_CONTRACT §16–16.20 and this C0 acceptance. No shared checkout or cache assumption.
+C1/C2/C3/C5/C8 HOLD; C6 is active only for this bounded task.
+
+Only these 5 existing files may change:
+
+- .github/workflows/ci.yml
+- .github/workflows/native-context-db.yml
+- scripts/check_backend.sh
+- scripts/native_context_db_catalog.py
+- tests/test_native_context_db_runner.py
+
+Required behavior:
+1. Ordinary pull_request-to-main and push-to-main verification must contain a
+   dedicated native job using the existing owned stock runner, pinned actions,
+   DB image, frozen Python 3.13/uv0.10.0 and complete current MODULES. Prefer
+   reusing the existing workflow rather than duplicating resource lifecycle.
+   Preserve the existing explicit C0 stock-push route and its source guard.
+   No workflow_dispatch, pull_request_target, secrets/write permissions,
+   arbitrary checkout input, arbitrary ref/event/resource adoption or lab fallback.
+2. Admission must distinguish existing stock push, actual same-repository
+   pull_request-to-main merge checkout, and actual main push. Bind HEAD/tree,
+   actual event/ref/run/attempt and source archive consistently; validate event
+   payload/target and reject malformed/mismatched/unapproved routes before any
+   Docker/resource action. A reusable caller event retains its real identity;
+   never label a PR as stock push. Event metadata remains test-source identity,
+   not C0 deployment approval or drain/deployed-process attestation.
+3. The generic integration command must not execute the 3 destructive native PG
+   modules against the shared Compose DB. Route the complete modules to the
+   native job; do not grant its reset opt-in/admin credentials to generic checks.
+   All other generic unit/integration tests, complete lifecycle before/after PG,
+   contract export, reproducibility and service smoke remain unchanged. Preserve
+   every native test/assertion and all 112 current carrier IDs/order. No skips,
+   xfail, -k filtering, partial cases, selection based only on a stale total,
+   continue-on-error, failure masking, broad ignores or replacement of real tests.
+   A source/collection guard must prove the partition has no lost PG cases and
+   only the exact 3 native modules leave the generic integration selection.
+4. Reuse all ownership/nonce/container/volume/server/login guards, isolated
+   child-only credentials,105 guarded resets, full catalog/ACL comparison,
+   complete phase evidence, sanitization, owned-only cleanup and clean-source
+   checks. No source/schema readiness override. Real browser remains the normal
+   full job;54=45desktop+9narrow is the current expected inventory, not execution.
+5. Preserve all 9 existing CI jobs and their checks/budgets/commands; the native
+   gate is additional. Whole native job stays20 min including prep/cleanup/upload,
+   payload1080s reserve; foundation45/browser25/state25 and every prior transport
+   and migration budget remain exact. No CI optimization/retry/cache redesign.
+   Publish useful exact source/inventory/phase/result/catalog/cleanup artifacts
+   on success or failure. Overall integration cannot be accepted if this job
+   is skipped, absent, failed, or uses a different source from the other jobs.
+
+Bounded local verification only:
+- Python 3.13 and frozen uv.lock/dev; compile/Ruff/check-format changed Python,
+  mypy backend/src only if a production typing dependency changes.
+- Complete tests/test_native_context_db_runner.py, preserving prior 51 cases/
+ 130 subtests and explicitly count additions. New meaningful negatives cover
+  event/repository/ref/base/merge-source mismatches before resource creation,
+  actual identity in evidence, exact test partition/lost module, payload and
+  cleanup failure propagation. Mock seams are local unit evidence only.
+- YAML parse, pinned actions/permissions/caps and shell syntax for both workflows
+  and check_backend.sh; verify reusable event semantics from workflow source.
+- Collection-only full native MODULES112/105 shared guarded consumers, retained
+  old105 ordered prefix; collect the generic integration partition and prove
+  disjoint PG execution sets and complete union (current907=802+105).
+  Account for the7 source tests in the dedicated112 separately from PG105;
+  no fixed count that silently permits dropped/new tests. No fixture execution.
+- Exact allowlist diff, frozen original11/contract/SQL/API/frontend/locks/compose/
+  images and protected leaves, clean final checkout; pure source pairing all 4
+  components: 167functions/45tables/635columns on the published final source.
+
+Do not edit product code, test fixtures/migrations/DDL, public contracts, locks,
+images, Compose, other tests/docs or shared runtime settings. If these5 paths
+cannot preserve the complete gate, return a precise blocker before expanding.
+No PG/Docker/services/resource inspection/start/reuse/cleanup, browser/provider/
+account/VM/S3/LLM/policy CLI, Actions/dispatch/rerun/execution-ref/new PR/full CI/
+main/merge/deploy/live/renewal or other chats/agents. Source-only permission does
+not authorize execution of the newly admitted routes. C0 will inspect the source
+and issue the exact first ordinary CI/PR execution separately; user owns merge.
+
+Publish only the task branch and one REVIEW return to PR34 with exact commit/
+tree/parent,5-path diff, source/inventory/guard proof, full actual commands/exits/
+counts and explicit actual PG/browser/Actions NOT RUN. Then C6 HOLD. No task
+comment/PR-body/C0-doc/other-ref changes. Existing findings stay closed unless
+new contrary evidence is actually demonstrated.
+
+## История — 0. Текущий шаг C0 — C8 review принято; точечное исправление C6 HOST-R2 / 2026-10-19 UTC
 
 [C8 return6260761693](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260761693);
 [C0 disposition6260873892](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260873892).

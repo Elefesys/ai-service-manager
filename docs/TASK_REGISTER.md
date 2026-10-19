@@ -2,7 +2,60 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — C8 review принято; C6 исправляет command-key validation / 2026-10-19 UTC
+## Текущий статус — native host stock112 PASS; C6 CI-R1 / 2026-10-19 UTC
+
+[C0 acceptance6262637585](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6262637585);
+[C0 stock acceptance6262882269](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6262882269).
+**C6 CI-R1 ACTIVE/source-only; C1/C2/C3/C5/C8 HOLD. M3 IN_PROGRESS.**
+Текущая работа — подключение уже написанных проверок к обычному CI.
+Product scope не меняется; broad CI optimization/IMPL-05 остаётся DEFERRED.
+
+| Task / finding | Current disposition |
+|---|---|
+| C8-NC-HOST-01/P2 | CLOSED LOCAL/TEST; exact existing command-key contract restored |
+| C6 HOST-R2 | INTEGRATED source; C0 independent278/278 unit PASS |
+| Native DB/API/runtime/operator carrier | VERIFIED LOCAL/TEST on af7482d;112/112 actual PASS |
+| C8 independent source review | COMPLETE/HOLD; only actionable finding closed |
+| C6-M3.1-NATIVE-CONTEXT-CI-R1 | IN_PROGRESS/source-only; connect mandatory owned native job to ordinary CI |
+| Unified browser/full ordinary CI/deployed host | NOT VERIFIED; next exact C0 execution after CI-R1 review |
+| Account/A08/P01/P05/renewal/collector/A12 | Later gates OPEN; M4 out |
+
+Accepted implementation af7482dede085bc033e3fee34f9a2425124351ee, tree
+212f753f0cfc21ea53fab103349bb8e4d36971c6, sole parent0d3d089727fe6652b80c2695ab4d394044460a08.
+C0 checked all 292 remote bytes/modes, two-path+154/-3,290 protected leaves,
+old setup-test prefix, original11/manifest/full contract unchanged. Actual C0
+Python 3.13.12 setup+egress278 PASS/8.44s,128 ASCII/66 valid/0 mismatch, pure source
+pairing: 4 components/167functions/45tables/635columns. All 10 C6 evidence hashes
+and 19 old-pattern RED failures/33passes checked. Unchanged C8/frontend evidence
+remains tied to2b1d3cac; it is not fresh af7482d frontend/browser execution.
+
+Actual [run39220536676/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/39220536676),
+job117954530143, exact af7482d/tree above:112/112=7source +56DB+12API+37runtime,
+all 336 phases PASS,105 guarded reset proofs;51 runner tests+130subtests PASS.
+Independent installed 167 typed functions/45tables/635columns, roles/ACL/private
+verifier, full source archive and owned cleanup/final clean source all PASS.
+Native carrier 687.740s; whole receipt
+720.597s within unchanged20 min.
+Profile c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411 retained.
+Approval6262637585 CONSUMED ONCE; execution ref now af7482d. No rerun/ref permission.
+
+Integration wiring blocker confirmed from source and collection, not a full-CI
+failure claim: check_backend.sh selects907 PG cases=802 ordinary+105 owned-native;
+Compose checks has neither native reset opt-in nor owned-host administrator URL.
+The native workflow currently triggers only on the special C0 stock ref. CI-R1
+must route these 105 complete cases through a mandatory owned native job and
+retain all 802 ordinary cases and all 9 existing jobs. No reset bypass or skips.
+
+New C0 preparation is docs-only with sole parent af7482d; exact SHA/tree in the
+canonical task comment. Only HANDOFF/register differ;290 other leaves exact.
+Branches c0/m3-1-native-context-ci-r1 and c6/m3-1-native-context-ci-r1.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 and closed/merged PR34
+remain unchanged. Prior stock105/5d98651 and approvals retained as history only.
+Contract9/Q01/MATERIAL11, all prior closures/D1/D2/D3/caps retained. User owns merge.
+
+Exact C6 five-path task and limits: M3_HANDOFF§0.1.
+
+## История — Текущий статус — C8 review принято; C6 исправляет command-key validation / 2026-10-19 UTC
 
 [C8 review6260761693](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260761693);
 [C0 disposition6260873892](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260873892).
