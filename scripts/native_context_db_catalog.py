@@ -675,38 +675,131 @@ def require_ci_inputs():
         require(sha256((ROOT / path).read_bytes()) == expected, "CI gate input drift: " + path)
 
 
-def event_identity(env, payload, head, tree, parents):
-    """Test-source admission only; never deployment approval or process drain."""
-    require(isinstance(payload, dict), "Event payload must be an object")
-    require(
-        env.get("GITHUB_ACTIONS") == "true"
-        and env.get("GITHUB_REPOSITORY") == REPOSITORY
-        and env.get("GITHUB_REPOSITORY_ID") == str(REPOSITORY_ID),
-        "Only the actual repository Actions context is admitted",
-    )
+def event_operands(env, payload=None, *, head=None, tree=None, parents=None):
+    """Bounded source operands only; malformed values, URLs and event text stay private."""
+    sha_pattern = r"[0-9a-f]{40}"
+    number_pattern = r"[1-9][0-9]{0,19}"
+    branch_pattern = r"[A-Za-z0-9][A-Za-z0-9._/-]{0,159}"
 
-    def repository(value):
-        require(
-            isinstance(value, dict)
-            and value.get("full_name") == REPOSITORY
-            and type(value.get("id")) is int
-            and value["id"] == REPOSITORY_ID
-            and value.get("fork") is False,
-            "Event repository identity mismatch",
+    def safe(value, pattern):
+        return value if isinstance(value, str) and re.fullmatch(pattern, value) else "INVALID"
+
+    def number(value):
+        return (
+            value if type(value) is int and re.fullmatch(number_pattern, str(value)) else "INVALID"
         )
 
-    def commit(value):
-        require(
+    def object_value(value):
+        return value if isinstance(value, dict) else {}
+
+    payload = object_value(payload)
+    pr = object_value(payload.get("pull_request"))
+    base, branch = object_value(pr.get("base")), object_value(pr.get("head"))
+    repository = object_value(payload.get("repository"))
+    base_repository = object_value(base.get("repo"))
+    head_repository = object_value(branch.get("repo"))
+    advisory = pr.get("merge_commit_sha")
+    advisory_state = (
+        "missing" if "merge_commit_sha" not in pr else "null" if advisory is None else "sha"
+    )
+    if advisory is not None and safe(advisory, sha_pattern) == "INVALID":
+        advisory_state = "invalid"
+    elif advisory is not None and safe(head, sha_pattern) != "INVALID":
+        advisory_state = "current" if advisory == head else "stale"
+    return {
+        "actions": env.get("GITHUB_ACTIONS") == "true",
+        "repository_matches": env.get("GITHUB_REPOSITORY") == REPOSITORY,
+        "repository_id": safe(env.get("GITHUB_REPOSITORY_ID"), number_pattern),
+        "payload_repository_matches": repository.get("full_name") == REPOSITORY,
+        "payload_repository_id": number(repository.get("id")),
+        "payload_repository_fork": repository.get("fork")
+        if type(repository.get("fork")) is bool
+        else "INVALID",
+        "base_repository_matches": base_repository.get("full_name") == REPOSITORY,
+        "base_repository_id": number(base_repository.get("id")),
+        "base_repository_fork": base_repository.get("fork")
+        if type(base_repository.get("fork")) is bool
+        else "INVALID",
+        "head_repository_matches": head_repository.get("full_name") == REPOSITORY,
+        "head_repository_id": number(head_repository.get("id")),
+        "head_repository_fork": head_repository.get("fork")
+        if type(head_repository.get("fork")) is bool
+        else "INVALID",
+        "event": safe(
+            env.get("GITHUB_EVENT_NAME"),
+            r"push|pull_request|workflow_call|workflow_dispatch|pull_request_target|merge_group|schedule",
+        ),
+        "ref": safe(
+            env.get("GITHUB_REF"),
+            r"refs/(?:heads/" + branch_pattern + r"|pull/" + number_pattern + r"/(?:merge|head))",
+        ),
+        "run_id": safe(env.get("GITHUB_RUN_ID"), number_pattern),
+        "attempt": safe(env.get("GITHUB_RUN_ATTEMPT"), number_pattern),
+        "push_ref": safe(payload.get("ref"), r"refs/heads/" + branch_pattern),
+        "push_after": safe(payload.get("after"), sha_pattern),
+        "push_head_sha": safe(object_value(payload.get("head_commit")).get("id"), sha_pattern),
+        "push_deleted": payload.get("deleted")
+        if type(payload.get("deleted")) is bool
+        else "INVALID",
+        "push_base_ref_state": "null" if payload.get("base_ref") is None else "present",
+        "event_sha": safe(env.get("GITHUB_SHA"), sha_pattern),
+        "actual_head": safe(head, sha_pattern),
+        "actual_tree": safe(tree, sha_pattern),
+        "parent_count": len(parents) if isinstance(parents, list) else None,
+        "actual_parents": [safe(p, sha_pattern) for p in parents[:3]]
+        if isinstance(parents, list)
+        else [],
+        "parents_truncated": isinstance(parents, list) and len(parents) > 3,
+        "pr_number": number(payload.get("number")),
+        "pr_object_number": number(pr.get("number")),
+        "pr_state": safe(pr.get("state"), r"open|closed"),
+        "pr_merged": pr.get("merged") if type(pr.get("merged")) is bool else "INVALID",
+        "action": safe(payload.get("action"), r"opened|reopened|synchronize|closed|edited"),
+        "event_base_ref": safe(base.get("ref"), branch_pattern),
+        "env_base_ref": safe(env.get("GITHUB_BASE_REF"), branch_pattern),
+        "event_head_ref": safe(branch.get("ref"), branch_pattern),
+        "env_head_ref": safe(env.get("GITHUB_HEAD_REF"), branch_pattern),
+        "event_base_sha": safe(base.get("sha"), sha_pattern),
+        "event_head_sha": safe(branch.get("sha"), sha_pattern),
+        "advisory_merge_commit_sha_state": advisory_state,
+        "advisory_merge_commit_sha": safe(advisory, sha_pattern) if advisory is not None else None,
+    }
+
+
+def event_identity(env, payload, head, tree, parents, *, diagnostic=None):
+    """Test-source admission only; never deployment approval or process drain."""
+
+    def check(condition, reason):
+        if diagnostic is not None:
+            diagnostic["predicate"] = reason
+        require(condition, reason)
+
+    check(isinstance(payload, dict), "EVENT_PAYLOAD_OBJECT")
+    check(env.get("GITHUB_ACTIONS") == "true", "EVENT_ACTIONS_CONTEXT")
+    check(env.get("GITHUB_REPOSITORY") == REPOSITORY, "EVENT_ENV_REPOSITORY")
+    check(env.get("GITHUB_REPOSITORY_ID") == str(REPOSITORY_ID), "EVENT_ENV_REPOSITORY_ID")
+
+    def repository(value, scope):
+        check(isinstance(value, dict), scope + "_OBJECT")
+        check(value.get("full_name") == REPOSITORY, scope + "_NAME")
+        check(type(value.get("id")) is int and value["id"] == REPOSITORY_ID, scope + "_ID")
+        check(value.get("fork") is False, scope + "_FORK")
+
+    def commit(value, reason):
+        check(
             isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value),
-            "Invalid event commit identity",
+            reason,
         )
         return value
 
-    repository(payload.get("repository"))
+    repository(payload.get("repository"), "EVENT_REPOSITORY")
     for key in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT"):
-        require(re.fullmatch(r"[1-9][0-9]*", env.get(key, "")), "Invalid Actions run/attempt")
-    require(commit(env.get("GITHUB_SHA")) == commit(head), "Event SHA differs from HEAD")
-    commit(tree)
+        value = env.get(key)
+        check(isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*", value), "EVENT_" + key)
+    commit(env.get("GITHUB_SHA"), "EVENT_SHA_FORMAT")
+    commit(head, "EVENT_HEAD_FORMAT")
+    check(env["GITHUB_SHA"] == head, "EVENT_SHA_HEAD_MISMATCH")
+    commit(tree, "EVENT_TREE_FORMAT")
     identity = {
         "repository": REPOSITORY,
         "repository_id": REPOSITORY_ID,
@@ -719,53 +812,73 @@ def event_identity(env, payload, head, tree, parents):
         "event_identity_is_c0_approval": False,
     }
     if identity["event"] == "push":
-        require(
-            identity["ref"] in (EXECUTION_REF, "refs/heads/main")
-            and payload.get("ref") == identity["ref"]
-            and payload.get("deleted") is False
-            and payload.get("base_ref") is None
-            and not env.get("GITHUB_BASE_REF")
-            and not env.get("GITHUB_HEAD_REF"),
-            "Only the stock or actual main push is admitted",
-        )
-        require(
-            commit(payload.get("after")) == head
-            and isinstance(payload.get("head_commit"), dict)
-            and commit(payload["head_commit"].get("id")) == head,
-            "Push payload source mismatch",
+        check(identity["ref"] in (EXECUTION_REF, "refs/heads/main"), "EVENT_PUSH_ENV_REF")
+        check(payload.get("ref") == identity["ref"], "EVENT_PUSH_PAYLOAD_REF")
+        check(payload.get("deleted") is False, "EVENT_PUSH_DELETED")
+        check(payload.get("base_ref") is None, "EVENT_PUSH_BASE_REF")
+        check(not env.get("GITHUB_BASE_REF"), "EVENT_PUSH_ENV_BASE_REF")
+        check(not env.get("GITHUB_HEAD_REF"), "EVENT_PUSH_ENV_HEAD_REF")
+        check(commit(payload.get("after"), "EVENT_PUSH_AFTER_FORMAT") == head, "EVENT_PUSH_AFTER")
+        check(isinstance(payload.get("head_commit"), dict), "EVENT_PUSH_HEAD_OBJECT")
+        check(
+            commit(payload["head_commit"].get("id"), "EVENT_PUSH_HEAD_FORMAT") == head,
+            "EVENT_PUSH_HEAD",
         )
         identity["route"] = "stock-push" if identity["ref"] == EXECUTION_REF else "main-push"
     elif identity["event"] == "pull_request":
         pr = payload.get("pull_request")
-        require(
-            isinstance(pr, dict)
-            and payload.get("action") in ("opened", "reopened", "synchronize")
-            and type(payload.get("number")) is int
-            and payload["number"] > 0
-            and type(pr.get("number")) is int
-            and pr.get("number") == payload["number"]
-            and pr.get("state") == "open"
-            and pr.get("merged") is False,
-            "Only an actual open PR verification event is admitted",
+        check(isinstance(pr, dict), "EVENT_PR_OBJECT")
+        check(payload.get("action") in ("opened", "reopened", "synchronize"), "EVENT_PR_ACTION")
+        check(type(payload.get("number")) is int and payload["number"] > 0, "EVENT_PR_NUMBER")
+        check(
+            type(pr.get("number")) is int and pr["number"] == payload["number"],
+            "EVENT_PR_OBJECT_NUMBER",
         )
+        check(pr.get("state") == "open", "EVENT_PR_STATE")
+        check(pr.get("merged") is False, "EVENT_PR_MERGED")
         base, branch = pr.get("base"), pr.get("head")
-        require(isinstance(base, dict) and isinstance(branch, dict), "Missing PR source/target")
-        repository(base.get("repo"))
-        repository(branch.get("repo"))
-        require(
-            base.get("ref") == env.get("GITHUB_BASE_REF") == "main"
-            and isinstance(branch.get("ref"), str)
+        check(isinstance(base, dict), "EVENT_PR_BASE_OBJECT")
+        check(isinstance(branch, dict), "EVENT_PR_HEAD_OBJECT")
+        repository(base.get("repo"), "EVENT_PR_BASE_REPOSITORY")
+        repository(branch.get("repo"), "EVENT_PR_HEAD_REPOSITORY")
+        check(base.get("ref") == "main", "EVENT_PR_BASE_REF")
+        check(env.get("GITHUB_BASE_REF") == base["ref"], "EVENT_PR_ENV_BASE_REF")
+        check(
+            isinstance(branch.get("ref"), str)
             and branch["ref"]
-            and branch["ref"] == env.get("GITHUB_HEAD_REF")
-            and identity["ref"] == f"refs/pull/{payload['number']}/merge",
-            "PR ref/base/head mismatch",
+            and branch["ref"] == env.get("GITHUB_HEAD_REF"),
+            "EVENT_PR_HEAD_REF",
         )
-        base_sha, head_sha = commit(base.get("sha")), commit(branch.get("sha"))
-        require(
-            parents == [base_sha, head_sha]
-            and head not in (base_sha, head_sha)
-            and (pr.get("merge_commit_sha") is None or pr["merge_commit_sha"] == head),
-            "PR checkout is not the exact base/head merge",
+        check(identity["ref"] == f"refs/pull/{payload['number']}/merge", "EVENT_PR_MERGE_REF")
+        base_sha = commit(base.get("sha"), "EVENT_PR_BASE_SHA_FORMAT")
+        head_sha = commit(branch.get("sha"), "EVENT_PR_HEAD_SHA_FORMAT")
+        check(
+            isinstance(parents, list)
+            and all(isinstance(p, str) and re.fullmatch(r"[0-9a-f]{40}", p) for p in parents),
+            "EVENT_PR_PARENTS_FORMAT",
+        )
+        check(len(parents) == 2, "EVENT_PR_PARENT_COUNT")
+        check(parents[0] == base_sha, "EVENT_PR_BASE_PARENT")
+        check(parents[1] == head_sha, "EVENT_PR_HEAD_PARENT")
+        check(head not in (base_sha, head_sha), "EVENT_PR_MERGE_DISTINCT")
+        advisory = pr.get("merge_commit_sha")
+        check(
+            advisory is None
+            or isinstance(advisory, str)
+            and re.fullmatch(r"[0-9a-f]{40}", advisory),
+            "EVENT_PR_ADVISORY_FORMAT",
+        )
+        # GITHUB_SHA/HEAD/raw ordered parents prove the actual merge. GitHub's
+        # optional test-merge snapshot is computed asynchronously; retain it as
+        # advisory metadata, never as the tested source or a substitute for it.
+        advisory_state = (
+            "missing"
+            if "merge_commit_sha" not in pr
+            else "null"
+            if advisory is None
+            else "current"
+            if advisory == head
+            else "stale"
         )
         identity.update(
             route="same-repository-pr-merge",
@@ -776,33 +889,103 @@ def event_identity(env, payload, head, tree, parents):
             base_sha=base_sha,
             head_sha=head_sha,
             merge_parents=parents,
+            advisory_merge_commit_sha=advisory,
+            advisory_merge_commit_sha_state=advisory_state,
         )
     else:
-        raise Refusal("Unsupported event; reusable calls must retain their actual caller event")
+        check(False, "EVENT_UNSUPPORTED")
     return identity
 
 
-def admit_event():
-    require_ci_inputs()
-    tree, manifest = require_source(ROOT, os.environ.get("GITHUB_SHA", ""))
-    # cat-file reads the actual commit headers even at checkout fetch-depth: 1;
-    # rev-list/show ancestry can hide parents at a shallow boundary.
-    headers = git_bytes(ROOT, "cat-file", "-p", "HEAD").decode().split("\n\n", 1)[0].splitlines()
-    require([row[5:] for row in headers if row.startswith("tree ")] == [tree], "HEAD tree drift")
-    parents = [row[7:] for row in headers if row.startswith("parent ")]
+def publish_event_diagnostic(evidence, diagnostic, refusal=None):
+    if evidence is None:
+        return
+    try:
+        write_json(
+            Path(evidence) / ("event-admission-" + diagnostic["entrypoint"] + ".json"), diagnostic
+        )
+    except Exception:
+        if refusal is not None:
+            refusal.add_note("EVENT_DIAGNOSTIC_WRITE_FAILED")
+            return
+        error = Refusal("EVENT_DIAGNOSTIC_WRITE_FAILED")
+        error.admission_diagnostic = {
+            **diagnostic,
+            "result": "REFUSED",
+            "failure_reason": "EVENT_DIAGNOSTIC_WRITE_FAILED",
+        }
+        raise error from None
+
+
+def admit_event(evidence=None, *, entrypoint="admission"):
+    require(entrypoint in {"admission", "run", "cleanup", "carrier", "catalog"}, "EVENT_ENTRYPOINT")
+    diagnostic = {
+        "version": 1,
+        "entrypoint": entrypoint,
+        "result": "REFUSED",
+        "predicate": "EVENT_PAYLOAD_READ",
+        "failure_reason": None,
+        "operands": event_operands(os.environ),
+        "event_payload_sha256": None,
+    }
 
     def unique_object(pairs):
         value = dict(pairs)
-        require(len(value) == len(pairs), "Duplicate event payload keys")
+        if len(value) != len(pairs):
+            diagnostic["predicate"] = "EVENT_PAYLOAD_DUPLICATE_KEYS"
+            raise Refusal("EVENT_PAYLOAD_DUPLICATE_KEYS")
         return value
+
+    def invalid_constant(value):
+        raise ValueError("Non-JSON constant")
 
     try:
         raw = Path(os.environ["GITHUB_EVENT_PATH"]).read_bytes()
-        payload = json.loads(raw, object_pairs_hook=unique_object)
-    except (KeyError, OSError, ValueError, UnicodeError):
-        raise Refusal("Missing or malformed actual event payload") from None
-    identity = event_identity(os.environ, payload, os.environ["GITHUB_SHA"], tree, parents)
-    identity["event_payload_sha256"] = sha256(raw)
+        diagnostic["event_payload_sha256"] = sha256(raw)
+        diagnostic["predicate"] = "EVENT_PAYLOAD_JSON"
+        payload = json.loads(raw, object_pairs_hook=unique_object, parse_constant=invalid_constant)
+        diagnostic["operands"] = event_operands(os.environ, payload)
+        diagnostic["predicate"] = "EVENT_CI_INPUTS"
+        require_ci_inputs()
+        diagnostic["predicate"] = "EVENT_HEAD_READ"
+        head = git_bytes(ROOT, "rev-parse", "HEAD").decode().strip()
+        diagnostic["operands"] = event_operands(os.environ, payload, head=head)
+        diagnostic["predicate"] = "EVENT_COMMIT_HEADERS"
+        # Raw headers retain both parents even at fetch-depth1, unlike rev-list.
+        headers = (
+            git_bytes(ROOT, "cat-file", "-p", "HEAD").decode().split("\n\n", 1)[0].splitlines()
+        )
+        trees = [row[5:] for row in headers if row.startswith("tree ")]
+        parents = [row[7:] for row in headers if row.startswith("parent ")]
+        diagnostic["operands"] = event_operands(
+            os.environ,
+            payload,
+            head=head,
+            tree=trees[0] if len(trees) == 1 else None,
+            parents=parents,
+        )
+        for value, reason in (
+            (os.environ.get("GITHUB_SHA"), "EVENT_SHA_FORMAT"),
+            (head, "EVENT_HEAD_FORMAT"),
+        ):
+            diagnostic["predicate"] = reason
+            require(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value), reason)
+        diagnostic["predicate"] = "EVENT_SHA_HEAD_MISMATCH"
+        require(head == os.environ["GITHUB_SHA"], "EVENT_SHA_HEAD_MISMATCH")
+        diagnostic["predicate"] = "EVENT_SOURCE_VERIFY"
+        tree, manifest = require_source(ROOT, os.environ.get("GITHUB_SHA", ""))
+        diagnostic["predicate"] = "EVENT_HEAD_TREE"
+        require(trees == [tree], "EVENT_HEAD_TREE")
+        identity = event_identity(os.environ, payload, head, tree, parents, diagnostic=diagnostic)
+        identity["event_payload_sha256"] = diagnostic["event_payload_sha256"]
+    except Exception as error:
+        diagnostic["failure_reason"] = diagnostic["predicate"]
+        refusal = error if isinstance(error, Refusal) else Refusal(diagnostic["failure_reason"])
+        refusal.admission_diagnostic = diagnostic
+        publish_event_diagnostic(evidence, diagnostic, refusal)
+        raise refusal from None
+    diagnostic.update(result="PASS", predicate="EVENT_ADMITTED")
+    publish_event_diagnostic(evidence, diagnostic)
     return identity, manifest
 
 
@@ -1890,7 +2073,7 @@ def child(mode, private, evidence):
         not any(key in os.environ for key in SECRET_ENV),
         "Child reset credentials must originate in its private lease",
     )
-    identity, _ = admit_event()
+    identity, _ = admit_event(evidence, entrypoint=mode)
     require_event_lease(private, identity)
     lease = load_lease(private)
     require(lease["source_sha"] == identity["head"], "Lease differs from admitted event source")
@@ -1926,7 +2109,7 @@ def run_lane(private, evidence):
     result = 1
     admitted = False
     try:
-        identity, manifest = admit_event()
+        identity, manifest = admit_event(evidence, entrypoint="run")
         require(not (private / "state.json").exists(), "Run must start without retained resources")
         admitted = True
         receipt.update(admission="PASS", source_identity=identity)
@@ -2046,7 +2229,9 @@ def run_lane(private, evidence):
         require_source(ROOT, source_sha)
         receipt["result"] = "PASS"
         result = 0
-    except Exception:
+    except Exception as error:
+        if hasattr(error, "admission_diagnostic"):
+            receipt["admission_diagnostic"] = error.admission_diagnostic
         passwords = ()
         if admitted and (private / "state.json").exists():
             passwords = tuple(load_lease(private)["passwords"].values())
@@ -2129,13 +2314,16 @@ def main():
     if args.mode == "run":
         return run_lane(private, evidence)
     if args.mode == "cleanup":
-        identity, _ = admit_event()
+        identity, _ = admit_event(evidence, entrypoint="cleanup")
         require_event_lease(private, identity)
         cleanup(private, evidence)
         return 0
     try:
         return child(args.mode, private, evidence)
-    except Exception:
+    except Exception as error:
+        if hasattr(error, "admission_diagnostic"):
+            # Refusal has no resource authority, including retained private state.
+            raise
         passwords = tuple(load_lease(private)["passwords"].values())
         (evidence / (args.mode + "-error.log")).write_text(
             redact(traceback.format_exc(), passwords)

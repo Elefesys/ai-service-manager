@@ -1128,6 +1128,9 @@ def exercise_ci_lane(
     cleanup_failure=False,
     partition_failure=False,
     retained_state=False,
+    actual_head="b" * 40,
+    header_tree="e" * 40,
+    source_failure=None,
 ):
     """Real JSON/admission/source-input checks; every command/resource is mocked."""
     private, evidence = tmp_path / "private", tmp_path / "evidence"
@@ -1158,19 +1161,25 @@ def exercise_ci_lane(
     parent_lines = ["c" * 40, "d" * 40] if parents is None else parents
     headers = (
         "tree "
-        + "e" * 40
+        + header_tree
         + "\n"
         + "".join("parent " + p + "\n" for p in parent_lines)
         + "\nunit-only commit"
     ).encode()
     with (
         patch.dict(os.environ, env, clear=True),
-        patch.object(lane, "require_source", return_value=("e" * 40, [])),
+        patch.object(
+            lane, "require_source", return_value=("e" * 40, []), side_effect=source_failure
+        ),
         patch.object(
             lane,
             "git_bytes",
             side_effect=lambda root, *args: (
-                headers if args == ("cat-file", "-p", "HEAD") else b"unit-only archive"
+                headers
+                if args == ("cat-file", "-p", "HEAD")
+                else actual_head.encode()
+                if args == ("rev-parse", "HEAD")
+                else b"unit-only archive"
             ),
         ) as git,
         patch.object(lane, "Commands", return_value=commands),
@@ -1326,7 +1335,8 @@ def test_ci_payload_target_and_merge_mismatch_refuses_before_docker(tmp_path, ch
     elif change == "pr-action":
         payload["action"] = "closed"
     elif change == "pr-merge":
-        pr["merge_commit_sha"] = "a" * 40
+        # A well-formed stale snapshot is advisory. Malformed values still refuse.
+        pr["merge_commit_sha"] = "not-a-commit"
     elif change == "pr-head-sha":
         pr["head"]["sha"] = "a" * 40
     elif change == "pr-base-sha":
@@ -1607,6 +1617,454 @@ def test_ci_guard_reads_actual_inputs_and_refuses_absent_or_changed_gate(tmp_pat
         changed.unlink()
         with pytest.raises(FileNotFoundError):
             lane.require_ci_inputs()
+
+
+@pytest.mark.parametrize("action", ("opened", "reopened", "synchronize"))
+@pytest.mark.parametrize("advisory", ("current", "null", "missing", "stale"))
+def test_ci_pr_snapshot_is_advisory_after_exact_actual_merge_proof(tmp_path, action, advisory):
+    env, payload = ci_event(tmp_path, "same-repository-pr-merge")
+    payload["action"] = action
+    pr = payload["pull_request"]
+    if advisory == "missing":
+        del pr["merge_commit_sha"]
+    else:
+        pr["merge_commit_sha"] = {"current": env["GITHUB_SHA"], "null": None, "stale": "a" * 40}[
+            advisory
+        ]
+    probe = exercise_ci_lane(tmp_path, env, payload)
+    assert probe.result == 0
+    identity = probe.receipt["source_identity"]
+    assert identity["head"] == env["GITHUB_SHA"] != pr["head"]["sha"]
+    assert identity["route"] == "same-repository-pr-merge" and identity["action"] == action
+    assert identity["merge_parents"] == [pr["base"]["sha"], pr["head"]["sha"]]
+    assert identity["advisory_merge_commit_sha"] == pr.get("merge_commit_sha")
+    assert identity["advisory_merge_commit_sha_state"] == advisory
+    diagnostic = json.loads((probe.evidence / "event-admission-run.json").read_text())
+    assert diagnostic["result"] == "PASS" and diagnostic["failure_reason"] is None
+    assert diagnostic["operands"]["actual_head"] == env["GITHUB_SHA"]
+    assert diagnostic["operands"]["actual_parents"] == identity["merge_parents"]
+    assert diagnostic["operands"]["advisory_merge_commit_sha_state"] == advisory
+    assert diagnostic["event_payload_sha256"] == identity["event_payload_sha256"]
+
+
+@pytest.mark.parametrize("action", ("opened", "reopened", "synchronize"))
+@pytest.mark.parametrize(
+    "fault,reason",
+    (
+        ("no-parents", "EVENT_PR_PARENT_COUNT"),
+        ("one-parent", "EVENT_PR_PARENT_COUNT"),
+        ("reversed", "EVENT_PR_BASE_PARENT"),
+        ("base-parent", "EVENT_PR_BASE_PARENT"),
+        ("head-parent", "EVENT_PR_HEAD_PARENT"),
+        ("extra-parent", "EVENT_PR_PARENT_COUNT"),
+        ("event-base", "EVENT_PR_BASE_PARENT"),
+        ("event-head", "EVENT_PR_HEAD_PARENT"),
+        ("merge-is-base", "EVENT_PR_MERGE_DISTINCT"),
+        ("env-sha", "EVENT_SHA_HEAD_MISMATCH"),
+        ("env-sha-format", "EVENT_SHA_FORMAT"),
+        ("merge-ref", "EVENT_PR_MERGE_REF"),
+        ("base-ref", "EVENT_PR_ENV_BASE_REF"),
+        ("head-ref", "EVENT_PR_HEAD_REF"),
+        ("fork", "EVENT_PR_HEAD_REPOSITORY_FORK"),
+        ("base-sha-format", "EVENT_PR_BASE_SHA_FORMAT"),
+    ),
+)
+def test_ci_stale_advisory_cannot_replace_any_actual_merge_operand(tmp_path, action, fault, reason):
+    env, payload = ci_event(tmp_path, "same-repository-pr-merge")
+    payload["action"] = action
+    pr, parents = payload["pull_request"], ["c" * 40, "d" * 40]
+    pr["merge_commit_sha"] = "a" * 40
+    if fault == "no-parents":
+        parents = []
+    elif fault == "one-parent":
+        parents = parents[:1]
+    elif fault == "reversed":
+        parents.reverse()
+    elif fault == "base-parent":
+        parents[0] = "a" * 40
+    elif fault == "head-parent":
+        parents[1] = "a" * 40
+    elif fault == "extra-parent":
+        parents.append("a" * 40)
+    elif fault == "event-base":
+        pr["base"]["sha"] = "a" * 40
+    elif fault == "event-head":
+        pr["head"]["sha"] = "a" * 40
+    elif fault == "merge-is-base":
+        pr["base"]["sha"] = parents[0] = env["GITHUB_SHA"]
+    elif fault == "env-sha":
+        env["GITHUB_SHA"] = "a" * 40
+    elif fault == "env-sha-format":
+        env["GITHUB_SHA"] = "not-a-sha"
+    elif fault == "merge-ref":
+        env["GITHUB_REF"] = "refs/pull/42/head"
+    elif fault == "base-ref":
+        env["GITHUB_BASE_REF"] = "other"
+    elif fault == "head-ref":
+        env["GITHUB_HEAD_REF"] = "other"
+    elif fault == "fork":
+        pr["head"]["repo"]["fork"] = True
+    elif fault == "base-sha-format":
+        pr["base"]["sha"] = "c" * 39
+    probe = exercise_ci_lane(tmp_path, env, payload, parents=parents)
+    assert probe.result != 0 and probe.receipt["admission"] == "REFUSED"
+    assert probe.receipt["owned_cleanup"] == "NOT_ATTEMPTED_EVENT_REFUSED"
+    diagnostic = json.loads((probe.evidence / "event-admission-run.json").read_text())
+    assert diagnostic == probe.receipt["admission_diagnostic"]
+    assert diagnostic["failure_reason"] == diagnostic["predicate"] == reason
+    assert diagnostic["operands"]["actual_head"] == "b" * 40
+    assert diagnostic["operands"]["actual_parents"] == parents
+    assert diagnostic["event_payload_sha256"] == lane.sha256(
+        Path(env["GITHUB_EVENT_PATH"]).read_bytes()
+    )
+    for mock in (probe.commands.run, probe.create, probe.logs, probe.cleanup, probe.partition):
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        True,
+        7,
+        [],
+        {},
+        "",
+        "a" * 39,
+        "a" * 41,
+        "A" * 40,
+        "a" * 40 + "\n",
+        "https://secret.invalid/credential",
+    ),
+)
+def test_ci_invalid_advisory_type_or_format_is_explicit_and_never_echoed(tmp_path, value):
+    env, payload = ci_event(tmp_path, "same-repository-pr-merge")
+    payload["pull_request"]["merge_commit_sha"] = value
+    probe = exercise_ci_lane(tmp_path, env, payload)
+    diagnostic = probe.receipt["admission_diagnostic"]
+    assert probe.result != 0 and diagnostic["failure_reason"] == "EVENT_PR_ADVISORY_FORMAT"
+    assert diagnostic["operands"]["advisory_merge_commit_sha_state"] == "invalid"
+    assert diagnostic["operands"]["advisory_merge_commit_sha"] == "INVALID"
+    for mock in (probe.commands.run, probe.create, probe.logs, probe.cleanup):
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize("fault", ("head", "tree", "duplicate-tree", "bytes", "mode"))
+def test_ci_real_source_proof_failures_keep_safe_operands_before_commands(tmp_path, fault):
+    env, payload = ci_event(tmp_path, "same-repository-pr-merge")
+    primary = lane.Refusal("existing source guard refused") if fault in {"bytes", "mode"} else None
+    tree = "e" * 40 if fault not in {"tree", "duplicate-tree"} else "f" * 40
+    if fault == "duplicate-tree":
+        tree += "\ntree " + "e" * 40
+    probe = exercise_ci_lane(
+        tmp_path,
+        env,
+        payload,
+        actual_head="a" * 40 if fault == "head" else "b" * 40,
+        header_tree=tree,
+        source_failure=primary,
+    )
+    reason = (
+        "EVENT_SHA_HEAD_MISMATCH"
+        if fault == "head"
+        else "EVENT_SOURCE_VERIFY"
+        if primary
+        else "EVENT_HEAD_TREE"
+    )
+    assert probe.receipt["admission_diagnostic"]["failure_reason"] == reason
+    assert probe.receipt["owned_cleanup"] == "NOT_ATTEMPTED_EVENT_REFUSED"
+    for mock in (probe.commands.run, probe.create, probe.logs, probe.cleanup):
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize("fault", ("advisory", "head-ref", "repository", "parent"))
+def test_ci_diagnostics_are_bounded_allowlisted_and_omit_payload_env_and_urls(tmp_path, fault):
+    env, payload = ci_event(tmp_path, "same-repository-pr-merge")
+    secret = "https://credential.invalid/SECRET_PAYLOAD"
+    env.update(GITHUB_TOKEN=secret, ARBITRARY_SECRET=secret)
+    payload.update(body=secret * 2000, title=secret, html_url=secret, sender={"token": secret})
+    pr = payload["pull_request"]
+    pr.update(body=secret, title=secret, url=secret)
+    parents = ["c" * 40, "d" * 40]
+    if fault == "advisory":
+        pr["merge_commit_sha"] = {"token": secret}
+    elif fault == "head-ref":
+        env["GITHUB_HEAD_REF"] = secret
+    elif fault == "repository":
+        payload["repository"]["full_name"] = secret
+    elif fault == "parent":
+        parents = [secret] * 7
+    probe = exercise_ci_lane(tmp_path, env, payload, parents=parents)
+    diagnostic = (probe.evidence / "event-admission-run.json").read_text()
+    assert probe.result != 0 and len(diagnostic.encode()) < 8192
+    assert secret not in diagnostic and "SECRET_PAYLOAD" not in diagnostic
+    assert "GITHUB_TOKEN" not in diagnostic and "ARBITRARY_SECRET" not in diagnostic
+    assert "https://" not in diagnostic and '"body"' not in diagnostic
+    assert set(json.loads(diagnostic)) == {
+        "version",
+        "entrypoint",
+        "result",
+        "predicate",
+        "failure_reason",
+        "operands",
+        "event_payload_sha256",
+    }
+    if fault == "parent":
+        operands = json.loads(diagnostic)["operands"]
+        assert operands["parent_count"] == 7 and operands["parents_truncated"]
+        assert operands["actual_parents"] == ["INVALID"] * 3
+    for path in probe.evidence.iterdir():
+        assert "SECRET_PAYLOAD" not in path.read_text()
+    for mock in (probe.commands.run, probe.create, probe.logs, probe.cleanup):
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize("route", ("stock-push", "main-push", "same-repository-pr-merge"))
+@pytest.mark.parametrize("primary_failure", (False, True))
+def test_ci_diagnostic_write_failure_cannot_hide_refusal_or_authorize_resources(
+    tmp_path, route, primary_failure
+):
+    env, payload = ci_event(tmp_path, route)
+    primary = lane.Refusal("unit original source refusal") if primary_failure else None
+    original_write = lane.write_json
+
+    def write(path, value):
+        if path.name.startswith("event-admission-"):
+            raise OSError("unit diagnostic write failed")
+        return original_write(path, value)
+
+    with patch.object(lane, "write_json", side_effect=write):
+        probe = exercise_ci_lane(tmp_path, env, payload, source_failure=primary)
+    assert probe.result != 0 and probe.receipt["admission"] == "REFUSED"
+    assert probe.receipt["owned_cleanup"] == "NOT_ATTEMPTED_EVENT_REFUSED"
+    assert not (probe.evidence / "event-admission-run.json").exists()
+    diagnostic = probe.receipt["admission_diagnostic"]
+    assert diagnostic["result"] == "REFUSED"
+    assert diagnostic["failure_reason"] == (
+        "EVENT_SOURCE_VERIFY" if primary_failure else "EVENT_DIAGNOSTIC_WRITE_FAILED"
+    )
+    if primary_failure:
+        assert primary.admission_diagnostic is not None
+        assert primary.__notes__ == ["EVENT_DIAGNOSTIC_WRITE_FAILED"]
+        assert "unit original source refusal" in (probe.evidence / "runner-error.log").read_text()
+    for mock in (probe.commands.run, probe.create, probe.logs, probe.cleanup):
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize("mode", ("cleanup", "carrier", "catalog"))
+@pytest.mark.parametrize(
+    "fault", ("parents", "malformed", "duplicate", "advisory", "write", "primary-write")
+)
+def test_ci_secondary_actual_admission_diagnostics_never_load_or_adopt_retained_state(
+    tmp_path, mode, fault
+):
+    env, payload = ci_event(tmp_path, "same-repository-pr-merge")
+    env["NATIVE_ROOT"] = str(tmp_path)
+    private, evidence = tmp_path / "private", tmp_path / "evidence"
+    private.mkdir(mode=0o700)
+    evidence.mkdir(mode=0o700)
+    (private / "state.json").write_text("unadopted state with private credentials")
+    if fault == "advisory":
+        payload["pull_request"]["merge_commit_sha"] = {"invalid": True}
+    raw = (
+        "{"
+        if fault == "malformed"
+        else '{"repository":{},"repository":{}}'
+        if fault == "duplicate"
+        else json.dumps(payload)
+    )
+    Path(env["GITHUB_EVENT_PATH"]).write_text(raw)
+    parents = (
+        ["d" * 40, "c" * 40] if fault in {"parents", "primary-write"} else ["c" * 40, "d" * 40]
+    )
+    header = (
+        "tree "
+        + "e" * 40
+        + "\n"
+        + "".join("parent " + p + "\n" for p in parents)
+        + "\nunit fixture"
+    ).encode()
+    original_write = lane.write_json
+
+    def write(path, value):
+        if path.name.startswith("event-admission-") and fault in {"write", "primary-write"}:
+            raise OSError("unit diagnostic write failed")
+        return original_write(path, value)
+
+    with (
+        patch.dict(os.environ, env, clear=True),
+        patch.object(lane.sys, "argv", ["runner", mode]),
+        patch.object(lane.signal, "signal"),
+        patch.object(lane, "require_source", return_value=("e" * 40, [])),
+        patch.object(
+            lane,
+            "git_bytes",
+            side_effect=lambda root, *args: b"b" * 40 if args == ("rev-parse", "HEAD") else header,
+        ),
+        patch.object(lane, "write_json", side_effect=write),
+        patch.object(lane, "cleanup") as cleanup,
+        patch.object(lane, "load_lease") as lease,
+        patch.object(lane, "verify_server") as server,
+        patch.object(lane, "collect_owned_logs") as logs,
+        patch.object(lane, "Commands") as commands,
+    ):
+        with pytest.raises(lane.Refusal) as caught:
+            lane.main()
+    reason = {
+        "parents": "EVENT_PR_BASE_PARENT",
+        "malformed": "EVENT_PAYLOAD_JSON",
+        "duplicate": "EVENT_PAYLOAD_DUPLICATE_KEYS",
+        "advisory": "EVENT_PR_ADVISORY_FORMAT",
+        "write": "EVENT_DIAGNOSTIC_WRITE_FAILED",
+        "primary-write": "EVENT_PR_BASE_PARENT",
+    }[fault]
+    assert caught.value.admission_diagnostic["failure_reason"] == reason
+    assert caught.value.admission_diagnostic["entrypoint"] == mode
+    if fault in {"write", "primary-write"}:
+        assert not (evidence / ("event-admission-" + mode + ".json")).exists()
+        if fault == "primary-write":
+            assert caught.value.__notes__ == ["EVENT_DIAGNOSTIC_WRITE_FAILED"]
+    else:
+        diagnostic = json.loads((evidence / ("event-admission-" + mode + ".json")).read_text())
+        assert diagnostic["result"] == "REFUSED" and diagnostic["failure_reason"] == reason
+        assert diagnostic["event_payload_sha256"] == lane.sha256(raw.encode())
+    for mock in (cleanup, lease, server, logs, commands):
+        mock.assert_not_called()
+    assert (private / "state.json").read_text() == "unadopted state with private credentials"
+
+
+def test_ci_admission_reads_real_shallow_merge_headers_and_never_advisory_parents(tmp_path):
+    source, checkout, evidence = tmp_path / "source", tmp_path / "shallow", tmp_path / "evidence"
+    source.mkdir()
+    evidence.mkdir()
+
+    def git(root, *args):
+        return subprocess.check_output(
+            [
+                "git",
+                "-c",
+                "user.name=Unit",
+                "-c",
+                "user.email=unit@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                *args,
+            ],
+            cwd=root,
+            text=True,
+            stderr=subprocess.PIPE,
+        ).strip()
+
+    git(source, "init", "-q")
+    for relative in lane.CI_INPUT_SHA256:
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes((lane.ROOT / relative).read_bytes())
+    (source / "source.py").write_text("value = 1\n")
+    git(source, "add", ".")
+    git(source, "commit", "-qm", "unit base")
+    base = git(source, "rev-parse", "HEAD")
+    (source / "source.py").write_text("value = 2\n")
+    git(source, "commit", "-qam", "unit head")
+    head = git(source, "rev-parse", "HEAD")
+    tree = git(source, "rev-parse", "HEAD^{tree}")
+    merge = git(source, "commit-tree", tree, "-p", base, "-p", head, "-m", "constructed unit merge")
+    git(source, "update-ref", "HEAD", merge)
+    git(tmp_path, "clone", "-q", "--depth=1", "--no-tags", source.as_uri(), str(checkout))
+    assert git(checkout, "rev-list", "--parents", "-1", "HEAD") == merge
+    env, payload = ci_event(tmp_path, "same-repository-pr-merge")
+    env["GITHUB_SHA"] = merge
+    pr = payload["pull_request"]
+    pr["base"]["sha"], pr["head"]["sha"] = base, head
+    pr["merge_commit_sha"] = "a" * 40
+    Path(env["GITHUB_EVENT_PATH"]).write_text(json.dumps(payload))
+    with patch.dict(os.environ, env, clear=True), patch.object(lane, "ROOT", checkout):
+        identity, manifest = lane.admit_event(evidence, entrypoint="run")
+    assert identity["head"] == merge and identity["tree"] == tree
+    assert identity["merge_parents"] == [base, head]
+    assert identity["advisory_merge_commit_sha"] == "a" * 40
+    assert len(manifest) == len(lane.CI_INPUT_SHA256) + 1
+    diagnostic = json.loads((evidence / "event-admission-run.json").read_text())
+    assert diagnostic["result"] == "PASS"
+    assert diagnostic["operands"]["actual_parents"] == [base, head]
+
+
+@pytest.mark.parametrize("route", ("stock-push", "main-push"))
+@pytest.mark.parametrize(
+    "fault,reason",
+    (
+        ("env-ref", "EVENT_PUSH_ENV_REF"),
+        ("payload-ref", "EVENT_PUSH_PAYLOAD_REF"),
+        ("deleted", "EVENT_PUSH_DELETED"),
+        ("base-ref", "EVENT_PUSH_BASE_REF"),
+        ("env-base", "EVENT_PUSH_ENV_BASE_REF"),
+        ("env-head", "EVENT_PUSH_ENV_HEAD_REF"),
+        ("after", "EVENT_PUSH_AFTER"),
+        ("head", "EVENT_PUSH_HEAD"),
+    ),
+)
+def test_ci_push_refusal_identifies_the_actual_source_predicate(tmp_path, route, fault, reason):
+    env, payload = ci_event(tmp_path, route)
+    if fault == "env-ref":
+        env["GITHUB_REF"] = "refs/heads/other"
+    elif fault == "payload-ref":
+        payload["ref"] = "refs/heads/other"
+    elif fault == "deleted":
+        payload["deleted"] = True
+    elif fault == "base-ref":
+        payload["base_ref"] = "refs/heads/main"
+    elif fault == "env-base":
+        env["GITHUB_BASE_REF"] = "main"
+    elif fault == "env-head":
+        env["GITHUB_HEAD_REF"] = "candidate"
+    elif fault == "after":
+        payload["after"] = "a" * 40
+    elif fault == "head":
+        payload["head_commit"]["id"] = "a" * 40
+    probe = exercise_ci_lane(tmp_path, env, payload)
+    assert probe.result != 0 and probe.receipt["admission_diagnostic"]["failure_reason"] == reason
+    for mock in (probe.commands.run, probe.create, probe.logs, probe.cleanup):
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize("constant", ("NaN", "Infinity", "-Infinity"))
+def test_ci_non_json_constants_refuse_with_digest_without_echo_or_commands(tmp_path, constant):
+    env, payload = ci_event(tmp_path, "same-repository-pr-merge")
+    raw = '{"untrusted":' + constant + "}"
+    probe = exercise_ci_lane(tmp_path, env, payload, raw=raw)
+    diagnostic = probe.receipt["admission_diagnostic"]
+    assert diagnostic["failure_reason"] == "EVENT_PAYLOAD_JSON"
+    assert diagnostic["event_payload_sha256"] == lane.sha256(raw.encode())
+    for mock in (probe.commands.run, probe.create, probe.logs, probe.cleanup):
+        mock.assert_not_called()
+
+
+@pytest.mark.parametrize("stage", ("head", "headers"))
+def test_ci_source_read_failure_keeps_already_observed_safe_operands(tmp_path, stage):
+    env, payload = ci_event(tmp_path, "same-repository-pr-merge")
+    Path(env["GITHUB_EVENT_PATH"]).write_text(json.dumps(payload))
+
+    def git(root, *args):
+        if args == ("rev-parse", "HEAD") and stage != "head":
+            return b"b" * 40
+        raise OSError("https://private.invalid/DO_NOT_PUBLISH")
+
+    with (
+        patch.dict(os.environ, env, clear=True),
+        patch.object(lane, "git_bytes", side_effect=git),
+        patch.object(lane, "Commands") as commands,
+        patch.object(lane, "load_lease") as lease,
+    ):
+        with pytest.raises(lane.Refusal) as caught:
+            lane.admit_event(tmp_path, entrypoint="cleanup")
+    diagnostic = json.loads((tmp_path / "event-admission-cleanup.json").read_text())
+    assert diagnostic["failure_reason"] == (
+        "EVENT_HEAD_READ" if stage == "head" else "EVENT_COMMIT_HEADERS"
+    )
+    assert diagnostic["operands"]["actual_head"] == ("INVALID" if stage == "head" else "b" * 40)
+    assert diagnostic["operands"]["event_sha"] == env["GITHUB_SHA"]
+    assert "DO_NOT_PUBLISH" not in json.dumps(diagnostic) + str(caught.value)
+    commands.assert_not_called()
+    lease.assert_not_called()
 
 
 if __name__ == "__main__":
