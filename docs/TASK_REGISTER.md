@@ -2,7 +2,57 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — stock105 PASS; C6 host/operator и C5 Console source-only / 2026-10-18 UTC
+## Текущий статус — C5 исправляет два frontend-теста; C6 HOLD / 2026-10-19 UTC
+
+[C0 review6260097657](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260097657).
+**C5 CONSOLE-R2 ACTIVE/source-only; C6/C1/C2/C3/C8 HOLD. M3 IN_PROGRESS.**
+Нового product scope нет: два test-only blockers ранее выданной Console-задачи.
+
+| Task / finding | Current status |
+|---|---|
+| Native DB/API/runtime and prior C2/C3/runner acceptance | INTEGRATED / VERIFIED LOCAL/TEST on accepted stock5d98651 only |
+| C0-NC-CARRIER-01/02; C3-NC-RUNTIME-01 | CLOSED LOCAL/TEST retained |
+| C6-M3.1-NATIVE-CONTEXT-HOST-R1 | REVIEW/HOLD; C0 source review complete, no new finding; actual paired PG/host verification pending |
+| C5-M3.1-NATIVE-CONTEXT-CONSOLE-R1 | REVIEW; required frontend gates FAIL |
+| C0-NC-UI-01/P2 | OPEN: browser Response/APIResponse helper mismatch, two TS2345 |
+| C0-NC-UI-02/P2 | OPEN: second save() queries a form button removed during pending submission |
+| C5-M3.1-NATIVE-CONTEXT-CONSOLE-R2 | IN_PROGRESS/source-only; exactly two test files, current HANDOFF§0.2 |
+| Whole host/Console/C8/full integration | NOT VERIFIED; follows corrected source review/consolidation |
+| Whole M3/account/A08/renewal/collector/A12 | IN_PROGRESS / later gates OPEN |
+
+C6 source9bd76b30069617ceadf5e35de046505255600cca/tree8124ef7664434a2e999502daff4b1f5d856bab0f;
+C5 sourcee9a5dcbf16fd9d3d7824a2c3d3b3628074d3cc79/tree723869324be6f5627a3d1348d32a55c36e7a2dae.
+Common parent8d1ba99c820b42c590408d98043e6963743f77a0.
+C0 all288/292 blobs/modes and disjoint12/24paths verified; original11,
+contracts/SQL/API/locks/CI source frozen. Review combined indexd460c942752983b127c16309e6486916110e6a68
+was not published/accepted. Entire frontend exact C5.
+
+C0 actual Node24.19.0/npm11.9.0 restored exact167 locked packages, no source/lock
+change: typecheck FAIL2; complete10 Vitest files358PASS/1FAIL/359; build PASS;
+full Playwright list54=45desktop+9narrow PASS after supplying private inert
+collection inputs. No browser/PG execution. C6 final XML/log digests checked:
+863 unit PASS,0fail/error/skip;112 native collection and20host collection,
+all old105 IDs/order retained. These are verified C6 report files; C0 Python
+recheck NOT RUN because retained3.13 interpreter targets were unavailable.
+
+New preparation: sole parent C5 e9a5dcb, only HANDOFF/register,
+290 other leaves exact/292 total; C6 not included. Reviewed repair base only,
+not whole-source acceptance. Full SHA/tree supplied by canonical C0 task.
+Branches c0/m3-1-native-context-console-r2 and c5/m3-1-native-context-console-r2.
+R2 allows npm ci from frozen lock and exact typecheck/10Vitest/build/full list,
+only conversation-control.spec.ts and HumanContextPanel.test.tsx edits.
+No product change or weakening/skips/retries/budget increases.
+
+Prior run39160997284/attempt1/job117774086948 SUCCESS105/105/all315phases,
+51runner+130subtests/98guardedresets/catalog/ownedcleanup/clean retained for
+source5d98651d2c34314724a12283d1741e73594e16b8/treea1989f20284c201bfd58bafe12c174544f1eb3c1.
+Approval6254432619 consumed once; execution stays5d98651, no rerun/ref permission.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012; PR34 closed/merged.
+Contract9/Q01/MATERIAL11/D1/D2/D3/allcaps retained; M4 out.
+No PG/Docker/services/browser/Actions/full CI/new PR/VM/live/deploy/renewal.
+C0 consolidates corrected source then assigns C8/actual gates; user owns merge.
+
+## История — Текущий статус — stock105 PASS; C6 host/operator и C5 Console source-only / 2026-10-18 UTC
 
 [C0 acceptance6254556203](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6254556203).
 **C6/C5 ACTIVE; C1/C2/C3/C8 HOLD.** Existing planned contract§16.7/16.9 work;

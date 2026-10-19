@@ -5,7 +5,161 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущая выдача C0 — stock105 PASS; C6 host/operator и C5 Console / 2026-10-18 UTC
+## 0. Текущая выдача C0 — два исправления frontend-проверок C5 / 2026-10-19 UTC
+
+[C0 review6260097657](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6260097657).
+**C5 CONSOLE-R2 ACTIVE/source-only; C6/C1/C2/C3/C8 HOLD.**
+Новых требований к функции нет: исправляются две ошибки тестового кода в рамках
+уже выданной Console-R1. M3 IN_PROGRESS. Host/Console whole integration NOT VERIFIED.
+
+### 0.1. Disposition and exact evidence
+
+| Return / finding | C0 disposition |
+|---|---|
+| C6 HOST-R1 6255240519 | Source review complete; no new source finding; REVIEW/HOLD pending C5 and paired actual gates |
+| C5 CONSOLE-R1 6255159597 | REVIEW; required frontend gates FAIL; two narrow corrections assigned |
+| C0-NC-UI-01/P2 | OPEN: Response passed to helper accepting only APIResponse, two TS2345 errors |
+| C0-NC-UI-02/P2 | OPEN: duplicate-submit test queries already removed form button |
+| Old native stock/carrier/runtime findings | Prior acceptance6254556203 and CLOSED LOCAL/TEST retained |
+
+C6 exact9bd76b30069617ceadf5e35de046505255600cca/tree8124ef7664434a2e999502daff4b1f5d856bab0f;
+C5 exacte9a5dcbf16fd9d3d7824a2c3d3b3628074d3cc79/tree723869324be6f5627a3d1348d32a55c36e7a2dae.
+Both sole-parent8d1ba99c820b42c590408d98043e6963743f77a0.
+C0 checked all288/292 actual remote/local blobs/modes, disjoint12/24 changes,
+276/268 retained old leaves; original11 and full contract exact. Source-only
+combined review indexd460c942752983b127c16309e6486916110e6a68 was not published or
+accepted as integration; its complete frontend equals C5 source.
+
+C0 restored exact Node24.19.0/npm11.9.0 frozen dependencies (npm ci --ignore-scripts,
+167 packages, no package/lock edit). Actual checks: typecheck FAIL2;
+complete10 impacted Vitest files358PASS/1FAIL/359 in6.36s; build PASS40 modules/0.99s;
+full Playwright list PASS54=45desktop+9narrow/4files. Initial list lacked private
+import inputs and failed; corrected list used inert synthetic files only, no
+browser/HTTP/PG execution. C5's earlier syntax/vector probes remain supplemental.
+
+C6 final evidence files independently checked: log SHA256
+ac369c6d482d5bb0c1916aba73be0f388afe6aeb1fc2322a5c375b9fcd434208,
+XML b4d8dda1e35a823fa1fa09106783aac11eb4abea24fad3e306ede67438c04d50;
+863 cases=36foundation+82setup+144egress+601migration,0fail/error/skip.
+Native collection112=7source+56DB+12API+37runtime and host collection20 match
+reported digests; all105 old IDs/order retained, SHA256
+9881ab5a77aca51a7d6c66737c352055cd4f037acf156e55f265cedeabb24b1a.
+C0 Python recheck did not start because retained3.13 interpreter targets were
+unavailable; NOT RUN. Report-file verification is not a fresh C0 execution.
+
+C6's pinned runtime catalog SELECT, API startup/readiness, explicit trusted policy
+operator and all new host carriers still need actual paired verification. No
+runtime EXECUTE grant, SQL mutation outside accepted capability, implicit policy
+activation or automatic replay/current-state conflation is accepted. Old0012
+negative/readiness evidence remains alongside the new0013 positive source cases.
+Historical material0001–0012 profile132functions/42tables remains bounded separately;
+current native167functions/45tables/635columns/full profile
+c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411 is unchanged.
+
+The R2 preparation is docs-only on C5 e9a5dcb; only HANDOFF/register differ,
+290 other leaves exact/292 total. It does not contain C6 changes and is not whole
+Console integration acceptance. Full new SHA/tree supplied in the canonical task.
+C0 branch c0/m3-1-native-context-console-r2; C5 branch below. Separate clean checkout.
+
+### 0.2. C5 exact correction
+
+**C5-M3.1-NATIVE-CONTEXT-CONSOLE-R2 — fix two frontend test blockers; source-only.**
+
+Repository Elefesys/ai-service-manager. Branch c5/m3-1-native-context-console-r2.
+Start only at the exact new C0 preparation SHA/tree in the canonical task binding.
+Its sole parent is C5 e9a5dcbf16fd9d3d7824a2c3d3b3628074d3cc79, tree
+723869324be6f5627a3d1348d32a55c36e7a2dae. Preparation changes only HANDOFF/register;
+the remaining290 leaves are exact C5 R1. This is a reviewed repair base, not
+INTEGRATED/VERIFIED whole-Console acceptance. C6 is not incorporated in this base;
+do not merge/follow the C6 branch. C0 will consolidate both returns after R2.
+
+Read current HANDOFF/REGISTER, AGENTS, IMPL-001, supplied original11 and their
+SOURCE_MANIFEST; applicable Spec5.8–5.14/18.5–18.9, ADR002–007/024–026/180/266/267,
+MVP GJ-G/J, Plan/Roadmap M3, M3_CONTRACT§16–16.20. Accepted backend/Python/OpenAPI,
+all product behavior, SQL, prior constraints and R1 assertions remain frozen.
+
+**Only two existing paths may change:**
+- frontend/e2e/conversation-control.spec.ts — the shared JSON response helper/
+  necessary response type import, solely to fix both TS2345 call sites.
+- frontend/src/HumanContextPanel.test.tsx — the failing full-replacement/
+  duplicate-submit test and a local helper only if needed for that probe.
+
+C0-NC-UI-01/P2: lines152/187 pass Playwright Response from page.waitForResponse
+to json(APIResponse). Give the helper its actual supported response union/minimal
+JSON interface or use the existing typed safe response path. Preserve
+safeDiagnostic, strict receipt parsing, scope/body checks and all54 browser cases.
+No any/unknown-as cast, @ts-ignore, tsconfig change or suppressed diagnostic.
+
+C0-NC-UI-02/P2: in test "prefills current text separately, requires both
+confirmations and saves one frozen replacement without Resume/send", the second
+save() queries a form button already removed by the first pending submission.
+Repair the probe against the actual pending state. It must meaningfully prove
+that a second attempt cannot create another request or replace the frozen intent,
+and then exercise the deferred receipt/current-read completion. Keep explicit
+two confirmations, old/current text separation, full replacement, exact frozen
+body, one request, no Resume/send, old-text removal, accepted callback once and
+cleared intent. Do not merely drop the second-action assertion, click a detached
+node with no possible React handler, weaken assertions or change product code
+just to preserve a button for the test. No skip/delete/retry/sleep/timeout increase.
+
+**Exact local verification is required.** Node24 with the existing package.json
+and package-lock.json; restoring an absent dependency environment with
+npm ci --ignore-scripts --no-audit --no-fund is explicitly allowed. Use an
+isolated checkout/private cache or external node_modules; verify lock/source
+bytes before and after. No manifest/lock edit, package upgrade, new library,
+global installation, browser download or service. C0 used Node24.19.0/npm11.9.0,
+167 locked packages; lock SHA256
+bc4c95ef78ada2e6c2e1eee49974f6d13e865cb62409265c577d06baaa8809ad.
+
+Run and report actual exit codes/results on the final frozen source:
+1. npm run typecheck.
+2. npm run test -- src/HumanContextPanel.test.tsx src/human-context-api.test.ts
+   src/ConversationControl.test.tsx src/conversation-control-api.test.ts
+   src/MessagingPanel.test.tsx src/messaging-api.test.ts
+   src/EscalationsPanel.test.tsx src/escalation-api.test.ts
+   src/BillingPanel.test.tsx src/billing-api.test.ts
+3. npm run build -- --outDir <external-evidence-build-directory>.
+4. npm run test:e2e -- --list, full existing config; expect all54 cases retained,
+   45 desktop+9 narrow. Collection needs ASM_BROWSER_LOGIN,
+   ASM_BROWSER_PASSWORD_FILE, ASM_BROWSER_FIXTURE_FILE, ASM_BROWSER_ENV_FILE,
+   ASM_BROWSER_MESSAGING_FILE and ASM_BROWSER_COUNTER_DIR. For list-only, private
+   files outside checkout may contain an unused synthetic login/password,
+   {"billing_fixtures":{},"messaging_fixtures":{}}, empty inventory{}, empty env
+   and an empty counter directory. Never use account credentials or start a stack.
+   This import/collection input is not fabricated browser/PG execution evidence.
+
+Keep failed R1 facts: typecheck2 errors, Vitest358PASS/1FAIL/359; build/list PASS.
+Do not rerun unrelated Python/PG suites for counts; no Python source is assigned.
+Preserve all old test cases/assertions; changes to the named failing probe must
+be explained, not hidden in a claim of exact AST identity.
+
+Return REVIEW then C5 HOLD: exact commit/tree/sole parent/branch and two changed
+paths, retained source/lock/contract hashes, actual commands/results and concise
+mapping of each correction to its finding. Normal FF from the prepared head with
+expected SHA/force=false; no amend/rebase/force. C0 alone closes findings after review.
+
+No product UI/API/SQL, host/operator, contracts/C0 docs, dependencies, CI/runner/
+budget changes; no PG/Docker/services/browser/API/provider/account/VM/Actions/
+execution-ref/full CI/new PR/main/merge/live/deploy/renewal or other agents.
+If a change outside the two files becomes necessary, return the exact reason to C0.
+C6/C1/C2/C3/C8 HOLD. Prior stock105 and closures retained; M3 IN_PROGRESS.
+Next after correction: C0 consolidation, independent C8 and exact actual paired gates.
+User owns merge.
+
+### 0.3. Retained gates
+
+Accepted actual stock source5d98651d2c34314724a12283d1741e73594e16b8/tree
+a1989f20284c201bfd58bafe12c174544f1eb3c1, run39160997284/attempt1:
+105/105/all315 phases PASS,51runner+130subtests,98 guarded resets, complete
+independent catalog/cleanup/clean-source. Approval6254432619 CONSUMED ONCE;
+execution branch remains5d98651. No further run/ref permission.
+C0-NC-CARRIER-01/02 and C3-NC-RUNTIME-01 CLOSED LOCAL/TEST on that source.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 and PR34 closed/merged unchanged.
+Contract9/Q01/MATERIAL11/D1/D2/D3 and all existing caps retained; M4 out.
+C8/actual host+Console/full CI/account/A08/P01/P05/renewal/collector/A12 remain
+separate gates. No service or live authorization follows from this correction.
+
+## История — 0. Текущая выдача C0 — stock105 PASS; C6 host/operator и C5 Console / 2026-10-18 UTC
 
 [C0 actual acceptance6254556203](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6254556203).
 **C6 и C5 ACTIVE по двум source-only задачам ниже; C1/C2/C3/C8 HOLD.**
