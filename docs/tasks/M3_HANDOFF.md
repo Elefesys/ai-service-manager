@@ -5,7 +5,108 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий шаг C0 — RUN2 FAILED; C6/C1 точечные CI-исправления / 2026-10-19 UTC
+## 0. Текущий шаг C0 — C6 CI-R3/C1 CI-R1 приняты; ordinary CI RUN3 / 2026-10-19 UTC
+
+[C0 review6267813855](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6267813855)
+accepts [C6 return6267631802](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6267631802)
+and [C1 return6267256061](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6267256061).
+**Both corrections INTEGRATED source; C1 bounded inventory VERIFIED LOCAL/TEST.
+C0 prepares ordinary PR35 CI RUN3. C1/C2/C3/C5/C6/C8 HOLD. M3 IN_PROGRESS.**
+
+| Binding | Exact value |
+|---|---|
+| Common preparation / parent of both returns | a85d7aaa03d0a28b06c02197072c4c22ed413820 |
+| C6 CI-R3 / tree | 88e9919298dfd6ffd4fd5ac7083371e79ff8b90c / b7c682dd43a305b7dc5be957d77712327d9a04c0 |
+| C1 CI-R1 / tree | f7bff2d61f5d49e2d0a7fd9a11883f9a192bb3b8 / 485a17e7aa727891528e8eb0fd2b43348840a969 |
+| Combined implementation | 972e838c9f132ee1f4da0c66ec50bed5db179c22 |
+| Combined tree | 044c4b775d93cb008acca01b4b0a8064c58caf52 |
+| Ordered combined parents | C6 88e9919298dfd6ffd4fd5ac7083371e79ff8b90c, C1 f7bff2d61f5d49e2d0a7fd9a11883f9a192bb3b8 |
+| Existing Draft PR35 execution branch | c0/m3-1-native-context-ci-r1 |
+| Old PR35 head / future FF lease | 45253120875ba8107035c1eb27427cdc6f30364e |
+| Frozen main / MATERIAL P | e205e22051bc06295758b504d84699652b176c15 / schema0012 |
+| Frozen stock execution ref | af7482dede085bc033e3fee34f9a2425124351ee |
+
+This preparation changes only HANDOFF/register as a sole child of the combined
+implementation. Exact prepared SHA/tree and leased execution binding follow in
+the canonical C0 RUN3 comment. C0 preparation ref c0/m3-1-native-context-ci-r3;
+owner C6/C1 refs remain at the accepted returns. The existing PR35 is retained.
+
+C0 independently verified all292 remote bytes/modes for each owner return and
+combined source; clean exact commits/trees/parents, original11=manifest=repo,
+full unchanged M3_CONTRACT. C6 exactly3 paths,+736/-87,289 protected leaves;
+C1 exactly1 path,+7/-0,291 protected leaves; combined4 paths,+743/-87,288
+protected leaves. All combined changed blobs equal their accepted owner bytes.
+C6 evidence manifest60 entries/source archive and C1 published5 evidence hashes
+match. All134 old runner IDs and130 subtests retained;125 additional cases.
+
+CI-03 correction keeps actual HEAD==GITHUB_SHA/full clean bytes/modes/tree,
+raw commit-header exact2 ordered parents=original event base/head, same repo
+name/numeric ID/nonfork/open unmerged PR-to-main/ref/action/run/attempt.
+Optional missing/null/current/well-formed stale merge_commit_sha is advisory;
+malformed values refuse. No REST refresh/substitution/retry/head-only trust.
+PASS/refusal diagnostics contain bounded validated operands, payload digest
+and closed predicate reason; no arbitrary malformed values/event/secret dumps.
+Refused secondary entrypoints never adopt/read retained lease; diagnostic
+write failure retains primary refusal or fails before resource authority.
+Constructed stale-advisory RED/GREEN does not recover the missing RUN2 webhook.
+
+CI-04 correction adds only3 development-stage Dockerfile lines for minimal
+real git install and apt-list cleanup. Runtime/shared toolchain/pins/locks
+and every pre-existing development line exact. Shell syntax PASS; image
+installation/runtime proof still requires actual RUN3, not source checking.
+
+CI-05 correction adds exactly3 explicit accepted native owner-route literals
+to existing exact sorted equality,25 routes total. Removing only assignment/
+concatenation restores whole old AST. Auth7/schema0003/down0002/all existing
+auth assertions/offline DB refusal/full generated OpenAPI byte equality exact.
+
+Independent C0 combined verification: Python3.13.12/58 exact locked packages,
+runner259 +9 real-Git host fixtures +24 auth =292 PASS,130 subtests PASS/8.15s,
+0skip/xfail/failure/error. Ruff/check-format/compile3 paths and read-only
+export_contracts --check PASS. Pure clean published source pairing all4
+api/worker/scheduler/console and167 functions/45 tables/635 columns PASS.
+Production collect-only907=802+105,112=7source+105PG; complete ordered IDs and
+fixture guards equal unchanged base; no fixture execution. Ordered SHA256:
+allPG8a39f48de61c848c697b394e45d24eba42c86990ea35146bd5d4205e64e04031;
+genericbde64cc7fbfd35daa02e8141adcaec0723427ed6c2cfeef4b5e15402e8b1d283;
+native7b3ae663595966409f0291fe9836753bf303a37b76c529c36df7dd0957a2cf0d.
+
+| Task / finding / gate | Current disposition |
+|---|---|
+| C6-M3.1-NATIVE-CONTEXT-CI-R3 | INTEGRATED source; actual CI validation pending |
+| C1-M3.1-NATIVE-CONTEXT-CI-R1 | INTEGRATED / VERIFIED LOCAL/TEST bounded inventory |
+| C0-NC-CI-03/P2 | Source correction accepted; actual event/runtime closure PENDING RUN3 |
+| C0-NC-CI-04/P2 | Source correction accepted; development-image closure PENDING RUN3 |
+| C0-NC-CI-05/P2 | CLOSED LOCAL/TEST for strict route inventory; whole foundation pending |
+| C0-NC-CI-01/02 | CLOSED in RUN2; retained exact historical proof |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN2 | Historical FAILED8SUCCESS/2FAILURE; approval6266348523 consumed |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN3 | PREPARED; separate exact one-use C0 execution comment follows |
+| Full ordinary CI / whole native integration | PENDING; PR35 Draft, no merge |
+
+RUN3 must use one leased FF of existing PR35 execution head and automatic
+pull_request/synchronize attempt1. Actual GitHub merge ordered parents must
+equal [frozen main,prepared candidate], tree equal candidate. No reuse of
+RUN1/RUN2 approvals, manual dispatch/rerun/retry/cancel or source movement
+during execution. No user merge or deployment is included.
+
+Required all10 ordinary jobs/clean-source gates on one actual merge: complete
+current durable6 lifecycles/45 tables in both lanes; full retained H/T/C/G/E
+plus unchanged frozen P0012 MATERIAL replay and T2+lateC3 negatives in both
+state lanes; full unfiltered foundation units/generic802PG/migration/contracts/
+wheels/service/HTTP smoke; native259runner+130subtests/full112carrier/336phases/
+105reset/catalog167/45/635/owned cleanup; frontend and54 real Playwright
+45desktop+9narrow plus all4 image/intent shards. Counts describe complete
+inventories, not caps or permission to filter mandatory work.
+
+All clocks unchanged: native20min/payload1080s,foundation45/browser25/state25;
+originalS/retained600/P720/fixed120/supervisorS+1200/cleanup90. Actual disposable
+Actions LOCAL/TEST fixtures only. No shared lab/VM/account/Telegram/provider/
+S3/LLM/renewal/deployment. D1/D2/D3 and prior closures retained; IMPL-05/broad
+optimization DEFERRED; account/A08/P01/P05/renewal/collector/A12/M4 later.
+Whole M3 IN_PROGRESS; user owns merge.
+
+
+## История — 0. Текущий шаг C0 — RUN2 FAILED; C6/C1 точечные CI-исправления / 2026-10-19 UTC
 
 [C0 final RUN2 disposition6266843739](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6266843739).
 **PR35 Draft/BLOCKED; RUN2 completed8 SUCCESS/2 FAILURE.
