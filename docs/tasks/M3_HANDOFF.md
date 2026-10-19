@@ -5,7 +5,94 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий шаг C0 — CI-R1 source принят; первый ordinary PR/CI / 2026-10-19 UTC
+## 0. Текущий шаг C0 — ordinary CI FAILED; C6 CI-R2 / 2026-10-19 UTC
+
+[C0 failure disposition6265446311](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6265446311).
+**PR35 Draft/BLOCKED; run39235044613/attempt1 completed:6 SUCCESS,4 FAILURE.
+C6 CI-R2 ACTIVE/source-only; C1/C2/C3/C5/C8 HOLD. M3 IN_PROGRESS.**
+
+Frozen PR35 head d5e0fe586179dfc22084c80562abec0796e88cbe, tested merge
+bb8a30324e9e4f40bb64784dd5774d899e4fcebb, tree2f7123c22b4685173c9c5faa8f5dcdc99f7b3231,
+ordered parents[e205e22051bc06295758b504d84699652b176c15,d5e0fe586179dfc22084c80562abec0796e88cbe].
+All10 checkout logs bind to this merge. Approval6264718588 CONSUMED ONCE.
+
+| Task / finding / gate | Current disposition |
+|---|---|
+| C6-M3.1-NATIVE-CONTEXT-CI-R1 | INTEGRATED source |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN1 | FAILED; full integration BLOCKED |
+| C0-NC-CI-01/P2 | OPEN: current durable0013 invokes historical0012 fingerprint |
+| C0-NC-CI-02/P2 | OPEN: MATERIAL0011→0012 uses current0013 candidate as P |
+| C6-M3.1-NATIVE-CONTEXT-CI-R2 | IN_PROGRESS/source-only; exact4-path task below |
+| Actual PR native/browser slices | VERIFIED LOCAL/TEST on tested mergebb8a3032 |
+| Foundation generic802 PG/contracts/reproducibility/smoke | NOT VERIFIED; stopped before compose run checks |
+| Historical closures/main/M3 | Retained / unchanged / IN_PROGRESS |
+
+Failed: foundation118001968950 and docker29-compatibility118001968862 at
+durable_fresh, tests/test_telegram_egress_postgres.py:949→801,0013!=0012.
+Both state jobs normal118001969077/docker29118001968958 stop at
+MATERIAL probe_bb8a3032_False; generated header asserts current runtime is0012.
+C0 source-only reproductions confirm both mismatches. Actual state logs suppress
+inner stderr; no later unexecuted stage is claimed PASS. Both failure reports
+retain owned cleanup PASS and complete diagnostics. Preparation705.048s(normal)/
+521.814s(Docker29) stayed below720; observed failure is schema probing.
+
+C0 checked5 ZIP digests,7 current-source archives/all292 bytes+modes, native
+manifest and archived clean status in4 failed jobs. Native actual112=7source+56DB+
+12API+37runtime,336 phases,105 guarded resets,134 runner+130subtests PASS.
+Rechecked installed167 typed functions/OIDs/bodies/ACL,45 tables/635 columns,
+profilec045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411,
+owned cleanup/final clean PASS. Carrier588.778s/whole648.299s under20min.
+Browser actual398 frontend/14 files and54 Playwright=45desktop+9narrow PASS;
+clean-source SUCCESS. Four image/intent jobs SUCCESS. Whole CI remains FAILED.
+
+This C0 preparation is a docs-only child of frozen d5e0fe58, on new isolated
+c0/m3-1-native-context-ci-r2 and c6/m3-1-native-context-ci-r2 branches.
+Exact SHA/tree in canonical C6 task comment; only HANDOFF/register differ,
+290 other leaves remain exact. Do not move PR35 head for status-only docs:
+that would trigger a new run. Source correction and next execution are separate.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 and stock ref
+af7482dede085bc033e3fee34f9a2425124351ee remain unchanged; user owns merge.
+D1/D2/D3/caps/previous closures retained; IMPL-05 DEFERRED. Account/A08/P01/P05/
+renewal/collector/A12/M4 remain later gates.
+
+### 0.1. Exact C6 CI-R2 correction task
+
+C6-M3.1-NATIVE-CONTEXT-CI-R2 — repair two observed compatibility-harness source/schema pairings; source-only.
+
+Repository Elefesys/ai-service-manager. Start only from the full C0 preparation SHA/tree in the canonical task comment, in a separate clean checkout of c6/m3-1-native-context-ci-r2. Its sole parent is frozen PR35 candidate d5e0fe586179dfc22084c80562abec0796e88cbe; preparation changes HANDOFF/register only. Do not assume shared disk/cache. Read AGENTS, current HANDOFF/register, canonical Spec/ADR/MVP/Plan M3 and M3_CONTRACT§16–16.20; original11/manifest/contract and existing acceptance remain authoritative. C1/C2/C3/C5/C8 HOLD.
+
+Observed basis: C0 disposition6265446311 and run39235044613/attempt1. C0-NC-CI-01/P2 breaks foundation+Docker29 compatibility at durable_fresh: actual0013 versus retained canonical_fingerprint default0012. C0-NC-CI-02/P2 breaks both state lanes: the current0013 candidate image is passed to the0012 MATERIAL readiness header. Native112/336/105 and browser54/frontend398 actually PASS on mergebb8a30324e9e4f40bb64784dd5774d899e4fcebb; whole CI FAILED. Fix only these source/schema routing errors; do not alter product behavior.
+
+Only these4 existing files may change:
+- tests/test_telegram_egress_postgres.py
+- tests/test_telegram_egress_migration.py
+- tests/test_telegram_egress.py
+- scripts/test_telegram_egress_migration.sh
+
+Required correction A — current durable0013:
+1. Preserve canonical_fingerprint default0012, its closed0009–0012 schema set and historical MATERIAL/42-table callers/assertions. Do not widen it to0013, derive a permissive expected revision from the live DB, or change production RuntimeDatabase/schema readiness.
+2. Introduce a separate exact current0013 fingerprint path for durable_local and durable_snapshot. Cover every current empty/seeded/before/after/cleanup use, not just the first failing call. Validate exact revision0013 and the complete45-table inventory; preserve all row hashes/counts, UNKNOWN receipts, Console sessions, wire counter, actual caller database identity, read-only snapshots, held-state lifetime and owned fixture teardown. Missing/extra native tables and schema mismatch must fail before accepting any fingerprint.
+3. Keep historical asm_test/frozen executors and schema0012 fingerprints unchanged. No downgrade of current callers, partial table filtering, skips or removal of durable phases.
+
+Required correction B — retained MATERIAL0011→0012:
+1. Add exact frozen P=e205e22051bc06295758b504d84699652b176c15 /tree85206b9c66ac151f3847aa39f46fb75663a18b91. This is the accepted PR34 main0012, ordered parents[933ddd284ff5b77fb1aa88a4270ab0032bc499c9,f78ff5c1d9996760d6d5e78d15a2c7a8148bab5f]. Verify commit/tree/ancestry, clean checkout and source/image bindings. E stays933ddd284ff5b77fb1aa88a4270ab0032bc499c9/treed0759acb9f83ec3f3e10d9c5d1325c937c343ee7.
+2. Run the accepted complete E→P MATERIAL phase from P's exact tracked checkout/helper/controller/runtime/development bytes, analogously to retained E. Invoke only its material phase, not its whole coordinator. Do not transplant0012 foundation into current source, monkeypatch the frozen executor, build modified archives or accept a current0013 image as P.
+3. Current outer coordinator/source archive/ledger must retain the actual current SHA. Frozen MATERIAL reports, source-P archive, diagnostics, images, recovery selections and readiness pairings identify P truthfully. Update the current launcher admission checks to validate both current coordinator and frozen P execution instead of equating them. Export complete retained reports on success/failure, require a clean frozen checkout before removal, and retain primary/secondary failure discipline.
+4. Preserve every historical phase/assertion and full ordering: H/T/C/G/E, MATERIAL42 tables/132 functions, current-at-P V1 readers and fresh V2/OFF receipt, unchanged row/catalog proofs, two upgrade/reverse cycles, committed-result-loss86 recovery by observed revision, used55000 refusal before DDL, P cutover/restart, complete T negatives2 and late-C negatives3, owned cleanup and foreign-state invariance. Current0013 remains the dedicated native gate and current durable route; historical P replay cannot claim current native readiness.
+5. Preserve original clock S and exact budgets: retained preparation S+600, terminal P S+720/fixed120, supervisor+480/S+1200, cleanup90, state25min and all existing transport caps. Charge added checkout/archive/image/export/cleanup work to the original applicable budget. Use only correctly source-validated existing image reuse; no budget reset, subtraction, extension, extra retry or broad caching/optimization. If the complete pairing cannot fit the existing contract, report a precise blocker.
+
+Bounded verification:
+- Python3.13/frozen uv.lock development dependencies; compile/Ruff/check-format the changed Python and sh -n the changed launcher.
+- Full unit selections of tests/test_telegram_egress.py and tests/test_telegram_egress_migration.py, with all existing cases and failure assertions retained. Include new meaningful negatives for mismatched0012/0013 tables/revision, the full current durable call route, wrong P source/tree/ancestry/image/report/cleanup identity, current coordinator versus P identity, unconsumed/expired/tampered handoff, original-clock budget accounting and primary-error/report-copy/cleanup propagation. Use existing source/unit seams; no DB/Docker work.
+- Reproduce each source-only failure on unmodified base, then demonstrate corrected routing without overriding foundation revision. Keep exact historical helper/phase bodies unchanged where they remain retained; explicitly account for unit fixture expectations that now model a frozen P executor. Tests must fail if current0013 is again fed to a0012 executor or native tables are silently omitted.
+- Verify full existing generic-unit invocation remains unchanged; no marker/collection/ignore/workflow edits. Collect-only current generic/native partition (907=802+105;112 carrier=7source+105PG) with production guard, no fixture execution. Counts describe current complete inventories, never a cap permitting missing tests.
+- Exact4-path diff;288 protected leaves equal preparation, including workflows/runner/check_backend/Dockerfile/Compose/image pins/locks/production SQL/API/Console/contracts/original11. Pure source pairing all4 components/167 functions/45 tables/635 columns on the final published source. Attach exact commands/exits/counts and evidence/source hashes.
+
+No changes to production code, migrations0001–0013, frozen source refs, source helpers outside the4 paths, docs, contracts, workflows, runner partition, dependencies or budgets. Do not add source-only output that pretends to be live PG/browser proof. If a necessary correction needs another file or weakens any retained assertion, return a precise blocker before expanding.
+
+Execution boundary: publish only the isolated task branch and one REVIEW return in PR34 with full commit/tree/parent, allowlist diff, evidence hashes and limitations, then HOLD. Actual PG/Docker/browser/Actions/deploy are NOT RUN by this task. No inspection/start/reuse/cleanup of services, no new PR, no change to open PR35 branch c0/m3-1-native-context-ci-r1, main, stock execution ref or old C6 CI-R1 ref; no dispatch/rerun/retry/cancel/merge/VM/account/provider/Telegram/S3/LLM/policy/renewal actions and no other chats/agents. C0 independently reviews the return and then binds a separate next CI execution to the corrected exact source. User owns merge.
+
+## История — 0. Текущий шаг C0 — CI-R1 source принят; первый ordinary PR/CI / 2026-10-19 UTC
 
 [C6 return6264502649](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6264502649)
 accepted by [C0 review6264669308](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6264669308).

@@ -2,7 +2,59 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## Текущий статус — CI-R1 INTEGRATED source; C0 ordinary CI gate / 2026-10-19 UTC
+## Текущий статус — ordinary CI FAILED; C6 CI-R2 / 2026-10-19 UTC
+
+[C0 failure disposition6265446311](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6265446311).
+**PR35 Draft/BLOCKED; run39235044613/attempt1 completed:6 SUCCESS,4 FAILURE.
+C6 CI-R2 ACTIVE/source-only; C1/C2/C3/C5/C8 HOLD. M3 IN_PROGRESS.**
+
+Frozen PR35 head d5e0fe586179dfc22084c80562abec0796e88cbe, tested merge
+bb8a30324e9e4f40bb64784dd5774d899e4fcebb, tree2f7123c22b4685173c9c5faa8f5dcdc99f7b3231,
+ordered parents[e205e22051bc06295758b504d84699652b176c15,d5e0fe586179dfc22084c80562abec0796e88cbe].
+All10 checkout logs bind to this merge. Approval6264718588 CONSUMED ONCE.
+
+| Task / finding / gate | Current disposition |
+|---|---|
+| C6-M3.1-NATIVE-CONTEXT-CI-R1 | INTEGRATED source |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN1 | FAILED; full integration BLOCKED |
+| C0-NC-CI-01/P2 | OPEN: current durable0013 invokes historical0012 fingerprint |
+| C0-NC-CI-02/P2 | OPEN: MATERIAL0011→0012 uses current0013 candidate as P |
+| C6-M3.1-NATIVE-CONTEXT-CI-R2 | IN_PROGRESS/source-only; exact4-path task in M3_HANDOFF§0.1 |
+| Actual PR native/browser slices | VERIFIED LOCAL/TEST on tested mergebb8a3032 |
+| Foundation generic802 PG/contracts/reproducibility/smoke | NOT VERIFIED; stopped before compose run checks |
+| Historical closures/main/M3 | Retained / unchanged / IN_PROGRESS |
+
+Failed: foundation118001968950 and docker29-compatibility118001968862 at
+durable_fresh, tests/test_telegram_egress_postgres.py:949→801,0013!=0012.
+Both state jobs normal118001969077/docker29118001968958 stop at
+MATERIAL probe_bb8a3032_False; generated header asserts current runtime is0012.
+C0 source-only reproductions confirm both mismatches. Actual state logs suppress
+inner stderr; no later unexecuted stage is claimed PASS. Both failure reports
+retain owned cleanup PASS and complete diagnostics. Preparation705.048s(normal)/
+521.814s(Docker29) stayed below720; observed failure is schema probing.
+
+C0 checked5 ZIP digests,7 current-source archives/all292 bytes+modes, native
+manifest and archived clean status in4 failed jobs. Native actual112=7source+56DB+
+12API+37runtime,336 phases,105 guarded resets,134 runner+130subtests PASS.
+Rechecked installed167 typed functions/OIDs/bodies/ACL,45 tables/635 columns,
+profilec045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411,
+owned cleanup/final clean PASS. Carrier588.778s/whole648.299s under20min.
+Browser actual398 frontend/14 files and54 Playwright=45desktop+9narrow PASS;
+clean-source SUCCESS. Four image/intent jobs SUCCESS. Whole CI remains FAILED.
+
+This C0 preparation is a docs-only child of frozen d5e0fe58, on new isolated
+c0/m3-1-native-context-ci-r2 and c6/m3-1-native-context-ci-r2 branches.
+Exact SHA/tree in canonical C6 task comment; only HANDOFF/register differ,
+290 other leaves remain exact. Do not move PR35 head for status-only docs:
+that would trigger a new run. Source correction and next execution are separate.
+Main e205e22051bc06295758b504d84699652b176c15/schema0012 and stock ref
+af7482dede085bc033e3fee34f9a2425124351ee remain unchanged; user owns merge.
+D1/D2/D3/caps/previous closures retained; IMPL-05 DEFERRED. Account/A08/P01/P05/
+renewal/collector/A12/M4 remain later gates.
+
+Exact correction scope and verification: M3_HANDOFF§0.1 and canonical C6 task comment. No new CI execution permission.
+
+## История — Текущий статус — CI-R1 INTEGRATED source; C0 ordinary CI gate / 2026-10-19 UTC
 
 [C6 return6264502649](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6264502649)
 accepted by [C0 review6264669308](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6264669308).
