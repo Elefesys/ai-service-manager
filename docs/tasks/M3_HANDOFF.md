@@ -5,7 +5,126 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — diagnostic returns accepted; C6 foundation CI-R4 source implementation / 2026-10-20 UTC
+## CURRENT — C6 CI-R4 review: CI-08/P2 OPEN; narrow correction / 2026-10-20 UTC
+
+C0 reviewed [C6 return6288482681](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6288482681).
+[C0 disposition and exact correction6288734136](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6288734136):
+**CHANGES REQUESTED, one reproduced cleanup defect CI-08/P2 (C0-NC-CI-08).**
+Returned implementation remains REVIEW, not INTEGRATED or runtime VERIFIED.
+**C6-M3.1-NATIVE-CONTEXT-FOUNDATION-CI-R4 is IN_PROGRESS for this correction only.**
+C2/C1/C3/C5/C8 and all other tasks HOLD. CI-06/07 remain OPEN; whole native
+integration and Draft PR35 BLOCKED; M3 IN_PROGRESS.
+
+| Source binding | Exact value |
+|---|---|
+| Reviewed C6 commit | b02a421bee23f53affb03b310cb8078393b68592 |
+| Tree / sole parent | fd373b323e819b1c3c95dfae466d08c9cd4c6b01 / 427bcd4259c35e3c775a40afadf9a97fab9507ec |
+| C6 correction branch | c6/m3-1-native-context-foundation-ci-r4; exact start b02a421 above |
+| C0 coordination branch | c0/m3-1-native-context-ci-r4; this update changes only HANDOFF/register from427bcd42 and does not integrate the five C6 files |
+| Frozen PR35 / main / stock | 59c9fce52bdaae54f50cdb847a378d47f75c642b / e205e22051bc06295758b504d84699652b176c15 / af7482dede085bc033e3fee34f9a2425124351ee |
+
+### Independent source/local verification
+
+C0 reconstructed a separate clean checkout, checked all294 remote bytes/modes,
+the exact five-path +2262/-32 scope and all289 protected leaves. Original11,
+full M3_CONTRACT, both accepted diagnostic reports and C0 documents are unchanged
+by C6. All24 entries in C6's evidence manifest hash correctly. Exact CI hashes
+and constructed native_host_source pairing pass for all4 components and the
+167function/45table/635column catalog. This is source verification, not a new
+installed PostgreSQL catalog or runtime approval.
+
+C0 independently ran the runner suite using frozen Python3.13.12, all58 installed
+distributions matching uv.lock and imports from C0's own checkout: **338 PASS,
+130 subtests PASS,131.66s**, all259 baseline cases retained. Two pytest
+configuration/deprecation warnings; no failures. Ruff check/format, compileall,
+shell syntax and git diff-check exit0. The additional focused C0 process probe
+uses only temporary Git repositories and inert command stubs; no real Docker,
+PostgreSQL, build, browser, service, Actions or live endpoint was executed.
+
+| C0 evidence | SHA256 |
+|---|---|
+| Independent JUnit | 6064ab7874155e08175ef63fabb30d4b8b3016821796992ed567bd0f8b3c27aa |
+| Runner log | 44c9c0f253f3a7467e8e86a2e6bcdacf17ce26baf8b8b07aa3618546c2efb704 |
+| Cleanup control/fault JSON | 58f1dbf88ecc654adb49ef4710541aecb1f9396e71613834ac9158fc23af7789 |
+| Cleanup probe summary log | d1d381bc1d4ce001ccc4332e568696f8a30d3555019ac33cb950ece62759a1fb |
+
+### CI-08/P2 — post-admission diagnostic loss blocks owned cleanup
+
+foundation_step constructs foundation_store before its reporting-error handler
+and child command. FoundationEvidence opens/pins every evidence file. The ci.sh
+EXIT trap routes cleanup through that same step. If cases.jsonl disappears after
+valid admission and checks starts, the cleanup wrapper refuses before invoking
+docker compose down. This violates preserved bounded owned cleanup; reporting
+failure must fail acceptance without disabling cleanup of already-owned resources.
+
+C0's actual unchanged ci.sh --foundation-core/runner with inert commands:
+
+| Probe | checks | cleanup wrapper | compose-down stub | Exit | execution.json |
+|---|---:|---:|---:|---:|---|
+| Control: checks returns17 | 1 | 1 | 1 | 17 | primary17/cleanup0 |
+| Same checks removes only cases.jsonl, returns17 | 1 | 1 | 0 | 17 | empty |
+
+Reproduction and exact insertion into the existing foundation_commands fixture
+are in C0 comment6288734136. Counting only the wrapper would miss the defect.
+The existing append-error test supplies an already constructed store and does
+not cover this constructor failure. The primary17 is preserved correctly.
+This finding is a local source/process result, not evidence of a real resource leak.
+
+### Sole active correction and acceptance boundary
+
+C6 continues its own returned candidate b02a421 in a separate clean checkout;
+only scripts/ci.sh, scripts/native_context_db_catalog.py and
+tests/test_native_context_db_runner.py may change. The workflow/check_backend
+and their current bindings remain byte-exact. Other291 leaves, original sources,
+reports/contracts/production/fixtures/locks/C0 documents are frozen. Use the
+exact comment6288734136 for scope; do not merge coordination changes into the
+three-file correction or start dependent implementation from this unaccepted code.
+
+Preserve initial source/evidence/foreign-UID/path/inode/symlink/digest refusal
+before resources. Establish cleanup authority before resources and keep it
+independent of later diagnostic journal health: loss/replacement/reopen failure
+must still attempt exactly the trusted already-owned cleanup, bounded90s. Do not
+derive authority from an untrusted replacement binding, adopt resources, broaden
+the cleanup target or add retries/prune/bypasses. Preserve primary failure and
+cancellation; otherwise-successful work with missing evidence must fail.
+
+Required regression: control and post-admission journal loss/replacement invoke
+the same owned down once, primary17/cancellation remain, success plus evidence
+failure stays nonzero, and foreign evidence still refuses before resource work.
+Retain338 cases/130subtests and all original assertions; add only focused inert
+regressions. Allowed work is frozen local source/static/runner/stub checks only.
+Return exact corrected commit/tree/sole parentb02a421, three-path subset/protected
+leaf proof, clean source pairing, actual commands/counts/hashes and RED-to-GREEN
+proof on PR34, then HOLD. C0 integrates only after corrected source acceptance.
+
+The accepted policy remains11 required expanded jobs: whole normal durable25min
+then dependent foundation45min, fresh resources, full generic802 and full tail;
+other9 unchanged. No-argument ci.sh remains the complete gate. This design is in
+the unaccepted C6 candidate; frozen PR35 still has10 jobs. All existing caps and
+native20min/payload1080s/S600/P720/fixed120/+480/supervisor1200/cleanup90 remain.
+All11 actual SUCCESS at the exact later source, each foundation job independently,
+full clean/cleanup/evidence gates are still required; dependent SKIPPED is not PASS.
+Administrative protection remains unverified (prior GET403/rulesets[]); no settings
+changed. IMPL-05 remains DEFERRED.
+
+Both earlier diagnostic reports remain accepted SOURCE+SAVED-DATA only. RUN3
+39256948310/attempt1 retains9 SUCCESS/foundation CANCELLED at45min; generic802
+has755 terminal outcomes=667PASS+88FAIL and47UNKNOWN, no recovered original error
+chains. Nine families remain source hypotheses. After corrected source acceptance,
+separately authorize C2 section8 bounded actual LOCAL/TEST diagnosis, then scoped
+owner fixes and full generic802/native112/336/105/catalog/full-tail/all11 gates.
+C2's ten-test-path+helper proposal remains unassigned. No hidden0012 substitution.
+
+PR35/main/stock refs unchanged. No dispatch/rerun/cancel/new PR/merge/deployment
+or real Docker/PG/services/build/browser/VM/provider/Telegram/S3/LLM is authorized
+by this review/correction. Prior one-use approvals remain consumed; D1/D2/D3 and
+earlier closures retained. A08/P01/P05/renewal/collector/account/A12/M4 later.
+User owns merge.
+
+---
+
+
+## History — diagnostic acceptance and initial C6 CI-R4 assignment / 2026-10-20 UTC
 
 C0 accepts [C2 diagnostic return6269738186](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6269738186)
 and [C6 budget/evidence return6269543868](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6269543868)
