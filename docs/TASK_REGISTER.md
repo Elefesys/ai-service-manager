@@ -2,7 +2,62 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — CI-10 CLOSED LOCAL; C6 accepted; RUN6 prepared, not authorized / 2026-10-20 UTC
+## CURRENT — RUN6 reviewed; diagnostics complete; C2/C6 report scopes / 2026-10-20 UTC
+
+[RUN6 / 39457359784](https://github.com/Elefesys/ai-service-manager/actions/runs/39457359784),attempt1, completed2026-10-20T17:17:04Z:
+**9SUCCESS, 2FAILURE**. Approval6295749140 CONSUMED ONCE; one expected-head/force=false
+FF, no retry/rerun/dispatch/cancel/source mutation. Tested PR35 headfaceef49dc719d1b3c2b7945116794f6737d7b32,
+tree341112cfd977f25441d9f617a2db8580a87dbc42, actual merge6e12ce98f0436c8c33b8b75c62b52ce911eb0068, ordered parents[e205e22051bc06295758b504d84699652b176c15,faceef49dc719d1b3c2b7945116794f6737d7b32].
+
+| Task / finding | Current status |
+|---|---|
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN6 | COMPLETED/FAILURE; all saved evidence reviewed; diagnostic objective met |
+| C6-M3.1-NATIVE-CONTEXT-FAILURE-EVIDENCE-R1 | INTEGRATED / VERIFIED SOURCE+LOCAL UNIT+actual RUN6 recorder; COMPLETE/HOLD |
+| C0-NC-CI-10/P2 | CLOSED with actual RUN6 confirmation: every failed phase recorded, no sink issue |
+| C0-NC-CI-06/P2 | OPEN: generic802=714PASSED, 88FAILED;0UNKNOWN |
+| C0-NC-CI-07/P2 | OPEN:2failed jobs; full generic/tail and all11SUCCESS unmet |
+| C0-NC-CI-11/P2 | OPEN: earlier PROVIDER image-helper wrong-job claim remains unrepaired |
+| C0-NC-CI-12/P2 | OPEN: Docker29 frozen P material image probe exhausts shared preparation budget |
+| C0-NC-CI-08/09/P2 | Prior CLOSED LOCAL states retained; ordinary cleanup/units confirmed |
+| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-RECONCILE-R1 | TODO/ASSIGNED; SOURCE+SAVED EVIDENCE report only, exact one-path scope |
+| C6-M3.1-NATIVE-CONTEXT-STATE-BUDGET-DIAG-R1 | TODO/ASSIGNED; SOURCE+SAVED EVIDENCE report only, disjoint one-path scope |
+| C1/C3/C5/C8 and all implementation/repair/runtime scopes | HOLD |
+
+Ordinary units: **2144 passed, 907 deselected, 5 warnings, 130 subtests passed in 421.95s (0:07:01)**. Native runner386+130subtests also PASS.
+Generic802 has2406 phases/88 bounded diagnostics;
+0missing/0issues,evidence_failed=false,original exit1 and strict gates retained.
+Prior88={"FAILED": 88};
+prior47UNKNOWN={"PASSED": 47}.
+All12 potentially vacuous negative cases keep observed PASS; intended-origin
+controls remain missing. Complete diagnostic capture does not prove all report
+section8 discriminating facts or authorize a generic helper/ten-path repair.
+CI-11 comparison and exact failure families: [current HANDOFF](tasks/M3_HANDOFF.md).
+
+Native112/336/105 and167/45/635, browser398+54, durable6/12, Docker29compat6/12,
+four image/intent shards and normal state20pairings PASS. Docker29 state fails
+at frozen P preparation with10.632304912s remaining, final image probe timeout
+0.144769160s; C/G/E and owned cleanup PASS, P tail/later C negatives NOT_RUN.
+Source and caps unchanged from RUN5; no Docker29-specific root cause is proven.
+Core primary1/cleanup0, full post-generic tailNOT_RUN. All10 artifact hashes,
+294current leaves/modes and historical sources verified. Nine explicit ordinary
+clean-source gates PASS; Docker29 state's gate SKIPPED after failure, but its
+always-run saved clean status/equal source independently verified; native clean PASS.
+Original11/manifest remain exact; earlier upload limitation resolved.
+
+Two independent report-only branches start at the exact C0 post-run commit/tree
+published in the disposition; full scopes/allowed paths/criteria in HANDOFF.
+Neither report grants PG/Docker/Actions, test/code/DDL/CI changes, ref movement,
+retry, merge or live work. Return then HOLD for C0. User owns merge.
+
+Only preparation c0/m3-1-native-context-ci-r6 advances with this two-document
+coordination. PR35 stays OPEN Draft/BLOCKED atfaceef49dc719d1b3c2b7945116794f6737d7b32; maine205e22051bc06295758b504d84699652b176c15/schema0012
+and stockaf7482dede085bc033e3fee34f9a2425124351ee freeze. This coordination is not the tested source.
+M3 IN_PROGRESS; D1/D2/D3/prior closures/caps retained, enforcement UNVERIFIED,
+IMPL-05 DEFERRED. Historical run outcomes remain unchanged.
+
+---
+
+## History — CI-10 CLOSED LOCAL; C6 accepted; RUN6 prepared, not authorized / 2026-10-20 UTC
 
 C0 accepts [C6 return6294851327](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6294851327)
 at **ad89819de5778df32146dff245937e9a205e8265**, treec3e3eee324fe6c1f0fb2856be5dbddbe5aa6f4ab, sole parent
