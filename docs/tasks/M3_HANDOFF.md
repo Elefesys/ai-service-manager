@@ -5,7 +5,338 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — CI-09 accepted CLOSED LOCAL; diagnostic RUN5 prepared / 2026-10-20 UTC
+## CURRENT — RUN5 FAILURE;802 outcomes; CI-10/11 OPEN / 2026-10-20 UTC
+
+[RUN5 / 39435478971](https://github.com/Elefesys/ai-service-manager/actions/runs/39435478971), attempt1, completed
+2026-10-20T14:50:37Z: **10SUCCESS, 1FAILURE**. The one-use
+[user-confirmed approval6292650855](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6292650855) is **CONSUMED ONCE**.
+Exactly one expected-head/force=false FF was performed from the previous
+cf9d037dbf605ec01bc81306a546cac54a3f7f91 to the accepted candidate below,
+causing its first automatic pull_request/synchronize run. No rerun, retry,
+dispatch, cancel or source mutation occurred during execution.
+
+CI-06/07 remain OPEN; PR35 remains OPEN Draft/BLOCKED; M3 IN_PROGRESS.
+C6's clock task is COMPLETE. The sole next assignment below is C6 CI-10
+SOURCE + ISOLATED LOCAL UNIT correction. C1/C2/C3/C5/C8 and every other
+implementation/repair scope remain HOLD. User owns merge.
+
+### Exact executed source and immutable evidence
+
+| Binding | Exact value |
+|---|---|
+| PR35 head / frozen execution c0/m3-1-native-context-ci-r1 | efc1c8af12dfe8b0c4098c2bf6b6d085e1b35f0b |
+| Candidate tree / sole parent | 27bf2b804d6e3cf32cb548fd61ac349209b2b0c1 / 1a3295a43434142a0642f473bf5b12b6f0197b2a |
+| Actual tested PR merge | f747ca7570a39c4867e145263c4234b8e9504ee8 |
+| Exact ordered merge parents | [e205e22051bc06295758b504d84699652b176c15,efc1c8af12dfe8b0c4098c2bf6b6d085e1b35f0b] |
+| Actual merge tree | 27bf2b804d6e3cf32cb548fd61ac349209b2b0c1; identical to candidate |
+| Event / action / run / attempt | pull_request / synchronize / 39435478971 / 1 |
+| Event payload SHA256 | c549e80a0c6465806f4aa978c48fae78e484fcea4be81fcd86639a50cdf44dff |
+| Frozen main / schema | e205e22051bc06295758b504d84699652b176c15 / 0012 |
+| Frozen stock | af7482dede085bc033e3fee34f9a2425124351ee |
+
+The webhook's advisory merge9e9e4d617cbbcbab84d8dfbec7698c1a9defb5ef is
+explicitly stale; actual checkout/header/ordered parents/tree and all retained
+source artifacts establish the tested merge above. All294 current source bytes
+and modes reconstruct the exact candidate tree. All10 archive sizes and SHA256
+digests match GitHub metadata. Browser has decoded job logs instead of an artifact.
+
+This post-run C0 coordination commit changes only HANDOFF/register and has sole
+parent the tested candidate. Its exact final commit/tree are in the C0 disposition
+comment; it is not the tested PR35 source. Only the existing preparation ref
+c0/m3-1-native-context-ci-r5 advances after terminal completion. It has no PR or
+applicable push workflow. Execution/main/stock/old refs remain frozen.
+
+### Foundation: actual result and completeness
+
+Ordinary unit result: **2121 passed, 907 deselected, 4 warnings, 130 subtests passed in 397.72s (0:06:37)**.
+The accepted CI-09 unit-clock correction now has actual ordinary CI evidence in
+addition to the independent local2121+130 result. Operational clocks, guards,
+original assertions and the907 integration deselection remain unchanged.
+
+Generic802: **802 terminal / 802 started; 713PASSED, 89FAILED**.
+Actual phase records=2406; sanitized failure records=0
+with89 missing failure records and89 EVIDENCE_WRITE_FAILED issues;
+remaining UNKNOWN=0. Completion receipt:
+`{"complete":true,"completed":802,"evidence_failed":true,"expected":802,"pytest_exit":1}`.
+All802 ordered IDs retain LF-list SHA256
+bde64cc7fbfd35daa02e8141adcaec0723427ed6c2cfeef4b5e15402e8b1d283.
+Partition907=generic802+native105 remains disjoint and complete. Complete
+case capture is not complete failure diagnostics or a successful generic gate.
+
+| Journal | Phase | Seconds | Actual exit |
+|---|---|---:|---:|
+| host | init | 0.029699 | 0 |
+| host | config | 0.627995 | 0 |
+| host | build | 36.120817 | 0 |
+| host | checks | 1870.126560 | 1 |
+| host | cleanup | 0.365404 | 0 |
+| backend | ruff | 0.069376 | 0 |
+| backend | format | 0.105476 | 0 |
+| backend | mypy | 10.876300 | 0 |
+| backend | unit | 399.380483 | 0 |
+| backend | upgrade | 2.143586 | 0 |
+| backend | repeat-upgrade | 1.566182 | 0 |
+| backend | generic | 1438.637643 | 1 |
+
+Execution receipt={"cleanup_exit":0,"primary_exit":1};
+issues.jsonl=7498bytes; clean-source PASS. Executed host/backend
+journals are independently checked for sequence, identity, order, finite times
+and case identity. Failure frames are unavailable from the empty failure journal.
+No missing or unentered phase is counted PASS.
+Core and durable have separate actual runners/projects; the core starts only
+after the entire durable job succeeds. No prior private evidence or DB resources
+are adopted. Core host elapsed1908.009015644s within2700s.
+
+Full tail disposition: downgrade=NOT_RUN, reupgrade=NOT_RUN, contracts=NOT_RUN, wheel-one=NOT_RUN, wheel-two=NOT_RUN, wheel-compare=NOT_RUN, wheel-hash=NOT_RUN, storage-version=NOT_RUN, storage-admin-version=NOT_RUN, services=NOT_RUN, http=NOT_RUN, images=NOT_RUN.
+
+### Generic observations and two new findings
+
+All802 start/setup/call/teardown/end sequences are present in order:4010 records,
+2406 phases,802 setup PASS,802 teardown PASS,713 call PASS and89 call FAIL.
+No skip/xfail/INCOMPLETE/UNKNOWN. The ordinary pytest summary independently agrees:
+89 failed,713 passed,2121 deselected,2 warnings,1398.04s. The whole generic phase,
+including partition collection/reporting, took1438.637642695s.
+
+Every old88 failed ID fails again. Their prior taxonomy membership is
+F1=5,F2=1,F3=56,F4=3,F5=6,F6=1,F7=7,F8=1,F9=8. This is an ID mapping,
+not newly established exception origins. All47 formerly UNKNOWN cases now PASS
+individually: U1=1,U2=38,U3=2,U4=6. All12 potentially vacuous negative cases
+also have ordinary PASS; their intended rejection/injected-write origin remains
+unproven by that outcome alone. The accepted generic report's section8 and its
+ten-test-path/helper proposal remain scoped proposals, not implementation grants.
+
+**C0-NC-CI-10/P2 OPEN — actual failure diagnostics are lost.**
+failures.jsonl is0bytes despite89 failed call phases. issues.jsonl has89
+EVIDENCE_WRITE_FAILED records/7498bytes. generic-result.json correctly reports
+complete=true/completed802/pytest_exit1/**evidence_failed=true**. The full
+case/phase journal and ordinary ci.log remain. The completeness step correctly
+fails; complete802 outcomes and successful cleanup do not hide this defect.
+No exception-chain/SQLSTATE/constraint evidence is claimed from the empty journal.
+
+C0 independently reproduces the defect with the exact unmodified
+source_catalog -> foundation_failure path and a safe constructed AssertionError,
+without PostgreSQL, Docker, pytest or another CI execution. source_catalog emits
+717 nonfunction_ddl dictionaries with index/revision/sql. foundation_failure at
+scripts/native_context_db_catalog.py:2416 joins those dictionaries as strings,
+raising TypeError: `sequence item 0: expected str instance, dict found` before
+emitting a diagnostic. The computed actual catalog equals the saved native
+catalog. Script SHA256
+f20cce5917afe5a9b8a7813a96c9a8e6e1f51ea18c2cf06153c7083324cee87e;
+catalog file SHA256
+e701a2ffe539da25e2624f9ff5c4ec87b4fc06ec8502a518979d63c1aa150bd5.
+The foundation_git fixture at tests/test_native_context_db_runner.py:84 instead
+supplies a list of SQL strings and replaces source_catalog, leaving this actual
+shape mismatch uncovered. This establishes a formatter defect, not a filesystem
+or database write-permission failure. Current generic outcomes remain89FAIL.
+
+**C0-NC-CI-11/P2 OPEN — a newly observed generic case fails before its target.**
+tests/test_m2_3_api_postgres.py::test_all_five_routes_require_current_session_and_live_owner[PROVIDER]
+passed in RUN3 and fails in RUN5. The ordinary saved traceback locates
+tests/test_m2_3_api_postgres.py:336 -> ready at tests/test_m2_2_db_postgres.py:60
+-> image at line36. claim_job("file-process") returns a non-null
+TurnJobClaim(kind=PROCESS_TURN) whose job_id differs from receipt.job_id.
+The image helper's assertion fails during preparation, before role mutation
+and the five HTTP authorization assertions. The other four variants pass.
+
+The helper assumes the next globally claimable job is its new image inbox job.
+The exact queue/timing/fixture cause and repair are not established by this
+single traceback. No production authorization defect is inferred. Do not skip
+or weaken the check, add retries/sleeps, force job order, or edit this helper in
+the C6 scope. C1/C2/C3 review and any bounded reproduction are later assignments.
+ci.log SHA256 b40dbd63f89d31515f46658bc88545e10d441cacba10f67ad313866fbf0786e0;
+traceback lines3297-3334. Public summary excludes UUIDs, payloads and locals.
+
+The immediate correction is CI-10's source/local recorder fix. C2 saved-log
+reconciliation and generic repairs remain HOLD until C0's exact next issuance.
+CI-06/07 and CI-10/11 remain OPEN; RUN5 approval is consumed.
+
+### Retained successful jobs
+
+- Native actual112=7source+105PG, all336 phases PASS,105 guarded resets,
+  runner363+130subtests PASS. Exact installed source/OID/body/ACL/roles/catalog
+  167functions/45tables/635columns; PostgreSQL18.6/vector0.8.6/btree_gist1.8.
+  Four event admissions, source cleanliness and owned cleanup PASS.
+  Carrier590.066694848s; complete receipt721.45059466362s within1080s.
+  Profile c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411;
+  verifier527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac.
+- Browser398 Vitest cases/14files and54 Playwright cases PASS; actual checkout
+  and clean-source gate verified in its decoded log and job metadata.
+- Whole normal durable:6 lifecycles/12 final assertions PASS; all host phases,
+  primary0/cleanup0, empty irrelevant generic/backend sinks,1035.834582333s.
+  Docker29 compatibility29.8.2 likewise passes all6 lifecycles/12 final
+  assertions, current0013 image proofs and corrected dual-family routing.
+- All6 migration shards PASS. Current source and every retained historical
+  H/P/T/C/G/E archive reconstruct their exact Git trees. Retry/rollback/source
+  pairing and owned cleanup pass. Each state lane retains20 exact P pairings;
+  normal coordinator1150.424446428s and Docker29 coordinator819.827167412s,
+  both within1200s. Per-phase cleanup PASS, no owned/unconfirmed leftovers,
+  negative cleanup controls PASS and4 historical owned volumes removed per lane.
+
+| Job | ID | Result |
+|---|---:|---|
+| docker29-compatibility | 118671230183 | SUCCESS |
+| native-context-db / native-context-db | 118671230600 | SUCCESS |
+| connect5-migration (normal, image) | 118671230637 | SUCCESS |
+| foundation-durable | 118671230714 | SUCCESS |
+| browser | 118671230717 | SUCCESS |
+| connect5-migration (docker29, image) | 118671230797 | SUCCESS |
+| connect5-migration (docker29, intent) | 118671230854 | SUCCESS |
+| connect5-migration (docker29, state) | 118671230917 | SUCCESS |
+| connect5-migration (normal, intent) | 118671230970 | SUCCESS |
+| connect5-migration (normal, state) | 118671230983 | SUCCESS |
+| foundation | 118680201529 | FAILURE |
+
+| Artifact | ID | Bytes | SHA256 |
+|---|---:|---:|---|
+| m0-verification-39435478971 | 12275172758 | 2968589 | 2cae090f1c706d7f58821b3e0094c0c730d752c11c83e0405f95940cfc961d0f |
+| connect5-migration-docker29-image-39435478971 | 12273330038 | 5252804 | 579b5dba8b8cdea12974bd8f11665677383e86fae5eda5bcaa6a5dadbf5d3b2e |
+| connect5-migration-docker29-state-39435478971 | 12273167228 | 20164221 | 1c8fe8b6eac3300b677949dc23f204ce0da86af9c8cfc461232fc10284769f79 |
+| foundation-durable-39435478971-1 | 12273087354 | 2737200 | 913190858e72f9826a5a06b76d9bd70dcecbc5d09604adf7f600b75afa040746 |
+| connect5-migration-normal-state-39435478971 | 12272818378 | 20163387 | 0f0396803baa3eb209781cac1f36abff56b9e382dc1951ce33b145ccdde3f8e2 |
+| native-context-db-f747ca7570a39c4867e145263c4234b8e9504ee8-39435478971-1 | 12272721612 | 3427887 | 73e865c4f416a79505d845a4f64ccdca301a74651a47a0497a32e4483f8bc802 |
+| connect5-migration-normal-intent-39435478971 | 12272680305 | 5251818 | b7972f04d353d21d752259fcc0441652b88f71a36b8b268cbddf489ac4921de9 |
+| connect5-migration-normal-image-39435478971 | 12272395399 | 5251891 | e3c118d411534c506955d26b490879198f8cf3371173ae8da07c00c1cd392e31 |
+| connect5-migration-docker29-intent-39435478971 | 12272190286 | 5252732 | a2f788dc32640428d2d7022daed2f05438c50ad9b346c69b7d61e81641d7bc05 |
+| docker29-compatibility-39435478971 | 12271717659 | 2702584 | 15f18672a6b8b8268c8b89f224c0f053bc4205915ddc3f1a850073c59c080ec3 |
+
+GitHub artifacts retain the exact journals, source archives and receipts;
+the workflow's existing retention is7days. C0 independently downloaded and
+verified all10. Local evidence root is
+/workspace/scratch/241587c3ddae/c0-native-context-ci-run5-evidence;
+another chat must retrieve the GitHub artifacts, not assume a shared checkout.
+Read-only audit commands from the workspace root:
+```sh
+python c0-native-context-ci-run5-evidence/scripts/verify_archives.py
+python c0-native-context-ci-run5-evidence/scripts/verify_native.py
+python c0-native-context-ci-run5-evidence/scripts/verify_foundation.py
+python c0-native-context-ci-run5-evidence/scripts/verify_secondary.py
+python c0-native-context-ci-run5-evidence/scripts/summarize_generic.py
+python c0-native-context-ci-run5-evidence/scripts/probe_failure_formatter.py
+python c0-native-context-ci-run5-evidence/scripts/verify_final.py
+```
+These parse saved evidence/source or invoke the pure formatter with a constructed
+exception; they do not execute PostgreSQL, Docker or another Actions run.
+Image/intent evidence and browser logs were also checked
+independently. Exact metadata, byte digests and proof files are retained.
+
+| C0 evidence | SHA256 |
+|---|---|
+| original-attachments-proof.json | 3664802388bcdae7d399dd2b8525de63e358488ec51f69e5244d23dcc78ada37 |
+| native-verification.json | c8f99251f82f60cc1026587a6a144f89bf4b50d7f3245c596f90aa3b4155c330 |
+| browser-verification.json | 966635bcc6cf9d5c53a736c7f14d8b18b907dd0112e8a75e95f11b9f5bf0a163 |
+| secondary-verification.json | 7d99cbd0ac9ad6714b5773b5ad11f0c368a90794f13a9cf85030627738b70683 |
+| foundation-verification.json | 3ffcf501ec462d0f515f4aa06e15ea438ac78941d6e0c730fca3df94e84210e3 |
+| generic-diagnostic-summary.json | 6999d739946ab2357f6db741a7040e4a15b60189a556a8bcf64bc3bfc6c14073 |
+| generic802-outcomes.json | bb11e31712fcdb6a7cd84bde50264a5b030eeb117fa2d7ee3aceef7853350506 |
+| generic-failures-mapped.json | 37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570 |
+| failure-formatter-source-probe.json | 475537716635cf1e584b312c7af361b91bf7cc7ba2e3f9969d21f164e40608d1 |
+| new-generic-failure-source-review.json | 4191f735494dc2181c238744ab7ce6349ebf11f7aec5dc43e60fe6fb874035f3 |
+| final-verification.json | cbade9cbb70b214894ff93a1c62adddee8bddee65832c4784db356244b36b912 |
+| evidence-manifest.json | 3fb66fb76cf3c0bd0153dc0531140f906b71f92fb3e5c54f36421d14b248e167 |
+
+### Original files: prior limitation resolved
+
+All11 original documents are now available to C0. All17 supplied copies,
+including duplicates, match frozen SOURCE_MANIFEST and candidate
+docs/architecture byte-for-byte. No upload or replacement is still needed.
+The earlier five-available/six-unavailable statement describes the prior turn.
+Git retains original baseline source documents under docs/architecture; current
+implementation decisions, task contracts, HANDOFF and status live in
+docs/decisions, docs/tasks and docs/TASK_REGISTER.md. No baseline file was
+overwritten. Last architecture import395b760175871a3d6cde10b8e01e1f9364e3bd57
+is the accepted2026-09-15 byte-identical import.
+
+### Exact next assignment — C6-M3.1-NATIVE-CONTEXT-FAILURE-EVIDENCE-R1
+
+**TODO/ASSIGNED: SOURCE + ISOLATED LOCAL UNIT CHECKS only.** Owner C6;
+correct only C0-NC-CI-10/P2, return then HOLD. Repository
+Elefesys/ai-service-manager. Create separate branch
+c6/m3-1-native-context-failure-evidence-r1 from the exact final C0 post-run
+commit/tree in the assignment comment. Sole parent of that base is tested
+efc1c8af12dfe8b0c4098c2bf6b6d085e1b35f0b; only HANDOFF/register differ.
+Use an independent checkout; do not assume a shared disk, environment or cache.
+
+Permitted tracked writes, exactly two paths:
+
+- scripts/native_context_db_catalog.py: foundation_failure's consumption of
+  actual source_catalog nonfunction_ddl records; only a directly necessary
+  private pure helper may also change. Preserve the producer's established schema.
+- tests/test_native_context_db_runner.py: model the real catalog record shape
+  and add regression coverage of the actual producer/formatter/journal path.
+
+All other files are read-only: applied migrations/backend/DDL, generic tests
+and helpers, architecture/manifest/contracts, prior reports, HANDOFF/register,
+workflows/Compose/scripts/CI inputs, pins/locks. The accepted
+tests/test_telegram_egress_migration.py clock fix stays exact. CI-11 is outside
+this correction. No PostgreSQL/Docker/service/Actions execution, execution-ref
+movement, new PR, merge, settings, VM/account/provider/live action is granted.
+
+Read AGENTS, applicable architecture/MVP/Roadmap/implementation plan/ADRs,
+native contract/current HANDOFF and accepted diagnostic reports. Retrieve and
+verify the RUN5 artifact metadata/digests/source bindings above; C0 local paths
+are provenance only. Actual expected-source-catalog.json is in native
+artifact12272721612; generic journals/ci.log are in artifact12275172758.
+
+Required correction and proof:
+
+1. Reproduce RED using actual unmodified source_catalog output, not a handwritten
+   string list or mock replacing that producer. Capture the deterministic
+   TypeError at the pristine base. A safe constructed exception suffices.
+2. Consume the real index/revision/sql records and extract only intended
+   source-defined constraint names. Do not accept arbitrary alternate shapes
+   merely to retain a bad test double, change the producer schema, drop
+   constraint evidence or substitute UNKNOWN to hide this defect. Preserve
+   honest failure on malformed/missing data.
+3. Prove GREEN through formatter and GenericJournal/report with real producer
+   data and failed setup/call/teardown examples: exact identity/sequence, one
+   persisted bounded failure record per failed phase, original pytest nonzero
+   result, complete case/phase records, and evidence_failed=false only when
+   recording succeeds. Regression fails against pristine base. Retain actual
+   sink-failure tests requiring evidence_failed=true and a failed gate.
+4. Preserve privacy/robustness: no exception str/repr, arbitrary SQL/messages/
+   locals/DSNs/credentials/payloads, hostile descriptor execution or new
+   diagnostic authority. Retain source/catalog whitelists, UNKNOWN for genuinely
+   unavailable fields, chain/frame bounds, ASCII/final LF/4096-byte record cap,
+   BaseException propagation, private ownership/admission, admitted owned
+   cleanup after diagnostic failure, original primary status and strict
+   foundation-check. Do not weaken any gate to make the report green.
+5. Use a separately verified frozen uv.lock Python3.13/uv environment; report
+   actual versions/import paths. Run complete runner units and complete ordinary
+   non-integration units. Preserve all363 old runner cases,2121 old ordinary
+   cases and130 subtests; inventory additions. Preserve all old IDs/parameters/
+   assertions and hostile/fault/cleanup tests. Verify generic802/native112 and
+   907 disjoint PG coverage by collection only; all four carrier modules stay.
+6. Ruff/format, relevant syntax/diff checks and pure current source pairing for
+   all4 components/167functions/45tables/635columns must pass. Unchanged workflow
+   inputs keep their existing hashes. No clock/cap, selection, retry, skip/xfail,
+   payload, native reset or CI-boundary change is permitted. Constructed probes
+   do not supply database/runtime acceptance.
+
+Return full commit/tree/sole parent, exact two-path diff and all other source
+bytes/modes proof, RED/GREEN commands/results, full unit/inventory evidence,
+privacy/fault/cleanup results, environment/source identity, evidence manifest
+hashes, limits and next step. Do not self-promote to INTEGRATED/VERIFIED.
+C0 independently reviews source/local evidence before any later diagnostic or
+ordinary CI proposal. RUN5 consumed approval grants no retry. C1/C2/C3/C5/C8
+and all other scopes remain HOLD; broad IMPL-05 optimization remains DEFERRED.
+
+### Continuing limits
+
+CI-06 requires all current0013/OFF generic802 with every historical obligation.
+CI-07 requires all11 SUCCESS at one exact source, both entire foundation lanes,
+full tail, native112/336/105 and167/45/635 catalog/security/cleanup evidence.
+Ordinary cleanup success reinforces CI-08 CLOSED LOCAL; the journal-loss probe
+remains explicitly local. CI-09 local closure is retained with ordinary unit
+confirmation. No previous failed/cancelled run is relabelled.
+All prior closures and D1/D2/D3 remain; enforcement UNVERIFIED, IMPL-05 DEFERRED.
+Caps remain durable25/foundation45, native20/payload1080, state/browser/compat25,
+S600/P720/fixed120/+480/supervisor1200/cleanup90. No extra run or resource budget
+arises from this disposition. A08/P01/P05/renewal/collector/account/A12/M4 remain
+separate later scopes. No merge, settings, VM, deployment or live account action.
+
+---
+
+## History — CI-09 accepted CLOSED LOCAL; diagnostic RUN5 prepared / 2026-10-20 UTC
 
 C0 accepts [C6 UNIT-CLOCK-R1 return6291541015](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6291541015)
 as **INTEGRATED / VERIFIED SOURCE + ISOLATED LOCAL UNIT CHECKS only**.

@@ -2,7 +2,75 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — CI-09 CLOSED LOCAL; C6 accepted; diagnostic RUN5 prepared / 2026-10-20 UTC
+## CURRENT — RUN5 reviewed; CI-10/11 OPEN; C6 recorder correction assigned / 2026-10-20 UTC
+
+[RUN5 / 39435478971](https://github.com/Elefesys/ai-service-manager/actions/runs/39435478971), attempt1, completed2026-10-20T14:50:37Z:
+**10SUCCESS, 1FAILURE**. User-confirmed one-use approval6292650855 CONSUMED ONCE;
+exactly one expected-head/force=false FF, no rerun/retry/dispatch/cancel.
+Tested PR35 head efc1c8af12dfe8b0c4098c2bf6b6d085e1b35f0b, tree 27bf2b804d6e3cf32cb548fd61ac349209b2b0c1, actual merge
+f747ca7570a39c4867e145263c4234b8e9504ee8; ordered parents
+[e205e22051bc06295758b504d84699652b176c15,efc1c8af12dfe8b0c4098c2bf6b6d085e1b35f0b].
+
+| Task / finding | Current status |
+|---|---|
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN5 | COMPLETED/FAILURE: 10SUCCESS, 1FAILURE; full saved evidence reviewed |
+| C6-M3.1-NATIVE-CONTEXT-UNIT-CLOCK-R1 | INTEGRATED / VERIFIED SOURCE+LOCAL UNIT; ordinary RUN5 unit confirmation; COMPLETE/HOLD |
+| C0-NC-CI-09/P2 | CLOSED LOCAL, now also confirmed by actual ordinary RUN5 units |
+| C0-NC-CI-08/P2 | CLOSED LOCAL; ordinary RUN4/RUN5 cleanup PASS; journal-loss probe remains local |
+| C0-NC-CI-06/P2 | OPEN: generic802 terminal, 713PASSED, 89FAILED; 0 UNKNOWN |
+| C0-NC-CI-07/P2 | OPEN: full generic/tail and all11 SUCCESS still unmet |
+| C0-NC-CI-10/P2 | OPEN: formatter joins actual DDL dictionaries as strings;89 detailed failure records lost |
+| C0-NC-CI-11/P2 | OPEN: PROVIDER generic case claims PROCESS_TURN during image preparation, before HTTP authorization checks |
+| C6-M3.1-NATIVE-CONTEXT-FAILURE-EVIDENCE-R1 | TODO/ASSIGNED; SOURCE + ISOLATED LOCAL UNIT only; exact runner + test paths |
+| C1/C2/C3/C5/C8/all other implementation and generic repair scopes | HOLD; no generic ten-path/helper repair or new runtime authorization |
+
+Actual ordinary units: **2121 passed, 907 deselected, 4 warnings, 130 subtests passed in 397.72s (0:06:37)**. Generic802 ordered inventory unchanged;
+907 integration partition=802+105 remains exact. Prior88 outcomes:
+{"FAILED": 88}; prior47 UNKNOWN outcomes:
+{"PASSED": 47}. New failed IDs count:
+1. Detailed origin/phase limits are in
+[current HANDOFF](tasks/M3_HANDOFF.md); complete terminal outcomes do not establish complete failure diagnostics or a
+green gate. Full tail=NOT_RUN;
+foundation execution={"cleanup_exit": 0, "primary_exit": 1},
+issues7498bytes, clean-source PASS.
+
+All802 case outcomes/2406 phases survive, but failures.jsonl is empty and89
+EVIDENCE_WRITE_FAILED markers make evidence_failed=true. C0's exact pure
+source_catalog -> foundation_failure reproduction gives TypeError at line2416:
+717 actual index/revision/sql dictionaries were joined as strings; the unit
+fixture had mocked a string list. CI-10 is an independently reproduced recorder
+defect. CI-11's saved traceback is ready/image setup before role mutation or
+authorization assertions; no product authorization defect is inferred. Both
+remain OPEN. All47 previous UNKNOWN and all12 potentially vacuous negatives
+have observed PASS; the12 still need intended-origin/positive-control evidence.
+
+Native112/336/105 and167functions/45tables/635columns, runner363+130,
+browser398+54, entire durable, Docker29 compatibility and all6 migration shards
+PASS. All10 GitHub archive sizes/digests and exact294-file current trees checked;
+historical archives, source/schema pairing and owned cleanup verified.
+
+All11 original attachments now available; all17 copies including duplicates
+match manifest and docs/architecture byte-for-byte. Prior missing-six limitation
+resolved. Originals stay the baseline; task/decision/HANDOFF/status docs evolve.
+
+C6 receives only the two-path recorder correction in HANDOFF and the C0
+assignment comment at its exact post-run base/tree. Preserve actual catalog
+shape, privacy/frame/record limits, existing nonzero/fault/cleanup behavior,
+all363 runner and2121 ordinary cases+130subtests and unchanged inventories.
+Require real producer-to-formatter/journal RED-to-GREEN and complete locked
+local units. No PG/Docker/Actions or generic/production changes; return then
+HOLD. C2 saved-log reconciliation and CI-11 diagnosis are later scopes.
+
+This coordination commit changes only HANDOFF/register on preparation
+c0/m3-1-native-context-ci-r5; it is not the tested PR35 source. PR35 remains
+OPEN Draft/BLOCKED at efc1c8af12dfe8b0c4098c2bf6b6d085e1b35f0b; main e205e220/schema0012 and
+stock af7482dede085bc033e3fee34f9a2425124351ee unchanged. M3 IN_PROGRESS;
+user owns merge. D1/D2/D3/prior closures/caps retained, enforcement UNVERIFIED,
+IMPL-05 DEFERRED. Later M3/M4 and live/account/deployment scopes remain separate.
+
+---
+
+## History — CI-09 CLOSED LOCAL; C6 accepted; diagnostic RUN5 prepared / 2026-10-20 UTC
 
 C0 accepts [C6 UNIT-CLOCK-R1 return6291541015](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6291541015)
 as INTEGRATED / VERIFIED SOURCE + ISOLATED LOCAL UNIT only. Exact accepted commit
