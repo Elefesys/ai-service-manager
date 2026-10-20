@@ -9886,6 +9886,21 @@ def test_ack_loss_does_not_accept_unexpected_migrator_result(status, marker):
     assert "recovery_source" not in report["upgrade_ack_loss"]
 
 
+@pytest.fixture
+def unit_budget_clock():
+    """Synthetic handoff time only for explicit unit consumers, never shared time."""
+    original_time = time
+    shared_monotonic = sys.modules["time"].monotonic
+    clock = SimpleNamespace(now=10000.0)
+    local_time = SimpleNamespace(**(vars(original_time) | {"monotonic": lambda: clock.now}))
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(sys.modules[__name__], "time", local_time)
+        yield clock
+    assert time is original_time
+    assert sys.modules["time"].monotonic is shared_monotonic
+    assert e.time.monotonic is shared_monotonic
+
+
 def control_budget_file(tmp_path, **changes):
     now = time.monotonic()
     value = dict(
@@ -9906,7 +9921,9 @@ def control_budget_file(tmp_path, **changes):
     return path
 
 
-def test_control_remaining_budget_is_absolute_private_and_consumed_once(tmp_path):
+def test_control_remaining_budget_is_absolute_private_and_consumed_once(
+    tmp_path, unit_budget_clock
+):
     path = control_budget_file(tmp_path)
     budget = consume_control_budget(path, CONTROL_T, "c" * 40)
     assert 0 < budget["remaining_seconds"] <= 570
@@ -9929,19 +9946,34 @@ def test_control_remaining_budget_is_absolute_private_and_consumed_once(tmp_path
         {"unexpected": 1},
     ],
 )
-def test_control_budget_wrong_phase_source_clock_or_owner_refuses(tmp_path, change):
+def test_control_budget_wrong_phase_source_clock_or_owner_refuses(
+    tmp_path, change, unit_budget_clock
+):
     path = control_budget_file(tmp_path, **change)
-    with pytest.raises(AssertionError):
+    reason = {
+        "phase": "PHASE_SOURCE",
+        "historical": "PHASE_SOURCE",
+        "candidate": "CANDIDATE_OWNER",
+        "uid": "CANDIDATE_OWNER",
+        "version": "VERSION",
+        "charged_seconds": "CHARGED",
+        "deadline": "CLOCK",
+        "started_at": "TOTAL",
+        "unexpected": "FORMAT",
+    }[next(iter(change))]
+    with pytest.raises(AssertionError, match="CONTROL_BUDGET_" + reason):
         consume_control_budget(path, CONTROL_T, "c" * 40)
 
 
-def test_control_budget_exhaustion_and_file_guards(tmp_path):
+def test_control_budget_exhaustion_and_file_guards(tmp_path, unit_budget_clock):
     now = time.monotonic()
     path = control_budget_file(
         tmp_path, started_at=now - 601, issued_at=now - 2, charged_seconds=599, deadline=now - 1
     )
+    expired = path.read_bytes()
     with pytest.raises(AssertionError, match="EXHAUSTED"):
         consume_control_budget(path, CONTROL_T, "c" * 40)
+    assert path.read_bytes() == expired
     path.unlink()
     path = control_budget_file(tmp_path)
     path.chmod(0o644)
@@ -10090,12 +10122,12 @@ def test_schema_probe_programs_are_executable_python_without_hidden_indentation(
 @pytest.mark.parametrize("entry", ["coordinator", "child"])
 @pytest.mark.parametrize("fault", ["mismatch", "dirty", "git", "command"])
 def test_control_initial_failure_retains_source_budget_and_primary(
-    tmp_path, monkeypatch, entry, fault
+    tmp_path, monkeypatch, entry, fault, unit_budget_clock
 ):
     # Reproduce the runner's fractional clock edge: subtracting the two stored
     # floats yields 600.0000000000001, although deadline is exactly start+600.
     # This early-refusal unit seam does no waiting or external command work.
-    monkeypatch.setattr(time, "monotonic", lambda: 905.198142485)
+    unit_budget_clock.now = 905.198142485
     root = tmp_path / "checkout"
     root.mkdir()
     foreign = tmp_path / "foreign"
@@ -10168,7 +10200,7 @@ def test_control_initial_failure_retains_source_budget_and_primary(
 
 @pytest.mark.parametrize("fault", ["malformed", "invalid", "expired", "unreadable", "consumed"])
 def test_control_rejected_handoff_report_never_claims_unvalidated_budget(
-    tmp_path, monkeypatch, fault
+    tmp_path, monkeypatch, fault, unit_budget_clock
 ):
     candidate = "c" * 40
     root = tmp_path / "checkout"
@@ -10204,10 +10236,13 @@ def test_control_rejected_handoff_report_never_claims_unvalidated_budget(
     monkeypatch.setattr(
         e, "source_check", lambda _: pytest.fail("budget refusal must precede source admission")
     )
-    with pytest.raises((e.EgressError, AssertionError, FileNotFoundError)):
+    with pytest.raises((e.EgressError, AssertionError, FileNotFoundError)) as rejection:
         run_control_schema_phase(
             {"historical": CONTROL_T, "candidate": candidate, "budget_file": str(path)}
         )
+    if fault == "expired":
+        assert str(rejection.value).splitlines()[0] == "CONTROL_BUDGET_EXHAUSTED"
+        assert path.exists()
     report = json.loads((root / "reports/control-schema-phase.json").read_text())
     assert len(calls) == 1 and report["primary_failure"]["stage"] == "consume_budget"
     assert report["budget_state"] == "NOT_VALIDATED" and "prepare_budget" not in report
@@ -10218,7 +10253,7 @@ def test_control_rejected_handoff_report_never_claims_unvalidated_budget(
 
 @pytest.mark.parametrize("fault", ["archive", "build", "reuse", "probe"])
 def test_control_prepare_failure_keeps_consumed_budget_before_any_runtime(
-    tmp_path, monkeypatch, fault
+    tmp_path, monkeypatch, fault, unit_budget_clock
 ):
     root = tmp_path / "checkout"
     (root / "infra").mkdir(parents=True)
@@ -11185,7 +11220,7 @@ def test_guards_recovery_uses_actual_revision_and_fresh_process_identity(revisio
 @pytest.mark.parametrize(
     "damage", [None, "phase", "historical", "candidate", "deadline", "charged_seconds"]
 )
-def test_guards_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage):
+def test_guards_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage, unit_budget_clock):
     path = tmp_path / "budget.json"
     issued = time.monotonic()
     value = dict(
@@ -11203,7 +11238,14 @@ def test_guards_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage):
         value[damage] = value[damage] + 1 if damage in {"deadline", "charged_seconds"} else "wrong"
     e.write_private(path, e.encoded(value))
     if damage:
-        with pytest.raises(AssertionError):
+        reason = {
+            "phase": "PHASE_SOURCE",
+            "historical": "PHASE_SOURCE",
+            "candidate": "CANDIDATE_OWNER",
+            "deadline": "TOTAL",
+            "charged_seconds": "CHARGED",
+        }[damage]
+        with pytest.raises(AssertionError, match="GUARDS_BUDGET_" + reason):
             consume_guards_budget(path, GUARDS_C, "a" * 40)
         assert path.exists()
     else:
@@ -11268,7 +11310,9 @@ def test_escalation_recovery_uses_actual_revision_and_fresh_process_identity(rev
 @pytest.mark.parametrize(
     "damage", [None, "phase", "historical", "candidate", "deadline", "charged_seconds"]
 )
-def test_escalation_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage):
+def test_escalation_budget_is_known_c_g_pair_and_same_absolute600(
+    tmp_path, damage, unit_budget_clock
+):
     path = tmp_path / "budget.json"
     issued = time.monotonic()
     value = dict(
@@ -11286,7 +11330,14 @@ def test_escalation_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, dama
         value[damage] = value[damage] + 1 if damage in {"deadline", "charged_seconds"} else "wrong"
     e.write_private(path, e.encoded(value))
     if damage:
-        with pytest.raises(AssertionError):
+        reason = {
+            "phase": "PHASE_SOURCE",
+            "historical": "PHASE_SOURCE",
+            "candidate": "CANDIDATE_OWNER",
+            "deadline": "TOTAL",
+            "charged_seconds": "CHARGED",
+        }[damage]
+        with pytest.raises(AssertionError, match="ESCALATION_BUDGET_" + reason):
             consume_escalation_budget(path, ESCALATION_G, "a" * 40)
         assert path.exists()
     else:
@@ -11295,6 +11346,89 @@ def test_escalation_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, dama
             consumed["deadline"] == value["deadline"] and 0 < consumed["remaining_seconds"] <= 170
         )
         assert not path.exists()
+
+
+@pytest.mark.parametrize(
+    "host_epoch", [0.0, 10.0, 100.0, 430.0, 490.452973924, 601.0, 602.0, 10000.0]
+)
+def test_unit_budget_clock_is_independent_of_host_epoch(tmp_path, monkeypatch, request, host_epoch):
+    shared = sys.modules["time"]
+    shared_monotonic = shared.monotonic
+    host_time = SimpleNamespace(**(vars(shared) | {"monotonic": lambda: host_epoch}))
+    monkeypatch.setattr(sys.modules[__name__], "time", host_time)
+    clock = request.getfixturevalue("unit_budget_clock")
+    assert time.monotonic() == clock.now == 10000.0
+    assert shared.monotonic is shared_monotonic and e.time is shared
+    # Reuse the original bodies/parameters, including the private/hardlink and
+    # consume-once controls; the simulated host epoch cannot affect their data.
+    for function, args in (
+        (test_control_remaining_budget_is_absolute_private_and_consumed_once, ()),
+        (test_control_budget_exhaustion_and_file_guards, ()),
+        (test_guards_budget_is_known_c_g_pair_and_same_absolute600, (None,)),
+        (test_escalation_budget_is_known_c_g_pair_and_same_absolute600, (None,)),
+    ):
+        directory = tmp_path / function.__name__
+        directory.mkdir(mode=0o700)
+        function(directory, *args, unit_budget_clock=clock)
+
+
+@pytest.mark.parametrize("lane", ["CONTROL", "GUARDS", "ESCALATION"])
+@pytest.mark.parametrize("condition", ["valid", "invalid-clock", "exact-deadline"])
+def test_unit_budget_clock_preserves_guard_origin_and_absolute600(
+    tmp_path, unit_budget_clock, lane, condition
+):
+    historical, phase, consume, charged = {
+        "CONTROL": (CONTROL_T, CONTROL_PHASE, consume_control_budget, 30),
+        "GUARDS": (GUARDS_C, GUARDS_PHASE, consume_guards_budget, 430),
+        "ESCALATION": (ESCALATION_G, ESCALATION_PHASE, consume_escalation_budget, 430),
+    }[lane]
+    now = unit_budget_clock.now
+    path = control_budget_file(
+        tmp_path,
+        historical=historical,
+        phase=phase,
+        started_at=now - charged,
+        charged_seconds=charged,
+        deadline=now - charged + 600,
+    )
+    if condition != "valid":
+        value = json.loads(path.read_text())
+        value.update(
+            started_at=0 if condition == "invalid-clock" else now - 600,
+            issued_at=charged if condition == "invalid-clock" else now - 1,
+            charged_seconds=charged if condition == "invalid-clock" else 599,
+            deadline=600 if condition == "invalid-clock" else now,
+        )
+        path.write_bytes(e.encoded(value))
+        before = path.read_bytes()
+        reason = "CLOCK" if condition == "invalid-clock" else "EXHAUSTED"
+        with pytest.raises(AssertionError, match=lane + "_BUDGET_" + reason):
+            consume(path, historical, "c" * 40)
+        assert path.read_bytes() == before  # Refusal precedes one-use consumption.
+    else:
+        unit_budget_clock.now += 5  # Synthetic handoff delay; no real wait/reset.
+        budget = consume(path, historical, "c" * 40)
+        assert budget["deadline"] == budget["started_at"] + 600
+        assert budget["charged_seconds"] == charged and budget["handoff_seconds"] == 5
+        assert budget["remaining_seconds"] == 600 - charged - 5 and not path.exists()
+        with pytest.raises(FileNotFoundError):
+            consume(path, historical, "c" * 40)
+
+
+def test_unit_budget_clock_restores_module_without_changing_shared_time():
+    original_time = time
+    shared = sys.modules["time"]
+    shared_monotonic = shared.monotonic
+    with contextmanager(unit_budget_clock.__wrapped__)() as clock:
+        clock.now = 905.198142485
+        assert time.monotonic() == 905.198142485
+        assert time is not original_time and shared.monotonic is shared_monotonic
+        assert e.time is shared
+    assert time is original_time and shared.monotonic is shared_monotonic
+    assert all(
+        consume.__globals__["time"] is original_time
+        for consume in (consume_control_budget, consume_guards_budget, consume_escalation_budget)
+    )
 
 
 @pytest.mark.parametrize("direction", ["upgrade", "downgrade"])
