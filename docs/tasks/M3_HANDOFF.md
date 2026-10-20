@@ -5,7 +5,233 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — C6 foundation CI-R4 accepted; CI-08 CLOSED LOCAL; diagnostic RUN4 proposed / 2026-10-20 UTC
+## CURRENT — RUN4 FAILED before generic PG; CI-09 unit clock OPEN / 2026-10-20 UTC
+
+**C0-M3.1-NATIVE-CONTEXT-CI-RUN4 completed: 10 SUCCESS / 1 FAILURE.**
+[Run39418189410 / attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/39418189410)
+ran from11:53:24 to12:19:24 UTC. [One-use user approval6290230660](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6290230660)
+is CONSUMED. C0 made exactly one expected-head/force=false fast-forward of the
+existing PR35 execution ref; no rerun, dispatch, retry, cancel or in-run source
+patch occurred. PR35 remains Draft/BLOCKED. User owns merge; M3 IN_PROGRESS.
+
+### Exact source and event
+
+| Binding | Exact value |
+|---|---|
+| PR35 head / execution branch | cf9d037dbf605ec01bc81306a546cac54a3f7f91 / c0/m3-1-native-context-ci-r1 |
+| Candidate / actual tested tree | 9dc0f1e70a1b6a29ce9667ebae662a58ad07e11b |
+| Actual tested merge | 9e9e4d617cbbcbab84d8dfbec7698c1a9defb5ef |
+| Exactly ordered merge parents | e205e22051bc06295758b504d84699652b176c15, cf9d037dbf605ec01bc81306a546cac54a3f7f91 |
+| Candidate ordered parents | cbbfce1fb492b164220d5d9d064037216e28e0e1, 2280b694915bf7a50cbeb3e9eb12603dd7c52c68 |
+| Event / action / ref | pull_request / synchronize / refs/pull/35/merge |
+| Event payload SHA256 | 44bf7344478a58fec5285a8df8a33813b3873d60ab9d181a0a182ba511227cb2 |
+| Frozen main / stock | e205e22051bc06295758b504d84699652b176c15 / af7482dede085bc033e3fee34f9a2425124351ee |
+
+C0 re-read actual Git headers, job/run/artifact metadata and PR/ref state.
+All10 artifact ZIP digests/sizes match GitHub; every current source archive
+reconstructs exactly the294-leaf candidate tree, including executable modes.
+Every supplied tested-commit/status receipt matches the actual merge/clean tree;
+native has its own full source/clean receipts. The webhook advisory merge
+b6cf7fb... was correctly recorded STALE; actual checkout/ordered parents are
+authoritative. No main/stock/settings change. This post-run C0 documentation
+commit changes HANDOFF/register only on c0/m3-1-native-context-ci-r4 and is not
+the tested PR35 candidate or authorization to move that execution ref.
+
+### Actual jobs
+
+| Job / ID | Actual result | Job seconds |
+|---|---|---:|
+| docker29-compatibility / 118612251410 | SUCCESS | 1015 |
+| browser / 118612251722 | SUCCESS | 608 |
+| connect5-migration (normal, intent) / 118612251844 | SUCCESS | 251 |
+| foundation-durable / 118612251857 | SUCCESS | 1072 |
+| connect5-migration (normal, image) / 118612251878 | SUCCESS | 275 |
+| connect5-migration (docker29, state) / 118612251889 | SUCCESS | 1150 |
+| native-context-db / native-context-db / 118612251908 | SUCCESS | 740 |
+| connect5-migration (docker29, image) / 118612251922 | SUCCESS | 247 |
+| connect5-migration (normal, state) / 118612252002 | SUCCESS | 1182 |
+| connect5-migration (docker29, intent) / 118612252129 | SUCCESS | 249 |
+| foundation / 118619511159 | FAILURE | 480 |
+
+### Foundation failure and retained evidence
+
+Foundation-durable completed its complete six-lifecycle normal lane and12 final
+assertions at current0013. Its host journal has all10 start/end records for
+init/config/build/normal-durable/cleanup; primary0/cleanup0, no signal or evidence
+issue. Durable command1028.020648823s; whole journal1064.455827302s, within25min.
+Its294-entry manifest, image proofs for api/worker/scheduler/fixture and all3 CI
+input hashes match the actual source. Foundation starts only after this job
+succeeds and uses a distinct fresh project/directory.
+
+Foundation host journal is complete for the **executed prefix**:
+init/config/build SUCCESS; checks exit1; cleanup exit0. Backend journal:
+ruff/format/mypy SUCCESS; unit exit1. All10 host and8 backend records have exact
+sequence, finite monotonic elapsed values, valid bounded ASCII lines and no
+signal. execution.json is **primary_exit=1, cleanup_exit=0**; issues.jsonl is empty.
+Actual owned Docker containers/network are removed in the job log. Host cleanup
+takes0.366832348s; full host prefix474.105105136s. This is ordinary failure-path
+cleanup evidence; it does not repeat the local post-admission journal-loss probe.
+
+**Unit: 2102 PASSED, 1 FAILED, 130 subtests PASSED, 907 integration DESELECTED,
+406.85s.** The907 deselection is the intended non-integration unit selector, not
+a removal from the complete gate. Sole failed node:
+`tests/test_telegram_egress_migration.py::test_control_budget_exhaustion_and_file_guards`.
+No integration upgrade/repeat-upgrade/generic phase was entered.
+All generic cases/failures/partition/result sinks remain empty: **generic802
+NOT_RUN, zero new terminal outcomes**. Downgrade/reupgrade/contracts/wheels and
+host service/HTTP/image tail are NOT_RUN. Clean-source and source/artifact upload
+steps succeeded; the full execution/evidence gate correctly FAILED. Empty
+unentered generic files are not lost/truncated reports or a successful generic run.
+
+RUN3 remains the latest ordinary generic evidence:755 terminal =667PASS+88FAIL,
+47UNKNOWN. RUN4 does not recover those47 outcomes or diagnose the88 failures.
+CI-06 and CI-07 stay OPEN. The nine-family C2 taxonomy and its section8 missing
+valid-V2/target-origin/schema-role/profile/historical-teardown facts remain;
+no generic repair scope is issued.
+
+### CI-09/P2 (C0-NC-CI-09) — unit fixture assumes a sufficiently old monotonic epoch
+
+The exact source at lines9938–9953 constructs an expired handoff using
+`now=time.monotonic(); started_at=now-601; issued_at=now-2; charged_seconds=599;
+deadline=now-1`, then requires an EXHAUSTED error. The saved failure reports
+**started_at=-110.54702607600001** and **CONTROL_BUDGET_CLOCK** at the positive
+finite-clock guard (line2480), before the intended exhaustion check (line2488).
+Thus the fixture's sampled now was about490.452973924s. Splitting onto a fresh
+runner exposes this pre-existing dependence on host monotonic time. A unit
+fixture defect is established; no production deadline/clock defect is inferred.
+
+C0 independently AST-loaded the exact unchanged consumers and private-file
+helpers, using real owned temporary files and a constructed module-local clock.
+At490.452973924 the same negative start and CLOCK rejection reproduce; at602
+and10000 the exact expired fixture reaches CONTROL_BUDGET_EXHAUSTED.
+Boundary601 gives start0 and CLOCK. Additional constructed source probes show
+the related valid control fixture's now-30 fails at10, and valid G/E fixtures'
+now-430 fail at100/430 but reach acceptance at490/10000. These are separately
+labelled local source probes, not extra CI runs or observed RUN4 failures.
+The G/E cases passed in RUN4; no observed result is relabelled.
+Source file SHA256:5efe2979b2a20fe8daabc795aad984bdbb5bf760b1f242621c7e532f961365fd.
+C0 probe JSON SHA256:afda6373ab7bd8dd918efd66e6f80ede8edcb3ef0903fa6b9f9b084afc61f175.
+
+### Successful retained gates
+
+- Native actual112 cases =7source+105PG; all336 setup/call/teardown PASS,
+  105 guarded resets, no missing/skip/xfail. Runner363+130subtests PASS.
+  Installed source/OID/body/ACL/roles/catalog equals167functions/45tables/635columns,
+  PostgreSQL18.6/vector0.8.6/btree_gist1.8; runtime/migrator privilege constraints
+  hold. Full profile c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411,
+  verifier527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac.
+  Four event admissions, clean-source and owned cleanup PASS. Carrier603.718728051s,
+  job receipt732.035454988s; full ordered generic802 inventory still equals RUN3
+  and partition907=802+105 remains disjoint. Collection is not generic execution.
+- Browser398 Vitest cases/14files and54 Playwright cases PASS, clean-source PASS.
+- Docker29 compatibility: engine29.8.2; all six durable lifecycles/current0013
+  image proofs,12 final assertions, corrected dual-stack mapping and old strict
+  mapping rejection PASS.
+- All six migration shards PASS. H/P source archives reconstruct exact frozen
+  Git trees; completed retry/rollback/receipt assertions and owned cleanup pass.
+  Both state lanes additionally preserve T/C/G/E/frozen-main-P source archives
+  and actual matching historical schema phases. C0 reconstructed every retained
+  archive tree against Git;20 P source/schema pairings per state lane pass,
+  actual phase cleanup PASS/no owned remaining, negative cleanup controls PASS.
+  State coordinator elapsed925.921076027s Docker29 and954.838881408s normal,
+  within unchanged1200s supervisor; S600/P720/fixed120/+480/cleanup90 unchanged.
+  Historical state success is not evidence for unentered current generic802.
+
+### C0 evidence receipts
+
+| Artifact ID / name suffix | ZIP bytes | SHA256 |
+|---|---:|---|
+| 12264135080 / m0-verification | 2672604 | 0df4ac2103f8e2027804087f7c192e119e551c460a29de9559981c2c0ccadcda |
+| 12263612535 / docker29-compatibility | 2689057 | a9a08e87e6eb513a330db037c49052d58717d54420e22725b896bca8d2a06ce1 |
+| 12263578143 / foundation-durable-1 | 2723824 | a7928445846ce296fb9baf3658f2793001574fc27095ead56dfae9bd5ae7f894 |
+| 12263365909 / connect5-migration-normal-image | 5238458 | 0c174b223c0283d3fe0366b469c55a3fa673fcf684ba1cff7ad1333bf8eb1356 |
+| 12263345882 / connect5-migration-docker29-intent | 5239327 | ec16e3568ef8e493fa795b42bf45fe282268f5925a09457b52ac47f6601e86c8 |
+| 12263024125 / connect5-migration-docker29-state | 20151042 | 2acbe89b4f433a9170d17d4f5ce054d2b93c930d06f6f9a529514d811953c59a |
+| 12262741458 / connect5-migration-normal-intent | 5238380 | 73261d2524e23ea787f13bfab8eb8638b194bf7398522cea28c68613e4b28cfb |
+| 12262518614 / connect5-migration-normal-state | 20150076 | ace2d812e6acbe5cae11965467600d9790ff743bd614d594377e91e08505bebe |
+| 12262367812 / native-context-db-1 | 3413917 | 835e2bb913d17d68a6537b1859b3d425d508b9617fadacd4ccc850d77e8e998f |
+| 12262164266 / connect5-migration-docker29-image | 5239380 | c60e0f7b2054a25736f466e8526fd8b251bd2dd54d80c1b18eb3a1b665b299c3 |
+
+Foundation ci.log SHA256:
+`1e6dd27f871d364f7f44936f5a5860f3d83ac79fe89f323bfd77676086609cd0` (61149bytes).
+Decoded saved foundation job log (one final LF added) SHA256:
+`84127e325ce59cf45ed218a37b39037725ea340b892ae7d91a1685fe799afe7d`.
+Native independent saved-data receipt SHA256:
+`1f0a75dc7c980860ed7c2f05f84415feef2569f091c514e0d6487a20a53f8a05`.
+Secondary artifact/source/phase receipt SHA256:
+`bff399e5dfdd23cdd99866c07702a4008261ac739e551adc5e5a4a93a226cd61`.
+These are checked actual RUN4 artifacts plus explicitly separated constructed
+local probes; no additional runtime, provider, DB or account execution.
+
+### C6-M3.1-NATIVE-CONTEXT-UNIT-CLOCK-R1 — sole new assignment
+
+Owner C6. Dependency CI-09/RUN4 evidence above. Repository
+Elefesys/ai-service-manager; branch `c6/m3-1-native-context-unit-clock-r1`.
+Start in a separate clean checkout from the **exact C0 documentation commit/tree
+published in the accompanying C0 task comment**; its sole parent is the frozen
+PR35 candidatecf9d037dbf605ec01bc81306a546cac54a3f7f91 and its other292 leaves match.
+Read AGENTS, current HANDOFF/register, canonical Spec/ADR/MVP/Roadmap/Plan,
+M3_CONTRACT§16–16.20 and both accepted diagnostic reports. Verify all originals,
+exact source pairing and branch/base before editing; no shared-disk assumption.
+
+**Allowed tracked write-set: only `tests/test_telegram_egress_migration.py`, only
+the unit clock-fixture/helper and immediately related unit tests.**
+Relevant boundaries: control_budget_file; test_control_remaining_budget_is_absolute_private_and_consumed_once;
+test_control_budget_wrong_phase_source_clock_or_owner_refuses;
+test_control_budget_exhaustion_and_file_guards; control_budget_file callers
+test_control_rejected_handoff_report_never_claims_unvalidated_budget and
+test_control_initial_failure_retains_source_budget_and_primary and
+test_control_prepare_failure_keeps_consumed_budget_before_any_runtime;
+test_guards_budget_is_known_c_g_pair_and_same_absolute600;
+test_escalation_budget_is_known_c_g_pair_and_same_absolute600.
+Preserve the existing905.198142485 fractional-arithmetic control in the initial
+failure test. Existing helper callers may receive a narrow scoped fixture dependency. Add only
+focused unit regression cases needed to prove low-epoch independence and intended
+guard origins. Do not refactor unrelated tests or change existing parameter IDs.
+
+Make synthetic unit timestamps internally consistent and independent of host
+uptime. Keep the real consume_control_budget/consume_guards_budget/
+consume_escalation_budget definitions, source/schema controllers, subprocess
+supervision and every real monotonic/wall deadline byte-for-byte unchanged.
+No autouse/global shared-time monkeypatch; no time.sleep/prewarm/old durable
+prelude to wait for uptime; no retries, skip/xfail/filter/selector change or
+weaker expected-error match. Preserve expired vs invalid-clock, private-mode,
+single-link, consume-once, exact600/charged/deadline arithmetic and all negatives'
+intended origins. Positive controls must reach the accepted path; expired cases
+must reach EXHAUSTED before consumption and retain the handoff.
+
+Validation is **source + isolated LOCAL unit checks only**, no Docker/PG/Actions:
+reproduce the old exact failure at a constructed490.452973924 (and low/boundary
+epochs), then the same original node/parameters GREEN with narrow unit-fixture
+changes. Include explicit invalid-clock and valid-budget controls, private-mode/
+hardlink/consume-once cases, low-epoch control/G/E constructed data, and check
+the fake clock does not leak into other tests or operational consumers.
+Run the entire non-integration suite from locked Python3.13/uv.lock with
+(2103 existing cases + explicitly inventoried additions), all130subtests, no
+missing old IDs/skips/xfails/errors; runner363 remains included. Run relevant
+lint/format and clean/diff checks. Preserve complete generic802/native112
+inventories, all assertions, original11/contract/accepted reports, migrations,
+backend, workflow/scripts/Compose/pins/hash bindings and historical source bytes.
+
+Return exact commit/tree/parent, changed function/fixture boundaries, RED/GREEN
+commands/results and hashes, preserved old inventories, actual additional IDs,
+scope proof that all operational definitions/constants are unchanged, and
+limitations. Then C6 HOLD for C0 review. C1/C2/C3/C5/C8 and all other work HOLD.
+No PR35/stock/main/ref/settings/PR creation/merge/deploy/live/VM/provider/account
+action or workflow dispatch/rerun is granted. A later full ordinary diagnostic
+CI needs separately reviewed exact source and one-use C0 approval; RUN4 approval
+cannot be reused. C2's ten-test-path+helper generic repair stays unassigned.
+
+CI-08 remains CLOSED LOCAL with ordinary actual cleanup now additionally observed;
+its post-admission loss control is still explicitly local. CI-09 OPEN, CI-06/07
+OPEN, whole native integration BLOCKED. Prior closures/D1/D2/D3 retained.
+Administrative branch enforcement UNVERIFIED; IMPL-05 DEFERRED.
+A08/P01/P05/renewal/collector/account/A12/M4 remain later.
+
+---
+
+
+## History — C6 foundation CI-R4 accepted; CI-08 CLOSED LOCAL; diagnostic RUN4 proposed / 2026-10-20 UTC
 
 C0 accepts [C6 CI-08 return6289282472](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6289282472)
 and its parent foundation CI-R4 implementation as **INTEGRATED / VERIFIED

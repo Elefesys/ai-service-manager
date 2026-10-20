@@ -2,7 +2,57 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6 foundation CI-R4 accepted; CI-08 CLOSED LOCAL; diagnostic RUN4 proposed / 2026-10-20 UTC
+## CURRENT — RUN4 FAILED before generic; CI-09 unit clock OPEN / 2026-10-20 UTC
+
+[C0 RUN4](https://github.com/Elefesys/ai-service-manager/actions/runs/39418189410),
+attempt1: **10 SUCCESS / 1 FAILURE**, completed12:19:24 UTC. One-use approval
+[6290230660](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6290230660)
+CONSUMED; no rerun/dispatch/retry/cancel. Tested PR35 head
+cf9d037dbf605ec01bc81306a546cac54a3f7f91, merge
+9e9e4d617cbbcbab84d8dfbec7698c1a9defb5ef, tree
+9dc0f1e70a1b6a29ce9667ebae662a58ad07e11b; ordered parents
+[e205e22051bc06295758b504d84699652b176c15,cf9d037dbf605ec01bc81306a546cac54a3f7f91].
+Main/stock unchanged; PR35 Draft/BLOCKED; M3 IN_PROGRESS; user owns merge.
+
+| Task / finding | Current status |
+|---|---|
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN4 | COMPLETED/FAILED:10SUCCESS, foundation FAILURE before generic |
+| C6-M3.1-NATIVE-CONTEXT-FOUNDATION-CI-R4 | INTEGRATED/VERIFIED SOURCE+LOCAL; actual durable25min and ordinary failure cleanup pass; complete foundation still blocked |
+| C0-NC-CI-08/P2 | CLOSED LOCAL; ordinary actual owned cleanup also PASS, journal-loss probe remains explicitly local |
+| C0-NC-CI-09/P2 | OPEN: unit fixture now-601 becomes negative on fresh low-epoch runner |
+| C6-M3.1-NATIVE-CONTEXT-UNIT-CLOCK-R1 | TODO/ASSIGNED; sole new source+isolated LOCAL unit scope, one test file; HOLD after return |
+| C0-NC-CI-06/P2 | OPEN: RUN4 generic802 NOT_RUN; RUN3 latest755 terminal=667PASS+88FAIL,47UNKNOWN |
+| C0-NC-CI-07/P2 | OPEN: executed journals retained, but full generic/tail and all11 SUCCESS not established |
+| C2 generic diagnostic / proposed repair | Accepted SOURCE+SAVED DATA; generic ten-test-path+helper write-set remains unassigned/HOLD |
+| C1/C2/C3/C5/C8 and other tasks | HOLD |
+
+Foundation unit2102PASS/1FAIL/130subtestsPASS/406.85s. Sole failure is
+`test_control_budget_exhaustion_and_file_guards`: expected EXHAUSTED, actual
+CONTROL_BUDGET_CLOCK, started_at=-110.54702607600001. C0 exact-source constructed
+local probes reproduce the low-epoch defect and separately establish related
+now-30/now-430 fixture assumptions. Do not relax operational clock/budget guards.
+Full host/backend executed-prefix records persist; primary1/cleanup0,
+issues empty, clean-source PASS. All generic sinks empty because generic was
+never entered; no new generic verdicts. Native112/336/105/catalog167/45/635,
+runner363+130, browser398+54, Docker29 compatibility and all6 migration shards PASS.
+
+[Current HANDOFF](tasks/M3_HANDOFF.md) contains exact job/artifact hashes,
+independent source/evidence checks, CI-09 diagnosis and complete C6 scope.
+C6 branch c6/m3-1-native-context-unit-clock-r1 starts from the exact C0 docs
+commit/tree in its task comment (sole parent cf9 above). Only unit clock fixtures
+and directly related tests in tests/test_telegram_egress_migration.py may change;
+operational consumers/controllers/clocks/caps, generic/native inventories and
+all production/CI files remain fixed. Full locked non-integration validation
+preserves2103 old cases+130subtests and inventories additions. No Docker/PG/CI,
+execution-ref movement, new PR, merge or external/live action. Later ordinary
+CI needs new exact source review and one-use approval; RUN4 grants no retry.
+
+This C0 post-run docs commit is not the tested PR35 source. Earlier closures,
+D1/D2/D3, all caps, IMPL-05 DEFERRED and enforcement UNVERIFIED retained.
+
+---
+
+## History — C6 foundation CI-R4 accepted; CI-08 CLOSED LOCAL; diagnostic RUN4 proposed / 2026-10-20 UTC
 
 C0 accepts [C6 CI-08 return6289282472](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6289282472)
 and its parent foundation CI-R4 implementation as **INTEGRATED / VERIFIED
