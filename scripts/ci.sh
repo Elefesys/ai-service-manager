@@ -22,7 +22,12 @@ fi
 phase_child=
 phase() {
     label=$1; shift
-    python3 scripts/native_context_db_catalog.py foundation-step host "$label" -- "$@" <&3 3<&- &
+    if [ "$label" = cleanup ]; then
+        set -- --owned-cleanup-fd=4 -- "$@"
+    else
+        set -- -- "$@"
+    fi
+    python3 scripts/native_context_db_catalog.py foundation-step host "$label" "$@" <&3 3<&- &
     phase_child=$!
     if wait "$phase_child"; then phase_status=0; else phase_status=$?; fi
     phase_child=
@@ -45,15 +50,25 @@ if [ "$mode" != all ]; then
     networks=$(docker network ls -q --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME")
     test -z "$containers$volumes$networks"
 fi
+# Fully admit source, evidence and ownership once more before resource work.
+# Keep cleanup authority in this parent shell, never recover it from later files.
+owned_cleanup=$(python3 scripts/native_context_db_catalog.py foundation-ownership)
+readonly owned_cleanup
 cleanup() {
     primary=$?
     trap - EXIT INT TERM
     set +e
-    compose_phase cleanup down --remove-orphans
+    compose_phase cleanup down --remove-orphans 4<<OWNED_CLEANUP
+$owned_cleanup
+OWNED_CLEANUP
     cleanup_status=$?
-    python3 scripts/native_context_db_catalog.py foundation-finish "$primary" "$cleanup_status"
+    python3 scripts/native_context_db_catalog.py foundation-finish "$primary" "$cleanup_status" --owned-cleanup-fd=4 4<<OWNED_CLEANUP
+$owned_cleanup
+OWNED_CLEANUP
+    reporting_status=$?
     result=$primary
     if [ "$result" -eq 0 ]; then result=$cleanup_status; fi
+    if [ "$result" -eq 0 ]; then result=$reporting_status; fi
     if [ "$result" -eq 0 ]; then
         # Separate completeness gate; never replace an original nonzero/cancel.
         python3 scripts/native_context_db_catalog.py foundation-check

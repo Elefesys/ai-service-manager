@@ -2170,7 +2170,106 @@ def foundation_store():
     return FoundationEvidence()
 
 
-def foundation_step(stream, phase, argv):
+FOUNDATION_CLEANUP = (
+    "docker",
+    "compose",
+    "--env-file",
+    "infra/images.lock.env",
+    "--env-file",
+    ".env",
+    "--profile",
+    "test",
+    "down",
+    "--remove-orphans",
+)
+
+
+def foundation_ownership():
+    """Called before resources; the shell retains this admission in readonly memory."""
+    store = foundation_store()  # All original source/file/UID/inode checks still apply.
+    require(
+        store.uid == os.getuid() and store.path.is_relative_to(ROOT / "reports"),
+        "Foundation host ownership",
+    )
+    project = os.environ.get("COMPOSE_PROJECT_NAME")
+    require(
+        store.binding["route"] == "all" or project == store.binding["project"],
+        "Foundation owned project",
+    )
+    # Preserve the full caller's original Compose resolution when unset, rather
+    # than guessing a project from a checkout/directory name. No credentials.
+    return {
+        "version": 1,
+        "uid": store.uid,
+        "path": str(store.path),
+        "cwd": str(ROOT),
+        "project": project,
+        "binding": {k: store.binding[k] for k in ("directory", "files", "origin_ns")},
+    }
+
+
+def foundation_owned_cleanup():
+    """Only the parent's inherited FD4 carries authority; current files cannot grant it.
+
+    The descriptor is supplied from readonly shell memory after full admission,
+    not opened from an evidence path. This snapshot permits the fixed owned down
+    command and best-effort writes to individually pinned original sinks only.
+    """
+    with os.fdopen(os.dup(4), "rb") as source:
+        raw = source.read(4097)
+    require(len(raw) <= 4096, "Foundation ownership limit")
+    value = json.loads(raw)
+    require(
+        set(value) == {"version", "uid", "path", "cwd", "project", "binding"}
+        and type(value["version"]) is int
+        and value["version"] == 1
+        and type(value["uid"]) is int
+        and value["uid"] == os.getuid()
+        and value["cwd"] == str(ROOT) == str(Path.cwd())
+        and type(value["path"]) is str
+        and Path(value["path"]).is_absolute()
+        and ".." not in Path(value["path"]).parts
+        and Path(value["path"]).is_relative_to(ROOT / "reports")
+        and (value["project"] is None or type(value["project"]) is str),
+        "Foundation inherited ownership",
+    )
+    binding = value["binding"]
+    require(
+        set(binding) == {"directory", "files", "origin_ns"}
+        and set(binding["files"]) == set(FOUNDATION_FILES)
+        and all(
+            type(pair) is list and len(pair) == 2 and all(type(n) is int and n >= 0 for n in pair)
+            for pair in (binding["directory"], *binding["files"].values())
+        )
+        and type(binding["origin_ns"]) is int
+        and 0 < binding["origin_ns"] <= time.monotonic_ns(),
+        "Foundation inherited inode pins",
+    )
+    store = object.__new__(FoundationEvidence)
+    store.uid, store.path, store.binding = value["uid"], Path(value["path"]), binding
+    env = os.environ.copy()
+    if value["project"] is None:
+        env.pop("COMPOSE_PROJECT_NAME", None)
+    else:
+        env["COMPOSE_PROJECT_NAME"] = value["project"]
+    failed = False
+    try:
+        current = foundation_store()
+        require(
+            current.uid == store.uid
+            and current.path == store.path
+            and all(current.binding[k] == v for k, v in binding.items()),
+            "Foundation ownership changed",
+        )
+    except Exception:
+        failed = True
+        store.issue()
+    # Never reopen/recreate a missing sink to recover authority. Each reporting
+    # write still checks its own original directory/file inode, mode and UID.
+    return store, failed, env
+
+
+def foundation_step(stream, phase, argv, *, owned_cleanup=False):
     require(stream in {"host", "backend"}, "Foundation phase stream")
     allowed = (
         (*FOUNDATION_HOST, "normal-durable", *FOUNDATION_CORE, "cleanup")
@@ -2178,8 +2277,14 @@ def foundation_step(stream, phase, argv):
         else FOUNDATION_BACKEND
     )
     require(phase in allowed and argv, "Foundation phase/command")
-    store = foundation_store()
-    recording_failed = False
+    if owned_cleanup:
+        require(
+            stream == "host" and phase == "cleanup" and tuple(argv) == FOUNDATION_CLEANUP,
+            "Foundation owned cleanup command",
+        )
+        store, recording_failed, env = foundation_owned_cleanup()
+    else:
+        store, recording_failed, env = foundation_store(), False, None
     try:
         store.append(stream + ".jsonl", {"phase": phase, "edge": "start"})
     except Exception:
@@ -2209,7 +2314,9 @@ def foundation_step(stream, phase, argv):
         signal.signal(s, forward)
     try:
         try:
-            child = subprocess.Popen(argv, start_new_session=True)
+            child = subprocess.Popen(
+                argv, start_new_session=True, **({"env": env} if owned_cleanup else {})
+            )
         except OSError:
             code = 127
         else:
@@ -2244,7 +2351,9 @@ def foundation_step(stream, phase, argv):
         store.issue()
     # This is an evidence gate after the process, not a replacement for its exit.
     # A failed primary/signal always wins, including when every sink is broken.
-    return code if code else int(recording_failed)
+    # The owned cleanup status is the actual command's status. Reporting errors
+    # remain separate in issues/phase records and the finish/completeness gate.
+    return code if code or owned_cleanup else int(recording_failed)
 
 
 def foundation_locations(manifest):
@@ -2750,7 +2859,13 @@ def foundation_cli(argv):
     parser = argparse.ArgumentParser(description="Fixed foundation source/evidence plumbing")
     parser.add_argument(
         "mode",
-        choices=("foundation-prepare", "foundation-step", "foundation-finish", "foundation-check"),
+        choices=(
+            "foundation-prepare",
+            "foundation-ownership",
+            "foundation-step",
+            "foundation-finish",
+            "foundation-check",
+        ),
     )
     parser.add_argument("values", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
@@ -2759,19 +2874,42 @@ def foundation_cli(argv):
         print(foundation_prepare(args.values[0]))
         return 0
     if args.mode == "foundation-step":
+        owned = args.values[2:3] == ["--owned-cleanup-fd=4"]
+        if owned:
+            del args.values[2]
         require(len(args.values) >= 4 and args.values[2] == "--", "Foundation step arguments")
-        return foundation_step(args.values[0], args.values[1], args.values[3:])
-    store = foundation_store()
+        return foundation_step(args.values[0], args.values[1], args.values[3:], owned_cleanup=owned)
+    if args.mode == "foundation-ownership":
+        require(not args.values, "Foundation ownership arguments")
+        raw = json.dumps(foundation_ownership(), ensure_ascii=True, sort_keys=True)
+        require(len(raw.encode()) + 1 <= 4096, "Foundation ownership limit")
+        print(raw)
+        return 0
+    owned = args.mode == "foundation-finish" and args.values[-1:] == ["--owned-cleanup-fd=4"]
+    if owned:
+        args.values.pop()
+        store, reporting_failed, _ = foundation_owned_cleanup()
+    else:
+        store, reporting_failed = foundation_store(), False
     if args.mode == "foundation-finish":
         require(
             len(args.values) == 2
             and all(re.fullmatch(r"[0-9]{1,3}", x) and int(x) <= 255 for x in args.values),
             "Foundation finish status",
         )
-        store.publish(
-            "execution.json",
-            {"primary_exit": int(args.values[0]), "cleanup_exit": int(args.values[1])},
-        )
+        try:
+            store.publish(
+                "execution.json",
+                {
+                    "primary_exit": int(args.values[0]),
+                    "cleanup_exit": int(args.values[1]),
+                    **({"evidence_failed": True} if reporting_failed else {}),
+                },
+            )
+        except Exception:
+            store.issue()
+            return 1
+        return int(reporting_failed)
     else:
         require(not args.values, "Foundation check arguments")
         foundation_check(store)

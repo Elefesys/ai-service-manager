@@ -751,6 +751,283 @@ def test_foundation_signal_forwarding_preserves_cancellation_and_owned_cleanup(
             process.communicate(timeout=2)
 
 
+@pytest.fixture
+def foundation_cleanup_fault(foundation_commands, monkeypatch):
+    """Damage diagnostics in an external inert command after valid admission."""
+    fixture = foundation_commands
+    docker = Path(os.environ["PATH"].split(os.pathsep)[0]) / "docker"
+    program = docker.read_text()
+    before = "if stage == os.environ.get('FAKE_BLOCK'):"
+    assert program.count(before) == 1
+    docker.write_text(
+        program.replace(
+            before,
+            r"""
+if stage == os.environ.get('FAKE_FAULT_STAGE'):
+    path = pathlib.Path(os.environ['ASM_FOUNDATION_EVIDENCE'])
+    target = path / 'cases.jsonl'
+    fault = os.environ['FAKE_EVIDENCE_FAULT']
+    if fault == 'missing': target.unlink()
+    elif fault == 'replacement':
+        target.rename(path / 'cases.saved')
+        target.write_text('PRIVATE_SENTINEL_FOREIGN_JOURNAL\n')
+        target.chmod(0o600)
+    elif fault == 'mode': target.chmod(0)
+    elif fault == 'symlink':
+        target.rename(path / 'cases.saved')
+        target.symlink_to(path / 'cases.saved')
+    elif fault == 'binding':
+        binding = json.loads((path / 'binding.json').read_text())
+        binding['project'] = 'PRIVATE_SENTINEL_FOREIGN_PROJECT'
+        (path / 'binding.json').write_text(json.dumps(binding))
+    elif fault == 'directory':
+        path.rename(path.with_name(path.name + '.saved'))
+        path.mkdir(mode=0o700)
+        (path / 'binding.json').write_text('{"project":"PRIVATE_SENTINEL_FOREIGN_PROJECT"}')
+"""
+            + before,
+        )
+    )
+    monkeypatch.setenv("FAKE_EVIDENCE_FAULT", "missing")
+    monkeypatch.setenv("FAKE_FAULT_STAGE", "checks")
+    return fixture
+
+
+def foundation_actual_down(fixture):
+    calls = [json.loads(line) for line in fixture.log.read_text().splitlines()]
+    checks = [
+        c
+        for c in calls
+        if c["name"] == "docker" and "run" in c["args"] and c["args"][-1] == "checks"
+    ]
+    down = [c for c in calls if c["name"] == "docker" and "down" in c["args"]]
+    assert len(checks) == len(down) == 1  # Count the actual command, not its Python wrapper.
+    assert down[0]["args"] == list(lane.FOUNDATION_CLEANUP[1:])
+    assert down[0]["project"] == checks[0]["project"]
+    assert down[0]["project"].startswith("asm-foundation-foundation-core-")
+    return next(
+        p
+        for p in (fixture.root / "reports/foundation-local").iterdir()
+        if not p.name.endswith(".saved")
+    )
+
+
+@pytest.mark.parametrize(
+    "fault", ("control", "missing", "replacement", "mode", "symlink", "binding", "directory")
+)
+@pytest.mark.parametrize("primary", (0, 17))
+def test_foundation_post_admission_loss_executes_same_owned_down_once_and_fails_evidence(
+    foundation_cleanup_fault, monkeypatch, fault, primary
+):
+    fixture = foundation_cleanup_fault
+    monkeypatch.setenv("FAKE_EVIDENCE_FAULT", fault)
+    # For primary0, damage the last command so execution succeeds up to cleanup.
+    monkeypatch.setenv("FAKE_FAULT_STAGE", "checks" if primary else "other-last")
+    if primary:
+        monkeypatch.setenv("FAKE_FAIL", "checks")
+    else:
+        docker = Path(os.environ["PATH"].split(os.pathsep)[0]) / "docker"
+        docker.write_text(
+            docker.read_text().replace(
+                "if stage == os.environ.get('FAKE_FAULT_STAGE'):",
+                "if stage == os.environ.get('FAKE_FAULT_STAGE') or args[-1:] == ['images']:",
+            )
+        )
+    result = subprocess.run(
+        ["/bin/sh", "scripts/ci.sh", "--foundation-core"],
+        cwd=fixture.root,
+        capture_output=True,
+        text=True,
+        timeout=25,
+    )
+    assert result.returncode == (primary or int(fault != "control")), result.stderr
+    path = foundation_actual_down(fixture)
+    assert "PRIVATE_SENTINEL" not in result.stdout + result.stderr
+    if fault == "directory":
+        assert not (path / "execution.json").exists()  # Never recreate a foreign sink.
+        assert set(p.name for p in path.iterdir()) == {"binding.json"}
+    else:
+        receipt = json.loads((path / "execution.json").read_text())
+        assert receipt == {
+            "primary_exit": primary,
+            "cleanup_exit": 0,
+            **({"evidence_failed": True} if fault != "control" else {}),
+        }
+        if fault != "control":
+            issues = (path / "issues.jsonl").read_text()
+            assert "EVIDENCE_WRITE_FAILED" in issues
+            rows = [json.loads(line) for line in (path / "host.jsonl").read_text().splitlines()]
+            assert rows[-1]["phase"] == "cleanup" and rows[-1]["process_exit"] == 0
+        if fault == "missing":
+            assert not (path / "cases.jsonl").exists()
+        elif fault == "replacement":
+            assert (path / "cases.jsonl").read_text() == "PRIVATE_SENTINEL_FOREIGN_JOURNAL\n"
+            assert not (path / "cases.saved").read_bytes()
+        elif fault == "mode":
+            assert (path / "cases.jsonl").stat().st_mode & 0o777 == 0
+        elif fault == "symlink":
+            assert (path / "cases.jsonl").is_symlink() and not (path / "cases.saved").read_bytes()
+
+
+@pytest.mark.parametrize("fault", ("missing", "replacement"))
+@pytest.mark.parametrize("signum", (signal.SIGTERM, signal.SIGINT))
+def test_foundation_post_admission_loss_retains_cancellation_and_actual_owned_down(
+    foundation_cleanup_fault, monkeypatch, fault, signum
+):
+    fixture = foundation_cleanup_fault
+    monkeypatch.setenv("FAKE_EVIDENCE_FAULT", fault)
+    monkeypatch.setenv("FAKE_BLOCK", "checks")
+    process = subprocess.Popen(
+        ["/bin/sh", "scripts/ci.sh", "--foundation-core"],
+        cwd=fixture.root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while (
+            not fixture.marker.exists() and process.poll() is None and time.monotonic() < deadline
+        ):
+            time.sleep(0.01)
+        assert fixture.marker.exists(), process.communicate(timeout=1)
+        process.send_signal(signum)  # Actual shell PID, including SIGINT handling.
+        stdout, stderr = process.communicate(timeout=10)
+        assert process.returncode == 128 + signum, (stdout, stderr)
+        path = foundation_actual_down(fixture)
+        assert json.loads((path / "execution.json").read_text()) == {
+            "primary_exit": 128 + signum,
+            "cleanup_exit": 0,
+            "evidence_failed": True,
+        }
+        assert "PRIVATE_SENTINEL" not in stdout + stderr
+    finally:
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.communicate(timeout=2)
+
+
+@pytest.mark.parametrize("fault", ("inode", "project"))
+def test_foundation_no_cleanup_authority_is_granted_to_invalid_initial_admission(
+    foundation_commands, monkeypatch, fault
+):
+    fixture = foundation_commands
+    binary = Path(os.environ["PATH"].split(os.pathsep)[0]) / "python3"
+    before = "    os.execv(sys.executable, [sys.executable, *args])"
+    program = binary.read_text()
+    assert program.count(before) == 1
+    binary.write_text(
+        program.replace(
+            before,
+            "    if args[1] == 'foundation-ownership':\n"
+            + (
+                "        path = pathlib.Path(os.environ['ASM_FOUNDATION_EVIDENCE']) / 'cases.jsonl'\n"
+                "        path.rename(path.with_name('cases.saved'))\n"
+                "        path.touch(mode=0o600)\n"
+                if fault == "inode"
+                else "        os.environ['COMPOSE_PROJECT_NAME'] = 'foreign-project'\n"
+            )
+            + before,
+        )
+    )
+    result = subprocess.run(
+        ["/bin/sh", "scripts/ci.sh", "--foundation-core"],
+        cwd=fixture.root,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 1 and "FOUNDATION_EVIDENCE_REFUSED" in result.stderr
+    calls = [json.loads(line) for line in fixture.log.read_text().splitlines()]
+    assert not any(
+        c["name"] == "docker" and any(x in c["args"] for x in ("build", "run", "up", "down"))
+        for c in calls
+    )
+
+
+@pytest.mark.parametrize(
+    "stream,phase,argv",
+    (
+        ("backend", "ruff", ("ruff",)),
+        ("host", "build", ("docker",)),
+        ("host", "cleanup", ("prune",)),
+    ),
+)
+def test_foundation_owned_descriptor_cannot_authorize_other_commands(stream, phase, argv):
+    with (
+        patch.object(lane, "foundation_owned_cleanup") as admission,
+        patch.object(lane.subprocess, "Popen") as command,
+    ):
+        with pytest.raises(lane.Refusal, match="owned cleanup command"):
+            lane.foundation_step(stream, phase, list(argv), owned_cleanup=True)
+    admission.assert_not_called()
+    command.assert_not_called()
+
+
+def test_foundation_owned_cleanup_requires_parent_descriptor_not_current_evidence(
+    foundation_commands, foundation_sink
+):
+    fixture = foundation_commands
+    result = subprocess.run(
+        [
+            lane.sys.executable,
+            "scripts/native_context_db_catalog.py",
+            "foundation-step",
+            "host",
+            "cleanup",
+            "--owned-cleanup-fd=4",
+            "--",
+            *lane.FOUNDATION_CLEANUP,
+        ],
+        cwd=fixture.root,
+        capture_output=True,
+        text=True,
+        close_fds=True,
+        timeout=5,
+    )
+    assert result.returncode == 1 and result.stderr.strip() == "FOUNDATION_EVIDENCE_REFUSED"
+    assert not fixture.log.exists()  # Valid current evidence alone grants no cleanup command.
+
+
+def test_foundation_owned_cleanup_after_loss_pins_project_and_keeps_ninety_second_cap(
+    foundation_sink, monkeypatch, tmp_path
+):
+    store = foundation_sink
+    monkeypatch.chdir(lane.ROOT)
+    project = store.binding["project"]
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", project)
+    snapshot = lane.foundation_ownership()  # Genuine full admission, before diagnostic loss.
+    authority = tmp_path / "parent-memory"
+    authority.write_text(json.dumps(snapshot))
+    (store.path / "cases.jsonl").unlink()
+    monkeypatch.setenv("COMPOSE_PROJECT_NAME", "foreign-project-after-admission")
+    original_dup = os.dup
+    fd = os.open(authority, os.O_RDONLY)
+    child = Mock(pid=12345)
+    child.wait.side_effect = [subprocess.TimeoutExpired(["owned-cleanup"], 90), 0]
+    try:
+        with (
+            patch.object(lane.os, "dup", side_effect=lambda n: original_dup(fd if n == 4 else n)),
+            patch.object(lane.subprocess, "Popen", return_value=child) as command,
+            patch.object(lane.os, "killpg") as terminate,
+        ):
+            assert (
+                lane.foundation_step(
+                    "host", "cleanup", list(lane.FOUNDATION_CLEANUP), owned_cleanup=True
+                )
+                == 124
+            )
+        assert command.call_args.kwargs["env"]["COMPOSE_PROJECT_NAME"] == project
+        assert child.wait.call_args_list[0].kwargs == {"timeout": 90}
+        terminate.assert_called_once_with(12345, signal.SIGKILL)
+        assert not (store.path / "cases.jsonl").exists()
+        assert foundation_rows(store, "host.jsonl")[-1]["process_exit"] == 124
+        assert foundation_rows(store, "issues.jsonl")[-1]["issue"] == "EVIDENCE_WRITE_FAILED"
+    finally:
+        os.close(fd)
+
+
 def test_foundation_backend_keeps_every_original_command_argument_and_epoch(
     foundation_commands, foundation_sink
 ):
