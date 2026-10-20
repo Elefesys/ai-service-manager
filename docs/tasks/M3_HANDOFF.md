@@ -5,7 +5,199 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — RUN4 FAILED before generic PG; CI-09 unit clock OPEN / 2026-10-20 UTC
+## CURRENT — CI-09 accepted CLOSED LOCAL; diagnostic RUN5 prepared / 2026-10-20 UTC
+
+C0 accepts [C6 UNIT-CLOCK-R1 return6291541015](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6291541015)
+as **INTEGRATED / VERIFIED SOURCE + ISOLATED LOCAL UNIT CHECKS only**.
+**C0-NC-CI-09/P2 CLOSED LOCAL.** C6 COMPLETE/HOLD; all other implementation
+roles HOLD. CI-06/07 remain OPEN, PR35 Draft/BLOCKED, M3 IN_PROGRESS.
+The test clock correction has independent complete unit evidence; current CI
+runtime acceptance and generic recovery remain outstanding.
+
+### Exact accepted source and C0 preparation
+
+| Binding | Exact value |
+|---|---|
+| Accepted C6 commit | 1a3295a43434142a0642f473bf5b12b6f0197b2a |
+| Accepted tree | 0b86b377f1fae3812cfb2d6f40c8742abdfaab98 |
+| Sole parent / assigned C0 base | 86c62f6876b093fc9e0d9306630981e569223810 |
+| Base tree / its sole parent | 9c0afcf07603c25b628b7c2373a8deb33962a122 / cf9d037dbf605ec01bc81306a546cac54a3f7f91 |
+| C6 branch | c6/m3-1-native-context-unit-clock-r1 |
+| Prepared C0 branch | c0/m3-1-native-context-ci-r5; exact final commit/tree in C0 acceptance/proposal comment |
+| Prepared C0 commit sole parent | Accepted C6 1a3295a43434142a0642f473bf5b12b6f0197b2a |
+| Frozen PR35 / execution branch | cf9d037dbf605ec01bc81306a546cac54a3f7f91 / c0/m3-1-native-context-ci-r1 |
+| Frozen main / schema | e205e22051bc06295758b504d84699652b176c15 / 0012 |
+| Frozen stock | af7482dede085bc033e3fee34f9a2425124351ee |
+
+C6 changes exactly tests/test_telegram_egress_migration.py, mode100644,
++147/-13,550077bytes, SHA256
+34b91631501c84b211916f4179506196764fc97693578725b2559b399e9b7517.
+C0 independently verified all294 remote/local leaves and modes, exact sole
+parent/tree and clean source;293 other leaves remain byte-exact to the assigned
+base. This C0 preparation changes only HANDOFF/register on top of accepted C6,
+retains all earlier history, and preserves the other292 leaves/modes. Its exact
+final tree, source pairing and remote readback are checked before publication.
+The new preparation branch has no PR and no applicable push workflow; PR35's
+execution ref is not advanced by this review.
+
+### Correction review and independent evidence
+
+The non-autouse, function-scoped unit_budget_clock fixture replaces only the
+test module's time binding with a separate namespace for its explicit callers.
+It supplies synthetic now10000.0, restores the binding on exit, and asserts
+shared stdlib/pytest/e.time monotonic identity. Eight assigned existing test
+definitions change;171 other existing definitions, all module imports/globals/
+dispatch, original parameter decorators and every original assert are retained.
+The three operational consumers, controllers, private helpers, deadlines/caps
+and production/CI files are byte-exact. Operational imports still use real time.
+
+Original now-30, expired now-601/issued now-2/charged599/deadline now-1,
+G/E now-430 and exact absolute600 arithmetic remain. The fractional regression
+at905.198142485 remains, with the old shared-time monkeypatch replaced by the
+local fixture. EXHAUSTED matching is not relaxed. Existing negative cases now
+require their own VERSION/PHASE_SOURCE/CANDIDATE_OWNER/CLOCK/TOTAL/CHARGED/FORMAT
+origins; expired rejection requires EXHAUSTED and preserves the handoff bytes.
+Private-mode, hardlink, consume-once, original charged/deadline and reporting
+assertions remain. No waits/prewarm/retries, skips/xfails, selector or ID changes.
+
+C0 repeated the same four original nodes on its own pristine base and corrected
+checkout with a separate external module-local clock probe. Shared time is never
+patched. At0 the old source fails4/4; at490.452973924 it fails only the original
+exhaustion node with exactly started_at=-110.54702607600001 and CLOCK instead of
+EXHAUSTED; at10000 the old four all pass. Corrected source passes4/4 at both0
+and490.452973924. RED pytest exits1 are expected reproduction, not green runs.
+C0 also checked C6's actual per-epoch XML: eight epochs
+0/10/100/430/490.452973924/601/602/10000 have old failures4/4/3/3/1/1/0/0,
+corrected32/32 PASS. C6 final focused58PASS/604deselected is retained; its disclosed
+initial50PASS/8FAIL was a new wrapper-directory mode0755 setup error, corrected
+to0700 without weakening the real private guard.
+
+**C0 independently executed the complete ordinary unit selector at exact C6
+1a3295a:2121 PASS +130 subtests PASS,907 integration deselected,4 warnings,
+368.71s,exit0.** No failures/errors/skips/xfails. Runner363 is included.
+Separate clean checkout, own frozen/offline uv.lock environment, Python3.13.12,
+uv0.10.0; all58 installed distributions match the lock and editable/source imports
+point to this checkout. No clock probe/plugin is used by the complete suite.
+The907 deselection is the original non-integration selector, not a removed gate.
+Both C0 and C6 complete JUnit case inventories are checked against independent
+before/after collections: all2103 old IDs remain in order plus18 explicit
+additions; every original parameter and all907 deselected IDs/markers remain.
+C6 independently reports2121+130/385.07s on this same commit; C0 verified its XML,
+commands/logs, all144 evidence-manifest entries and complete294-file source tar.
+
+The18 additions cover8 host epochs,9 CONTROL/GUARDS/ESCALATION x
+valid/invalid-clock/exact-deadline cases, and1 fixture-restoration case.
+They reuse the original positive/private/hardlink/consume-once bodies and prove
+unchanged600/charged accounting with synthetic5s delay, exact refusal origins
+and byte-preserved rejected handoffs. Full IDs are in the accepted C6 return and
+C0 results-proof.json. Ruff check, Ruff format check and git diff --check pass.
+
+Generic802 collection SHA256 remains
+bde64cc7fbfd35daa02e8141adcaec0723427ed6c2cfeef4b5e15402e8b1d283;
+native112=7source+105PG in carrier MODULES order remains
+7b3ae663595966409f0291fe9836753bf303a37b76c529c36df7dd0957a2cf0d.
+Hash method: UTF-8 node IDs joined by LF with a final LF. This is collection,
+not current PostgreSQL execution. Pure constructed native_host_profile -> model
+validation -> native_host_source pairing verifies api/console/scheduler/worker,
+167functions/45tables/635columns and verifier
+527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac.
+This is source pairing, not operator approval or installed database evidence.
+
+C0 evidence root: /workspace/scratch/241587c3ddae/c0-native-unit-clock-review.
+Source=source, evidence=evidence, scripts=scripts under that root. Python is
+evidence/python-env/bin/python; commands execute from source through local_run.py
+with caches/bytecode/temp outside source and saved exact argv/cwd/exits:
+```sh
+python scripts/verify_source.py
+python scripts/verify_clock.py
+"$PY" -m pytest -q --durations=20 -m 'not integration' --basetemp="$E/unit-tmp" --junitxml="$E/unit.xml"
+"$PY" -m pytest -q --collect-only -m 'not integration' -p c0_inventory_plugin --c0-inventory="$E/inventory.json"
+"$PY" -m ruff check tests/test_telegram_egress_migration.py
+"$PY" -m ruff format --check tests/test_telegram_egress_migration.py
+"$PY" "$SCRIPTS/pairing.py"
+python scripts/verify_results.py
+git diff --check HEAD^ HEAD
+```
+Baseline collection uses the same collect command in the separate exact86c62f68
+worktree and writes baseline-inventory.json. verify_source/verify_clock/results
+run from the review root with explicit absolute paths; the above variables denote
+the absolute evidence Python/E/scripts paths. No actual Docker/PG/Actions run.
+
+### Evidence identity and available canonical sources
+
+| C0 evidence | SHA256 |
+|---|---|
+| source-verification.json | 01111296c498222ab246a279ebe2a2fab5ce9265a03238b7b84b8757779da4b3 |
+| environment-proof.json | 327562da83a0b4478f7c9fa575dda24049d37a2cb4df9a3dce1c0c2eadae46e7 |
+| c0-clock-proof.json | fc37cd295c2c20b6fb4fb9dbfa7bc1398ac9952df6b5d730deda48f5744c768a |
+| unit.xml | 87e60e53c764f13919c58c6e739b33dd24d2793da09b4295a0dc995c15726cdb |
+| unit.log | 58c73306fce49f9a3fafab364672a4dcf2d61fc36bb5d0ba32b9b017c1f6fdc2 |
+| results-proof.json | cc4971cf1e37add5052b71a6a434c68c69f2f4c5cd5820f25b03ee41bb48fb4f |
+| pairing-proof.json | a82a01d0e93cccce61edb55914e8ba79d417dd7abc0c25b95ed19af99236205f |
+| c0-evidence-manifest.json | 5e4f4118e3898815322d5de346c397a0529c5c8200e736d111612d689fb15279 |
+
+C6 evidence-manifest SHA256 c49d3502e237f646d3ff3770473b1abcd333f1a4ad4db7c53a0b61c75691640c;
+final-source.tar10168320bytes SHA256423af3d14678bbd5463d8f0cced1d52c42158f62986ef50b616f4d9462e58fd5.
+
+Only five original attachments were available to C0 this turn: implementation
+plan, production runbooks, open questions, ADR and baseline. Their original
+bytes match SOURCE_MANIFEST and Git. The six attachments ARCHITECTURE_SPEC,
+DEVELOPMENT_ROADMAP, PROJECT_OVERVIEW, CHANGELOG, MVP_SPEC and GLOSSARY failed to
+load this turn; C0 does not claim to have verified those six attachment files.
+All11 previously accepted repository copies still match the frozen manifest.
+Full contract and both accepted diagnostic reports, migrations/schema/history,
+backend/CI/locks/Compose and every protected leaf remain exact.
+
+### Concrete next proposal — C0-M3.1-NATIVE-CONTEXT-CI-RUN5
+
+**PROPOSED/PREPARED, NOT AUTHORIZED, NOT RUN.** RUN4 one-use approval6290230660
+is CONSUMED. Assignment6290903192 and this C6 return cover source/isolated LOCAL
+unit work only. This acceptance does not move an execution ref or grant a retry.
+
+After separate explicit approval, proposed action is exactly one expected-head,
+force=false fast-forward of c0/m3-1-native-context-ci-r1 from
+cf9d037dbf605ec01bc81306a546cac54a3f7f91 to the exact prepared C0 RUN5 commit/tree
+published in the acceptance/proposal. PR35 remains Draft. This allows only the
+first automatic pull_request/synchronize run,attempt1. Immediately beforehand,
+recheck exact candidate/parent/tree, unchanged main e205e220, PR35 old head and
+no active run which the workflow concurrency group would cancel; otherwise STOP.
+Record actual merge SHA, exactly ordered parents [main,candidate], equal tree,
+event/run/attempt/job/artifact identities and all complete evidence. No source
+mutation during execution; no manual dispatch/rerun/retry/cancel, second ref move,
+new PR, main/stock/settings change, merge, deployment or external/live action.
+
+Purpose: pass the corrected unit prerequisite and obtain the unmodified full
+generic802's failure/phase evidence and terminal outcomes for47 UNKNOWN cases.
+The88 earlier generic failures are unfixed; a green complete gate is not promised.
+Use all existing entrypoints/assertions/inventories, with no diagnostic selector
+or source patch. Existing11 jobs remain: whole normal durable25min, then dependent
+foundation45min on fresh resources with complete units/generic802/full tail;
+other9 jobs unchanged. At most25+45min serial allocation excluding queue time,
+not increased individual caps. Native20min/payload1080s; state/browser/compat25min;
+S600/P720/fixed120/+480/supervisor1200/cleanup90 all unchanged. Actions disposable
+LOCAL/TEST only. Product/VM/account/provider/Telegram/S3/LLM work is not included.
+
+CI-06 requires complete current0013/OFF generic802 with historical assertions;
+CI-07 requires all11 actual SUCCESS at one exact source, both complete foundation
+lanes, full native112/336/105/catalog167/45/635, full tail, clean/owned cleanup and
+persisted evidence. A failed durable prerequisite/skipped foundation is failure.
+C0/C2 must review failure origins/SQLSTATE/constraints and phase data against
+the nine-family taxonomy before issuing repair scopes. An ordinary capture may
+still not supply every C2 report section8 valid-V2/intended-origin/schema-role-
+profile/historical-teardown fact. The12 potentially vacuous negatives retain
+their observed result until intended-origin controls exist; no blanket stale-test
+classification and no C2 generic ten-path/helper repair assignment.
+
+RUN4 remains10SUCCESS/1FAILURE, generic802/full tail NOT_RUN; RUN3 remains latest
+generic evidence755terminal=667PASS+88FAIL,47UNKNOWN. CI-08 CLOSED LOCAL with
+ordinary RUN4 actual cleanup additionally PASS; journal-loss probe remains local.
+CI-09's local closure does not relabel RUN4. All prior closures/D1/D2/D3 retained,
+enforcement UNVERIFIED, IMPL-05 DEFERRED. A08/P01/P05/renewal/collector/account/A12/
+M4 remain later scopes. User owns merge; all implementation roles HOLD.
+
+---
+
+## History — RUN4 FAILED before generic PG; CI-09 unit clock OPEN / 2026-10-20 UTC
 
 **C0-M3.1-NATIVE-CONTEXT-CI-RUN4 completed: 10 SUCCESS / 1 FAILURE.**
 [Run39418189410 / attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/39418189410)

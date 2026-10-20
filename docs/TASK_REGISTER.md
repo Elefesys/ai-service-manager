@@ -2,7 +2,62 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — RUN4 FAILED before generic; CI-09 unit clock OPEN / 2026-10-20 UTC
+## CURRENT — CI-09 CLOSED LOCAL; C6 accepted; diagnostic RUN5 prepared / 2026-10-20 UTC
+
+C0 accepts [C6 UNIT-CLOCK-R1 return6291541015](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6291541015)
+as INTEGRATED / VERIFIED SOURCE + ISOLATED LOCAL UNIT only. Exact accepted commit
+1a3295a43434142a0642f473bf5b12b6f0197b2a,tree0b86b377f1fae3812cfb2d6f40c8742abdfaab98,
+sole parent86c62f6876b093fc9e0d9306630981e569223810. One test file,+147/-13;
+293 other leaves/modes exact. C0's prepared c0/m3-1-native-context-ci-r5 adds only
+HANDOFF/register with sole parent accepted C6; exact final commit/tree are in
+the C0 acceptance/proposal comment. No execution branch moved by preparation.
+
+| Task / finding | Current status |
+|---|---|
+| C6-M3.1-NATIVE-CONTEXT-UNIT-CLOCK-R1 | INTEGRATED / VERIFIED SOURCE+LOCAL UNIT; COMPLETE/HOLD |
+| C0-NC-CI-09/P2 | CLOSED LOCAL: synthetic unit clocks independent of host epoch; operational guards unchanged |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN5 | PROPOSED/PREPARED; NOT AUTHORIZED / NOT RUN |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN4 | Historical COMPLETED/FAILED:10SUCCESS, foundation unit FAILURE before generic |
+| C0-NC-CI-06/P2 | OPEN: RUN3 latest generic667PASS+88FAIL/47UNKNOWN; RUN4 generic NOT_RUN |
+| C0-NC-CI-07/P2 | OPEN: full generic/tail and all11 actual SUCCESS not established |
+| C0-NC-CI-08/P2 | CLOSED LOCAL; ordinary RUN4 owned cleanup also PASS; journal-loss probe local |
+| C2 generic repair; C1/C2/C3/C5/C6/C8 and other implementation tasks | HOLD; no generic repair scope issued |
+
+C0 independent full ordinary unit selector: **2121 PASS +130 subtests PASS,
+907 integration deselected,4 warnings,368.71s,exit0** on exact C6 source.
+All2103 prior unit IDs preserved in order,+18 additions,runner363 included;
+no failed/error/skipped/xfail cases. Independent base RED at0/490.452973924 and
+corrected GREEN confirm the same original nodes. C6 complete2121+130/385.07s,
+32/32 corrected epoch matrix,144 evidence hashes and exact294-file archive checked.
+All171 unrelated definitions, original asserts/decorators/imports/globals,
+operational consumers/controllers/clocks/caps unchanged; specific refusal origins
+and905.198142485 control preserved. Ruff/format/diff checks PASS.
+
+Generic802/native112 inventories unchanged; constructed source pairing verifies
+all4 components/167functions/45tables/635columns. No new Docker/PG/Actions evidence.
+Only five originals available this turn were checked as attachments; six failed
+to load and are explicitly unverified as attachments. All11 accepted Git copies
+match the manifest. [Current HANDOFF](tasks/M3_HANDOFF.md) records exact scope,
+commands/results/hashes, missing-attachment limitation and next-run conditions.
+
+RUN5 proposes one expected-head/force=false FF of Draft PR35 execution branch
+c0/m3-1-native-context-ci-r1 fromcf9d037dbf605ec01bc81306a546cac54a3f7f91 to the
+exact prepared candidate, first automatic synchronize run/attempt1 only, after
+new explicit approval and fresh candidate/main/no-active-run checks. RUN4 approval
+6290230660 is CONSUMED. No rerun/retry/dispatch/cancel or source change in-run.
+Purpose is complete unmodified generic802 diagnostics, including47 UNKNOWN;
+88 prior failures are unfixed. All11 jobs and individual caps unchanged:
+durable25 then foundation45, native20/payload1080, state/browser/compat25,
+S600/P720/fixed120/+480/supervisor1200/cleanup90. No generic repair assignment.
+
+PR35 remains Draft/BLOCKED atcf9d037; main e205e22051bc06295758b504d84699652b176c15/
+schema0012 and stockaf7482dede085bc033e3fee34f9a2425124351ee unchanged.
+M3 IN_PROGRESS; user owns merge. D1/D2/D3/prior closures retained, enforcement
+UNVERIFIED, IMPL-05 DEFERRED; account/live/deploy and later M3/M4 scopes separate.
+
+---
+
+## History — RUN4 FAILED before generic; CI-09 unit clock OPEN / 2026-10-20 UTC
 
 [C0 RUN4](https://github.com/Elefesys/ai-service-manager/actions/runs/39418189410),
 attempt1: **10 SUCCESS / 1 FAILURE**, completed12:19:24 UTC. One-use approval
