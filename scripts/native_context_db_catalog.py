@@ -2411,9 +2411,26 @@ def foundation_failure(error, locations, catalog):
     }
     tables = {t.split(".", 1)[1] for t in catalog["columns"]}
     functions = {signature.split("(", 1)[0] for signature in catalog["functions"]}
+    ddl = catalog["nonfunction_ddl"]
+    require(
+        type(ddl) is list
+        and ddl
+        and all(
+            type(row) is dict
+            and set(row) == {"index", "revision", "sql"}
+            and type(row["index"]) is int
+            and row["index"] >= 0
+            and type(row["revision"]) is str
+            and re.fullmatch(r"[0-9]{4}", row["revision"])
+            and type(row["sql"]) is str
+            and row["sql"].strip()
+            for row in ddl
+        ),
+        "Foundation source DDL records",
+    )
     constraints = set(
         re.findall(
-            r"\bCONSTRAINT\s+([a-z_][a-z_0-9]{0,62})\b", "\n".join(catalog["nonfunction_ddl"])
+            r"\bCONSTRAINT\s+([a-z_][a-z_0-9]{0,62})\b", "\n".join(row["sql"] for row in ddl)
         )
     )
     labels = {

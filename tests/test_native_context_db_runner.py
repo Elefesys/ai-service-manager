@@ -32,6 +32,7 @@ REQUIRED_MODULES = (
 def foundation_git(tmp_path, monkeypatch):
     """Constructed clean Git source and journals; no product fixtures or resources."""
     actual = lane.ROOT
+    producer = lane.source_catalog
     root = tmp_path / "source"
     root.mkdir()
     for relative in (
@@ -82,11 +83,15 @@ def foundation_git(tmp_path, monkeypatch):
         "columns": {"app.messages": ["id"]},
         "functions": {"platform.safe_function()": {}},
         "nonfunction_ddl": [
-            "CREATE TABLE app.messages (id integer CONSTRAINT approved_check CHECK (id>0))"
+            {
+                "index": 0,
+                "revision": "0001",
+                "sql": "CREATE TABLE app.messages (id integer CONSTRAINT approved_check CHECK (id>0))",
+            }
         ],
     }
     monkeypatch.setattr(lane, "source_catalog", lambda _: catalog)
-    return SimpleNamespace(root=root, actual=actual, git=git, catalog=catalog)
+    return SimpleNamespace(root=root, actual=actual, git=git, catalog=catalog, producer=producer)
 
 
 @pytest.fixture
@@ -106,6 +111,254 @@ def foundation_rows(store, name="cases.jsonl"):
 
 def constructed_report(phase, outcome="passed", duration=0.01):
     return SimpleNamespace(when=phase, outcome=outcome, duration=duration)
+
+
+@pytest.fixture
+def foundation_real_catalog_sink(foundation_git, monkeypatch, request):
+    """Real migration expansion in an owned synthetic Git checkout; no database."""
+    fixture = foundation_git
+    paths = sorted((fixture.actual / "migrations/versions").glob("*.py"))
+    assert len(paths) == 13
+    for source in paths:
+        target = fixture.root / source.relative_to(fixture.actual)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(source.read_bytes())
+        assert target.read_bytes() == source.read_bytes()
+    fixture.git("add", "migrations")
+    fixture.git("commit", "-qm", "actual migration source for local formatter checks")
+    monkeypatch.setattr(lane, "source_catalog", fixture.producer)
+    assert lane.source_catalog is fixture.producer
+    return request.getfixturevalue("foundation_sink")
+
+
+@pytest.mark.parametrize(
+    "constraint",
+    ("conversations_control_mode_check", "conversation_control_receipts_audit_fk", "private_guess"),
+)
+def test_foundation_real_catalog_constraint_whitelist(constraint):
+    from psycopg.errors import CheckViolation
+    from psycopg.pq import DiagnosticField as D
+
+    catalog = lane.source_catalog(lane.ROOT)
+    assert len(catalog["nonfunction_ddl"]) == 717
+    assert all(set(row) == {"index", "revision", "sql"} for row in catalog["nonfunction_ddl"])
+    before = copy.deepcopy(catalog)
+    error = CheckViolation(
+        "PRIVATE_SENTINEL_DSN_SQL",
+        info={
+            D.SQLSTATE: b"23514",
+            D.SCHEMA_NAME: b"app",
+            D.TABLE_NAME: b"conversations",
+            D.CONSTRAINT_NAME: constraint.encode(),
+            D.CONTEXT: b"PL/pgSQL function platform.human_context_schema_profile() line 7 at PRIVATE_SENTINEL_DSN_SQL",
+        },
+    )
+    value = lane.foundation_failure(error, {}, catalog)
+    row = value["chain"][0]
+    assert row["exception"] == "CheckViolation" and row["sqlstate"] == "23514"
+    assert row["schema"] == "app" and row["table"] == "conversations"
+    assert row["constraint"] == ("UNKNOWN" if constraint == "private_guess" else constraint)
+    assert row["plpgsql_frames"] == [
+        {"function": "platform.human_context_schema_profile", "line": 7}
+    ]
+    raw = json.dumps(value, ensure_ascii=True).encode()
+    assert raw.isascii() and len(raw) <= 3400 and b"PRIVATE_SENTINEL" not in raw
+    assert b"private_guess" not in raw and catalog == before
+
+
+@pytest.mark.parametrize("phase", ("setup", "call", "teardown"))
+@pytest.mark.parametrize("fault", (None, "write", "fsync"))
+def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_sink, phase, fault):
+    store = foundation_real_catalog_sink
+    node = "tests/test_constructed.py::test_call"
+    journal = lane.GenericJournal(store, [node])
+    assert len(journal.catalog["nonfunction_ddl"]) == 717
+    journal.start(node)
+    append = store.append
+
+    def append_failure(name, value):
+        if name == "failures.jsonl" and fault:
+            with patch.object(lane.os, fault, side_effect=OSError("PRIVATE_SENTINEL_DSN_SQL")):
+                return append(name, value)
+        return append(name, value)
+
+    phases = [p for p in ("setup", "call", "teardown") if not (phase == "setup" and p == "call")]
+    with patch.object(store, "append", side_effect=append_failure):
+        for current in phases:
+            journal.report(
+                node,
+                constructed_report(current, "failed" if current == phase else "passed"),
+                AssertionError("PRIVATE_SENTINEL_DSN_SQL") if current == phase else None,
+            )
+            if current == phase:
+                # Failure bytes are persisted immediately, before finish/terminal summary.
+                assert not store.read("generic-result.json")
+                assert len(foundation_rows(store, "failures.jsonl")) == (
+                    0 if fault == "write" else 1
+                )
+    journal.finish(7)
+    assert json.loads(store.read("generic-result.json")) == {
+        "pytest_exit": 7,
+        "complete": True,
+        "evidence_failed": fault is not None,
+        "expected": 1,
+        "completed": 1,
+    }
+    rows = foundation_rows(store)
+    assert [(r["event"], r.get("phase")) for r in rows] == [
+        ("start", None),
+        *(("phase", p) for p in phases),
+        ("case-end", None),
+    ]
+    assert rows[-1]["outcome"] == "FAILED"
+    assert [r["sequence"] for r in rows] == list(range(1, len(rows) + 1))
+    failures = foundation_rows(store, "failures.jsonl")
+    assert [r["sequence"] for r in failures] == list(range(1, len(failures) + 1))
+    assert all(
+        r["index"] == 0 and r["nodeid_sha256"] == lane.sha256(node.encode())
+        for r in rows + failures
+    )
+    if failures:
+        assert failures[0]["phase"] == phase
+        assert failures[0]["failure"]["chain"][0]["exception"] == "AssertionError"
+    for name in ("cases.jsonl", "failures.jsonl", "issues.jsonl"):
+        raw = store.read(name)
+        assert not raw or (raw.isascii() and raw.endswith(b"\n"))
+        assert all(len(line) + 1 <= 4096 for line in raw.splitlines())
+        assert b"PRIVATE_SENTINEL" not in raw
+    assert bool(store.read("issues.jsonl")) == (fault is not None)
+    if fault:
+        with pytest.raises(lane.Refusal, match="Foundation evidence sink failed"):
+            lane.foundation_check(store)
+    else:
+        # A successfully recorded failed test still cannot pass the strict gate.
+        for p in (*lane.FOUNDATION_HOST, *lane.FOUNDATION_CORE, "cleanup"):
+            store.append("host.jsonl", {"phase": p, "edge": "start"})
+            store.append("host.jsonl", {"phase": p, "edge": "end", "status": 0})
+        store.publish("execution.json", {"primary_exit": 7, "cleanup_exit": 0})
+        with pytest.raises(lane.Refusal, match="Foundation execution/cleanup failed"):
+            lane.foundation_check(store)
+
+
+@pytest.mark.parametrize(
+    "fault",
+    (
+        "missing",
+        "strings",
+        "empty",
+        "tuple",
+        "missing-sql",
+        "sql-type",
+        "empty-sql",
+        "index",
+        "revision",
+        "extra",
+    ),
+)
+def test_foundation_real_catalog_malformed_records_refuse(fault):
+    catalog = lane.source_catalog(lane.ROOT)
+    if fault == "missing":
+        del catalog["nonfunction_ddl"]
+    elif fault == "strings":
+        catalog["nonfunction_ddl"] = [row["sql"] for row in catalog["nonfunction_ddl"]]
+    elif fault == "empty":
+        catalog["nonfunction_ddl"] = []
+    elif fault == "tuple":
+        catalog["nonfunction_ddl"] = tuple(catalog["nonfunction_ddl"])
+    else:
+        row = catalog["nonfunction_ddl"][0]
+        if fault == "missing-sql":
+            del row["sql"]
+        else:
+            key, value = {
+                "sql-type": ("sql", None),
+                "empty-sql": ("sql", " "),
+                "index": ("index", True),
+                "revision": ("revision", "PRIVATE_SENTINEL"),
+                "extra": ("extra", "PRIVATE_SENTINEL"),
+            }[fault]
+            row[key] = value
+    expected = KeyError if fault == "missing" else lane.Refusal
+    with pytest.raises(expected) as caught:
+        lane.foundation_failure(AssertionError("PRIVATE_SENTINEL"), {}, catalog)
+    assert caught.value.args == (
+        "nonfunction_ddl" if fault == "missing" else "Foundation source DDL records",
+    )
+
+
+def test_foundation_real_catalog_pytest_reports(foundation_real_catalog_sink, monkeypatch):
+    store = foundation_real_catalog_sink
+    # Each nested pytest run imports its own synthetic module under the same
+    # name. Restore that one cache entry on teardown, including failed checks.
+    monkeypatch.setitem(lane.sys.modules, "test_constructed", None)
+    del lane.sys.modules["test_constructed"]
+    nodes = [
+        "tests/test_constructed.py::test_" + name for name in ("pass", "call", "setup", "teardown")
+    ]
+
+    def proof(private, evidence, commands, env):
+        a, n, g = partition_fixture()
+        a["nodeids"] = nodes + n["integration_nodeids"]
+        a["integration_nodeids"] = a["nodeids"][:]
+        g["nodeids"] = g["integration_nodeids"] = nodes[:]
+        result = lane.validate_partition(a, n, g)
+        for name, data in (
+            ("partition-all-pg.json", a),
+            ("partition-native.json", n),
+            ("partition-generic-pg.json", g),
+            ("integration-partition.json", result),
+        ):
+            lane.write_json(private / name, data)
+        return result, nodes
+
+    monkeypatch.setattr(lane, "prove_partition", proof)
+    monkeypatch.chdir(lane.ROOT)
+    assert lane.generic_integration() == 1
+    assert json.loads(store.read("generic-result.json")) == {
+        "pytest_exit": 1,
+        "complete": True,
+        "evidence_failed": False,
+        "expected": 4,
+        "completed": 4,
+    }
+    assert not store.read("issues.jsonl")
+    rows, failures = foundation_rows(store), foundation_rows(store, "failures.jsonl")
+    assert [r["sequence"] for r in rows] == list(range(1, 20))
+    assert [(r["index"], r["phase"], r["sequence"]) for r in failures] == [
+        (1, "call", 1),
+        (2, "setup", 2),
+        (3, "teardown", 3),
+    ]
+    assert [r["failure"]["chain"][0]["exception"] for r in failures] == [
+        "AssertionError",
+        "ValueError",
+        "RuntimeError",
+    ]
+    assert [(r["index"], r["event"], r.get("phase")) for r in rows] == [
+        (i, event, phase)
+        for i in range(4)
+        for event, phase in (
+            ("start", None),
+            ("phase", "setup"),
+            ("phase", "call"),
+            ("phase", "teardown"),
+            ("case-end", None),
+        )
+        if not (i == 2 and phase == "call")
+    ]
+    assert [r["outcome"] for r in rows if r["event"] == "case-end"] == [
+        "PASSED",
+        "FAILED",
+        "FAILED",
+        "FAILED",
+    ]
+    assert all(
+        r["nodeid_sha256"] == lane.sha256(nodes[r["index"]].encode()) for r in rows + failures
+    )
+    for name in ("cases.jsonl", "failures.jsonl"):
+        raw = store.read(name)
+        assert raw.isascii() and raw.endswith(b"\n") and b"PRIVATE_SENTINEL" not in raw
+        assert all(len(line) + 1 <= 4096 for line in raw.splitlines())
 
 
 def test_foundation_workflow_has_eleven_required_jobs_serial_source_and_always_gates():
