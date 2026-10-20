@@ -12,6 +12,7 @@ import hashlib
 import importlib.metadata
 import inspect
 import json
+import math
 import os
 import re
 import secrets
@@ -46,13 +47,14 @@ PG_MODULES = (
     "tests/test_m3_1_native_context_api_postgres.py",
     "tests/test_m3_1_native_context_runtime_postgres.py",
 )
-# Bind the actual inputs, including all nine unchanged ordinary jobs and their
-# default merge/main checkout, unconditional same-commit reusable call, pinned
+# Bind the actual inputs, including ten ordinary jobs (the two serial foundation
+# boundaries plus the unchanged eight) and the unconditional native job: eleven.
+# Preserve default merge/main checkout, unconditional same-commit reusable call, pinned
 # owned lane and exact generic command. No fallback/embedded workflow is used.
 CI_INPUT_SHA256 = {
-    ".github/workflows/ci.yml": "475e9c7dc32bed8d0b5ab12260b1ab698835f634eb8c4b089d7c53c0af6d130d",
+    ".github/workflows/ci.yml": "cdb6e92b90c3070ea22812e0edd8df5767bbbea7a67c8304a54d2282ef23c691",
     ".github/workflows/native-context-db.yml": "ff43d2470b56d26cf9c616cad5bc570e31634a19d97bdec4f28e73a205e049fd",
-    "scripts/check_backend.sh": "bd836b9afaf76ffc5e612f33e3662eef4671665b4147f4ef39247b402bb262ee",
+    "scripts/check_backend.sh": "1473e64b8ed0819b046b764f281072583271acd5f7b0929b3f8aa959c5d69330",
 }
 SECRET_ENV = (
     "ASM_NATIVE_TEST_ALLOW_RESET",
@@ -1816,6 +1818,967 @@ def prove_partition(private, evidence, commands, env):
     return proof, inventories[2]["nodeids"]
 
 
+FOUNDATION_HOST = ("init", "config", "build")
+FOUNDATION_CORE = (
+    "checks",
+    "storage-version",
+    "storage-admin-version",
+    "services",
+    "http",
+    "images",
+)
+FOUNDATION_BACKEND = (
+    "ruff",
+    "format",
+    "mypy",
+    "unit",
+    "upgrade",
+    "repeat-upgrade",
+    "generic",
+    "downgrade",
+    "reupgrade",
+    "contracts",
+    "wheel-one",
+    "wheel-two",
+    "wheel-compare",
+    "wheel-hash",
+)
+FOUNDATION_FILES = (
+    "binding.json",
+    "host.jsonl",
+    "backend.jsonl",
+    "cases.jsonl",
+    "failures.jsonl",
+    "issues.jsonl",
+    "partition-all-pg.json",
+    "partition-native.json",
+    "partition-generic-pg.json",
+    "integration-partition.json",
+    "generic-result.json",
+    "execution.json",
+)
+FOUNDATION_COPY = (
+    "backend/",
+    "migrations/",
+    "tests/",
+    "scripts/",
+    "contracts/",
+    "pyproject.toml",
+    "uv.lock",
+    "alembic.ini",
+    "infra/postgres/ensure_m1_3_prerequisites.sh",
+    ".github/workflows/ci.yml",
+    ".github/workflows/native-context-db.yml",
+)
+FOUNDATION_LIMIT = 16 * 1024 * 1024
+FOUNDATION_LIFECYCLES = (
+    "fresh",
+    "recovery",
+    "recover-stopped",
+    "recover-missing",
+    "legacy-disable",
+    "legacy-stop",
+)
+
+
+def foundation_stat(info, uid, *, directory=False):
+    require(
+        (stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode))
+        and info.st_uid == uid
+        and stat.S_IMODE(info.st_mode) == (0o700 if directory else 0o600)
+        and (directory or info.st_nlink == 1),
+        "Foundation evidence type/owner/mode/link mismatch",
+    )
+    return [info.st_dev, info.st_ino]
+
+
+def foundation_prepare(route):
+    """No resources: admit clean source, then exclusively create host-owned evidence."""
+    require(route in {"all", "normal-durable", "foundation-core"}, "Foundation route")
+    require(not os.environ.get("ASM_FOUNDATION_EVIDENCE"), "Foundation evidence cannot be adopted")
+    require_ci_inputs()
+    head = git_bytes(ROOT, "rev-parse", "HEAD").decode().strip()
+    tree, manifest = require_source(ROOT, head)
+    headers = git_bytes(ROOT, "cat-file", "commit", head).decode().split("\n\n", 1)[0].splitlines()
+    parents = [line[7:] for line in headers if line.startswith("parent ")]
+    identity = {"head": head, "tree": tree, "parents": parents, "event_payload_sha256": None}
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        require(os.environ.get("GITHUB_SHA") == head, "Foundation event/HEAD mismatch")
+        job = os.environ.get("GITHUB_JOB", "")
+        workflow = os.environ.get("GITHUB_WORKFLOW_REF", "")
+        if route != "all":
+            require(
+                job == ("foundation-durable" if route == "normal-durable" else "foundation"),
+                "Foundation job/route mismatch",
+            )
+            require(
+                workflow.startswith(REPOSITORY + "/.github/workflows/ci.yml@"),
+                "Foundation workflow",
+            )
+            admitted, _ = admit_event()
+            identity.update(admitted)
+        else:
+            # The existing full caller has its own workflow_dispatch/push policy.
+            # Do not broaden native/event_identity to admit storage packaging.
+            require(
+                job == "verify"
+                and workflow.startswith(REPOSITORY + "/.github/workflows/storage-images.yml@")
+                and os.environ.get("GITHUB_REPOSITORY") == REPOSITORY
+                and os.environ.get("GITHUB_REPOSITORY_ID") == str(REPOSITORY_ID)
+                and (os.environ.get("GITHUB_EVENT_NAME"), os.environ.get("GITHUB_REF"))
+                in {
+                    ("workflow_dispatch", "refs/heads/main"),
+                    ("push", "refs/heads/c6/m2-live-smoke"),
+                },
+                "Foundation full storage caller",
+            )
+            identity["event_payload_sha256"] = sha256(
+                Path(os.environ["GITHUB_EVENT_PATH"]).read_bytes()
+            )
+        run, attempt = os.environ.get("GITHUB_RUN_ID", ""), os.environ.get("GITHUB_RUN_ATTEMPT", "")
+        require(
+            all(re.fullmatch(r"[1-9][0-9]{0,19}", x) for x in (run, attempt)),
+            "Foundation run identity",
+        )
+    else:
+        job, run, attempt = "local", str(os.getpid()), "1"
+    uid = os.getuid()
+    reports = ROOT / "reports"
+    require(not reports.is_symlink(), "Symlinked reports")
+    reports.mkdir(exist_ok=True)
+    require(
+        reports.stat().st_uid == uid
+        and stat.S_ISDIR(reports.stat().st_mode)
+        and not reports.stat().st_mode & 0o022,
+        "Unsafe reports parent",
+    )
+    if route != "foundation-core":
+        require(
+            not any(
+                (reports / name).exists() or (reports / name).is_symlink()
+                for name in ("telegram-egress.json", "candidate-egress-source.json")
+            ),
+            "Foundation cannot adopt previous durable reports",
+        )
+    parent = reports / ("foundation-" + job)
+    require(not parent.is_symlink(), "Symlinked foundation parent")
+    parent.mkdir(mode=0o700, exist_ok=True)
+    foundation_stat(parent.stat(), uid, directory=True)
+    path = parent / (run + "-" + attempt + "-" + head + "-" + secrets.token_hex(8))
+    require(path.absolute() == path.resolve(), "Foundation path escape")
+    path.mkdir(mode=0o700)
+    files = {}
+    for name in FOUNDATION_FILES:
+        fd = os.open(path / name, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        try:
+            files[name] = foundation_stat(os.fstat(fd), uid)
+        finally:
+            os.close(fd)
+    binding = {
+        "version": 1,
+        "uid": uid,
+        "directory": foundation_stat(path.stat(), uid, directory=True),
+        "files": files,
+        "route": route,
+        "run": run,
+        "attempt": attempt,
+        "job": job,
+        "identity": identity,
+        "source_manifest": manifest,
+        "origin_ns": time.monotonic_ns(),
+        "ci_inputs": CI_INPUT_SHA256,
+        "source_identity_is_runtime_approval": False,
+        "project": "asm-foundation-" + route + "-" + path.name.rsplit("-", 1)[1]
+        if route != "all"
+        else os.environ.get("COMPOSE_PROJECT_NAME", ROOT.name),
+    }
+    raw = (json.dumps(binding, sort_keys=True, ensure_ascii=True) + "\n").encode()
+    fd = os.open(path / "binding.json", os.O_WRONLY | os.O_NOFOLLOW)
+    try:
+        require(os.write(fd, raw) == len(raw), "Partial foundation binding")
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        values = {
+            "ASM_FOUNDATION_EVIDENCE": str(path),
+            "ASM_FOUNDATION_OWNER_UID": str(uid),
+            "ASM_FOUNDATION_BINDING_SHA256": sha256(raw),
+        }
+        require(
+            all("\n" not in x and "\r" not in x for x in values.values()), "Invalid foundation path"
+        )
+        with open(os.environ["GITHUB_ENV"], "a") as output:
+            output.write("".join(k + "=" + v + "\n" for k, v in values.items()))
+    return path
+
+
+class FoundationEvidence:
+    """Fixed precreated files; inode/host-UID pins also apply inside the narrow bind."""
+
+    def __init__(self):
+        path = Path(os.environ["ASM_FOUNDATION_EVIDENCE"])
+        require(path.is_absolute() and path == path.resolve(), "Foundation evidence path/symlink")
+        require(
+            path == Path("/asm-evidence") or path.is_relative_to(ROOT / "reports"),
+            "Foundation evidence outside reports/bind",
+        )
+        uid = os.environ["ASM_FOUNDATION_OWNER_UID"]
+        require(re.fullmatch(r"0|[1-9][0-9]{0,9}", uid), "Foundation UID")
+        self.uid, self.path = int(uid), path
+        directory = foundation_stat(path.lstat(), self.uid, directory=True)
+        self.binding = None
+        raw = self.read("binding.json", limit=2 * 1024 * 1024)
+        require(
+            sha256(raw) == os.environ["ASM_FOUNDATION_BINDING_SHA256"], "Foundation binding digest"
+        )
+        value = json.loads(raw)
+        require(
+            type(value["version"]) is int
+            and value["version"] == 1
+            and type(value["uid"]) is int
+            and value["uid"] == self.uid
+            and value["directory"] == directory
+            and set(value["files"]) == set(FOUNDATION_FILES)
+            and value["route"] in {"all", "normal-durable", "foundation-core"}
+            and type(value["origin_ns"]) is int
+            and 0 < value["origin_ns"] <= time.monotonic_ns()
+            and value["ci_inputs"] == CI_INPUT_SHA256,
+            "Foundation binding identity",
+        )
+        self.binding = value
+        require(
+            type(value["source_manifest"]) is list
+            and value["source_manifest"]
+            and len({entry["path"] for entry in value["source_manifest"]})
+            == len(value["source_manifest"])
+            and all(
+                type(entry["path"]) is str
+                and not Path(entry["path"]).is_absolute()
+                and ".." not in Path(entry["path"]).parts
+                and entry["path"] == Path(entry["path"]).as_posix()
+                and entry["mode"] in {"100644", "100755"}
+                and re.fullmatch(r"[0-9a-f]{64}", entry["sha256"])
+                for entry in value["source_manifest"]
+            )
+            and set(CI_INPUT_SHA256) <= {entry["path"] for entry in value["source_manifest"]},
+            "Foundation source manifest",
+        )
+        for name in FOUNDATION_FILES:
+            fd = self.open(name)
+            os.close(fd)
+        require_ci_inputs()
+        for entry in value["source_manifest"]:
+            name = entry["path"]
+            if any(name.startswith(p) if p.endswith("/") else name == p for p in FOUNDATION_COPY):
+                source = ROOT / name
+                require(
+                    source.is_file()
+                    and not source.is_symlink()
+                    and sha256(source.read_bytes()) == entry["sha256"]
+                    and bool(source.stat().st_mode & 0o111) == (entry["mode"] == "100755"),
+                    "Foundation copied source differs",
+                )
+
+    def open(self, name):
+        require(name in FOUNDATION_FILES, "Unknown foundation file")
+        require(self.path == self.path.resolve(), "Foundation directory replaced")
+        directory = foundation_stat(self.path.lstat(), self.uid, directory=True)
+        require(
+            self.binding is None or directory == self.binding["directory"],
+            "Foundation directory inode",
+        )
+        directory_fd = os.open(self.path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            require(
+                foundation_stat(os.fstat(directory_fd), self.uid, directory=True) == directory,
+                "Foundation directory race",
+            )
+            fd = os.open(
+                name, os.O_RDWR | os.O_APPEND | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd
+            )
+        finally:
+            os.close(directory_fd)
+        try:
+            identity = foundation_stat(os.fstat(fd), self.uid)
+            require(
+                self.binding is None or identity == self.binding["files"][name],
+                "Foundation file inode",
+            )
+        except Exception:
+            os.close(fd)
+            raise
+        return fd
+
+    def read(self, name, *, limit=FOUNDATION_LIMIT):
+        fd = self.open(name)
+        try:
+            size = os.fstat(fd).st_size
+            require(size <= limit, "Foundation file limit")
+            raw = os.pread(fd, size + 1, 0)
+            require(len(raw) == size, "Foundation read changed")
+            return raw
+        finally:
+            os.close(fd)
+
+    def publish(self, name, value):
+        raw = (json.dumps(value, ensure_ascii=True, sort_keys=True) + "\n").encode()
+        require(len(raw) <= FOUNDATION_LIMIT, "Foundation JSON limit")
+        fd = self.open(name)
+        try:
+            require(os.fstat(fd).st_size == 0, "Foundation JSON cannot be replaced/adopted")
+            require(os.write(fd, raw) == len(raw), "Partial foundation JSON")
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    def append(self, name, row):
+        fd = self.open(name)
+        try:
+            size = os.fstat(fd).st_size
+            previous = os.pread(fd, min(size, 4096), max(0, size - 4096))
+            require(not size or previous.endswith(b"\n"), "Torn foundation journal")
+            sequence = json.loads(previous.splitlines()[-1])["sequence"] + 1 if size else 1
+            elapsed = (time.monotonic_ns() - self.binding["origin_ns"]) / 1e9
+            require(math.isfinite(elapsed) and elapsed >= 0, "Foundation elapsed")
+            raw = (
+                json.dumps(
+                    {**row, "version": 1, "sequence": sequence, "elapsed": elapsed},
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            ).encode()
+            require(
+                len(raw) <= 4096 and size + len(raw) <= FOUNDATION_LIMIT, "Foundation journal limit"
+            )
+            require(os.write(fd, raw) == len(raw), "Partial foundation journal")
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+
+    def issue(self):
+        # Closed signal only; even a sink exception may contain credentials/argv.
+        print("FOUNDATION_EVIDENCE_WRITE_FAILED", flush=True)
+        try:
+            self.append("issues.jsonl", {"issue": "EVIDENCE_WRITE_FAILED"})
+        except Exception:
+            pass  # Missing/invalid records independently fail the completeness gate.
+
+
+def foundation_store():
+    return FoundationEvidence()
+
+
+def foundation_step(stream, phase, argv):
+    require(stream in {"host", "backend"}, "Foundation phase stream")
+    allowed = (
+        (*FOUNDATION_HOST, "normal-durable", *FOUNDATION_CORE, "cleanup")
+        if stream == "host"
+        else FOUNDATION_BACKEND
+    )
+    require(phase in allowed and argv, "Foundation phase/command")
+    store = foundation_store()
+    recording_failed = False
+    try:
+        store.append(stream + ".jsonl", {"phase": phase, "edge": "start"})
+    except Exception:
+        recording_failed = True
+        store.issue()
+    child, interrupted = None, None
+
+    def forward(signum, frame):
+        nonlocal interrupted
+        interrupted = signum
+        if child is not None:
+            try:
+                # The unchanged durable shell embeds Python. SIGINT enters its
+                # existing finally/owned90s cleanup; retain the original incoming
+                # cancellation status below, never grant extra job time.
+                delivered = (
+                    signal.SIGINT
+                    if phase == "normal-durable" and signum == signal.SIGTERM
+                    else signum
+                )
+                os.killpg(child.pid, delivered)
+            except ProcessLookupError:
+                pass
+
+    handlers = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGINT)}
+    for s in handlers:
+        signal.signal(s, forward)
+    try:
+        try:
+            child = subprocess.Popen(argv, start_new_session=True)
+        except OSError:
+            code = 127
+        else:
+            if interrupted is not None:
+                forward(interrupted, None)
+            try:
+                code = child.wait(timeout=90 if phase == "cleanup" else None)
+            except subprocess.TimeoutExpired:
+                os.killpg(child.pid, signal.SIGKILL)
+                child.wait()
+                code = 124
+            code = 128 - code if code < 0 else code
+        child_code = code
+        if interrupted is not None:
+            code = 128 + interrupted
+    finally:
+        for s, previous in handlers.items():
+            signal.signal(s, previous)
+    try:
+        store.append(
+            stream + ".jsonl",
+            {
+                "phase": phase,
+                "edge": "end",
+                "status": code,
+                "process_exit": child_code,
+                "signal": interrupted,
+            },
+        )
+    except Exception:
+        recording_failed = True
+        store.issue()
+    # This is an evidence gate after the process, not a replacement for its exit.
+    # A failed primary/signal always wins, including when every sink is broken.
+    return code if code else int(recording_failed)
+
+
+def foundation_locations(manifest):
+    """Source-relative frame ranges; never traceback formatting/source statements."""
+    result = {}
+    for entry in manifest:
+        relative = entry["path"]
+        if not relative.endswith(".py") or relative.split("/", 1)[0] not in {
+            "backend",
+            "tests",
+            "scripts",
+            "migrations",
+        }:
+            continue
+        path = ROOT / relative
+        source = path.read_text()
+        require(
+            not path.is_symlink() and sha256(source.encode()) == entry["sha256"],
+            "Foundation frame source drift",
+        )
+        tree = ast.parse(source)
+        result[relative] = [("<module>", 1, max(1, len(source.splitlines())))]
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                result[relative].append((node.name, node.lineno, node.end_lineno))
+    return result
+
+
+def foundation_failure(error, locations, catalog):
+    classes = {
+        "AssertionError",
+        "ValueError",
+        "TypeError",
+        "KeyError",
+        "RuntimeError",
+        "Refusal",
+        "MessagingError",
+        "DBAPIError",
+        "OperationalError",
+        "ProgrammingError",
+        "IntegrityError",
+        "DatabaseError",
+        "InternalError",
+        "InterfaceError",
+        "TimeoutError",
+        "CancelledError",
+        "DeadlockDetected",
+        "LockNotAvailable",
+        "ForeignKeyViolation",
+        "CheckViolation",
+        "NotNullViolation",
+        "UniqueViolation",
+        "SerializationFailure",
+        "InFailedSqlTransaction",
+    }
+    tables = {t.split(".", 1)[1] for t in catalog["columns"]}
+    functions = {signature.split("(", 1)[0] for signature in catalog["functions"]}
+    constraints = set(
+        re.findall(
+            r"\bCONSTRAINT\s+([a-z_][a-z_0-9]{0,62})\b", "\n".join(catalog["nonfunction_ddl"])
+        )
+    )
+    labels = {
+        c: c.__name__
+        for c in (
+            AssertionError,
+            ValueError,
+            TypeError,
+            KeyError,
+            RuntimeError,
+            TimeoutError,
+            Refusal,
+        )
+    }
+    for name in (
+        "sqlalchemy.exc",
+        "psycopg",
+        "psycopg.errors",
+        "asyncio.exceptions",
+        "asm.messaging.errors",
+    ):
+        module = sys.modules.get(name)
+        if module is not None:
+            labels.update(
+                {
+                    value: key
+                    for key, value in vars(module).items()
+                    if key in classes and isinstance(value, type)
+                }
+            )
+    psycopg = sys.modules.get("psycopg")
+    diagnostic = (
+        vars(sys.modules["psycopg.errors"]).get("Diagnostic")
+        if "psycopg.errors" in sys.modules
+        else None
+    )
+    pg_error = vars(psycopg).get("Error") if psycopg is not None else None
+
+    def field(value, name):
+        try:
+            raw = inspect.getattr_static(value, name, None)
+            if (
+                name in {"__traceback__", "__cause__", "__context__"}
+                and raw is BaseException.__dict__[name]
+            ):
+                return raw.__get__(value, type(value))
+            if isinstance(raw, property):
+                # Only exact pinned psycopg properties may be evaluated. Foreign
+                # descriptors, including properties raising BaseException, are inert.
+                if (
+                    diagnostic is not None
+                    and type(value) is diagnostic
+                    and raw is inspect.getattr_static(diagnostic, name, None)
+                ):
+                    return raw.__get__(value, diagnostic)
+                if (
+                    pg_error is not None
+                    and type(value) in labels
+                    and isinstance(value, pg_error)
+                    and raw is inspect.getattr_static(pg_error, name, None)
+                ):
+                    return raw.__get__(value, type(value))
+                return None
+            return raw
+        except Exception:
+            return None
+
+    def known(value, choices):
+        return value if type(value) is str and value in choices else "UNKNOWN"
+
+    chain, seen, pending = [], set(), [("primary", error)]
+    python_budget = 8
+    while pending and len(chain) < 4:
+        via, fault = pending.pop(0)
+        if not isinstance(fault, BaseException) or id(fault) in seen:
+            continue
+        seen.add(id(fault))
+        diag = field(fault, "diag")
+        state = field(fault, "sqlstate")
+        if type(state) is not str or not re.fullmatch(r"[0-9A-Z]{5}", state):
+            state = "UNKNOWN"
+        python_frames, frames = [], []
+        trace = field(fault, "__traceback__")
+        scanned = 0
+        while trace is not None and scanned < 128 and python_budget:
+            scanned += 1
+            code = trace.tb_frame.f_code
+            name = code.co_filename
+            if len(name) <= 1024:
+                try:
+                    path = Path(name).resolve()
+                except (OSError, ValueError):
+                    path = ROOT.parent
+                relative = path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else None
+                if relative in locations and any(
+                    function == code.co_name and start <= trace.tb_lineno <= end
+                    for function, start, end in locations[relative]
+                ):
+                    python_frames.append(
+                        {"path": relative, "function": code.co_name, "line": trace.tb_lineno}
+                    )
+                    python_budget -= 1
+                    if not python_budget:
+                        break
+            trace = trace.tb_next
+        context = field(diag, "context")
+        if type(context) is str and len(context) <= 16384:
+            for match in re.finditer(
+                r"^PL/pgSQL function ((?:platform\.|app\.)?[a-z_][a-z_0-9]{0,62})\([a-z0-9_.,\[\] ]{0,240}\) line ([1-9][0-9]{0,5}) at [^\n]*$",
+                context,
+                re.MULTILINE,
+            ):
+                function, line = match.groups()
+                function = function if "." in function else "platform." + function
+                if function in functions:
+                    frames.append({"function": function, "line": int(line)})
+                    if len(frames) == 3:
+                        break
+        chain.append(
+            {
+                "via": via,
+                "exception": labels.get(type(fault), "UNKNOWN"),
+                "sqlstate": state,
+                "schema": known(field(diag, "schema_name"), {"app", "platform"}),
+                "table": known(field(diag, "table_name"), tables),
+                "constraint": known(field(diag, "constraint_name"), constraints),
+                "python_frames": python_frames,
+                "plpgsql_frames": frames,
+                "frames_limited": trace is not None,
+                "context_limited": type(context) is str and len(context) > 16384,
+            }
+        )
+        for attr in ("orig", "__cause__", "__context__"):
+            linked = field(fault, attr)
+            if isinstance(linked, BaseException) and id(linked) not in seen:
+                pending.append((attr, linked))
+    value = {
+        "chain": chain,
+        "chain_limited": any(id(f) not in seen for _, f in pending),
+        "detail_limited": False,
+    }
+    # Reserve room for the journal's fixed case/sequence/time envelope.
+    while len(json.dumps(value, ensure_ascii=True).encode()) > 3400:
+        value["detail_limited"] = True
+        for node in reversed(chain):
+            if node["python_frames"]:
+                node["python_frames"].pop()
+                node["frames_limited"] = True
+                break
+            if node["plpgsql_frames"]:
+                node["plpgsql_frames"].pop()
+                node["context_limited"] = True
+                break
+        else:
+            chain.pop()
+            value["chain_limited"] = True
+    return value
+
+
+class GenericJournal:
+    def __init__(self, store, expected):
+        self.store, self.expected = store, expected
+        self.index = {node: i for i, node in enumerate(expected)}
+        self.started, self.phases, self.completed = [], {}, {}
+        self.failed = False
+        self.locations, self.catalog = (
+            foundation_locations(store.binding["source_manifest"]),
+            source_catalog(ROOT),
+        )
+
+    def persist_partition(self, work):
+        for name in (
+            "partition-all-pg.json",
+            "partition-native.json",
+            "partition-generic-pg.json",
+            "integration-partition.json",
+        ):
+            self.store.publish(name, json.loads((work / name).read_text()))
+
+    def record(self, name, row):
+        try:
+            self.store.append(name, row)
+        except Exception:
+            self.failed = True
+            self.store.issue()
+
+    def key(self, node):
+        return {"index": self.index[node], "nodeid_sha256": sha256(node.encode())}
+
+    def start(self, node):
+        try:
+            require(
+                node in self.index and self.index[node] == len(self.started), "Generic start order"
+            )
+            self.started.append(node)
+            self.phases[node] = {}
+            self.record("cases.jsonl", {"event": "start", **self.key(node)})
+        except Exception:
+            self.failed = True
+            self.store.issue()
+
+    def report(self, node, report, error):
+        try:
+            require(
+                node in self.phases and report.when in {"setup", "call", "teardown"},
+                "Generic report identity",
+            )
+            phases = self.phases[node]
+            require(
+                report.when not in phases and report.outcome in {"passed", "failed", "skipped"},
+                "Generic phase duplicate/outcome",
+            )
+            duration = report.duration
+            require(
+                type(duration) in {int, float} and math.isfinite(duration) and duration >= 0,
+                "Generic duration",
+            )
+            phases[report.when] = {
+                "outcome": report.outcome,
+                "xfail": bool(getattr(report, "wasxfail", False)),
+            }
+            self.record(
+                "cases.jsonl",
+                {
+                    "event": "phase",
+                    **self.key(node),
+                    "phase": report.when,
+                    "outcome": report.outcome,
+                    "duration": duration,
+                    "xfail": phases[report.when]["xfail"],
+                },
+            )
+            if report.outcome == "failed":
+                self.record(
+                    "failures.jsonl",
+                    {
+                        **self.key(node),
+                        "phase": report.when,
+                        "failure": foundation_failure(error, self.locations, self.catalog),
+                    },
+                )
+            if report.when == "teardown":
+                setup = phases.get("setup", {})
+                complete = bool(setup) and (setup["outcome"] != "passed" or "call" in phases)
+                outcome = "INCOMPLETE"
+                if complete:
+                    outcome = (
+                        "FAILED"
+                        if any(p["outcome"] == "failed" for p in phases.values())
+                        else "PASSED"
+                        if all(p["outcome"] == "passed" and not p["xfail"] for p in phases.values())
+                        else "SKIPPED"
+                    )
+                self.completed[node] = outcome
+                self.record(
+                    "cases.jsonl", {"event": "case-end", **self.key(node), "outcome": outcome}
+                )
+        except Exception:
+            self.failed = True
+            self.store.issue()
+
+    def finish(self, code):
+        complete = (
+            self.started == self.expected
+            and set(self.completed) == set(self.expected)
+            and not any(x in {"INCOMPLETE", "SKIPPED"} for x in self.completed.values())
+        )
+        try:
+            self.store.publish(
+                "generic-result.json",
+                {
+                    "pytest_exit": code,
+                    "complete": complete,
+                    "evidence_failed": self.failed,
+                    "expected": len(self.expected),
+                    "completed": len(self.completed),
+                },
+            )
+        except Exception:
+            self.failed = True
+            self.store.issue()
+
+
+def foundation_check(store):
+    require(not store.read("issues.jsonl"), "Foundation evidence sink failed")
+
+    def rows(name):
+        raw = store.read(name)
+        require(raw.endswith(b"\n"), "Missing/torn foundation journal")
+        values = [json.loads(line) for line in raw.splitlines()]
+        require(
+            all(len(line) + 1 <= 4096 for line in raw.splitlines()), "Oversized foundation record"
+        )
+        require(
+            all(type(r["sequence"]) is int for r in values)
+            and [r["sequence"] for r in values] == list(range(1, len(values) + 1)),
+            "Foundation journal sequence",
+        )
+        require(
+            all(
+                r["version"] == 1
+                and type(r["elapsed"]) in {float, int}
+                and math.isfinite(r["elapsed"])
+                and r["elapsed"] >= 0
+                for r in values
+            ),
+            "Foundation journal clock",
+        )
+        require(
+            [r["elapsed"] for r in values] == sorted(r["elapsed"] for r in values),
+            "Foundation clock regressed",
+        )
+        return values
+
+    route = store.binding["route"]
+    host = (
+        *FOUNDATION_HOST,
+        *(("normal-durable",) if route != "foundation-core" else ()),
+        *(FOUNDATION_CORE if route != "normal-durable" else ()),
+        "cleanup",
+    )
+    expected = [
+        {"phase": p, "edge": edge, **({"status": 0} if edge == "end" else {})}
+        for p in host
+        for edge in ("start", "end")
+    ]
+    require(
+        [{k: r[k] for k in ("phase", "edge", "status") if k in r} for r in rows("host.jsonl")]
+        == expected,
+        "Foundation host incomplete/failed",
+    )
+    execution = json.loads(store.read("execution.json"))
+    require(
+        execution == {"primary_exit": 0, "cleanup_exit": 0}, "Foundation execution/cleanup failed"
+    )
+    if route != "foundation-core":
+        durable = {}
+        for name in ("telegram-egress.json", "candidate-egress-source.json"):
+            fd = os.open(ROOT / "reports" / name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            try:
+                foundation_stat(os.fstat(fd), store.uid)
+                size = os.fstat(fd).st_size
+                require(size <= FOUNDATION_LIMIT, "Foundation durable report size")
+                durable[name] = json.loads(os.pread(fd, size + 1, 0))
+            finally:
+                os.close(fd)
+        report, source = durable["telegram-egress.json"], durable["candidate-egress-source.json"]
+        require(
+            report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
+            and source["parents"] == store.binding["identity"]["parents"]
+            and source["expected_revision"] == "0013"
+            and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
+            and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
+            and all(
+                row["source_sha"] == source["source_sha"] for row in report["lifecycles"].values()
+            )
+            and report["assertions"]
+            and all(row["result"] == "PASS" for row in report["assertions"]),
+            "Foundation current durable evidence incomplete/different source",
+        )
+    if route == "normal-durable":
+        return
+    expected = [
+        {"phase": p, "edge": edge, **({"status": 0} if edge == "end" else {})}
+        for p in FOUNDATION_BACKEND
+        for edge in ("start", "end")
+    ]
+    require(
+        [{k: r[k] for k in ("phase", "edge", "status") if k in r} for r in rows("backend.jsonl")]
+        == expected,
+        "Foundation backend incomplete/failed",
+    )
+    inventories = [
+        json.loads(store.read("partition-" + name + ".json"))
+        for name in ("all-pg", "native", "generic-pg")
+    ]
+    proof = validate_partition(*inventories)
+    require(
+        json.loads(json.dumps(proof)) == json.loads(store.read("integration-partition.json")),
+        "Foundation partition differs",
+    )
+    nodes = inventories[2]["nodeids"]
+    cases = rows("cases.jsonl")
+    starts = [r for r in cases if r["event"] == "start"]
+    ends = [r for r in cases if r["event"] == "case-end"]
+    require(
+        [r["index"] for r in starts] == list(range(len(nodes))) == [r["index"] for r in ends],
+        "Generic cases incomplete/order",
+    )
+    require(
+        [(r["event"], r["index"], r.get("phase")) for r in cases]
+        == [
+            (event, i, phase)
+            for i in range(len(nodes))
+            for event, phase in (
+                ("start", None),
+                ("phase", "setup"),
+                ("phase", "call"),
+                ("phase", "teardown"),
+                ("case-end", None),
+            )
+        ],
+        "Generic journal event order",
+    )
+    require(
+        all(r["nodeid_sha256"] == sha256(nodes[r["index"]].encode()) for r in cases),
+        "Generic journal case identity",
+    )
+    require(all(r["outcome"] == "PASSED" for r in ends), "Generic case failed/incomplete")
+    phases = [r for r in cases if r["event"] == "phase"]
+    require(
+        [(r["index"], r["phase"]) for r in phases]
+        == [(i, p) for i in range(len(nodes)) for p in ("setup", "call", "teardown")],
+        "Generic actual phases incomplete/order",
+    )
+    require(
+        all(
+            r["outcome"] == "passed"
+            and r["xfail"] is False
+            and type(r["duration"]) in {float, int}
+            and math.isfinite(r["duration"])
+            and r["duration"] >= 0
+            for r in phases
+        ),
+        "Generic actual phase failed",
+    )
+    require(not store.read("failures.jsonl"), "Generic failure records")
+    result = json.loads(store.read("generic-result.json"))
+    require(
+        result
+        == {
+            "pytest_exit": 0,
+            "complete": True,
+            "evidence_failed": False,
+            "expected": len(nodes),
+            "completed": len(nodes),
+        },
+        "Generic completion failed",
+    )
+
+
+def foundation_cli(argv):
+    parser = argparse.ArgumentParser(description="Fixed foundation source/evidence plumbing")
+    parser.add_argument(
+        "mode",
+        choices=("foundation-prepare", "foundation-step", "foundation-finish", "foundation-check"),
+    )
+    parser.add_argument("values", nargs=argparse.REMAINDER)
+    args = parser.parse_args(argv)
+    if args.mode == "foundation-prepare":
+        require(len(args.values) == 1, "Foundation prepare arguments")
+        print(foundation_prepare(args.values[0]))
+        return 0
+    if args.mode == "foundation-step":
+        require(len(args.values) >= 4 and args.values[2] == "--", "Foundation step arguments")
+        return foundation_step(args.values[0], args.values[1], args.values[3:])
+    store = foundation_store()
+    if args.mode == "foundation-finish":
+        require(
+            len(args.values) == 2
+            and all(re.fullmatch(r"[0-9]{1,3}", x) and int(x) <= 255 for x in args.values),
+            "Foundation finish status",
+        )
+        store.publish(
+            "execution.json",
+            {"primary_exit": int(args.values[0]), "cleanup_exit": int(args.values[1])},
+        )
+    else:
+        require(not args.values, "Foundation check arguments")
+        foundation_check(store)
+        print("FOUNDATION_COMPLETE_EVIDENCE_PASS")
+    return 0
+
+
 def generic_integration():
     import pytest
 
@@ -1824,6 +2787,7 @@ def generic_integration():
         "Generic checks must never receive native reset/admin credentials",
     )
     require(not os.environ.get("PYTEST_ADDOPTS"), "External pytest selection is forbidden")
+    store = foundation_store()  # Refuse a missing/foreign sink before collection or fixtures.
     os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     with tempfile.TemporaryDirectory(prefix="asm-integration-partition-") as directory:
         work = external_directory(directory)
@@ -1839,6 +2803,8 @@ def generic_integration():
                     print(path.name + "\n" + redact(path.read_text(errors="replace")), flush=True)
             raise
         print(json.dumps(proof, sort_keys=True), flush=True)
+        journal = GenericJournal(store, expected)
+        journal.persist_partition(work)
 
         class ExactGeneric:
             def pytest_collection_finish(self, session):
@@ -1847,12 +2813,27 @@ def generic_integration():
                     "Actual generic PG execution differs from the proven partition",
                 )
 
+            def pytest_runtest_logstart(self, nodeid, location):
+                journal.start(nodeid)
+
+            @pytest.hookimpl(hookwrapper=True)
+            def pytest_runtest_makereport(self, item, call):
+                outcome = yield
+                report = outcome.get_result()
+                journal.report(item.nodeid, report, call.excinfo.value if call.excinfo else None)
+
         # Retain the original pytest verbosity/durations/marker and exit code.
-        return int(
+        code = int(
             pytest.main(
                 [*integration_arguments(), "-p", "pytest_asyncio.plugin"], plugins=[ExactGeneric()]
             )
         )
+        journal.finish(code)
+        if code == 0:
+            require(
+                not journal.failed, "Generic evidence completeness failed after pytest exit zero"
+            )
+        return code
 
 
 def carrier(private, evidence, lease, commands):
@@ -2273,6 +3254,12 @@ def run_lane(private, evidence):
 
 def main():
     os.umask(0o077)
+    if len(sys.argv) > 1 and sys.argv[1].startswith("foundation-"):
+        try:
+            return foundation_cli(sys.argv[1:])
+        except Exception:
+            print("FOUNDATION_EVIDENCE_REFUSED", file=sys.stderr, flush=True)
+            return 1
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "mode",

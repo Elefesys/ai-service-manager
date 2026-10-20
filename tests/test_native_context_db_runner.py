@@ -6,6 +6,8 @@ import importlib
 import inspect
 import json
 import os
+import re
+import signal
 import subprocess
 import tempfile
 import time
@@ -24,6 +26,1115 @@ REQUIRED_MODULES = (
     "tests/test_m3_1_native_context_api_postgres.py",
     "tests/test_m3_1_native_context_runtime_postgres.py",
 )
+
+
+@pytest.fixture
+def foundation_git(tmp_path, monkeypatch):
+    """Constructed clean Git source and journals; no product fixtures or resources."""
+    actual = lane.ROOT
+    root = tmp_path / "source"
+    root.mkdir()
+    for relative in (
+        *lane.CI_INPUT_SHA256,
+        "scripts/ci.sh",
+        "scripts/native_context_db_catalog.py",
+    ):
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes((actual / relative).read_bytes())
+    (root / ".gitignore").write_text("reports/\n.env\n.pytest_cache/\n__pycache__/\n*.pyc\n")
+    (root / "tests").mkdir()
+    (root / "tests/test_constructed.py").write_text(
+        "import pytest\n"
+        "@pytest.fixture\ndef setup_bad():\n    raise ValueError('PRIVATE_SENTINEL_DSN_SQL')\n"
+        "@pytest.fixture\ndef teardown_bad():\n    yield\n    raise RuntimeError('PRIVATE_SENTINEL_DSN_SQL')\n"
+        "@pytest.mark.integration\ndef test_pass():\n    assert True\n"
+        "@pytest.mark.integration\ndef test_call():\n    raise AssertionError('PRIVATE_SENTINEL_DSN_SQL')\n"
+        "@pytest.mark.integration\ndef test_setup(setup_bad):\n    raise AssertionError('must not run')\n"
+        "@pytest.mark.integration\ndef test_teardown(teardown_bad):\n    assert True\n"
+    )
+
+    def git(*args):
+        return subprocess.check_output(
+            [
+                "git",
+                "-c",
+                "user.name=Constructed",
+                "-c",
+                "user.email=unit@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                *args,
+            ],
+            cwd=root,
+            text=True,
+            stderr=subprocess.PIPE,
+        ).strip()
+
+    git("init", "-q")
+    git("add", ".")
+    git("commit", "-qm", "constructed source")
+    for key in list(os.environ):
+        if key.startswith(("GITHUB_", "ASM_FOUNDATION_")):
+            monkeypatch.delenv(key)
+    monkeypatch.setattr(lane, "ROOT", root)
+    catalog = {
+        "columns": {"app.messages": ["id"]},
+        "functions": {"platform.safe_function()": {}},
+        "nonfunction_ddl": [
+            "CREATE TABLE app.messages (id integer CONSTRAINT approved_check CHECK (id>0))"
+        ],
+    }
+    monkeypatch.setattr(lane, "source_catalog", lambda _: catalog)
+    return SimpleNamespace(root=root, actual=actual, git=git, catalog=catalog)
+
+
+@pytest.fixture
+def foundation_sink(foundation_git, monkeypatch):
+    path = lane.foundation_prepare("foundation-core")
+    monkeypatch.setenv("ASM_FOUNDATION_EVIDENCE", str(path))
+    monkeypatch.setenv("ASM_FOUNDATION_OWNER_UID", str(os.getuid()))
+    monkeypatch.setenv(
+        "ASM_FOUNDATION_BINDING_SHA256", lane.sha256((path / "binding.json").read_bytes())
+    )
+    return lane.foundation_store()
+
+
+def foundation_rows(store, name="cases.jsonl"):
+    return [json.loads(line) for line in store.read(name).splitlines()]
+
+
+def constructed_report(phase, outcome="passed", duration=0.01):
+    return SimpleNamespace(when=phase, outcome=outcome, duration=duration)
+
+
+def test_foundation_workflow_has_eleven_required_jobs_serial_source_and_always_gates():
+    source = (lane.ROOT / ".github/workflows/ci.yml").read_text()
+    parts = re.split(r"^  ([a-z0-9-]+):\n", source.split("jobs:\n", 1)[1], flags=re.M)
+    jobs = dict(zip(parts[1::2], parts[2::2], strict=True))
+    assert set(jobs) == {
+        "browser",
+        "foundation-durable",
+        "foundation",
+        "docker29-compatibility",
+        "connect5-migration",
+        "native-context-db",
+    }
+    assert len(jobs) - 1 + 6 == 11
+    for job, digest in {
+        "browser": "b3ab2a96b6f7f8eb3a3b726b9769d756a55bd50694b3f21be8779aabcc87c3db",
+        "docker29-compatibility": "37ecbf897d53f318f3d0e2192b05574923e6e9ed7a6bbd421aa6eecddff055b1",
+        "connect5-migration": "c624af64b59752a4889032d4bbbbb729fe5732f99733199a2b590e2b942df645",
+        "native-context-db": "ab14f25d082e830a8be35422a7ae4f0fc7d8f7092ec992fcbde703751b2fe78b",
+    }.items():
+        assert lane.sha256(jobs[job].encode()) == digest
+    assert "needs: [foundation-durable]" in jobs["foundation"]
+    for job, cap, route in (
+        ("foundation-durable", 25, "normal-durable"),
+        ("foundation", 45, "foundation-core"),
+    ):
+        block = jobs[job]
+        assert (
+            f"timeout-minutes: {cap}" in block
+            and f"sh scripts/ci.sh --{route} 2>&1 | tee reports/ci.log" in block
+        )
+        assert "ref:" not in block and "continue-on-error" not in block
+        assert block.count("if: always()") == 4
+        assert (
+            "foundation-check" in block and "git status --porcelain --untracked-files=all" in block
+        )
+    lane.require_ci_inputs()
+
+
+def test_foundation_preparation_binds_clean_source_private_inodes_and_no_adoption(foundation_sink):
+    store = foundation_sink
+    assert (
+        store.binding["identity"]["head"]
+        == subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=lane.ROOT, text=True).strip()
+    )
+    assert store.binding["identity"]["parents"] == []
+    assert store.binding["source_identity_is_runtime_approval"] is False
+    assert store.binding["project"].startswith("asm-foundation-foundation-core-")
+    for name in lane.FOUNDATION_FILES:
+        info = (store.path / name).stat()
+        assert info.st_uid == os.getuid() and info.st_mode & 0o777 == 0o600 and info.st_nlink == 1
+    assert store.path.stat().st_mode & 0o777 == 0o700
+    with pytest.raises(lane.Refusal, match="adopted"):
+        lane.foundation_prepare("foundation-core")
+
+
+@pytest.mark.parametrize(
+    "fault",
+    (
+        "uid",
+        "digest",
+        "directory-mode",
+        "file-mode",
+        "file-inode",
+        "symlink",
+        "hardlink",
+        "outside",
+    ),
+)
+def test_foundation_refuses_foreign_or_replaced_evidence_before_any_command(
+    foundation_sink, monkeypatch, tmp_path, fault
+):
+    store = foundation_sink
+    sentinel = tmp_path / "unrelated"
+    sentinel.write_text("private sentinel must remain unchanged")
+    if fault == "uid":
+        monkeypatch.setenv("ASM_FOUNDATION_OWNER_UID", str(os.getuid() + 1))
+    elif fault == "digest":
+        monkeypatch.setenv("ASM_FOUNDATION_BINDING_SHA256", "0" * 64)
+    elif fault == "directory-mode":
+        store.path.chmod(0o755)
+    elif fault == "file-mode":
+        (store.path / "cases.jsonl").chmod(0o644)
+    elif fault == "file-inode":
+        p = store.path / "cases.jsonl"
+        p.rename(store.path / "old-cases")
+        p.touch(mode=0o600)
+    elif fault == "symlink":
+        p = store.path / "cases.jsonl"
+        p.unlink()
+        p.symlink_to(sentinel)
+    elif fault == "hardlink":
+        os.link(store.path / "cases.jsonl", store.path / "alias")
+    elif fault == "outside":
+        monkeypatch.setenv("ASM_FOUNDATION_EVIDENCE", str(tmp_path))
+    with patch.object(lane.subprocess, "Popen") as commands:
+        with pytest.raises((lane.Refusal, OSError)):
+            lane.foundation_step("host", "init", ["must-never-start"])
+    commands.assert_not_called()
+    assert sentinel.read_text() == "private sentinel must remain unchanged"
+
+
+def test_foundation_parent_symlink_and_dirty_source_refuse_before_prepare(foundation_git, tmp_path):
+    frozen = lane.require_source(foundation_git.root, foundation_git.git("rev-parse", "HEAD"))
+    reports = foundation_git.root / "reports"
+    reports.symlink_to(tmp_path, target_is_directory=True)
+    with (
+        patch.object(lane, "require_source", return_value=frozen),
+        pytest.raises(lane.Refusal, match="Symlinked reports"),
+    ):
+        lane.foundation_prepare("all")
+    reports.unlink()
+    (foundation_git.root / "untracked.py").write_text("private = 1\n")
+    with pytest.raises(lane.Refusal, match="dirty"):
+        lane.foundation_prepare("all")
+
+
+def test_foundation_changed_copied_input_refuses_even_if_host_binding_is_retained(foundation_sink):
+    (lane.ROOT / "scripts/check_backend.sh").write_text("exit 0\n")
+    with pytest.raises(lane.Refusal, match="CI gate input drift"):
+        lane.foundation_store()
+
+
+def test_foundation_live_start_phases_durations_and_completion_are_persisted_before_summary(
+    foundation_sink,
+):
+    node = "tests/test_constructed.py::test_pass"
+    journal = lane.GenericJournal(foundation_sink, [node])
+    with patch.object(lane.os, "fsync", wraps=os.fsync) as synced:
+        journal.start(node)
+        assert foundation_rows(foundation_sink)[0]["event"] == "start"
+        assert not foundation_sink.read("generic-result.json")
+        for i, phase in enumerate(("setup", "call", "teardown")):
+            journal.report(node, constructed_report(phase), None)
+            rows = foundation_rows(foundation_sink)
+            assert len([r for r in rows if r["event"] == "phase"]) == i + 1
+            assert len([r for r in rows if r["event"] == "case-end"]) == int(phase == "teardown")
+        assert synced.call_count == 5
+    rows = foundation_rows(foundation_sink)
+    assert rows[-1]["outcome"] == "PASSED"
+    assert all(
+        row["index"] == 0 and row["nodeid_sha256"] == lane.sha256(node.encode()) for row in rows
+    )
+    assert [r["sequence"] for r in rows] == list(range(1, 6))
+    assert all(r["duration"] == 0.01 for r in rows if r["event"] == "phase")
+    journal.finish(0)
+    assert json.loads(foundation_sink.read("generic-result.json"))["complete"] is True
+
+
+@pytest.mark.parametrize("phase", ("setup", "call", "teardown"))
+def test_foundation_failed_phase_uses_same_exception_and_preserves_status(foundation_sink, phase):
+    node = "tests/test_constructed.py::test_call"
+    journal = lane.GenericJournal(foundation_sink, [node])
+    journal.start(node)
+    error = ValueError("PRIVATE_SENTINEL_DSN_SQL")
+    for current in ("setup", "call", "teardown"):
+        if phase == "setup" and current == "call":
+            continue
+        journal.report(
+            node,
+            constructed_report(current, "failed" if current == phase else "passed"),
+            error if current == phase else None,
+        )
+    journal.finish(7)
+    result = json.loads(foundation_sink.read("generic-result.json"))
+    assert result["pytest_exit"] == 7 and result["complete"] is True
+    assert foundation_rows(foundation_sink)[-1]["outcome"] == "FAILED"
+    failures = foundation_rows(foundation_sink, "failures.jsonl")
+    assert len(failures) == 1 and failures[0]["phase"] == phase
+    assert failures[0]["failure"]["chain"][0]["exception"] == "ValueError"
+    assert "PRIVATE_SENTINEL" not in foundation_sink.read("failures.jsonl").decode()
+
+
+@pytest.mark.parametrize("until", ("start", "setup", "call"))
+def test_foundation_interruption_never_fabricates_teardown_or_case_completion(
+    foundation_sink, until
+):
+    node = "tests/test_constructed.py::test_pass"
+    journal = lane.GenericJournal(foundation_sink, [node])
+    journal.start(node)
+    for phase in ("setup", "call")[: (0 if until == "start" else 1 if until == "setup" else 2)]:
+        journal.report(node, constructed_report(phase), None)
+    assert not any(row["event"] == "case-end" for row in foundation_rows(foundation_sink))
+    assert not foundation_sink.read("generic-result.json")
+    # If pytest itself returns after interruption, only its incomplete receipt is added.
+    journal.finish(2)
+    assert json.loads(foundation_sink.read("generic-result.json"))["complete"] is False
+
+
+@pytest.mark.parametrize("fault", ("nan", "negative", "duplicate", "unknown", "skip", "xfail"))
+def test_foundation_invalid_or_nonpassing_phase_cannot_create_complete_green_evidence(
+    foundation_sink, fault
+):
+    node = "tests/test_constructed.py::test_pass"
+    journal = lane.GenericJournal(foundation_sink, [node])
+    journal.start(node)
+    for phase in ("setup", "call", "teardown"):
+        report = constructed_report(phase)
+        if phase == "call":
+            if fault == "nan":
+                report.duration = float("nan")
+            elif fault == "negative":
+                report.duration = -1
+            elif fault == "unknown":
+                report.when = "untrusted"
+            elif fault == "skip":
+                report.outcome = "skipped"
+            elif fault == "xfail":
+                report.wasxfail = "PRIVATE_SENTINEL"
+        journal.report(node, report, None)
+        if phase == "setup" and fault == "duplicate":
+            journal.report(node, report, None)
+    journal.finish(0)
+    result = json.loads(foundation_sink.read("generic-result.json"))
+    assert result["evidence_failed"] or not result["complete"]
+
+
+def test_foundation_torn_record_and_io_limit_are_explicit_never_repaired(
+    foundation_sink, monkeypatch
+):
+    path = foundation_sink.path / "cases.jsonl"
+    path.write_bytes(b'{"incomplete":')
+    node = "tests/test_constructed.py::test_pass"
+    journal = lane.GenericJournal(foundation_sink, [node])
+    journal.start(node)
+    assert path.read_bytes() == b'{"incomplete":'
+    assert journal.failed and foundation_sink.read("issues.jsonl")
+    monkeypatch.setattr(lane, "FOUNDATION_LIMIT", 1)
+    with pytest.raises(lane.Refusal, match="limit"):
+        foundation_sink.append("backend.jsonl", {"event": "test"})
+
+
+def test_foundation_partial_write_and_fsync_failure_cannot_be_hidden(foundation_sink):
+    original_write = os.write
+    with patch.object(lane.os, "write", side_effect=lambda fd, raw: original_write(fd, raw[:5])):
+        with pytest.raises(lane.Refusal, match="Partial"):
+            foundation_sink.append("cases.jsonl", {"event": "start"})
+    assert not foundation_sink.read("cases.jsonl").endswith(b"\n")
+    with patch.object(lane.os, "fsync", side_effect=OSError("PRIVATE_SENTINEL")):
+        with pytest.raises(OSError):
+            foundation_sink.append("backend.jsonl", {"event": "start"})
+
+
+def test_foundation_bounded_failure_metadata_never_formats_hostile_values(foundation_git):
+    class Forbidden:
+        def __str__(self):
+            raise AssertionError("must not stringify")
+
+        def __repr__(self):
+            raise AssertionError("must not repr")
+
+    error = ValueError(Forbidden())
+    error.sqlstate = "23514"
+    error.diag = SimpleNamespace(
+        schema_name="app",
+        table_name="messages",
+        constraint_name="approved_check",
+        context="PL/pgSQL function platform.safe_function() line 7 at PRIVATE_SENTINEL_DSN_SQL",
+    )
+    error.orig = error
+    value = lane.foundation_failure(error, {}, foundation_git.catalog)
+    raw = json.dumps(value)
+    assert "PRIVATE_SENTINEL" not in raw
+    node = value["chain"][0]
+    assert node["exception"] == "ValueError" and node["sqlstate"] == "23514"
+    assert node["constraint"] == "approved_check" and node["table"] == "messages"
+    assert node["plpgsql_frames"] == [{"function": "platform.safe_function", "line": 7}]
+    for field in ("schema_name", "table_name", "constraint_name", "context"):
+        setattr(error.diag, field, Forbidden())
+    error.sqlstate = Forbidden()
+    other = lane.foundation_failure(error, {}, foundation_git.catalog)
+    assert other["chain"][0]["sqlstate"] == "UNKNOWN"
+    assert other["chain"][0]["constraint"] == "UNKNOWN"
+
+
+def test_foundation_failure_chain_frames_and_encoded_record_are_bounded(
+    foundation_sink, foundation_git
+):
+    source = lane.ROOT / "tests/test_constructed.py"
+    namespace = {"__name__": "constructed"}
+    exec(compile(source.read_text(), str(source), "exec"), namespace)
+    try:
+        namespace["test_call"]()
+    except AssertionError as error:
+        first = error
+    cursor = first
+    for _ in range(8):
+        following = RuntimeError("PRIVATE_SENTINEL_DSN_SQL")
+        cursor.orig = following
+        cursor = following
+    cursor.orig = first
+    locations = lane.foundation_locations(foundation_sink.binding["source_manifest"])
+    value = lane.foundation_failure(first, locations, foundation_git.catalog)
+    assert len(value["chain"]) == 4 and value["chain_limited"]
+    assert value["chain"][0]["python_frames"][-1] == {
+        "path": "tests/test_constructed.py",
+        "function": "test_call",
+        "line": 14,
+    }
+    foundation_sink.append(
+        "failures.jsonl", {"index": 0, "nodeid_sha256": "a" * 64, "phase": "call", "failure": value}
+    )
+    raw = foundation_sink.read("failures.jsonl")
+    assert len(raw) <= 4096 and raw.isascii() and "PRIVATE_SENTINEL" not in raw.decode()
+
+
+def test_foundation_formatter_and_reporter_do_not_swallow_baseexception(foundation_sink):
+    node = "tests/test_constructed.py::test_pass"
+    journal = lane.GenericJournal(foundation_sink, [node])
+    with patch.object(foundation_sink, "append", side_effect=KeyboardInterrupt):
+        with pytest.raises(KeyboardInterrupt):
+            journal.start(node)
+
+
+def test_foundation_actual_constructed_pytest_reports_retained_before_terminal_summary(
+    foundation_sink, foundation_git, monkeypatch
+):
+    nodes = [
+        "tests/test_constructed.py::test_" + name for name in ("pass", "call", "setup", "teardown")
+    ]
+
+    def proof(private, evidence, commands, env):
+        a, n, g = partition_fixture()
+        a["nodeids"] = nodes + n["integration_nodeids"]
+        a["integration_nodeids"] = a["nodeids"][:]
+        g["nodeids"] = g["integration_nodeids"] = nodes[:]
+        result = lane.validate_partition(a, n, g)
+        for name, data in (
+            ("partition-all-pg.json", a),
+            ("partition-native.json", n),
+            ("partition-generic-pg.json", g),
+            ("integration-partition.json", result),
+        ):
+            lane.write_json(private / name, data)
+        return result, nodes
+
+    monkeypatch.setattr(lane, "prove_partition", proof)
+    monkeypatch.chdir(lane.ROOT)
+    with patch.object(lane.GenericJournal, "finish", autospec=True, wraps=None) as finish:
+        assert lane.generic_integration() == 1
+        assert not foundation_sink.read("generic-result.json")
+        assert finish.call_args.args[1] == 1
+    failures = foundation_rows(foundation_sink, "failures.jsonl")
+    assert [row["phase"] for row in failures] == ["call", "setup", "teardown"]
+    assert [row["failure"]["chain"][0]["exception"] for row in failures] == [
+        "AssertionError",
+        "ValueError",
+        "RuntimeError",
+    ]
+    assert [
+        row["outcome"] for row in foundation_rows(foundation_sink) if row["event"] == "case-end"
+    ] == ["PASSED", "FAILED", "FAILED", "FAILED"]
+    assert b"PRIVATE_SENTINEL" not in foundation_sink.read("failures.jsonl")
+
+
+def foundation_complete_fixture(store):
+    a, n, g = partition_fixture()
+    proof = lane.validate_partition(a, n, g)
+    route = store.binding["route"]
+    host = (
+        *lane.FOUNDATION_HOST,
+        *(("normal-durable",) if route != "foundation-core" else ()),
+        *(lane.FOUNDATION_CORE if route != "normal-durable" else ()),
+        "cleanup",
+    )
+    for stream, phases in (
+        ("host", host),
+        ("backend", lane.FOUNDATION_BACKEND if route != "normal-durable" else ()),
+    ):
+        for phase in phases:
+            store.append(stream + ".jsonl", {"phase": phase, "edge": "start"})
+            store.append(stream + ".jsonl", {"phase": phase, "edge": "end", "status": 0})
+    if route == "normal-durable":
+        store.publish("execution.json", {"primary_exit": 0, "cleanup_exit": 0})
+        return
+    for name, data in (
+        ("partition-all-pg.json", a),
+        ("partition-native.json", n),
+        ("partition-generic-pg.json", g),
+        ("integration-partition.json", proof),
+    ):
+        store.publish(name, data)
+    journal = lane.GenericJournal(store, g["nodeids"])
+    for node in g["nodeids"]:
+        journal.start(node)
+        for phase in ("setup", "call", "teardown"):
+            journal.report(node, constructed_report(phase), None)
+    journal.finish(0)
+    store.publish("execution.json", {"primary_exit": 0, "cleanup_exit": 0})
+
+
+@pytest.mark.parametrize(
+    "fault",
+    (
+        None,
+        "missing-phase",
+        "duplicate-phase",
+        "missing-case",
+        "torn",
+        "exit",
+        "cleanup",
+        "issue",
+        "clock",
+        "identity",
+        "fake-end",
+    ),
+)
+def test_foundation_separate_completeness_gate_requires_full_actual_evidence(
+    foundation_sink, fault
+):
+    store = foundation_sink
+    foundation_complete_fixture(store)
+    if fault is None:
+        lane.foundation_check(store)
+        return
+    name = "cases.jsonl"
+    rows = foundation_rows(store)
+    if fault == "missing-phase":
+        rows.pop(2)
+    elif fault == "duplicate-phase":
+        rows.insert(2, rows[1])
+    elif fault == "missing-case":
+        rows = rows[:5]
+    elif fault == "clock":
+        rows[-1]["elapsed"] = -1
+    elif fault == "identity":
+        rows[2]["nodeid_sha256"] = "f" * 64
+    elif fault == "fake-end":
+        rows[1]["event"] = "case-end"
+    elif fault == "torn":
+        with (store.path / name).open("ab") as output:
+            output.write(b'{"partial":')
+    elif fault in {"exit", "cleanup"}:
+        (store.path / "execution.json").write_text(
+            json.dumps(
+                {
+                    "primary_exit": 7 if fault == "exit" else 0,
+                    "cleanup_exit": 23 if fault == "cleanup" else 0,
+                }
+            )
+        )
+    elif fault == "issue":
+        store.issue()
+    if fault not in {"exit", "cleanup", "issue", "torn"}:
+        for i, row in enumerate(rows, 1):
+            row["sequence"] = i
+        (store.path / name).write_text("".join(json.dumps(row) + "\n" for row in rows))
+    with pytest.raises(lane.Refusal):
+        lane.foundation_check(store)
+
+
+@pytest.fixture
+def foundation_commands(foundation_git, tmp_path, monkeypatch):
+    """All Docker/shell/build/test invocations are inert local command stubs."""
+    import sys
+
+    binary = tmp_path / "bin"
+    binary.mkdir()
+    log = tmp_path / "commands.jsonl"
+    program = (
+        "#!"
+        + sys.executable
+        + "\n"
+        + r"""
+import json, os, pathlib, signal, sys
+name, args = pathlib.Path(sys.argv[0]).name, sys.argv[1:]
+with open(os.environ['FAKE_LOG'], 'a') as output:
+    output.write(json.dumps({'name': name, 'args': args, 'epoch': os.environ.get('SOURCE_DATE_EPOCH'), 'project': os.environ.get('COMPOSE_PROJECT_NAME')}) + '\n')
+if name in {'python', 'python3'} and args[:1] == ['scripts/native_context_db_catalog.py'] and len(args)>1 and args[1].startswith('foundation-'):
+    if args[1] == 'foundation-check':
+        # Routing probe only. Actual completeness is tested with real records separately.
+        sys.exit(int(os.environ.get('FAKE_COMPLETENESS_STATUS', '0')))
+    os.execv(sys.executable, [sys.executable, *args])
+if name == 'sha256sum' and args and args[0].endswith('/binding.json'):
+    import hashlib
+    print(hashlib.sha256(pathlib.Path(args[0]).read_bytes()).hexdigest()+'  '+args[0])
+    sys.exit(0)
+stage = 'other'
+if name == 'docker':
+    stage = 'build' if 'build' in args else 'checks' if 'run' in args and args[-1]=='checks' else 'cleanup' if 'down' in args else 'other'
+elif name == 'sh': stage = 'durable'
+elif name in {'python', 'python3'} and args == ['-']:
+    pathlib.Path(os.environ['FAKE_SMOKE_CAPTURE']).write_text(sys.stdin.read())
+    stage = 'http'
+elif name in {'python', 'python3'} and args[-1:] == ['generic-integration']: stage = 'generic'
+if stage == os.environ.get('FAKE_BLOCK'):
+    pathlib.Path(os.environ['FAKE_MARKER']).write_text(str(os.getpid()))
+    while True: signal.pause()
+if stage == 'cleanup' and os.environ.get('FAKE_CLEANUP_STATUS'):
+    sys.exit(int(os.environ['FAKE_CLEANUP_STATUS']))
+sys.exit(17 if stage == os.environ.get('FAKE_FAIL') else 0)
+"""
+    )
+    for name in (
+        "python",
+        "python3",
+        "docker",
+        "sh",
+        "ruff",
+        "mypy",
+        "pytest",
+        "alembic",
+        "cmp",
+        "sha256sum",
+    ):
+        p = binary / name
+        p.write_text(program)
+        p.chmod(0o755)
+    monkeypatch.setenv("PATH", str(binary) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setenv("FAKE_LOG", str(log))
+    marker = tmp_path / "blocked"
+    monkeypatch.setenv("FAKE_MARKER", str(marker))
+    smoke = tmp_path / "http-body"
+    monkeypatch.setenv("FAKE_SMOKE_CAPTURE", str(smoke))
+    return SimpleNamespace(root=foundation_git.root, log=log, marker=marker, smoke=smoke)
+
+
+@pytest.mark.parametrize(
+    "args",
+    (
+        ("--unknown",),
+        ("--normal-durable", "extra"),
+        ("all",),
+        ("--foundation-core", "--normal-durable"),
+    ),
+)
+def test_foundation_invalid_routes_never_reach_init_or_commands(foundation_commands, args):
+    fixture = foundation_commands
+    result = subprocess.run(
+        ["/bin/sh", "scripts/ci.sh", *args], cwd=fixture.root, capture_output=True, text=True
+    )
+    assert result.returncode == 2 and result.stderr.strip() == "INVALID_FOUNDATION_ROUTE"
+    assert not fixture.log.exists() and not (fixture.root / "reports").exists()
+
+
+@pytest.mark.parametrize("mode", (None, "--normal-durable", "--foundation-core"))
+def test_foundation_closed_routes_preserve_complete_default_prelude_tail_and_private_bind(
+    foundation_commands, mode
+):
+    fixture = foundation_commands
+    args = ["/bin/sh", "scripts/ci.sh", *([mode] if mode else [])]
+    result = subprocess.run(args, cwd=fixture.root, capture_output=True, text=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+    calls = [json.loads(x) for x in fixture.log.read_text().splitlines()]
+    stages = [
+        c["args"][2]
+        for c in calls
+        if c["args"][:2] == ["scripts/native_context_db_catalog.py", "foundation-step"]
+    ]
+    expected = ["host", "host", "host"]  # Stream is separate from the fixed label.
+    assert stages[:3] == expected
+    labels = [
+        c["args"][3]
+        for c in calls
+        if c["args"][:2] == ["scripts/native_context_db_catalog.py", "foundation-step"]
+    ]
+    assert labels == [
+        "init",
+        "config",
+        "build",
+        *(["normal-durable"] if mode != "--foundation-core" else []),
+        *([] if mode == "--normal-durable" else lane.FOUNDATION_CORE),
+        "cleanup",
+    ]
+    docker = [c["args"] for c in calls if c["name"] == "docker"]
+    assert any(c[-5:] == ["build", "--pull", "api", "checks", "frontend"] for c in docker)
+    assert sum(
+        c["name"] == "sh" and c["args"] == ["scripts/test_telegram_egress.sh"] for c in calls
+    ) == int(mode != "--foundation-core")
+    checks = [c for c in docker if "run" in c and c[-1] == "checks"]
+    assert len(checks) == int(mode != "--normal-durable")
+    if checks:
+        assert "--rm" in checks[0] and "--volume" in checks[0]
+        assert any(x.endswith(":/asm-evidence:rw") for x in checks[0])
+        assert not any(
+            "ASM_NATIVE_TEST_ADMIN" in x or "ASM_NATIVE_TEST_ALLOW_RESET" in x for x in checks[0]
+        )
+        assert "for port in (8000, 8080)" in fixture.smoke.read_text()
+        assert "http://127.0.0.1:8080/ops/" in fixture.smoke.read_text()
+    if mode:
+        projects = {c["project"] for c in calls if c["name"] == "docker"}
+        assert len(projects) == 1 and next(iter(projects)).startswith("asm-foundation-")
+
+
+@pytest.mark.parametrize(
+    "failure,cleanup,completion,expected",
+    (
+        ("build", 0, 0, 17),
+        ("durable", 23, 0, 17),
+        ("checks", 23, 0, 17),
+        ("http", 23, 0, 17),
+        (None, 23, 0, 23),
+        (None, 0, 9, 9),
+    ),
+)
+def test_foundation_primary_status_cleanup_and_separate_evidence_gate(
+    foundation_commands, monkeypatch, failure, cleanup, completion, expected
+):
+    fixture = foundation_commands
+    if failure:
+        monkeypatch.setenv("FAKE_FAIL", failure)
+    monkeypatch.setenv("FAKE_CLEANUP_STATUS", str(cleanup))
+    monkeypatch.setenv("FAKE_COMPLETENESS_STATUS", str(completion))
+    result = subprocess.run(
+        ["/bin/sh", "scripts/ci.sh"], cwd=fixture.root, capture_output=True, text=True, timeout=20
+    )
+    assert result.returncode == expected, result.stderr
+    paths = list((fixture.root / "reports/foundation-local").glob("*/execution.json"))
+    assert len(paths) == 1
+    receipt = json.loads(paths[0].read_text())
+    assert receipt["primary_exit"] == (17 if failure else 0) and receipt["cleanup_exit"] == cleanup
+
+
+def test_foundation_signal_forwarding_preserves_cancellation_and_owned_cleanup(
+    foundation_commands, monkeypatch
+):
+    fixture = foundation_commands
+    monkeypatch.setenv("FAKE_BLOCK", "build")
+    process = subprocess.Popen(
+        ["/bin/sh", "scripts/ci.sh", "--normal-durable"],
+        cwd=fixture.root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 8
+        while (
+            not fixture.marker.exists() and process.poll() is None and time.monotonic() < deadline
+        ):
+            time.sleep(0.01)
+        assert fixture.marker.exists(), process.communicate(timeout=1)
+        os.killpg(process.pid, signal.SIGTERM)
+        stdout, stderr = process.communicate(timeout=10)
+        assert process.returncode == 143, (stdout, stderr)
+        receipt = next((fixture.root / "reports/foundation-local").glob("*/execution.json"))
+        assert json.loads(receipt.read_text()) == {"primary_exit": 143, "cleanup_exit": 0}
+    finally:
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.communicate(timeout=2)
+
+
+def test_foundation_backend_keeps_every_original_command_argument_and_epoch(
+    foundation_commands, foundation_sink
+):
+    fixture = foundation_commands
+    result = subprocess.run(
+        ["/bin/sh", "scripts/check_backend.sh"],
+        cwd=fixture.root,
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    calls = [json.loads(x) for x in fixture.log.read_text().splitlines()]
+    commands = [
+        c["args"][5:]
+        for c in calls
+        if c["args"][:3] == ["scripts/native_context_db_catalog.py", "foundation-step", "backend"]
+    ]
+    assert commands == [
+        ["ruff", "check", "backend", "tests", "scripts", "migrations"],
+        ["ruff", "format", "--check", "--diff", "backend", "tests", "scripts", "migrations"],
+        ["mypy", "backend/src"],
+        ["pytest", "-q", "--durations=20", "-m", "not integration"],
+        ["alembic", "upgrade", "head"],
+        ["alembic", "upgrade", "head"],
+        ["python", "scripts/native_context_db_catalog.py", "generic-integration"],
+        ["alembic", "downgrade", "base"],
+        ["alembic", "upgrade", "head"],
+        ["python", "scripts/export_contracts.py", "--check"],
+        ["python", "-m", "build", "--wheel", "--no-isolation", "--outdir", "/tmp/wheel-one"],
+        ["python", "-m", "build", "--wheel", "--no-isolation", "--outdir", "/tmp/wheel-two"],
+        ["cmp", "/tmp/wheel-one/*.whl", "/tmp/wheel-two/*.whl"],
+        ["sha256sum", "/tmp/wheel-one/*.whl"],
+    ]
+    builds = [c for c in calls if c["name"] == "python" and c["args"][:2] == ["-m", "build"]]
+    assert len(builds) == 2 and all(c["epoch"] == "315532800" for c in builds)
+    assert [
+        r["phase"] for r in foundation_rows(foundation_sink, "backend.jsonl") if r["edge"] == "end"
+    ] == list(lane.FOUNDATION_BACKEND)
+
+
+@pytest.mark.parametrize("fault", (None, "sha", "job", "workflow", "event"))
+def test_foundation_main_source_event_admission_and_job_binding(
+    foundation_git, tmp_path, monkeypatch, fault
+):
+    env, payload = ci_event(tmp_path, "main-push")
+    head = foundation_git.git("rev-parse", "HEAD")
+    env.update(
+        GITHUB_SHA=head,
+        GITHUB_JOB="foundation",
+        GITHUB_WORKFLOW_REF=lane.REPOSITORY + "/.github/workflows/ci.yml@refs/heads/main",
+        GITHUB_ENV=str(tmp_path / "actions-env"),
+    )
+    payload["after"], payload["head_commit"]["id"] = head, head
+    Path(env["GITHUB_EVENT_PATH"]).write_text(json.dumps(payload))
+    if fault == "sha":
+        env["GITHUB_SHA"] = "f" * 40
+    elif fault == "job":
+        env["GITHUB_JOB"] = "foundation-durable"
+    elif fault == "workflow":
+        env["GITHUB_WORKFLOW_REF"] = "foreign/workflow@main"
+    elif fault == "event":
+        env["GITHUB_EVENT_NAME"] = "workflow_dispatch"
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    if fault:
+        with pytest.raises(lane.Refusal):
+            lane.foundation_prepare("foundation-core")
+        assert not (foundation_git.root / "reports").exists()
+    else:
+        directory = lane.foundation_prepare("foundation-core")
+        binding = json.loads((directory / "binding.json").read_text())
+        assert binding["identity"]["event_payload_sha256"] == lane.sha256(
+            Path(env["GITHUB_EVENT_PATH"]).read_bytes()
+        )
+        assert (
+            binding["identity"]["head"] == head
+            and binding["run"] == "123"
+            and binding["attempt"] == "2"
+        )
+        exported = Path(env["GITHUB_ENV"]).read_text()
+        assert (
+            str(directory) in exported
+            and lane.sha256((directory / "binding.json").read_bytes()) in exported
+        )
+
+
+def test_foundation_full_storage_caller_is_preserved_without_broadening_native_events(
+    foundation_git, tmp_path, monkeypatch
+):
+    head = foundation_git.git("rev-parse", "HEAD")
+    event = tmp_path / "event.json"
+    event.write_text('{"source":"constructed storage event"}')
+    values = {
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_REPOSITORY": lane.REPOSITORY,
+        "GITHUB_REPOSITORY_ID": str(lane.REPOSITORY_ID),
+        "GITHUB_JOB": "verify",
+        "GITHUB_SHA": head,
+        "GITHUB_WORKFLOW_REF": lane.REPOSITORY
+        + "/.github/workflows/storage-images.yml@refs/heads/main",
+        "GITHUB_EVENT_NAME": "workflow_dispatch",
+        "GITHUB_REF": "refs/heads/main",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "2",
+        "GITHUB_ENV": str(tmp_path / "actions-env"),
+        "GITHUB_EVENT_PATH": str(event),
+        "COMPOSE_PROJECT_NAME": "storage-image-verification",
+    }
+    for key, value in values.items():
+        monkeypatch.setenv(key, value)
+    directory = lane.foundation_prepare("all")
+    binding = json.loads((directory / "binding.json").read_text())
+    assert binding["project"] == "storage-image-verification" and binding["route"] == "all"
+    with pytest.raises(lane.Refusal):
+        lane.admit_event()
+
+
+def test_foundation_prior_durable_reports_are_not_adopted(foundation_git):
+    reports = foundation_git.root / "reports"
+    reports.mkdir()
+    (reports / "telegram-egress.json").write_text('{"source_sha":"stale"}')
+    with pytest.raises(lane.Refusal, match="previous durable"):
+        lane.foundation_prepare("normal-durable")
+
+
+@pytest.mark.parametrize("fault", (None, "missing-lifecycle", "source", "parents", "wire"))
+def test_foundation_durable_completeness_requires_current_six_lane_receipts(
+    foundation_git, monkeypatch, fault
+):
+    path = lane.foundation_prepare("normal-durable")
+    monkeypatch.setenv("ASM_FOUNDATION_EVIDENCE", str(path))
+    monkeypatch.setenv("ASM_FOUNDATION_OWNER_UID", str(os.getuid()))
+    monkeypatch.setenv(
+        "ASM_FOUNDATION_BINDING_SHA256", lane.sha256((path / "binding.json").read_bytes())
+    )
+    store = lane.foundation_store()
+    foundation_complete_fixture(store)
+    head = store.binding["identity"]["head"]
+    report = {
+        "source_sha": head,
+        "lifecycles": {k: {"source_sha": head} for k in lane.FOUNDATION_LIFECYCLES},
+        "assertions": [{"result": "PASS"}],
+    }
+    source = {
+        "source_sha": head,
+        "parents": [],
+        "expected_revision": "0013",
+        "images": {k: {} for k in ("api", "worker", "scheduler", "fixture")},
+    }
+    if fault == "missing-lifecycle":
+        report["lifecycles"].pop("legacy-stop")
+    elif fault == "source":
+        report["source_sha"] = "f" * 40
+    elif fault == "parents":
+        source["parents"] = ["f" * 40]
+    elif fault == "wire":
+        report["assertions"][0]["result"] = "FAIL"
+    for name, value in (("telegram-egress.json", report), ("candidate-egress-source.json", source)):
+        target = lane.ROOT / "reports" / name
+        target.write_text(json.dumps(value))
+        target.chmod(0o600)
+    if fault:
+        with pytest.raises(lane.Refusal, match="durable evidence"):
+            lane.foundation_check(store)
+    else:
+        lane.foundation_check(store)
+
+
+def test_foundation_reporter_error_cannot_replace_primary_process_exit(foundation_sink):
+    with (
+        patch.object(lane, "foundation_store", return_value=foundation_sink),
+        patch.object(foundation_sink, "append", side_effect=OSError("PRIVATE_SENTINEL_DSN_SQL")),
+    ):
+        assert (
+            lane.foundation_step(
+                "host", "build", [lane.sys.executable, "-c", "raise SystemExit(17)"]
+            )
+            == 17
+        )
+        assert lane.foundation_step("host", "build", [lane.sys.executable, "-c", "pass"]) != 0
+
+
+def test_foundation_cleanup_remains_bounded_at_ninety_seconds(foundation_sink):
+    child = Mock(pid=12345)
+    child.wait.side_effect = [subprocess.TimeoutExpired(["constructed"], 90), 0]
+    with (
+        patch.object(lane, "foundation_store", return_value=foundation_sink),
+        patch.object(lane.subprocess, "Popen", return_value=child),
+        patch.object(lane.os, "killpg") as terminate,
+    ):
+        assert lane.foundation_step("host", "cleanup", ["constructed-owned-cleanup"]) == 124
+    assert child.wait.call_args_list[0].kwargs == {"timeout": 90}
+    terminate.assert_called_once_with(12345, signal.SIGKILL)
+    assert foundation_rows(foundation_sink, "host.jsonl")[-1]["status"] == 124
+
+
+def test_foundation_hostile_descriptors_stay_unknown_without_execution(foundation_git):
+    class Hostile(RuntimeError):
+        @property
+        def diag(self):
+            raise KeyboardInterrupt("must not evaluate")
+
+        @property
+        def sqlstate(self):
+            raise AssertionError("must not evaluate")
+
+        @property
+        def orig(self):
+            raise SystemExit("must not evaluate")
+
+    value = lane.foundation_failure(Hostile("PRIVATE_SENTINEL_DSN_SQL"), {}, foundation_git.catalog)
+    assert value["chain"][0]["exception"] == value["chain"][0]["sqlstate"] == "UNKNOWN"
+    assert len(value["chain"]) == 1 and "PRIVATE_SENTINEL" not in json.dumps(value)
+
+
+def test_foundation_genuine_psycopg_metadata_is_constructed_not_database_evidence(foundation_git):
+    from psycopg.errors import CheckViolation
+    from psycopg.pq import DiagnosticField as D
+
+    error = CheckViolation(
+        "PRIVATE_SENTINEL_DSN_SQL",
+        info={
+            D.SQLSTATE: b"23514",
+            D.SCHEMA_NAME: b"app",
+            D.TABLE_NAME: b"messages",
+            D.CONSTRAINT_NAME: b"approved_check",
+            D.CONTEXT: b"PL/pgSQL function platform.safe_function() line 8 at PRIVATE_SENTINEL_DSN_SQL",
+        },
+    )
+    value = lane.foundation_failure(error, {}, foundation_git.catalog)
+    row = value["chain"][0]
+    assert row["exception"] == "CheckViolation" and row["sqlstate"] == "23514"
+    assert (
+        row["constraint"] == "approved_check"
+        and row["schema"] == "app"
+        and row["table"] == "messages"
+    )
+    assert row["plpgsql_frames"] == [{"function": "platform.safe_function", "line": 8}]
+    assert "PRIVATE_SENTINEL" not in json.dumps(value)
+
+
+@pytest.mark.parametrize("signum", (signal.SIGTERM, signal.SIGINT))
+def test_foundation_backend_pid_one_signal_reaches_actual_child_without_a_group_signal(
+    foundation_commands, foundation_sink, monkeypatch, signum
+):
+    fixture = foundation_commands
+    monkeypatch.setenv("FAKE_BLOCK", "generic")
+    process = subprocess.Popen(
+        ["/bin/sh", "scripts/check_backend.sh"],
+        cwd=fixture.root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while (
+            not fixture.marker.exists() and process.poll() is None and time.monotonic() < deadline
+        ):
+            time.sleep(0.01)
+        assert fixture.marker.exists(), process.communicate(timeout=1)
+        process.send_signal(signum)  # Docker's PID1 delivery, not a synthetic killpg shortcut.
+        stdout, stderr = process.communicate(timeout=10)
+        assert process.returncode == 128 + signum, (stdout, stderr)
+        rows = foundation_rows(foundation_sink, "backend.jsonl")
+        assert rows[-1]["phase"] == "generic" and rows[-1]["status"] == 128 + signum
+        assert not foundation_sink.read("generic-result.json")
+    finally:
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.communicate(timeout=2)
+
+
+def test_foundation_durable_term_enters_unchanged_python_finally_and_retains_incoming_status(
+    foundation_sink, foundation_git, tmp_path
+):
+    marker, cleaned = tmp_path / "started", tmp_path / "cleaned"
+    code = f"import pathlib,signal\ntry:\n pathlib.Path({str(marker)!r}).write_text('started')\n signal.pause()\nfinally:\n pathlib.Path({str(cleaned)!r}).write_text('owned cleanup')\n"
+    process = subprocess.Popen(
+        [
+            lane.sys.executable,
+            "scripts/native_context_db_catalog.py",
+            "foundation-step",
+            "host",
+            "normal-durable",
+            "--",
+            lane.sys.executable,
+            "-c",
+            code,
+        ],
+        cwd=foundation_git.root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while not marker.exists() and process.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert marker.exists(), process.communicate(timeout=1)
+        process.send_signal(signal.SIGTERM)
+        stdout, stderr = process.communicate(timeout=5)
+        assert process.returncode == 143 and cleaned.read_text() == "owned cleanup", (
+            stdout,
+            stderr,
+        )
+        row = foundation_rows(foundation_sink, "host.jsonl")[-1]
+        assert (
+            row["status"] == 143 and row["process_exit"] == 130 and row["signal"] == signal.SIGTERM
+        )
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate(timeout=2)
+
+
+@pytest.mark.parametrize("original", (0, 7))
+def test_foundation_generic_sink_failure_is_a_separate_gate_and_keeps_nonzero_exit(
+    foundation_sink, monkeypatch, original
+):
+    expected = partition_fixture()[2]["nodeids"]
+
+    def proof(private, evidence, commands, env):
+        inventories = partition_fixture()
+        value = lane.validate_partition(*inventories)
+        for name, data in zip(("all-pg", "native", "generic-pg"), inventories, strict=True):
+            lane.write_json(private / ("partition-" + name + ".json"), data)
+        lane.write_json(private / "integration-partition.json", value)
+        return value, expected
+
+    def execute(argv, *, plugins):
+        plugins[0].pytest_collection_finish(
+            SimpleNamespace(items=[SimpleNamespace(nodeid=n) for n in expected])
+        )
+        return original
+
+    publish = foundation_sink.publish
+
+    def broken_result(name, value):
+        if name == "generic-result.json":
+            raise OSError("PRIVATE_SENTINEL_DSN_SQL")
+        return publish(name, value)
+
+    monkeypatch.setattr(lane, "prove_partition", proof)
+    monkeypatch.setattr(foundation_sink, "publish", broken_result)
+    monkeypatch.setattr(lane, "foundation_store", lambda: foundation_sink)
+    with patch("pytest.main", side_effect=execute):
+        if original:
+            assert lane.generic_integration() == original
+        else:
+            with pytest.raises(lane.Refusal, match="after pytest exit zero"):
+                lane.generic_integration()
+    assert not foundation_sink.read("generic-result.json") and foundation_sink.read("issues.jsonl")
+
+
+def test_foundation_python_frames_have_one_eight_frame_budget_across_the_chain(
+    foundation_sink, foundation_git
+):
+    from types import TracebackType
+
+    path = lane.ROOT / "tests/test_constructed.py"
+    namespace = {"__name__": "constructed"}
+    exec(compile(path.read_text(), str(path), "exec"), namespace)
+    try:
+        namespace["test_call"]()
+    except AssertionError as error:
+        trace = error.__traceback__.tb_next
+    repeated = None
+    for _ in range(20):
+        repeated = TracebackType(repeated, trace.tb_frame, trace.tb_lasti, trace.tb_lineno)
+    first = RuntimeError("PRIVATE_SENTINEL").with_traceback(repeated)
+    current = first
+    for _ in range(3):
+        current.orig = RuntimeError("PRIVATE_SENTINEL").with_traceback(repeated)
+        current = current.orig
+    value = lane.foundation_failure(
+        first,
+        lane.foundation_locations(foundation_sink.binding["source_manifest"]),
+        foundation_git.catalog,
+    )
+    assert sum(len(row["python_frames"]) for row in value["chain"]) <= 8
+    assert len(value["chain"]) == 4 and all(row["frames_limited"] for row in value["chain"])
 
 
 def complete_reports(nodes):
@@ -1576,6 +2687,8 @@ def test_ci_actual_generic_execution_must_match_proven_inventory(tmp_path, bad_s
             clear=True,
         ),
         patch.object(lane, "prove_partition", return_value=({}, expected)),
+        patch.object(lane, "foundation_store"),
+        patch.object(lane, "GenericJournal"),
         patch("pytest.main", side_effect=execute),
     ):
         if bad_selection:
