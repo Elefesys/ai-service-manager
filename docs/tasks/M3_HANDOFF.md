@@ -5,7 +5,211 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — RUN5 FAILURE;802 outcomes; CI-10/11 OPEN / 2026-10-20 UTC
+## CURRENT — CI-10 CLOSED LOCAL; C6 accepted; diagnostic RUN6 prepared / 2026-10-20 UTC
+
+C0 accepts [C6 FAILURE-EVIDENCE-R1 return6294851327](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6294851327)
+against [assignment6294026073](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6294026073):
+**INTEGRATED / VERIFIED SOURCE + ISOLATED LOCAL UNIT only; COMPLETE/HOLD.**
+**C0-NC-CI-10/P2 CLOSED LOCAL.** The actual RUN5 diagnostic loss is historical;
+the corrected recorder has no new PostgreSQL/Actions evidence yet. CI-06/07/11
+remain OPEN; PR35 remains OPEN Draft/BLOCKED. No generic repair is accepted.
+
+### Exact accepted source and independent review
+
+| Binding | Exact value |
+|---|---|
+| C6 branch | c6/m3-1-native-context-failure-evidence-r1 |
+| Accepted commit | ad89819de5778df32146dff245937e9a205e8265 |
+| Accepted tree | c3e3eee324fe6c1f0fb2856be5dbddbe5aa6f4ab |
+| Sole parent / assigned base | 49363b1eed1950446fd242fd9ef7ad32ee5eee58 |
+| Base tree / sole parent | d59bd2d5ad0d3f4b7925b5568017f9b3a1f69d56 / efc1c8af12dfe8b0c4098c2bf6b6d085e1b35f0b |
+| Frozen PR35 execution ref c0/m3-1-native-context-ci-r1 | efc1c8af12dfe8b0c4098c2bf6b6d085e1b35f0b |
+| Frozen main / schema | e205e22051bc06295758b504d84699652b176c15 / 0012 |
+| Frozen stock | af7482dede085bc033e3fee34f9a2425124351ee |
+
+Exactly two existing 100644 paths change from the assigned base, +273/-3:
+scripts/native_context_db_catalog.py +18/-1 and
+tests/test_native_context_db_runner.py +255/-2. Independent GitHub tree/commit
+readback and local Git objects match all294 bytes/modes; other292 leaves and all
+modes are exact. The runner changes only foundation_failure; other67 top-level
+definitions and globals are unchanged. Only old fixture foundation_git changes
+in the tests; all other88 old definitions, old assertions and parameter decorators
+remain exact. The added fixture and four tests expand to23 additional case IDs.
+
+foundation_failure now validates the nonempty list of exact index/revision/sql
+records, then extracts the unchanged constraint-name regex from each row's sql.
+The producer schema is unchanged. Missing data raises KeyError; malformed or
+alternate record shapes refuse with a fixed message. There is no string-list
+fallback or substitution of UNKNOWN to hide the producer/consumer defect.
+Actual source-defined constraint names survive; a foreign name remains UNKNOWN.
+
+Source review retains exception/descriptor guards, no exception str/repr or raw
+SQL/messages/locals/DSNs/payloads, the four-node/eight-frame bounds, PL/pgSQL
+whitelist/bounds, ASCII/final-LF/4096-byte records and BaseException propagation.
+GenericJournal, FoundationEvidence, generic_integration, foundation_check,
+owner admission/cleanup, selectors, clocks/caps, original nonzero exit and strict
+failure gates are byte-exact. No production/schema/workflow/CI-input changes.
+
+### C0 independent RED, GREEN, complete units and source pairing
+
+Before altered regression fixtures, the exact pristine base's source_catalog
+produced717 index/revision/sql records, equal to RUN5's saved expected catalog
+SHA256 e701a2ffe539da25e2624f9ff5c4ec87b4fc06ec8502a518979d63c1aa150bd5.
+Its foundation_failure on a safe constructed AssertionError raises exactly
+TypeError: sequence item 0: expected str instance, dict found. The corrected
+formatter consumes the same catalog and returns sanitized bounded evidence.
+This pure probe executes no database, Docker or pytest.
+
+The new23 regression cases were independently run in a separate base worktree
+with only the returned test file overlaid; all runtime source stayed pristine.
+RED: **20 failed, 3 passed, 363 deselected, 1 warning in 17.32s**; exit1.
+GREEN at accepted commit: **23 passed, 363 deselected, 1 warning in 10.18s**; exit0.
+
+Independent complete final checks at the clean accepted source:
+
+| Check | Actual C0 result |
+|---|---|
+| Complete runner | 386 passed, 2 warnings, 130 subtests passed in 118.01s (0:01:58) |
+| Complete ordinary non-integration suite | 2144 passed, 907 deselected, 5 warnings, 130 subtests passed in 340.30s (0:05:40) |
+| Ruff / format / compileall / git diff --check | PASS |
+| Pure profile -> model -> native_host_source pairing | all4 components;167functions/45tables/635columns PASS |
+
+Own frozen/offline uv.lock virtual environment: Python3.13.12, uv0.10.0, all58
+installed distributions match the lock; editable project and imported asm,
+provisioning and runner/preparer paths resolve to the independent checkout.
+Full execution uses the stock pinned plugins; no extra probe/inventory/clock
+plugin, timing adjustment or selection override. Caches/temp/bytecode stay outside
+the checkout. All363 old runner and2121 old ordinary IDs/parameters/order plus
+130subtests remain;23 additions only. No failed/error/skipped final JUnit case.
+
+C0 independently checked all182 C6 evidence-manifest entries and the294-leaf
+source tar, both complete C6 JUnit/command/log sets and the10 saved constructed
+journal cases. C6 complete results were386+130/123.92s and2144+130/424.90s.
+Its disclosed unpublished first candidate's nested pytest module-cache failure
+is retained as development history; final source restores that cache entry via
+monkeypatch, and all old/new nested cases pass together in both full C0 suites.
+
+C0 also parsed its own10 constructed journal cases. Successful recording of
+failed setup/call/teardown persists one bounded diagnostic per failed phase,
+exact case index/hash and ordered sequence, complete=true/evidence_failed=false,
+with original nonzero7 retained. The actual nested pytest path gives four cases,
+19case records/11phases/3diagnostics,1PASS+3FAIL and original exit1. Six actual
+write/fsync fault variants retain evidence_failed=true and failed strict gates;
+fsync failure remains failure even when bytes reached the file. A recorded test
+failure still fails the execution gate. These are constructed LOCAL units only.
+
+Independent collection preserves generic802 and native112=7source+105PG,
+disjointly covering all907 PG IDs; all four carrier modules remain. Ordered
+LF-list hashes: generic bde64cc7fbfd35daa02e8141adcaec0723427ed6c2cfeef4b5e15402e8b1d283,
+native 7b3ae663595966409f0291fe9836753bf303a37b76c529c36df7dd0957a2cf0d.
+No PG fixture executed. Verifier body remains
+527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac.
+Unchanged inputs retain ci.yml cdb6e92b90c3070ea22812e0edd8df5767bbbea7a67c8304a54d2282ef23c691,
+native-context-db.yml ff43d2470b56d26cf9c616cad5bc570e31634a19d97bdec4f28e73a205e049fd,
+check_backend.sh 1473e64b8ed0819b046b764f281072583271acd5f7b0929b3f8aa959c5d69330.
+
+### Evidence identity and exact preparation
+
+C0 review root: /workspace/scratch/241587c3ddae/c0-native-failure-evidence-review.
+The source/base/regression-red checkouts and evidence/scripts/metadata are
+separate. Actual commands are saved with argv/cwd/environment/exit in evidence;
+PY=evidence/python-env/bin/python, E=evidence, run from source:
+```sh
+"$PY" -m pytest -q tests/test_native_context_db_runner.py -k real_catalog --basetemp="$E/green-tmp" --junitxml="$E/regression-green.xml"
+"$PY" -m pytest -q --durations=20 tests/test_native_context_db_runner.py --basetemp="$E/runner-tmp" --junitxml="$E/runner.xml"
+"$PY" -m pytest -q --durations=20 -m 'not integration' --basetemp="$E/ordinary-tmp" --junitxml="$E/ordinary.xml"
+"$PY" -m ruff check scripts/native_context_db_catalog.py tests/test_native_context_db_runner.py
+"$PY" -m ruff format --check scripts/native_context_db_catalog.py tests/test_native_context_db_runner.py
+"$PY" -m compileall -q scripts/native_context_db_catalog.py tests/test_native_context_db_runner.py
+git diff --check HEAD^ HEAD
+```
+Variables above denote absolute paths recorded by scripts/local_run.py.
+verify_source.py, probe_producer.py, verify_environment.py, pairing.py and
+verify_results.py supply independent source, saved evidence, RED/GREEN, inventory,
+JUnit, actual constructed journals and environment checks. Collection uses
+--collect-only and the saved inventory plugin; full execution does not.
+
+| C0 evidence | SHA256 |
+|---|---|
+| source-and-c6-evidence-proof.json | 2f987c6eb170e2d37c09c90e90398984b34a264b4819a0c53851db6bb71c9bf8 |
+| environment-proof.json | 239255b74722ad0fd541c4d46df9942e44d1520eb15efa2facd4492a44b5fc4d |
+| producer-red.json | 50649e283f7ee1a02f49beac89af0f9f54a7610bcbdd7641a41a46171d3e3918 |
+| producer-green.json | d3ded0d2c172a9e62a5d2f3422141e61471da33ce34f6efc6705070769137cb1 |
+| regression-red.xml | d79041ee3eea31f847b9e0b7dd0438fd82cbea57719da0fff4480b77a7dffdfc |
+| regression-green.xml | 304ac253c2d752c9b1e5be8fd8a90103dae30bc04b039debebb4024951dcc3d8 |
+| runner.xml | 8042f9c9e24e66a3519c8dcef821760adbb0e3918b0aefa7d2da5fc5a6c8ffa0 |
+| ordinary.xml | 5130ecf2466a3441c70b1431ddf346de0c0f0f06258d00d5160906e51703796f |
+| inventory-proof.json | 0615c5d2411b74b51c192f3db5d3d8ee106faaa56eac72777a89e66f69d18db9 |
+| results-proof.json | 6cf8a927d9cd5478d85ad0e0c190a0ca7884e7b9c9d3fe66f470258fb24f3516 |
+| pairing-proof.json | 982ad9ca874bcf509ce7e6a71f4a2504ca1739f16a3e0c3fbdc3314f37910fe8 |
+| c0-evidence-manifest.json | 0ef49eb82075f577d1ea580c5dbe86beb2fe5d37ae3c503e0288c91a36f53ac7 |
+
+C0 manifest covers114 files: review scripts, retrieved metadata,
+receipts/logs/XML/proofs and50 constructed journal files. It excludes environments,
+caches, temporary worktrees and later preparation/publication receipts.
+C6 manifest182files SHA256544750db2b1f4e85101b4303efe302209367e7c20f40b2c15d96bd2c9be39377.
+All11 available original attachments and canonical copies match SOURCE_MANIFEST.
+The full contract, accepted diagnostic reports and original architecture remain
+unchanged; current implementation coordination is recorded here and in the register.
+
+This C0 preparation has sole parent accepted C6 and changes only HANDOFF/register;
+other292 leaves are exact. New preparation branch c0/m3-1-native-context-ci-r6
+has no PR or applicable push workflow. Its exact commit/tree and source-pairing
+readback are published in the C0 acceptance/proposal. No existing remote ref moves
+in preparation. PR35/execution, main, stock and prior preparation refs stay frozen.
+
+### Concrete next proposal — C0-M3.1-NATIVE-CONTEXT-CI-RUN6
+
+**PROPOSED/PREPARED, NOT AUTHORIZED, NOT RUN.** RUN5 one-use approval6292650855
+is CONSUMED ONCE. C6's task and this review cover SOURCE + LOCAL units only.
+A separate explicit approval of the exact prepared source is required by the
+current one-use execution procedure before moving the execution ref.
+
+Purpose: obtain actual complete sanitized failure diagnostics for the unchanged
+generic802 and verify the corrected recorder in ordinary CI. RUN5 remains
+10SUCCESS/1FAILURE,713PASS/89FAIL,0UNKNOWN,2406phases,0detailed failures and
+89EVIDENCE_WRITE_FAILED markers; full post-generic tail NOT_RUN. This source
+does not fix those89 cases or CI-11; a green complete gate is not promised.
+
+Proposed action after explicit approval: one expected-head, force=false FF of
+c0/m3-1-native-context-ci-r1 from efc1c8af12dfe8b0c4098c2bf6b6d085e1b35f0b to
+the exact prepared C0 commit/tree in the proposal, enabling only its first
+automatic pull_request/synchronize run,attempt1. Fresh preflight must verify
+candidate/sole parent/tree, unchanged main/schema/stock and PR35 Draft/old head,
+FF ancestry, no previous candidate run and no active run in the concurrency group;
+otherwise stop. Record actual merge SHA, ordered[main,candidate] parents, equal
+tree, event/run/attempt/job/artifact identities and all outcomes. Freeze source
+during execution. No manual dispatch/rerun/retry/cancel, second ref move, new PR,
+main/stock/settings/merge/deploy/VM/account/provider/live action.
+
+All11 jobs and entrypoints remain exact: whole normal durable25min then dependent
+foundation45min on fresh resources, complete ordinary units/generic802/full tail;
+native112 and other9 jobs unchanged. Maximum serial allocation25+45min excluding
+queueing, unchanged native20min/payload1080s, state/browser/compat25min,
+S600/P720/fixed120/+480/supervisor1200/cleanup90. No subset/fail-fast/retry,
+clock reset, changed resource ownership or native reset in generic execution.
+
+C0 checks each actual failed phase against a persisted bounded record and exact
+case identity/sequence, complete outcomes, original pytest result, honest
+evidence_failed, primary/cleanup receipts, archive hashes and clean source.
+Actual recorder confirmation does not require or imply green generic tests.
+CI-06 still requires complete current0013/OFF generic802 with historical
+assertions. CI-07 still requires all11 actualSUCCESS, both foundation lanes,
+full native112/336/105/catalog167/45/635, full tail and owned cleanup. A failed
+durable prerequisite/skipped foundation is failure; missing phases are NOT_RUN.
+
+After evidence exists, C0/C2 reconcile observed failure origins with F1-F9 and
+CI-11 before exact repair assignments. The12 potentially vacuous negatives retain
+observed PASS until intended-origin controls exist. Ordinary capture alone may
+not satisfy every report section8 valid-V2/schema-role-profile/historical-teardown
+fact. No blanket stale-test classification or ten-test-path/helper repair grant.
+C6 and C1/C2/C3/C5/C8/all implementation scopes HOLD. CI-08/09 closures and
+D1/D2/D3/caps retained; enforcement UNVERIFIED, IMPL-05 DEFERRED, M3 IN_PROGRESS.
+User owns merge. Later M3/M4/live/account scopes remain separate.
+
+---
+
+## History — RUN5 FAILURE;802 outcomes; CI-10/11 OPEN / 2026-10-20 UTC
 
 [RUN5 / 39435478971](https://github.com/Elefesys/ai-service-manager/actions/runs/39435478971), attempt1, completed
 2026-10-20T14:50:37Z: **10SUCCESS, 1FAILURE**. The one-use

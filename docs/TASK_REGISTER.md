@@ -2,7 +2,63 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — RUN5 reviewed; CI-10/11 OPEN; C6 recorder correction assigned / 2026-10-20 UTC
+## CURRENT — CI-10 CLOSED LOCAL; C6 accepted; RUN6 prepared, not authorized / 2026-10-20 UTC
+
+C0 accepts [C6 return6294851327](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6294851327)
+at **ad89819de5778df32146dff245937e9a205e8265**, treec3e3eee324fe6c1f0fb2856be5dbddbe5aa6f4ab, sole parent
+49363b1eed1950446fd242fd9ef7ad32ee5eee58. Two permitted paths,+273/-3;
+other292 leaves/all modes exact. Correct actual source DDL record consumption;
+unchanged producer/gates/privacy/cleanup and all old assertions.
+
+| Task / finding | Current status |
+|---|---|
+| C6-M3.1-NATIVE-CONTEXT-FAILURE-EVIDENCE-R1 | INTEGRATED / VERIFIED SOURCE + ISOLATED LOCAL UNIT; COMPLETE/HOLD |
+| C0-NC-CI-10/P2 | CLOSED LOCAL; actual new recorder CI confirmation pending; RUN5 diagnostic loss retained |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN6 | PROPOSED/PREPARED, NOT AUTHORIZED, NOT RUN; exact one-use proposal in HANDOFF/comment |
+| C0-M3.1-NATIVE-CONTEXT-CI-RUN5 | COMPLETED/FAILURE:10SUCCESS/1FAILURE; approval6292650855 CONSUMED ONCE |
+| C0-NC-CI-06/P2 | OPEN: latest actual generic802=713PASS/89FAIL,0UNKNOWN; those failures unfixed |
+| C0-NC-CI-07/P2 | OPEN: complete generic/tail and all11SUCCESS unmet |
+| C0-NC-CI-11/P2 | OPEN: PROCESS_TURN claimed during PROVIDER image preparation; no repair/authorization-bug inference |
+| C0-NC-CI-08/09/P2 | Prior CLOSED LOCAL states retained with RUN5 ordinary cleanup/unit confirmation |
+| C1/C2/C3/C5/C8/all implementation and generic repair scopes | HOLD |
+
+Independent C0 RED old formatter20FAIL/3PASS versus corrected23PASS.
+Full runner: **386 passed, 2 warnings, 130 subtests passed in 118.01s (0:01:58)**.
+Full ordinary: **2144 passed, 907 deselected, 5 warnings, 130 subtests passed in 340.30s (0:05:40)**.
+All363 old runner/2121 old ordinary IDs/parameters/order and130subtests retained;
+23 additions, no failure/error/skip in complete final JUnit. Ruff/format/compile/diff
+PASS. Separate frozen Python3.13.12/uv0.10.0 environment; all58 distributions locked
+and imports/editable mapping point to C0 checkout. All182 C6 evidence-manifest
+entries, full294-leaf tar, final XML/commands/logs and constructed journals verified.
+
+Own actual nested pytest path persists3 bounded failure records with19case rows,
+11phases and unchanged exit1. Failed setup/call/teardown, original nonzero7,
+identity/order, descriptor/privacy/frame bounds and actual write/fsync faults are
+covered. All6 sink-failure variants keep evidence_failed=true/failed gate;
+successfully recorded failed tests still fail execution. Constructed local units
+are not PostgreSQL/runtime evidence. Details/hashes: [current HANDOFF](tasks/M3_HANDOFF.md).
+
+Collection only preserves generic802/native112(7source+105PG)/disjoint907/all4
+carrier modules. Pure4component pairing167functions/45tables/635columns PASS;
+workflow/input hashes and original11/full contract/accepted reports unchanged.
+
+New C0 preparation c0/m3-1-native-context-ci-r6 changes only HANDOFF/register
+with sole parent accepted C6; exact final commit/tree appear in the acceptance
+proposal. No existing ref moves. PR35 remains OPEN Draft/BLOCKED at
+efc1c8af12dfe8b0c4098c2bf6b6d085e1b35f0b; main
+e205e22051bc06295758b504d84699652b176c15/schema0012 and stock
+af7482dede085bc033e3fee34f9a2425124351ee frozen. RUN5 stays713PASS/89FAIL,
+empty failure journal/evidence_failed=true/full tail NOT_RUN; historical outcomes
+are not relabeled. C0 prepares one ordinary diagnostic RUN6 to capture those
+failures after separate explicit source-specific approval. Existing11 jobs and
+all budgets remain; prior RUN5 approval cannot authorize it. No rerun/retry,
+execution-ref move, PG/Docker/Actions, repair, merge or live action in this review.
+M3 IN_PROGRESS; user owns merge. D1/D2/D3 and previous closures retained;
+enforcement UNVERIFIED, IMPL-05 DEFERRED.
+
+---
+
+## History — RUN5 reviewed; CI-10/11 OPEN; C6 recorder correction assigned / 2026-10-20 UTC
 
 [RUN5 / 39435478971](https://github.com/Elefesys/ai-service-manager/actions/runs/39435478971), attempt1, completed2026-10-20T14:50:37Z:
 **10SUCCESS, 1FAILURE**. User-confirmed one-use approval6292650855 CONSUMED ONCE;
