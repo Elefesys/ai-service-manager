@@ -5,7 +5,145 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## 0. Текущий шаг C0 — RUN3 blocked; C2/C6 диагностика foundation / 2026-10-19 UTC
+## CURRENT — diagnostic returns accepted; C6 foundation CI-R4 source implementation / 2026-10-20 UTC
+
+C0 accepts [C2 diagnostic return6269738186](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6269738186)
+and [C6 budget/evidence return6269543868](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6269543868)
+as **INTEGRATED / VERIFIED SOURCE+SAVED-DATA only**. Their diagnostic tasks are
+complete; C2 is HOLD. **C6-M3.1-NATIVE-CONTEXT-FOUNDATION-CI-R4 is the sole ACTIVE
+task, source implementation/local isolated verification only.** C1/C3/C5/C8 and
+all other implementation tasks remain HOLD. CI-06/P2 and CI-07/P2 remain OPEN;
+whole native integration/PR35 stays BLOCKED and M3 IN_PROGRESS.
+
+### Accepted report/source evidence
+
+| Return | Exact source / sole parent / scope |
+|---|---|
+| C2 | aca4f9e5ad8bb8888f580dfa8102e065b2950de7; tree bca69e7c1341f31869d22dc7eac3702c24cf95c1; parent 9ec5508e13a60962a4b2fded1d8a582cd1e6346b; only docs/tasks/M3_NATIVE_CONTEXT_GENERIC_PG_DIAG.md, +789/-0 |
+| C6 | e1f5cc77659bc73f82a473bd1543cf8f2200b99d; tree 7ca0266aa5fd45dc95715fd0b3ea004a7d5e103e; same parent; only docs/tasks/M3_NATIVE_CONTEXT_FOUNDATION_BUDGET_DIAG.md, +499/-0 |
+
+C0 reconstructed both exact report trees and commits, proved every preexisting292
+leaf unchanged, verified both report SHA256 values and all11 canonical attachments
+against SOURCE_MANIFEST/repository. Full M3_CONTRACT remains byte-exact
+fe2eb4ef2469ccb14b7147017c3c81066cde1b8a6ad60acbf73922a15e3ace5f.
+C0 downloaded and hash-checked RUN3 foundation12191528180 and native12188761326;
+both source archives independently rebuild candidate tree
+c5941d30aba59fe68f07b86f96c1cd8ae9c55c9a from292 bytes/modes. Actual foundation
+job log hash8791be4f230d35a6a2ebba3d1d767af7ef1ac7c98a1138effee381428af4f79a
+matches C6. Both log representations match all ordered755 outcomes and full802
+inventory. All88 failed IDs/definition lines/family assignments and all47 UNKNOWN
+IDs were independently checked; first FAIL13:26:51.337Z, last terminal13:48:49.259Z.
+
+Nine source-supported families account for88 FAIL as5+1+56+3+6+1+7+1+8.
+These remain hypotheses about actual first exceptions, not recovered traces or
+proof that all failures are stale tests. C0 independently reconstructed the
+TRUNCATE FK closure22→31 (nine missing relations), confirmed fresh ingress only
+converts codec2 on0012, and checked current0013 readiness versus historical0012
+positive assumptions. Three write-fault and nine malformed-input PASSED cases
+may fail before their intended target; retain their observed statuses and require
+positive/control/error-origin proof in later validation. All47 tenancy/security/
+transaction outcomes remain UNKNOWN; no speculative test_tenancy_* edits.
+
+Pure current source_catalog equals the saved native expected catalog. Its saved
+function/OID/catalog/profile comparison passes167functions/45tables/635columns,
+profile c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411.
+Saved112 native cases/336 phases/105 resets were rechecked. This is reanalysis of
+RUN3, not new PostgreSQL or runtime evidence. C0 ran no product tests, fixtures,
+Docker, browser, service, Actions, VM, Telegram, S3, LLM or deployment.
+
+### C0 decision: narrow execution-boundary change, explicitly accepted
+
+The whole normal durable visible envelope is1005.260s; it precedes an incomplete
+backend prefix1659.763s with47 generic outcomes and the complete post-PG tail
+still unknown. C0 accepts C6's whole-lane separation, **10→11 expanded required
+jobs**, as a bounded CI-07 repair. This revises only the current orchestration
+count/boundary; historical nine/ten-job receipts remain historical. It does not
+reopen IMPL-05 or general CI optimization, reduce coverage, reset a clock or
+increase an existing per-job/inner cap. No claim of a complete45min fit is made.
+
+| Required job | Responsibility / accepted policy |
+|---|---|
+| New foundation-durable,25min | Fresh source/resources; entire normal durable gate, all wire checks and six complete lifecycles, owned cleanup, source/evidence/archive |
+| Existing foundation,45min | needs: [foundation-durable]; fresh source/resources; complete units, exact generic802, migration/base→head/contracts/two wheels/storage/service/HTTP tail, cleanup/source/evidence/archive |
+| Other existing9 jobs | Unchanged browser, Docker29 compatibility, all6 normal/Docker29 image/intent/state matrix jobs and unconditional same-commit native reusable job |
+
+Foundation must not start resources after failed/cancelled durable. A skipped
+dependent foundation is not acceptance. C0's later candidate/main acceptance
+requires **all11 actual SUCCESS at one exact tested source**, including each of
+foundation-durable and foundation independently, clean-source gates and owned
+cleanup. Repository rulesets GET returned[]; main branch-protection read returned
+403 Resource not accessible by integration. Administrative enforcement therefore
+is UNVERIFIED, not absent or configured. No repository protection setting is
+changed by this decision; it does not block source implementation or waive the
+manual all11 gate/user-owned merge. Verify administrative enforcement separately
+at premerge if needed; never claim it follows from workflow YAML or needs.
+
+No-argument scripts/ci.sh remains the full combined gate for storage-images.yml
+and bootstrap callers. Only closed --normal-durable and --foundation-core routes
+are added; no environment bypass, arbitrary selectors, resume offsets, resource
+sharing/adoption, caching, sharding, retries or lifecycle splitting. Native20min/
+payload1080s, state/browser/compat25min, foundation45min, original S/600/P720/
+fixed120/+480/supervisorS+1200/cleanup90 and every individual cap remain exact.
+The new serial25+45 allocation is explicit; request clocks never cross the job
+boundary because the whole durable lane moves intact.
+
+### Sole next task and later sequence
+
+C6-M3.1-NATIVE-CONTEXT-FOUNDATION-CI-R4; branch
+c6/m3-1-native-context-foundation-ci-r4. Exact base/tree are this combined C0
+preparation, published in the canonical task comment on PR34 before work starts.
+Preparation contains both report blobs unchanged and updates only HANDOFF/register;
+all290 other original leaves remain exact,294 total. C0 integration ref is
+c0/m3-1-native-context-ci-r4. C6 may modify only these five existing paths:
+
+1. .github/workflows/ci.yml
+2. scripts/ci.sh
+3. scripts/check_backend.sh
+4. scripts/native_context_db_catalog.py
+5. tests/test_native_context_db_runner.py
+
+Implement the accepted complete routing and immediate bounded sanitized generic
+phase/failure evidence from C6 report sections4–7. Retain exact collection/order,
+three complete native exclusions, partition proof, original pytest exit and
+cancellation. Persist existing inventories before fixtures, then start and actual
+setup/call/teardown records; missing terminal phases stay INCOMPLETE. Evidence
+must survive container removal while runner/always steps remain available, with
+private host-owned validated files, flush/fsync and no arbitrary exception text,
+SQL/DSN/parameters/locals/env/stdout/payload dumps in the new structured record.
+Preserve primary failure when reporting/cleanup fails; successful execution with
+missing required evidence fails a separate completeness gate. Source/cleanup and
+archive success never convert failure/cancellation into PASS.
+
+Update the exact changed CI_INPUT_SHA256 entries atomically with their inputs;
+native-context-db.yml and its hash remain exact. Preserve all existing guard
+negatives/event identity/parent checks and259 existing runner tests/130 subtests;
+add only meaningful routing/signal/status/evidence/redaction/hostile-path tests.
+No Dockerfile/Compose/lock/image/product/SQL/migration/test fixture changes.
+Full C6 scope/validation is the canonical PR34 task, which does not authorize an
+actual DB/CI run. Local frozen-environment static/isolated unit tests and stubbed
+shell routing/cancellation checks are allowed; no real Docker/PG/service/build/
+browser/Actions/VM/provider execution. Return REVIEW, then HOLD.
+
+After C0 accepts C6's exact implementation, separately authorize bounded actual
+LOCAL/TEST diagnostic execution to obtain C2 section8 facts at unchanged test
+source. C2's ten-test-path+one-helper proposal is **not yet an implementation
+assignment**. Then issue small owner-specific fixes and validate target-origin
+negatives, full current0013/OFF coverage and strict paired historical phases.
+Preserve every existing802 generic ID; no historical-only generic substitution,
+no relaxing readiness/profile/grants, no deleting usage to downgrade and no
+production/migration change without a distinct finding and C0 scope.
+
+PR35/execution remains59c9fce52bdaae54f50cdb847a378d47f75c642b; main remains
+e205e22051bc06295758b504d84699652b176c15/schema0012; stock remains
+af7482dede085bc033e3fee34f9a2425124351ee. RUN3 approval6267864984 consumed once.
+No rerun/dispatch/retry/cancel/new PR/merge/deployment is authorized in this step.
+D1/D2/D3/prior closures retained; account/A08/P01/P05/renewal/collector/A12/M4
+remain later. User owns merge.
+
+---
+
+
+## History — RUN3 diagnostic issuance / 2026-10-19 UTC
 
 [C0 final RUN3 disposition6268965488](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6268965488).
 **RUN3 completed9 SUCCESS/foundation CANCELLED; PR35 Draft/BLOCKED.
