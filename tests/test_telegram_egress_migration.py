@@ -2589,13 +2589,16 @@ def schema_coordinator_workspace(ledger):
 
 
 def run_retained_full_negatives(directory, checkout, request, ledger):
-    """Entire immutable T negatives, after P and within the original S+1200."""
-    deadline = ledger["material_supervisor_deadline"]
+    """Entire immutable T negatives, after P and within the original S+1440."""
+    deadline = ledger["state_deadline"]
     began = time.monotonic()
-    assert deadline == ledger["started_at"] + 1200, "CONTROL_NEGATIVE_BUDGET_TOTAL"
+    assert deadline == ledger["started_at"] + 1440, "CONTROL_NEGATIVE_BUDGET_TOTAL"
     assert (
         ledger["material_exit"] == 0
         and ledger["material_cleanup"]["state"] == "PASS"
+        and ledger["material_export_completed_at"]
+        < ledger["material_supervisor_deadline"]
+        == ledger["started_at"] + 1200
         and ledger["started_at"] <= ledger["material_export_completed_at"] <= began < deadline
     ), "CONTROL_NEGATIVE_ADMISSION"
     positive = json.loads((checkout / "reports/m3-schema-phase.json").read_text())
@@ -2618,7 +2621,7 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
             evidence="ACTUAL_FULL_T_DOCKER_POSTGRES",
             whole_state_started_at=ledger["started_at"],
             deadline=deadline,
-            budget_seconds=1200,
+            budget_seconds=1440,
             budget_scope="POST_MATERIAL_NEGATIVES",
             executor_source=CONTROL_T,
         )
@@ -4288,6 +4291,7 @@ def run_control_coordinator(request):
         material_deadline=material_deadline,
         material_extension_seconds=120,
         material_supervisor_deadline=material_deadline + 480,
+        state_deadline=started + 1440,
     )
     reports = e.ROOT / "reports"
     path = reports / "control-schema-ledger.json"
@@ -4628,20 +4632,18 @@ def run_control_coordinator(request):
                 "completed_at": time.monotonic(),
             }
             run_frozen_material(directory, ledger, completion)
-            # Proposed contract revision: full real T negatives follow P. They
-            # share S+1200; no new start, skipped wait or frozen-source change.
+            # Full real T negatives and C cleanup share the original S+1440.
+            # P keeps its separate S+1200 supervisor; no clock reset.
             run_retained_full_negatives(directory, checkout, request, ledger)
             if added:
                 e.command(
                     ["git", "worktree", "remove", str(checkout)],
-                    timeout=min(40, ledger["material_supervisor_deadline"] - time.monotonic()),
+                    timeout=min(40, ledger["state_deadline"] - time.monotonic()),
                 )
             # Original C bytes/assertions and unchanged invocation request.
             # The separate current observer journal labels execution instrumented.
             ledger["stage"] = "retained_control_cleanup_negatives"
-            assert time.monotonic() < ledger["material_supervisor_deadline"], (
-                "CONTROL_STATE_BUDGET_EXHAUSTED"
-            )
+            assert time.monotonic() < ledger["state_deadline"], "CONTROL_STATE_BUDGET_EXHAUSTED"
             result = supervised_schema_child(
                 [
                     sys.executable,
@@ -4651,7 +4653,7 @@ def run_control_coordinator(request):
                     ),
                 ],
                 cwd=control,
-                timeout=min(480, ledger["material_supervisor_deadline"] - time.monotonic()),
+                timeout=min(480, ledger["state_deadline"] - time.monotonic()),
             )
             try:
                 assert result == 0, "CONTROL_CLEANUP_NEGATIVE_EXIT"
@@ -4670,9 +4672,7 @@ def run_control_coordinator(request):
                 ["git", "-C", str(control), "status", "--porcelain", "--untracked-files=all"]
             ).strip(), "FROZEN_CONTROL_SOURCE_CHANGED"
             e.command(["git", "worktree", "remove", str(control)])
-            assert time.monotonic() < ledger["material_supervisor_deadline"], (
-                "CONTROL_STATE_BUDGET_EXHAUSTED"
-            )
+            assert time.monotonic() < ledger["state_deadline"], "CONTROL_STATE_BUDGET_EXHAUSTED"
             schema_publish(ledger, path)
             print("GUARDS_SCHEMA_COORDINATOR_PASS", flush=True)
             print("MATERIAL_SCHEMA_COORDINATOR_PASS", flush=True)
@@ -9847,7 +9847,7 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
     assert ast.unparse(next(k.value for k in ordered[5].keywords if k.arg == "cwd")) == "control"
     assert (
         ast.unparse(next(k.value for k in ordered[5].keywords if k.arg == "timeout"))
-        == "min(480, ledger['material_supervisor_deadline'] - time.monotonic())"
+        == "min(480, ledger['state_deadline'] - time.monotonic())"
     )
     assert "--guards-schema-upgrade" in shell and "--escalation-schema-upgrade" in shell
     assert "retained-guards/guards-schema-phase.json" in coordinator
@@ -12008,27 +12008,33 @@ def test_material_entrypoint_accounts_full_preparation_and_refuses_before_runtim
     assert report["cleanup"]["state"] == ("NOT_ADMITTED" if not cleaned else "PASS")
 
 
-@pytest.mark.parametrize("fault", [None, "deadline", "expired", "P_exit", "P_cleanup", "P_late"])
+@pytest.mark.parametrize(
+    "fault", [None, "deadline", "expired", "P_exit", "P_cleanup", "P_late", "P_deadline"]
+)
 def test_post_material_negative_admission_keeps_original_S(tmp_path, monkeypatch, fault):
     ledger = {
         "started_at": 100.0,
         "deadline": 700.0,
         "material_supervisor_deadline": 1300.0,
+        "state_deadline": 1540.0,
         "material_export_completed_at": 800.0,
         "material_exit": 0,
         "material_cleanup": {"state": "PASS"},
     }
     now = 900.0
     if fault == "deadline":
-        ledger["material_supervisor_deadline"] += 1
+        ledger["state_deadline"] += 1
     elif fault == "expired":
-        now = 1300.0
+        now = 1540.0
     elif fault == "P_exit":
         ledger["material_exit"] = 1
     elif fault == "P_cleanup":
         ledger["material_cleanup"]["state"] = "ADMITTED"
     elif fault == "P_late":
         ledger["material_export_completed_at"] = now + 1
+    elif fault == "P_deadline":
+        now = 1400.0
+        ledger["material_export_completed_at"] = 1300.0
     monkeypatch.setattr(sys.modules[__name__], "time", SimpleNamespace(monotonic=lambda: now))
     reports = tmp_path / "reports"
     reports.mkdir()
@@ -12172,14 +12178,15 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
         assert ledger["material_exit"] == 0 and ledger["material_cleanup"]["state"] == "PASS"
         assert ledger["material_export_completed_at"] == f.clock[0]
         assert ledger["material_supervisor_deadline"] == ledger["started_at"] + 1200 == 1300
+        assert ledger["state_deadline"] == ledger["started_at"] + 1440 == 1540
         sequence.extend(["timeout", "export"])
         if fault == "negative_failed":
             raise e.EgressError("CONTROL_COMMAND_EXIT")
         f.clock[0] += 192
         if fault == "tail_expired":
-            f.clock[0] = 1300.0
+            f.clock[0] = 1540.0
         if fault in {"tail_just_before", "tail_at_deadline"}:
-            f.clock[0] = 1299.875
+            f.clock[0] = 1539.875
 
     monkeypatch.setattr(sys.modules[__name__], "run_retained_full_negatives", negatives)
 
@@ -12189,7 +12196,7 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
         if args[0] == sys.executable:
             sequence.append("C-cleanup-negatives")
             assert sequence == ["T", "C", "G", "E", "P", "timeout", "export", "C-cleanup-negatives"]
-            assert 0 < timeout == min(480, 1300 - f.clock[0])
+            assert 0 < timeout == min(480, 1540 - f.clock[0])
             assert not (f.root / "coordinator/turns").exists()
             if fault == "tail_just_before":
                 f.clock[0] += 0.0625
@@ -12316,7 +12323,7 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
     assert ledger["material_deadline"] == 820 and ledger["material_supervisor_deadline"] == 1300
     assert cleaned == [owner.phase for owner in owners]
     if success:
-        assert ledger["total_schema_seconds"] == f.clock[0] - 100 < 1200
+        assert ledger["total_schema_seconds"] == f.clock[0] - 100 < 1440
     else:
         assert ledger["primary_failure"]
         if fault in {"tail_expired", "tail_at_deadline"}:
@@ -12364,6 +12371,8 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
         "negative_result",
         "negative_ledger_mismatch",
         "state_deadline",
+        "state_budget",
+        "P_supervisor",
     ],
 )
 def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
@@ -12391,12 +12400,13 @@ def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
         "material_deadline": 1020.0,
         "material_extension_seconds": 120,
         "material_supervisor_deadline": 1500.0,
+        "state_deadline": 1740.0,
         "material_handoff": copy.deepcopy(f.value),
         "escalation_completion": copy.deepcopy(f.value["escalation_completion"]),
         "escalation_cleanup": {"token": "e" * 32},
         "material_cleanup": {"token": f.owner.token},
         "material_export_completed_at": 1400.0,
-        "total_schema_seconds": 1190.0,
+        "total_schema_seconds": 1430.0,
     }
     full = {
         "candidate": "a" * 40,
@@ -12404,12 +12414,12 @@ def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
         "result": "PASS",
         "count": 2,
         "results": ["timeout", "export"],
-        "deadline": 1500.0,
+        "deadline": 1740.0,
         "started_at": 300.0,
         "material_export_completed_at": 1400.0,
         "execution_started_at": 1401.0,
-        "completed_at": 1480.0,
-        "charged_seconds": 1180.0,
+        "completed_at": 1720.0,
+        "charged_seconds": 1420.0,
     }
     budget = {
         **copy.deepcopy(f.value),
@@ -12478,7 +12488,12 @@ def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
     elif damage == "negative_result":
         full["result"] = "FAIL"
     elif damage == "state_deadline":
-        ledger["total_schema_seconds"] = 1200.0
+        ledger["total_schema_seconds"] = 1440.0
+    elif damage == "state_budget":
+        ledger["state_deadline"] += 1
+    elif damage == "P_supervisor":
+        ledger["material_export_completed_at"] = full["material_export_completed_at"] = 1500.0
+        full["execution_started_at"] = 1501.0
     ledger["full_retained_negatives"] = copy.deepcopy(full)
     if damage == "negative_ledger_mismatch":
         ledger["full_retained_negatives"]["completed_at"] -= 1

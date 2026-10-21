@@ -377,10 +377,14 @@ def test_foundation_workflow_has_eleven_required_jobs_serial_source_and_always_g
     for job, digest in {
         "browser": "b3ab2a96b6f7f8eb3a3b726b9769d756a55bd50694b3f21be8779aabcc87c3db",
         "docker29-compatibility": "37ecbf897d53f318f3d0e2192b05574923e6e9ed7a6bbd421aa6eecddff055b1",
-        "connect5-migration": "c624af64b59752a4889032d4bbbbb729fe5732f99733199a2b590e2b942df645",
+        "connect5-migration": "940bc041722d35488f6bc5b148e87793eebda363df6aa572762f5ed4f2de2100",
         "native-context-db": "ab14f25d082e830a8be35422a7ae4f0fc7d8f7092ec992fcbde703751b2fe78b",
     }.items():
         assert lane.sha256(jobs[job].encode()) == digest
+    assert (
+        "timeout-minutes: ${{ matrix.boundary == 'state' && 30 || 25 }}"
+        in jobs["connect5-migration"]
+    )
     assert "needs: [foundation-durable]" in jobs["foundation"]
     for job, cap, route in (
         ("foundation-durable", 25, "normal-durable"),

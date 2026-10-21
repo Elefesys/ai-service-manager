@@ -5024,24 +5024,38 @@ The entire existing contract through§15.10.4 is preserved byte-for-byte.
 
 #### 15.11.1. Decision, measured cause and unchanged execution
 
-**2026-10-21 C0 revision (REVISED):** the ordering/budget of the two full T negatives
-below is superseded by this paragraph. Execute T positive → C → G → E → P → real
-T timeout → T export failure → the three original C cleanup negatives. Both full
-T negatives now use the original S+1200, and may start only after successful P,
-validated/exported P evidence and owned cleanup. They remain mandatory; an earlier
-failure means NOT_RUN and a failed state lane, never PASS. Their elapsed time is
-fully charged from S. The final C supervisor gets min(480, S+1200−now); successful
-completion of the entire sequence requires elapsed <1200. T/C/G/E positive600,
-P preparation720/supervisor1200, cleanup90 and job25min remain unchanged. There is
-no fresh clock, duration subtraction, frozen-source edit, skipped negative, or
-change to the20 pairings, data/security/refusal proofs or product behavior.
+**2026-10-21 C0 revision after RUN7 (REVISED):** keep the accepted order
+T positive → C → G → E → P → real T timeout → T export failure → three original
+C cleanup negatives. The whole-state deadline is now **S+1440**, and only the two
+`connect5-migration` state matrix jobs receive **30min**. This explicitly supersedes
+the earlier S+1200 total/25min state-job constraint. Original S is retained; all
+elapsed time is charged, without reset, subtraction or per-negative fresh budget.
+T/C/G/E positive600, P preparation720 and **P supervisor S+1200**, cleanup90,
+real T timeout120 and C supervisor cap480 remain unchanged. T negatives may start
+only after successful P, validated/exported evidence before S+1200 and owned
+cleanup. They and the three C negatives must finish before S+1440; the C child
+gets min(480,S+1440−now). All20 pairings and data/security/refusal proofs remain.
+Any missing/failed phase fails the lane. Product behavior and frozen sources do
+not change. This is a bounded CI budget correction, not an automatic future increase.
 
-Rationale: intentional failure waits need not precede preparation of an unrelated
-positive migration. RUN6 measured195.592719116s in those two negatives; moving
-them removes that scheduling dependency but does not reduce total work or prove
-runtime feasibility. C6 proposal cde80c2d941d98aa91b373ad5e58d69efb85569d is accepted
-for source integration and actual normal/Docker29 validation. CI-12 remains OPEN
-until those gates pass. The historical rule and evidence below remain historical.
+Measured reason: RUN7 /39564573743, head f15118831af25d7b94e56f9c11e0ae37a8a7c28a,
+actual merge fddc0bc0d21ecd6a5758025e4b470b6960426cdf. Docker29 completed P
+preparation at538.176225005s<720 and P export at1000.214391230s from S, with20
+pairings PASS. The mandatory T timeout then took158.065762171s. Export-negative
+owned resources were removed, but its zero-connection checkpoint write reached
+the expired global deadline; total1200.625390259s, missing required event, and
+three C negatives NOT_RUN. The earlier isolated Docker29 PASS had only11.763s
+slack. Reordering fixed P admission but did not provide reliable terminal margin.
+A240s whole-state reserve and five job minutes accommodate the retained work;
+they are not a claim that a failed run passed. New source requires unit and actual
+normal/Docker29 full-CI evidence before closure. Main/stock and merge policy stay fixed.
+
+The workflow change is exactly one timeout expression: state30, intent/image25.
+Its reviewed SHA256 is3fa9fb80384d80cafeac55da9b5309feebca29c7999341eeed3ab1a964d56cbf;
+connect5 block SHA256940bc041722d35488f6bc5b148e87793eebda363df6aa572762f5ed4f2de2100.
+C0 authorizes updating those two exact input fingerprints; all other workflow bytes,
+eleven jobs, source/admission/ownership/evidence gates and pins remain unchanged.
+The original decision/evidence below is historical where superseded here.
 
 One original monotonic start **S** remains established before T. H/predecessor
 execution stays before that ledger, exactly as in the accepted harness. Retained

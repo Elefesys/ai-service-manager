@@ -52,7 +52,7 @@ PG_MODULES = (
 # Preserve default merge/main checkout, unconditional same-commit reusable call, pinned
 # owned lane and exact generic command. No fallback/embedded workflow is used.
 CI_INPUT_SHA256 = {
-    ".github/workflows/ci.yml": "cdb6e92b90c3070ea22812e0edd8df5767bbbea7a67c8304a54d2282ef23c691",
+    ".github/workflows/ci.yml": "3fa9fb80384d80cafeac55da9b5309feebca29c7999341eeed3ab1a964d56cbf",
     ".github/workflows/native-context-db.yml": "ff43d2470b56d26cf9c616cad5bc570e31634a19d97bdec4f28e73a205e049fd",
     "scripts/check_backend.sh": "1473e64b8ed0819b046b764f281072583271acd5f7b0929b3f8aa959c5d69330",
 }

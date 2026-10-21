@@ -2,26 +2,26 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C0 repairs verified; full CI next / 2026-10-21
+## CURRENT — native checks pass; C0 corrects remaining CI budget / 2026-10-21
 
 | Task / finding | Current status |
 |---|---|
 | C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-REPAIR-R1 | INTEGRATED / VERIFIED TARGETED with C0 fixture corrections f211272…;331/331, all former88, generic802/802 and downgrade/restore PASS; C2 HOLD |
-| C6-M3.1-NATIVE-CONTEXT-STATE-REPAIR-R1 | INTEGRATED / VERIFIED TARGETED on d2a1914…: normal+Docker29 SUCCESS, each20 pairings+2T negatives+3C negatives/cleanup; C6 HOLD |
-| M3_CONTRACT§15.11.1 scheduling | REVISED by C0: T negatives after P, original S+1200. Actual891.158/1188.237s; Docker29 total slack11.763s |
-| C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 | IN_PROGRESS: targeted gates PASS; one FF of existing PR35 execution for whole-candidate CI/native112 |
-| C0-NC-CI-06/11/12 | Targeted remediations VERIFIED; final dispositions await whole-candidate CI |
-| C0-NC-CI-07 | OPEN: full CI remains required; no whole-feature completion claim |
-| PR35 / main / stock | PR35 execution advances only after verified gates; main e205e220…/stock af7482de… frozen; user owns merge |
+| C6-M3.1-NATIVE-CONTEXT-STATE-REPAIR-R1 | Source INTEGRATED; targeted normal/Docker29 PASS, but RUN7 Docker29 total budget exhausted; C6 HOLD, C0 owns bounded correction |
+| Native context / browser RUN7 | VERIFIED on f151188…: native112/336 phases/105 resets and fresh0013 catalog; browser54 journeys/398 units PASS; not whole CI PASS |
+| M3_CONTRACT§15.11.1 | REVISED by C0: same original S, whole-state1440/state-job30min; positive600/P720/P-supervisor1200/cleanup90 unchanged |
+| C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 | IN_PROGRESS: check bounded correction locally, wait for all RUN7 outcomes, then one new full CI; no duplicate standalone state run |
+| C0-NC-CI-06/11 | Targeted remediations VERIFIED; final dispositions follow whole CI evidence |
+| C0-NC-CI-07/12 | OPEN: RUN7 state Docker29 FAILURE; foundation result pending at correction decision |
+| PR35 / main / stock | Execution f151188…; main e205e220…/stock af7482de… frozen; merge belongs to user |
 
 [Decision/evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516)
-and HANDOFF CURRENT bind exact sources, artifacts and limitations. PG3 run39561491975:
-802PASS/2406 phases,1204.86s, zero initial workspaces, clean source/owned cleanup and
-final downgrade/base→0013 PASS. PG2 had331PASS and generic792PASS/10FAIL:9 failures
-from C0 reused-DB residue and1 unexplained1.5s lock timeout. The latter did not recur
-on the fresh run; its timing cause is not declared fixed. First PG159/upload and
-coverage mistakes remain recorded. No product/DDL changes or merged temporary
-workflow. M3 IN_PROGRESS; full CI result is maintained in the decision link above.
+and HANDOFF CURRENT bind exact sources, artifacts and next run. RUN7 had9SUCCESS,
+1FAILURE and1running at this decision. Docker29 P20 pairings pass, but export-negative
+checkpoint recording hit S+1200 after owned resources were removed; three final C
+negatives NOT_RUN. Explicit240s total reserve preserves all cases and positive
+limits. Only the state timeout expression and its exact fingerprints change in CI.
+Product runtime/DDL remain unchanged; M3 IN_PROGRESS, no completion/merge claim.
 
 ---
 

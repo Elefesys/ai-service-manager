@@ -5,71 +5,51 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — C0 repair validation / 2026-10-21
+## CURRENT — C0 terminal state-budget correction / 2026-10-21
 
 C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 owns integration; C2/C6 HOLD.
-[Current decision and actual evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516).
-C2 e8cfe0f7819b0f2a19548cd7b6f7058dca129a30 and C6
-cde80c2d941d98aa91b373ad5e58d69efb85569d were composed at
-d2a1914ec22d5f4b14f0576b51a78d8baccb14e8/tree99017b9ad0126d536086496dc4cc13c56f1cedd4.
-C0 correction f211272e14598db79f54b768a1bfa9d410dd59d4/tree087d72c9e9d941a2ca88f3b37efcc9327ca0b51f
-changes only2 tests,+4/−3: ACCEPTED receipt envelope plus QUEUED result, and
-CI-11 conversation lookup through Job.turn_id. No production/DDL/frozen-source/pin change.
+[Current decision and source-bound evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516).
+The C2/C6 return blobs were composed at d2a1914…; C0 fixed two fixture errors at
+f211272… (ACCEPTED/QUEUED envelope and Job.turn_id lookup). No business runtime/DDL
+changed. Targeted331/331 includes all former88 failures,12 origin controls and5
+CI-11 cases. Fresh PG run39561491975 on f211272:802/802 PASS,2406 phases,
+1204.86s; downgrade/base→0013, exact296 source leaves, clean source and cleanup PASS.
+Earlier C0 coverage/upload/reused-DB failures remain documented. PG2's single
+1.5s lock timeout did not recur on the fresh run; its exact cause is not proven fixed.
 
-C0 independently confirmed158 focused units and642 units+130subtests on the
-combined d2a1914 tree; pinned Python3.13.12/uv0.10.0/frozen lock. The two corrections
-passed Ruff/format/diff checks and are confirmed by the actual PG gates below.
+RUN7 /39564573743 executes PR35 head f15118831af25d7b94e56f9c11e0ae37a8a7c28a,
+merge fddc0bc0d21ecd6a5758025e4b470b6960426cdf,
+tree3d251d5c1ef7ad2164287281173e7ef2a041c4fc. At this correction decision:
+9 jobs SUCCESS, Docker29 state FAILURE, foundation still running. Wait for its
+complete result before the next head update; no cancellation or unchanged rerun.
+Native112/336 phases/105 resets, fresh167functions/45tables/635columns and cleanup
+PASS; runner516 units PASS. Browser54 journeys/398 frontend tests PASS. Normal
+state:20 pairings,2 real T negatives,3 C cleanup negatives, exact source/cleanup
+PASS; preparation317.077428067s, wholeS771.188318408s.
 
-C0 explicitly accepted the scheduling revision at M3_CONTRACT§15.11.1.
-Run39555517022 tests exact d2a1914 on separate normal/Docker29 runners. Both state
-jobs SUCCESS:20 source/schema pairings,2 full T negatives after P,3 original C
-cleanup negatives, owned cleanup and exact296 source leaves/modes PASS.
-P preparation:356.316341058/522.532018077s<720; whole original-S sequence:
-891.157554072/1188.236758719s<1200 (normal/Docker29). No clock reset or increased
-600/720/1200, cleanup90 or job25min. Docker29 has11.763241281s total slack;
-future-run timing stability is not proven. Archive IDs/digests are in the decision.
-This verifies the C6 change on d2a1914; the final whole-candidate CI remains mandatory.
+Docker29 positive phases/P20 pairings PASS: preparation538.176225005s<720;
+P export atS+1000.214391230, timeout negative158.065762171s PASS. Export-negative
+owned cleanup removed its resources, but the required zero-connection checkpoint
+could not be recorded after S+1200; total1200.625390259s. Full cleanup evidence is
+incomplete and3 C negatives NOT_RUN, so state is FAILURE. Artifact12329639787,
+20213620bytes,SHA2565af086a46016498705e030425b073ae77396f4d985818b5aa24d4545ce88013a.
+The earlier targeted Docker29 PASS with11.763s slack did not prove timing stability.
 
-First PG subset159 in that run had142PASS/17FAIL; full802 NOT_RUN.12 new positive
-controls confused receipt code/result_code; the5 CI-11 failures also exposed a
-source-confirmed nonexistent Job.conversation_id. Full traces/JUnit were not
-uploaded because root-owned0600 inventory caused EACCES; only the saved job log
-and its complete17-failure summary survive. Do not claim full artifact evidence.
-The first11-file selection covered65 old failures, not all88:23 callers are in
-four unchanged control/guards/turns modules. This selection error is corrected.
+C0 explicitly revises M3_CONTRACT§15.11.1: original-S whole-state1440 and state-job30min;
+positive600/P preparation720/P supervisor1200/cleanup90 and all mandatory cases stay.
+The new ledger separates state_deadline from the unchanged material supervisor.
+Only the state matrix timeout changes in the workflow. Its two exact fingerprints
+are updated to that reviewed one-line change, with guards and all11 jobs retained.
+Unit checks must cover both terminal boundaries and refuse P beyond its old1200.
+After local checks and the complete RUN7 result, publish one bounded correction
+and run whole-candidate CI, which also supplies real normal/Docker29 validation.
+Do not add an extra duplicate standalone state run or a new observer framework.
 
-PG2 run39556449833 on exact f211272: **331/331 PASS,993 phases PASS**; generic802:
-792PASS/10FAIL, all2406 phases recorded. All88 former RUN6 failures pass by exact
-nodeid in both phases;12 origin controls and5 CI-11 cases pass. Artifact12327850408,
-2992959bytes, SHA2560488098360978ffc6fd6d99e43e5437aecf02384d3c0e8eb7aa21fe358ea91df;
-296 source leaves/modes exact, clean checkout/owned cleanup PASS. Final tail NOT_RUN.
-Nine new duplicate fixed-Workspace failures are C0 temporary harness contamination:
-focused billing leaves01990000…0001 and the following full suite expected a fresh DB.
-One controlled-activation-subscription wait_blocked1.5s timeout remains unexplained;
-its focused/RUN6 PASS does not prove a timing fix.
-
-PG3 run39561491975, workflowe4d0e89d4ef82dd527345f484e75e6e1e925dd73:
-**SUCCESS on exact f211272:802/802 PASS,2406 phases PASS,1204.86s**, zero skips.
-Fresh TEST DB had zero workspaces; final downgrade/base and restore0013 PASS.
-The earlier timeout did not recur; its specific timing cause is not proven fixed.
-Archive12329370620,2952346bytes,
-SHA2563cd2238d437254fb0790c34319bd47c223c3295d1267281cd026d2bf5e9a59b0;
-exact296 source leaves/modes, empty worktree and owned cleanup PASS. Successful331
-was not repeated. Only the separate temporary harness isolation/timeout evidence
-changed; tests, product, edge/timeout and ordinary CI remain unchanged.
-
-**All targeted repair gates now PASS.** C0 advances the existing PR35 execution
-branch once for full CI/native112, including this two-document CURRENT update.
-Runtime/test bytes equal f211272; this source-bound acceptance is not full CI PASS.
-The full run identity and disposition will be maintained in the decision link above.
-
-Temporary push-only workflow on c0/m3-1-native-context-repair-check-r1 is separate
-from the integration candidate; ordinary CI/workflows/guards remain unchanged.
-The existing user instruction authorizes necessary checks. After all targeted
-criteria passed, C0 advances existing PR35 execution once for full CI/native112 and
-all remaining gates. No unchanged lucky rerun. Main e205e220…/stock af7482de… stay
-frozen; user owns merge. CI-06/07/11/12 OPEN; M3 IN_PROGRESS. New product functions,
-production/VM/provider/paid actions remain outside this scope.
+Main e205e220…/stock af7482de… stay frozen; user owns merge. CI-07/12 OPEN, M3
+IN_PROGRESS. The linked C0 decision binds the next exact commit/run and final
+results. This instruction authorizes necessary TEST checks under the user's
+existing request; new product functions/production/VM/provider/paid actions remain
+outside scope. Failure is not permission for an automatic further budget increase.
 
 ---
 

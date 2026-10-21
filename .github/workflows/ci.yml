@@ -178,7 +178,7 @@ jobs:
     # Independent disposable shards preserve the existing three verification jobs.
     name: connect5-migration (${{ matrix.docker }}, ${{ matrix.boundary }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: ${{ matrix.boundary == 'state' && 30 || 25 }}
     permissions:
       contents: read
     strategy:

@@ -138,7 +138,7 @@ try:
         full = json.loads((e.ROOT / 'reports/control-full-retained-negatives.json').read_text())
         assert full['candidate'] == source and full['result'] == 'PASS' and full['count'] == 2
         assert full['results'] == ['timeout', 'export']
-        assert full['deadline'] == full['started_at'] + 1200 and full['charged_seconds'] < 1200
+        assert full['deadline'] == full['started_at'] + 1440 and full['charged_seconds'] < 1440
         admission['full_retained_negatives'] = full
         # The GUARDS coordinator executed __control_cleanup_negatives__ in
         # the byte-identical frozen C checkout before preserving/removing it.
@@ -173,11 +173,11 @@ try:
         assert full['candidate'] == source and full['source'] == 'ea1ae98ce9e5e26d5d0d14f3e6d278ecb9efbbad'
         assert full['result'] == 'PASS' and full['count'] == 2 and full['results'] == ['timeout', 'export']
         assert full['started_at'] == ledger['started_at']
-        assert full['deadline'] == ledger['material_supervisor_deadline'] == full['started_at'] + 1200
-        assert full['material_export_completed_at'] == ledger['material_export_completed_at']
+        assert full['deadline'] == ledger['state_deadline'] == full['started_at'] + 1440
+        assert full['material_export_completed_at'] == ledger['material_export_completed_at'] < ledger['material_supervisor_deadline']
         assert budget['preparation_ended_at'] <= full['material_export_completed_at'] <= full['execution_started_at'] <= full['completed_at'] < full['deadline']
         assert full['charged_seconds'] == full['completed_at'] - full['started_at']
-        assert full['charged_seconds'] <= ledger['total_schema_seconds'] < 1200
+        assert full['charged_seconds'] <= ledger['total_schema_seconds'] < 1440
         assert ledger['candidate'] == ledger['observed_source'] == source
         assert ledger['material_sources']['coordinator']['sha'] == source
         assert ledger['material_sources']['coordinator']['tree'] == source_tree
