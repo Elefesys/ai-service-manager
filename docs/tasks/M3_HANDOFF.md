@@ -5,7 +5,140 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — RUN6 reviewed; CI-10 confirmed; CI-06/07/11/12 OPEN / 2026-10-20 UTC
+## CURRENT — продолжение native context: исправления вместо отдельного цикла отчётов / 2026-10-21
+
+Пользователь подтвердил прежний вариант OWNER reconciliation + observation barrier.
+Цель: после общения мастера вне Console следующий AI-контекст содержит подтверждённые
+договорённости; известный несверенный сигнал останавливает новые AI actions.
+Для пилота это полезно при ответах мастера из Telegram; сама возможность отвечать
+через Console не требует этого расширения. Упрощённый вариант не принят.
+Новые правила пилота, предварительного объяснения функций и пересмотра архитектуры
+записаны в AGENTS.md. Пользователь разрешил продолжить реализацию и необходимые проверки.
+
+Последний исполненный кандидат остаётся faceef49dc719d1b3c2b7945116794f6737d7b32;
+RUN6: 9 SUCCESS / 2 FAILURE, generic 714 PASS / 88 FAIL, все802 исхода известны.
+CI-06/07/11/12 OPEN; PR35 OPEN Draft/BLOCKED; M3 IN_PROGRESS. Main/stock не меняются.
+Эта координация не является новым исполненным кандидатом и не закрывает findings.
+
+C6 [6308193288](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6308193288)
+и его неизменённый отчёт0973cd2bb5376060bb7ebcdd4bf73a3ae5eabf8a приняты как вход
+для исправления CI-12. C0 прочитал выводы/исходные ограничения и проверил однофайловый
+коммит; новое независимое воспроизведение четырёх архивов здесь не заявляется.
+Нового опубликованного возврата C2 по RECONCILE-R1 на момент выдачи нет.
+Готовые материалы этой задачи использовать внутри исправления; отдельный промежуточный
+отчёт и новая очередь согласования для них больше не требуются.
+
+Ниже полностью заменены старые report-only выдачи. Их исторические запреты не
+блокируют явно разрешённые здесь изменения и LOCAL/TEST проверки. Это не разрешение
+новой функции, production/VM/provider действий, платных вызовов или merge.
+
+### Общая исходная точка и проверка
+
+- Repository: Elefesys/ai-service-manager. Отдельные checkout/ветки C2 и C6 от
+  **точного C0 coordination commit/tree из новой выдачи в PR34**. Его sole parent:
+  0973cd2bb5376060bb7ebcdd4bf73a3ae5eabf8a, tree f94639ee44c5a12ef11857c1e6fc62e081a91b72.
+  Runtime bytes равны RUN6; отличаются только правила/координация и отчёт C6.
+- Читать AGENTS, этот CURRENT, реестр, применимый контракт§16 и уже принятые отчёты.
+  Источники/артефакты привязать к SHA; не начинать повторный аудит всех оригиналов
+  и архивов, если их целостность уже подтверждена и не возник новый конкретный риск.
+- Допускаются изолированные LOCAL/TEST PostgreSQL/Docker и необходимые targeted units.
+  Использовать штатные pinned зависимости, собственные ресурсы и cleanup. До запуска
+  фиксировать source/schema/role и цель; сохранить setup/call/teardown, primary error,
+  полный перечень исходов и длительности. Не печатать secrets/DSN/private payload.
+- Минимальную диагностику выполнять в рамках исправления там, где нужен недостающий
+  факт. Не вводить общий observer framework или отдельную серию report/prototype задач.
+- Возврат: commit/patch, короткая таблица «группа → причина → изменение → проверка»,
+  команды/фактические исходы, остаточные риски и ссылки на полные артефакты. Новый
+  многостраничный tracked diagnostic report не требуется. После возврата HOLD для интеграции.
+- Полный CI запускает C0 на объединённом проверенном SHA после целевых результатов
+  обеих задач. Старые consumed approvals не переиспользовать; текущее поручение
+  пользователя разрешает необходимые проверки исправлений, но не слепые rerun.
+  Чистый focused subset не заменяет generic802/native112 и оставшиеся обязательные gates.
+
+### C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-REPAIR-R1 — все группы generic, CI-11
+
+Ветка c2/m3-1-native-context-generic-pg-repair-r1. C0 назначает C2 единственным
+исполнителем этого согласованного test-fixture среза, включая перечисленные ранее
+C1/C3 test paths; параллельных авторов этих файлов не назначать.
+
+Вход: RUN6 core artifact12285065331, native12281891391; точные SHA/digests и все88
+диагностик — в историческом RUN6 ниже. Старый GENERIC_PG_DIAG§5–8 содержит карту
+девяти групп, write-set и недостающие discriminating controls. RUN6 устранил UNKNOWN
+исходы, но не доказывает поведение после исправленного входа или origin12 negative PASS.
+
+Разрешённый write-set — только следующие11 существующих test files и один helper
+при доказанной необходимости; все production/DDL/API/workflow/lock paths read-only:
+
+| Файл в tests/ | Изменение и проверяемый результат |
+|---|---|
+| test_m2_3_db_postgres.py | F3: ingress выбирает корректный codec2 для0012/0013; old writers/replay сохранены. Все56 доходят до целевого поведения;12 negative cases имеют valid-input positive control и intended error/injection origin. |
+| test_m1_3_c0_acceptance.py | F1: явное замыкание FK для transactional TRUNCATE;5 conflict cases и восстановление строк/catalog после rollback. Не CASCADE. |
+| test_m1_3_postgres.py | F2: точные четыре native Audit columns/generated expressions; прежние defaults/keys/grants остаются. |
+| test_postgres.py | F8: точный current inventory45 tables, остальные capability/role checks сохранены. |
+| test_m2_3_schema_postgres.py | Current0013 postcondition после старого0007 refusal; исторический0006→0007 цикл сохранён. |
+| test_m3_1_migrations.py | F4: actual refusal before DDL и полный неизменённый current snapshot; old H/I proofs сохранены. |
+| test_m3_1_guards_migrations.py | F5: current отказ проверяется на current полном состоянии; strict historical G helpers не ослаблять. |
+| test_m3_2_escalations_migrations.py | F5/F6: разделить current refusal/security и точную historical E phase; RLS/ACL/clock assertions выполняются. |
+| test_m3_1_provenance_migrations.py | F7: явные0012/P и0013/current phases, source-paired readiness, exact downgrade/restore и usage refusals. |
+| test_telegram_egress_postgres.py | F9: все8 cases, current45/167 и historical42/132; семь реальных downgrade witnesses должны быть достигнуты. |
+| test_m2_3_api_postgres.py | CI-11: установить причину чужого PROCESS_TURN claim в image setup; точечно исправить fixture ownership/order при подтверждении, сохранить5 route authorization checks. |
+| generic_pg_schema.py (только если нужен) | Небольшой используемый helper: current snapshot, explicit historical phase и paired readiness. Не общий schema runner. |
+
+Сначала сопоставить все88 actual failures с группами и добавить недостающие факты
+в целевых RED→GREEN проверках; не проводить ещё один общий RED ради уже записанных
+ошибок. F3 —55 P2001 +1 caught-message assertion, а не56 одинаковых исключений.
+Native OFF/current0013 — обычная среда generic. Исторические фазы имеют точный source,
+роль/schema и finally-восстановление current состояния; использованный native context
+не очищать ради downgrade. Не переносить generic целиком на0012, не ослаблять equality,
+tenant/authority/refusal guards, не skip/xfail/удалять IDs и не менять applied migrations.
+
+Проверить все88,12 negative controls, CI-11 с воспроизводимым конкурирующим Job,
+и затронутые historical/current restore paths. Затем один полный generic802 на final
+candidate, с учётом всех исходов и прежних47 UNKNOWN→PASS. Точный сбор907=802+105
+сохранить; новые осмысленные случаи учитывать отдельно. Native112 и полный CI —
+интеграционная проверка C0. Если вскроется production-дефект, вернуть его точную
+причину/минимальный patch proposal; не скрывать изменением fixture или теста.
+
+### C6-M3.1-NATIVE-CONTEXT-STATE-REPAIR-R1 — CI-12
+
+Ветка c6/m3-1-native-context-state-repair-r1. Цель — конкретное исправление выполнения
+state-проверки с подтверждённым результатом; повышение объёма диагностики само по себе
+задачу не закрывает. Уже подтверждён расход S+720 и распределённое замедление;
+не доказывать это заново. Причина host/Docker и длительность helper probe неизвестны.
+
+Write-set: tests/test_telegram_egress_migration.py, scripts/test_telegram_egress_migration.sh,
+scripts/prepare_telegram_egress.py и tests/test_telegram_egress.py — только текущая
+обвязка state lane и проверки её изменения. Другие файлы, production/backend/DDL,
+frozen source bytes, workflow/pins и общий performance refactor не входят.
+
+Установить конкретную устранимую причину в разрешённой обвязке; использовать
+существующий timing path, при необходимости добавить только недостающий замер
+оригинальной операции. Не отдельный общий recorder. Разрешены один полный owned
+state RED для недостающего факта и проверка final patch в normal/Docker29 lanes;
+частные units/controlled regression — по проверяемому риску. Не повторять полный
+запуск неизменённого кандидата ради PASS и не подменять original command/result.
+
+Исправление сохраняет source/schema pairing,20 pairings, retained negative tests,
+исторические данные/отказы, owner cleanup и точный учёт elapsed. Текущие600/720/1200,
+cleanup90 и job25min не увеличивать автоматически. Если исправление внутри этих
+границ невозможно или требует нового общего механизма, вернуть **один конкретный
+вариант пересмотра**: какой пункт чрезмерен, минимальный diff/новое правило, сохранённые
+доказательства и последствия для пилота. C0 примет/отклонит этот вариант как явное
+решение; не начинать следующий diagnostic round. Архитектура пересматриваема, но
+подмена старого source или объявление непроверенных обязательств PASS недопустимы.
+
+### Следующая точка решения C0
+
+Эта итерация должна дать исправления известных групп либо конкретный технический
+предел. Если возвращается только предложение нового большого инструмента/серии
+диагностик без ограниченного исправления, остановить выдачу новых циклов и оценить
+DEFERRED всей функции по решению пользователя. Одна случайная ошибка CI сама по
+себе не доказывает невозможность native context. Согласованный критерий завершения:
+целевые гарантии, полный CI кандидата и итоговая приёмка; число отчётов не критерий.
+
+---
+
+## History — RUN6 reviewed; CI-10 confirmed; CI-06/07/11/12 OPEN / 2026-10-20 UTC
 
 [RUN6 / 39457359784](https://github.com/Elefesys/ai-service-manager/actions/runs/39457359784), attempt1, completed
 2026-10-20T17:17:04Z: **9SUCCESS, 2FAILURE**. The diagnostic purpose is met:

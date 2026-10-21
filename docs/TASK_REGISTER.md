@@ -2,7 +2,32 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — RUN6 reviewed; diagnostics complete; C2/C6 report scopes / 2026-10-20 UTC
+## CURRENT — native context: согласованное исправление / 2026-10-21
+
+Пользователь подтвердил прежний OWNER reconciliation + observation barrier.
+Упрощённый вариант не принят. Правила объяснения пользы до реализации, приоритета
+пилота, пересмотра архитектуры и остановки бесконечной диагностики — в AGENTS.md.
+
+| Task / finding | Current status |
+|---|---|
+| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-REPAIR-R1 | TODO / ASSIGNED: все88 F1–F9,12 negative controls, CI-11 и полный generic802; точный write-set в HANDOFF |
+| C6-M3.1-NATIVE-CONTEXT-STATE-REPAIR-R1 | TODO / ASSIGNED: исправление CI-12; минимальная диагностика внутри задачи, конкретный предел/вариант пересмотра вместо следующего общего отчёта |
+| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-RECONCILE-R1 | HOLD / отдельная report-only выдача заменена REPAIR-R1; готовый анализ используется в исправлении; опубликованный возврат не получен |
+| C6-M3.1-NATIVE-CONTEXT-STATE-BUDGET-DIAG-R1 | INTEGRATED как неизменённый отчёт0973cd2… / вход для repair; новая независимая runtime/evidence verification не заявляется |
+| C0-NC-CI-06/07/11/12 | OPEN; никакая находка не закрыта данной координацией |
+| C0-NC-CI-08/09/10 | Прежние CLOSED dispositions сохранены |
+| C1/C3/C5/C8, новые функции, production/merge | HOLD; C2 отдельно разрешены перечисленные C1/C3 test-fixture paths |
+
+Точная общая база — C0 coordination commit/tree из новой выдачи PR34, sole parent
+0973cd2bb5376060bb7ebcdd4bf73a3ae5eabf8a. Полные задачи и критерии:
+[HANDOFF CURRENT](tasks/M3_HANDOFF.md#current--продолжение-native-context-исправления-вместо-отдельного-цикла-отчётов--2026-10-21).
+Последний выполненный RUN6:9SUCCESS/2FAILURE, generic714PASS/88FAIL; PR35 остаётся
+OPEN Draft/BLOCKED наfaceef49dc719d1b3c2b7945116794f6737d7b32. Main/stock неизменны.
+Новый CI не выполнен. M3 IN_PROGRESS; merge остаётся за пользователем.
+
+---
+
+## History — RUN6 reviewed; diagnostics complete; C2/C6 report scopes / 2026-10-20 UTC
 
 [RUN6 / 39457359784](https://github.com/Elefesys/ai-service-manager/actions/runs/39457359784),attempt1, completed2026-10-20T17:17:04Z:
 **9SUCCESS, 2FAILURE**. Approval6295749140 CONSUMED ONCE; one expected-head/force=false
