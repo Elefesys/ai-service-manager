@@ -31,42 +31,75 @@ jobs:
           BIND
           cat > "$RUNNER_TEMP/repair-tools/repair_checks.py" <<'PY'
           """One-use TEST runner embedded in the separate validation workflow."""
+          import asyncio
           import hashlib
+          import time
           import json
           import os
           import runpy
           import subprocess
           import sys
           from pathlib import Path
-
+          
           REPORTS = Path('/repair-evidence')
-          FILES = [
-              'tests/test_m1_3_c0_acceptance.py', 'tests/test_m1_3_postgres.py',
-              'tests/test_m2_3_api_postgres.py', 'tests/test_m2_3_db_postgres.py',
-              'tests/test_m2_3_schema_postgres.py', 'tests/test_m3_1_guards_migrations.py',
-              'tests/test_m3_1_migrations.py', 'tests/test_m3_1_provenance_migrations.py',
-              'tests/test_m3_1_control_api_postgres.py', 'tests/test_m3_1_control_postgres.py',
-              'tests/test_m3_1_guards_postgres.py', 'tests/test_m3_1_turns_postgres.py',
-              'tests/test_m3_2_escalations_migrations.py', 'tests/test_postgres.py',
-              'tests/test_telegram_egress_postgres.py',
-          ]
-
-
+          
+          
+          
           def pytest_collection_finish(session):
               expected = json.loads((REPORTS / (os.environ['REPAIR_PHASE'] + '-expected.json')).read_text())
               assert [item.nodeid for item in session.items] == expected
               assert not any(item.get_closest_marker(m) for item in session.items for m in ('skip', 'skipif', 'xfail'))
-
-
+          
+          
           def pytest_runtest_logreport(report):
               with (REPORTS / (os.environ['REPAIR_PHASE'] + '-phases.jsonl')).open('a') as out:
                   out.write(json.dumps({'nodeid': report.nodeid, 'when': report.when,
                                         'outcome': report.outcome, 'seconds': report.duration}) + '\n')
-
-
+          
+          
+          
+          def pytest_runtest_setup(item):
+              if 'test_post_lock_product_boundaries_with_actual_conversation_wait[' not in item.nodeid:
+                  return
+              original = item.module.wait_blocked
+          
+              async def observed_wait(connection, blocker, *, pending=None):
+                  started = time.monotonic()
+                  try:
+                      return await original(connection, blocker, pending=pending)
+                  except TimeoutError:
+                      record = {'nodeid': item.nodeid, 'seconds': time.monotonic() - started,
+                                'blocker_pid': blocker, 'request_done': pending.done(),
+                                'request_stack': [{'file': f.f_code.co_filename, 'line': f.f_lineno,
+                                                   'function': f.f_code.co_name}
+                                                  for f in pending.get_stack()]}
+                      if pending.done() and not pending.cancelled():
+                          error = pending.exception()
+                          record['request_result'] = type(error).__name__ if error else getattr(pending.result(), 'status_code', None)
+                      try:
+                          from sqlalchemy import text
+                          async with asyncio.timeout(2), connection.engine.connect() as observer:
+                              record['activity'] = [dict(r) for r in (await observer.execute(text(
+                                  'SELECT pid,state,wait_event_type,wait_event,pg_blocking_pids(pid) AS blockers '
+                                  'FROM pg_stat_activity WHERE datname=current_database()'
+                              ))).mappings()]
+                              record['locks'] = [dict(r) for r in (await observer.execute(text(
+                                  'SELECT pid,locktype,mode,granted FROM pg_locks '
+                                  'WHERE NOT granted OR pid=:blocker'
+                              ), {'blocker': blocker})).mappings()]
+                      except Exception as error:
+                          record['observer_error'] = type(error).__name__
+                      with (REPORTS / 'lock-timeout.jsonl').open('a') as output:
+                          output.write(json.dumps(record) + '\n')
+                      raise
+                  finally:
+                      item.module.wait_blocked = original
+          
+              item.module.wait_blocked = observed_wait
+          
           def main():
               from sqlalchemy.engine import make_url
-
+          
               assert os.environ['ASM_ENVIRONMENT'] == 'TEST'
               secrets = []
               for key in ('ASM_DATABASE_URL', 'ASM_MIGRATION_DATABASE_URL', 'ASM_ADMIN_DATABASE_URL'):
@@ -74,13 +107,13 @@ jobs:
                   assert url.database == 'asm_test' and url.host == 'postgres-test'
                   secrets.extend([os.environ[key], url.password])
               secrets.extend(os.environ[k] for k in ('ASM_STORAGE_ACCESS_KEY', 'ASM_STORAGE_SECRET_KEY'))
-
+          
               def sanitize(value):
                   for secret in sorted(set(secrets), key=len, reverse=True):
                       if secret:
                           value = value.replace(secret, '[REDACTED]')
                   return value
-
+          
               def run(args, label, *, env=None):
                   result = subprocess.run(args, capture_output=True, text=True, env=env)
                   output = sanitize(result.stdout + result.stderr)
@@ -89,7 +122,7 @@ jobs:
                   if result.returncode:
                       print(output, flush=True)
                       raise SystemExit(result.returncode)
-
+          
               try:
                   catalog = runpy.run_path('scripts/native_context_db_catalog.py')
                   inventories = {}
@@ -105,11 +138,20 @@ jobs:
                   (REPORTS / 'partition.json').write_text(json.dumps(proof, indent=2) + '\n')
                   run([sys.executable, '-m', 'alembic', 'upgrade', 'head'], 'upgrade')
                   run([sys.executable, '-m', 'alembic', 'upgrade', 'head'], 'repeat-upgrade')
-                  for phase, args in (
-                      ('focused', ['-q', '-m', 'integration', *sorted(FILES)]),
-                      ('generic', catalog['integration_arguments']()),
-                  ):
-                      expected = [node for node in generic if phase == 'generic' or node.split('::')[0] in FILES]
+                  async def require_fresh_test_database():
+                      from sqlalchemy import text
+                      from sqlalchemy.ext.asyncio import create_async_engine
+                      engine = create_async_engine(os.environ['ASM_MIGRATION_DATABASE_URL'], hide_parameters=True)
+                      try:
+                          async with engine.connect() as connection:
+                              count = (await connection.execute(text('SELECT count(*) FROM platform.workspaces'))).scalar_one()
+                              assert count == 0, 'generic802 requires fresh TEST DB, no focused-suite residue'
+                              (REPORTS / 'fresh-database.json').write_text(json.dumps({'workspace_count': count}) + '\n')
+                      finally:
+                          await engine.dispose()
+                  asyncio.run(require_fresh_test_database())
+                  for phase, args in (('generic', catalog['integration_arguments']()),):
+                      expected = generic
                       (REPORTS / (phase + '-expected.json')).write_text(json.dumps(expected) + '\n')
                       env = dict(os.environ, REPAIR_PHASE=phase, PYTEST_DISABLE_PLUGIN_AUTOLOAD='1',
                                  PYTHONPATH='/repair-tools:/app/backend/src')
@@ -125,15 +167,15 @@ jobs:
                   for path in REPORTS.iterdir():
                       if path.suffix in {'.log', '.json', '.jsonl', '.xml'}:
                           path.write_text(sanitize(path.read_text()))
-
-
+          
+          
           if __name__ == '__main__':
               main()
           PY
           python3 scripts/init_local.py
       - name: Build locked TEST checks
         run: docker compose --env-file infra/images.lock.env --env-file .env --profile test build --pull checks
-      - name: Affected PG scenarios then complete generic802
+      - name: Complete generic802 on fresh isolated TEST database
         shell: bash
         run: |
           set -euo pipefail
