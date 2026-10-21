@@ -7,44 +7,69 @@
 
 ## CURRENT — C0 repair validation / 2026-10-21
 
-C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1: source review and composition of C2
-e8cfe0f7819b0f2a19548cd7b6f7058dca129a30 and C6
-cde80c2d941d98aa91b373ad5e58d69efb85569d. Both have sole parent
-f2f0da81e018a230fbc53db8fc2f3d02475e21d8. Their disjoint14 code/test paths are
-accepted for validation, not runtime VERIFIED. C2 reports642 unit PASS and C6
-158 focused PASS; PG and both state lanes are NOT_RUN. Their return comments are
-[6309331991](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309331991)
-and [6309095832](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309095832).
+C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 owns integration; C2/C6 HOLD.
+[Current decision and actual evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516).
+C2 e8cfe0f7819b0f2a19548cd7b6f7058dca129a30 and C6
+cde80c2d941d98aa91b373ad5e58d69efb85569d were composed at
+d2a1914ec22d5f4b14f0576b51a78d8baccb14e8/tree99017b9ad0126d536086496dc4cc13c56f1cedd4.
+C0 correction f211272e14598db79f54b768a1bfa9d410dd59d4/tree087d72c9e9d941a2ca88f3b37efcc9327ca0b51f
+changes only2 tests,+4/−3: ACCEPTED receipt envelope plus QUEUED result, and
+CI-11 conversation lookup through Job.turn_id. No production/DDL/frozen-source/pin change.
 
-C0 explicitly accepts the single scheduling revision at M3_CONTRACT§15.11.1:
-T positive → C/G/E/P → real T timeout/export negatives → three C cleanup negatives,
-all charged to original S, with entire successful sequence <1200. This removes
-intentional failure waits from P admission, without a new product feature or
-increased total allowance. CI-12 remains OPEN pending actual normal/Docker29.
+C0 independently confirmed158 focused units and642 units+130subtests on the
+combined d2a1914 tree; pinned Python3.13.12/uv0.10.0/frozen lock. The two corrections
+passed Ruff/format/diff checks and are confirmed by the actual PG gates below.
 
-Branch/checkout: c0/m3-1-native-context-repair-validation-r1 from exact f2f0da81…;
-write-set: the14 returned code/test files plus this file, TASK_REGISTER and the
-explicit contract revision. No production, DDL, frozen-source, dependency or
-ordinary-workflow changes. C2/C6 remain HOLD; C0 owns integration and any bounded
-correction in the returned fixture/harness slice. New production findings return
-to a concrete scope decision; no weakened assertions or automatic budget increase.
+C0 explicitly accepted the scheduling revision at M3_CONTRACT§15.11.1.
+Run39555517022 tests exact d2a1914 on separate normal/Docker29 runners. Both state
+jobs SUCCESS:20 source/schema pairings,2 full T negatives after P,3 original C
+cleanup negatives, owned cleanup and exact296 source leaves/modes PASS.
+P preparation:356.316341058/522.532018077s<720; whole original-S sequence:
+891.157554072/1188.236758719s<1200 (normal/Docker29). No clock reset or increased
+600/720/1200, cleanup90 or job25min. Docker29 has11.763241281s total slack;
+future-run timing stability is not proven. Archive IDs/digests are in the decision.
+This verifies the C6 change on d2a1914; the final whole-candidate CI remains mandatory.
 
-Local execution has no Docker and cannot switch to a non-root PG user. Use an
-isolated TEST GitHub runner, via a temporary push-only workflow on a separate
-c0/m3-1-native-context-repair-check-r1 branch, checking out the exact published
-candidate. The temporary workflow is not part of the integration candidate.
-First execute all11 affected generic files (including88 previous failures,
-12 origin controls, CI-11 and historical restore paths); only on success execute
-one complete generic802 with unchanged907=802+105 inventory. Run normal and
-Docker29 state on separate disposable runners with existing25min limits and pins.
-Preserve exact source, full outcomes, failure evidence and owned cleanup. No
-provider/live/VM/paid actions, merge, or unchanged lucky rerun.
+First PG subset159 in that run had142PASS/17FAIL; full802 NOT_RUN.12 new positive
+controls confused receipt code/result_code; the5 CI-11 failures also exposed a
+source-confirmed nonexistent Job.conversation_id. Full traces/JUnit were not
+uploaded because root-owned0600 inventory caused EACCES; only the saved job log
+and its complete17-failure summary survive. Do not claim full artifact evidence.
+The first11-file selection covered65 old failures, not all88:23 callers are in
+four unchanged control/guards/turns modules. This selection error is corrected.
 
-The user's existing instruction authorizes these necessary checks. Only after
-focused PG/full802 and both state lanes pass may C0 advance PR35 once for full CI
-including native112 and all remaining integration gates. Main/stock remain frozen;
-user owns merge. CI-06/07/11/12 OPEN, M3 IN_PROGRESS. Exact source and results are
-published in PR34; a plan, collection or unit PASS is not runtime evidence.
+PG2 run39556449833 on exact f211272: **331/331 PASS,993 phases PASS**; generic802:
+792PASS/10FAIL, all2406 phases recorded. All88 former RUN6 failures pass by exact
+nodeid in both phases;12 origin controls and5 CI-11 cases pass. Artifact12327850408,
+2992959bytes, SHA2560488098360978ffc6fd6d99e43e5437aecf02384d3c0e8eb7aa21fe358ea91df;
+296 source leaves/modes exact, clean checkout/owned cleanup PASS. Final tail NOT_RUN.
+Nine new duplicate fixed-Workspace failures are C0 temporary harness contamination:
+focused billing leaves01990000…0001 and the following full suite expected a fresh DB.
+One controlled-activation-subscription wait_blocked1.5s timeout remains unexplained;
+its focused/RUN6 PASS does not prove a timing fix.
+
+PG3 run39561491975, workflowe4d0e89d4ef82dd527345f484e75e6e1e925dd73:
+**SUCCESS on exact f211272:802/802 PASS,2406 phases PASS,1204.86s**, zero skips.
+Fresh TEST DB had zero workspaces; final downgrade/base and restore0013 PASS.
+The earlier timeout did not recur; its specific timing cause is not proven fixed.
+Archive12329370620,2952346bytes,
+SHA2563cd2238d437254fb0790c34319bd47c223c3295d1267281cd026d2bf5e9a59b0;
+exact296 source leaves/modes, empty worktree and owned cleanup PASS. Successful331
+was not repeated. Only the separate temporary harness isolation/timeout evidence
+changed; tests, product, edge/timeout and ordinary CI remain unchanged.
+
+**All targeted repair gates now PASS.** C0 advances the existing PR35 execution
+branch once for full CI/native112, including this two-document CURRENT update.
+Runtime/test bytes equal f211272; this source-bound acceptance is not full CI PASS.
+The full run identity and disposition will be maintained in the decision link above.
+
+Temporary push-only workflow on c0/m3-1-native-context-repair-check-r1 is separate
+from the integration candidate; ordinary CI/workflows/guards remain unchanged.
+The existing user instruction authorizes necessary checks. After all targeted
+criteria passed, C0 advances existing PR35 execution once for full CI/native112 and
+all remaining gates. No unchanged lucky rerun. Main e205e220…/stock af7482de… stay
+frozen; user owns merge. CI-06/07/11/12 OPEN; M3 IN_PROGRESS. New product functions,
+production/VM/provider/paid actions remain outside this scope.
 
 ---
 

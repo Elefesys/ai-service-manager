@@ -2,20 +2,26 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C0 repair validation / 2026-10-21
+## CURRENT — C0 repairs verified; full CI next / 2026-10-21
 
 | Task / finding | Current status |
 |---|---|
-| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-REPAIR-R1 | SOURCE REVIEW accepted for C0 validation: e8cfe0f…; PG NOT_RUN,642 reported unit PASS; HOLD |
-| C6-M3.1-NATIVE-CONTEXT-STATE-REPAIR-R1 | SOURCE REVIEW accepted for C0 validation: cde80c2…;158 reported focused PASS; normal/Docker29 NOT_RUN; HOLD |
-| M3_CONTRACT§15.11.1 scheduling | REVISED by C0: full T negatives after P, original S+1200 and mandatory complete sequence; runtime verification pending |
-| C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 | IN_PROGRESS: reviewed composition; affected PG files → full802 and both state lanes on isolated TEST runners |
-| C0-NC-CI-06/07/11/12 | OPEN; no runtime closure from source/unit review |
-| PR35 / main / stock | Existing heads frozen until targeted gates; full CI follows once on successful candidate; user owns merge |
+| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-REPAIR-R1 | INTEGRATED / VERIFIED TARGETED with C0 fixture corrections f211272…;331/331, all former88, generic802/802 and downgrade/restore PASS; C2 HOLD |
+| C6-M3.1-NATIVE-CONTEXT-STATE-REPAIR-R1 | INTEGRATED / VERIFIED TARGETED on d2a1914…: normal+Docker29 SUCCESS, each20 pairings+2T negatives+3C negatives/cleanup; C6 HOLD |
+| M3_CONTRACT§15.11.1 scheduling | REVISED by C0: T negatives after P, original S+1200. Actual891.158/1188.237s; Docker29 total slack11.763s |
+| C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 | IN_PROGRESS: targeted gates PASS; one FF of existing PR35 execution for whole-candidate CI/native112 |
+| C0-NC-CI-06/11/12 | Targeted remediations VERIFIED; final dispositions await whole-candidate CI |
+| C0-NC-CI-07 | OPEN: full CI remains required; no whole-feature completion claim |
+| PR35 / main / stock | PR35 execution advances only after verified gates; main e205e220…/stock af7482de… frozen; user owns merge |
 
-Scope, exact parents, write-set and completion gates are in HANDOFF CURRENT.
-Temporary push-only validation workflow stays off the integration candidate.
-No new product function or production/DDL change. M3 IN_PROGRESS.
+[Decision/evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516)
+and HANDOFF CURRENT bind exact sources, artifacts and limitations. PG3 run39561491975:
+802PASS/2406 phases,1204.86s, zero initial workspaces, clean source/owned cleanup and
+final downgrade/base→0013 PASS. PG2 had331PASS and generic792PASS/10FAIL:9 failures
+from C0 reused-DB residue and1 unexplained1.5s lock timeout. The latter did not recur
+on the fresh run; its timing cause is not declared fixed. First PG159/upload and
+coverage mistakes remain recorded. No product/DDL changes or merged temporary
+workflow. M3 IN_PROGRESS; full CI result is maintained in the decision link above.
 
 ---
 
