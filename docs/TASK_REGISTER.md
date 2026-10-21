@@ -2,26 +2,31 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — native checks pass; C0 corrects remaining CI budget / 2026-10-21
+## CURRENT — PR35 merged; native context VERIFIED on main / 2026-10-21
+
+C0 accepts **5c074beb4a47521b8c11a820f580673ec1c2cce2**, tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**, for native-context
+integration in LOCAL/TEST. PR35 merged by the user at 10:03:42 UTC.
+[Post-merge CI39581765849](https://github.com/Elefesys/ai-service-manager/actions/runs/39581765849),
+push/main, attempt1: **11/11 SUCCESS**, completed 10:55:20 UTC.
+The tree equals the RUN8 accepted PR candidate; no runtime delta was introduced by merge.
 
 | Task / finding | Current status |
 |---|---|
-| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-REPAIR-R1 | INTEGRATED / VERIFIED TARGETED with C0 fixture corrections f211272…;331/331, all former88, generic802/802 and downgrade/restore PASS; C2 HOLD |
-| C6-M3.1-NATIVE-CONTEXT-STATE-REPAIR-R1 | Source INTEGRATED; targeted normal/Docker29 PASS, but RUN7 Docker29 total budget exhausted; C6 HOLD, C0 owns bounded correction |
-| Native context / browser RUN7 | VERIFIED on f151188…: native112/336 phases/105 resets and fresh0013 catalog; browser54 journeys/398 units PASS; not whole CI PASS |
-| M3_CONTRACT§15.11.1 | REVISED by C0: same original S, whole-state1440/state-job30min; positive600/P720/P-supervisor1200/cleanup90 unchanged |
-| C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 | IN_PROGRESS: check bounded correction locally, wait for all RUN7 outcomes, then one new full CI; no duplicate standalone state run |
-| C0-NC-CI-06/11 | Targeted remediations VERIFIED; final dispositions follow whole CI evidence |
-| C0-NC-CI-07/12 | OPEN: RUN7 state Docker29 FAILURE; foundation result pending at correction decision |
-| PR35 / main / stock | Execution f151188…; main e205e220…/stock af7482de… frozen; merge belongs to user |
+| Native context DB/API/runtime/Console | INTEGRATED / VERIFIED on accepted main in LOCAL/TEST |
+| C2/C6 repair and C0 repair-validation | COMPLETE; CI-06/07/11/12 CLOSED; prior scoped closures retained |
+| Post-merge evidence | Generic802/2406 phases; ordinary2167+130 subtests; native112/336 phases/105 resets; browser54+398 PASS |
+| Source / cleanup | All10 ordinary clean-source steps and native cleanup/source gate PASS; core/native archive hashes and all296 source leaves/modes independently matched to main |
+| C8-M3-ACCEPTANCE-MAIN-R1 | TODO / ASSIGNED: one bounded review of existing evidence for all M3-A01–A12; exact scope in HANDOFF CURRENT |
+| M3-ACCEPTANCE / whole M3 | IN_PROGRESS; actual-account/A08, deployed TEST and applicable A12 evidence are not established by CI |
+| P-01/P-05/P-A03-09 / renewal / collector | Existing separate open scopes retained; C8 must distinguish implemented LOCAL/TEST evidence from missing account/host evidence and identify the minimal remaining action |
+| M4 / CI optimization / IMPL-05 | Not opened; optimization/fix remain DEFERRED |
 
-[Decision/evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516)
-and HANDOFF CURRENT bind exact sources, artifacts and next run. RUN7 had9SUCCESS,
-1FAILURE and1running at this decision. Docker29 P20 pairings pass, but export-negative
-checkpoint recording hit S+1200 after owned resources were removed; three final C
-negatives NOT_RUN. Explicit240s total reserve preserves all cases and positive
-limits. Only the state timeout expression and its exact fingerprints change in CI.
-Product runtime/DDL remain unchanged; M3 IN_PROGRESS, no completion/merge claim.
+This is a two-document coordination record based on accepted main, on a separate
+C0 branch. It does not advance main, create a PR or run CI. The older CURRENT on
+main is the pre-result text embedded in the tested source; current disposition is
+[the C0 receipt](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516)
+and this record. No claim of whole-M3 or production readiness is made.
+
 
 ---
 

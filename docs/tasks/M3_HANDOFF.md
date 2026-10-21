@@ -5,51 +5,72 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — C0 terminal state-budget correction / 2026-10-21
+## CURRENT — PR35 post-merge accepted; bounded M3 acceptance review / 2026-10-21
 
-C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 owns integration; C2/C6 HOLD.
-[Current decision and source-bound evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516).
-The C2/C6 return blobs were composed at d2a1914…; C0 fixed two fixture errors at
-f211272… (ACCEPTED/QUEUED envelope and Job.turn_id lookup). No business runtime/DDL
-changed. Targeted331/331 includes all former88 failures,12 origin controls and5
-CI-11 cases. Fresh PG run39561491975 on f211272:802/802 PASS,2406 phases,
-1204.86s; downgrade/base→0013, exact296 source leaves, clean source and cleanup PASS.
-Earlier C0 coverage/upload/reused-DB failures remain documented. PG2's single
-1.5s lock timeout did not recur on the fresh run; its exact cause is not proven fixed.
+**C0 accepts native context INTEGRATED / VERIFIED in LOCAL/TEST on main
+5c074beb4a47521b8c11a820f580673ec1c2cce2, tree cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b.**
+PR35 merged by the user at 2026-10-21T10:03:42Z; parents are e205e22051bc06295758b504d84699652b176c15
+and ba1d7088a412cbe715b765290a447be1fb89bcec. Its tree equals accepted RUN8.
+[Post-merge run39581765849](https://github.com/Elefesys/ai-service-manager/actions/runs/39581765849),
+push/main attempt1, completed SUCCESS at10:55:20Z: all11 required jobs present and green.
 
-RUN7 /39564573743 executes PR35 head f15118831af25d7b94e56f9c11e0ae37a8a7c28a,
-merge fddc0bc0d21ecd6a5758025e4b470b6960426cdf,
-tree3d251d5c1ef7ad2164287281173e7ef2a041c4fc. At this correction decision:
-9 jobs SUCCESS, Docker29 state FAILURE, foundation still running. Wait for its
-complete result before the next head update; no cancellation or unchanged rerun.
-Native112/336 phases/105 resets, fresh167functions/45tables/635columns and cleanup
-PASS; runner516 units PASS. Browser54 journeys/398 frontend tests PASS. Normal
-state:20 pairings,2 real T negatives,3 C cleanup negatives, exact source/cleanup
-PASS; preparation317.077428067s, wholeS771.188318408s.
+C0 inspected the run, all job/clean-source results, core/native archives and browser/state logs.
+Generic802/802 with2406 successful phases, ordinary2167+130 subtests, native112/336
+phases/105 resets and runner516 cases, browser54+398 all PASS. Core primary/cleanup
+exits0; complete=true/evidence_failed=false; failures/issues journals empty.
+Native actual main-push admission, source before/after,167-function/45-table profile
+and owned cleanup PASS. Both state jobs include all3 terminal C cleanup negatives
+and complete success. All10 ordinary source-clean steps and native cleanup/source gate PASS.
 
-Docker29 positive phases/P20 pairings PASS: preparation538.176225005s<720;
-P export atS+1000.214391230, timeout negative158.065762171s PASS. Export-negative
-owned cleanup removed its resources, but the required zero-connection checkpoint
-could not be recorded after S+1200; total1200.625390259s. Full cleanup evidence is
-incomplete and3 C negatives NOT_RUN, so state is FAILURE. Artifact12329639787,
-20213620bytes,SHA2565af086a46016498705e030425b073ae77396f4d985818b5aa24d4545ce88013a.
-The earlier targeted Docker29 PASS with11.763s slack did not prove timing stability.
+Downloaded core artifact12340238010 (2999482 bytes,
+SHA256 adc39ce2e23b7892141341ed822e648691bcb8daf81a6c768c1ca97b251373fa)
+and native12338316135 (3492437 bytes,
+SHA256 3bd6da4f5773b79158f8c84bb8b364df281665ce1c58f1c6280e4e0fc61efb12)
+match GitHub digests; each source archive independently matches all296 Git blobs/modes.
+The other8 archive downloads were not repeated: this acceptance uses their successful
+jobs/clean-source gates and the unchanged accepted tree, without claiming a new full
+historical-archive audit. RUN8 detailed evidence remains in
+[receipt6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516).
 
-C0 explicitly revises M3_CONTRACT§15.11.1: original-S whole-state1440 and state-job30min;
-positive600/P preparation720/P supervisor1200/cleanup90 and all mandatory cases stay.
-The new ledger separates state_deadline from the unchanged material supervisor.
-Only the state matrix timeout changes in the workflow. Its two exact fingerprints
-are updated to that reviewed one-line change, with guards and all11 jobs retained.
-Unit checks must cover both terminal boundaries and refuse P beyond its old1200.
-After local checks and the complete RUN7 result, publish one bounded correction
-and run whole-candidate CI, which also supplies real normal/Docker29 validation.
-Do not add an extra duplicate standalone state run or a new observer framework.
+C2/C6 and C0 repair-validation complete; CI-06/07/11/12 CLOSED, previous closures
+and explicit state-budget decision retained. Main integration does not deploy the VM,
+renew TEST, enable policy or prove external Telegram behavior. Whole M3 remains IN_PROGRESS.
 
-Main e205e220…/stock af7482de… stay frozen; user owns merge. CI-07/12 OPEN, M3
-IN_PROGRESS. The linked C0 decision binds the next exact commit/run and final
-results. This instruction authorizes necessary TEST checks under the user's
-existing request; new product functions/production/VM/provider/paid actions remain
-outside scope. Failure is not permission for an automatic further budget increase.
+### C8-M3-ACCEPTANCE-MAIN-R1 — existing evidence, one complete disposition
+
+User benefit: finish the remaining acceptance of conversation control and owner handoff,
+so the next implementation starts from a known working base. This is the existing M3
+acceptance task, not a new product feature or another general diagnostics framework.
+
+- Repository Elefesys/ai-service-manager. Review exact accepted main SHA/tree above;
+  use this docs-only C0 record and linked receipt as coordination, not new runtime.
+  Local checkout, if needed, separate branch c8/m3-acceptance-main-r1 from that main.
+- Read AGENTS, this CURRENT, TASK_REGISTER, M3_CONTRACT applicable sections and the
+  existing M3-A01–A12 matrix. Original sources/ADR022–026 and later explicit C0 decisions
+  remain inputs; historical OPEN/HOLD text alone is not the current disposition.
+- Read-only source/evidence review. No tracked write-set, new report file, code,
+  tests, workflow, dependency, migration or budget change. No new full CI/dispatch/
+  rerun, DB/VM/Telegram/provider/paid call, renewal, policy enable or deployment.
+- Return one compact table covering **all12 M3-A01–A12**: supported scope, exact
+  source/run/test or receipt, unresolved requirement and smallest next action.
+  Reuse accepted evidence; inspect changes since prior scoped C8 reviews and any
+  concrete gap. Do not repeat the complete historical audit or infer real-account
+  evidence from fixtures/browser CI. Confirm the OWNER reconciliation/barrier
+  limits; unseen Telegram updates are not guaranteed captured.
+- Separate P-01/A08/P-A03-09 actual-account evidence, P-05 renewal/collector and
+  applicable A12 deployed-host evidence from already verified LOCAL/TEST code.
+  Identify which remaining items are genuine blockers, prerequisites or candidates
+  for an explicit C0 scope decision; no silent waiver and no new mechanism by default.
+- Findings need concrete source/evidence and impact; one complete disposition covers
+  all known groups. Return concise receipt to the existing PR34 coordination thread,
+  then HOLD. No independent closure of whole M3; C0 owns that decision.
+- C1/C2/C3/C5/C6 remain HOLD. After C8, C0 defines only the smallest required
+  TEST/operator step with its result and pilot value before implementation.
+  New product functions, M4 and broad CI optimization remain outside this task.
+
+This record changes only HANDOFF/register on a separate C0 branch from accepted main.
+It creates no implementation PR and triggers no CI. Accepted runtime main is unchanged.
+
 
 ---
 
