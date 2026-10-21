@@ -5,7 +5,50 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — продолжение native context: исправления вместо отдельного цикла отчётов / 2026-10-21
+## CURRENT — C0 repair validation / 2026-10-21
+
+C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1: source review and composition of C2
+e8cfe0f7819b0f2a19548cd7b6f7058dca129a30 and C6
+cde80c2d941d98aa91b373ad5e58d69efb85569d. Both have sole parent
+f2f0da81e018a230fbc53db8fc2f3d02475e21d8. Their disjoint14 code/test paths are
+accepted for validation, not runtime VERIFIED. C2 reports642 unit PASS and C6
+158 focused PASS; PG and both state lanes are NOT_RUN. Their return comments are
+[6309331991](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309331991)
+and [6309095832](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309095832).
+
+C0 explicitly accepts the single scheduling revision at M3_CONTRACT§15.11.1:
+T positive → C/G/E/P → real T timeout/export negatives → three C cleanup negatives,
+all charged to original S, with entire successful sequence <1200. This removes
+intentional failure waits from P admission, without a new product feature or
+increased total allowance. CI-12 remains OPEN pending actual normal/Docker29.
+
+Branch/checkout: c0/m3-1-native-context-repair-validation-r1 from exact f2f0da81…;
+write-set: the14 returned code/test files plus this file, TASK_REGISTER and the
+explicit contract revision. No production, DDL, frozen-source, dependency or
+ordinary-workflow changes. C2/C6 remain HOLD; C0 owns integration and any bounded
+correction in the returned fixture/harness slice. New production findings return
+to a concrete scope decision; no weakened assertions or automatic budget increase.
+
+Local execution has no Docker and cannot switch to a non-root PG user. Use an
+isolated TEST GitHub runner, via a temporary push-only workflow on a separate
+c0/m3-1-native-context-repair-check-r1 branch, checking out the exact published
+candidate. The temporary workflow is not part of the integration candidate.
+First execute all11 affected generic files (including88 previous failures,
+12 origin controls, CI-11 and historical restore paths); only on success execute
+one complete generic802 with unchanged907=802+105 inventory. Run normal and
+Docker29 state on separate disposable runners with existing25min limits and pins.
+Preserve exact source, full outcomes, failure evidence and owned cleanup. No
+provider/live/VM/paid actions, merge, or unchanged lucky rerun.
+
+The user's existing instruction authorizes these necessary checks. Only after
+focused PG/full802 and both state lanes pass may C0 advance PR35 once for full CI
+including native112 and all remaining integration gates. Main/stock remain frozen;
+user owns merge. CI-06/07/11/12 OPEN, M3 IN_PROGRESS. Exact source and results are
+published in PR34; a plan, collection or unit PASS is not runtime evidence.
+
+---
+
+## History — продолжение native context: исправления вместо отдельного цикла отчётов / 2026-10-21
 
 Пользователь подтвердил прежний вариант OWNER reconciliation + observation barrier.
 Цель: после общения мастера вне Console следующий AI-контекст содержит подтверждённые

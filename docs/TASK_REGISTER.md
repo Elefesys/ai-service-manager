@@ -2,7 +2,24 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — native context: согласованное исправление / 2026-10-21
+## CURRENT — C0 repair validation / 2026-10-21
+
+| Task / finding | Current status |
+|---|---|
+| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-REPAIR-R1 | SOURCE REVIEW accepted for C0 validation: e8cfe0f…; PG NOT_RUN,642 reported unit PASS; HOLD |
+| C6-M3.1-NATIVE-CONTEXT-STATE-REPAIR-R1 | SOURCE REVIEW accepted for C0 validation: cde80c2…;158 reported focused PASS; normal/Docker29 NOT_RUN; HOLD |
+| M3_CONTRACT§15.11.1 scheduling | REVISED by C0: full T negatives after P, original S+1200 and mandatory complete sequence; runtime verification pending |
+| C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 | IN_PROGRESS: reviewed composition; affected PG files → full802 and both state lanes on isolated TEST runners |
+| C0-NC-CI-06/07/11/12 | OPEN; no runtime closure from source/unit review |
+| PR35 / main / stock | Existing heads frozen until targeted gates; full CI follows once on successful candidate; user owns merge |
+
+Scope, exact parents, write-set and completion gates are in HANDOFF CURRENT.
+Temporary push-only validation workflow stays off the integration candidate.
+No new product function or production/DDL change. M3 IN_PROGRESS.
+
+---
+
+## History — native context: согласованное исправление / 2026-10-21
 
 Пользователь подтвердил прежний OWNER reconciliation + observation barrier.
 Упрощённый вариант не принят. Правила объяснения пользы до реализации, приоритета

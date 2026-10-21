@@ -44,6 +44,12 @@ from asm.messaging.worker import Worker
 from asm.telegram.client import TelegramClient, TelegramError
 from asm.telegram.database import TelegramIngress
 from asm.tenancy import AuthenticatedAccount
+from generic_pg_schema import (
+    assert_current_schema,
+    current_snapshot,
+    historical_schema,
+    paired_p_readiness,
+)
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
@@ -2108,6 +2114,37 @@ async def material_schema_controller(action, state_path):
         await migrator.dispose()
 
 
+async def current_material_refusal(c):
+    """The actual P refusal on current 0013 must preserve every row and catalog."""
+    from alembic import op
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from sqlalchemy.exc import DBAPIError
+    from test_m3_1_provenance_migrations import migration
+
+    before = await current_snapshot(c)
+    module, executed = migration(), []
+
+    def execute(statement):
+        executed.append(statement)
+        return op.execute(statement)
+
+    module.op = SimpleNamespace(execute=execute)
+    with pytest.raises(DBAPIError) as caught:
+        async with c.begin_nested():
+
+            def down(sync):
+                with Operations.context(MigrationContext.configure(sync)):
+                    module.downgrade()
+
+            await c.run_sync(down)
+    assert caught.value.orig.sqlstate == "55000"
+    assert caught.value.orig.diag.message_primary == "Material history prevents downgrade"
+    assert len(executed) == 2 and executed[0].startswith("LOCK TABLE")
+    assert executed[1].startswith("DO $$ BEGIN")
+    assert await current_snapshot(c) == before
+
+
 class TestEgressMaterialCompatibility:
     async def test_current_0012_profile_v2_off_receipt_dto_and_snapshot(self, control):
         from asm.conversations.turns import consume, parse_snapshot
@@ -2117,33 +2154,50 @@ class TestEgressMaterialCompatibility:
         from test_m3_1_turns_postgres import seal, snapshot
 
         h = control
-        async with h.migrator.connect() as c:
-            await material_catalog_profile(c)
-            await material_no_backfill(c)
-        receipt, _, result = await process(h, raw())
-        assert receipt.result_code == "QUEUED" and result.message_id
-        proof = (
-            await query(
-                h,
-                "SELECT r.codec,p.codec AS sidecar_codec,p.material_enabled FROM platform.telegram_update_receipts r JOIN platform.telegram_provenance p ON p.receipt_id=r.id WHERE r.id=:id",
-                id=receipt.receipt_id,
+
+        async def exercise(value):
+            receipt, _, result = await process(h, value)
+            assert receipt.result_code == "QUEUED" and result.message_id
+            proof = (
+                await query(
+                    h,
+                    "SELECT r.codec,p.codec AS sidecar_codec,p.material_enabled FROM platform.telegram_update_receipts r JOIN platform.telegram_provenance p ON p.receipt_id=r.id WHERE r.id=:id",
+                    id=receipt.receipt_id,
+                )
+            )[0]
+            assert proof == {"codec": 2, "sidecar_codec": 2, "material_enabled": False}
+            assert not await query(h, "SELECT id FROM platform.message_material_targets")
+            replay = await TelegramIngress(h.kernel, BOT).ingest_update(value, uuid4())
+            assert replay.code == "DUPLICATE" and replay.receipt_id == receipt.receipt_id
+            turn = (
+                await query(
+                    h,
+                    "SELECT t.id,t.conversation_id FROM app.conversation_turns t JOIN app.conversation_turn_messages m ON (m.workspace_id,m.turn_id)=(t.workspace_id,t.id) WHERE m.message_id=:id",
+                    id=result.message_id,
+                )
+            )[0]
+            await seal(h, turn["id"])
+            claim, value = await snapshot(h, turn["id"])
+            assert value.schema_version == 2
+            decoded = parse_snapshot(value.model_dump(mode="json"))
+            assert decoded == value and all(
+                member.current.changed is False for member in value.members
             )
-        )[0]
-        assert proof == {"codec": 2, "sidecar_codec": 2, "material_enabled": False}
-        assert not await query(h, "SELECT id FROM platform.message_material_targets")
-        replay = await TelegramIngress(h.kernel, BOT).ingest_update(raw(), uuid4())
-        assert replay.code == "DUPLICATE" and replay.receipt_id == receipt.receipt_id
-        turn = (await query(h, "SELECT id,conversation_id FROM app.conversation_turns"))[0]
-        await seal(h, turn["id"])
-        claim, value = await snapshot(h, turn["id"])
-        assert value.schema_version == 2
-        decoded = parse_snapshot(value.model_dump(mode="json"))
-        assert decoded == value and all(member.current.changed is False for member in value.members)
-        await h.kernel.finish_turn(claim, consume(value))
-        async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
-            page = await unit.messaging_messages_page(turn["conversation_id"], 10, None, None)
-        assert len(page) == 1
-        assert MessageResponse.model_validate(wire_dates(page[0])).current.changed is False
+            await h.kernel.finish_turn(claim, consume(value))
+            async with h.runtime.tenancy.transaction(AuthenticatedAccount(UA), A, uuid4()) as unit:
+                page = await unit.messaging_messages_page(turn["conversation_id"], 10, None, None)
+            assert len(page) == 1
+            assert MessageResponse.model_validate(wire_dates(page[0])).current.changed is False
+
+        async with historical_schema(h, "0012"):
+            await paired_p_readiness(h)
+            async with h.migrator.connect() as c:
+                await material_catalog_profile(c)
+                await material_no_backfill(c)
+            await exercise(raw())
+        async with h.migrator.connect() as c:
+            await assert_current_schema(c)
+        await exercise(raw(100003, message=503, chat="7000002", sender="7000002"))
 
     @pytest.mark.parametrize(
         "used",
@@ -2162,40 +2216,45 @@ class TestEgressMaterialCompatibility:
         from test_m3_1_provenance_postgres import process, raw
 
         h = control
-        if used != "codec-off":
-            await query(
-                h,
-                "UPDATE platform.telegram_connection_state SET material_enabled=true WHERE connection_id=:id RETURNING connection_id",
-                id=h.telegram_connection,
-            )
-        if used == "codec-off":
-            await TelegramIngress(h.kernel, BOT).ingest_update(raw(), uuid4())
-            witness = "SELECT count(*) AS n FROM platform.telegram_provenance WHERE NOT material_enabled AND codec=2"
-        elif used == "enabled-gate":
-            witness = "SELECT count(*) AS n FROM platform.telegram_connection_state WHERE material_enabled"
-        elif used in {"target", "material-result"}:
-            await process(h, raw(100002, kind="DELETE"))
-            witness = (
-                "SELECT count(*) AS n FROM platform.message_material_targets"
-                if used == "target"
-                else "SELECT count(*) AS n FROM platform.inbox_events WHERE material_result IS NOT NULL AND material_claim_token IS NOT NULL AND result_code='MATERIAL_PROCESSED'"
-            )
-        elif used == "suppression-member":
-            await process(h, raw(100002, kind="EDIT", value="B"))
-            await process(h, raw(photo="F"))
-            witness = "SELECT count(*) AS n FROM platform.message_initial_suppressions s JOIN app.conversation_turn_messages m ON m.workspace_id=s.workspace_id AND m.initial_suppression_id=s.id WHERE m.membership_form='INITIAL_FOLD_SUPPRESSED'"
-        else:
-            await process(h, raw())
-            await process(h, raw(100002, kind="DELETE"))
-            witness = (
-                "SELECT count(*) AS n FROM platform.message_material_effects e JOIN app.audit_events a ON a.workspace_id=e.workspace_id AND a.audit_event_id=e.audit_event_id WHERE a.event_type='MESSAGE_MATERIAL_CHANGED'"
-                if used == "effect-audit"
-                else "SELECT count(*) AS n FROM app.conversation_turns WHERE material_invalidated"
-            )
+        async with historical_schema(h, "0012"):
+            await paired_p_readiness(h)
+            if used != "codec-off":
+                await query(
+                    h,
+                    "UPDATE platform.telegram_connection_state SET material_enabled=true WHERE connection_id=:id RETURNING connection_id",
+                    id=h.telegram_connection,
+                )
+            if used == "codec-off":
+                await TelegramIngress(h.kernel, BOT).ingest_update(raw(), uuid4())
+                witness = "SELECT count(*) AS n FROM platform.telegram_provenance WHERE NOT material_enabled AND codec=2"
+            elif used == "enabled-gate":
+                witness = "SELECT count(*) AS n FROM platform.telegram_connection_state WHERE material_enabled"
+            elif used in {"target", "material-result"}:
+                await process(h, raw(100002, kind="DELETE"))
+                witness = (
+                    "SELECT count(*) AS n FROM platform.message_material_targets"
+                    if used == "target"
+                    else "SELECT count(*) AS n FROM platform.inbox_events WHERE material_result IS NOT NULL AND material_claim_token IS NOT NULL AND result_code='MATERIAL_PROCESSED'"
+                )
+            elif used == "suppression-member":
+                await process(h, raw(100002, kind="EDIT", value="B"))
+                await process(h, raw(photo="F"))
+                witness = "SELECT count(*) AS n FROM platform.message_initial_suppressions s JOIN app.conversation_turn_messages m ON m.workspace_id=s.workspace_id AND m.initial_suppression_id=s.id WHERE m.membership_form='INITIAL_FOLD_SUPPRESSED'"
+            else:
+                await process(h, raw())
+                await process(h, raw(100002, kind="DELETE"))
+                witness = (
+                    "SELECT count(*) AS n FROM platform.message_material_effects e JOIN app.audit_events a ON a.workspace_id=e.workspace_id AND a.audit_event_id=e.audit_event_id WHERE a.event_type='MESSAGE_MATERIAL_CHANGED'"
+                    if used == "effect-audit"
+                    else "SELECT count(*) AS n FROM app.conversation_turns WHERE material_invalidated"
+                )
+            assert (await query(h, witness))[0]["n"] > 0, used
+            async with h.migrator.begin() as c:
+                proof = await material_used_refusal(c)
+                assert proof["before_ddl"] and proof["tables"] == 42
         assert (await query(h, witness))[0]["n"] > 0, used
         async with h.migrator.begin() as c:
-            proof = await material_used_refusal(c)
-            assert proof["before_ddl"] and proof["tables"] == 42
+            await current_material_refusal(c)
         await h.runtime.check()
 
 

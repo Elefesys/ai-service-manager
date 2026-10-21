@@ -7,14 +7,17 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from alembic import op
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from asm.foundation import RuntimeDatabase, Settings
 from asm.messaging.database import MessagingDatabase
 from asm.telegram.database import TelegramReceipt
+from generic_pg_schema import current_snapshot
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_m2_1_models import event
@@ -598,17 +601,26 @@ async def test_populated_refusal_is_before_destructive_ddl_and_preserves_exact_s
             await h.kernel.finish_turn(claim, consume(value))
     async with h.migrator.begin() as c:
         before, objects = await fingerprints(c), await definitions(c)
+        current = await current_snapshot(c)
+        module, executed = migration(), []
+
+        def execute(statement):
+            executed.append(statement)
+            return op.execute(statement)
+
+        module.op = SimpleNamespace(execute=execute)
         with pytest.raises(DBAPIError) as caught:
             async with c.begin_nested():
 
                 def downgrade(sync):
                     with Operations.context(MigrationContext.configure(sync)):
-                        migration().downgrade()
+                        module.downgrade()
 
                 await c.run_sync(downgrade)
         assert caught.value.orig.sqlstate == "55000"
-        # Direct 0008 refusal must leave the current 0012 marker and all rows intact.
-        await assert_head(c, "0012")
+        assert len(executed) == 1 and executed[0].startswith("DO $$ BEGIN")
+        # Direct 0008 refusal preserves every current row, definition and marker.
+        assert await current_snapshot(c) == current
         assert await fingerprints(c) == before and await definitions(c) == objects
     # No M3 row is deleted to force a cycle; only the ordinary end-of-test
     # child-first tenant cleanup follows after refusal has been proved.

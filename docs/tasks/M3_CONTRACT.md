@@ -5024,6 +5024,25 @@ The entire existing contract through§15.10.4 is preserved byte-for-byte.
 
 #### 15.11.1. Decision, measured cause and unchanged execution
 
+**2026-10-21 C0 revision (REVISED):** the ordering/budget of the two full T negatives
+below is superseded by this paragraph. Execute T positive → C → G → E → P → real
+T timeout → T export failure → the three original C cleanup negatives. Both full
+T negatives now use the original S+1200, and may start only after successful P,
+validated/exported P evidence and owned cleanup. They remain mandatory; an earlier
+failure means NOT_RUN and a failed state lane, never PASS. Their elapsed time is
+fully charged from S. The final C supervisor gets min(480, S+1200−now); successful
+completion of the entire sequence requires elapsed <1200. T/C/G/E positive600,
+P preparation720/supervisor1200, cleanup90 and job25min remain unchanged. There is
+no fresh clock, duration subtraction, frozen-source edit, skipped negative, or
+change to the20 pairings, data/security/refusal proofs or product behavior.
+
+Rationale: intentional failure waits need not precede preparation of an unrelated
+positive migration. RUN6 measured195.592719116s in those two negatives; moving
+them removes that scheduling dependency but does not reduce total work or prove
+runtime feasibility. C6 proposal cde80c2d941d98aa91b373ad5e58d69efb85569d is accepted
+for source integration and actual normal/Docker29 validation. CI-12 remains OPEN
+until those gates pass. The historical rule and evidence below remain historical.
+
 One original monotonic start **S** remains established before T. H/predecessor
 execution stays before that ledger, exactly as in the accepted harness. Retained
 T/C/G/E keep **D_retained=S+600** and their original version1 requests/consumers.
