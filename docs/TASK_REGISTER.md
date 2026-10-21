@@ -2,26 +2,33 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — native checks pass; C0 corrects remaining CI budget / 2026-10-21
+## CURRENT — native context integration VERIFIED / 2026-10-21
+
+[Final C0 disposition](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516)
+and [RUN8 /39571105525](https://github.com/Elefesys/ai-service-manager/actions/runs/39571105525):
+**11/11 jobs SUCCESS**, attempt1, same-repository PR merge.
+Tested PR35 head ba1d7088a412cbe715b765290a447be1fb89bcec;
+merge3fa08447a5dbbe4b7038a29e3230ce6dfb3100be;
+treecb47cccdb02ba414c79c65e4fecf81f3fe83cd8b. Full evidence is in HANDOFF CURRENT
+and the linked disposition, including source/archive identities and cleanup.
 
 | Task / finding | Current status |
 |---|---|
-| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-REPAIR-R1 | INTEGRATED / VERIFIED TARGETED with C0 fixture corrections f211272…;331/331, all former88, generic802/802 and downgrade/restore PASS; C2 HOLD |
-| C6-M3.1-NATIVE-CONTEXT-STATE-REPAIR-R1 | Source INTEGRATED; targeted normal/Docker29 PASS, but RUN7 Docker29 total budget exhausted; C6 HOLD, C0 owns bounded correction |
-| Native context / browser RUN7 | VERIFIED on f151188…: native112/336 phases/105 resets and fresh0013 catalog; browser54 journeys/398 units PASS; not whole CI PASS |
-| M3_CONTRACT§15.11.1 | REVISED by C0: same original S, whole-state1440/state-job30min; positive600/P720/P-supervisor1200/cleanup90 unchanged |
-| C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 | IN_PROGRESS: check bounded correction locally, wait for all RUN7 outcomes, then one new full CI; no duplicate standalone state run |
-| C0-NC-CI-06/11 | Targeted remediations VERIFIED; final dispositions follow whole CI evidence |
-| C0-NC-CI-07/12 | OPEN: RUN7 state Docker29 FAILURE; foundation result pending at correction decision |
-| PR35 / main / stock | Execution f151188…; main e205e220…/stock af7482de… frozen; merge belongs to user |
+| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-REPAIR-R1 | INTEGRATED / VERIFIED LOCAL/TEST with C0 fixture corrections; all former88 and full802/2406 phases PASS; complete/HOLD |
+| C6-M3.1-NATIVE-CONTEXT-STATE-REPAIR-R1 | INTEGRATED / VERIFIED LOCAL/TEST with explicit C0 ordering/budget revision; both state lanes20+2+3 and cleanup PASS; complete/HOLD |
+| C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 | VERIFIED LOCAL/TEST; whole11-job CI, source-bound artifacts and all required tails PASS |
+| C0-NC-CI-06/07/11/12 | CLOSED with actual RUN8 evidence; prior closures retained |
+| Native DB/API/runtime/operator/Console integration | VERIFIED LOCAL/TEST: native112/336 phases/105 resets; browser54+398; ordinary2167+130 subtests PASS |
+| M3_CONTRACT§15.11.1 | REVISED / verified: original-S whole-state1440/state-job30min; positive600/P720/P-supervisor1200/cleanup90 retained |
+| M3 / actual-account and pilot acceptance | IN_PROGRESS / later scoped gates remain; no deployed-host/account acceptance inferred |
+| PR35 / main / stock | OPEN Draft at tested ba1d708; main e205e220…/stock af7482de… frozen; user owns merge |
 
-[Decision/evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516)
-and HANDOFF CURRENT bind exact sources, artifacts and next run. RUN7 had9SUCCESS,
-1FAILURE and1running at this decision. Docker29 P20 pairings pass, but export-negative
-checkpoint recording hit S+1200 after owned resources were removed; three final C
-negatives NOT_RUN. Explicit240s total reserve preserves all cases and positive
-limits. Only the state timeout expression and its exact fingerprints change in CI.
-Product runtime/DDL remain unchanged; M3 IN_PROGRESS, no completion/merge claim.
+This is a docs-only acceptance child of the tested head on the C0 repair-validation
+branch; PR35 execution remains unchanged and no report-only CI rerun is required.
+Normal state whole890.769s; Docker29 whole988.759s. Extra240s was not consumed in
+RUN8; local regressions exercise its boundary. All original required cases and
+source/role/cleanup guards remain. Earlier failures remain history. Pilot priority,
+advance explanation of new functions and revisable architecture are recorded in AGENTS.
 
 ---
 

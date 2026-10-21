@@ -5,51 +5,51 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — C0 terminal state-budget correction / 2026-10-21
+## CURRENT — native context: full integration VERIFIED / 2026-10-21
 
-C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 owns integration; C2/C6 HOLD.
-[Current decision and source-bound evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516).
-The C2/C6 return blobs were composed at d2a1914…; C0 fixed two fixture errors at
-f211272… (ACCEPTED/QUEUED envelope and Job.turn_id lookup). No business runtime/DDL
-changed. Targeted331/331 includes all former88 failures,12 origin controls and5
-CI-11 cases. Fresh PG run39561491975 on f211272:802/802 PASS,2406 phases,
-1204.86s; downgrade/base→0013, exact296 source leaves, clean source and cleanup PASS.
-Earlier C0 coverage/upload/reused-DB failures remain documented. PG2's single
-1.5s lock timeout did not recur on the fresh run; its exact cause is not proven fixed.
+C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 is complete / VERIFIED LOCAL/TEST.
+[Final C0 disposition and artifact identities](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516).
+[RUN8 /39571105525](https://github.com/Elefesys/ai-service-manager/actions/runs/39571105525),
+attempt1, pull_request: **all11 jobs SUCCESS**, no missing/skipped required job.
+Tested PR35 head **ba1d7088a412cbe715b765290a447be1fb89bcec**;
+actual merge **3fa08447a5dbbe4b7038a29e3230ce6dfb3100be**;
+tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**.
+Ordered merge parents are main e205e22051bc06295758b504d84699652b176c15 and that head.
 
-RUN7 /39564573743 executes PR35 head f15118831af25d7b94e56f9c11e0ae37a8a7c28a,
-merge fddc0bc0d21ecd6a5758025e4b470b6960426cdf,
-tree3d251d5c1ef7ad2164287281173e7ef2a041c4fc. At this correction decision:
-9 jobs SUCCESS, Docker29 state FAILURE, foundation still running. Wait for its
-complete result before the next head update; no cancellation or unchanged rerun.
-Native112/336 phases/105 resets, fresh167functions/45tables/635columns and cleanup
-PASS; runner516 units PASS. Browser54 journeys/398 frontend tests PASS. Normal
-state:20 pairings,2 real T negatives,3 C cleanup negatives, exact source/cleanup
-PASS; preparation317.077428067s, wholeS771.188318408s.
+| Accepted evidence on this source | Actual result |
+|---|---|
+| Ordinary checks | 2167 tests +130 subtests PASS; Ruff/format/mypy/contracts/deterministic wheels PASS |
+| Generic PostgreSQL | 802/802,2406 ordered phases PASS; all former88 individually matched and PASS; zero failures/issues/skips; downgrade/base→0013 and service/HTTP tail PASS |
+| Native carrier | 112/112,336 ordered phases,105 reset proofs PASS;167 functions/45 tables/635 columns; actual role/ACL/source/profile and owned cleanup PASS;516 runner-unit JUnit cases PASS |
+| Browser / frontend | 54 actual browser/API/PG journeys and398 frontend tests PASS |
+| Normal state | 20 exact pairings +2 real T negatives +3 original C cleanup negatives PASS; P preparation379.813s, whole original-S890.769s |
+| Docker29 state | Same20+2+3 and cleanup PASS; P preparation427.202s, whole original-S988.759s; Engine29.8.2/8af9fe3 |
+| Other retained lanes | Four image/intent shards PASS; normal durable and Docker29 compatibility each6 lifecycles/12 assertions PASS |
 
-Docker29 positive phases/P20 pairings PASS: preparation538.176225005s<720;
-P export atS+1000.214391230, timeout negative158.065762171s PASS. Export-negative
-owned cleanup removed its resources, but the required zero-connection checkpoint
-could not be recorded after S+1200; total1200.625390259s. Full cleanup evidence is
-incomplete and3 C negatives NOT_RUN, so state is FAILURE. Artifact12329639787,
-20213620bytes,SHA2565af086a46016498705e030425b073ae77396f4d985818b5aa24d4545ce88013a.
-The earlier targeted Docker29 PASS with11.763s slack did not prove timing stability.
+C0 checked all10 artifact sizes/SHA256 values and current296 leaf bytes/modes;
+all10 historical archives in each state lane and H/predecessor archives in the
+four image/intent shards match Git. All10 ordinary clean-source gates and native
+before/after clean receipt PASS; owned cleanup and complete evidence gates PASS.
+No mock/collection-only result substitutes for these executed PG/browser cases.
 
-C0 explicitly revises M3_CONTRACT§15.11.1: original-S whole-state1440 and state-job30min;
-positive600/P preparation720/P supervisor1200/cleanup90 and all mandatory cases stay.
-The new ledger separates state_deadline from the unchanged material supervisor.
-Only the state matrix timeout changes in the workflow. Its two exact fingerprints
-are updated to that reviewed one-line change, with guards and all11 jobs retained.
-Unit checks must cover both terminal boundaries and refuse P beyond its old1200.
-After local checks and the complete RUN7 result, publish one bounded correction
-and run whole-candidate CI, which also supplies real normal/Docker29 validation.
-Do not add an extra duplicate standalone state run or a new observer framework.
+C2/C6 returns are INTEGRATED/VERIFIED with C0's two fixture corrections and the
+explicit bounded state-budget revision in M3_CONTRACT§15.11.1. Findings
+**C0-NC-CI-06/07/11/12 CLOSED**; prior closures remain. C2/C6 complete/HOLD.
+Original positive600/P preparation720/P supervisor1200/cleanup90 remain; whole
+state1440 and state-job30min are the only accepted timing revision. RUN8 did not
+consume the extra240s;162 focused local tests cover the changed boundary. This
+is actual acceptance, not proof that host timing variability disappeared. Earlier
+failed runs, C0 harness mistakes and the unreproduced PG2 lock timeout remain history.
+No production/DDL/new product feature was introduced by these repairs.
 
-Main e205e220…/stock af7482de… stay frozen; user owns merge. CI-07/12 OPEN, M3
-IN_PROGRESS. The linked C0 decision binds the next exact commit/run and final
-results. This instruction authorizes necessary TEST checks under the user's
-existing request; new product functions/production/VM/provider/paid actions remain
-outside scope. Failure is not permission for an automatic further budget increase.
+This two-document post-run acceptance is a child of the tested head on the C0
+repair-validation branch. PR35 execution stays on tested ba1d708; this record does
+not require another unchanged CI run. Exact documentation commit is in the C0
+link above. Main e205e220… and stock af7482de… remain unchanged; user owns merge.
+PR35 remains OPEN Draft, ready for the user's integration decision. M3 overall is
+IN_PROGRESS. Actual-account/deployed-host/A08/P01/P05/renewal/collector/A12 acceptance
+remains separately scoped; M4 and broad IMPL-05 optimization remain outside this task.
+OWNER reconciliation + observation barrier and the pilot rules in AGENTS remain.
 
 ---
 
