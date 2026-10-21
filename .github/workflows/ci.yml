@@ -4,7 +4,6 @@ on:
     branches: [main]
   push:
     branches: [main]
-  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
@@ -34,7 +33,48 @@ jobs:
         run: sh scripts/test_browser.sh
       - name: Require unchanged tracked and untracked source
         run: test -z "$(git status --porcelain --untracked-files=all)"
+  foundation-durable:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Verify canonical architecture sources
+        shell: bash
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          python3 scripts/import_architecture.py docs/architecture 2>&1 | tee reports/architecture.log
+      - name: Build and verify the complete normal durable lane
+        shell: bash
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          sh scripts/ci.sh --normal-durable 2>&1 | tee reports/ci.log
+      - name: Require unchanged tracked and untracked source
+        if: always()
+        shell: bash
+        run: test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Require complete execution and persisted evidence
+        if: always()
+        run: python3 scripts/native_context_db_catalog.py foundation-check
+      - name: Record tested source
+        if: always()
+        run: |
+          mkdir -p reports
+          git rev-parse HEAD > reports/tested-commit.txt
+          git status --porcelain --untracked-files=all > reports/worktree-status.txt
+          git archive --format=tar.gz HEAD > reports/source.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: foundation-durable-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/
+          retention-days: 7
+          if-no-files-found: error
   foundation:
+    needs: [foundation-durable]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -52,11 +92,15 @@ jobs:
         run: |
           mkdir -p reports
           set -o pipefail
-          sh scripts/ci.sh 2>&1 | tee reports/ci.log
+          sh scripts/ci.sh --foundation-core 2>&1 | tee reports/ci.log
       - name: Require unchanged tracked and untracked source
+        if: always()
         shell: bash
         run: |
           test -z "$(git status --porcelain --untracked-files=all)"
+      - name: Require complete execution and persisted evidence
+        if: always()
+        run: python3 scripts/native_context_db_catalog.py foundation-check
       - name: Record tested source
         if: always()
         run: |
@@ -134,7 +178,7 @@ jobs:
     # Independent disposable shards preserve the existing three verification jobs.
     name: connect5-migration (${{ matrix.docker }}, ${{ matrix.boundary }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: ${{ matrix.boundary == 'state' && 30 || 25 }}
     permissions:
       contents: read
     strategy:
@@ -198,3 +242,7 @@ jobs:
           path: reports/
           retention-days: 7
           if-no-files-found: error
+  native-context-db:
+    uses: ./.github/workflows/native-context-db.yml
+    permissions:
+      contents: read

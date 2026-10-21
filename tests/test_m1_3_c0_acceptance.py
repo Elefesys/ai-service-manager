@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 import pytest_asyncio
+from generic_pg_schema import current_snapshot
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
@@ -145,6 +146,8 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
     migrator, _ = engines
     workspace = uuid4()
     async with migrator.connect() as connection:
+        current_before = await current_snapshot(connection)
+        await connection.rollback()
         transaction = await connection.begin()
         try:
             # Transactional isolated catalog; rollback restores all existing test data.
@@ -168,6 +171,15 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
                             "platform.file_object_uploads",
                             "app.file_objects",
                             "app.conversation_turn_messages",
+                            "app.conversation_turns",
+                            "app.conversations",
+                            "app.messages",
+                            "app.outbox_events",
+                            "platform.human_context_observations",
+                            "platform.human_context_policy_receipts",
+                            "platform.human_context_reconciliations",
+                            "platform.inbox_events",
+                            "platform.telegram_update_receipts",
                         )
                     )
                 )
@@ -203,6 +215,7 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
             assert after == before, "bounded conflict must not leave a newly created catalog"
         finally:
             await transaction.rollback()
+        assert await current_snapshot(connection) == current_before
 
 
 async def test_initializer_detects_provisioning_audit_drift(billing_case):

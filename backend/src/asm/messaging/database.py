@@ -30,14 +30,18 @@ from asm.conversations.guards import (
 from asm.conversations.turns import (
     ConsumerReceipt,
     ConsumerResult,
+    TurnAdmissionProgress,
     TurnProgress,
     TurnSnapshot,
     parse_snapshot,
+    parse_turn_progress,
 )
 from asm.messaging.adapter import Barrier, TrustedSource
 from asm.messaging.errors import Code, MessagingError, database_error
 from asm.messaging.models import NormalizedEventV1, SendOutcome, identifier
 from asm.messaging.results import (
+    CONTEXT_WORK_CODES,
+    ContextWorkResult,
     FinalizeResult,
     InboxProcessingResult,
     InboxReceipt,
@@ -46,7 +50,9 @@ from asm.messaging.results import (
     ScanStep,
     SendPermit,
     TerminalRejection,
+    TurnJobClaim,
     parse_claim,
+    parse_context_work,
     parse_inbox_result,
 )
 from asm.tenancy.database import _active as _owner_active
@@ -432,13 +438,63 @@ class MessagingDatabase:
                 break
         return recovered
 
-    async def process_turn(self, claim: JobClaim) -> TurnSnapshot | TurnProgress:
+    async def replay_context_work(self, job_id: UUID, claim_token: UUID) -> ContextWorkResult:
+        require_uuid(job_id)
+        require_uuid(claim_token)
+        async with self._transaction() as connection:
+            # Retained old-schema test lanes have no native capability. This is
+            # a bounded historical lookup, not readiness or new worker admission.
+            if not await call(
+                connection,
+                "SELECT to_regprocedure('platform.human_context_work_replay(uuid,uuid)') IS NOT NULL",
+                {},
+            ):
+                raise MessagingError(Code.STALE_CLAIM)
+            result = parse_context_work(
+                await call(
+                    connection,
+                    "SELECT platform.human_context_work_replay(:job,:token)",
+                    {"job": job_id, "token": claim_token},
+                )
+            )
+            if result.job_id != job_id:
+                raise MessagingError(Code.INVALID_INPUT)
+        return result
+
+    async def _context_before_admission(self, claim: JobClaim) -> ContextWorkResult | None:
+        try:
+            result = await self.replay_context_work(claim.job_id, claim.claim_token)
+        except MessagingError as error:
+            if error.code != Code.STALE_CLAIM:
+                raise
+            return None
+        if result.outbox_id != claim.outbox_id or (
+            isinstance(claim, TurnJobClaim)
+            and (result.turn_id, result.turn_revision) != (claim.turn_id, claim.turn_revision)
+        ):
+            raise MessagingError(Code.INVALID_INPUT)
+        return result
+
+    async def process_turn(
+        self, claim: JobClaim
+    ) -> TurnSnapshot | TurnProgress | TurnAdmissionProgress | ConsumerReceipt | ContextWorkResult:
+        if isinstance(claim, TurnJobClaim) and claim.step == "TEST_CONSUME":
+            try:
+                return await self.replay_turn(claim.job_id, claim.claim_token)
+            except MessagingError as error:
+                if error.code != Code.STALE_CLAIM:
+                    raise
+            saved = await self._context_before_admission(claim)
+            if saved is not None:
+                return saved
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:
             raw = await unit._execute("SELECT platform.turn_execute(:job, :token)")
             result = (
-                parse_snapshot(raw)
+                parse_context_work(raw)
+                if raw["code"] in CONTEXT_WORK_CODES
+                else parse_snapshot(raw)
                 if raw["code"] == "SNAPSHOT"
-                else TurnProgress.model_validate(raw)
+                else parse_turn_progress(raw)
             )
             await self.checkpoint("turn_before_commit")
         await self.checkpoint("turn_after_commit")
@@ -446,11 +502,19 @@ class MessagingDatabase:
 
     async def finish_turn(
         self, claim: JobClaim, result: ConsumerResult
-    ) -> ConsumerReceipt | TurnProgress:
+    ) -> ConsumerReceipt | TurnProgress | TurnAdmissionProgress | ContextWorkResult:
         require_uuid(claim.job_id)
         require_uuid(claim.claim_token)
         if type(result) is not ConsumerResult:
             raise MessagingError(Code.INVALID_INPUT)
+        try:
+            return await self.replay_turn(claim.job_id, claim.claim_token)
+        except MessagingError as error:
+            if error.code != Code.STALE_CLAIM:
+                raise
+        saved = await self._context_before_admission(claim)
+        if saved is not None:
+            return saved
         async with self._transaction() as connection:
             raw = await call(
                 connection,
@@ -462,8 +526,11 @@ class MessagingDatabase:
                 },
             )
             receipt = (
-                TurnProgress.model_validate(raw)
-                if raw["code"] == "SUPERSEDED"
+                parse_context_work(raw)
+                if raw["code"] in CONTEXT_WORK_CODES
+                else parse_turn_progress(raw)
+                if raw["code"] in ("SUPERSEDED", "NOT_ALLOWED")
+                or (raw["code"] == "STALE" and "result" not in raw)
                 else ConsumerReceipt.model_validate(raw)
             )
             await self.checkpoint("turn_finalize_before_commit")
@@ -490,12 +557,22 @@ class MessagingDatabase:
 
     async def request_escalation(
         self, claim: JobClaim
-    ) -> EscalationCreationResult | EscalationProgress:
+    ) -> EscalationCreationResult | EscalationProgress | ContextWorkResult:
         self._require_guards()
+        try:
+            return await self.replay_escalation(claim.job_id, claim.claim_token)
+        except MessagingError as error:
+            if error.code != Code.STALE_CLAIM:
+                raise
+        saved = await self._context_before_admission(claim)
+        if saved is not None:
+            return saved
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:
             raw = await unit._execute("SELECT platform.escalation_request_for_turn(:job,:token)")
             result = (
-                EscalationCreationResult.model_validate(raw)
+                parse_context_work(raw)
+                if raw["code"] in CONTEXT_WORK_CODES
+                else EscalationCreationResult.model_validate(raw)
                 if raw["code"] == "ESCALATED"
                 else EscalationProgress.model_validate(raw)
             )
@@ -525,12 +602,19 @@ class MessagingDatabase:
         await self.checkpoint("escalation_timer_after_commit")
         return result
 
-    async def prepare_guarded_turn(self, claim: JobClaim) -> GuardedTurnSnapshot | GuardProgress:
+    async def prepare_guarded_turn(
+        self, claim: JobClaim
+    ) -> GuardedTurnSnapshot | GuardProgress | ContextWorkResult:
         self._require_guards()
+        saved = await self._context_before_admission(claim)
+        if saved is not None:
+            return saved
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:
             raw = await unit._execute("SELECT platform.guard_turn_prepare(:job, :token)")
             result = (
-                parse_guarded_snapshot(raw)
+                parse_context_work(raw)
+                if raw["code"] in CONTEXT_WORK_CODES
+                else parse_guarded_snapshot(raw)
                 if raw["code"] == "SNAPSHOT"
                 else GuardProgress.model_validate(raw)
             )
@@ -540,11 +624,21 @@ class MessagingDatabase:
 
     async def accept_guarded_text(
         self, claim: JobClaim, snapshot_digest: str, exact_text: str
-    ) -> GuardReceipt | GuardProgress:
+    ) -> GuardReceipt | GuardProgress | ContextWorkResult:
         self._require_guards()
         for value in (claim.job_id, claim.claim_token):
             require_uuid(value)
         result = GuardTextResult(snapshot_digest=snapshot_digest, text=exact_text)
+        try:
+            return await self.replay_guarded_text(
+                claim.job_id, claim.claim_token, snapshot_digest, exact_text
+            )
+        except MessagingError as error:
+            if error.code != Code.STALE_CLAIM:
+                raise
+        saved = await self._context_before_admission(claim)
+        if saved is not None:
+            return saved
         async with self._transaction() as connection:
             raw = await call(
                 connection,
@@ -557,7 +651,9 @@ class MessagingDatabase:
                 },
             )
             receipt = (
-                GuardProgress.model_validate(raw)
+                parse_context_work(raw)
+                if raw["code"] in CONTEXT_WORK_CODES
+                else GuardProgress.model_validate(raw)
                 if raw["code"] == "ALREADY_ACCEPTED"
                 else GuardReceipt.model_validate(raw)
             )
@@ -586,12 +682,19 @@ class MessagingDatabase:
                 )
             )
 
-    async def begin_guarded_send(self, claim: JobClaim) -> SendPermit | TerminalRejection:
+    async def begin_guarded_send(
+        self, claim: JobClaim
+    ) -> SendPermit | TerminalRejection | ContextWorkResult:
         self._require_guards()
+        saved = await self._context_before_admission(claim)
+        if saved is not None:
+            return saved
         async with self.admit_job(claim.job_id, claim.claim_token) as unit:
             raw = await unit._execute("SELECT platform.guard_send_begin(:job, :token)")
             result = (
-                SendPermit.model_validate(raw)
+                parse_context_work(raw)
+                if raw["code"] in CONTEXT_WORK_CODES
+                else SendPermit.model_validate(raw)
                 if raw["code"] == "PERMITTED"
                 else TerminalRejection.model_validate(raw)
             )

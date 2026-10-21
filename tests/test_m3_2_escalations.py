@@ -321,6 +321,7 @@ def page_row(number=2):
         maintenance="SCHEDULED",
         resolution=None,
         closure=None,
+        context_hold=None,
         can_resolve=True,
         can_cancel=True,
     )

@@ -726,6 +726,82 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             "platform.material_bind(uuid, uuid, boolean, uuid)": (True, False),
             "platform.material_process(platform.messaging_jobs)": (True, False),
         }
+        # Separate exact 0013 profile. The accepted 0012 names/signatures and
+        # their assertions above remain unchanged; no wildcard/private grants.
+        revision = (
+            await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
+        ).scalar_one()
+        native_profiles = {}
+        if revision == "0013":
+            native_profiles = {
+                "platform.human_context_hash(text,text[])": (True, False),
+                "platform.human_context_text_valid(text)": (True, False),
+                "platform.human_context_decimal(jsonb,boolean)": (True, False),
+                "platform.human_context_uuid(jsonb)": (True, False),
+                "platform.human_context_revision_json(platform.human_context_reconciliations)": (
+                    True,
+                    False,
+                ),
+                "platform.human_context_effective(app.messages,jsonb,text)": (True, False),
+                "platform.human_context_projection(uuid,uuid,timestamptz)": (True, False),
+                "platform.human_context_turn_projection(uuid,uuid,timestamptz)": (True, False),
+                "platform.human_context_reason(jsonb,boolean)": (True, False),
+                "platform.human_context_observation_digest(uuid,uuid,uuid,uuid,jsonb)": (
+                    True,
+                    False,
+                ),
+                "platform.human_context_preview(jsonb)": (True, False),
+                "platform.human_context_observe(platform.telegram_update_receipts,jsonb)": (
+                    True,
+                    False,
+                ),
+                "platform.human_context_read(uuid)": (True, True),
+                "platform.human_context_observations(uuid,integer,jsonb)": (True, True),
+                "platform.human_context_reconcile_result(platform.human_context_reconciliations)": (
+                    True,
+                    False,
+                ),
+                "platform.human_context_reconcile(uuid,text,jsonb)": (True, True),
+                "platform.human_context_current_valid(jsonb)": (True, False),
+                "platform.human_context_snapshot_valid(jsonb,text)": (True, False),
+                "platform.human_context_admission(uuid,uuid,jsonb)": (True, False),
+                "platform.human_context_work_valid(platform.messaging_jobs)": (True, False),
+                "platform.human_context_work_replay(uuid,uuid)": (True, True),
+                "platform.human_context_wait(uuid,uuid,text)": (True, False),
+                "platform.human_context_test_prelock(platform.messaging_jobs)": (True, False),
+                "platform.human_context_test_guard(platform.messaging_jobs,jsonb)": (True, False),
+                "platform.human_context_snapshot_check(jsonb,text)": (True, False),
+                "platform.human_context_basic_current(uuid,uuid,uuid,bigint)": (True, False),
+                "platform.human_context_escalation_hold(uuid,uuid,timestamptz)": (True, False),
+                "platform.human_context_policy_result(platform.human_context_policy_receipts)": (
+                    True,
+                    False,
+                ),
+                "platform.human_context_policy_command(uuid,uuid,text,text,text,bigint,jsonb,jsonb)": (
+                    True,
+                    False,
+                ),
+                "platform.human_context_policy_guard()": (True, False),
+                "platform.human_context_integrity()": (True, False),
+                "platform.human_context_consistent()": (True, False),
+                "platform.human_context_work_lookup(uuid,uuid)": (True, False),
+                "platform.human_context_stale()": (True, False),
+                "platform.human_context_schema_profile()": (True, False),
+            }
+        native_names = {signature.split(".")[1].split("(")[0] for signature in native_profiles}
+        native_rows = [row for row in functions if row["proname"] in native_names]
+        assert len(native_rows) == len(native_profiles)
+        native_oid_profiles = {}
+        for signature, profile in native_profiles.items():
+            oid = (
+                await connection.execute(
+                    text("SELECT CAST(CAST(:signature AS regprocedure) AS oid)"),
+                    {"signature": signature},
+                )
+            ).scalar_one()
+            assert oid not in native_oid_profiles, signature
+            native_oid_profiles[oid] = profile
+        assert {row["oid"] for row in native_rows} == set(native_oid_profiles)
         material_names = {signature.split(".")[1].split("(")[0] for signature in material_profiles}
         material_rows = [row for row in functions if row["proname"] in material_names]
         assert len(material_rows) == len(material_profiles) == 23
@@ -746,6 +822,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             | set(m2_profiles)
             | set(m3_profiles)
             | material_names
+            | native_names
         )
         m1_3_profiles.update(m2_profiles)
         m1_3_profiles.update(m3_profiles)
@@ -763,6 +840,13 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             assert row["proconfig"] == ["search_path=pg_catalog, pg_temp"]
         for row in material_rows:
             security_definer, runtime_execute = material_oid_profiles[row["oid"]]
+            assert row["prosecdef"] is security_definer
+            assert row["runtime_execute"] is runtime_execute
+            assert row["rolname"] == "asm_migrator"
+            assert not row["public_execute"]
+            assert row["proconfig"] == ["search_path=pg_catalog, pg_temp"]
+        for row in native_rows:
+            security_definer, runtime_execute = native_oid_profiles[row["oid"]]
             assert row["prosecdef"] is security_definer
             assert row["runtime_execute"] is runtime_execute
             assert row["rolname"] == "asm_migrator"

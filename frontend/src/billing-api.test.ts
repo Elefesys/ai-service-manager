@@ -3,6 +3,18 @@ import { billingApi, normalizeContact, parseAuditPage, parseBilling, parseBillin
 import { billing, event, fail, ok, receipt, stamp, ws } from './billing-fixtures.test-helper';
 
 describe('R4 generated OpenAPI consumer', () => {
+  it('reads native reconciliation and all policy command Audit transitions without exposing private context',()=>{
+    const reconciled={...event(50),object_type:'CONVERSATION',object_version:'9007199254740994',event_type:'HUMAN_CONTEXT_RECONCILED',payload:{revision_id:event(51).object_id,previous_revision_id:null,disposition:'OWNER_TEXT',source_media:'UNAVAILABLE',control_generation:'9007199254740993',previous_context_version:'9007199254740993',accepted_context_version:'9007199254740994',policy_epoch:'1',observation_epoch:'0',reviewed_ingress_checkpoint:'0'}};
+    const policy={...event(52),object_type:'CHANNEL_CONNECTION',object_version:'1',event_type:'HUMAN_CONTEXT_POLICY_COMMANDED',actor_kind:'LOCAL_PROVISIONER',actor_user_account_id:null,payload:{receipt_id:event(53).object_id,operation:'ENABLE',change:'ENABLED',previous_policy:'OFF_UNUSED',accepted_policy:'ON',previous_policy_epoch:'0',accepted_policy_epoch:'1'}};
+    for(const patch of [{},{disposition:'UNRESOLVED'},{disposition:'CANONICAL_SUFFICIENT',source_media:'NONE'}])expect(parseAuditPage({items:[{...reconciled,payload:{...reconciled.payload,...patch}},event()],next_cursor:null}).items).toHaveLength(2);
+    const transitions=[policy,{...policy,payload:{...policy.payload,previous_policy:'ON',previous_policy_epoch:'1',change:'UNCHANGED'}},{...policy,payload:{...policy.payload,operation:'PAUSE',previous_policy:'ON',previous_policy_epoch:'1',accepted_policy:'PAUSED',change:'PAUSED'}},{...policy,payload:{...policy.payload,operation:'PAUSE',previous_policy:'PAUSED',previous_policy_epoch:'1',accepted_policy:'PAUSED',change:'UNCHANGED'}},{...policy,object_version:'2',payload:{...policy.payload,previous_policy:'PAUSED',previous_policy_epoch:'1',accepted_policy_epoch:'2'}}];
+    expect(parseAuditPage({items:transitions,next_cursor:null}).items).toEqual(transitions);
+    for(const v of [{...reconciled,actor_kind:'LOCAL_PROVISIONER'},{...reconciled,actor_user_account_id:null},{...reconciled,object_type:'MESSAGE'},{...reconciled,object_version:'2'},...[
+      {revision_id:'bad'},{previous_revision_id:reconciled.payload.revision_id},{disposition:'CANONICAL_SUFFICIENT'},{accepted_context_version:'9007199254740995'},{policy_epoch:'0'},{observation_epoch:0},{text:'private'},{reviewed_input_state_hash:'a'.repeat(64)},
+    ].map(p=>({...reconciled,payload:{...reconciled.payload,...p}})),{...policy,actor_kind:'USER_ACCOUNT'},{...policy,actor_user_account_id:event().actor_user_account_id},{...policy,object_type:'CONVERSATION'},...[
+      {operation:'PAUSE'},{change:'UNCHANGED'},{previous_policy_epoch:'1'},{accepted_policy:'PAUSED'},{accepted_policy_epoch:'2'},{receipt_id:'bad'},{source_profile:{}},
+    ].map(p=>({...policy,payload:{...policy.payload,...p}}))])expect(()=>parseAuditPage({items:[v],next_cursor:null})).toThrow('INVALID_RESPONSE');
+  });
   it('accepts both Escalation decisions with mixed Audit and rejects cross-variant or answer payloads', () => {
     const resolve = {...event(6),object_type:'ESCALATION',object_version:'2',event_type:'ESCALATION_DECIDED',payload:{operation:'RESOLVE',status:'RESOLVED'}};
     const cancel = {...resolve,audit_event_id:event(7).audit_event_id,payload:{operation:'CANCEL',status:'CANCELLED'}};

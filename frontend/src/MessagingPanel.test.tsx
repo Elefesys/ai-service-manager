@@ -5,6 +5,7 @@ import { App } from './App';
 import { escalationApi, EscalationError } from './escalation-api';
 import { api } from './api';
 import { controlApi, ControlReceipt } from './conversation-control-api';
+import { HumanContextError, HumanContextState, ReconcileReceipt, humanContextApi } from './human-context-api';
 import { controlState, controlReceipt } from './messaging-fixtures.test-helper';
 import { MessagingPanel } from './MessagingPanel';
 import { billingApi, BillingError } from './billing-api';
@@ -13,6 +14,11 @@ import { MessagingError, Message, ReadGrant, SendReceipt, messagingApi } from '.
 import { connection, conversation, conversationId, deferred, id, message, ok, outbound, page, photo, receipt, session, when, ws } from './messaging-fixtures.test-helper';
 
 beforeEach(() => {
+  // Retained pre-native scenarios use the accepted legacy OFF_UNUSED projection.
+  // No messaging entitlement or control permission is inferred from this state.
+  vi.spyOn(humanContextApi,'read').mockImplementation(async c=>({...controlState(c),policy:'OFF_UNUSED',policy_epoch:'0',observation_epoch:'0',ingress_checkpoint:'0',input_state_hash:'a'.repeat(64),input_gap_limit_exceeded:false,has_unsequenced_context_input:false,current_revision:null,review_status:'POLICY_INACTIVE',context_blockers:['POLICY_INACTIVE'],resume_blockers:[],history_truncated:false,coverage_status:'UNCONFIRMED',pending_context_input:false,has_failed_context_input:false,unreviewed_failed_context_input:false,automation_work:{state:'IDLE',reason:null,job_id:null,turn_id:null,observed_at:controlState(c).observed_at}} satisfies HumanContextState));
+  vi.spyOn(humanContextApi,'observations').mockResolvedValue({items:[],next_cursor:null,through_epoch:'0',current_epoch:'0',observed_at:when});
+  vi.spyOn(humanContextApi,'reconcile');
   vi.spyOn(escalationApi,'list').mockResolvedValue({items:[],next_cursor:null,observed_at:'2030-01-01T00:00:00.000000Z'});
   vi.spyOn(controlApi,'read').mockImplementation(async context=>controlState(context));
   vi.spyOn(controlApi,'command').mockImplementation(async(context,operation,body)=>controlReceipt(operation,body,context));
@@ -35,6 +41,16 @@ async function submit(text='  Оригинал\ne\u0301🙂  ') {
 const newSession = (v: ReturnType<typeof setup>, token='recovered') => v.rerender(<MessagingPanel {...v.props} session={session(token)}/>);
 
 describe('manual/control intent coordination',()=>{
+  it('accepted native save and failed current GET stay in read-only recovery without self-refreshing or CONTROL/send POST',async()=>{
+    const legacy=vi.mocked(humanContextApi.read).getMockImplementation()!,c={workspace:ws,conversation:conversationId,client:conversation().client_id};const off=await legacy(c);const on:HumanContextState={...off,policy:'ON',policy_epoch:'1',review_status:'BOOTSTRAP_REQUIRED',context_blockers:['CONTEXT_CONFIRMATION_REQUIRED'],resume_blockers:['CONTEXT_CONFIRMATION_REQUIRED']};vi.mocked(humanContextApi.read).mockResolvedValueOnce(on).mockRejectedValueOnce(new TypeError('read lost')).mockResolvedValue(on);
+    vi.mocked(humanContextApi.reconcile).mockImplementation(async(c,b)=>({outcome:'ACCEPTED',result:{workspace_id:c.workspace,conversation_id:c.conversation,client_id:c.client,receipt_id:id(81),revision_id:id(81),revision_no:'1',previous_revision_id:null,audit_event_id:id(82),control_generation:b.expected_control_generation,previous_context_version:b.expected_context_version,accepted_context_version:String(BigInt(b.expected_context_version)+1n),policy_epoch:b.expected_policy_epoch,observation_epoch:b.expected_observation_epoch,reviewed_ingress_checkpoint:b.expected_ingress_checkpoint,reviewed_input_state_hash:b.expected_input_state_hash,disposition:b.disposition,source_media:b.source_media,coverage:'OWNER_ASSERTED_TEXT_ONLY',accepted_at:when}}));
+    setup();await screen.findByLabelText('Новый полный контекст');await waitFor(()=>expect(screen.getByRole('button',{name:'Обновить наблюдения'})).toBeEnabled());fireEvent.change(screen.getByLabelText('Новый полный контекст'),{target:{value:'Explicit context'}});fireEvent.click(screen.getByLabelText('Подтверждаю полную замену или отзыв прежнего контекста'));fireEvent.click(screen.getByLabelText('Я сверил доступный контекст и существенные договорённости'));fireEvent.click(screen.getByRole('button',{name:'Сохранить сверенный контекст'}));await screen.findByText('Сохранение подтверждено. Повторяется только чтение.');expect(humanContextApi.read).toHaveBeenCalledTimes(2);expect(humanContextApi.reconcile).toHaveBeenCalledTimes(1);expect(controlApi.command).not.toHaveBeenCalled();expect(messagingApi.send).not.toHaveBeenCalled();
+  });
+  it('blocks manual and CONTROL while a native reconciliation is unresolved, using synchronous shared refs',async()=>{
+    const legacy=vi.mocked(humanContextApi.read).getMockImplementation()!;vi.mocked(humanContextApi.read).mockImplementation(async(c,signal)=>({...await legacy(c,signal),policy:'ON',policy_epoch:'1',review_status:'BOOTSTRAP_REQUIRED',context_blockers:['CONTEXT_CONFIRMATION_REQUIRED'],resume_blockers:['CONTEXT_CONFIRMATION_REQUIRED']}));
+    const pending=deferred<ReconcileReceipt>();vi.mocked(humanContextApi.reconcile).mockReturnValueOnce(pending.promise);setup();await ready();await screen.findByLabelText('Новый полный контекст');await waitFor(()=>expect(screen.getByRole('button',{name:'Обновить наблюдения'})).toBeEnabled());fireEvent.change(screen.getByLabelText('Новый полный контекст'),{target:{value:'Complete replacement'}});fireEvent.click(screen.getByLabelText('Подтверждаю полную замену или отзыв прежнего контекста'));fireEvent.click(screen.getByLabelText('Я сверил доступный контекст и существенные договорённости'));fireEvent.click(screen.getByRole('button',{name:'Сохранить сверенный контекст'}));
+    fireEvent.submit(screen.getByRole('button',{name:'Проверить и отправить'}).closest('form')!);fireEvent.click(screen.getByRole('button',{name:'Забрать управление'}));expect(messagingApi.send).not.toHaveBeenCalled();expect(controlApi.command).not.toHaveBeenCalled();expect(humanContextApi.reconcile).toHaveBeenCalledTimes(1);expect(screen.getByLabelText('Ручной текстовый ответ')).toBeDisabled();expect(screen.getByRole('button',{name:'Забрать управление'})).toBeDisabled();await act(async()=>pending.reject(new TypeError('lost')));expect(screen.getByRole('button',{name:'Проверить и отправить'})).toBeDisabled();
+  });
   it('blocks manual submit synchronously while CONTROL is unresolved',async()=>{
     const pending=deferred<ControlReceipt>();vi.mocked(controlApi.command).mockReturnValue(pending.promise);setup();await ready();
     fireEvent.change(screen.getByLabelText('Ручной текстовый ответ'),{target:{value:'Draft'}});
@@ -185,7 +201,7 @@ describe('one frozen intention and receipt-aware recovery',()=>{
     await screen.findByRole('button',{name:'Повторить исходный ответ'}); const before=checks; fireEvent.focus(window); await waitFor(()=>expect(checks).toBeGreaterThan(before)); await waitFor(()=>expect(screen.getByRole('button',{name:'Повторить исходный ответ'})).toBeEnabled()); fireEvent.click(screen.getByRole('button',{name:'Повторить исходный ответ'})); await ready(); expect(messagingApi.send).toHaveBeenCalledTimes(2);
     v.unmount(); const reloaded=render(<App/>); await ready(); expect(messagingApi.send).toHaveBeenCalledTimes(2); const reads=vi.mocked(messagingApi.connections).mock.calls.length; reloaded.unmount(); render(<App pathname="/ops/"/>); await screen.findByText('Проверка готовности пройдена'); expect(messagingApi.connections).toHaveBeenCalledTimes(reads); expect(screen.queryByRole('region',{name:'Переписка'})).toBeNull(); expect(localStorage.length+sessionStorage.length).toBe(0);
   });
-  it.each(['billing','messaging','escalation'] as const)('current %s OWNER denial hides all owner panels and preserves a pending reply until explicit recovery',async source=>{
+  it.each(['billing','messaging','escalation','human-context'] as const)('current %s OWNER denial hides all owner panels and preserves a pending reply until explicit recovery',async source=>{
     vi.spyOn(api,'session').mockResolvedValue(session()); vi.spyOn(api,'businesses').mockResolvedValue([]);
     vi.spyOn(billingApi,'read').mockResolvedValue({...billing(),workspace_id:ws});
     vi.spyOn(billingApi,'audit').mockResolvedValue({items:[],next_cursor:null});
@@ -196,7 +212,8 @@ describe('one frozen intention and receipt-aware recovery',()=>{
     await submit('Frozen reply through owner denial');
     if(source==='billing') {vi.mocked(billingApi.read).mockRejectedValueOnce(new BillingError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить подписку'}));}
     else if(source==='messaging') {vi.mocked(messagingApi.connections).mockRejectedValueOnce(new MessagingError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить подключения'}));}
-    else {vi.mocked(escalationApi.list).mockRejectedValueOnce(new EscalationError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить очередь'}));}
+    else if(source==='escalation') {vi.mocked(escalationApi.list).mockRejectedValueOnce(new EscalationError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить очередь'}));}
+    else {vi.mocked(humanContextApi.read).mockRejectedValueOnce(new HumanContextError(403,'ACCESS_DENIED'));fireEvent.click(screen.getByRole('button',{name:'Обновить контекст'}));}
     await screen.findByText('Нет доступа к данным владельца');
     expect(screen.queryByRole('img')).toBeNull(); expect(screen.queryByTestId('current-contact')).toBeNull();
     expect(screen.queryByRole('region',{name:'Переписка'})).toBeNull(); expect(screen.queryByRole('region',{name:'Audit'})).toBeNull();

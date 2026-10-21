@@ -12,6 +12,8 @@
                   "CONVERSATION_RESUMED": "#/components/schemas/ConversationResumedAudit",
                   "CONVERSATION_TAKEN_OVER": "#/components/schemas/ConversationTakenOverAudit",
                   "ESCALATION_DECIDED": "#/components/schemas/EscalationDecidedAudit",
+                  "HUMAN_CONTEXT_POLICY_COMMANDED": "#/components/schemas/HumanContextPolicyAudit",
+                  "HUMAN_CONTEXT_RECONCILED": "#/components/schemas/HumanContextReconciledAudit",
                   "MESSAGE_MATERIAL_CHANGED": "#/components/schemas/MessageMaterialAudit",
                   "MESSAGE_SEND_REQUESTED": "#/components/schemas/MessageSendAudit",
                   "WORKSPACE_BILLING_PROVISIONED": "#/components/schemas/ProvisionAudit"
@@ -39,6 +41,12 @@
                 },
                 {
                   "$ref": "#/components/schemas/MessageMaterialAudit"
+                },
+                {
+                  "$ref": "#/components/schemas/HumanContextReconciledAudit"
+                },
+                {
+                  "$ref": "#/components/schemas/HumanContextPolicyAudit"
                 }
               ]
             },
@@ -768,7 +776,15 @@
               {
                 "enum": [
                   "NOT_ALLOWED",
-                  "CONTROL_VERSION_EXHAUSTED"
+                  "CONTROL_VERSION_EXHAUSTED",
+                  "CONTEXT_POLICY_INACTIVE",
+                  "CONTEXT_POLICY_PAUSED",
+                  "HUMAN_REQUIRED",
+                  "CONTEXT_CONFIRMATION_REQUIRED",
+                  "CONTEXT_UNRESOLVED",
+                  "CONTEXT_INPUT_PENDING",
+                  "CONTEXT_INPUT_UNRESOLVED",
+                  "CONTEXT_COVERAGE_REQUIRED"
                 ],
                 "type": "string"
               }
@@ -1104,6 +1120,28 @@
           "next_cursor"
         ],
         "title": "ConversationsPage",
+        "type": "object"
+      },
+      "DeletePreview": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "DELETE",
+            "title": "Kind",
+            "type": "string"
+          },
+          "target_count": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Target Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "target_count"
+        ],
+        "title": "DeletePreview",
         "type": "object"
       },
       "DeliveryResponse": {
@@ -1497,6 +1535,66 @@
         "title": "EscalationCommandResponse",
         "type": "object"
       },
+      "EscalationContextHold": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage_status": {
+            "enum": [
+              "UNCONFIRMED",
+              "UNRESOLVED",
+              "OWNER_TEXT",
+              "CANONICAL_COMPLETE",
+              "CANONICAL_TRUNCATED"
+            ],
+            "title": "Coverage Status",
+            "type": "string"
+          },
+          "observation_epoch": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Observation Epoch",
+            "type": "string"
+          },
+          "policy": {
+            "enum": [
+              "ON",
+              "PAUSED"
+            ],
+            "title": "Policy",
+            "type": "string"
+          },
+          "policy_epoch": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Policy Epoch",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "CONTEXT_POLICY_PAUSED",
+              "CONTEXT_CONFIRMATION_REQUIRED",
+              "CONTEXT_UNRESOLVED",
+              "NEW_OBSERVATION",
+              "CONTEXT_INPUT_UNRESOLVED",
+              "CONTEXT_COVERAGE_REQUIRED",
+              "CONTEXT_INPUT_PENDING"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "policy",
+          "policy_epoch",
+          "observation_epoch",
+          "coverage_status"
+        ],
+        "title": "EscalationContextHold",
+        "type": "object"
+      },
       "EscalationCurrentContext": {
         "additionalProperties": false,
         "properties": {
@@ -1836,6 +1934,16 @@
               }
             ]
           },
+          "context_hold": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EscalationContextHold"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "conversation_id": {
             "format": "uuid",
             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -2004,6 +2112,7 @@
           "maintenance",
           "resolution",
           "closure",
+          "context_hold",
           "can_resolve",
           "can_cancel"
         ],
@@ -2131,6 +2240,802 @@
           "component"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "HeldAutomationWork": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CONTEXT_POLICY_PAUSED",
+                  "CONTEXT_CONFIRMATION_REQUIRED",
+                  "CONTEXT_UNRESOLVED",
+                  "NEW_OBSERVATION",
+                  "CONTEXT_INPUT_UNRESOLVED",
+                  "CONTEXT_COVERAGE_REQUIRED",
+                  "CONTEXT_TOO_LARGE"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "CONTEXT_WAIT_EXHAUSTED",
+                "type": "string"
+              }
+            ],
+            "title": "Reason"
+          },
+          "state": {
+            "const": "OPERATOR_REQUIRED",
+            "title": "State",
+            "type": "string"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "reason",
+          "job_id",
+          "turn_id",
+          "observed_at"
+        ],
+        "title": "HeldAutomationWork",
+        "type": "object"
+      },
+      "HumanContextPolicyAudit": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_kind": {
+            "const": "LOCAL_PROVISIONER",
+            "title": "Actor Kind",
+            "type": "string"
+          },
+          "actor_user_account_id": {
+            "title": "Actor User Account Id",
+            "type": "null"
+          },
+          "audit_event_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Audit Event Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "HUMAN_CONTEXT_POLICY_COMMANDED",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "object_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Object Id",
+            "type": "string"
+          },
+          "object_type": {
+            "const": "CHANNEL_CONNECTION",
+            "title": "Object Type",
+            "type": "string"
+          },
+          "object_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Object Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/HumanContextPolicyPayload"
+          }
+        },
+        "required": [
+          "audit_event_id",
+          "occurred_at",
+          "correlation_id",
+          "object_type",
+          "object_id",
+          "object_version",
+          "event_type",
+          "actor_kind",
+          "actor_user_account_id",
+          "payload"
+        ],
+        "title": "HumanContextPolicyAudit",
+        "type": "object"
+      },
+      "HumanContextPolicyPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_policy": {
+            "enum": [
+              "ON",
+              "PAUSED"
+            ],
+            "title": "Accepted Policy",
+            "type": "string"
+          },
+          "accepted_policy_epoch": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Accepted Policy Epoch",
+            "type": "string"
+          },
+          "change": {
+            "enum": [
+              "ENABLED",
+              "PAUSED",
+              "UNCHANGED"
+            ],
+            "title": "Change",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "ENABLE",
+              "PAUSE"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "previous_policy": {
+            "enum": [
+              "OFF_UNUSED",
+              "ON",
+              "PAUSED"
+            ],
+            "title": "Previous Policy",
+            "type": "string"
+          },
+          "previous_policy_epoch": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Previous Policy Epoch",
+            "type": "string"
+          },
+          "receipt_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Receipt Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "receipt_id",
+          "operation",
+          "change",
+          "previous_policy",
+          "accepted_policy",
+          "previous_policy_epoch",
+          "accepted_policy_epoch"
+        ],
+        "title": "HumanContextPolicyPayload",
+        "type": "object"
+      },
+      "HumanContextReconciledAudit": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_kind": {
+            "const": "USER_ACCOUNT",
+            "title": "Actor Kind",
+            "type": "string"
+          },
+          "actor_user_account_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Actor User Account Id",
+            "type": "string"
+          },
+          "audit_event_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Audit Event Id",
+            "type": "string"
+          },
+          "correlation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "HUMAN_CONTEXT_RECONCILED",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "object_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Object Id",
+            "type": "string"
+          },
+          "object_type": {
+            "const": "CONVERSATION",
+            "title": "Object Type",
+            "type": "string"
+          },
+          "object_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Object Version",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/HumanContextReconciledPayload"
+          }
+        },
+        "required": [
+          "audit_event_id",
+          "occurred_at",
+          "correlation_id",
+          "object_type",
+          "object_id",
+          "object_version",
+          "actor_kind",
+          "actor_user_account_id",
+          "event_type",
+          "payload"
+        ],
+        "title": "HumanContextReconciledAudit",
+        "type": "object"
+      },
+      "HumanContextReconciledPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_context_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Accepted Context Version",
+            "type": "string"
+          },
+          "control_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Control Generation",
+            "type": "string"
+          },
+          "disposition": {
+            "enum": [
+              "OWNER_TEXT",
+              "CANONICAL_SUFFICIENT",
+              "UNRESOLVED"
+            ],
+            "title": "Disposition",
+            "type": "string"
+          },
+          "observation_epoch": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Observation Epoch",
+            "type": "string"
+          },
+          "policy_epoch": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Policy Epoch",
+            "type": "string"
+          },
+          "previous_context_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Previous Context Version",
+            "type": "string"
+          },
+          "previous_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Revision Id"
+          },
+          "reviewed_ingress_checkpoint": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Reviewed Ingress Checkpoint",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "source_media": {
+            "enum": [
+              "NONE",
+              "UNAVAILABLE"
+            ],
+            "title": "Source Media",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision_id",
+          "previous_revision_id",
+          "disposition",
+          "source_media",
+          "control_generation",
+          "previous_context_version",
+          "accepted_context_version",
+          "policy_epoch",
+          "observation_epoch",
+          "reviewed_ingress_checkpoint"
+        ],
+        "title": "HumanContextReconciledPayload",
+        "type": "object"
+      },
+      "HumanContextRevision": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "accepted_context_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Accepted Context Version",
+            "type": "string"
+          },
+          "actor_user_account_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Actor User Account Id",
+            "type": "string"
+          },
+          "confirmed_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Confirmed Generation",
+            "type": "string"
+          },
+          "coverage": {
+            "const": "OWNER_ASSERTED_TEXT_ONLY",
+            "title": "Coverage",
+            "type": "string"
+          },
+          "disposition": {
+            "enum": [
+              "OWNER_TEXT",
+              "CANONICAL_SUFFICIENT",
+              "UNRESOLVED"
+            ],
+            "title": "Disposition",
+            "type": "string"
+          },
+          "observation_epoch": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Observation Epoch",
+            "type": "string"
+          },
+          "policy_epoch": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Policy Epoch",
+            "type": "string"
+          },
+          "previous_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Revision Id"
+          },
+          "reviewed_ingress_checkpoint": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Reviewed Ingress Checkpoint",
+            "type": "string"
+          },
+          "reviewed_input_state_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Reviewed Input State Hash",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Revision No",
+            "type": "string"
+          },
+          "source_media": {
+            "enum": [
+              "NONE",
+              "UNAVAILABLE"
+            ],
+            "title": "Source Media",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "revision_id",
+          "revision_no",
+          "previous_revision_id",
+          "actor_user_account_id",
+          "accepted_at",
+          "disposition",
+          "text",
+          "source_media",
+          "coverage",
+          "confirmed_generation",
+          "accepted_context_version",
+          "policy_epoch",
+          "observation_epoch",
+          "reviewed_ingress_checkpoint",
+          "reviewed_input_state_hash"
+        ],
+        "title": "HumanContextRevision",
+        "type": "object"
+      },
+      "HumanContextState": {
+        "additionalProperties": false,
+        "properties": {
+          "automation_work": {
+            "discriminator": {
+              "mapping": {
+                "IDLE": "#/components/schemas/IdleAutomationWork",
+                "OPERATOR_REQUIRED": "#/components/schemas/HeldAutomationWork",
+                "WAITING_CONTEXT": "#/components/schemas/WaitingAutomationWork"
+              },
+              "propertyName": "state"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IdleAutomationWork"
+              },
+              {
+                "$ref": "#/components/schemas/WaitingAutomationWork"
+              },
+              {
+                "$ref": "#/components/schemas/HeldAutomationWork"
+              }
+            ],
+            "title": "Automation Work"
+          },
+          "client_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "context_blockers": {
+            "items": {
+              "enum": [
+                "POLICY_INACTIVE",
+                "POLICY_PAUSED",
+                "CONTEXT_CONFIRMATION_REQUIRED",
+                "CONTEXT_CHANGED",
+                "CONTEXT_UNRESOLVED",
+                "NEW_OBSERVATION",
+                "CONTEXT_INPUT_UNRESOLVED",
+                "CONTEXT_COVERAGE_REQUIRED",
+                "CONTEXT_INPUT_PENDING"
+              ],
+              "type": "string"
+            },
+            "maxItems": 9,
+            "title": "Context Blockers",
+            "type": "array"
+          },
+          "context_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Context Version",
+            "type": "string"
+          },
+          "control_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Control Generation",
+            "type": "string"
+          },
+          "control_mode": {
+            "enum": [
+              "HUMAN",
+              "AI"
+            ],
+            "title": "Control Mode",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "coverage_status": {
+            "enum": [
+              "UNCONFIRMED",
+              "UNRESOLVED",
+              "OWNER_TEXT",
+              "CANONICAL_COMPLETE",
+              "CANONICAL_TRUNCATED"
+            ],
+            "title": "Coverage Status",
+            "type": "string"
+          },
+          "current_revision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HumanContextRevision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "has_failed_context_input": {
+            "title": "Has Failed Context Input",
+            "type": "boolean"
+          },
+          "has_unsequenced_context_input": {
+            "title": "Has Unsequenced Context Input",
+            "type": "boolean"
+          },
+          "history_truncated": {
+            "title": "History Truncated",
+            "type": "boolean"
+          },
+          "ingress_checkpoint": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Ingress Checkpoint",
+            "type": "string"
+          },
+          "input_gap_limit_exceeded": {
+            "title": "Input Gap Limit Exceeded",
+            "type": "boolean"
+          },
+          "input_state_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Input State Hash",
+            "type": "string"
+          },
+          "manual_delivery": {
+            "$ref": "#/components/schemas/ManualDeliveryState"
+          },
+          "observation_epoch": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Observation Epoch",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "pending_context_input": {
+            "title": "Pending Context Input",
+            "type": "boolean"
+          },
+          "policy": {
+            "enum": [
+              "OFF_UNUSED",
+              "ON",
+              "PAUSED"
+            ],
+            "title": "Policy",
+            "type": "string"
+          },
+          "policy_epoch": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Policy Epoch",
+            "type": "string"
+          },
+          "resume_blockers": {
+            "items": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "POLICY_INACTIVE",
+                    "POLICY_PAUSED",
+                    "CONTEXT_CONFIRMATION_REQUIRED",
+                    "CONTEXT_CHANGED",
+                    "CONTEXT_UNRESOLVED",
+                    "NEW_OBSERVATION",
+                    "CONTEXT_INPUT_UNRESOLVED",
+                    "CONTEXT_COVERAGE_REQUIRED",
+                    "CONTEXT_INPUT_PENDING"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "const": "HUMAN_REQUIRED",
+                  "type": "string"
+                }
+              ]
+            },
+            "maxItems": 10,
+            "title": "Resume Blockers",
+            "type": "array"
+          },
+          "review_status": {
+            "enum": [
+              "POLICY_INACTIVE",
+              "POLICY_PAUSED",
+              "BOOTSTRAP_REQUIRED",
+              "CONFIRMATION_REQUIRED",
+              "UNRESOLVED",
+              "NEW_OBSERVATION",
+              "INPUT_UNRESOLVED",
+              "COVERAGE_REQUIRED",
+              "INPUT_PENDING",
+              "CONFIRMED"
+            ],
+            "title": "Review Status",
+            "type": "string"
+          },
+          "unreviewed_failed_context_input": {
+            "title": "Unreviewed Failed Context Input",
+            "type": "boolean"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "conversation_id",
+          "client_id",
+          "observed_at",
+          "control_mode",
+          "control_generation",
+          "context_version",
+          "policy",
+          "policy_epoch",
+          "observation_epoch",
+          "ingress_checkpoint",
+          "input_state_hash",
+          "input_gap_limit_exceeded",
+          "has_unsequenced_context_input",
+          "current_revision",
+          "review_status",
+          "context_blockers",
+          "resume_blockers",
+          "history_truncated",
+          "coverage_status",
+          "pending_context_input",
+          "has_failed_context_input",
+          "unreviewed_failed_context_input",
+          "automation_work",
+          "manual_delivery"
+        ],
+        "title": "HumanContextState",
+        "type": "object"
+      },
+      "IdleAutomationWork": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "null"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "null"
+          },
+          "state": {
+            "const": "IDLE",
+            "title": "State",
+            "type": "string"
+          },
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "null"
+          }
+        },
+        "required": [
+          "state",
+          "reason",
+          "job_id",
+          "turn_id",
+          "observed_at"
+        ],
+        "title": "IdleAutomationWork",
         "type": "object"
       },
       "LimitDecision": {
@@ -2712,6 +3617,207 @@
         "title": "MessagingErrorResponse",
         "type": "object"
       },
+      "NativeContextErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "SESSION_REQUIRED",
+                  "ORIGIN_DENIED",
+                  "CSRF_REJECTED",
+                  "ACCESS_DENIED",
+                  "BODY_TOO_LARGE",
+                  "UNSUPPORTED_MEDIA_TYPE",
+                  "INVALID_REQUEST",
+                  "RATE_LIMITED",
+                  "UNAVAILABLE",
+                  "INTERNAL_ERROR",
+                  "NOT_FOUND",
+                  "STALE_STATE",
+                  "IDEMPOTENCY_KEY_CONFLICT"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "VERSION_EXHAUSTED",
+                  "CONTEXT_POLICY_INACTIVE",
+                  "CONTEXT_POLICY_PAUSED",
+                  "HUMAN_REQUIRED",
+                  "CONTEXT_CONFIRMATION_REQUIRED",
+                  "CONTEXT_UNRESOLVED",
+                  "CONTEXT_INPUT_PENDING",
+                  "CONTEXT_INPUT_UNRESOLVED",
+                  "CONTEXT_COVERAGE_REQUIRED",
+                  "CONTEXT_CURSOR_STALE"
+                ],
+                "type": "string"
+              }
+            ],
+            "title": "Code"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "NativeContextErrorDetail",
+        "type": "object"
+      },
+      "NativeContextErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/NativeContextErrorDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "NativeContextErrorResponse",
+        "type": "object"
+      },
+      "ObservationItem": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "enum": [
+              "NATIVE_CANDIDATE",
+              "AMBIGUOUS_NONCLIENT",
+              "CANONICAL_MUTATION",
+              "UNBOUND_MUTATION"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "coverage": {
+            "const": "PROVIDER_OBSERVATION_ONLY",
+            "title": "Coverage",
+            "type": "string"
+          },
+          "epoch": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Epoch",
+            "type": "string"
+          },
+          "observation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Observation Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "preview": {
+            "discriminator": {
+              "mapping": {
+                "DELETE": "#/components/schemas/DeletePreview",
+                "PHOTO": "#/components/schemas/PhotoPreview",
+                "TEXT": "#/components/schemas/TextPreview",
+                "UNSUPPORTED": "#/components/schemas/UnsupportedPreview"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TextPreview"
+              },
+              {
+                "$ref": "#/components/schemas/PhotoPreview"
+              },
+              {
+                "$ref": "#/components/schemas/UnsupportedPreview"
+              },
+              {
+                "$ref": "#/components/schemas/DeletePreview"
+              }
+            ],
+            "title": "Preview"
+          },
+          "source_kind": {
+            "enum": [
+              "NEW",
+              "EDIT",
+              "DELETE"
+            ],
+            "title": "Source Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "observation_id",
+          "epoch",
+          "classification",
+          "observed_at",
+          "source_kind",
+          "preview",
+          "coverage"
+        ],
+        "title": "ObservationItem",
+        "type": "object"
+      },
+      "ObservationPage": {
+        "additionalProperties": false,
+        "properties": {
+          "current_epoch": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Current Epoch",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ObservationItem"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "through_epoch": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Through Epoch",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "through_epoch",
+          "current_epoch",
+          "observed_at"
+        ],
+        "title": "ObservationPage",
+        "type": "object"
+      },
       "Permission": {
         "enum": [
           "tenancy:read",
@@ -2719,6 +3825,40 @@
         ],
         "title": "Permission",
         "type": "string"
+      },
+      "PhotoPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "caption": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "image_availability": {
+            "const": "NATIVE_UNAVAILABLE",
+            "title": "Image Availability",
+            "type": "string"
+          },
+          "kind": {
+            "const": "PHOTO",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "caption",
+          "image_availability"
+        ],
+        "title": "PhotoPreview",
+        "type": "object"
       },
       "Plan": {
         "additionalProperties": false,
@@ -2853,6 +3993,189 @@
           "expires_at"
         ],
         "title": "ReadGrantResponse",
+        "type": "object"
+      },
+      "ReconcileResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "enum": [
+              "ACCEPTED",
+              "REPLAY"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ReconcileResult"
+          }
+        },
+        "required": [
+          "outcome",
+          "result"
+        ],
+        "title": "ReconcileResponse",
+        "type": "object"
+      },
+      "ReconcileResult": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "accepted_context_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Accepted Context Version",
+            "type": "string"
+          },
+          "audit_event_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Audit Event Id",
+            "type": "string"
+          },
+          "client_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "control_generation": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Control Generation",
+            "type": "string"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "coverage": {
+            "const": "OWNER_ASSERTED_TEXT_ONLY",
+            "title": "Coverage",
+            "type": "string"
+          },
+          "disposition": {
+            "enum": [
+              "OWNER_TEXT",
+              "CANONICAL_SUFFICIENT",
+              "UNRESOLVED"
+            ],
+            "title": "Disposition",
+            "type": "string"
+          },
+          "observation_epoch": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Observation Epoch",
+            "type": "string"
+          },
+          "policy_epoch": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Policy Epoch",
+            "type": "string"
+          },
+          "previous_context_version": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Previous Context Version",
+            "type": "string"
+          },
+          "previous_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Revision Id"
+          },
+          "receipt_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "reviewed_ingress_checkpoint": {
+            "description": "Canonical decimal string, 0..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Reviewed Ingress Checkpoint",
+            "type": "string"
+          },
+          "reviewed_input_state_hash": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Reviewed Input State Hash",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "revision_no": {
+            "description": "Canonical decimal string, 1..9223372036854775807.",
+            "maxLength": 19,
+            "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+            "title": "Revision No",
+            "type": "string"
+          },
+          "source_media": {
+            "enum": [
+              "NONE",
+              "UNAVAILABLE"
+            ],
+            "title": "Source Media",
+            "type": "string"
+          },
+          "workspace_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "conversation_id",
+          "client_id",
+          "receipt_id",
+          "revision_id",
+          "revision_no",
+          "previous_revision_id",
+          "audit_event_id",
+          "control_generation",
+          "previous_context_version",
+          "accepted_context_version",
+          "policy_epoch",
+          "observation_epoch",
+          "reviewed_ingress_checkpoint",
+          "reviewed_input_state_hash",
+          "disposition",
+          "source_media",
+          "coverage",
+          "accepted_at"
+        ],
+        "title": "ReconcileResult",
         "type": "object"
       },
       "ResumePayload": {
@@ -3103,6 +4426,95 @@
           "control_generation"
         ],
         "title": "TakeoverPayload",
+        "type": "object"
+      },
+      "TextPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "TEXT",
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "TextPreview",
+        "type": "object"
+      },
+      "UnsupportedPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "UNSUPPORTED",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "UNSUPPORTED_CONTENT",
+              "AMBIGUOUS_ORIGIN",
+              "UNAVAILABLE_PROJECTION"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "reason"
+        ],
+        "title": "UnsupportedPreview",
+        "type": "object"
+      },
+      "WaitingAutomationWork": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "reason": {
+            "const": "CONTEXT_INPUT_PENDING",
+            "title": "Reason",
+            "type": "string"
+          },
+          "state": {
+            "const": "WAITING_CONTEXT",
+            "title": "State",
+            "type": "string"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "reason",
+          "job_id",
+          "turn_id",
+          "observed_at"
+        ],
+        "title": "WaitingAutomationWork",
         "type": "object"
       },
       "WebhookAcknowledgement": {
@@ -4926,6 +6338,596 @@
         "summary": "Read",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/human-context": {
+      "get": {
+        "operationId": "read_api_v1_workspaces__workspace_id__conversations__conversation_id__human_context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HumanContextState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Read",
+        "tags": [
+          "human-context"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/human-context/observations": {
+      "get": {
+        "operationId": "observations_api_v1_workspaces__workspace_id__conversations__conversation_id__human_context_observations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": "20",
+              "pattern": "^(?:[1-9][0-9]?|100)$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "maxLength": 1024,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservationPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Observations",
+        "tags": [
+          "human-context"
+        ]
+      }
+    },
+    "/api/v1/workspaces/{workspace_id}/conversations/{conversation_id}/human-context/reconcile": {
+      "post": {
+        "description": "Live OWNER reconciliation in HUMAN; no send entitlement, Resume, Takeover or provider I/O. Total serialized UTF-8 request body <=4096 bytes. Retry ambiguous commit with the same actor/key/body; saved replay is not current state.",
+        "operationId": "reconcile_api_v1_workspaces__workspace_id__conversations__conversation_id__human_context_reconcile_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspace_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "attestation": {
+                    "const": "REVIEWED_AVAILABLE_CONTEXT",
+                    "title": "Attestation",
+                    "type": "string"
+                  },
+                  "disposition": {
+                    "enum": [
+                      "OWNER_TEXT",
+                      "CANONICAL_SUFFICIENT",
+                      "UNRESOLVED"
+                    ],
+                    "title": "Disposition",
+                    "type": "string"
+                  },
+                  "expected_client_id": {
+                    "format": "uuid",
+                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                    "title": "Expected Client Id",
+                    "type": "string"
+                  },
+                  "expected_context_version": {
+                    "description": "Canonical decimal string, 1..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Context Version",
+                    "type": "string"
+                  },
+                  "expected_control_generation": {
+                    "description": "Canonical decimal string, 1..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Control Generation",
+                    "type": "string"
+                  },
+                  "expected_ingress_checkpoint": {
+                    "description": "Canonical decimal string, 0..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Ingress Checkpoint",
+                    "type": "string"
+                  },
+                  "expected_input_state_hash": {
+                    "maxLength": 64,
+                    "minLength": 64,
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Expected Input State Hash",
+                    "type": "string"
+                  },
+                  "expected_observation_epoch": {
+                    "description": "Canonical decimal string, 0..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Observation Epoch",
+                    "type": "string"
+                  },
+                  "expected_policy_epoch": {
+                    "description": "Canonical decimal string, 0..9223372036854775807.",
+                    "maxLength": 19,
+                    "pattern": "^(?:0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6][0-9]{0}|9223372036854775807)$",
+                    "title": "Expected Policy Epoch",
+                    "type": "string"
+                  },
+                  "expected_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Expected Revision Id"
+                  },
+                  "source_media": {
+                    "enum": [
+                      "NONE",
+                      "UNAVAILABLE"
+                    ],
+                    "title": "Source Media",
+                    "type": "string"
+                  },
+                  "text": {
+                    "anyOf": [
+                      {
+                        "maxLength": 4096,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Text"
+                  }
+                },
+                "required": [
+                  "expected_client_id",
+                  "expected_control_generation",
+                  "expected_context_version",
+                  "expected_policy_epoch",
+                  "expected_observation_epoch",
+                  "expected_ingress_checkpoint",
+                  "expected_input_state_hash",
+                  "expected_revision_id",
+                  "disposition",
+                  "text",
+                  "source_media",
+                  "attestation"
+                ],
+                "title": "ReconcileRequest",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconcileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Unsupported Media Type"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeContextErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Reconcile",
+        "tags": [
+          "human-context"
         ]
       }
     },

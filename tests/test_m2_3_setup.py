@@ -249,8 +249,8 @@ async def test_billing_and_binding_use_one_short_reviewed_capability_transaction
             if sql == "SELECT current_user":
                 return Result("asm_migrator")
             if sql == "SELECT version_num FROM platform.alembic_version":
-                # The current operator is paired only with the 0012 implementation source head.
-                return Result("0012")
+                # Setup is paired with current0013; native policy remains a separate command.
+                return Result("0013")
             assert sql.startswith("SELECT platform.initialize_")
             assert params["workspace"] == WS
             if "initialize_local_messaging_billing" in sql:
@@ -312,7 +312,7 @@ def test_clis_default_to_no_network_and_never_echo_accidental_token(
     assert "TELEGRAM_" in output.err
 
 
-@pytest.mark.parametrize("head", ["0007", "0008", "0009", "0010", "0011", "0013", "unknown"])
+@pytest.mark.parametrize("head", ["0007", "0008", "0009", "0010", "0011", "0012", "unknown"])
 async def test_binding_wrong_head_rejected_before_either_initializer(monkeypatch, head):
     from types import SimpleNamespace
 
@@ -549,3 +549,517 @@ def test_smoke_send_requires_separate_exact_approval_before_network():
 def test_live_smoke_origin_requires_exact_https_origin(value):
     with pytest.raises(smoke_cli.SmokeError):
         smoke_cli.origin(value)
+
+
+def native_request(**updates):
+    from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
+
+    value = {
+        "environment": "LOCAL",
+        "workspace_id": str(WS),
+        "connection_id": str(CONN),
+        "operation": "ENABLE",
+        "key": "private-command-canary",
+        "expected_policy": "OFF_UNUSED",
+        "expected_policy_epoch": "0",
+        "expected_binding": {
+            "business_id": str(BIZ),
+            "provider": "CONTROLLED",
+            "bot_identity": "CONTROLLED_TEST",
+            "external_connection_id": "private-binding-canary",
+            "owner_user_id": None,
+        },
+        "source_profile": {
+            "source_tree": "b" * 40,
+            "schema_revision": "0013",
+            "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
+            "drain_confirmed": True,
+        },
+    }
+    value.update(updates)
+    return setup.NativePolicyRequest.model_validate(value)
+
+
+def native_approval():
+    return setup.NativeHostApproval(
+        commit="a" * 40,
+        tree="b" * 40,
+        components={role: "c" * 64 for role in setup.NATIVE_COMPONENTS},
+    )
+
+
+def native_receipt(outcome="ACCEPTED"):
+    # Synthetic unit RPC return only. Actual authority is tested by appended PG
+    # carriers using the real capability, never these toy objects.
+    return setup.NativePolicyReceipt.model_validate(
+        {
+            "outcome": outcome,
+            "result": {
+                "receipt_id": str(UUID(int=77)),
+                "workspace_id": str(WS),
+                "connection_id": str(CONN),
+                "operation": "ENABLE",
+                "change": "ENABLED",
+                "previous_policy": "OFF_UNUSED",
+                "accepted_policy": "ON",
+                "previous_policy_epoch": "0",
+                "accepted_policy_epoch": "1",
+                "actor_kind": "LOCAL_PROVISIONER",
+                "actor_db_role": "asm_migrator",
+                "audit_event_id": str(UUID(int=78)),
+                "accepted_at": "2026-10-18T12:00:00.000001Z",
+            },
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "extra",
+        "key",
+        "epoch_int",
+        "epoch_bool",
+        "epoch_overflow",
+        "epoch_leading_zero",
+        "epoch_policy",
+        "operation",
+        "profile",
+        "drain_false",
+        "drain_int",
+        "owner",
+        "provider",
+        "binding_extra",
+        "uuid",
+        "null_epoch",
+    ],
+)
+def test_native_policy_closed_request_never_coerces_private_inputs(damage):
+    from pydantic import ValidationError
+
+    value = native_request().model_dump(mode="json")
+    if damage == "extra":
+        value["trusted"] = True
+    elif damage == "key":
+        value["key"] = "private key canary"
+    elif damage == "epoch_int":
+        value["expected_policy_epoch"] = 0
+    elif damage == "epoch_bool":
+        value["expected_policy_epoch"] = False
+    elif damage == "epoch_overflow":
+        value["expected_policy_epoch"] = str(2**63)
+    elif damage == "epoch_leading_zero":
+        value["expected_policy_epoch"] = "00"
+    elif damage == "epoch_policy":
+        value["expected_policy"] = "ON"
+    elif damage == "operation":
+        value["operation"] = "DISABLE"
+    elif damage == "profile":
+        value["source_profile"]["profile_sha256"] = "0" * 64
+    elif damage == "drain_false":
+        value["source_profile"]["drain_confirmed"] = False
+    elif damage == "drain_int":
+        value["source_profile"]["drain_confirmed"] = 1
+    elif damage == "owner":
+        value["expected_binding"]["owner_user_id"] = OWNER
+    elif damage == "provider":
+        value["expected_binding"]["provider"] = "HTTP"
+    elif damage == "binding_extra":
+        value["expected_binding"]["trusted"] = True
+    elif damage == "uuid":
+        value["workspace_id"] = str(WS).upper()
+    else:
+        value["expected_policy_epoch"] = None
+    if damage == "uuid":
+        value["workspace_id"] = "12345678-ABCD-4234-8234-123456789001"
+    with pytest.raises((ValidationError, setup.ProvisioningError)) as error:
+        setup.NativePolicyRequest.model_validate(value)
+    assert "private-command-canary" not in str(error.value)
+    assert "private-binding-canary" not in repr(native_request())
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "accepted",
+        "replay_paused",
+        "current_error",
+        "rpc_error",
+        "invalid_result",
+        "commit_error",
+        "STALE_STATE",
+        "IDEMPOTENCY_KEY_CONFLICT",
+    ],
+)
+async def test_native_policy_transaction_boundary_and_read_after_commit(monkeypatch, mode):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from sqlalchemy.exc import DBAPIError
+
+    events = []
+    statements = []
+    source = Mock(return_value=(SimpleNamespace(), {}))
+    monkeypatch.setattr(setup, "native_host_source", source)
+
+    async def catalog(*args):
+        events.append("catalog")
+
+    async def binding(*args):
+        events.append("binding")
+        return setup.NativePolicyCurrent(policy="OFF_UNUSED", policy_epoch="0")
+
+    async def current(*args):
+        events.append("current_read")
+        assert "commit" in events
+        if mode == "current_error":
+            raise RuntimeError("private current canary")
+        return setup.NativePolicyCurrent(policy="PAUSED", policy_epoch="1")
+
+    monkeypatch.setattr(setup, "native_catalog_profile", catalog)
+    monkeypatch.setattr(setup, "native_policy_current", binding)
+    monkeypatch.setattr(setup, "read_native_context_policy", current)
+
+    class Unit:
+        async def __aenter__(self):
+            events.append("begin")
+            return self
+
+        async def __aexit__(self, kind, *args):
+            events.append("rollback" if kind else "commit")
+            if mode == "commit_error" and kind is None:
+                raise RuntimeError("private commit canary")
+
+        async def execute(self, statement, params=None):
+            sql = str(statement)
+            statements.append(sql)
+            if sql.startswith("SELECT session_user"):
+                return SimpleNamespace(
+                    one=lambda: ("asm_migrator", "asm_migrator", "asm_local", "read committed")
+                )
+            assert sql.startswith("SELECT platform.human_context_policy_command(")
+            assert source.call_count == 2 and events[-1] == "binding"
+            events.append("capability")
+            assert params["key"] == native_request().key and params["epoch"] == 0
+            if mode == "rpc_error":
+                raise RuntimeError("private body canary")
+            if mode in {"STALE_STATE", "IDEMPOTENCY_KEY_CONFLICT"}:
+                original = RuntimeError("private SQL parameters")
+                original.diag = SimpleNamespace(message_primary=mode)
+                raise DBAPIError(sql, params, original)
+            value = native_receipt("REPLAY" if mode == "replay_paused" else "ACCEPTED").model_dump(
+                mode="json"
+            )
+            if mode == "invalid_result":
+                value["result"]["accepted_policy_epoch"] = 1
+            return SimpleNamespace(scalar_one=lambda: value)
+
+    class Engine:
+        def begin(self):
+            return Unit()
+
+        async def dispose(self):
+            events.append("dispose")
+
+    def engine(*args, **kwargs):
+        assert kwargs["hide_parameters"] is True
+        assert kwargs["isolation_level"] == "READ COMMITTED"
+        assert kwargs["connect_args"] == {"connect_timeout": 3}
+        return Engine()
+
+    monkeypatch.setattr(setup, "create_async_engine", engine)
+    with monkeypatch.context() as no_network:
+        no_network.setattr(httpx, "AsyncClient", lambda *a, **k: pytest.fail("No HTTP for policy"))
+        if mode in {
+            "rpc_error",
+            "invalid_result",
+            "commit_error",
+            "STALE_STATE",
+            "IDEMPOTENCY_KEY_CONFLICT",
+        }:
+            code = mode if mode in {"STALE_STATE", "IDEMPOTENCY_KEY_CONFLICT"} else "UNAVAILABLE"
+            with pytest.raises(setup.ProvisioningError, match="^" + code + "$"):
+                await setup.commit_native_context_policy(native_request(), URL, native_approval())
+            assert "current_read" not in events
+            assert events[-2] == ("commit" if mode == "commit_error" else "rollback")
+        else:
+            result = await setup.commit_native_context_policy(
+                native_request(), URL, native_approval()
+            )
+            assert result.receipt.result.accepted_policy == "ON"
+            if mode == "current_error":
+                assert result.current is None
+            else:
+                assert result.current.policy == "PAUSED" and result.current.policy_epoch == "1"
+            assert events.index("commit") < events.index("current_read")
+    assert events[-1] == "dispose"
+    assert not any(
+        "initialize_" in sql or "INSERT " in sql or "UPDATE " in sql for sql in statements
+    )
+
+
+@pytest.mark.parametrize("damage", ["source", "tree", "missing_console", "mixed_components"])
+async def test_native_policy_source_pairing_refuses_before_engine_or_mutation(monkeypatch, damage):
+    from unittest.mock import Mock
+
+    from pydantic import ValidationError
+
+    engine = Mock(side_effect=AssertionError("No engine before paired source"))
+    monkeypatch.setattr(setup, "create_async_engine", engine)
+    value = native_approval().model_dump()
+    if damage == "missing_console":
+        del value["components"]["console"]
+    if damage == "mixed_components":
+        value["components"]["api"] = True
+    if damage == "tree":
+        value["tree"] = "c" * 40
+    with pytest.raises((setup.ProvisioningError, ValidationError)):
+        await setup.commit_native_context_policy(
+            native_request(), URL, setup.NativeHostApproval.model_validate(value)
+        )
+    engine.assert_not_called()
+
+
+async def test_native_cli_preserves_private_acceptance_and_retries_only_current(
+    monkeypatch, tmp_path
+):
+    from unittest.mock import AsyncMock
+
+    directory = tmp_path / "private"
+    directory.mkdir(mode=0o700)
+    inputs, receipt = directory / "input.json", directory / "receipt.json"
+    inputs.write_text(
+        json.dumps(
+            {
+                "request": native_request().model_dump(mode="json"),
+                "approval": native_approval().model_dump(mode="json"),
+            }
+        )
+    )
+    inputs.chmod(0o600)
+    env = {
+        "ASM_NATIVE_POLICY_INPUT": str(inputs),
+        "ASM_NATIVE_POLICY_RECEIPT": str(receipt),
+        "ASM_ENVIRONMENT": "LOCAL",
+        "ASM_MIGRATION_DATABASE_URL": URL,
+    }
+    command = AsyncMock(return_value=setup.CommittedNativePolicy(native_receipt(), None))
+    read = AsyncMock(side_effect=RuntimeError("private failed read"))
+    monkeypatch.setattr(setup_cli, "commit_native_context_policy", command)
+    monkeypatch.setattr(setup_cli, "read_native_context_policy", read)
+    result = await setup_cli.run_native_policy(env, "commit")
+    assert result["current_read"] == "RETRY_READ_ONLY" and receipt.stat().st_mode & 0o777 == 0o600
+    accepted = receipt.read_bytes()
+    with pytest.raises(RuntimeError):
+        await setup_cli.run_native_policy(env, "current")
+    assert receipt.read_bytes() == accepted
+    read.side_effect = None
+    read.return_value = setup.NativePolicyCurrent(policy="PAUSED", policy_epoch="1")
+    result = await setup_cli.run_native_policy(env, "current")
+    assert result["current_policy"] == "PAUSED" and command.await_count == 1
+    saved = json.loads(receipt.read_bytes())
+    assert saved["receipt"] == native_receipt().model_dump(mode="json")
+    assert saved["current"] == {"policy": "PAUSED", "policy_epoch": "1"}
+    assert "private-command-canary" not in json.dumps(result)
+    assert "private-binding-canary" not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
+    "args", [["--native-policy", "commit", "--live"], ["--native-policy", "check", "--discover"]]
+)
+def test_native_cli_never_combines_policy_with_telegram_http(monkeypatch, capsys, args):
+    async def forbidden(*a):
+        pytest.fail("No command or HTTP after ambiguous CLI")
+
+    monkeypatch.setattr(setup_cli, "run_native_policy", forbidden)
+    monkeypatch.setattr(setup_cli, "run", forbidden)
+    monkeypatch.setattr(sys, "argv", ["operator", *args])
+    for name in ("httpx", "httpcore", "sqlalchemy.engine"):
+        logger = logging.getLogger(name)
+        for attribute in ("disabled", "propagate", "handlers"):
+            monkeypatch.setattr(logger, attribute, getattr(logger, attribute))
+    assert setup_cli.main() == 1
+    assert capsys.readouterr().err.strip() == "INVALID_INPUT"
+
+
+@pytest.mark.parametrize(
+    "case", ["current", "saved", "missing", "foreign_connection", "changed_profile"]
+)
+async def test_native_historical_source_tree_only_allows_stored_request_replay(case):
+    from types import SimpleNamespace
+
+    request = native_request()
+    if case != "current":
+        data = request.model_dump(mode="json")
+        data["source_profile"]["source_tree"] = "d" * 40
+        request = setup.NativePolicyRequest.model_validate(data)
+    prior = {
+        "connection_id": request.connection_id,
+        "source_profile": request.source_profile.model_dump(),
+    }
+    if case == "missing":
+        prior = None
+    elif case == "foreign_connection":
+        prior["connection_id"] = str(UUID(int=99))
+    elif case == "changed_profile":
+        prior["source_profile"] = dict(prior["source_profile"], source_tree="e" * 40)
+    statements = []
+
+    class Connection:
+        async def execute(self, statement, params):
+            statements.append(str(statement))
+            assert str(statement).startswith(
+                "SELECT connection_id::text,source_profile FROM platform.human_context_policy_receipts"
+            )
+            assert params == {"ws": WS, "key": request.key}
+            return SimpleNamespace(mappings=lambda: SimpleNamespace(one_or_none=lambda: prior))
+
+    if case in {"current", "saved"}:
+        await setup.native_policy_request_source(Connection(), request, native_approval())
+    else:
+        code = "POLICY_PREREQUISITE_FAILED" if case == "missing" else "IDEMPOTENCY_KEY_CONFLICT"
+        with pytest.raises(setup.ProvisioningError, match="^" + code + "$"):
+            await setup.native_policy_request_source(Connection(), request, native_approval())
+    assert len(statements) == (0 if case == "current" else 1)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        pytest.param("lowercase.key-09_:k", id="lowercase"),
+        pytest.param("UPPERCASE", id="uppercase"),
+        pytest.param("mIxEd.Case-09_:K", id="mixed_case"),
+        pytest.param(str(WS), id="digit_uuid"),
+        pytest.param(".Dot", id="dot_first"),
+        pytest.param("_Under", id="underscore_first"),
+        pytest.param(":Colon", id="colon_first"),
+        pytest.param("-Dash", id="dash_first"),
+        pytest.param("a", id="one_lower"),
+        pytest.param("Z", id="one_upper"),
+        pytest.param("0", id="one_digit"),
+        pytest.param(".", id="one_dot"),
+        pytest.param("_", id="one_underscore"),
+        pytest.param(":", id="one_colon"),
+        pytest.param("-", id="one_dash"),
+        pytest.param("U" * 128, id="upper_128"),
+    ],
+)
+def test_native_command_key_preserves_exact_python_json_and_host_clone(key):
+    request = native_request(key=key)
+    payload = request.model_dump(mode="json")
+    from_python = setup.NativePolicyRequest.model_validate(payload)
+    from_json = setup.NativePolicyRequest.model_validate_json(json.dumps(payload))
+    # This is the immutable request clone used by both host paths before await.
+    clone = setup.NativePolicyRequest.model_validate_json(request.model_dump_json())
+    for candidate in (request, from_python, from_json, clone):
+        assert candidate.key == key and candidate.key.encode("ascii") == key.encode("ascii")
+        assert json.loads(candidate.model_dump_json())["key"] == key
+        assert "key=" not in repr(candidate)
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("U" * 129, id="over_128"),
+        pytest.param(" HOST_R2_PRIVATE_KEY_CANARY", id="leading_space"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY ", id="trailing_space"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY middle", id="embedded_space"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\n", id="terminal_newline"),
+        pytest.param("\nHOST_R2_PRIVATE_KEY_CANARY", id="leading_newline"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\nmiddle", id="embedded_newline"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\t", id="tab"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\r", id="carriage_return"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\f", id="form_feed"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\v", id="vertical_tab"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARYЖ", id="non_ascii"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\u0301", id="combining_mark"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\u00a0", id="nonbreaking_space"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY/", id="slash"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\\", id="backslash"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY+", id="plus"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY@", id="at"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\0", id="nul"),
+        pytest.param("HOST_R2_PRIVATE_KEY_CANARY\x7f", id="del"),
+        pytest.param(None, id="none"),
+        pytest.param(True, id="true"),
+        pytest.param(False, id="false"),
+        pytest.param(123, id="integer"),
+        pytest.param(1.0, id="float"),
+        pytest.param(b"HOST_R2_PRIVATE_KEY_CANARY", id="bytes"),
+        pytest.param(bytearray(b"HOST_R2_PRIVATE_KEY_CANARY"), id="bytearray"),
+        pytest.param(WS, id="uuid_object"),
+        pytest.param(["HOST_R2_PRIVATE_KEY_CANARY"], id="list"),
+        pytest.param({"key": "HOST_R2_PRIVATE_KEY_CANARY"}, id="object"),
+    ],
+)
+def test_native_command_key_rejects_noncanonical_input_with_bounded_errors(key):
+    from pydantic import ValidationError
+
+    payload = native_request().model_dump(mode="json")
+    payload["key"] = key
+    validators = [lambda: setup.NativePolicyRequest.model_validate(payload)]
+    if not isinstance(key, (bytes, bytearray, UUID)):
+        validators.append(
+            lambda: setup.NativePolicyRequest.model_validate_json(json.dumps(payload))
+        )
+    for validate in validators:
+        with pytest.raises(ValidationError) as caught:
+            validate()
+        assert [item["loc"] for item in caught.value.errors(include_input=False)] == [("key",)]
+        assert "HOST_R2_PRIVATE_KEY_CANARY" not in str(caught.value)
+        assert "HOST_R2_PRIVATE_KEY_CANARY" not in repr(caught.value)
+        assert len(str(caught.value)) < 512
+
+
+def test_native_command_key_private_canary_stays_hidden_and_frozen_after_clone():
+    from pydantic import ValidationError
+
+    key = "HOST_R2_PRIVATE_KEY_CANARY"
+    request = native_request(key=key)
+    clone = setup.NativePolicyRequest.model_validate_json(request.model_dump_json())
+    for candidate in (request, clone):
+        assert candidate.key == key and key not in repr(candidate)
+        with pytest.raises(ValidationError) as frozen:
+            candidate.key = key
+        assert [item["type"] for item in frozen.value.errors(include_input=False)] == [
+            "frozen_instance"
+        ]
+        # The host clones/validates input rather than assigning frozen fields.
+        # Check bounded input errors, including a whole-request CAS error.
+        payload = candidate.model_dump(mode="json")
+        payload["expected_policy_epoch"] = "1"
+        with pytest.raises(ValidationError) as caught:
+            setup.NativePolicyRequest.model_validate(payload)
+        assert key not in str(caught.value) and key not in repr(caught.value)
+        assert len(str(caught.value)) < 512
+        assert candidate.key == key
+
+
+def native_command_key_request(monkeypatch):
+    original = native_request
+    key = "1_HOST_R2_Private-Key:CANARY"
+
+    def keyed_request(**updates):
+        return original(**dict(updates, key=key))
+
+    monkeypatch.setattr(sys.modules[__name__], "native_request", keyed_request)
+    return key
+
+
+@pytest.mark.parametrize("mode", ["accepted", "replay_paused", "current_error"])
+async def test_native_command_key_survives_existing_host_rpc_and_recovery(monkeypatch, mode):
+    # Reuse every existing transaction/RPC/commit/current assertion with the
+    # formerly rejected key. These remain unit doubles, never PG authority.
+    native_command_key_request(monkeypatch)
+    await test_native_policy_transaction_boundary_and_read_after_commit(monkeypatch, mode)
+
+
+async def test_native_command_key_survives_saved_receipt_and_read_only_retry(monkeypatch, tmp_path):
+    key = native_command_key_request(monkeypatch)
+    await test_native_cli_preserves_private_acceptance_and_retries_only_current(
+        monkeypatch, tmp_path
+    )
+    saved = json.loads((tmp_path / "private" / "receipt.json").read_bytes())
+    assert saved["request"]["key"] == key
+    assert saved["current"] == {"policy": "PAUSED", "policy_epoch": "1"}

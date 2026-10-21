@@ -1728,9 +1728,375 @@ def test_material_egress_current_revision_and_runtime_only_narrow_wrappers():
     from asm.foundation import DATABASE_SCHEMA_REVISION
     from test_telegram_egress_postgres import canonical_fingerprint
 
-    assert DATABASE_SCHEMA_REVISION == "0012"
+    assert DATABASE_SCHEMA_REVISION == "0013"
     assert inspect.signature(canonical_fingerprint).parameters["revision"].default == "0012"
     shell = (egress.ROOT / "scripts/test_telegram_egress.sh").read_text()
-    assert "'expected_revision': '0012'" in shell
+    assert "'expected_revision': '0013'" in shell
     # The source/image-switch production helper is still historical0007-only.
     assert 'heads == [b"0007"]' in inspect.getsource(egress.migration_source)
+
+
+def test_native_profile_is_separate_from_exact_historical_material_inventory():
+    from test_telegram_egress_postgres import material_source_profile
+
+    old = material_source_profile()
+    native = egress.native_source_profile()
+    assert len(old["functions"]) == 132 and len(old["columns"]) == 42
+    assert len(native["functions"]) == 167 and len(native["columns"]) == 45
+    assert sum(map(len, native["columns"].values())) == 635
+    assert set(old["columns"]) == egress.SCHEMA_TABLES["0012"]
+    assert set(native["columns"]) == egress.SCHEMA_TABLES["0013"]
+    with pytest.raises(egress.EgressError, match="DATABASE_TABLES"):
+        egress.schema_inventory("0012", native["columns"])
+    with pytest.raises(egress.EgressError, match="DATABASE_TABLES"):
+        egress.schema_inventory("0013", old["columns"])
+
+
+@pytest.fixture
+def native_source_checkout(tmp_path, monkeypatch):
+    """Toy Git source identity only; the Console placeholders are not C5 acceptance."""
+    import shutil
+    import subprocess
+
+    from asm.telegram import provisioning
+
+    from scripts import native_context_db_catalog as runner
+
+    root = tmp_path / "source"
+    root.mkdir()
+    for name in {
+        "scripts/native_context_db_catalog.py",
+        "backend/src/asm/telegram/provisioning.py",
+    } | {path for paths in provisioning.NATIVE_COMPONENTS.values() for path in paths}:
+        destination = root / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if (egress.ROOT / name).exists():
+            shutil.copyfile(egress.ROOT / name, destination)
+        else:
+            destination.write_text("UNIT ONLY CONSOLE PLACEHOLDER\n")
+    shutil.copytree(egress.ROOT / "migrations/versions", root / "migrations/versions")
+
+    def git(*args):
+        return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
+
+    git("init", "-q")
+    git("add", ".")
+    git(
+        "-c",
+        "user.name=Unit",
+        "-c",
+        "user.email=unit@example.invalid",
+        "commit",
+        "-qm",
+        "source fixture",
+    )
+    monkeypatch.setattr(egress, "ROOT", root)
+    monkeypatch.setattr(runner, "ROOT", root)
+    monkeypatch.setattr(
+        provisioning, "__file__", str(root / "backend/src/asm/telegram/provisioning.py")
+    )
+    approved = egress.native_host_profile(git("rev-parse", "HEAD"), git("rev-parse", "HEAD^{tree}"))
+    return root, git, approved
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        None,
+        "dirty",
+        "assume_unchanged",
+        "tree",
+        "head",
+        "component",
+        "missing_console",
+        "mode",
+        "runner",
+    ],
+)
+def test_native_host_checks_actual_clean_git_bytes_and_all_component_profiles(
+    native_source_checkout, damage
+):
+    from asm.telegram import provisioning
+
+    root, git, approved = native_source_checkout
+    path = root / "frontend/src/HumanContextPanel.tsx"
+    if damage in {"dirty", "assume_unchanged"}:
+        if damage == "assume_unchanged":
+            git("update-index", "--assume-unchanged", str(path.relative_to(root)))
+        path.write_text(path.read_text() + "DRIFT")
+    elif damage == "tree":
+        approved["tree"] = "0" * 40
+    elif damage == "head":
+        approved["commit"] = "0" * 40
+    elif damage == "component":
+        approved["components"]["worker"] = "0" * 64
+    elif damage == "mode":
+        path.chmod(0o755)
+    elif damage == "runner":
+        (root / "scripts/native_context_db_catalog.py").write_text(
+            "raise AssertionError('must not execute')\n"
+        )
+    elif damage == "missing_console":
+        git("rm", "-q", str(path.relative_to(root)))
+        git(
+            "-c",
+            "user.name=Unit",
+            "-c",
+            "user.email=unit@example.invalid",
+            "commit",
+            "-qm",
+            "unpaired source fixture",
+        )
+        approved.update(commit=git("rev-parse", "HEAD"), tree=git("rev-parse", "HEAD^{tree}"))
+        # Keep the other three profiles correct: absence of Console, rather than
+        # an unrelated stale API digest, must be what prevents pairing.
+        import hashlib
+
+        from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
+
+        from scripts import native_context_db_catalog as runner
+
+        _, manifest = runner.require_source(root, approved["commit"])
+        entries = {entry["path"]: entry for entry in manifest}
+        for role, paths in provisioning.NATIVE_COMPONENTS.items():
+            if role == "console":
+                continue
+            material = {
+                "role": role,
+                "source_tree": approved["tree"],
+                "schema_revision": "0013",
+                "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
+                "files": {name: entries[name] for name in paths},
+            }
+            approved["components"][role] = hashlib.sha256(
+                json.dumps(material, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+    approval = provisioning.NativeHostApproval.model_validate(approved)
+    if damage is None:
+        _, profile = provisioning.native_host_source(approval)
+        assert len(profile["functions"]) == 167 and len(profile["columns"]) == 45
+    else:
+        with pytest.raises(provisioning.ProvisioningError, match="^POLICY_PREREQUISITE_FAILED$"):
+            provisioning.native_host_source(approval)
+
+
+async def test_native_installed_catalog_missing_function_refuses_before_self_report_or_mutation():
+    from types import SimpleNamespace
+
+    from asm.telegram import provisioning
+
+    from scripts import native_context_db_catalog as runner
+
+    expected = egress.native_source_profile()
+    statements = []
+
+    class Connection:
+        async def execute(self, statement, params=None):
+            sql = str(statement)
+            statements.append(sql)
+            if sql.startswith("SET LOCAL "):
+                return None
+            if sql == "SHOW server_version_num":
+                return SimpleNamespace(scalar_one=lambda: "180006")
+            if "version_num" in sql:
+                return SimpleNamespace(scalar_one=lambda: "0013")
+            if sql == runner.CATALOG_SQL:
+                return SimpleNamespace(one=lambda: ("{}", "{}"))
+            if sql == runner.FUNCTION_SQL:
+                return SimpleNamespace(mappings=lambda: SimpleNamespace(all=lambda: []))
+            if "FROM unnest" in sql:
+                return SimpleNamespace(
+                    mappings=lambda: SimpleNamespace(
+                        all=lambda: [
+                            {"signature": name, "oid": i + 1}
+                            for i, name in enumerate(sorted(expected["functions"]))
+                        ]
+                    )
+                )
+            assert sql.startswith("SELECT 1 FROM pg_class")
+            return SimpleNamespace(all=lambda: [])
+
+    with pytest.raises(provisioning.ProvisioningError, match="POLICY_PREREQUISITE_FAILED"):
+        await provisioning.native_catalog_profile(Connection(), runner, expected)
+    assert "SELECT platform.human_context_schema_profile()" not in statements
+    assert not any("human_context_policy_command(" in sql for sql in statements)
+
+
+def durable_fingerprint_connection(revision="0013", tables=None):
+    """SQL result seam only; every selected row read is recorded, no engine."""
+    from types import SimpleNamespace
+
+    selected = sorted(egress.SCHEMA_TABLES["0013"] if tables is None else tables)
+    rows = {name: [{"id": name, "value": "exact\nUnicode Я"}] for name in selected}
+    reads = []
+
+    class Connection:
+        async def execute(self, statement):
+            sql = str(statement)
+            if "FROM pg_class" in sql:
+                return SimpleNamespace(all=lambda: [tuple(name.split(".")) for name in selected])
+            if "SELECT version_num" in sql:
+                return SimpleNamespace(scalar_one=lambda: revision)
+            assert sql.startswith("SELECT to_jsonb(t) FROM ")
+            name = sql.split('"')[1] + "." + sql.split('"')[3]
+            reads.append(name)
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: rows[name]))
+
+    return Connection(), rows, reads
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "damage", (None, "0012", "0014", "missing-native", "extra-native", "replace-native")
+)
+async def test_current_durable_fingerprint_requires_exact0013_and_all45_tables(damage):
+    from test_telegram_egress_postgres import current_durable_fingerprint
+
+    tables = set(egress.SCHEMA_TABLES["0013"])
+    native = sorted(tables - egress.SCHEMA_TABLES["0012"])
+    if damage in {"missing-native", "replace-native"}:
+        tables.remove(native[0])
+    if damage in {"extra-native", "replace-native"}:
+        tables.add("platform.unapproved_native")
+    connection, rows, reads = durable_fingerprint_connection(
+        damage if damage in {"0012", "0014"} else "0013", tables
+    )
+    if damage == "replace-native":
+        # run_path executes the actual helper in a separate module namespace.
+        with pytest.raises(Exception) as caught:
+            await current_durable_fingerprint(connection)
+        assert type(caught.value).__name__ == "EgressError"
+        assert str(caught.value) == "EGRESS_MIGRATION_DATABASE_TABLES"
+        assert reads == []
+    elif damage:
+        with pytest.raises(AssertionError):
+            await current_durable_fingerprint(connection)
+        assert reads == []
+    else:
+        fingerprint = await current_durable_fingerprint(connection)
+        assert set(fingerprint) == tables and len(reads) == len(set(reads)) == 45
+        for name in tables:
+            expected = "\n".join(
+                sorted(json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows[name])
+            )
+            assert fingerprint[name] == {
+                "count": 1,
+                "sha256": hashlib.sha256(expected.encode()).hexdigest(),
+            }
+        for name in native:
+            rows[name].append({"new": "native state must not disappear"})
+        changed = await current_durable_fingerprint(connection)
+        assert all(changed[name] != fingerprint[name] for name in native)
+
+
+@pytest.mark.asyncio
+async def test_historical_fingerprint_still_refuses0013_before_any_row_acceptance():
+    from test_telegram_egress_postgres import canonical_fingerprint
+
+    connection, _, reads = durable_fingerprint_connection()
+    with pytest.raises(AssertionError):
+        await canonical_fingerprint(connection)
+    with pytest.raises(AssertionError):
+        await canonical_fingerprint(connection, revision="0013")
+    assert reads == []
+
+
+def test_all_current_durable_before_seeded_cleanup_and_snapshot_routes_are0013():
+    import ast
+    import inspect
+
+    import test_telegram_egress_postgres as durable
+
+    for function, names in (
+        (durable.durable_local, ["empty", "seeded", "cleaned"]),
+        (durable.durable_snapshot, ["fingerprint"]),
+    ):
+        tree = ast.parse(inspect.getsource(inspect.unwrap(function)))
+        calls = [
+            n
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Assign)
+            and isinstance(n.value, ast.Await)
+            and isinstance(n.value.value, ast.Call)
+            and isinstance(n.value.value.func, ast.Name)
+            and "fingerprint" in n.value.value.func.id
+        ]
+        assert sorted(ast.unparse(n.targets[0]) for n in calls) == sorted(names)
+        assert all(
+            n.value.value.func.id == "current_durable_fingerprint" and not n.value.value.keywords
+            for n in calls
+        )
+    signature = inspect.signature(durable.canonical_fingerprint)
+    assert signature.parameters["revision"].default == "0012"
+    assert "0013" not in inspect.getsource(durable.canonical_fingerprint)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("wrong_database", (False, True))
+async def test_current_durable_snapshot_keeps_readonly_database_unknown_console_and_all_tables(
+    monkeypatch, wrong_database
+):
+    from types import SimpleNamespace
+
+    import test_telegram_egress_postgres as durable
+
+    base, rows, reads = durable_fingerprint_connection()
+    rows["platform.auth_sessions"].append({"second": "retained Console session"})
+    calls = []
+    identity = {"database": "asm_local", "oid": 12}
+
+    class Connection:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            calls.append("connection-closed")
+
+        async def execute(self, statement):
+            sql = str(statement)
+            calls.append(sql)
+            if sql.startswith("SET TRANSACTION "):
+                assert sql == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+                return None
+            if sql == durable.DATABASE_IDENTITY_SQL:
+                return SimpleNamespace(
+                    mappings=lambda: SimpleNamespace(
+                        one=lambda: (
+                            dict(identity, database="asm_test") if wrong_database else identity
+                        )
+                    )
+                )
+            if sql == "SELECT status FROM app.outbox_events":
+                return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: ["UNKNOWN"]))
+            return await base.execute(statement)
+
+    async def dispose():
+        calls.append("engine-disposed")
+
+    monkeypatch.setenv("ASM_EGRESS_LIFECYCLE", "fresh")
+    monkeypatch.setenv("ASM_MIGRATION_DATABASE_URL", "unit-only")
+    monkeypatch.setattr(durable, "durable_target", lambda: {"database_identity": identity})
+    monkeypatch.setattr(
+        durable,
+        "create_async_engine",
+        lambda *a, **k: SimpleNamespace(connect=Connection, dispose=dispose),
+    )
+    if wrong_database:
+        with pytest.raises(AssertionError, match="DATABASE_IDENTITY"):
+            await durable.durable_snapshot()
+        assert reads == []
+    else:
+        snapshot = await durable.durable_snapshot()
+        assert (
+            snapshot["identity"] == identity
+            and set(snapshot["tables"]) == egress.SCHEMA_TABLES["0013"]
+        )
+        assert snapshot["tables"]["platform.auth_sessions"]["count"] == 2
+        assert (
+            snapshot["sha256"]
+            == hashlib.sha256(
+                json.dumps(snapshot["tables"], sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+        )
+        assert "SELECT status FROM app.outbox_events" in calls
+    assert calls[-2:] == ["connection-closed", "engine-disposed"]

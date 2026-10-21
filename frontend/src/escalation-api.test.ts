@@ -5,6 +5,15 @@ import { actor, body, context, escalation, id, observed, page, receipt, terminal
 afterEach(()=>vi.unstubAllGlobals());
 const ok=(value:unknown,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json'}});
 describe('accepted Escalation DTOs',()=>{
+  it('requires nullable context_hold and accepts its exact closed native variants only on current unresolved requests',()=>{
+    const context_hold={reason:'CONTEXT_CONFIRMATION_REQUIRED',policy:'ON',policy_epoch:'9007199254740993',observation_epoch:'0',coverage_status:'UNCONFIRMED'};
+    const held={...escalation(),can_resolve:false,context_hold};expect(parseEscalation(held,workspace)).toEqual(held);
+    for(const reason of ['CONTEXT_POLICY_PAUSED','CONTEXT_CONFIRMATION_REQUIRED','CONTEXT_UNRESOLVED','NEW_OBSERVATION','CONTEXT_INPUT_UNRESOLVED','CONTEXT_COVERAGE_REQUIRED','CONTEXT_INPUT_PENDING'])expect(parseEscalation({...held,context_hold:{...context_hold,reason}},workspace).context_hold?.reason).toBe(reason);
+    const missing:Record<string,unknown>={...escalation()};delete missing.context_hold;
+    for(const v of [missing,{...held,can_resolve:true},{...terminal(),context_hold},{...held,validity:'ASSIGNEE_REVOKED',waiting:null},...[
+      {reason:'CONTEXT_TOO_LARGE'},{policy:'OFF_UNUSED'},{policy_epoch:'0'},{observation_epoch:0},{coverage_status:'PARTIAL'},{extra:null},
+    ].map(p=>({...held,context_hold:{...context_hold,...p}}))])expect(()=>parseEscalation(v,workspace)).toThrow('INVALID_RESPONSE');
+  });
   it('accepts required empty page clock, nullable fields and every terminal shape',()=>{
     expect(parseEscalationPage(page(),workspace,'PENDING')).toEqual(page());
     for(const v of [escalation(),terminal(),terminal('CANCEL'),{...terminal('CANCEL'),status:'EXPIRED',closure:{reason:'DEADLINE_ELAPSED',actor_user_account_id:null,completed_at:observed}}])expect(parseEscalation(v,workspace)).toEqual(v);

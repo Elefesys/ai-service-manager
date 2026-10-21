@@ -9,7 +9,7 @@ export const escalation=(n=10):EscalationView=>({
   bound_context:{turn_revision:'9007199254740993',control_generation:'9007199254740995',context_version:'9007199254740997',fingerprint:'a'.repeat(64)},
   current_context:{control_mode:'AI',control_generation:'9007199254740995',context_version:'9007199254740997'},validity:'CURRENT',waiting:'WAITING_FOR_HUMAN',
   created_at:'2030-01-01T00:00:00.123456Z',due_at:'2030-01-01T00:02:00.123456Z',second_reminder_at:'2030-01-01T00:05:00.123456Z',expires_at:'2030-01-01T00:10:00.123456Z',observed_at:observed,
-  reminders:[{ordinal:1,due_at:'2030-01-01T00:02:00.123456Z',recorded_at:null},{ordinal:2,due_at:'2030-01-01T00:05:00.123456Z',recorded_at:null}],maintenance:'SCHEDULED',resolution:null,closure:null,can_resolve:true,can_cancel:true,
+  reminders:[{ordinal:1,due_at:'2030-01-01T00:02:00.123456Z',recorded_at:null},{ordinal:2,due_at:'2030-01-01T00:05:00.123456Z',recorded_at:null}],maintenance:'SCHEDULED',resolution:null,closure:null,context_hold:null,can_resolve:true,can_cancel:true,
 });
 export const context=(v=escalation()):EscalationContext=>({workspace:v.workspace_id,escalation:v.escalation_id,conversation:v.conversation_id,client:v.client_id});
 export const body=(operation:EscalationOperation='RESOLVE',v=escalation(),answer='  Решение\ne\u0301 🎨  '):EscalationBody=>({expected_conversation_id:v.conversation_id,expected_client_id:v.client_id,expected_escalation_version:v.version,expected_control_generation:v.current_context.control_generation,expected_context_version:v.current_context.context_version,...(operation==='RESOLVE'?{answer_text:answer}:{})});

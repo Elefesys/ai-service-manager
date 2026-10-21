@@ -17,6 +17,10 @@ async function submit(answer=body().answer_text!){await open();await act(async()
 const settled=async()=>{await waitFor(()=>expect(screen.queryByText('Читаем актуальный запрос…')).not.toBeInTheDocument());};
 
 describe('owner queue and current projection',()=>{
+  it('native context hold blocks resolve while retaining PENDING/current/wait and server-authorized cancel',async()=>{
+    const held={...escalation(),can_resolve:false,context_hold:{reason:'CONTEXT_POLICY_PAUSED' as const,policy:'PAUSED' as const,policy_epoch:'1',observation_epoch:'0',coverage_status:'UNCONFIRMED' as const}};vi.mocked(escalationApi.read).mockResolvedValue(held);setup();await open();
+    expect(detail().getByText('Открытые')).toBeVisible();expect(detail().getByText('Ожидается решение владельца')).toBeVisible();expect(detail().getByText(/Сверка приостановлена оператором/)).toBeVisible();expect(screen.getByRole('button',{name:'Сохранить внутренний ответ'})).toBeDisabled();expect(screen.getByRole('button',{name:'Отменить запрос'})).toBeEnabled();expect(escalationApi.command).not.toHaveBeenCalled();
+  });
   it('reads PENDING without a Business/channel/billing prerequisite; chooses explicitly',async()=>{
     setup();await screen.findByTestId(`escalation-${id(10)}`);
     expect(escalationApi.list).toHaveBeenCalledWith(workspace,'PENDING',null,expect.any(AbortSignal));expect(escalationApi.read).not.toHaveBeenCalled();expect(escalationApi.command).not.toHaveBeenCalled();

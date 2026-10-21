@@ -939,6 +939,9 @@ ESCALATION_G = "c502d5fd258aef15bb5549e1529df8d038a4fb9b"
 ESCALATION_PHASE = "ESCALATION_SCHEMA_0010_0011"
 MATERIAL_E = "933ddd284ff5b77fb1aa88a4270ab0032bc499c9"
 MATERIAL_E_TREE = "d0759acb9f83ec3f3e10d9c5d1325c937c343ee7"
+MATERIAL_P = "e205e22051bc06295758b504d84699652b176c15"
+MATERIAL_P_TREE = "85206b9c66ac151f3847aa39f46fb75663a18b91"
+MATERIAL_P_PARENTS = (MATERIAL_E, "f78ff5c1d9996760d6d5e78d15a2c7a8148bab5f")
 MATERIAL_BASE = "edda243773702e7be1cd969d3ede622b4dacb74e"
 MATERIAL_PHASE = "MATERIAL_SCHEMA_0011_0012"
 SCHEMA_OWNER_LABEL = "io.asm.schema-owner"
@@ -2586,8 +2589,18 @@ def schema_coordinator_workspace(ledger):
 
 
 def run_retained_full_negatives(directory, checkout, request, ledger):
-    """Entire immutable T function/finally, charged to the original600 clock."""
-    deadline = ledger["deadline"]
+    """Entire immutable T negatives, after P and within the original S+1440."""
+    deadline = ledger["state_deadline"]
+    began = time.monotonic()
+    assert deadline == ledger["started_at"] + 1440, "CONTROL_NEGATIVE_BUDGET_TOTAL"
+    assert (
+        ledger["material_exit"] == 0
+        and ledger["material_cleanup"]["state"] == "PASS"
+        and ledger["material_export_completed_at"]
+        < ledger["material_supervisor_deadline"]
+        == ledger["started_at"] + 1200
+        and ledger["started_at"] <= ledger["material_export_completed_at"] <= began < deadline
+    ), "CONTROL_NEGATIVE_ADMISSION"
     positive = json.loads((checkout / "reports/m3-schema-phase.json").read_text())
     historical = request["historical"]
     candidate = request["candidate"]
@@ -2606,9 +2619,10 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
         report = schema_envelope(request, "FULL_RETAINED_T_" + fault.upper())
         report.update(
             evidence="ACTUAL_FULL_T_DOCKER_POSTGRES",
-            whole_prepare_started_at=ledger["started_at"],
+            whole_state_started_at=ledger["started_at"],
             deadline=deadline,
-            budget_seconds=600,
+            budget_seconds=1440,
+            budget_scope="POST_MATERIAL_NEGATIVES",
             executor_source=CONTROL_T,
         )
         path = e.ROOT / "reports" / ("control-full-retained-" + fault + ".json")
@@ -2748,6 +2762,8 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
     assert results == ["timeout", "export"]
     assert not e.command(["docker", "ps", "-aq"]).strip()
     assert not e.command(["docker", "volume", "ls", "-q"]).strip()
+    completed = time.monotonic()
+    assert completed < deadline, "CONTROL_NEGATIVE_BUDGET_EXHAUSTED"
     summary = {
         "candidate": candidate,
         "source": CONTROL_T,
@@ -2756,7 +2772,10 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
         "results": results,
         "deadline": deadline,
         "started_at": ledger["started_at"],
-        "charged_seconds": time.monotonic() - ledger["started_at"],
+        "material_export_completed_at": ledger["material_export_completed_at"],
+        "execution_started_at": began,
+        "completed_at": completed,
+        "charged_seconds": completed - ledger["started_at"],
     }
     (e.ROOT / "reports/control-full-retained-negatives.json").write_text(
         json.dumps(summary, indent=2) + "\n"
@@ -4029,6 +4048,236 @@ def material_escalation_evidence(raw, started, retained_deadline):
     }
 
 
+def frozen_material_binding(coordinator, checkout=None):
+    """The retained0012 executor is P, never the current0013 coordinator."""
+    assert coordinator != MATERIAL_P, "MATERIAL_CURRENT_COORDINATOR_REQUIRED"
+    current = schema_source_binding(coordinator, checkout=e.ROOT)
+    frozen = schema_source_binding(MATERIAL_P, checkout=checkout, expected_tree=MATERIAL_P_TREE)
+    assert frozen["parents"] == list(MATERIAL_P_PARENTS), "MATERIAL_P_PARENTS"
+    for earlier, later in ((MATERIAL_BASE, MATERIAL_P), (MATERIAL_P, coordinator)):
+        e.command(["git", "merge-base", "--is-ancestor", earlier, later])
+    if checkout is not None:
+        # Git status alone can hide assume-unchanged byte/mode drift. Verify the
+        # complete fixed tree before execution and again before worktree removal.
+        entries = e.command(["git", "ls-tree", "-rz", MATERIAL_P]).split(b"\0")
+        manifest = []
+        for entry in filter(None, entries):
+            meta, name = entry.split(b"\t")
+            mode, kind, blob = meta.decode().split()
+            path = Path(checkout) / name.decode()
+            assert kind == "blob" and mode in {"100644", "100755"}, "MATERIAL_P_ENTRY"
+            assert path.is_file() and not path.is_symlink(), "MATERIAL_P_FILE"
+            assert diagnostic_blob(path.read_bytes()) == blob, "MATERIAL_P_BYTES"
+            assert bool(path.stat().st_mode & 0o111) == (mode == "100755"), "MATERIAL_P_MODE"
+            manifest.append((name.decode(), mode, blob))
+        assert manifest, "MATERIAL_P_EMPTY_TREE"
+        frozen.update(tracked_files=len(manifest), manifest_sha256=e.sha(e.encoded(manifest)))
+    return {"coordinator": current, "executor": frozen}
+
+
+def validate_frozen_material_report(material, ledger, reports):
+    """Validate P's untouched report; current and replay identities stay distinct."""
+    assert (
+        material["coordinator"]
+        == material["observed_source"]
+        == material["requested_source"]
+        == MATERIAL_P
+    ), "MATERIAL_P_REPORT_SOURCE"
+    assert material["historical"] == MATERIAL_E and material["phase"] == MATERIAL_PHASE
+    assert not material.get("primary_failure") and material["budget_state"] == "VALIDATED_CONSUMED"
+    assert material["cleanup"]["state"] == "PASS"
+    assert (
+        material["cleanup"]["source"] == MATERIAL_P
+        and material["cleanup"]["phase"] == MATERIAL_PHASE
+    ), "MATERIAL_P_CLEANUP_SOURCE"
+    assert material["cleanup"]["token"] == ledger["material_handoff"]["owner_token"], (
+        "MATERIAL_P_CLEANUP_OWNER"
+    )
+    expected_images = {
+        (s, k) for s in (MATERIAL_E, MATERIAL_P) for k in ("runtime", "development")
+    } | {(ESCALATION_G, "development")}
+    assert set(material["images"]) == {s + ":" + k for s, k in expected_images}, (
+        "MATERIAL_P_IMAGE_SET"
+    )
+    for source, kind in expected_images:
+        proof = material["images"][source + ":" + kind]
+        assert proof == e.migration_image_expected(proof["id"], source, kind), (
+            "MATERIAL_P_IMAGE_SOURCE"
+        )
+    sources = {row["sha"]: row for row in material["sources"]}
+    assert sources[MATERIAL_P]["tree"] == MATERIAL_P_TREE and sources[MATERIAL_P][
+        "parents"
+    ] == list(MATERIAL_P_PARENTS), "MATERIAL_P_REPORT_TREE"
+    archive = (reports / "source-P.tar.gz").read_bytes()
+    assert material["archives"]["source-P.tar.gz"] == {
+        "source": MATERIAL_P,
+        "sha256": e.sha(archive),
+    }, "MATERIAL_P_ARCHIVE"
+    assert e.sha(archive) == ledger["material_source_archive_sha256"], "MATERIAL_P_ARCHIVE_CHANGED"
+    diagnostic = material["migration_diagnostics"]
+    assert diagnostic["status"] == "COMPLETE" and diagnostic["sha256"] == e.sha(
+        (reports / "migration-P-observation.json").read_bytes()
+    ), "MATERIAL_P_DIAGNOSTICS"
+    assert (
+        material["upgrade_ack_loss"]["recovery_source"]
+        == material["used_recovery"]["source"]
+        == MATERIAL_P
+    ), "MATERIAL_P_RECOVERY_SOURCE"
+    assert material["downgrade_ack_loss"]["recovery_source"] == MATERIAL_E
+    for key in ("cutover_callers", "restarted_callers"):
+        assert set(material[key]) == {"api", "worker", "scheduler"}
+        assert all(
+            row["source"] == MATERIAL_P
+            and row["image"] == material["images"][MATERIAL_P + ":runtime"]["id"]
+            for row in material[key].values()
+        ), "MATERIAL_P_CALLER_IMAGE"
+    budget = material["prepare_budget"]
+    assert all(budget[key] == value for key, value in ledger["material_handoff"].items()), (
+        "MATERIAL_P_HANDOFF_CHANGED"
+    )
+    assert (
+        budget["started_at"] == ledger["started_at"]
+        and budget["retained_deadline"] == ledger["deadline"] == budget["started_at"] + 600
+    )
+    assert (
+        budget["deadline"] == ledger["material_deadline"] == budget["started_at"] + 720
+        and budget["extension_seconds"] == 120
+    )
+    assert (
+        budget["issued_at"]
+        <= budget["observed_at"]
+        <= budget["preparation_ended_at"]
+        < budget["deadline"]
+    ), "MATERIAL_P_PREPARE_CLOCK"
+    assert (
+        budget["charged_total_seconds"] == budget["preparation_ended_at"] - budget["started_at"]
+        and budget["remaining_seconds"] == budget["deadline"] - budget["preparation_ended_at"]
+    )
+
+
+def run_frozen_material(directory, ledger, completion):
+    """Only P's material phase; original S, fixed deadlines, complete reports."""
+    candidate, started = ledger["candidate"], ledger["started_at"]
+    deadline, terminal = ledger["deadline"], ledger["material_deadline"]
+    supervisor = ledger["material_supervisor_deadline"]
+    assert deadline == started + 600 and terminal == started + 720 and supervisor == started + 1200
+    reports = e.ROOT / "reports"
+    retained = reports / "retained-material"
+    retained.mkdir(parents=True, exist_ok=True)
+    checkout = directory / "material"
+    ledger["stage"] = "material_archive"
+    try:
+        assert time.monotonic() < terminal, "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
+        with e.migration_budget(terminal - time.monotonic()):
+            ledger["material_sources"] = frozen_material_binding(candidate)
+            archive = e.command(["git", "archive", "--format=tar.gz", MATERIAL_P])
+            (retained / "source-P.tar.gz").write_bytes(archive)
+            ledger["material_source_archive_sha256"] = e.sha(archive)
+            e.command(["git", "worktree", "add", "--detach", str(checkout), MATERIAL_P])
+            ledger["material_sources"] = frozen_material_binding(candidate, checkout)
+            # Frozen P consumes the exact completed E report from its own ROOT.
+            prior = reports / "retained-escalation/escalation-schema-phase.json"
+            destination = checkout / "reports/retained-escalation/escalation-schema-phase.json"
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            raw = prior.read_bytes()
+            assert e.sha(raw) == completion["report_sha256"], "MATERIAL_E_REPORT_CHANGED"
+            destination.write_bytes(raw)
+        owner = SchemaOwnership(
+            directory / "owner-P", "asm-material-schema-phase", MATERIAL_PHASE, MATERIAL_P
+        )
+        issued = time.monotonic()
+        ledger["material_remaining_seconds"] = terminal - issued
+        assert completion["report_ended_at"] <= completion["completed_at"] <= issued, (
+            "MATERIAL_E_COMPLETION_ORDER"
+        )
+        ledger["escalation_completion"] = completion
+        assert issued < terminal, "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
+        value = dict(
+            version=2,
+            phase=MATERIAL_PHASE,
+            historical=MATERIAL_E,
+            candidate=MATERIAL_P,
+            uid=os.getuid(),
+            owner_token=owner.token,
+            started_at=started,
+            issued_at=issued,
+            charged_seconds=issued - started,
+            retained_deadline=deadline,
+            extension_seconds=120,
+            deadline=terminal,
+            escalation_completion=completion,
+        )
+        handoff = directory / "material-budget.json"
+        e.write_private(handoff, e.encoded(value))
+        ledger["material_handoff"] = value
+        ledger["stage"] = "material_admission"
+        owner.admit()
+        ledger["cleanup"] = {"state": "ADMITTED"}
+        with schema_cleanup_scope(owner, ledger, reports / "control-schema-ledger.json"):
+            try:
+                ledger["stage"] = "material_shell"
+                assert time.monotonic() < terminal, "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
+                result = supervised_schema_child(
+                    [
+                        "sh",
+                        "scripts/test_telegram_egress.sh",
+                        "--material-schema-upgrade",
+                        MATERIAL_E,
+                        MATERIAL_P,
+                        str(handoff),
+                    ],
+                    cwd=checkout,
+                    timeout=supervisor - time.monotonic(),
+                    environment=owner.environment(),
+                )
+                ledger["material_exit"] = result
+                assert result == 0 and not handoff.exists(), "MATERIAL_SCHEMA_PHASE_FAILED"
+            finally:
+                failure = sys.exception()
+                try:
+                    # Complete private replay reports survive either outcome.
+                    shutil.copytree(checkout / "reports", retained, dirs_exist_ok=True)
+                    for name in (
+                        "material-schema-phase.json",
+                        "migration-P-observation.json",
+                        "source-E.tar.gz",
+                        "source-P.tar.gz",
+                    ):
+                        path = checkout / "reports" / name
+                        if path.exists():
+                            shutil.copy2(path, reports / name)
+                    assert time.monotonic() < supervisor, "MATERIAL_SUPERVISOR_BUDGET_EXHAUSTED"
+                except BaseException as error:
+                    ledger.update(retained_reports_failed=True, private_state_retained=True)
+                    if failure is None:
+                        ledger["stage"] = "retained_material_reports"
+                        raise
+                    ledger.setdefault("secondary_failures", []).append(
+                        {"stage": "retained_material_reports", **schema_failure(error)}
+                    )
+                    failure.add_note("CONTROL_MATERIAL_REPORT_FAILED")
+        ledger["material_cleanup"] = ledger["cleanup"]
+        ledger["stage"] = "material_report_validation"
+        validate_frozen_material_report(
+            json.loads((reports / "material-schema-phase.json").read_text()), ledger, reports
+        )
+        with e.migration_budget(supervisor - time.monotonic()):
+            ledger["material_sources"] = frozen_material_binding(candidate, checkout)
+            assert (
+                ledger["material_cleanup"]["source"] == MATERIAL_P
+                and ledger["material_cleanup"]["state"] == "PASS"
+            ), "MATERIAL_P_OUTER_CLEANUP"
+            e.command(["git", "worktree", "remove", str(checkout)])
+            e.source_check(candidate)
+        ledger["material_export_completed_at"] = time.monotonic()
+        assert ledger["material_export_completed_at"] < supervisor, (
+            "MATERIAL_SUPERVISOR_BUDGET_EXHAUSTED"
+        )
+    except BaseException:
+        ledger["private_state_retained"] = True
+        raise
+
+
 def run_control_coordinator(request):
     """Retained frozen T shell is charged once, including runtime and cleanup."""
     ledger = schema_envelope(request, "CONTROL_COORDINATOR")
@@ -4042,6 +4291,7 @@ def run_control_coordinator(request):
         material_deadline=material_deadline,
         material_extension_seconds=120,
         material_supervisor_deadline=material_deadline + 480,
+        state_deadline=started + 1440,
     )
     reports = e.ROOT / "reports"
     path = reports / "control-schema-ledger.json"
@@ -4145,9 +4395,8 @@ def run_control_coordinator(request):
             # Owned cleanup and copied reports precede checkout removal. If any
             # preceding stage failed, retain the checkout instead of hiding it.
             ledger["retained_cleanup"] = ledger["cleanup"]
-            run_retained_full_negatives(directory, checkout, request, ledger)
-            if added:
-                e.command(["git", "worktree", "remove", str(checkout)])
+            # Keep the clean T checkout for the mandatory post-P negatives.
+            # Its positive report has already been copied to retained-turns.
             assert ledger["retained_clean"], "FROZEN_TURNS_SOURCE_CHANGED"
             # C is a frozen executor in its own checkout. It receives the
             # same original deadline, not a nested coordinator/fresh600.
@@ -4382,62 +4631,19 @@ def run_control_coordinator(request):
                 "cleanup_state": "PASS",
                 "completed_at": time.monotonic(),
             }
-            owner_p = SchemaOwnership(
-                directory / "owner-P", "asm-material-schema-phase", MATERIAL_PHASE, candidate
-            )
-            issued = time.monotonic()
-            # Includes all preceding E runtime, supervision, exports and cleanup.
-            # C0's explicit terminal +120 is measured from the same original S.
-            ledger["material_remaining_seconds"] = material_deadline - issued
-            assert completion["report_ended_at"] <= completion["completed_at"] <= issued, (
-                "MATERIAL_E_COMPLETION_ORDER"
-            )
-            ledger["escalation_completion"] = completion
-            assert issued < material_deadline, "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
-            value = dict(
-                version=2,
-                phase=MATERIAL_PHASE,
-                historical=MATERIAL_E,
-                candidate=candidate,
-                uid=os.getuid(),
-                owner_token=owner_p.token,
-                started_at=started,
-                issued_at=issued,
-                charged_seconds=issued - started,
-                retained_deadline=deadline,
-                extension_seconds=120,
-                deadline=material_deadline,
-                escalation_completion=completion,
-            )
-            handoff_p = directory / "material-budget.json"
-            e.write_private(handoff_p, e.encoded(value))
-            ledger["material_handoff"] = value
-            ledger["stage"] = "material_admission"
-            owner_p.admit()
-            ledger["cleanup"] = {"state": "ADMITTED"}
-            with schema_cleanup_scope(owner_p, ledger, path):
-                ledger["stage"] = "material_shell"
-                assert time.monotonic() < material_deadline, "MATERIAL_PREPARE_BUDGET_EXHAUSTED"
-                result = supervised_schema_child(
-                    [
-                        "sh",
-                        "scripts/test_telegram_egress.sh",
-                        "--material-schema-upgrade",
-                        MATERIAL_E,
-                        candidate,
-                        str(handoff_p),
-                    ],
-                    cwd=e.ROOT,
-                    timeout=(material_deadline - time.monotonic()) + 480,
-                    environment=owner_p.environment(),
+            run_frozen_material(directory, ledger, completion)
+            # Full real T negatives and C cleanup share the original S+1440.
+            # P keeps its separate S+1200 supervisor; no clock reset.
+            run_retained_full_negatives(directory, checkout, request, ledger)
+            if added:
+                e.command(
+                    ["git", "worktree", "remove", str(checkout)],
+                    timeout=min(40, ledger["state_deadline"] - time.monotonic()),
                 )
-                ledger["material_exit"] = result
-                assert result == 0 and not handoff_p.exists(), "MATERIAL_SCHEMA_PHASE_FAILED"
-                e.source_check(candidate)
-            ledger["material_cleanup"] = ledger["cleanup"]
             # Original C bytes/assertions and unchanged invocation request.
             # The separate current observer journal labels execution instrumented.
             ledger["stage"] = "retained_control_cleanup_negatives"
+            assert time.monotonic() < ledger["state_deadline"], "CONTROL_STATE_BUDGET_EXHAUSTED"
             result = supervised_schema_child(
                 [
                     sys.executable,
@@ -4447,7 +4653,7 @@ def run_control_coordinator(request):
                     ),
                 ],
                 cwd=control,
-                timeout=480,
+                timeout=min(480, ledger["state_deadline"] - time.monotonic()),
             )
             try:
                 assert result == 0, "CONTROL_CLEANUP_NEGATIVE_EXIT"
@@ -4466,6 +4672,7 @@ def run_control_coordinator(request):
                 ["git", "-C", str(control), "status", "--porcelain", "--untracked-files=all"]
             ).strip(), "FROZEN_CONTROL_SOURCE_CHANGED"
             e.command(["git", "worktree", "remove", str(control)])
+            assert time.monotonic() < ledger["state_deadline"], "CONTROL_STATE_BUDGET_EXHAUSTED"
             schema_publish(ledger, path)
             print("GUARDS_SCHEMA_COORDINATOR_PASS", flush=True)
             print("MATERIAL_SCHEMA_COORDINATOR_PASS", flush=True)
@@ -9543,19 +9750,34 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
     import inspect
 
     dispatcher = ast.parse(inspect.getsource(run_control_coordinator))
-    calls = [
+    dispatches = [
         node
         for node in ast.walk(dispatcher)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
-        and node.func.id == "supervised_schema_child"
+        and node.func.id in {"supervised_schema_child", "run_frozen_material"}
     ]
+    calls = []
+    for dispatch in sorted(dispatches, key=lambda call: call.lineno):
+        if dispatch.func.id == "run_frozen_material":
+            retained = ast.parse(inspect.getsource(run_frozen_material))
+            material_calls = [
+                node
+                for node in ast.walk(retained)
+                if isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "supervised_schema_child"
+            ]
+            assert len(material_calls) == 1
+            calls.extend(material_calls)
+        else:
+            calls.append(dispatch)
     argv = [
         [
             item.value if isinstance(item, ast.Constant) else ast.unparse(item)
             for item in call.args[0].elts
         ]
-        for call in sorted(calls, key=lambda call: call.lineno)
+        for call in calls
     ]
     assert argv[:4] == [
         ["sh", "scripts/test_telegram_egress.sh", "--schema-upgrade", "historical", "CONTROL_T"],
@@ -9590,8 +9812,8 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
         "scripts/test_telegram_egress.sh",
         "--material-schema-upgrade",
         "MATERIAL_E",
-        "candidate",
-        "str(handoff_p)",
+        "MATERIAL_P",
+        "str(handoff)",
     ]
     assert argv[5][:2] == ["sys.executable", "-c"]
     assert (
@@ -9616,14 +9838,17 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
         },
         "run_name": "__control_cleanup_negatives__",
     }
-    ordered = sorted(calls, key=lambda call: call.lineno)
+    ordered = calls
     assert ast.unparse(next(k.value for k in ordered[1].keywords if k.arg == "cwd")) == "control"
     assert (
         ast.unparse(next(k.value for k in ordered[1].keywords if k.arg == "timeout"))
         == "deadline - time.monotonic()"
     )
     assert ast.unparse(next(k.value for k in ordered[5].keywords if k.arg == "cwd")) == "control"
-    assert ast.literal_eval(next(k.value for k in ordered[5].keywords if k.arg == "timeout")) == 480
+    assert (
+        ast.unparse(next(k.value for k in ordered[5].keywords if k.arg == "timeout"))
+        == "min(480, ledger['state_deadline'] - time.monotonic())"
+    )
     assert "--guards-schema-upgrade" in shell and "--escalation-schema-upgrade" in shell
     assert "retained-guards/guards-schema-phase.json" in coordinator
     assert "reports/retained-escalation/escalation-schema-phase.json" in coordinator
@@ -9636,10 +9861,10 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
         "--material-schema-upgrade" in shell and "reports/material-schema-phase.json" in coordinator
     )
     assert ast.unparse(next(k.value for k in ordered[3].keywords if k.arg == "cwd")) == "escalation"
-    assert ast.unparse(next(k.value for k in ordered[4].keywords if k.arg == "cwd")) == "e.ROOT"
+    assert ast.unparse(next(k.value for k in ordered[4].keywords if k.arg == "cwd")) == "checkout"
     assert (
         ast.unparse(next(k.value for k in ordered[4].keywords if k.arg == "timeout"))
-        == "material_deadline - time.monotonic() + 480"
+        == "supervisor - time.monotonic()"
     )
 
 
@@ -9690,6 +9915,21 @@ def test_ack_loss_does_not_accept_unexpected_migrator_result(status, marker):
     assert "recovery_source" not in report["upgrade_ack_loss"]
 
 
+@pytest.fixture
+def unit_budget_clock():
+    """Synthetic handoff time only for explicit unit consumers, never shared time."""
+    original_time = time
+    shared_monotonic = sys.modules["time"].monotonic
+    clock = SimpleNamespace(now=10000.0)
+    local_time = SimpleNamespace(**(vars(original_time) | {"monotonic": lambda: clock.now}))
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(sys.modules[__name__], "time", local_time)
+        yield clock
+    assert time is original_time
+    assert sys.modules["time"].monotonic is shared_monotonic
+    assert e.time.monotonic is shared_monotonic
+
+
 def control_budget_file(tmp_path, **changes):
     now = time.monotonic()
     value = dict(
@@ -9710,7 +9950,9 @@ def control_budget_file(tmp_path, **changes):
     return path
 
 
-def test_control_remaining_budget_is_absolute_private_and_consumed_once(tmp_path):
+def test_control_remaining_budget_is_absolute_private_and_consumed_once(
+    tmp_path, unit_budget_clock
+):
     path = control_budget_file(tmp_path)
     budget = consume_control_budget(path, CONTROL_T, "c" * 40)
     assert 0 < budget["remaining_seconds"] <= 570
@@ -9733,19 +9975,34 @@ def test_control_remaining_budget_is_absolute_private_and_consumed_once(tmp_path
         {"unexpected": 1},
     ],
 )
-def test_control_budget_wrong_phase_source_clock_or_owner_refuses(tmp_path, change):
+def test_control_budget_wrong_phase_source_clock_or_owner_refuses(
+    tmp_path, change, unit_budget_clock
+):
     path = control_budget_file(tmp_path, **change)
-    with pytest.raises(AssertionError):
+    reason = {
+        "phase": "PHASE_SOURCE",
+        "historical": "PHASE_SOURCE",
+        "candidate": "CANDIDATE_OWNER",
+        "uid": "CANDIDATE_OWNER",
+        "version": "VERSION",
+        "charged_seconds": "CHARGED",
+        "deadline": "CLOCK",
+        "started_at": "TOTAL",
+        "unexpected": "FORMAT",
+    }[next(iter(change))]
+    with pytest.raises(AssertionError, match="CONTROL_BUDGET_" + reason):
         consume_control_budget(path, CONTROL_T, "c" * 40)
 
 
-def test_control_budget_exhaustion_and_file_guards(tmp_path):
+def test_control_budget_exhaustion_and_file_guards(tmp_path, unit_budget_clock):
     now = time.monotonic()
     path = control_budget_file(
         tmp_path, started_at=now - 601, issued_at=now - 2, charged_seconds=599, deadline=now - 1
     )
+    expired = path.read_bytes()
     with pytest.raises(AssertionError, match="EXHAUSTED"):
         consume_control_budget(path, CONTROL_T, "c" * 40)
+    assert path.read_bytes() == expired
     path.unlink()
     path = control_budget_file(tmp_path)
     path.chmod(0o644)
@@ -9894,12 +10151,12 @@ def test_schema_probe_programs_are_executable_python_without_hidden_indentation(
 @pytest.mark.parametrize("entry", ["coordinator", "child"])
 @pytest.mark.parametrize("fault", ["mismatch", "dirty", "git", "command"])
 def test_control_initial_failure_retains_source_budget_and_primary(
-    tmp_path, monkeypatch, entry, fault
+    tmp_path, monkeypatch, entry, fault, unit_budget_clock
 ):
     # Reproduce the runner's fractional clock edge: subtracting the two stored
     # floats yields 600.0000000000001, although deadline is exactly start+600.
     # This early-refusal unit seam does no waiting or external command work.
-    monkeypatch.setattr(time, "monotonic", lambda: 905.198142485)
+    unit_budget_clock.now = 905.198142485
     root = tmp_path / "checkout"
     root.mkdir()
     foreign = tmp_path / "foreign"
@@ -9972,7 +10229,7 @@ def test_control_initial_failure_retains_source_budget_and_primary(
 
 @pytest.mark.parametrize("fault", ["malformed", "invalid", "expired", "unreadable", "consumed"])
 def test_control_rejected_handoff_report_never_claims_unvalidated_budget(
-    tmp_path, monkeypatch, fault
+    tmp_path, monkeypatch, fault, unit_budget_clock
 ):
     candidate = "c" * 40
     root = tmp_path / "checkout"
@@ -10008,10 +10265,13 @@ def test_control_rejected_handoff_report_never_claims_unvalidated_budget(
     monkeypatch.setattr(
         e, "source_check", lambda _: pytest.fail("budget refusal must precede source admission")
     )
-    with pytest.raises((e.EgressError, AssertionError, FileNotFoundError)):
+    with pytest.raises((e.EgressError, AssertionError, FileNotFoundError)) as rejection:
         run_control_schema_phase(
             {"historical": CONTROL_T, "candidate": candidate, "budget_file": str(path)}
         )
+    if fault == "expired":
+        assert str(rejection.value).splitlines()[0] == "CONTROL_BUDGET_EXHAUSTED"
+        assert path.exists()
     report = json.loads((root / "reports/control-schema-phase.json").read_text())
     assert len(calls) == 1 and report["primary_failure"]["stage"] == "consume_budget"
     assert report["budget_state"] == "NOT_VALIDATED" and "prepare_budget" not in report
@@ -10022,7 +10282,7 @@ def test_control_rejected_handoff_report_never_claims_unvalidated_budget(
 
 @pytest.mark.parametrize("fault", ["archive", "build", "reuse", "probe"])
 def test_control_prepare_failure_keeps_consumed_budget_before_any_runtime(
-    tmp_path, monkeypatch, fault
+    tmp_path, monkeypatch, fault, unit_budget_clock
 ):
     root = tmp_path / "checkout"
     (root / "infra").mkdir(parents=True)
@@ -10989,7 +11249,7 @@ def test_guards_recovery_uses_actual_revision_and_fresh_process_identity(revisio
 @pytest.mark.parametrize(
     "damage", [None, "phase", "historical", "candidate", "deadline", "charged_seconds"]
 )
-def test_guards_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage):
+def test_guards_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage, unit_budget_clock):
     path = tmp_path / "budget.json"
     issued = time.monotonic()
     value = dict(
@@ -11007,7 +11267,14 @@ def test_guards_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage):
         value[damage] = value[damage] + 1 if damage in {"deadline", "charged_seconds"} else "wrong"
     e.write_private(path, e.encoded(value))
     if damage:
-        with pytest.raises(AssertionError):
+        reason = {
+            "phase": "PHASE_SOURCE",
+            "historical": "PHASE_SOURCE",
+            "candidate": "CANDIDATE_OWNER",
+            "deadline": "TOTAL",
+            "charged_seconds": "CHARGED",
+        }[damage]
+        with pytest.raises(AssertionError, match="GUARDS_BUDGET_" + reason):
             consume_guards_budget(path, GUARDS_C, "a" * 40)
         assert path.exists()
     else:
@@ -11072,7 +11339,9 @@ def test_escalation_recovery_uses_actual_revision_and_fresh_process_identity(rev
 @pytest.mark.parametrize(
     "damage", [None, "phase", "historical", "candidate", "deadline", "charged_seconds"]
 )
-def test_escalation_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, damage):
+def test_escalation_budget_is_known_c_g_pair_and_same_absolute600(
+    tmp_path, damage, unit_budget_clock
+):
     path = tmp_path / "budget.json"
     issued = time.monotonic()
     value = dict(
@@ -11090,7 +11359,14 @@ def test_escalation_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, dama
         value[damage] = value[damage] + 1 if damage in {"deadline", "charged_seconds"} else "wrong"
     e.write_private(path, e.encoded(value))
     if damage:
-        with pytest.raises(AssertionError):
+        reason = {
+            "phase": "PHASE_SOURCE",
+            "historical": "PHASE_SOURCE",
+            "candidate": "CANDIDATE_OWNER",
+            "deadline": "TOTAL",
+            "charged_seconds": "CHARGED",
+        }[damage]
+        with pytest.raises(AssertionError, match="ESCALATION_BUDGET_" + reason):
             consume_escalation_budget(path, ESCALATION_G, "a" * 40)
         assert path.exists()
     else:
@@ -11099,6 +11375,89 @@ def test_escalation_budget_is_known_c_g_pair_and_same_absolute600(tmp_path, dama
             consumed["deadline"] == value["deadline"] and 0 < consumed["remaining_seconds"] <= 170
         )
         assert not path.exists()
+
+
+@pytest.mark.parametrize(
+    "host_epoch", [0.0, 10.0, 100.0, 430.0, 490.452973924, 601.0, 602.0, 10000.0]
+)
+def test_unit_budget_clock_is_independent_of_host_epoch(tmp_path, monkeypatch, request, host_epoch):
+    shared = sys.modules["time"]
+    shared_monotonic = shared.monotonic
+    host_time = SimpleNamespace(**(vars(shared) | {"monotonic": lambda: host_epoch}))
+    monkeypatch.setattr(sys.modules[__name__], "time", host_time)
+    clock = request.getfixturevalue("unit_budget_clock")
+    assert time.monotonic() == clock.now == 10000.0
+    assert shared.monotonic is shared_monotonic and e.time is shared
+    # Reuse the original bodies/parameters, including the private/hardlink and
+    # consume-once controls; the simulated host epoch cannot affect their data.
+    for function, args in (
+        (test_control_remaining_budget_is_absolute_private_and_consumed_once, ()),
+        (test_control_budget_exhaustion_and_file_guards, ()),
+        (test_guards_budget_is_known_c_g_pair_and_same_absolute600, (None,)),
+        (test_escalation_budget_is_known_c_g_pair_and_same_absolute600, (None,)),
+    ):
+        directory = tmp_path / function.__name__
+        directory.mkdir(mode=0o700)
+        function(directory, *args, unit_budget_clock=clock)
+
+
+@pytest.mark.parametrize("lane", ["CONTROL", "GUARDS", "ESCALATION"])
+@pytest.mark.parametrize("condition", ["valid", "invalid-clock", "exact-deadline"])
+def test_unit_budget_clock_preserves_guard_origin_and_absolute600(
+    tmp_path, unit_budget_clock, lane, condition
+):
+    historical, phase, consume, charged = {
+        "CONTROL": (CONTROL_T, CONTROL_PHASE, consume_control_budget, 30),
+        "GUARDS": (GUARDS_C, GUARDS_PHASE, consume_guards_budget, 430),
+        "ESCALATION": (ESCALATION_G, ESCALATION_PHASE, consume_escalation_budget, 430),
+    }[lane]
+    now = unit_budget_clock.now
+    path = control_budget_file(
+        tmp_path,
+        historical=historical,
+        phase=phase,
+        started_at=now - charged,
+        charged_seconds=charged,
+        deadline=now - charged + 600,
+    )
+    if condition != "valid":
+        value = json.loads(path.read_text())
+        value.update(
+            started_at=0 if condition == "invalid-clock" else now - 600,
+            issued_at=charged if condition == "invalid-clock" else now - 1,
+            charged_seconds=charged if condition == "invalid-clock" else 599,
+            deadline=600 if condition == "invalid-clock" else now,
+        )
+        path.write_bytes(e.encoded(value))
+        before = path.read_bytes()
+        reason = "CLOCK" if condition == "invalid-clock" else "EXHAUSTED"
+        with pytest.raises(AssertionError, match=lane + "_BUDGET_" + reason):
+            consume(path, historical, "c" * 40)
+        assert path.read_bytes() == before  # Refusal precedes one-use consumption.
+    else:
+        unit_budget_clock.now += 5  # Synthetic handoff delay; no real wait/reset.
+        budget = consume(path, historical, "c" * 40)
+        assert budget["deadline"] == budget["started_at"] + 600
+        assert budget["charged_seconds"] == charged and budget["handoff_seconds"] == 5
+        assert budget["remaining_seconds"] == 600 - charged - 5 and not path.exists()
+        with pytest.raises(FileNotFoundError):
+            consume(path, historical, "c" * 40)
+
+
+def test_unit_budget_clock_restores_module_without_changing_shared_time():
+    original_time = time
+    shared = sys.modules["time"]
+    shared_monotonic = shared.monotonic
+    with contextmanager(unit_budget_clock.__wrapped__)() as clock:
+        clock.now = 905.198142485
+        assert time.monotonic() == 905.198142485
+        assert time is not original_time and shared.monotonic is shared_monotonic
+        assert e.time is shared
+    assert time is original_time and shared.monotonic is shared_monotonic
+    assert all(
+        consume.__globals__["time"] is original_time
+        for consume in (consume_control_budget, consume_guards_budget, consume_escalation_budget)
+    )
 
 
 @pytest.mark.parametrize("direction", ["upgrade", "downgrade"])
@@ -11650,9 +12009,64 @@ def test_material_entrypoint_accounts_full_preparation_and_refuses_before_runtim
 
 
 @pytest.mark.parametrize(
+    "fault", [None, "deadline", "expired", "P_exit", "P_cleanup", "P_late", "P_deadline"]
+)
+def test_post_material_negative_admission_keeps_original_S(tmp_path, monkeypatch, fault):
+    ledger = {
+        "started_at": 100.0,
+        "deadline": 700.0,
+        "material_supervisor_deadline": 1300.0,
+        "state_deadline": 1540.0,
+        "material_export_completed_at": 800.0,
+        "material_exit": 0,
+        "material_cleanup": {"state": "PASS"},
+    }
+    now = 900.0
+    if fault == "deadline":
+        ledger["state_deadline"] += 1
+    elif fault == "expired":
+        now = 1540.0
+    elif fault == "P_exit":
+        ledger["material_exit"] = 1
+    elif fault == "P_cleanup":
+        ledger["material_cleanup"]["state"] = "ADMITTED"
+    elif fault == "P_late":
+        ledger["material_export_completed_at"] = now + 1
+    elif fault == "P_deadline":
+        now = 1400.0
+        ledger["material_export_completed_at"] = 1300.0
+    monkeypatch.setattr(sys.modules[__name__], "time", SimpleNamespace(monotonic=lambda: now))
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "m3-schema-phase.json").write_text(
+        json.dumps({"images": {"historical:runtime": {"id": "positive-image"}}})
+    )
+    calls = []
+    stopped = RuntimeError("stop before first real Docker command")
+
+    def command(args, *, timeout):
+        calls.append((args, timeout))
+        raise stopped
+
+    monkeypatch.setattr(e, "command", command)
+    with pytest.raises(AssertionError if fault else RuntimeError) as caught:
+        run_retained_full_negatives(
+            tmp_path, tmp_path, {"historical": "historical", "candidate": "a" * 40}, ledger
+        )
+    if fault:
+        assert calls == [] and str(caught.value).startswith("CONTROL_NEGATIVE_")
+    else:
+        assert caught.value is stopped
+        assert calls == [
+            (["docker", "tag", "positive-image", "asm-connect5-runtime:historical"], 40)
+        ]
+
+
+@pytest.mark.parametrize(
     "fault",
     [
         "pass",
+        "late_E",
         "E_exit",
         "E_source",
         "E_report_missing",
@@ -11661,6 +12075,11 @@ def test_material_entrypoint_accounts_full_preparation_and_refuses_before_runtim
         "E_primary_and_cleanup",
         "E_cleanup_exhausted",
         "P_admission_exhausted",
+        "P_exit",
+        "negative_failed",
+        "tail_expired",
+        "tail_just_before",
+        "tail_at_deadline",
     ],
 )
 def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
@@ -11677,6 +12096,24 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
     monkeypatch.setattr(e, "source_check", lambda p: None)
     monkeypatch.setattr(sys.modules[__name__], "schema_ordered_sources", lambda h, p: [])
     monkeypatch.setattr(sys.modules[__name__], "enable_retained_checkpoint", lambda *a: None)
+    # This fixture exercises coordinator ordering/clock/cleanup. P's report and
+    # complete source verifier have their own negative tests below.
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        "frozen_material_binding",
+        lambda candidate, checkout=None: {
+            "coordinator": {"sha": candidate, "tree": "b" * 40},
+            "executor": {
+                "sha": MATERIAL_P,
+                "tree": MATERIAL_P_TREE,
+                "parents": list(MATERIAL_P_PARENTS),
+                "clean": True,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        sys.modules[__name__], "validate_frozen_material_report", lambda *args: None
+    )
     owners, cleaned, sequence, source_reads = [], [], [], []
     snapshots = {}
 
@@ -11736,8 +12173,20 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
     monkeypatch.setattr(SchemaOwnership, "inherited", lambda project, source: owners[-1])
 
     def negatives(directory, checkout, request, ledger):
+        assert sequence == ["T", "C", "G", "E", "P"]
+        assert Path(checkout).is_dir()
+        assert ledger["material_exit"] == 0 and ledger["material_cleanup"]["state"] == "PASS"
+        assert ledger["material_export_completed_at"] == f.clock[0]
+        assert ledger["material_supervisor_deadline"] == ledger["started_at"] + 1200 == 1300
+        assert ledger["state_deadline"] == ledger["started_at"] + 1440 == 1540
         sequence.extend(["timeout", "export"])
+        if fault == "negative_failed":
+            raise e.EgressError("CONTROL_COMMAND_EXIT")
         f.clock[0] += 192
+        if fault == "tail_expired":
+            f.clock[0] = 1540.0
+        if fault in {"tail_just_before", "tail_at_deadline"}:
+            f.clock[0] = 1539.875
 
     monkeypatch.setattr(sys.modules[__name__], "run_retained_full_negatives", negatives)
 
@@ -11746,7 +12195,15 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
         reports.mkdir(exist_ok=True)
         if args[0] == sys.executable:
             sequence.append("C-cleanup-negatives")
-            assert timeout == 480
+            assert sequence == ["T", "C", "G", "E", "P", "timeout", "export", "C-cleanup-negatives"]
+            assert 0 < timeout == min(480, 1540 - f.clock[0])
+            assert not (f.root / "coordinator/turns").exists()
+            if fault == "tail_just_before":
+                f.clock[0] += 0.0625
+            elif fault == "tail_at_deadline":
+                f.clock[0] += timeout
+            else:
+                f.clock[0] += 25
             (reports / "control-cleanup-negatives.json").write_text(
                 json.dumps(
                     {
@@ -11768,12 +12225,26 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
         value = json.loads(path.read_text())
         if selector == "--material-schema-upgrade":
             sequence.append("P")
+            assert Path(cwd) == f.root / "coordinator/material"
+            assert args[3:5] == [MATERIAL_E, MATERIAL_P]
             snapshots["handoff"] = copy.deepcopy(value)
             assert timeout == 100 + 1200 - f.clock[0]
-            consumed = consume_material_budget(path, MATERIAL_E, "a" * 40)
-            assert consumed["charged_at_observation"] > 600
+            consumed = consume_material_budget(path, MATERIAL_E, MATERIAL_P)
+            assert consumed["charged_at_observation"] == f.clock[0] - 100
             assert consumed["started_at"] == 100 and consumed["retained_deadline"] == 700
-            assert consumed["deadline"] == 820 and 0 < consumed["remaining_seconds"] < 50
+            assert consumed["deadline"] == 820
+            if fault == "late_E":
+                assert 600 < consumed["charged_at_observation"] < 720
+                assert 0 < consumed["remaining_seconds"] < 50
+            else:
+                assert consumed["charged_at_observation"] < 600
+                assert 200 < consumed["remaining_seconds"] < 250
+            (reports / "material-schema-phase.json").write_text(
+                json.dumps({"coordinator": MATERIAL_P})
+            )
+            f.clock[0] += 200 if fault == "late_E" else 430
+            if fault == "P_exit":
+                return 1
             return 0
         assert value["version"] == 1 and value["started_at"] == 100 and value["deadline"] == 700
         path.unlink()
@@ -11783,6 +12254,8 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
             "--escalation-schema-upgrade": ("E", "escalation-schema-phase.json", 135),
         }
         label, name, seconds = names[selector]
+        if label == "E" and fault == "late_E":
+            seconds += 192
         sequence.append(label)
         began = f.clock[0]
         f.clock[0] += seconds
@@ -11818,26 +12291,43 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
 
     namespace = dict(globals())
     exec(
+        compile(inspect.getsource(run_frozen_material), "<frozen material launcher>", "exec"),
+        namespace,
+    )
+    exec(
         compile(inspect.getsource(run_control_coordinator), "<current coordinator>", "exec"),
         namespace,
     )
     request = {"historical": "754f1c883e5a94a7fc9e729af2605424f949ba33", "candidate": "a" * 40}
-    if fault == "pass":
+    success = fault in {"pass", "late_E", "tail_just_before"}
+    if success:
         namespace["run_control_coordinator"](request)
-        assert sequence == ["T", "timeout", "export", "C", "G", "E", "P", "C-cleanup-negatives"]
+        assert sequence == ["T", "C", "G", "E", "P", "timeout", "export", "C-cleanup-negatives"]
         handoff = snapshots["handoff"]
         assert handoff["escalation_completion"]["completed_at"] <= handoff["issued_at"]
-        assert handoff["charged_seconds"] == handoff["issued_at"] - 100 > 600
+        assert handoff["charged_seconds"] == handoff["issued_at"] - 100
+        assert (handoff["charged_seconds"] > 600) == (fault == "late_E")
     else:
         with pytest.raises((AssertionError, OSError, e.EgressError)) as caught:
             namespace["run_control_coordinator"](request)
-        assert "P" not in sequence and "C-cleanup-negatives" not in sequence
+        if fault not in {"P_exit", "negative_failed", "tail_expired", "tail_at_deadline"}:
+            assert "P" not in sequence
+        if fault != "tail_at_deadline":
+            assert "C-cleanup-negatives" not in sequence
+        if fault in {"negative_failed", "tail_expired", "tail_at_deadline"}:
+            assert sequence[:7] == ["T", "C", "G", "E", "P", "timeout", "export"]
+        else:
+            assert "timeout" not in sequence and "export" not in sequence
     ledger = json.loads((f.root / "reports/control-schema-ledger.json").read_text())
     assert ledger["started_at"] == 100 and ledger["deadline"] == 700
     assert ledger["material_deadline"] == 820 and ledger["material_supervisor_deadline"] == 1300
     assert cleaned == [owner.phase for owner in owners]
-    if fault != "pass":
+    if success:
+        assert ledger["total_schema_seconds"] == f.clock[0] - 100 < 1440
+    else:
         assert ledger["primary_failure"]
+        if fault in {"tail_expired", "tail_at_deadline"}:
+            assert ledger["primary_failure"]["reason"] == "CONTROL_STATE_BUDGET_EXHAUSTED"
         if fault == "E_primary_and_cleanup":
             assert "ESCALATION_SCHEMA_PHASE_FAILED" in str(caught.value)
             # Retain the existing sanitizer's closed prefix set too.
@@ -11873,6 +12363,16 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
         "supervisor_deadline",
         "diagnostic_status",
         "diagnostic_hash",
+        "negative_start",
+        "negative_deadline",
+        "negative_order",
+        "negative_count",
+        "negative_charge",
+        "negative_result",
+        "negative_ledger_mismatch",
+        "state_deadline",
+        "state_budget",
+        "P_supervisor",
     ],
 )
 def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
@@ -11881,16 +12381,45 @@ def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
     import ast
 
     f = material_budget_fixture
+    f.value["candidate"] = MATERIAL_P
     ledger = {
+        "candidate": "a" * 40,
+        "observed_source": "a" * 40,
+        "material_exit": 0,
+        "material_sources": {
+            "coordinator": {"sha": "a" * 40, "tree": "b" * 40},
+            "executor": {
+                "sha": MATERIAL_P,
+                "tree": MATERIAL_P_TREE,
+                "parents": list(MATERIAL_P_PARENTS),
+                "clean": True,
+            },
+        },
         "started_at": 300.0,
         "deadline": 900.0,
         "material_deadline": 1020.0,
         "material_extension_seconds": 120,
         "material_supervisor_deadline": 1500.0,
+        "state_deadline": 1740.0,
         "material_handoff": copy.deepcopy(f.value),
         "escalation_completion": copy.deepcopy(f.value["escalation_completion"]),
         "escalation_cleanup": {"token": "e" * 32},
         "material_cleanup": {"token": f.owner.token},
+        "material_export_completed_at": 1400.0,
+        "total_schema_seconds": 1430.0,
+    }
+    full = {
+        "candidate": "a" * 40,
+        "source": CONTROL_T,
+        "result": "PASS",
+        "count": 2,
+        "results": ["timeout", "export"],
+        "deadline": 1740.0,
+        "started_at": 300.0,
+        "material_export_completed_at": 1400.0,
+        "execution_started_at": 1401.0,
+        "completed_at": 1720.0,
+        "charged_seconds": 1420.0,
     }
     budget = {
         **copy.deepcopy(f.value),
@@ -11901,14 +12430,14 @@ def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
         "remaining_seconds": 10.0,
     }
     material = {
-        "coordinator": "a" * 40,
+        "coordinator": MATERIAL_P,
         "historical": MATERIAL_E,
         "cleanup": {"state": "PASS", "token": f.owner.token},
         "prepare_budget": budget,
         "database": {"populated_refusal": "PASS", "refusal": {"before_ddl": True, "tables": 42}},
-        "upgrade_ack_loss": {"observed": {"revision": "0012"}, "recovery_source": "a" * 40},
+        "upgrade_ack_loss": {"observed": {"revision": "0012"}, "recovery_source": MATERIAL_P},
         "downgrade_ack_loss": {"observed": {"revision": "0011"}, "recovery_source": MATERIAL_E},
-        "used_recovery": {"source": "a" * 40},
+        "used_recovery": {"source": MATERIAL_P},
         "migration_diagnostics": {
             "status": "COMPLETE",
             "sha256": e.sha(b"unit-closed-observation"),
@@ -11945,6 +12474,30 @@ def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
         material["migration_diagnostics"]["status"] = "INVALID"
     elif damage == "diagnostic_hash":
         material["migration_diagnostics"]["sha256"] = "0" * 64
+    elif damage == "negative_start":
+        full["started_at"] += 1
+    elif damage == "negative_deadline":
+        full["deadline"] += 1
+    elif damage == "negative_order":
+        full["execution_started_at"] = 1399.0
+    elif damage == "negative_count":
+        full["count"] = 1
+        full["results"] = ["timeout"]
+    elif damage == "negative_charge":
+        full["charged_seconds"] -= 120
+    elif damage == "negative_result":
+        full["result"] = "FAIL"
+    elif damage == "state_deadline":
+        ledger["total_schema_seconds"] = 1440.0
+    elif damage == "state_budget":
+        ledger["state_deadline"] += 1
+    elif damage == "P_supervisor":
+        ledger["material_export_completed_at"] = full["material_export_completed_at"] = 1500.0
+        full["execution_started_at"] = 1501.0
+    ledger["full_retained_negatives"] = copy.deepcopy(full)
+    if damage == "negative_ledger_mismatch":
+        ledger["full_retained_negatives"]["completed_at"] -= 1
+    (f.root / "reports/control-full-retained-negatives.json").write_bytes(e.encoded(full))
     (f.root / "reports/control-schema-ledger.json").write_bytes(e.encoded(ledger))
     (f.root / "reports/material-schema-phase.json").write_bytes(e.encoded(material))
     source = (f.original_root / "scripts/test_telegram_egress_migration.sh").read_text()
@@ -11962,7 +12515,14 @@ def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
     gate = compile(
         ast.Module(body=state.body[index:], type_ignores=[]), "<material shell gate>", "exec"
     )
-    namespace = {"e": e, "json": json, "source": "a" * 40, "escalation": f.report, "admission": {}}
+    namespace = {
+        "e": e,
+        "json": json,
+        "source": "a" * 40,
+        "source_tree": "b" * 40,
+        "escalation": f.report,
+        "admission": {},
+    }
     if damage:
         with pytest.raises(AssertionError):
             exec(gate, namespace)
@@ -12128,3 +12688,427 @@ def test_material_source_binding_checks_order_tree_and_actual_checkout(
             [a["sha"], b["sha"]] for a, b in zip(chain, chain[1:], strict=False)
         ]
     assert all(args[0] == "git" for args in calls)
+
+
+@pytest.mark.parametrize(
+    "damage",
+    (
+        None,
+        "current-is-P",
+        "tree",
+        "parents",
+        "ancestry",
+        "head",
+        "dirty",
+        "bytes",
+        "mode",
+        "missing",
+        "kind",
+    ),
+)
+def test_frozen_p_binding_requires_exact_commit_tree_parents_ancestry_and_all_bytes(
+    tmp_path, monkeypatch, damage
+):
+    checkout = tmp_path / "P"
+    checkout.mkdir()
+    path = checkout / "tracked.py"
+    path.write_bytes(b"exact frozen source\n")
+    blob = diagnostic_blob(path.read_bytes())
+    if damage == "bytes":
+        path.write_bytes(b"changed despite clean status")
+    if damage == "mode":
+        path.chmod(0o755)
+    if damage == "missing":
+        path.unlink()
+    calls = []
+
+    def command(args, **kwargs):
+        calls.append(args)
+        assert args[0] == "git", "No resource action allowed during source admission"
+        if args[1:3] == ["cat-file", "commit"]:
+            frozen = args[-1] == MATERIAL_P
+            tree = MATERIAL_P_TREE if frozen else "b" * 40
+            parents = list(MATERIAL_P_PARENTS) if frozen else [MATERIAL_P]
+            if frozen and damage == "tree":
+                tree = "c" * 40
+            if frozen and damage == "parents":
+                parents.reverse()
+            return (
+                "tree " + tree + "\n" + "".join("parent " + p + "\n" for p in parents) + "\ncommit"
+            ).encode()
+        if "rev-parse" in args:
+            source = MATERIAL_P if str(checkout) in args else "a" * 40
+            return ("f" * 40 if damage == "head" and source == MATERIAL_P else source).encode()
+        if "status" in args:
+            return b" M tracked.py" if damage == "dirty" else b""
+        if args[1] == "ls-tree":
+            return (
+                ("120000" if damage == "kind" else "100644") + " blob " + blob + "\ttracked.py\0"
+            ).encode()
+        assert args[1:3] == ["merge-base", "--is-ancestor"]
+        if damage == "ancestry":
+            raise e.EgressError("EGRESS_COMMAND_FAILED")
+        return b""
+
+    monkeypatch.setattr(e, "command", command)
+    if damage:
+        with pytest.raises((AssertionError, e.EgressError)):
+            frozen_material_binding(MATERIAL_P if damage == "current-is-P" else "a" * 40, checkout)
+    else:
+        binding = frozen_material_binding("a" * 40, checkout)
+        assert binding["coordinator"]["sha"] == "a" * 40
+        assert (
+            binding["executor"]["sha"] == MATERIAL_P
+            and binding["executor"]["tree"] == MATERIAL_P_TREE
+        )
+        assert binding["executor"]["tracked_files"] == 1 and binding["executor"]["clean"]
+        assert [c[-2:] for c in calls if c[1] == "merge-base"] == [
+            [MATERIAL_BASE, MATERIAL_P],
+            [MATERIAL_P, "a" * 40],
+        ]
+
+
+@pytest.fixture
+def frozen_p_report_unit(material_budget_fixture, monkeypatch):
+    f = material_budget_fixture
+    handoff = {**copy.deepcopy(f.value), "candidate": MATERIAL_P}
+    binding = {
+        "coordinator": {"sha": "a" * 40, "tree": "b" * 40, "clean": True},
+        "executor": {
+            "sha": MATERIAL_P,
+            "tree": MATERIAL_P_TREE,
+            "parents": list(MATERIAL_P_PARENTS),
+            "clean": True,
+        },
+    }
+    archive, diagnostic = b"unit-only exact P archive", b"unit-only P diagnostics"
+    reports = f.root / "reports"
+    (reports / "source-P.tar.gz").write_bytes(archive)
+    (reports / "migration-P-observation.json").write_bytes(diagnostic)
+
+    def expected_image(identity, source, kind):
+        return {
+            "id": identity,
+            "source_sha": source,
+            "source_tree": MATERIAL_P_TREE
+            if source == MATERIAL_P
+            else MATERIAL_E_TREE
+            if source == MATERIAL_E
+            else "c" * 40,
+            "kind": kind,
+            "blobs_sha256": e.sha((source + kind).encode()),
+        }
+
+    monkeypatch.setattr(e, "migration_image_expected", expected_image)
+    images = {
+        source + ":" + kind: expected_image(
+            "sha256:" + e.sha((source + kind).encode()), source, kind
+        )
+        for source, kind in (
+            {(s, k) for s in (MATERIAL_E, MATERIAL_P) for k in ("runtime", "development")}
+            | {(ESCALATION_G, "development")}
+        )
+    }
+    runtime = images[MATERIAL_P + ":runtime"]["id"]
+    budget = {
+        **handoff,
+        "observed_at": 1000.0,
+        "preparation_ended_at": 1001.0,
+        "charged_total_seconds": 701.0,
+        "remaining_seconds": 19.0,
+    }
+    material = {
+        "phase": MATERIAL_PHASE,
+        "coordinator": MATERIAL_P,
+        "observed_source": MATERIAL_P,
+        "requested_source": MATERIAL_P,
+        "historical": MATERIAL_E,
+        "budget_state": "VALIDATED_CONSUMED",
+        "cleanup": {
+            "source": MATERIAL_P,
+            "phase": MATERIAL_PHASE,
+            "state": "PASS",
+            "token": handoff["owner_token"],
+        },
+        "images": images,
+        "sources": [binding["executor"]],
+        "archives": {"source-P.tar.gz": {"source": MATERIAL_P, "sha256": e.sha(archive)}},
+        "migration_diagnostics": {"status": "COMPLETE", "sha256": e.sha(diagnostic)},
+        "upgrade_ack_loss": {"recovery_source": MATERIAL_P},
+        "downgrade_ack_loss": {"recovery_source": MATERIAL_E},
+        "used_recovery": {"source": MATERIAL_P},
+        "prepare_budget": budget,
+    }
+    for key in ("cutover_callers", "restarted_callers"):
+        material[key] = {
+            name: {"source": MATERIAL_P, "image": runtime}
+            for name in ("api", "worker", "scheduler")
+        }
+    ledger = {
+        "candidate": "a" * 40,
+        "started_at": 300.0,
+        "deadline": 900.0,
+        "material_deadline": 1020.0,
+        "material_supervisor_deadline": 1500.0,
+        "material_handoff": handoff,
+        "material_sources": binding,
+        "material_source_archive_sha256": e.sha(archive),
+    }
+    return SimpleNamespace(
+        base=f,
+        material=material,
+        ledger=ledger,
+        binding=binding,
+        archive=archive,
+        diagnostic=diagnostic,
+    )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    (
+        None,
+        "current-source",
+        "current-image",
+        "image-tree",
+        "image-bytes",
+        "missing-image",
+        "report-tree",
+        "report-parents",
+        "archive",
+        "archive-binding",
+        "diagnostic",
+        "cleanup-source",
+        "cleanup-token",
+        "recovery-current",
+        "caller-current",
+        "handoff",
+        "expired",
+        "new-clock",
+        "failure",
+    ),
+)
+def test_frozen_p_report_never_accepts_current0013_or_mismatched_proofs(
+    frozen_p_report_unit, damage
+):
+    f = frozen_p_report_unit
+    report, ledger = f.material, f.ledger
+    if damage == "current-source":
+        report["coordinator"] = ledger["candidate"]
+    elif damage == "current-image":
+        report["images"][MATERIAL_P + ":runtime"]["source_sha"] = ledger["candidate"]
+    elif damage == "image-tree":
+        report["images"][MATERIAL_P + ":development"]["source_tree"] = "f" * 40
+    elif damage == "image-bytes":
+        report["images"][MATERIAL_P + ":development"]["blobs_sha256"] = "0" * 64
+    elif damage == "missing-image":
+        report["images"].pop(MATERIAL_E + ":runtime")
+    elif damage == "report-tree":
+        report["sources"][0]["tree"] = "f" * 40
+    elif damage == "report-parents":
+        report["sources"][0]["parents"] = list(reversed(MATERIAL_P_PARENTS))
+    elif damage == "archive":
+        (f.base.root / "reports/source-P.tar.gz").write_bytes(b"modified archive")
+    elif damage == "archive-binding":
+        ledger["material_source_archive_sha256"] = "0" * 64
+    elif damage == "diagnostic":
+        report["migration_diagnostics"]["sha256"] = "0" * 64
+    elif damage == "cleanup-source":
+        report["cleanup"]["source"] = ledger["candidate"]
+    elif damage == "cleanup-token":
+        report["cleanup"]["token"] = "0" * 32
+    elif damage == "recovery-current":
+        report["used_recovery"]["source"] = ledger["candidate"]
+    elif damage == "caller-current":
+        report["cutover_callers"]["api"]["source"] = ledger["candidate"]
+    elif damage == "handoff":
+        report["prepare_budget"]["candidate"] = ledger["candidate"]
+    elif damage == "expired":
+        report["prepare_budget"]["preparation_ended_at"] = 1020.0
+    elif damage == "new-clock":
+        report["prepare_budget"]["started_at"] = 301.0
+    elif damage == "failure":
+        report["primary_failure"] = {"reason": "not complete"}
+    if damage:
+        with pytest.raises(AssertionError):
+            validate_frozen_material_report(report, ledger, f.base.root / "reports")
+    else:
+        validate_frozen_material_report(report, ledger, f.base.root / "reports")
+
+
+@pytest.mark.parametrize(
+    "fault",
+    (
+        None,
+        "unconsumed",
+        "tampered",
+        "late-checkout",
+        "expired-handoff",
+        "primary",
+        "copy",
+        "primary-copy",
+        "cleanup",
+        "primary-cleanup",
+        "cleanup-source",
+        "dirty",
+        "late-export",
+    ),
+)
+def test_frozen_p_launcher_preserves_clock_reports_primary_cleanup_and_current_identity(
+    frozen_p_report_unit, monkeypatch, fault
+):
+    import inspect
+
+    f = frozen_p_report_unit
+    root, clock, ledger = f.base.root, f.base.clock, f.ledger
+    ledger.pop("material_handoff")
+    directory = root / "coordinator"
+    directory.mkdir(mode=0o700)
+    owners, calls = [], []
+    completion = copy.deepcopy(f.base.value["escalation_completion"])
+    primary = RuntimeError("unit-primary")
+    checks = [0]
+
+    def binding(current, checkout=None):
+        assert current == ledger["candidate"] != MATERIAL_P
+        if checkout:
+            checks[0] += 1
+            if checks[0] == 2 and fault == "dirty":
+                raise AssertionError("MATERIAL_P_BYTES")
+        return copy.deepcopy(f.binding)
+
+    monkeypatch.setattr(sys.modules[__name__], "frozen_material_binding", binding)
+
+    def command(args, **kwargs):
+        calls.append(args)
+        assert args[0] == "git", "No real Docker/resources in unit fixture"
+        if args[1] == "archive":
+            assert args[-1] == MATERIAL_P
+            clock[0] += 1
+            return f.archive
+        if args[1:3] == ["worktree", "add"]:
+            assert args[-1] == MATERIAL_P
+            Path(args[-2]).mkdir()
+            clock[0] += 1
+            if fault == "late-checkout":
+                clock[0] = 1020.0
+        if args[1:3] == ["worktree", "remove"]:
+            assert Path(args[-1]) == directory / "material"
+            shutil.rmtree(args[-1])
+        return b""
+
+    monkeypatch.setattr(e, "command", command)
+    monkeypatch.setattr(e, "source_check", lambda source: calls.append(["source_check", source]))
+
+    def admit(owner):
+        assert owner.source == MATERIAL_P
+        owner.directory.mkdir(mode=0o700)
+        owner.admitted = True
+        owners.append(owner)
+        if fault == "expired-handoff":
+            clock[0] = 1020.0
+
+    def cleanup(owner, detail):
+        calls.append(["cleanup", owner.source])
+        detail.update(
+            state="PASS",
+            source=ledger["candidate"] if fault == "cleanup-source" else MATERIAL_P,
+            token=owner.token,
+            phase=MATERIAL_PHASE,
+        )
+        if fault in {"cleanup", "primary-cleanup"}:
+            raise OSError("unit-cleanup")
+
+    monkeypatch.setattr(SchemaOwnership, "admit", admit)
+    monkeypatch.setattr(SchemaOwnership, "cleanup", cleanup)
+    monkeypatch.setattr(SchemaOwnership, "inherited", lambda *a: owners[-1])
+    original_copy = shutil.copytree
+
+    def copy_reports(source, destination, *args, **kwargs):
+        if Path(destination).name == "retained-material":
+            if fault in {"copy", "primary-copy"}:
+                raise OSError("unit-copy")
+            result = original_copy(source, destination, *args, **kwargs)
+            if fault == "late-export":
+                clock[0] = 1500.0
+            return result
+        return original_copy(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "copytree", copy_reports)
+
+    def child(args, *, cwd, timeout, environment):
+        calls.append(args)
+        assert args[:5] == [
+            "sh",
+            "scripts/test_telegram_egress.sh",
+            "--material-schema-upgrade",
+            MATERIAL_E,
+            MATERIAL_P,
+        ]
+        assert Path(cwd) == directory / "material" and timeout == 1500.0 - clock[0]
+        reports = Path(cwd) / "reports"
+        assert (
+            reports / "retained-escalation/escalation-schema-phase.json"
+        ).read_bytes() == f.base.report_path.read_bytes()
+        handoff = Path(args[-1])
+        if fault == "unconsumed":
+            return 0
+        if fault == "tampered":
+            value = json.loads(handoff.read_text())
+            value["candidate"] = ledger["candidate"]
+            e.write_private(handoff, e.encoded(value))
+        budget = consume_material_budget(handoff, MATERIAL_E, MATERIAL_P)
+        assert (
+            budget["started_at"] == 300
+            and budget["deadline"] == 1020
+            and budget["retained_deadline"] == 900
+        )
+        assert budget["charged_at_observation"] == clock[0] - 300 and budget["observed_at"] >= 1002
+        clock[0] += 1
+        report = copy.deepcopy(f.material)
+        report["prepare_budget"] = {
+            **budget,
+            "preparation_ended_at": clock[0],
+            "charged_total_seconds": clock[0] - 300,
+            "remaining_seconds": 1020 - clock[0],
+        }
+        report["cleanup"]["token"] = owners[-1].token
+        (reports / "material-schema-phase.json").write_bytes(e.encoded(report))
+        (reports / "source-P.tar.gz").write_bytes(f.archive)
+        (reports / "source-E.tar.gz").write_bytes(b"unit-E")
+        (reports / "migration-P-observation.json").write_bytes(f.diagnostic)
+        (reports / "complete-extra-report.json").write_text("{}")
+        if fault in {"primary", "primary-copy", "primary-cleanup"}:
+            raise primary
+        return 0
+
+    monkeypatch.setattr(sys.modules[__name__], "supervised_schema_child", child)
+    namespace = dict(globals())
+    exec(compile(inspect.getsource(run_frozen_material), "<frozen-P launcher>", "exec"), namespace)
+    if fault:
+        with pytest.raises((AssertionError, OSError, e.EgressError, RuntimeError)) as caught:
+            namespace["run_frozen_material"](directory, ledger, completion)
+        assert ledger["private_state_retained"]
+        assert not any(c[:2] == ["git", "worktree"] and c[2] == "remove" for c in calls)
+        if fault.startswith("primary"):
+            assert caught.value is primary
+        if fault in {"copy", "primary-copy"}:
+            assert ledger["retained_reports_failed"]
+        if fault == "primary-cleanup":
+            assert any(row["stage"] == "cleanup" for row in ledger["secondary_failures"])
+    else:
+        namespace["run_frozen_material"](directory, ledger, completion)
+        assert (
+            ledger["candidate"] == "a" * 40
+            and ledger["material_handoff"]["candidate"] == MATERIAL_P
+        )
+        assert (
+            ledger["material_handoff"]["started_at"] == 300
+            and ledger["material_handoff"]["charged_seconds"]
+            == ledger["material_handoff"]["issued_at"] - 300
+        )
+        assert (root / "reports/retained-material/complete-extra-report.json").exists()
+        assert ledger["material_export_completed_at"] < 1500
+        assert calls[-1] == ["source_check", ledger["candidate"]]
+    if owners:
+        assert ["cleanup", MATERIAL_P] in calls

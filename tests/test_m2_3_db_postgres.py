@@ -185,12 +185,16 @@ async def cleanup_material(c):
     )
 
 
-async def ingress(h, p=None, bot=BOT):
-    p = p or projection()
+async def ingress_projection(h, p, bot):
     revision = await sql(h, "SELECT version_num FROM platform.alembic_version")
     # Frozen predecessor lanes still exercise their original writer directly.
-    if revision == "0012" and "codec" not in p:
+    if revision in {"0012", "0013"} and "codec" not in p:
         p = v2_fixture(p, bot)
+    return p
+
+
+async def ingress(h, p=None, bot=BOT):
+    p = await ingress_projection(h, projection() if p is None else p, bot)
     return await sql(
         h,
         "SELECT platform.telegram_ingest(:bot,CAST(:p AS jsonb),:corr)",
@@ -198,6 +202,38 @@ async def ingress(h, p=None, bot=BOT):
         p=json.dumps(p),
         corr=uuid4(),
     )
+
+
+async def valid_ingress_control(h):
+    """Prove the same valid writer reaches all three writes, then roll it back."""
+    p = await ingress_projection(h, projection(), BOT)
+    assert p["codec"] == "TELEGRAM_PROVENANCE_V2"
+    async with h.runtime.engine.connect() as c:
+        transaction = await c.begin()
+        try:
+            result = (
+                await c.execute(
+                    text("SELECT platform.telegram_ingest(:bot,CAST(:p AS jsonb),:corr)"),
+                    {"bot": BOT, "p": json.dumps(p), "corr": uuid4()},
+                )
+            ).scalar_one()
+            assert result["code"] == "ACCEPTED" and result["result_code"] == "QUEUED"
+            for table, key in (
+                ("platform.telegram_update_receipts", "receipt_id"),
+                ("platform.inbox_events", "inbox_id"),
+                ("platform.messaging_jobs", "job_id"),
+            ):
+                # These tables are deliberately private to runtime. The returned
+                # typed references prove writes; migrator verifies rollback below.
+                assert UUID(result[key]).version == 7, table
+        finally:
+            await transaction.rollback()
+    for table in (
+        "platform.telegram_update_receipts",
+        "platform.inbox_events",
+        "platform.messaging_jobs",
+    ):
+        assert not await query(h, f"SELECT id FROM {table}")
 
 
 async def owner_sql(h, statement, *, workspace=A, actor=UA, **params):
@@ -468,10 +504,11 @@ async def test_terminal_ignored_receipts_and_lifecycle_never_create_work(telegra
 )
 async def test_any_ingress_write_failure_rolls_back_whole_receipt_inbox_job(telegram, relation):
     h = telegram
+    await valid_ingress_control(h)
     async with h.migrator.begin() as c:
         await c.execute(
             text(
-                "CREATE FUNCTION platform.m23_fail_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test write failure'; END $$"
+                "CREATE FUNCTION platform.m23_fail_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test write failure %.%', TG_TABLE_SCHEMA,TG_TABLE_NAME; END $$"
             )
         )
         await c.execute(
@@ -480,8 +517,11 @@ async def test_any_ingress_write_failure_rolls_back_whole_receipt_inbox_job(tele
             )
         )
     try:
-        with pytest.raises(DBAPIError):
+        with pytest.raises(DBAPIError) as caught:
             await ingress(h)
+        assert caught.value.orig.sqlstate == "P0001"
+        assert caught.value.orig.diag.message_primary == f"test write failure {relation}"
+        assert "m23_fail_insert()" in caught.value.orig.diag.context
         for table in (
             "platform.inbox_events",
             "platform.messaging_jobs",
@@ -1011,9 +1051,12 @@ async def test_db_receipt_codec_preserves_opaque_utf8_and_delete_chat(telegram):
     ],
 )
 async def test_runtime_ingress_rejects_untyped_or_ambiguous_projection(telegram, change):
+    await valid_ingress_control(telegram)
     with pytest.raises(DBAPIError) as caught:
         await ingress(telegram, projection(**change))
+    assert caught.value.orig.sqlstate == "P2001"
     assert caught.value.orig.diag.message_primary == "INVALID_INPUT"
+    assert "telegram_validate_projection" in caught.value.orig.diag.context
     assert not await query(telegram, "SELECT id FROM platform.telegram_update_receipts")
 
 

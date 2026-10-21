@@ -7,6 +7,7 @@ asm_runtime runner and the browser's owner HTTP commands, never this provisioner
 import asyncio
 import json
 import os
+import re
 import sys
 from uuid import UUID, uuid4
 
@@ -30,34 +31,44 @@ ESCALATION_PRESETS = (
     "esc_stale",
     "esc_revoked",
 )
+# Two finite identities retain the existing <128 seed-event guard. Native policy
+# is exercised through its accepted capability, not fixture authority DML.
+NATIVE_PRESETS = ("native_happy", "native_narrow")
 PRESETS = (
-    "material",
-    "happy",
-    "recovery",
-    "unknown",
-    "read_failure",
-    "isolation",
-    "isolation_peer",
-    "foreign",
-    "restricted",
-    "inactive",
-    "pagination",
-    "late",
-    "revoked",
-    "permanent",
-    "ctrl_stale",
-    "ctrl_recovery",
-    "ctrl_read",
-    "ctrl_revoked",
-    "ctrl_inactive",
-    "ctrl_restricted",
-) + ESCALATION_PRESETS
+    (
+        "material",
+        "happy",
+        "recovery",
+        "unknown",
+        "read_failure",
+        "isolation",
+        "isolation_peer",
+        "foreign",
+        "restricted",
+        "inactive",
+        "pagination",
+        "late",
+        "revoked",
+        "permanent",
+        "ctrl_stale",
+        "ctrl_recovery",
+        "ctrl_read",
+        "ctrl_revoked",
+        "ctrl_inactive",
+        "ctrl_restricted",
+    )
+    + ESCALATION_PRESETS
+    + NATIVE_PRESETS
+)
 ACTIONS = (
     "inventory",
     "stats",
     "control-stats",
     "escalation-stats",
     "material-stats",
+    "native-stats",
+    "native-enable",
+    "native-pause",
     "downgrade",
     "disable",
     "restrict",
@@ -70,11 +81,14 @@ def validate_operation(preset, operation):
     ):
         raise ProvisioningError("Invalid finite messaging fixture action")
     allowed = {
-        "downgrade": ("revoked", "ctrl_revoked", "esc_revoked"),
+        "downgrade": ("revoked", "ctrl_revoked", "esc_revoked") + NATIVE_PRESETS,
         "disable": ("inactive", "ctrl_inactive", "esc_happy", "esc_narrow"),
         "restrict": ("restricted", "ctrl_restricted", "esc_happy", "esc_narrow"),
         "escalation-stats": ESCALATION_PRESETS,
         "material-stats": ("material",),
+        "native-stats": NATIVE_PRESETS,
+        "native-enable": NATIVE_PRESETS,
+        "native-pause": NATIVE_PRESETS,
     }
     if operation in allowed and preset not in allowed[operation]:
         raise ProvisioningError("Invalid finite messaging state change")
@@ -331,8 +345,78 @@ async def material_stats(connection, params):
     }
 
 
-async def action(preset, operation):
+def validate_native_source(operation, source_tree):
+    # The later C0 clean-source browser gate supplies its actual Git tree. This
+    # disposable TEST carrier is not the host/operator rollout/readiness proof.
+    if operation in {"native-enable", "native-pause"}:
+        if not isinstance(source_tree, str) or re.fullmatch("[0-9a-f]{40}", source_tree) is None:
+            raise ProvisioningError("Exact browser TEST source tree required")
+    elif source_tree is not None:
+        raise ProvisioningError("Source tree only belongs to native policy carrier")
+
+
+async def native_policy(connection, params, preset, operation, source_tree):
+    row = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.channel_connections WHERE workspace_id=:ws "
+                    "AND provider='CONTROLLED' AND bot_identity=:bot AND external_connection_id=:external"
+                ),
+                params | {"bot": bot(preset), "external": route(preset)},
+            )
+        )
+        .mappings()
+        .one()
+    )
+    installed = (
+        await connection.execute(text("SELECT platform.human_context_schema_profile()"))
+    ).scalar_one()
+    if (
+        not isinstance(installed, dict)
+        or set(installed) != {"schema_revision", "valid", "profile_sha256"}
+        or installed["schema_revision"] != "0013"
+        or installed["valid"] is not True
+        or not isinstance(installed["profile_sha256"], str)
+        or re.fullmatch("[0-9a-f]{64}", installed["profile_sha256"]) is None
+    ):
+        raise ProvisioningError("Exact native TEST catalog profile required")
+    binding = {
+        k: str(row[k])
+        for k in ("business_id", "provider", "bot_identity", "external_connection_id")
+    } | {"owner_user_id": None}
+    # Only a fresh, C0-paired disposable browser stack may invoke this carrier;
+    # no old writers are started by it. This is not an operator drain probe.
+    profile = dict(
+        source_tree=source_tree,
+        schema_revision="0013",
+        profile_sha256=installed["profile_sha256"],
+        drain_confirmed=True,
+    )
+    await connection.execute(
+        text(
+            "SELECT platform.human_context_policy_command(:ws,:id,:op,:key,:policy,:epoch,"
+            "CAST(:binding AS jsonb),CAST(:profile AS jsonb))"
+        ),
+        {
+            "ws": params["ws"],
+            "id": row["id"],
+            "op": operation.removeprefix("native-").upper(),
+            "key": str(uuid4()),
+            "policy": row["human_context_policy"],
+            "epoch": row["human_context_policy_epoch"],
+            "binding": json.dumps(binding),
+            "profile": json.dumps(profile),
+        },
+    )
+    # Never present the historical command result as current state. The browser
+    # must GET through the owner API; any SQL/commit failure propagates closed.
+    return {"command_completed": True}
+
+
+async def action(preset, operation, source_tree=None):
     validate_operation(preset, operation)
+    validate_native_source(operation, source_tree)
     url = target()
     engine = create_async_engine(url, hide_parameters=True, connect_args={"connect_timeout": 3})
     try:
@@ -342,9 +426,11 @@ async def action(preset, operation):
                 return await inventory(connection)
             owner = await identity(connection, preset)
             params = {"ws": owner.workspace_id, "actor": owner.user_account_id}
+            if operation in {"native-enable", "native-pause"}:
+                return await native_policy(connection, params, preset, operation, source_tree)
             if operation == "material-stats":
                 return await material_stats(connection, params)
-            if operation in {"stats", "control-stats", "escalation-stats"}:
+            if operation in {"stats", "control-stats", "escalation-stats", "native-stats"}:
                 statements = {
                     "messages": "SELECT count(*) FROM app.messages WHERE workspace_id=:ws AND direction='OUTBOUND'",
                     "receipts": "SELECT count(*) FROM platform.messaging_command_receipts WHERE workspace_id=:ws",
@@ -352,10 +438,17 @@ async def action(preset, operation):
                     "outbox_events": "SELECT count(*) FROM app.outbox_events WHERE workspace_id=:ws",
                     "jobs": "SELECT count(*) FROM platform.messaging_jobs WHERE workspace_id=:ws AND kind='SEND_MANUAL_TEXT'",
                 }
-                if operation in {"control-stats", "escalation-stats"}:
+                if operation in {"control-stats", "escalation-stats", "native-stats"}:
                     statements.update(
                         control_receipts="SELECT count(*) FROM platform.conversation_control_receipts WHERE workspace_id=:ws",
                         control_audit_events="SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws AND event_type IN ('CONVERSATION_TAKEN_OVER','CONVERSATION_RESUMED')",
+                    )
+                if operation == "native-stats":
+                    statements.update(
+                        reconciliations="SELECT count(*) FROM platform.human_context_reconciliations WHERE workspace_id=:ws",
+                        reconciliation_audit="SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws AND event_type='HUMAN_CONTEXT_RECONCILED'",
+                        policy_receipts="SELECT count(*) FROM platform.human_context_policy_receipts WHERE workspace_id=:ws",
+                        policy_audit="SELECT count(*) FROM app.audit_events WHERE workspace_id=:ws AND event_type='HUMAN_CONTEXT_POLICY_COMMANDED'",
                     )
                 if operation == "escalation-stats":
                     statements.update(
@@ -386,8 +479,13 @@ def main():
         parser = PrivateArgumentParser()
         parser.add_argument("--preset", choices=PRESETS)
         parser.add_argument("--action", required=True, choices=ACTIONS)
+        parser.add_argument("--source-tree")
         args = parser.parse_args()
-        print(json.dumps(asyncio.run(action(args.preset, args.action)), sort_keys=True))
+        print(
+            json.dumps(
+                asyncio.run(action(args.preset, args.action, args.source_tree)), sort_keys=True
+            )
+        )
         return 0
     except Exception:
         print("M2_4_BROWSER_FIXTURE_FAILED", file=sys.stderr)

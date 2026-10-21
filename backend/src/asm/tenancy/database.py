@@ -345,6 +345,39 @@ class TenantUnitOfWork:
             {"conversation": conversation_id},
         )
 
+    async def human_context_read(self, conversation_id: UUID) -> Any:
+        return await self._messaging_execute(
+            "SELECT platform.human_context_read(:conversation)", {"conversation": conversation_id}
+        )
+
+    async def human_context_observations(
+        self, conversation_id: UUID, limit: int, cursor: dict[str, object] | None
+    ) -> Any:
+        import json
+
+        return await self._messaging_execute(
+            "SELECT platform.human_context_observations(:conversation,:limit,CAST(:cursor AS jsonb))",
+            {
+                "conversation": conversation_id,
+                "limit": limit,
+                "cursor": json.dumps(cursor, ensure_ascii=False) if cursor is not None else None,
+            },
+        )
+
+    async def human_context_reconcile(
+        self, conversation_id: UUID, key: str, body: dict[str, object]
+    ) -> Any:
+        import json
+
+        return await self._messaging_execute(
+            "SELECT platform.human_context_reconcile(:conversation,:key,CAST(:body AS jsonb))",
+            {
+                "conversation": conversation_id,
+                "key": key,
+                "body": json.dumps(body, ensure_ascii=False, allow_nan=False),
+            },
+        )
+
     async def conversation_control_prepare(
         self,
         conversation_id: UUID,

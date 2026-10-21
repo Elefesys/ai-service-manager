@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from generic_pg_schema import current_snapshot
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_m2_1_postgres import command, query
@@ -392,6 +393,7 @@ async def test_downgrade_refuses_55000_before_first_destructive_statement(telegr
     await receive(h)
     before = await query(h, "SELECT id,fingerprint FROM platform.telegram_update_receipts")
     async with h.migrator.begin() as c:
+        current = await current_snapshot(c)
         with pytest.raises(DBAPIError) as caught:
             async with c.begin_nested():
 
@@ -403,7 +405,8 @@ async def test_downgrade_refuses_55000_before_first_destructive_statement(telegr
         assert caught.value.orig.sqlstate == "55000"
         assert (
             await c.execute(text("SELECT version_num FROM platform.alembic_version"))
-        ).scalar_one() == "0012"  # Direct 0007 refusal preserves the current head too.
+        ).scalar_one() == "0013"  # Direct 0007 refusal preserves the current head too.
+        assert await current_snapshot(c) == current
         assert (
             await c.execute(text("SELECT count(*) FROM platform.telegram_connection_state"))
         ).scalar_one() == 1

@@ -5227,3 +5227,178 @@ Playwright proof is NOT RUN here. Source/node/evidence map is M3_CONTRACT§15.10
 C0 intake→C6 descendant (budget blocker C2-MAT-02 still OPEN)→same Draft PR34 automatic
 CI; no new PR, dispatch/rerun, live/VM/sends/deploy or service installation. C3 HOLD
 after the canonical PR34 receipt; activation remains a separate C0 decision.
+
+### NATIVE-CONTEXT HOST-R1 /0013 — source preparation, separate execution approval
+
+The C0 task6254580543 pairs the current API/Worker/Scheduler with schema0013.
+The accepted stock105 run39160997284 verified its DB/API/runtime source, not this
+new host code or a Console rollout. This section supplies commands for a later
+explicit C0 authorization; it does not authorize their execution, activation,
+account access, deployment or renewal. C5 Console integration and actual host/PG/
+full integration acceptance remain separate gates. Never promote collection or
+mock results to rollout PASS.
+
+Current runtime readiness requires exactly0013, PostgreSQL18 and vector0.8.6,
+real asm_runtime without inheritance/membership/ownership/DDL/bypass privileges,
+and the pinned native full catalog profile
+`c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411`.
+The profile capability itself remains private to asm_migrator. Runtime verifies
+its exact SQL body hash/metadata/ACL, then runs that pinned catalog-only SELECT
+with pg_catalog,pg_temp; no new EXECUTE grant or owner identity is introduced.
+The host operator separately compares all167 typed source definitions/unique OIDs,
+including the verifier,45 tables/635 ordered columns and exact nonfunction/
+security/ACL before reading the installed self-report. Native policy remains
+OFF_UNUSED unless an explicitly authorized command commits.
+
+Keep these profiles distinct:
+
+| Profile | Boundary / recovery |
+|---|---|
+| Historical MATERIAL0012 | Exactly0001–0012 source,132 functions/42 tables, existing V1/V2 readers/exports/recovery/pins. It rejects0013, rather than accepting additional tables or a new reader shape. |
+| Current native0013 | Full0001–0013 source,167 functions/45 tables/635 columns, current paired Python/Console source and generated profile. It rejects0012 and any mixed/unsafe catalog. |
+| Historical source/image switch | Remains0007-only. It is not a native DDL upgrade/downgrade tool. All frozen H/T/C/G/E/P sources, receipts and budget ledgers retain their original meaning. |
+
+The following order is mandatory when C0 later authorizes an exact rollout:
+
+1. Prepare the one reviewed C0-consolidated commit/tree containing both C5 and C6.
+   Use a separate clean checkout and the existing frozen Python3.13 environment.
+   Verify actual imported asm modules belong to that checkout. Record/approve
+   API/Worker/Scheduler/Console source/image profiles together; a DB response is
+   not proof of which binaries or browser bundle are running. Retain existing
+   exact image/source checks and the old receipts outside the checkout. A C6-only
+   source has no HumanContextPanel/human-context-api and must fail pairing.
+2. Drain old writers, workers, scheduler and readers explicitly. The operator
+   attests completion; neither a catalog digest nor a process name proves drain.
+   Deploy only the approved paired artifacts under the separate authorization.
+   Do not run old0012 software over a used0013 DB. Keep an already-used native
+   system on compatible source and use PAUSED/forward recovery as necessary.
+3. Apply the approved migration order once to the authorized fresh/unused target,
+   then check exact schema/catalog and each caller's readiness before admission.
+   Do not reapply a used0013, edit applied migrations or invent0014. Normal unused
+   reverse is allowed only by its own C0 authorization and the migration's complete
+   before-DDL usage checks. Used P>0/observations/revisions/V3/receipt/work markers
+   prohibit downgrade; never delete history to satisfy the guard.
+4. Prepare the private component proof below and have C0 approve the exact
+   commit/tree and all four component digests. This is source identity, not an
+   automatic approval or a claim to observe deployed processes. Independently
+   verify matching deployed artifacts and complete the explicit drain attestation.
+5. Run policy `check` with the exact binding and request. It performs source,
+   LOCAL/TEST actual session_user/current_user/database/READ COMMITTED, full
+   catalog and scoped route/binding checks only. It grants no ENABLE permission
+   and makes no state mutation. Fresh ENABLE still has all SQL product/manual-send/
+   MATERIAL prerequisites; PAUSE remains available with expired entitlement.
+6. Only after separate account/operation authorization issue `commit` with the
+   reviewed key/body/CAS. Saving/reconciling context and Resume remain separate
+   owner actions in the paired Console; policy activation creates neither an
+   answer nor a send permission. Read the current state after the acceptance.
+
+Use a private0700 directory outside the checkout and0600 files owned by the
+operator. Keys, hashes, provider binding, raw requests, receipts, credentials and
+request bodies must never be copied to stdout/logs/chat/PR. These are command
+forms with C0-approved values, not values to infer from the current HEAD:
+
+```sh
+# After exact C0 review, from the complete host checkout and frozen Python3.13:
+# PYTHONPATH must include both APPROVED_CHECKOUT/backend/src and APPROVED_CHECKOUT.
+python scripts/prepare_telegram_egress.py native-policy-profile \
+  --state-dir /private/native-policy \
+  --accepted-sha C0_APPROVED_COMMIT --accepted-tree C0_APPROVED_TREE
+# Writes /private/native-policy/native-policy-approval.json privately, no hashes printed.
+```
+
+The policy CLI runs on that complete host checkout. Generic runtime/operator images
+without Git and the paired Console source intentionally refuse; do not add a bypass
+or expose a DB port to work around that refusal.
+
+The source proof hashes each named component's exact tracked file manifest,
+whole Git tree, schema0013 and accepted catalog profile. Both the preparer and
+committer verify real clean Git bytes/modes. All four component names are required;
+missing Console/mixed source/profile never falls back to an older reader. C0
+reviews the resulting private approval; generating it is not approval.
+
+Prepare a separate private input JSON with exactly `approval` (that approved
+object) and `request`. The request has exactly:
+
+```json
+{
+  "environment": "TEST",
+  "workspace_id": "C0_APPROVED_CANONICAL_UUID",
+  "connection_id": "C0_APPROVED_CANONICAL_UUID",
+  "operation": "ENABLE",
+  "key": "PRIVATE_SAVED_ASCII_COMMAND_KEY",
+  "expected_policy": "OFF_UNUSED",
+  "expected_policy_epoch": "0",
+  "expected_binding": {
+    "business_id": "C0_APPROVED_CANONICAL_UUID",
+    "provider": "TELEGRAM",
+    "bot_identity": "APPROVED_BOT_NUMERIC_ID",
+    "external_connection_id": "APPROVED_PRIVATE_BINDING",
+    "owner_user_id": "APPROVED_OWNER_NUMERIC_ID"
+  },
+  "source_profile": {
+    "source_tree": "C0_APPROVED_TREE",
+    "schema_revision": "0013",
+    "profile_sha256": "c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411",
+    "drain_confirmed": true
+  }
+}
+```
+
+Placeholders must be replaced only from the explicit approved source/binding,
+not provider discovery. CONTROLLED uses its exact existing identifiers and JSON
+null owner; TELEGRAM requires the approved owner and current route/state. Numeric
+policy epochs are canonical decimal strings, not JSON numbers/bools. ENABLE and
+PAUSE are the only operations. There is no OFF reset or owner HTTP toggle. Use
+an explicit new receipt file for a new command; do not overwrite a saved intent.
+
+Supply `ASM_NATIVE_POLICY_INPUT` and `ASM_NATIVE_POLICY_RECEIPT` as private absolute
+file paths, `ASM_ENVIRONMENT=LOCAL|TEST`, and the matching
+`ASM_MIGRATION_DATABASE_URL` from the protected operator environment. The URL must
+use real asm_migrator LOGIN and asm_local|asm_test. No Telegram token or billing
+initialization/renewal input is needed in this path.
+
+```sh
+python scripts/provision_telegram_test.py --native-policy check
+# Separate C0 operation approval must precede this mutation:
+python scripts/provision_telegram_test.py --native-policy commit
+# Read-only recovery when an accepted result exists but current state is unavailable:
+python scripts/provision_telegram_test.py --native-policy current
+```
+
+Policy modes cannot be combined with `--live`/`--discover`; they never instantiate
+TelegramClient, probe/discover provider state, call setWebhook, renew billing or
+perform external HTTP. The legacy explicit Telegram setup flow remains separate.
+The SQL capability alone writes policy/receipt/Audit atomically. Host code issues
+no direct state, receipt or Audit DML. Exact result validation happens before the
+outer commit; an accepted result escapes only after commit. Failures return
+bounded diagnostics without SQL parameters or the private request.
+
+The immutable accepted result and the separate current policy are deliberately
+stored separately in the private receipt. A current-read failure preserves the
+accepted result and returns RETRY_READ_ONLY. Retry `current`, never create a new
+key or repeat a new command to repair the display. If the original commit ACK was
+lost before a receipt was saved, repeat `commit` with the exact saved key/body and
+same saved request source binding; SQL returns its canonical REPLAY. If the current
+C0-approved compatible host tree changes, update only the separately approved
+`approval` object; keep the saved request/key/profile exact. The host verifies the
+new current source/components and permits an old request tree only when the
+immutable DB receipt already contains that same source profile and connection.
+An old tree can never authorize a fresh command. An old ENABLE
+acceptance may say ON while the actual current policy is PAUSED after a later
+PAUSE. The replay must not update that PAUSED policy, epochs, Audit or receipt.
+A failed read does not turn historical acceptance into current permission.
+
+PAUSE uses its own key and exact current CAS; it retains P and evidence. Reenable
+from PAUSED increments P and requires fresh owner reconciliation/Resume under the
+new P. Material disable while native ON is rejected: first separately commit PAUSE,
+then perform the separately approved existing material operation. PAUSED recovery
+retains observations, context/revisions, manual work, receipts and UNKNOWN history;
+never downgrade used native evidence or manufacture a new successful delivery.
+
+Bounds are unchanged: runtime readiness3s, policy transaction/outer work10s and
+current-read3s within that envelope, connect3s, statement3s/lock2s. These do not
+increase S600/P720/fixed120/+480/S+1200, cleanup90,state25,browser25,foundation45,
+stock20m or request3s/60s/10s. No polling loop, automatic invocation at startup/
+migration/health, service install, full CI optimization or live execution follows
+from this source handoff. The retained0012 historical carriers/pins remain separate
+from a future actual0013 host/Console integration run.

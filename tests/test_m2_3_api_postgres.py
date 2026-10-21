@@ -333,7 +333,45 @@ async def test_public_policy_structural_and_inactive_states_have_distinct_envelo
 async def test_all_five_routes_require_current_session_and_live_owner(api, case):
     h = api
     cid = await conversation(h)
-    row, _, _ = await ready(h, event_id="private", message_id="private")
+    # Deterministic CI-11 control: this earlier Turn job is claimable even if
+    # image preparation is fast. A global claim is not an image-job selector.
+    competitors = await query(
+        h,
+        "UPDATE platform.messaging_jobs j SET available_at=clock_timestamp()-interval '1 hour' "
+        "FROM app.conversation_turns t WHERE (j.workspace_id,j.turn_id)=(t.workspace_id,t.id) "
+        "AND j.kind='PROCESS_TURN' AND t.conversation_id=:cid AND j.status='READY' RETURNING j.id",
+        cid=cid,
+    )
+    assert competitors
+    before = await query(
+        h,
+        "SELECT to_jsonb(j) AS row FROM platform.messaging_jobs j WHERE status='READY' ORDER BY id",
+    )
+    try:
+        for saved in before:
+            await query(
+                h,
+                "UPDATE platform.messaging_jobs SET available_at=clock_timestamp()+interval '1 hour' WHERE id=:id RETURNING id",
+                id=UUID(saved["row"]["id"]),
+            )
+        # Separate conversation: file preparation must not legitimately regroup
+        # the competitor's Turn or modify its canonical deadlines.
+        row, _, _ = await ready(
+            h,
+            event_id="private",
+            message_id="private",
+            chat_id="private-image",
+            sender_id="private-image-client",
+        )
+    finally:
+        for saved in before:
+            restored = await query(
+                h,
+                "UPDATE platform.messaging_jobs SET available_at=CAST(:at AS timestamptz) WHERE id=:id AND status='READY' RETURNING to_jsonb(messaging_jobs) AS row",
+                id=UUID(saved["row"]["id"]),
+                at=saved["row"]["available_at"],
+            )
+            assert restored == [saved]
     accepted = await send(h, cid)
     assert accepted.status_code == 202
     if case in ("ADMIN", "PROVIDER"):

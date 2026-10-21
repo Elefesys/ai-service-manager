@@ -8,12 +8,20 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from alembic import op
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from asm.telegram.database import TelegramIngress
+from generic_pg_schema import (
+    assert_current_schema,
+    current_snapshot,
+    historical_schema,
+    paired_p_readiness,
+)
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_m2_1_postgres import messaging as messaging
@@ -112,56 +120,65 @@ async def catalog(c):
 
 async def test_fresh_head_full42_columns_profiles_rls_and_no_unused_backfill(control):
     h = control
-    m = migration()
-    async with h.migrator.connect() as c:
-        await assert_schema(c)
-        assert (
-            await c.execute(
-                text(
-                    "SELECT count(*) FROM platform.inbox_events WHERE material_result IS NOT NULL OR material_claim_token IS NOT NULL"
-                )
-            )
-        ).scalar_one() == 0
-        assert (
-            await c.execute(
-                text(
-                    "SELECT data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema='platform' AND table_name='inbox_events' AND column_name='material_claim_token'"
-                )
-            )
-        ).one() == ("uuid", "YES", None)
-        for table in m.TABLES:
-            assert (await c.execute(text(f"SELECT count(*) FROM {table}"))).scalar_one() == 0
-        for signature in (*m.PUBLIC_FUNCTIONS, *m.PRIVATE_FUNCTIONS):
-            row = (
+
+    async def checks(*, historical):
+        m = migration()
+        async with h.migrator.connect() as c:
+            if historical:
+                await assert_schema(c)
+            else:
+                await assert_current_schema(c)
+            assert (
                 await c.execute(
                     text(
-                        "SELECT p.proowner::regrole::text,p.proconfig,has_function_privilege('asm_runtime',p.oid,'EXECUTE'),coalesce(bool_or(a.grantee=0 AND a.privilege_type='EXECUTE'),false) FROM pg_proc p LEFT JOIN LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a ON true WHERE p.oid=CAST(:sig AS regprocedure) GROUP BY p.oid"
-                    ),
-                    {"sig": signature},
+                        "SELECT count(*) FROM platform.inbox_events WHERE material_result IS NOT NULL OR material_claim_token IS NOT NULL"
+                    )
                 )
-            ).one()
-            assert row == (
-                "asm_migrator",
-                ["search_path=pg_catalog, pg_temp"],
-                signature in m.PUBLIC_FUNCTIONS,
-                False,
-            )
-        for table in m.TABLES:
-            row = (
+            ).scalar_one() == 0
+            assert (
                 await c.execute(
                     text(
-                        "SELECT relowner::regrole::text,relrowsecurity,relforcerowsecurity,has_table_privilege('asm_runtime',oid,'SELECT,INSERT,UPDATE,DELETE') FROM pg_class WHERE oid=CAST(:t AS regclass)"
-                    ),
-                    {"t": table},
+                        "SELECT data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema='platform' AND table_name='inbox_events' AND column_name='material_claim_token'"
+                    )
                 )
-            ).one()
-            assert row == ("asm_migrator", True, True, False)
+            ).one() == ("uuid", "YES", None)
+            for table in m.TABLES:
+                assert (await c.execute(text(f"SELECT count(*) FROM {table}"))).scalar_one() == 0
+            for signature in (*m.PUBLIC_FUNCTIONS, *m.PRIVATE_FUNCTIONS):
+                row = (
+                    await c.execute(
+                        text(
+                            "SELECT p.proowner::regrole::text,p.proconfig,has_function_privilege('asm_runtime',p.oid,'EXECUTE'),coalesce(bool_or(a.grantee=0 AND a.privilege_type='EXECUTE'),false) FROM pg_proc p LEFT JOIN LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a ON true WHERE p.oid=CAST(:sig AS regprocedure) GROUP BY p.oid"
+                        ),
+                        {"sig": signature},
+                    )
+                ).one()
+                assert row == (
+                    "asm_migrator",
+                    ["search_path=pg_catalog, pg_temp"],
+                    signature in m.PUBLIC_FUNCTIONS,
+                    False,
+                )
+            for table in m.TABLES:
+                row = (
+                    await c.execute(
+                        text(
+                            "SELECT relowner::regrole::text,relrowsecurity,relforcerowsecurity,has_table_privilege('asm_runtime',oid,'SELECT,INSERT,UPDATE,DELETE') FROM pg_class WHERE oid=CAST(:t AS regclass)"
+                        ),
+                        {"t": table},
+                    )
+                ).one()
+                assert row == ("asm_migrator", True, True, False)
+
+    await checks(historical=False)
+    async with historical_schema(h, "0012"):
+        await paired_p_readiness(h)
+        await checks(historical=True)
 
 
 async def test_populated_0011_repeat_upgrade_and_exact_unused_reverse(control):
     h = control
-    try:
-        await _migrate("downgrade", "0011")
+    async with historical_schema(h, "0011"):
         with pytest.raises(RuntimeError, match="schema"):
             await h.runtime.check()
         legacy_projection = projection()
@@ -240,7 +257,7 @@ async def test_populated_0011_repeat_upgrade_and_exact_unused_reverse(control):
         for _ in range(2):
             await _migrate("upgrade", "0012")
             await _migrate("upgrade", "0012")
-            await h.runtime.check()
+            await paired_p_readiness(h)
             async with h.migrator.connect() as c:
                 await assert_schema(c)
                 assert await fingerprints(c, legacy=True) == before
@@ -280,42 +297,68 @@ async def test_populated_0011_repeat_upgrade_and_exact_unused_reverse(control):
             await _migrate("downgrade", "0011")
             async with h.migrator.connect() as c:
                 assert await fingerprints(c, legacy=True) == before and await catalog(c) == ddl
-    finally:
-        await _migrate("upgrade", "head")
-        await h.runtime.engine.dispose()
 
 
 @pytest.mark.parametrize("used", ["codec-off", "target", "effect", "suppression", "enabled-only"])
 async def test_owned_used_refusal_precedes_every_ddl_and_preserves_all42(control, used):
     h = control
-    if used != "codec-off":
-        await query(
-            h,
-            "UPDATE platform.telegram_connection_state SET material_enabled=true RETURNING connection_id",
-        )
-    if used == "codec-off":
-        await TelegramIngress(h.kernel, BOT).ingest_update(raw(), uuid4())
-    elif used == "target":
-        await process(h, raw(100002, kind="DELETE"))
-    elif used == "effect":
-        await process(h, raw())
-        await process(h, raw(100002, kind="DELETE"))
-    elif used == "suppression":
-        await process(h, raw(100002, kind="EDIT", value="B"))
-        await process(h, raw(photo="F"))
-    async with h.migrator.begin() as c:
-        before, ddl = await fingerprints(c), await catalog(c)
-        with pytest.raises(DBAPIError) as caught:
-            async with c.begin_nested():
 
-                def down(sync):
-                    with Operations.context(MigrationContext.configure(sync)):
-                        migration().downgrade()
+    async def refuse(*, current):
+        async with h.migrator.begin() as c:
+            before, ddl = await fingerprints(c), await catalog(c)
+            full = await current_snapshot(c) if current else None
+            module, executed = migration(), []
 
-                await c.run_sync(down)
-        assert caught.value.orig.sqlstate == "55000"
-        await assert_schema(c)
-        assert await fingerprints(c) == before and await catalog(c) == ddl
+            def execute(statement):
+                executed.append(statement)
+                return op.execute(statement)
+
+            module.op = SimpleNamespace(execute=execute)
+            with pytest.raises(DBAPIError) as caught:
+                async with c.begin_nested():
+
+                    def down(sync):
+                        with Operations.context(MigrationContext.configure(sync)):
+                            module.downgrade()
+
+                    await c.run_sync(down)
+            assert caught.value.orig.sqlstate == "55000"
+            assert len(executed) == 2 and executed[0].startswith("LOCK TABLE")
+            assert executed[1].startswith("DO $$ BEGIN")
+            if current:
+                assert await current_snapshot(c) == full
+            else:
+                await assert_schema(c)
+            assert await fingerprints(c) == before and await catalog(c) == ddl
+
+    async with historical_schema(h, "0012"):
+        await paired_p_readiness(h)
+        if used != "codec-off":
+            await query(
+                h,
+                "UPDATE platform.telegram_connection_state SET material_enabled=true RETURNING connection_id",
+            )
+        if used == "codec-off":
+            await TelegramIngress(h.kernel, BOT).ingest_update(raw(), uuid4())
+        elif used == "target":
+            await process(h, raw(100002, kind="DELETE"))
+        elif used == "effect":
+            await process(h, raw())
+            await process(h, raw(100002, kind="DELETE"))
+        elif used == "suppression":
+            await process(h, raw(100002, kind="EDIT", value="B"))
+            await process(h, raw(photo="F"))
+        witness = {
+            "codec-off": "SELECT count(*) AS n FROM platform.telegram_provenance WHERE codec=2 AND NOT material_enabled",
+            "target": "SELECT count(*) AS n FROM platform.message_material_targets",
+            "effect": "SELECT count(*) AS n FROM platform.message_material_effects e JOIN app.audit_events a ON (a.workspace_id,a.audit_event_id)=(e.workspace_id,e.audit_event_id) WHERE a.event_type='MESSAGE_MATERIAL_CHANGED'",
+            "suppression": "SELECT count(*) AS n FROM platform.message_initial_suppressions s JOIN app.conversation_turn_messages m ON (m.workspace_id,m.initial_suppression_id)=(s.workspace_id,s.id) WHERE m.membership_form='INITIAL_FOLD_SUPPRESSED'",
+            "enabled-only": "SELECT count(*) AS n FROM platform.telegram_connection_state WHERE material_enabled",
+        }[used]
+        assert (await query(h, witness))[0]["n"] > 0, used
+        await refuse(current=False)
+    assert (await query(h, witness))[0]["n"] > 0, used
+    await refuse(current=True)
 
 
 async def test_cutover_saved_v1_replay_precedes_new_field_parse_and_fresh_v1_refused(control):

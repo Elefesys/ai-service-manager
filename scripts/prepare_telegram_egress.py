@@ -1944,6 +1944,55 @@ SCHEMA_TABLES["0012"] = SCHEMA_TABLES["0011"] | {
     "platform.message_material_effects",
     "platform.message_initial_suppressions",
 }
+SCHEMA_TABLES["0013"] = SCHEMA_TABLES["0012"] | {
+    "platform.human_context_observations",
+    "platform.human_context_reconciliations",
+    "platform.human_context_policy_receipts",
+}
+
+
+def native_source_profile():
+    """Distinct source-only0013 inventory; never widen the retained0012 reader."""
+    from scripts import native_context_db_catalog as runner
+
+    require(runner.ROOT == ROOT, "NATIVE_PROFILE_SOURCE_MISMATCH")
+    profile = runner.source_catalog(ROOT)
+    schema_inventory("0013", profile["columns"])
+    require(
+        len(profile["functions"]) == 167 and sum(map(len, profile["columns"].values())) == 635,
+        "NATIVE_PROFILE_INVENTORY",
+    )
+    return profile
+
+
+def native_host_profile(accepted_sha, accepted_tree):
+    """Prepare private source proofs for C0 review, not execution permission."""
+    from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
+    from asm.telegram import provisioning
+
+    from scripts import native_context_db_catalog as runner
+
+    require(
+        Path(provisioning.__file__).resolve() == ROOT / "backend/src/asm/telegram/provisioning.py"
+        and runner.ROOT == ROOT
+        and re.fullmatch(r"[0-9a-f]{40}", accepted_tree or "") is not None,
+        "NATIVE_PROFILE_SOURCE_MISMATCH",
+    )
+    tree, manifest = runner.require_source(ROOT, accepted_sha)
+    require(tree == accepted_tree, "NATIVE_PROFILE_TREE_MISMATCH")
+    entries = {entry["path"]: entry for entry in manifest}
+    components = {}
+    for role, paths in provisioning.NATIVE_COMPONENTS.items():
+        require(all(name in entries for name in paths), "NATIVE_PROFILE_CONSOLE_UNPAIRED")
+        material = {
+            "role": role,
+            "source_tree": tree,
+            "schema_revision": "0013",
+            "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
+            "files": {name: entries[name] for name in paths},
+        }
+        components[role] = sha(json.dumps(material, sort_keys=True, separators=(",", ":")).encode())
+    return {"commit": accepted_sha, "tree": tree, "components": components}
 
 
 def schema_inventory(revision, names):
@@ -3417,6 +3466,7 @@ def main():
             "migration-resume",
             "migration-preflight",
             "migration-rollback",
+            "native-policy-profile",
         ),
     )
     parser.add_argument("--state-dir", required=True)
@@ -3424,6 +3474,7 @@ def main():
     parser.add_argument("--telegram-env")
     parser.add_argument("--project", default="asm-telegram-test")
     parser.add_argument("--accepted-sha")
+    parser.add_argument("--accepted-tree")
     parser.add_argument("--from-sha")
     parser.add_argument("--operator-receipt")
     parser.add_argument("--operator-receipt-sha256")
@@ -3434,7 +3485,12 @@ def main():
     try:
         require(os.getuid() != 0, "EGRESS_NONROOT_OPERATOR_REQUIRED")
         require(not compose_args or args.action == "compose", "EGRESS_UNEXPECTED_ARGUMENTS")
-        if args.action == "prepare":
+        if args.action == "native-policy-profile":
+            directory = state_directory(args.state_dir)
+            with operation_lock(directory):
+                profile = native_host_profile(args.accepted_sha, args.accepted_tree)
+                write_private(directory / "native-policy-approval.json", encoded(profile))
+        elif args.action == "prepare":
             require(
                 all((args.profile, args.telegram_env, args.accepted_sha)), "EGRESS_PREPARE_INPUTS"
             )

@@ -1,5 +1,6 @@
 import { MutableRefObject, ReactNode, useEffect, useRef, useState } from 'react';
 import { Session } from './api';
+import type { HumanContextState } from './human-context-api';
 import { ControlBody, ControlContext, ControlError, ControlOperation, ControlReceipt, ControlState, controlApi } from './conversation-control-api';
 
 export type ControlIntent = {
@@ -14,10 +15,11 @@ const failure = (e: unknown) => e instanceof ControlError && e.code === 'BILLING
 // Stays mounted with MessagingPanel during login and selection changes. The
 // render slot places its view next to the selected conversation without losing
 // the memory-only intent. The shared ref also blocks synchronous manual submit.
-export function ConversationControl({session,context,intent,manualPending,refresh,accepted,recover,expired,accessDenied,children}: {
+export function ConversationControl({session,context,intent,manualPending,refresh,accepted,recover,expired,accessDenied,humanState,contextChanged,children}: {
   session: Session | null; context: ControlContext | null; intent: MutableRefObject<ControlIntent | null>;
   manualPending: () => boolean; refresh: number; accepted: () => void;
   recover: () => void; expired: () => void; accessDenied: () => void;
+  humanState?: HumanContextState | null; contextChanged?: () => void;
   children?: (control: ReactNode, pending: boolean) => ReactNode;
 }) {
   const owner = !!session && !!context && session.memberships.some(m=>m.workspace_id===context.workspace&&m.role==='OWNER');
@@ -81,14 +83,16 @@ export function ConversationControl({session,context,intent,manualPending,refres
       if(e instanceof ControlError&&e.code==='IDEMPOTENCY_KEY_CONFLICT'){p.phase='conflict';update({notice:'Конфликт ключа. Повтор операции остановлен.'});return;}
       if(e instanceof ControlError&&[401,403].includes(e.status)){p.ambiguous=true;if(authorization(e))return;}
       const definitive=e instanceof ControlError&&[404,409,413,415,422,429].includes(e.status);
+      if(definitive&&(e.code==='STALE_STATE'||e.code.startsWith('CONTEXT_')||e.code==='HUMAN_REQUIRED'))contextChanged?.();
       if(definitive&&!p.ambiguous){
         intent.current=null;changed();
-        update({notice:e.code==='STALE_STATE'?'Состояние изменилось. Проверьте свежий режим и выберите действие заново.':e.code==='NOT_ALLOWED'?'Сервер не разрешил автоматику. Управление можно забрать независимо от доступности отправки.':e.code==='CONTROL_VERSION_EXHAUSTED'?'Сервер не может изменить режим: счётчик версий исчерпан.':'Операция отклонена. Проверьте состояние перед новым действием.'});
+        update({notice:e.code==='STALE_STATE'?'Состояние изменилось. Проверьте свежий режим и выберите действие заново.':e.code==='NOT_ALLOWED'?'Сервер не разрешил автоматику. Управление можно забрать независимо от доступности отправки.':e.code.startsWith('CONTEXT_')||e.code==='HUMAN_REQUIRED'?'Сверьте доступный контекст владельца. При необходимости сначала заберите управление. Новое разрешение автоматики потребует отдельного действия.':e.code==='CONTROL_VERSION_EXHAUSTED'?'Сервер не может изменить режим: счётчик версий исчерпан.':'Операция отклонена. Проверьте состояние перед новым действием.'});
         void read();
       } else {p.ambiguous=true;update({notice:definitive?'Эта попытка отклонена; результат прежней попытки всё ещё неизвестен.':''});}
     } finally {controllers.current.delete(c);}
   }
   function start(operation:ControlOperation) {
+    if(operation==='RESUME'&&nativeBlocked)return;
     if(!session||!context||!current()||!view.state||reading.current||intent.current||manualPending())return;
     const p:ControlIntent={actor:session.user_account_id,...context,operation,body:Object.freeze({expected_client_id:view.state.client_id,expected_control_generation:view.state.control_generation,expected_context_version:view.state.context_version}),key:crypto.randomUUID(),phase:'uncertain',ambiguous:false,failedSession:session};
     intent.current=p;void send(p);
@@ -97,16 +101,19 @@ export function ConversationControl({session,context,intent,manualPending,refres
     if(intent.current?.phase==='sending'&&matches(intent.current))return;
     intent.current=null;changed();update({notice:'Ожидание завершено без повтора. Это не отменяет возможную серверную операцию.'});void read();
   }
+  const nativeBlocked=humanState!==undefined&&(!humanState||(humanState.policy!=='OFF_UNUSED'&&(humanState.resume_blockers.length>0||humanState.control_generation!==view.state?.control_generation||humanState.context_version!==view.state?.context_version)));
+  const nativeHold=humanState!==undefined&&(!humanState||(humanState.policy!=='OFF_UNUSED'&&humanState.context_blockers.length>0));
   const p=intent.current, matching=!!p&&matches(p)&&owner&&!view.denied;
   const control=owner&&context&&!view.denied?<section className="conversation-control" aria-label="Управление диалогом">
     <div className="billing-heading"><h3>Управление диалогом</h3><button className="secondary" disabled={view.busy||p?.phase==='sending'} onClick={()=>void read()}>Обновить режим</button></div>
     {view.busy&&<p role="status">Проверяем текущий режим…</p>}{view.error&&<p role="alert">{view.error}</p>}
-    {view.state&&<><p role="status" className="control-mode">{view.state.control_mode==='HUMAN'?'Управление у мастера':'Автоматика разрешена'}</p>
+    {view.state&&<><p role="status" className="control-mode">{view.state.control_mode==='HUMAN'?'Управление у мастера':nativeHold?'Сохранён режим AI; новые действия требуют сверки':'Автоматика разрешена'}</p>
       <p className="muted">Автоматика разрешается только для будущих входящих сообщений. Режим AI не означает, что ИИ уже подключён или ответит клиенту.</p>
       {view.state.manual_delivery.has_dispatching&&<p role="status">Отправка уже начата. Смена режима не отзывает внешний запрос.</p>}
       {view.state.manual_delivery.has_unknown&&<p role="status">Есть отправка с неизвестным результатом (UNKNOWN). Она не отменена и не отправляется повторно.</p>}
     </>}
-    <div className="control-actions"><button disabled={!view.state||view.busy||!!p||manualPending()} onClick={()=>start('TAKEOVER')}>Забрать управление</button><button className="secondary" disabled={!view.state||view.busy||!!p||manualPending()} onClick={()=>start('RESUME')}>Разрешить автоматику</button></div>
+    <div className="control-actions"><button disabled={!view.state||view.busy||!!p||manualPending()} onClick={()=>start('TAKEOVER')}>Забрать управление</button><button className="secondary" disabled={!view.state||view.busy||!!p||manualPending()||nativeBlocked} onClick={()=>start('RESUME')}>Разрешить автоматику</button></div>
+    {nativeBlocked&&<p>Перед разрешением автоматики обновите и сверьте контекст владельца.</p>}
     {view.notice&&<p role="status">{view.notice}</p>}
     {matching&&p&&<div className="notice" aria-live="polite">
       {p.phase==='sending'&&<p>Принимаем операцию… Новые действия заблокированы.</p>}
