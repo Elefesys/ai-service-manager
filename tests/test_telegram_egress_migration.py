@@ -2589,8 +2589,15 @@ def schema_coordinator_workspace(ledger):
 
 
 def run_retained_full_negatives(directory, checkout, request, ledger):
-    """Entire immutable T function/finally, charged to the original600 clock."""
-    deadline = ledger["deadline"]
+    """Entire immutable T negatives, after P and within the original S+1200."""
+    deadline = ledger["material_supervisor_deadline"]
+    began = time.monotonic()
+    assert deadline == ledger["started_at"] + 1200, "CONTROL_NEGATIVE_BUDGET_TOTAL"
+    assert (
+        ledger["material_exit"] == 0
+        and ledger["material_cleanup"]["state"] == "PASS"
+        and ledger["started_at"] <= ledger["material_export_completed_at"] <= began < deadline
+    ), "CONTROL_NEGATIVE_ADMISSION"
     positive = json.loads((checkout / "reports/m3-schema-phase.json").read_text())
     historical = request["historical"]
     candidate = request["candidate"]
@@ -2609,9 +2616,10 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
         report = schema_envelope(request, "FULL_RETAINED_T_" + fault.upper())
         report.update(
             evidence="ACTUAL_FULL_T_DOCKER_POSTGRES",
-            whole_prepare_started_at=ledger["started_at"],
+            whole_state_started_at=ledger["started_at"],
             deadline=deadline,
-            budget_seconds=600,
+            budget_seconds=1200,
+            budget_scope="POST_MATERIAL_NEGATIVES",
             executor_source=CONTROL_T,
         )
         path = e.ROOT / "reports" / ("control-full-retained-" + fault + ".json")
@@ -2751,6 +2759,8 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
     assert results == ["timeout", "export"]
     assert not e.command(["docker", "ps", "-aq"]).strip()
     assert not e.command(["docker", "volume", "ls", "-q"]).strip()
+    completed = time.monotonic()
+    assert completed < deadline, "CONTROL_NEGATIVE_BUDGET_EXHAUSTED"
     summary = {
         "candidate": candidate,
         "source": CONTROL_T,
@@ -2759,7 +2769,10 @@ def run_retained_full_negatives(directory, checkout, request, ledger):
         "results": results,
         "deadline": deadline,
         "started_at": ledger["started_at"],
-        "charged_seconds": time.monotonic() - ledger["started_at"],
+        "material_export_completed_at": ledger["material_export_completed_at"],
+        "execution_started_at": began,
+        "completed_at": completed,
+        "charged_seconds": completed - ledger["started_at"],
     }
     (e.ROOT / "reports/control-full-retained-negatives.json").write_text(
         json.dumps(summary, indent=2) + "\n"
@@ -4378,9 +4391,8 @@ def run_control_coordinator(request):
             # Owned cleanup and copied reports precede checkout removal. If any
             # preceding stage failed, retain the checkout instead of hiding it.
             ledger["retained_cleanup"] = ledger["cleanup"]
-            run_retained_full_negatives(directory, checkout, request, ledger)
-            if added:
-                e.command(["git", "worktree", "remove", str(checkout)])
+            # Keep the clean T checkout for the mandatory post-P negatives.
+            # Its positive report has already been copied to retained-turns.
             assert ledger["retained_clean"], "FROZEN_TURNS_SOURCE_CHANGED"
             # C is a frozen executor in its own checkout. It receives the
             # same original deadline, not a nested coordinator/fresh600.
@@ -4616,9 +4628,20 @@ def run_control_coordinator(request):
                 "completed_at": time.monotonic(),
             }
             run_frozen_material(directory, ledger, completion)
+            # Proposed contract revision: full real T negatives follow P. They
+            # share S+1200; no new start, skipped wait or frozen-source change.
+            run_retained_full_negatives(directory, checkout, request, ledger)
+            if added:
+                e.command(
+                    ["git", "worktree", "remove", str(checkout)],
+                    timeout=min(40, ledger["material_supervisor_deadline"] - time.monotonic()),
+                )
             # Original C bytes/assertions and unchanged invocation request.
             # The separate current observer journal labels execution instrumented.
             ledger["stage"] = "retained_control_cleanup_negatives"
+            assert time.monotonic() < ledger["material_supervisor_deadline"], (
+                "CONTROL_STATE_BUDGET_EXHAUSTED"
+            )
             result = supervised_schema_child(
                 [
                     sys.executable,
@@ -4628,7 +4651,7 @@ def run_control_coordinator(request):
                     ),
                 ],
                 cwd=control,
-                timeout=480,
+                timeout=min(480, ledger["material_supervisor_deadline"] - time.monotonic()),
             )
             try:
                 assert result == 0, "CONTROL_CLEANUP_NEGATIVE_EXIT"
@@ -4647,6 +4670,9 @@ def run_control_coordinator(request):
                 ["git", "-C", str(control), "status", "--porcelain", "--untracked-files=all"]
             ).strip(), "FROZEN_CONTROL_SOURCE_CHANGED"
             e.command(["git", "worktree", "remove", str(control)])
+            assert time.monotonic() < ledger["material_supervisor_deadline"], (
+                "CONTROL_STATE_BUDGET_EXHAUSTED"
+            )
             schema_publish(ledger, path)
             print("GUARDS_SCHEMA_COORDINATOR_PASS", flush=True)
             print("MATERIAL_SCHEMA_COORDINATOR_PASS", flush=True)
@@ -9819,7 +9845,10 @@ def test_schema_entrypoint_is_mandatory_only_in_both_state_shards():
         == "deadline - time.monotonic()"
     )
     assert ast.unparse(next(k.value for k in ordered[5].keywords if k.arg == "cwd")) == "control"
-    assert ast.literal_eval(next(k.value for k in ordered[5].keywords if k.arg == "timeout")) == 480
+    assert (
+        ast.unparse(next(k.value for k in ordered[5].keywords if k.arg == "timeout"))
+        == "min(480, ledger['material_supervisor_deadline'] - time.monotonic())"
+    )
     assert "--guards-schema-upgrade" in shell and "--escalation-schema-upgrade" in shell
     assert "retained-guards/guards-schema-phase.json" in coordinator
     assert "reports/retained-escalation/escalation-schema-phase.json" in coordinator
@@ -11979,10 +12008,59 @@ def test_material_entrypoint_accounts_full_preparation_and_refuses_before_runtim
     assert report["cleanup"]["state"] == ("NOT_ADMITTED" if not cleaned else "PASS")
 
 
+@pytest.mark.parametrize("fault", [None, "deadline", "expired", "P_exit", "P_cleanup", "P_late"])
+def test_post_material_negative_admission_keeps_original_S(tmp_path, monkeypatch, fault):
+    ledger = {
+        "started_at": 100.0,
+        "deadline": 700.0,
+        "material_supervisor_deadline": 1300.0,
+        "material_export_completed_at": 800.0,
+        "material_exit": 0,
+        "material_cleanup": {"state": "PASS"},
+    }
+    now = 900.0
+    if fault == "deadline":
+        ledger["material_supervisor_deadline"] += 1
+    elif fault == "expired":
+        now = 1300.0
+    elif fault == "P_exit":
+        ledger["material_exit"] = 1
+    elif fault == "P_cleanup":
+        ledger["material_cleanup"]["state"] = "ADMITTED"
+    elif fault == "P_late":
+        ledger["material_export_completed_at"] = now + 1
+    monkeypatch.setattr(sys.modules[__name__], "time", SimpleNamespace(monotonic=lambda: now))
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "m3-schema-phase.json").write_text(
+        json.dumps({"images": {"historical:runtime": {"id": "positive-image"}}})
+    )
+    calls = []
+    stopped = RuntimeError("stop before first real Docker command")
+
+    def command(args, *, timeout):
+        calls.append((args, timeout))
+        raise stopped
+
+    monkeypatch.setattr(e, "command", command)
+    with pytest.raises(AssertionError if fault else RuntimeError) as caught:
+        run_retained_full_negatives(
+            tmp_path, tmp_path, {"historical": "historical", "candidate": "a" * 40}, ledger
+        )
+    if fault:
+        assert calls == [] and str(caught.value).startswith("CONTROL_NEGATIVE_")
+    else:
+        assert caught.value is stopped
+        assert calls == [
+            (["docker", "tag", "positive-image", "asm-connect5-runtime:historical"], 40)
+        ]
+
+
 @pytest.mark.parametrize(
     "fault",
     [
         "pass",
+        "late_E",
         "E_exit",
         "E_source",
         "E_report_missing",
@@ -11991,6 +12069,11 @@ def test_material_entrypoint_accounts_full_preparation_and_refuses_before_runtim
         "E_primary_and_cleanup",
         "E_cleanup_exhausted",
         "P_admission_exhausted",
+        "P_exit",
+        "negative_failed",
+        "tail_expired",
+        "tail_just_before",
+        "tail_at_deadline",
     ],
 )
 def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
@@ -12084,8 +12167,19 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
     monkeypatch.setattr(SchemaOwnership, "inherited", lambda project, source: owners[-1])
 
     def negatives(directory, checkout, request, ledger):
+        assert sequence == ["T", "C", "G", "E", "P"]
+        assert Path(checkout).is_dir()
+        assert ledger["material_exit"] == 0 and ledger["material_cleanup"]["state"] == "PASS"
+        assert ledger["material_export_completed_at"] == f.clock[0]
+        assert ledger["material_supervisor_deadline"] == ledger["started_at"] + 1200 == 1300
         sequence.extend(["timeout", "export"])
+        if fault == "negative_failed":
+            raise e.EgressError("CONTROL_COMMAND_EXIT")
         f.clock[0] += 192
+        if fault == "tail_expired":
+            f.clock[0] = 1300.0
+        if fault in {"tail_just_before", "tail_at_deadline"}:
+            f.clock[0] = 1299.875
 
     monkeypatch.setattr(sys.modules[__name__], "run_retained_full_negatives", negatives)
 
@@ -12094,7 +12188,15 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
         reports.mkdir(exist_ok=True)
         if args[0] == sys.executable:
             sequence.append("C-cleanup-negatives")
-            assert timeout == 480
+            assert sequence == ["T", "C", "G", "E", "P", "timeout", "export", "C-cleanup-negatives"]
+            assert 0 < timeout == min(480, 1300 - f.clock[0])
+            assert not (f.root / "coordinator/turns").exists()
+            if fault == "tail_just_before":
+                f.clock[0] += 0.0625
+            elif fault == "tail_at_deadline":
+                f.clock[0] += timeout
+            else:
+                f.clock[0] += 25
             (reports / "control-cleanup-negatives.json").write_text(
                 json.dumps(
                     {
@@ -12121,12 +12223,21 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
             snapshots["handoff"] = copy.deepcopy(value)
             assert timeout == 100 + 1200 - f.clock[0]
             consumed = consume_material_budget(path, MATERIAL_E, MATERIAL_P)
-            assert consumed["charged_at_observation"] > 600
+            assert consumed["charged_at_observation"] == f.clock[0] - 100
             assert consumed["started_at"] == 100 and consumed["retained_deadline"] == 700
-            assert consumed["deadline"] == 820 and 0 < consumed["remaining_seconds"] < 50
+            assert consumed["deadline"] == 820
+            if fault == "late_E":
+                assert 600 < consumed["charged_at_observation"] < 720
+                assert 0 < consumed["remaining_seconds"] < 50
+            else:
+                assert consumed["charged_at_observation"] < 600
+                assert 200 < consumed["remaining_seconds"] < 250
             (reports / "material-schema-phase.json").write_text(
                 json.dumps({"coordinator": MATERIAL_P})
             )
+            f.clock[0] += 200 if fault == "late_E" else 430
+            if fault == "P_exit":
+                return 1
             return 0
         assert value["version"] == 1 and value["started_at"] == 100 and value["deadline"] == 700
         path.unlink()
@@ -12136,6 +12247,8 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
             "--escalation-schema-upgrade": ("E", "escalation-schema-phase.json", 135),
         }
         label, name, seconds = names[selector]
+        if label == "E" and fault == "late_E":
+            seconds += 192
         sequence.append(label)
         began = f.clock[0]
         f.clock[0] += seconds
@@ -12179,22 +12292,35 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
         namespace,
     )
     request = {"historical": "754f1c883e5a94a7fc9e729af2605424f949ba33", "candidate": "a" * 40}
-    if fault == "pass":
+    success = fault in {"pass", "late_E", "tail_just_before"}
+    if success:
         namespace["run_control_coordinator"](request)
-        assert sequence == ["T", "timeout", "export", "C", "G", "E", "P", "C-cleanup-negatives"]
+        assert sequence == ["T", "C", "G", "E", "P", "timeout", "export", "C-cleanup-negatives"]
         handoff = snapshots["handoff"]
         assert handoff["escalation_completion"]["completed_at"] <= handoff["issued_at"]
-        assert handoff["charged_seconds"] == handoff["issued_at"] - 100 > 600
+        assert handoff["charged_seconds"] == handoff["issued_at"] - 100
+        assert (handoff["charged_seconds"] > 600) == (fault == "late_E")
     else:
         with pytest.raises((AssertionError, OSError, e.EgressError)) as caught:
             namespace["run_control_coordinator"](request)
-        assert "P" not in sequence and "C-cleanup-negatives" not in sequence
+        if fault not in {"P_exit", "negative_failed", "tail_expired", "tail_at_deadline"}:
+            assert "P" not in sequence
+        if fault != "tail_at_deadline":
+            assert "C-cleanup-negatives" not in sequence
+        if fault in {"negative_failed", "tail_expired", "tail_at_deadline"}:
+            assert sequence[:7] == ["T", "C", "G", "E", "P", "timeout", "export"]
+        else:
+            assert "timeout" not in sequence and "export" not in sequence
     ledger = json.loads((f.root / "reports/control-schema-ledger.json").read_text())
     assert ledger["started_at"] == 100 and ledger["deadline"] == 700
     assert ledger["material_deadline"] == 820 and ledger["material_supervisor_deadline"] == 1300
     assert cleaned == [owner.phase for owner in owners]
-    if fault != "pass":
+    if success:
+        assert ledger["total_schema_seconds"] == f.clock[0] - 100 < 1200
+    else:
         assert ledger["primary_failure"]
+        if fault in {"tail_expired", "tail_at_deadline"}:
+            assert ledger["primary_failure"]["reason"] == "CONTROL_STATE_BUDGET_EXHAUSTED"
         if fault == "E_primary_and_cleanup":
             assert "ESCALATION_SCHEMA_PHASE_FAILED" in str(caught.value)
             # Retain the existing sanitizer's closed prefix set too.
@@ -12230,6 +12356,14 @@ def test_current_coordinator_binds_completed_E_and_full_elapsed_to_terminal720(
         "supervisor_deadline",
         "diagnostic_status",
         "diagnostic_hash",
+        "negative_start",
+        "negative_deadline",
+        "negative_order",
+        "negative_count",
+        "negative_charge",
+        "negative_result",
+        "negative_ledger_mismatch",
+        "state_deadline",
     ],
 )
 def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
@@ -12261,6 +12395,21 @@ def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
         "escalation_completion": copy.deepcopy(f.value["escalation_completion"]),
         "escalation_cleanup": {"token": "e" * 32},
         "material_cleanup": {"token": f.owner.token},
+        "material_export_completed_at": 1400.0,
+        "total_schema_seconds": 1190.0,
+    }
+    full = {
+        "candidate": "a" * 40,
+        "source": CONTROL_T,
+        "result": "PASS",
+        "count": 2,
+        "results": ["timeout", "export"],
+        "deadline": 1500.0,
+        "started_at": 300.0,
+        "material_export_completed_at": 1400.0,
+        "execution_started_at": 1401.0,
+        "completed_at": 1480.0,
+        "charged_seconds": 1180.0,
     }
     budget = {
         **copy.deepcopy(f.value),
@@ -12315,6 +12464,25 @@ def test_material_shell_validates_original_S_completed_E_and_terminal720_report(
         material["migration_diagnostics"]["status"] = "INVALID"
     elif damage == "diagnostic_hash":
         material["migration_diagnostics"]["sha256"] = "0" * 64
+    elif damage == "negative_start":
+        full["started_at"] += 1
+    elif damage == "negative_deadline":
+        full["deadline"] += 1
+    elif damage == "negative_order":
+        full["execution_started_at"] = 1399.0
+    elif damage == "negative_count":
+        full["count"] = 1
+        full["results"] = ["timeout"]
+    elif damage == "negative_charge":
+        full["charged_seconds"] -= 120
+    elif damage == "negative_result":
+        full["result"] = "FAIL"
+    elif damage == "state_deadline":
+        ledger["total_schema_seconds"] = 1200.0
+    ledger["full_retained_negatives"] = copy.deepcopy(full)
+    if damage == "negative_ledger_mismatch":
+        ledger["full_retained_negatives"]["completed_at"] -= 1
+    (f.root / "reports/control-full-retained-negatives.json").write_bytes(e.encoded(full))
     (f.root / "reports/control-schema-ledger.json").write_bytes(e.encoded(ledger))
     (f.root / "reports/material-schema-phase.json").write_bytes(e.encoded(material))
     source = (f.original_root / "scripts/test_telegram_egress_migration.sh").read_text()
