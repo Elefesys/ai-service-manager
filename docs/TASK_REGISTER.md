@@ -2,30 +2,30 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — PR35 merged; native context VERIFIED on main / 2026-10-21
+## CURRENT — C8 acceptance review received; TEST-host preflight next / 2026-10-21
 
-C0 accepts **5c074beb4a47521b8c11a820f580673ec1c2cce2**, tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**, for native-context
-integration in LOCAL/TEST. PR35 merged by the user at 10:03:42 UTC.
-[Post-merge CI39581765849](https://github.com/Elefesys/ai-service-manager/actions/runs/39581765849),
-push/main, attempt1: **11/11 SUCCESS**, completed 10:55:20 UTC.
-The tree equals the RUN8 accepted PR candidate; no runtime delta was introduced by merge.
+C0 accepts [C8-M3-ACCEPTANCE-MAIN-R1](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363):
+all12 M3 acceptance rows reviewed; no new confirmed product defect in the reviewed
+delta. C8 COMPLETE/HOLD. Native context stays INTEGRATED / VERIFIED LOCAL/TEST on
+main **5c074beb4a47521b8c11a820f580673ec1c2cce2**, tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**.
+[Main CI39581765849](https://github.com/Elefesys/ai-service-manager/actions/runs/39581765849)
+attempt1 remains11/11 SUCCESS; prior code/source/cleanup acceptance and CI closures retained.
 
-| Task / finding | Current status |
+| Scope / task | C0 disposition |
 |---|---|
-| Native context DB/API/runtime/Console | INTEGRATED / VERIFIED on accepted main in LOCAL/TEST |
-| C2/C6 repair and C0 repair-validation | COMPLETE; CI-06/07/11/12 CLOSED; prior scoped closures retained |
-| Post-merge evidence | Generic802/2406 phases; ordinary2167+130 subtests; native112/336 phases/105 resets; browser54+398 PASS |
-| Source / cleanup | All10 ordinary clean-source steps and native cleanup/source gate PASS; core/native archive hashes and all296 source leaves/modes independently matched to main |
-| C8-M3-ACCEPTANCE-MAIN-R1 | TODO / ASSIGNED: one bounded review of existing evidence for all M3-A01–A12; exact scope in HANDOFF CURRENT |
-| M3-ACCEPTANCE / whole M3 | IN_PROGRESS; actual-account/A08, deployed TEST and applicable A12 evidence are not established by CI |
-| P-01/P-05/P-A03-09 / renewal / collector | Existing separate open scopes retained; C8 must distinguish implemented LOCAL/TEST evidence from missing account/host evidence and identify the minimal remaining action |
-| M4 / CI optimization / IMPL-05 | Not opened; optimization/fix remain DEFERRED |
+| A01–A07, A09–A11 | Accepted in demonstrated LOCAL/TEST scope; A03 account-specific P-A03-09 remains separate |
+| A08 / P-01 | Reconciliation/barrier implementation verified; actual-account observations still NOT VERIFIED |
+| A12 | Integrated-main CI and typed M4 interface verified; applicable deployed-host/owner receipt and final C0 handoff pending |
+| P-A03-09 / account smoke | OPEN: finite text/photo/native/echo/edit/delete/reconciliation behavior on approved test accounts |
+| TEST windows / source / schema / binding / policy | Actual host UNKNOWN; last documented TEST expiry2026-10-09 does not establish current state |
+| P-05 capture / renewal | No implementation issued. Prefer existing V2/committed provenance where sufficient; missing pre-normalization evidence remains explicit. Renewal need is determined from actual host facts |
+| C6-M3-ACCEPTANCE-HOST-PREFLIGHT-R1 | TODO / ASSIGNED: one bounded read-only host pass and minimal prerequisite plan, exact scope in HANDOFF CURRENT |
+| C8/C1/C2/C3/C5 | HOLD; no new code or repeated CI assigned |
+| Whole M3 / M4 / CI optimization | M3 IN_PROGRESS; M4 unopened; optimization and IMPL-05 fix remain DEFERRED |
 
-This is a two-document coordination record based on accepted main, on a separate
-C0 branch. It does not advance main, create a PR or run CI. The older CURRENT on
-main is the pre-result text embedded in the tested source; current disposition is
-[the C0 receipt](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516)
-and this record. No claim of whole-M3 or production readiness is made.
+External owner notification transport belongs to M9 and is not added to close M3.
+No full CI repeat, deployment, policy activation, renewal or Telegram send is authorized
+by this preflight. Current source tree and declared LOCAL/TEST scope stay accepted.
 
 
 ---

@@ -5,71 +5,94 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — PR35 post-merge accepted; bounded M3 acceptance review / 2026-10-21
+## CURRENT — C8 accepted; read-only TEST-host preflight / 2026-10-21
 
-**C0 accepts native context INTEGRATED / VERIFIED in LOCAL/TEST on main
-5c074beb4a47521b8c11a820f580673ec1c2cce2, tree cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b.**
-PR35 merged by the user at 2026-10-21T10:03:42Z; parents are e205e22051bc06295758b504d84699652b176c15
-and ba1d7088a412cbe715b765290a447be1fb89bcec. Its tree equals accepted RUN8.
-[Post-merge run39581765849](https://github.com/Elefesys/ai-service-manager/actions/runs/39581765849),
-push/main attempt1, completed SUCCESS at10:55:20Z: all11 required jobs present and green.
+C0 accepts [C8 return6314784363](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363).
+All12 M3-A01–A12 were reviewed in one disposition; no new confirmed product defect
+in the reviewed delta. C8 COMPLETE/HOLD. Accepted runtime main is
+**5c074beb4a47521b8c11a820f580673ec1c2cce2**, tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**;
+[push/main CI39581765849](https://github.com/Elefesys/ai-service-manager/actions/runs/39581765849)
+attempt1 is11/11 SUCCESS. [C0 post-merge evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516)
+retains exact core/native archive verification, clean-source/cleanup and prior closures.
 
-C0 inspected the run, all job/clean-source results, core/native archives and browser/state logs.
-Generic802/802 with2406 successful phases, ordinary2167+130 subtests, native112/336
-phases/105 resets and runner516 cases, browser54+398 all PASS. Core primary/cleanup
-exits0; complete=true/evidence_failed=false; failures/issues journals empty.
-Native actual main-push admission, source before/after,167-function/45-table profile
-and owned cleanup PASS. Both state jobs include all3 terminal C cleanup negatives
-and complete success. All10 ordinary source-clean steps and native cleanup/source gate PASS.
+A01–A07/A09–A11 retain demonstrated LOCAL/TEST acceptance; account P-A03-09 is
+not inferred from A03 fixtures. A08 remains partial until applicable real-account
+observations; A12 requires applicable accepted-main deployed-host/owner receipt
+and final C0 disposition. P-01 reconciliation/barrier is already implemented:
+do not reimplement it. Whole M3 remains IN_PROGRESS. External owner notification
+transport is M9; no new notification mechanism is needed for this acceptance.
 
-Downloaded core artifact12340238010 (2999482 bytes,
-SHA256 adc39ce2e23b7892141341ed822e648691bcb8daf81a6c768c1ca97b251373fa)
-and native12338316135 (3492437 bytes,
-SHA256 3bd6da4f5773b79158f8c84bb8b364df281665ce1c58f1c6280e4e0fc61efb12)
-match GitHub digests; each source archive independently matches all296 Git blobs/modes.
-The other8 archive downloads were not repeated: this acceptance uses their successful
-jobs/clean-source gates and the unchanged accepted tree, without claiming a new full
-historical-archive audit. RUN8 detailed evidence remains in
-[receipt6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516).
+### C6-M3-ACCEPTANCE-HOST-PREFLIGHT-R1 — one factual host pass
 
-C2/C6 and C0 repair-validation complete; CI-06/07/11/12 CLOSED, previous closures
-and explicit state-budget decision retained. Main integration does not deploy the VM,
-renew TEST, enable policy or prove external Telegram behavior. Whole M3 remains IN_PROGRESS.
+Purpose: determine the actual prerequisites for one finite owner/Telegram/Console
+smoke on the accepted version. This is deployment/test preparation for the existing
+M3 scope; it creates no product feature. Its output must identify concrete missing
+preparation rather than start another general diagnostic cycle.
 
-### C8-M3-ACCEPTANCE-MAIN-R1 — existing evidence, one complete disposition
+**Binding/scope.** Repository Elefesys/ai-service-manager; source main SHA/tree above.
+Coordination is the exact C0 child of768a320 published with this task. If a local
+checkout is needed, use separate c6/m3-acceptance-host-preflight-r1 from accepted main;
+no repository write-set, branch publication, PR or CI. Read AGENTS, this CURRENT,
+TASK_REGISTER, applicable M3_CONTRACT§15.8/16.7–16.7.1 and current
+docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md. Target only the already approved
+asm-telegram-test-vm / asm-telegram-test deployment through its existing secure
+operator access. Do not infer host source/schema/DB name from the repository.
 
-User benefit: finish the remaining acceptance of conversation control and owner handoff,
-so the next implementation starts from a known working base. This is the existing M3
-acceptance task, not a new product feature or another general diagnostics framework.
+**Allowed execution:** one bounded read-only pass using already installed tools
+and access. Finite per-command timeouts, no retry loop or unbounded log scan.
+DB reads use an explicitly READ ONLY transaction, existing approved authority,
+short statement/lock limits and rollback; no mutating application functions.
+Use schema introspection before version-dependent queries. Missing columns or old
+source are observations requiring a rollout plan, not permission to patch the host.
 
-- Repository Elefesys/ai-service-manager. Review exact accepted main SHA/tree above;
-  use this docs-only C0 record and linked receipt as coordination, not new runtime.
-  Local checkout, if needed, separate branch c8/m3-acceptance-main-r1 from that main.
-- Read AGENTS, this CURRENT, TASK_REGISTER, M3_CONTRACT applicable sections and the
-  existing M3-A01–A12 matrix. Original sources/ADR022–026 and later explicit C0 decisions
-  remain inputs; historical OPEN/HOLD text alone is not the current disposition.
-- Read-only source/evidence review. No tracked write-set, new report file, code,
-  tests, workflow, dependency, migration or budget change. No new full CI/dispatch/
-  rerun, DB/VM/Telegram/provider/paid call, renewal, policy enable or deployment.
-- Return one compact table covering **all12 M3-A01–A12**: supported scope, exact
-  source/run/test or receipt, unresolved requirement and smallest next action.
-  Reuse accepted evidence; inspect changes since prior scoped C8 reviews and any
-  concrete gap. Do not repeat the complete historical audit or infer real-account
-  evidence from fixtures/browser CI. Confirm the OWNER reconciliation/barrier
-  limits; unseen Telegram updates are not guaranteed captured.
-- Separate P-01/A08/P-A03-09 actual-account evidence, P-05 renewal/collector and
-  applicable A12 deployed-host evidence from already verified LOCAL/TEST code.
-  Identify which remaining items are genuine blockers, prerequisites or candidates
-  for an explicit C0 scope decision; no silent waiver and no new mechanism by default.
-- Findings need concrete source/evidence and impact; one complete disposition covers
-  all known groups. Return concise receipt to the existing PR34 coordination thread,
-  then HOLD. No independent closure of whole M3; C0 owns that decision.
-- C1/C2/C3/C5/C6 remain HOLD. After C8, C0 defines only the smallest required
-  TEST/operator step with its result and pilot value before implementation.
-  New product functions, M4 and broad CI optimization remain outside this task.
+| Group | Required sanitized factual output |
+|---|---|
+| Host/source/processes | Observation time, checkout commit/tree/clean status; actual API/worker/scheduler/Console image IDs/source fingerprints and running state; identify mixed versions. Compare with accepted main, do not checkout/fetch/build/pull/start anything on the VM |
+| DB/schema/roles | Actual environment and database identity, migration revision, caller-role attributes, supported policy/provenance objects; match running callers to the same DB. No assumed asm_test/0013 and no fake readiness override |
+| Approved binding | Privately compare existing Workspace/Business/connection/bot/Owner and route against prior approved operator receipts; return match/mismatch/missing predicates, not real account IDs or secrets |
+| Both TEST windows | DB-clock UTC and actual subscription plus current service-mode states/reason/from/until/version; valid/expired/missing for each independently. No fresh initializer, subscription append, mode CAS, entitlement bypass or receipt rewrite |
+| Gates/update prerequisites | Actual MATERIAL/native policy/epoch and applicable control/job state only where schema supports it; existing receipt/intent/source compatibility and plausible guarded update/recovery path. Drain is not performed or presumed; identify the processes a later update would need to drain |
 
-This record changes only HANDOFF/register on a separate C0 branch from accepted main.
-It creates no implementation PR and triggers no CI. Accepted runtime main is unchanged.
+Read and print only selected nonsecret Docker fields; never emit raw inspect/env,
+DSNs, private config/receipts, webhook URLs, payloads/text/photos, tokens, account
+identifiers or whole exception/log dumps. Preserve existing operator state, queues,
+session/UNKNOWN/history, receipts and volumes. No services/containers/files on the
+host may be created/replaced/restarted/deleted for this read-only task.
+
+Do not equate a command named preflight with read-only behavior:
+prepare_telegram_egress.py uses operation locks and may launch probes/containers;
+native-policy-profile writes native-policy-approval.json. Do not run these complete
+wrappers blindly. Use reviewed primitive reads; existing read_native_context_policy
+is only applicable after its actual source/schema/approval prerequisites are proven.
+No getMe/getBusinessConnection/getWebhookInfo, setWebhook/getUpdates, Console
+send/Resume, policy enable/pause, migration, renewal, deployment or provider call.
+
+**P-05 evidence decision input, no collector implementation.** Accepted source already
+retains normalized V2 origin/bot/offline/date/content projection in committed
+platform.telegram_provenance. Compare the finite §15.8 whitelist with the supported
+actual source/schema and existing receipts. Return a short mapping of available
+evidence and genuinely missing observations, including pre-normalization failures.
+Do not export private projection bodies. Missing/rejected events and unavailable
+account cases remain NOT OBSERVED/NOT AVAILABLE, not success. A new general collector
+or renewal capability is not authorized by the old proposed path list.
+
+**Return once:** a compact table for the5 groups above with fact/evidence/status,
+the capture gap mapping, and the smallest ordered preparation for a single smoke.
+If a blocker stops a dependent check, keep it UNKNOWN/NOT_RUN; finish independent
+safe reads. On missing SSH/access, prepare one fully reviewable read-only operator
+block using the established connection; request only its execution and sanitized
+output, never secrets in chat. Do not claim actual host evidence from source review.
+Do not invent approvals/targets or work around denied access.
+
+Post the concise result to the existing PR34 coordination thread, then C6 HOLD.
+No new tracked report file or repeated CI. C0 next decides any required guarded
+update, supported interval preparation and exact evidence capture from those facts;
+only then issue the finite owner/account smoke. C1/C2/C3/C5/C8 remain HOLD.
+M4/LLM, production and broad CI optimization remain outside scope.
+
+OWNER confirms their handoff; unseen Telegram updates/complete external history/
+causal order are not guaranteed. Save does not Resume/send; native media stays
+TEXT_ONLY/UNAVAILABLE and UNKNOWN is not blindly resent. D1/D2/D3 remain explicit.
 
 
 ---
