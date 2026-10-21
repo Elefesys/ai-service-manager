@@ -337,8 +337,9 @@ async def test_all_five_routes_require_current_session_and_live_owner(api, case)
     # image preparation is fast. A global claim is not an image-job selector.
     competitors = await query(
         h,
-        "UPDATE platform.messaging_jobs SET available_at=clock_timestamp()-interval '1 hour' "
-        "WHERE kind='PROCESS_TURN' AND conversation_id=:cid AND status='READY' RETURNING id",
+        "UPDATE platform.messaging_jobs j SET available_at=clock_timestamp()-interval '1 hour' "
+        "FROM app.conversation_turns t WHERE (j.workspace_id,j.turn_id)=(t.workspace_id,t.id) "
+        "AND j.kind='PROCESS_TURN' AND t.conversation_id=:cid AND j.status='READY' RETURNING j.id",
         cid=cid,
     )
     assert competitors
