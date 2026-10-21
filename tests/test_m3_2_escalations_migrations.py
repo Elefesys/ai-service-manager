@@ -6,10 +6,13 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from alembic import op
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from generic_pg_schema import assert_current_schema, current_snapshot, historical_schema
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from test_m2_1_models import event
@@ -111,16 +114,32 @@ async def no_backfill(c):
 
 async def assert_refusal(c):
     before, ddl = await fingerprints(c), await definitions(c)
+    revision = (
+        await c.execute(text("SELECT version_num FROM platform.alembic_version"))
+    ).scalar_one()
+    current = await current_snapshot(c) if revision == "0013" else None
+    module, executed = migration(), []
+
+    def execute(statement):
+        executed.append(statement)
+        return op.execute(statement)
+
+    module.op = SimpleNamespace(execute=execute)
     with pytest.raises(DBAPIError) as caught:
         async with c.begin_nested():
 
             def down(sync):
                 with Operations.context(MigrationContext.configure(sync)):
-                    migration().downgrade()
+                    module.downgrade()
 
             await c.run_sync(down)
     assert caught.value.orig.sqlstate == "55000"
-    await assert_schema(c)
+    assert len(executed) == 2 and executed[0].startswith("LOCK TABLE")
+    assert executed[1].startswith("DO $$ BEGIN")
+    if revision == "0013":
+        assert await current_snapshot(c) == current
+    else:
+        await assert_schema(c)
     assert await fingerprints(c) == before and await definitions(c) == ddl
 
 
@@ -192,103 +211,112 @@ async def test_used_e_refuses_before_ddl_even_after_terminal_decision(control, t
 
 async def test_exact_e_profiles_private_clock_forced_rls_and_no_runtime_raw_access(control):
     h = control
-    module = migration()
-    async with h.migrator.connect() as c:
-        await assert_schema(c)
+
+    async def checks(*, historical):
+        module = migration()
+        async with h.migrator.connect() as c:
+            if historical:
+                await assert_schema(c)
+            else:
+                await assert_current_schema(c)
+            for table in ("app.escalations", "platform.escalation_command_receipts"):
+                row = (
+                    await c.execute(
+                        text(
+                            "SELECT r.rolname,c.relrowsecurity,c.relforcerowsecurity,has_table_privilege('asm_runtime',c.oid,'SELECT'),has_table_privilege('asm_runtime',c.oid,'INSERT'),has_table_privilege('asm_runtime',c.oid,'UPDATE'),has_table_privilege('asm_runtime',c.oid,'DELETE') FROM pg_class c JOIN pg_roles r ON r.oid=c.relowner WHERE c.oid=CAST(:t AS regclass)"
+                        ),
+                        {"t": table},
+                    )
+                ).one()
+                assert row == ("asm_migrator", True, True, False, False, False, False)
+            inventory = (
+                (
+                    await c.execute(
+                        text(
+                            "SELECT p.oid::regprocedure::text FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='platform' AND p.proname LIKE 'escalation_%'"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            # regprocedure spells timestamp with time zone, so compare OID resolution
+            # of the fixed eleven signatures rather than string aliases.
+            expected = {
+                (
+                    await c.execute(text("SELECT CAST(:fn AS regprocedure)::oid"), {"fn": sig})
+                ).scalar_one()
+                for sig in (*module.PUBLIC_FUNCTIONS, *module.PRIVATE_FUNCTIONS)
+            }
+            observed = set(
+                (
+                    await c.execute(
+                        text(
+                            "SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='platform' AND p.proname LIKE 'escalation_%'"
+                        )
+                    )
+                ).scalars()
+            )
+            assert len(inventory) == 11 and observed == expected
+            for sig in (*module.PUBLIC_FUNCTIONS, *module.PRIVATE_FUNCTIONS):
+                row = (
+                    await c.execute(
+                        text(
+                            "SELECT r.rolname,p.prosecdef,p.provolatile,p.proisstrict,p.proconfig,has_function_privilege('asm_runtime',p.oid,'EXECUTE'),EXISTS(SELECT 1 FROM aclexplode(p.proacl) WHERE grantee=0) FROM pg_proc p JOIN pg_roles r ON r.oid=p.proowner WHERE p.oid=CAST(:fn AS regprocedure)"
+                        ),
+                        {"fn": sig},
+                    )
+                ).one()
+                invoker = sig.startswith(
+                    ("platform.escalation_now(", "platform.escalation_command_fingerprint(")
+                )
+                volatility = (
+                    "i"
+                    if "fingerprint(" in sig
+                    else "s"
+                    if "validity(" in sig or "request_replay(" in sig
+                    else "v"
+                )
+                assert row == (
+                    "asm_migrator",
+                    not invoker,
+                    volatility,
+                    False,
+                    ["search_path=pg_catalog, pg_temp"],
+                    sig in module.PUBLIC_FUNCTIONS,
+                    False,
+                )
+            for removed in (
+                "platform.messaging_claim(text)",
+                "platform.messaging_recover_expired(integer)",
+            ):
+                assert (
+                    await c.execute(text("SELECT to_regprocedure(:fn)"), {"fn": removed})
+                ).scalar_one() is None
+            fks = (
+                await c.execute(
+                    text(
+                        "SELECT conrelid::regclass::text,confrelid::regclass::text,condeferrable,confdeltype FROM pg_constraint WHERE contype='f' AND (conrelid IN ('app.escalations'::regclass,'platform.escalation_command_receipts'::regclass) OR conname IN ('messaging_escalation_fkey','audit_events_escalation_fkey'))"
+                    )
+                )
+            ).all()
+            assert len(fks) == 12 and all(not row[2] and row[3] == "r" for row in fks)
         for table in ("app.escalations", "platform.escalation_command_receipts"):
-            row = (
-                await c.execute(
-                    text(
-                        "SELECT r.rolname,c.relrowsecurity,c.relforcerowsecurity,has_table_privilege('asm_runtime',c.oid,'SELECT'),has_table_privilege('asm_runtime',c.oid,'INSERT'),has_table_privilege('asm_runtime',c.oid,'UPDATE'),has_table_privilege('asm_runtime',c.oid,'DELETE') FROM pg_class c JOIN pg_roles r ON r.oid=c.relowner WHERE c.oid=CAST(:t AS regclass)"
-                    ),
-                    {"t": table},
-                )
-            ).one()
-            assert row == ("asm_migrator", True, True, False, False, False, False)
-        inventory = (
-            (
-                await c.execute(
-                    text(
-                        "SELECT p.oid::regprocedure::text FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='platform' AND p.proname LIKE 'escalation_%'"
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-        # regprocedure spells timestamp with time zone, so compare OID resolution
-        # of the fixed eleven signatures rather than string aliases.
-        expected = {
-            (
-                await c.execute(text("SELECT CAST(:fn AS regprocedure)::oid"), {"fn": sig})
-            ).scalar_one()
-            for sig in (*module.PUBLIC_FUNCTIONS, *module.PRIVATE_FUNCTIONS)
-        }
-        observed = set(
-            (
-                await c.execute(
-                    text(
-                        "SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='platform' AND p.proname LIKE 'escalation_%'"
-                    )
-                )
-            ).scalars()
-        )
-        assert len(inventory) == 11 and observed == expected
-        for sig in (*module.PUBLIC_FUNCTIONS, *module.PRIVATE_FUNCTIONS):
-            row = (
-                await c.execute(
-                    text(
-                        "SELECT r.rolname,p.prosecdef,p.provolatile,p.proisstrict,p.proconfig,has_function_privilege('asm_runtime',p.oid,'EXECUTE'),EXISTS(SELECT 1 FROM aclexplode(p.proacl) WHERE grantee=0) FROM pg_proc p JOIN pg_roles r ON r.oid=p.proowner WHERE p.oid=CAST(:fn AS regprocedure)"
-                    ),
-                    {"fn": sig},
-                )
-            ).one()
-            invoker = sig.startswith(
-                ("platform.escalation_now(", "platform.escalation_command_fingerprint(")
-            )
-            volatility = (
-                "i"
-                if "fingerprint(" in sig
-                else "s"
-                if "validity(" in sig or "request_replay(" in sig
-                else "v"
-            )
-            assert row == (
-                "asm_migrator",
-                not invoker,
-                volatility,
-                False,
-                ["search_path=pg_catalog, pg_temp"],
-                sig in module.PUBLIC_FUNCTIONS,
-                False,
-            )
-        for removed in (
-            "platform.messaging_claim(text)",
-            "platform.messaging_recover_expired(integer)",
-        ):
-            assert (
-                await c.execute(text("SELECT to_regprocedure(:fn)"), {"fn": removed})
-            ).scalar_one() is None
-        fks = (
-            await c.execute(
-                text(
-                    "SELECT conrelid::regclass::text,confrelid::regclass::text,condeferrable,confdeltype FROM pg_constraint WHERE contype='f' AND (conrelid IN ('app.escalations'::regclass,'platform.escalation_command_receipts'::regclass) OR conname IN ('messaging_escalation_fkey','audit_events_escalation_fkey'))"
-                )
-            )
-        ).all()
-        assert len(fks) == 12 and all(not row[2] and row[3] == "r" for row in fks)
-    for table in ("app.escalations", "platform.escalation_command_receipts"):
-        for operation in (f"SELECT * FROM {table}", f"DELETE FROM {table}"):
-            async with h.runtime.engine.begin() as c:
-                with pytest.raises(DBAPIError) as caught:
-                    async with c.begin_nested():
-                        await c.execute(text(operation))
-                assert caught.value.orig.sqlstate == "42501"
-    async with h.runtime.engine.begin() as c:
-        with pytest.raises(DBAPIError) as caught:
-            async with c.begin_nested():
-                await c.execute(text("SELECT platform.escalation_now()"))
-        assert caught.value.orig.sqlstate == "42501"
+            for operation in (f"SELECT * FROM {table}", f"DELETE FROM {table}"):
+                async with h.runtime.engine.begin() as c:
+                    with pytest.raises(DBAPIError) as caught:
+                        async with c.begin_nested():
+                            await c.execute(text(operation))
+                    assert caught.value.orig.sqlstate == "42501"
+        async with h.runtime.engine.begin() as c:
+            with pytest.raises(DBAPIError) as caught:
+                async with c.begin_nested():
+                    await c.execute(text("SELECT platform.escalation_now()"))
+            assert caught.value.orig.sqlstate == "42501"
+
+    await checks(historical=False)
+    async with historical_schema(h, "0011"):
+        await checks(historical=True)
 
 
 async def test_terminal_audit_identity_and_receipt_foreign_keys_bind_client_actor_and_exact_audit(
