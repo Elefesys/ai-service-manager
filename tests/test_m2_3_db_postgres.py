@@ -217,7 +217,7 @@ async def valid_ingress_control(h):
                     {"bot": BOT, "p": json.dumps(p), "corr": uuid4()},
                 )
             ).scalar_one()
-            assert result["code"] == "QUEUED"
+            assert result["code"] == "ACCEPTED" and result["result_code"] == "QUEUED"
             for table, key in (
                 ("platform.telegram_update_receipts", "receipt_id"),
                 ("platform.inbox_events", "inbox_id"),

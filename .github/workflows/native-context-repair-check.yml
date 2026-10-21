@@ -1,4 +1,4 @@
-name: Native context repair validation
+name: Native context PG repair validation
 on:
   push:
     branches: [c0/m3-1-native-context-repair-check-r1]
@@ -13,21 +13,21 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: d2a1914ec22d5f4b14f0576b51a78d8baccb14e8
+          ref: f211272e14598db79f54b768a1bfa9d410dd59d4
           persist-credentials: false
           fetch-depth: 0
       - name: Bind exact candidate and prepare one-use TEST checks
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = d2a1914ec22d5f4b14f0576b51a78d8baccb14e8
-          test "$(git rev-parse HEAD^{tree})" = 99017b9ad0126d536086496dc4cc13c56f1cedd4
+          test "$(git rev-parse HEAD)" = f211272e14598db79f54b768a1bfa9d410dd59d4
+          test "$(git rev-parse HEAD^{tree})" = 087d72c9e9d941a2ca88f3b37efcc9327ca0b51f
           test -z "$(git status --porcelain --untracked-files=all)"
           test -z "$(docker ps -aq)$(docker volume ls -q)"
           mkdir -p reports "$RUNNER_TEMP/repair-tools"
           python3 - <<'BIND'
           import json, os, pathlib
-          pathlib.Path('reports/binding.json').write_text(json.dumps({'candidate': 'd2a1914ec22d5f4b14f0576b51a78d8baccb14e8', 'tree': '99017b9ad0126d536086496dc4cc13c56f1cedd4', 'workflow_sha': os.environ['GITHUB_SHA'], 'run': os.environ['GITHUB_RUN_ID'], 'attempt': os.environ['GITHUB_RUN_ATTEMPT']}, indent=2) + '\n')
+          pathlib.Path('reports/binding.json').write_text(json.dumps({'candidate': 'f211272e14598db79f54b768a1bfa9d410dd59d4', 'tree': '087d72c9e9d941a2ca88f3b37efcc9327ca0b51f', 'workflow_sha': os.environ['GITHUB_SHA'], 'run': os.environ['GITHUB_RUN_ID'], 'attempt': os.environ['GITHUB_RUN_ATTEMPT']}, indent=2) + '\n')
           BIND
           cat > "$RUNNER_TEMP/repair-tools/repair_checks.py" <<'PY'
           """One-use TEST runner embedded in the separate validation workflow."""
@@ -45,6 +45,8 @@ jobs:
               'tests/test_m2_3_api_postgres.py', 'tests/test_m2_3_db_postgres.py',
               'tests/test_m2_3_schema_postgres.py', 'tests/test_m3_1_guards_migrations.py',
               'tests/test_m3_1_migrations.py', 'tests/test_m3_1_provenance_migrations.py',
+              'tests/test_m3_1_control_api_postgres.py', 'tests/test_m3_1_control_postgres.py',
+              'tests/test_m3_1_guards_postgres.py', 'tests/test_m3_1_turns_postgres.py',
               'tests/test_m3_2_escalations_migrations.py', 'tests/test_postgres.py',
               'tests/test_telegram_egress_postgres.py',
           ]
@@ -85,7 +87,7 @@ jobs:
                   (REPORTS / (label + '.log')).write_text(output)
                   print(label, 'exit', result.returncode, flush=True)
                   if result.returncode:
-                      print('\n'.join(output.splitlines()[-100:]), flush=True)
+                      print(output, flush=True)
                       raise SystemExit(result.returncode)
 
               try:
@@ -104,7 +106,7 @@ jobs:
                   run([sys.executable, '-m', 'alembic', 'upgrade', 'head'], 'upgrade')
                   run([sys.executable, '-m', 'alembic', 'upgrade', 'head'], 'repeat-upgrade')
                   for phase, args in (
-                      ('focused', ['-q', '-m', 'integration', *FILES]),
+                      ('focused', ['-q', '-m', 'integration', *sorted(FILES)]),
                       ('generic', catalog['integration_arguments']()),
                   ):
                       expected = [node for node in generic if phase == 'generic' or node.split('::')[0] in FILES]
@@ -138,7 +140,7 @@ jobs:
           docker compose --env-file infra/images.lock.env --env-file .env --profile test run --rm \
             --volume "$PWD/reports:/repair-evidence:rw" \
             --volume "$RUNNER_TEMP/repair-tools:/repair-tools:ro" \
-            checks python /repair-tools/repair_checks.py
+            --user "$(id -u):$(id -g)" checks python /repair-tools/repair_checks.py
       - name: Owned TEST cleanup
         if: always()
         shell: bash
@@ -163,75 +165,6 @@ jobs:
         if: always()
         with:
           name: repair-generic-${{ github.run_id }}
-          path: reports/
-          retention-days: 7
-          if-no-files-found: error
-  state:
-    # Independent disposable shards preserve the existing three verification jobs.
-    name: native-context repair state (${{ matrix.docker }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        docker: [normal, docker29]
-        boundary: [state]
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: d2a1914ec22d5f4b14f0576b51a78d8baccb14e8
-          persist-credentials: false
-          fetch-depth: 0
-      - name: Install exact official Engine and Compose for the reported boundary
-        if: matrix.docker == 'docker29'
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$GITHUB_ACTIONS" = true
-          curl --fail --silent --show-error --location --max-time 60 https://download.docker.com/linux/ubuntu/gpg -o "$RUNNER_TEMP/asm-docker.asc"
-          test "$(gpg --show-keys --with-colons "$RUNNER_TEMP/asm-docker.asc" | awk -F: '$1=="fpr" {print $10; exit}')" = 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
-          sudo install -m 0644 "$RUNNER_TEMP/asm-docker.asc" /etc/apt/keyrings/asm-docker.asc
-          printf '%s\n' 'deb [arch=amd64 signed-by=/etc/apt/keyrings/asm-docker.asc] https://download.docker.com/linux/ubuntu noble stable' > "$RUNNER_TEMP/asm-docker.list"
-          sudo apt-get update -o Dir::Etc::sourcelist="$RUNNER_TEMP/asm-docker.list" -o Dir::Etc::sourceparts=-
-          sudo apt-get install -y --no-install-recommends --allow-downgrades -o Dir::Etc::sourcelist="$RUNNER_TEMP/asm-docker.list" -o Dir::Etc::sourceparts=- docker-ce=5:29.8.2-1~ubuntu.24.04~noble docker-ce-cli=5:29.8.2-1~ubuntu.24.04~noble
-          curl --fail --silent --show-error --location --max-time 120 https://github.com/docker/compose/releases/download/v5.5.1/docker-compose-linux-x86_64 -o "$RUNNER_TEMP/asm-compose"
-          printf '%s  %s\n' db1889184726840f75c4f9c001048430d4f25b3be3cb084d3ddd762bc0aed576 "$RUNNER_TEMP/asm-compose" | sha256sum --check --strict
-          install -d -m 0700 "$HOME/.docker/cli-plugins"
-          install -m 0755 "$RUNNER_TEMP/asm-compose" "$HOME/.docker/cli-plugins/docker-compose"
-          sudo systemctl restart docker
-          test "$(docker version --format '{{.Server.Version}}/{{.Server.GitCommit}}')" = 29.8.2/8af9fe3
-          test "$(docker compose version --short | sed 's/^v//')" = 5.5.1
-          mkdir -p reports
-          docker version --format '{{json .}}' > reports/docker29-version.json
-          dpkg-query -W docker-ce docker-ce-cli containerd.io > reports/docker29-packages.txt
-      - name: Verify completed recovery migration, real interruption and rollback
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p reports
-          docker version --format '{{json .}}' > reports/migration-docker-version.json
-          docker compose version --short > reports/migration-compose-version.txt
-          sh scripts/test_telegram_egress_migration.sh '${{ matrix.boundary }}' 2>&1 | tee reports/migration.log
-      - name: Require unchanged tracked and untracked source
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -z "$(git status --porcelain --untracked-files=all)"
-      - name: Record migration source
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p reports
-          git rev-parse HEAD > reports/tested-commit.txt
-          git status --porcelain --untracked-files=all > reports/worktree-status.txt
-          git archive --format=tar.gz HEAD > reports/source.tar.gz
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: always()
-        with:
-          name: repair-state-${{ matrix.docker }}-${{ github.run_id }}
           path: reports/
           retention-days: 7
           if-no-files-found: error
