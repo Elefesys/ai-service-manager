@@ -5,85 +5,99 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — ограниченная активация M3 на новой TEST VM / 2026-10-28
+## CURRENT — C6 R1 принят; одноразовая MATERIAL-операция разрешена / 2026-10-28
 
-Прежний C6 read-only preflight заменён этой выдачей с учётом завершённого
-пользователем восстановления новой VM и принятого маршрута ПК/Happ/SSH.
-C0 принимает user-observed live text/photo/manual Console reply и сохранение HUMAN
-после reload. Это не собственная инспекция VM и не доказательство автономности.
+C0 принимает переданный пользователем результат C6-M3-TEST-POLICY-ENABLE-R1:
+accepted source/images/schema/binding/identity PASS; оба TEST окна были действительны;
+MATERIAL=false, native OFF_UNUSED/P0; БД/приложение/транспорт/старые private files
+не изменены. Единственный выявленный blocker — MATERIAL_OPERATOR_PATH_MISSING.
+PC_SESSION INACTIVE. Native check/commit/current ещё не выполнялись.
 
-Скриншот Console показывает OFF_UNUSED («Сверка ещё не включена оператором»).
-Native observations/reconciliation пока выключены. MATERIAL gate неизвестен:
-отсутствие видимого удаления само по себе не доказывает ни gate OFF, ни потерю update.
-Whole M3 IN_PROGRESS; [C8 acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363)
-и native INTEGRATED / VERIFIED LOCAL/TEST сохраняются.
+### C6-M3-TEST-POLICY-ENABLE-R2
 
-### C6-M3-TEST-POLICY-ENABLE-R1
+**Результат:** включить уже реализованную обработку edit/delete и затем штатный
+native context, чтобы продолжить M3 owner smoke без LLM. C0 разрешает подготовку
+и выполнение описанной операции сейчас; дополнительное согласование того же
+scope после подготовки блока не требуется. При отсутствии доступа C6 предоставляет
+владельцу один проверенный блок для существующего SSH-операторского сеанса.
 
-**Результат для пользователя:** включить уже реализованные наблюдения внешней
-переписки, обработку изменений/удалений и сверку договорённостей, чтобы продолжить
-один короткий M3 smoke без LLM. Новых функций и автономного маршрута сейчас не нужно.
+**Точная область:** новая принятая C6 TEST VM и один ранее утверждённый
+Telegram binding из его приватного activation intent. Repository Elefesys/ai-service-manager;
+accepted main baseline **5c074beb4a47521b8c11a820f580673ec1c2cce2** / tree
+**cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**; PR36 polling candidate
+**5d828a1ece2840b57fb2fd7d890d3e3fd47da388** / tree
+**141d0a6b2b2be0efe1fcb1c3f851796e9f4cb427**, schema0013.
+Фактический source/component profile и images — те же, что приняты в R1 private
+intent; эта операция не переключает runtime между main и PR36.
+Coordination parent этой выдачи **2015950ddb87e134c35dc81230569324b7ed75ff**,
+branch c0/m3-native-context-postmerge. Tracked implementation write-set пуст:
+короткий операторский блок и новые private intent/result находятся вне принятого
+checkout. Старые receipts/inputs не редактируются. PR36 и отдельный PC helper сохраняются.
 
-**Источник и цель.** Repo Elefesys/ai-service-manager. Accepted app main
-5c074beb4a47521b8c11a820f580673ec1c2cce2 / tree
-cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b. PR36 polling candidate
-5d828a1ece2840b57fb2fd7d890d3e3fd47da388; его CI 40305446978 — 11/11 SUCCESS,
-tree 141d0a6b2b2be0efe1fcb1c3f851796e9f4cb427 одинаков у head/tested merge.
-Только новая LOCAL/TEST VM и тот единственный binding, которые C6 уже настроил
-с пользователем. Старое имя VM/старые receipts не подставлять. PC helper остаётся
-отдельно от PR36; текущие source/image/runtime и приватные результаты C6 использовать
-повторно после проверки актуальности. M4/LLM/production/merge не выдаются.
+**Явное решение C0:** запрет прямого UPDATE в R1 п.2 пересмотрен только для
+одной операции ниже. Имеющаяся роль asm_migrator владеет нужной таблицей и имеет
+принятую RLS policy; identity trigger и native guard не запрещают false→true.
+Поэтому новый API, SQL capability, GRANT или миграция ради этой TEST-активации
+не нужны. Это не общее разрешение менять DB state; native policy/Audit/receipt
+по-прежнему изменяет исключительно штатный policy command. Spec5.12/5.12.1,
+ADR026/180 и остальные гарантии не пересматриваются.
 
-**C0 разрешает следующую ограниченную подготовку без дополнительного круга
-разрешений для уже совпадающих prerequisites:**
+1. До записи сохранить отдельный private intent: точные принятые environment/DB,
+   source/schema/binding, ожидаемые MATERIAL=false и native OFF_UNUSED/P0.
+   Переиспользовать доказательства R1, проверив их текущую актуальность; полный
+   аудит/CI не повторять. Проверить source/images и installed0013 существующим
+   механизмом; подключиться реальным LOGIN asm_migrator, session_user=current_user,
+   READ COMMITTED, только TEST / asm_test. Не SET ROLE из admin.
+2. Одна короткая транзакция с существующими bounded statement/lock/connect limits.
+   Порядок: Workspace SHARE → Business SHARE → ChannelConnection UPDATE →
+   TelegramState UPDATE → штатные billing locks через
+   platform.messaging_manual_send_allowed(ws). Повторить binding/route/status,
+   native policy/epoch и все условия после lock waits. Требуются ACTIVE
+   Workspace/Business/connection, точные утверждённые bot/external/Owner,
+   оба прежних TEST окна действительны по свежим часам БД и manual-send gate=true.
+   Cached Telegram state не выдавать за новый live provider probe.
+3. Если MATERIAL уже true — только чтение и ALREADY_ENABLED, без UPDATE и
+   приписывания перехода текущей попытке. Для самой записи обязательны
+   native OFF_UNUSED/P0 и MATERIAL=false. Единственный DML:
+   UPDATE platform.telegram_connection_state SET material_enabled=true
+   с параметризованными exact workspace_id+connection_id и material_enabled=false.
+   RETURNING обязан дать ровно одну строку; сравнить её с заблокированной исходной
+   строкой: единственная семантическая дельта — material_enabled. Native policy/epoch
+   и остальные поля остаются прежними. Любое несовпадение/ошибка/timeout до commit —
+   rollback, без retry loop. Не отключать RLS/constraints/triggers.
+4. Private результат COMMITTED сохранять только после подтверждённого commit.
+   Потеря ACK — UNKNOWN, затем отдельное чтение с проверкой того же intent/target;
+   material=true подтверждает текущее состояние, а не атомарность private файла
+   с БД или авторство перехода. Не повторять UPDATE для восстановления отчёта.
+5. После MATERIAL=true выполнить штатные native check/commit/current с точным
+   approved component profile и фактической проверкой drain старых несовместимых
+   writers. OFF_UNUSED/P0→ON/P1 — существующий replayable policy command.
+   Если уже ON, достаточно current; при потерянном native ACK — exact saved
+   key/body replay и отдельный current. Сохранить стандартные source/schema/
+   authority/product gates и тайм-ауты. Сохранение контекста и Resume остаются
+   отдельными действиями владельца, не частью операторского блока.
+6. Если native шаг не прошёл после MATERIAL commit, вернуть MATERIAL=true /
+   actual native state и конкретную ошибку. Не откатывать MATERIAL автоматически:
+   могли появиться новые receipts/effects. После native ON возможное восстановление
+   использует PAUSED и отдельное решение, не OFF_UNUSED/удаление evidence.
 
-1. Коротко прочитать фактические MATERIAL/native policy/epoch для принятого binding.
-   Переиспользовать прежние проверенные source/image/schema/binding/оба TEST окна;
-   подтвердить только необходимые актуальные prerequisites штатного policy command.
-   Не запускать заново общий аудит VM, прежние transport smokes или полный CI.
-   Source/schema/окно, реально не совпавшие с принятым состоянием, — конкретный
-   blocker; не выполнять initializer, renewal, redeploy или исправление receipts
-   автоматически.
-2. При выключенном MATERIAL подготовить проверенный, строго ограниченный этим
-   binding операторский путь включения существующего gate. Использовать имеющийся
-   путь, если он существует; отсутствие поддержанного пути не обходить произвольным
-   UPDATE/выдачей дополнительных прав. В таком случае вернуть одну конкретную
-   минимальную правку/операцию для C0, без нового общего механизма.
-3. При готовых prerequisites включить native policy штатными
-   read_native_context_policy / commit_native_context_policy либо соответствующим
-   CLI scripts/provision_telegram_test.py --native-policy check|commit|current.
-   Точный source/component profile, реальная роль asm_migrator, installed0013,
-   PRIVATE accepted binding, MATERIAL ON и существующие действующие product окна
-   обязательны. drain_confirmed — только фактически проверенное отсутствие старых
-   несовместимых writers, не подстановка true ради PASS.
-4. Новый intent/key/CAS и результат сохранить приватно. OFF_UNUSED/P0→ON/P1 —
-   через штатный policy command; не прямой DML policy/Audit/receipt. Если уже ON,
-   достаточно current/read, без лишнего ENABLE. Если ACK потерян — exact replay
-   исходного intent, затем отдельный current. После ON возврата в OFF_UNUSED нет;
-   предусмотренный путь при необходимости — PAUSED с сохранением evidence.
-5. Подтвердить фактический current MATERIAL/native state и готовность Console
-   к «Сохранить сверенный контекст». Само включение не делает owner reconciliation,
-   Resume, отправку Telegram и не подтверждает отсутствие пропущенной истории.
+Рабочий transport, webhook/getUpdates mode, Happ/SSH/PC helper, история/очереди,
+контроль разговоров и UNKNOWN не изменяются этой операцией. Нет новых прав,
+schema/DDL, billing renewal/initializer, replay старых IGNORED, provider calls,
+отправок, merge или общего framework. Если фактические условия требуют выхода
+за эту область, остановиться с одним точным blocker; не расширять задачу.
 
-Не менять рабочий транспорт, webhook/getUpdates mode, настройки Happ/SSH/PC helper,
-приватные исходные receipts, историю, очереди, UNKNOWN или данные ради проверки.
-Не создавать новую VM/схему/миграцию, не перепроигрывать terminal IGNORED и не снимать
-guards. Если существующему operator path нужна небольшая адаптация новой площадки,
-сначала вернуть конкретный минимальный diff и причину; не создавать generic collector
-или новую серию диагностики. Это не разрешение незаметно расширять продукт.
+**Возврат C6:** MATERIAL before→after и COMMITTED/ALREADY_ENABLED/UNKNOWN;
+native before→after/current и receipt outcome; schema/binding/source match;
+актуальность обоих окон; сохранность приложения/транспорта/старых private files.
+Наружу только sanitized статусы, не credentials/IDs/private bodies/хэши.
+C6 HOLD после результата; whole M3 не закрывать.
 
-**Возврат:** коротко source/schema/binding match, MATERIAL before→after,
-native policy/epoch before→after, оба окна VALID либо точный blocker, подтверждение
-сохранённого рабочего маршрута. Только sanitized статусы; никаких credentials,
-IDs, private hashes/requests/receipts или сырых payloads. C6 выполняет подготовку,
-не объявляет весь M3 принятым. После возврата C6 HOLD.
-
-**Следующий owner smoke C0:** свежие тестовые native text / client edit/delete →
-обновить observations и сообщения → полный owner context → save сохраняет HUMAN →
-отдельный Resume. Native NEW виден в observations, не создаёт canonical Message.
-Canonical deletion даёт пометку «Сообщение удалено.», не физическое удаление истории.
-При отсутствии наблюдения фиксировать NOT_OBSERVED, а не completeness/PASS.
-Старые terminal IGNORED после включения автоматически не оживают.
+PC_SESSION INACTIVE не мешает этой локальной DB-настройке и не означает поломку
+маршрута. Перед последующим owner smoke пользователь запускает уже проверенную
+PC-сессию прежним способом. Затем свежие native text/edit/delete → обновление Console →
+owner context save сохраняет HUMAN → отдельный Resume. События, ранее принятые
+как terminal IGNORED, не восстанавливаются этой активацией.
 
 ---
 

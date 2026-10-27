@@ -2,27 +2,26 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — новая TEST VM; HUMAN сохраняется, native policy выключена / 2026-10-28
+## CURRENT — C6 R1 принят; разрешена одноразовая TEST-активация MATERIAL / 2026-10-28
 
-Accepted runtime main: **5c074beb4a47521b8c11a820f580673ec1c2cce2**, tree
-**cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**. [C0/C8 acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363)
-и INTEGRATED / VERIFIED LOCAL/TEST native context сохраняются. Whole M3 IN_PROGRESS.
+Accepted runtime main **5c074beb4a47521b8c11a820f580673ec1c2cce2**,
+tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**. Прежние [C0/C8 acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363)
+и native INTEGRATED / VERIFIED LOCAL/TEST сохраняются. Whole M3 IN_PROGRESS.
 
-| Scope / task | Текущее доказательство и остаток |
+| Scope / task | Текущий результат |
 |---|---|
-| Новая VM / транспорт | Пользователь подтвердил живые Client text, photo и manual Console reply. Рабочий маршрут зависит от ПК, Happ и SSH; принят для разработки, автономность отложена к пилоту. C0 не выдаёт это за собственную инспекцию VM. |
-| PR36 | Draft/open, head 5d828a1ece2840b57fb2fd7d890d3e3fd47da388. [CI 40305446978](https://github.com/Elefesys/ai-service-manager/actions/runs/40305446978) 11/11 SUCCESS; tested 5a37e9e6ee5be8c6877eda971880797bedceb870 и head имеют tree 141d0a6b2b2be0efe1fcb1c3f851796e9f4cb427.804 PG,54 browser; PC helper вне PR, merge не выполнен. |
-| Owner smoke / HUMAN | PASS USER-OBSERVED: после «Забрать управление» и перезагрузки страницы остаётся «Управление у мастера». Это не доказывает подавление настоящего LLM. |
-| Native context на новой VM | Screenshot: «Сверка ещё не включена оператором», подтверждения нет. Policy OFF_UNUSED; save/reconciliation/Resume с включённой policy ещё не проверены. |
-| Native messages / delete | Пользователь не видит сообщения мастера из Telegram и изменения после удаления для обоих. Native OFF объясняет отсутствие observations; MATERIAL gate и фактическое получение событий пока UNKNOWN. Product defect/потеря Telegram updates не установлены. |
-| C6-M3-TEST-POLICY-ENABLE-R1 | ASSIGNED: ограниченная подготовка существующих MATERIAL/native возможностей на уже принятой новой TEST VM; [точная выдача](tasks/M3_HANDOFF.md#c6-m3-test-policy-enable-r1). Не новая функция/новый общий preflight. |
-| A08 / P-A03-09 / A12 | Остаются OPEN в части живых событий, сверки, отдельного Resume и применимого deployed-host receipt. Старые CI closures сохраняются. |
-| M4 / CI optimization / остальные чаты | M4 не открыт; оптимизация после всего M3; C1/C2/C3/C5/C8 HOLD. |
+| Новая TEST VM / источник | C6 R1, переданный пользователем: accepted source/images, schema/binding/identity PASS; оба принятых TEST окна действовали на момент проверки. C0 не выполнял независимую VM-инспекцию. |
+| Живой транспорт / HUMAN | User-observed text/photo/manual Console reply и сохранение HUMAN после reload приняты. Маршрут ПК/Happ/SSH принят для разработки; автономность к пилоту. PC_SESSION сейчас INACTIVE. |
+| MATERIAL / native | Фактически MATERIAL=false; native OFF_UNUSED/P0. Изменений БД/приложения/транспорта/исходных приватных файлов нет. Native check/commit/current ещё NOT_RUN. |
+| C6-M3-TEST-POLICY-ENABLE-R1 | Возврат принят. Единственный выявленный blocker MATERIAL_OPERATOR_PATH_MISSING подтверждён source review; остановка без произвольного SQL корректна. |
+| C6-M3-TEST-POLICY-ENABLE-R2 | AUTHORIZED / NOT_EXECUTED: [точная одноразовая операция и последующий штатный native ENABLE](tasks/M3_HANDOFF.md#c6-m3-test-policy-enable-r2). Явное исключение к R1 п.2 только для material_enabled false→true у одного принятого TEST-binding через существующий asm_migrator. |
+| PR36 | Последняя проверка: Draft/open, head 5d828a1ece2840b57fb2fd7d890d3e3fd47da388, CI 40305446978 — 11/11 SUCCESS; 804 PG, 54 browser. PC helper отдельно, merge этой выдачей не выполняется. |
+| A08 / P-A03-09 / A12 | Живые observations/edit/delete, save/отдельный Resume и итоговый deployed-host receipt остаются OPEN. Старые terminal IGNORED не переигрываются. |
+| M4 / CI optimization / другие чаты | M4 не открыт; оптимизация после всего M3; C1/C2/C3/C5/C8 HOLD. |
 
-Обычная история и native observations различаются: native сообщение не создаёт второй
-canonical Message; обработанное удаление показывает «Сообщение удалено.» без физического
-удаления истории. После активации проверять свежие события: старые terminal IGNORED
-не переигрываются. Отсутствие ИИ не препятствует этим детерминированным проверкам.
+Разрешение не является результатом выполнения. Если MATERIAL принят, а native шаг
+не прошёл, сохраняется честный partial state; автоматический сброс gate не назначен.
+Новых прав/DDL/runtime API или общего operator framework не добавляется.
 
 ---
 
