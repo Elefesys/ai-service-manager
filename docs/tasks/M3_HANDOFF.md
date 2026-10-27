@@ -5,95 +5,85 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — C8 accepted; read-only TEST-host preflight / 2026-10-21
+## CURRENT — ограниченная активация M3 на новой TEST VM / 2026-10-28
 
-C0 accepts [C8 return6314784363](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363).
-All12 M3-A01–A12 were reviewed in one disposition; no new confirmed product defect
-in the reviewed delta. C8 COMPLETE/HOLD. Accepted runtime main is
-**5c074beb4a47521b8c11a820f580673ec1c2cce2**, tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**;
-[push/main CI39581765849](https://github.com/Elefesys/ai-service-manager/actions/runs/39581765849)
-attempt1 is11/11 SUCCESS. [C0 post-merge evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516)
-retains exact core/native archive verification, clean-source/cleanup and prior closures.
+Прежний C6 read-only preflight заменён этой выдачей с учётом завершённого
+пользователем восстановления новой VM и принятого маршрута ПК/Happ/SSH.
+C0 принимает user-observed live text/photo/manual Console reply и сохранение HUMAN
+после reload. Это не собственная инспекция VM и не доказательство автономности.
 
-A01–A07/A09–A11 retain demonstrated LOCAL/TEST acceptance; account P-A03-09 is
-not inferred from A03 fixtures. A08 remains partial until applicable real-account
-observations; A12 requires applicable accepted-main deployed-host/owner receipt
-and final C0 disposition. P-01 reconciliation/barrier is already implemented:
-do not reimplement it. Whole M3 remains IN_PROGRESS. External owner notification
-transport is M9; no new notification mechanism is needed for this acceptance.
+Скриншот Console показывает OFF_UNUSED («Сверка ещё не включена оператором»).
+Native observations/reconciliation пока выключены. MATERIAL gate неизвестен:
+отсутствие видимого удаления само по себе не доказывает ни gate OFF, ни потерю update.
+Whole M3 IN_PROGRESS; [C8 acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363)
+и native INTEGRATED / VERIFIED LOCAL/TEST сохраняются.
 
-### C6-M3-ACCEPTANCE-HOST-PREFLIGHT-R1 — one factual host pass
+### C6-M3-TEST-POLICY-ENABLE-R1
 
-Purpose: determine the actual prerequisites for one finite owner/Telegram/Console
-smoke on the accepted version. This is deployment/test preparation for the existing
-M3 scope; it creates no product feature. Its output must identify concrete missing
-preparation rather than start another general diagnostic cycle.
+**Результат для пользователя:** включить уже реализованные наблюдения внешней
+переписки, обработку изменений/удалений и сверку договорённостей, чтобы продолжить
+один короткий M3 smoke без LLM. Новых функций и автономного маршрута сейчас не нужно.
 
-**Binding/scope.** Repository Elefesys/ai-service-manager; source main SHA/tree above.
-Coordination is the exact C0 child of768a320 published with this task. If a local
-checkout is needed, use separate c6/m3-acceptance-host-preflight-r1 from accepted main;
-no repository write-set, branch publication, PR or CI. Read AGENTS, this CURRENT,
-TASK_REGISTER, applicable M3_CONTRACT§15.8/16.7–16.7.1 and current
-docs/runbooks/M2_TELEGRAM_LOCAL_TEST.md. Target only the already approved
-asm-telegram-test-vm / asm-telegram-test deployment through its existing secure
-operator access. Do not infer host source/schema/DB name from the repository.
+**Источник и цель.** Repo Elefesys/ai-service-manager. Accepted app main
+5c074beb4a47521b8c11a820f580673ec1c2cce2 / tree
+cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b. PR36 polling candidate
+5d828a1ece2840b57fb2fd7d890d3e3fd47da388; его CI 40305446978 — 11/11 SUCCESS,
+tree 141d0a6b2b2be0efe1fcb1c3f851796e9f4cb427 одинаков у head/tested merge.
+Только новая LOCAL/TEST VM и тот единственный binding, которые C6 уже настроил
+с пользователем. Старое имя VM/старые receipts не подставлять. PC helper остаётся
+отдельно от PR36; текущие source/image/runtime и приватные результаты C6 использовать
+повторно после проверки актуальности. M4/LLM/production/merge не выдаются.
 
-**Allowed execution:** one bounded read-only pass using already installed tools
-and access. Finite per-command timeouts, no retry loop or unbounded log scan.
-DB reads use an explicitly READ ONLY transaction, existing approved authority,
-short statement/lock limits and rollback; no mutating application functions.
-Use schema introspection before version-dependent queries. Missing columns or old
-source are observations requiring a rollout plan, not permission to patch the host.
+**C0 разрешает следующую ограниченную подготовку без дополнительного круга
+разрешений для уже совпадающих prerequisites:**
 
-| Group | Required sanitized factual output |
-|---|---|
-| Host/source/processes | Observation time, checkout commit/tree/clean status; actual API/worker/scheduler/Console image IDs/source fingerprints and running state; identify mixed versions. Compare with accepted main, do not checkout/fetch/build/pull/start anything on the VM |
-| DB/schema/roles | Actual environment and database identity, migration revision, caller-role attributes, supported policy/provenance objects; match running callers to the same DB. No assumed asm_test/0013 and no fake readiness override |
-| Approved binding | Privately compare existing Workspace/Business/connection/bot/Owner and route against prior approved operator receipts; return match/mismatch/missing predicates, not real account IDs or secrets |
-| Both TEST windows | DB-clock UTC and actual subscription plus current service-mode states/reason/from/until/version; valid/expired/missing for each independently. No fresh initializer, subscription append, mode CAS, entitlement bypass or receipt rewrite |
-| Gates/update prerequisites | Actual MATERIAL/native policy/epoch and applicable control/job state only where schema supports it; existing receipt/intent/source compatibility and plausible guarded update/recovery path. Drain is not performed or presumed; identify the processes a later update would need to drain |
+1. Коротко прочитать фактические MATERIAL/native policy/epoch для принятого binding.
+   Переиспользовать прежние проверенные source/image/schema/binding/оба TEST окна;
+   подтвердить только необходимые актуальные prerequisites штатного policy command.
+   Не запускать заново общий аудит VM, прежние transport smokes или полный CI.
+   Source/schema/окно, реально не совпавшие с принятым состоянием, — конкретный
+   blocker; не выполнять initializer, renewal, redeploy или исправление receipts
+   автоматически.
+2. При выключенном MATERIAL подготовить проверенный, строго ограниченный этим
+   binding операторский путь включения существующего gate. Использовать имеющийся
+   путь, если он существует; отсутствие поддержанного пути не обходить произвольным
+   UPDATE/выдачей дополнительных прав. В таком случае вернуть одну конкретную
+   минимальную правку/операцию для C0, без нового общего механизма.
+3. При готовых prerequisites включить native policy штатными
+   read_native_context_policy / commit_native_context_policy либо соответствующим
+   CLI scripts/provision_telegram_test.py --native-policy check|commit|current.
+   Точный source/component profile, реальная роль asm_migrator, installed0013,
+   PRIVATE accepted binding, MATERIAL ON и существующие действующие product окна
+   обязательны. drain_confirmed — только фактически проверенное отсутствие старых
+   несовместимых writers, не подстановка true ради PASS.
+4. Новый intent/key/CAS и результат сохранить приватно. OFF_UNUSED/P0→ON/P1 —
+   через штатный policy command; не прямой DML policy/Audit/receipt. Если уже ON,
+   достаточно current/read, без лишнего ENABLE. Если ACK потерян — exact replay
+   исходного intent, затем отдельный current. После ON возврата в OFF_UNUSED нет;
+   предусмотренный путь при необходимости — PAUSED с сохранением evidence.
+5. Подтвердить фактический current MATERIAL/native state и готовность Console
+   к «Сохранить сверенный контекст». Само включение не делает owner reconciliation,
+   Resume, отправку Telegram и не подтверждает отсутствие пропущенной истории.
 
-Read and print only selected nonsecret Docker fields; never emit raw inspect/env,
-DSNs, private config/receipts, webhook URLs, payloads/text/photos, tokens, account
-identifiers or whole exception/log dumps. Preserve existing operator state, queues,
-session/UNKNOWN/history, receipts and volumes. No services/containers/files on the
-host may be created/replaced/restarted/deleted for this read-only task.
+Не менять рабочий транспорт, webhook/getUpdates mode, настройки Happ/SSH/PC helper,
+приватные исходные receipts, историю, очереди, UNKNOWN или данные ради проверки.
+Не создавать новую VM/схему/миграцию, не перепроигрывать terminal IGNORED и не снимать
+guards. Если существующему operator path нужна небольшая адаптация новой площадки,
+сначала вернуть конкретный минимальный diff и причину; не создавать generic collector
+или новую серию диагностики. Это не разрешение незаметно расширять продукт.
 
-Do not equate a command named preflight with read-only behavior:
-prepare_telegram_egress.py uses operation locks and may launch probes/containers;
-native-policy-profile writes native-policy-approval.json. Do not run these complete
-wrappers blindly. Use reviewed primitive reads; existing read_native_context_policy
-is only applicable after its actual source/schema/approval prerequisites are proven.
-No getMe/getBusinessConnection/getWebhookInfo, setWebhook/getUpdates, Console
-send/Resume, policy enable/pause, migration, renewal, deployment or provider call.
+**Возврат:** коротко source/schema/binding match, MATERIAL before→after,
+native policy/epoch before→after, оба окна VALID либо точный blocker, подтверждение
+сохранённого рабочего маршрута. Только sanitized статусы; никаких credentials,
+IDs, private hashes/requests/receipts или сырых payloads. C6 выполняет подготовку,
+не объявляет весь M3 принятым. После возврата C6 HOLD.
 
-**P-05 evidence decision input, no collector implementation.** Accepted source already
-retains normalized V2 origin/bot/offline/date/content projection in committed
-platform.telegram_provenance. Compare the finite §15.8 whitelist with the supported
-actual source/schema and existing receipts. Return a short mapping of available
-evidence and genuinely missing observations, including pre-normalization failures.
-Do not export private projection bodies. Missing/rejected events and unavailable
-account cases remain NOT OBSERVED/NOT AVAILABLE, not success. A new general collector
-or renewal capability is not authorized by the old proposed path list.
-
-**Return once:** a compact table for the5 groups above with fact/evidence/status,
-the capture gap mapping, and the smallest ordered preparation for a single smoke.
-If a blocker stops a dependent check, keep it UNKNOWN/NOT_RUN; finish independent
-safe reads. On missing SSH/access, prepare one fully reviewable read-only operator
-block using the established connection; request only its execution and sanitized
-output, never secrets in chat. Do not claim actual host evidence from source review.
-Do not invent approvals/targets or work around denied access.
-
-Post the concise result to the existing PR34 coordination thread, then C6 HOLD.
-No new tracked report file or repeated CI. C0 next decides any required guarded
-update, supported interval preparation and exact evidence capture from those facts;
-only then issue the finite owner/account smoke. C1/C2/C3/C5/C8 remain HOLD.
-M4/LLM, production and broad CI optimization remain outside scope.
-
-OWNER confirms their handoff; unseen Telegram updates/complete external history/
-causal order are not guaranteed. Save does not Resume/send; native media stays
-TEXT_ONLY/UNAVAILABLE and UNKNOWN is not blindly resent. D1/D2/D3 remain explicit.
-
+**Следующий owner smoke C0:** свежие тестовые native text / client edit/delete →
+обновить observations и сообщения → полный owner context → save сохраняет HUMAN →
+отдельный Resume. Native NEW виден в observations, не создаёт canonical Message.
+Canonical deletion даёт пометку «Сообщение удалено.», не физическое удаление истории.
+При отсутствии наблюдения фиксировать NOT_OBSERVED, а не completeness/PASS.
+Старые terminal IGNORED после включения автоматически не оживают.
 
 ---
 

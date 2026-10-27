@@ -2,31 +2,27 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C8 acceptance review received; TEST-host preflight next / 2026-10-21
+## CURRENT — новая TEST VM; HUMAN сохраняется, native policy выключена / 2026-10-28
 
-C0 accepts [C8-M3-ACCEPTANCE-MAIN-R1](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363):
-all12 M3 acceptance rows reviewed; no new confirmed product defect in the reviewed
-delta. C8 COMPLETE/HOLD. Native context stays INTEGRATED / VERIFIED LOCAL/TEST on
-main **5c074beb4a47521b8c11a820f580673ec1c2cce2**, tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**.
-[Main CI39581765849](https://github.com/Elefesys/ai-service-manager/actions/runs/39581765849)
-attempt1 remains11/11 SUCCESS; prior code/source/cleanup acceptance and CI closures retained.
+Accepted runtime main: **5c074beb4a47521b8c11a820f580673ec1c2cce2**, tree
+**cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**. [C0/C8 acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363)
+и INTEGRATED / VERIFIED LOCAL/TEST native context сохраняются. Whole M3 IN_PROGRESS.
 
-| Scope / task | C0 disposition |
+| Scope / task | Текущее доказательство и остаток |
 |---|---|
-| A01–A07, A09–A11 | Accepted in demonstrated LOCAL/TEST scope; A03 account-specific P-A03-09 remains separate |
-| A08 / P-01 | Reconciliation/barrier implementation verified; actual-account observations still NOT VERIFIED |
-| A12 | Integrated-main CI and typed M4 interface verified; applicable deployed-host/owner receipt and final C0 handoff pending |
-| P-A03-09 / account smoke | OPEN: finite text/photo/native/echo/edit/delete/reconciliation behavior on approved test accounts |
-| TEST windows / source / schema / binding / policy | Actual host UNKNOWN; last documented TEST expiry2026-10-09 does not establish current state |
-| P-05 capture / renewal | No implementation issued. Prefer existing V2/committed provenance where sufficient; missing pre-normalization evidence remains explicit. Renewal need is determined from actual host facts |
-| C6-M3-ACCEPTANCE-HOST-PREFLIGHT-R1 | TODO / ASSIGNED: one bounded read-only host pass and minimal prerequisite plan, exact scope in HANDOFF CURRENT |
-| C8/C1/C2/C3/C5 | HOLD; no new code or repeated CI assigned |
-| Whole M3 / M4 / CI optimization | M3 IN_PROGRESS; M4 unopened; optimization and IMPL-05 fix remain DEFERRED |
+| Новая VM / транспорт | Пользователь подтвердил живые Client text, photo и manual Console reply. Рабочий маршрут зависит от ПК, Happ и SSH; принят для разработки, автономность отложена к пилоту. C0 не выдаёт это за собственную инспекцию VM. |
+| PR36 | Draft/open, head 5d828a1ece2840b57fb2fd7d890d3e3fd47da388. [CI 40305446978](https://github.com/Elefesys/ai-service-manager/actions/runs/40305446978) 11/11 SUCCESS; tested 5a37e9e6ee5be8c6877eda971880797bedceb870 и head имеют tree 141d0a6b2b2be0efe1fcb1c3f851796e9f4cb427.804 PG,54 browser; PC helper вне PR, merge не выполнен. |
+| Owner smoke / HUMAN | PASS USER-OBSERVED: после «Забрать управление» и перезагрузки страницы остаётся «Управление у мастера». Это не доказывает подавление настоящего LLM. |
+| Native context на новой VM | Screenshot: «Сверка ещё не включена оператором», подтверждения нет. Policy OFF_UNUSED; save/reconciliation/Resume с включённой policy ещё не проверены. |
+| Native messages / delete | Пользователь не видит сообщения мастера из Telegram и изменения после удаления для обоих. Native OFF объясняет отсутствие observations; MATERIAL gate и фактическое получение событий пока UNKNOWN. Product defect/потеря Telegram updates не установлены. |
+| C6-M3-TEST-POLICY-ENABLE-R1 | ASSIGNED: ограниченная подготовка существующих MATERIAL/native возможностей на уже принятой новой TEST VM; [точная выдача](tasks/M3_HANDOFF.md#c6-m3-test-policy-enable-r1). Не новая функция/новый общий preflight. |
+| A08 / P-A03-09 / A12 | Остаются OPEN в части живых событий, сверки, отдельного Resume и применимого deployed-host receipt. Старые CI closures сохраняются. |
+| M4 / CI optimization / остальные чаты | M4 не открыт; оптимизация после всего M3; C1/C2/C3/C5/C8 HOLD. |
 
-External owner notification transport belongs to M9 and is not added to close M3.
-No full CI repeat, deployment, policy activation, renewal or Telegram send is authorized
-by this preflight. Current source tree and declared LOCAL/TEST scope stay accepted.
-
+Обычная история и native observations различаются: native сообщение не создаёт второй
+canonical Message; обработанное удаление показывает «Сообщение удалено.» без физического
+удаления истории. После активации проверять свежие события: старые terminal IGNORED
+не переигрываются. Отсутствие ИИ не препятствует этим детерминированным проверкам.
 
 ---
 
