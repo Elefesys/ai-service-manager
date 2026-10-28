@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6 R2 LIVE PASS принят; M3 owner smoke продолжается / 2026-10-28
+## CURRENT — основной M3 owner smoke LIVE PASS; фото-пункт и интеграция остаются / 2026-10-28
 
 Accepted runtime main **5c074beb4a47521b8c11a820f580673ec1c2cce2**,
 tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**. Прежние [C0/C8 acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363)
@@ -10,18 +10,19 @@ tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**. Прежние [C0/C8 accepta
 
 | Scope / task | Текущий результат |
 |---|---|
-| Принятая VM / источник | LOCAL / asm_local, тот же binding из private activation intent. По переданному пользователем live-отчёту C6 R2 revision 4: source/images, schema/binding/identity и оба TEST окна PASS на момент проверки. C0 не выполнял независимую VM-инспекцию. |
-| Живой транспорт / HUMAN | User-observed text/photo/manual Console reply и сохранение HUMAN после reload приняты. Маршрут ПК/Happ/SSH принят для разработки; автономность к пилоту. PC_SESSION_INACTIVE; перед owner smoke пользователь запускает прежнюю сессию. |
+| Принятая VM / источник | LOCAL / asm_local, тот же binding из private activation intent. C6 R2 revision 4: source/images, schema/binding/identity и оба TEST окна PASS на момент проверки. C0 не выполнял независимую VM-инспекцию. |
+| Живой транспорт / HUMAN | User-observed text/photo/manual Console reply и сохранение HUMAN после reload приняты. Маршрут ПК/Happ/SSH принят для разработки; автономность к пилоту. PC_SESSION_INACTIVE — снимок C6 до последующего успешного owner smoke, не текущий статус после него. |
 | MATERIAL / native | MATERIAL false→true / COMMITTED; native OFF_UNUSED/P0→ON/P1, receipt ACCEPTED, current ON/P1. Приложение, транспорт и исходные private files UNCHANGED; временный контейнер удалён, SSH_EXIT=0. |
-| C6-M3-TEST-POLICY-ENABLE-R1 | Возврат принят; первоначальный MATERIAL_OPERATOR_PATH_MISSING устранён в рамках разрешённой R2. |
-| C6-M3-TEST-POLICY-ENABLE-R2 | VERIFIED / LIVE PASS по переданному отчёту C6, оператор revision 4; COMPLETE / C6 HOLD. [Scope и принятый результат](tasks/M3_HANDOFF.md#c6-m3-test-policy-enable-r2). TARGET_ENVIRONMENT_MISMATCH исправлен точным ограничением LOCAL / asm_local в commit 310210c70ff918c73f75f69de7b9b927ac8be5dc. |
-| M3-OWNER-SMOKE-R1 / A08 / P-A03-09 / A12 | IN_PROGRESS: [следующий шаг и последовательность](tasks/M3_HANDOFF.md#m3-owner-smoke-r1). Свежие native observations/edit/delete, сохранение полного контекста с HUMAN, отдельный Resume и итог живого M3 ещё не подтверждены. Старые terminal IGNORED не переигрываются. |
-| PR36 | Последняя проверка: Draft/open, head 5d828a1ece2840b57fb2fd7d890d3e3fd47da388, CI 40305446978 — 11/11 SUCCESS; 804 PG, 54 browser. PC helper отдельно, merge этой выдачей не выполняется. |
+| C6-M3-TEST-POLICY-ENABLE-R1 / R2 | Blockers MATERIAL_OPERATOR_PATH_MISSING / TARGET_ENVIRONMENT_MISMATCH устранены в разрешённой R2; R2 VERIFIED / LIVE PASS по переданному отчёту revision 4, COMPLETE / C6 HOLD. [Сохранённый scope](tasks/M3_HANDOFF.md#c6-m3-test-policy-enable-r2). |
+| M3-OWNER-SMOKE-R1 | VERIFIED / USER-OBSERVED LIVE PASS: native text/edit/delete, canonical inbound delete, сохранение полного контекста с HUMAN, отдельный Resume/reload с сохранённым текстом и без наблюдаемых повторных отправок. [Пооперационный результат и границы](tasks/M3_HANDOFF.md#m3-owner-smoke-r1). |
+| P-A03-09 / A08 | Text/edit/delete часть подтверждена живым сценарием; замена вложения фото ещё NOT_RUN. Own-bot echo markers/native photo/offline/other-bot/unsupported/delayed account variants NOT OBSERVED, требуют честного final C0 disposition; synthetic evidence не переименовано в live. |
+| A12 / whole M3 | Deployed Console owner scenario подтверждён пользователем; C6 host/policy receipt принят. Итоговая приёмка M3 ещё OPEN: фото-пункт, PR36 integration/current-main verification и final scope/handoff. |
+| PR36 | Повторно проверен Draft/open, head 5d828a1ece2840b57fb2fd7d890d3e3fd47da388; CI40305446978 — 11/11 SUCCESS на том же head. Прежние 804 PG/54 browser evidence сохраняются. PC helper отдельно; merge остаётся пользователю. |
 | M4 / CI optimization / другие чаты | M4 не открыт; оптимизация после всего M3; C1/C2/C3/C5/C6/C8 HOLD. |
 
-Настройка MATERIAL/native завершена; её LIVE PASS не подменяет owner smoke.
-Следующий результат — фактическое отображение свежих событий и действия владельца
-в Console на принятом маршруте. Использование контекста настоящей моделью относится к M4.
+Следующий живой шаг — один fresh photo replacement с предварительным Takeover/HUMAN.
+No-refetch/unavailable policy сохраняется. Новый общий CI, collector или реализация
+не назначены. Работа настоящей модели относится к M4.
 
 ---
 
