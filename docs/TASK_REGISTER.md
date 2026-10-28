@@ -19,7 +19,7 @@ existing escalation login/rotation/replay recovery: UI стал anonymous до r
 |---|---|
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance + main CI40725828529 PASS |
 | M4.1-CONTRACT | BLOCKED: C4 implementation returned/source reviewed; полный CI FAIL; PR38 не слит, C4 HOLD |
-| C5-M4.1-CI-RECOVERY-R1 | TODO / ASSIGNED, продолжение разрешено: C5 готовит bounded diagnostic candidate в прежнем write-set; C0 запускает изменённый тест в существующем GitHub Actions Docker harness. Локальный Docker не является gate передачи; E2E пока NOT RUN, исправления нет. Receipt dceffadc… сохранён, точный порядок в M4_HANDOFF |
+| C5-M4.1-CI-RECOVERY-R1 | REVIEW / diagnostic candidate; C5 HOLD для C0/Actions. Один recovery case: bounded protected-read timeline и управляемый Business GET через rotation после исходного replay. Typecheck/diff/privacy-source checks PASS; реальный E2E NOT RUN, причина исходного CI и исправление ещё не заявлены. Base1449e9f9…; прежний blocker receipt сохранён; порядок/receipt в M4_HANDOFF |
 | M4.2-PROBE | TODO / HOLD до приёмки M4.1; Polza adapter/synthetic comparison, отдельный ключ и подтверждённый бюджет |
 | M4.3-CONTEXT | TODO: актуальный M3 context и необходимые read-only tools |
 | M4.3-RUNTIME | TODO: durable AI run и настоящий guarded Telegram consumer; C2/C3 по точной дельте |

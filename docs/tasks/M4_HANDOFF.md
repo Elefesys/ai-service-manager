@@ -158,6 +158,23 @@ evidence требует другого path, вернуть C0 конкретн�
 blocker-return уже разобран, подготовка возобновлена уточнением выше. M4.2 выдаётся только после устранения blocker и приёмки
 M4.1 по текущей общей базе. Единственная матрица A01–A08 ниже не меняется.
 
+### C5 diagnostic candidate — C5-M4.1-CI-RECOVERY-R1 / 2026-10-29
+
+**REVIEW / C5 HOLD для C0/Actions**, base1449e9f9e1a70db4e5ea0f9b95d291e11cf50594.
+Изменены только failing case/local formatter в messaging.spec.ts и разрешённые
+два docs места. R4-журнал: до160 событий/32KiB, закрытые классы путей,
+request ordinals, method/status/phase и boolean UI; печатается при PASS и FAIL.
+Исходный committed200/login/CSRF403/exact replay/one-decision путь сохранён.
+После его assertions один реальный Business GET на reload удерживается до
+внешней rotation: captured credentials сначала проверяются реальным session200,
+затем исходный GET должен получить настоящий SESSION_REQUIRED401 и скрыть UI.
+Это управляемая проверка гипотезы, не идентификация исторического причинного GET.
+Runtime/остальные tests/guards неизменны; typecheck/diff и локальные проверки
+privacy/bounds/classification/assertion retention PASS. Real browser/API/PG
+**NOT RUN**; прежний CI FAIL и отсутствие доказанного исправления сохраняются.
+Следующий шаг — review C0 и один FF PR38 для штатного Actions по уточнению выше.
+Полные SHA/команды/границы — в возврате C5 в PR38; неизменённые unit suites не повторены.
+
 ### C5 receipt — C5-M4.1-CI-RECOVERY-R1 / 2026-10-29
 
 **BLOCKED / C5 HOLD, исправление не заявлено.** Проверены seed
