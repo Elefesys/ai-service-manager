@@ -5,51 +5,202 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — C0 terminal state-budget correction / 2026-10-21
+## CURRENT — M3 INTEGRATED / VERIFIED в LOCAL/TEST; PR36 merged / 2026-10-28
 
-C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 owns integration; C2/C6 HOLD.
-[Current decision and source-bound evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516).
-The C2/C6 return blobs were composed at d2a1914…; C0 fixed two fixture errors at
-f211272… (ACCEPTED/QUEUED envelope and Job.turn_id lookup). No business runtime/DDL
-changed. Targeted331/331 includes all former88 failures,12 origin controls and5
-CI-11 cases. Fresh PG run39561491975 on f211272:802/802 PASS,2406 phases,
-1204.86s; downgrade/base→0013, exact296 source leaves, clean source and cleanup PASS.
-Earlier C0 coverage/upload/reused-DB failures remain documented. PG2's single
-1.5s lock timeout did not recur on the fresh run; its exact cause is not proven fixed.
+**Решение C0:** M3 закрыт в принятом LOCAL/TEST scope. Основание — прежняя
+[C8 acceptance A01–A12](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363),
+проверенный merge PR36 и новый main CI, C6 host/policy receipt, подтверждённый
+пользователем конечный owner smoke и явные границы live-покрытия ниже.
+Это не production/pilot readiness и не проверка настоящей модели.
 
-RUN7 /39564573743 executes PR35 head f15118831af25d7b94e56f9c11e0ae37a8a7c28a,
-merge fddc0bc0d21ecd6a5758025e4b470b6960426cdf,
-tree3d251d5c1ef7ad2164287281173e7ef2a041c4fc. At this correction decision:
-9 jobs SUCCESS, Docker29 state FAILURE, foundation still running. Wait for its
-complete result before the next head update; no cancellation or unchanged rerun.
-Native112/336 phases/105 resets, fresh167functions/45tables/635columns and cleanup
-PASS; runner516 units PASS. Browser54 journeys/398 frontend tests PASS. Normal
-state:20 pairings,2 real T negatives,3 C cleanup negatives, exact source/cleanup
-PASS; preparation317.077428067s, wholeS771.188318408s.
+| Binding / evidence | Принятое значение |
+|---|---|
+| PR36 / actual main | MERGED; **d2f25673f6d2698d3c3dae2d7b2d709e134358f4** |
+| Main tree | **141d0a6b2b2be0efe1fcb1c3f851796e9f4cb427**, побайтовое Git-tree equality с проверенным PR36 head **5d828a1ece2840b57fb2fd7d890d3e3fd47da388** |
+| Merge parents | **5c074beb4a47521b8c11a820f580673ec1c2cce2**, **5d828a1ece2840b57fb2fd7d890d3e3fd47da388** |
+| Post-merge CI | [40681691046, push/main, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/40681691046) — **11/11 SUCCESS** на exact main |
+| Foundation | Job122802288218: **804 PG PASS**, **2197 ordinary + 155 subtests PASS**; complete evidence/source gates PASS |
+| Browser | Job122793727493: **54 browser/API/PG scenarios**, **398 frontend tests / 14 files PASS** |
+| Native / compatibility | Native runner/carrier/fresh0013 catalog/owned cleanup PASS; durable, Docker29 и все6 migration shards PASS |
+| Source / artifacts | Exact main найден в checkout logs всех11 jobs;10 ordinary source-clean gates + native cleanup/source gate PASS. Все10 uploads доступны; artifact IDs/digests совпали с логами. Payload архивов заново не аудировался. |
 
-Docker29 positive phases/P20 pairings PASS: preparation538.176225005s<720;
-P export atS+1000.214391230, timeout negative158.065762171s PASS. Export-negative
-owned cleanup removed its resources, but the required zero-connection checkpoint
-could not be recorded after S+1200; total1200.625390259s. Full cleanup evidence is
-incomplete and3 C negatives NOT_RUN, so state is FAILURE. Artifact12329639787,
-20213620bytes,SHA2565af086a46016498705e030425b073ae77396f4d985818b5aa24d4545ce88013a.
-The earlier targeted Docker29 PASS with11.763s slack did not prove timing stability.
+Actual main и PR36 candidate имеют одно дерево; повторять неизменённые тесты либо
+весь owner smoke после одного факта merge не требуется. Новый CI не запускался C0:
+проверен штатный push/main run. VM этим merge не обновлялась и отдельно C0 не
+инспектировалась; operational evidence относится к принятому component profile.
 
-C0 explicitly revises M3_CONTRACT§15.11.1: original-S whole-state1440 and state-job30min;
-positive600/P preparation720/P supervisor1200/cleanup90 and all mandatory cases stay.
-The new ledger separates state_deadline from the unchanged material supervisor.
-Only the state matrix timeout changes in the workflow. Its two exact fingerprints
-are updated to that reviewed one-line change, with guards and all11 jobs retained.
-Unit checks must cover both terminal boundaries and refuse P beyond its old1200.
-After local checks and the complete RUN7 result, publish one bounded correction
-and run whole-candidate CI, which also supplies real normal/Docker29 validation.
-Do not add an extra duplicate standalone state run or a new observer framework.
+C6-M3-TEST-POLICY-ENABLE-R2, оператор revision4: LIVE PASS на существующей
+LOCAL / asm_local и том же private binding; MATERIAL false→true / COMMITTED,
+native OFF_UNUSED/P0→ON/P1, receipt ACCEPTED, current ON/P1. Source/images/schema/
+binding/identity и оба TEST окна PASS на момент проверки; приложение/транспорт/
+исходные private files UNCHANGED, временный контейнер удалён, SSH_EXIT=0.
+PC_SESSION_INACTIVE — снимок C6 до позднейшего owner smoke, не текущий статус.
+Повторная активация не нужна. Все C1/C2/C3/C5/C6/C8 HOLD.
 
-Main e205e220…/stock af7482de… stay frozen; user owns merge. CI-07/12 OPEN, M3
-IN_PROGRESS. The linked C0 decision binds the next exact commit/run and final
-results. This instruction authorizes necessary TEST checks under the user's
-existing request; new product functions/production/VM/provider/paid actions remain
-outside scope. Failure is not permission for an automatic further budget increase.
+### M3-OWNER-SMOKE-R1
+
+**Принятый результат — LIVE PASS по сообщениям пользователя:**
+
+| Шаг | Фактически подтверждено |
+|---|---|
+| Takeover / reload | «Управление у мастера» сохраняется после обновления страницы; подтверждено ранее. |
+| Native text | Свежий текст из Telegram-аккаунта мастера появился в «Наблюдениях провайдера»; HUMAN сохранился. |
+| Native edit | Новая запись «Наблюдалось изменение в канале» содержит изменённый текст; HUMAN сохранился. |
+| Native delete | После удаления того же тестового сообщения для обеих сторон появилось наблюдение удаления; пользователь подтвердил предложенные условия шага. |
+| Canonical inbound delete | Новое сообщение тестового клиента сначала появилось в обычной истории; после удаления для обеих сторон и reload показано «Сообщение удалено», HUMAN сохранён. |
+| Owner reconciliation | Полный текст контекста сохранён и виден после reload; сохранение оставило управление у мастера. |
+| Separate Resume | Пользователь отдельно нажал «Разрешить автоматику» и подтвердил все три условия: режим пережил reload, контекст сохранился, повторных отправок прежних сообщений не наблюдалось. |
+| Photo replacement / P-A03-09 | После отдельного шага с предварительным Takeover пользователь заменил вложение фото в том же Telegram-сообщении и подтвердил «Фото заменено, новое изображение недоступно». PASS принятой обработки замены без загрузки нового вложения; полноценная загрузка replacement этим не заявлена. |
+
+Ранее user-observed text/photo/manual Console reply сохраняют приёмку.
+Этот finite smoke не доказывает полноту/порядок внешней истории, все гонки,
+exactly-once Telegram или использование контекста настоящей LLM. Stale/duplicate/
+restart/UNKNOWN guarantees опираются на принятые автоматические тесты;
+использование подтверждённого контекста настоящей LLM проверяется в M4. Старые terminal IGNORED
+не переигрывались. Private evidence/IDs/content в Git не публикуются.
+
+**Ограничение фото сохранено:** система учитывает замену, закрывает старое фото
+как актуальный input, но не скачивает/не открывает/не анализирует новое вложение.
+MEDIA_REPLACED_UNAVAILABLE и текстовая пометка — выбранный no-refetch scope M3.
+Это корректное поведение ограниченной реализации, не полноценная поддержка
+замены изображения для будущей Vision. Нужность загрузки replacement для пилота
+оценивается отдельно; этой приёмкой новая реализация не назначается.
+
+**Явный C0 disposition для живого scope A08/P-A03-09/P-05:** наблюдённые native
+text/edit/delete, canonical deletion, photo replacement, reconciliation и отдельный
+Resume вместе с ранее принятыми CI/PG/browser и C6 host/policy receipt достаточны
+для bounded LOCAL/TEST owner smoke. Дополнительный общий collector не требуется
+для подтверждения этих пользовательских результатов. Новые роли/схемы/renewal
+не нужны: действующие окна подтверждены C6 в своём временном срезе.
+
+Own-bot echo markers/native photo/offline/other-bot/unsupported/delayed варианты
+остаются NOT OBSERVED в живом account scope. C0 принимает это как явный предел
+данной LOCAL/TEST приёмки, а не LIVE PASS этих вариантов или доказательство
+полноты/causality Telegram. Их принятые synthetic/PG guards сохраняются; отдельная
+оценка по фактическому использованию в пилоте остаётся. Искусственная задержка,
+смена подключения и расширение текущего smoke не назначаются.
+
+### Итог по матрице M3
+
+| Условия | Disposition C0 |
+|---|---|
+| A01/A02/A04/A05/A06/A07/A09/A10/A11 | Принятые C8 LOCAL/TEST witnesses сохраняются; весь соответствующий текущий main CI PASS. Проверки конкуренции/изоляции/restart/UNKNOWN не подменяются молчанием LLM. |
+| A03/A08 / P-A03-09 | Synthetic/PG/browser evidence + описанный finite user-observed text/edit/delete/photo-replacement/reconciliation smoke приняты. Ненаблюдённые account variants и no-refetch граница явно сохранены, не названы live-verified. |
+| A12 | Actual main/tree/CI PASS, C6 deployed-host/policy receipt принят, owner smoke PASS, передача в M4 подготовлена. **M3 INTEGRATED / VERIFIED LOCAL/TEST.** |
+
+### Передача в M4 — отдельный актуальный план
+
+Финальная приёмка M3 выше сохраняется. Исходная передача C0 из coordination
+025688e94a9147891e83f69713e2476c3419ca3c уточнена по новому поручению пользователя:
+[активный M4_HANDOFF](M4_HANDOFF.md), [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md)
+и [сравнение агрегаторов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
+План пока REVIEW, M4 implementation TODO; принятого live AI provider ещё нет.
+Первый кандидат Polza, одна модель/один agent. Одновременный direct runtime
+перенесён явной поправкой IMPL-004, а не объявлен уже готовым.
+
+Accepted runtime base остаётся d2f25673f6d2698d3c3dae2d7b2d709e134358f4,
+schema0013. Следующий исполнитель получает фактический принятый SHA после
+интеграции текущего плана. Все M3 context/control/native admission гарантии,
+раздельные сохранение owner context и Resume, UNKNOWN/no-resend и no-refetch
+для замены фото сохраняются. M4 ограниченно расширяет controlled consumer до
+реального AI→Telegram пути; существующий controlled PASS не выдаётся за него.
+
+PC/Happ/SSH — development route; автономность требуется к пилоту. Новая VM
+активация, paid calls, production или перенос инфраструктуры этой записью не
+выполняются. Ниже — завершённые/исторические M3 выдачи; не повторять их как
+текущие команды M4.
+
+### C6-M3-TEST-POLICY-ENABLE-R2
+
+**Исполнение завершено:** LIVE PASS, оператор revision 4, результат принят выше.
+Ниже сохранён точный scope разрешённой операции; повторное включение не требуется.
+
+**Результат:** включить уже реализованную обработку edit/delete и затем штатный
+native context, чтобы продолжить M3 owner smoke без LLM. C0 разрешает подготовку
+и выполнение описанной операции сейчас; дополнительное согласование того же
+scope после подготовки блока не требуется. При отсутствии доступа C6 предоставляет
+владельцу один проверенный блок для существующего SSH-операторского сеанса.
+
+**Точная область:** новая принятая C6 TEST VM и один ранее утверждённый
+Telegram binding из его приватного activation intent. Repository Elefesys/ai-service-manager;
+accepted main baseline **5c074beb4a47521b8c11a820f580673ec1c2cce2** / tree
+**cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**; PR36 polling candidate
+**5d828a1ece2840b57fb2fd7d890d3e3fd47da388** / tree
+**141d0a6b2b2be0efe1fcb1c3f851796e9f4cb427**, schema0013.
+Фактический source/component profile и images — те же, что приняты в R1 private
+intent; эта операция не переключает runtime между main и PR36.
+Coordination parent этой выдачи **2015950ddb87e134c35dc81230569324b7ed75ff**,
+branch c0/m3-native-context-postmerge. Tracked implementation write-set пуст:
+короткий операторский блок и новые private intent/result находятся вне принятого
+checkout. Старые receipts/inputs не редактируются. PR36 и отдельный PC helper сохраняются.
+
+**Явное решение C0:** запрет прямого UPDATE в R1 п.2 пересмотрен только для
+одной операции ниже. Имеющаяся роль asm_migrator владеет нужной таблицей и имеет
+принятую RLS policy; identity trigger и native guard не запрещают false→true.
+Поэтому новый API, SQL capability, GRANT или миграция ради этой TEST-активации
+не нужны. Это не общее разрешение менять DB state; native policy/Audit/receipt
+по-прежнему изменяет исключительно штатный policy command. Spec5.12/5.12.1,
+ADR026/180 и остальные гарантии не пересматриваются.
+
+1. До записи сохранить отдельный private intent: точные принятые environment/DB,
+   source/schema/binding, ожидаемые MATERIAL=false и native OFF_UNUSED/P0.
+   Переиспользовать доказательства R1, проверив их текущую актуальность; полный
+   аудит/CI не повторять. Проверить source/images и installed0013 существующим
+   механизмом; подключиться реальным LOGIN asm_migrator, session_user=current_user,
+   READ COMMITTED, только существующая принятая LOCAL / asm_local
+   (ASM_ENVIRONMENT=LOCAL, current_database()='asm_local'), тот же binding из
+   приватного activation intent. Перенос или смена среды не требуются.
+   Не SET ROLE из admin.
+2. Одна короткая транзакция с существующими bounded statement/lock/connect limits.
+   Порядок: Workspace SHARE → Business SHARE → ChannelConnection UPDATE →
+   TelegramState UPDATE → штатные billing locks через
+   platform.messaging_manual_send_allowed(ws). Повторить binding/route/status,
+   native policy/epoch и все условия после lock waits. Требуются ACTIVE
+   Workspace/Business/connection, точные утверждённые bot/external/Owner,
+   оба прежних TEST окна действительны по свежим часам БД и manual-send gate=true.
+   Cached Telegram state не выдавать за новый live provider probe.
+3. Если MATERIAL уже true — только чтение и ALREADY_ENABLED, без UPDATE и
+   приписывания перехода текущей попытке. Для самой записи обязательны
+   native OFF_UNUSED/P0 и MATERIAL=false. Единственный DML:
+   UPDATE platform.telegram_connection_state SET material_enabled=true
+   с параметризованными exact workspace_id+connection_id и material_enabled=false.
+   RETURNING обязан дать ровно одну строку; сравнить её с заблокированной исходной
+   строкой: единственная семантическая дельта — material_enabled. Native policy/epoch
+   и остальные поля остаются прежними. Любое несовпадение/ошибка/timeout до commit —
+   rollback, без retry loop. Не отключать RLS/constraints/triggers.
+4. Private результат COMMITTED сохранять только после подтверждённого commit.
+   Потеря ACK — UNKNOWN, затем отдельное чтение с проверкой того же intent/target;
+   material=true подтверждает текущее состояние, а не атомарность private файла
+   с БД или авторство перехода. Не повторять UPDATE для восстановления отчёта.
+5. После MATERIAL=true выполнить штатные native check/commit/current с точным
+   approved component profile и фактической проверкой drain старых несовместимых
+   writers. OFF_UNUSED/P0→ON/P1 — существующий replayable policy command.
+   Если уже ON, достаточно current; при потерянном native ACK — exact saved
+   key/body replay и отдельный current. Сохранить стандартные source/schema/
+   authority/product gates и тайм-ауты. Сохранение контекста и Resume остаются
+   отдельными действиями владельца, не частью операторского блока.
+6. Если native шаг не прошёл после MATERIAL commit, вернуть MATERIAL=true /
+   actual native state и конкретную ошибку. Не откатывать MATERIAL автоматически:
+   могли появиться новые receipts/effects. После native ON возможное восстановление
+   использует PAUSED и отдельное решение, не OFF_UNUSED/удаление evidence.
+
+Рабочий transport, webhook/getUpdates mode, Happ/SSH/PC helper, история/очереди,
+контроль разговоров и UNKNOWN не изменяются этой операцией. Нет новых прав,
+schema/DDL, billing renewal/initializer, replay старых IGNORED, provider calls,
+отправок, merge или общего framework. Если фактические условия требуют выхода
+за эту область, остановиться с одним точным blocker; не расширять задачу.
+
+**Возврат C6:** MATERIAL before→after и COMMITTED/ALREADY_ENABLED/UNKNOWN;
+native before→after/current и receipt outcome; schema/binding/source match;
+актуальность обоих окон; сохранность приложения/транспорта/старых private files.
+Наружу только sanitized статусы, не credentials/IDs/private bodies/хэши.
+C6 HOLD после результата; whole M3 не закрывать.
+
+PC_SESSION INACTIVE не мешает этой локальной DB-настройке и не означает поломку
+маршрута. Перед последующим owner smoke пользователь запускает уже проверенную
+PC-сессию прежним способом. Затем свежие native text/edit/delete → обновление Console →
+owner context save сохраняет HUMAN → отдельный Resume. События, ранее принятые
+как terminal IGNORED, не восстанавливаются этой активацией.
 
 ---
 

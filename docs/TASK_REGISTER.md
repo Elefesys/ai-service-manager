@@ -2,7 +2,61 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — recovered TEST Telegram polling / 2026-10-26
+## CURRENT — M4 planning REVIEW; implementation TODO / 2026-10-28
+
+Пользователь поручил исследовать AI-агрегаторов и подготовить минимальный M4.
+[План и единственная матрица A01–A08](tasks/M4_HANDOFF.md),
+[поправка к архитектуре IMPL-004, PROPOSED](decisions/IMPL-004-m4-pilot-ai.md),
+[исследование рынка](research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
+**PolzaAI — первый кандидат, не live-verified provider.** Actual M4 implementation
+и платные API-вызовы не выполнены. C0 принимает план до выдачи кода; первый
+исполнитель C4. Следующая task base — фактический принятый SHA после интеграции
+планирующего PR, не предполагаемый merge commit.
+
+| Task | Status / ближайший результат |
+|---|---|
+| M4-PLAN | REVIEW: docs-only; C0 acceptance ожидается, runtime не менялся |
+| M4.1-CONTRACT | TODO: минимальный Gateway/config/schema/fakes; следующая выдача C4 |
+| M4.2-PROBE | TODO: Polza adapter, synthetic API proof и выбор одной модели; нужен ограниченный ключ/бюджет |
+| M4.3-CONTEXT | TODO: актуальный M3 context, один-два реальных read tools, bounded agent |
+| M4.3-RUNTIME | TODO: durable AI run и настоящий guarded Telegram consumer; C2/C3 участвуют по точной дельте |
+| M4.3-QUALITY | TODO: focused C8/eval и A01–A07; тесты создаются вместе с функциями |
+| M4-ACCEPTANCE | TODO: bounded synthetic live, A08, actual main CI и передача M5 |
+
+Один агент/один рабочий provider. Direct API runtime, registry/admin UI, RAG/Vision
+runtime, новые business domains и production отложены по IMPL-004, а не считаются
+реализованными. Existing native context/owner control/no-resend сохраняются.
+Подготовка не переоткрывает M3 и не запускает исторические C6 инструкции.
+
+## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
+
+Accepted actual main **d2f25673f6d2698d3c3dae2d7b2d709e134358f4**, tree
+**141d0a6b2b2be0efe1fcb1c3f851796e9f4cb427**. Tree exact-equal reviewed PR36
+head **5d828a1ece2840b57fb2fd7d890d3e3fd47da388**.
+[Post-merge CI 40681691046](https://github.com/Elefesys/ai-service-manager/actions/runs/40681691046), push/main attempt1:
+**11/11 SUCCESS**. [M3 final acceptance / handoff](tasks/M3_HANDOFF.md).
+
+| Scope / task | Текущий результат |
+|---|---|
+| Whole M3 / A01–A12 | **INTEGRATED / VERIFIED LOCAL/TEST, CLOSED by C0.** C8 witnesses, exact current main CI, C6 host/policy evidence и bounded owner smoke приняты. Scope/ограничения явно зафиксированы в HANDOFF; production readiness и actual LLM не заявлены. |
+| PR36 / C6-M3-TELEGRAM-POLLING-01 | **INTEGRATED / VERIFIED**: MERGED into main d2f25673f6d2698d3c3dae2d7b2d709e134358f4; candidate/main tree equality, current11/11 CI и user-observed text/photo/manual reply. PC helper вне PR; merge не deployment. |
+| Main verification | 804 PG;2197 ordinary+155 subtests;54 browser/API/PG;398 frontend PASS. Native/catalog/cleanup, durable, Docker29 и6 migration shards PASS. Все11 exact checkouts/source gates подтверждены;10 artifact ID/digest совпали с upload logs, payload заново не аудировался. |
+| C6-M3-TEST-POLICY-ENABLE-R2 | VERIFIED / LIVE PASS по переданному отчёту revision4; LOCAL / asm_local, тот же accepted binding; MATERIAL=true / COMMITTED, native ON/P1 / ACCEPTED/current. Source/images/schema/binding/identity и оба окна PASS на момент проверки. C6 HOLD. |
+| M3-OWNER-SMOKE-R1 | VERIFIED / USER-OBSERVED LIVE PASS: HUMAN/reload, native text/edit/delete, canonical inbound delete, сохранение owner context с HUMAN, отдельный Resume/reload без наблюдаемых resend, photo replacement с MEDIA_REPLACED_UNAVAILABLE. |
+| A08/P-A03-09/P-05 limits | Наблюдённый bounded scope принят; own-bot echo markers/native photo/offline/other-bot/unsupported/delayed account variants остаются NOT OBSERVED. C0 принял этот предел live-покрытия; автоматические guards сохраняются. Общий collector не нужен для принятого scope. |
+| Development limits | Маршрут ПК/Happ/SSH принят для разработки; автономность к пилоту. Новое вложение после замены фото не загружается/не анализируется. Текущее состояние PC-сессии и VM после smoke не проверялось C0; нет нового runtime deployment. |
+| Передача M4 | Первоначальная передача C0 уточнена [M4_HANDOFF](tasks/M4_HANDOFF.md) и IMPL-004. Актуальные задачи — в CURRENT выше; реализация не начата. |
+| Другие чаты / CI optimization | C1/C2/C3/C4/C5/C6/C8 HOLD. Общая оптимизация CI остаётся DEFERRED и не запускается автоматически вслед за M3. |
+
+Новых code/DDL/provider/VM/test/CI действий для этой приёмки не выполнялось:
+C0 прочитал существующее evidence и интегрировал main в координационную ветку,
+обновив только два документа сверх принятого runtime tree.
+
+---
+
+## History — C6 polling до итоговой приёмки / 2026-10-26
+
+Исторический возврат PR36; его pending/REVIEW статусы заменены CURRENT выше.
 
 | Task | Status and scope |
 |---|---|
@@ -18,28 +72,7 @@ tests/polling/, tests/test_telegram_polling_postgres.py, IMPL-003 and this regis
 Local evidence: 30 focused unit/model tests and Ruff pass; accepted activation
 receipt/runtime fixture passes. Full CI and live VM acceptance remain pending.
 
-## History — native checks pass; C0 corrects remaining CI budget / 2026-10-21
 
-| Task / finding | Current status |
-|---|---|
-| C2-M3.1-NATIVE-CONTEXT-GENERIC-PG-REPAIR-R1 | INTEGRATED / VERIFIED TARGETED with C0 fixture corrections f211272…;331/331, all former88, generic802/802 and downgrade/restore PASS; C2 HOLD |
-| C6-M3.1-NATIVE-CONTEXT-STATE-REPAIR-R1 | Source INTEGRATED; targeted normal/Docker29 PASS, but RUN7 Docker29 total budget exhausted; C6 HOLD, C0 owns bounded correction |
-| Native context / browser RUN7 | VERIFIED on f151188…: native112/336 phases/105 resets and fresh0013 catalog; browser54 journeys/398 units PASS; not whole CI PASS |
-| M3_CONTRACT§15.11.1 | REVISED by C0: same original S, whole-state1440/state-job30min; positive600/P720/P-supervisor1200/cleanup90 unchanged |
-| C0-M3.1-NATIVE-CONTEXT-REPAIR-VALIDATION-R1 | IN_PROGRESS: check bounded correction locally, wait for all RUN7 outcomes, then one new full CI; no duplicate standalone state run |
-| C0-NC-CI-06/11 | Targeted remediations VERIFIED; final dispositions follow whole CI evidence |
-| C0-NC-CI-07/12 | OPEN: RUN7 state Docker29 FAILURE; foundation result pending at correction decision |
-| PR35 / main / stock | Execution f151188…; main e205e220…/stock af7482de… frozen; merge belongs to user |
-
-[Decision/evidence6309594516](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6309594516)
-and HANDOFF CURRENT bind exact sources, artifacts and next run. RUN7 had9SUCCESS,
-1FAILURE and1running at this decision. Docker29 P20 pairings pass, but export-negative
-checkpoint recording hit S+1200 after owned resources were removed; three final C
-negatives NOT_RUN. Explicit240s total reserve preserves all cases and positive
-limits. Only the state timeout expression and its exact fingerprints change in CI.
-Product runtime/DDL remain unchanged; M3 IN_PROGRESS, no completion/merge claim.
-
----
 
 ## History — native context: согласованное исправление / 2026-10-21
 

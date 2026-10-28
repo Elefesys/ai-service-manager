@@ -1,12 +1,14 @@
 # AI Service Manager
 
 Modular monolith; architecture v0.28. Stack decision: `docs/decisions/IMPL-001-stack.md`.
-Current tasks and acceptance: [`docs/TASK_REGISTER.md`](docs/TASK_REGISTER.md). M2 is accepted in its LOCAL/TEST scope; the next execution plan is [`docs/tasks/M3_HANDOFF.md`](docs/tasks/M3_HANDOFF.md).
+Current tasks and acceptance: [`docs/TASK_REGISTER.md`](docs/TASK_REGISTER.md). M3 is accepted in its LOCAL/TEST scope; the next plan is [`docs/tasks/M4_HANDOFF.md`](docs/tasks/M4_HANDOFF.md) (REVIEW; implementation not started).
 All eleven canonical architecture documents are in `docs/architecture/`, byte-identical to the approved project attachments. Their historical pre-implementation/Freeze-pending wording is preserved; current implementation status belongs in the task register, not in a rewritten historical snapshot.
 
 ## Scope
 
-API/Worker/Scheduler, LOCAL/TEST owner auth and tenant isolation, billing/entitlements and Audit, durable PostgreSQL Inbox/Outbox/Jobs, Telegram text/private images and manual replies in Business Console. The M2 owner-operated live scenario and its limits are recorded in the [C0 acceptance receipt](https://github.com/Elefesys/ai-service-manager/pull/24#issuecomment-6066209663). M3 conversation turns/control/escalation are planned; AI providers start in M4. This remains LOCAL/TEST, with no production readiness or payment integration claimed.
+API/Worker/Scheduler, LOCAL/TEST owner auth and tenant isolation, billing/entitlements and Audit, durable PostgreSQL Inbox/Outbox/Jobs, Telegram text/private images and manual replies, conversation turns, HUMAN takeover/Resume, escalation and owner-confirmed native context. [M3 acceptance](docs/tasks/M3_HANDOFF.md) records main `d2f25673f6d2698d3c3dae2d7b2d709e134358f4` and [11/11 post-merge CI](https://github.com/Elefesys/ai-service-manager/actions/runs/40681691046).
+
+M4 adds the real AI runtime; its current plan is deliberately limited to one provider/model, current context and read-only tools. [IMPL-004](docs/decisions/IMPL-004-m4-pilot-ai.md) proposes the pilot scope revision; the [provider review](docs/research/M4_AI_PROVIDER_REVIEW_2026-10-28.md) recommends PolzaAI first, pending an actual API probe. Existing guarded consumers are controlled/test consumers; a bounded real AI-to-Telegram integration is still required. No live LLM, production readiness or payment integration is claimed. The PC/Happ/SSH development route and unavailable replacement-photo content remain explicit limitations.
 
 ## LOCAL start
 
@@ -48,6 +50,6 @@ Reproducibility means locked dependencies/image inputs and matching wheel/static
 
 ## Architecture and work distribution
 
-Read `AGENTS.md`, canonical `docs/architecture/01_ARCHITECTURE_SPEC.md`, applicable ADRs and `09_IMPLEMENTATION_PLAN.md` before changing code. Verify all source hashes with the command above. Do not change manifest hashes to hide an accidental source modification; approved future architecture revisions require explicit review and a new documented source baseline.
+Read `AGENTS.md`, the current M4 handoff and IMPL-004, then applicable canonical architecture/ADRs and `09_IMPLEMENTATION_PLAN.md` before changing code. Verify all source hashes with the command above. Do not change manifest hashes to hide an accidental source modification; current architecture revisions require an explicit reviewed decision; they do not silently rewrite the imported historical source baseline.
 
-C0 owns the single task register and integration. [`M3_HANDOFF`](docs/tasks/M3_HANDOFF.md) defines the next sequential scope; M3 implementation is not yet accepted. M1/M2 handoffs are closed history. C0 assigns each task an actual accepted full main commit and bounded file/migration scope. A repository merge does not update the existing VM; historical operator commands are not current deployment instructions. Do not prebuild future milestones or assume separate chats share a checkout.
+C0 owns the single task register and integration. [`M4_HANDOFF`](docs/tasks/M4_HANDOFF.md) defines the next sequential scope; M4 implementation has not started. M1–M3 handoffs retain closed acceptance/history. C0 assigns each task an actual accepted full main commit and bounded file/migration scope. A repository merge does not update the existing VM; historical operator commands are not current deployment instructions. Do not prebuild future milestones or assume separate chats share a checkout.
