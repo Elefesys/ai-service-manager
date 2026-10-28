@@ -18,7 +18,7 @@ Implementation ещё не заявлен выполненным. Polza оста
 | Task | Status / ближайший результат |
 |---|---|
 | M4-PLAN | INTEGRATED / VERIFIED для docs-only scope: решение C0, merged PR #37, actual main CI PASS |
-| M4.1-CONTRACT | TODO / ASSIGNED C4: typed Gateway/DTO/schema/limits/fake; ветка c4/m4-1-contract, base 1cb3b6e168276d77faa3f11f33f8ecd0408ce406; точный write-set и evidence в текущей выдаче |
+| M4.1-CONTRACT | REVIEW / C4: typed Gateway/DTO/schema/limits/fake; ветка c4/m4-1-contract, base 1cb3b6e168276d77faa3f11f33f8ecd0408ce406; точный write-set и evidence в текущей выдаче |
 | M4.2-PROBE | TODO: Polza adapter и synthetic сравнение кандидатов; после M4.1, отдельный ключ и подтверждённый бюджет |
 | M4.3-CONTEXT | TODO: актуальный M3 context и необходимые read-only tools |
 | M4.3-RUNTIME | TODO: durable AI run и настоящий guarded Telegram consumer; C2/C3 по точной дельте |

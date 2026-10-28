@@ -124,6 +124,18 @@ manifests/locks, workflows/scripts, UI и прочие paths вне write-set.
 M4.1; перед её платной частью нужны reproducible command, secret path инструкция
 и отдельно подтверждённый владельцем бюджет.
 
+
+### C4 receipt — M4.1-CONTRACT / 2026-10-29
+
+**REVIEW**, затем C4 HOLD до решения C0. Реализованы `ModelGateway.call()`,
+immutable DTO, versioned prompt/schema и явный EVAL_ONLY fake; continuation
+сохраняет config/deadline и общий предел 3 calls / 4 reads. 89 focused tests,
+Ruff check/format, mypy (68 source files) и обычная wheel-сборка с изолированным
+импортом/вызовом Gateway PASS. Точные команды, head/base SHA, diff и штатный
+PR CI run/attempt — в PR ветки `c4/m4-1-contract`. Это авторская проверка,
+не независимый C8; A01/A06 только contract/failure evidence. HTTP/DB/Telegram,
+Polza proof, durable spend enforcement и приёмка всего M4 не заявлены.
+
 ## Результат для пользователя
 
 Тестовый клиент пишет в Telegram. Один AI-агент читает разрешённый актуальный
