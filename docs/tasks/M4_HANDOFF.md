@@ -14,6 +14,40 @@
 Задача включает причинное воспроизведение и минимальное исправление, а не отдельный
 этап общей диагностики или повышение timeout.
 
+### Уточнение C0 — воспроизведение в GitHub Actions / 2026-10-29
+
+C5 [вернул blocker](https://github.com/Elefesys/ai-service-manager/pull/38#issuecomment-6478249644):
+Docker отсутствует **в локальной среде исполнителя**. GitHub Actions browser job
+на ubuntu-24.04 уже выполняет scripts/test_browser.sh с настоящими Docker Compose,
+API/PostgreSQL и synthetic private env, создаваемыми самим harness.
+Локальное отсутствие Docker не блокирует подготовку теста и не требует VM владельца.
+
+C0 исправляет порядок этой же задачи; write-set и итоговые критерии сохраняются:
+1. **Сейчас C5 продолжает подготовку:** в разрешённом failing case добавить
+   bounded payload-free observer причинных protected reads и необходимые управляемые
+   точки воспроизведения. Runtime не менять до evidence. Сохранить реальный
+   committed200/login/rotate/CSRF/replay путь и все исходные assertions.
+   Локально выполнить typecheck и diff check; Docker-dependent E2E честно NOT RUN.
+   Уже выполненные неизменённые unit suites повторять не требуется.
+2. C5 возвращает **диагностический candidate** C0: full SHA, минимальный diff,
+   какие конкретные события он различает, команды/результаты. Для этого возврата
+   предварительный локальный Docker PASS больше не требуется.
+3. C0 проверяет дельту и выполняет один expected-head/force=false FF существующего
+   PR38 на изменённый candidate. Это запускает штатный GitHub Actions, где Docker
+   доступен. Workflow сейчас запускает весь набор jobs; browser выполняет реальное
+   воспроизведение. Отдельный runner/workflow или включение VM не нужны.
+   Это разрешённый запуск для нового диагностического кода, не blind rerun
+   неизменённого FAIL. Прежний attempt1 остаётся FAILURE.
+4. По фактическим событиям C5 в той же задаче исправляет подтверждённую причину;
+   после review C0 конечный candidate проходит полный штатный CI.
+   Если диагностический run не выявил причину, один PASS не закрывает finding:
+   определить недостающий факт и следующую минимальную управляемую проверку,
+   не повторять неизменённый прогон в надежде получить нужный результат.
+
+C5 HOLD из blocker receipt ниже снят **для этой подготовки**; реальное E2E
+ещё не выполнено, исправление и новый CI пока не заявлены. C4/M4.2 остаются HOLD.
+C5 не двигает c4/main и не открывает дополнительный PR; передачу в CI делает C0.
+
 ### Решение C0 по возврату C4
 
 [PR #38](https://github.com/Elefesys/ai-service-manager/pull/38), candidate
@@ -55,7 +89,8 @@ Repository: **Elefesys/ai-service-manager**.
 эту выдачу поверх repair base; точный стартовый head в передаче C0.
 C5 продолжает подготовленную ветку в отдельном checkout и сохраняет Gateway/C0 docs.
 Candidate допустим как база этого ремонта, но не объявлен принятым main.
-PR38/c4 branch удерживается до готового конечного repair candidate.
+PR38/c4 branch удерживается до проверенного C0 диагностического candidate,
+затем до конечного repair candidate согласно уточнению GitHub Actions выше.
 
 Зависимости: accepted M3 recovery/authorization/UNKNOWN semantics, IMPL-004,
 данный CI receipt. Применимы ADR-024/026/180/267 и существующие session/CSRF
@@ -103,13 +138,15 @@ evidence требует другого path, вернуть C0 конкретн�
   после проходит; проверить и актуальный отказ, и запоздалый ответ.
   Если меняется только harness, показать, что контролируемый порядок устраняет
   именно воспроизведённую гонку, а все исходные business/auth assertions сохранены.
-- Сначала targeted: существующий locked Node24 environment и реальный
-  browser/API/PG harness. После его обычного setup и с его private env:
+- При доступном Docker targeted команда использует существующий locked Node24
+  environment и реальный browser/API/PG harness после обычного setup/private env:
   `npm --prefix frontend run test:e2e -- --project=chromium-desktop e2e/messaging.spec.ts --grep "^Escalation committed200 loss"`.
   Setup/private files остаются вне Git; тест без env/реальной БД не evidence.
   При изменении App: `npm --prefix frontend test -- src/App.test.tsx`.
-  Затем frontend typecheck и релевантные существующие auth/recovery/revoke cases.
-- Готовый итог вернуть C0: полный head и base, changed paths, точный root cause
+  Без локального Docker действует уточнение GitHub Actions выше: typecheck и
+  диагностический candidate сначала; реальный E2E проверяется в CI.
+  Релевантные auth/recovery/revoke cases входят в окончательную проверку.
+- После диагностического возврата и исправления готовый итог вернуть C0: полный head и base, changed paths, точный root cause
   или оставшийся конкретный blocker, команды/фактические результаты, сохранённые
   инварианты. C0 проверяет candidate и переносит его в существующий PR38 для
   **одного штатного полного CI**. Не открывать дублирующий implementation PR,
@@ -117,7 +154,8 @@ evidence требует другого path, вернуть C0 конкретн�
   При новом падении разобрать все известные группы; прежний FAIL не переписать
   задним числом как PASS. Авторский review не считать независимым C8.
 
-После возврата C5 — HOLD. M4.2 выдаётся только после устранения blocker и приёмки
+После каждого возврата C5 — HOLD до получения результата C0/CI; текущий
+blocker-return уже разобран, подготовка возобновлена уточнением выше. M4.2 выдаётся только после устранения blocker и приёмки
 M4.1 по текущей общей базе. Единственная матрица A01–A08 ниже не меняется.
 
 ### C5 receipt — C5-M4.1-CI-RECOVERY-R1 / 2026-10-29
