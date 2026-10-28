@@ -2,33 +2,35 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4 plan accepted; M4.1-CONTRACT issued to C4 / 2026-10-29
+## CURRENT — M4.1 CI BLOCKED; C5 recovery repair issued / 2026-10-29
 
-План и [IMPL-004](decisions/IMPL-004-m4-pilot-ai.md) приняты C0 в
-[PR #37](https://github.com/Elefesys/ai-service-manager/pull/37), PR слит владельцем.
-Принятая база: **1cb3b6e168276d77faa3f11f33f8ecd0408ce406** (actual main после PR #37).
-Дерево: **25205a6644bff00f8afa110058ad1e569695791d**, совпадает с принятым planning head.
-[Main CI 40725828529](https://github.com/Elefesys/ai-service-manager/actions/runs/40725828529),
-push/main, attempt 1: **11/11 SUCCESS**. Проверены SHA и conclusions всех jobs;
-прежние артефакты/M3/рынок заново не аудировались.
-Единственная текущая выдача — [M4.1-CONTRACT](tasks/M4_HANDOFF.md#текущая-выдача--m41-contract--c4--2026-10-29).
-Implementation ещё не заявлен выполненным. Polza остаётся первым EVAL_ONLY
-кандидатом; платные вызовы и live AI не выполнялись.
+Принятый main **1cb3b6e168276d77faa3f11f33f8ecd0408ce406**; PR37/план/IMPL-004 интегрированы.
+[PR38](https://github.com/Elefesys/ai-service-manager/pull/38) candidate
+**31537848de7bcfb5732622b9361cfaba41c1105b**, tree **aa265f68c3fec9e3b7128d9a800e6e5cf5574f25**.
+C0 source review Gateway/DTO/fake/tests завершён без существенных замечаний;
+это не независимый C8 и не итоговая интеграция.
+[CI40740338709](https://github.com/Elefesys/ai-service-manager/actions/runs/40740338709),
+attempt1, завершён: **10 SUCCESS / 1 FAILURE**. Foundation2286+155subtests/804PG PASS;
+browser398unit PASS,53browserPASS/1FAIL. Единственный подтверждённый blocker —
+existing escalation login/rotation/replay recovery: UI стал anonymous до retry.
+Причинный request пока не установлен; cleanup=false после timeout — вторичный факт.
 
 | Task | Status / ближайший результат |
 |---|---|
-| M4-PLAN | INTEGRATED / VERIFIED для docs-only scope: решение C0, merged PR #37, actual main CI PASS |
-| M4.1-CONTRACT | REVIEW / C4: typed Gateway/DTO/schema/limits/fake; ветка c4/m4-1-contract, base 1cb3b6e168276d77faa3f11f33f8ecd0408ce406; точный write-set и evidence в текущей выдаче |
-| M4.2-PROBE | TODO: Polza adapter и synthetic сравнение кандидатов; после M4.1, отдельный ключ и подтверждённый бюджет |
+| M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance + main CI40725828529 PASS |
+| M4.1-CONTRACT | BLOCKED: C4 implementation returned/source reviewed; полный CI FAIL; PR38 не слит, C4 HOLD |
+| C5-M4.1-CI-RECOVERY-R1 | TODO / ASSIGNED C5: причинное воспроизведение и минимальное исправление recovery; repair base 31537848de7bcfb5732622b9361cfaba41c1105b; ветка c5/m4-1-ci-recovery-r1; точный write-set в верхнем M4_HANDOFF |
+| M4.2-PROBE | TODO / HOLD до приёмки M4.1; Polza adapter/synthetic comparison, отдельный ключ и подтверждённый бюджет |
 | M4.3-CONTEXT | TODO: актуальный M3 context и необходимые read-only tools |
 | M4.3-RUNTIME | TODO: durable AI run и настоящий guarded Telegram consumer; C2/C3 по точной дельте |
 | M4.3-QUALITY | TODO: независимый scoped C8/eval; авторские тесты внутри каждой задачи |
 | M4-ACCEPTANCE | TODO: bounded synthetic live, A08, actual main CI и передача M5 |
 
-Единственная матрица A01–A08 — [M4_HANDOFF](tasks/M4_HANDOFF.md).
-C1/C2/C3/C5/C6/C8 HOLD; общие файлы и миграции параллельно не меняются.
-Direct API runtime, registry/admin UI, RAG/Vision runtime и будущие business domains
-отложены по IMPL-004. M3 не переоткрывается; старые операторские команды не выдаются.
+Единственная текущая выдача и матрица A01–A08 — [M4_HANDOFF](tasks/M4_HANDOFF.md).
+C1/C2/C3/C4/C6/C8 HOLD. Общие файлы не редактируются параллельно.
+C5 не меняет Gateway, backend/SQL/CI/VM и не ослабляет auth/replay критерии.
+Direct/RAG/Vision/registry и следующие business domains сохраняют DEFERRED scope.
+Платных API, новой VM активации или переоткрытия M3 нет.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

@@ -6,7 +6,126 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.1-CONTRACT / C4 / 2026-10-29
+## Текущая выдача — C5-M4.1-CI-RECOVERY-R1 / 2026-10-29
+
+**Результат и польза:** устранить конкретное падение восстановления уже принятого
+решения владельца после потери HTTP-ответа, повторного входа и ротации сессии.
+Это разблокирует интеграцию Gateway и M4.2, сохранив один business effect.
+Задача включает причинное воспроизведение и минимальное исправление, а не отдельный
+этап общей диагностики или повышение timeout.
+
+### Решение C0 по возврату C4
+
+[PR #38](https://github.com/Elefesys/ai-service-manager/pull/38), candidate
+**31537848de7bcfb5732622b9361cfaba41c1105b**, tree **aa265f68c3fec9e3b7128d9a800e6e5cf5574f25**.
+C0 прочитал весь новый Gateway/DTO/fake/prompt/schema и оба test files:
+существенных source замечаний в выданном contract scope не обнаружено.
+C4 изменил ровно 10 разрешённых paths относительно seed2107f918…; CURRENT-строка
+и короткий receipt — единственные его doc changes. Это C0 review, не C8 acceptance.
+
+[CI 40740338709](https://github.com/Elefesys/ai-service-manager/actions/runs/40740338709),
+attempt1, exact candidate: **COMPLETED / FAILURE — 10 SUCCESS / 1 FAILURE**.
+Foundation: **2286 ordinary +155 subtests**, **804 PG PASS**, Ruff/mypy PASS.
+Browser: **398 frontend unit PASS; 53 browser PASS / 1 FAIL**.
+M4.1 остаётся BLOCKED на полном CI; не INTEGRATED/VERIFIED. C4 HOLD.
+Новая выдача ниже — единственная активная; M4.2 и остальные чаты HOLD.
+
+**Единственная подтверждённая группа сбоя:** existing recovery test в
+frontend/e2e/messaging.spec.ts:298, ожидание retry button на строке353.
+[Browser job122999902003](https://github.com/Elefesys/ai-service-manager/actions/runs/40740338709/job/122999902003).
+Commit resolve=200, ответ ABORTED; session=401 после clearCookies;
+login/detail/rotate=200. Перед первым retry: login_present=true,
+detail_present=false, retry_present=false; resolve_requests=1, retry_clicked=false.
+Cleanup=false зарегистрирован после закрытия страницы по timeout и не является
+доказанной отдельной первопричиной.
+
+Из source: после login читаются несколько панелей; готовая escalation detail
+не доказывает завершения остальных GET. Текущий SESSION_REQUIRED от Business/
+Billing/Escalations/Messaging вызывает invalidateAuth/очистку protected state.
+Какой именно request/response вызвал возврат в anonymous, старый диагностический
+observer не записал. Гонка GET с внешней ротацией — проверяемая гипотеза,
+не установленный root cause и не основание назвать падение случайным.
+
+### База, ветка и зависимости
+
+Repository: **Elefesys/ai-service-manager**.
+Принятый actual main: **1cb3b6e168276d77faa3f11f33f8ecd0408ce406**.
+Точная repair base: **31537848de7bcfb5732622b9361cfaba41c1105b** (текущий PR38 candidate).
+Ветка C5: **c5/m4-1-ci-recovery-r1**. C0 добавляет одним docs-only commit
+эту выдачу поверх repair base; точный стартовый head в передаче C0.
+C5 продолжает подготовленную ветку в отдельном checkout и сохраняет Gateway/C0 docs.
+Candidate допустим как база этого ремонта, но не объявлен принятым main.
+PR38/c4 branch удерживается до готового конечного repair candidate.
+
+Зависимости: accepted M3 recovery/authorization/UNKNOWN semantics, IMPL-004,
+данный CI receipt. Применимы ADR-024/026/180/267 и существующие session/CSRF
+contracts. Не повторять аудит M3, provider research или исправный backend CI.
+
+### Точный write-set C5
+
+1. **frontend/e2e/messaging.spec.ts** — только failing recovery case и необходимые
+   локальные helpers этого case. Bounded payload-free diagnosis и детерминированный
+   порядок реальных auth/read/rotate/resolve событий.
+2. **frontend/src/App.tsx** — условно: только если воспроизведение докажет
+   runtime defect текущего auth recovery/invalidation. Сначала причинное evidence,
+   затем минимальное исправление в том же задании; отдельное разрешение на эту
+   уже указанную дельту не требуется.
+3. **frontend/src/App.test.tsx** — regression/negative controls для фактического
+   изменения App.tsx. Если исправление только в синхронизации теста, этот path
+   менять ради количества тестов не требуется.
+4. **docs/TASK_REGISTER.md** — только строка C5-M4.1-CI-RECOVERY-R1 в CURRENT.
+5. **docs/tasks/M4_HANDOFF.md** — короткий C5 receipt под этой выдачей.
+
+Остальные panels/API/backend/SQL, Gateway, manifests/locks, CI workflows,
+playwright.config.ts и scripts/test_browser.sh не меняются. Если причинное
+evidence требует другого path, вернуть C0 конкретную ошибку/файл/минимальную дельту,
+не менять общую auth policy предположением. Нет VM/paid API или новых migrations.
+
+### Выполнение и критерии
+
+- Воспроизвести смену auth state целевым тестом и идентифицировать причинный read:
+  порядок request/response относительно login/rotate, безопасный класс пути,
+  method/status, ограниченные phase/boolean/UI markers. Не логировать raw URL/IDs,
+  cookies, CSRF, idempotency-key, bodies, частный текст или signed URLs.
+  Нужен конечный локальный observer данного case, не общий recorder/framework.
+- Разделить две причины: неконтролируемая ротация до завершения текущих auth reads
+  в harness либо дефект обработки устаревшего ответа в runtime. Исправить доказанную
+  причину. Готовность кнопки не подменяет завершение причинного read.
+  Ожидания основаны на конкретных событиях/границах, не sleep/networkidle/большем
+  timeout. Нельзя игнорировать настоящий current 401 или подменять успешный JSON.
+- Сохранить смысл полного сценария: первая команда реально COMMITTED200,
+  клиент теряет ответ; реальный login возвращает доступ; после rotate исходный
+  retry получает CSRF403; recovery позволяет явный повтор **тех же bytes/key**;
+  ответ REPLAY совпадает с первым, в PG ровно одно решение. Нет автоматического
+  mutation retry, client send или Resume. Отрицательный реальный logout/revoke
+  по-прежнему скрывает protected данные и не возрождает чужое/старое намерение.
+- Если App меняется, regression до исправления падает по целевой причине,
+  после проходит; проверить и актуальный отказ, и запоздалый ответ.
+  Если меняется только harness, показать, что контролируемый порядок устраняет
+  именно воспроизведённую гонку, а все исходные business/auth assertions сохранены.
+- Сначала targeted: существующий locked Node24 environment и реальный
+  browser/API/PG harness. После его обычного setup и с его private env:
+  `npm --prefix frontend run test:e2e -- --project=chromium-desktop e2e/messaging.spec.ts --grep "^Escalation committed200 loss"`.
+  Setup/private files остаются вне Git; тест без env/реальной БД не evidence.
+  При изменении App: `npm --prefix frontend test -- src/App.test.tsx`.
+  Затем frontend typecheck и релевантные существующие auth/recovery/revoke cases.
+- Готовый итог вернуть C0: полный head и base, changed paths, точный root cause
+  или оставшийся конкретный blocker, команды/фактические результаты, сохранённые
+  инварианты. C0 проверяет candidate и переносит его в существующий PR38 для
+  **одного штатного полного CI**. Не открывать дублирующий implementation PR,
+  не двигать c4/main и не перезапускать неизменённый CI.
+  При новом падении разобрать все известные группы; прежний FAIL не переписать
+  задним числом как PASS. Авторский review не считать независимым C8.
+
+После возврата C5 — HOLD. M4.2 выдаётся только после устранения blocker и приёмки
+M4.1 по текущей общей базе. Единственная матрица A01–A08 ниже не меняется.
+
+## Предыдущая выдача — M4.1-CONTRACT / C4 / HOLD
+
+C4 вернул реализацию в PR38; source review C0 завершён, интеграция блокирована
+browser CI. Следующая работа — только текущая C5 выдача выше. Исходный scope
+ниже сохранён для проверки результата, не для параллельного продолжения C4.
+
 
 **Результат и польза:** рабочий typed Gateway с проверкой входа/выхода, конечными
 лимитами и детерминированным fake adapter. M4.2 подключит Polza через этот же
@@ -371,7 +490,8 @@ M4 VERIFIED только после A01–A08 в заявленных грани
 
 ## Непосредственное следующее действие
 
-C4 выполняет единственную M4.1-CONTRACT из текущей выдачи выше. После возврата
-C0 принимает контракт и выдаёт M4.2-PROBE от фактической общей базы.
+C5 выполняет единственную C5-M4.1-CI-RECOVERY-R1 из текущей выдачи выше; C4 HOLD.
+После исправления C0 принимает конечный M4.1 candidate и его полный CI;
+затем M4.2-PROBE получает фактическую принятую общую базу.
 Подготовка probe command/secret инструкции не разрешает платные вызовы или VM
 активацию сама по себе; бюджет подтверждает владелец.

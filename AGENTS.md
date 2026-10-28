@@ -20,7 +20,9 @@ M3 закрыт в LOCAL/TEST; финальный receipt — в верхнем 
 [IMPL-004](docs/decisions/IMPL-004-m4-pilot-ai.md) и CURRENT в
 [TASK_REGISTER](docs/TASK_REGISTER.md), затем относящиеся к задаче исходные ADR.
 План/IMPL-004 приняты C0 и интегрированы в PR #37. Единственная текущая
-выдача M4.1-CONTRACT, её accepted base и write-set — в верхнем M4_HANDOFF/CURRENT.
+выдача, её accepted/repair base, исполнитель и write-set — в верхнем
+M4_HANDOFF/CURRENT. После возврата C4 текущий blocker PR38 исправляет C5;
+C4 HOLD, M4.2 ждёт полного CI и приёмки.
 Исторические HOLD/операторские команды M1–M3 не являются новой задачей M4.
 
 Цель — один агент/один рабочий AI provider и инструменты чтения; provider-neutral
