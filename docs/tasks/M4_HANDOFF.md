@@ -58,6 +58,22 @@ read/rotation →401→anonymous в заданном порядке; конкр�
 C5 продолжает работу; C4/M4.2 HOLD. Нового task ID/матрицы, runtime/SQL/VM scope нет.
 Предыдущий FAILURE40740338709 и diagnostic PASS факты сохраняются раздельно.
 
+### C5 repair candidate — C5-M4.1-CI-RECOVERY-R1 / 2026-10-29
+
+**REVIEW / C5 HOLD для C0/CI**, basefe9de57d69ad4123e103ebc931970d0413b80371.
+Только текущий E2E case/helper: первая rotation ждёт11 login/child read classes,
+200+FINISHED каждого наблюдённого GET и завершения обработки в UI. Пустой набор,
+пропущенный child, FAILED/denied или неполный observer барьер не открывают.
+Управляемый observations GET удерживается, пока rotation ждёт барьер; после
+release требуется настоящий200 с ещё действующими credentials. Отдельный
+принятый old-credential Business401→anonymous negative и исходные23 expect
+statements, exact replay/one decision/worker0/reload assertions сохранены.
+App/runtime/остальные paths не менялись, кроме этой записи и C5 CURRENT.
+Typecheck/diff и локальные source/predicate/privacy checks PASS; новый реальный
+browser/API/PG **NOT RUN**. Причина класса гонки подтверждена прежним R4 CI,
+исторический GET неизвестен; приёмка исправления требует нового полного CI C0.
+Полные head/tree/команды/границы — в возврате C5 в PR38; M4.1 VERIFIED не заявлен.
+
 ### История — разрешённый диагностический этап в GitHub Actions / 2026-10-29
 
 C5 [вернул blocker](https://github.com/Elefesys/ai-service-manager/pull/38#issuecomment-6478249644):

@@ -274,7 +274,7 @@ function escalationRecoveryDiagnostic(value:Record<string,unknown>):string{
   const prefix='E2E_ESCALATION_RECOVERY_R4:';
   const fallback=prefix+'{"stage":"UNKNOWN","diagnostic_error":true}';
   try{
-    const stages=['SETUP','FIRST_SUBMIT','COMMITTED','AMBIGUOUS','CLEAR_COOKIES','SESSION_RECOVERY','LOGIN','RETRY_ENABLED','ROTATE_SESSION','ROTATE','FIRST_RETRY_CLICK','FIRST_RETRY_RESPONSE','CSRF_RECOVERY','SECOND_RETRY_CLICK','SECOND_RETRY_RESPONSE','RECEIPT','ASSERTIONS','RELOAD','PROBE_HELD','PROBE_SESSION','PROBE_ROTATE','PROBE_RELEASE','PROBE_DENIAL','DONE','CLEANUP'];
+    const stages=['SETUP','FIRST_SUBMIT','COMMITTED','AMBIGUOUS','CLEAR_COOKIES','SESSION_RECOVERY','LOGIN','RETRY_ENABLED','STARTUP_READS','STARTUP_RELEASE','ROTATE_SESSION','ROTATE','FIRST_RETRY_CLICK','FIRST_RETRY_RESPONSE','CSRF_RECOVERY','SECOND_RETRY_CLICK','SECOND_RETRY_RESPONSE','RECEIPT','ASSERTIONS','RELOAD','PROBE_HELD','PROBE_SESSION','PROBE_ROTATE','PROBE_RELEASE','PROBE_DENIAL','DONE','CLEANUP'];
     const routes=['ENTERED','FETCH_PENDING','FETCH_FAILED','PARSE_PENDING','PARSED','PARSE_FAILED','ABORT_PENDING','ABORTED','ABORT_FAILED','CONTINUE_PENDING','CONTINUED','CONTINUE_FAILED'];
     const closed=(v:unknown,allowed:string[])=>typeof v==='string'&&allowed.includes(v)?v:'UNKNOWN';
     const boolean=(v:unknown)=>typeof v==='boolean'?v:null;
@@ -283,8 +283,8 @@ function escalationRecoveryDiagnostic(value:Record<string,unknown>):string{
     const status=(v:unknown)=>typeof v==='number'&&Number.isInteger(v)&&v>=100&&v<=599?v:null;
     const record:Record<string,unknown>={stage:closed(value.stage,stages),route_stage:closed(value.route_stage,routes)};
     for(const key of ['attempts','resolve_requests','resolve_responses','resolve_failed','resolve_finished','session_requests','session_responses','login_requests','login_responses','detail_requests','detail_responses'])record[key]=count(value[key]);
-    for(const key of ['first_status','rotate_status','resolve_status','session_status','login_status','detail_status','held_status'])record[key]=status(value[key]);
-    for(const key of ['observers_attached','observer_error','route_is_post','first_fetch_ok','first_parse_ok','first_abort_ok','same_body','same_key','same_intent','retry_clicked','replay_clicked','observers_removed','cleanup_ok','original_assertions_passed','held_has_cookie','held_session_required','events_truncated'])record[key]=boolean(value[key]);
+    for(const key of ['first_status','rotate_status','resolve_status','session_status','login_status','detail_status','held_status','startup_status'])record[key]=status(value[key]);
+    for(const key of ['observers_attached','observer_error','route_is_post','first_fetch_ok','first_parse_ok','first_abort_ok','same_body','same_key','same_intent','retry_clicked','replay_clicked','observers_removed','cleanup_ok','original_assertions_passed','held_has_cookie','held_session_required','events_truncated','startup_blocked','startup_complete'])record[key]=boolean(value[key]);
     for(const key of ['ui_before_rotate','ui_before_retry','ui_probe_held','ui_probe_denied','ui_failure']){
       const input=value[key],ui=input&&typeof input==='object'?input as Record<string,unknown>:{};
       record[key]=Object.fromEntries(['closed','read_ok','detail_present','detail_loading','retry_present','retry_disabled','recover_present','saving','login_present','auth_recovering'].map(k=>[k,boolean(ui[k])]));
@@ -305,7 +305,7 @@ test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key
   test.setTimeout(60000);const preset='esc_recovery';
   let attempts=0,original:string|null=null,key:string|undefined,first:EscalationReceipt|undefined,identical=true;
   const diagnostic:Record<string,unknown>={stage:'SETUP',observers_attached:false,observer_error:false,retry_clicked:false,replay_clicked:false};
-  let failed=false,primary:unknown,removeObservers=()=>{},releaseRead=()=>{},closing=false;
+  let failed=false,primary:unknown,removeObservers=()=>{},releaseRead=()=>{},releaseStartup=()=>{},closing=false;
   const sampleUI=async()=>{
     const result=await safeDiagnostic('MESSAGING_HTTP_FAILED',async()=>{
       if(page.isClosed())return {closed:true,read_ok:false};
@@ -379,8 +379,47 @@ test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key
     });
     diagnostic.stage='FIRST_SUBMIT';await escDetail(page).getByLabel('Внутренний ответ владельца').fill('  Сохранить точно\ne\u0301 🎨  ');await escDetail(page).getByRole('button',{name:'Сохранить внутренний ответ'}).click();diagnostic.stage='COMMITTED';expect(requireSafeResult(await committed)).toBe(200);
     diagnostic.stage='AMBIGUOUS';await expect(escDetail(page).getByText(/Результат решения неизвестен/)).toBeVisible();escDelta(before,await helper(preset,'escalation-stats'),1);
-    diagnostic.stage='CLEAR_COOKIES';await page.context().clearCookies();diagnostic.stage='SESSION_RECOVERY';await escDetail(page).getByRole('button',{name:'Проверить сессию для решения'}).click();diagnostic.stage='LOGIN';await loginForm(page,preset);
-    diagnostic.stage='RETRY_ENABLED';await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();diagnostic.ui_before_rotate=await sampleUI();diagnostic.stage='ROTATE_SESSION';const rotate=await rotateSession('ROTATE');diagnostic.rotate_status=rotate.status();expect(rotate.status()).toBe(200);
+    diagnostic.stage='CLEAR_COOKIES';await page.context().clearCookies();diagnostic.stage='SESSION_RECOVERY';await escDetail(page).getByRole('button',{name:'Проверить сессию для решения'}).click();
+    // Login starts seven reads; conversations then starts history/control/context/
+    // observations. Hold that last child before the wire to exercise the barrier.
+    const startupHold:{captured:boolean;result?:SafeResult<number>}={captured:false};
+    const startupRelease=new Promise<void>(resolve=>{releaseStartup=resolve;});
+    await page.route(u=>u.origin===origin&&u.pathname.startsWith(path(preset,'conversations/'))&&u.pathname.endsWith('/human-context/observations'),async route=>{
+      if(route.request().method()!=='GET'||startupHold.captured){await safeContinue(route);return;}startupHold.captured=true;
+      startupHold.result=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',async()=>{
+        const headers=await route.request().allHeaders();record('HELD','observations',route.request());
+        await startupRelease;if(closing){await route.abort('failed');return 0;}
+        record('RELEASED','observations',route.request());const response=await route.fetch({headers,timeout:10000,maxRedirects:0});diagnostic.startup_status=response.status();record('FETCH_RESPONSE','observations',route.request(),response.status());
+        await route.fulfill({response});return response.status();
+      });
+      if(!startupHold.result.ok)await safeDiagnostic('MESSAGING_ROUTE_ABORT_FAILED',()=>route.abort('failed'));
+    });
+    const startupFrom=events.length;
+    const startupComplete=()=>{
+      if(diagnostic.observer_error||diagnostic.events_truncated)return false;
+      const wave=events.slice(startupFrom),reads=wave.filter(e=>e.event==='REQUEST'&&e.method==='GET'&&e.kind!=='session');
+      const required=['businesses','billing','audit','escalations','detail','connections','conversations','messages','control','human_context','observations'];
+      return required.every(kind=>reads.some(r=>r.kind===kind))&&reads.every(r=>{
+        const related=wave.filter(e=>e.request===r.request);
+        return related.some(e=>e.event==='RESPONSE'&&e.status===200)&&related.some(e=>e.event==='FINISHED')&&!related.some(e=>e.event==='FAILED'||e.event==='RESPONSE'&&e.status!==200);
+      });
+    };
+    diagnostic.stage='LOGIN';await loginForm(page,preset);
+    diagnostic.stage='RETRY_ENABLED';await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();
+    await expect.poll(()=>startupHold.captured||!!startupHold.result).toBe(true);if(startupHold.result)requireSafeResult(startupHold.result);
+    diagnostic.stage='STARTUP_READS';let barrierChecked=false;
+    const rotation=(async()=>{
+      await expect.poll(()=>{barrierChecked=true;return startupComplete();}).toBe(true);
+      // Network completion precedes React's JSON handling/render. These controls
+      // settle each read's busy state, including the observed child components.
+      for(const name of ['Обновить подписку','Обновить историю','Обновить очередь','Обновить запрос','Обновить подключения','Обновить диалоги','Обновить сообщения','Обновить режим','Обновить контекст','Обновить наблюдения'])await expect(page.getByRole('button',{name,exact:true})).toBeEnabled();
+      await expect(page.getByText('Загружаем список…',{exact:true})).toHaveCount(0);expect(startupComplete()).toBe(true);
+      diagnostic.startup_complete=true;diagnostic.ui_before_rotate=await sampleUI();diagnostic.stage='ROTATE_SESSION';return rotateSession('ROTATE');
+    })();void rotation.catch(()=>{});
+    await expect.poll(()=>barrierChecked).toBe(true);
+    diagnostic.startup_blocked=!startupComplete()&&!events.some(e=>e.event==='HARNESS_REQUEST'&&e.kind==='rotate');expect(diagnostic.startup_blocked).toBe(true);
+    diagnostic.stage='STARTUP_RELEASE';releaseStartup();await expect.poll(()=>!!startupHold.result).toBe(true);expect(requireSafeResult(startupHold.result!)).toBe(200);
+    const rotate=await rotation;diagnostic.rotate_status=rotate.status();expect(rotate.status()).toBe(200);
     diagnostic.ui_before_retry=await sampleUI();
     const denied=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);void denied.catch(()=>{}); // Handle an early rejection; still await the original promise below.
     diagnostic.stage='FIRST_RETRY_CLICK';await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();diagnostic.retry_clicked=true;diagnostic.stage='FIRST_RETRY_RESPONSE';expect((await denied).status()).toBe(403);
@@ -419,7 +458,7 @@ test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key
   }catch(error){failed=true;primary=error;diagnostic.ui_failure=await sampleUI();}
   finally{
     // No payload/error serialization; a cleanup failure cannot replace the primary.
-    closing=true;releaseRead();
+    closing=true;releaseStartup();releaseRead();
     const removed=await safeDiagnostic('MESSAGING_ROUTE_RELEASE_FAILED',async()=>removeObservers());diagnostic.observers_removed=removed.ok;
     const cleaned=await safeDiagnostic('MESSAGING_ROUTE_RELEASE_FAILED',()=>page.unrouteAll({behavior:'wait'}));diagnostic.cleanup_ok=cleaned.ok;
     original=null;key=undefined;first=undefined;diagnostic.attempts=attempts;diagnostic.same_intent=attempts>1?identical:null;

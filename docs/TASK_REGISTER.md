@@ -19,7 +19,7 @@ existing escalation login/rotation/replay recovery: UI стал anonymous до r
 |---|---|
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance + main CI40725828529 PASS |
 | M4.1-CONTRACT | BLOCKED: C4 implementation returned/source reviewed; полный CI FAIL; PR38 не слит, C4 HOLD |
-| C5-M4.1-CI-RECOVERY-R1 | TODO / ASSIGNED C5: diagnostic7c36a836… принят, browser run40760265440 54/54 PASS; controlled real read/rotation401→anonymous подтверждён, исторический GET неизвестен. Следующий шаг — минимальный причинный барьер startup reads до внешней rotation в том же E2E case; App не менять. Точный scope/evidence в верхнем M4_HANDOFF |
+| C5-M4.1-CI-RECOVERY-R1 | REVIEW / repair candidate, C5 HOLD для C0/CI: добавлен барьер11 startup/child reads и UI перед первой rotation; задержанный observations GET должен завершиться200 до неё. Negative old-credential Business401 сохранён. Typecheck/diff/local predicate checks PASS; новый E2E NOT RUN. Basefe9de57d…; diagnostic54/54 PASS отдельно, исторический GET неизвестен; receipt в M4_HANDOFF |
 | M4.2-PROBE | TODO / HOLD до приёмки M4.1; Polza adapter/synthetic comparison, отдельный ключ и подтверждённый бюджет |
 | M4.3-CONTEXT | TODO: актуальный M3 context и необходимые read-only tools |
 | M4.3-RUNTIME | TODO: durable AI run и настоящий guarded Telegram consumer; C2/C3 по точной дельте |
