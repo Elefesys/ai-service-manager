@@ -14,7 +14,51 @@
 Задача включает причинное воспроизведение и минимальное исправление, а не отдельный
 этап общей диагностики или повышение timeout.
 
-### Уточнение C0 — воспроизведение в GitHub Actions / 2026-10-29
+### Текущий шаг C5 — исправить порядок чтений в harness
+
+**Diagnostic source принят для этого шага:** 7c36a8360ede2b6f5ed6d800c5dd1972e2a37dce,
+tree c82d3a73d179661df8fa62bbe81243ad5a73f556. Accepted main остаётся
+1cb3b6e168276d77faa3f11f33f8ecd0408ce406; ветка c5/m4-1-ci-recovery-r1.
+C0 добавляет эту дельту задания поверх diagnostic source; точный стартовый
+head — в передаче C0. Полная интеграция M4.1 ещё не принята.
+
+**Новое реальное evidence:** [browser job123069972604 / run40760265440](https://github.com/Elefesys/ai-service-manager/actions/runs/40760265440/job/123069972604),
+attempt1: **54/54 browser PASS**,398 frontend PASS, source-clean PASS.
+Проверенный merge561faa3760a70120b6158c96052a1d4ac7dd3318 имеет exact candidate tree.
+R4 DONE,137 событий, не обрезан, observer/cleanup без ошибок. В исходном пути
+все startup reads завершились до первой rotation (events13–45, затем46–49);
+первый retry403, recovery и exact bytes/key REPLAY200, один PG decision сохранены.
+В controlled probe захваченная сессия действительна (session200), после rotation200
+удержанный настоящий Business GET получает SESSION_REQUIRED401, UI показывает login
+и скрывает owner panels (events130–137). Это причинно подтверждает механизм
+read/rotation →401→anonymous в заданном порядке; конкретный GET старого attempt1
+остаётся неизвестным. Runtime defect не доказан. Один диагностический PASS не
+исправляет отсутствие явного порядка в исходном тесте. Остальной CI ещё выполняется.
+
+**Сейчас разрешено C5 в той же R1:**
+- Минимальное исправление только frontend/e2e/messaging.spec.ts, данного case/helper:
+  перед первой внешней rotation установить конечный барьер завершения настоящих
+  защищённых чтений, вызванных login, включая их наблюдённые дочерние reads.
+  Одна готовая detail/retry button или мгновенное отсутствие in-flight недостаточны;
+  ожидание связано с конкретными завершёнными reads/состоянием данного recovery.
+- Управляемо задержанный real read должен удерживать rotation до своего завершения
+  с ещё действующими credentials. Затем исходный CSRF403→recovery→REPLAY путь проходит.
+  Сохранить отдельно доказанный negative: real old-credential GET после rotation
+  всё ещё401 и скрывает protected UI. Не подавлять401, не подменять ответы/receipts,
+  не добавлять sleep/networkidle/timeout/retry и не менять App.tsx/App.test.tsx.
+- Сохраняются exact bytes/key, attempts=3, один PG decision, worker.calls=0,
+  reload без нового resolve и все остальные cases. Достаточен текущий bounded R4;
+  новая общая диагностика не нужна.
+- Локально typecheck/diff checks; Docker E2E здесь по-прежнему может быть NOT RUN.
+  Вернуть C0 конечный исправленный candidate и причинное обоснование изменения;
+  C0 review → один штатный полный Actions в существующем PR38 на новом head.
+  Предварительный локальный Docker PASS не является gate передачи.
+  Из docs разрешены только строка C5 в CURRENT и короткий receipt под этой выдачей.
+
+C5 продолжает работу; C4/M4.2 HOLD. Нового task ID/матрицы, runtime/SQL/VM scope нет.
+Предыдущий FAILURE40740338709 и diagnostic PASS факты сохраняются раздельно.
+
+### История — разрешённый диагностический этап в GitHub Actions / 2026-10-29
 
 C5 [вернул blocker](https://github.com/Elefesys/ai-service-manager/pull/38#issuecomment-6478249644):
 Docker отсутствует **в локальной среде исполнителя**. GitHub Actions browser job
@@ -23,7 +67,7 @@ API/PostgreSQL и synthetic private env, создаваемыми самим har
 Локальное отсутствие Docker не блокирует подготовку теста и не требует VM владельца.
 
 C0 исправляет порядок этой же задачи; write-set и итоговые критерии сохраняются:
-1. **Сейчас C5 продолжает подготовку:** в разрешённом failing case добавить
+1. **Для диагностического этапа C5 получил подготовку:** в разрешённом failing case добавить
    bounded payload-free observer причинных protected reads и необходимые управляемые
    точки воспроизведения. Runtime не менять до evidence. Сохранить реальный
    committed200/login/rotate/CSRF/replay путь и все исходные assertions.
@@ -44,8 +88,9 @@ C0 исправляет порядок этой же задачи; write-set и 
    определить недостающий факт и следующую минимальную управляемую проверку,
    не повторять неизменённый прогон в надежде получить нужный результат.
 
-C5 HOLD из blocker receipt ниже снят **для этой подготовки**; реальное E2E
-ещё не выполнено, исправление и новый CI пока не заявлены. C4/M4.2 остаются HOLD.
+Эта подготовка завершена candidate7c36a836…; диагностический browser outcome
+принят в текущем шаге выше. Blocker receipt ниже сохраняет прежний временной
+срез, а актуальное продолжение — минимальное исправление harness. C4/M4.2 HOLD.
 C5 не двигает c4/main и не открывает дополнительный PR; передачу в CI делает C0.
 
 ### Решение C0 по возврату C4

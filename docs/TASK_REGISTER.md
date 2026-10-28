@@ -19,12 +19,16 @@ existing escalation login/rotation/replay recovery: UI стал anonymous до r
 |---|---|
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance + main CI40725828529 PASS |
 | M4.1-CONTRACT | BLOCKED: C4 implementation returned/source reviewed; полный CI FAIL; PR38 не слит, C4 HOLD |
-| C5-M4.1-CI-RECOVERY-R1 | REVIEW / diagnostic candidate; C5 HOLD для C0/Actions. Один recovery case: bounded protected-read timeline и управляемый Business GET через rotation после исходного replay. Typecheck/diff/privacy-source checks PASS; реальный E2E NOT RUN, причина исходного CI и исправление ещё не заявлены. Base1449e9f9…; прежний blocker receipt сохранён; порядок/receipt в M4_HANDOFF |
+| C5-M4.1-CI-RECOVERY-R1 | TODO / ASSIGNED C5: diagnostic7c36a836… принят, browser run40760265440 54/54 PASS; controlled real read/rotation401→anonymous подтверждён, исторический GET неизвестен. Следующий шаг — минимальный причинный барьер startup reads до внешней rotation в том же E2E case; App не менять. Точный scope/evidence в верхнем M4_HANDOFF |
 | M4.2-PROBE | TODO / HOLD до приёмки M4.1; Polza adapter/synthetic comparison, отдельный ключ и подтверждённый бюджет |
 | M4.3-CONTEXT | TODO: актуальный M3 context и необходимые read-only tools |
 | M4.3-RUNTIME | TODO: durable AI run и настоящий guarded Telegram consumer; C2/C3 по точной дельте |
 | M4.3-QUALITY | TODO: независимый scoped C8/eval; авторские тесты внутри каждой задачи |
 | M4-ACCEPTANCE | TODO: bounded synthetic live, A08, actual main CI и передача M5 |
+
+Новый диагностический run40760265440: browser54/54 и398frontend PASS; R4 полный,
+controlled rotation401→anonymous воспроизведён. Полный run пока IN_PROGRESS;
+исходный FAIL сохранён. Диагностика не является завершённым исправлением.
 
 Единственная текущая выдача и матрица A01–A08 — [M4_HANDOFF](tasks/M4_HANDOFF.md).
 C1/C2/C3/C4/C6/C8 HOLD. Общие файлы не редактируются параллельно.
