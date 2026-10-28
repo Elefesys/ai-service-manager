@@ -2,7 +2,23 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — native checks pass; C0 corrects remaining CI budget / 2026-10-21
+## CURRENT — recovered TEST Telegram polling / 2026-10-26
+
+| Task | Status and scope |
+|---|---|
+| C6-M3-TELEGRAM-POLLING-01 | REVIEW; user approved outbound getUpdates after repeated fresh webhook timeouts. Base 5c074beb4a47521b8c11a820f580673ec1c2cce2; branch c6/telegram-polling-recovery. Receiver, bounded TEST deployment/rollback, focused tests and IMPL-003; no DDL, billing, conversation policy, UI or existing transport changes. |
+
+The recovered Selectel TEST has an enabled binding, working manual replies and
+successful processing of earlier text/photo events. Six later events remain at
+Telegram. [IMPL-003](decisions/IMPL-003-telegram-polling-test.md) records the approved
+receive-mode revision and acceptance criteria. No polling deployment or new live
+success is claimed before the user's VM receipt; M3 remains IN_PROGRESS.
+Write-set: scripts/telegram_polling_receiver.py, scripts/telegram_polling_recovery.py,
+tests/polling/, tests/test_telegram_polling_postgres.py, IMPL-003 and this register.
+Local evidence: 30 focused unit/model tests and Ruff pass; accepted activation
+receipt/runtime fixture passes. Full CI and live VM acceptance remain pending.
+
+## History — native checks pass; C0 corrects remaining CI budget / 2026-10-21
 
 | Task / finding | Current status |
 |---|---|
