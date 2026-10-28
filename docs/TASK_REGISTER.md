@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6 R1 принят; разрешена одноразовая TEST-активация MATERIAL / 2026-10-28
+## CURRENT — C6 R2 LIVE PASS принят; M3 owner smoke продолжается / 2026-10-28
 
 Accepted runtime main **5c074beb4a47521b8c11a820f580673ec1c2cce2**,
 tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**. Прежние [C0/C8 acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363)
@@ -10,18 +10,18 @@ tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**. Прежние [C0/C8 accepta
 
 | Scope / task | Текущий результат |
 |---|---|
-| Новая TEST VM / источник | C6 R1, переданный пользователем: accepted source/images, schema/binding/identity PASS; оба принятых TEST окна действовали на момент проверки. C0 не выполнял независимую VM-инспекцию. |
-| Живой транспорт / HUMAN | User-observed text/photo/manual Console reply и сохранение HUMAN после reload приняты. Маршрут ПК/Happ/SSH принят для разработки; автономность к пилоту. PC_SESSION сейчас INACTIVE. |
-| MATERIAL / native | Фактически MATERIAL=false; native OFF_UNUSED/P0. Изменений БД/приложения/транспорта/исходных приватных файлов нет. Native check/commit/current ещё NOT_RUN. |
-| C6-M3-TEST-POLICY-ENABLE-R1 | Возврат принят. Единственный выявленный blocker MATERIAL_OPERATOR_PATH_MISSING подтверждён source review; остановка без произвольного SQL корректна. |
-| C6-M3-TEST-POLICY-ENABLE-R2 | AUTHORIZED / NOT_EXECUTED: [точная одноразовая операция и последующий штатный native ENABLE](tasks/M3_HANDOFF.md#c6-m3-test-policy-enable-r2). Явное исключение к R1 п.2 только для material_enabled false→true у одного принятого TEST-binding через существующий asm_migrator. |
+| Принятая VM / источник | LOCAL / asm_local, тот же binding из private activation intent. По переданному пользователем live-отчёту C6 R2 revision 4: source/images, schema/binding/identity и оба TEST окна PASS на момент проверки. C0 не выполнял независимую VM-инспекцию. |
+| Живой транспорт / HUMAN | User-observed text/photo/manual Console reply и сохранение HUMAN после reload приняты. Маршрут ПК/Happ/SSH принят для разработки; автономность к пилоту. PC_SESSION_INACTIVE; перед owner smoke пользователь запускает прежнюю сессию. |
+| MATERIAL / native | MATERIAL false→true / COMMITTED; native OFF_UNUSED/P0→ON/P1, receipt ACCEPTED, current ON/P1. Приложение, транспорт и исходные private files UNCHANGED; временный контейнер удалён, SSH_EXIT=0. |
+| C6-M3-TEST-POLICY-ENABLE-R1 | Возврат принят; первоначальный MATERIAL_OPERATOR_PATH_MISSING устранён в рамках разрешённой R2. |
+| C6-M3-TEST-POLICY-ENABLE-R2 | VERIFIED / LIVE PASS по переданному отчёту C6, оператор revision 4; COMPLETE / C6 HOLD. [Scope и принятый результат](tasks/M3_HANDOFF.md#c6-m3-test-policy-enable-r2). TARGET_ENVIRONMENT_MISMATCH исправлен точным ограничением LOCAL / asm_local в commit 310210c70ff918c73f75f69de7b9b927ac8be5dc. |
+| M3-OWNER-SMOKE-R1 / A08 / P-A03-09 / A12 | IN_PROGRESS: [следующий шаг и последовательность](tasks/M3_HANDOFF.md#m3-owner-smoke-r1). Свежие native observations/edit/delete, сохранение полного контекста с HUMAN, отдельный Resume и итог живого M3 ещё не подтверждены. Старые terminal IGNORED не переигрываются. |
 | PR36 | Последняя проверка: Draft/open, head 5d828a1ece2840b57fb2fd7d890d3e3fd47da388, CI 40305446978 — 11/11 SUCCESS; 804 PG, 54 browser. PC helper отдельно, merge этой выдачей не выполняется. |
-| A08 / P-A03-09 / A12 | Живые observations/edit/delete, save/отдельный Resume и итоговый deployed-host receipt остаются OPEN. Старые terminal IGNORED не переигрываются. |
-| M4 / CI optimization / другие чаты | M4 не открыт; оптимизация после всего M3; C1/C2/C3/C5/C8 HOLD. |
+| M4 / CI optimization / другие чаты | M4 не открыт; оптимизация после всего M3; C1/C2/C3/C5/C6/C8 HOLD. |
 
-Разрешение не является результатом выполнения. Если MATERIAL принят, а native шаг
-не прошёл, сохраняется честный partial state; автоматический сброс gate не назначен.
-Новых прав/DDL/runtime API или общего operator framework не добавляется.
+Настройка MATERIAL/native завершена; её LIVE PASS не подменяет owner smoke.
+Следующий результат — фактическое отображение свежих событий и действия владельца
+в Console на принятом маршруте. Использование контекста настоящей моделью относится к M4.
 
 ---
 
