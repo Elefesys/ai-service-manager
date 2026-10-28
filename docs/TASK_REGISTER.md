@@ -2,31 +2,33 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4 planning REVIEW; implementation TODO / 2026-10-28
+## CURRENT — M4 plan accepted; M4.1-CONTRACT issued to C4 / 2026-10-29
 
-Пользователь поручил исследовать AI-агрегаторов и подготовить минимальный M4.
-[План и единственная матрица A01–A08](tasks/M4_HANDOFF.md),
-[поправка к архитектуре IMPL-004, PROPOSED](decisions/IMPL-004-m4-pilot-ai.md),
-[исследование рынка](research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-**PolzaAI — первый кандидат, не live-verified provider.** Actual M4 implementation
-и платные API-вызовы не выполнены. C0 принимает план до выдачи кода; первый
-исполнитель C4. Следующая task base — фактический принятый SHA после интеграции
-планирующего PR, не предполагаемый merge commit.
+План и [IMPL-004](decisions/IMPL-004-m4-pilot-ai.md) приняты C0 в
+[PR #37](https://github.com/Elefesys/ai-service-manager/pull/37), PR слит владельцем.
+Принятая база: **1cb3b6e168276d77faa3f11f33f8ecd0408ce406** (actual main после PR #37).
+Дерево: **25205a6644bff00f8afa110058ad1e569695791d**, совпадает с принятым planning head.
+[Main CI 40725828529](https://github.com/Elefesys/ai-service-manager/actions/runs/40725828529),
+push/main, attempt 1: **11/11 SUCCESS**. Проверены SHA и conclusions всех jobs;
+прежние артефакты/M3/рынок заново не аудировались.
+Единственная текущая выдача — [M4.1-CONTRACT](tasks/M4_HANDOFF.md#текущая-выдача--m41-contract--c4--2026-10-29).
+Implementation ещё не заявлен выполненным. Polza остаётся первым EVAL_ONLY
+кандидатом; платные вызовы и live AI не выполнялись.
 
 | Task | Status / ближайший результат |
 |---|---|
-| M4-PLAN | REVIEW: docs-only; C0 acceptance ожидается, runtime не менялся |
-| M4.1-CONTRACT | TODO: минимальный Gateway/config/schema/fakes; следующая выдача C4 |
-| M4.2-PROBE | TODO: Polza adapter, synthetic API proof и выбор одной модели; нужен ограниченный ключ/бюджет |
-| M4.3-CONTEXT | TODO: актуальный M3 context, один-два реальных read tools, bounded agent |
-| M4.3-RUNTIME | TODO: durable AI run и настоящий guarded Telegram consumer; C2/C3 участвуют по точной дельте |
-| M4.3-QUALITY | TODO: focused C8/eval и A01–A07; тесты создаются вместе с функциями |
+| M4-PLAN | INTEGRATED / VERIFIED для docs-only scope: решение C0, merged PR #37, actual main CI PASS |
+| M4.1-CONTRACT | TODO / ASSIGNED C4: typed Gateway/DTO/schema/limits/fake; ветка c4/m4-1-contract, base 1cb3b6e168276d77faa3f11f33f8ecd0408ce406; точный write-set и evidence в текущей выдаче |
+| M4.2-PROBE | TODO: Polza adapter и synthetic сравнение кандидатов; после M4.1, отдельный ключ и подтверждённый бюджет |
+| M4.3-CONTEXT | TODO: актуальный M3 context и необходимые read-only tools |
+| M4.3-RUNTIME | TODO: durable AI run и настоящий guarded Telegram consumer; C2/C3 по точной дельте |
+| M4.3-QUALITY | TODO: независимый scoped C8/eval; авторские тесты внутри каждой задачи |
 | M4-ACCEPTANCE | TODO: bounded synthetic live, A08, actual main CI и передача M5 |
 
-Один агент/один рабочий provider. Direct API runtime, registry/admin UI, RAG/Vision
-runtime, новые business domains и production отложены по IMPL-004, а не считаются
-реализованными. Existing native context/owner control/no-resend сохраняются.
-Подготовка не переоткрывает M3 и не запускает исторические C6 инструкции.
+Единственная матрица A01–A08 — [M4_HANDOFF](tasks/M4_HANDOFF.md).
+C1/C2/C3/C5/C6/C8 HOLD; общие файлы и миграции параллельно не меняются.
+Direct API runtime, registry/admin UI, RAG/Vision runtime и будущие business domains
+отложены по IMPL-004. M3 не переоткрывается; старые операторские команды не выдаются.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

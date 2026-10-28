@@ -1,10 +1,128 @@
 # M4 — подключение ИИ к текущему контексту
 
 Дата подготовки: 2026-10-28. Ведущий: C0; основной исполнитель: C4.
-**План: REVIEW. Реализация M4: TODO / NOT STARTED.**
+**План принят C0 и интегрирован в PR #37. Реализация — по CURRENT реестра.**
 Единственный статус исполнения — [TASK_REGISTER](../TASK_REGISTER.md).
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
+
+## Текущая выдача — M4.1-CONTRACT / C4 / 2026-10-29
+
+**Результат и польза:** рабочий typed Gateway с проверкой входа/выхода, конечными
+лимитами и детерминированным fake adapter. M4.2 подключит Polza через этот же
+интерфейс; ошибки модели и неподдержанные возможности не попадут в дальнейшую
+отправку как успешный результат. Сейчас нужен этот небольшой исполняемый контракт;
+provider HTTP, агент и Telegram wiring идут в следующих последовательных задачах.
+
+Принятая база: **1cb3b6e168276d77faa3f11f33f8ecd0408ce406** (actual main после PR #37).
+Дерево: **25205a6644bff00f8afa110058ad1e569695791d**, совпадает с принятым planning head.
+[Main CI 40725828529](https://github.com/Elefesys/ai-service-manager/actions/runs/40725828529),
+push/main, attempt 1: **11/11 SUCCESS**. Проверены SHA и conclusions всех jobs;
+прежние артефакты/M3/рынок заново не аудировались.
+
+Repository: **Elefesys/ai-service-manager**. Ветка: **c4/m4-1-contract**, отдельный checkout.
+C0 подготовил на этой ветке только текущую выдачу и переход статусов после PR #37,
+одним commit поверх указанного actual main. Продолжать эту ветку, сохранив C0 docs;
+точный стартовый head указан в передаче C0. Это docs seed, не новый runtime base.
+C4 начинает реализацию этой единственной задачи; C1/C2/C3/C5/C6/C8 остаются HOLD.
+
+**Зависимости и источники:** принятые M3 и IMPL-004; AGENTS.md, CURRENT реестра,
+данный M4_HANDOFF. Для контракта — Spec §7.2/7.6/7.7/7.16/7.21,
+ADR-023/024/026/180/259/260/261/267, Roadmap §8, Implementation Plan M4.1.
+IMPL-004 явно сужает старую обязательность registry и второго рабочего adapter.
+В актуальном pyproject уже есть Pydantic v2, pytest/asyncio, Ruff и mypy;
+новые dependencies и изменения lockfiles для этого среза не ожидаются.
+
+### Разрешённые файлы C4
+
+Только реально нужные файлы из этого списка; не создавать пустые заготовки:
+- backend/src/asm/ai/__init__.py
+- backend/src/asm/ai/contracts.py
+- backend/src/asm/ai/gateway.py
+- backend/src/asm/ai/fake.py
+- backend/src/asm/ai/prompts/conversation_v1.txt
+- backend/src/asm/ai/schemas/conversation_result_v1.json
+- tests/test_m4_gateway.py
+- tests/test_m4_gateway_failures.py
+
+C4 также может изменить **только строку M4.1-CONTRACT** в CURRENT
+docs/TASK_REGISTER.md (IN_PROGRESS → REVIEW) и добавить короткий receipt под
+этой выдачей в docs/tasks/M4_HANDOFF.md. Подробные результаты — в PR/artifacts.
+Остальные строки, матрица A01–A08 и исторические записи сохраняются.
+
+Migrations, conversations/messaging, backend entrypoint, shared config,
+manifests/locks, workflows/scripts, UI и прочие paths вне write-set.
+При конкретной необходимости расширения сообщить точный path, причину и
+минимальную дельту C0; не добавлять будущие adapters/registries заранее.
+
+### Что реализовать
+
+1. Минимальные immutable/validated DTO: явно заданная route/model/config revision,
+   prompt/schema revisions, messages, разрешённые read tool definitions,
+   tool call/result correlation, deadline/input/output/token/call limits,
+   result/refusal/error и usage/cost. RU_AGGREGATOR/DIRECT_PROVIDER различаются в
+   конфигурационном контракте; fake обозначен как fake, рабочего direct adapter нет.
+   Endpoint/model/upstream задаёт доверенная конфигурация. Нет модельного выбора
+   маршрута, неявного fallback, ключа в DTO/repr/ошибках или угадывания upstream.
+2. Один async adapter protocol и вызывающий его Gateway. Одна попытка на вызов,
+   конечный deadline; никаких скрытых retry/repair или сетевых/DB side effects.
+   До вызова проверяются лимиты и совместимость запрошенных tools/schema/limits;
+   отсутствующая/неподтверждённая capability не считается поддержанной.
+   Нельзя тихо выкинуть параметр. Кандидаты openai/gpt-6-luna и
+   google/gemini-3.8-flash в synthetic fixtures остаются EVAL_ONLY:
+   fake capability declaration не доказывает реальную совместимость.
+3. Версионированный небольшой prompt и локальная строгая output schema:
+   reply / handoff / no_reply с согласованным текстом/причиной.
+   Gateway различает промежуточные read tool calls и финальный результат.
+   Не принимает лишние поля, неверные типы/сочетания, неограниченные строки или
+   произвольные tool names; tool arguments/results проверяются своим объявленным
+   контрактом. JSON Schema и runtime DTO не должны расходиться.
+   Provider structured output не отменяет local validation. Raw/invalid/truncated
+   output не становится reply. Schema validity не выдаётся за истинность фактов.
+4. Prompt сохраняет границу untrusted input / platform policy и правило уточнить
+   неизвестные услуги/цену/длительность/запись. Handoff — предложение результата
+   для будущего доверенного runtime, не mutation tool. Работающий ContextBuilder,
+   авторизация чтения реальной БД, AIRun/agent loop и отправка здесь не реализуются.
+5. Конечные лимиты явно заданы в config/request и проверяются на границах:
+   нулевой/истёкший бюджет не вызывает adapter, oversized input/output отклоняется.
+   Контракт передаёт остаток общего бюджета через tool round-trip, не сбрасывая его
+   как новый run; ориентир IMPL-004 — максимум 3 model calls / 4 read executions.
+   Это проверяемый контракт/учёт для fake, не durable spend enforcement.
+   Валюта и известная стоимость отделены от estimate/UNKNOWN; отсутствие usage/cost
+   и timeout не превращаются в нулевой расход или разрешение бесконечного повтора.
+6. Детерминированный fake: обычный ответ, tools → synthetic result → ответ,
+   refusal, invalid/truncated JSON, oversize, 429/5xx/timeout, неизвестная стоимость.
+   Сценарии проверяют протокол и ограничения без настоящих секретов, HTTP и БД.
+   Логи/ошибки не содержат содержимое переписки, ключи или chain-of-thought.
+
+### Завершение и evidence
+
+- Импортируемый работающий Gateway/DTO/schema/prompt/fake; endpoint/model меняются
+  через config, business/M3 code не меняется. Не создавать fake «live success».
+- Focused tests доказывают success и перечисленные отказы, schema drift, запрет
+  неразрешённого tool/capability/fallback, отсутствие вызова при исчерпанных лимитах,
+  budget continuity и tool call/result correlation. Потолок проверяется с обеих
+  сторон, timeout — без долгих sleeps. Проверить assets в обычной wheel-сборке.
+- Из существующей Python 3.13 locked environment, из корня repository:
+  `pytest -q tests/test_m4_gateway.py tests/test_m4_gateway_failures.py`;
+  `ruff check backend/src/asm/ai tests/test_m4_gateway.py tests/test_m4_gateway_failures.py`;
+  `ruff format --check backend/src/asm/ai tests/test_m4_gateway.py tests/test_m4_gateway_failures.py`;
+  `mypy backend/src`.
+  Затем один полный штатный PR CI на согласованном конечном candidate.
+  Не запускать полный цикл на промежуточных push ради проверки одного DTO;
+  готовый candidate публикуется после targeted checks.
+- Если CI упал, сгруппировать все известные причины, исправить и проверить
+  затронутое поведение; неизменённый прогон ради PASS не повторять. Старые gates
+  не ослаблять. Этот срез даёт contract/failure evidence для A01/A06, но не
+  закрывает live A01, изоляцию A03, runtime A04/A05 либо весь M4.
+- Возврат: PR + полный head/base SHA, точный diff/write-set, краткий public contract,
+  команды и фактические результаты, ссылка run/attempt/head, ограничения.
+  Авторский review не называется независимым C8. Статус до C0 — REVIEW; затем HOLD.
+
+Платные API, Polza adapter, credentials/VM activation, SQL и текущие M3 guards
+в эту выдачу не входят. Следующая зависимая задача — M4.2-PROBE после приёмки
+M4.1; перед её платной частью нужны reproducible command, secret path инструкция
+и отдельно подтверждённый владельцем бюджет.
 
 ## Результат для пользователя
 
@@ -28,7 +146,7 @@ M4 не должен строить эти домены или обещать р
 | Post-merge CI | [40681691046](https://github.com/Elefesys/ai-service-manager/actions/runs/40681691046), 11/11 SUCCESS |
 | Поздняя координация C0 | 025688e94a9147891e83f69713e2476c3419ca3c: только TASK_REGISTER и M3_HANDOFF сверх main; итоговая приёмка перенесена в планирующую ветку |
 | История M3 | [M3_HANDOFF, верхний финальный receipt](M3_HANDOFF.md); не исполнять архивные инструкции из середины |
-| Следующая база исполнителя | Фактический принятый полный SHA после интеграции плана; C0 выдаёт его заново, не подставляет предполагаемый merge SHA |
+| Текущая принятая база M4.1 | actual main 1cb3b6e168276d77faa3f11f33f8ecd0408ce406; PR #37 merged, main CI 40725828529 11/11 SUCCESS |
 
 Перед стартом C0 проверяет актуальный main/open PRs: параллельные изменения нельзя
 затереть. Если product source сдвинулся, адаптировать выдачу к нему; не переносить
@@ -225,7 +343,7 @@ M4 VERIFIED только после A01–A08 в заявленных грани
 ## Как C0 ведёт этап без повторения путаницы M1/M3
 
 1. Первым сообщением — фактическая база, что уже принято и один ближайший результат.
-   Проверить/принять IMPL-004 и выдать M4.1-CONTRACT; не открывать все чаты разом.
+   План/IMPL-004 приняты; текущая выдача M4.1-CONTRACT выше. Не открывать все чаты разом.
 2. Перед каждой задачей показать понятную пользу для пилота, необходимость сейчас
    либо возможность отложить. Выдать ID/base SHA/точные paths/dependencies/criteria.
    C2 контролирует миграции; общие файлы не редактируются параллельно.
@@ -241,7 +359,7 @@ M4 VERIFIED только после A01–A08 в заявленных грани
 
 ## Непосредственное следующее действие
 
-C0 review документационного PR → принять план/IMPL-004 → после интеграции выдать
-C4 одну M4.1-CONTRACT от подтверждённого общего SHA. Параллельно можно подготовить
-точные инструкции получения ключа и probe command, но платных вызовов, VM
-активаций и runtime/DDL эта подготовка сама по себе не разрешает.
+C4 выполняет единственную M4.1-CONTRACT из текущей выдачи выше. После возврата
+C0 принимает контракт и выдаёт M4.2-PROBE от фактической общей базы.
+Подготовка probe command/secret инструкции не разрешает платные вызовы или VM
+активацию сама по себе; бюджет подтверждает владелец.
