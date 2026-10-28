@@ -5,22 +5,37 @@
 План принят C0 и слит в PR25; runtime/DDL M3 допускаются отдельными выдачами C0.
 Он детализирует M3.1/M3.2 из исходного плана, не добавляет новый milestone.
 
-## CURRENT — M3 owner smoke и замена фото LIVE PASS; PR36 готов к merge / 2026-10-28
+## CURRENT — M3 INTEGRATED / VERIFIED в LOCAL/TEST; PR36 merged / 2026-10-28
 
-C0 принимает последовательные подтверждения пользователя в этом чате как
-user-observed LIVE PASS для указанного ниже сценария на принятой восстановленной
-VM LOCAL / asm_local, том же binding и маршруте ПК/Happ/SSH. Это наблюдение владельца,
-а не независимое исполнение или VM-инспекция C0. Живая часть согласованного сценария
-без LLM, включая фото-пункт C8, завершена. Весь M3 пока IN_PROGRESS до интеграции
-PR36, проверки actual main/CI и итогового handoff.
+**Решение C0:** M3 закрыт в принятом LOCAL/TEST scope. Основание — прежняя
+[C8 acceptance A01–A12](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363),
+проверенный merge PR36 и новый main CI, C6 host/policy receipt, подтверждённый
+пользователем конечный owner smoke и явные границы live-покрытия ниже.
+Это не production/pilot readiness и не проверка настоящей модели.
 
-C6-M3-TEST-POLICY-ENABLE-R2, оператор revision 4, ранее принят как LIVE PASS:
-MATERIAL false→true / COMMITTED; native OFF_UNUSED/P0→ON/P1,
-receipt ACCEPTED, current ON/P1. Source/images, schema/binding/identity и оба TEST окна
-PASS на момент C6-проверки; приложение, транспорт и исходные private files UNCHANGED;
-временный контейнер удалён, SSH_EXIT=0. PC_SESSION_INACTIVE относится к возврату C6
-до последующего owner smoke; текущее состояние сессии после smoke не утверждается.
-C6 HOLD; повторная активация не нужна. Статусы — в [TASK_REGISTER](../TASK_REGISTER.md).
+| Binding / evidence | Принятое значение |
+|---|---|
+| PR36 / actual main | MERGED; **d2f25673f6d2698d3c3dae2d7b2d709e134358f4** |
+| Main tree | **141d0a6b2b2be0efe1fcb1c3f851796e9f4cb427**, побайтовое Git-tree equality с проверенным PR36 head **5d828a1ece2840b57fb2fd7d890d3e3fd47da388** |
+| Merge parents | **5c074beb4a47521b8c11a820f580673ec1c2cce2**, **5d828a1ece2840b57fb2fd7d890d3e3fd47da388** |
+| Post-merge CI | [40681691046, push/main, attempt 1](https://github.com/Elefesys/ai-service-manager/actions/runs/40681691046) — **11/11 SUCCESS** на exact main |
+| Foundation | Job122802288218: **804 PG PASS**, **2197 ordinary + 155 subtests PASS**; complete evidence/source gates PASS |
+| Browser | Job122793727493: **54 browser/API/PG scenarios**, **398 frontend tests / 14 files PASS** |
+| Native / compatibility | Native runner/carrier/fresh0013 catalog/owned cleanup PASS; durable, Docker29 и все6 migration shards PASS |
+| Source / artifacts | Exact main найден в checkout logs всех11 jobs;10 ordinary source-clean gates + native cleanup/source gate PASS. Все10 uploads доступны; artifact IDs/digests совпали с логами. Payload архивов заново не аудировался. |
+
+Actual main и PR36 candidate имеют одно дерево; повторять неизменённые тесты либо
+весь owner smoke после одного факта merge не требуется. Новый CI не запускался C0:
+проверен штатный push/main run. VM этим merge не обновлялась и отдельно C0 не
+инспектировалась; operational evidence относится к принятому component profile.
+
+C6-M3-TEST-POLICY-ENABLE-R2, оператор revision4: LIVE PASS на существующей
+LOCAL / asm_local и том же private binding; MATERIAL false→true / COMMITTED,
+native OFF_UNUSED/P0→ON/P1, receipt ACCEPTED, current ON/P1. Source/images/schema/
+binding/identity и оба TEST окна PASS на момент проверки; приложение/транспорт/
+исходные private files UNCHANGED, временный контейнер удалён, SSH_EXIT=0.
+PC_SESSION_INACTIVE — снимок C6 до позднейшего owner smoke, не текущий статус.
+Повторная активация не нужна. Все C1/C2/C3/C5/C6/C8 HOLD.
 
 ### M3-OWNER-SMOKE-R1
 
@@ -65,13 +80,40 @@ Own-bot echo markers/native photo/offline/other-bot/unsupported/delayed вари
 оценка по фактическому использованию в пилоте остаётся. Искусственная задержка,
 смена подключения и расширение текущего smoke не назначаются.
 
-PR36 принят C0 по ранее просмотренному неизменённому source и текущим evidence;
-переведён из Draft в Ready for review/open на head
-5d828a1ece2840b57fb2fd7d890d3e3fd47da388;
-CI40305446978 повторно прочитан: 11/11 SUCCESS на этом head, новых запусков нет.
-Операторские state changes не меняют этот source. Merge остаётся пользователю;
-после merge требуется сверка actual main/обычного post-merge CI, не перенос runtime
-по самому факту merge. M4 не открыт; C1/C2/C3/C5/C6/C8 HOLD.
+### Итог по матрице M3
+
+| Условия | Disposition C0 |
+|---|---|
+| A01/A02/A04/A05/A06/A07/A09/A10/A11 | Принятые C8 LOCAL/TEST witnesses сохраняются; весь соответствующий текущий main CI PASS. Проверки конкуренции/изоляции/restart/UNKNOWN не подменяются молчанием LLM. |
+| A03/A08 / P-A03-09 | Synthetic/PG/browser evidence + описанный finite user-observed text/edit/delete/photo-replacement/reconciliation smoke приняты. Ненаблюдённые account variants и no-refetch граница явно сохранены, не названы live-verified. |
+| A12 | Actual main/tree/CI PASS, C6 deployed-host/policy receipt принят, owner smoke PASS, передача в M4 подготовлена. **M3 INTEGRATED / VERIFIED LOCAL/TEST.** |
+
+### Передача в M4 — подготовлена, реализация не начата
+
+Пользовательский результат следующего этапа — AI читает актуальный подтверждённый
+контекст и отвечает тестовому клиенту через уже защищённый путь M3. Начальный
+срез по Implementation Plan§7 — M4.1 typed Gateway/profile/routing/run contracts
+и fake adapters; ведущий C4, отдельная выдача с точным write-set ещё не выдана.
+M4 не считается начатым этой приёмкой. Accepted runtime base —
+**d2f25673f6d2698d3c3dae2d7b2d709e134358f4**, schema0013; coordination descendant
+содержит тот же product source и только актуальные REGISTER/HANDOFF сверх него.
+
+Унаследовать `backend/src/asm/conversations/turns.py` (`parse_snapshot`,
+TurnSnapshotV2/V3), `guards.py` (`parse_guarded_snapshot`) и
+`native_context.py` (owner context). Обязательны current context/control generation,
+existing admission и tenant/Client authorization; model output не авторитетен
+для цены/времени/записи. Canonical PostgreSQL state остаётся источником истины.
+Saved owner context и Resume — отдельные операции; UNAVAILABLE/PARTIAL/UNKNOWN
+не превращаются в доступное изображение, полный контекст либо повторную отправку.
+
+Границы по Spec§7/ADR023–026/180/259–261/267 и Roadmap§8:
+query-only AI, выбранные aggregator/direct adapters используют общий контракт;
+конкретные API/model IDs/стоимость проверяются при реализации. Начальный путь —
+synthetic/fake contracts; live API-доступ и допустимый маршрут решаются в M4.2.
+Mutation tools, новая бизнесовая архитектура, перенос среды, production activation
+и платные/provider calls этой записью не назначаются.
+PC/Happ/SSH остаётся принятым маршрутом разработки; автономность — к пилоту.
+Загрузка нового вложения после замены фото не реализована и не включена скрыто в M4.
 
 ### C6-M3-TEST-POLICY-ENABLE-R2
 

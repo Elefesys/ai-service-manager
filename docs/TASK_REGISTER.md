@@ -2,30 +2,51 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — согласованный M3 owner smoke LIVE PASS; PR36 готов к merge / 2026-10-28
+## CURRENT — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 
-Accepted runtime main **5c074beb4a47521b8c11a820f580673ec1c2cce2**,
-tree **cb47cccdb02ba414c79c65e4fecf81f3fe83cd8b**. Прежние [C0/C8 acceptance](https://github.com/Elefesys/ai-service-manager/pull/34#issuecomment-6314784363)
-и native INTEGRATED / VERIFIED LOCAL/TEST сохраняются. Whole M3 IN_PROGRESS.
+Accepted actual main **d2f25673f6d2698d3c3dae2d7b2d709e134358f4**, tree
+**141d0a6b2b2be0efe1fcb1c3f851796e9f4cb427**. Tree exact-equal reviewed PR36
+head **5d828a1ece2840b57fb2fd7d890d3e3fd47da388**.
+[Post-merge CI 40681691046](https://github.com/Elefesys/ai-service-manager/actions/runs/40681691046), push/main attempt1:
+**11/11 SUCCESS**. [M3 final acceptance / handoff](tasks/M3_HANDOFF.md).
 
 | Scope / task | Текущий результат |
 |---|---|
-| Принятая VM / источник | LOCAL / asm_local, тот же binding из private activation intent. C6 R2 revision 4: source/images, schema/binding/identity и оба TEST окна PASS на момент проверки. C0 не выполнял независимую VM-инспекцию. |
-| Живой транспорт / HUMAN | User-observed text/photo/manual Console reply и сохранение HUMAN после reload приняты. Маршрут ПК/Happ/SSH принят для разработки; автономность к пилоту. PC_SESSION_INACTIVE — снимок C6 до последующего успешного owner smoke, не текущий статус после него. |
-| MATERIAL / native | MATERIAL false→true / COMMITTED; native OFF_UNUSED/P0→ON/P1, receipt ACCEPTED, current ON/P1. Приложение, транспорт и исходные private files UNCHANGED; временный контейнер удалён, SSH_EXIT=0. |
-| C6-M3-TEST-POLICY-ENABLE-R1 / R2 | Blockers MATERIAL_OPERATOR_PATH_MISSING / TARGET_ENVIRONMENT_MISMATCH устранены в разрешённой R2; R2 VERIFIED / LIVE PASS по переданному отчёту revision 4, COMPLETE / C6 HOLD. [Сохранённый scope](tasks/M3_HANDOFF.md#c6-m3-test-policy-enable-r2). |
-| M3-OWNER-SMOKE-R1 | VERIFIED / USER-OBSERVED LIVE PASS: native text/edit/delete, canonical inbound delete, owner context/HUMAN, отдельный Resume/reload без наблюдаемых повторных отправок и фото-пункт с MEDIA_REPLACED_UNAVAILABLE. [Пооперационный результат, ограничение фото и C0 scope disposition](tasks/M3_HANDOFF.md#m3-owner-smoke-r1). |
-| P-A03-09 / A08 / P-05 | Наблюдённый text/edit/delete/photo-replacement scope принят LIVE PASS. C0 явно принимает достаточность этого bounded LOCAL/TEST smoke вместе с CI и C6 evidence без нового общего collector. Own-bot echo markers/native photo/offline/other-bot/unsupported/delayed variants остаются NOT OBSERVED, приняты как предел live-покрытия; synthetic evidence не переименовано в live. |
-| A12 / whole M3 | Deployed Console owner scenario и фото-пункт подтверждены пользователем, C6 host/policy receipt принят. Живая часть согласованного сценария завершена. Whole M3 IN_PROGRESS до PR36 integration, actual main/CI verification и итогового handoff. |
-| PR36 | C0 acceptance; Ready for review/open (Draft снят), head 5d828a1ece2840b57fb2fd7d890d3e3fd47da388 и base 5c074beb неизменны; CI40305446978 — 11/11 SUCCESS на том же head. Прежние 804 PG/54 browser evidence сохраняются. PC helper отдельно; готов к пользовательскому merge. |
-| M4 / CI optimization / другие чаты | M4 не открыт; оптимизация после всего M3; C1/C2/C3/C5/C6/C8 HOLD. |
+| Whole M3 / A01–A12 | **INTEGRATED / VERIFIED LOCAL/TEST, CLOSED by C0.** C8 witnesses, exact current main CI, C6 host/policy evidence и bounded owner smoke приняты. Scope/ограничения явно зафиксированы в HANDOFF; production readiness и actual LLM не заявлены. |
+| PR36 / C6-M3-TELEGRAM-POLLING-01 | **INTEGRATED / VERIFIED**: MERGED into main d2f25673f6d2698d3c3dae2d7b2d709e134358f4; candidate/main tree equality, current11/11 CI и user-observed text/photo/manual reply. PC helper вне PR; merge не deployment. |
+| Main verification | 804 PG;2197 ordinary+155 subtests;54 browser/API/PG;398 frontend PASS. Native/catalog/cleanup, durable, Docker29 и6 migration shards PASS. Все11 exact checkouts/source gates подтверждены;10 artifact ID/digest совпали с upload logs, payload заново не аудировался. |
+| C6-M3-TEST-POLICY-ENABLE-R2 | VERIFIED / LIVE PASS по переданному отчёту revision4; LOCAL / asm_local, тот же accepted binding; MATERIAL=true / COMMITTED, native ON/P1 / ACCEPTED/current. Source/images/schema/binding/identity и оба окна PASS на момент проверки. C6 HOLD. |
+| M3-OWNER-SMOKE-R1 | VERIFIED / USER-OBSERVED LIVE PASS: HUMAN/reload, native text/edit/delete, canonical inbound delete, сохранение owner context с HUMAN, отдельный Resume/reload без наблюдаемых resend, photo replacement с MEDIA_REPLACED_UNAVAILABLE. |
+| A08/P-A03-09/P-05 limits | Наблюдённый bounded scope принят; own-bot echo markers/native photo/offline/other-bot/unsupported/delayed account variants остаются NOT OBSERVED. C0 принял этот предел live-покрытия; автоматические guards сохраняются. Общий collector не нужен для принятого scope. |
+| Development limits | Маршрут ПК/Happ/SSH принят для разработки; автономность к пилоту. Новое вложение после замены фото не загружается/не анализируется. Текущее состояние PC-сессии и VM после smoke не проверялось C0; нет нового runtime deployment. |
+| M4.1 | **TODO; handoff PREPARED, NOT STARTED.** Следующий ведущий C4; typed Gateway/profile/routing/run contracts и fake adapters на accepted main. Отдельная реализационная выдача ещё не выдана. |
+| Другие чаты / CI optimization | C1/C2/C3/C4/C5/C6/C8 HOLD. Общая оптимизация CI остаётся DEFERRED и не запускается автоматически вслед за M3. |
 
-Следующий шаг — пользовательский merge PR36, затем C0 проверяет actual main и обычный
-post-merge CI для закрытия M3/handoff. Новых живых шагов, общего CI rerun, collector
-или реализации не назначено. Новое фото после замены остаётся недоступным по принятому
-no-refetch scope; полноценная загрузка replacement не реализована. Работа модели — M4.
+Новых code/DDL/provider/VM/test/CI действий для этой приёмки не выполнялось:
+C0 прочитал существующее evidence и интегрировал main в координационную ветку,
+обновив только два документа сверх принятого runtime tree.
 
 ---
+
+## History — C6 polling до итоговой приёмки / 2026-10-26
+
+Исторический возврат PR36; его pending/REVIEW статусы заменены CURRENT выше.
+
+| Task | Status and scope |
+|---|---|
+| C6-M3-TELEGRAM-POLLING-01 | REVIEW; user approved outbound getUpdates after repeated fresh webhook timeouts. Base 5c074beb4a47521b8c11a820f580673ec1c2cce2; branch c6/telegram-polling-recovery. Receiver, bounded TEST deployment/rollback, focused tests and IMPL-003; no DDL, billing, conversation policy, UI or existing transport changes. |
+
+The recovered Selectel TEST has an enabled binding, working manual replies and
+successful processing of earlier text/photo events. Six later events remain at
+Telegram. [IMPL-003](decisions/IMPL-003-telegram-polling-test.md) records the approved
+receive-mode revision and acceptance criteria. No polling deployment or new live
+success is claimed before the user's VM receipt; M3 remains IN_PROGRESS.
+Write-set: scripts/telegram_polling_receiver.py, scripts/telegram_polling_recovery.py,
+tests/polling/, tests/test_telegram_polling_postgres.py, IMPL-003 and this register.
+Local evidence: 30 focused unit/model tests and Ruff pass; accepted activation
+receipt/runtime fixture passes. Full CI and live VM acceptance remain pending.
+
+
 
 ## History — native context: согласованное исправление / 2026-10-21
 
