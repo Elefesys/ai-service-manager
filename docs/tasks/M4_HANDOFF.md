@@ -120,6 +120,21 @@ evidence требует другого path, вернуть C0 конкретн�
 После возврата C5 — HOLD. M4.2 выдаётся только после устранения blocker и приёмки
 M4.1 по текущей общей базе. Единственная матрица A01–A08 ниже не меняется.
 
+### C5 receipt — C5-M4.1-CI-RECOVERY-R1 / 2026-10-29
+
+**BLOCKED / C5 HOLD, исправление не заявлено.** Проверены seed
+96e74c489d76d41a9df8f007f84ef2e0581a1398, его sole parent repair base и ancestry
+принятого main. В текущей среде нет Docker CLI/daemon socket; capabilities=0,
+`unshare -Ur true` получает Operation not permitted. Штатный real browser/API/PG
+setup и целевой recovery case не выполнены; причинный read не установлен.
+После frozen `npm ci --ignore-scripts --no-audit --no-fund`: typecheck и 180 tests
+в App/EscalationsPanel/escalation-api/BillingPanel/MessagingPanel PASS
+(Node24.22.1, npm11.9.0). Это только unit/consumer evidence, не воспроизведение CI.
+Code/tests/locks/Gateway сохранены; изменены только эта запись и строка CURRENT.
+Для продолжения нужен существующий Docker-capable harness с private env и
+причинным target из выдачи; расширение write-set не требуется. Полные команды,
+SHA и пределы результата — в возврате C5 в PR38; прежний CI FAIL сохраняется.
+
 ## Предыдущая выдача — M4.1-CONTRACT / C4 / HOLD
 
 C4 вернул реализацию в PR38; source review C0 завершён, интеграция блокирована
