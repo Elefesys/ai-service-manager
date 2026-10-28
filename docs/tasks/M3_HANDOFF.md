@@ -47,7 +47,10 @@ ADR026/180 и остальные гарантии не пересматрива�
    Переиспользовать доказательства R1, проверив их текущую актуальность; полный
    аудит/CI не повторять. Проверить source/images и installed0013 существующим
    механизмом; подключиться реальным LOGIN asm_migrator, session_user=current_user,
-   READ COMMITTED, только TEST / asm_test. Не SET ROLE из admin.
+   READ COMMITTED, только существующая принятая LOCAL / asm_local
+   (ASM_ENVIRONMENT=LOCAL, current_database()='asm_local'), тот же binding из
+   приватного activation intent. Перенос или смена среды не требуются.
+   Не SET ROLE из admin.
 2. Одна короткая транзакция с существующими bounded statement/lock/connect limits.
    Порядок: Workspace SHARE → Business SHARE → ChannelConnection UPDATE →
    TelegramState UPDATE → штатные billing locks через
