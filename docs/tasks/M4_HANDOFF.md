@@ -6,7 +6,149 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-PROBE-WINDOWS-LOCK-R1 / C0 / 2026-10-29
+## Текущая выдача — M4.2-PROBE-CATALOG-R1 / C4 / 2026-10-29
+
+**Результат:** исправить конкретные несовпадения пробника с полученным каталогом
+Polza, затем вернуть проверенный candidate и пригодный для review план запуска.
+Настройки Windows завершены; следующий шаг требует изменения adapter, а не нового
+ввода ключа. Никаких платных вызовов в этой выдаче.
+
+### База и границы
+
+- Repository: Elefesys/ai-service-manager; ветка **c4/m4-2-probe-catalog-r1**,
+  отдельный checkout от опубликованного C0 coordination seed этой выдачи
+  (точный SHA/tree — в верхнем receipt PR39).
+- Sole parent/source base seed: **708dc86f1d3493867852256ed6a42a891e1f7d62**,
+  tree **b266d566f7f8f4eb01ee1efe39a25464e46678da**. Сохранить Windows wheels;
+  не начинать заново от PR head4f86 или accepted main.
+- Accepted actual main остаётся **51d7d73752128715c6d98157445167c0cc0d894d**;
+  Draft PR39 head остаётся **4f86e7fe1d014ddbbe87ca734d868522599fe7ba**.
+- Write-set C4: `backend/src/asm/ai/polza.py`,
+  `backend/src/asm/ai/probe.py`, `tests/test_m4_polza.py`,
+  `tests/test_m4_probe.py`, при необходимости новый
+  `tests/fixtures/m4_polza_catalog_shapes.json`,
+  `docs/runbooks/M4_POLZA_PROBE.md`, CURRENT row M4.2 в
+  `docs/TASK_REGISTER.md`, короткий receipt в этом handoff.
+  C0 seed меняет только CURRENT/handoff и уточнение IMPL-004.
+- Сохраняются три model IDs, fixture SHA256
+  `7abd25f1e1f08e51eacc3a68975e6099c942d33fad37376366dfdef6c7e025b2`,
+  75 scenarios/81 calls/6 READ, 32768/512 tokens, 24576/32768 bytes,
+  60/1800 seconds и общий предложенный потолок100 RUB.
+  Не менять contracts/gateway/fake/prompt/canonical schema, fixtures сценариев,
+  settings/secret handling, locks/manifests, CI/DB/M3/runtime.
+
+### Полученный факт и воспроизводимые препятствия
+
+Владелец успешно установил frozen окружение на Windows и получил offline plan.
+Подтверждён owner-only ACL перед hidden key input. Получен результат отдельного
+catalog GET; `checked_at=2026-10-29T10:43:36.518349+00:00`.
+SHA256 переданного файла (180945 bytes):
+`ac671d10d528ff8c8458f9fad5dd853651c74b29a7763c20e740e2539ae5d02f`.
+Все три entry fingerprints пересчитаны и совпали:
+
+| Model | Catalog fingerprint | Providers |
+|---|---|---|
+| openai/gpt-6-luna | 39b6f598a76a28a37328e5088203244e225d38bb0cba1e8343b2d81b44d1df36 | 8 |
+| google/gemini-3.8-flash | 4a93208038b19c7bb46036e51941721adafc0e79398ed1bc4f925d0a2d576ee3 | 7 |
+| deepseek/deepseek-v4.1-flash-1017 | 8183fdf11ac6b6a619d32b6a31b4d323e4e12a10def1c2b6bc46e2e5d181936c | 43 |
+
+Каталог доступен публично: успешный GET сам по себе не подтверждает
+валидность ключа, whitelist аккаунта, его индивидуальный тариф или списание.
+Это snapshot маршрутов/заявленных возможностей; paid generation NOT RUN.
+Полный файл/секрет/локальные имена учётной записи в Git не публикуются.
+
+C0 на source708dc86 без сети проверил `provider()/reservation()` всех58 entries
+(без создания trusted evidence/RouteReview для запуска). Первые отказы:
+GPT — 2 OFFICIAL_ROUTE_UNKNOWN,3 PARAMETER_UNSUPPORTED,3 TARIFF_UNKNOWN;
+Gemini — 7 PARAMETER_UNSUPPORTED; DeepSeek — 2 OFFICIAL_ROUTE_UNKNOWN,
+37 PARAMETER_UNSUPPORTED,3 CAPABILITY_UNKNOWN и один static pass `primeintellect`.
+Это не exhaustive diagnosis: ранний отказ маскирует следующие проверки.
+У GPT/Gemini нет route, который допускает текущий код; полный probe не стартует.
+
+- У GPT два разных `providers[].name=openai`; у DeepSeek два `deepseek`.
+  Они различаются parameters/capabilities/pricing. Выбор первого либо слияние
+  возможностей разных записей не доказывает однозначный wire route.
+- Все7 Gemini routes имеют `max_tokens`, но не `max_completion_tokens` в
+  supported_parameters. То же у большинства DeepSeek routes. Код требует и
+  отправляет только второе имя. Поле catalog `max_completion_tokens` как числовой
+  предел модели не равно supported request parameter.
+- Все7 Gemini pricing содержат `audio_per_million`,
+  `input_audio_cache_per_million`, `web_search_per_thousand`; ещё7 GPT routes
+  содержат web_search fee. Нынешний `rates()` отвергает эти поля. Audio/web search
+  в нашем payload отсутствуют, но их неприменимость нужно обосновать, а не
+  произвольно игнорировать все незнакомые ставки.
+- Прямой `deepseek`: `json_schema_strict.status=rejected`,
+  verified_at2026-10-23T11:22:11.622Z; tools supported. Это конкретный
+  неподходящий route, не доказательство непригодности всей модели.
+  `primeintellect` проходит static checks, но tools/schema/image verified_at=null:
+  нет доказательства совместной работы точной схемы, READ и image.
+- Gemini reasoning mandatory=true. Параметр ограничения ответа должен
+  ограничивать оплачиваемый вывод, включая reasoning; наличие alias не
+  доказывает одинаковую семантику на всех upstream.
+- Canonical conversation_result_v1 имеет root anyOf; OpenAI Structured Outputs
+  требует root object. Полза flags поддерживаемой schema не снимают это
+  противоречие; это документированный риск, не полученный live HTTP400.
+
+### Исправление и критерии
+
+1. Выбирать и проверять один однозначный official route для каждой модели;
+   duplicate names оставлять BLOCKED без доказанного selector/эквивалентности.
+   Можно выбрать другой уникальный route из каталога вручную по review, без
+   auto-selection/fallback. Не угадывать response provider по display name.
+2. Поддержать документированное имя token cap для конкретного route в admission
+   и wire. Проверить supported_parameters, числовой предел и reasoning semantics;
+   неподтверждённый bound остаётся явным blocker. Не отправлять оба alias вслепую.
+3. Разобрать применимые billing components для нашего text/PNG/function payload.
+   Известные условные fees исключать только по проверенному контракту и при
+   невозможности включить соответствующую функцию в этом пробнике. Неизвестные
+   fees/units остаются STOP; ставки cache не считать скидкой без основания.
+   Полный резерв всех81 calls показать через Decimal; >100 RUB — честный blocker,
+   без увеличения бюджета, сокращения выборки или выдуманных evidence.
+4. C0 разрешает минимальную эквивалентную wire-обёртку conversation result:
+   root object с одним required полем `result`, внутри неизменённый union;
+   корректно сохранить/перенести $defs/$ref. После строгой проверки envelope
+   распаковать и передать прежнему local DTO validator. Версия wire schema
+   отличима в report; canonical contract/prompt/revision не переписывать.
+   Это уточнение adapter scope, не разрешение удалять ограничения, strict или
+   переходить на json_object. Если нужны иные преобразования — точный blocker C0.
+5. Проверить совместимость целого payload: native schema + strict READ tools,
+   text/image modality именно выбранного provider, фактический output cap,
+   response provider mapping, usage/cost. Catalog declared/verified/live evidence
+   различать. Не создавать положительный review текстом «supported».
+   Результат этой выдачи — candidate и открытые факты, не paid/live PASS.
+6. Исправить runbook: Windows команды после обновления точного SHA; snapshot не
+   равен account authorization; фактические причины отказа понятны оператору.
+   Старый каталог не объявлять fresh после24h и не менять checked_at задним числом.
+
+Целевые проверки: catalog shapes с повторяющимися name, max_tokens-only,
+условными audio/search fees, rejected strict и null verified_at; положительные и
+отрицательные исходы каждой группы, включая маскируемые ранним отказом.
+Для wrapper — все reply/handoff/no_reply, READ round-trip, $ref resolution,
+лишнее/отсутствующее поле envelope и invalid inner result. Сохранить fail-closed
+на drift/unofficial/неизвестном тарифе/нарушении cap и UNKNOWN billing.
+Контролируемый CLI по всем трём моделям остаётся75 finals/81 POST/1 GET/6 READ;
+это offline evidence. Targeted pytest, Ruff/format, mypy и --plan, затем C0 review.
+
+После возврата C0 проверяет delta и отдельно решает следующий штатный full CI
+нового кандидата. Существующий run40841849732 остаётся FAILURE:
+10/11 jobs, PG803 PASS/1 setup TimeoutError в RuntimeDatabase.check при connect;
+причина задержки UNKNOWN. Этот adapter repair не заявляется исправлением PG.
+Не повторять неизменённый run ради PASS, не ослаблять timeout/tests/evidence.
+
+C4 возвращает commit/tree, точные команды и результаты, рассчитанный резерв либо
+конкретные незакрытые факты и следующий операторский шаг. Final paid approval
+владельца ещё отсутствует; C0 не выдаёт --live до конкретного review.
+C1/C2/C3/C5/C6/C8 и M4.3 HOLD; merge остаётся у владельца.
+
+Источники: [Polza models](https://github.com/polza-ai/docs/blob/main/gaidy/models.mdx),
+[chat parameters](https://github.com/polza-ai/docs/blob/main/gaidy/chat-completions.mdx),
+[routing](https://github.com/polza-ai/docs/blob/main/gaidy/provider-selection.mdx),
+[reasoning](https://github.com/polza-ai/docs/blob/main/osobennosti/reasoning-tokens.mdx),
+[usage](https://github.com/polza-ai/docs/blob/main/osobennosti/usage.mdx),
+[OpenAI schema subset](https://developers.openai.com/api/docs/guides/structured-outputs).
+Сверены2026-10-29; общий пример openai-direct не доказывает mapping всех routes.
+
+## История — M4.2-PROBE-WINDOWS-LOCK-R1 / C0 / 2026-10-29
 
 **Результат:** установить frozen зависимости пробника на Windows x64 владельца
 без MSVC. На CPython3.13.2 `uv sync --frozen` потребовал C compiler для cffi.
@@ -414,9 +556,9 @@ M4 VERIFIED только после A01–A08 в заявленных грани
 
 ## Непосредственное следующее действие
 
-C4 выполняет единственную M4.2-PROBE-THIRD-CANDIDATE-R1 от точной repair base
-и C0 seed выше: три кандидата,75 scenarios/81 calls,100 RUB общий потолок.
-Возврат REVIEW / PAID PROBE NOT RUN; C0 принимает delta/CI, затем account preflight
-и конкретный бюджет. Ключ уже создан владельцем; не запрашивать его в чат и не
-делать paid calls/VM activation до допуска.
+C4 выполняет единственную M4.2-PROBE-CATALOG-R1 от C0 seed выше,
+сохраняя Windows repair708dc86 и принятые bounds. Catalog GET уже получен;
+устранить подтверждённые adapter assumptions и вернуть targeted-checked candidate.
+Затем C0 review, решение по CI и конкретный priced plan для owner paid admission.
+Ключ остаётся у владельца; paid calls/VM activation не разрешены.
 C1/C2/C3/C5/C6/C8 HOLD; M4.3 ждёт реальной проверки внешней зависимости.

@@ -115,6 +115,21 @@ adapter branches, runtime fallback, registry или Vision runtime эта поп
 Пока это не закрыто, проба использует только synthetic TEST. Никакая новая
 compliance-платформа не требуется: короткая запись фактов/ограничений достаточна.
 
+**Уточнение C0 от2026-10-29 после catalog preflight (M4.2-PROBE-CATALOG-R1):**
+адаптер может применять эквивалентную wire-обёртку `{result: ...}` с root object
+для conversation_result_v1, поскольку canonical root anyOf не соответствует
+документированному OpenAI Structured Outputs subset. Union, ограничения и
+$defs/$ref сохраняются; после проверки envelope результат проходит прежнюю
+local DTO validation. Canonical schema/prompt/contracts/gateway не меняются,
+wire revision отражается отдельно. Это устраняет известное несовпадение формы,
+но не доказывает live schema+tools compatibility. Иные ослабления не разрешены.
+Публичный catalog snapshot подтверждает опубликованные metadata, но не
+валидность ключа, его whitelist или индивидуальный account tariff.
+Следующая ограниченная выдача C4 исправляет token-cap alias и применимые fees
+по контракту; дублирующееся provider name без однозначного selector остаётся
+BLOCKED. Три модели,75 scenarios/81 calls и предложенный общий потолок100 RUB
+сохранены; live admission/расходы требуют прежнего отдельного допуска владельца.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

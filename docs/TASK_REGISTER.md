@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.1 INTEGRATED / VERIFIED; M4.2 Windows lock repair / 2026-10-29
+## CURRENT — M4.1 INTEGRATED / VERIFIED; M4.2 catalog repair / 2026-10-29
 
 Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**; PR38 слит владельцем,
@@ -13,23 +13,24 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 |---|---|
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
-| C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; read barrier до rotation и real401 negative приняты; C5 HOLD |
-| M4.2-PROBE | BLOCKED / PAID PROBE NOT RUN. C4 three-model candidate4f86e7fe1d014ddbbe87ca734d868522599fe7ba принят C0 по source и FF в Draft PR39; 75 scenarios / 81 calls / 6 READ / общий потолок100 RUB. CI40841849732:10/11 SUCCESS, foundation setup TimeoutError подключения PostgreSQL; причина задержки не установлена. C0 M4.2-PROBE-WINDOWS-LOCK-R1 исправляет отдельную подтверждённую проблему установки: два Windows x64 wheel в frozen lock без изменения версий. Проверки выбора пакетов выполнены, установка на ПК владельца ожидается; account facts/paid admission NOT RUN |
-| M4.3-CONTEXT | TODO / HOLD: актуальный M3 context и необходимые read-only tools после текущей выдачи |
-| M4.3-RUNTIME | TODO / HOLD: durable AI run и guarded Telegram consumer; C2/C3 по точной дельте |
-| M4.3-QUALITY | TODO: независимый scoped C8/eval; авторские тесты внутри каждой задачи |
-| M4-ACCEPTANCE | TODO: bounded synthetic live, A08, actual main CI и передача M5 |
+| C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
+| M4.2-PROBE | BLOCKED / PAID PROBE NOT RUN. Windows frozen install и offline plan подтверждены владельцем; owner-only ACL и отдельный catalog GET выполнены. Три entries/58 providers, fingerprints сверены. Source708dc86: у GPT/Gemini нет static-eligible route из-за name/parameter/fee assumptions; прямой DeepSeek strict rejected. Единственная выдача C4 — M4.2-PROBE-CATALOG-R1, adapter repair + equivalent wire wrapper, точный scope в handoff. Proposed100 RUB/75 scenarios/81 calls/6 READ сохранены, priced reservation UNKNOWN. Отдельный foundation CI blocker остаётся открытым |
+| M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
+| M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
+| M4.3-QUALITY | TODO; независимый scoped C8/eval |
+| M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-Единственная текущая выдача — **M4.2-PROBE-WINDOWS-LOCK-R1 / C0**,
-ветка **c0/m4-probe-windows-lock-r1**, отдельный checkout от
-**4f86e7fe1d014ddbbe87ca734d868522599fe7ba**. Точный write-set/receipt —
+C4 начинает **c4/m4-2-probe-catalog-r1** от опубликованного C0 seed,
+sole parent **708dc86f1d3493867852256ed6a42a891e1f7d62**, tree
+**b266d566f7f8f4eb01ee1efe39a25464e46678da**; seed SHA/tree — в PR39.
+Write-set, snapshot receipt, все известные причины отказа и проверки —
 [M4_HANDOFF](tasks/M4_HANDOFF.md); матрица A01–A08 сохранена.
-C1–C6/C8 HOLD, кроме этой ограниченной работы C0. PR39/main не двигать:
-Windows-only repair не является исправлением PostgreSQL CI, поэтому повторный
-полный CI ради возможного PASS не запускается. После текущего offline шага —
-ограниченная диагностика CI blocker, затем account preflight по новому допуску.
-Ключ остаётся у владельца; до Windows ACL не записывать secret. Нет API calls,
-VM/Telegram/БД/runtime activation или разрешения на расходы.
+C1/C2/C3/C5/C6/C8 HOLD. PR39 head4f86e7fe1d014ddbbe87ca734d868522599fe7ba
+и main не сдвигались. CI40841849732:10/11 SUCCESS, PG803 PASS/1 setup connect
+TimeoutError, причина UNKNOWN; неизменённый full CI не перезапускать.
+C0 разрешил один read-only preflight независимо от этого PG сбоя; он выполнен.
+Публичный каталог не доказывает валидность ключа/аккаунтный тариф/списание.
+Секрет остаётся у владельца; paid approval, VM/Telegram/DB/runtime отсутствуют.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 
