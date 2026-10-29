@@ -1,0 +1,109 @@
+{
+  "$defs": {
+    "Handoff": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "handoff",
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Text"
+        },
+        "reason": {
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "reason"
+      ],
+      "title": "Handoff",
+      "type": "object"
+    },
+    "NoReply": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "no_reply",
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "null"
+        },
+        "reason": {
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "reason"
+      ],
+      "title": "NoReply",
+      "type": "object"
+    },
+    "Reply": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "reply",
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Text",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "null"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "reason"
+      ],
+      "title": "Reply",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/Reply"
+    },
+    {
+      "$ref": "#/$defs/Handoff"
+    },
+    {
+      "$ref": "#/$defs/NoReply"
+    }
+  ]
+}

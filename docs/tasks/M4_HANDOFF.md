@@ -1,10 +1,390 @@
 # M4 — подключение ИИ к текущему контексту
 
 Дата подготовки: 2026-10-28. Ведущий: C0; основной исполнитель: C4.
-**План: REVIEW. Реализация M4: TODO / NOT STARTED.**
+**План принят C0 и интегрирован в PR #37. Реализация — по CURRENT реестра.**
 Единственный статус исполнения — [TASK_REGISTER](../TASK_REGISTER.md).
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
+
+## Текущая выдача — C5-M4.1-CI-RECOVERY-R1 / 2026-10-29
+
+**Результат и польза:** устранить конкретное падение восстановления уже принятого
+решения владельца после потери HTTP-ответа, повторного входа и ротации сессии.
+Это разблокирует интеграцию Gateway и M4.2, сохранив один business effect.
+Задача включает причинное воспроизведение и минимальное исправление, а не отдельный
+этап общей диагностики или повышение timeout.
+
+### Текущий шаг C5 — исправить порядок чтений в harness
+
+**Diagnostic source принят для этого шага:** 7c36a8360ede2b6f5ed6d800c5dd1972e2a37dce,
+tree c82d3a73d179661df8fa62bbe81243ad5a73f556. Accepted main остаётся
+1cb3b6e168276d77faa3f11f33f8ecd0408ce406; ветка c5/m4-1-ci-recovery-r1.
+C0 добавляет эту дельту задания поверх diagnostic source; точный стартовый
+head — в передаче C0. Полная интеграция M4.1 ещё не принята.
+
+**Новое реальное evidence:** [browser job123069972604 / run40760265440](https://github.com/Elefesys/ai-service-manager/actions/runs/40760265440/job/123069972604),
+attempt1: **54/54 browser PASS**,398 frontend PASS, source-clean PASS.
+Проверенный merge561faa3760a70120b6158c96052a1d4ac7dd3318 имеет exact candidate tree.
+R4 DONE,137 событий, не обрезан, observer/cleanup без ошибок. В исходном пути
+все startup reads завершились до первой rotation (events13–45, затем46–49);
+первый retry403, recovery и exact bytes/key REPLAY200, один PG decision сохранены.
+В controlled probe захваченная сессия действительна (session200), после rotation200
+удержанный настоящий Business GET получает SESSION_REQUIRED401, UI показывает login
+и скрывает owner panels (events130–137). Это причинно подтверждает механизм
+read/rotation →401→anonymous в заданном порядке; конкретный GET старого attempt1
+остаётся неизвестным. Runtime defect не доказан. Один диагностический PASS не
+исправляет отсутствие явного порядка в исходном тесте. Остальной CI ещё выполняется.
+
+**Сейчас разрешено C5 в той же R1:**
+- Минимальное исправление только frontend/e2e/messaging.spec.ts, данного case/helper:
+  перед первой внешней rotation установить конечный барьер завершения настоящих
+  защищённых чтений, вызванных login, включая их наблюдённые дочерние reads.
+  Одна готовая detail/retry button или мгновенное отсутствие in-flight недостаточны;
+  ожидание связано с конкретными завершёнными reads/состоянием данного recovery.
+- Управляемо задержанный real read должен удерживать rotation до своего завершения
+  с ещё действующими credentials. Затем исходный CSRF403→recovery→REPLAY путь проходит.
+  Сохранить отдельно доказанный negative: real old-credential GET после rotation
+  всё ещё401 и скрывает protected UI. Не подавлять401, не подменять ответы/receipts,
+  не добавлять sleep/networkidle/timeout/retry и не менять App.tsx/App.test.tsx.
+- Сохраняются exact bytes/key, attempts=3, один PG decision, worker.calls=0,
+  reload без нового resolve и все остальные cases. Достаточен текущий bounded R4;
+  новая общая диагностика не нужна.
+- Локально typecheck/diff checks; Docker E2E здесь по-прежнему может быть NOT RUN.
+  Вернуть C0 конечный исправленный candidate и причинное обоснование изменения;
+  C0 review → один штатный полный Actions в существующем PR38 на новом head.
+  Предварительный локальный Docker PASS не является gate передачи.
+  Из docs разрешены только строка C5 в CURRENT и короткий receipt под этой выдачей.
+
+C5 продолжает работу; C4/M4.2 HOLD. Нового task ID/матрицы, runtime/SQL/VM scope нет.
+Предыдущий FAILURE40740338709 и diagnostic PASS факты сохраняются раздельно.
+
+### C5 repair candidate — C5-M4.1-CI-RECOVERY-R1 / 2026-10-29
+
+**REVIEW / C5 HOLD для C0/CI**, basefe9de57d69ad4123e103ebc931970d0413b80371.
+Только текущий E2E case/helper: первая rotation ждёт11 login/child read classes,
+200+FINISHED каждого наблюдённого GET и завершения обработки в UI. Пустой набор,
+пропущенный child, FAILED/denied или неполный observer барьер не открывают.
+Управляемый observations GET удерживается, пока rotation ждёт барьер; после
+release требуется настоящий200 с ещё действующими credentials. Отдельный
+принятый old-credential Business401→anonymous negative и исходные23 expect
+statements, exact replay/one decision/worker0/reload assertions сохранены.
+App/runtime/остальные paths не менялись, кроме этой записи и C5 CURRENT.
+Typecheck/diff и локальные source/predicate/privacy checks PASS; новый реальный
+browser/API/PG **NOT RUN**. Причина класса гонки подтверждена прежним R4 CI,
+исторический GET неизвестен; приёмка исправления требует нового полного CI C0.
+Полные head/tree/команды/границы — в возврате C5 в PR38; M4.1 VERIFIED не заявлен.
+
+### История — разрешённый диагностический этап в GitHub Actions / 2026-10-29
+
+C5 [вернул blocker](https://github.com/Elefesys/ai-service-manager/pull/38#issuecomment-6478249644):
+Docker отсутствует **в локальной среде исполнителя**. GitHub Actions browser job
+на ubuntu-24.04 уже выполняет scripts/test_browser.sh с настоящими Docker Compose,
+API/PostgreSQL и synthetic private env, создаваемыми самим harness.
+Локальное отсутствие Docker не блокирует подготовку теста и не требует VM владельца.
+
+C0 исправляет порядок этой же задачи; write-set и итоговые критерии сохраняются:
+1. **Для диагностического этапа C5 получил подготовку:** в разрешённом failing case добавить
+   bounded payload-free observer причинных protected reads и необходимые управляемые
+   точки воспроизведения. Runtime не менять до evidence. Сохранить реальный
+   committed200/login/rotate/CSRF/replay путь и все исходные assertions.
+   Локально выполнить typecheck и diff check; Docker-dependent E2E честно NOT RUN.
+   Уже выполненные неизменённые unit suites повторять не требуется.
+2. C5 возвращает **диагностический candidate** C0: full SHA, минимальный diff,
+   какие конкретные события он различает, команды/результаты. Для этого возврата
+   предварительный локальный Docker PASS больше не требуется.
+3. C0 проверяет дельту и выполняет один expected-head/force=false FF существующего
+   PR38 на изменённый candidate. Это запускает штатный GitHub Actions, где Docker
+   доступен. Workflow сейчас запускает весь набор jobs; browser выполняет реальное
+   воспроизведение. Отдельный runner/workflow или включение VM не нужны.
+   Это разрешённый запуск для нового диагностического кода, не blind rerun
+   неизменённого FAIL. Прежний attempt1 остаётся FAILURE.
+4. По фактическим событиям C5 в той же задаче исправляет подтверждённую причину;
+   после review C0 конечный candidate проходит полный штатный CI.
+   Если диагностический run не выявил причину, один PASS не закрывает finding:
+   определить недостающий факт и следующую минимальную управляемую проверку,
+   не повторять неизменённый прогон в надежде получить нужный результат.
+
+Эта подготовка завершена candidate7c36a836…; диагностический browser outcome
+принят в текущем шаге выше. Blocker receipt ниже сохраняет прежний временной
+срез, а актуальное продолжение — минимальное исправление harness. C4/M4.2 HOLD.
+C5 не двигает c4/main и не открывает дополнительный PR; передачу в CI делает C0.
+
+### Решение C0 по возврату C4
+
+[PR #38](https://github.com/Elefesys/ai-service-manager/pull/38), candidate
+**31537848de7bcfb5732622b9361cfaba41c1105b**, tree **aa265f68c3fec9e3b7128d9a800e6e5cf5574f25**.
+C0 прочитал весь новый Gateway/DTO/fake/prompt/schema и оба test files:
+существенных source замечаний в выданном contract scope не обнаружено.
+C4 изменил ровно 10 разрешённых paths относительно seed2107f918…; CURRENT-строка
+и короткий receipt — единственные его doc changes. Это C0 review, не C8 acceptance.
+
+[CI 40740338709](https://github.com/Elefesys/ai-service-manager/actions/runs/40740338709),
+attempt1, exact candidate: **COMPLETED / FAILURE — 10 SUCCESS / 1 FAILURE**.
+Foundation: **2286 ordinary +155 subtests**, **804 PG PASS**, Ruff/mypy PASS.
+Browser: **398 frontend unit PASS; 53 browser PASS / 1 FAIL**.
+M4.1 остаётся BLOCKED на полном CI; не INTEGRATED/VERIFIED. C4 HOLD.
+Новая выдача ниже — единственная активная; M4.2 и остальные чаты HOLD.
+
+**Единственная подтверждённая группа сбоя:** existing recovery test в
+frontend/e2e/messaging.spec.ts:298, ожидание retry button на строке353.
+[Browser job122999902003](https://github.com/Elefesys/ai-service-manager/actions/runs/40740338709/job/122999902003).
+Commit resolve=200, ответ ABORTED; session=401 после clearCookies;
+login/detail/rotate=200. Перед первым retry: login_present=true,
+detail_present=false, retry_present=false; resolve_requests=1, retry_clicked=false.
+Cleanup=false зарегистрирован после закрытия страницы по timeout и не является
+доказанной отдельной первопричиной.
+
+Из source: после login читаются несколько панелей; готовая escalation detail
+не доказывает завершения остальных GET. Текущий SESSION_REQUIRED от Business/
+Billing/Escalations/Messaging вызывает invalidateAuth/очистку protected state.
+Какой именно request/response вызвал возврат в anonymous, старый диагностический
+observer не записал. Гонка GET с внешней ротацией — проверяемая гипотеза,
+не установленный root cause и не основание назвать падение случайным.
+
+### База, ветка и зависимости
+
+Repository: **Elefesys/ai-service-manager**.
+Принятый actual main: **1cb3b6e168276d77faa3f11f33f8ecd0408ce406**.
+Точная repair base: **31537848de7bcfb5732622b9361cfaba41c1105b** (текущий PR38 candidate).
+Ветка C5: **c5/m4-1-ci-recovery-r1**. C0 добавляет одним docs-only commit
+эту выдачу поверх repair base; точный стартовый head в передаче C0.
+C5 продолжает подготовленную ветку в отдельном checkout и сохраняет Gateway/C0 docs.
+Candidate допустим как база этого ремонта, но не объявлен принятым main.
+PR38/c4 branch удерживается до проверенного C0 диагностического candidate,
+затем до конечного repair candidate согласно уточнению GitHub Actions выше.
+
+Зависимости: accepted M3 recovery/authorization/UNKNOWN semantics, IMPL-004,
+данный CI receipt. Применимы ADR-024/026/180/267 и существующие session/CSRF
+contracts. Не повторять аудит M3, provider research или исправный backend CI.
+
+### Точный write-set C5
+
+1. **frontend/e2e/messaging.spec.ts** — только failing recovery case и необходимые
+   локальные helpers этого case. Bounded payload-free diagnosis и детерминированный
+   порядок реальных auth/read/rotate/resolve событий.
+2. **frontend/src/App.tsx** — условно: только если воспроизведение докажет
+   runtime defect текущего auth recovery/invalidation. Сначала причинное evidence,
+   затем минимальное исправление в том же задании; отдельное разрешение на эту
+   уже указанную дельту не требуется.
+3. **frontend/src/App.test.tsx** — regression/negative controls для фактического
+   изменения App.tsx. Если исправление только в синхронизации теста, этот path
+   менять ради количества тестов не требуется.
+4. **docs/TASK_REGISTER.md** — только строка C5-M4.1-CI-RECOVERY-R1 в CURRENT.
+5. **docs/tasks/M4_HANDOFF.md** — короткий C5 receipt под этой выдачей.
+
+Остальные panels/API/backend/SQL, Gateway, manifests/locks, CI workflows,
+playwright.config.ts и scripts/test_browser.sh не меняются. Если причинное
+evidence требует другого path, вернуть C0 конкретную ошибку/файл/минимальную дельту,
+не менять общую auth policy предположением. Нет VM/paid API или новых migrations.
+
+### Выполнение и критерии
+
+- Воспроизвести смену auth state целевым тестом и идентифицировать причинный read:
+  порядок request/response относительно login/rotate, безопасный класс пути,
+  method/status, ограниченные phase/boolean/UI markers. Не логировать raw URL/IDs,
+  cookies, CSRF, idempotency-key, bodies, частный текст или signed URLs.
+  Нужен конечный локальный observer данного case, не общий recorder/framework.
+- Разделить две причины: неконтролируемая ротация до завершения текущих auth reads
+  в harness либо дефект обработки устаревшего ответа в runtime. Исправить доказанную
+  причину. Готовность кнопки не подменяет завершение причинного read.
+  Ожидания основаны на конкретных событиях/границах, не sleep/networkidle/большем
+  timeout. Нельзя игнорировать настоящий current 401 или подменять успешный JSON.
+- Сохранить смысл полного сценария: первая команда реально COMMITTED200,
+  клиент теряет ответ; реальный login возвращает доступ; после rotate исходный
+  retry получает CSRF403; recovery позволяет явный повтор **тех же bytes/key**;
+  ответ REPLAY совпадает с первым, в PG ровно одно решение. Нет автоматического
+  mutation retry, client send или Resume. Отрицательный реальный logout/revoke
+  по-прежнему скрывает protected данные и не возрождает чужое/старое намерение.
+- Если App меняется, regression до исправления падает по целевой причине,
+  после проходит; проверить и актуальный отказ, и запоздалый ответ.
+  Если меняется только harness, показать, что контролируемый порядок устраняет
+  именно воспроизведённую гонку, а все исходные business/auth assertions сохранены.
+- При доступном Docker targeted команда использует существующий locked Node24
+  environment и реальный browser/API/PG harness после обычного setup/private env:
+  `npm --prefix frontend run test:e2e -- --project=chromium-desktop e2e/messaging.spec.ts --grep "^Escalation committed200 loss"`.
+  Setup/private files остаются вне Git; тест без env/реальной БД не evidence.
+  При изменении App: `npm --prefix frontend test -- src/App.test.tsx`.
+  Без локального Docker действует уточнение GitHub Actions выше: typecheck и
+  диагностический candidate сначала; реальный E2E проверяется в CI.
+  Релевантные auth/recovery/revoke cases входят в окончательную проверку.
+- После диагностического возврата и исправления готовый итог вернуть C0: полный head и base, changed paths, точный root cause
+  или оставшийся конкретный blocker, команды/фактические результаты, сохранённые
+  инварианты. C0 проверяет candidate и переносит его в существующий PR38 для
+  **одного штатного полного CI**. Не открывать дублирующий implementation PR,
+  не двигать c4/main и не перезапускать неизменённый CI.
+  При новом падении разобрать все известные группы; прежний FAIL не переписать
+  задним числом как PASS. Авторский review не считать независимым C8.
+
+После каждого возврата C5 — HOLD до получения результата C0/CI; текущий
+blocker-return уже разобран, подготовка возобновлена уточнением выше. M4.2 выдаётся только после устранения blocker и приёмки
+M4.1 по текущей общей базе. Единственная матрица A01–A08 ниже не меняется.
+
+### C5 diagnostic candidate — C5-M4.1-CI-RECOVERY-R1 / 2026-10-29
+
+**REVIEW / C5 HOLD для C0/Actions**, base1449e9f9e1a70db4e5ea0f9b95d291e11cf50594.
+Изменены только failing case/local formatter в messaging.spec.ts и разрешённые
+два docs места. R4-журнал: до160 событий/32KiB, закрытые классы путей,
+request ordinals, method/status/phase и boolean UI; печатается при PASS и FAIL.
+Исходный committed200/login/CSRF403/exact replay/one-decision путь сохранён.
+После его assertions один реальный Business GET на reload удерживается до
+внешней rotation: captured credentials сначала проверяются реальным session200,
+затем исходный GET должен получить настоящий SESSION_REQUIRED401 и скрыть UI.
+Это управляемая проверка гипотезы, не идентификация исторического причинного GET.
+Runtime/остальные tests/guards неизменны; typecheck/diff и локальные проверки
+privacy/bounds/classification/assertion retention PASS. Real browser/API/PG
+**NOT RUN**; прежний CI FAIL и отсутствие доказанного исправления сохраняются.
+Следующий шаг — review C0 и один FF PR38 для штатного Actions по уточнению выше.
+Полные SHA/команды/границы — в возврате C5 в PR38; неизменённые unit suites не повторены.
+
+### C5 receipt — C5-M4.1-CI-RECOVERY-R1 / 2026-10-29
+
+**BLOCKED / C5 HOLD, исправление не заявлено.** Проверены seed
+96e74c489d76d41a9df8f007f84ef2e0581a1398, его sole parent repair base и ancestry
+принятого main. В текущей среде нет Docker CLI/daemon socket; capabilities=0,
+`unshare -Ur true` получает Operation not permitted. Штатный real browser/API/PG
+setup и целевой recovery case не выполнены; причинный read не установлен.
+После frozen `npm ci --ignore-scripts --no-audit --no-fund`: typecheck и 180 tests
+в App/EscalationsPanel/escalation-api/BillingPanel/MessagingPanel PASS
+(Node24.22.1, npm11.9.0). Это только unit/consumer evidence, не воспроизведение CI.
+Code/tests/locks/Gateway сохранены; изменены только эта запись и строка CURRENT.
+Для продолжения нужен существующий Docker-capable harness с private env и
+причинным target из выдачи; расширение write-set не требуется. Полные команды,
+SHA и пределы результата — в возврате C5 в PR38; прежний CI FAIL сохраняется.
+
+## Предыдущая выдача — M4.1-CONTRACT / C4 / HOLD
+
+C4 вернул реализацию в PR38; source review C0 завершён, интеграция блокирована
+browser CI. Следующая работа — только текущая C5 выдача выше. Исходный scope
+ниже сохранён для проверки результата, не для параллельного продолжения C4.
+
+
+**Результат и польза:** рабочий typed Gateway с проверкой входа/выхода, конечными
+лимитами и детерминированным fake adapter. M4.2 подключит Polza через этот же
+интерфейс; ошибки модели и неподдержанные возможности не попадут в дальнейшую
+отправку как успешный результат. Сейчас нужен этот небольшой исполняемый контракт;
+provider HTTP, агент и Telegram wiring идут в следующих последовательных задачах.
+
+Принятая база: **1cb3b6e168276d77faa3f11f33f8ecd0408ce406** (actual main после PR #37).
+Дерево: **25205a6644bff00f8afa110058ad1e569695791d**, совпадает с принятым planning head.
+[Main CI 40725828529](https://github.com/Elefesys/ai-service-manager/actions/runs/40725828529),
+push/main, attempt 1: **11/11 SUCCESS**. Проверены SHA и conclusions всех jobs;
+прежние артефакты/M3/рынок заново не аудировались.
+
+Repository: **Elefesys/ai-service-manager**. Ветка: **c4/m4-1-contract**, отдельный checkout.
+C0 подготовил на этой ветке только текущую выдачу и переход статусов после PR #37,
+одним commit поверх указанного actual main. Продолжать эту ветку, сохранив C0 docs;
+точный стартовый head указан в передаче C0. Это docs seed, не новый runtime base.
+C4 начинает реализацию этой единственной задачи; C1/C2/C3/C5/C6/C8 остаются HOLD.
+
+**Зависимости и источники:** принятые M3 и IMPL-004; AGENTS.md, CURRENT реестра,
+данный M4_HANDOFF. Для контракта — Spec §7.2/7.6/7.7/7.16/7.21,
+ADR-023/024/026/180/259/260/261/267, Roadmap §8, Implementation Plan M4.1.
+IMPL-004 явно сужает старую обязательность registry и второго рабочего adapter.
+В актуальном pyproject уже есть Pydantic v2, pytest/asyncio, Ruff и mypy;
+новые dependencies и изменения lockfiles для этого среза не ожидаются.
+
+### Разрешённые файлы C4
+
+Только реально нужные файлы из этого списка; не создавать пустые заготовки:
+- backend/src/asm/ai/__init__.py
+- backend/src/asm/ai/contracts.py
+- backend/src/asm/ai/gateway.py
+- backend/src/asm/ai/fake.py
+- backend/src/asm/ai/prompts/conversation_v1.txt
+- backend/src/asm/ai/schemas/conversation_result_v1.json
+- tests/test_m4_gateway.py
+- tests/test_m4_gateway_failures.py
+
+C4 также может изменить **только строку M4.1-CONTRACT** в CURRENT
+docs/TASK_REGISTER.md (IN_PROGRESS → REVIEW) и добавить короткий receipt под
+этой выдачей в docs/tasks/M4_HANDOFF.md. Подробные результаты — в PR/artifacts.
+Остальные строки, матрица A01–A08 и исторические записи сохраняются.
+
+Migrations, conversations/messaging, backend entrypoint, shared config,
+manifests/locks, workflows/scripts, UI и прочие paths вне write-set.
+При конкретной необходимости расширения сообщить точный path, причину и
+минимальную дельту C0; не добавлять будущие adapters/registries заранее.
+
+### Что реализовать
+
+1. Минимальные immutable/validated DTO: явно заданная route/model/config revision,
+   prompt/schema revisions, messages, разрешённые read tool definitions,
+   tool call/result correlation, deadline/input/output/token/call limits,
+   result/refusal/error и usage/cost. RU_AGGREGATOR/DIRECT_PROVIDER различаются в
+   конфигурационном контракте; fake обозначен как fake, рабочего direct adapter нет.
+   Endpoint/model/upstream задаёт доверенная конфигурация. Нет модельного выбора
+   маршрута, неявного fallback, ключа в DTO/repr/ошибках или угадывания upstream.
+2. Один async adapter protocol и вызывающий его Gateway. Одна попытка на вызов,
+   конечный deadline; никаких скрытых retry/repair или сетевых/DB side effects.
+   До вызова проверяются лимиты и совместимость запрошенных tools/schema/limits;
+   отсутствующая/неподтверждённая capability не считается поддержанной.
+   Нельзя тихо выкинуть параметр. Кандидаты openai/gpt-6-luna и
+   google/gemini-3.8-flash в synthetic fixtures остаются EVAL_ONLY:
+   fake capability declaration не доказывает реальную совместимость.
+3. Версионированный небольшой prompt и локальная строгая output schema:
+   reply / handoff / no_reply с согласованным текстом/причиной.
+   Gateway различает промежуточные read tool calls и финальный результат.
+   Не принимает лишние поля, неверные типы/сочетания, неограниченные строки или
+   произвольные tool names; tool arguments/results проверяются своим объявленным
+   контрактом. JSON Schema и runtime DTO не должны расходиться.
+   Provider structured output не отменяет local validation. Raw/invalid/truncated
+   output не становится reply. Schema validity не выдаётся за истинность фактов.
+4. Prompt сохраняет границу untrusted input / platform policy и правило уточнить
+   неизвестные услуги/цену/длительность/запись. Handoff — предложение результата
+   для будущего доверенного runtime, не mutation tool. Работающий ContextBuilder,
+   авторизация чтения реальной БД, AIRun/agent loop и отправка здесь не реализуются.
+5. Конечные лимиты явно заданы в config/request и проверяются на границах:
+   нулевой/истёкший бюджет не вызывает adapter, oversized input/output отклоняется.
+   Контракт передаёт остаток общего бюджета через tool round-trip, не сбрасывая его
+   как новый run; ориентир IMPL-004 — максимум 3 model calls / 4 read executions.
+   Это проверяемый контракт/учёт для fake, не durable spend enforcement.
+   Валюта и известная стоимость отделены от estimate/UNKNOWN; отсутствие usage/cost
+   и timeout не превращаются в нулевой расход или разрешение бесконечного повтора.
+6. Детерминированный fake: обычный ответ, tools → synthetic result → ответ,
+   refusal, invalid/truncated JSON, oversize, 429/5xx/timeout, неизвестная стоимость.
+   Сценарии проверяют протокол и ограничения без настоящих секретов, HTTP и БД.
+   Логи/ошибки не содержат содержимое переписки, ключи или chain-of-thought.
+
+### Завершение и evidence
+
+- Импортируемый работающий Gateway/DTO/schema/prompt/fake; endpoint/model меняются
+  через config, business/M3 code не меняется. Не создавать fake «live success».
+- Focused tests доказывают success и перечисленные отказы, schema drift, запрет
+  неразрешённого tool/capability/fallback, отсутствие вызова при исчерпанных лимитах,
+  budget continuity и tool call/result correlation. Потолок проверяется с обеих
+  сторон, timeout — без долгих sleeps. Проверить assets в обычной wheel-сборке.
+- Из существующей Python 3.13 locked environment, из корня repository:
+  `pytest -q tests/test_m4_gateway.py tests/test_m4_gateway_failures.py`;
+  `ruff check backend/src/asm/ai tests/test_m4_gateway.py tests/test_m4_gateway_failures.py`;
+  `ruff format --check backend/src/asm/ai tests/test_m4_gateway.py tests/test_m4_gateway_failures.py`;
+  `mypy backend/src`.
+  Затем один полный штатный PR CI на согласованном конечном candidate.
+  Не запускать полный цикл на промежуточных push ради проверки одного DTO;
+  готовый candidate публикуется после targeted checks.
+- Если CI упал, сгруппировать все известные причины, исправить и проверить
+  затронутое поведение; неизменённый прогон ради PASS не повторять. Старые gates
+  не ослаблять. Этот срез даёт contract/failure evidence для A01/A06, но не
+  закрывает live A01, изоляцию A03, runtime A04/A05 либо весь M4.
+- Возврат: PR + полный head/base SHA, точный diff/write-set, краткий public contract,
+  команды и фактические результаты, ссылка run/attempt/head, ограничения.
+  Авторский review не называется независимым C8. Статус до C0 — REVIEW; затем HOLD.
+
+Платные API, Polza adapter, credentials/VM activation, SQL и текущие M3 guards
+в эту выдачу не входят. Следующая зависимая задача — M4.2-PROBE после приёмки
+M4.1; перед её платной частью нужны reproducible command, secret path инструкция
+и отдельно подтверждённый владельцем бюджет.
+
+
+### C4 receipt — M4.1-CONTRACT / 2026-10-29
+
+**REVIEW**, затем C4 HOLD до решения C0. Реализованы `ModelGateway.call()`,
+immutable DTO, versioned prompt/schema и явный EVAL_ONLY fake; continuation
+сохраняет config/deadline и общий предел 3 calls / 4 reads. 89 focused tests,
+Ruff check/format, mypy (68 source files) и обычная wheel-сборка с изолированным
+импортом/вызовом Gateway PASS. Точные команды, head/base SHA, diff и штатный
+PR CI run/attempt — в PR ветки `c4/m4-1-contract`. Это авторская проверка,
+не независимый C8; A01/A06 только contract/failure evidence. HTTP/DB/Telegram,
+Polza proof, durable spend enforcement и приёмка всего M4 не заявлены.
 
 ## Результат для пользователя
 
@@ -28,7 +408,7 @@ M4 не должен строить эти домены или обещать р
 | Post-merge CI | [40681691046](https://github.com/Elefesys/ai-service-manager/actions/runs/40681691046), 11/11 SUCCESS |
 | Поздняя координация C0 | 025688e94a9147891e83f69713e2476c3419ca3c: только TASK_REGISTER и M3_HANDOFF сверх main; итоговая приёмка перенесена в планирующую ветку |
 | История M3 | [M3_HANDOFF, верхний финальный receipt](M3_HANDOFF.md); не исполнять архивные инструкции из середины |
-| Следующая база исполнителя | Фактический принятый полный SHA после интеграции плана; C0 выдаёт его заново, не подставляет предполагаемый merge SHA |
+| Текущая принятая база M4.1 | actual main 1cb3b6e168276d77faa3f11f33f8ecd0408ce406; PR #37 merged, main CI 40725828529 11/11 SUCCESS |
 
 Перед стартом C0 проверяет актуальный main/open PRs: параллельные изменения нельзя
 затереть. Если product source сдвинулся, адаптировать выдачу к нему; не переносить
@@ -225,7 +605,7 @@ M4 VERIFIED только после A01–A08 в заявленных грани
 ## Как C0 ведёт этап без повторения путаницы M1/M3
 
 1. Первым сообщением — фактическая база, что уже принято и один ближайший результат.
-   Проверить/принять IMPL-004 и выдать M4.1-CONTRACT; не открывать все чаты разом.
+   План/IMPL-004 приняты; текущая выдача M4.1-CONTRACT выше. Не открывать все чаты разом.
 2. Перед каждой задачей показать понятную пользу для пилота, необходимость сейчас
    либо возможность отложить. Выдать ID/base SHA/точные paths/dependencies/criteria.
    C2 контролирует миграции; общие файлы не редактируются параллельно.
@@ -241,7 +621,8 @@ M4 VERIFIED только после A01–A08 в заявленных грани
 
 ## Непосредственное следующее действие
 
-C0 review документационного PR → принять план/IMPL-004 → после интеграции выдать
-C4 одну M4.1-CONTRACT от подтверждённого общего SHA. Параллельно можно подготовить
-точные инструкции получения ключа и probe command, но платных вызовов, VM
-активаций и runtime/DDL эта подготовка сама по себе не разрешает.
+C5 выполняет единственную C5-M4.1-CI-RECOVERY-R1 из текущей выдачи выше; C4 HOLD.
+После исправления C0 принимает конечный M4.1 candidate и его полный CI;
+затем M4.2-PROBE получает фактическую принятую общую базу.
+Подготовка probe command/secret инструкции не разрешает платные вызовы или VM
+активацию сама по себе; бюджет подтверждает владелец.

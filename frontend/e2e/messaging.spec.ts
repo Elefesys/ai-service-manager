@@ -271,27 +271,33 @@ test('@narrow Escalation runtime queue -> exact internal resolve and cancel; ina
 
 // Only the committed200 recovery case uses this closed, payload-free record.
 function escalationRecoveryDiagnostic(value:Record<string,unknown>):string{
-  const prefix='E2E_ESCALATION_RECOVERY_R3:';
+  const prefix='E2E_ESCALATION_RECOVERY_R4:';
   const fallback=prefix+'{"stage":"UNKNOWN","diagnostic_error":true}';
   try{
-    const stages=['SETUP','FIRST_SUBMIT','COMMITTED','AMBIGUOUS','CLEAR_COOKIES','SESSION_RECOVERY','LOGIN','RETRY_ENABLED','ROTATE_SESSION','ROTATE','FIRST_RETRY_CLICK','FIRST_RETRY_RESPONSE','CSRF_RECOVERY','SECOND_RETRY_CLICK','SECOND_RETRY_RESPONSE','RECEIPT','ASSERTIONS','RELOAD','DONE','CLEANUP'];
+    const stages=['SETUP','FIRST_SUBMIT','COMMITTED','AMBIGUOUS','CLEAR_COOKIES','SESSION_RECOVERY','LOGIN','RETRY_ENABLED','STARTUP_READS','STARTUP_RELEASE','ROTATE_SESSION','ROTATE','FIRST_RETRY_CLICK','FIRST_RETRY_RESPONSE','CSRF_RECOVERY','SECOND_RETRY_CLICK','SECOND_RETRY_RESPONSE','RECEIPT','ASSERTIONS','RELOAD','PROBE_HELD','PROBE_SESSION','PROBE_ROTATE','PROBE_RELEASE','PROBE_DENIAL','DONE','CLEANUP'];
     const routes=['ENTERED','FETCH_PENDING','FETCH_FAILED','PARSE_PENDING','PARSED','PARSE_FAILED','ABORT_PENDING','ABORTED','ABORT_FAILED','CONTINUE_PENDING','CONTINUED','CONTINUE_FAILED'];
     const closed=(v:unknown,allowed:string[])=>typeof v==='string'&&allowed.includes(v)?v:'UNKNOWN';
     const boolean=(v:unknown)=>typeof v==='boolean'?v:null;
     let truncated=false;
-    const count=(v:unknown)=>{if(typeof v!=='number'||!Number.isSafeInteger(v)||v<0)return null;if(v>99){truncated=true;return 99;}return v;};
+    const count=(v:unknown,max=99)=>{if(typeof v!=='number'||!Number.isSafeInteger(v)||v<0)return null;if(v>max){truncated=true;return max;}return v;};
     const status=(v:unknown)=>typeof v==='number'&&Number.isInteger(v)&&v>=100&&v<=599?v:null;
     const record:Record<string,unknown>={stage:closed(value.stage,stages),route_stage:closed(value.route_stage,routes)};
     for(const key of ['attempts','resolve_requests','resolve_responses','resolve_failed','resolve_finished','session_requests','session_responses','login_requests','login_responses','detail_requests','detail_responses'])record[key]=count(value[key]);
-    for(const key of ['first_status','rotate_status','resolve_status','session_status','login_status','detail_status'])record[key]=status(value[key]);
-    for(const key of ['observers_attached','observer_error','route_is_post','first_fetch_ok','first_parse_ok','first_abort_ok','same_body','same_key','same_intent','retry_clicked','replay_clicked','observers_removed','cleanup_ok'])record[key]=boolean(value[key]);
-    for(const key of ['ui_before_retry','ui_failure']){
+    for(const key of ['first_status','rotate_status','resolve_status','session_status','login_status','detail_status','held_status','startup_status'])record[key]=status(value[key]);
+    for(const key of ['observers_attached','observer_error','route_is_post','first_fetch_ok','first_parse_ok','first_abort_ok','same_body','same_key','same_intent','retry_clicked','replay_clicked','observers_removed','cleanup_ok','original_assertions_passed','held_has_cookie','held_session_required','events_truncated','startup_blocked','startup_complete'])record[key]=boolean(value[key]);
+    for(const key of ['ui_before_rotate','ui_before_retry','ui_probe_held','ui_probe_denied','ui_failure']){
       const input=value[key],ui=input&&typeof input==='object'?input as Record<string,unknown>:{};
       record[key]=Object.fromEntries(['closed','read_ok','detail_present','detail_loading','retry_present','retry_disabled','recover_present','saving','login_present','auth_recovering'].map(k=>[k,boolean(ui[k])]));
     }
-    record.truncated=truncated;
+    const kinds=['resolve','session','bootstrap','login','rotate','logout','businesses','billing','audit','connections','conversations','messages','control','human_context','observations','escalations','detail','other_workspace','other_api'];
+    const events=Array.isArray(value.events)?value.events:[];
+    record.events=events.slice(0,160).map(input=>{
+      const e=input&&typeof input==='object'?input as Record<string,unknown>:{};
+      return {seq:count(e.seq,511),request:count(e.request),phase:closed(e.phase,stages),kind:closed(e.kind,kinds),event:closed(e.event,['REQUEST','RESPONSE','FINISHED','FAILED','HARNESS_REQUEST','HARNESS_RESPONSE','HELD','RELEASED','FETCH_RESPONSE']),method:closed(e.method,['GET','POST','PATCH','DELETE','OPTIONS']),status:status(e.status)};
+    });
+    record.truncated=truncated||events.length>160||value.events_truncated===true;
     const output=prefix+JSON.stringify(record);
-    return Buffer.byteLength(output,'utf8')<=4096?output:prefix+'{"stage":"UNKNOWN","truncated":true}';
+    return Buffer.byteLength(output,'utf8')<=32768?output:prefix+'{"stage":"UNKNOWN","truncated":true}';
   }catch{return fallback;}
 }
 
@@ -299,7 +305,7 @@ test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key
   test.setTimeout(60000);const preset='esc_recovery';
   let attempts=0,original:string|null=null,key:string|undefined,first:EscalationReceipt|undefined,identical=true;
   const diagnostic:Record<string,unknown>={stage:'SETUP',observers_attached:false,observer_error:false,retry_clicked:false,replay_clicked:false};
-  let failed=false,primary:unknown,removeObservers=()=>{};
+  let failed=false,primary:unknown,removeObservers=()=>{},releaseRead=()=>{},releaseStartup=()=>{},closing=false;
   const sampleUI=async()=>{
     const result=await safeDiagnostic('MESSAGING_HTTP_FAILED',async()=>{
       if(page.isClosed())return {closed:true,read_ok:false};
@@ -316,22 +322,49 @@ test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key
     await signIn(page,preset);const v=await createEsc(page,preset);await openEsc(page,v);const before=await helper(preset,'escalation-stats');
     let complete!:(result:SafeResult<number>)=>void;const committed=new Promise<SafeResult<number>>(r=>{complete=r;});const url=`${escPath(preset,v.escalation_id)}/resolve`;
     const classify=(request:import('@playwright/test').Request)=>{
-      const pathname=new URL(request.url()).pathname,method=request.method();
-      return method==='POST'&&pathname===url?'resolve':method==='GET'&&pathname==='/api/v1/auth/session'?'session':method==='POST'&&pathname==='/api/v1/auth/login'?'login':method==='GET'&&pathname===escPath(preset,v.escalation_id)?'detail':null;
+      const parsed=new URL(request.url()),pathname=parsed.pathname;
+      if(parsed.origin!==origin||!pathname.startsWith('/api/v1/'))return null;
+      if(pathname===url)return 'resolve';
+      if(pathname===escPath(preset,v.escalation_id))return 'detail';
+      const auth=pathname.match(/^\/api\/v1\/auth\/(session|bootstrap|login|rotate|logout)$/);if(auth)return auth[1];
+      const suffix=pathname.startsWith(path(preset,''))?pathname.slice(path(preset,'').length):null;
+      if(suffix===null)return pathname.startsWith('/api/v1/workspaces/')?'other_workspace':'other_api';
+      if(suffix==='businesses'||suffix.startsWith('businesses/'))return 'businesses';
+      if(suffix==='billing')return 'billing';if(suffix==='audit-events')return 'audit';
+      if(suffix==='channel-connections')return 'connections';if(suffix==='conversations')return 'conversations';
+      if(suffix==='escalations')return 'escalations';if(suffix.startsWith('escalations/'))return 'detail';
+      if(/^conversations\/[^/]+\/messages$/.test(suffix))return 'messages';
+      if(/^conversations\/[^/]+\/control$/.test(suffix))return 'control';
+      if(/^conversations\/[^/]+\/human-context$/.test(suffix))return 'human_context';
+      if(/^conversations\/[^/]+\/human-context\/observations$/.test(suffix))return 'observations';
+      return 'other_api';
     };
-    const increment=(field:string)=>{diagnostic[field]=Math.min(100,Number(diagnostic[field])+1);};
+    // Ordinals correlate events inside this case; they are never domain IDs.
+    const requests=new WeakMap<import('@playwright/test').Request,number>();let requestCount=0,eventCount=0;
+    const events:Record<string,unknown>[]=[];diagnostic.events=events;diagnostic.events_truncated=false;
+    const record=(event:string,kind:string,request?:import('@playwright/test').Request,status?:number,method=request?.method()??'GET')=>{
+      if(events.length===160){diagnostic.events_truncated=true;return;}
+      events.push({seq:++eventCount,request:request?requests.get(request):null,phase:diagnostic.stage,kind,event,method,status});
+    };
+    const increment=(field:string)=>{if(typeof diagnostic[field]==='number')diagnostic[field]=Math.min(100,Number(diagnostic[field])+1);};
     for(const name of ['resolve','session','login','detail']){diagnostic[`${name}_requests`]=0;diagnostic[`${name}_responses`]=0;}
     diagnostic.resolve_failed=0;diagnostic.resolve_finished=0;
-    const requested=(request:import('@playwright/test').Request)=>{try{const kind=classify(request);if(kind)increment(`${kind}_requests`);}catch{diagnostic.observer_error=true;}};
-    const responded=(response:import('@playwright/test').Response)=>{try{const kind=classify(response.request());if(kind){increment(`${kind}_responses`);diagnostic[`${kind}_status`]=response.status();}}catch{diagnostic.observer_error=true;}};
-    const requestFailed=(request:import('@playwright/test').Request)=>{try{if(classify(request)==='resolve')increment('resolve_failed');}catch{diagnostic.observer_error=true;}};
-    const requestFinished=(request:import('@playwright/test').Request)=>{try{if(classify(request)==='resolve')increment('resolve_finished');}catch{diagnostic.observer_error=true;}};
+    const requested=(request:import('@playwright/test').Request)=>{try{const kind=classify(request);if(kind){requestCount=Math.min(100,requestCount+1);requests.set(request,requestCount);increment(`${kind}_requests`);record('REQUEST',kind,request);}}catch{diagnostic.observer_error=true;}};
+    const responded=(response:import('@playwright/test').Response)=>{try{const kind=classify(response.request());if(kind){increment(`${kind}_responses`);diagnostic[`${kind}_status`]=response.status();record('RESPONSE',kind,response.request(),response.status());}}catch{diagnostic.observer_error=true;}};
+    const requestFailed=(request:import('@playwright/test').Request)=>{try{const kind=classify(request);if(kind){if(kind==='resolve')increment('resolve_failed');record('FAILED',kind,request);}}catch{diagnostic.observer_error=true;}};
+    const requestFinished=(request:import('@playwright/test').Request)=>{try{const kind=classify(request);if(kind){if(kind==='resolve')increment('resolve_finished');record('FINISHED',kind,request);}}catch{diagnostic.observer_error=true;}};
     removeObservers=()=>{
       let removalFailed=false;
       for(const remove of [()=>page.off('request',requested),()=>page.off('response',responded),()=>page.off('requestfailed',requestFailed),()=>page.off('requestfinished',requestFinished)]){try{remove();}catch{removalFailed=true;}}
       if(removalFailed)throw new Error('E2E_SAFE_FAILURE:MESSAGING_ROUTE_RELEASE_FAILED');
     };
     page.on('request',requested);page.on('response',responded);page.on('requestfailed',requestFailed);page.on('requestfinished',requestFinished);diagnostic.observers_attached=true;
+    // APIRequestContext traffic is not emitted by page's network observers.
+    const rotateSession=async(stage:'ROTATE'|'PROBE_ROTATE',headers?:Record<string,string>)=>{
+      record('HARNESS_REQUEST','session');const session=await http(()=>page.request.get('/api/v1/auth/session',{headers}));record('HARNESS_RESPONSE','session',undefined,session.status());expect(session.status()).toBe(200);
+      const token=(await json(session)).csrf_token as string;diagnostic.stage=stage;
+      record('HARNESS_REQUEST','rotate',undefined,undefined,'POST');const rotated=await http(()=>page.request.post('/api/v1/auth/rotate',{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}));record('HARNESS_RESPONSE','rotate',undefined,rotated.status(),'POST');return rotated;
+    };
     await page.route(`**${url}`,async route=>{
       diagnostic.route_stage='ENTERED';diagnostic.route_is_post=route.request().method()==='POST';
       attempts++;if(attempts>1){
@@ -341,13 +374,52 @@ test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key
       }
       original=route.request().postData();key=route.request().headers()['idempotency-key'];diagnostic.route_stage='FETCH_PENDING';const real=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',()=>route.fetch({timeout:10000}));
       diagnostic.first_fetch_ok=real.ok;diagnostic.route_stage=real.ok?'PARSE_PENDING':'FETCH_FAILED';
-      if(real.ok){diagnostic.first_status=real.value.status();const parsed=await safeDiagnostic('MESSAGING_BODY_FAILED',async()=>parseEscalationReceipt(await real.value.json(),escContext(v),'RESOLVE',JSON.parse(original!) as EscalationBody));diagnostic.first_parse_ok=parsed.ok;diagnostic.route_stage=parsed.ok?'PARSED':'PARSE_FAILED';if(parsed.ok)first=parsed.value;else{complete(parsed);return;}}
+      if(real.ok){diagnostic.first_status=real.value.status();record('FETCH_RESPONSE','resolve',route.request(),real.value.status());const parsed=await safeDiagnostic('MESSAGING_BODY_FAILED',async()=>parseEscalationReceipt(await real.value.json(),escContext(v),'RESOLVE',JSON.parse(original!) as EscalationBody));diagnostic.first_parse_ok=parsed.ok;diagnostic.route_stage=parsed.ok?'PARSED':'PARSE_FAILED';if(parsed.ok)first=parsed.value;else{complete(parsed);return;}}
       diagnostic.route_stage='ABORT_PENDING';const aborted=await safeDiagnostic('MESSAGING_ROUTE_ABORT_FAILED',()=>route.abort('failed'));diagnostic.first_abort_ok=aborted.ok;diagnostic.route_stage=aborted.ok?'ABORTED':'ABORT_FAILED';complete(!real.ok?real:!aborted.ok?aborted:{ok:true,value:real.value.status()});
     });
     diagnostic.stage='FIRST_SUBMIT';await escDetail(page).getByLabel('Внутренний ответ владельца').fill('  Сохранить точно\ne\u0301 🎨  ');await escDetail(page).getByRole('button',{name:'Сохранить внутренний ответ'}).click();diagnostic.stage='COMMITTED';expect(requireSafeResult(await committed)).toBe(200);
     diagnostic.stage='AMBIGUOUS';await expect(escDetail(page).getByText(/Результат решения неизвестен/)).toBeVisible();escDelta(before,await helper(preset,'escalation-stats'),1);
-    diagnostic.stage='CLEAR_COOKIES';await page.context().clearCookies();diagnostic.stage='SESSION_RECOVERY';await escDetail(page).getByRole('button',{name:'Проверить сессию для решения'}).click();diagnostic.stage='LOGIN';await loginForm(page,preset);
-    diagnostic.stage='RETRY_ENABLED';await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();diagnostic.stage='ROTATE_SESSION';const token=await csrf(page.request);diagnostic.stage='ROTATE';const rotate=await http(()=>page.request.post('/api/v1/auth/rotate',{headers:{Origin:origin,'X-CSRF-Token':token},data:{}}));diagnostic.rotate_status=rotate.status();expect(rotate.status()).toBe(200);
+    diagnostic.stage='CLEAR_COOKIES';await page.context().clearCookies();diagnostic.stage='SESSION_RECOVERY';await escDetail(page).getByRole('button',{name:'Проверить сессию для решения'}).click();
+    // Login starts seven reads; conversations then starts history/control/context/
+    // observations. Hold that last child before the wire to exercise the barrier.
+    const startupHold:{captured:boolean;result?:SafeResult<number>}={captured:false};
+    const startupRelease=new Promise<void>(resolve=>{releaseStartup=resolve;});
+    await page.route(u=>u.origin===origin&&u.pathname.startsWith(path(preset,'conversations/'))&&u.pathname.endsWith('/human-context/observations'),async route=>{
+      if(route.request().method()!=='GET'||startupHold.captured){await safeContinue(route);return;}startupHold.captured=true;
+      startupHold.result=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',async()=>{
+        const headers=await route.request().allHeaders();record('HELD','observations',route.request());
+        await startupRelease;if(closing){await route.abort('failed');return 0;}
+        record('RELEASED','observations',route.request());const response=await route.fetch({headers,timeout:10000,maxRedirects:0});diagnostic.startup_status=response.status();record('FETCH_RESPONSE','observations',route.request(),response.status());
+        await route.fulfill({response});return response.status();
+      });
+      if(!startupHold.result.ok)await safeDiagnostic('MESSAGING_ROUTE_ABORT_FAILED',()=>route.abort('failed'));
+    });
+    const startupFrom=events.length;
+    const startupComplete=()=>{
+      if(diagnostic.observer_error||diagnostic.events_truncated)return false;
+      const wave=events.slice(startupFrom),reads=wave.filter(e=>e.event==='REQUEST'&&e.method==='GET'&&e.kind!=='session');
+      const required=['businesses','billing','audit','escalations','detail','connections','conversations','messages','control','human_context','observations'];
+      return required.every(kind=>reads.some(r=>r.kind===kind))&&reads.every(r=>{
+        const related=wave.filter(e=>e.request===r.request);
+        return related.some(e=>e.event==='RESPONSE'&&e.status===200)&&related.some(e=>e.event==='FINISHED')&&!related.some(e=>e.event==='FAILED'||e.event==='RESPONSE'&&e.status!==200);
+      });
+    };
+    diagnostic.stage='LOGIN';await loginForm(page,preset);
+    diagnostic.stage='RETRY_ENABLED';await expect(escDetail(page).getByRole('button',{name:'Повторить исходное решение'})).toBeEnabled();
+    await expect.poll(()=>startupHold.captured||!!startupHold.result).toBe(true);if(startupHold.result)requireSafeResult(startupHold.result);
+    diagnostic.stage='STARTUP_READS';let barrierChecked=false;
+    const rotation=(async()=>{
+      await expect.poll(()=>{barrierChecked=true;return startupComplete();}).toBe(true);
+      // Network completion precedes React's JSON handling/render. These controls
+      // settle each read's busy state, including the observed child components.
+      for(const name of ['Обновить подписку','Обновить историю','Обновить очередь','Обновить запрос','Обновить подключения','Обновить диалоги','Обновить сообщения','Обновить режим','Обновить контекст','Обновить наблюдения'])await expect(page.getByRole('button',{name,exact:true})).toBeEnabled();
+      await expect(page.getByText('Загружаем список…',{exact:true})).toHaveCount(0);expect(startupComplete()).toBe(true);
+      diagnostic.startup_complete=true;diagnostic.ui_before_rotate=await sampleUI();diagnostic.stage='ROTATE_SESSION';return rotateSession('ROTATE');
+    })();void rotation.catch(()=>{});
+    await expect.poll(()=>barrierChecked).toBe(true);
+    diagnostic.startup_blocked=!startupComplete()&&!events.some(e=>e.event==='HARNESS_REQUEST'&&e.kind==='rotate');expect(diagnostic.startup_blocked).toBe(true);
+    diagnostic.stage='STARTUP_RELEASE';releaseStartup();await expect.poll(()=>!!startupHold.result).toBe(true);expect(requireSafeResult(startupHold.result!)).toBe(200);
+    const rotate=await rotation;diagnostic.rotate_status=rotate.status();expect(rotate.status()).toBe(200);
     diagnostic.ui_before_retry=await sampleUI();
     const denied=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===url);void denied.catch(()=>{}); // Handle an early rejection; still await the original promise below.
     diagnostic.stage='FIRST_RETRY_CLICK';await escDetail(page).getByRole('button',{name:'Повторить исходное решение'}).click();diagnostic.retry_clicked=true;diagnostic.stage='FIRST_RETRY_RESPONSE';expect((await denied).status()).toBe(403);
@@ -357,15 +429,41 @@ test('Escalation committed200 loss -> real login/CSRF recovery -> exact same key
     const saved=parseEscalationReceipt(requireSafeResult(await safeDiagnostic('MESSAGING_BODY_FAILED',()=>response.json())),escContext(v),'RESOLVE',JSON.parse(original!) as EscalationBody);expect(saved.outcome).toBe('REPLAY');expect(JSON.stringify(saved.result)===JSON.stringify(first?.result)).toBe(true);
     diagnostic.stage='ASSERTIONS';
     await expect(escDetail(page).getByText('Сохранённый внутренний ответ')).toBeVisible();expect(attempts).toBe(3);expect(identical).toBe(true);escDelta(before,await helper(preset,'escalation-stats'),1);expect((await worker(preset,'stats')).calls).toBe(0);
-    diagnostic.stage='RELOAD';await page.reload();await expect(escQueue(page)).toBeVisible();expect(attempts).toBe(3);diagnostic.stage='DONE';
-  }catch(error){failed=true;primary=error;}
+    // Keep the original journey first. The following one-shot probe only delays
+    // a real read on reload; it neither fabricates a 401 nor changes a receipt.
+    const held:{headers?:Record<string,string>;result?:SafeResult<number>}={};let captured=false;
+    const released=new Promise<void>(resolve=>{releaseRead=resolve;});
+    await page.route(`**${path(preset,'businesses')}`,async route=>{
+      if(route.request().method()!=='GET'||captured){await safeContinue(route);return;}captured=true;
+      held.result=await safeDiagnostic('MESSAGING_ROUTE_FETCH_FAILED',async()=>{
+        const headers=await route.request().allHeaders();held.headers=headers;diagnostic.held_has_cookie=!!headers.cookie;record('HELD','businesses',route.request());
+        await released;if(closing){await route.abort('failed');return 0;}
+        record('RELEASED','businesses',route.request());
+        const response=await route.fetch({headers,timeout:10000,maxRedirects:0});diagnostic.held_status=response.status();record('FETCH_RESPONSE','businesses',route.request(),response.status());
+        const body:unknown=await response.json();diagnostic.held_session_required=!!body&&typeof body==='object'&&'error' in body&&!!body.error&&typeof body.error==='object'&&'code' in body.error&&body.error.code==='SESSION_REQUIRED';
+        await route.fulfill({response});return response.status();
+      });
+      if(!held.result.ok)await safeDiagnostic('MESSAGING_ROUTE_ABORT_FAILED',()=>route.abort('failed'));
+      held.headers=undefined;
+    });
+    diagnostic.stage='RELOAD';await page.reload();await expect(escQueue(page)).toBeVisible();expect(attempts).toBe(3);diagnostic.original_assertions_passed=true;
+    diagnostic.stage='PROBE_HELD';await expect.poll(()=>!!held.headers||!!held.result).toBe(true);if(held.result)requireSafeResult(held.result);expect(!!held.headers?.cookie).toBe(true);diagnostic.ui_probe_held=await sampleUI();
+    // Validate those exact captured credentials before rotation. They remain
+    // private to this route; no header/body/token is put in the diagnostic.
+    diagnostic.stage='PROBE_SESSION';expect((await rotateSession('PROBE_ROTATE',held.headers)).status()).toBe(200);
+    diagnostic.stage='PROBE_RELEASE';releaseRead();await expect.poll(()=>!!held.result).toBe(true);expect(requireSafeResult(held.result!)).toBe(401);expect(diagnostic.held_session_required).toBe(true);
+    diagnostic.stage='PROBE_DENIAL';await expect(page.getByRole('heading',{name:'Вход в консоль'})).toBeVisible();
+    for(const name of ['Панель владельца','Audit','Запросы владельцу','Переписка'])await expect(page.getByRole('region',{name,exact:true})).toHaveCount(0);
+    diagnostic.ui_probe_denied=await sampleUI();expect(attempts).toBe(3);diagnostic.stage='DONE';
+  }catch(error){failed=true;primary=error;diagnostic.ui_failure=await sampleUI();}
   finally{
     // No payload/error serialization; a cleanup failure cannot replace the primary.
+    closing=true;releaseStartup();releaseRead();
     const removed=await safeDiagnostic('MESSAGING_ROUTE_RELEASE_FAILED',async()=>removeObservers());diagnostic.observers_removed=removed.ok;
     const cleaned=await safeDiagnostic('MESSAGING_ROUTE_RELEASE_FAILED',()=>page.unrouteAll({behavior:'wait'}));diagnostic.cleanup_ok=cleaned.ok;
     original=null;key=undefined;first=undefined;diagnostic.attempts=attempts;diagnostic.same_intent=attempts>1?identical:null;
     if((!removed.ok||!cleaned.ok)&&!failed){failed=true;diagnostic.stage='CLEANUP';try{requireSafeResult(!removed.ok?removed:cleaned);}catch(error){primary=error;}}
-    if(failed){diagnostic.ui_failure=await sampleUI();try{console.log(escalationRecoveryDiagnostic(diagnostic));}catch{/* Preserve the primary even if diagnostic output is unavailable. */}}
+    try{console.log(escalationRecoveryDiagnostic(diagnostic));}catch{/* Preserve the primary even if diagnostic output is unavailable. */}
   }
   if(failed)throw primary;
 });

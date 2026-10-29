@@ -2,31 +2,39 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4 planning REVIEW; implementation TODO / 2026-10-28
+## CURRENT — M4.1 CI BLOCKED; C5 recovery repair issued / 2026-10-29
 
-Пользователь поручил исследовать AI-агрегаторов и подготовить минимальный M4.
-[План и единственная матрица A01–A08](tasks/M4_HANDOFF.md),
-[поправка к архитектуре IMPL-004, PROPOSED](decisions/IMPL-004-m4-pilot-ai.md),
-[исследование рынка](research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-**PolzaAI — первый кандидат, не live-verified provider.** Actual M4 implementation
-и платные API-вызовы не выполнены. C0 принимает план до выдачи кода; первый
-исполнитель C4. Следующая task base — фактический принятый SHA после интеграции
-планирующего PR, не предполагаемый merge commit.
+Принятый main **1cb3b6e168276d77faa3f11f33f8ecd0408ce406**; PR37/план/IMPL-004 интегрированы.
+[PR38](https://github.com/Elefesys/ai-service-manager/pull/38) candidate
+**31537848de7bcfb5732622b9361cfaba41c1105b**, tree **aa265f68c3fec9e3b7128d9a800e6e5cf5574f25**.
+C0 source review Gateway/DTO/fake/tests завершён без существенных замечаний;
+это не независимый C8 и не итоговая интеграция.
+[CI40740338709](https://github.com/Elefesys/ai-service-manager/actions/runs/40740338709),
+attempt1, завершён: **10 SUCCESS / 1 FAILURE**. Foundation2286+155subtests/804PG PASS;
+browser398unit PASS,53browserPASS/1FAIL. Единственный подтверждённый blocker —
+existing escalation login/rotation/replay recovery: UI стал anonymous до retry.
+Причинный request пока не установлен; cleanup=false после timeout — вторичный факт.
 
 | Task | Status / ближайший результат |
 |---|---|
-| M4-PLAN | REVIEW: docs-only; C0 acceptance ожидается, runtime не менялся |
-| M4.1-CONTRACT | TODO: минимальный Gateway/config/schema/fakes; следующая выдача C4 |
-| M4.2-PROBE | TODO: Polza adapter, synthetic API proof и выбор одной модели; нужен ограниченный ключ/бюджет |
-| M4.3-CONTEXT | TODO: актуальный M3 context, один-два реальных read tools, bounded agent |
-| M4.3-RUNTIME | TODO: durable AI run и настоящий guarded Telegram consumer; C2/C3 участвуют по точной дельте |
-| M4.3-QUALITY | TODO: focused C8/eval и A01–A07; тесты создаются вместе с функциями |
+| M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance + main CI40725828529 PASS |
+| M4.1-CONTRACT | BLOCKED: C4 implementation returned/source reviewed; полный CI FAIL; PR38 не слит, C4 HOLD |
+| C5-M4.1-CI-RECOVERY-R1 | REVIEW / repair candidate, C5 HOLD для C0/CI: добавлен барьер11 startup/child reads и UI перед первой rotation; задержанный observations GET должен завершиться200 до неё. Negative old-credential Business401 сохранён. Typecheck/diff/local predicate checks PASS; новый E2E NOT RUN. Basefe9de57d…; diagnostic54/54 PASS отдельно, исторический GET неизвестен; receipt в M4_HANDOFF |
+| M4.2-PROBE | TODO / HOLD до приёмки M4.1; Polza adapter/synthetic comparison, отдельный ключ и подтверждённый бюджет |
+| M4.3-CONTEXT | TODO: актуальный M3 context и необходимые read-only tools |
+| M4.3-RUNTIME | TODO: durable AI run и настоящий guarded Telegram consumer; C2/C3 по точной дельте |
+| M4.3-QUALITY | TODO: независимый scoped C8/eval; авторские тесты внутри каждой задачи |
 | M4-ACCEPTANCE | TODO: bounded synthetic live, A08, actual main CI и передача M5 |
 
-Один агент/один рабочий provider. Direct API runtime, registry/admin UI, RAG/Vision
-runtime, новые business domains и production отложены по IMPL-004, а не считаются
-реализованными. Existing native context/owner control/no-resend сохраняются.
-Подготовка не переоткрывает M3 и не запускает исторические C6 инструкции.
+Новый диагностический run40760265440: browser54/54 и398frontend PASS; R4 полный,
+controlled rotation401→anonymous воспроизведён. Полный run пока IN_PROGRESS;
+исходный FAIL сохранён. Диагностика не является завершённым исправлением.
+
+Единственная текущая выдача и матрица A01–A08 — [M4_HANDOFF](tasks/M4_HANDOFF.md).
+C1/C2/C3/C4/C6/C8 HOLD. Общие файлы не редактируются параллельно.
+C5 не меняет Gateway, backend/SQL/CI/VM и не ослабляет auth/replay критерии.
+Direct/RAG/Vision/registry и следующие business domains сохраняют DEFERRED scope.
+Платных API, новой VM активации или переоткрытия M3 нет.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 
