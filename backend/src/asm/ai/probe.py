@@ -520,9 +520,9 @@ async def live(
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> dict[str, Any]:
     proposal = plan(cases, reviews)
+    ledger = Ledger(output, approved, proposal["max_model_http_calls"])
     if Decimal(proposal["priced_reservation_rub"]) > approved:
         raise ValueError("APPROVED_BUDGET_TOO_SMALL")
-    ledger = Ledger(output, approved, proposal["max_model_http_calls"])
     current = await catalog(settings, transport)
     for review, entry in zip(reviews, current, strict=True):
         review.fresh()

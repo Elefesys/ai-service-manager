@@ -16,7 +16,7 @@ C0 source/evidence review завершён; не независимый C8, не
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; read barrier до rotation и real401 negative приняты; исходный FAIL/diagnostic history в PR38, C5 HOLD |
-| M4.2-PROBE | REVIEW / PAID PROBE NOT RUN — C4: Polza adapter, finite synthetic probe и [runbook](runbooks/M4_POLZA_PROBE.md); 172 targeted PASS, Ruff/format/mypy PASS. План 50 scenarios / ≤54 model calls / предложение ≤100 RUB; account route/capability/token/billing proof и owner budget остаются открыты. Full CI — в Draft PR; C4 HOLD для C0 review |
+| M4.2-PROBE | REVIEW / PAID PROBE NOT RUN — C4: Polza adapter, finite synthetic probe и [runbook](runbooks/M4_POLZA_PROBE.md); 177 targeted PASS, Ruff/format/mypy PASS. План 50 scenarios / ≤54 model calls / предложение ≤100 RUB; account route/capability/token/billing proof и owner budget остаются открыты. Full CI — в Draft PR; C4 HOLD для C0 review |
 | M4.3-CONTEXT | TODO / HOLD: актуальный M3 context и необходимые read-only tools после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD: durable AI run и guarded Telegram consumer; C2/C3 по точной дельте |
 | M4.3-QUALITY | TODO: независимый scoped C8/eval; авторские тесты внутри каждой задачи |

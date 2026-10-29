@@ -89,6 +89,8 @@ class RouteReview(DTO):
             if provider.get("capabilities", {}).get(name, {}).get("status") != "supported":
                 raise ValueError("CAPABILITY_UNKNOWN")
         parameters = provider.get("supported_parameters", [])
+        if type(parameters) is not list or any(type(p) is not str for p in parameters):
+            raise ValueError("PARAMETER_UNSUPPORTED")
         if not {"tools", "tool_choice", "response_format", "max_completion_tokens"} <= set(
             parameters
         ):
@@ -103,7 +105,12 @@ class RouteReview(DTO):
             cap = provider.get("per_request_limits", {}).get(key)
             if cap is not None and (type(cap) is not int or cap < limit):
                 raise ValueError("REQUEST_LIMIT_UNKNOWN")
-        if not {"text", "image"} <= set(entry.get("architecture", {}).get("input_modalities", [])):
+        modalities = entry.get("architecture", {}).get("input_modalities", [])
+        if (
+            type(modalities) is not list
+            or any(type(m) is not str for m in modalities)
+            or not {"text", "image"} <= set(modalities)
+        ):
             raise ValueError("IMAGE_CAPABILITY_UNKNOWN")
         return provider
 

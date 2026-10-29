@@ -166,7 +166,7 @@ VM, не менять PC/Happ/SSH/egress и не использовать Telegr
 **REVIEW / PAID PROBE NOT RUN; C4 HOLD для C0.** В разрешённом write-set
 подготовлены Polza adapter, private settings, finite CLI, synthetic cases и
 [runbook](../runbooks/M4_POLZA_PROBE.md) с точными plan/preflight/live командами.
-172 targeted tests, Ruff/format и mypy71 PASS; локальный Docker NOT RUN
+177 targeted tests, Ruff/format и mypy71 PASS; локальный Docker NOT RUN
 (executable отсутствует). Один штатный full CI и full head/tree — в Draft PR.
 План: 25 scenarios на модель (20 text +3 repeats +2 images), ≤54 model HTTP,
 ≤4 synthetic READ, ≤1800s; предложение ≤100 RUB, фактический тариф пока UNKNOWN.

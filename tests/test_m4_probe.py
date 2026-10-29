@@ -351,3 +351,18 @@ def test_existing_receipt_cannot_be_reused_or_overwritten(tmp_path, monkeypatch,
     assert main(["--preflight", "--report", str(path), "--approval-ref", "fixture-approval"]) == 2
     assert path.read_text() == "existing evidence"
     assert KEY.get_secret_value() not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("amount", ["NaN", "Infinity", "-1"])
+async def test_live_invalid_budget_fails_admission_without_catalog(amount):
+    calls = []
+    with pytest.raises(ValueError, match="APPROVAL_LIMIT"):
+        await live(
+            load_cases(FIXTURES),
+            (review(), review(MODELS[1])),
+            ProbeSettings(api_key=KEY),
+            io.StringIO(),
+            Decimal(amount),
+            transport=httpx.MockTransport(lambda r: calls.append(r)),
+        )
+    assert not calls

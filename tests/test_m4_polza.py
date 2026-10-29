@@ -411,6 +411,8 @@ async def test_cancellation_closes_gateway_and_keeps_reservation():
         "missing_official",
         "capability",
         "parameter",
+        "parameter_shape",
+        "modality_shape",
         "currency",
         "fee",
         "tier",
@@ -431,6 +433,10 @@ def test_unknown_review_is_not_admitted(change):
         p["capabilities"]["json_schema_strict"]["status"] = "unknown"
     if change == "parameter":
         p["supported_parameters"].remove("max_completion_tokens")
+    if change == "parameter_shape":
+        p["supported_parameters"] = dict.fromkeys(p["supported_parameters"], False)
+    if change == "modality_shape":
+        entry["architecture"]["input_modalities"] = {"text": False, "image": False}
     if change == "currency":
         p["pricing"]["currency"] = "USD"
     if change == "fee":
