@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.1 INTEGRATED / VERIFIED; M4.2-PROBE issued / 2026-10-29
+## CURRENT — M4.1 INTEGRATED / VERIFIED; M4.2-PROBE third candidate R1 / 2026-10-29
 
 Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**. PR #38 слит владельцем;
@@ -16,17 +16,21 @@ C0 source/evidence review завершён; не независимый C8, не
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; read barrier до rotation и real401 negative приняты; исходный FAIL/diagnostic history в PR38, C5 HOLD |
-| M4.2-PROBE | REVIEW / PAID PROBE NOT RUN — C4: Polza adapter, finite synthetic probe и [runbook](runbooks/M4_POLZA_PROBE.md); 177 targeted PASS, Ruff/format/mypy PASS. План 50 scenarios / ≤54 model calls / предложение ≤100 RUB; account route/capability/token/billing proof и owner budget остаются открыты. Full CI — в Draft PR; C4 HOLD для C0 review |
+| M4.2-PROBE | IN_PROGRESS — единственная выдача C4 M4.2-PROBE-THIRD-CANDIDATE-R1: добавить выбранный владельцем deepseek/deepseek-v4.1-flash-1017; тот же набор75 scenarios / ≤81 calls / общий потолок100 RUB. Repair base9024b8e… и его CI40822050930 11/11 SUCCESS приняты только для подготовки. Key/top-up подтверждены владельцем; account preflight/paid probe NOT RUN; новый candidate/evidence ещё не получен |
 | M4.3-CONTEXT | TODO / HOLD: актуальный M3 context и необходимые read-only tools после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD: durable AI run и guarded Telegram consumer; C2/C3 по точной дельте |
 | M4.3-QUALITY | TODO: независимый scoped C8/eval; авторские тесты внутри каждой задачи |
 | M4-ACCEPTANCE | TODO: bounded synthetic live, A08, actual main CI и передача M5 |
 
 Единственная текущая выдача/точный write-set и матрица A01–A08 —
-[M4_HANDOFF](tasks/M4_HANDOFF.md). Ветка **c4/m4-2-probe**, C0 docs seed поверх
-actual main выше; сохранить seed ancestry. C1/C2/C3/C5/C6/C8 HOLD.
-Предложенный предел будущей пробы100 ₽/80 model calls — не разрешение расхода.
-Сначала готовая команда и secret инструкция, затем допуск владельца;
+[M4_HANDOFF](tasks/M4_HANDOFF.md). Ветка **c4/m4-2-probe-third-r1**, C0 docs seed
+поверх reviewed preparation **9024b8e062c712e1e69124db7d7eea5ee2de9491**;
+actual main выше остаётся принятым. Сохранить ancestry; PR39 пока Draft на repair
+base. После C4 return/source review C0 переносит candidate в PR39 для full CI.
+C1/C2/C3/C5/C6/C8 HOLD. Новый конечный план75 scenarios/81 calls заменяет50/54
+и потолок80; общий денежный потолок100 ₽ не повышается. Пока без платного допуска.
+Владелец сообщил о создании ключа и пополнении100 ₽; secret/account facts не получены.
+После R1 — private Windows placement, единый preflight и финальный бюджет;
 только synthetic TEST data, accepted environment LOCAL/asm_local не переименовывать.
 M3 final acceptance ниже и M3_HANDOFF сохранены. Нет runtime/Telegram wiring,
 новых миграций, VM activation, прямого API adapter, RAG/Vision runtime или registry.

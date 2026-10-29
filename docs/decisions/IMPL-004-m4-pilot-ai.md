@@ -89,7 +89,17 @@ direct adapter. Если необходим direct уже для данного 
 ## Маршрут и выбор модели
 
 Исследование даёт рекомендацию **Polza-first**, не контрактную сертификацию.
-Начальные EVAL_ONLY кандидаты: openai/gpt-6-luna и google/gemini-3.8-flash.
+Начальные EVAL_ONLY кандидаты: openai/gpt-6-luna, google/gemini-3.8-flash
+и deepseek/deepseek-v4.1-flash-1017.
+
+**Поправка C0 от2026-10-29 по явному выбору владельца:** добавлен третий
+кандидат DeepSeek. Сохраняется одинаковый finite набор25 scenarios/27 model calls
+на модель; итого75 scenarios/81 calls, общий предложенный потолок100 RUB.
+Это заменяет двухмодельную выборку50/54 и её ceiling80; paid admission требует
+актуального расчёта, route proof и финального допуска владельца.
+[Публичная карточка Polza](https://polza.ai/models/deepseek/deepseek-v4.1-flash-1017)
+подтверждает ID, не заменяя account tariff/capability evidence. Никаких новых
+adapter branches, runtime fallback, registry или Vision runtime эта поправка не включает.
 Выбирается самая дешёвая из прошедших предметную проверку; нельзя заключить,
 что первая лучше отвечает по одному ценнику.
 

@@ -6,162 +6,96 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-PROBE / C4 / 2026-10-29
+## Текущая выдача — M4.2-PROBE-THIRD-CANDIDATE-R1 / C4 / 2026-10-29
 
-**Результат и польза:** настоящий Polza adapter к принятому Gateway и одна
-воспроизводимая команда короткого synthetic сравнения. Это проверит внешнюю
-зависимость до разработки durable AI runtime: пригодны ли маршрут, tools/schema,
-лимиты и качество, сколько стоит завершённый сценарий. Сейчас разрешены код,
-targeted tests и подготовка запуска; платная часть ждёт конкретной команды,
-инструкции secret и подтверждённого владельцем бюджета. Рынок заново не исследовать.
+**Результат и польза:** включить выбранный владельцем
+`deepseek/deepseek-v4.1-flash-1017` в то же ограниченное сравнение с
+`openai/gpt-6-luna` и `google/gemini-3.8-flash`. Это позволит проверить качество
+и стоимость третьего кандидата до выбора одной runtime-модели. Добавление модели
+в whitelist ключа само по себе не меняет двухмодельный CLI. Рынок заново не исследовать.
 
-### Принятая база и зависимости
+### База, состояние и порядок передачи
 
-Repository: **Elefesys/ai-service-manager**.
-Accepted actual main: **51d7d73752128715c6d98157445167c0cc0d894d**.
-Tree: **411636a3614529077f6d0d230c62d11f69da600f**; PR #38 слит владельцем,
-дерево равно принятому candidate85d32562bdce37ef38fea1305dfe249f66f41b65.
-[Main CI40811295940](https://github.com/Elefesys/ai-service-manager/actions/runs/40811295940),
-push/main, attempt1: **11/11 SUCCESS**, head и все conclusions проверены C0.
-Ветка: **c4/m4-2-probe**, отдельный checkout; продолжать подготовленный C0 docs seed
-с sole parent actual main выше. Точный стартовый head дан в передаче, не угадывать SHA.
-
-Зависимости: M4.1-CONTRACT принят; AGENTS, CURRENT, этот handoff, IMPL-004 и уже
-готовый M4_AI_PROVIDER_REVIEW_2026-10-28. Применимы Spec §7.2/7.6/7.7/7.16/7.21,
-ADR-023/024/026/180/259/260/261/267, Implementation Plan M4.2 с поправкой IMPL-004.
-Для реализации сверить только актуальную официальную документацию нужных Polza
-endpoints/полей. Это проверка API-контракта, не новое сравнение рынка.
-Одна текущая выдача C4; C1/C2/C3/C5/C6/C8 HOLD. C6 подключается C0 только при
-конкретном secret/network blocker; общие файлы/миграции параллельно не меняются.
+- Repository: **Elefesys/ai-service-manager**.
+- Accepted actual main: **51d7d73752128715c6d98157445167c0cc0d894d**,
+  tree **411636a3614529077f6d0d230c62d11f69da600f**; M4.1 принят, PR38 merged.
+- Reviewed preparation / repair base: **9024b8e062c712e1e69124db7d7eea5ee2de9491**,
+  tree **73d1e313732b55dc5719550ca06f641be203f410**, existing Draft [PR39](https://github.com/Elefesys/ai-service-manager/pull/39).
+  [CI40822050930](https://github.com/Elefesys/ai-service-manager/actions/runs/40822050930):
+  exact head, attempt1, **11/11 SUCCESS**; подготовка принята C0 для preflight,
+  не live M4.2 и не независимый C8. Повторять CI старого кандидата не нужно.
+- Рабочая ветка **c4/m4-2-probe-third-r1**, отдельный checkout, от C0 docs seed
+  с sole parent repair base выше. Полный стартовый SHA дан в передаче C0.
+  Сохранить всю ancestry; main и ветку существующего PR39 сейчас не двигать.
+- Зависимости: AGENTS, CURRENT, IMPL-004 с поправкой ниже; Spec §7.2/7.6/7.7/7.16/7.21,
+  ADR-023/024/026/180/259/260/261/267. Общие Gateway/DTO/prompt/schema и M3 не меняются.
+- Владелец сообщил: баланс пополнен на100 RUB, отдельный ключ создан, третья модель
+  добавлена в его whitelist. Секрет C0/C4 не передавался; параметры ключа и actual
+  account catalog ещё не проверены. Платный запуск не выполнен и пока не допущен.
+  Предыдущую двухмодельную preflight-команду пока не запускать: после R1 получаем
+  одним GET каталог для всех трёх. Размещение ключа остаётся private, Windows ACL
+  проверяется до записи значения; в чат/Git/CI/argv ключ не передавать.
 
 ### Точный write-set C4
 
-- backend/src/asm/ai/polza.py — HTTP adapter, explicit route/capabilities, bounded
-  request/response mapping через существующий ModelAdapter; provider поля здесь.
-- backend/src/asm/ai/settings.py — минимальное чтение отдельного private secret
-  и probe settings; secret не входит в Gateway DTO, repr/errors/logs.
-- backend/src/asm/ai/probe.py — запускаемый модуль, finite plan/dry-run/live modes,
-  synthetic fixtures, route preflight, счётчики/резерв расходов и короткий report.
-- tests/test_m4_polza.py — transport/mapping/failure/route и реальные Gateway
-  round-trip проверки через controlled HTTP transport, без платного API.
-- tests/test_m4_probe.py — dry-run без сети, границы бюджета/calls, secret/privacy,
-  отказ при неопределённом/неразрешённом route и корректное завершение пробника.
-- tests/fixtures/m4_probe_cases.json — небольшой фиксированный русский набор с
-  case IDs, ожидаемыми фактами/допустимыми outcomes и критериями оценки.
-- docs/runbooks/M4_POLZA_PROBE.md — точные воспроизводимые команды, размещение
-  отдельного ключа, план/лимиты, безопасный report, отключение и границы evidence.
-- docs/TASK_REGISTER.md — только строка M4.2-PROBE в CURRENT.
-- docs/tasks/M4_HANDOFF.md — короткий receipt под этой выдачей.
+- `backend/src/asm/ai/polza.py` — фиксированный список трёх кандидатов;
+- `backend/src/asm/ai/probe.py` — plan/preflight/admission/summary для трёх,
+  полная сумма резервов и согласованные конечные пределы;
+- `tests/test_m4_polza.py`, `tests/test_m4_probe.py` — соответствующие проверки;
+- `docs/runbooks/M4_POLZA_PROBE.md` — согласованные числа, три RouteReview,
+  точные команды и сохранённая private secret процедура;
+- `docs/TASK_REGISTER.md` — только строка M4.2-PROBE в CURRENT;
+- `docs/tasks/M4_HANDOFF.md` — короткий receipt под этой выдачей.
 
-Новые файлы создавать только если они используются. httpx, Pydantic/settings,
-Pillow и test tooling уже есть в locked environment; SDK/dependencies не нужны.
-Существующие contracts.py/gateway.py/fake.py/prompt/schema, manifests/locks,
-backend entrypoint, UI, Docker/CI/scripts, DB/migrations и M3 wiring не менять.
-При фактической несовместимости вернуть C0 точный contract blocker и минимальную
-дельту; не маскировать её обходом Gateway или выдачей fake capabilities за proof.
+Fixtures `tests/fixtures/m4_probe_cases.json`, settings.py, manifests/locks,
+Gateway/contracts/fake/prompt/schema, CI/Docker, UI, DB/migrations и M3 wiring
+не менять. При конкретной несовместимости вернуть C0 факт/источник и минимальную
+необходимую дельту; не подменять модель/route и не ослаблять strict validation.
 
-### Реализация и критерии пригодности
+### Согласованная дельта и критерии завершения
 
-1. Реальный adapter использует bounded HTTP с одним явным маршрутом и без скрытых
-   retries/fallback. Endpoint/official upstream из проверенного конфигурационного
-   источника, не из model output. Нельзя отправить ключ через redirect на другой
-   host; provider.only/запрет fallback/unofficial и returned provider проверяются
-   по актуальному API. Неизвестный upstream/capability — не PASS.
-2. Сохранять neutral DTO и local strict validation. Проверить native schema,
-   tools и их совместимость, включая один настоящий tools→synthetic read result→
-   final цикл на каждом пригодном кандидате. Synthetic tool читает только fixture,
-   без БД/произвольного SQL/URL. Prompt/schema revisions остаются закреплены.
-   Если provider не поддерживает обязательный режим, явно вернуть несовместимость,
-   не удалять незаметно параметр и не ослаблять M4.1.
-3. Локальный count_input_tokens не выдавать за точный provider tokenizer без
-   основания: задокументировать используемую безопасную границу/ограничение,
-   учесть полный wire input/tools/schema и проверить фактический usage.
-   Deadline, input/output bytes/tokens, число calls/reads и общий cost reservation
-   действуют до HTTP; bounded response reading, отказ при oversize/truncation.
-   Сохранить REFUSAL/429/5xx/timeout/invalid output/UNKNOWN cost; ни один не даёт
-   сырой успешный reply. Отмена/timeout не означают доказанное отсутствие списания.
-4. Пробник сначала фиксирует критерии, затем после допуска получает account
-   catalog/pricing/currency/official upstream/capability metadata. Проверяем
-   **openai/gpt-6-luna** и **google/gemini-3.8-flash** одинаковым набором, без
-   автоматического выбора каталога/другого gateway. Если ID недоступен — blocker,
-   не молчаливая подмена. GPTunnel только по конкретному решению после проблемы.
-5. Ориентир: 20 коротких русских cases на каждого кандидата, включая ответ из
-   owner facts, неизвестные цену/услугу/длительность/запись, уточнение, актуализацию
-   synthetic context, injection, handoff и tools. Несколько critical repeats и
-   synthetic image inputs входят в тот же конечный план/бюджет; точный N/call
-   ceiling фиксируется до запуска. Изображения только заранее созданные synthetic
-   fixtures; raw image probe остаётся EVAL_ONLY и не расширяет text Gateway/M3.
-6. Критические нарушения (выдуманная цена/запись, нарушение route, небезопасный
-   output, непройденные limits/schema/tools) не усреднять общим score. Сначала
-   пригодность по явным case expectations, затем стоимость завершённого сценария
-   среди прошедших. Report: case/model/route/prompt/schema revision, outcomes,
-   calls, observed latency p50/p95 с N, usage и CONFIRMED/ESTIMATE/UNKNOWN cost.
-   Указать ограничения малой выборки; одна выбранная модель для будущего runtime,
-   без её включения сейчас. Нужны проверяемые synthetic final outputs/оценки,
-   а не один счётчик PASS; без chain-of-thought и частных данных.
+1. Порядок моделей ровно: `openai/gpt-6-luna`,
+   `google/gemini-3.8-flash`, `deepseek/deepseek-v4.1-flash-1017`.
+   Это явный finite allowlist, не registry, auto-selection или fallback.
+   Каталог, три RouteReview, их freshness/fingerprints и returned route проверяются
+   для каждого кандидата. Неполный/дублированный/иной набор не допускает генерации.
+2. Сохраняется полный одинаковый набор: 20 text cases, три critical repeats,
+   две PNG fixtures на модель. Итого **75 scenarios**, максимум **81 model HTTP**
+   (27 на модель, включая два tools round trips), **6 fixture READ**.
+   C0 явно меняет старый потолок80 на81 из-за третьего кандидата; запасных
+   retry/repair calls нет. Не убирать кейс или проверку для сохранения старого числа.
+3. Все расчёты/admission/CLI/summary должны согласоваться с тремя моделями:
+   общий token reservation ceiling **2695680**, input/output **32768/512** на call,
+   wire **24576/32768 bytes**, **60s** на сценарий, **1800s** на весь live run.
+   Денежный потолок **100 RUB суммарно** сохраняется. До HTTP проверить полный
+   резерв всех81 calls по actual account tariff, не распределять100 на каждую модель.
+   Дефицит бюджета или неизвестная тарификация => STOP/возврат C0.
+4. Требования official upstream, no fallback/unofficial, native schema+READ,
+   включая root anyOf, token/image/billing proof сохраняются и для DeepSeek.
+   Публичная карточка подтверждает существование ID, но не capability выбранного
+   account route. Нет live pass по fake fixtures, отзывам или низкому ценнику.
+   При первом quality/contract/accounting отказе остановить расходы и честно
+   показать непройденные случаи; отсутствующие/UNKNOWN данные не считать нулём.
+5. Полный controlled HTTP run через настоящий Gateway должен дать75 проверяемых
+   synthetic finals,81 POST, один admission catalog GET,6 READ и по25 completed
+   для каждой модели; selected_model остаётся null до C0 review реальных finals.
+   Проверить, что третий кандидат входит в reservation/cost/N и fingerprint checks.
+   Отрицательные проверки: неверный/неполный третий review до генераций,
+   бюджет>100 либо недостаточный полный резерв до HTTP, попытка82 доHTTP,
+   UNKNOWN usage/cost/timeout без возврата резерва и скрытого повтора.
+6. Сначала targeted четыре существующих M4 suites, Ruff/format/mypy, `--plan`
+   без сети/secret, diff check. Return: полный head/tree, diff, команды/результаты,
+   dry-run plan и оставшиеся account blockers; **REVIEW / PAID PROBE NOT RUN**.
+   После source review C0 переносит согласованный candidate FF в существующий
+   PR39 и использует один штатный full CI этого изменённого кандидата.
+   Новый PR, force-push, rerun старого CI или merge не нужны; merge у владельца.
 
-### Сначала воспроизводимая подготовка; затем отдельный paid допуск
+После R1: C0 выдаёт Windows-команду private key/preflight на принятом candidate,
+сверяет actual catalog, показывает рассчитанный резерв и получает финальный
+допуск владельца на платную пробу. ВМ/Telegram/БД/runtime остаются вне этого шага.
+C1/C2/C3/C5/C6/C8 и M4.3 HOLD; одна матрица A01–A08 ниже без изменений.
 
-До оплаты/ключа подготовить работающую команду вида
-`python -m asm.ai.probe --plan …` (точные flags реализует и фиксирует C4):
-она без сети/секрета проверяет fixtures, печатает N, максимальные calls, token/time
-ceilings и предлагаемый бюджет. Live mode должен включаться явно; обычный запуск,
-tests и CI не обращаются к внешним model API.
-
-**Предложение для первого допуска, ещё НЕ разрешение:** до **100 ₽** совокупно
-на оба кандидата, максимум **80 model HTTP calls**, включая tool rounds,
-critical repeats и image probes; никаких скрытых retry/repair вызовов.
-C4 рассчитывает план по актуальному тарифу/единицам/верхним token bounds до
-генераций. Если план не помещается — уменьшить выборку/вернуть обоснование C0,
-не увеличивать бюджет. Резервы монотонны; UNKNOWN не становится нулём/возвратом
-резерва. Ограничение ключа у провайдера — где доступно; локальный счётчик нельзя
-объявлять гарантией фактического списания. Без достаточного известного потолка
-тарификации платную часть остановить до разрешения неопределённости.
-
-Использовать существующий private env mechanism: отдельный ignored
-`.env.m4-probe`, mode0600 на Linux, оператор-владелец, SecretStr/settings;
-на Windows описать эквивалент закрытого ACL. `.gitignore` уже исключает `.env.*`.
-Не переписывать исходные .env/.env.telegram/private activation intent. Инструкция
-создания ключа и размещения значения — без вставки в CLI/history/чат/Git/CI или
-артефакты; обычный вывод не печатает ключ и HTTP headers. Ключ отдельный от Telegram.
-C4 возвращает инструкцию и точную готовую команду, затем C0 запрашивает у владельца
-конкретный бюджет/размещение ключа как финальный допуск. Не просить secret в чат.
-
-Пока только **synthetic TEST data**. Accepted deployed environment остаётся
-**LOCAL / asm_local**; synthetic TEST scope не требует переименования среды/БД.
-Этот пробник не обращается к БД, Telegram, client history, S3 или paid SaaS state.
-Сетевую доступность с фактической backend среды нужно подтвердить перед заявлением
-о runtime-ready route; успешный вызов с ПК этого не доказывает. Сейчас не включать
-VM, не менять PC/Happ/SSH/egress и не использовать Telegram relay для AI.
-При route blocker — точная ошибка и минимальный следующий шаг C0/C6.
-Настоящие клиентские данные остаются закрыты до отдельного data-route допуска.
-
-### Проверка и возврат
-
-- Сначала targeted: новые test_m4_polza.py/test_m4_probe.py плюс существующие
-  test_m4_gateway.py/test_m4_gateway_failures.py; Ruff/format и mypy, dry-run,
-  diff --check/clean source. Использовать существующий frozen Python3.13 environment.
-- Offline transport fixtures обязаны покрыть success/tool round-trip и все
-  известные группы отказа, включая route mismatch, secrets, malformed/oversize,
-  exhausted budget и missing/unknown usage/cost. Не делать paid failure injection.
-- Затем один штатный полный CI согласованного candidate в Draft PR этой ветки.
-  Отсутствие Docker локально — честный NOT RUN, не запрет передачи: штатный
-  GitHub Actions уже содержит Docker/API/PG harness, новую VM/CI lane не создавать.
-  Не повторять неизменённый run ради PASS; разбирать все известные группы падения.
-- Первый возврат C4: full head/tree, changed paths, команды/фактические результаты,
-  готовая plan/live команда, secret инструкция, N/call/token/time/spend ceilings и
-  ещё неизвестные provider факты. Статус REVIEW / PAID PROBE NOT RUN, C4 HOLD для
-  C0 review/budget; это не завершение M4.2 и не разрешение основной runtime работы.
-- После допуска в этой же M4.2: реальный report с actual upstream/capabilities,
-  ценой/usage/cost/качеством/latency, точным SHA и source environment, один выбранный
-  model либо конкретный blocker. C0 принимает evidence A01/A07 только по scope;
-  A03–A05/весь M4 и независимый C8 этим не закрываются.
-- Нет registry/admin platform, direct adapter, agent/runtime/Outbox wiring,
-  migrations, нового broker, RAG/Vision runtime или бизнесовых доменов M5/M6.
-  Полные логи в PR/artifacts; одна матрица A01–A08 ниже, не создавать вторую.
-  Не добавлять commit ради собственного SHA или записи CI PASS. Merge — владелец.
-
-### Receipt C4 — подготовка M4.2-PROBE / 2026-10-29
+### Исторический receipt C4 — двухмодельная подготовка / 2026-10-29
 
 **REVIEW / PAID PROBE NOT RUN; C4 HOLD для C0.** В разрешённом write-set
 подготовлены Polza adapter, private settings, finite CLI, synthetic cases и
@@ -272,13 +206,13 @@ Polza — выбранный первый кандидат по desk research, �
 проверяется только при конкретном препятствии/непригодном результате Polza.
 
 До платного вызова владелец предоставляет выделенный secret через штатный
-локальный secret path и подтверждает сумму. Предлагаемый первоначальный предел
-100–300 ₽; не пополнять/не тратить автоматически. В Git/CI ключ не попадает.
+локальный secret path и подтверждает сумму. Предлагаемый суммарный предел100 ₽; не пополнять/не тратить автоматически. В Git/CI ключ не попадает.
 
 Одна воспроизводимая команда пробника:
 - получает/фиксирует актуальные ID, official upstream, pricing/currency и capability
   metadata аккаунта; unofficial providers выключены, route закреплён;
-- проверяет openai/gpt-6-luna и google/gemini-3.8-flash на одинаковых русских cases:
+- проверяет openai/gpt-6-luna, google/gemini-3.8-flash и добавленный владельцем
+  deepseek/deepseek-v4.1-flash-1017 на одинаковых русских cases:
   краткий ответ/уточнение, неизвестная цена, owner facts, изменение контекста,
   недоверенные инструкции, handoff, JSON и реальный tools→result→ответ;
 - проверяет несколько synthetic image inputs для ранней проверки M5 capability.
@@ -426,8 +360,9 @@ M4 VERIFIED только после A01–A08 в заявленных грани
 
 ## Непосредственное следующее действие
 
-C4 выполняет единственную M4.2-PROBE от принятого actual main: adapter, offline
-checks и воспроизводимая команда с secret инструкцией/лимитами. Первый возврат —
-REVIEW / PAID PROBE NOT RUN; C0 принимает подготовку, затем владелец подтверждает
-бюджет. До этого не запрашивать ключ в чат, не делать paid calls/VM activation.
+C4 выполняет единственную M4.2-PROBE-THIRD-CANDIDATE-R1 от точной repair base
+и C0 seed выше: три кандидата,75 scenarios/81 calls,100 RUB общий потолок.
+Возврат REVIEW / PAID PROBE NOT RUN; C0 принимает delta/CI, затем account preflight
+и конкретный бюджет. Ключ уже создан владельцем; не запрашивать его в чат и не
+делать paid calls/VM activation до допуска.
 C1/C2/C3/C5/C6/C8 HOLD; M4.3 ждёт реальной проверки внешней зависимости.
