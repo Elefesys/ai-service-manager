@@ -21,13 +21,16 @@ from asm.ai.gateway import ModelGateway, ProviderFailure
 from asm.ai.polza import (
     CONVERSATION_WIRE_REVISION,
     ENDPOINT,
+    EXPERIMENT_PROVIDERS,
     HISTORY,
     HISTORY_LIST,
     INPUT_TOKENS,
     MODELS,
     OVERHEAD_TOKENS,
+    SIGNATURE_BYTES,
     PolzaAdapter,
     RouteReview,
+    SyntheticRoute,
     bounded_http,
     conversation_wire_schema,
     encode,
@@ -91,6 +94,61 @@ def review(model=MODELS[0], **changes):
     return RouteReview(**fields)
 
 
+def experiment_entry(model=MODELS[0]):
+    """CONTROLLED catalog declaration, not a fetched tariff or verified RouteReview."""
+    entry = review(model).catalog_entry
+    provider = entry["providers"][0]
+    provider["name"] = EXPERIMENT_PROVIDERS[MODELS.index(model)]
+    provider["supported_parameters"] = [
+        "tools",
+        "tool_choice",
+        "response_format",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+    ]
+    provider["capabilities"].update(
+        {
+            "reasoning_toggle": {"status": "supported"},
+            "reasoning_effort": {"status": "supported", "values": ["none"]},
+        }
+    )
+    provider["reasoning"] = {
+        "mandatory": False,
+        "default_enabled": True,
+        "supported_efforts": ["none"],
+    }
+    provider["pricing"].update(
+        {
+            "image_input_per_million": "2",
+            "input_cache_read_per_million": "1",
+            "input_cache_write_per_million": "1",
+            "input_audio_cache_per_million": "3",
+            "internal_reasoning_per_million": "5",
+            "audio_per_million": "999",
+            "web_search_per_thousand": "999",
+        }
+    )
+    return entry
+
+
+def experiment_route(model=MODELS[0]):
+    return SyntheticRoute.from_catalog(experiment_entry(model), datetime.now(UTC))
+
+
+def experiment_history(data, family=None):
+    listing, detail = history_payloads(data)
+    family = (
+        family
+        or ("OpenAI", "controlled-google-family", "controlled-wafer-family")[
+            MODELS.index(data["model"])
+        ]
+    )
+    listing["items"][0]["provider"] = detail["finalEndpointSlug"] = family
+    detail["apiType"] = "completions"
+    return listing, detail
+
+
 class Stream(httpx.AsyncByteStream):
     def __init__(self, chunks, delay=0):
         self.chunks, self.delay, self.reads = chunks, delay, 0
@@ -127,6 +185,10 @@ def payload(model=MODELS[0], *, tools=False):
                     "function": {"name": "read_current", "arguments": '{"key":"current"}'},
                 }
             ],
+        }
+    if tools and model == MODELS[1]:
+        message["tool_calls"][0]["extra_content"] = {
+            "google": {"thought_signature": "CONTROLLED_OPAQUE_SIGNATURE"}
         }
     return {
         "model": model,
@@ -1074,3 +1136,333 @@ async def test_history_transport_allowlist_rejects_other_paths_methods_and_limit
             maximum=maximum,
             transport=httpx.MockTransport(lambda _: pytest.fail("unexpected HTTP")),
         )
+
+
+@pytest.mark.parametrize(
+    "bad", ["missing", "wrong_path", "extra", "null", "empty", "number", "oversized", "control"]
+)
+async def test_gemini_invalid_signature_stops_before_read_and_continuation(bad):
+    posts = []
+    data = payload(MODELS[1], tools=True)
+    call = data["choices"][0]["message"]["tool_calls"][0]
+    if bad == "missing":
+        call.pop("extra_content")
+    elif bad == "wrong_path":
+        call["extra_content"] = {"thought_signature": "PRIVATE_BAD_SIGNATURE"}
+    elif bad == "extra":
+        call["extra_content"]["unexpected"] = "PRIVATE_BAD_SIGNATURE"
+    else:
+        call["extra_content"]["google"]["thought_signature"] = {
+            "null": None,
+            "empty": "",
+            "number": 123,
+            "oversized": "S" * (SIGNATURE_BYTES + 1),
+            "control": "PRIVATE\nSIGNATURE",
+        }[bad]
+
+    def handler(request):
+        posts.append(request)
+        return response(data)
+
+    adapter = PolzaAdapter(review(MODELS[1]), KEY, transport=httpx.MockTransport(handler))
+    case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+    row = await run_case(adapter, case, Ledger(io.StringIO(), Decimal(10), 2), 0)
+    assert len(posts) == 1 and row["reads"] == 0 and row["final"] is None
+    assert row["calls"][0]["error_detail"] == "SIGNATURE_INVALID"
+    assert "PRIVATE" not in json.dumps(row)
+    assert adapter._continuation is None and adapter._run_key is None
+
+
+@pytest.mark.parametrize("change", ["call_id", "arguments", "run", "route", "size", "reflect"])
+async def test_gemini_continuation_is_bound_and_bounded(change):
+    posts = []
+    captured = []
+
+    def handler(request):
+        posts.append(json.loads(request.content))
+        data = payload(MODELS[1], tools=len(posts) == 1)
+        if change == "reflect" and len(posts) == 2:
+            data["choices"][0]["message"]["content"] = "CONTROLLED_OPAQUE_SIGNATURE"
+        return response(data)
+
+    adapter = PolzaAdapter(review(MODELS[1]), KEY, transport=httpx.MockTransport(handler))
+    original = adapter.wire
+
+    def capture(request):
+        captured.append(request)
+        return original(request)
+
+    adapter.wire = capture
+    gw = gateway(adapter, tools=True)
+    first = await gw.call()
+    assert first.kind == "TOOLS"
+    result = ToolResult(call_id="read-1", name="read_current", result_json='{"fact":"current"}')
+    if change == "reflect":
+        second = await gw.call((result,))
+        assert second.kind == "ERROR" and len(posts) == 2
+        assert adapter.observation["error_detail"] == "SIGNATURE_IN_RESPONSE"
+        assert adapter._continuation is None
+        return
+    if change == "run":
+        # Another run with the same run_id but its own deadline must clear old state.
+        other = gateway(adapter, tools=True)
+        await other.call()
+    elif change == "route":
+        adapter._run_key = ("controlled_http", "different-route", "different-route")
+    elif change == "size":
+        # Exercise the unchanged wire-byte limit after a valid response's metadata.
+        adapter._continuation = (first.tool_calls[0], "S" * SIGNATURE_BYTES)
+        # A large but valid synthetic READ result plus metadata cannot fit the wire.
+        result = ToolResult(
+            call_id="read-1", name="read_current", result_json='{"fact":"' + "я" * 190 + '"}'
+        )
+        original_body = adapter.base_body
+
+        def padded(*args, **kwargs):
+            body = original_body(*args, **kwargs)
+            body["messages"][0]["content"] += "я" * 8000
+            return body
+
+        adapter.base_body = padded
+    else:
+        changed = first.tool_calls[0].model_copy(
+            update={"call_id": "wrong-id"}
+            if change == "call_id"
+            else {"arguments_json": '{"key":"other"}'}
+        )
+        adapter._continuation = (changed, "CONTROLLED_OPAQUE_SIGNATURE")
+    before = len(posts)
+    second = await gw.call((result,))
+    assert second.kind == "ERROR" and len(posts) == before
+    # No field in the neutral request/response DTO carries vendor metadata.
+    assert "thought_signature" not in first.model_dump_json()
+    assert all("thought_signature" not in r.input_json() for r in captured)
+
+
+@pytest.mark.parametrize("kind", ["reasoning_content", "reasoning", "reasoning_details", "usage"])
+async def test_deepseek_non_thinking_response_required_before_read(kind):
+    posts = []
+    data = payload(MODELS[2], tools=True)
+    data["id"] = "gen_901"
+    if kind == "usage":
+        data["usage"]["completion_tokens_details"] = {"reasoning_tokens": 1}
+    else:
+        data["choices"][0]["message"][kind] = "PRIVATE_REASONING_MUST_NOT_SURVIVE"
+
+    def handler(request):
+        assert request.method == "POST"
+        wire = json.loads(request.content)
+        assert wire["reasoning"] == {"effort": "none", "enabled": False}
+        posts.append(wire)
+        return response(data)
+
+    adapter = PolzaAdapter(experiment_route(MODELS[2]), KEY, transport=httpx.MockTransport(handler))
+    case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+    row = await run_case(adapter, case, Ledger(io.StringIO(), Decimal(10), 2), 0)
+    assert len(posts) == 1 and row["reads"] == 0 and row["final"] is None
+    assert row["calls"][0]["error_detail"] == "NON_THINKING_NOT_OBSERVED"
+    assert "PRIVATE_REASONING" not in json.dumps(row)
+
+
+@pytest.mark.parametrize(
+    "model,bad",
+    [
+        (model, bad)
+        for model in MODELS
+        for bad in (
+            "invalid_family",
+            "different_detail",
+            "changed_family",
+            "cost",
+            "usage",
+            "attempts",
+        )
+    ]
+    + [(MODELS[0], "known_gpt_family")],
+)
+async def test_experiment_history_observations_never_bypass_identity_or_metering(model, bad):
+    posts, gets = [], []
+    latest = None
+
+    def handler(request):
+        nonlocal latest
+        if request.method == "POST":
+            posts.append(json.loads(request.content))
+            latest = payload(model, tools=len(posts) == 1)
+            latest.pop("provider")
+            latest["id"] = "gen_" + str(900 + len(posts))
+            return response(latest)
+        gets.append(str(request.url))
+        listing, detail = experiment_history(latest)
+        if bad == "invalid_family":
+            listing["items"][0]["provider"] = None
+        if bad == "different_detail":
+            detail["finalEndpointSlug"] = "another-family"
+        if bad == "changed_family" and len(posts) == 2 or bad == "known_gpt_family":
+            listing["items"][0]["provider"] = detail["finalEndpointSlug"] = "different-family"
+        if bad == "cost":
+            detail["clientCost"] = "0.002"
+        if bad == "usage":
+            detail["usage"]["prompt_tokens"] = 31
+        if bad == "attempts":
+            detail["attemptsCount"] = 2
+        return response(listing if str(request.url) == HISTORY_LIST else detail)
+
+    adapter = PolzaAdapter(experiment_route(model), KEY, transport=httpx.MockTransport(handler))
+    case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+    row = await run_case(adapter, case, Ledger(io.StringIO(), Decimal(10), 2), 0)
+    assert len(posts) == (2 if bad == "changed_family" else 1)
+    assert row["reads"] == (1 if bad == "changed_family" else 0)
+    assert row["final"] is None and row["failures"]
+    assert row["calls"][-1]["error_detail"] == "HISTORY_VERIFICATION_FAILED"
+    assert len(gets) <= 2 * len(posts)
+    assert adapter._continuation is None
+
+
+@pytest.mark.parametrize("bad", ["input", "output", "cost", "unknown_cost"])
+async def test_experimental_actual_usage_and_cost_stop_before_history_or_read(bad):
+    posts = []
+    data = payload(tools=True)
+    data["id"] = "gen_989"
+    if bad == "input":
+        data["usage"]["prompt_tokens"] = INPUT_TOKENS + 1
+    if bad == "output":
+        data["usage"]["completion_tokens"] = 513
+    if bad == "cost":
+        data["usage"]["cost_rub"] = "100"
+    if bad == "unknown_cost":
+        data["usage"].pop("cost_rub")
+
+    def handler(request):
+        assert request.method == "POST"
+        posts.append(request)
+        return response(data)
+
+    adapter = PolzaAdapter(experiment_route(), KEY, transport=httpx.MockTransport(handler))
+    case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+    row = await run_case(adapter, case, Ledger(io.StringIO(), Decimal(10), 2), 0)
+    assert len(posts) == 1 and row["reads"] == 0 and row["final"] is None
+    assert row["calls"][0]["error_detail"] == (
+        "HISTORY_METERING_UNKNOWN" if bad == "unknown_cost" else "HISTORY_METERING_LIMIT"
+    )
+
+
+@pytest.mark.parametrize("model", MODELS[1:])
+async def test_experiment_family_stays_pinned_across_cases(model):
+    posts = []
+    latest = None
+
+    def handler(request):
+        nonlocal latest
+        if request.method == "POST":
+            posts.append(request)
+            latest = payload(model, tools=len(posts) == 1)
+            latest["id"] = "gen_" + str(700 + len(posts))
+            return response(latest)
+        listing, detail = experiment_history(latest)
+        if len(posts) == 3:
+            listing["items"][0]["provider"] = detail["finalEndpointSlug"] = "other-family"
+        return response(listing if str(request.url) == HISTORY_LIST else detail)
+
+    adapter = PolzaAdapter(experiment_route(model), KEY, transport=httpx.MockTransport(handler))
+    cases = load_cases(FIXTURES)
+    ledger = Ledger(io.StringIO(), Decimal(10), 3)
+    first = await run_case(adapter, next(c for c in cases if c.id == "tool_current"), ledger, 0)
+    assert not first["failures"] and first["reads"] == 1
+    assert adapter._continuation is None
+    second = await run_case(adapter, next(c for c in cases if c.id == "owner_fact"), ledger, 1)
+    assert second["final"] is None and second["reads"] == 0 and len(posts) == 3
+    assert second["calls"][0]["error_detail"] == "HISTORY_VERIFICATION_FAILED"
+
+
+@pytest.mark.parametrize("alteration", ["missing", "enabled", "raw_reasoning", "extra_content"])
+async def test_non_thinking_finite_wire_cannot_be_silently_changed(alteration):
+    adapter = PolzaAdapter(
+        experiment_route(MODELS[2]),
+        KEY,
+        transport=httpx.MockTransport(lambda _: pytest.fail("POST forbidden")),
+    )
+    body = adapter.base_body(
+        [{"role": "user", "content": "synthetic"}], {}, 512, schema_name="test"
+    )
+    if alteration == "missing":
+        body.pop("reasoning")
+    if alteration == "enabled":
+        body["reasoning"]["enabled"] = True
+    if alteration == "raw_reasoning":
+        body["messages"][0]["reasoning_content"] = "PRIVATE_RAW_REASONING"
+    if alteration == "extra_content":
+        body["messages"][0]["extra_content"] = {"arbitrary": "PRIVATE_METADATA"}
+    with pytest.raises(ProviderFailure) as exc:
+        await adapter.image_probe(encode(body), 1)
+    assert exc.value.detail == "PAYLOAD_OUTSIDE_REVIEWED_SCOPE"
+    assert "PRIVATE" not in json.dumps(adapter.observation)
+
+
+@pytest.mark.parametrize("size", [1, SIGNATURE_BYTES])
+async def test_valid_gemini_signature_bytes_count_towards_input_and_are_not_logged(size):
+    signature = "Z" * size
+    posts, counts = [], []
+
+    def handler(request):
+        body = json.loads(request.content)
+        posts.append(body)
+        data = payload(MODELS[1], tools=len(posts) == 1)
+        if len(posts) == 1:
+            data["choices"][0]["message"]["tool_calls"][0]["extra_content"]["google"][
+                "thought_signature"
+            ] = signature
+        else:
+            assert (
+                body["messages"][-2]["tool_calls"][0]["extra_content"]["google"][
+                    "thought_signature"
+                ]
+                == signature
+            )
+        return response(data)
+
+    adapter = PolzaAdapter(review(MODELS[1]), KEY, transport=httpx.MockTransport(handler))
+    original_count = adapter.count_input_tokens
+
+    def measured(request):
+        tokens = original_count(request)
+        wire = adapter.wire(request)
+        assert tokens == len(wire) + OVERHEAD_TOKENS
+        if request.exchanges:
+            counts.append(len(wire))
+            body = json.loads(wire)
+            without = copy.deepcopy(body)
+            without["messages"][-2]["tool_calls"][0].pop("extra_content")
+            assert len(wire) - len(encode(without)) > size
+        return tokens
+
+    adapter.count_input_tokens = measured
+    case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+    row = await run_case(adapter, case, Ledger(io.StringIO(), Decimal(10), 2), 0)
+    assert not row["failures"] and row["reads"] == 1 and len(posts) == 2 and counts
+    assert "thought_signature" not in json.dumps(row)
+    if size > 1:
+        assert signature not in json.dumps(row)
+    assert adapter._continuation is None and adapter._run_key is None
+
+
+@pytest.mark.parametrize("field", ["provider", "reasoning_tokens", "arguments"])
+async def test_gemini_signature_reflection_never_enters_observations_or_dto(field):
+    signature = "PRIVATE_SIGNATURE_FOR_REFLECTION_TEST"
+    data = payload(MODELS[1], tools=True)
+    call = data["choices"][0]["message"]["tool_calls"][0]
+    call["extra_content"]["google"]["thought_signature"] = signature
+    if field == "provider":
+        data["provider"] = signature
+    elif field == "reasoning_tokens":
+        data["usage"]["completion_tokens_details"] = {"reasoning_tokens": signature}
+    else:
+        call["function"]["arguments"] = json.dumps({"key": signature})
+    adapter = PolzaAdapter(
+        review(MODELS[1]), KEY, transport=httpx.MockTransport(lambda _: response(data))
+    )
+    case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+    row = await run_case(adapter, case, Ledger(io.StringIO(), Decimal(10), 2), 0)
+    assert row["reads"] == 0 and row["final"] is None
+    assert row["calls"][0]["error_detail"] == "SIGNATURE_IN_RESPONSE"
+    assert signature not in json.dumps(row) and adapter._continuation is None

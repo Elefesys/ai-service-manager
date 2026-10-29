@@ -133,6 +133,42 @@ candidate и выдаёт владельцу запуск в уже соглас
 невозможно выполнить один из перечисленных условий — вернуть точное препятствие,
 а не фиктивное evidence. C1/C2/C3/C5/C6/C8 HOLD; main/VM/runtime/merge не трогать.
 
+### Receipt C4 — EXECUTABLE-EVAL-R1 / 2026-10-29
+
+**Candidate REVIEW; paid75 NOT RUN; C4 HOLD для C0.** Ветка
+`c4/m4-2-executable-eval-r1`, sole parent **43da703ed00830ae9d7ceb9bd27771e5295ba146**,
+seed tree **2efb8c1ce56cc03bab45287e519b035ee34ee028**; source78dabd8 в ancestry.
+Ровно7 разрешённых paths; contracts/gateway/prompt/schema/fixtures/locks/CI не менялись.
+
+Явный `--synthetic-experiment` создаёт отдельный conditional профиль, не RouteReview.
+Fixed selectors: openai/flex, google-ai-studio/flex, wafer/us; один fresh catalog GET
+проверяет все3 и пишет rates/assumptions/plan до POST. Audio cache включён полностью.
+Gemini signature≤8192 bytes transiently связана с run/route/validated call, учтена
+в input limits, не попадает в DTO/JSONL, очищается на границах cases/errors/final.
+DeepSeek явно `reasoning={effort:none,enabled:false}` с catalog none/toggle checks;
+reported thinking вызывает STOP. GPT default сохранён. History проверяется для
+каждого experimental response: GPT family OpenAI; другие families впервые
+наблюдаются и закрепляются на model eval. Request/body/history/variant разделены.
+Обычный reviewed admission, present mismatch и repricing guards сохранены.
+
+Frozen uv0.13.4 / CPython3.13.16: целевой pytest из runbook **399 PASS**;
+Ruff/format5 PASS, strict mypy **71 source files** PASS, default/оба offline plans
+и diff check PASS. Полный controlled CLI проходит75 finals/81 POST/6 READ,
+1 catalog +162 history GET, с присутствующим/отсутствующим body provider.
+Mock требует уникальную Gemini signature на follow-up и DeepSeek none на каждом
+POST, включая images. Негативные проверки доходят до metadata/correlation/limits,
+unknown fees/caps, family changes, actual cost/usage и overbudget STOP.
+
+Локальный расчёт по **историческому** snapshot от10:43:36Z даёт111.008526759 RUB
+с audio cache; это не fresh live plan и не гарантия счёта. Все hard limits и prior
+расход сохранены. [Одна Windows команда](../runbooks/M4_POLZA_PROBE.md#одна-windows-команда-после-принятия-c0)
+использует существующие `.venv`/`.env.m4-probe`, exact accepted SHA/решение C0,
+explicit experiment, stage149.98730215 и новый exclusive report; reviews не нужны.
+C4 не выполнял paid/helper/full CI, не двигал PR39/main. Source CI40902629746
+оставался in_progress при отдельной проверке; его успех не заявлен.
+Следующий шаг — C0 review candidate/plan, один full CI и выдача владельцу.
+Runtime authorization/selection остаются false; merge у владельца.
+
 ## История — M4.2-PROBE-OBSERVATION-COMPAT-R1 / C0 / 2026-10-29
 
 Возврат C4 **fb2d318671ca5186cdc514b6117225d580cdd679**, tree

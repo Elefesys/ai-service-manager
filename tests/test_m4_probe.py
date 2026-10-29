@@ -27,7 +27,17 @@ from asm.ai.probe import (
     run_case,
 )
 from asm.ai.settings import ProbeSettings, load_secret
-from test_m4_polza import KEY, history_payloads, history_review, payload, response, review
+from test_m4_polza import (
+    KEY,
+    experiment_entry,
+    experiment_history,
+    experiment_route,
+    history_payloads,
+    history_review,
+    payload,
+    response,
+    review,
+)
 
 
 def test_default_and_plan_do_not_read_secret_or_open_network(monkeypatch, capsys):
@@ -36,7 +46,7 @@ def test_default_and_plan_do_not_read_secret_or_open_network(monkeypatch, capsys
 
     monkeypatch.setattr(httpx, "AsyncClient", forbidden)
     monkeypatch.setattr("asm.ai.probe.load_secret", forbidden)
-    for argv in ([], ["--plan"]):
+    for argv in ([], ["--plan"], ["--plan", "--synthetic-experiment"]):
         assert main(argv) == 0
         result = json.loads(capsys.readouterr().out)
         assert result["models"] == [
@@ -49,6 +59,14 @@ def test_default_and_plan_do_not_read_secret_or_open_network(monkeypatch, capsys
         assert result["max_synthetic_reads"] == 6
         assert result["priced_reservation_rub"] is None and result["proposed_rub_ceiling"] == "150"
         assert result["total_token_reservation_ceiling"] == 2695680
+        if "--synthetic-experiment" in argv:
+            assert result["billing_status"] == "CONDITIONAL_ESTIMATE"
+            assert result["status"] == "SYNTHETIC_EXPERIMENT / EVAL_ONLY"
+            assert not result["runtime_authorized"] and not result["reviewed_routes"]
+            assert result["experimental_routes"][2]["reasoning_wire"] == {
+                "effort": "none",
+                "enabled": False,
+            }
 
 
 @pytest.mark.parametrize("bad", ["repeat", "regex", "image", "size", "tool"])
@@ -286,18 +304,31 @@ def test_critical_invented_facts_fail_despite_valid_schema():
     )
 
 
-@pytest.mark.parametrize("absent_provider", [False, True])
+@pytest.mark.parametrize(
+    "absent_provider,synthetic_experiment",
+    [(False, False), (True, False), (False, True), (True, True)],
+)
 def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
-    tmp_path, monkeypatch, capsys, absent_provider
+    tmp_path, monkeypatch, capsys, absent_provider, synthetic_experiment
 ):
     cases = load_cases(FIXTURES)
     reviews = tuple((history_review if absent_provider else review)(model) for model in MODELS)
     originals = [r.model_dump(mode="json") for r in reviews]
-    entries = [copy.deepcopy(r.catalog_entry) for r in reviews]
+    entries = (
+        [experiment_entry(model) for model in MODELS]
+        if synthetic_experiment
+        else [copy.deepcopy(r.catalog_entry) for r in reviews]
+    )
     expected_reserves = []
     for i, entry in enumerate(entries):
         entry["providers"][0]["pricing"]["prompt_per_million"] = str(11 + i)
-        expected_reserves.append((Decimal(32768) * (11 + i) + 512 * Decimal(40)) / 1000000)
+        expected_reserves.append(
+            (
+                Decimal(32768) * (11 + i + (7 if synthetic_experiment else 0))
+                + 512 * Decimal(45 if synthetic_experiment else 40)
+            )
+            / 1000000
+        )
     answers = {
         "owner_fact": "Улица Тестовая, 7",
         "owner_hours": "10:00–18:00",
@@ -323,23 +354,38 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
     seen = []
     models_seen = []
     history_data = []
+    expected_signature = None
 
     def handler(request):
+        nonlocal expected_signature
         seen.append(request.method)
         if request.method == "GET":
             if request.url.path.endswith("/models"):
                 return response({"data": entries})
-            listing, detail = history_payloads(history_data[-1])
+            listing, detail = (experiment_history if synthetic_experiment else history_payloads)(
+                history_data[-1]
+            )
             return response(listing if str(request.url) == HISTORY_LIST else detail)
         body = json.loads(request.content)
         models_seen.append(body["model"])
-        assert body["provider"]["only"] == ["Official Fixture Provider"]
+        assert body["provider"]["only"] == [
+            entries[MODELS.index(body["model"])]["providers"][0]["name"]
+        ]
         assert body["provider"]["allow_fallbacks"] is False
         assert body["provider"]["max_price"] == {
-            "prompt": 11 + MODELS.index(body["model"]),
-            "completion": 40.0,
+            "prompt": 11 + MODELS.index(body["model"]) + (7 if synthetic_experiment else 0),
+            "completion": 45.0 if synthetic_experiment else 40.0,
             "request": 0.0,
         }
+        if synthetic_experiment and body["model"] == MODELS[2]:
+            assert body["reasoning"] == {"effort": "none", "enabled": False}
+        else:
+            assert "reasoning" not in body
+        if body["model"] == MODELS[1] and body["messages"][-1]["role"] == "tool":
+            # A permissive HTTP mock would conceal the production continuation bug.
+            call = body["messages"][-2]["tool_calls"][0]
+            assert call["extra_content"] == {"google": {"thought_signature": expected_signature}}
+            assert call["id"] == body["messages"][-1]["tool_call_id"]
         if isinstance(body["messages"][0]["content"], list):
             url = body["messages"][0]["content"][1]["image_url"]["url"]
             case = next(c for c in cases if c.image_base64 and url.endswith(c.image_base64))
@@ -361,17 +407,26 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
                         }
                     }
                 )
-        data["choices"][0]["message"]["reasoning"] = "PRIVATE CHAIN OF THOUGHT MUST NOT BE SAVED"
+        if body["model"] == MODELS[1] and data["choices"][0]["finish_reason"] == "tool_calls":
+            expected_signature = "CONTROLLED_OPAQUE_SIGNATURE_" + str(len(models_seen))
+            data["choices"][0]["message"]["tool_calls"][0]["extra_content"]["google"][
+                "thought_signature"
+            ] = expected_signature
+        if not synthetic_experiment or body["model"] != MODELS[2]:
+            data["choices"][0]["message"]["reasoning"] = (
+                "PRIVATE CHAIN OF THOUGHT MUST NOT BE SAVED"
+            )
         # Different observed charges make accidental omission of model three visible.
         data["usage"]["cost_rub"] = str(Decimal("0.001") * (MODELS.index(body["model"]) + 1))
         if absent_provider:
             data.pop("provider")
+        if absent_provider or synthetic_experiment:
             data["id"] = "gen_" + str(len(models_seen))
             history_data.append(data)
         return response(data)
 
-    async def controlled_live(*args):
-        return await live(*args, transport=httpx.MockTransport(handler))
+    async def controlled_live(*args, **kwargs):
+        return await live(*args, **kwargs, transport=httpx.MockTransport(handler))
 
     review_path = tmp_path / "review.json"
     review_path.write_text(json.dumps([r.model_dump(mode="json") for r in reviews]))
@@ -382,8 +437,11 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
         main(
             [
                 "--live",
-                "--review",
-                str(review_path),
+                *(
+                    ["--synthetic-experiment"]
+                    if synthetic_experiment
+                    else ["--review", str(review_path)]
+                ),
                 "--report",
                 str(report_path),
                 "--approved-rub",
@@ -403,7 +461,9 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
     events = [json.loads(line) for line in output.splitlines()]
     summary = events[-1]
     assert summary["event"] == "summary"
-    assert seen.count("POST") == 81 and seen.count("GET") == (163 if absent_provider else 1)
+    assert seen.count("POST") == 81 and seen.count("GET") == (
+        163 if absent_provider or synthetic_experiment else 1
+    )
     assert models_seen == [model for model in MODELS for _ in range(27)]
     assert summary["status"] == "HUMAN_REVIEW_REQUIRED"
     for i, model in enumerate(MODELS):
@@ -416,29 +476,51 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
     assert summary["selected_model"] is None
     assert KEY.get_secret_value() not in output and "CHAIN OF THOUGHT" not in output
     assert "PRIVATE_ACCOUNT_METADATA" not in output
+    assert "CONTROLLED_OPAQUE_SIGNATURE" not in output
     case_rows = [r for r in events if r["event"] == "case"]
     assert len([r for r in case_rows if r["final"]]) == 75
     assert sum(r["reads"] for r in case_rows) == 6
     assert all(sum(r["reads"] for r in case_rows if r["model"] == m) == 2 for m in MODELS)
     recorded_plan = next(r for r in events if r["event"] == "plan")
-    assert recorded_plan["route_reviews"] == [r.catalog_sha256 for r in reviews]
-    assert recorded_plan["pricing_catalogs"] == [fingerprint(e) for e in entries]
-    assert recorded_plan["prior_confirmed_cost_rub"] == "0.01269785"
-    assert recorded_plan["max_shared_model_posts"] == 84
-    repricing = next(r for r in events if r["event"] == "catalog_repricing")
-    for i, row in enumerate(repricing["routes"]):
-        assert row["old_catalog_sha256"] == reviews[i].catalog_sha256
-        assert row["new_catalog_sha256"] == fingerprint(entries[i])
-        assert row["review_checked_at"] == reviews[i].checked_at.isoformat()
-        assert row["old_pricing"]["prompt_per_million"] == "10"
-        assert row["new_pricing"]["prompt_per_million"] == str(11 + i)
+    if synthetic_experiment:
+        assert recorded_plan["route_reviews"] == recorded_plan["reviewed_routes"] == []
+        assert recorded_plan["billing_status"] == "CONDITIONAL_ESTIMATE"
+        assert recorded_plan["runtime_authorized"] is False
+        assert not any(r["event"] == "catalog_repricing" for r in events)
+        assert len(recorded_plan["experimental_routes"]) == 3
+        assert recorded_plan["experimental_routes"][1]["expected_history_family"] is None
+        assert (
+            recorded_plan["experimental_routes"][2]["reasoning_profile"] == "NON_THINKING_EXPLICIT"
+        )
+        for row in case_rows:
+            for call in row["calls"]:
+                assert call["history_family_evidence"] == (
+                    "PRIOR_OWNER_OBSERVATION"
+                    if row["model"] == MODELS[0]
+                    else "OBSERVED_DURING_THIS_EVAL"
+                )
+    else:
+        assert recorded_plan["route_reviews"] == [r.catalog_sha256 for r in reviews]
+        assert recorded_plan["pricing_catalogs"] == [fingerprint(e) for e in entries]
+        assert recorded_plan["prior_confirmed_cost_rub"] == "0.01269785"
+        assert recorded_plan["max_shared_model_posts"] == 84
+        repricing = next(r for r in events if r["event"] == "catalog_repricing")
+        for i, row in enumerate(repricing["routes"]):
+            assert row["old_catalog_sha256"] == reviews[i].catalog_sha256
+            assert row["new_catalog_sha256"] == fingerprint(entries[i])
+            assert row["review_checked_at"] == reviews[i].checked_at.isoformat()
+            assert row["old_pricing"]["prompt_per_million"] == "10"
+            assert row["new_pricing"]["prompt_per_million"] == str(11 + i)
     assert originals == [r.model_dump(mode="json") for r in reviews]
     assert recorded_plan["wire_schema_revision"] == CONVERSATION_WIRE_REVISION
-    assert [r["output_cap_parameter"] for r in recorded_plan["reviewed_routes"]] == [
-        "max_completion_tokens",
-        "max_tokens",
-        "max_completion_tokens",
-    ]
+    assert [
+        r["output_cap_parameter"]
+        for r in recorded_plan["experimental_routes" if synthetic_experiment else "reviewed_routes"]
+    ] == (
+        ["max_tokens"] * 3
+        if synthetic_experiment
+        else ["max_completion_tokens", "max_tokens", "max_completion_tokens"]
+    )
     for row in case_rows:
         assert row["wire_schema_revision"] == (
             "synthetic_shapes_v1" if row["mode"] == "image" else CONVERSATION_WIRE_REVISION
@@ -448,10 +530,11 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
     assert len(reservations) == 81
     assert reservations[-1] == sum(r * 27 for r in expected_reserves)
     assert sum(c["history_gets"] for r in case_rows for c in r["calls"]) == (
-        162 if absent_provider else 0
+        162 if absent_provider or synthetic_experiment else 0
     )
     assert all(
-        c["route_evidence_source"] == ("HISTORY_LIST_DETAIL" if absent_provider else "BODY")
+        c["route_evidence_source"]
+        == ("HISTORY_LIST_DETAIL" if absent_provider or synthetic_experiment else "BODY")
         for r in case_rows
         for c in r["calls"]
     )
@@ -844,3 +927,111 @@ def test_prior_and_stage_reservations_share_one_150_ceiling():
     assert ledger.reserved + PRIOR_CONFIRMED_RUB == 150
     with pytest.raises(ValueError, match="GLOBAL_BUDGET_EXHAUSTED"):
         ledger.reserve(review(), load_cases(FIXTURES)[0], 1)
+
+
+@pytest.mark.parametrize(
+    "bad,code",
+    [
+        ("duplicate", "EXPERIMENT_ROUTE_NOT_UNIQUE"),
+        ("missing", "EXPERIMENT_ROUTE_NOT_UNIQUE"),
+        ("unofficial", "OFFICIAL_ROUTE_UNKNOWN"),
+        ("capability", "CAPABILITY_UNKNOWN"),
+        ("rejected", "INPUT_IMAGE_REJECTED"),
+        ("cap_alias", "OUTPUT_CAP_PARAMETER_UNSUPPORTED"),
+        ("context", "CONTEXT_LIMIT_UNKNOWN"),
+        ("currency", "CURRENCY_UNKNOWN"),
+        ("new_fee", "TARIFF_UNKNOWN"),
+        ("nonnumeric", "TARIFF_UNKNOWN"),
+        ("null_fee", "TARIFF_UNKNOWN"),
+        ("toggle", "NON_THINKING_UNSUPPORTED"),
+        ("effort", "NON_THINKING_UNSUPPORTED"),
+        ("mandatory", "NON_THINKING_UNSUPPORTED"),
+        ("reasoning_parameter", "NON_THINKING_UNSUPPORTED"),
+        ("overbudget", "PLAN_EXCEEDS_CEILING"),
+        ("smaller_approval", "APPROVED_BUDGET_TOO_SMALL"),
+    ],
+)
+async def test_all_experimental_routes_admitted_before_any_post(bad, code):
+    entries = [experiment_entry(model) for model in MODELS]
+    p = entries[-1]["providers"][0]
+    if bad == "duplicate":
+        entries[-1]["providers"].append(copy.deepcopy(p))
+    if bad == "missing":
+        p["name"] = "unselected-other-route"
+    if bad == "unofficial":
+        p["is_unofficial"] = True
+    if bad == "capability":
+        p["capabilities"]["tools"]["status"] = "unknown"
+    if bad == "rejected":
+        p["capabilities"]["input_image"]["status"] = "rejected"
+    if bad == "cap_alias":
+        p["supported_parameters"].remove("max_tokens")
+    if bad == "context":
+        p["context_length"] = 32768
+    if bad == "currency":
+        p["pricing"]["currency"] = "USD"
+    if bad == "new_fee":
+        p["pricing"]["undocumented_fee"] = 0
+    if bad == "nonnumeric":
+        p["pricing"]["audio_per_million"] = "unknown"
+    if bad == "null_fee":
+        p["pricing"]["input_audio_cache_per_million"] = None
+    if bad == "toggle":
+        p["capabilities"]["reasoning_toggle"]["status"] = "unknown"
+    if bad == "effort":
+        p["capabilities"]["reasoning_effort"]["values"] = ["low"]
+    if bad == "mandatory":
+        p["reasoning"]["mandatory"] = True
+    if bad == "reasoning_parameter":
+        p["supported_parameters"].remove("reasoning")
+    if bad == "overbudget":
+        p["pricing"]["prompt_per_million"] = "1000"
+    seen = []
+
+    def handler(request):
+        seen.append(request.method)
+        assert request.method == "GET" and request.url.path.endswith("/models")
+        return response({"data": entries})
+
+    output = io.StringIO()
+    with pytest.raises(ValueError, match=code):
+        await live(
+            load_cases(FIXTURES),
+            (),
+            ProbeSettings(api_key=KEY),
+            output,
+            Decimal(1) if bad == "smaller_approval" else STAGE_RUB_CEILING,
+            synthetic_experiment=True,
+            transport=httpx.MockTransport(handler),
+        )
+    assert seen == ["GET"]
+    assert '"event": "reserved"' not in output.getvalue()
+    if bad in ("overbudget", "smaller_approval"):
+        record = json.loads(output.getvalue().splitlines()[0])
+        assert record["billing_status"] == "CONDITIONAL_ESTIMATE" and len(record["routes"]) == 3
+
+
+def test_experimental_plan_requires_explicit_mode_and_cannot_be_a_review(
+    tmp_path, monkeypatch, capsys
+):
+    from asm.ai.polza import RouteReview
+
+    routes = tuple(experiment_route(m) for m in MODELS)
+    cases = load_cases(FIXTURES)
+    with pytest.raises(ValueError, match="ADMISSION_MODE_MISMATCH"):
+        plan(cases, routes)
+    with pytest.raises(ValueError, match="ADMISSION_MODE_MISMATCH"):
+        plan(cases, tuple(review(m) for m in MODELS), synthetic_experiment=True)
+    with pytest.raises(ValueError):
+        RouteReview.model_validate(routes[0])
+    proposal = plan(cases, routes, synthetic_experiment=True)
+    assert proposal["billing_status"] == "CONDITIONAL_ESTIMATE"
+    assert proposal["reviewed_routes"] == [] and proposal["experimental_assumptions"]
+    # Includes audio cache fully, excludes only impossible audio/search payload rates.
+    assert routes[0].rates() == (Decimal(17), Decimal(45), Decimal(0))
+    monkeypatch.setattr("asm.ai.probe.load_secret", lambda _: pytest.fail("secret forbidden"))
+    assert main(["--live", "--synthetic-experiment", "--review", "never-read.json"]) == 2
+    assert "EXPERIMENT_CANNOT_USE_REVIEWS" in capsys.readouterr().out
+    changed = (cases[0].model_copy(update={"question": "Changed finite evaluation"}), *cases[1:])
+    with pytest.raises(ValueError, match="EXPERIMENT_FIXTURES_CHANGED"):
+        plan(changed, synthetic_experiment=True)

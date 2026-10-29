@@ -14,7 +14,7 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | IN_PROGRESS / C4 EXECUTABLE-EVAL-R1; full75 NOT RUN. C0 source78dabd8 исправил apiType,327 targeted PASS; CI40902629746 отдельно. Новая конечная выдача: Gemini signature continuation, DeepSeek non-thinking и явный SYNTHETIC_EXPERIMENT admission с declared/conditional/observed evidence вместо фиктивных verified reviews. Фиксированные3 routes,75/81/6, прежние hard limits; prior0.01269785, новый этап≤149.98730215 из150. Runtime/automatic model selection не разрешены |
+| M4.2-PROBE | REVIEW / C4 EXECUTABLE-EVAL-R1 candidate; full75 paid NOT RUN. От seed43da703 (source78dabd8): explicit SYNTHETIC_EXPERIMENT без fake reviews, fixed3 official routes, conditional fresh plan; bounded Gemini signature continuation, explicit DeepSeek non-thinking; GPT profile сохранён. Controlled399 PASS, Ruff/format/mypy71/offline plans PASS; full CLI75 finals/81 POST/6 READ/162 history GET. Hard limits/fixtures/contracts сохранены; prior0.01269785 +stage≤149.98730215 из150. Windows команда в runbook, существующий ключ. C4 HOLD: C0 source/plan review → один full CI нового candidate → выдача владельцу; PR39/main/runtime/paid C4 не менялись |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
 | M4.3-QUALITY | TODO; независимый scoped C8/eval |

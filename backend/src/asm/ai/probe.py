@@ -32,6 +32,7 @@ from asm.ai.gateway import ModelGateway, ProviderFailure
 from asm.ai.polza import (
     CATALOG,
     CONVERSATION_WIRE_REVISION,
+    EXPERIMENT_PROVIDERS,
     HISTORY_BYTES,
     HISTORY_SECONDS,
     INPUT_BYTES,
@@ -42,7 +43,9 @@ from asm.ai.polza import (
     OVERHEAD_TOKENS,
     PolzaAdapter,
     PolzaFailure,
+    ProbeRoute,
     RouteReview,
+    SyntheticRoute,
     bounded_http,
     encode,
     fingerprint,
@@ -165,7 +168,7 @@ def read_reviews(path: Path) -> tuple[RouteReview, ...]:
     return reviews
 
 
-def validate_reviews(reviews: tuple[RouteReview, ...]) -> None:
+def validate_reviews(reviews: tuple[ProbeRoute, ...]) -> None:
     if tuple(r.model for r in reviews) != MODELS:
         raise ValueError("EXACT_THREE_MODELS_REQUIRED")
     for review in reviews:
@@ -174,7 +177,20 @@ def validate_reviews(reviews: tuple[RouteReview, ...]) -> None:
         review.reservation()
 
 
-def plan(cases: tuple[Case, ...], reviews: tuple[RouteReview, ...] = ()) -> dict[str, Any]:
+def plan(
+    cases: tuple[Case, ...],
+    reviews: tuple[ProbeRoute, ...] = (),
+    *,
+    synthetic_experiment: bool = False,
+) -> dict[str, Any]:
+    if any(isinstance(r, SyntheticRoute) != synthetic_experiment for r in reviews):
+        raise ValueError("ADMISSION_MODE_MISMATCH")
+    if (
+        synthetic_experiment
+        and fingerprint([c.model_dump(mode="json") for c in cases])
+        != "7abd25f1e1f08e51eacc3a68975e6099c942d33fad37376366dfdef6c7e025b2"
+    ):
+        raise ValueError("EXPERIMENT_FIXTURES_CHANGED")
     if reviews:
         validate_reviews(reviews)
     rows = schedule(cases)
@@ -184,7 +200,12 @@ def plan(cases: tuple[Case, ...], reviews: tuple[RouteReview, ...] = ()) -> dict
     if total_calls > CALL_CEILING or total is not None and total > STAGE_RUB_CEILING:
         raise ValueError("PLAN_EXCEEDS_CEILING")
     return {
-        "status": "REVIEW / PAID PROBE NOT RUN",
+        "status": "SYNTHETIC_EXPERIMENT / EVAL_ONLY"
+        if synthetic_experiment
+        else "REVIEW / PAID PROBE NOT RUN",
+        "admission": "SYNTHETIC_EXPERIMENT" if synthetic_experiment else "REVIEWED",
+        "runtime_authorized": False,
+        "model_selected": False,
         "fixture_sha256": fingerprint([c.model_dump(mode="json") for c in cases]),
         "models": MODELS,
         "cases_per_model": len(rows),
@@ -212,13 +233,48 @@ def plan(cases: tuple[Case, ...], reviews: tuple[RouteReview, ...] = ()) -> dict
         "max_shared_model_posts": PRIOR_MODEL_POSTS + total_calls,
         "stage_rub_ceiling": str(STAGE_RUB_CEILING),
         "priced_reservation_rub": str(total) if total is not None else None,
-        "billing_status": "REVIEWED_BOUND"
+        "billing_status": "CONDITIONAL_ESTIMATE"
+        if synthetic_experiment
+        else "REVIEWED_BOUND"
         if reviews
         else "UNKNOWN: account tariff and route review required",
         "prompt_revision": "conversation_v1",
         "schema_revision": "conversation_result_v1",
         "wire_schema_revision": CONVERSATION_WIRE_REVISION,
-        "reviewed_routes": [r.metadata() for r in reviews],
+        "reviewed_routes": [] if synthetic_experiment else [r.metadata() for r in reviews],
+        "experimental_routes": (
+            [r.metadata() for r in reviews]
+            if reviews
+            else [
+                {
+                    "model": model,
+                    "provider_only": selector,
+                    "upstream_semantics": "REQUEST_SELECTOR_NOT_OBSERVATION",
+                    "reasoning_profile": "NON_THINKING_EXPLICIT"
+                    if model == MODELS[2]
+                    else "PROVIDER_DEFAULT",
+                    "reasoning_wire": {"effort": "none", "enabled": False}
+                    if model == MODELS[2]
+                    else None,
+                    "expected_history_family": "OpenAI" if model == MODELS[0] else None,
+                    "continuation": "TRANSIENT_GOOGLE_SIGNATURE"
+                    if model == MODELS[1]
+                    else "NEUTRAL_TOOL_RESULT",
+                }
+                for model, selector in zip(MODELS, EXPERIMENT_PROVIDERS, strict=True)
+            ]
+        )
+        if synthetic_experiment
+        else [],
+        "experimental_assumptions": [
+            "Total output including reasoning fits selected 512-token cap",
+            "Tokenizer and synthetic image input fit wire bytes plus 4096 tokens",
+            "Public catalog rates approximate account charges; additive fee reserve",
+            "Declared strict schema and tools work together on these hosted routes",
+            "History family does not prove requested variant",
+        ]
+        if synthetic_experiment
+        else [],
         "image_revision": "synthetic_shapes_v1/EVAL_ONLY",
     }
 
@@ -278,7 +334,7 @@ class Ledger:
         self.output.write(json.dumps(value, ensure_ascii=False) + "\n")
         self.output.flush()
 
-    def reserve(self, review: RouteReview, case: Case, repeat: int) -> None:
+    def reserve(self, review: ProbeRoute, case: Case, repeat: int) -> None:
         amount = review.reservation()
         if (
             time.monotonic() >= self.deadline
@@ -302,7 +358,7 @@ class Ledger:
         )
 
 
-def configuration(review: RouteReview, case: Case) -> GatewayConfig:
+def configuration(review: ProbeRoute, case: Case) -> GatewayConfig:
     reserve = review.reservation()
     return GatewayConfig(
         revision="m4_2_probe_v1",
@@ -339,7 +395,7 @@ def evaluate(case: Case, final: dict[str, Any] | None, reads: int) -> list[str]:
     return failures
 
 
-def metering_failures(result: dict[str, Any], review: RouteReview) -> list[str]:
+def metering_failures(result: dict[str, Any], review: ProbeRoute) -> list[str]:
     failures = []
     usage, cost = result["usage"], result["cost"]
     if usage["input_tokens"] is None or usage["output_tokens"] is None:
@@ -363,6 +419,7 @@ async def run_case(
     final: dict[str, Any] | None = None
     failures: list[str] = []
     reads = 0
+    adapter.clear_continuation()
     try:
         if case.mode == "image":
             body = encode(
@@ -480,10 +537,15 @@ async def run_case(
         )
     except (ValueError, TypeError, KeyError, AttributeError, RecursionError):
         failures.append("PROBE_INVALID")
+    finally:
+        adapter.clear_continuation()
     return {
         "event": "case",
         "model": review.model,
-        "upstream": review.response_provider,
+        "upstream": review.route().upstream,
+        "upstream_semantics": "REQUEST_SELECTOR_NOT_OBSERVATION"
+        if isinstance(review, SyntheticRoute)
+        else "REVIEWED_RESPONSE_MAPPING",
         "provider_only": review.provider_name,
         "case": case.id,
         "repeat": repeat,
@@ -533,6 +595,7 @@ def summaries(rows: list[dict[str, Any]]) -> dict[str, Any]:
         else "FAILED_OR_INCOMPLETE",
         "models": summary,
         "selected_model": None,
+        "runtime_authorized": False,
         "limitation": "Small synthetic sample; review every final output against fixtures before selection. No runtime authorization.",
     }
 
@@ -545,53 +608,80 @@ async def live(
     approved: Decimal,
     *,
     transport: httpx.AsyncBaseTransport | None = None,
+    synthetic_experiment: bool = False,
 ) -> dict[str, Any]:
-    if not reviews:
-        raise ValueError("EXACT_THREE_MODELS_REQUIRED")
-    validate_reviews(reviews)
+    if synthetic_experiment:
+        if reviews:
+            raise ValueError("EXPERIMENT_CANNOT_USE_REVIEWS")
+        plan(cases, synthetic_experiment=True)
+    else:
+        if not reviews:
+            raise ValueError("EXACT_THREE_MODELS_REQUIRED")
+        validate_reviews(reviews)
     ledger = Ledger(output, approved, CALL_CEILING)
     async with asyncio.timeout(ledger.deadline - time.monotonic()):
         current = await catalog(settings, transport)
     price_checked_at = datetime.now(UTC).isoformat()
-    priced_reviews = tuple(r.reprice(e) for r, e in zip(reviews, current, strict=True))
-    fresh_reservation = sum((r.reservation() * 27 for r in priced_reviews), Decimal(0))
-    ledger.record(
-        {
-            "event": "catalog_repricing",
-            "source": "PUBLIC_CATALOG",
-            "account_tariff": "NOT_ESTABLISHED_BY_CATALOG",
-            "checked_at": price_checked_at,
-            "priced_reservation_rub": str(fresh_reservation),
-            "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
-            "shared_rub_committed_or_reserved": str(PRIOR_CONFIRMED_RUB + fresh_reservation),
-            "routes": [
-                {
-                    "model": old.model,
-                    "requested_provider": old.provider_name,
-                    "review_sha256": fingerprint(old.model_dump(mode="json")),
-                    "review_checked_at": old.checked_at.isoformat(),
-                    "old_catalog_sha256": old.catalog_sha256,
-                    "new_catalog_sha256": new.catalog_sha256,
-                    "provider_configuration_sha256": fingerprint(
-                        {k: v for k, v in old.provider().items() if k != "pricing"}
-                    ),
-                    "old_pricing": old.provider()["pricing"],
-                    "new_pricing": new.provider()["pricing"],
-                    "fresh_rates_rub": [str(v) for v in new.rates()],
-                    "call_reservation_rub": str(new.reservation()),
-                }
-                for old, new in zip(reviews, priced_reviews, strict=True)
-            ],
-        }
-    )
-    proposal = plan(cases, priced_reviews)
+    priced_reviews: tuple[ProbeRoute, ...]
+    if synthetic_experiment:
+        priced_reviews = tuple(SyntheticRoute.from_catalog(e, datetime.now(UTC)) for e in current)
+        ledger.record(
+            {
+                "event": "catalog_experiment",
+                "admission": "SYNTHETIC_EXPERIMENT",
+                "source": "PUBLIC_CATALOG",
+                "checked_at": price_checked_at,
+                "billing_status": "CONDITIONAL_ESTIMATE",
+                "account_tariff": "NOT_ESTABLISHED_BY_CATALOG",
+                "routes": [r.metadata() for r in priced_reviews],
+                "priced_reservation_rub": str(
+                    sum((r.reservation() * 27 for r in priced_reviews), Decimal(0))
+                ),
+                "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
+            }
+        )
+    else:
+        priced_reviews = tuple(r.reprice(e) for r, e in zip(reviews, current, strict=True))
+        fresh_reservation = sum((r.reservation() * 27 for r in priced_reviews), Decimal(0))
+        ledger.record(
+            {
+                "event": "catalog_repricing",
+                "source": "PUBLIC_CATALOG",
+                "account_tariff": "NOT_ESTABLISHED_BY_CATALOG",
+                "checked_at": price_checked_at,
+                "priced_reservation_rub": str(fresh_reservation),
+                "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
+                "shared_rub_committed_or_reserved": str(PRIOR_CONFIRMED_RUB + fresh_reservation),
+                "routes": [
+                    {
+                        "model": old.model,
+                        "requested_provider": old.provider_name,
+                        "review_sha256": fingerprint(old.model_dump(mode="json")),
+                        "review_checked_at": old.checked_at.isoformat(),
+                        "old_catalog_sha256": old.catalog_sha256,
+                        "new_catalog_sha256": new.catalog_sha256,
+                        "provider_configuration_sha256": fingerprint(
+                            {k: v for k, v in old.provider().items() if k != "pricing"}
+                        ),
+                        "old_pricing": old.provider()["pricing"],
+                        "new_pricing": new.provider()["pricing"],
+                        "fresh_rates_rub": [str(v) for v in new.rates()],
+                        "call_reservation_rub": str(new.reservation()),
+                    }
+                    for old, new in zip(reviews, priced_reviews, strict=True)
+                ],
+            }
+        )
+    proposal = plan(cases, priced_reviews, synthetic_experiment=synthetic_experiment)
     if Decimal(proposal["priced_reservation_rub"]) > approved:
         raise ValueError("APPROVED_BUDGET_TOO_SMALL")
     ledger.record(
         {
             "event": "plan",
             **proposal,
-            "status": "SYNTHETIC_EVAL_ONLY",
+            "status": "SYNTHETIC_EXPERIMENT / EVAL_ONLY"
+            if synthetic_experiment
+            else "SYNTHETIC_EVAL_ONLY",
             "route_reviews": [r.catalog_sha256 for r in reviews],
             "reviewed_routes": [r.metadata() for r in reviews],
             "pricing_catalogs": [r.catalog_sha256 for r in priced_reviews],
@@ -627,6 +717,7 @@ def main(argv: list[str] | None = None) -> int:
     mode.add_argument("--live", action="store_true")
     parser.add_argument("--fixtures", type=Path, default=FIXTURES)
     parser.add_argument("--review", type=Path)
+    parser.add_argument("--synthetic-experiment", action="store_true")
     parser.add_argument("--secret-file", type=Path, default=Path(".env.m4-probe"))
     parser.add_argument("--report", type=Path)
     parser.add_argument("--approval-ref")
@@ -635,14 +726,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-environment", choices=("LOCAL_DESKTOP", "LOCAL_BACKEND"))
     args = parser.parse_args(argv)
     try:
+        if args.synthetic_experiment and (args.review or args.preflight):
+            raise ValueError("EXPERIMENT_CANNOT_USE_REVIEWS_OR_PREFLIGHT")
         cases = load_cases(args.fixtures)
         reviews = read_reviews(args.review) if args.review else ()
         if not args.preflight and not args.live:
-            print(json.dumps(plan(cases, reviews), ensure_ascii=False, indent=2))
+            print(
+                json.dumps(
+                    plan(cases, reviews, synthetic_experiment=args.synthetic_experiment),
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
             return 0
         if not args.approval_ref or not args.report:
             raise ValueError("EXPLICIT_APPROVAL_AND_NEW_REPORT_REQUIRED")
-        if args.live and (len(reviews) != len(MODELS) or args.approved_rub is None):
+        if args.live and (
+            (not args.synthetic_experiment and len(reviews) != len(MODELS))
+            or args.approved_rub is None
+        ):
             raise ValueError("REVIEW_AND_BUDGET_REQUIRED")
         if args.live and (
             not re.fullmatch(r"[0-9a-f]{40}", args.source_sha or "") or not args.source_environment
@@ -674,6 +776,10 @@ def main(argv: list[str] | None = None) -> int:
                     json.dumps(
                         {
                             "event": "source",
+                            "admission": "SYNTHETIC_EXPERIMENT"
+                            if args.synthetic_experiment
+                            else "REVIEWED",
+                            "runtime_authorized": False,
                             "sha": args.source_sha,
                             "environment": args.source_environment,
                             "approval_ref": args.approval_ref,
@@ -687,7 +793,21 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 output.flush()
                 try:
-                    summary = asyncio.run(live(cases, reviews, settings, output, args.approved_rub))
+                    if args.synthetic_experiment:
+                        summary = asyncio.run(
+                            live(
+                                cases,
+                                reviews,
+                                settings,
+                                output,
+                                args.approved_rub,
+                                synthetic_experiment=True,
+                            )
+                        )
+                    else:
+                        summary = asyncio.run(
+                            live(cases, reviews, settings, output, args.approved_rub)
+                        )
                 except (
                     ValueError,
                     TypeError,

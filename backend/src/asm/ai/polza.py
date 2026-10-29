@@ -1,4 +1,4 @@
-"""One pinned, reviewed Polza route. No retries, SDK, redirect or runtime wiring."""
+"""Pinned Polza evaluation routes. No retries, SDK, redirect or runtime wiring."""
 
 import asyncio
 import hashlib
@@ -47,6 +47,8 @@ INPUT_BYTES = 24576
 OUTPUT_BYTES = 32768
 OVERHEAD_TOKENS = 4096
 CONVERSATION_WIRE_REVISION = "conversation_result_envelope_v1"
+EXPERIMENT_PROVIDERS = ("openai/flex", "google-ai-studio/flex", "wafer/us")
+SIGNATURE_BYTES = 8192
 Evidence = Annotated[str, Field(min_length=20, max_length=2000)]
 ConditionalFee = Literal[
     "audio_per_million", "input_audio_cache_per_million", "web_search_per_thousand"
@@ -96,31 +98,14 @@ class HistoryReview(DTO):
     evidence: Evidence
 
 
-class RouteReview(DTO):
-    """Trusted operator input, NOT model output or auto-generated capability proof.
-
-    Exact catalog entry is pinned separately from provider name -> response ID mapping.
-    Evidence fields must cite reviewed provider contracts, not offline test results.
-    """
+class CatalogRoute(DTO):
+    """Shared catalog validation; declarations alone never certify a route."""
 
     model: str
     provider_name: str = Field(min_length=1, max_length=128)
-    response_provider: Identifier
-    history: HistoryReview | None = None
     catalog_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     checked_at: datetime
-    route_evidence: str = Field(min_length=20, max_length=2000)
-    schema_tools_evidence: str = Field(min_length=20, max_length=2000)
-    token_bound_evidence: str = Field(min_length=20, max_length=2000)
-    billing_bound_evidence: str = Field(min_length=20, max_length=2000)
-    image_bound_evidence: str = Field(min_length=20, max_length=2000)
     output_cap_parameter: Literal["max_tokens", "max_completion_tokens"]
-    output_cap_includes_reasoning: Literal[True]
-    output_cap_evidence: Evidence
-    # Each exclusion needs a reviewed route contract, not just an apparent field name.
-    # Actual input_audio_cache units/applicability remain unproven by the public docs.
-    inactive_fee_evidence: dict[ConditionalFee, Evidence] = Field(default_factory=dict)
-    # Public catalog snapshot, not account authorization; rechecked before generation.
     catalog_entry: dict[str, Any] = Field(repr=False)
 
     def provider(self) -> dict[str, Any]:
@@ -169,18 +154,6 @@ class RouteReview(DTO):
             raise ValueError("IMAGE_CAPABILITY_UNKNOWN")
         return provider
 
-    def route(self) -> Route:
-        self.provider()
-        return Route(
-            branch="RU_AGGREGATOR",
-            adapter="polza",
-            execution="PROVIDER",
-            endpoint=ENDPOINT,
-            model=self.model,
-            upstream=self.response_provider,
-            eligibility="EVAL_ONLY",
-        )
-
     def fresh(self) -> None:
         if self.checked_at.tzinfo is None:
             raise ValueError("REVIEW_EXPIRED")
@@ -188,11 +161,13 @@ class RouteReview(DTO):
         if not 0 <= age <= 86400:
             raise ValueError("REVIEW_EXPIRED")
 
-    def rates(self) -> tuple[Decimal, Decimal, Decimal]:
+    def rates(
+        self, *, excluded_fees: frozenset[str] = frozenset()
+    ) -> tuple[Decimal, Decimal, Decimal]:
         """Sum possibly additive rates; no optimistic cache discount or unknown fee.
 
-        The billing evidence must establish missing optional fees are inapplicable,
-        output cap includes reasoning, and image input fits the same input ceiling.
+        Reviewed routes require evidence for exclusions. The explicit synthetic
+        profile reports its token/image/billing bounds as conditional assumptions.
         """
         pricing = self.provider().get("pricing", {})
         if pricing.get("currency") != "RUB":
@@ -202,20 +177,19 @@ class RouteReview(DTO):
             "image_input_per_million",
             "input_cache_read_per_million",
             "input_cache_write_per_million",
+            "input_audio_cache_per_million",
         }
         outputs = {"completion_per_million", "internal_reasoning_per_million"}
         requests = {"per_request", "request_per_thousand"}
         if not {"prompt_per_million", "completion_per_million"} <= pricing.keys():
             raise ValueError("TARIFF_UNKNOWN")
         values: dict[str, Decimal] = {}
-        if not self.inactive_fee_evidence.keys() <= pricing.keys():
-            raise ValueError("FEE_EXCLUSION_NOT_IN_CATALOG")
         for key, raw in pricing.items():
             if key == "currency":
                 continue
             if key not in inputs | outputs | requests | CONDITIONAL_FEES:
                 raise ValueError("TARIFF_UNKNOWN")
-            if key in CONDITIONAL_FEES and key not in self.inactive_fee_evidence:
+            if key in CONDITIONAL_FEES - inputs and key not in excluded_fees:
                 raise ValueError("CONDITIONAL_FEE_REVIEW_REQUIRED")
             if raw is None:
                 continue
@@ -227,7 +201,7 @@ class RouteReview(DTO):
                 raise ValueError("TARIFF_UNKNOWN") from None
             if not number.is_finite() or not 0 <= number <= 1000000:
                 raise ValueError("TARIFF_UNKNOWN")
-            if key not in CONDITIONAL_FEES:
+            if key not in excluded_fees:
                 values[key] = number
         if not {"prompt_per_million", "completion_per_million"} <= values.keys():
             raise ValueError("TARIFF_UNKNOWN")
@@ -244,6 +218,49 @@ class RouteReview(DTO):
         return max(
             Decimal("0.000000001"), amount.quantize(Decimal("0.000000001"), rounding=ROUND_CEILING)
         )
+
+
+class RouteReview(CatalogRoute):
+    """Trusted operator input, NOT model output or auto-generated capability proof.
+
+    Exact catalog entry is pinned separately from provider name -> response ID mapping.
+    Evidence fields must cite reviewed provider contracts, not offline test results.
+    """
+
+    response_provider: Identifier
+    history: HistoryReview | None = None
+    route_evidence: str = Field(min_length=20, max_length=2000)
+    schema_tools_evidence: str = Field(min_length=20, max_length=2000)
+    token_bound_evidence: str = Field(min_length=20, max_length=2000)
+    billing_bound_evidence: str = Field(min_length=20, max_length=2000)
+    image_bound_evidence: str = Field(min_length=20, max_length=2000)
+    output_cap_includes_reasoning: Literal[True]
+    output_cap_evidence: Evidence
+    # Each exclusion needs a reviewed route contract, not just an apparent field name.
+    # Actual input_audio_cache units/applicability remain unproven by the public docs.
+    inactive_fee_evidence: dict[ConditionalFee, Evidence] = Field(default_factory=dict)
+
+    def route(self) -> Route:
+        self.provider()
+        return Route(
+            branch="RU_AGGREGATOR",
+            adapter="polza",
+            execution="PROVIDER",
+            endpoint=ENDPOINT,
+            model=self.model,
+            upstream=self.response_provider,
+            eligibility="EVAL_ONLY",
+        )
+
+    def rates(
+        self, *, excluded_fees: frozenset[str] = frozenset()
+    ) -> tuple[Decimal, Decimal, Decimal]:
+        pricing = self.provider().get("pricing", {})
+        if not self.inactive_fee_evidence.keys() <= pricing.keys():
+            raise ValueError("FEE_EXCLUSION_NOT_IN_CATALOG")
+        if CONDITIONAL_FEES & pricing.keys() - self.inactive_fee_evidence.keys():
+            raise ValueError("CONDITIONAL_FEE_REVIEW_REQUIRED")
+        return super().rates(excluded_fees=frozenset(self.inactive_fee_evidence))
 
     def reprice(self, entry: dict[str, Any]) -> "RouteReview":
         """Derive a price view; preserve the source review object and its original date."""
@@ -294,6 +311,131 @@ class RouteReview(DTO):
             "live_payload_verification": "NOT_ESTABLISHED_BY_CATALOG",
             "account_authorization": "NOT_ESTABLISHED_BY_CATALOG",
         }
+
+
+class SyntheticRoute(CatalogRoute):
+    """C0's finite experimental profile, deliberately separate from RouteReview."""
+
+    @classmethod
+    def from_catalog(cls, entry: dict[str, Any], checked_at: datetime) -> "SyntheticRoute":
+        model = entry.get("id")
+        if model not in MODELS:
+            raise ValueError("MODEL_UNAVAILABLE")
+        name = EXPERIMENT_PROVIDERS[MODELS.index(model)]
+        selected = [p for p in entry.get("providers", []) if p.get("name") == name]
+        if len(selected) != 1:
+            raise ValueError("EXPERIMENT_ROUTE_NOT_UNIQUE")
+        parameters = selected[0].get("supported_parameters", [])
+        cap: Literal["max_tokens", "max_completion_tokens"] = (
+            "max_tokens" if "max_tokens" in parameters else "max_completion_tokens"
+        )
+        result = cls(
+            model=model,
+            provider_name=name,
+            catalog_entry=entry,
+            catalog_sha256=fingerprint(entry),
+            checked_at=checked_at,
+            output_cap_parameter=cap,
+        )
+        result.provider()
+        result.rates()
+        return result
+
+    def provider(self) -> dict[str, Any]:
+        if (
+            self.model not in MODELS
+            or self.provider_name != EXPERIMENT_PROVIDERS[MODELS.index(self.model)]
+        ):
+            raise ValueError("EXPERIMENT_ROUTE_MISMATCH")
+        provider = super().provider()
+        if self.model == MODELS[2]:
+            caps = provider.get("capabilities", {})
+            reasoning = provider.get("reasoning", {})
+            if (
+                not {"reasoning", "reasoning_effort"} <= set(provider["supported_parameters"])
+                or caps.get("reasoning_toggle", {}).get("status") != "supported"
+                or caps.get("reasoning_effort", {}).get("status") != "supported"
+                or "none" not in caps.get("reasoning_effort", {}).get("values", [])
+                or reasoning.get("mandatory") is not False
+                or "none" not in reasoning.get("supported_efforts", [])
+            ):
+                raise ValueError("NON_THINKING_UNSUPPORTED")
+        return provider
+
+    def route(self) -> Route:
+        self.provider()
+        return Route(
+            branch="RU_AGGREGATOR",
+            adapter="polza",
+            execution="PROVIDER",
+            endpoint=ENDPOINT,
+            model=self.model,
+            upstream=self.provider_name,
+            eligibility="EVAL_ONLY",
+        )
+
+    def rates(
+        self, *, excluded_fees: frozenset[str] = frozenset()
+    ) -> tuple[Decimal, Decimal, Decimal]:
+        if any(v is None for v in self.provider()["pricing"].values()):
+            raise ValueError("TARIFF_UNKNOWN")
+        # Audio/search cannot occur in the checked wire surface. Audio cache is
+        # conservatively INCLUDED in full; its applicability is not certified.
+        return super().rates(
+            excluded_fees=frozenset(("audio_per_million", "web_search_per_thousand"))
+        )
+
+    def metadata(self) -> dict[str, Any]:
+        provider = self.provider()
+        return {
+            "model": self.model,
+            "provider_only": self.provider_name,
+            "upstream_semantics": "REQUEST_SELECTOR_NOT_OBSERVATION",
+            "eligibility": "EVAL_ONLY",
+            "admission": "SYNTHETIC_EXPERIMENT",
+            "catalog_sha256": self.catalog_sha256,
+            "checked_at": self.checked_at.isoformat(),
+            "billing_status": "CONDITIONAL_ESTIMATE",
+            "catalog_pricing": provider["pricing"],
+            "rates_rub": [str(v) for v in self.rates()],
+            "call_reservation_rub": str(self.reservation()),
+            "output_cap_parameter": self.output_cap_parameter,
+            "output_cap_scope": "ASSUMED_TOTAL_OUTPUT_INCLUDING_REASONING",
+            "input_bound": "ASSUMED_WIRE_BYTES_PLUS_4096_INCLUDING_IMAGES",
+            "fee_assumptions": {
+                "input_audio_cache_per_million": "INCLUDED_IN_FULL",
+                "audio_per_million": "EXCLUDED_BY_FINITE_PAYLOAD",
+                "web_search_per_thousand": "EXCLUDED_BY_FINITE_PAYLOAD",
+            },
+            "capabilities": {
+                name: {
+                    "status": provider["capabilities"][name]["status"],
+                    "evidence": "CATALOG_DECLARATION_ONLY",
+                }
+                for name in ("tools", "json_schema_strict", "input_image")
+            },
+            "catalog_reasoning": provider.get("reasoning"),
+            "reasoning_profile": "NON_THINKING_EXPLICIT"
+            if self.model == MODELS[2]
+            else "PROVIDER_DEFAULT",
+            "reasoning_wire": {"effort": "none", "enabled": False}
+            if self.model == MODELS[2]
+            else None,
+            "continuation": "TRANSIENT_GOOGLE_SIGNATURE"
+            if self.model == MODELS[1]
+            else "NEUTRAL_TOOL_RESULT",
+            "expected_history_family": "OpenAI" if self.model == MODELS[0] else None,
+            "history_family_evidence": "PRIOR_OWNER_OBSERVATION"
+            if self.model == MODELS[0]
+            else "UNKNOWN_UNTIL_THIS_EVAL",
+            "route_variant": "NOT_OBSERVED",
+            "account_tariff": "NOT_ESTABLISHED_BY_CATALOG",
+            "live_payload_verification": "NOT_ESTABLISHED_BY_CATALOG",
+            "runtime_authorized": False,
+        }
+
+
+ProbeRoute = RouteReview | SyntheticRoute
 
 
 async def bounded_http(
@@ -363,12 +505,27 @@ async def bounded_http(
 class PolzaAdapter:
     def __init__(
         self,
-        review: RouteReview,
+        review: ProbeRoute,
         key: SecretStr,
         *,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
-        self.review = RouteReview.model_validate(review)
+        self.review: ProbeRoute = (
+            SyntheticRoute.model_validate(review)
+            if isinstance(review, SyntheticRoute)
+            else RouteReview.model_validate(review)
+        )
+        self.experimental = isinstance(self.review, SyntheticRoute)
+        self.non_thinking = self.experimental and review.model == MODELS[2]
+        self._history_family: str | None = (
+            ("OpenAI" if review.model == MODELS[0] else None)
+            if self.experimental
+            else review.history.provider
+            if isinstance(review, RouteReview) and review.history
+            else None
+        )
+        self._run_key: tuple[str, str, str] | None = None
+        self._continuation: tuple[ToolCall, str] | None = None
         self._key = key
         self._transport = transport
         self.observation: dict[str, Any] = {}
@@ -385,9 +542,65 @@ class PolzaAdapter:
             max_output_tokens=OUTPUT_TOKENS,
         )
 
+    def clear_continuation(self) -> None:
+        self._run_key = None
+        self._continuation = None
+
+    def continuation_call(self, call: ToolCall) -> dict[str, Any]:
+        wire: dict[str, Any] = {
+            "id": call.call_id,
+            "type": "function",
+            "function": {"name": call.name, "arguments": call.arguments_json},
+        }
+        if self.review.model == MODELS[1]:
+            if self._continuation is None or self._continuation[0] != call:
+                self.clear_continuation()
+                raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_CORRELATION_FAILED")
+            wire["extra_content"] = {"google": {"thought_signature": self._continuation[1]}}
+        return wire
+
+    @staticmethod
+    def google_signature(calls: Any) -> str:
+        if type(calls) is not list or len(calls) != 1 or type(calls[0]) is not dict:
+            raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_CORRELATION_FAILED")
+        extra = calls[0].get("extra_content")
+        if (
+            type(extra) is not dict
+            or set(extra) != {"google"}
+            or type(extra["google"]) is not dict
+            or set(extra["google"]) != {"thought_signature"}
+        ):
+            raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_INVALID")
+        signature = extra["google"]["thought_signature"]
+        if (
+            type(signature) is not str
+            or not signature.strip()
+            or not signature.isprintable()
+            or len(signature.encode()) > SIGNATURE_BYTES
+        ):
+            raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_INVALID")
+        return signature
+
     def wire(self, request: AdapterRequest) -> bytes:
         if request.config.route != self.capabilities.route:
+            self.clear_continuation()
             raise ValueError("ROUTE_MISMATCH")
+        run_key = (
+            request.request.run_id,
+            request.request.deadline.isoformat(),
+            fingerprint(request.config.route.model_dump()),
+        )
+        if run_key != self._run_key:
+            self.clear_continuation()
+            if request.exchanges and self.review.model == MODELS[1]:
+                raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_RUN_MISMATCH")
+            self._run_key = run_key
+        if (
+            self.review.model == MODELS[1]
+            and request.exchanges
+            and (len(request.exchanges) != 1 or len(request.exchanges[0].calls) != 1)
+        ):
+            raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_CORRELATION_FAILED")
         messages: list[dict[str, Any]] = [{"role": "system", "content": request.prompt}]
         for message in request.request.messages:
             messages.append(
@@ -403,14 +616,7 @@ class PolzaAdapter:
                 {
                     "role": "assistant",
                     "content": None,
-                    "tool_calls": [
-                        {
-                            "id": c.call_id,
-                            "type": "function",
-                            "function": {"name": c.name, "arguments": c.arguments_json},
-                        }
-                        for c in exchange.calls
-                    ],
+                    "tool_calls": [self.continuation_call(c) for c in exchange.calls],
                 }
             )
             messages.extend(
@@ -448,7 +654,7 @@ class PolzaAdapter:
         schema_name: str,
     ) -> dict[str, Any]:
         prompt_rate, output_rate, request_rate = self.review.rates()
-        return {
+        body = {
             "model": self.review.model,
             "messages": messages,
             "stream": False,
@@ -468,8 +674,13 @@ class PolzaAdapter:
             },
         }
 
+        if self.non_thinking:
+            body["reasoning"] = {"effort": "none", "enabled": False}
+        return body
+
     def count_input_tokens(self, request: AdapterRequest) -> int:
-        # Conditional upper bound, not tokenizer output. Evidence is mandatory at admission.
+        # Conditional upper bound, not tokenizer output. The admission mode states
+        # whether these bounds are reviewed or experimental assumptions.
         # Entire serialized body includes messages, tools, schema, protocol field names.
         return len(self.wire(request)) + OVERHEAD_TOKENS
 
@@ -503,6 +714,7 @@ class PolzaAdapter:
         return result
 
     async def _send(self, body: bytes, seconds: float, maximum: int) -> AdapterResponse:
+        keep_continuation = False
         try:
             self.check_payload(body)
             deadline = time.monotonic() + seconds
@@ -515,9 +727,14 @@ class PolzaAdapter:
                     maximum=maximum,
                     transport=self._transport,
                 )
-                result = self.decode(raw, history_pending=self.review.history is not None)
-                if self.observation["provider_field_state"] == "ABSENT":
+                result = self.decode(
+                    raw,
+                    history_pending=self.experimental
+                    or (isinstance(self.review, RouteReview) and self.review.history is not None),
+                )
+                if self.experimental or self.observation["provider_field_state"] == "ABSENT":
                     await self.verify_history(result, deadline)
+                keep_continuation = result.kind == "TOOLS"
                 return result
         except TimeoutError:
             self.observation["error_detail"] = "REQUEST_DEADLINE"
@@ -525,12 +742,14 @@ class PolzaAdapter:
         except PolzaFailure as exc:
             self.observation["error_detail"] = exc.detail
             raise
+        finally:
+            if not keep_continuation:
+                self.clear_continuation()
 
     async def verify_history(self, result: AdapterResponse, deadline: float) -> None:
         """Two bounded GETs before returning TOOLS/OUTPUT, including the image path."""
-        review = self.review.history
         identifier = self.observation["generation_id"]
-        if review is None:
+        if not self.experimental and self._history_family is None:
             raise PolzaFailure("ADAPTER_ERROR", "HISTORY_REVIEW_REQUIRED")
         if identifier is None:
             raise PolzaFailure("ADAPTER_ERROR", "GENERATION_ID_INVALID")
@@ -564,7 +783,12 @@ class PolzaAdapter:
                 transport=self._transport,
             )
             data = strict_json(raw.decode())
-            if self._key.get_secret_value() in json.dumps(data, ensure_ascii=False):
+            serialized = json.dumps(data, ensure_ascii=False)
+            if (
+                self._key.get_secret_value() in serialized
+                or self._continuation
+                and self._continuation[1] in serialized
+            ):
                 raise ValueError
             return data
 
@@ -578,7 +802,6 @@ class PolzaAdapter:
                 row["id"] == identifier
                 and row["requestType"] == "chat"
                 and row["status"] == "completed"
-                and row["finalEndpointSlug" if detail else "provider"] == review.provider
                 and money.is_finite()
                 and money == result.cost.amount
                 and all(
@@ -614,9 +837,18 @@ class PolzaAdapter:
                 not in (self.review.model, self.review.model.split("/", 1)[1])
             ):
                 raise ValueError
+            family = selected[0].get("provider")
+            if (
+                type(family) is not str
+                or not re.fullmatch(r"[a-zA-Z0-9_.:/-]{1,128}", family)
+                or self._history_family is not None
+                and family != self._history_family
+            ):
+                raise ValueError
             detail = await get(HISTORY + "/" + identifier)
             if (
-                not matches(detail, detail=True)
+                detail.get("finalEndpointSlug") != family
+                or not matches(detail, detail=True)
                 # Polza documents chat_completions; the owner's three real
                 # 2026-10-29 generations report completions for this same endpoint.
                 or detail.get("apiType") not in ("chat_completions", "completions")
@@ -634,8 +866,17 @@ class PolzaAdapter:
                 raise ValueError
         except (ValueError, TypeError, KeyError, AttributeError, InvalidOperation, RecursionError):
             raise PolzaFailure("ADAPTER_ERROR", "HISTORY_VERIFICATION_FAILED") from None
+        self._history_family = family
         self.observation.update(
-            history_family=review.provider, route_evidence_source="HISTORY_LIST_DETAIL"
+            history_family=family,
+            route_evidence_source="HISTORY_LIST_DETAIL",
+            history_family_evidence=(
+                "PRIOR_OWNER_OBSERVATION"
+                if self.review.model == MODELS[0]
+                else "OBSERVED_DURING_THIS_EVAL"
+            )
+            if self.experimental
+            else "REVIEWED_MAPPING",
         )
 
     def check_payload(self, raw: bytes) -> None:
@@ -657,7 +898,10 @@ class PolzaAdapter:
                     "response_format",
                     "tools",
                     "tool_choice",
+                    *(("reasoning",) if self.non_thinking else ()),
                 }
+                or self.non_thinking
+                and body.get("reasoning") != {"effort": "none", "enabled": False}
                 or body.get("model") != self.review.model
                 or body.get("stream") is not False
                 or type(body.get(cap)) is not int
@@ -677,6 +921,15 @@ class PolzaAdapter:
                     raise ValueError
                 for call in message.get("tool_calls", []):
                     if call.get("type") != "function":
+                        raise ValueError
+                    expected = self.continuation_call(
+                        ToolCall(
+                            call_id=call["id"],
+                            name=call["function"]["name"],
+                            arguments_json=call["function"]["arguments"],
+                        )
+                    )
+                    if call != expected:
                         raise ValueError
                 content = message.get("content")
                 if isinstance(content, list):
@@ -698,6 +951,7 @@ class PolzaAdapter:
 
     async def image_probe(self, body: bytes, seconds: float) -> AdapterResponse:
         """EVAL_ONLY raw image path, never part of ModelAdapter or the text Gateway."""
+        self.clear_continuation()
         self.observation = {}
         self.review.fresh()
         if len(body) > INPUT_BYTES or len(body) + OVERHEAD_TOKENS > INPUT_TOKENS:
@@ -709,6 +963,23 @@ class PolzaAdapter:
             if self._key.get_secret_value().encode() in raw:
                 raise ValueError
             data = strict_json(raw.decode("utf-8"))
+            choices = data["choices"]
+            if type(choices) is not list or len(choices) != 1:
+                raise ValueError
+            message = choices[0]["message"]
+            calls = message.get("tool_calls")
+            if self.review.model == MODELS[1] and calls:
+                signature = self.google_signature(calls)
+                extra = calls[0].pop("extra_content")
+                try:
+                    # A signature reflected in another field must not enter even
+                    # the bounded observation labels or neutral tool arguments.
+                    if signature in json.dumps(data, ensure_ascii=False):
+                        raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_IN_RESPONSE")
+                finally:
+                    calls[0]["extra_content"] = extra
+            if self._continuation and self._continuation[1] in json.dumps(data, ensure_ascii=False):
+                raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_IN_RESPONSE")
             self.observation.update(
                 requested_provider=self.review.provider_name,
                 provider_field_state="PRESENT" if "provider" in data else "ABSENT",
@@ -732,7 +1003,15 @@ class PolzaAdapter:
                 )
             self.observation["observed_body_provider"] = self.observation["observed_provider"]
             if (
-                ("provider" in data and data["provider"] != self.review.response_provider)
+                (
+                    "provider" in data
+                    and (
+                        self.observation["observed_body_provider"] is None
+                        if self.experimental
+                        else isinstance(self.review, RouteReview)
+                        and data["provider"] != self.review.response_provider
+                    )
+                )
                 or ("provider" not in data and not history_pending)
                 or data.get("model") != self.review.model
             ):
@@ -745,7 +1024,12 @@ class PolzaAdapter:
                 output_tokens=usage_data.get("completion_tokens"),
             )
             reasoning = (usage_data.get("completion_tokens_details") or {}).get("reasoning_tokens")
-            self.observation["reasoning_tokens"] = reasoning
+            self.observation["reasoning_tokens"] = reasoning if type(reasoning) is int else None
+            if self.non_thinking:
+                self.observation["reasoning_profile"] = "NON_THINKING_EXPLICIT"
+                self.observation["reasoning_usage_evidence"] = (
+                    "NOT_REPORTED" if reasoning is None else "REPORTED"
+                )
             if reasoning is not None and (
                 type(reasoning) is not int
                 or reasoning < 0
@@ -770,13 +1054,17 @@ class PolzaAdapter:
                 ):
                     raise ValueError
                 cost = Cost(status="CONFIRMED", amount=Decimal(str(amount)), currency="RUB")
-            choices = data["choices"]
-            if len(choices) != 1:
-                raise ValueError
             choice = choices[0]
-            message = choice["message"]
             if self._key.get_secret_value() in str(message):
                 raise ValueError
+            if self.non_thinking and (
+                reasoning not in (None, 0)
+                or any(
+                    message.get(k) not in (None, "", [])
+                    for k in ("reasoning", "reasoning_content", "reasoning_details")
+                )
+            ):
+                raise PolzaFailure("ADAPTER_ERROR", "NON_THINKING_NOT_OBSERVED")
             reason = choice["finish_reason"]
             self.observation["finish_reason"] = (
                 reason if reason in ("stop", "tool_calls", "length", "content_filter") else None
@@ -789,7 +1077,7 @@ class PolzaAdapter:
             if reason == "tool_calls" and calls and not message.get("content"):
                 if any(c.get("type") != "function" for c in calls):
                     raise ValueError
-                return AdapterResponse(
+                result = AdapterResponse(
                     kind="TOOLS",
                     usage=usage,
                     cost=cost,
@@ -802,6 +1090,11 @@ class PolzaAdapter:
                         for c in calls
                     ),
                 )
+                if self.review.model == MODELS[1]:
+                    if len(calls) != 1 or self._run_key is None:
+                        raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_CORRELATION_FAILED")
+                    self._continuation = (result.tool_calls[0], self.google_signature(calls))
+                return result
             if reason != "stop" or calls or not isinstance(message.get("content"), str):
                 raise ValueError
             # Local Gateway validates content; reasoning/other response fields are discarded.
