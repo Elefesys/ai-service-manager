@@ -14,6 +14,7 @@ from asm.ai.polza import MODELS, PolzaAdapter, fingerprint
 from asm.ai.probe import (
     FIXTURES,
     Ledger,
+    catalog,
     catalog_subset,
     evaluate,
     live,
@@ -36,9 +37,16 @@ def test_default_and_plan_do_not_read_secret_or_open_network(monkeypatch, capsys
     for argv in ([], ["--plan"]):
         assert main(argv) == 0
         result = json.loads(capsys.readouterr().out)
-        assert result["cases_per_model"] == 25 and result["max_model_http_calls"] == 54
+        assert result["models"] == [
+            "openai/gpt-6-luna",
+            "google/gemini-3.8-flash",
+            "deepseek/deepseek-v4.1-flash-1017",
+        ]
+        assert result["cases_per_model"] == 25 and result["total_scenarios"] == 75
+        assert result["max_model_http_calls"] == result["hard_call_ceiling"] == 81
+        assert result["max_synthetic_reads"] == 6
         assert result["priced_reservation_rub"] is None and result["proposed_rub_ceiling"] == "100"
-        assert result["total_token_reservation_ceiling"] == 1797120
+        assert result["total_token_reservation_ceiling"] == 2695680
 
 
 @pytest.mark.parametrize("bad", ["repeat", "regex", "image", "size", "tool"])
@@ -62,20 +70,22 @@ def test_invalid_fixtures_rejected(tmp_path, bad):
 
 def test_reviewed_plan_prices_all_calls_and_rejects_more_than_100():
     cases = load_cases(FIXTURES)
-    reviews = (review(), review(MODELS[1]))
+    reviews = tuple(review(model) for model in MODELS)
     assert Decimal(plan(cases, reviews)["priced_reservation_rub"]) == sum(
         r.reservation() * 27 for r in reviews
     )
-    entry = copy.deepcopy(reviews[0].catalog_entry)
-    entry["providers"][0]["pricing"]["prompt_per_million"] = "1000"
-    expensive = review(catalog_entry=entry, catalog_sha256=fingerprint(entry))
+    entry = copy.deepcopy(reviews[2].catalog_entry)
+    entry["providers"][0]["pricing"]["prompt_per_million"] = "100"
+    expensive = review(MODELS[2], catalog_entry=entry, catalog_sha256=fingerprint(entry))
+    assert sum(r.reservation() * 27 for r in reviews[:2]) < 100
+    assert expensive.reservation() * 27 < 100
     with pytest.raises(ValueError, match="PLAN_EXCEEDS_CEILING"):
-        plan(cases, (expensive, reviews[1]))
+        plan(cases, (*reviews[:2], expensive))
 
 
 @pytest.mark.parametrize(
     "approved,calls",
-    [(Decimal(101), 54), (Decimal(0), 54), (Decimal("NaN"), 54), (Decimal(100), 81)],
+    [(Decimal(101), 81), (Decimal(0), 81), (Decimal("NaN"), 81), (Decimal(100), 82)],
 )
 def test_ledger_rejects_invalid_limits(approved, calls):
     with pytest.raises(ValueError):
@@ -142,22 +152,23 @@ def test_cli_requires_authorization_and_review_before_secret(monkeypatch, capsys
 
 def test_reviews_expire_and_missing_evidence_is_not_pass(tmp_path):
     path = tmp_path / "review.json"
-    entries = [review().model_dump(mode="json"), review(MODELS[1]).model_dump(mode="json")]
-    entries[0]["checked_at"] = (datetime.now(UTC) - timedelta(days=2)).isoformat()
+    entries = [review(model).model_dump(mode="json") for model in MODELS]
+    entries[2]["checked_at"] = (datetime.now(UTC) - timedelta(days=2)).isoformat()
     path.write_text(json.dumps(entries))
     with pytest.raises(ValueError, match="REVIEW_EXPIRED"):
         read_reviews(path)
-    entries[0] = review().model_dump(mode="json")
-    entries[0]["schema_tools_evidence"] = ""
+    entries[2] = review(MODELS[2]).model_dump(mode="json")
+    entries[2]["schema_tools_evidence"] = ""
     path.write_text(json.dumps(entries))
     with pytest.raises(ValueError):
         read_reviews(path)
 
 
-async def test_catalog_drift_stops_all_generations():
-    reviews = (review(), review(MODELS[1]))
+@pytest.mark.parametrize("changed_model", range(3))
+async def test_catalog_drift_stops_all_generations(changed_model):
+    reviews = tuple(review(model) for model in MODELS)
     data = {"data": [copy.deepcopy(r.catalog_entry) for r in reviews]}
-    data["data"][1]["providers"][0]["pricing"]["completion_per_million"] = "99"
+    data["data"][changed_model]["providers"][0]["pricing"]["completion_per_million"] = "99"
     methods = []
 
     def handler(req):
@@ -179,39 +190,46 @@ async def test_catalog_drift_stops_all_generations():
 
 async def test_too_small_approved_budget_stops_before_catalog():
     calls = []
+    reviews = tuple(review(model) for model in MODELS)
+    approved = sum(r.reservation() * 27 for r in reviews[:2])
     with pytest.raises(ValueError, match="APPROVED_BUDGET_TOO_SMALL"):
         await live(
             load_cases(FIXTURES),
-            (review(), review(MODELS[1])),
+            reviews,
             ProbeSettings(api_key=KEY),
             io.StringIO(),
-            Decimal("0.01"),
+            approved,
             transport=httpx.MockTransport(lambda r: calls.append(r)),
         )
     assert not calls
 
 
-@pytest.mark.parametrize("missing", ["usage", "cost"])
+@pytest.mark.parametrize("missing", ["usage", "cost", "timeout"])
 async def test_unknown_tool_call_charge_stops_before_read_or_second_http(missing):
-    data = payload(tools=True)
+    third = review(MODELS[2])
+    data = payload(third.model, tools=True)
     if missing == "usage":
         data.pop("usage")
-    else:
+    elif missing == "cost":
         data["usage"].pop("cost_rub")
     count = 0
 
-    def handler(_):
+    def handler(request):
         nonlocal count
         count += 1
+        if missing == "timeout":
+            raise httpx.ReadTimeout("private details", request=request)
         return response(data)
 
     output = io.StringIO()
-    ledger = Ledger(output, Decimal(100), 54)
-    adapter = PolzaAdapter(review(), KEY, transport=httpx.MockTransport(handler))
+    ledger = Ledger(output, Decimal(100), 81)
+    adapter = PolzaAdapter(third, KEY, transport=httpx.MockTransport(handler))
     case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
     row = await run_case(adapter, case, ledger, 0)
     assert count == 1 and row["reads"] == 0 and "COST_UNKNOWN" in row["failures"]
-    assert ledger.reserved == review().reservation()
+    assert ledger.calls == 1 and ledger.reserved == third.reservation()
+    if missing == "timeout":
+        assert "TIMEOUT" in row["failures"]
 
 
 def test_critical_invented_facts_fail_despite_valid_schema():
@@ -230,9 +248,11 @@ def test_critical_invented_facts_fail_despite_valid_schema():
     )
 
 
-async def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection():
+def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
+    tmp_path, monkeypatch, capsys
+):
     cases = load_cases(FIXTURES)
-    reviews = (review(), review(MODELS[1]))
+    reviews = tuple(review(model) for model in MODELS)
     answers = {
         "owner_fact": "Улица Тестовая, 7",
         "owner_hours": "10:00–18:00",
@@ -256,12 +276,16 @@ async def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection
         "tool_injection": "11:00–17:00",
     }
     seen = []
+    models_seen = []
 
     def handler(request):
         seen.append(request.method)
         if request.method == "GET":
             return response({"data": [r.catalog_entry for r in reviews]})
         body = json.loads(request.content)
+        models_seen.append(body["model"])
+        assert body["provider"]["only"] == ["Official Fixture Provider"]
+        assert body["provider"]["allow_fallbacks"] is False
         if isinstance(body["messages"][0]["content"], list):
             url = body["messages"][0]["content"][1]["image_url"]["url"]
             case = next(c for c in cases if c.image_base64 and url.endswith(c.image_base64))
@@ -282,30 +306,66 @@ async def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection
                     }
                 )
         data["choices"][0]["message"]["reasoning"] = "PRIVATE CHAIN OF THOUGHT MUST NOT BE SAVED"
+        # Different observed charges make accidental omission of model three visible.
+        data["usage"]["cost_rub"] = str(Decimal("0.001") * (MODELS.index(body["model"]) + 1))
         return response(data)
 
-    output = io.StringIO()
-    summary = await live(
-        cases,
-        reviews,
-        ProbeSettings(api_key=KEY),
-        output,
-        Decimal(100),
-        transport=httpx.MockTransport(handler),
+    async def controlled_live(*args):
+        return await live(*args, transport=httpx.MockTransport(handler))
+
+    review_path = tmp_path / "review.json"
+    review_path.write_text(json.dumps([r.model_dump(mode="json") for r in reviews]))
+    report_path = tmp_path / "report.jsonl"
+    monkeypatch.setattr("asm.ai.probe.load_secret", lambda _: ProbeSettings(api_key=KEY))
+    monkeypatch.setattr("asm.ai.probe.live", controlled_live)
+    assert (
+        main(
+            [
+                "--live",
+                "--review",
+                str(review_path),
+                "--report",
+                str(report_path),
+                "--approved-rub",
+                "100",
+                "--approval-ref",
+                "OFFLINE-FIXTURE-ONLY",
+                "--source-sha",
+                "a" * 40,
+                "--source-environment",
+                "LOCAL_DESKTOP",
+            ]
+        )
+        == 0
     )
-    assert seen.count("POST") == 54 and seen.count("GET") == 1
-    for model in MODELS:
+    assert "NO_RUNTIME_AUTHORIZATION" in capsys.readouterr().out
+    output = report_path.read_text()
+    events = [json.loads(line) for line in output.splitlines()]
+    summary = events[-1]
+    assert summary["event"] == "summary"
+    assert seen.count("POST") == 81 and seen.count("GET") == 1
+    assert models_seen == [model for model in MODELS for _ in range(27)]
+    assert summary["status"] == "HUMAN_REVIEW_REQUIRED"
+    for i, model in enumerate(MODELS):
         assert summary["models"][model]["completed"] == 25
+        assert summary["models"][model]["n"] == 25
+        cost = Decimal("0.001") * (i + 1) * 27
+        assert Decimal(summary["models"][model]["completed_cost_rub"]) == cost
+        assert Decimal(summary["models"][model]["mean_completed_cost_rub"]) == cost / 25
         assert summary["models"][model]["eligibility"] == "HUMAN_REVIEW_REQUIRED"
     assert summary["selected_model"] is None
-    assert (
-        KEY.get_secret_value() not in output.getvalue()
-        and "CHAIN OF THOUGHT" not in output.getvalue()
-    )
-    events = [json.loads(line) for line in output.getvalue().splitlines()]
-    assert len([r for r in events if r["event"] == "case" and r["final"]]) == 50
+    assert KEY.get_secret_value() not in output and "CHAIN OF THOUGHT" not in output
+    case_rows = [r for r in events if r["event"] == "case"]
+    assert len([r for r in case_rows if r["final"]]) == 75
+    assert sum(r["reads"] for r in case_rows) == 6
+    assert all(sum(r["reads"] for r in case_rows if r["model"] == m) == 2 for m in MODELS)
+    recorded_plan = next(r for r in events if r["event"] == "plan")
+    assert recorded_plan["route_reviews"] == [r.catalog_sha256 for r in reviews]
     reservations = [Decimal(r["rub_reserved"]) for r in events if r["event"] == "reserved"]
     assert reservations == sorted(set(reservations))
+    assert len(reservations) == 81
+    assert reservations[-1] == sum(r.reservation() * 27 for r in reviews)
+    assert str(reservations[-1]) == recorded_plan["priced_reservation_rub"]
 
 
 def test_missing_exact_candidate_not_replaced_by_other_models():
@@ -313,8 +373,8 @@ def test_missing_exact_candidate_not_replaced_by_other_models():
         catalog_subset({"data": [{"id": "another/model"}]})
 
 
-async def test_first_route_failure_stops_both_models_and_retains_unknown_charge():
-    reviews = (review(), review(MODELS[1]))
+async def test_first_route_failure_stops_all_models_and_retains_unknown_charge():
+    reviews = tuple(review(model) for model in MODELS)
     seen = []
 
     def handler(request):
@@ -341,6 +401,12 @@ async def test_first_route_failure_stops_both_models_and_retains_unknown_charge(
     assert case["calls"][0]["observed_provider"] == "wrong-upstream"
     assert case["calls"][0]["error_detail"] == "RETURNED_ROUTE_MISMATCH"
     assert sum(e["event"] == "reserved" for e in events) == 1
+    for model in MODELS:
+        stats = summary["models"][model]
+        assert stats["completed"] == 0 and stats["eligibility"] == "FAILED_OR_INCOMPLETE"
+        assert stats["cost_status"] == "UNKNOWN" and stats["completed_cost_rub"] is None
+    assert summary["models"][MODELS[2]]["n"] == 0
+    assert summary["models"][MODELS[2]]["p95_seconds"] is None
 
 
 def test_existing_receipt_cannot_be_reused_or_overwritten(tmp_path, monkeypatch, capsys):
@@ -353,16 +419,157 @@ def test_existing_receipt_cannot_be_reused_or_overwritten(tmp_path, monkeypatch,
     assert KEY.get_secret_value() not in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("amount", ["NaN", "Infinity", "-1"])
+@pytest.mark.parametrize("amount", ["NaN", "Infinity", "-1", "100.01"])
 async def test_live_invalid_budget_fails_admission_without_catalog(amount):
     calls = []
     with pytest.raises(ValueError, match="APPROVAL_LIMIT"):
         await live(
             load_cases(FIXTURES),
-            (review(), review(MODELS[1])),
+            tuple(review(model) for model in MODELS),
             ProbeSettings(api_key=KEY),
             io.StringIO(),
             Decimal(amount),
             transport=httpx.MockTransport(lambda r: calls.append(r)),
         )
     assert not calls
+
+
+@pytest.mark.parametrize("change", ["missing", "duplicate", "other", "order", "empty"])
+async def test_exact_three_reviews_required_before_http_and_secret(
+    tmp_path, monkeypatch, capsys, change
+):
+    reviews = [review(model) for model in MODELS]
+    if change == "missing":
+        reviews.pop()
+    elif change == "duplicate":
+        reviews[2] = reviews[1]
+    elif change == "other":
+        reviews[2] = review("other/model")
+    elif change == "order":
+        reviews.reverse()
+    else:
+        reviews.clear()
+    path = tmp_path / "review.json"
+    path.write_text(json.dumps([r.model_dump(mode="json") for r in reviews]))
+    monkeypatch.setattr("asm.ai.probe.load_secret", lambda _: pytest.fail("read secret"))
+    assert main(["--live", "--review", str(path)]) == 2
+    assert "EXACT_THREE_MODELS_REQUIRED" in capsys.readouterr().out
+    calls = []
+    with pytest.raises(ValueError, match="EXACT_THREE_MODELS_REQUIRED"):
+        await live(
+            load_cases(FIXTURES),
+            tuple(reviews),
+            ProbeSettings(api_key=KEY),
+            io.StringIO(),
+            Decimal(100),
+            transport=httpx.MockTransport(lambda r: calls.append(r)),
+        )
+    assert not calls
+
+
+@pytest.mark.parametrize(
+    "change,error",
+    [
+        ("stale", "REVIEW_EXPIRED"),
+        ("fingerprint", "CATALOG_DRIFT"),
+        ("unofficial", "OFFICIAL_ROUTE_UNKNOWN"),
+        ("capability", "CAPABILITY_UNKNOWN"),
+        ("image", "IMAGE_CAPABILITY_UNKNOWN"),
+        ("tariff", "TARIFF_UNKNOWN"),
+        ("price", "PLAN_EXCEEDS_CEILING"),
+    ],
+)
+async def test_invalid_third_review_stops_before_any_http(change, error):
+    reviews = [review(model) for model in MODELS]
+    entry = copy.deepcopy(reviews[2].catalog_entry)
+    provider = entry["providers"][0]
+    if change == "unofficial":
+        provider["is_unofficial"] = True
+    elif change == "capability":
+        provider["capabilities"]["json_schema_strict"]["status"] = "unknown"
+    elif change == "image":
+        entry["architecture"]["input_modalities"] = ["text"]
+    elif change == "tariff":
+        provider["pricing"]["unknown_fee"] = "1"
+    elif change == "price":
+        provider["pricing"]["prompt_per_million"] = "100"
+    reviews[2] = review(
+        MODELS[2],
+        catalog_entry=entry,
+        catalog_sha256="0" * 64 if change == "fingerprint" else fingerprint(entry),
+        checked_at=datetime.now(UTC) - timedelta(days=2 if change == "stale" else 0),
+    )
+    calls = []
+    with pytest.raises(ValueError, match=error):
+        await live(
+            load_cases(FIXTURES),
+            tuple(reviews),
+            ProbeSettings(api_key=KEY),
+            io.StringIO(),
+            Decimal(100),
+            transport=httpx.MockTransport(lambda r: calls.append(r)),
+        )
+    assert not calls
+
+
+async def test_82nd_model_attempt_is_rejected_before_http():
+    third = review(MODELS[2])
+    case = next(c for c in load_cases(FIXTURES) if c.id == "owner_fact")
+    ledger = Ledger(io.StringIO(), Decimal(100), 81)
+    for n in range(81):
+        ledger.reserve(third, case, n)
+    calls = []
+    adapter = PolzaAdapter(third, KEY, transport=httpx.MockTransport(lambda r: calls.append(r)))
+    result = await run_case(adapter, case, ledger, 81)
+    assert result["failures"] == ["PROBE_INVALID"] and not calls
+    assert ledger.calls == 81 and ledger.reserved == 81 * third.reservation()
+
+
+def test_preflight_cli_gets_all_three_catalog_entries_once(tmp_path, monkeypatch):
+    reviews = tuple(review(model) for model in MODELS)
+    seen = []
+
+    def handler(request):
+        seen.append(request.method)
+        return response({"data": [r.catalog_entry for r in reversed(reviews)]})
+
+    async def controlled_catalog(settings):
+        return await catalog(settings, transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("asm.ai.probe.load_secret", lambda _: ProbeSettings(api_key=KEY))
+    monkeypatch.setattr("asm.ai.probe.catalog", controlled_catalog)
+    path = tmp_path / "catalog.json"
+    assert (
+        main(["--preflight", "--approval-ref", "OFFLINE-FIXTURE-ONLY", "--report", str(path)]) == 0
+    )
+    assert seen == ["GET"]
+    entries = json.loads(path.read_text())["entries"]
+    assert [e["catalog_entry"]["id"] for e in entries] == list(MODELS)
+    assert [e["catalog_sha256"] for e in entries] == [r.catalog_sha256 for r in reviews]
+    assert KEY.get_secret_value() not in path.read_text()
+
+
+@pytest.mark.parametrize("duplicate", [False, True])
+async def test_missing_or_duplicate_third_catalog_entry_blocks_generations(duplicate):
+    reviews = tuple(review(model) for model in MODELS)
+    entries = [r.catalog_entry for r in reviews]
+    if duplicate:
+        entries.append(entries[2])
+    else:
+        entries.pop()
+    seen = []
+
+    def handler(request):
+        seen.append(request.method)
+        return response({"data": entries})
+
+    with pytest.raises(ValueError, match="MODEL_UNAVAILABLE"):
+        await live(
+            load_cases(FIXTURES),
+            reviews,
+            ProbeSettings(api_key=KEY),
+            io.StringIO(),
+            Decimal(100),
+            transport=httpx.MockTransport(handler),
+        )
+    assert seen == ["GET"]

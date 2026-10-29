@@ -29,7 +29,11 @@ ENDPOINT = "https://polza.ai/api/v1/chat/completions"
 CATALOG = (
     "https://polza.ai/api/v1/models?type=chat&include_providers=true&include_capabilities=true"
 )
-MODELS = ("openai/gpt-6-luna", "google/gemini-3.8-flash")
+MODELS = (
+    "openai/gpt-6-luna",
+    "google/gemini-3.8-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
+)
 INPUT_TOKENS = 32768
 OUTPUT_TOKENS = 512
 INPUT_BYTES = 24576

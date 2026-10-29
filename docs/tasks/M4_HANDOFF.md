@@ -95,6 +95,21 @@ Gateway/contracts/fake/prompt/schema, CI/Docker, UI, DB/migrations и M3 wiring
 допуск владельца на платную пробу. ВМ/Telegram/БД/runtime остаются вне этого шага.
 C1/C2/C3/C5/C6/C8 и M4.3 HOLD; одна матрица A01–A08 ниже без изменений.
 
+### Receipt C4 — THIRD-CANDIDATE-R1 / 2026-10-29
+
+**REVIEW / PAID PROBE NOT RUN; C4 HOLD для C0.** От seed
+`0563d6d3916a4557ab0526f61d437d4746e7fb28` в `c4/m4-2-probe-third-r1`
+подготовлены ровно три кандидата:75 scenarios/81 calls/6 READ,
+2695680 tokens и общий потолок100 RUB; fixtures/контракты не менялись.
+201 targeted tests, Ruff/format, mypy71, offline plan и diff check PASS.
+Controlled HTTP через CLI/Gateway:75 finals,81 POST,1 GET,6 READ,N=25 на модель;
+third-review/fingerprint, общий бюджет,82-я попытка и UNKNOWN/timeout negatives PASS.
+План/команды и private key процедура — в [runbook](../runbooks/M4_POLZA_PROBE.md).
+Actual account catalog, official routes/native schema+tools/image/token/billing
+proof и owner paid admission остаются непроверенными; selected_model=null.
+Full CI нового кандидата не запускался: C0 review → FF в существующий PR39 → CI.
+PR39/main не сдвинуты; новый PR/merge/paid calls/VM activation не выполнялись.
+
 ### Исторический receipt C4 — двухмодельная подготовка / 2026-10-29
 
 **REVIEW / PAID PROBE NOT RUN; C4 HOLD для C0.** В разрешённом write-set

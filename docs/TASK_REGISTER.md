@@ -16,7 +16,7 @@ C0 source/evidence review завершён; не независимый C8, не
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; read barrier до rotation и real401 negative приняты; исходный FAIL/diagnostic history в PR38, C5 HOLD |
-| M4.2-PROBE | IN_PROGRESS — единственная выдача C4 M4.2-PROBE-THIRD-CANDIDATE-R1: добавить выбранный владельцем deepseek/deepseek-v4.1-flash-1017; тот же набор75 scenarios / ≤81 calls / общий потолок100 RUB. Repair base9024b8e… и его CI40822050930 11/11 SUCCESS приняты только для подготовки. Key/top-up подтверждены владельцем; account preflight/paid probe NOT RUN; новый candidate/evidence ещё не получен |
+| M4.2-PROBE | REVIEW / PAID PROBE NOT RUN — C4 M4.2-PROBE-THIRD-CANDIDATE-R1 подготовлен в отдельной c4/m4-2-probe-third-r1 от seed0563d6d…: три кандидата,75 scenarios / ≤81 calls / ≤6 READ / общий потолок100 RUB;201 targeted PASS, Ruff/format/mypy71 и offline plan PASS. Controlled HTTP CLI:75 finals/81 POST/1 GET/6 READ,N=25 для каждой модели; это не live provider evidence. Account catalog/routes/tariff и owner paid admission остаются UNKNOWN/NOT RUN. C0 source review → FF в существующий PR39 → один штатный full CI нового кандидата; PR39/main не сдвинуты C4, C4 HOLD |
 | M4.3-CONTEXT | TODO / HOLD: актуальный M3 context и необходимые read-only tools после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD: durable AI run и guarded Telegram consumer; C2/C3 по точной дельте |
 | M4.3-QUALITY | TODO: независимый scoped C8/eval; авторские тесты внутри каждой задачи |

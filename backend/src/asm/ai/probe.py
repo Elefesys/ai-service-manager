@@ -47,7 +47,7 @@ from asm.ai.polza import (
 from asm.ai.settings import ProbeSettings, load_secret
 
 FIXTURES = Path("tests/fixtures/m4_probe_cases.json")
-CALL_CEILING = 80
+CALL_CEILING = 81
 RUB_CEILING = Decimal(100)
 DURATION = 1800.0
 CASE_SECONDS = 60.0
@@ -138,35 +138,43 @@ def read_reviews(path: Path) -> tuple[RouteReview, ...]:
         raise ValueError("REVIEW_SIZE")
     strict_json(raw.decode())
     reviews = TypeAdapter(tuple[RouteReview, ...]).validate_json(raw)
+    validate_reviews(reviews)
+    return reviews
+
+
+def validate_reviews(reviews: tuple[RouteReview, ...]) -> None:
     if tuple(r.model for r in reviews) != MODELS:
-        raise ValueError("EXACT_TWO_MODELS_REQUIRED")
+        raise ValueError("EXACT_THREE_MODELS_REQUIRED")
     for review in reviews:
         review.fresh()
         review.route()
         review.reservation()
-    return reviews
 
 
 def plan(cases: tuple[Case, ...], reviews: tuple[RouteReview, ...] = ()) -> dict[str, Any]:
+    if reviews:
+        validate_reviews(reviews)
     rows = schedule(cases)
     calls = sum(c.max_calls for c in rows)
+    total_calls = calls * len(MODELS)
     total = sum((r.reservation() * calls for r in reviews), Decimal(0)) if reviews else None
-    if calls * 2 > CALL_CEILING or total is not None and total > RUB_CEILING:
+    if total_calls > CALL_CEILING or total is not None and total > RUB_CEILING:
         raise ValueError("PLAN_EXCEEDS_CEILING")
     return {
         "status": "REVIEW / PAID PROBE NOT RUN",
         "fixture_sha256": fingerprint([c.model_dump(mode="json") for c in cases]),
         "models": MODELS,
         "cases_per_model": len(rows),
+        "total_scenarios": len(rows) * len(MODELS),
         "base_text_per_model": 20,
         "critical_repeats_per_model": len(REPEATS),
         "images_per_model": 2,
-        "max_model_http_calls": calls * 2,
+        "max_model_http_calls": total_calls,
         "hard_call_ceiling": CALL_CEILING,
-        "max_synthetic_reads": 4,
+        "max_synthetic_reads": sum(c.mode == "tool" for c in rows) * len(MODELS),
         "input_tokens_per_call": INPUT_TOKENS,
         "output_tokens_per_call": OUTPUT_TOKENS,
-        "total_token_reservation_ceiling": calls * 2 * (INPUT_TOKENS + OUTPUT_TOKENS),
+        "total_token_reservation_ceiling": total_calls * (INPUT_TOKENS + OUTPUT_TOKENS),
         "wire_input_bytes_per_call": INPUT_BYTES,
         "wire_output_bytes_per_call": OUTPUT_BYTES,
         "case_seconds": CASE_SECONDS,
@@ -492,7 +500,7 @@ def summaries(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "p50_seconds": times[math.ceil(len(times) * 0.5) - 1] if times else None,
             "p95_seconds": times[math.ceil(len(times) * 0.95) - 1] if times else None,
             "completed": len(completed),
-            "completed_cost_rub": str(cost),
+            "completed_cost_rub": str(cost) if completed else None,
             "mean_completed_cost_rub": str(cost / len(completed)) if completed else None,
             "cost_status": "CONFIRMED" if completed else "UNKNOWN",
             "eligibility": "FAILED_OR_INCOMPLETE"
@@ -502,7 +510,7 @@ def summaries(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "event": "summary",
         "status": "HUMAN_REVIEW_REQUIRED"
-        if len(rows) == 50 and all(not r["failures"] for r in rows)
+        if len(rows) == 25 * len(MODELS) and all(not r["failures"] for r in rows)
         else "FAILED_OR_INCOMPLETE",
         "models": summary,
         "selected_model": None,
@@ -519,6 +527,8 @@ async def live(
     *,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> dict[str, Any]:
+    if not reviews:
+        raise ValueError("EXACT_THREE_MODELS_REQUIRED")
     proposal = plan(cases, reviews)
     ledger = Ledger(output, approved, proposal["max_model_http_calls"])
     if Decimal(proposal["priced_reservation_rub"]) > approved:
@@ -581,7 +591,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if not args.approval_ref or not args.report:
             raise ValueError("EXPLICIT_APPROVAL_AND_NEW_REPORT_REQUIRED")
-        if args.live and (len(reviews) != 2 or args.approved_rub is None):
+        if args.live and (len(reviews) != len(MODELS) or args.approved_rub is None):
             raise ValueError("REVIEW_AND_BUDGET_REQUIRED")
         if args.live and (
             not re.fullmatch(r"[0-9a-f]{40}", args.source_sha or "") or not args.source_environment

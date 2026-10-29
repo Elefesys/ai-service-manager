@@ -158,7 +158,8 @@ def gateway(adapter, *, tools=False, limits=None, deadline=None):
     return ModelGateway(cfg, request, adapter)
 
 
-async def test_real_gateway_native_schema_tools_round_trip():
+@pytest.mark.parametrize("model", MODELS)
+async def test_real_gateway_native_schema_tools_round_trip(model):
     calls = []
 
     def handler(request):
@@ -168,6 +169,7 @@ async def test_real_gateway_native_schema_tools_round_trip():
         assert request.headers["authorization"] == "Bearer " + KEY.get_secret_value()
         assert body["provider"]["only"] == ["Official Fixture Provider"]
         assert body["provider"]["allow_fallbacks"] is False
+        assert body["model"] == model
         assert body["response_format"]["json_schema"] == {
             "name": "conversation_result_v1",
             "strict": True,
@@ -181,9 +183,9 @@ async def test_real_gateway_native_schema_tools_round_trip():
                 "tool_call_id": "read-1",
                 "content": '{"fact":"Модельная, 12"}',
             }
-        return response(payload(tools=len(calls) == 1))
+        return response(payload(model, tools=len(calls) == 1))
 
-    adapter = PolzaAdapter(review(), KEY, transport=httpx.MockTransport(handler))
+    adapter = PolzaAdapter(review(model), KEY, transport=httpx.MockTransport(handler))
     gw = gateway(adapter, tools=True)
     first = await gw.call()
     assert first.kind == "TOOLS" and first.budget.reads_reserved == 1
@@ -468,15 +470,18 @@ async def test_unapproved_endpoint_rejected_without_transport():
     assert not calls
 
 
-async def test_observed_route_is_reported_as_mismatch_not_claimed_as_expected():
-    data = payload()
+@pytest.mark.parametrize("model", MODELS)
+async def test_observed_route_is_reported_as_mismatch_not_claimed_as_expected(model):
+    data = payload(model)
     data["provider"] = "unexpected-upstream"
-    adapter = PolzaAdapter(review(), KEY, transport=httpx.MockTransport(lambda _: response(data)))
+    adapter = PolzaAdapter(
+        review(model), KEY, transport=httpx.MockTransport(lambda _: response(data))
+    )
     result = await gateway(adapter).call()
     assert result.result is None and result.error == "ADAPTER_ERROR"
     assert adapter.observation == {
         "observed_provider": "unexpected-upstream",
-        "observed_model": MODELS[0],
+        "observed_model": model,
         "error_detail": "RETURNED_ROUTE_MISMATCH",
     }
 

@@ -25,21 +25,23 @@ READ round trips, плюс три critical repeats и две заранее со
 128×128 на каждого кандидата. PNG bytes и SHA-256 находятся в JSON fixture.
 Image calls — только отдельная EVAL_ONLY проверка, не расширение text Gateway.
 
-| Предел | Значение для обоих кандидатов |
+| Предел | Значение для трёх кандидатов суммарно |
 |---|---|
-| Модели | ровно `openai/gpt-6-luna`, `google/gemini-3.8-flash` |
-| Сценарии | 25 на модель, 50 всего |
-| Model HTTP | максимум 54; отдельный жёсткий потолок 80 не заполняется повторами |
+| Модели | ровно в этом порядке: `openai/gpt-6-luna`, `google/gemini-3.8-flash`, `deepseek/deepseek-v4.1-flash-1017` |
+| Сценарии | 25 на модель, 75 всего |
+| Model HTTP | 27 на модель, максимум и жёсткий потолок 81; retry/repair calls отсутствуют |
 | Catalog HTTP | один GET на preflight; один повторный GET на live admission |
-| READ | максимум 4, только локальные fixture facts |
+| READ | максимум 6, только локальные fixture facts |
 | Вход / выход | 32768 / 512 tokens на call |
-| Общий token reservation | максимум 1797120 tokens |
+| Общий token reservation | максимум 2695680 tokens |
 | Wire input / response | 24576 / 32768 bytes на call |
 | Сценарий / весь live запуск | 60 / 1800 секунд, включая каталог |
-| Предложение бюджета | максимум 100 RUB; сейчас не разрешено |
+| Предложение бюджета | максимум 100 RUB на все три модели вместе; сейчас не разрешено |
 
 Plan без account review печатает `priced_reservation_rub: null`, UNKNOWN.
 Публичный ценник из исследования не заменяет актуальный account tariff.
+Добавление DeepSeek согласовано C0 в M4.2-PROBE-THIRD-CANDIDATE-R1; это finite
+allowlist, не auto-selection или fallback. Набор fixtures не сокращён.
 
 ## Отдельный ключ после допуска C0
 
@@ -83,12 +85,17 @@ Windows ACL автоматически: до подтверждения ACL за
 .venv/bin/python -m asm.ai.probe --preflight --approval-ref C0-APPROVAL-ID --report .env.m4-probe.catalog.json
 ```
 
-Из отчёта reviewer создаёт `.env.m4-probe.review.json`: JSON-массив из **двух**
+Один GET получает каталог сразу для всех трёх кандидатов. Прежний двухмодельный
+preflight не использовать. Из отчёта reviewer создаёт `.env.m4-probe.review.json`:
+JSON-массив из **трёх**
 RouteReview в порядке моделей выше. Для каждого копируются `catalog_entry`,
 `catalog_sha256` и `checked_at`; добавляются поля ниже. Это trusted configuration,
 не вывод модели. Пустое поле/неизвестный факт означает BLOCKED; заполнять текстом
 «supported» ради обхода допуска нельзя. Review действителен 24 часа, live повторно
 получает account catalog и сравнивает fingerprint целиком для каждой модели.
+Неполный, дублированный, переставленный либо другой набор reviews отклоняется.
+Для DeepSeek нужны те же route/schema/tools/image/token/billing evidence;
+наличие ID в whitelist ключа или публичной карточке не подтверждает capability.
 
 | Поле | Что должен подтвердить reviewer |
 |---|---|
@@ -134,7 +141,9 @@ token на byte и скрытое framing/schema преобразование (�
 увеличивать лимит или называть эвристику гарантией нельзя. После каждого ответа
 usage сравнивается с границей; неизвестный usage не даёт PASS.
 
-До генераций рассчитывается полный резерв 27 calls для каждой модели. Цена call:
+До HTTP live admission рассчитывается полный резерв 27 calls для каждой из трёх
+моделей — сумма всех 81 calls. Общий резерв должен помещаться и в100 RUB, и в
+фактически разрешённую сумму; бюджет не выделяется заново каждой модели. Цена call:
 `(32768 * input_rate + 512 * output_rate) / 1000000 + request_rate` с округлением
 вверх до 1e-9 RUB. Input складывает prompt/image/cache-read/cache-write ставки;
 output складывает completion/reasoning; request складывает per_request и
@@ -184,6 +193,8 @@ Latency — whole-scenario elapsed, p50/p95 nearest-rank и N; не время �
 Стоимость completed scenarios и их средняя сравниваются только после ручного
 прохождения всех expectations. Regex checks — предварительный фильтр, не доказательство
 истинности prose; C0 проверяет выдуманные факты, семантику отрицаний и handoff.
+При полном прохождении ожидаются75 finals,81 POST,6 READ и N=25 на каждую модель.
+Для модели без completed scenarios стоимость остаётся null/UNKNOWN, не нулём.
 На малой выборке не делать production вывод. До такого review selected_model=null;
 затем C0 фиксирует одного прошедшего кандидата с минимальной стоимостью или blocker.
 
