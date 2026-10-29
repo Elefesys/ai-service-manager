@@ -6,7 +6,46 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-PROBE-THIRD-CANDIDATE-R1 / C4 / 2026-10-29
+## Текущая выдача — M4.2-PROBE-WINDOWS-LOCK-R1 / C0 / 2026-10-29
+
+**Результат:** установить frozen зависимости пробника на Windows x64 владельца
+без MSVC. На CPython3.13.2 `uv sync --frozen` потребовал C compiler для cffi.
+Проверка lock подтвердила две записи только с Linux wheels: cffi2.0.0 и
+argon2-cffi-bindings25.1.0; у PyPI есть Windows x64 artifacts тех же версий.
+
+- Repository: Elefesys/ai-service-manager; branch **c0/m4-probe-windows-lock-r1**,
+  отдельный checkout; sole parent/source base **4f86e7fe1d014ddbbe87ca734d868522599fe7ba**,
+  tree **e8c48d49de8cdcbc6090bf1155dfc330d2c3a889**.
+  Accepted actual main остаётся51d7d73752128715c6d98157445167c0cc0d894d.
+- C0 разрешает ровно четыре paths: `uv.lock` — только два дополнительных Windows
+  x64 wheel URL/hash/size; `docs/runbooks/M4_POLZA_PROBE.md` — Windows offline
+  инструкция; CURRENT в `docs/TASK_REGISTER.md`; этот верхний блок handoff.
+  Python/package versions, dependency graph, прежние hashes/artifacts, source,
+  schema/fixtures/tests и CI не менять. Основание: IMPL-001 frozen stack и
+  текущий IMPL-004; новые функции/ADR не вводятся.
+- Проверка: получить negative выбора Windows wheels на исходном lock; positive
+  после дополнения, все59 packages без source builds. Проверить SHA-256 реально
+  скачанных двух wheel против PyPI и что TOML меняется только этими artifacts.
+  Frozen Linux install и offline plan; native Windows результат даёт владелец.
+- История CI: C4 candidate принят по source и FF в Draft PR39; run40841849732,
+  attempt1: **10/11 SUCCESS, foundation FAILURE**. Unit2398/155subtests PASS;
+  PG803PASS/1setup ERROR на control[expired]: `RuntimeDatabase.check`,
+  `asyncio.timeout(3)` при psycopg connect. Следующий evidence step REFUSED.
+  Причина задержки UNKNOWN; этот repair её не исправляет. PR39/main не сдвигать
+  и полный CI не перезапускать ради случайного PASS. Следующий C0 шаг после
+  Windows подготовки — узкая диагностика CI blocker; runtime/preflight/live HOLD.
+
+**Receipt C0:** Windows cross-platform `uv sync --frozen --python 3.13
+--python-platform x86_64-pc-windows-msvc --no-build --no-install-project --dry-run
+--offline`: до исправления отказ на argon2 bindings, после —59 packages PASS.
+Оба скачанных wheel SHA-256 совпали с PyPI; сравнение TOML подтвердило неизменность
+всего остального. uv0.13.4 / CPython3.13.16 Linux: frozen install и
+`uv pip check --python .venv/bin/python` PASS; `.venv/bin/python -m asm.ai.probe
+--plan` PASS (75 scenarios/81 calls/6 READ, priced reservation null/UNKNOWN).
+Native Windows installation **NOT RUN здесь**, ожидается от владельца.
+API/secret/paid calls отсутствуют; M4.2 остаётся BLOCKED, остальные исполнители HOLD.
+
+## История — M4.2-PROBE-THIRD-CANDIDATE-R1 / C4 / 2026-10-29
 
 **Результат и польза:** включить выбранный владельцем
 `deepseek/deepseek-v4.1-flash-1017` в то же ограниченное сравнение с

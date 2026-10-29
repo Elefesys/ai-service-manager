@@ -2,39 +2,34 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.1 INTEGRATED / VERIFIED; M4.2-PROBE third candidate R1 / 2026-10-29
+## CURRENT — M4.1 INTEGRATED / VERIFIED; M4.2 Windows lock repair / 2026-10-29
 
 Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
-**411636a3614529077f6d0d230c62d11f69da600f**. PR #38 слит владельцем;
-дерево равно принятому candidate85d32562bdce37ef38fea1305dfe249f66f41b65.
-[Main CI40811295940](https://github.com/Elefesys/ai-service-manager/actions/runs/40811295940),
-push/main, attempt1: **11/11 SUCCESS**. Candidate CI40768758591 также11/11 SUCCESS.
-C0 source/evidence review завершён; не независимый C8, не live LLM acceptance.
+**411636a3614529077f6d0d230c62d11f69da600f**; PR38 слит владельцем,
+[main CI40811295940](https://github.com/Elefesys/ai-service-manager/actions/runs/40811295940)
+11/11 SUCCESS. Это contract/fake acceptance, не live LLM.
 
 | Task | Status / ближайший результат |
 |---|---|
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
-| C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; read barrier до rotation и real401 negative приняты; исходный FAIL/diagnostic history в PR38, C5 HOLD |
-| M4.2-PROBE | REVIEW / PAID PROBE NOT RUN — C4 M4.2-PROBE-THIRD-CANDIDATE-R1 подготовлен в отдельной c4/m4-2-probe-third-r1 от seed0563d6d…: три кандидата,75 scenarios / ≤81 calls / ≤6 READ / общий потолок100 RUB;201 targeted PASS, Ruff/format/mypy71 и offline plan PASS. Controlled HTTP CLI:75 finals/81 POST/1 GET/6 READ,N=25 для каждой модели; это не live provider evidence. Account catalog/routes/tariff и owner paid admission остаются UNKNOWN/NOT RUN. C0 source review → FF в существующий PR39 → один штатный full CI нового кандидата; PR39/main не сдвинуты C4, C4 HOLD |
+| C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; read barrier до rotation и real401 negative приняты; C5 HOLD |
+| M4.2-PROBE | BLOCKED / PAID PROBE NOT RUN. C4 three-model candidate4f86e7fe1d014ddbbe87ca734d868522599fe7ba принят C0 по source и FF в Draft PR39; 75 scenarios / 81 calls / 6 READ / общий потолок100 RUB. CI40841849732:10/11 SUCCESS, foundation setup TimeoutError подключения PostgreSQL; причина задержки не установлена. C0 M4.2-PROBE-WINDOWS-LOCK-R1 исправляет отдельную подтверждённую проблему установки: два Windows x64 wheel в frozen lock без изменения версий. Проверки выбора пакетов выполнены, установка на ПК владельца ожидается; account facts/paid admission NOT RUN |
 | M4.3-CONTEXT | TODO / HOLD: актуальный M3 context и необходимые read-only tools после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD: durable AI run и guarded Telegram consumer; C2/C3 по точной дельте |
 | M4.3-QUALITY | TODO: независимый scoped C8/eval; авторские тесты внутри каждой задачи |
 | M4-ACCEPTANCE | TODO: bounded synthetic live, A08, actual main CI и передача M5 |
 
-Единственная текущая выдача/точный write-set и матрица A01–A08 —
-[M4_HANDOFF](tasks/M4_HANDOFF.md). Ветка **c4/m4-2-probe-third-r1**, C0 docs seed
-поверх reviewed preparation **9024b8e062c712e1e69124db7d7eea5ee2de9491**;
-actual main выше остаётся принятым. Сохранить ancestry; PR39 пока Draft на repair
-base. После C4 return/source review C0 переносит candidate в PR39 для full CI.
-C1/C2/C3/C5/C6/C8 HOLD. Новый конечный план75 scenarios/81 calls заменяет50/54
-и потолок80; общий денежный потолок100 ₽ не повышается. Пока без платного допуска.
-Владелец сообщил о создании ключа и пополнении100 ₽; secret/account facts не получены.
-После R1 — private Windows placement, единый preflight и финальный бюджет;
-только synthetic TEST data, accepted environment LOCAL/asm_local не переименовывать.
-M3 final acceptance ниже и M3_HANDOFF сохранены. Нет runtime/Telegram wiring,
-новых миграций, VM activation, прямого API adapter, RAG/Vision runtime или registry.
-Полные receipts/CI evidence остаются в PR; не добавлять commit ради своего SHA.
+Единственная текущая выдача — **M4.2-PROBE-WINDOWS-LOCK-R1 / C0**,
+ветка **c0/m4-probe-windows-lock-r1**, отдельный checkout от
+**4f86e7fe1d014ddbbe87ca734d868522599fe7ba**. Точный write-set/receipt —
+[M4_HANDOFF](tasks/M4_HANDOFF.md); матрица A01–A08 сохранена.
+C1–C6/C8 HOLD, кроме этой ограниченной работы C0. PR39/main не двигать:
+Windows-only repair не является исправлением PostgreSQL CI, поэтому повторный
+полный CI ради возможного PASS не запускается. После текущего offline шага —
+ограниченная диагностика CI blocker, затем account preflight по новому допуску.
+Ключ остаётся у владельца; до Windows ACL не записывать secret. Нет API calls,
+VM/Telegram/БД/runtime activation или разрешения на расходы.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

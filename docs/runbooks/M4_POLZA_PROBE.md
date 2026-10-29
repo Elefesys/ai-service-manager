@@ -19,6 +19,29 @@ uv sync --frozen
 git diff --check
 ```
 
+Windows x64: после checkout точного SHA, переданного C0, выполнить из корня
+репозитория в обычном PowerShell. Нужны Git, uv и 64-битный CPython3.13:
+
+```powershell
+& {
+    $ErrorActionPreference = "Stop"
+    py -3.13 -c "import struct; assert struct.calcsize('P') == 8, 'Python x64 required'"
+    if ($LASTEXITCODE -ne 0) { throw "Python x64 check failed" }
+    uv sync --frozen --python 3.13 --no-build-package cffi --no-build-package argon2-cffi-bindings
+    if ($LASTEXITCODE -ne 0) { throw "Frozen dependency installation failed" }
+    .\.venv\Scripts\python.exe -m asm.ai.probe --plan
+}
+```
+
+В исходном head4f86e7f для cffi2.0.0 и argon2-cffi-bindings25.1.0 lock содержал
+только Linux wheels: Windows пыталась собирать C extension и требовала MSVC.
+M4.2-PROBE-WINDOWS-LOCK-R1 добавляет ровно два Windows x64 wheel URL/SHA-256 из
+[cffi PyPI](https://pypi.org/project/cffi/2.0.0/#files) и
+[argon2 bindings PyPI](https://pypi.org/project/argon2-cffi-bindings/25.1.0/#files).
+Версии и dependency graph сохранены. Не обходить frozen lock через upgrade,
+удаление зависимостей или установку компиляторов. Эти команды — только установка
+и offline plan; private key/account preflight/live имеют отдельные условия ниже.
+
 Без flags выполняется тот же offline plan. Он не читает secret и не создаёт HTTP
 client. Fixtures фиксируют ожидания до вызовов: 20 русских text cases, включая два
 READ round trips, плюс три critical repeats и две заранее созданные PNG фигуры
