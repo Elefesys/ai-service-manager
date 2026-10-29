@@ -18,6 +18,7 @@ from asm.ai.contracts import (
 )
 from asm.ai.gateway import ModelGateway, ProviderFailure
 from asm.ai.polza import (
+    CONVERSATION_WIRE_REVISION,
     ENDPOINT,
     INPUT_TOKENS,
     MODELS,
@@ -25,6 +26,7 @@ from asm.ai.polza import (
     PolzaAdapter,
     RouteReview,
     bounded_http,
+    conversation_wire_schema,
     encode,
     fingerprint,
 )
@@ -50,12 +52,13 @@ def review(model=MODELS[0], **changes):
                 "capabilities": {
                     "tools": {"status": "supported"},
                     "json_schema_strict": {"status": "supported"},
+                    "input_image": {"status": "supported", "verified_at": None},
                 },
                 "supported_parameters": [
                     "tools",
                     "tool_choice",
                     "response_format",
-                    "max_completion_tokens",
+                    "max_tokens" if model == MODELS[1] else "max_completion_tokens",
                 ],
                 "context_length": 65536,
                 "max_completion_tokens": 8192,
@@ -69,6 +72,9 @@ def review(model=MODELS[0], **changes):
         catalog_entry=entry,
         catalog_sha256=fingerprint(entry),
         checked_at=datetime.now(UTC),
+        output_cap_parameter="max_tokens" if model == MODELS[1] else "max_completion_tokens",
+        output_cap_includes_reasoning=True,
+        output_cap_evidence="OFFLINE FIXTURE ONLY; not provider evidence",
     )
     for key in (
         "route_evidence",
@@ -103,7 +109,9 @@ def response(data=None, *, status=200, raw=None, headers=None):
 def payload(model=MODELS[0], *, tools=False):
     message = {
         "role": "assistant",
-        "content": json.dumps({"kind": "reply", "text": "Улица Модельная, 12", "reason": None}),
+        "content": json.dumps(
+            {"result": {"kind": "reply", "text": "Улица Модельная, 12", "reason": None}}
+        ),
     }
     if tools:
         message = {
@@ -171,10 +179,13 @@ async def test_real_gateway_native_schema_tools_round_trip(model):
         assert body["provider"]["allow_fallbacks"] is False
         assert body["model"] == model
         assert body["response_format"]["json_schema"] == {
-            "name": "conversation_result_v1",
+            "name": CONVERSATION_WIRE_REVISION,
             "strict": True,
-            "schema": CONVERSATION_RESULT.json_schema(),
+            "schema": conversation_wire_schema(CONVERSATION_RESULT.json_schema()),
         }
+        cap = "max_tokens" if model == MODELS[1] else "max_completion_tokens"
+        assert body[cap] == 512
+        assert set(body) & {"max_tokens", "max_completion_tokens"} == {cap}
         assert body["messages"][1]["role"] == "user"
         assert body["tools"][0]["function"]["parameters"] == ReadArgs.model_json_schema()
         if len(calls) == 2:
@@ -496,3 +507,308 @@ async def test_escaped_secret_in_returned_route_cannot_enter_report():
     result = await gateway(adapter).call()
     assert result.error == "ADAPTER_ERROR" and result.result is None
     assert KEY.get_secret_value() not in str(adapter.observation)
+
+
+def test_duplicate_name_repair_exposes_alias_and_conditional_fee_blockers():
+    original = review()
+    entry = copy.deepcopy(original.catalog_entry)
+    provider = entry["providers"][0]
+    provider["supported_parameters"].remove("max_completion_tokens")
+    provider["supported_parameters"].append("max_tokens")
+    provider["pricing"]["web_search_per_thousand"] = "1000"
+    entry["providers"].append(copy.deepcopy(provider))
+    # Different rows with the same wire selector may not be merged or first-picked.
+    entry["providers"][1]["pricing"]["prompt_per_million"] = "1"
+    with pytest.raises(ValueError, match="AMBIGUOUS_PROVIDER_NAME"):
+        review(catalog_entry=entry, catalog_sha256=fingerprint(entry)).reservation()
+    entry["providers"].pop()
+    with pytest.raises(ValueError, match="OUTPUT_CAP_PARAMETER_UNSUPPORTED"):
+        review(catalog_entry=entry, catalog_sha256=fingerprint(entry)).reservation()
+    with pytest.raises(ValueError, match="CONDITIONAL_FEE_REVIEW_REQUIRED"):
+        review(
+            catalog_entry=entry,
+            catalog_sha256=fingerprint(entry),
+            output_cap_parameter="max_tokens",
+        ).reservation()
+    fixed = review(
+        catalog_entry=entry,
+        catalog_sha256=fingerprint(entry),
+        output_cap_parameter="max_tokens",
+        inactive_fee_evidence={
+            "web_search_per_thousand": "OFFLINE FIXTURE ONLY; no actual route proof"
+        },
+    )
+    assert fixed.reservation() == original.reservation()
+
+
+@pytest.mark.parametrize(
+    "fee", ["audio_per_million", "input_audio_cache_per_million", "web_search_per_thousand"]
+)
+async def test_conditional_fee_requires_explicit_review_and_inactive_payload(fee):
+    base = review(MODELS[1])
+    entry = copy.deepcopy(base.catalog_entry)
+    entry["providers"][0]["pricing"][fee] = "1000"
+    with pytest.raises(ValueError, match="CONDITIONAL_FEE_REVIEW_REQUIRED"):
+        review(MODELS[1], catalog_entry=entry, catalog_sha256=fingerprint(entry)).rates()
+    accepted = review(
+        MODELS[1],
+        catalog_entry=entry,
+        catalog_sha256=fingerprint(entry),
+        inactive_fee_evidence={fee: "OFFLINE FIXTURE ONLY; this is not contractual proof"},
+    )
+    assert accepted.rates() == base.rates()
+    sent = []
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return response(payload(MODELS[1]))
+
+    result = await gateway(
+        PolzaAdapter(accepted, KEY, transport=httpx.MockTransport(handler))
+    ).call()
+    assert result.kind == "FINAL" and len(sent) == 1
+    assert sent[0]["max_tokens"] == 512 and "max_completion_tokens" not in sent[0]
+    assert accepted.metadata()["excluded_fee_components"] == [fee]
+
+
+@pytest.mark.parametrize("value", [None, "0", "1", {"units": "tokens", "amount": "1"}])
+def test_unknown_fee_is_never_ignored_even_if_null_or_zero(value):
+    entry = copy.deepcopy(review().catalog_entry)
+    entry["providers"][0]["pricing"]["unreviewed_fee"] = value
+    with pytest.raises(ValueError, match="TARIFF_UNKNOWN"):
+        review(catalog_entry=entry, catalog_sha256=fingerprint(entry)).rates()
+    with pytest.raises(ValueError):
+        review(
+            inactive_fee_evidence={"unreviewed_fee": "OFFLINE ONLY; arbitrary waiver is forbidden"}
+        )
+
+
+@pytest.mark.parametrize("value", ["NaN", "-1", {}, True])
+def test_excluded_fee_still_requires_valid_numeric_rate(value):
+    entry = copy.deepcopy(review().catalog_entry)
+    entry["providers"][0]["pricing"]["audio_per_million"] = value
+    with pytest.raises(ValueError, match="TARIFF_UNKNOWN"):
+        review(
+            catalog_entry=entry,
+            catalog_sha256=fingerprint(entry),
+            inactive_fee_evidence={"audio_per_million": "OFFLINE FIXTURE ONLY; not provider proof"},
+        ).rates()
+
+
+def test_cache_and_reasoning_rates_remain_additive_and_cannot_be_waived():
+    entry = copy.deepcopy(review().catalog_entry)
+    entry["providers"][0]["pricing"].update(
+        {
+            "image_input_per_million": "10",
+            "input_cache_read_per_million": "2",
+            "input_cache_write_per_million": "3",
+            "internal_reasoning_per_million": "40",
+            "per_request": "0.01",
+            "request_per_thousand": "20",
+        }
+    )
+    r = review(catalog_entry=entry, catalog_sha256=fingerprint(entry))
+    assert r.rates() == (Decimal(25), Decimal(80), Decimal("0.03"))
+    assert r.reservation() == (32768 * Decimal(25) + 512 * Decimal(80)) / 1000000 + Decimal("0.03")
+    with pytest.raises(ValueError):
+        review(
+            inactive_fee_evidence={
+                "input_cache_read_per_million": "OFFLINE ONLY; do not waive cache rates"
+            }
+        )
+
+
+@pytest.mark.parametrize("capability", ["tools", "json_schema_strict", "input_image"])
+@pytest.mark.parametrize("status", ["unknown", "rejected"])
+def test_selected_provider_capabilities_cannot_borrow_from_another_route(capability, status):
+    entry = copy.deepcopy(review().catalog_entry)
+    other = copy.deepcopy(entry["providers"][0])
+    other["name"] = "Other supported provider"
+    entry["providers"].append(other)
+    entry["providers"][0]["capabilities"][capability] = {"status": status, "verified_at": None}
+    with pytest.raises(ValueError):
+        review(catalog_entry=entry, catalog_sha256=fingerprint(entry)).route()
+    # A manually selected, uniquely named different route is a separate review.
+    assert (
+        review(
+            catalog_entry=entry,
+            catalog_sha256=fingerprint(entry),
+            provider_name=other["name"],
+        )
+        .route()
+        .model
+        == MODELS[0]
+    )
+
+
+def test_null_catalog_verification_never_becomes_live_or_account_proof():
+    entry = copy.deepcopy(review().catalog_entry)
+    for cap in entry["providers"][0]["capabilities"].values():
+        cap["verified_at"] = None
+    r = review(catalog_entry=entry, catalog_sha256=fingerprint(entry))
+    assert all(
+        v["evidence"] == "CATALOG_DECLARATION_ONLY" for v in r.metadata()["capabilities"].values()
+    )
+    entry["providers"][0]["capabilities"]["tools"]["verified_at"] = "2026-10-23T11:22:10.757Z"
+    r = review(catalog_entry=entry, catalog_sha256=fingerprint(entry))
+    meta = r.metadata()
+    assert meta["capabilities"]["tools"]["evidence"] == "CATALOG_REPORTED_VERIFICATION"
+    assert meta["live_payload_verification"] == "NOT_ESTABLISHED_BY_CATALOG"
+    assert meta["account_authorization"] == "NOT_ESTABLISHED_BY_CATALOG"
+
+
+@pytest.mark.parametrize(
+    "inner",
+    [
+        {"kind": "reply", "text": "Известный факт", "reason": None},
+        {"kind": "handoff", "text": None, "reason": "Нужен владелец"},
+        {"kind": "no_reply", "text": None, "reason": "Нет вопроса"},
+    ],
+)
+async def test_wire_envelope_round_trips_each_canonical_result(inner):
+    data = payload()
+    data["choices"][0]["message"]["content"] = json.dumps({"result": inner})
+    result = await gateway(
+        PolzaAdapter(review(), KEY, transport=httpx.MockTransport(lambda _: response(data)))
+    ).call()
+    assert result.kind == "FINAL" and result.result.model_dump() == inner
+    assert result.cost.status == "CONFIRMED"
+
+
+def test_wire_wrapper_preserves_union_constraints_definitions_and_local_refs():
+    canonical = CONVERSATION_RESULT.json_schema()
+    untouched = copy.deepcopy(canonical)
+    wrapped = conversation_wire_schema(canonical)
+    assert canonical == untouched
+    assert wrapped["type"] == "object" and wrapped["required"] == ["result"]
+    assert wrapped["additionalProperties"] is False
+    assert wrapped["properties"]["result"] == {k: v for k, v in canonical.items() if k != "$defs"}
+    assert wrapped["$defs"] == canonical["$defs"]
+    for variant in wrapped["properties"]["result"]["anyOf"]:
+        target = wrapped
+        for part in variant["$ref"][2:].split("/"):
+            target = target[part]
+        assert target == canonical["$defs"][variant["$ref"].rsplit("/", 1)[1]]
+        assert target["additionalProperties"] is False
+    canonical["$defs"]["Reply"]["properties"]["text"].pop("maxLength")
+    with pytest.raises(ValueError, match="WIRE_SCHEMA_UNSUPPORTED"):
+        conversation_wire_schema(canonical)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "{}",
+        "[]",
+        '{"kind":"reply","text":"bare result","reason":null}',
+        '{"result":{"kind":"reply","text":"valid","reason":null},"extra":1}',
+        '{"result":null,"result":{"kind":"reply","text":"duplicate","reason":null}}',
+        '{"result":null}',
+        '{"result":{"kind":"unknown","text":"x","reason":null}}',
+        '{"result":{"kind":"reply","text":"","reason":null}}',
+        '{"result":{"kind":"reply","text":"x","reason":null,"extra":1}}',
+    ],
+)
+async def test_invalid_envelope_or_inner_result_preserves_charge_but_never_final(raw):
+    data = payload()
+    data["choices"][0]["message"]["content"] = raw
+    adapter = PolzaAdapter(review(), KEY, transport=httpx.MockTransport(lambda _: response(data)))
+    result = await gateway(adapter).call()
+    assert result.kind == "ERROR" and result.error == "INVALID_OUTPUT" and result.result is None
+    assert result.cost.status == "CONFIRMED" and result.cost.amount == Decimal("0.001")
+    assert result.budget.calls_used == 1 and result.budget.cost_reserved > 0
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "audio",
+        "audio_output",
+        "search",
+        "plugin",
+        "server_tool",
+        "both_caps",
+        "over_cap",
+        "fallback",
+    ],
+)
+async def test_conditional_fees_cannot_be_activated_via_raw_image_payload(change):
+    sent = []
+    adapter = PolzaAdapter(review(), KEY, transport=httpx.MockTransport(lambda r: sent.append(r)))
+    body = adapter.base_body(
+        [{"role": "user", "content": "synthetic text"}],
+        {"type": "object"},
+        512,
+        schema_name="synthetic_shapes_v1",
+    )
+    if change == "audio":
+        body["messages"][0]["content"] = [
+            {"type": "input_audio", "input_audio": {"data": "eA==", "format": "wav"}}
+        ]
+    elif change == "audio_output":
+        body["modalities"] = ["text", "audio"]
+    elif change == "search":
+        body["web_search_options"] = {}
+    elif change == "plugin":
+        body["plugins"] = [{"id": "web"}]
+    elif change == "server_tool":
+        body["tools"] = [{"type": "web_search"}]
+    elif change == "both_caps":
+        body["max_tokens"] = 512
+    elif change == "over_cap":
+        body["max_completion_tokens"] = 513
+    else:
+        body["provider"]["allow_fallbacks"] = True
+    with pytest.raises(ProviderFailure):
+        await adapter.image_probe(encode(body), 1)
+    assert not sent and adapter.observation["error_detail"] == "PAYLOAD_OUTSIDE_REVIEWED_SCOPE"
+
+
+@pytest.mark.parametrize(
+    "change,detail",
+    [
+        ("reasoning", "REASONING_OUTSIDE_OUTPUT_BOUND"),
+        ("audio", "UNREQUESTED_AUDIO_USAGE"),
+        ("search", "UNREQUESTED_SERVER_TOOL_USAGE"),
+    ],
+)
+async def test_observed_usage_cannot_escape_reviewed_billing_scope(change, detail):
+    data = payload()
+    if change == "reasoning":
+        data["usage"]["completion_tokens_details"] = {"reasoning_tokens": 513}
+    elif change == "audio":
+        data["usage"]["prompt_tokens_details"] = {"audio_tokens": 1}
+    else:
+        data["usage"]["server_tool_use"] = {"web_search_requests": 1}
+    seen = []
+
+    def handler(request):
+        seen.append(request.method)
+        return response(data)
+
+    adapter = PolzaAdapter(review(), KEY, transport=httpx.MockTransport(handler))
+    result = await gateway(adapter).call()
+    assert result.kind == "ERROR" and result.result is None and seen == ["POST"]
+    assert result.cost.status == "UNKNOWN" and result.budget.cost_reserved > 0
+    assert adapter.observation["error_detail"] == detail
+
+
+@pytest.mark.parametrize("limit", [511, "512", None, True])
+def test_max_tokens_alias_does_not_bypass_numeric_catalog_output_limit(limit):
+    entry = copy.deepcopy(review(MODELS[1]).catalog_entry)
+    entry["providers"][0]["max_completion_tokens"] = limit
+    entry["providers"][0]["reasoning"] = {"mandatory": True}
+    with pytest.raises(ValueError, match="OUTPUT_LIMIT_UNKNOWN"):
+        review(MODELS[1], catalog_entry=entry, catalog_sha256=fingerprint(entry)).reservation()
+
+
+async def test_reasoning_usage_within_confirmed_output_is_not_added_twice():
+    data = payload(MODELS[1])
+    data["usage"]["completion_tokens_details"] = {"reasoning_tokens": 15}
+    data["usage"]["server_tool_use"] = {"web_search_requests": 0}
+    adapter = PolzaAdapter(
+        review(MODELS[1]), KEY, transport=httpx.MockTransport(lambda _: response(data))
+    )
+    result = await gateway(adapter).call()
+    assert result.kind == "FINAL" and result.usage.output_tokens == 20
+    assert result.cost.amount == Decimal("0.001")

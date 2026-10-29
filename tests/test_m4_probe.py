@@ -10,7 +10,7 @@ from decimal import Decimal
 
 import httpx
 import pytest
-from asm.ai.polza import MODELS, PolzaAdapter, fingerprint
+from asm.ai.polza import CONVERSATION_WIRE_REVISION, MODELS, PolzaAdapter, fingerprint
 from asm.ai.probe import (
     FIXTURES,
     Ledger,
@@ -176,7 +176,7 @@ async def test_catalog_drift_stops_all_generations(changed_model):
         assert "include_capabilities=true" in str(req.url)
         return response(data)
 
-    with pytest.raises(ValueError, match="ACCOUNT_CATALOG_CHANGED"):
+    with pytest.raises(ValueError, match="CATALOG_CHANGED"):
         await live(
             load_cases(FIXTURES),
             reviews,
@@ -300,9 +300,11 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
                 handoff = case.id in ("handoff", "no_send_claim")
                 data["choices"][0]["message"]["content"] = json.dumps(
                     {
-                        "kind": "handoff" if handoff else "reply",
-                        "text": answers[case.id],
-                        "reason": "Предложение владельцу" if handoff else None,
+                        "result": {
+                            "kind": "handoff" if handoff else "reply",
+                            "text": answers[case.id],
+                            "reason": "Предложение владельцу" if handoff else None,
+                        }
                     }
                 )
         data["choices"][0]["message"]["reasoning"] = "PRIVATE CHAIN OF THOUGHT MUST NOT BE SAVED"
@@ -361,6 +363,16 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
     assert all(sum(r["reads"] for r in case_rows if r["model"] == m) == 2 for m in MODELS)
     recorded_plan = next(r for r in events if r["event"] == "plan")
     assert recorded_plan["route_reviews"] == [r.catalog_sha256 for r in reviews]
+    assert recorded_plan["wire_schema_revision"] == CONVERSATION_WIRE_REVISION
+    assert [r["output_cap_parameter"] for r in recorded_plan["reviewed_routes"]] == [
+        "max_completion_tokens",
+        "max_tokens",
+        "max_completion_tokens",
+    ]
+    for row in case_rows:
+        assert row["wire_schema_revision"] == (
+            "synthetic_shapes_v1" if row["mode"] == "image" else CONVERSATION_WIRE_REVISION
+        )
     reservations = [Decimal(r["rub_reserved"]) for r in events if r["event"] == "reserved"]
     assert reservations == sorted(set(reservations))
     assert len(reservations) == 81
@@ -543,7 +555,11 @@ def test_preflight_cli_gets_all_three_catalog_entries_once(tmp_path, monkeypatch
         main(["--preflight", "--approval-ref", "OFFLINE-FIXTURE-ONLY", "--report", str(path)]) == 0
     )
     assert seen == ["GET"]
-    entries = json.loads(path.read_text())["entries"]
+    report = json.loads(path.read_text())
+    assert report["source"] == "PUBLIC_CATALOG"
+    assert report["account_authorization"] == "NOT_CHECKED"
+    assert report["account_tariff"] == "NOT_ESTABLISHED_BY_CATALOG"
+    entries = report["entries"]
     assert [e["catalog_entry"]["id"] for e in entries] == list(MODELS)
     assert [e["catalog_sha256"] for e in entries] == [r.catalog_sha256 for r in reviews]
     assert KEY.get_secret_value() not in path.read_text()
@@ -573,3 +589,39 @@ async def test_missing_or_duplicate_third_catalog_entry_blocks_generations(dupli
             transport=httpx.MockTransport(handler),
         )
     assert seen == ["GET"]
+
+
+@pytest.mark.parametrize(
+    "change,code",
+    [
+        ("alias", "OUTPUT_CAP_REVIEW_REQUIRED"),
+        ("semantics", "OUTPUT_CAP_REVIEW_REQUIRED"),
+        ("proof", "OUTPUT_CAP_REVIEW_REQUIRED"),
+        ("unsupported", "OUTPUT_CAP_PARAMETER_UNSUPPORTED"),
+        ("fee", "FEE_EXCLUSION_REVIEW_REQUIRED"),
+    ],
+)
+def test_operator_gets_safe_review_failure_before_secret_or_http(
+    tmp_path, monkeypatch, capsys, change, code
+):
+    entries = [review(model).model_dump(mode="json") for model in MODELS]
+    selected = entries[1]
+    selected["catalog_entry"]["providers"][0]["reasoning"] = {"mandatory": True}
+    selected["catalog_sha256"] = fingerprint(selected["catalog_entry"])
+    if change == "alias":
+        selected["output_cap_parameter"] = "unrecognized"
+    elif change == "semantics":
+        selected["output_cap_includes_reasoning"] = False
+    elif change == "proof":
+        selected.pop("output_cap_evidence")
+    elif change == "unsupported":
+        selected["output_cap_parameter"] = "max_completion_tokens"
+    else:
+        selected["inactive_fee_evidence"] = {"audio_per_million": "secret"}
+    path = tmp_path / "review.json"
+    path.write_text(json.dumps(entries))
+    monkeypatch.setattr("asm.ai.probe.load_secret", lambda _: pytest.fail("read secret"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: pytest.fail("HTTP"))
+    assert main(["--plan", "--review", str(path)]) == 2
+    text = capsys.readouterr().out
+    assert code in text and "secret" not in text

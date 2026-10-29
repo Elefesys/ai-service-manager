@@ -6,12 +6,13 @@ import json
 import re
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import httpx
 from pydantic import Field, SecretStr
 
 from asm.ai.contracts import (
+    CONVERSATION_RESULT,
     DTO,
     AdapterRequest,
     AdapterResponse,
@@ -39,6 +40,14 @@ OUTPUT_TOKENS = 512
 INPUT_BYTES = 24576
 OUTPUT_BYTES = 32768
 OVERHEAD_TOKENS = 4096
+CONVERSATION_WIRE_REVISION = "conversation_result_envelope_v1"
+Evidence = Annotated[str, Field(min_length=20, max_length=2000)]
+ConditionalFee = Literal[
+    "audio_per_million", "input_audio_cache_per_million", "web_search_per_thousand"
+]
+CONDITIONAL_FEES = frozenset(
+    ("audio_per_million", "input_audio_cache_per_million", "web_search_per_thousand")
+)
 
 
 class PolzaFailure(ProviderFailure):
@@ -59,6 +68,21 @@ def fingerprint(value: Any) -> str:
     ).hexdigest()
 
 
+def conversation_wire_schema(schema: Any) -> dict[str, Any]:
+    """Wrap only the accepted union; hoist its unchanged definitions for local refs."""
+    if schema != CONVERSATION_RESULT.json_schema():
+        raise ValueError("WIRE_SCHEMA_UNSUPPORTED")
+    inner = strict_json(encode(schema).decode())
+    definitions = inner.pop("$defs")
+    return {
+        "type": "object",
+        "properties": {"result": inner},
+        "required": ["result"],
+        "additionalProperties": False,
+        "$defs": definitions,
+    }
+
+
 class RouteReview(DTO):
     """Trusted operator input, NOT model output or auto-generated capability proof.
 
@@ -76,7 +100,13 @@ class RouteReview(DTO):
     token_bound_evidence: str = Field(min_length=20, max_length=2000)
     billing_bound_evidence: str = Field(min_length=20, max_length=2000)
     image_bound_evidence: str = Field(min_length=20, max_length=2000)
-    # Populated from the account catalog by a reviewer; checked again before generation.
+    output_cap_parameter: Literal["max_tokens", "max_completion_tokens"]
+    output_cap_includes_reasoning: Literal[True]
+    output_cap_evidence: Evidence
+    # Each exclusion needs a reviewed route contract, not just an apparent field name.
+    # Actual input_audio_cache units/applicability remain unproven by the public docs.
+    inactive_fee_evidence: dict[ConditionalFee, Evidence] = Field(default_factory=dict)
+    # Public catalog snapshot, not account authorization; rechecked before generation.
     catalog_entry: dict[str, Any] = Field(repr=False)
 
     def provider(self) -> dict[str, Any]:
@@ -86,19 +116,26 @@ class RouteReview(DTO):
         if fingerprint(entry) != self.catalog_sha256:
             raise ValueError("CATALOG_DRIFT")
         matches = [p for p in entry.get("providers", []) if p.get("name") == self.provider_name]
+        if len(matches) > 1:
+            raise ValueError("AMBIGUOUS_PROVIDER_NAME")
         if len(matches) != 1 or matches[0].get("is_unofficial") is not False:
             raise ValueError("OFFICIAL_ROUTE_UNKNOWN")
         provider: dict[str, Any] = matches[0]
-        for name in ("tools", "json_schema_strict"):
-            if provider.get("capabilities", {}).get(name, {}).get("status") != "supported":
+        for name in ("tools", "json_schema_strict", "input_image"):
+            status = provider.get("capabilities", {}).get(name, {}).get("status")
+            if status == "rejected":
+                raise ValueError(name.upper() + "_REJECTED")
+            if status != "supported":
+                if name == "input_image":
+                    raise ValueError("IMAGE_CAPABILITY_UNKNOWN")
                 raise ValueError("CAPABILITY_UNKNOWN")
         parameters = provider.get("supported_parameters", [])
         if type(parameters) is not list or any(type(p) is not str for p in parameters):
             raise ValueError("PARAMETER_UNSUPPORTED")
-        if not {"tools", "tool_choice", "response_format", "max_completion_tokens"} <= set(
-            parameters
-        ):
+        if not {"tools", "tool_choice", "response_format"} <= set(parameters):
             raise ValueError("PARAMETER_UNSUPPORTED")
+        if self.output_cap_parameter not in parameters:
+            raise ValueError("OUTPUT_CAP_PARAMETER_UNSUPPORTED")
         context = provider.get("context_length")
         completion = provider.get("max_completion_tokens")
         if type(context) is not int or context < INPUT_TOKENS + OUTPUT_TOKENS:
@@ -157,10 +194,18 @@ class RouteReview(DTO):
         if not {"prompt_per_million", "completion_per_million"} <= pricing.keys():
             raise ValueError("TARIFF_UNKNOWN")
         values: dict[str, Decimal] = {}
+        if not self.inactive_fee_evidence.keys() <= pricing.keys():
+            raise ValueError("FEE_EXCLUSION_NOT_IN_CATALOG")
         for key, raw in pricing.items():
-            if key == "currency" or raw is None:
+            if key == "currency":
                 continue
-            if key not in inputs | outputs | requests or type(raw) not in (str, int, float):
+            if key not in inputs | outputs | requests | CONDITIONAL_FEES:
+                raise ValueError("TARIFF_UNKNOWN")
+            if key in CONDITIONAL_FEES and key not in self.inactive_fee_evidence:
+                raise ValueError("CONDITIONAL_FEE_REVIEW_REQUIRED")
+            if raw is None:
+                continue
+            if type(raw) not in (str, int, float):
                 raise ValueError("TARIFF_UNKNOWN")
             try:
                 number = Decimal(str(raw))
@@ -168,7 +213,8 @@ class RouteReview(DTO):
                 raise ValueError("TARIFF_UNKNOWN") from None
             if not number.is_finite() or not 0 <= number <= 1000000:
                 raise ValueError("TARIFF_UNKNOWN")
-            values[key] = number
+            if key not in CONDITIONAL_FEES:
+                values[key] = number
         if not {"prompt_per_million", "completion_per_million"} <= values.keys():
             raise ValueError("TARIFF_UNKNOWN")
         return (
@@ -184,6 +230,33 @@ class RouteReview(DTO):
         return max(
             Decimal("0.000000001"), amount.quantize(Decimal("0.000000001"), rounding=ROUND_CEILING)
         )
+
+    def metadata(self) -> dict[str, Any]:
+        """Catalog declarations/check dates are not a live test or key authorization."""
+        capabilities = self.provider()["capabilities"]
+        return {
+            "model": self.model,
+            "provider_only": self.provider_name,
+            "expected_response_provider": self.response_provider,
+            "catalog_sha256": self.catalog_sha256,
+            "review_sha256": fingerprint(self.model_dump(mode="json")),
+            "output_cap_parameter": self.output_cap_parameter,
+            "output_cap_scope": "TOTAL_OUTPUT_INCLUDING_REASONING",
+            "catalog_reasoning": self.provider().get("reasoning"),
+            "excluded_fee_components": sorted(self.inactive_fee_evidence),
+            "capabilities": {
+                name: {
+                    "status": capabilities[name]["status"],
+                    "verified_at": capabilities[name].get("verified_at"),
+                    "evidence": "CATALOG_REPORTED_VERIFICATION"
+                    if capabilities[name].get("verified_at")
+                    else "CATALOG_DECLARATION_ONLY",
+                }
+                for name in ("tools", "json_schema_strict", "input_image")
+            },
+            "live_payload_verification": "NOT_ESTABLISHED_BY_CATALOG",
+            "account_authorization": "NOT_ESTABLISHED_BY_CATALOG",
+        }
 
 
 async def bounded_http(
@@ -301,7 +374,10 @@ class PolzaAdapter:
                 for r in exchange.results
             )
         body = self.base_body(
-            messages, strict_json(request.output_schema_json), request.config.limits.output_tokens
+            messages,
+            conversation_wire_schema(strict_json(request.output_schema_json)),
+            request.config.limits.output_tokens,
+            schema_name=CONVERSATION_WIRE_REVISION,
         )
         if request.request.tools:
             body["tools"] = [
@@ -325,14 +401,14 @@ class PolzaAdapter:
         schema: Any,
         output: int,
         *,
-        schema_name: str = "conversation_result_v1",
+        schema_name: str,
     ) -> dict[str, Any]:
         prompt_rate, output_rate, request_rate = self.review.rates()
         return {
             "model": self.review.model,
             "messages": messages,
             "stream": False,
-            "max_completion_tokens": output,
+            self.review.output_cap_parameter: output,
             "provider": {
                 "only": [self.review.provider_name],
                 "allow_fallbacks": False,
@@ -365,10 +441,26 @@ class PolzaAdapter:
             or limits.call_cost_reservation < self.review.reservation()
         ):
             raise ProviderFailure("ADAPTER_ERROR")
-        return await self._send(body, request.remaining_seconds, limits.output_bytes)
+        result = await self._send(body, request.remaining_seconds, limits.output_bytes)
+        if result.kind == "OUTPUT":
+            try:
+                envelope = strict_json(result.output_json or "")
+                if type(envelope) is not dict or set(envelope) != {"result"}:
+                    raise ValueError
+                inner = encode(envelope["result"]).decode()
+            except (ValueError, TypeError, RecursionError):
+                self.observation["error_detail"] = "INVALID_RESULT_ENVELOPE"
+                # Guaranteed invalid for the unchanged local result DTO. Preserve known
+                # usage/cost while the Gateway returns its existing INVALID_OUTPUT error.
+                inner = "null"
+            result = AdapterResponse(
+                kind="OUTPUT", output_json=inner, usage=result.usage, cost=result.cost
+            )
+        return result
 
     async def _send(self, body: bytes, seconds: float, maximum: int) -> AdapterResponse:
         try:
+            self.check_payload(body)
             raw = await bounded_http(
                 self._key,
                 ENDPOINT,
@@ -381,6 +473,64 @@ class PolzaAdapter:
         except PolzaFailure as exc:
             self.observation["error_detail"] = exc.detail
             raise
+
+    def check_payload(self, raw: bytes) -> None:
+        """Fee exclusions apply only to this finite text/PNG/function wire surface."""
+        try:
+            body = strict_json(raw.decode())
+            cap = self.review.output_cap_parameter
+            if (
+                type(body) is not dict
+                or not {"model", "messages", "stream", cap, "provider", "response_format"}
+                <= set(body)
+                or set(body)
+                - {
+                    "model",
+                    "messages",
+                    "stream",
+                    cap,
+                    "provider",
+                    "response_format",
+                    "tools",
+                    "tool_choice",
+                }
+                or body.get("model") != self.review.model
+                or body.get("stream") is not False
+                or type(body.get(cap)) is not int
+                or not 0 < body[cap] <= OUTPUT_TOKENS
+                or body["provider"]["only"] != [self.review.provider_name]
+                or body["provider"]["allow_fallbacks"] is not False
+                or set(body["provider"]) != {"only", "allow_fallbacks", "max_price"}
+                or body["response_format"]["type"] != "json_schema"
+                or body["response_format"]["json_schema"]["strict"] is not True
+            ):
+                raise ValueError
+            for tool in body.get("tools", []):
+                if tool.get("type") != "function" or tool["function"].get("strict") is not True:
+                    raise ValueError
+            for message in body["messages"]:
+                if set(message) - {"role", "content", "tool_calls", "tool_call_id"}:
+                    raise ValueError
+                for call in message.get("tool_calls", []):
+                    if call.get("type") != "function":
+                        raise ValueError
+                content = message.get("content")
+                if isinstance(content, list):
+                    for part in content:
+                        if part.get("type") == "text" and set(part) == {"type", "text"}:
+                            if type(part["text"]) is not str:
+                                raise ValueError
+                        elif part.get("type") == "image_url" and set(part) == {"type", "image_url"}:
+                            if set(part["image_url"]) != {"url"} or not part["image_url"][
+                                "url"
+                            ].startswith("data:image/png;base64,"):
+                                raise ValueError
+                        else:
+                            raise ValueError
+                elif content is not None and type(content) is not str:
+                    raise ValueError
+        except (ValueError, TypeError, KeyError, AttributeError, RecursionError):
+            raise PolzaFailure("ADAPTER_ERROR", "PAYLOAD_OUTSIDE_REVIEWED_SCOPE") from None
 
     async def image_probe(self, body: bytes, seconds: float) -> AdapterResponse:
         """EVAL_ONLY raw image path, never part of ModelAdapter or the text Gateway."""
@@ -414,6 +564,19 @@ class PolzaAdapter:
                 input_tokens=usage_data.get("prompt_tokens"),
                 output_tokens=usage_data.get("completion_tokens"),
             )
+            reasoning = (usage_data.get("completion_tokens_details") or {}).get("reasoning_tokens")
+            if reasoning is not None and (
+                type(reasoning) is not int
+                or reasoning < 0
+                or usage.output_tokens is None
+                or reasoning > usage.output_tokens
+            ):
+                raise PolzaFailure("USAGE_LIMIT", "REASONING_OUTSIDE_OUTPUT_BOUND")
+            for detail in ("prompt_tokens_details", "completion_tokens_details"):
+                if (usage_data.get(detail) or {}).get("audio_tokens") not in (None, 0):
+                    raise PolzaFailure("ADAPTER_ERROR", "UNREQUESTED_AUDIO_USAGE")
+            if any(value != 0 for value in (usage_data.get("server_tool_use") or {}).values()):
+                raise PolzaFailure("ADAPTER_ERROR", "UNREQUESTED_SERVER_TOOL_USAGE")
             amount = usage_data.get("cost_rub", usage_data.get("cost"))
             cost = Cost()
             if amount is not None:

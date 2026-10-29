@@ -148,6 +148,31 @@ C1/C2/C3/C5/C6/C8 и M4.3 HOLD; merge остаётся у владельца.
 [OpenAI schema subset](https://developers.openai.com/api/docs/guides/structured-outputs).
 Сверены2026-10-29; общий пример openai-direct не доказывает mapping всех routes.
 
+### Receipt C4 — CATALOG-R1 / 2026-10-29
+
+**Candidate REVIEW / PAID PROBE BLOCKED, NOT RUN; C4 HOLD для C0.** Sole parent
+этого candidate — coordination seed **b3d18fb47849eddae426439753b602a169734393**,
+tree **fd7062836dc56c3cbde9f50565b685538a9fad26**, поверх Windows repair708dc86.
+Изменены ровно 7 разрешённых paths; canonical DTO/prompt/schema, fixtures, lock
+и все лимиты сохранены. Добавлены explicit reviewed cap/reasoning, условные fee
+exclusions с проверкой payload, duplicate-name STOP, selected-provider image/strict
+checks и эквивалентный `conversation_result_envelope_v1` с прежним DTO validator.
+Catalog declarations/verified_at отделены от actual live/account evidence.
+
+На frozen uv0.13.4 / CPython3.13.16: целевые pytest из runbook — **255 PASS**;
+Ruff/format, mypy (**71 source files**), `--plan`, `git diff --check` — PASS.
+Полный CLI→Gateway→MockHTTP: **75 finals / 81 POST / 1 GET / 6 READ**, N=25/model.
+Это offline evidence; native Windows команды подготовлены, здесь не исполнялись.
+Snapshot fingerprint/исходный checked_at сохранены; все58 entries разобраны по
+независимым группам. Ни реальный RouteReview, ни новое account подтверждение
+не создавались. Условный минимум Decimal по прежней формуле —
+**107.138276775 RUB >100**; подробности и открытые route/cap/fees/account факты —
+[runbook](../runbooks/M4_POLZA_PROBE.md#snapshot-2026-10-29-оставшиеся-блокеры).
+`--plan` без фактических reviews остаётся null/UNKNOWN. Следующий шаг — review C0
+нового candidate и решение по blocker; paid/full CI здесь не запускались.
+PR39/main не сдвигались; CI40841849732 FAILURE и неизвестная причина PG setup
+connect timeout остаются отдельными от этого repair.
+
 ## История — M4.2-PROBE-WINDOWS-LOCK-R1 / C0 / 2026-10-29
 
 **Результат:** установить frozen зависимости пробника на Windows x64 владельца

@@ -14,7 +14,7 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | BLOCKED / PAID PROBE NOT RUN. Windows frozen install и offline plan подтверждены владельцем; owner-only ACL и отдельный catalog GET выполнены. Три entries/58 providers, fingerprints сверены. Source708dc86: у GPT/Gemini нет static-eligible route из-за name/parameter/fee assumptions; прямой DeepSeek strict rejected. Единственная выдача C4 — M4.2-PROBE-CATALOG-R1, adapter repair + equivalent wire wrapper, точный scope в handoff. Proposed100 RUB/75 scenarios/81 calls/6 READ сохранены, priced reservation UNKNOWN. Отдельный foundation CI blocker остаётся открытым |
+| M4.2-PROBE | CATALOG-R1 candidate REVIEW / PAID PROBE BLOCKED, NOT RUN; C4 HOLD для C0. От seed b3d18fb: explicit route token cap/reasoning evidence, reviewed conditional fees, duplicate-name STOP, provider-specific image/strict checks, equivalent result envelope; canonical contract/Windows lock сохранены. 255 targeted PASS, Ruff/format/mypy/plan PASS; 75 scenarios/81 calls/6 READ и100 RUB без изменений. Snapshot58 entries: условный Decimal минимум107.138276775 RUB >100; actual priced reservation UNKNOWN, route/billing/account evidence остаются открыты. Full CI не запускался; отдельный foundation CI40841849732 FAILURE не исправлен |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
 | M4.3-QUALITY | TODO; независимый scoped C8/eval |

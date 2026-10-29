@@ -16,7 +16,7 @@ from typing import Any, Literal, TextIO
 
 import httpx
 from PIL import Image
-from pydantic import Field, TypeAdapter
+from pydantic import Field, TypeAdapter, ValidationError
 
 from asm.ai.contracts import (
     DTO,
@@ -31,6 +31,7 @@ from asm.ai.contracts import (
 from asm.ai.gateway import ModelGateway, ProviderFailure
 from asm.ai.polza import (
     CATALOG,
+    CONVERSATION_WIRE_REVISION,
     INPUT_BYTES,
     INPUT_TOKENS,
     MODELS,
@@ -137,7 +138,24 @@ def read_reviews(path: Path) -> tuple[RouteReview, ...]:
     if len(raw) > 200000:
         raise ValueError("REVIEW_SIZE")
     strict_json(raw.decode())
-    reviews = TypeAdapter(tuple[RouteReview, ...]).validate_json(raw)
+    try:
+        reviews = TypeAdapter(tuple[RouteReview, ...]).validate_json(raw)
+    except ValidationError as exc:
+        fields = {
+            part
+            for error in exc.errors(include_input=False, include_context=False)
+            for part in error["loc"]
+            if isinstance(part, str)
+        }
+        if fields & {
+            "output_cap_parameter",
+            "output_cap_includes_reasoning",
+            "output_cap_evidence",
+        }:
+            raise ValueError("OUTPUT_CAP_REVIEW_REQUIRED") from None
+        if "inactive_fee_evidence" in fields:
+            raise ValueError("FEE_EXCLUSION_REVIEW_REQUIRED") from None
+        raise ValueError("REVIEW_FIELDS_INVALID") from None
     validate_reviews(reviews)
     return reviews
 
@@ -187,6 +205,8 @@ def plan(cases: tuple[Case, ...], reviews: tuple[RouteReview, ...] = ()) -> dict
         else "UNKNOWN: account tariff and route review required",
         "prompt_revision": "conversation_v1",
         "schema_revision": "conversation_result_v1",
+        "wire_schema_revision": CONVERSATION_WIRE_REVISION,
+        "reviewed_routes": [r.metadata() for r in reviews],
         "image_revision": "synthetic_shapes_v1/EVAL_ONLY",
     }
 
@@ -477,6 +497,9 @@ async def run_case(
         "schema_revision": "conversation_result_v1"
         if case.mode != "image"
         else "synthetic_shapes_v1",
+        "wire_schema_revision": CONVERSATION_WIRE_REVISION
+        if case.mode != "image"
+        else "synthetic_shapes_v1",
         "seconds": round(time.monotonic() - started, 3),
         "calls": results,
         "reads": reads,
@@ -537,7 +560,7 @@ async def live(
     for review, entry in zip(reviews, current, strict=True):
         review.fresh()
         if fingerprint(entry) != review.catalog_sha256:
-            raise ValueError("ACCOUNT_CATALOG_CHANGED")
+            raise ValueError("CATALOG_CHANGED")
     ledger.record(
         {
             "event": "plan",
@@ -606,6 +629,9 @@ def main(argv: list[str] | None = None) -> int:
                     json.dumps(
                         {
                             "checked_at": datetime.now(UTC).isoformat(),
+                            "source": "PUBLIC_CATALOG",
+                            "account_authorization": "NOT_CHECKED",
+                            "account_tariff": "NOT_ESTABLISHED_BY_CATALOG",
                             "entries": [
                                 {"catalog_entry": e, "catalog_sha256": fingerprint(e)}
                                 for e in entries

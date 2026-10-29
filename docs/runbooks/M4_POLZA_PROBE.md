@@ -1,6 +1,6 @@
 # M4.2 — synthetic Polza probe
 
-Статус первой передачи: **REVIEW / PAID PROBE NOT RUN**. Команды ниже не являются
+Статус CATALOG-R1: **REVIEW / PAID PROBE BLOCKED / NOT RUN**. Команды ниже не являются
 разрешением потратить деньги. C0 получает отдельный допуск владельца после review
 кода, плана и размещения ключа. Никаких клиентских данных, Telegram, БД, S3 или
 runtime activation. Accepted deployment остаётся LOCAL / asm_local.
@@ -19,17 +19,29 @@ uv sync --frozen
 git diff --check
 ```
 
-Windows x64: после checkout точного SHA, переданного C0, выполнить из корня
-репозитория в обычном PowerShell. Нужны Git, uv и 64-битный CPython3.13:
+Windows x64: после review C0 заменить `C0_ACCEPTED_FULL_SHA` полным SHA принятого
+кандидата и выполнить из корня чистого checkout в обычном PowerShell. Нужны Git,
+uv и 64-битный CPython3.13. Новый ввод ключа для установки/plan не нужен:
 
 ```powershell
 & {
     $ErrorActionPreference = "Stop"
+    $Candidate = "C0_ACCEPTED_FULL_SHA"
+    if ($Candidate -cnotmatch '^[0-9a-f]{40}$') { throw "Exact accepted SHA required" }
+    $Dirty = git status --porcelain
+    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean checkout required" }
+    git fetch origin $Candidate
+    if ($LASTEXITCODE -ne 0) { throw "Candidate fetch failed" }
+    git switch --detach $Candidate
+    if ($LASTEXITCODE -ne 0) { throw "Candidate checkout failed" }
+    $Actual = git rev-parse HEAD
+    if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Source SHA mismatch" }
     py -3.13 -c "import struct; assert struct.calcsize('P') == 8, 'Python x64 required'"
     if ($LASTEXITCODE -ne 0) { throw "Python x64 check failed" }
     uv sync --frozen --python 3.13 --no-build-package cffi --no-build-package argon2-cffi-bindings
     if ($LASTEXITCODE -ne 0) { throw "Frozen dependency installation failed" }
     .\.venv\Scripts\python.exe -m asm.ai.probe --plan
+    if ($LASTEXITCODE -ne 0) { throw "Offline plan failed" }
 }
 ```
 
@@ -99,7 +111,7 @@ git check-ignore .env.m4-probe
 Windows ACL автоматически: до подтверждения ACL запуск закрыт. Python там —
 `.venv\Scripts\python.exe`; ключ также запрещён в PowerShell command line/history.
 
-## Account preflight и review маршрутов
+## Catalog preflight и отдельный review аккаунта/маршрутов
 
 После отдельного допуска на ключ/preflight; `C0-APPROVAL-ID` заменить ссылкой/ID
 реального решения, не выдумывать. Команда делает один GET, без генераций:
@@ -108,14 +120,21 @@ Windows ACL автоматически: до подтверждения ACL за
 .venv/bin/python -m asm.ai.probe --preflight --approval-ref C0-APPROVAL-ID --report .env.m4-probe.catalog.json
 ```
 
-Один GET получает каталог сразу для всех трёх кандидатов. Прежний двухмодельный
-preflight не использовать. Из отчёта reviewer создаёт `.env.m4-probe.review.json`:
+Один GET получает **публичный** каталог сразу для всех трёх кандидатов. Даже с
+Authorization header успешный GET не доказывает валидность ключа, whitelist,
+индивидуальный тариф или доступность генерации. В новом отчёте это явно
+`source: PUBLIC_CATALOG`, `account_authorization: NOT_CHECKED`,
+`account_tariff: NOT_ESTABLISHED_BY_CATALOG`. Прежний двухмодельный preflight не
+использовать. Из отчёта reviewer создаёт `.env.m4-probe.review.json`:
 JSON-массив из **трёх**
 RouteReview в порядке моделей выше. Для каждого копируются `catalog_entry`,
 `catalog_sha256` и `checked_at`; добавляются поля ниже. Это trusted configuration,
 не вывод модели. Пустое поле/неизвестный факт означает BLOCKED; заполнять текстом
-«supported» ради обхода допуска нельзя. Review действителен 24 часа, live повторно
-получает account catalog и сравнивает fingerprint целиком для каждой модели.
+«supported» ради обхода допуска нельзя. Review действителен 24 часа от исходного
+`checked_at`; live повторно получает публичный каталог и сравнивает fingerprint
+целиком для каждой модели. Не обновлять время старого snapshot задним числом:
+после 24 часов нужен новый разрешённый GET и review. Это не снимает отдельную
+проверку key restrictions и индивидуального тарифа.
 Неполный, дублированный, переставленный либо другой набор reviews отклоняется.
 Для DeepSeek нужны те же route/schema/tools/image/token/billing evidence;
 наличие ID в whitelist ключа или публичной карточке не подтверждает capability.
@@ -123,27 +142,41 @@ RouteReview в порядке моделей выше. Для каждого к�
 | Поле | Что должен подтвердить reviewer |
 |---|---|
 | `model` | точный разрешённый ID, без замены |
-| `provider_name` | точное имя из `providers`, для `provider.only` |
+| `provider_name` | точное **единственное** имя из `providers`, для `provider.only`; duplicate name блокируется |
 | `response_provider` | документированное соответствующее значение response `provider`; это `Route.upstream` |
 | `route_evidence` | источник/дата/вывод для name→response ID, official upstream, key restrictions |
-| `schema_tools_evidence` | native strict **точная** conversation_result_v1, READ tools и совместное использование |
+| `schema_tools_evidence` | native strict **точная** conversation_result_envelope_v1 с неизменённым conversation_result_v1 внутри, strict READ tools и совместное использование |
 | `token_bound_evidence` | основание указанной ниже границы для этого tokenizer/wire protocol |
 | `billing_bound_evidence` | актуальные ставки/единицы, применимые fees, отсутствие неизвестного начисления сверх резерва |
 | `image_bound_evidence` | поддержка PNG input и token/billing bound для данных двух изображений |
+| `output_cap_parameter` | ровно `max_tokens` либо `max_completion_tokens`, явно поддерживаемый выбранным provider |
+| `output_cap_includes_reasoning` | только `true`, если подтверждён общий предел всей платной генерации |
+| `output_cap_evidence` | источник/дата/вывод: выбранный параметр ограничивает completion **вместе** с paid reasoning; числовой catalog limit сам по себе этого не доказывает |
+| `inactive_fee_evidence` | объект `имя fee: evidence` только для присутствующих в pricing `audio_per_million`, `input_audio_cache_per_million`, `web_search_per_thousand`; отдельное подтверждение единиц и неприменимости каждого fee к этому payload |
 
 Каждое evidence — короткий текст (20–2000 символов) со ссылкой и проверенным
 выводом. Это обязательный review, не автоматическая сертификация текстового поля.
 Не копировать строки `OFFLINE FIXTURE ONLY` из тестов: они не являются evidence.
 Если нет источника, вернуть C0 точный неизвестный факт. Нет catalog auto-selection.
 
-Каталог должен явно сообщать `is_unofficial: false`, `tools.status: supported`,
-`json_schema_strict.status: supported`, необходимые supported_parameters и token
-limits. `top_provider` не используется вместо выбранного provider. Individual
-tools/schema flags сами по себе **не** доказывают совместимость. Есть потенциально
-важный вопрос для live admission: принятая schema содержит root `anyOf`; адаптер
-передаёт её без удаления ограничений или wrapping. Если маршрут не принимает
-её, C0 получает blocker для `contracts.py` / `schemas/conversation_result_v1.json`
-и решения о минимальной эквивалентной wire-схеме; C4 не меняет принятый контракт.
+Выбранный provider должен явно сообщать `is_unofficial: false`, supported для
+`tools`, `json_schema_strict`, `input_image`, необходимые supported_parameters и
+числовые token limits. `top_provider` не заменяет выбранную запись. Дублированные
+имена не объединяются и первая запись не выбирается. Другой уникальный official
+route возможен только по ручному review; response provider ID не угадывается.
+
+`verified_at: null` — только заявление каталога, timestamp — сообщённая каталогом
+проверка. Ни то ни другое не является нашим live evidence совместимости целого
+payload; plan сохраняет эти различия в `reviewed_routes` вместе с review hash.
+
+Разрешённая C0 wire-обёртка — root object с единственным required полем `result`
+и `additionalProperties: false`. Внутри неизменённый canonical union; `$defs`
+перенесены на root без изменения `$ref`. Адаптер проверяет envelope и передаёт
+его `result` прежнему DTO validator Gateway. Отчёт различает canonical
+`schema_revision: conversation_result_v1` и wire
+`wire_schema_revision: conversation_result_envelope_v1`; prompt не изменён.
+Offline tests покрывают reply/handoff/no_reply и READ, но actual native strict
+schema + tools на конкретном route ещё не проверены.
 
 Официальные источники, сверенные при подготовке 2026-10-29:
 
@@ -152,6 +185,9 @@ tools/schema flags сами по себе **не** доказывают совм
 - [Provider selection](https://polza.ai/docs/gaidy/provider-selection): only/fallback и различие request name / returned provider.
 - [Unofficial providers](https://polza.ai/docs/gaidy/unofficial-providers): restriction ключа и `is_unofficial`.
 - [Chat](https://polza.ai/docs/gaidy/chat-completions), [tools](https://polza.ai/docs/gaidy/tool-calling), [schema](https://polza.ai/docs/gaidy/structured-output), [usage](https://polza.ai/docs/osobennosti/usage): wire mapping, finish reasons, `cost_rub` / `cost` в RUB.
+- [Reasoning](https://polza.ai/docs/osobennosti/reasoning-tokens): paid output и provider defaults; наличие alias не доказывает общий cap для любого route.
+- [Web search](https://polza.ai/docs/gaidy/web-search): способы активации и условный search fee.
+- [OpenAI schema subset](https://developers.openai.com/api/docs/guides/structured-outputs): root object, nested anyOf и `$defs`/`$ref`; это не доказательство совместимости всех Polza routes.
 
 ## Тарификация и token bound
 
@@ -172,8 +208,63 @@ usage сравнивается с границей; неизвестный usage
 output складывает completion/reasoning; request складывает per_request и
 request_per_thousand/1000. Это намеренно консервативно, без cache discounts.
 Reviewer подтверждает, что отсутствующие optional fees неприменимы/включены и
-`max_completion_tokens` включает всю платную reasoning-генерацию. Неизвестные
+**выбранный** cap включает всю платную reasoning-генерацию. Отправляется только
+один alias; supported_parameters и числовой `max_completion_tokens >= 512`
+проверяются независимо. Отдельно заявленные reasoning tokens должны быть
+подмножеством usage completion_tokens, иначе STOP без повторного вызова.
+Неизвестные
 валюта, единицы, tiers, fee objects или дополнительные ставки останавливают план.
+
+Три известных условных audio/search fees требуют `inactive_fee_evidence` даже
+при нулевой ставке. До HTTP проверяется конечная форма text/PNG/function payload:
+audio/modalities, plugins, web_search_options, built-in search tools, лишние поля
+и второй token-cap alias запрещены. Unexpected audio/server-tool usage — STOP.
+Это не разрешение игнорировать неизвестные fees, даже null/zero; cache ставки
+остаются слагаемыми. Для `input_audio_cache_per_million` в сверенных официальных
+источниках пока не найден достаточный контракт единиц/применимости: фактический
+review этого fee остаётся UNKNOWN, его название не является доказательством.
+
+### Snapshot 2026-10-29: оставшиеся блокеры
+
+Разобраны все 58 записей исходного snapshot с
+`checked_at=2026-10-29T10:43:36.518349+00:00`, SHA256
+`ac671d10d528ff8c8458f9fad5dd853651c74b29a7763c20e740e2539ae5d02f`.
+Проверки групп независимы: ранняя ошибка больше не считается полным диагнозом.
+У GPT два `openai`, у DeepSeek два `deepseek`; max_tokens-only — 4/7/42 записей
+соответственно. Все 7 Gemini требуют reasoning и содержат три условных fees;
+ещё 7 GPT содержат search fee. Strict rejected у 5 DeepSeek entries: оба
+`deepseek`, `baseten`, `alibaba`, `novita/fp8`; `baseten` и `mistral/fp8` также
+не имеют `response_format`. У одной direct DeepSeek записи нет input_image.
+У 7/7/42 записей соответственно image/tools заявлены без verified_at.
+
+Ни одного trusted review для реального запуска в этой выдаче не создано.
+Отдельный расчёт Decimal по публичным ставкам и прежней консервативной формуле
+показывает **условный арифметический минимум**, если позже подтвердятся все
+route/cap/billing evidence и исключения fees. Среди уникальных official записей
+с нужными declared capabilities/parameters и numeric limits:
+
+| Модель / арифметический минимум route | Резерв одного call, RUB | Все 27 calls, RUB |
+|---|---:|---:|
+| GPT / `openai/flex` | 0.464071642 | 12.529934334 |
+| Gemini / `google-ai-studio/flex` (равен `google-vertex/global/flex`) | 3.313802006 | 89.472654162 |
+| DeepSeek / `wafer/us` | 0.190210677 | 5.135688279 |
+| **Итого 81 call** | | **107.138276775** |
+
+Это **выше 100 RUB** даже до подтверждения аккаунта; это не выбранные runtime
+routes и не priced plan. Без действительных reviews `--plan` по-прежнему даёт
+null/UNKNOWN. Открыты однозначный selector/response mapping, общий paid-output
+cap (особенно mandatory reasoning Gemini), token/image bound, fee contracts,
+совместимость native schema/tools/PNG и account restrictions/tariff. C0 получает
+бюджетный blocker отдельно; лимиты, выборка и модели здесь не изменяются.
+
+| Код STOP | Действие reviewer |
+|---|---|
+| `AMBIGUOUS_PROVIDER_NAME` | Не выбирать первую запись; нужен иной уникальный route или отдельное решение C0 |
+| `OUTPUT_CAP_REVIEW_REQUIRED` / `OUTPUT_CAP_PARAMETER_UNSUPPORTED` | Подтвердить один поддерживаемый alias и полный paid-output bound |
+| `CONDITIONAL_FEE_REVIEW_REQUIRED` / `FEE_EXCLUSION_REVIEW_REQUIRED` | Проверить каждый fee; не копировать synthetic evidence из тестов |
+| `JSON_SCHEMA_STRICT_REJECTED` / `IMAGE_CAPABILITY_UNKNOWN` | Этот выбранный route не допускается без необходимых capabilities |
+| `TARIFF_UNKNOWN` / `PLAN_EXCEEDS_CEILING` | Устранить неизвестный контракт либо вернуть C0 бюджетный blocker; не повышать лимит |
+| `REVIEW_EXPIRED` / `CATALOG_CHANGED` | Нужны свежий разрешённый snapshot и новый review |
 
 Локальный резерв не гарантирует фактическое списание провайдером. UNKNOWN,
 429/5xx, timeout и отмена не возвращают резерв. Каждая попытка записывает и flush
@@ -190,8 +281,9 @@ billing subsystem и не защита от ручного второго зап
 ```
 
 C0 показывает владельцу конкретный plan/fingerprint, вычисленный резерв, лимит
-ключа и источник запуска. Если резерв >100 RUB — STOP/уменьшение выборки только
-новым review; программа не повышает бюджет. После owner approval до100 RUB:
+ключа и источник запуска. Если резерв >100 RUB — STOP и отдельное решение C0;
+в этой выдаче повышение бюджета/сокращение выборки запрещены. Следующая команда
+пока **BLOCKED**; применять только после закрытия blocker и owner approval до100 RUB:
 
 ```sh
 .venv/bin/python -m asm.ai.probe --live --review .env.m4-probe.review.json --approval-ref C0-APPROVAL-ID --approved-rub 100 --source-sha "$(git rev-parse HEAD)" --source-environment LOCAL_DESKTOP --report .env.m4-probe.report.jsonl
