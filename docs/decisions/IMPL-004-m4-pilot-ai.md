@@ -139,6 +139,28 @@ route/billing facts, превышение150 и отсутствие допус�
 не разрешают paid HTTP. Условный минимум107.138276775 RUB из catalog snapshot
 не является прогнозом списания или доказанным actual priced plan.
 
+**Решение C0 от2026-10-29 — реальные Polza observations / EVAL_ONLY:** владелец
+успешно выполнил отдельный synthetic GPT READ roundtrip: 2 POST,1 READ,валидный
+final с текущим адресом; stage cost0.00895610 RUB, общий prior spend0.01269785 RUB.
+Это не штатный Gateway/runtime acceptance; полное сравнение ещё NOT RUN.
+
+Два предположения пробника пересмотрены на основании этого опыта. Отсутствующее
+body `provider` допускается проверять через ограниченную официальную history API
+по generation ID и согласованным model/usage/cost/finish. Request pin, body field,
+observed history family и непроверенный variant записываются отдельно. History
+OpenAI не доказывает flex. Present wrong provider не подменяется данными history;
+неизвестная/противоречивая identity останавливает этап до следующего POST.
+Это достаточный уровень наблюдения для synthetic EVAL_ONLY, не новое разрешение runtime.
+
+Изменение только числовых ставок не требует повторного ручного review всего
+каталога: при прежней reviewed model/unique official route, modalities и non-price
+provider configuration пробник пересчитывает свежий резерв перед paid calls.
+Fee schema/currency, input/output/reasoning/image assumptions и approved amount
+продолжают ограничивать запуск. Старый snapshot и свежие цены сохраняются раздельно;
+нет подмены hash/даты review или обещания фактической стоимости по публичному тарифу.
+Полная проба использует остаток общего150 с учётом prior0.01269785, без нового150.
+Конкретный write-set, limits history и checks — в CURRENT M4_HANDOFF.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

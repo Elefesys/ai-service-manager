@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.1 INTEGRATED / VERIFIED; M4.2 budget150 / 2026-10-29
+## CURRENT — M4.1 INTEGRATED / VERIFIED; GPT READ live PASS / 2026-10-29
 
 Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**; PR38 слит владельцем,
@@ -14,24 +14,29 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | IN_PROGRESS / PAID PROBE BLOCKED, NOT RUN. CATALOG-R1 fde935f551c83879fda49430f8b096b5e9771659 принят C0 по source/targeted255 PASS; родитель b3d18fb и Windows repair сохранены. C0 M4.2-PROBE-BUDGET-R1 меняет общий proposed ceiling100→150 RUB после готовности владельца увеличить бюджет;75 scenarios/81 calls/6 READ и меньший explicit owner amount сохраняются. Условный минимум107.138276775 RUB не равен actual priced plan. Дальше штатный CI нового candidate и read-only key check; route/billing/account facts ещё открыты |
+| M4.2-PROBE | IN_PROGRESS; full75 NOT RUN. Пользовательский helper GPT READ_ROUNDTRIP_OK:2 POST/1 READ/валидный final, stage0.00895610 RUB; всего3 POST/0.01269785 RUB. Поле provider отсутствует; history OpenAI, flex только request pin. Единственная выдача C4 OBSERVATION-R1 исправляет штатный route observation и fresh repricing, готовит comparison75/81/6 с остатком общего150. Helper не является Gateway/runtime acceptance |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
 | M4.3-QUALITY | TODO; независимый scoped C8/eval |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-Единственная текущая работа **M4.2-PROBE-BUDGET-R1 / C0**:
-`c0/m4-probe-budget-r1` от fde935f551c83879fda49430f8b096b5e9771659,
-tree a1d7a640139c087b92d9c88e0fbcbfd4662f26cf. Write-set6 paths и порядок —
-[M4_HANDOFF](tasks/M4_HANDOFF.md). Candidate SHA/tree и фактический CI —
-в верхнем receipt PR39; до результата не объявлять PASS.
-C1–C6/C8 HOLD. Не повторять неизменённый run40841849732 ради PASS:
-его PG803 PASS/1 setup connect TimeoutError остаётся с неизвестной причиной.
-Новый source проходит отдельный штатный full CI после target checks.
-Разрешён один read-only GET /v1/key с ПК владельца; выводить только limit/usage,
-без secret/label/creator. Публичный catalog GET ранее получен и проверен.
-Подготовленный потолок150 не является paid approval; реальный review/plan и
-explicit owner amount обязательны. Нет paid/VM/Telegram/DB/runtime activation.
+Единственная текущая работа **M4.2-PROBE-OBSERVATION-R1 / C4**:
+`c4/m4-2-probe-observation-r1` от C0 coordination seed с sole parent
+**ff245248e77e39f113064ae7c2eed229603165dd**, source tree
+**a606fd7a5d8c21b78e315fd64d27e6562dc5f8df**. Точный seed SHA/tree — верхний
+receipt [PR39](https://github.com/Elefesys/ai-service-manager/pull/39);
+write-set и критерии — [M4_HANDOFF](tasks/M4_HANDOFF.md).
+Source ff245248 CI40870897271 SUCCESS11/11; не повторять неизменённый CI.
+Source tests и реальные helper receipts различаются; новый adapter candidate
+ещё не получен. C1/C2/C3/C5/C6/C8 HOLD, остальные этапы M4 HOLD.
+
+Владелец уже подтвердил key limit150/reset never и выделил этот общий бюджет.
+Не просить повторного согласия на ту же сумму. C4 готовит конкретный reviewed
+plan и Windows команду; C0 проверяет candidate перед следующим платным этапом.
+Известный prior spend0.01269785 оставляет149.98730215 RUB по арифметике receipts;
+actual account/key remaining после них не запрашивался. Старые reports сохраняются.
+Нет нового paid retry/VM/Telegram/DB/runtime/merge. Старый run40841849732 с PG
+setup connect TimeoutError остаётся историческим наблюдением с неизвестной причиной.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

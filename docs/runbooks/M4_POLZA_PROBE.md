@@ -1,9 +1,16 @@
 # M4.2 — synthetic Polza probe
 
-Статус C0 BUDGET-R1: **REVIEW / PAID PROBE BLOCKED / NOT RUN**. Команды ниже не являются
-разрешением потратить деньги. C0 получает отдельный допуск владельца после review
-кода, плана и размещения ключа. Никаких клиентских данных, Telegram, БД, S3 или
-runtime activation. Accepted deployment остаётся LOCAL / asm_local.
+Статус C0 OBSERVATION-R1: **GPT helper READ_ROUNDTRIP_OK / full75 NOT RUN**.
+Владелец уже выделил общий150 RUB и выполнил один одиночный POST и успешный
+двухшаговый synthetic READ test. Подтверждённый расход **0.01269785 RUB**;
+арифметический остаток общего бюджета **149.98730215 RUB**, не новый150.
+Ниже — процедура основного CLI, которую сейчас исправляет C4; она пока не
+является готовой командой запуска. Повтор успешного helper не нужен.
+Body provider оказался отсутствующим, history family — OpenAI; выбранный
+openai/flex остаётся request pin. Price-only catalog drift требует fresh repricing.
+Точный receipt и текущая выдача — [M4_HANDOFF](../tasks/M4_HANDOFF.md).
+Никаких клиентских данных, Telegram, БД, S3 или runtime activation.
+Accepted deployment остаётся LOCAL / asm_local.
 
 C0 подготовил общий ceiling150 RUB после сообщения владельца о готовности
 увеличить бюджет. Это потолок на все три модели вместе, не автоматическое

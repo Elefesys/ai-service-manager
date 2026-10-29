@@ -6,7 +6,147 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-PROBE-BUDGET-R1 / C0 / 2026-10-29
+## Текущая выдача — M4.2-PROBE-OBSERVATION-R1 / C4 / 2026-10-29
+
+**Результат для пилота:** перенести подтверждённый Polza READ→final в штатный
+adapter/probe и вернуть готовый план сравнения трёх моделей. Отдельный PC helper
+уже прошёл; повторять этот успешный эксперимент или создавать следующий helper
+вместо исправления основного пути не требуется. Runtime/Telegram ещё не проверены.
+
+### База, исполнитель и write-set
+
+- Исполнитель C4; ветка **c4/m4-2-probe-observation-r1**, отдельный checkout от
+  опубликованного C0 coordination commit, содержащего эту выдачу. Полный SHA/tree
+  seed указан в верхнем receipt [PR39](https://github.com/Elefesys/ai-service-manager/pull/39).
+- Sole parent seed и проверенная source base:
+  **ff245248e77e39f113064ae7c2eed229603165dd**, tree
+  **a606fd7a5d8c21b78e315fd64d27e6562dc5f8df**. Source CI
+  [40870897271](https://github.com/Elefesys/ai-service-manager/actions/runs/40870897271)
+  SUCCESS 11/11; не перезапускать неизменённый source. Accepted main остаётся
+  **51d7d73752128715c6d98157445167c0cc0d894d**. PR39 остаётся Draft.
+- C0 seed меняет только этот handoff, CURRENT, IMPL-004 и статус runbook.
+- Write-set C4: `backend/src/asm/ai/polza.py`, `backend/src/asm/ai/probe.py`,
+  `tests/test_m4_polza.py`, `tests/test_m4_probe.py`, при необходимости один
+  `tests/fixtures/m4_polza_observations.json`, `docs/runbooks/M4_POLZA_PROBE.md`,
+  строка M4.2 CURRENT и короткий receipt здесь. Не переносить PC helpers в runtime.
+- Сохранить contracts/gateway/prompt/canonical schema, scenario fixtures SHA256
+  **7abd25f1e1f08e51eacc3a68975e6099c942d33fad37376366dfdef6c7e025b2**,
+  все три model IDs, 75 scenarios / 81 model POST / 6 READ,
+  32768/512 tokens, 24576/32768 model wire bytes, 60s/case / 1800s/run.
+  Locks/manifests/CI/DB/M3/VM/runtime не входят в выдачу.
+
+### Принятое живое наблюдение владельца
+
+Владелец передал полный JSONL **READ_ROUNDTRIP_OK** из
+`reports/m4-polza-read-roundtrip-r2.jsonl`, begin
+**2026-10-29T14:25:37.137743+00:00**, source ff245248, operator_revision
+`m4_read_roundtrip_r2`, helper SHA256
+**4ed5a9fd1d4fe55e694de8cacba0de36da305d4ee7559f4c3213a2296bc8ec2c**.
+Это пользовательский live receipt отдельного helper, не запуск штатного Gateway.
+
+| POST / generation ID | Input / output / reasoning | Finish | Confirmed RUB |
+|---|---|---|---|
+| 1 / gen_2227091293761835009 | 560 / 18 / 0 | tool_calls | 0.00379969 |
+| 2 / gen_2227091341204393985 | 611 / 56 / 12 | stop | 0.00515641 |
+
+Оба observed model — `openai/gpt-6-luna`; body provider **ABSENT**.
+Первый ответ вызвал ровно `read_current({"key":"current"})`, call_id
+`call_AO3zUHfL9ybWYbZ7mrmPBffa`. Один synthetic READ вернул
+«Текущий подтверждённый адрес: улица Модельная, 12.»; второй ответ прошёл
+canonical DTO/evaluation, failures=[]:
+`{"kind":"reply","text":"Сейчас подтверждённый адрес: улица Модельная, 12.","reason":null}`.
+
+History list/detail совпали по generation ID, token counts, finish и стоимости;
+list.provider и detail.finalEndpointSlug — **OpenAI**, status completed,
+attemptsCount=1. createdAt соответственно **2026-10-29T14:25:42.795Z** и
+**2026-10-29T14:25:54.121Z**. History подтверждает family OpenAI; отдельный flex
+variant там не наблюдается. Request pin `provider.only=[openai/flex]`, fallback=false
+не выдавать за наблюдаемый endpoint. Native schema + declared READ + correlated
+result + final подтверждены для этого text case; images и остальные модели ещё нет.
+
+Стоимость этапа **0.00895610 RUB**; с первым одиночным POST
+gen_2227069862221189121 / 0.00374175 RUB весь подтверждённый расход
+**0.01269785 RUB**, всего **3 model POST / 1 synthetic READ**.
+R1 и его catalog preflight дали 0 POST; новых неизвестных списаний в этих receipts нет.
+Остаток общего150 по этим расходам — **149.98730215 RUB**, а не новый бюджет150.
+Это арифметический остаток; текущее значение account/key remaining не запрашивалось.
+
+### Два несовпадения основного кода и решение C0
+
+1. `PolzaAdapter.decode()` требует `data.provider == review.response_provider`.
+   Реальный successful response без поля provider ошибочно становится
+   RETURNED_ROUTE_MISMATCH. Для synthetic EVAL_ONLY C0 разрешает ограниченную
+   проверку route family по официальной history API, когда body provider отсутствует.
+   Present-but-mismatched/malformed provider не превращать в успешный missing case.
+   Не подставлять requested route в response и не менять neutral Gateway контракт.
+   Record отдельно requested_provider, observed_body_provider, history family,
+   source of evidence и неподтверждённый route variant.
+2. Live admission сравнивает hash всей catalog entry. На подготовке R1 изменились
+   ровно пять цен selected openai/flex; остальные его поля совпали. C0 разрешает
+   fresh repricing без нового ручного review при прежней unique official route,
+   model/нужных modalities и unchanged non-price provider configuration, известной
+   fee schema/currency и прежних fee/output/input assumptions. Неизвестные fees,
+   capability/route changes, неоднозначность и превышение approved amount — STOP.
+   Сохранить old/new fingerprints, фактические rates и пересчитанный plan; не
+   перезаписывать старый hash/checked_at и не объявлять публичный тариф account proof.
+
+У R2 entry SHA256 **6d6024d82bd4b4f9004632251aaa2575fbd7a7a645e6fd1b174c7355624c6fcd**;
+selected provider SHA256 **55f2ea5990559bde5bbbaad09af566fea3b17fa4b48120a6a45de2e2253a14bc**;
+provider без pricing SHA256 **f272bbfb18df9d994aa33eb7085ba967c89eba6f3cdf3ec43cabdbbb9255612c**.
+RUB/million: prompt **5.84567500**, completion **29.22837500**,
+cache_read **0.58456750**, cache_write **7.30709375**;
+web_search **1169.13500000 RUB/thousand**, не используется в этом text/function payload.
+Условный reserve двух calls **0.930219926 RUB**, реальное списание приведено выше.
+Operator stage cap1 RUB относился только к R2, не ко всему81-call сравнению.
+
+### Реализация и проверка
+
+- Исправить штатный CLI→Gateway→PolzaAdapter путь, включая image EVAL path;
+  одно изменение adapter не должно оставить отдельный image decoder с прежней ошибкой.
+  History — read-only, только allowlisted Polza origin/path и validated generation ID
+  из конкретного response. Максимум2 history GET на model POST / 162 на full probe,
+  65536 bytes на GET, не более15s и всегда внутри оставшегося60s case/1800s run.
+  Нет polling/retry/redirect или произвольного URL от модели. Missing ID, mismatch,
+  unknown cost/usage/history или attemptsCount!=1 — явный STOP без следующего POST.
+  Body/model/tool/schema/cost/usage проверки сохраняются до исполнения READ/принятия final.
+  Не логировать raw history, account/key fields, headers или chain-of-thought.
+- Fresh catalog GET остаётся один на live admission. Reprice все три routes до
+  первого model POST; новый plan/wire max_price/Gateway reservations/ledger должны
+  использовать одни и те же свежие rates. Исторический reserve107.138276775 не
+  применять как новый plan. Истечение review/capability drift не скрывать repricing.
+- Общий бюджет владельца150 учитывает prior confirmed0.01269785. Простейший
+  operator запуск использует `--approved-rub` не выше **149.98730215** для нового
+  этапа и явно записывает prior/total в receipt; новая billing platform не нужна.
+  Unknown paid attempt нельзя считать нулём, reports нельзя перезаписывать/удалять
+  ради replay. Вместе с будущим полным81-call этапом максимум84 model POST.
+- Нужны настоящие source/contract review для Gemini/DeepSeek route, output/reasoning,
+  fees и image bounds; GPT observation не копировать как evidence этих моделей.
+  Различать catalog declaration, reviewed contract, controlled test и live observation.
+  Успех всей будущей пробы не является предварительным условием её запуска; её
+  задача — установить фактическую совместимость. Не генерировать фиктивные reviews.
+- Controlled tests: absent provider + exact history → tools then final; ID/provider/
+  cost/usage/finish/attempt mismatch, missing history, timeout/limits → STOP;
+  present wrong provider не маскируется history. Price-only drift → правильные
+  fresh reservations; new fee/currency/route/capability/overbudget → 0 POST.
+  Проверить общий prior budget и сохранение 75 finals / 81 POST / 6 READ при
+  успешном mocked CLI всех трёх моделей, включая оба image cases. Негативные тесты
+  должны доходить до своей причины, не останавливаться раньше на другом gate.
+- Targeted pytest, Ruff/format/mypy, offline plan и diff check; затем один итоговый
+  candidate для C0. Полный CI нового source — после review C0, без rerun старого SHA.
+  Вернуть commit/tree, scope, реальные результаты и готовую Windows команду с
+  имеющимся `.env.m4-probe`. Не просить ключ/повторную установку без новой причины.
+  Если остаются blockers — один конкретный список с полем, источником и необходимым
+  фактом; не начинать очередную серию платных диагностических helpers.
+
+Официальные API contracts для C4: [history list/detail](https://github.com/polza-ai/docs/blob/main/api-reference/history/generations.mdx),
+[routing](https://github.com/polza-ai/docs/blob/main/gaidy/provider-selection.mdx),
+[chat completion](https://github.com/polza-ai/docs/blob/main/api-reference/chat/completions.mdx),
+[tools](https://github.com/polza-ai/docs/blob/main/gaidy/tool-calling.mdx).
+C4 не делает paid calls. Владелец уже выделил общий150; повторный запрос той же
+суммы не нужен. Полный запуск выдаётся после проверки конкретного candidate/plan.
+C1/C2/C3/C5/C6/C8 HOLD; full75 NOT RUN, runtime_authorized=false; merge у владельца.
+
+## История — M4.2-PROBE-BUDGET-R1 / C0 / 2026-10-29
 
 **Результат:** подготовить общий потолок150 RUB после сообщения владельца,
 что превышение100 RUB приемлемо. Это ceiling подготовки, не автоматический
