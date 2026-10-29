@@ -2,39 +2,35 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.1 CI BLOCKED; C5 recovery repair issued / 2026-10-29
+## CURRENT — M4.1 INTEGRATED / VERIFIED; M4.2-PROBE issued / 2026-10-29
 
-Принятый main **1cb3b6e168276d77faa3f11f33f8ecd0408ce406**; PR37/план/IMPL-004 интегрированы.
-[PR38](https://github.com/Elefesys/ai-service-manager/pull/38) candidate
-**31537848de7bcfb5732622b9361cfaba41c1105b**, tree **aa265f68c3fec9e3b7128d9a800e6e5cf5574f25**.
-C0 source review Gateway/DTO/fake/tests завершён без существенных замечаний;
-это не независимый C8 и не итоговая интеграция.
-[CI40740338709](https://github.com/Elefesys/ai-service-manager/actions/runs/40740338709),
-attempt1, завершён: **10 SUCCESS / 1 FAILURE**. Foundation2286+155subtests/804PG PASS;
-browser398unit PASS,53browserPASS/1FAIL. Единственный подтверждённый blocker —
-existing escalation login/rotation/replay recovery: UI стал anonymous до retry.
-Причинный request пока не установлен; cleanup=false после timeout — вторичный факт.
+Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
+**411636a3614529077f6d0d230c62d11f69da600f**. PR #38 слит владельцем;
+дерево равно принятому candidate85d32562bdce37ef38fea1305dfe249f66f41b65.
+[Main CI40811295940](https://github.com/Elefesys/ai-service-manager/actions/runs/40811295940),
+push/main, attempt1: **11/11 SUCCESS**. Candidate CI40768758591 также11/11 SUCCESS.
+C0 source/evidence review завершён; не независимый C8, не live LLM acceptance.
 
 | Task | Status / ближайший результат |
 |---|---|
-| M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance + main CI40725828529 PASS |
-| M4.1-CONTRACT | BLOCKED: C4 implementation returned/source reviewed; полный CI FAIL; PR38 не слит, C4 HOLD |
-| C5-M4.1-CI-RECOVERY-R1 | REVIEW / repair candidate, C5 HOLD для C0/CI: добавлен барьер11 startup/child reads и UI перед первой rotation; задержанный observations GET должен завершиться200 до неё. Negative old-credential Business401 сохранён. Typecheck/diff/local predicate checks PASS; новый E2E NOT RUN. Basefe9de57d…; diagnostic54/54 PASS отдельно, исторический GET неизвестен; receipt в M4_HANDOFF |
-| M4.2-PROBE | TODO / HOLD до приёмки M4.1; Polza adapter/synthetic comparison, отдельный ключ и подтверждённый бюджет |
-| M4.3-CONTEXT | TODO: актуальный M3 context и необходимые read-only tools |
-| M4.3-RUNTIME | TODO: durable AI run и настоящий guarded Telegram consumer; C2/C3 по точной дельте |
+| M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
+| M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
+| C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; read barrier до rotation и real401 negative приняты; исходный FAIL/diagnostic history в PR38, C5 HOLD |
+| M4.2-PROBE | TODO / ASSIGNED C4: Polza adapter + offline tests + готовая команда/secret инструкция/лимиты; первый возврат REVIEW / PAID PROBE NOT RUN. Live budget/ключ ещё не подтверждены |
+| M4.3-CONTEXT | TODO / HOLD: актуальный M3 context и необходимые read-only tools после текущей выдачи |
+| M4.3-RUNTIME | TODO / HOLD: durable AI run и guarded Telegram consumer; C2/C3 по точной дельте |
 | M4.3-QUALITY | TODO: независимый scoped C8/eval; авторские тесты внутри каждой задачи |
 | M4-ACCEPTANCE | TODO: bounded synthetic live, A08, actual main CI и передача M5 |
 
-Новый диагностический run40760265440: browser54/54 и398frontend PASS; R4 полный,
-controlled rotation401→anonymous воспроизведён. Полный run пока IN_PROGRESS;
-исходный FAIL сохранён. Диагностика не является завершённым исправлением.
-
-Единственная текущая выдача и матрица A01–A08 — [M4_HANDOFF](tasks/M4_HANDOFF.md).
-C1/C2/C3/C4/C6/C8 HOLD. Общие файлы не редактируются параллельно.
-C5 не меняет Gateway, backend/SQL/CI/VM и не ослабляет auth/replay критерии.
-Direct/RAG/Vision/registry и следующие business domains сохраняют DEFERRED scope.
-Платных API, новой VM активации или переоткрытия M3 нет.
+Единственная текущая выдача/точный write-set и матрица A01–A08 —
+[M4_HANDOFF](tasks/M4_HANDOFF.md). Ветка **c4/m4-2-probe**, C0 docs seed поверх
+actual main выше; сохранить seed ancestry. C1/C2/C3/C5/C6/C8 HOLD.
+Предложенный предел будущей пробы100 ₽/80 model calls — не разрешение расхода.
+Сначала готовая команда и secret инструкция, затем допуск владельца;
+только synthetic TEST data, accepted environment LOCAL/asm_local не переименовывать.
+M3 final acceptance ниже и M3_HANDOFF сохранены. Нет runtime/Telegram wiring,
+новых миграций, VM activation, прямого API adapter, RAG/Vision runtime или registry.
+Полные receipts/CI evidence остаются в PR; не добавлять commit ради своего SHA.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 
