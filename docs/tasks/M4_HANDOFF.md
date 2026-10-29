@@ -6,7 +6,40 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-PROBE-OBSERVATION-R1 / C4 / 2026-10-29
+## Текущая выдача — M4.2-PROBE-OBSERVATION-COMPAT-R1 / C0 / 2026-10-29
+
+Возврат C4 **fb2d318671ca5186cdc514b6117225d580cdd679**, tree
+**5853046a035adc71671a03d2eb8fbd55f20911b5**, sole parent a5508dd714eb4c83fcb39abd547cb62b2a41037f
+проверен C0. Ровно7 разрешённых paths; исходные contracts/fixtures/locks сохранены.
+Ниже остаются scope и receipt C4; C4 HOLD, текущую узкую поправку выполняет C0
+в `c0/m4-observation-compat-r1` от exact fb2d318.
+
+**Воспроизведённая ошибка:** история всех трёх реальных GPT generations владельца
+содержит `apiType=completions`, а candidate требует только `chat_completions` из
+примера документации. Controlled replay с единственным изменением apiType
+получил HISTORY_VERIFICATION_FAILED после POST/GET/GET и до READ.
+Это подтверждённое несовпадение, не причина просить новый платный диагностический вызов.
+C0 принимает ровно обе известные формы; остальные типы, model/family/ID/cost/usage/
+finish/attempt checks остаются строгими. Новые проверки обеих форм READ→final и
+отказов responses/media/null/empty используют реальные generation IDs и metering
+из receipt, остальной HTTP fixture явно controlled.
+
+В независимом исходном прогоне C0 **321 PASS / 1 FAIL**: compressed transport test
+остановился до MockHTTP (count0) из-за общего25ms deadline, поэтому не проверил свою
+причину. C0 отделил бюджет подготовки:25ms оставлен только slow_body deadline case,
+остальные ошибки получают1s и по-прежнему обязаны достичь ровно одного HTTP,
+сохранить резерв и закончиться ERROR. Production60s/1800s limits не изменены.
+После source/test поправки **327 PASS**; Ruff/format и mypy71 PASS. Это новый
+кандидат, не неизменённый rerun ради PASS. Source/CI receipt публикуется в PR39.
+
+C0 write-set: `backend/src/asm/ai/polza.py`, `tests/test_m4_polza.py`,
+этот handoff, CURRENT и `docs/runbooks/M4_POLZA_PROBE.md`. После публикации C0
+FF интегрирует итоговый source в Draft PR39 с expected head/force=false для
+одного штатного full CI. Paid/full75 ещё NOT RUN: реальные три route reviews
+не созданы, оставшиеся contract facts перечислены в runbook. Бюджет владельца
+150 и prior0.01269785 не изменяются. VM/runtime/merge не выполняются.
+
+### Принятая выдача C4 — OBSERVATION-R1
 
 **Результат для пилота:** перенести подтверждённый Polza READ→final в штатный
 adapter/probe и вернуть готовый план сравнения трёх моделей. Отдельный PC helper

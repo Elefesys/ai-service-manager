@@ -409,7 +409,9 @@ async def test_wire_and_transport_failures_are_bounded(scenario):
 
     gw = gateway(
         PolzaAdapter(review(), KEY, transport=httpx.MockTransport(handler)),
-        limits={"duration_seconds": 0.025},
+        # Only slow_body tests the elapsed deadline. Other cases must reach
+        # the transport failure even when local schema preparation takes >25ms.
+        limits={"duration_seconds": 0.025 if scenario == "slow_body" else 1.0},
     )
     result = await gw.call()
     assert result.kind == "ERROR" and result.result is None and result.cost.status == "UNKNOWN"
@@ -863,13 +865,15 @@ async def test_reasoning_usage_within_confirmed_output_is_not_added_twice():
     assert result.cost.amount == Decimal("0.001")
 
 
-async def test_absent_body_provider_requires_history_before_read_and_final():
+@pytest.mark.parametrize("api_type", ["chat_completions", "completions"])
+async def test_absent_body_provider_requires_history_before_read_and_final(api_type):
     data = [payload(tools=True), payload()]
+    generation_ids = ("gen_2227091293761835009", "gen_2227091341204393985")
     for i, (entry, prompt, completion, reasoning, cost) in enumerate(
         zip(data, (560, 611), (18, 56), (0, 12), ("0.00379969", "0.00515641"), strict=True)
     ):
         entry.pop("provider")
-        entry["id"] = "gen_" + str(2227091293761835009 + i)
+        entry["id"] = generation_ids[i]
         entry["usage"].update(
             prompt_tokens=prompt,
             completion_tokens=completion,
@@ -887,6 +891,7 @@ async def test_absent_body_provider_requires_history_before_read_and_final():
             current.append(data[len(current)])
             return response(current[-1])
         listing, detail = history_payloads(current[-1])
+        detail["apiType"] = api_type
         return response(listing if str(request.url) == HISTORY_LIST else detail)
 
     adapter = PolzaAdapter(history_review(), KEY, transport=httpx.MockTransport(handler))
@@ -925,6 +930,10 @@ async def test_absent_body_provider_requires_history_before_read_and_final():
         ("detail", "usage", None),
         ("detail", "isCancelled", True),
         ("detail", "responseMode", "async"),
+        ("detail", "apiType", "responses"),
+        ("detail", "apiType", "media"),
+        ("detail", "apiType", None),
+        ("detail", "apiType", ""),
         ("detail", "requestType", "audio"),
         ("detail", "serverTools", {"steps": 2}),
     ],

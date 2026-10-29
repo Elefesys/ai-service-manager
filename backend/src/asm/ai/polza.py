@@ -617,7 +617,9 @@ class PolzaAdapter:
             detail = await get(HISTORY + "/" + identifier)
             if (
                 not matches(detail, detail=True)
-                or detail.get("apiType") != "chat_completions"
+                # Polza documents chat_completions; the owner's three real
+                # 2026-10-29 generations report completions for this same endpoint.
+                or detail.get("apiType") not in ("chat_completions", "completions")
                 or detail.get("responseMode") != "sync"
                 or detail.get("isCancelled") is not False
                 or type(detail.get("attemptsCount")) is not int
