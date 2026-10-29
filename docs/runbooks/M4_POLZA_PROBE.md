@@ -1,5 +1,12 @@
 # M4.2 — synthetic Polza probe
 
+**Текущая подготовка: C4 EXECUTABLE-EVAL-R1.** C0 разрешил конечный experimental
+admission с явными assumptions вместо фиктивных verified reviews; нужны Gemini
+signature continuation и явный DeepSeek non-thinking профиль. Задача и принятые
+границы — [верхний M4_HANDOFF](../tasks/M4_HANDOFF.md). Следующие команды описывают
+прежний reviewed path; новая исполняемая команда будет дана с принятым candidate.
+Полный75-case paid запуск ещё NOT RUN, повтор GPT helper не нужен.
+
 Статус C0 OBSERVATION-R1: **GPT helper READ_ROUNDTRIP_OK / full75 NOT RUN**.
 Владелец уже выделил общий150 RUB и выполнил один одиночный POST и успешный
 двухшаговый synthetic READ test. Подтверждённый расход **0.01269785 RUB**;

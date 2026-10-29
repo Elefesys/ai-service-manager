@@ -6,7 +6,134 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-PROBE-OBSERVATION-COMPAT-R1 / C0 / 2026-10-29
+## Текущая выдача — M4.2-PROBE-EXECUTABLE-EVAL-R1 / C4 / 2026-10-29
+
+**Результат:** одна готовая Windows команда штатного синтетического сравнения
+трёх выбранных моделей в уже выделенном общем бюджете150 RUB. Ещё один набор
+неисполняемых review placeholders или новый платный helper не закрывает задачу.
+Цель пробы — установить compatibility/quality и расход, а не потребовать их
+предварительного live PASS. C0 явно пересматривает admission ниже и в IMPL-004.
+
+### Точная база и границы
+
+- Repository Elefesys/ai-service-manager. Ветка C4 **c4/m4-2-executable-eval-r1**
+  от опубликованного C0 seed этой выдачи; его полный SHA/tree — верхний PR39 receipt.
+- Sole parent/source base seed **78dabd8ffb05e036e7f2e3acad6ae4832ea7badb**,
+  tree **9d15250dc46575ecdd331ec6b5bf21130fdd7d9f**. Ancestry сохраняет C4
+  fb2d318 → C0 compatibility repair; 327 targeted PASS, Ruff/format/mypy71/plan PASS.
+  CI [40902629746](https://github.com/Elefesys/ai-service-manager/actions/runs/40902629746)
+  запущен один раз на exact78dabd8, результат проверять отдельно; пока не объявлять PASS.
+  Эта выдача разрешает локальную реализацию C4; merge/runtime зависят от финальных gates.
+- Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, Draft PR39 head78dabd8.
+  C0 seed меняет только CURRENT, handoff, IMPL-004 и статус runbook, не двигает PR39.
+- Write-set C4: `backend/src/asm/ai/polza.py`, `backend/src/asm/ai/probe.py`,
+  `tests/test_m4_polza.py`, `tests/test_m4_probe.py`, при необходимости один
+  `tests/fixtures/m4_polza_observations.json`, runbook, CURRENT M4.2 и receipt здесь.
+  Не менять contracts/gateway/prompt/canonical schema, scenario fixtures, locks,
+  CI/DB/M3/VM/runtime. Не вводить registry, новый сервис или отдельный helper.
+- Сохранить fixture SHA256 **7abd25f1e1f08e51eacc3a68975e6099c942d33fad37376366dfdef6c7e025b2**,
+  75 scenarios / 81 новых model POST / 6 READ, 32768/512 tokens,
+  24576/32768 model wire bytes,60s/case,1800s/run; history≤162 GET,65536 bytes,
+  ≤15s на verification внутри общих deadlines. Retry/repair/fallback отсутствуют.
+- До полного этапа уже3 POST и **0.01269785 RUB**. Новый этап≤**149.98730215 RUB**,
+  вся последовательность≤84 model POST. Секрет остаётся на ПК владельца.
+
+### Подтверждённые source findings и пределы evidence
+
+1. C0 исправил C4 apiType mismatch: реальные history receipts имеют `completions`,
+   пример документации — `chat_completions`. Теперь принимаются ровно обе формы;
+   other/missing type, mismatched identity/metering/finish/attempt по-прежнему STOP.
+2. `PolzaAdapter.decode/wire` отбрасывает vendor continuation metadata.
+   [Google OpenAI-compatible tools](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures#signatures-for-openai-compatibility)
+   требуют вернуть `tool_calls[].extra_content.google.thought_signature`.
+   [DeepSeek thinking tools](https://api-docs.deepseek.com/guides/thinking_mode/)
+   требуют `reasoning_content` в следующем запросе при включённом thinking.
+   C0 controlled repro для обеих моделей: первый TOOLS, второй ERROR/HTTP400,
+   потому что mock потребовал указанное поле, а wire его потерял. Real Polza POST=0;
+   это доказательство потери поля и риска native-контракта, не наблюдённый Polza400.
+3. Пока нельзя честно заполнить прежние «доказанные» route/token/billing/image
+   assertions для всех hosted routes. Отсутствие этой сертификации не запрещает
+   ограниченный synthetic experiment; неизвестное должно оставаться явно неизвестным.
+
+### Решение C0: конечный experimental admission
+
+Разрешить в существующем CLI явный **SYNTHETIC_EXPERIMENT / EVAL_ONLY** путь.
+Это не фиктивный RouteReview и не APPROVED/runtime. Обычный reviewed path и его
+проверки сохраняются. Не заполнять `output_cap_includes_reasoning=true` или evidence
+строками, которые выдают предположение за проверенный контракт. Минимальный профиль
+явно различает declared capability, assumption, observed result и ручную оценку C0.
+
+- Только фиксированные пары: `openai/gpt-6-luna` → `openai/flex`;
+  `google/gemini-3.8-flash` → `google-ai-studio/flex`;
+  `deepseek/deepseek-v4.1-flash-1017` → `wafer/us`. Это выбор C0 по полученному
+  public snapshot, не auto-selection. Перед paid HTTP один fresh catalog GET
+  проверяет unique exact route/is_unofficial=false, нужные declared capabilities,
+  supported parameters и limits. Missing/duplicate/rejected/unknown — STOP;
+  другую route/model автоматически не выбирать.
+- До первого POST сформировать и записать фактический conditional plan всех3
+  routes по свежим rates; `billing_status=CONDITIONAL_ESTIMATE`, а не REVIEWED_BOUND.
+  Существующие консервативные input/output/cache sums сохраняются. Для известного
+  `input_audio_cache_per_million` допустимо включить всю declared per-million ставку
+  в input reserve вместо недоказанного исключения. Audio/search исключаются только
+  по проверяемому отсутствию этих modalities/server-tools/plugins в конечном payload.
+  Новая/нечисловая/неизвестная fee или валюта — STOP. Максимум512 выходных токенов
+  передаётся поддерживаемым alias; допущения tokenizer/image/reasoning обозначаются
+  как assumptions. После каждого ответа прежние actual usage/cost limits обязательны.
+  Никакой гарантии конечного счёта только из public catalog не заявляется.
+- Configured request route и observed provider разделяются. При известном mapping
+  (GPT history **OpenAI**) mismatch остаётся STOP. Для двух ещё не наблюдённых
+  families не угадывать label: сохранить отсутствие prior mapping, а первый
+  согласованный list/detail label записать как **OBSERVED_DURING_THIS_EVAL**.
+  Требовать точное совпадение generation ID/model/usage/cost/status/finish,
+  list/detail family и attemptsCount=1; последующие обращения той же модели
+  должны сохранить эту family. Неизвестные labels не становятся доказанным mapping
+  к requested variant. Все фактически присутствующие body labels сохраняются
+  отдельно; reviewed-path present mismatch нельзя обходить новым режимом.
+  Route.upstream может обозначать явно настроенный unique request selector только
+  в этом EVAL пути; отчёт обязан прямо обозначить это как configuration, не observation.
+- Никакой автоматической «модель принята»: после полного75 нужен C0 review всех
+  outputs, observed routes и расходов. Runtime selection/authorization остаётся false.
+  Секрет/клиентские данные/Telegram/БД отсутствуют; модель читает только fixture facts.
+
+### Продолжение tools без изменения neutral contracts
+
+- Gemini: сохранить полученную opaque thought_signature только в ограниченном
+  transient adapter state, связав с текущим run/route и validated call_id. Вернуть
+  ровно её в соответствующем assistant tool_call следующего запроса. Не копировать
+  произвольный extra_content/message. Подпись не выводить в JSONL/errors или files,
+  не переносить между cases/runs. Включить её bytes в прежний input/token admission;
+  превышение/invalid shape/correlation — STOP до следующего POST. Это encrypted
+  protocol metadata, не бизнес-факт и не новый tool.
+- DeepSeek: C0 выбирает явный **non-thinking** профиль для этой пробы, поскольку
+  current adapter не передаёт raw reasoning. Использовать документированный Polza
+  reasoning control и подтверждённую catalog возможность none/disable; выбранная
+  route в snapshot объявляет toggle supported, mandatory=false, effort none.
+  Записать режим в plan. Не молча надеяться на default (в snapshot default_enabled=true).
+  Если отключение не поддержано/не соблюдено — явный STOP; raw reasoning не логировать
+  и не добавлять в neutral DTO. GPT сохранить в уже проверенном режиме; настройки
+  каждого кандидата видны в отчёте, сравнение относится именно к этим профилям.
+
+### Проверка и готовый возврат
+
+Controlled полный CLI обязан учитывать Gemini signatures и выбранный DeepSeek
+non-thinking wire; старого mock, который принимает любой follow-up, недостаточно.
+Проверить no cross-run carryover, wrong/missing/malformed/oversized metadata,
+invalid/changed history family, original reviewed mismatch, unknown fee/capability,
+overbudget и actual usage/cost exceed → STOP. Успешный путь75/81/6; default plan
+без секретов/HTTP; synthetic/declared/observed evidence не смешиваются.
+
+Вернуть один candidate с targeted pytest/Ruff/format/mypy/plan/diff receipt,
+actual source SHA/tree, изменёнными profiles и **исполняемой Windows командой**.
+Она использует существующие `.venv`/`.env.m4-probe`, exact accepted source, explicit
+experiment flag, остаток149.98730215, один свежий catalog GET и новый exclusive report.
+До accepted candidate placeholders допустимы только для SHA/ссылки решения C0;
+не требовать от владельца сочинять route reviews или заново передавать/вводить ключ.
+Paid calls не выполнять из C4. C0 проверяет source/plan, затем один full CI нового
+candidate и выдаёт владельцу запуск в уже согласованном бюджете. Если объективно
+невозможно выполнить один из перечисленных условий — вернуть точное препятствие,
+а не фиктивное evidence. C1/C2/C3/C5/C6/C8 HOLD; main/VM/runtime/merge не трогать.
+
+## История — M4.2-PROBE-OBSERVATION-COMPAT-R1 / C0 / 2026-10-29
 
 Возврат C4 **fb2d318671ca5186cdc514b6117225d580cdd679**, tree
 **5853046a035adc71671a03d2eb8fbd55f20911b5**, sole parent a5508dd714eb4c83fcb39abd547cb62b2a41037f

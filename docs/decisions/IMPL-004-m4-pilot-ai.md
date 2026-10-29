@@ -161,6 +161,31 @@ Fee schema/currency, input/output/reasoning/image assumptions и approved amount
 Полная проба использует остаток общего150 с учётом prior0.01269785, без нового150.
 Конкретный write-set, limits history и checks — в CURRENT M4_HANDOFF.
 
+**Решение C0 от2026-10-29 — исполняемый synthetic experiment:** предварительная
+сертификация всех hosted route/token/image/billing properties не является
+условием конечной пробы, предназначенной для их измерения. C0 разрешает отдельный
+явный EVAL_ONLY experimental admission в существующем CLI с тремя фиксированными
+official route selectors, fresh catalog, conditional budget и прежними hard limits.
+Нельзя маскировать assumptions под существующий verified RouteReview, обновлять
+дату старого review или считать conditional reserve гарантированным списанием.
+Review-mode guards сохраняются; experiment не может быть APPROVED/runtime.
+
+Для GPT сохраняется известная history family OpenAI. Для Gemini/DeepSeek, где
+prior mapping неизвестен, family устанавливается как observation первого exact
+generation ID с совпадающими list/detail/model/usage/cost/finish/attempts и должна
+оставаться неизменной в рамках model eval. Requested selector остаётся config,
+body label и observed history family — отдельными facts, variant — NOT_OBSERVED.
+Нет auto-selection, fallback, retry, клиентских данных или runtime promotion.
+
+Native tools continuation — часть необходимой совместимости: bounded opaque
+Gemini thought_signature допускается transiently сохранить и вернуть только
+соответствующему call_id в том же run/route; в logs/files/DTO её нет. Для DeepSeek
+этот experiment явно использует non-thinking профиль при заявленной catalog
+поддержке none/disable; raw reasoning не сохраняется/не передаётся через neutral
+contracts. Все bytes и actual usage/cost проверяются прежними ограничениями.
+Полный отчёт75 cases требует последующего ручного review C0. Общий150 включает
+prior0.01269785. Точный scope/профили/негативные проверки — EXECUTABLE-EVAL-R1 в handoff.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

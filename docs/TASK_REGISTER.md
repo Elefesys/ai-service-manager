@@ -14,26 +14,26 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | IN_PROGRESS / C0 OBSERVATION-COMPAT-R1; C4 HOLD, full75 NOT RUN. C4 fb2d318 проверен: history/repricing сохранены, но apiType=completions из реального receipt отвергался. Узкая поправка C0 принимает обе известные chat формы; другие типы STOP. Независимый baseline321 PASS/1 timing-fixture FAIL; после source/test поправки327 PASS, Ruff/format/mypy71 PASS. Source и новый CI — верхний PR39 receipt. Controlled CLI75/81/6, history≤162; prior0.01269785, новый этап≤149.98730215 из150. Реальные три reviews/contract fields ещё не закрыты |
+| M4.2-PROBE | IN_PROGRESS / C4 EXECUTABLE-EVAL-R1; full75 NOT RUN. C0 source78dabd8 исправил apiType,327 targeted PASS; CI40902629746 отдельно. Новая конечная выдача: Gemini signature continuation, DeepSeek non-thinking и явный SYNTHETIC_EXPERIMENT admission с declared/conditional/observed evidence вместо фиктивных verified reviews. Фиксированные3 routes,75/81/6, прежние hard limits; prior0.01269785, новый этап≤149.98730215 из150. Runtime/automatic model selection не разрешены |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
 | M4.3-QUALITY | TODO; независимый scoped C8/eval |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-Единственная текущая работа **M4.2-PROBE-OBSERVATION-COMPAT-R1 / C0**:
-`c0/m4-observation-compat-r1` от C4
-**fb2d318671ca5186cdc514b6117225d580cdd679**, source tree
-**5853046a035adc71671a03d2eb8fbd55f20911b5**. Итоговый candidate SHA/tree — верхний
+Единственная текущая работа **M4.2-PROBE-EXECUTABLE-EVAL-R1 / C4**:
+`c4/m4-2-executable-eval-r1` от C0 coordination seed с sole parent
+**78dabd8ffb05e036e7f2e3acad6ae4832ea7badb**, source tree
+**9d15250dc46575ecdd331ec6b5bf21130fdd7d9f**. Seed SHA/tree — верхний
 receipt [PR39](https://github.com/Elefesys/ai-service-manager/pull/39);
 write-set и критерии — [M4_HANDOFF](tasks/M4_HANDOFF.md).
 Source ff245248 CI40870897271 SUCCESS11/11; не повторять неизменённый CI.
-Source tests и реальные helper receipts различаются; C4 candidate получен,
-исправлен C0 и готовится к одному полному CI нового source.
-C1/C2/C3/C4/C5/C6/C8 HOLD, остальные этапы M4 HOLD.
+Source tests и реальные helper receipts различаются. Новый source78dabd8
+находится в Draft PR39; CI40902629746 attempt1 запущен, result см. PR39.
+C4 может выполнять узкую выдачу; C1/C2/C3/C5/C6/C8 и остальные этапы M4 HOLD.
 
 Владелец уже подтвердил key limit150/reset never и выделил этот общий бюджет.
-Не просить повторного согласия на ту же сумму. C0 закрывает source/contract review
-и конкретный plan перед следующим платным этапом; готовая команда в runbook пока HOLD.
+Не просить повторного согласия на ту же сумму. C4 готовит исполняемый finite
+experiment; C0 проверяет candidate и конкретный conditional plan перед paid этапом.
 Известный prior spend0.01269785 оставляет149.98730215 RUB по арифметике receipts;
 actual account/key remaining после них не запрашивался. Старые reports сохраняются.
 Нет нового paid retry/VM/Telegram/DB/runtime/merge. Старый run40841849732 с PG
