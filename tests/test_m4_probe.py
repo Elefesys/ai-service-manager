@@ -10,9 +10,11 @@ from decimal import Decimal
 
 import httpx
 import pytest
-from asm.ai.polza import CONVERSATION_WIRE_REVISION, MODELS, PolzaAdapter, fingerprint
+from asm.ai.polza import CONVERSATION_WIRE_REVISION, HISTORY_LIST, MODELS, PolzaAdapter, fingerprint
 from asm.ai.probe import (
     FIXTURES,
+    PRIOR_CONFIRMED_RUB,
+    STAGE_RUB_CEILING,
     Ledger,
     catalog,
     catalog_subset,
@@ -25,7 +27,7 @@ from asm.ai.probe import (
     run_case,
 )
 from asm.ai.settings import ProbeSettings, load_secret
-from test_m4_polza import KEY, payload, response, review
+from test_m4_polza import KEY, history_payloads, history_review, payload, response, review
 
 
 def test_default_and_plan_do_not_read_secret_or_open_network(monkeypatch, capsys):
@@ -100,7 +102,7 @@ async def test_higher_ceiling_does_not_raise_a_smaller_owner_budget():
     cases = load_cases(FIXTURES)
     total = Decimal(plan(cases, tuple(reviews))["priced_reservation_rub"])
     assert Decimal(100) < total < Decimal(150)
-    ledger = Ledger(io.StringIO(), Decimal(150), 81)
+    ledger = Ledger(io.StringIO(), STAGE_RUB_CEILING, 81)
     for reviewed in reviews:
         for repeat in range(27):
             ledger.reserve(reviewed, cases[0], repeat)
@@ -113,9 +115,14 @@ async def test_higher_ceiling_does_not_raise_a_smaller_owner_budget():
             ProbeSettings(api_key=KEY),
             io.StringIO(),
             Decimal(100),
-            transport=httpx.MockTransport(lambda request: calls.append(request)),
+            transport=httpx.MockTransport(
+                lambda request: (
+                    calls.append(request.method),
+                    response({"data": [r.catalog_entry for r in reviews]}),
+                )[1]
+            ),
         )
-    assert not calls
+    assert calls == ["GET"]  # Fresh prices, still no model POST under the smaller approval.
 
 
 def test_reservations_never_refunded_and_fail_before_next_call():
@@ -191,10 +198,10 @@ def test_reviews_expire_and_missing_evidence_is_not_pass(tmp_path):
 
 
 @pytest.mark.parametrize("changed_model", range(3))
-async def test_catalog_drift_stops_all_generations(changed_model):
+async def test_non_price_catalog_drift_stops_all_generations(changed_model):
     reviews = tuple(review(model) for model in MODELS)
     data = {"data": [copy.deepcopy(r.catalog_entry) for r in reviews]}
-    data["data"][changed_model]["providers"][0]["pricing"]["completion_per_million"] = "99"
+    data["data"][changed_model]["providers"][0]["context_length"] = 131072
     methods = []
 
     def handler(req):
@@ -202,7 +209,7 @@ async def test_catalog_drift_stops_all_generations(changed_model):
         assert "include_capabilities=true" in str(req.url)
         return response(data)
 
-    with pytest.raises(ValueError, match="CATALOG_CHANGED"):
+    with pytest.raises(ValueError, match="PROVIDER_CONFIGURATION_CHANGED"):
         await live(
             load_cases(FIXTURES),
             reviews,
@@ -214,7 +221,7 @@ async def test_catalog_drift_stops_all_generations(changed_model):
     assert methods == ["GET"]
 
 
-async def test_too_small_approved_budget_stops_before_catalog():
+async def test_too_small_approved_budget_stops_after_fresh_catalog_before_post():
     calls = []
     reviews = tuple(review(model) for model in MODELS)
     approved = sum(r.reservation() * 27 for r in reviews[:2])
@@ -225,9 +232,14 @@ async def test_too_small_approved_budget_stops_before_catalog():
             ProbeSettings(api_key=KEY),
             io.StringIO(),
             approved,
-            transport=httpx.MockTransport(lambda r: calls.append(r)),
+            transport=httpx.MockTransport(
+                lambda r: (
+                    calls.append(r.method),
+                    response({"data": [r.catalog_entry for r in reviews]}),
+                )[1]
+            ),
         )
-    assert not calls
+    assert calls == ["GET"]
 
 
 @pytest.mark.parametrize("missing", ["usage", "cost", "timeout"])
@@ -274,11 +286,18 @@ def test_critical_invented_facts_fail_despite_valid_schema():
     )
 
 
+@pytest.mark.parametrize("absent_provider", [False, True])
 def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, capsys, absent_provider
 ):
     cases = load_cases(FIXTURES)
-    reviews = tuple(review(model) for model in MODELS)
+    reviews = tuple((history_review if absent_provider else review)(model) for model in MODELS)
+    originals = [r.model_dump(mode="json") for r in reviews]
+    entries = [copy.deepcopy(r.catalog_entry) for r in reviews]
+    expected_reserves = []
+    for i, entry in enumerate(entries):
+        entry["providers"][0]["pricing"]["prompt_per_million"] = str(11 + i)
+        expected_reserves.append((Decimal(32768) * (11 + i) + 512 * Decimal(40)) / 1000000)
     answers = {
         "owner_fact": "Улица Тестовая, 7",
         "owner_hours": "10:00–18:00",
@@ -303,15 +322,24 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
     }
     seen = []
     models_seen = []
+    history_data = []
 
     def handler(request):
         seen.append(request.method)
         if request.method == "GET":
-            return response({"data": [r.catalog_entry for r in reviews]})
+            if request.url.path.endswith("/models"):
+                return response({"data": entries})
+            listing, detail = history_payloads(history_data[-1])
+            return response(listing if str(request.url) == HISTORY_LIST else detail)
         body = json.loads(request.content)
         models_seen.append(body["model"])
         assert body["provider"]["only"] == ["Official Fixture Provider"]
         assert body["provider"]["allow_fallbacks"] is False
+        assert body["provider"]["max_price"] == {
+            "prompt": 11 + MODELS.index(body["model"]),
+            "completion": 40.0,
+            "request": 0.0,
+        }
         if isinstance(body["messages"][0]["content"], list):
             url = body["messages"][0]["content"][1]["image_url"]["url"]
             case = next(c for c in cases if c.image_base64 and url.endswith(c.image_base64))
@@ -336,6 +364,10 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
         data["choices"][0]["message"]["reasoning"] = "PRIVATE CHAIN OF THOUGHT MUST NOT BE SAVED"
         # Different observed charges make accidental omission of model three visible.
         data["usage"]["cost_rub"] = str(Decimal("0.001") * (MODELS.index(body["model"]) + 1))
+        if absent_provider:
+            data.pop("provider")
+            data["id"] = "gen_" + str(len(models_seen))
+            history_data.append(data)
         return response(data)
 
     async def controlled_live(*args):
@@ -371,7 +403,7 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
     events = [json.loads(line) for line in output.splitlines()]
     summary = events[-1]
     assert summary["event"] == "summary"
-    assert seen.count("POST") == 81 and seen.count("GET") == 1
+    assert seen.count("POST") == 81 and seen.count("GET") == (163 if absent_provider else 1)
     assert models_seen == [model for model in MODELS for _ in range(27)]
     assert summary["status"] == "HUMAN_REVIEW_REQUIRED"
     for i, model in enumerate(MODELS):
@@ -383,12 +415,24 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
         assert summary["models"][model]["eligibility"] == "HUMAN_REVIEW_REQUIRED"
     assert summary["selected_model"] is None
     assert KEY.get_secret_value() not in output and "CHAIN OF THOUGHT" not in output
+    assert "PRIVATE_ACCOUNT_METADATA" not in output
     case_rows = [r for r in events if r["event"] == "case"]
     assert len([r for r in case_rows if r["final"]]) == 75
     assert sum(r["reads"] for r in case_rows) == 6
     assert all(sum(r["reads"] for r in case_rows if r["model"] == m) == 2 for m in MODELS)
     recorded_plan = next(r for r in events if r["event"] == "plan")
     assert recorded_plan["route_reviews"] == [r.catalog_sha256 for r in reviews]
+    assert recorded_plan["pricing_catalogs"] == [fingerprint(e) for e in entries]
+    assert recorded_plan["prior_confirmed_cost_rub"] == "0.01269785"
+    assert recorded_plan["max_shared_model_posts"] == 84
+    repricing = next(r for r in events if r["event"] == "catalog_repricing")
+    for i, row in enumerate(repricing["routes"]):
+        assert row["old_catalog_sha256"] == reviews[i].catalog_sha256
+        assert row["new_catalog_sha256"] == fingerprint(entries[i])
+        assert row["review_checked_at"] == reviews[i].checked_at.isoformat()
+        assert row["old_pricing"]["prompt_per_million"] == "10"
+        assert row["new_pricing"]["prompt_per_million"] == str(11 + i)
+    assert originals == [r.model_dump(mode="json") for r in reviews]
     assert recorded_plan["wire_schema_revision"] == CONVERSATION_WIRE_REVISION
     assert [r["output_cap_parameter"] for r in recorded_plan["reviewed_routes"]] == [
         "max_completion_tokens",
@@ -402,7 +446,15 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
     reservations = [Decimal(r["rub_reserved"]) for r in events if r["event"] == "reserved"]
     assert reservations == sorted(set(reservations))
     assert len(reservations) == 81
-    assert reservations[-1] == sum(r.reservation() * 27 for r in reviews)
+    assert reservations[-1] == sum(r * 27 for r in expected_reserves)
+    assert sum(c["history_gets"] for r in case_rows for c in r["calls"]) == (
+        162 if absent_provider else 0
+    )
+    assert all(
+        c["route_evidence_source"] == ("HISTORY_LIST_DETAIL" if absent_provider else "BODY")
+        for r in case_rows
+        for c in r["calls"]
+    )
     assert str(reservations[-1]) == recorded_plan["priced_reservation_rub"]
 
 
@@ -517,7 +569,7 @@ async def test_exact_three_reviews_required_before_http_and_secret(
         ("price", "PLAN_EXCEEDS_CEILING"),
     ],
 )
-async def test_invalid_third_review_stops_before_any_http(change, error):
+async def test_invalid_third_review_or_fresh_price_stops_before_post(change, error):
     reviews = [review(model) for model in MODELS]
     entry = copy.deepcopy(reviews[2].catalog_entry)
     provider = entry["providers"][0]
@@ -545,9 +597,14 @@ async def test_invalid_third_review_stops_before_any_http(change, error):
             ProbeSettings(api_key=KEY),
             io.StringIO(),
             Decimal(100),
-            transport=httpx.MockTransport(lambda r: calls.append(r)),
+            transport=httpx.MockTransport(
+                lambda r: (
+                    calls.append(r.method),
+                    response({"data": [r.catalog_entry for r in reviews]}),
+                )[1]
+            ),
         )
-    assert not calls
+    assert calls == (["GET"] if change == "price" else [])
 
 
 async def test_82nd_model_attempt_is_rejected_before_http():
@@ -651,3 +708,139 @@ def test_operator_gets_safe_review_failure_before_secret_or_http(
     assert main(["--plan", "--review", str(path)]) == 2
     text = capsys.readouterr().out
     assert code in text and "secret" not in text
+
+
+@pytest.mark.parametrize(
+    "change,code",
+    [
+        ("new_fee", "TARIFF_SCHEMA_CHANGED"),
+        ("currency", "TARIFF_SCHEMA_CHANGED"),
+        ("null_rate", "TARIFF_SCHEMA_CHANGED"),
+        ("bad_rate", "TARIFF_UNKNOWN"),
+        ("route", "OFFICIAL_ROUTE_UNKNOWN"),
+        ("duplicate", "AMBIGUOUS_PROVIDER_NAME"),
+        ("unofficial", "OFFICIAL_ROUTE_UNKNOWN"),
+        ("capability", "JSON_SCHEMA_STRICT_REJECTED"),
+        ("modality", "IMAGE_CAPABILITY_UNKNOWN"),
+        ("configuration", "PROVIDER_CONFIGURATION_CHANGED"),
+        ("unknown_configuration", "PROVIDER_CONFIGURATION_CHANGED"),
+        ("over_ceiling", "PLAN_EXCEEDS_CEILING"),
+        ("over_approved", "APPROVED_BUDGET_TOO_SMALL"),
+    ],
+)
+async def test_fresh_third_route_rejection_prevents_first_model_post(change, code):
+    reviews = tuple(review(m) for m in MODELS)
+    entries = [copy.deepcopy(r.catalog_entry) for r in reviews]
+    selected = entries[2]["providers"][0]
+    if change == "new_fee":
+        selected["pricing"]["unknown_fee"] = None
+    elif change == "currency":
+        selected["pricing"]["currency"] = "USD"
+    elif change in ("null_rate", "bad_rate", "over_ceiling", "over_approved"):
+        selected["pricing"]["prompt_per_million"] = {
+            "null_rate": None,
+            "bad_rate": {"tier": 1},
+            "over_ceiling": "150",
+            "over_approved": "100",
+        }[change]
+    elif change == "route":
+        selected["name"] = "Other"
+    elif change == "duplicate":
+        entries[2]["providers"].append(copy.deepcopy(selected))
+    elif change == "unofficial":
+        selected["is_unofficial"] = True
+    elif change == "capability":
+        selected["capabilities"]["json_schema_strict"]["status"] = "rejected"
+    elif change == "modality":
+        entries[2]["architecture"]["input_modalities"] = ["text"]
+    elif change == "configuration":
+        selected["reasoning"] = {"mandatory": True}
+    else:
+        selected["new_provider_policy"] = "must not disappear in catalog_subset"
+    seen, output = [], io.StringIO()
+    with pytest.raises(ValueError, match=code):
+        await live(
+            load_cases(FIXTURES),
+            reviews,
+            ProbeSettings(api_key=KEY),
+            output,
+            Decimal(100),
+            transport=httpx.MockTransport(
+                lambda r: (seen.append(r.method), response({"data": entries}))[1]
+            ),
+        )
+    assert seen == ["GET"] and '"event": "reserved"' not in output.getvalue()
+    if change.startswith("over_"):
+        pricing = json.loads(output.getvalue())
+        assert pricing["event"] == "catalog_repricing"
+        assert Decimal(pricing["priced_reservation_rub"]) > 100
+
+
+def test_repricing_preserves_review_date_and_ignores_unselected_price_changes():
+    original = review()
+    before = original.model_dump(mode="json")
+    entry = copy.deepcopy(original.catalog_entry)
+    entry["providers"].append({"name": "Unselected", "pricing": {"unknown_fee": "999"}})
+    current = original.reprice(entry)
+    assert current.checked_at == original.checked_at
+    assert current.reservation() == original.reservation()
+    assert current.catalog_sha256 != original.catalog_sha256
+    assert original.model_dump(mode="json") == before
+
+
+async def test_fresh_lower_prices_can_replace_an_expensive_historical_plan():
+    reviews = []
+    entries = []
+    for model in MODELS:
+        original = review(model)
+        entries.append(original.catalog_entry)
+        expensive = copy.deepcopy(original.catalog_entry)
+        expensive["providers"][0]["pricing"]["prompt_per_million"] = "150"
+        reviews.append(
+            review(model, catalog_entry=expensive, catalog_sha256=fingerprint(expensive))
+        )
+    seen, output = [], io.StringIO()
+
+    def handler(request):
+        seen.append(request.method)
+        if request.method == "GET":
+            return response({"data": entries})
+        return response(status=500)  # One reserved attempt; do not fake a full quality run here.
+
+    summary = await live(
+        load_cases(FIXTURES),
+        tuple(reviews),
+        ProbeSettings(api_key=KEY),
+        output,
+        Decimal(100),
+        transport=httpx.MockTransport(handler),
+    )
+    assert seen == ["GET", "POST"] and summary["status"] == "FAILED_OR_INCOMPLETE"
+    recorded = next(
+        r for r in map(json.loads, output.getvalue().splitlines()) if r["event"] == "plan"
+    )
+    assert Decimal(recorded["priced_reservation_rub"]) < 100
+
+
+@pytest.mark.parametrize("approved", [Decimal(150), Decimal("149.987302151")])
+async def test_prior_spend_cannot_be_reallocated_to_new_stage(approved):
+    with pytest.raises(ValueError, match="APPROVAL_LIMIT"):
+        await live(
+            load_cases(FIXTURES),
+            tuple(review(m) for m in MODELS),
+            ProbeSettings(api_key=KEY),
+            io.StringIO(),
+            approved,
+            transport=httpx.MockTransport(lambda _: pytest.fail("HTTP before budget check")),
+        )
+
+
+def test_prior_and_stage_reservations_share_one_150_ceiling():
+    ledger = Ledger(io.StringIO(), STAGE_RUB_CEILING, 81)
+    ledger.reserved = STAGE_RUB_CEILING - review().reservation()
+    ledger.reserve(review(), load_cases(FIXTURES)[0], 0)
+    recorded = json.loads(ledger.output.getvalue())
+    assert Decimal(recorded["shared_rub_committed_or_reserved"]) == Decimal(150)
+    assert ledger.reserved + PRIOR_CONFIRMED_RUB == 150
+    with pytest.raises(ValueError, match="GLOBAL_BUDGET_EXHAUSTED"):
+        ledger.reserve(review(), load_cases(FIXTURES)[0], 1)

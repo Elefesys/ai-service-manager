@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import re
+import time
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from typing import Annotated, Any, Literal
@@ -30,6 +31,11 @@ ENDPOINT = "https://polza.ai/api/v1/chat/completions"
 CATALOG = (
     "https://polza.ai/api/v1/models?type=chat&include_providers=true&include_capabilities=true"
 )
+HISTORY = "https://polza.ai/api/v1/history/generations"
+HISTORY_LIST = HISTORY + "?requestType=chat&page=1&limit=5&sortBy=createdAt&sortOrder=desc"
+GENERATION_ID = r"gen_[0-9]{1,64}"
+HISTORY_BYTES = 65536
+HISTORY_SECONDS = 15.0
 MODELS = (
     "openai/gpt-6-luna",
     "google/gemini-3.8-flash",
@@ -83,6 +89,13 @@ def conversation_wire_schema(schema: Any) -> dict[str, Any]:
     }
 
 
+class HistoryReview(DTO):
+    """Reviewed family label; never an assertion that history observes a variant."""
+
+    provider: Identifier
+    evidence: Evidence
+
+
 class RouteReview(DTO):
     """Trusted operator input, NOT model output or auto-generated capability proof.
 
@@ -93,6 +106,7 @@ class RouteReview(DTO):
     model: str
     provider_name: str = Field(min_length=1, max_length=128)
     response_provider: Identifier
+    history: HistoryReview | None = None
     catalog_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     checked_at: datetime
     route_evidence: str = Field(min_length=20, max_length=2000)
@@ -231,6 +245,28 @@ class RouteReview(DTO):
             Decimal("0.000000001"), amount.quantize(Decimal("0.000000001"), rounding=ROUND_CEILING)
         )
 
+    def reprice(self, entry: dict[str, Any]) -> "RouteReview":
+        """Derive a price view; preserve the source review object and its original date."""
+        self.fresh()
+        self.rates()
+        old = self.provider()
+        current = RouteReview.model_validate(
+            self.model_dump() | {"catalog_entry": entry, "catalog_sha256": fingerprint(entry)}
+        )
+        new = current.provider()
+        if self.catalog_entry["architecture"] != entry["architecture"] or {
+            k: v for k, v in old.items() if k != "pricing"
+        } != {k: v for k, v in new.items() if k != "pricing"}:
+            raise ValueError("PROVIDER_CONFIGURATION_CHANGED")
+        if (
+            set(old["pricing"]) != set(new["pricing"])
+            or old["pricing"]["currency"] != new["pricing"].get("currency")
+            or any((v is None) != (new["pricing"][k] is None) for k, v in old["pricing"].items())
+        ):
+            raise ValueError("TARIFF_SCHEMA_CHANGED")
+        current.rates()
+        return current
+
     def metadata(self) -> dict[str, Any]:
         """Catalog declarations/check dates are not a live test or key authorization."""
         capabilities = self.provider()["capabilities"]
@@ -238,6 +274,7 @@ class RouteReview(DTO):
             "model": self.model,
             "provider_only": self.provider_name,
             "expected_response_provider": self.response_provider,
+            "expected_history_family": self.history.provider if self.history else None,
             "catalog_sha256": self.catalog_sha256,
             "review_sha256": fingerprint(self.model_dump(mode="json")),
             "output_cap_parameter": self.output_cap_parameter,
@@ -269,7 +306,14 @@ async def bounded_http(
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> bytes:
     """Bound raw bytes before decode; reject compression to avoid decompression bombs."""
-    if url not in (ENDPOINT, CATALOG) or seconds <= 0:
+    history_url = url == HISTORY_LIST or re.fullmatch(re.escape(HISTORY) + "/" + GENERATION_ID, url)
+    if (
+        url not in (ENDPOINT, CATALOG)
+        and not history_url
+        or seconds <= 0
+        or history_url
+        and (body is not None or seconds > HISTORY_SECONDS or maximum > HISTORY_BYTES)
+    ):
         raise PolzaFailure("ADAPTER_ERROR", "REQUEST_ADMISSION")
     try:
         async with asyncio.timeout(seconds):
@@ -327,7 +371,7 @@ class PolzaAdapter:
         self.review = RouteReview.model_validate(review)
         self._key = key
         self._transport = transport
-        self.observation: dict[str, str | None] = {}
+        self.observation: dict[str, Any] = {}
         self.capabilities = Capabilities(
             route=review.route(),
             structured_output=True,
@@ -461,18 +505,136 @@ class PolzaAdapter:
     async def _send(self, body: bytes, seconds: float, maximum: int) -> AdapterResponse:
         try:
             self.check_payload(body)
-            raw = await bounded_http(
-                self._key,
-                ENDPOINT,
-                body=body,
-                seconds=seconds,
-                maximum=maximum,
-                transport=self._transport,
-            )
-            return self.decode(raw)
+            deadline = time.monotonic() + seconds
+            async with asyncio.timeout(seconds):
+                raw = await bounded_http(
+                    self._key,
+                    ENDPOINT,
+                    body=body,
+                    seconds=seconds,
+                    maximum=maximum,
+                    transport=self._transport,
+                )
+                result = self.decode(raw, history_pending=self.review.history is not None)
+                if self.observation["provider_field_state"] == "ABSENT":
+                    await self.verify_history(result, deadline)
+                return result
+        except TimeoutError:
+            self.observation["error_detail"] = "REQUEST_DEADLINE"
+            raise PolzaFailure("TIMEOUT", "REQUEST_DEADLINE") from None
         except PolzaFailure as exc:
             self.observation["error_detail"] = exc.detail
             raise
+
+    async def verify_history(self, result: AdapterResponse, deadline: float) -> None:
+        """Two bounded GETs before returning TOOLS/OUTPUT, including the image path."""
+        review = self.review.history
+        identifier = self.observation["generation_id"]
+        if review is None:
+            raise PolzaFailure("ADAPTER_ERROR", "HISTORY_REVIEW_REQUIRED")
+        if identifier is None:
+            raise PolzaFailure("ADAPTER_ERROR", "GENERATION_ID_INVALID")
+        if (
+            result.usage.input_tokens is None
+            or result.usage.output_tokens is None
+            or result.cost.status != "CONFIRMED"
+        ):
+            raise PolzaFailure("ADAPTER_ERROR", "HISTORY_METERING_UNKNOWN")
+        if (
+            result.usage.input_tokens > INPUT_TOKENS
+            or result.usage.output_tokens > OUTPUT_TOKENS
+            or result.cost.amount is None
+            or result.cost.amount > self.review.reservation()
+        ):
+            raise PolzaFailure("ADAPTER_ERROR", "HISTORY_METERING_LIMIT")
+        deadline = min(deadline, time.monotonic() + HISTORY_SECONDS)
+        total_tokens = result.usage.input_tokens + result.usage.output_tokens
+
+        async def get(url: str) -> Any:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise PolzaFailure("TIMEOUT", "HISTORY_DEADLINE")
+            self.observation["history_gets"] += 1
+            raw = await bounded_http(
+                self._key,
+                url,
+                body=None,
+                seconds=remaining,
+                maximum=HISTORY_BYTES,
+                transport=self._transport,
+            )
+            data = strict_json(raw.decode())
+            if self._key.get_secret_value() in json.dumps(data, ensure_ascii=False):
+                raise ValueError
+            return data
+
+        def matches(row: Any, *, detail: bool) -> bool:
+            usage = row["usage"]
+            amount = row["clientCost" if detail else "cost"]
+            if type(amount) not in (str, int, float):
+                return False
+            money = Decimal(str(amount))
+            return (
+                row["id"] == identifier
+                and row["requestType"] == "chat"
+                and row["status"] == "completed"
+                and row["finalEndpointSlug" if detail else "provider"] == review.provider
+                and money.is_finite()
+                and money == result.cost.amount
+                and all(
+                    type(usage.get(k)) is int and usage[k] == v
+                    for k, v in (
+                        ("prompt_tokens", result.usage.input_tokens),
+                        ("completion_tokens", result.usage.output_tokens),
+                    )
+                )
+                and (
+                    "total_tokens" not in usage
+                    or type(usage["total_tokens"]) is int
+                    and usage["total_tokens"] == total_tokens
+                )
+                and (
+                    (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") is None
+                    or type(usage["completion_tokens_details"]["reasoning_tokens"]) is int
+                    and usage["completion_tokens_details"]["reasoning_tokens"]
+                    == self.observation["reasoning_tokens"]
+                )
+            )
+
+        try:
+            listing = await get(HISTORY_LIST)
+            items = listing["items"]
+            if type(items) is not list or len(items) > 5 or any(type(r) is not dict for r in items):
+                raise ValueError
+            selected = [r for r in items if r.get("id") == identifier]
+            if (
+                len(selected) != 1
+                or not matches(selected[0], detail=False)
+                or selected[0].get("model")
+                not in (self.review.model, self.review.model.split("/", 1)[1])
+            ):
+                raise ValueError
+            detail = await get(HISTORY + "/" + identifier)
+            if (
+                not matches(detail, detail=True)
+                or detail.get("apiType") != "chat_completions"
+                or detail.get("responseMode") != "sync"
+                or detail.get("isCancelled") is not False
+                or type(detail.get("attemptsCount")) is not int
+                or detail["attemptsCount"] != 1
+                or detail.get("finishReason") != self.observation["finish_reason"]
+                or "model" in detail
+                and detail["model"] != selected[0]["model"]
+                or detail.get("serverTools")
+                or detail.get("parentGenerationId")
+                or detail.get("stepsCount", 1) != 1
+            ):
+                raise ValueError
+        except (ValueError, TypeError, KeyError, AttributeError, InvalidOperation, RecursionError):
+            raise PolzaFailure("ADAPTER_ERROR", "HISTORY_VERIFICATION_FAILED") from None
+        self.observation.update(
+            history_family=review.provider, route_evidence_source="HISTORY_LIST_DETAIL"
+        )
 
     def check_payload(self, raw: bytes) -> None:
         """Fee exclusions apply only to this finite text/PNG/function wire surface."""
@@ -540,11 +702,23 @@ class PolzaAdapter:
             raise ProviderFailure("ADAPTER_ERROR")
         return await self._send(body, seconds, OUTPUT_BYTES)
 
-    def decode(self, raw: bytes) -> AdapterResponse:
+    def decode(self, raw: bytes, *, history_pending: bool = False) -> AdapterResponse:
         try:
             if self._key.get_secret_value().encode() in raw:
                 raise ValueError
             data = strict_json(raw.decode("utf-8"))
+            self.observation.update(
+                requested_provider=self.review.provider_name,
+                provider_field_state="PRESENT" if "provider" in data else "ABSENT",
+                observed_body_provider=None,
+                history_family=None,
+                route_evidence_source="NONE",
+                route_variant="NOT_OBSERVED",
+                history_gets=0,
+                generation_id=data.get("id")
+                if isinstance(data.get("id"), str) and re.fullmatch(GENERATION_ID, data["id"])
+                else None,
+            )
             for field in ("provider", "model"):
                 value = data.get(field)
                 self.observation["observed_" + field] = (
@@ -554,17 +728,22 @@ class PolzaAdapter:
                     and re.fullmatch(r"[a-zA-Z0-9_.:/-]{1,128}", value)
                     else None
                 )
+            self.observation["observed_body_provider"] = self.observation["observed_provider"]
             if (
-                data.get("provider") != self.review.response_provider
+                ("provider" in data and data["provider"] != self.review.response_provider)
+                or ("provider" not in data and not history_pending)
                 or data.get("model") != self.review.model
             ):
                 raise PolzaFailure("ADAPTER_ERROR", "RETURNED_ROUTE_MISMATCH")
+            if "provider" in data:
+                self.observation["route_evidence_source"] = "BODY"
             usage_data = data.get("usage") or {}
             usage = Usage(
                 input_tokens=usage_data.get("prompt_tokens"),
                 output_tokens=usage_data.get("completion_tokens"),
             )
             reasoning = (usage_data.get("completion_tokens_details") or {}).get("reasoning_tokens")
+            self.observation["reasoning_tokens"] = reasoning
             if reasoning is not None and (
                 type(reasoning) is not int
                 or reasoning < 0
@@ -597,6 +776,9 @@ class PolzaAdapter:
             if self._key.get_secret_value() in str(message):
                 raise ValueError
             reason = choice["finish_reason"]
+            self.observation["finish_reason"] = (
+                reason if reason in ("stop", "tool_calls", "length", "content_filter") else None
+            )
             if reason == "length":
                 return AdapterResponse(kind="TRUNCATED", usage=usage, cost=cost)
             if reason == "content_filter" or message.get("refusal"):

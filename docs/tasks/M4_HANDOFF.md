@@ -146,6 +146,30 @@ C4 не делает paid calls. Владелец уже выделил общи
 суммы не нужен. Полный запуск выдаётся после проверки конкретного candidate/plan.
 C1/C2/C3/C5/C6/C8 HOLD; full75 NOT RUN, runtime_authorized=false; merge у владельца.
 
+### Receipt C4 — OBSERVATION-R1 / 2026-10-29
+
+**Candidate REVIEW; full75 NOT RUN; C4 HOLD для C0.** Sole parent candidate —
+seed **a5508dd714eb4c83fcb39abd547cb62b2a41037f**, tree
+**821e5c5beb0e9593b78bb1c3df23a7fd348800b2**; source ff245248 сохранён в ancestry.
+Ровно7 разрешённых paths. Missing body provider проверяется list/detail history
+по конкретному generation ID **до** READ/final, в общем text/image `_send`;
+present mismatch не подменяется. Максимум2 GET/POST,162/этап,65536 bytes/GET,
+до15s вместе и внутри case/run deadlines. Request pin/body/history family/variant
+разделены. Только price drift создаёт fresh price views; original review hash/date
+сохранены в receipt, все три routes перепроверяются до первого model POST.
+
+Frozen uv0.13.4 / CPython3.13.16: целевые pytest из runbook **322 PASS**;
+Ruff/format, mypy **71 source files**, offline plan и diff check PASS.
+Controlled CLI:75 finals/81 POST/6 READ при обеих формах body provider; при absent
+provider ещё162 history GET +1 catalog GET, включая оба image cases каждой модели.
+Все budgets/fixtures/contracts сохранены; prior0.01269785 учитывается в общем150,
+stage approval не выше149.98730215. Прежний reserve107.138276775 не выдаётся за fresh plan.
+Ни нового реального RouteReview, ни paid/helper/full CI запуска нет. Таблица
+недостающих contract facts и готовая Windows команда с существующим ключом —
+[runbook](../runbooks/M4_POLZA_PROBE.md#открытые-поля-для-c0-перед-полным-сравнением).
+Следующий шаг: C0 review source/contract fields и решение о full CI нового candidate;
+успех GPT helper не объявлен Gateway/runtime acceptance. PR39/main не сдвигались.
+
 ## История — M4.2-PROBE-BUDGET-R1 / C0 / 2026-10-29
 
 **Результат:** подготовить общий потолок150 RUB после сообщения владельца,

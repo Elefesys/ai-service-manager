@@ -2,6 +2,7 @@
 
 import asyncio
 import copy
+import io
 import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -20,6 +21,8 @@ from asm.ai.gateway import ModelGateway, ProviderFailure
 from asm.ai.polza import (
     CONVERSATION_WIRE_REVISION,
     ENDPOINT,
+    HISTORY,
+    HISTORY_LIST,
     INPUT_TOKENS,
     MODELS,
     OVERHEAD_TOKENS,
@@ -30,7 +33,7 @@ from asm.ai.polza import (
     encode,
     fingerprint,
 )
-from asm.ai.probe import FIXTURES, ReadArgs, ReadResult, configuration, load_cases
+from asm.ai.probe import FIXTURES, Ledger, ReadArgs, ReadResult, configuration, load_cases, run_case
 from pydantic import SecretStr
 
 KEY = SecretStr("offline-fixture-secret-do-not-log")
@@ -164,6 +167,45 @@ def gateway(adapter, *, tools=False, limits=None, deadline=None):
         else (),
     )
     return ModelGateway(cfg, request, adapter)
+
+
+def history_review(model=MODELS[0]):
+    return review(
+        model,
+        history={
+            "provider": "official-fixture",
+            "evidence": "CONTROLLED FIXTURE ONLY; no actual family mapping is asserted",
+        },
+    )
+
+
+def history_payloads(data):
+    """Minimal documented list/detail shape; synthetic metadata must not reach reports."""
+    item = {
+        "id": data["id"],
+        "model": data["model"].split("/", 1)[1],
+        "requestType": "chat",
+        "provider": "official-fixture",
+        "status": "completed",
+        "cost": str(data["usage"]["cost_rub"]),
+        "usage": copy.deepcopy(data["usage"]),
+        "apiKeyShort": "PRIVATE_ACCOUNT_METADATA",
+    }
+    detail = {
+        "id": data["id"],
+        "requestType": "chat",
+        "apiType": "chat_completions",
+        "responseMode": "sync",
+        "status": "completed",
+        "isCancelled": False,
+        "finishReason": data["choices"][0]["finish_reason"],
+        "attemptsCount": 1,
+        "finalEndpointSlug": "official-fixture",
+        "clientCost": str(data["usage"]["cost_rub"]),
+        "usage": copy.deepcopy(data["usage"]),
+        "organizationId": "PRIVATE_ACCOUNT_METADATA",
+    }
+    return {"items": [item]}, detail
 
 
 @pytest.mark.parametrize("model", MODELS)
@@ -490,11 +532,18 @@ async def test_observed_route_is_reported_as_mismatch_not_claimed_as_expected(mo
     )
     result = await gateway(adapter).call()
     assert result.result is None and result.error == "ADAPTER_ERROR"
-    assert adapter.observation == {
-        "observed_provider": "unexpected-upstream",
-        "observed_model": model,
-        "error_detail": "RETURNED_ROUTE_MISMATCH",
-    }
+    assert (
+        adapter.observation.items()
+        >= {
+            "observed_provider": "unexpected-upstream",
+            "observed_model": model,
+            "error_detail": "RETURNED_ROUTE_MISMATCH",
+            "observed_body_provider": "unexpected-upstream",
+            "history_family": None,
+            "history_gets": 0,
+            "route_evidence_source": "NONE",
+        }.items()
+    )
 
 
 async def test_escaped_secret_in_returned_route_cannot_enter_report():
@@ -812,3 +861,207 @@ async def test_reasoning_usage_within_confirmed_output_is_not_added_twice():
     result = await gateway(adapter).call()
     assert result.kind == "FINAL" and result.usage.output_tokens == 20
     assert result.cost.amount == Decimal("0.001")
+
+
+async def test_absent_body_provider_requires_history_before_read_and_final():
+    data = [payload(tools=True), payload()]
+    for i, (entry, prompt, completion, reasoning, cost) in enumerate(
+        zip(data, (560, 611), (18, 56), (0, 12), ("0.00379969", "0.00515641"), strict=True)
+    ):
+        entry.pop("provider")
+        entry["id"] = "gen_" + str(2227091293761835009 + i)
+        entry["usage"].update(
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            cost_rub=cost,
+            completion_tokens_details={"reasoning_tokens": reasoning},
+        )
+    seen, current = [], []
+
+    def handler(request):
+        seen.append(request.method)
+        if request.method == "POST":
+            if current:
+                assert seen == ["POST", "GET", "GET", "POST"]
+                assert json.loads(request.content)["messages"][-1]["role"] == "tool"
+            current.append(data[len(current)])
+            return response(current[-1])
+        listing, detail = history_payloads(current[-1])
+        return response(listing if str(request.url) == HISTORY_LIST else detail)
+
+    adapter = PolzaAdapter(history_review(), KEY, transport=httpx.MockTransport(handler))
+    case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+    row = await run_case(adapter, case, Ledger(io.StringIO(), Decimal(1), 2), 0)
+    assert not row["failures"] and row["reads"] == 1 and row["final"]["kind"] == "reply"
+    assert seen == ["POST", "GET", "GET", "POST", "GET", "GET"]
+    for call in row["calls"]:
+        assert call["observed_body_provider"] is None
+        assert call["history_family"] == "official-fixture"
+        assert call["requested_provider"] == "Official Fixture Provider"
+        assert call["route_evidence_source"] == "HISTORY_LIST_DETAIL"
+        assert call["route_variant"] == "NOT_OBSERVED"
+    assert "PRIVATE_ACCOUNT_METADATA" not in json.dumps(row)
+
+
+@pytest.mark.parametrize(
+    "stage,field,value",
+    [
+        ("list", "id", "gen_999"),
+        ("detail", "id", "gen_999"),
+        ("list", "model", "different-model"),
+        ("detail", "model", "different-model"),
+        ("list", "provider", "other"),
+        ("detail", "finalEndpointSlug", "other"),
+        ("list", "cost", "0.002"),
+        ("detail", "clientCost", "0.002"),
+        ("list", "usage", {"prompt_tokens": 30, "completion_tokens": 21}),
+        ("detail", "usage", {"prompt_tokens": 31, "completion_tokens": 20}),
+        ("detail", "finishReason", "stop"),
+        ("detail", "attemptsCount", 2),
+        ("detail", "attemptsCount", True),
+        ("list", "status", "pending"),
+        ("detail", "status", "failed"),
+        ("list", "cost", None),
+        ("detail", "usage", None),
+        ("detail", "isCancelled", True),
+        ("detail", "responseMode", "async"),
+        ("detail", "requestType", "audio"),
+        ("detail", "serverTools", {"steps": 2}),
+    ],
+)
+async def test_history_mismatch_stops_before_read_or_next_post(stage, field, value):
+    data = payload(tools=True)
+    data.pop("provider")
+    data["id"] = "gen_123"
+    listing, detail = history_payloads(data)
+    (listing["items"][0] if stage == "list" else detail)[field] = value
+    seen = []
+
+    def handler(request):
+        seen.append(request.method)
+        return response(
+            data
+            if request.method == "POST"
+            else listing
+            if str(request.url) == HISTORY_LIST
+            else detail
+        )
+
+    adapter = PolzaAdapter(history_review(), KEY, transport=httpx.MockTransport(handler))
+    case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+    ledger = Ledger(io.StringIO(), Decimal(1), 2)
+    row = await run_case(adapter, case, ledger, 0)
+    assert row["failures"] and row["reads"] == 0 and row["final"] is None
+    assert seen == ["POST", "GET"] + (["GET"] if stage == "detail" else [])
+    assert adapter.observation["error_detail"] == "HISTORY_VERIFICATION_FAILED"
+    assert ledger.calls == 1 and ledger.reserved > 0
+    assert row["calls"][0]["cost"]["status"] == "UNKNOWN"
+
+
+@pytest.mark.parametrize("provider", ["wrong", None, "", {}, 123])
+async def test_present_wrong_or_malformed_provider_never_uses_history(provider):
+    data = payload(tools=True)
+    data.update(provider=provider, id="gen_123")
+    seen = []
+    adapter = PolzaAdapter(
+        history_review(),
+        KEY,
+        transport=httpx.MockTransport(lambda r: (seen.append(r.method), response(data))[1]),
+    )
+    result = await gateway(adapter, tools=True).call()
+    assert result.error == "ADAPTER_ERROR" and seen == ["POST"]
+    assert adapter.observation["error_detail"] == "RETURNED_ROUTE_MISMATCH"
+
+
+@pytest.mark.parametrize(
+    "identifier", [None, "", "https://other.invalid/gen_1", "gen_1/../../key", "gen_x", 1]
+)
+async def test_missing_or_invalid_generation_id_stops_without_history(identifier):
+    data = payload(tools=True)
+    data.pop("provider")
+    data["id"] = identifier
+    seen = []
+    adapter = PolzaAdapter(
+        history_review(),
+        KEY,
+        transport=httpx.MockTransport(lambda r: (seen.append(r.method), response(data))[1]),
+    )
+    result = await gateway(adapter, tools=True).call()
+    assert result.error == "ADAPTER_ERROR" and seen == ["POST"]
+    assert adapter.observation["error_detail"] == "GENERATION_ID_INVALID"
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "empty",
+        "duplicate",
+        "items_limit",
+        "bytes",
+        "encoding",
+        "redirect",
+        "timeout",
+        "case_deadline",
+    ],
+)
+async def test_history_is_bounded_and_never_polled_or_retried(failure, monkeypatch):
+    data = payload(tools=True)
+    data.pop("provider")
+    data["id"] = "gen_123"
+    listing, detail = history_payloads(data)
+    if failure == "empty":
+        listing["items"] = []
+    elif failure in ("duplicate", "items_limit"):
+        listing["items"] *= 2 if failure == "duplicate" else 6
+    seen = []
+
+    def handler(request):
+        seen.append(request.method)
+        if request.method == "POST":
+            return response(data)
+        if failure == "bytes":
+            return response(raw=b"x" * 65537)
+        if failure == "encoding":
+            return response(listing, headers={"content-encoding": "gzip"})
+        if failure == "redirect":
+            return response(status=302, headers={"location": "https://other.invalid/"})
+        if failure in ("timeout", "case_deadline"):
+            return httpx.Response(200, stream=Stream([encode(listing)], delay=1))
+        return response(listing)
+
+    if failure == "timeout":
+        monkeypatch.setattr("asm.ai.polza.HISTORY_SECONDS", 0.01)
+    adapter = PolzaAdapter(history_review(), KEY, transport=httpx.MockTransport(handler))
+    result = await gateway(
+        adapter,
+        tools=True,
+        limits={"duration_seconds": 0.5} if failure == "case_deadline" else None,
+    ).call()
+    assert result.kind == "ERROR" and seen == ["POST", "GET"]
+    assert result.budget.calls_used == 1 and result.budget.cost_reserved > 0
+    assert adapter.observation["history_gets"] == 1
+
+
+@pytest.mark.parametrize(
+    "url,body,seconds,maximum",
+    [
+        (HISTORY + "/gen_1/children", None, 1, 65536),
+        (HISTORY.replace("polza.ai", "polzaXai") + "/gen_1", None, 1, 65536),
+        (HISTORY + "/gen_1?url=https://other.invalid", None, 1, 65536),
+        (HISTORY_LIST, b"{}", 1, 65536),
+        (HISTORY_LIST, None, 16, 65536),
+        (HISTORY_LIST, None, 1, 65537),
+    ],
+)
+async def test_history_transport_allowlist_rejects_other_paths_methods_and_limits(
+    url, body, seconds, maximum
+):
+    with pytest.raises(ProviderFailure):
+        await bounded_http(
+            KEY,
+            url,
+            body=body,
+            seconds=seconds,
+            maximum=maximum,
+            transport=httpx.MockTransport(lambda _: pytest.fail("unexpected HTTP")),
+        )

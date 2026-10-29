@@ -32,6 +32,8 @@ from asm.ai.gateway import ModelGateway, ProviderFailure
 from asm.ai.polza import (
     CATALOG,
     CONVERSATION_WIRE_REVISION,
+    HISTORY_BYTES,
+    HISTORY_SECONDS,
     INPUT_BYTES,
     INPUT_TOKENS,
     MODELS,
@@ -50,6 +52,9 @@ from asm.ai.settings import ProbeSettings, load_secret
 FIXTURES = Path("tests/fixtures/m4_probe_cases.json")
 CALL_CEILING = 81
 RUB_CEILING = Decimal(150)
+PRIOR_CONFIRMED_RUB = Decimal("0.01269785")
+PRIOR_MODEL_POSTS = 3
+STAGE_RUB_CEILING = RUB_CEILING - PRIOR_CONFIRMED_RUB
 DURATION = 1800.0
 CASE_SECONDS = 60.0
 REPEATS = ("unknown_price", "unknown_booking", "injection")
@@ -176,7 +181,7 @@ def plan(cases: tuple[Case, ...], reviews: tuple[RouteReview, ...] = ()) -> dict
     calls = sum(c.max_calls for c in rows)
     total_calls = calls * len(MODELS)
     total = sum((r.reservation() * calls for r in reviews), Decimal(0)) if reviews else None
-    if total_calls > CALL_CEILING or total is not None and total > RUB_CEILING:
+    if total_calls > CALL_CEILING or total is not None and total > STAGE_RUB_CEILING:
         raise ValueError("PLAN_EXCEEDS_CEILING")
     return {
         "status": "REVIEW / PAID PROBE NOT RUN",
@@ -198,7 +203,14 @@ def plan(cases: tuple[Case, ...], reviews: tuple[RouteReview, ...] = ()) -> dict
         "case_seconds": CASE_SECONDS,
         "overall_seconds": DURATION,
         "catalog_http_calls": 1,
+        "max_history_http_calls": 2 * total_calls,
+        "history_bytes_per_get": HISTORY_BYTES,
+        "history_seconds_per_post": HISTORY_SECONDS,
         "proposed_rub_ceiling": str(RUB_CEILING),
+        "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
+        "prior_model_posts": PRIOR_MODEL_POSTS,
+        "max_shared_model_posts": PRIOR_MODEL_POSTS + total_calls,
+        "stage_rub_ceiling": str(STAGE_RUB_CEILING),
         "priced_reservation_rub": str(total) if total is not None else None,
         "billing_status": "REVIEWED_BOUND"
         if reviews
@@ -212,32 +224,16 @@ def plan(cases: tuple[Case, ...], reviews: tuple[RouteReview, ...] = ()) -> dict
 
 
 def catalog_subset(data: Any) -> list[dict[str, Any]]:
-    """Copy only documented routing/tariff/capability fields for these exact models."""
+    """Retain model modalities and complete provider configuration for drift checks."""
     result = []
     for model in MODELS:
         matches = [m for m in data["data"] if m.get("id") == model]
         if len(matches) != 1:
             raise ValueError("MODEL_UNAVAILABLE")
         item = matches[0]
-        providers = []
-        for p in item.get("providers", []):
-            providers.append(
-                {
-                    k: p[k]
-                    for k in (
-                        "name",
-                        "is_unofficial",
-                        "pricing",
-                        "supported_parameters",
-                        "capabilities",
-                        "context_length",
-                        "max_completion_tokens",
-                        "per_request_limits",
-                        "reasoning",
-                    )
-                    if k in p
-                }
-            )
+        # Keep provider configuration intact: a new non-price field must not silently
+        # disappear before the selected route's repricing comparison.
+        providers = [dict(p) for p in item.get("providers", [])]
         result.append(
             {"id": model, "architecture": item.get("architecture", {}), "providers": providers}
         )
@@ -267,7 +263,7 @@ class Ledger:
     def __init__(self, output: TextIO, approved: Decimal, calls: int) -> None:
         if (
             not approved.is_finite()
-            or not 0 < approved <= RUB_CEILING
+            or not 0 < approved <= STAGE_RUB_CEILING
             or not 0 < calls <= CALL_CEILING
         ):
             raise ValueError("APPROVAL_LIMIT")
@@ -300,6 +296,7 @@ class Ledger:
                 "repeat": repeat,
                 "calls_reserved": self.calls,
                 "rub_reserved": str(self.reserved),
+                "shared_rub_committed_or_reserved": str(PRIOR_CONFIRMED_RUB + self.reserved),
                 "cost_status": "UNKNOWN",
             }
         )
@@ -360,6 +357,7 @@ async def run_case(
     adapter: PolzaAdapter, case: Case, ledger: Ledger, repeat: int
 ) -> dict[str, Any]:
     started = time.monotonic()
+    case_deadline = min(started + CASE_SECONDS, ledger.deadline)
     review = adapter.review
     results: list[dict[str, Any]] = []
     final: dict[str, Any] | None = None
@@ -391,9 +389,7 @@ async def run_case(
             if len(body) > INPUT_BYTES or len(body) + OVERHEAD_TOKENS > INPUT_TOKENS:
                 raise ValueError("IMAGE_INPUT_LIMIT")
             ledger.reserve(review, case, repeat)
-            response = await adapter.image_probe(
-                body, min(CASE_SECONDS, ledger.deadline - time.monotonic())
-            )
+            response = await adapter.image_probe(body, case_deadline - time.monotonic())
             results.append(
                 {
                     "kind": response.kind,
@@ -425,7 +421,7 @@ async def run_case(
             )
             request = GatewayRequest(
                 run_id=f"{case.id}_{repeat}",
-                deadline=datetime.now(UTC) + timedelta(seconds=CASE_SECONDS),
+                deadline=datetime.now(UTC) + timedelta(seconds=case_deadline - time.monotonic()),
                 messages=(
                     Message(role="context", text=case.context),
                     Message(role="user", text=case.question),
@@ -552,26 +548,58 @@ async def live(
 ) -> dict[str, Any]:
     if not reviews:
         raise ValueError("EXACT_THREE_MODELS_REQUIRED")
-    proposal = plan(cases, reviews)
-    ledger = Ledger(output, approved, proposal["max_model_http_calls"])
+    validate_reviews(reviews)
+    ledger = Ledger(output, approved, CALL_CEILING)
+    async with asyncio.timeout(ledger.deadline - time.monotonic()):
+        current = await catalog(settings, transport)
+    price_checked_at = datetime.now(UTC).isoformat()
+    priced_reviews = tuple(r.reprice(e) for r, e in zip(reviews, current, strict=True))
+    fresh_reservation = sum((r.reservation() * 27 for r in priced_reviews), Decimal(0))
+    ledger.record(
+        {
+            "event": "catalog_repricing",
+            "source": "PUBLIC_CATALOG",
+            "account_tariff": "NOT_ESTABLISHED_BY_CATALOG",
+            "checked_at": price_checked_at,
+            "priced_reservation_rub": str(fresh_reservation),
+            "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
+            "shared_rub_committed_or_reserved": str(PRIOR_CONFIRMED_RUB + fresh_reservation),
+            "routes": [
+                {
+                    "model": old.model,
+                    "requested_provider": old.provider_name,
+                    "review_sha256": fingerprint(old.model_dump(mode="json")),
+                    "review_checked_at": old.checked_at.isoformat(),
+                    "old_catalog_sha256": old.catalog_sha256,
+                    "new_catalog_sha256": new.catalog_sha256,
+                    "provider_configuration_sha256": fingerprint(
+                        {k: v for k, v in old.provider().items() if k != "pricing"}
+                    ),
+                    "old_pricing": old.provider()["pricing"],
+                    "new_pricing": new.provider()["pricing"],
+                    "fresh_rates_rub": [str(v) for v in new.rates()],
+                    "call_reservation_rub": str(new.reservation()),
+                }
+                for old, new in zip(reviews, priced_reviews, strict=True)
+            ],
+        }
+    )
+    proposal = plan(cases, priced_reviews)
     if Decimal(proposal["priced_reservation_rub"]) > approved:
         raise ValueError("APPROVED_BUDGET_TOO_SMALL")
-    current = await catalog(settings, transport)
-    for review, entry in zip(reviews, current, strict=True):
-        review.fresh()
-        if fingerprint(entry) != review.catalog_sha256:
-            raise ValueError("CATALOG_CHANGED")
     ledger.record(
         {
             "event": "plan",
             **proposal,
             "status": "SYNTHETIC_EVAL_ONLY",
             "route_reviews": [r.catalog_sha256 for r in reviews],
+            "reviewed_routes": [r.metadata() for r in reviews],
+            "pricing_catalogs": [r.catalog_sha256 for r in priced_reviews],
             "approved_rub": str(approved),
         }
     )
     rows = []
-    for review in reviews:
+    for review in priced_reviews:
         adapter = PolzaAdapter(review, settings.api_key, transport=transport)
         for repeat, case in enumerate(schedule(cases)):
             remaining = ledger.deadline - time.monotonic()
@@ -649,6 +677,10 @@ def main(argv: list[str] | None = None) -> int:
                             "sha": args.source_sha,
                             "environment": args.source_environment,
                             "approval_ref": args.approval_ref,
+                            "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
+                            "shared_total_budget_rub": str(RUB_CEILING),
+                            "stage_approved_rub": str(args.approved_rub),
+                            "prior_model_posts": PRIOR_MODEL_POSTS,
                         }
                     )
                     + "\n"

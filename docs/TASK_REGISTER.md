@@ -14,7 +14,7 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | IN_PROGRESS; full75 NOT RUN. Пользовательский helper GPT READ_ROUNDTRIP_OK:2 POST/1 READ/валидный final, stage0.00895610 RUB; всего3 POST/0.01269785 RUB. Поле provider отсутствует; history OpenAI, flex только request pin. Единственная выдача C4 OBSERVATION-R1 исправляет штатный route observation и fresh repricing, готовит comparison75/81/6 с остатком общего150. Helper не является Gateway/runtime acceptance |
+| M4.2-PROBE | OBSERVATION-R1 candidate REVIEW / C4 HOLD для C0; full75 NOT RUN. Штатные text/image paths проверяют missing provider через bounded history до READ/final; present mismatch STOP. Fresh price views до первого POST, original review hashes/date сохранены; wire/Gateway/ledger используют общие fresh rates. 322 targeted PASS, Ruff/format/mypy71/plan/diff PASS; controlled CLI75 finals/81 POST/6 READ, до162 history GET. Prior3 POST/0.01269785 RUB, новый этап≤149.98730215 из общего150; contract fields Gemini/DeepSeek/image остаются открыты в runbook. Paid/full CI/VM/runtime не выполнялись |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
 | M4.3-QUALITY | TODO; независимый scoped C8/eval |

@@ -4,8 +4,9 @@
 Владелец уже выделил общий150 RUB и выполнил один одиночный POST и успешный
 двухшаговый synthetic READ test. Подтверждённый расход **0.01269785 RUB**;
 арифметический остаток общего бюджета **149.98730215 RUB**, не новый150.
-Ниже — процедура основного CLI, которую сейчас исправляет C4; она пока не
-является готовой командой запуска. Повтор успешного helper не нужен.
+Ниже — процедура исправленного основного CLI, candidate **REVIEW** для C0.
+Команда полного сравнения подготовлена, но три фактических route reviews ещё
+не собраны; конкретные открытые поля перечислены ниже. Повтор успешного helper не нужен.
 Body provider оказался отсутствующим, history family — OpenAI; выбранный
 openai/flex остаётся request pin. Price-only catalog drift требует fresh repricing.
 Точный receipt и текущая выдача — [M4_HANDOFF](../tasks/M4_HANDOFF.md).
@@ -34,7 +35,8 @@ git diff --check
 
 Windows x64: после review C0 заменить `C0_ACCEPTED_FULL_SHA` полным SHA принятого
 кандидата и выполнить из корня чистого checkout в обычном PowerShell. Нужны Git,
-uv и 64-битный CPython3.13. Новый ввод ключа для установки/plan не нужен:
+существующее frozen окружение CPython3.13. Новый ввод ключа и повторная установка
+зависимостей не нужны: lock/manifests этого candidate не менялись.
 
 ```powershell
 & {
@@ -49,10 +51,7 @@ uv и 64-битный CPython3.13. Новый ввод ключа для уст�
     if ($LASTEXITCODE -ne 0) { throw "Candidate checkout failed" }
     $Actual = git rev-parse HEAD
     if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Source SHA mismatch" }
-    py -3.13 -c "import struct; assert struct.calcsize('P') == 8, 'Python x64 required'"
-    if ($LASTEXITCODE -ne 0) { throw "Python x64 check failed" }
-    uv sync --frozen --python 3.13 --no-build-package cffi --no-build-package argon2-cffi-bindings
-    if ($LASTEXITCODE -ne 0) { throw "Frozen dependency installation failed" }
+    if (-not (Test-Path .\.venv\Scripts\python.exe)) { throw "Existing probe environment not found" }
     .\.venv\Scripts\python.exe -m asm.ai.probe --plan
     if ($LASTEXITCODE -ne 0) { throw "Offline plan failed" }
 }
@@ -64,8 +63,10 @@ M4.2-PROBE-WINDOWS-LOCK-R1 добавляет ровно два Windows x64 whee
 [cffi PyPI](https://pypi.org/project/cffi/2.0.0/#files) и
 [argon2 bindings PyPI](https://pypi.org/project/argon2-cffi-bindings/25.1.0/#files).
 Версии и dependency graph сохранены. Не обходить frozen lock через upgrade,
-удаление зависимостей или установку компиляторов. Эти команды — только установка
-и offline plan; private key/account preflight/live имеют отдельные условия ниже.
+удаление зависимостей или установку компиляторов. Первичная frozen установка уже
+подтверждена владельцем; при новом checkout её команда из прежней выдачи —
+`uv sync --frozen --python 3.13 --no-build-package cffi --no-build-package argon2-cffi-bindings`.
+Обновление SHA выше запускает только offline plan.
 
 Без flags выполняется тот же offline plan. Он не читает secret и не создаёт HTTP
 client. Fixtures фиксируют ожидания до вызовов: 20 русских text cases, включая два
@@ -79,19 +80,25 @@ Image calls — только отдельная EVAL_ONLY проверка, не
 | Сценарии | 25 на модель, 75 всего |
 | Model HTTP | 27 на модель, максимум и жёсткий потолок 81; retry/repair calls отсутствуют |
 | Catalog HTTP | один GET на preflight; один повторный GET на live admission |
+| History HTTP | максимум 2 GET на model POST / 162 на весь этап; по 65536 bytes, суммарно до15s на проверку одного ответа внутри case/run deadlines |
 | READ | максимум 6, только локальные fixture facts |
 | Вход / выход | 32768 / 512 tokens на call |
 | Общий token reservation | максимум 2695680 tokens |
 | Wire input / response | 24576 / 32768 bytes на call |
 | Сценарий / весь live запуск | 60 / 1800 секунд, включая каталог |
-| Предложение бюджета | максимум 150 RUB на все три модели вместе; запуск по отдельному reviewed plan |
+| Бюджет | общий150 RUB; prior0.01269785, новый этап не выше149.98730215 RUB и меньшего explicit approved amount |
+| Общие model POST | prior3 + не более81 новых = максимум84 |
 
 Plan без account review печатает `priced_reservation_rub: null`, UNKNOWN.
 Публичный ценник из исследования не заменяет актуальный account tariff.
 Добавление DeepSeek согласовано C0 в M4.2-PROBE-THIRD-CANDIDATE-R1; это finite
 allowlist, не auto-selection или fallback. Набор fixtures не сокращён.
 
-## Отдельный ключ после допуска C0
+## Существующий отдельный ключ
+
+Владелец уже подтвердил dedicated key limit150/reset never и owner-only Windows
+ACL. Для этой выдачи использовать имеющийся `.env.m4-probe`; повторно создавать
+или вводить ключ не требуется. Следующая памятка относится к первичному созданию.
 
 В консоли Polza создать отдельный ключ для M4, выключить unofficial providers;
 поставить расходный лимит не выше согласованного бюджета, если доступен. Не
@@ -144,8 +151,9 @@ RouteReview в порядке моделей выше. Для каждого к�
 `catalog_sha256` и `checked_at`; добавляются поля ниже. Это trusted configuration,
 не вывод модели. Пустое поле/неизвестный факт означает BLOCKED; заполнять текстом
 «supported» ради обхода допуска нельзя. Review действителен 24 часа от исходного
-`checked_at`; live повторно получает публичный каталог и сравнивает fingerprint
-целиком для каждой модели. Не обновлять время старого snapshot задним числом:
+`checked_at`; live один раз получает публичный каталог и проверяет прежнюю unique
+official route, model/modalities, всю non-price provider configuration и fee schema.
+Числовые цены могут измениться; порядок пересчёта ниже. Не обновлять время review:
 после 24 часов нужен новый разрешённый GET и review. Это не снимает отдельную
 проверку key restrictions и индивидуального тарифа.
 Неполный, дублированный, переставленный либо другой набор reviews отклоняется.
@@ -157,6 +165,7 @@ RouteReview в порядке моделей выше. Для каждого к�
 | `model` | точный разрешённый ID, без замены |
 | `provider_name` | точное **единственное** имя из `providers`, для `provider.only`; duplicate name блокируется |
 | `response_provider` | документированное соответствующее значение response `provider`; это `Route.upstream` |
+| `history` | необязательный объект `provider` + `evidence` для разрешённой C0 проверки отсутствующего body provider; точный family label и источник его соответствия маршруту, без обещания variant |
 | `route_evidence` | источник/дата/вывод для name→response ID, official upstream, key restrictions |
 | `schema_tools_evidence` | native strict **точная** conversation_result_envelope_v1 с неизменённым conversation_result_v1 внутри, strict READ tools и совместное использование |
 | `token_bound_evidence` | основание указанной ниже границы для этого tokenizer/wire protocol |
@@ -188,8 +197,36 @@ payload; plan сохраняет эти различия в `reviewed_routes` в
 его `result` прежнему DTO validator Gateway. Отчёт различает canonical
 `schema_revision: conversation_result_v1` и wire
 `wire_schema_revision: conversation_result_envelope_v1`; prompt не изменён.
-Offline tests покрывают reply/handoff/no_reply и READ, но actual native strict
-schema + tools на конкретном route ещё не проверены.
+Offline tests покрывают reply/handoff/no_reply, READ и images. Пользовательский
+GPT helper уже подтвердил native strict schema + READ→final для одного text case;
+он не является live acceptance штатного Gateway, images или остальных моделей.
+
+## Наблюдение route через history
+
+Если поле body `provider` присутствует, оно обязано точно совпасть с reviewed
+`response_provider`; null/неверное значение/неправильный тип — STOP, history не
+подменяет этот ответ. Если поля нет, необходим `history` review и response ID
+формата `gen_` + 1–64 цифры. Произвольные URL, поиск по похожим usage/стоимости,
+substitution requested provider и polling не используются.
+
+По [официальному list/detail контракту](https://github.com/polza-ai/docs/blob/main/api-reference/history/generations.mdx)
+адаптер выполняет один GET последних5 chat generations, затем один detail GET
+строго по ID этого ответа. List model должен совпасть с полным model ID либо его
+документированной slug-частью после `/`; сравнение family регистрозависимое.
+ID должен быть единственным, оба статуса completed, family и usage/cost совпадают;
+detail также обязан подтвердить finishReason, attemptsCount=1, sync chat_completions
+и отсутствие отмены/server-tool steps. Неизвестные данные — STOP до READ/следующего
+POST. Total/reasoning counters, если присутствуют, также сверяются. Нет retry,
+redirect, pagination или `/log`. Время двух GET вместе ограничено15s и оставшимся
+временем исходного вызова; image EVAL использует тот же путь.
+
+В case report отдельно записываются `requested_provider`, `observed_body_provider`,
+`provider_field_state`, `history_family`, `route_evidence_source` (`BODY` либо
+`HISTORY_LIST_DETAIL`), `generation_id`, `history_gets`, `route_variant: NOT_OBSERVED`.
+Ожидаемый Route.upstream не выдаётся за observed endpoint. В принятом GPT receipt
+family — `OpenAI`, variant flex остаётся только request pin. Raw history, account/key
+поля и chain-of-thought не сохраняются. Недоступность/задержка history завершает
+этот этап с UNKNOWN/no automatic retry; reserved amount не возвращается.
 
 Официальные источники, сверенные при подготовке 2026-10-29:
 
@@ -213,9 +250,10 @@ token на byte и скрытое framing/schema преобразование (�
 увеличивать лимит или называть эвристику гарантией нельзя. После каждого ответа
 usage сравнивается с границей; неизвестный usage не даёт PASS.
 
-До HTTP live admission рассчитывается полный резерв 27 calls для каждой из трёх
-моделей — сумма всех 81 calls. Общий резерв должен помещаться и в150 RUB, и в
-фактически разрешённую сумму; бюджет не выделяется заново каждой модели. Цена call:
+После единственного admission catalog GET, **до первого model POST**, пересчитывается
+полный резерв27 calls для каждой из трёх моделей — сумма всех81 calls. Он должен
+помещаться в149.98730215 RUB и explicit `--approved-rub`; prior уже потрачен.
+Бюджет не выделяется заново каждой модели. Цена call:
 `(32768 * input_rate + 512 * output_rate) / 1000000 + request_rate` с округлением
 вверх до 1e-9 RUB. Input складывает prompt/image/cache-read/cache-write ставки;
 output складывает completion/reasoning; request складывает per_request и
@@ -237,7 +275,22 @@ audio/modalities, plugins, web_search_options, built-in search tools, лишни
 источниках пока не найден достаточный контракт единиц/применимости: фактический
 review этого fee остаётся UNKNOWN, его название не является доказательством.
 
-### Snapshot 2026-10-29: оставшиеся блокеры
+Price-only drift допускается без переписывания ручного review: прежние source
+snapshot/hash/checked_at остаются в файле и `reviewed_routes`. Для исполнения
+создаются отдельные views со свежими ценами и прежним временем review; истечение
+24h всё ещё останавливает запуск. Состав fees/currency, null↔number, route,
+capabilities, reasoning settings, parameters и прочая non-price configuration
+меняться не могут. Изменения других, не выбранных providers не влияют на route.
+
+`catalog_repricing` сохраняет old/new entry fingerprints, source review hash/date,
+non-price provider hash, old/new pricing, фактические additive rates и новый
+резерв. `plan.pricing_catalogs`, `max_price`, Gateway и ledger используют одни
+fresh prices. Overbudget останавливается до POST; валидный расчёт сохраняется в
+receipt даже при STOP. Публичные цены по-прежнему не доказывают account tariff.
+
+<a id="snapshot-2026-10-29-оставшиеся-блокеры"></a>
+
+### Исторический snapshot CATALOG-R1
 
 Разобраны все 58 записей исходного snapshot с
 `checked_at=2026-10-29T10:43:36.518349+00:00`, SHA256
@@ -263,13 +316,28 @@ route/cap/billing evidence и исключения fees. Среди уникал
 | DeepSeek / `wafer/us` | 0.190210677 | 5.135688279 |
 | **Итого 81 call** | | **107.138276775** |
 
-Это **выше прежнего ceiling100 RUB**, но ниже подготовленного ceiling150 RUB.
-Это условная арифметика до подтверждения аккаунта, не выбранные runtime
-routes и не priced plan. Без действительных reviews `--plan` по-прежнему даёт
-null/UNKNOWN. Открыты однозначный selector/response mapping, общий paid-output
-cap (особенно mandatory reasoning Gemini), token/image bound, fee contracts,
-совместимость native schema/tools/PNG и account restrictions/tariff. C0 получает
-бюджетный blocker отдельно; лимиты, выборка и модели здесь не изменяются.
+Это историческая условная арифметика, **не текущий plan OBSERVATION-R1**. Уже в
+R2 GPT цены изменились; reserve0.930219926 относился только к двум calls helper.
+Без фактических reviews `--plan` остаётся null/UNKNOWN. Актуальные81 calls будут
+пересчитаны по свежему admission GET; старый107.138276775 не переносится в ledger.
+
+### Открытые поля для C0 перед полным сравнением
+
+Сверены официальные источники2026-10-29; реальные RouteReview не создавались.
+Нужен один проверенный набор трёх routes, без выдуманных строк evidence.
+
+| Поле / кандидат | Источник и уже установленный факт | Недостающий факт |
+|---|---|---|
+| `provider_name`, `response_provider`, `history.provider/evidence` / Gemini, DeepSeek | [Polza routing](https://github.com/polza-ai/docs/blob/main/gaidy/provider-selection.mdx), [history](https://github.com/polza-ai/docs/blob/main/api-reference/history/generations.mdx); unique selector и family — разные поля | Выбранный unique official route и проверенное соответствие body/history family; GPT OpenAI не переносится на эти модели |
+| `output_cap_evidence` / Gemini, DeepSeek | [Gemini thinking](https://ai.google.dev/gemini-api/docs/generate-content/thinking) включает thoughts в native max_output_tokens; [DeepSeek API](https://api-docs.deepseek.com/api/create-chat-completion/) описывает native max_tokens | Подтвердить mapping одного Polza alias и aggregate usage для **выбранного** route; direct API contract не удостоверяет любой hosted variant |
+| `schema_tools_evidence` / Gemini, DeepSeek | Polza catalog даёт declarations; [DeepSeek thinking/tools](https://api-docs.deepseek.com/guides/thinking_mode/) требует reasoning_content в последующих tool turns в thinking mode | Подтвердить штатный text/function wire без скрытого обязательного continuation payload на конкретном route. Вывод: direct DeepSeek thinking docs недостаточны для нашего пути, который не возвращает reasoning; это риск контракта, не наблюдённый HTTP400 |
+| `inactive_fee_evidence` / Gemini и routes с search fee | Polza [models](https://github.com/polza-ai/docs/blob/main/gaidy/models.mdx)/[search](https://github.com/polza-ai/docs/blob/main/gaidy/web-search.mdx) и существующий snapshot | Единицы/неприменимость каждого исключения, особенно input_audio_cache_per_million; неизвестный контракт не заменяется именем поля |
+| `token_bound_evidence`, `image_bound_evidence` / все3 | [DeepSeek Vision](https://api-docs.deepseek.com/guides/vision/) описывает PNG и1024 tokens/image для своего deepseek-flash; GPT receipt покрывает только text/READ | Применимость к точному Polza model/provider и двум128×128 PNG, общий bound serialized bytes+4096; direct model и каталог не доказывают bound всех upstream |
+
+Actual compatibility/quality оставшихся75 cases устанавливает сама проба; её
+предварительный live PASS не требуется. До неё нужны проверяемые route/billing/
+token assumptions из таблицы и review C0 конкретного candidate/plan. Уже выделенные
+150 RUB и известный prior не требуют повторного согласования той же суммы.
 
 | Код STOP | Действие reviewer |
 |---|---|
@@ -278,7 +346,9 @@ cap (особенно mandatory reasoning Gemini), token/image bound, fee contra
 | `CONDITIONAL_FEE_REVIEW_REQUIRED` / `FEE_EXCLUSION_REVIEW_REQUIRED` | Проверить каждый fee; не копировать synthetic evidence из тестов |
 | `JSON_SCHEMA_STRICT_REJECTED` / `IMAGE_CAPABILITY_UNKNOWN` | Этот выбранный route не допускается без необходимых capabilities |
 | `TARIFF_UNKNOWN` / `PLAN_EXCEEDS_CEILING` | Устранить неизвестный контракт либо вернуть C0 бюджетный blocker; не повышать лимит |
-| `REVIEW_EXPIRED` / `CATALOG_CHANGED` | Нужны свежий разрешённый snapshot и новый review |
+| `REVIEW_EXPIRED` / `PROVIDER_CONFIGURATION_CHANGED` / `TARIFF_SCHEMA_CHANGED` | Нужен новый review изменившегося контракта; одна смена числовых цен сама по себе не требует review |
+| `GENERATION_ID_INVALID` / `HISTORY_VERIFICATION_FAILED` / `HISTORY_METERING_UNKNOWN` | Сохранить receipt, сверить конкретное наблюдение; не выполнять следующий POST |
+| `APPROVAL_LIMIT` / `APPROVED_BUDGET_TOO_SMALL` | Проверить остаток149.98730215 и меньший approved amount по свежему полному резерву |
 
 Локальный резерв не гарантирует фактическое списание провайдером. UNKNOWN,
 429/5xx, timeout и отмена не возвращают резерв. Каждая попытка записывает и flush
@@ -294,16 +364,36 @@ billing subsystem и не защита от ручного второго зап
 .venv/bin/python -m asm.ai.probe --plan --review .env.m4-probe.review.json
 ```
 
-C0 показывает владельцу конкретный plan/fingerprint, вычисленный резерв, лимит
-ключа и источник запуска. Если резерв >150 RUB — STOP и отдельное решение C0;
-автоматическое повышение бюджета/сокращение выборки запрещены. Следующая команда
-пока **BLOCKED**; применять только после закрытия blocker и owner approval до150 RUB:
+C0 проверяет candidate и фактические reviews, показывает plan/fingerprints и
+источник запуска. При reserve + prior >150 RUB либо reserve > approved — STOP;
+бюджет/выборка не меняются автоматически. Следующая команда подготовлена для
+Windows с имеющимся ключом; **сейчас HOLD до review C0 и закрытия таблицы выше**.
+Заменить два placeholders фактическими SHA/ссылкой решения C0; фиктивный approval
+не подставлять. Общий бюджет уже выделен, повторный запрос150 не нужен.
 
-```sh
-.venv/bin/python -m asm.ai.probe --live --review .env.m4-probe.review.json --approval-ref C0-APPROVAL-ID --approved-rub 150 --source-sha "$(git rev-parse HEAD)" --source-environment LOCAL_DESKTOP --report .env.m4-probe.report.jsonl
+```powershell
+& {
+    $ErrorActionPreference = "Stop"
+    $Candidate = "C0_ACCEPTED_FULL_SHA"
+    $Approval = "C0_REVIEW_REF"
+    if ($Candidate -cnotmatch '^[0-9a-f]{40}$' -or $Approval -eq "C0_REVIEW_REF") {
+        throw "Exact reviewed candidate and C0 decision required"
+    }
+    $Actual = git rev-parse HEAD
+    if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Source SHA mismatch" }
+    $Dirty = git status --porcelain
+    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean checkout required" }
+    if (-not (Test-Path .\.env.m4-probe) -or -not (Test-Path .\.env.m4-probe.review.json)) {
+        throw "Existing private secret and actual three-route review required"
+    }
+    $Report = ".env.m4-probe.observation-r1.report.jsonl"
+    if (Test-Path $Report) { throw "Receipt already exists; preserve it and reconcile, do not retry" }
+    .\.venv\Scripts\python.exe -m asm.ai.probe --live --secret-file .env.m4-probe --review .env.m4-probe.review.json --approval-ref $Approval --approved-rub 149.98730215 --source-sha $Candidate --source-environment LOCAL_DESKTOP --report $Report
+    if ($LASTEXITCODE -ne 0) { throw "Probe STOP; retain receipt, no automatic retry" }
+}
 ```
 
-При меньшем согласованном бюджете заменить150 на него. Команда не содержит
+При меньшем согласованном бюджете заменить149.98730215 на него. Команда не содержит
 secret. В source-environment честно указать LOCAL_DESKTOP либо LOCAL_BACKEND;
 сам flag не доказывает размещение. Не менять VM/Happ/SSH/egress для этого шага.
 Доступность с ПК не доказывает backend route; runtime-ready требует отдельного
@@ -315,7 +405,8 @@ review всех final outputs. Первый провал quality/route/schema/to
 остаются непройденными, failure не усредняется.
 
 JSONL содержит source SHA/environment/approval, plan и reservations, case/model,
-expected route и observed model/provider каждого ответа, revisions, outcomes,
+source prior/total/stage budget, old/new pricing, expected route и отдельно observed
+body/history каждого ответа, revisions, outcomes,
 usage/CONFIRMED либо UNKNOWN cost, READ count и проверяемый synthetic final.
 Raw HTTP, headers, key, provider reasoning и chain-of-thought не сохраняются.
 Latency — whole-scenario elapsed, p50/p95 nearest-rank и N; не время компиляции.
