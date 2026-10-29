@@ -49,7 +49,7 @@ from asm.ai.settings import ProbeSettings, load_secret
 
 FIXTURES = Path("tests/fixtures/m4_probe_cases.json")
 CALL_CEILING = 81
-RUB_CEILING = Decimal(100)
+RUB_CEILING = Decimal(150)
 DURATION = 1800.0
 CASE_SECONDS = 60.0
 REPEATS = ("unknown_price", "unknown_booking", "injection")

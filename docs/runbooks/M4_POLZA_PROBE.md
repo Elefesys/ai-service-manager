@@ -1,9 +1,15 @@
 # M4.2 — synthetic Polza probe
 
-Статус CATALOG-R1: **REVIEW / PAID PROBE BLOCKED / NOT RUN**. Команды ниже не являются
+Статус C0 BUDGET-R1: **REVIEW / PAID PROBE BLOCKED / NOT RUN**. Команды ниже не являются
 разрешением потратить деньги. C0 получает отдельный допуск владельца после review
 кода, плана и размещения ключа. Никаких клиентских данных, Telegram, БД, S3 или
 runtime activation. Accepted deployment остаётся LOCAL / asm_local.
+
+C0 подготовил общий ceiling150 RUB после сообщения владельца о готовности
+увеличить бюджет. Это потолок на все три модели вместе, не автоматическое
+разрешение потратить150. Меньший explicit approved amount сохраняет силу.
+Баланс Polza и лимит dedicated key проверяются отдельно; пополнение баланса
+само по себе не меняет лимит ключа и не подтверждает совместимость маршрута.
 
 ## Offline — можно сейчас
 
@@ -71,7 +77,7 @@ Image calls — только отдельная EVAL_ONLY проверка, не
 | Общий token reservation | максимум 2695680 tokens |
 | Wire input / response | 24576 / 32768 bytes на call |
 | Сценарий / весь live запуск | 60 / 1800 секунд, включая каталог |
-| Предложение бюджета | максимум 100 RUB на все три модели вместе; сейчас не разрешено |
+| Предложение бюджета | максимум 150 RUB на все три модели вместе; запуск по отдельному reviewed plan |
 
 Plan без account review печатает `priced_reservation_rub: null`, UNKNOWN.
 Публичный ценник из исследования не заменяет актуальный account tariff.
@@ -201,7 +207,7 @@ token на byte и скрытое framing/schema преобразование (�
 usage сравнивается с границей; неизвестный usage не даёт PASS.
 
 До HTTP live admission рассчитывается полный резерв 27 calls для каждой из трёх
-моделей — сумма всех 81 calls. Общий резерв должен помещаться и в100 RUB, и в
+моделей — сумма всех 81 calls. Общий резерв должен помещаться и в150 RUB, и в
 фактически разрешённую сумму; бюджет не выделяется заново каждой модели. Цена call:
 `(32768 * input_rate + 512 * output_rate) / 1000000 + request_rate` с округлением
 вверх до 1e-9 RUB. Input складывает prompt/image/cache-read/cache-write ставки;
@@ -250,7 +256,8 @@ route/cap/billing evidence и исключения fees. Среди уникал
 | DeepSeek / `wafer/us` | 0.190210677 | 5.135688279 |
 | **Итого 81 call** | | **107.138276775** |
 
-Это **выше 100 RUB** даже до подтверждения аккаунта; это не выбранные runtime
+Это **выше прежнего ceiling100 RUB**, но ниже подготовленного ceiling150 RUB.
+Это условная арифметика до подтверждения аккаунта, не выбранные runtime
 routes и не priced plan. Без действительных reviews `--plan` по-прежнему даёт
 null/UNKNOWN. Открыты однозначный selector/response mapping, общий paid-output
 cap (особенно mandatory reasoning Gemini), token/image bound, fee contracts,
@@ -281,15 +288,15 @@ billing subsystem и не защита от ручного второго зап
 ```
 
 C0 показывает владельцу конкретный plan/fingerprint, вычисленный резерв, лимит
-ключа и источник запуска. Если резерв >100 RUB — STOP и отдельное решение C0;
-в этой выдаче повышение бюджета/сокращение выборки запрещены. Следующая команда
-пока **BLOCKED**; применять только после закрытия blocker и owner approval до100 RUB:
+ключа и источник запуска. Если резерв >150 RUB — STOP и отдельное решение C0;
+автоматическое повышение бюджета/сокращение выборки запрещены. Следующая команда
+пока **BLOCKED**; применять только после закрытия blocker и owner approval до150 RUB:
 
 ```sh
-.venv/bin/python -m asm.ai.probe --live --review .env.m4-probe.review.json --approval-ref C0-APPROVAL-ID --approved-rub 100 --source-sha "$(git rev-parse HEAD)" --source-environment LOCAL_DESKTOP --report .env.m4-probe.report.jsonl
+.venv/bin/python -m asm.ai.probe --live --review .env.m4-probe.review.json --approval-ref C0-APPROVAL-ID --approved-rub 150 --source-sha "$(git rev-parse HEAD)" --source-environment LOCAL_DESKTOP --report .env.m4-probe.report.jsonl
 ```
 
-При меньшем согласованном бюджете заменить100 на него. Команда не содержит
+При меньшем согласованном бюджете заменить150 на него. Команда не содержит
 secret. В source-environment честно указать LOCAL_DESKTOP либо LOCAL_BACKEND;
 сам flag не доказывает размещение. Не менять VM/Happ/SSH/egress для этого шага.
 Доступность с ПК не доказывает backend route; runtime-ready требует отдельного

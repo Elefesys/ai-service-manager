@@ -6,7 +6,55 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-PROBE-CATALOG-R1 / C4 / 2026-10-29
+## Текущая выдача — M4.2-PROBE-BUDGET-R1 / C0 / 2026-10-29
+
+**Результат:** подготовить общий потолок150 RUB после сообщения владельца,
+что превышение100 RUB приемлемо. Это ceiling подготовки, не автоматический
+paid approval и не обещание стоимости. Три модели/75 scenarios/81 calls/6 READ
+и прежние per-call token/byte/time limits сохраняются.
+
+- Repository: Elefesys/ai-service-manager; C0 integration branch
+  **c0/m4-probe-budget-r1**, отдельная последовательная работа от
+  **fde935f551c83879fda49430f8b096b5e9771659**, tree
+  **a1d7a640139c087b92d9c88e0fbcbfd4662f26cf**.
+- C4 CATALOG-R1 source review принят: ровно7 разрешённых paths; C0 повторил
+  targeted255 PASS, Ruff/format/mypy71/plan/diff check PASS. Это controlled
+  evidence, не live proof и не independent C8.
+- C0 write-set ровно6 paths: `backend/src/asm/ai/probe.py` — только RUB_CEILING;
+  `tests/test_m4_probe.py` — связанные budget boundaries и сохранение меньшего
+  explicit owner amount; `docs/runbooks/M4_POLZA_PROBE.md`; CURRENT
+  `docs/TASK_REGISTER.md`; этот handoff; budget amendment IMPL-004.
+  Остальной source, lock, fixtures, CI/DB/runtime не менять.
+- Минимум107.138276775 RUB независимо пересчитан C0 по прежнему snapshot:
+  GPT12.529934334, Gemini89.472654162, DeepSeek5.135688279. Он условный,
+  при ещё не подтверждённых route/cap/fee facts, не actual priced plan.
+- После targeted checks C0 FF интегрирует один новый candidate в Draft PR39
+  с expected-head check и force=false, затем штатный full CI нового source.
+  Это новый source после CATALOG-R1 и budget amendment, не rerun прежнего SHA.
+  Старый PG setup connect TimeoutError не объявлять исправленным; новый результат
+  проверяется отдельно. Merge по-прежнему у владельца.
+- Следующий операторский шаг — read-only `GET /v1/key` на ПК владельца:
+  подтвердить ключ и фактический remaining limit, выводить только числовые
+  limit/usage и limit_reset, без label/creator/key/raw response.
+  [Официальный контракт](https://github.com/polza-ai/docs/blob/main/api-reference/other/key.mdx).
+  Допустим один такой GET, без model POST; нужен имеющийся private secret.
+- Для полного probe остаются review route→response mapping, paid-output/token/image
+  bounds, fee applicability и native schema+tools совместимость. Документированный
+  контракт и наблюдение теста различать; неизвестные поля не заполнять фиктивно.
+  Код всё ещё требует фактические reviews и explicit approved amount.
+  Поднятие ceiling не повышает меньший `--approved-rub` и не отменяет budget STOP.
+
+C1–C6/C8 HOLD кроме этой работы C0; paid/VM/Telegram/runtime не активируются.
+Матрица A01–A08 и весь accepted/history сохраняются.
+
+**Receipt C0:** targeted pytest **256 PASS**; Ruff/format2 files PASS,
+strict mypy71 PASS, offline plan150/75/81/6 PASS, diff check PASS.
+Новый budget test подтверждает: план между100 и150 допускается новым ceiling,
+полный резерв81 calls помещается в explicit150, но explicit100 всё ещё
+останавливает запуск до catalog/model HTTP. Старые cost/call/drift STOP сохранены.
+Полный CI проверяется на опубликованном итоговом SHA; его результат — в PR39.
+
+## История — M4.2-PROBE-CATALOG-R1 / C4 / 2026-10-29
 
 **Результат:** исправить конкретные несовпадения пробника с полученным каталогом
 Polza, затем вернуть проверенный candidate и пригодный для review план запуска.
@@ -581,9 +629,7 @@ M4 VERIFIED только после A01–A08 в заявленных грани
 
 ## Непосредственное следующее действие
 
-C4 выполняет единственную M4.2-PROBE-CATALOG-R1 от C0 seed выше,
-сохраняя Windows repair708dc86 и принятые bounds. Catalog GET уже получен;
-устранить подтверждённые adapter assumptions и вернуть targeted-checked candidate.
-Затем C0 review, решение по CI и конкретный priced plan для owner paid admission.
-Ключ остаётся у владельца; paid calls/VM activation не разрешены.
+C0 завершает M4.2-PROBE-BUDGET-R1 и проверяет CI нового кандидата.
+Оператор после инструкции C0 выполняет один read-only key check на своём ПК.
+Ключ остаётся локально; затем конкретный reviewed plan и owner paid admission.
 C1/C2/C3/C5/C6/C8 HOLD; M4.3 ждёт реальной проверки внешней зависимости.

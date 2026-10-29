@@ -45,7 +45,7 @@ def test_default_and_plan_do_not_read_secret_or_open_network(monkeypatch, capsys
         assert result["cases_per_model"] == 25 and result["total_scenarios"] == 75
         assert result["max_model_http_calls"] == result["hard_call_ceiling"] == 81
         assert result["max_synthetic_reads"] == 6
-        assert result["priced_reservation_rub"] is None and result["proposed_rub_ceiling"] == "100"
+        assert result["priced_reservation_rub"] is None and result["proposed_rub_ceiling"] == "150"
         assert result["total_token_reservation_ceiling"] == 2695680
 
 
@@ -68,28 +68,54 @@ def test_invalid_fixtures_rejected(tmp_path, bad):
         load_cases(path)
 
 
-def test_reviewed_plan_prices_all_calls_and_rejects_more_than_100():
+def test_reviewed_plan_prices_all_calls_and_rejects_more_than_150():
     cases = load_cases(FIXTURES)
     reviews = tuple(review(model) for model in MODELS)
     assert Decimal(plan(cases, reviews)["priced_reservation_rub"]) == sum(
         r.reservation() * 27 for r in reviews
     )
     entry = copy.deepcopy(reviews[2].catalog_entry)
-    entry["providers"][0]["pricing"]["prompt_per_million"] = "100"
+    entry["providers"][0]["pricing"]["prompt_per_million"] = "150"
     expensive = review(MODELS[2], catalog_entry=entry, catalog_sha256=fingerprint(entry))
-    assert sum(r.reservation() * 27 for r in reviews[:2]) < 100
-    assert expensive.reservation() * 27 < 100
+    assert sum(r.reservation() * 27 for r in reviews[:2]) < 150
+    assert expensive.reservation() * 27 < 150
     with pytest.raises(ValueError, match="PLAN_EXCEEDS_CEILING"):
         plan(cases, (*reviews[:2], expensive))
 
 
 @pytest.mark.parametrize(
     "approved,calls",
-    [(Decimal(101), 81), (Decimal(0), 81), (Decimal("NaN"), 81), (Decimal(100), 82)],
+    [(Decimal(151), 81), (Decimal(0), 81), (Decimal("NaN"), 81), (Decimal(150), 82)],
 )
 def test_ledger_rejects_invalid_limits(approved, calls):
     with pytest.raises(ValueError):
         Ledger(io.StringIO(), approved, calls)
+
+
+async def test_higher_ceiling_does_not_raise_a_smaller_owner_budget():
+    reviews = [review(model) for model in MODELS]
+    entry = copy.deepcopy(reviews[2].catalog_entry)
+    entry["providers"][0]["pricing"]["prompt_per_million"] = "100"
+    reviews[2] = review(MODELS[2], catalog_entry=entry, catalog_sha256=fingerprint(entry))
+    cases = load_cases(FIXTURES)
+    total = Decimal(plan(cases, tuple(reviews))["priced_reservation_rub"])
+    assert Decimal(100) < total < Decimal(150)
+    ledger = Ledger(io.StringIO(), Decimal(150), 81)
+    for reviewed in reviews:
+        for repeat in range(27):
+            ledger.reserve(reviewed, cases[0], repeat)
+    assert ledger.calls == 81 and ledger.reserved == total
+    calls = []
+    with pytest.raises(ValueError, match="APPROVED_BUDGET_TOO_SMALL"):
+        await live(
+            cases,
+            tuple(reviews),
+            ProbeSettings(api_key=KEY),
+            io.StringIO(),
+            Decimal(100),
+            transport=httpx.MockTransport(lambda request: calls.append(request)),
+        )
+    assert not calls
 
 
 def test_reservations_never_refunded_and_fail_before_next_call():
@@ -431,7 +457,7 @@ def test_existing_receipt_cannot_be_reused_or_overwritten(tmp_path, monkeypatch,
     assert KEY.get_secret_value() not in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("amount", ["NaN", "Infinity", "-1", "100.01"])
+@pytest.mark.parametrize("amount", ["NaN", "Infinity", "-1", "150.01"])
 async def test_live_invalid_budget_fails_admission_without_catalog(amount):
     calls = []
     with pytest.raises(ValueError, match="APPROVAL_LIMIT"):
@@ -504,7 +530,7 @@ async def test_invalid_third_review_stops_before_any_http(change, error):
     elif change == "tariff":
         provider["pricing"]["unknown_fee"] = "1"
     elif change == "price":
-        provider["pricing"]["prompt_per_million"] = "100"
+        provider["pricing"]["prompt_per_million"] = "150"
     reviews[2] = review(
         MODELS[2],
         catalog_entry=entry,

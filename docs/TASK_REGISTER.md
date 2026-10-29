@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.1 INTEGRATED / VERIFIED; M4.2 catalog repair / 2026-10-29
+## CURRENT — M4.1 INTEGRATED / VERIFIED; M4.2 budget150 / 2026-10-29
 
 Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**; PR38 слит владельцем,
@@ -14,23 +14,24 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | CATALOG-R1 candidate REVIEW / PAID PROBE BLOCKED, NOT RUN; C4 HOLD для C0. От seed b3d18fb: explicit route token cap/reasoning evidence, reviewed conditional fees, duplicate-name STOP, provider-specific image/strict checks, equivalent result envelope; canonical contract/Windows lock сохранены. 255 targeted PASS, Ruff/format/mypy/plan PASS; 75 scenarios/81 calls/6 READ и100 RUB без изменений. Snapshot58 entries: условный Decimal минимум107.138276775 RUB >100; actual priced reservation UNKNOWN, route/billing/account evidence остаются открыты. Full CI не запускался; отдельный foundation CI40841849732 FAILURE не исправлен |
+| M4.2-PROBE | IN_PROGRESS / PAID PROBE BLOCKED, NOT RUN. CATALOG-R1 fde935f551c83879fda49430f8b096b5e9771659 принят C0 по source/targeted255 PASS; родитель b3d18fb и Windows repair сохранены. C0 M4.2-PROBE-BUDGET-R1 меняет общий proposed ceiling100→150 RUB после готовности владельца увеличить бюджет;75 scenarios/81 calls/6 READ и меньший explicit owner amount сохраняются. Условный минимум107.138276775 RUB не равен actual priced plan. Дальше штатный CI нового candidate и read-only key check; route/billing/account facts ещё открыты |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
 | M4.3-QUALITY | TODO; независимый scoped C8/eval |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-C4 начинает **c4/m4-2-probe-catalog-r1** от опубликованного C0 seed,
-sole parent **708dc86f1d3493867852256ed6a42a891e1f7d62**, tree
-**b266d566f7f8f4eb01ee1efe39a25464e46678da**; seed SHA/tree — в PR39.
-Write-set, snapshot receipt, все известные причины отказа и проверки —
-[M4_HANDOFF](tasks/M4_HANDOFF.md); матрица A01–A08 сохранена.
-C1/C2/C3/C5/C6/C8 HOLD. PR39 head4f86e7fe1d014ddbbe87ca734d868522599fe7ba
-и main не сдвигались. CI40841849732:10/11 SUCCESS, PG803 PASS/1 setup connect
-TimeoutError, причина UNKNOWN; неизменённый full CI не перезапускать.
-C0 разрешил один read-only preflight независимо от этого PG сбоя; он выполнен.
-Публичный каталог не доказывает валидность ключа/аккаунтный тариф/списание.
-Секрет остаётся у владельца; paid approval, VM/Telegram/DB/runtime отсутствуют.
+Единственная текущая работа **M4.2-PROBE-BUDGET-R1 / C0**:
+`c0/m4-probe-budget-r1` от fde935f551c83879fda49430f8b096b5e9771659,
+tree a1d7a640139c087b92d9c88e0fbcbfd4662f26cf. Write-set6 paths и порядок —
+[M4_HANDOFF](tasks/M4_HANDOFF.md). Candidate SHA/tree и фактический CI —
+в верхнем receipt PR39; до результата не объявлять PASS.
+C1–C6/C8 HOLD. Не повторять неизменённый run40841849732 ради PASS:
+его PG803 PASS/1 setup connect TimeoutError остаётся с неизвестной причиной.
+Новый source проходит отдельный штатный full CI после target checks.
+Разрешён один read-only GET /v1/key с ПК владельца; выводить только limit/usage,
+без secret/label/creator. Публичный catalog GET ранее получен и проверен.
+Подготовленный потолок150 не является paid approval; реальный review/plan и
+explicit owner amount обязательны. Нет paid/VM/Telegram/DB/runtime activation.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 
