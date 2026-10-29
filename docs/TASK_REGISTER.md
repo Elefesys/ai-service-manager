@@ -14,30 +14,33 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | REVIEW / C4 EXECUTABLE-EVAL-R1 candidate; full75 paid NOT RUN. От seed43da703 (source78dabd8): explicit SYNTHETIC_EXPERIMENT без fake reviews, fixed3 official routes, conditional fresh plan; bounded Gemini signature continuation, explicit DeepSeek non-thinking; GPT profile сохранён. Controlled399 PASS, Ruff/format/mypy71/offline plans PASS; full CLI75 finals/81 POST/6 READ/162 history GET. Hard limits/fixtures/contracts сохранены; prior0.01269785 +stage≤149.98730215 из150. Windows команда в runbook, существующий ключ. C4 HOLD: C0 source/plan review → один full CI нового candidate → выдача владельцу; PR39/main/runtime/paid C4 не менялись |
+| M4.2-PROBE | REVIEW / C0 source accepted b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc; controlled399 PASS, Ruff/format/mypy71/plan/scope PASS. Exact full CI40915999616: 11/11 SUCCESS. Owner full75 synthetic experiment: ONE_OWNER_SYNTHETIC_RUN_AUTHORIZED, NOT RUN; C4 HOLD. Fixed3 official profiles, Gemini transient signature, DeepSeek explicit none, all hard limits/fixtures unchanged. Prior0.01269785 +stage≤149.98730215 из150; no runtime/merge. Команда и C0 receipt — runbook/handoff |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
 | M4.3-QUALITY | TODO; независимый scoped C8/eval |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-Единственная текущая работа **M4.2-PROBE-EXECUTABLE-EVAL-R1 / C4**:
-`c4/m4-2-executable-eval-r1` от C0 coordination seed с sole parent
-**78dabd8ffb05e036e7f2e3acad6ae4832ea7badb**, source tree
-**9d15250dc46575ecdd331ec6b5bf21130fdd7d9f**. Seed SHA/tree — верхний
-receipt [PR39](https://github.com/Elefesys/ai-service-manager/pull/39);
-write-set и критерии — [M4_HANDOFF](tasks/M4_HANDOFF.md).
-Source ff245248 CI40870897271 SUCCESS11/11; не повторять неизменённый CI.
-Source tests и реальные helper receipts различаются. Новый source78dabd8
-находится в Draft PR39; CI40902629746 attempt1 запущен, result см. PR39.
-C4 может выполнять узкую выдачу; C1/C2/C3/C5/C6/C8 и остальные этапы M4 HOLD.
+Следующий шаг **M4.2-PROBE-OWNER-EVAL-R1 / владелец**, один запуск принятого source.
+Source **b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc**, tree
+**75227361cac6f619d51d19acfc3e0c8e413fa530**; Draft PR39. Единственный full CI
+[40915999616](https://github.com/Elefesys/ai-service-manager/actions/runs/40915999616),
+attempt1: **11/11 SUCCESS**. Новый paid этап ещё NOT RUN.
+C4 вернул7 разрешённых paths от43da703; C0 независимо подтвердил399 targeted,
+Ruff/format5, mypy71, offline plans, historical catalog compatibility и scope PASS.
+Никаких изменений source для этой приёмки. Старый78dabd8 CI40902629746 SUCCESS11/11
+не заменяет новый CI; неизменённый полный прогон не повторяется.
 
-Владелец уже подтвердил key limit150/reset never и выделил этот общий бюджет.
-Не просить повторного согласия на ту же сумму. C4 готовит исполняемый finite
-experiment; C0 проверяет candidate и конкретный conditional plan перед paid этапом.
-Известный prior spend0.01269785 оставляет149.98730215 RUB по арифметике receipts;
-actual account/key remaining после них не запрашивался. Старые reports сохраняются.
-Нет нового paid retry/VM/Telegram/DB/runtime/merge. Старый run40841849732 с PG
-setup connect TimeoutError остаётся историческим наблюдением с неизвестной причиной.
+Решение C0 **C0-M4.2-EXECUTABLE-EVAL-ACCEPT-R1**: ONE_OWNER_SYNTHETIC_RUN_AUTHORIZED.
+Готовая команда [в runbook](runbooks/M4_POLZA_PROBE.md) использует прежние Windows
+checkout/.venv/.env.m4-probe и один exclusive report. Общий бюджет150 уже согласован:
+prior0.01269785 /3 POST/1 READ, новый этап≤149.98730215 /81 POST/6 READ;
+полная последовательность≤84 POST. Fresh conditional plan всех3 проверяется до POST.
+Исторический резерв111.008526759 не является fresh plan или прогнозом списания.
+При STOP сохранить отчёт; повторные расходы не разрешены этой выдачей.
+После выполнения C0 проверяет полный JSONL, каждый final, metering и observations;
+модель автоматически не выбирается. Все исполнители C1/C2/C3/C4/C5/C6/C8 HOLD.
+Accepted main51d7d737, VM/DB/Telegram/runtime/merge не менялись. Старые отчёты
+и historical CI40841849732 с PG setup timeout/unknown cause сохраняются.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

@@ -1,12 +1,18 @@
 # M4.2 — finite synthetic Polza experiment
 
-**EXECUTABLE-EVAL-R1: candidate REVIEW; полный paid75 NOT RUN.**
-Выдача C0 — [M4_HANDOFF](../tasks/M4_HANDOFF.md), решение об experimental admission —
-[IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md). Новая команда ниже не требует
-RouteReview-файла. Она использует существующие `.venv` и `.env.m4-probe` владельца.
+**C0 source review PASS; 11/11 SUCCESS; ONE_OWNER_SYNTHETIC_RUN_AUTHORIZED; paid75 NOT RUN.**
+Source **b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc**, tree
+**75227361cac6f619d51d19acfc3e0c8e413fa530**; full CI
+[40915999616](https://github.com/Elefesys/ai-service-manager/actions/runs/40915999616),
+attempt1. C0 independently:399 targeted PASS, Ruff/format5, mypy71, offline plans,
+scope/diff PASS. Решение **C0-M4.2-EXECUTABLE-EVAL-ACCEPT-R1** и полный receipt —
+[M4_HANDOFF](../tasks/M4_HANDOFF.md). Experimental admission —
+[IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
+
+Команда использует существующие `.venv` и `.env.m4-probe` владельца.
 Ключ повторно вводить, передавать в чат или переустанавливать зависимости не нужно.
-C4 выполняет только controlled проверки; C0 сначала принимает source/plan, затем
-проверяет один full CI нового candidate и выдаёт владельцу запуск.
+C0 допускает один новый finite synthetic experiment на этом source;
+самостоятельный повтор после STOP не входит в решение.
 
 Общий согласованный бюджет **150 RUB** уже включает **0.01269785 RUB / 3 POST**
 предыдущих GPT observations. Новый этап ограничен **149.98730215 RUB**, меньшая
@@ -46,22 +52,24 @@ synthetic images; объявленные strict schema/tools совместим�
 DeepSeek помечается `NOT_REPORTED`; наличие raw reasoning или ненулевых reasoning
 токенов останавливает probe до READ/final. Raw reasoning не сохраняется.
 
-## Одна Windows команда после принятия C0
+## Одна Windows команда принятого source
 
-В обычном PowerShell из корня существующего чистого checkout заменить только
-`C0_ACCEPTED_FULL_SHA` и `C0_ACCEPTED_DECISION_REF`. Они обозначают конкретный
-принятый candidate и решение C0, а не новые route/token/billing assertions.
-`.env.m4-probe` остаётся локальным с уже проверенным owner-only ACL.
+В обычном PowerShell на прежнем ПК выполнить блок целиком. Он использует
+существующий каталог ASM-M4-Probe-4f86e7f, проверяет точный source и
+сохранённый отчёт до любых Polza-запросов. `.env.m4-probe` остаётся локальным
+с уже проверенным owner-only ACL. Если каталог или prerequisite отличается —
+STOP без переустановки/удаления. Терминал может молчать до30 минут; progress
+пишется в JSONL, новый запуск в это время не выполнять.
 
 ```powershell
 & {
     $ErrorActionPreference = "Stop"
-    $Candidate = "C0_ACCEPTED_FULL_SHA"
-    $DecisionRef = "C0_ACCEPTED_DECISION_REF"
-    if ($Candidate -cnotmatch '^[0-9a-f]{40}$') { throw "Exact accepted SHA required" }
-    if ([string]::IsNullOrWhiteSpace($DecisionRef) -or $DecisionRef -eq "C0_ACCEPTED_DECISION_REF") {
-        throw "Exact C0 decision reference required"
-    }
+    $Candidate = "b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc"
+    $DecisionRef = "C0-M4.2-EXECUTABLE-EVAL-ACCEPT-R1:b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc:CI40915999616"
+    $Repo = Join-Path $env:LOCALAPPDATA "ASM-M4-Probe-4f86e7f"
+    Set-Location -LiteralPath $Repo
+    $Report = "reports\m4-polza-executable-eval-r1.jsonl"
+    if (Test-Path -LiteralPath $Report) { throw "Report already exists; do not repeat the probe" }
     $Dirty = git status --porcelain
     if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean checkout required" }
     git fetch origin $Candidate
@@ -75,13 +83,15 @@ DeepSeek помечается `NOT_REPORTED`; наличие raw reasoning ил�
     .\.venv\Scripts\python.exe -m asm.ai.probe --plan --synthetic-experiment
     if ($LASTEXITCODE -ne 0) { throw "Offline plan failed" }
     New-Item -ItemType Directory -Force -Path reports | Out-Null
-    $Report = Join-Path reports ("m4-polza-executable-eval-" + [guid]::NewGuid().ToString("N") + ".jsonl")
+    Write-Host "Report: $Report"
     .\.venv\Scripts\python.exe -m asm.ai.probe --live --synthetic-experiment `
         --secret-file .\.env.m4-probe --report $Report `
         --approved-rub 149.98730215 --approval-ref $DecisionRef `
         --source-sha $Candidate --source-environment LOCAL_DESKTOP
-    if ($LASTEXITCODE -ne 0) { throw "Probe stopped; preserve report and review with C0; do not replay" }
-    Write-Host "Report: $Report"
+    $ProbeExit = $LASTEXITCODE
+    if (Test-Path -LiteralPath $Report) { Get-Content -LiteralPath $Report -Encoding UTF8 -Tail 3 }
+    if ($ProbeExit -ne 0) { throw "Probe stopped; preserve report and return it to C0; do not replay" }
+    Write-Host "Complete. Return the JSONL report to C0: $Report"
 }
 ```
 
@@ -90,7 +100,8 @@ catalog цена в нём `null`. В `--live` выполняется **один
 проверки и запись свежего conditional plan, и только потом model POST.
 Отдельного preflight или review JSON для этой команды нет. Report создаётся
 exclusive (`x`); прерванный запуск нельзя возобновить или перезаписать тем же report.
-Новый UUID предотвращает случайную перезапись, но **не разрешает повторные расходы**.
+Фиксированное имя отчёта и exclusive open предотвращают случайный повтор этой команды;
+переименование/удаление отчёта не разрешает повторные расходы.
 При STOP сохранить JSONL и передать C0 для решения; unknown attempt не равен нулю.
 
 ## Расход, маршрут и протокол
@@ -207,8 +218,11 @@ unknown fee/capability, overbudget и actual usage/cost STOP.
 Windows PowerShell команда подготовлена для существующего окружения владельца;
 controlled CLI проверен на CPython3.13.16 Linux, Windows/Polza live не запускались.
 
-Source base78dabd8 имел327 targeted PASS и один CI run
-[40902629746](https://github.com/Elefesys/ai-service-manager/actions/runs/40902629746)
-со статусом in_progress при проверке C4; его успех здесь не заявлен.
-Результаты нового candidate — короткий receipt в CURRENT handoff. Full CI нового
-source выполняет C0 после review; C4 его не запускает и PR39/main не перемещает.
+C0 проверил exact candidate b1ff8f1:399 targeted PASS, Ruff/format5 и mypy71,
+offline plans/scope PASS. Full CI40915999616 attempt1 — **11/11 SUCCESS**:
+2596 ordinary+155 subtests,804 PostgreSQL,54 browser,398 frontend tests.
+Tested merge fffe3720cb2f36b69c12d225bb0725915b3c7102 tree точно равен
+source tree75227361cac6f619d51d19acfc3e0c8e413fa530. Native/cleanup/durable/
+Docker29/6 migration shards PASS; CI не перезапускался. Старый78dabd8 CI40902629746
+также завершился SUCCESS11/11, но не использован вместо новой проверки.
+Приёмка не меняет source/PR head/main и не является runtime admission.

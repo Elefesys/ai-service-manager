@@ -6,7 +6,56 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-PROBE-EXECUTABLE-EVAL-R1 / C4 / 2026-10-29
+## Текущая выдача — M4.2-PROBE-OWNER-EVAL-R1 / C0 → владелец / 2026-10-30
+
+**Source review PASS; 11/11 SUCCESS; ONE_OWNER_SYNTHETIC_RUN_AUTHORIZED; paid75 NOT RUN.**
+Решение **C0-M4.2-EXECUTABLE-EVAL-ACCEPT-R1**, source
+**b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc**, tree
+**75227361cac6f619d51d19acfc3e0c8e413fa530**, sole parent43da703ed00830ae9d7ceb9bd27771e5295ba146.
+Возврат C4 принят по scope/code review: ровно7 разрешённых paths; contracts,
+gateway, canonical prompt/schema/fixtures, locks и CI не менялись. C0 получил
+**399 targeted PASS**, Ruff/format5 PASS, mypy71 PASS, оба offline plans/diff PASS.
+Controlled CLI проверяет75 finals/81 POST/6 READ/162 history GET +1 catalog GET,
+обе формы body provider, signatures Gemini и explicit non-thinking DeepSeek.
+Это controlled evidence, не live proof hosted Polza.
+CI подтвердил **2596 ordinary tests +155 subtests,804 PostgreSQL tests,
+54 browser scenarios,398 frontend tests**; native-context/clean-source/recovery
+и все6 migration shards PASS. Foundation artifact12920545128, digest
+`6b6ad5e66393bbf8f6f3705c192f39435d4dd7f0fc74c4da725d2c6b23550948`.
+Проверены job logs/status и source tree; payload архивов заново не аудировался.
+
+Draft PR39 fast-forward78dabd8→b1ff8f1 с expected head/force=false. Единственный
+full CI [40915999616](https://github.com/Elefesys/ai-service-manager/actions/runs/40915999616),
+attempt1 на exact source: **11/11 SUCCESS**. Tested PR merge
+**fffe3720cb2f36b69c12d225bb0725915b3c7102** имеет тот же tree75227361,
+что и source b1ff8f1 (проверено GitHub Git object). Предыдущий source78dabd8:
+CI40902629746 SUCCESS11/11. Новый candidate не изменялся и не перезапускался.
+
+C0 допускает **один** полный synthetic EVAL_ONLY запуск
+по [готовой команде](../runbooks/M4_POLZA_PROBE.md). Использовать существующий
+Windows checkout/.venv/.env.m4-probe; ключ не передавать/не вводить заново.
+Source SHA проверяется перед запуском; фиксированный
+`reports/m4-polza-executable-eval-r1.jsonl` создаётся exclusive. Повтор команды
+при существующем отчёте прекращается до HTTP. Отчёт после STOP не удалять.
+
+Один fresh catalog GET, затем conditional plan всех3 и проверка stage budget
+до model POST. Profiles: GPT→`openai/flex` default, Gemini→`google-ai-studio/flex`
+default + bounded transient signature, DeepSeek→`wafer/us` explicit none/disabled.
+Request selector/body/history family/unknown variant не смешиваются. До нового
+этапа подтверждены3 POST/1 READ/0.01269785 RUB; stage≤149.98730215 и≤81 POST/6 READ,
+всё вместе≤150 RUB/84 POST. Остальные byte/token/deadline limits прежние.
+Исторический snapshot10:43:36Z проходит admission с conditional reserve111.008526759;
+это не обновлённый тариф и не обещание счёта. Actual account remaining не запрашивался.
+
+Оператор возвращает полученный JSONL и terminal status. При любой остановке —
+без самостоятельного replay; неизвестный charge не превращается в0. Успех CLI
+означает HUMAN_REVIEW_REQUIRED: C0 вручную проверяет все75 finals, quality,
+расходы и наблюдённые routes. Model selection/runtime authorization остаются false.
+Все чаты исполнения HOLD; новый task только по результату владельца. Main51d7d737,
+VM/DB/Telegram/runtime/merge не затронуты. C0 receipt/doc-only commit публикуется
+отдельно от PR head и не является новым code candidate или причиной повторять CI.
+
+## История — M4.2-PROBE-EXECUTABLE-EVAL-R1 / C4 / 2026-10-29
 
 **Результат:** одна готовая Windows команда штатного синтетического сравнения
 трёх выбранных моделей в уже выделенном общем бюджете150 RUB. Ещё один набор
