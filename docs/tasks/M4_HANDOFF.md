@@ -161,6 +161,19 @@ VM, не менять PC/Happ/SSH/egress и не использовать Telegr
   Полные логи в PR/artifacts; одна матрица A01–A08 ниже, не создавать вторую.
   Не добавлять commit ради собственного SHA или записи CI PASS. Merge — владелец.
 
+### Receipt C4 — подготовка M4.2-PROBE / 2026-10-29
+
+**REVIEW / PAID PROBE NOT RUN; C4 HOLD для C0.** В разрешённом write-set
+подготовлены Polza adapter, private settings, finite CLI, synthetic cases и
+[runbook](../runbooks/M4_POLZA_PROBE.md) с точными plan/preflight/live командами.
+172 targeted tests, Ruff/format и mypy71 PASS; локальный Docker NOT RUN
+(executable отсутствует). Один штатный full CI и full head/tree — в Draft PR.
+План: 25 scenarios на модель (20 text +3 repeats +2 images), ≤54 model HTTP,
+≤4 synthetic READ, ≤1800s; предложение ≤100 RUB, фактический тариф пока UNKNOWN.
+Ключ/платные вызовы/runtime не включены. Account catalog, official route mapping,
+точная native schema+tools, token/image и billing bounds требуют подтверждения;
+неизвестность закрывает paid admission. Принятые Gateway/DTO/prompt/schema не менялись.
+
 ## Принято — M4.1-CONTRACT и C5 recovery / 2026-10-29
 
 **INTEGRATED / VERIFIED** в contract/fake и CI-harness scope, без live LLM.
