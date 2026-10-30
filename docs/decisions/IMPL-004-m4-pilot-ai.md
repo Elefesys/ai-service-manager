@@ -286,6 +286,34 @@ Provider validator не ослабляется, unknown route не сертиф�
 continuation/READ не выполняются. После одного отчёта следующий paid шаг HOLD
 до C0 review. Новый code/helper/общий resume в этом решении не создаётся.
 
+**Решение C0 от2026-10-30 — diagnostic выполнен, следующий кандидат DeepSeek:**
+четыре owner events source68093c7 подтверждают1 Gemini POST/1 catalog/1 history,
+0 READ/follow-up. В tool call отсутствует extra_content (SIGNATURE_EXTRA_MISSING).
+Gemini tool continuation на текущем adapter/route BLOCKED; другой carrier и
+причина generic history-list failure не доказаны. Проверку signature/route не
+отключать, dummy не вставлять, thinking/маршрут не менять. ONE_POST_R1_5RUB consumed.
+
+Generation gen_2227371816211582977 имеет validated body354/172 tokens,
+reasoning156 внутри output, reported0.05269262 RUB. History не сверена, поэтому
+это не CONFIRMED charge. Shared known остаётся0.17509189/30 POST; два unknown
+Gemini удерживают6.929759328, remaining142.895148782 в прежнем150. Original R2
+unknown не сопоставляется с новым ID. Резервы не равны расходу/балансу аккаунта.
+
+Для продвижения исходного сравнения C4 получает M4.2-DEEPSEEK-EVAL-R1: offline
+подготовка одного finite DeepSeek-only25 cases/≤27 POST/≤2 READ, прежние fixtures,
+prompt/schema/non-thinking profile и wafer/us. GPT не повторяется; Gemini пока
+BLOCKED, не объявляется quality FAIL по protocol issue. Полное сравнение остаётся
+незавершённым. Снятие Gemini blocker требует точного Polza protocol evidence,
+а не ещё одного идентичного paid diagnostic. Новый общий resume не строится.
+
+Новый runner обязан учитывать reviewed C0 prior32 POST/оба unknown reserve;
+это явный accounting snapshot, не raw R2 hash и не импорт старых finals. Новый
+stage budget≤142.895148782, fresh whole-stage reservation до POST, обе старые
+неопределённости удерживаются. Existing model/runtime guards и acceptance остаются;
+допустима только fixed safe детализация history STOP без новых HTTP. Source review
+и готовая команда C0 нужны до live, бюджет150 заново не запрашивается. GPT quality
+findings, RED CI41009211185 и C0-M4-CI-OBSERVATION-01 не закрываются этим шагом.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

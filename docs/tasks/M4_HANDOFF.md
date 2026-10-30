@@ -6,10 +6,169 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущий допуск — C0-M4.2-GEMINI-DIAGNOSTIC-R1 / ONE_POST_R1_5RUB / 2026-10-30
+## Текущая выдача — M4.2-DEEPSEEK-EVAL-R1 / C4 / 2026-10-30
+
+**Подготовить отдельный DeepSeek-only этап без платных вызовов.** Один Gemini
+diagnostic выполнен; допуск ONE_POST_R1_5RUB использован. Маршрут Gemini BLOCKED
+по совместимости tool continuation, повтор прежних команд не нужен. GPT уже
+собран, его результаты сохраняются. Следующий полезный результат для пилота —
+проверяемая команда оставшегося кандидата DeepSeek на прежних25 scenarios.
+Это продолжает согласованное сравнение трёх моделей, не выбирает модель заранее.
+Gemini не объявляется неспособной к tools; устранение её blocker отложено до
+доказательства поддерживаемого Polza формата. Новый diagnostic framework не нужен.
+
+### Принятый owner receipt Gemini diagnostic-r1
+
+C0 получил все4 JSONL events прямо в сообщении владельца: source,
+diagnostic_plan, reserved, gemini_diagnostic. Это не byte hash оригинального
+Windows файла. Исходный `reports/m4-polza-gemini-diagnostic-r1.jsonl` сохраняется
+у владельца; owner reports/raw responses в Git не публикуются.
+
+Exact source **68093c769f24ea63eca5185179c3eab5fafd1229**, LOCAL_DESKTOP,
+approval ref `C0-M4.2-GEMINI-DIAGNOSTIC-R1:68093c769f24ea63eca5185179c3eab5fafd1229:ONE_POST_R1_5RUB`.
+Catalog checked_at **2026-10-30T09:00:25.023442+00:00**, entry hash
+`4eb195162d32dcc179bf8ced7e1534e6fdb3725e3f800c249f4a2915e7c3ed4e`.
+Fresh conditional reserve3.464879664 RUB поместился в explicit stage5.
+По receipt и exact source:1 catalog GET,1 model POST,1 history GET,0 READ,
+0 follow-up. Итог **TECHNICAL_FAILURE / NO_READ_OR_FOLLOWUP**; runtime false.
+PLAN_ONLY внутри diagnostic_plan — сохранённая метка proposal, а не отсутствие
+допуска у фактически выполненного вызова. Она не даёт права повторить этап.
+
+| Группа | Наблюдение | Предел вывода / следующий шаг |
+|---|---|---|
+| Protocol | SIGNATURE_EXTRA_MISSING, expected_field_present=false, shape EXTRA_CONTENT; finish_reason=tool_calls | В единственном tool call нет `extra_content`. Размер/тип signature не определены; наличие её в других полях не проверено этим receipt. Остановка до READ правильная. Совместимость текущего adapter/route BLOCKED; проверку не отключать |
+| Identity / body metering | generation `gen_2227371816211582977`, model Gemini, input354/output172, reasoning156, reported0.05269262 RUB | FIELD_VALIDATED_ONLY. Reasoning156 входит в172, не прибавляется ещё раз. Это доступные body observations, не согласованное списание |
+| History / route | HISTORY_VERIFICATION_FAILED после1 GET, route_evidence_source=NONE, history_family=null, provider field ABSENT | Отказ на чтении/проверке списка до detail. Точная причина неизвестна: нельзя приписать её provider label, задержке истории либо стоимости без evidence. Flex задан в запросе, фактически не доказан |
+| Учёт | Новый charge UNKNOWN, новый резерв3.464879664 удержан | Нулевой new_confirmed_cost не означает бесплатный запрос. Старый unknown также удержан; никакого автоматического settlement |
+
+C0 проверил arithmetic и actual error boundary на exact source:8 CONTROLLED
+вариантов. Положительный history control подтверждает body cost через2 GET,
+но сохраняет primary SIGNATURE_EXTRA_MISSING и terminal ERROR;7 независимых
+list failures (no ID/duplicate ID/cost/usage/model/provider null/provider spaces)
+дают тот же generic HISTORY_VERIFICATION_FAILED после1 GET. Это демонстрирует
+неоднозначность, не восстанавливает hosted history. Только MockTransport,
+реальные sockets запрещены; owner key/real HTTP/READ/follow-up=0.
+520 targeted source checks остаются прежними; полный suite/CI не повторялся.
+
+[Google OpenAI-compatible protocol](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures#signatures-for-openai-compatibility)
+описывает `tool_calls[].extra_content.google.thought_signature`. C0 сверил
+2026-10-30 также [Polza tools](https://polza.ai/docs/gaidy/tool-calling),
+[reasoning](https://polza.ai/docs/osobennosti/reasoning-tokens) и
+[chat API](https://polza.ai/docs/api-reference/chat/completions): в этих страницах
+не найдено описания альтернативного signature carrier. Это ограниченный поиск,
+не доказательство отсутствия такой поддержки у Polza. Не подставлять dummy
+signature, не выключать thinking и не читать другой путь по догадке. Блокер можно
+снять только точным контрактом/фактической формой и отдельной проверкой roundtrip.
+
+### Общий бюджет после диагностического вызова
+
+| Показатель | Состояние |
+|---|---|
+| Общий принятый бюджет | 150 RUB, не новый бюджет |
+| Подтверждено | 0.17509189 RUB /30 POST |
+| R2 Gemini | 1 unknown POST /reserve3.464879664 RUB; response ID утрачен |
+| Diagnostic-r1 Gemini | 1 unknown POST /reserve3.464879664 RUB; exact ID известен, body reported0.05269262 не погашен |
+| Всего попыток / unknown reserves | 32 POST /6.929759328 RUB |
+| Confirmed + held | 7.104851218 RUB |
+| Свободно с учётом обоих резервов | **142.895148782 RUB** |
+
+Это ledger capacity, не прочитанный баланс аккаунта/ключа. Source old history-r2
+и gemini-diagnostic CLI содержат prior до нового вызова и больше не используются
+как текущий бюджет. Повтор под новым именем report также запрещён. GPT25 finals /
+27 POST /2 READ сохраняют no_send_claim19 QUALITY_FAIL и unknown_price22
+QUALITY_NOTE; DeepSeek NOT_RUN. Полная75-case comparison и runtime не приняты.
+
+### База и write-set C4
+
+Repository **Elefesys/ai-service-manager**; branch **c4/m4-2-deepseek-eval-r1**.
+Начать от **опубликованного C0 seed с этим верхним блоком**: полный immutable SHA
+в URL переданного M4_HANDOFF и в receipt PR39. Не брать старый PR head или main.
+Его sole parent **2a1848f7089efda50913e24a58fcf21cafe167fc**, tree
+**033243903f283c02c976b3043faa928aae0f469e**; code base остаётся source68093c7,
+tree **585f034acedec906d6859a25176ef430f808d578**. Seed меняет только4 docs.
+C4 сначала записывает полный fetched base SHA/tree в своём receipt.
+
+Разрешены только `backend/src/asm/ai/probe.py`, `backend/src/asm/ai/polza.py`,
+`tests/test_m4_probe.py`, `tests/test_m4_polza.py`, этот короткий receipt,
+CURRENT `docs/TASK_REGISTER.md`, `docs/runbooks/M4_POLZA_PROBE.md`.
+В polza.py только уточнение диагностики существующего history отказа; acceptance
+предикаты/route/profile/signature semantics не ослабляются. Если нужен иной
+compatibility repair — вернуть доказанный blocker C0, не расширять scope.
+Новые helper files/framework/общий resume/registry не нужны. Contracts/gateway/
+settings/prompt/schema/canonical fixtures/зависимости/locks/CI/DB/VM/Telegram/
+runtime и IMPL-004 вне write-set. Реальных HTTP и чтения owner key у C4 нет.
+
+### Единственный требуемый результат
+
+1. Один конечный режим DeepSeek-only, переиспользующий текущие schedule/run_case/
+   quality_flags и bounded transport. Исходные25 cases в прежнем порядке и с
+   исходными repeat0–24:20 text,3 critical repeats,2 PNG; максимум27 POST/2
+   synthetic READ/54 history GET/1 fresh catalog GET. GPT/Gemini POST=0.
+   Только `deepseek/deepseek-v4.1-flash-1017` / `wafer/us`, прежний явный
+   `reasoning: {effort: "none", enabled: false}`. Новых effort/provider fallbacks нет.
+2. Применять полный прежний SyntheticRoute preflight именно к DeepSeek entry:
+   official selector, tools/strict schema/image/non-thinking/cap aliases и все
+   fee checks. Catalog declaration не становится runtime evidence. Отсутствие
+   обязательной catalog declaration — STOP до POST; чужие модели не попадают в runner.
+3. Новый finite prior snapshot с decision ref этой выдачи: confirmed0.17509189 /
+   known30 /unknown2 /held6.929759328 /remaining142.895148782,32 прежних POST.
+   Snapshot — reviewed C0 accounting, не raw receipt hash/resume cursor.
+   Исторические R1/R2/diagnostic modes и их source facts не переписывать.
+   Не импортировать/пересчитывать чужие результаты как DeepSeek cases; R1 loader
+   не использовать для replay13 GPT. Старые reports read-only, hashes не выдумывать.
+4. До POST fresh reservation всех27 calls должен поместиться в explicit stage
+   ceiling и remaining142.895148782. До каждого POST flush monotone reservation;
+   оба old unknown всегда удержаны. Новое confirmed/unknown считать отдельно,
+   исключить double count/release старых резервов; общий budget150 не превышать.
+   Максимум59 общих model POST после этапа. Сохранить32768/512 tokens,
+   24576/32768 bytes, case60s/overall1800s, history65536 bytes/15s verification
+   budget, catalog4MiB/20s; total token reservation ceiling898560 для27 calls.
+5. Сохранить fail-closed technical/usage/cost/history guards и отсутствие retry;
+   quality flags оставить ручной оценкой без искусственного PASS. Для следующего
+   history отказа добавить fixed stage/reason/type diagnostics по существующим
+   веткам, без raw response/arbitrary keys/labels/secret/reasoning. Основной
+   error и acceptance не менять, дополнительные HTTP не добавлять. Это нужно,
+   чтобы ещё один generic STOP не требовал новой платной генерации для triage.
+6. Отдельный exclusive `reports/m4-polza-deepseek-eval-r1.jsonl`: source/decision/
+   prior snapshot, catalog/plan, reservations/cases и terminal summary даже при
+   technical STOP. В summary только фактические новые DeepSeek cases, prior
+   отдельно; Gemini BLOCKED/GPT_REVIEWED не считать новым PASS. selected_model=null,
+   runtime_authorized=false. Crash/cancellation после reserved до metering не
+   освобождает резерв и не разрешает повтор. Существующий файл останавливает до key/HTTP.
+7. Offline plan должен работать без key/HTTP. Live требует отдельного нового
+   exact-source C0 ref +explicit stage amount после review, конфликтующие режимы
+   и старые R1/R2/ONE_POST refs отклоняются до key/HTTP. Подготовить описание одной
+   Windows команды для C0; до принятия source не публиковать активный live блок.
+
+### Проверки и возврат
+
+Нужны CONTROLLED полный DeepSeek25/27/2, недопустимый route/profile/fee/cap,
+ошибка history на list и detail с различимыми fixed codes, STOP после возможного
+POST без потери unknown reserve, недостающее metering и shared accounting с
+двумя old unknown. Проверить no GPT/Gemini POST, границы времени/числа/расхода,
+exclusive report/старые refs/конфликтующие modes до key/HTTP, отказ raw secret
+(включая JSON-escaped), signature/reasoning/account metadata в output.
+Положительные сценарии должны доходить до final/summary, ранний STOP не заменяет
+проверку поздних guards. Существующие full75/81/6, R1 continuation63/67/4 и
+Gemini diagnostic/history regressions сохраняются. Выполнить финальные targeted
+AI tests, Ruff/check+format затронутых Python, mypy и offline plans; во время
+проверок запретить real network/key reads. Прежний full CI ради случайного PASS
+не повторять.
+
+Вернуть полный commit/tree/base, diff scope, точные команды и результаты,
+пример CONTROLLED plan/summary и готовность Windows блока. До source review C0
+новые paid calls HOLD; accepted150 повторно не запрашивается. C0 не отправляет
+сообщение C4 автоматически — владелец передаёт immutable handoff link.
+
+PR39 остаётся Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**;
+CI41009211185 RED и C0-M4-CI-OBSERVATION-01 остаются до merge/runtime. Новый source
+full CI NOT_RUN. C1/C2/C3/C5/C6/C8 HOLD, единственная выдача — C4 выше.
+Main/VM/DB/Telegram/runtime/merge не меняются.
+
+## История использованного допуска — C0-M4.2-GEMINI-DIAGNOSTIC-R1 / ONE_POST_R1_5RUB / 2026-10-30
 
 **Один OWNER Gemini diagnostic разрешён в прежнем бюджете150.**
-Готовый [Windows блок](../runbooks/M4_POLZA_PROBE.md): **≤1 model POST,
+Исторический [Windows блок](https://github.com/Elefesys/ai-service-manager/blob/2a1848f7089efda50913e24a58fcf21cafe167fc/docs/runbooks/M4_POLZA_PROBE.md), допуск использован: **≤1 model POST,
 0 READ/0 follow-up, резерв нового этапа≤5 RUB**. Не повторяет GPT или полный R2.
 Source **68093c769f24ea63eca5185179c3eab5fafd1229**, tree
 **585f034acedec906d6859a25176ef430f808d578**, ранее проверенный520 targeted /

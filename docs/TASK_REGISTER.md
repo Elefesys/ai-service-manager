@@ -2,68 +2,66 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.2 один Gemini diagnostic / 2026-10-30
+## CURRENT — M4.2 DeepSeek-only preparation / 2026-10-30
 
 Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
-**411636a3614529077f6d0d230c62d11f69da600f**; PR38 слит владельцем,
+**411636a3614529077f6d0d230c62d11f69da600f**; PR38 merged,
 [main CI40811295940](https://github.com/Elefesys/ai-service-manager/actions/runs/40811295940)
 11/11 SUCCESS. Это contract/fake acceptance, не live LLM.
 
 | Task | Status / ближайший результат |
 |---|---|
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
-| M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
+| M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38, exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | REVIEW / R2 STOP: GPT25/25 technical completion, один clear quality failure и один quality note. Gemini первый POST SIGNATURE_INVALID/charge UNKNOWN, DeepSeek NOT_RUN. Полное сравнение/selection/runtime не приняты. Разовый R2 допуск использован; replay HOLD. |
-| M4.2-GEMINI-DIAGNOSTIC-R1 | REVIEW / OWNER ONE_POST_R1_5RUB AUTHORIZED: source68093c7,≤1 Gemini POST/0 READ/follow-up, stage reserve≤5 из прежнего150. History-r1 UNKNOWN/HISTORY_PROVIDER_UNKNOWN после1 GET принят; old charge/reserve сохраняются. Полный новый receipt → C0; дальнейший paid/R3 HOLD. |
-| C0-M4-CI-OBSERVATION-01 | TODO / до merge/runtime: разобрать M3 wait_blocked1.5s timeout и завершить отсутствующие foundation gates; причина задержки UNKNOWN. Тесты/таймауты неизменны; случайный rerun не выполнен. |
-| M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
+| M4.2-PROBE | REVIEW: GPT25 finals/27 POST/2 READ, no_send_claim19 QUALITY_FAIL, unknown_price22 QUALITY_NOTE. Gemini2 failed POST/0 final. DeepSeek NOT_RUN; comparison/selection/runtime не приняты |
+| M4.2-GEMINI-DIAGNOSTIC-R1 | VERIFIED только diagnostic scope: owner4 events source68093c7 приняты, SIGNATURE_EXTRA_MISSING установлен; history после1 GET не прошла, оба charge UNKNOWN. ONE_POST_R1_5RUB использован, не replay approval |
+| M4.2-GEMINI-COMPATIBILITY | BLOCKED: extra_content отсутствует в tool call; иной carrier в owner receipt не наблюдён. Нет READ/continuation до точного Polza protocol evidence и проверки; новый paid diagnostic не выдан |
+| M4.2-DEEPSEEK-EVAL-R1 | TODO / ISSUED C4: подготовить конечный DeepSeek-only25/≤27 POST/≤2 READ с prior30 known+2 unknown, без GPT/Gemini replay. Offline code/CONTROLLED review, paid HOLD до exact-source review C0 |
+| C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 wait_blocked1.5s timeout, root cause UNKNOWN; отсутствующие foundation gates не приняты |
+| M4.3-CONTEXT | TODO / HOLD |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
-| M4.3-QUALITY | TODO; независимый scoped C8/eval |
+| M4.3-QUALITY | TODO; scoped C8/eval |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-[Точный C4 scope, evidence и manual review](tasks/M4_HANDOFF.md),
-[текущее действие владельца](runbooks/M4_POLZA_PROBE.md),
+[Единственная выдача C4 и полный receipt](tasks/M4_HANDOFF.md),
+[статус операторских команд](runbooks/M4_POLZA_PROBE.md),
 [решение C0](decisions/IMPL-004-m4-pilot-ai.md).
-Итоговый reviewed source **68093c769f24ea63eca5185179c3eab5fafd1229**, tree
-**585f034acedec906d6859a25176ef430f808d578**, parent C4
-**cbc87bf6999157bdaa84e4d5e7d8219e83008998**. C0 delta ограничена decoded-key
-проверкой GET-only history и regression test: тест сначала FAIL на C4 candidate,
-затем520 targeted PASS. Owner key/реальные HTTP=0; Windows/live history NOT RUN.
-History-r1 уже вернулся UNKNOWN/HISTORY_PROVIDER_UNKNOWN после1 GET/0 POST;
-provider value/тип/конкретная row не сохранены. Допуск GET-only использован.
-Теперь готов один Gemini diagnostic:1 catalog/≤1 POST/≤2 history/0 READ/follow-up,
-120s overall, explicit reserve≤5 RUB. Полный отчёт → C0; автоматического retry нет.
-PR39 Draft/head остаётся **cd60e5e16d8bcada53597d660a15f4d82640e956**;
-новый full CI не запускался. C0 source review не означает merge/runtime acceptance.
+Новый C4 branch `c4/m4-2-deepseek-eval-r1` от опубликованного seed этого CURRENT
+(полный SHA в immutable handoff URL и PR39 receipt), parent2a1848f7089efda50913e24a58fcf21cafe167fc.
+Write-set/критерии — в верхнем HANDOFF; C1/C2/C3/C5/C6/C8 HOLD. Владельцу пока
+не запускать команды; передать C4 ссылку. Существующий бюджет150 принят.
 
-C0 прочитал33 events R2 из текстовой копии84220 bytes, hash6ca62d72…59b3fc0;
-это не подтверждённый hash оригинального Windows JSONL. Встроенный R1 точно
-совпал с реальным R1 b727cc1c; summary и все новые quality flags воспроизведены
-offline sourcecd60.13 новых GPT finals/13 confirmed POST +1 failed Gemini POST,
-новых READ0; aggregate25 GPT finals/27 confirmed POST/2 READ. Gemini0 finals,
-DeepSeek0 attempts. Manual no_send_claim19 — QUALITY_FAIL; unknown_price22 —
-QUALITY_NOTE, утверждение о зависимости цены не подтверждено context. Остальные
-новые11 finals PASS в их synthetic scope; исходные flags сохранены.
+Owner diagnostic source **68093c769f24ea63eca5185179c3eab5fafd1229**, tree
+**585f034acedec906d6859a25176ef430f808d578**:1 catalog/1 POST/1 history/0 READ/
+0 follow-up, TECHNICAL_FAILURE. Exact generation `gen_2227371816211582977`;
+354 input/172 output (156 reasoning внутри172), reported0.05269262 RUB только
+RESPONSE_BODY/FIELD_VALIDATED_ONLY. Primary SIGNATURE_EXTRA_MISSING;
+HISTORY_VERIFICATION_FAILED на списке до detail не раскрывает точную причину.
+Provider ABSENT/history family null, flex только requested selector. Runtime false.
+C0 проверил арифметику и8 CONTROLLED outcomes (positive history+7 независимых
+list failures), реальные HTTP/key/READ/follow-up=0. Source520 targeted checks
+сохраняются, полный suite/CI заново не выполнялся. Scope этой правки4 docs only.
 
-Shared confirmed **0.17509189 RUB** =helpers0.01269785 +R1 0.08303952
-+R2 GPT0.07935452;30 confirmed POST +1 unknown Gemini. Unknown reserve
-**3.464879664 RUB** сохраняется, остаток общего150 **146.360028446 RUB**.
-Model/time candidate из history не будет автоматически погашать неизвестный
-charge: у отказавшего R2 call нет generation ID. Новых paid вызовов C0 не делал.
+Shared **0.17509189 RUB/30 confirmed POST +2 unknown Gemini POST**.
+Оба unknown reserve по3.464879664 = **6.929759328 RUB**; committed/held7.104851218,
+остаток прежнего150 **142.895148782 RUB**, не live account balance. Body amount
+не погашает резерв; stage confirmed0 не означает cost0. Следующий finite runner
+должен явно учитывать32 прошлых POST и оба резерва; старые CLI prior неактуальны
+для нового запуска. Новый paid/R3/replay/settlement сейчас не разрешены.
 
-Sourcecd60 review:443 targeted PASS; real R1 +controlled remainder63/67/4 и
-CLI isolation PASS. [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
-остаётся **FAILURE /10 из11 SUCCESS**:2640 ordinary+155 subtests PASS,
-803 PG PASS/1 M3 observer timeout;54 browser/398 frontend PASS. Причина timeout
-не установлена. Foundation completeness и последующие gates не приняты.
-Разовый scoped standalone R2 был выполнен, исключение не означает зелёный CI
-или новый paid запуск. Нет нового полного CI/merge/runtime approval.
-C1/C2/C3/C4/C5/C6/C8 HOLD. Следующий шаг — один OWNER Gemini diagnostic
-по точному ref ONE_POST_R1_5RUB. Old reserve3.464879664 сохраняется независимо
-от результата; unknown provider label в history не подменяется догадкой.
-Полный report вернуть даже при STOP; дальнейший paid/R3 HOLD.
-main/VM/DB/Telegram/runtime без изменений. Оба owner reports сохраняются.
+R1/R2/history/diagnostic reports остаются у владельца неизменными. R2 summary,
+встроенный R1 и quality flags ранее проверены C0 по текстовой копии; hash копии
+не превращается в hash исходного Windows JSONL. Новый DeepSeek stage не выдаёт
+этот prior snapshot за импортированные eval rows и не переоценивает GPT.
+
+PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956** не меняется.
+[CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
+по sourcecd60 остаётся FAILURE/10 из11:2640 ordinary+155 subtests PASS,
+803 PG PASS/1 M3 observer timeout,54 browser/398 frontend PASS. Причина UNKNOWN,
+последующие foundation gates не приняты. Full CI source68093c7 NOT_RUN;
+standalone diagnostic receipt не закрывает merge/runtime gates.
+Main/VM/DB/Telegram/runtime/merge без изменений.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 
