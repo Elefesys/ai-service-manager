@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.2 GPT quality revision; DeepSeek tool receipt reviewed / 2026-10-30
+## CURRENT — M4.2 GPT quality v2: один owner запуск / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**, PR38 merged;
@@ -13,45 +13,50 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 |---|---|
 | M4-PLAN / M4.1-CONTRACT | INTEGRATED / VERIFIED docs и contract/fake scope; PR37/38 |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | REVIEW: GPT25 finals/27 POST/2 READ с quality findings; Gemini2 failed POST; DeepSeek auto и named profile остановлены. Полное сравнение/selection/runtime не приняты |
+| M4.2-PROBE | REVIEW: GPT v1 25 finals/27 POST/2 READ с quality findings; Gemini2 failed POST; DeepSeek auto и named profile остановлены. Comparison/selection/runtime не приняты |
 | M4.2-GEMINI-DIAGNOSTIC-R1 | VERIFIED diagnostic scope; SIGNATURE_EXTRA_MISSING, charge UNKNOWN, допуск consumed |
 | M4.2-GEMINI-COMPATIBILITY | BLOCKED; дальнейшая совместимость DEFERRED для первого пилота |
 | M4.2-DEEPSEEK-EVAL-R1 | BLOCKED: READ_ROUND_TRIP, handoff «С», OWNER_25_CASES_R1 consumed |
-| M4.2-DEEPSEEK-TOOL-COMPAT-R1 | BLOCKED: named phase1 POST/0 READ/0 history/0 final, INVALID_PROVIDER_RESPONSE; exact cause UNKNOWN, charge UNKNOWN. OWNER_ROUNDTRIP_R1_1RUB consumed; дальнейшая совместимость DEFERRED |
-| M4.2-GPT-QUALITY-R1 | REVIEW / C4: conversation_v2 и отдельный GPT-only25-case mode готовы; v1/schema/fixtures сохранены. 799 targeted tests, Ruff/format7, mypy71,8 offline plans и wheel PASS. Prior34/3 unknown held7.120395585, ceiling15/≤27 POST; API POST/GET0. Receipt/offline Windows instruction готовы; live только после exact-source C0 review, качество v2 пока UNKNOWN |
+| M4.2-DEEPSEEK-TOOL-COMPAT-R1 | BLOCKED: INVALID_PROVIDER_RESPONSE на первом POST; exact cause/charge UNKNOWN. Допуск consumed, дальнейшая совместимость DEFERRED |
+| M4.2-GPT-QUALITY-R1 | REVIEW / C0 SOURCE PASS; OWNER_25_CASES_R1_15RUB AUTHORIZED: sourceace29ce7,25 cases/≤27 POST/2 READ/15 RUB внутри прежнего150. Один full receipt→C0, manual quality/runtime не приняты |
 | C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 wait_blocked1.5s timeout, root cause UNKNOWN; последующие foundation gates не приняты |
 | M4.3-CONTEXT / M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-[Единственная выдача C4 и owner receipt](tasks/M4_HANDOFF.md),
-[операторский статус](runbooks/M4_POLZA_PROBE.md),
+[Приёмка и точный допуск](tasks/M4_HANDOFF.md),
+[готовая Windows команда](runbooks/M4_POLZA_PROBE.md),
 [решение C0](decisions/IMPL-004-m4-pilot-ai.md).
-Receipt7094 bytes/5 events source5885df1b0ba04378e8af6f2089d2fc86be6c22e3,
-SHA2561b7addea429f9e53f1e5d0086d1cdf1f648c138747013efe25c4c2ff037cd1b3.
-C0 воспроизвёл plan/reserve/all summary fields и8 CONTROLLED checks; разные
-response shapes дают сохранённый generic error. Actual failing field UNKNOWN,
-quality_flags=[] при final=null не PASS. Real HTTP/owner key reads0; код не менялся,
-прежние711 targeted/full CI заново не запускались.
+Accepted source **ace29ce7d77564f8fecea84d4b7e734e6c8fbe56**, tree **8a716c528a917c8a77a853c226699ba4a47ccc2b**,
+sole parent **07e18c70b02a3739fbe640d28c41ec0341f8452d**.11-file scope принят
+без code fixes. C0:799 targeted PASS13.15s, Ruff/format7, mypy71;8 actual
+offline plans, первые7 равны parent; wheel содержит byte-exact v1/v2.
+Contract delta только Literal v1/v2, Gateway только prompt selection; остальные
+методы/adapter/schema/fixtures/old constants/режимы сохранены. Exact CLI source/
+ref/15: complete, quality finding, late history и preflight budget STOP PASS;
+все3 held и report exclusivity сохранены. Real HTTP/owner key reads0;
+Windows/hosted v2 quality/full CI sourceace29ce7 NOT_RUN.
 
-Shared150: **0.17932550 confirmed /31 known**, **3 unknown** (2 Gemini +1 DeepSeek),
-held **7.120395585**, всего34 attempts; committed_or_held7.299721085,
-remaining **142.700278915 RUB**, не баланс аккаунта. Новая UNKNOWN reservation
-DeepSeek0.190636257, actual charge не установлен; все old holds сохранены.
+Единственный owner ref: `C0-M4.2-GPT-QUALITY-R1:ace29ce7d77564f8fecea84d4b7e734e6c8fbe56:OWNER_25_CASES_R1_15RUB`.
+GPT/openai/flex/provider-default/auto; прежние25 cases,3 critical repeats и2 images.
+Text/tool v2 SHA256b420be44a7e4210de1151e5b0604b0fa9a08c19b1bfbedb8147f2a9b38455956; image revision прежняя.
+Fresh reserve всех27 calls≤15 до POST;≤54 history/1 catalog,case60s/stage1800s,
+32768/512 tokens и24576/32768 bytes. Full report вернуть при любом исходе,
+без retry/fallback/resume. HUMAN_REVIEW_REQUIRED не означает quality PASS.
 
-GPT no_send_claim19 QUALITY_FAIL и unknown_price22 QUALITY_NOTE требуют v2
-кандидата; прежние выводы/fixtures/flags не переписываются. C0 разрешил только
-узкое расширение prompt Literal до v1/v2 и выбор двух bundled prompts в Gateway,
-без иных изменений контрактов/приёмки. Новый mode подготавливается на25 cases,
-≤27 POST/2 READ/54 history/1 catalog, ceiling15 из прежнего150, prior34/max61;
-source review и отдельный exact-source C0 ref до live. Сейчас paid/history GET0.
+Shared150 prior: **0.17932550 confirmed /31 known**, **3 unknown**, held
+**7.120395585**, всего34 attempts; committed_or_held7.299721085,
+remaining **142.700278915 RUB**, не баланс аккаунта. Максимум61 shared attempts;
+old holds не снимаются. GPT no_send_claim19 QUALITY_FAIL и unknown_price22
+QUALITY_NOTE остаются до нового hosted/manual evidence. Модель не выбрана,
+runtime=false; следующий paid шаг после одного receipt HOLD до C0 review.
 
 PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**;
 [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
 FAILURE/10 из11 на cd60:2640 ordinary+155 subtests PASS,803 PG PASS/1 M3 observer
-timeout,54 browser/398 frontend PASS. Root cause UNKNOWN; full CI source5885
-NOT_RUN, последующие foundation gates не приняты. Scoped EVAL_ONLY не закрывает
-CI debt и не разрешает merge/runtime. C1/C2/C3/C5/C6/C8 HOLD, C4 единственный
-следующий исполнитель; main/VM/DB/Telegram/merge без изменений. Общий150 уже согласован.
+timeout,54 browser/398 frontend PASS. Root cause UNKNOWN, последующие foundation
+gates не приняты. Scoped EVAL_ONLY не закрывает CI debt; полный CI интеграционного
+кандидата нужен до merge/runtime. C1/C2/C3/C4/C5/C6/C8 HOLD, следующий — владелец
+по готовой команде. Main/VM/DB/Telegram/merge не менялись, бюджет150 не запрашивается снова.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

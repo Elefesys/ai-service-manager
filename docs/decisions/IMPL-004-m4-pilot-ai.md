@@ -450,6 +450,44 @@ PR39 Draft/headcd60, CI41009211185 RED и C0-M4-CI-OBSERVATION-01 сохраня
 интеграционный full CI нужен до merge/runtime. Main/VM/DB/Telegram не меняются.
 Это подготовка нового EVAL_ONLY кандидата, а не готовый AI runtime.
 
+**Решение C0 от2026-10-30 — GPT quality source принят, один OWNER stage:**
+Source **ace29ce7d77564f8fecea84d4b7e734e6c8fbe56**, tree **8a716c528a917c8a77a853c226699ba4a47ccc2b**,
+sole parent07e18c70b02a3739fbe640d28c41ec0341f8452d принят без code fixes.
+11 разрешённых файлов; contract delta только Literal v1/v2, Gateway только
+фиксированный prompt selection; polza.py/v1/schema/fixtures/прочие методы и
+старые constants сохранены. conversation_v2 SHA256b420be44a7e4210de1151e5b0604b0fa9a08c19b1bfbedb8147f2a9b38455956.
+Versioned policy уточняет proposed handoff при explicit owner contact и запрет
+неподтверждённых business rules, сохраняя известные факты/обычные уточнения.
+
+Независимо C0:799 targeted PASS13.15s, Ruff/format7, mypy71;8 actual offline plans,
+первые7 JSON равны exact parent; wheel с byte-exact v1/v2. Exact source/ref/15 RUB
+CONTROLLED CLI: полный25-case путь и retained quality finding, late history
+mismatch, whole-stage budget STOP. Все3 old holds и exclusive report сохранены.
+Audit guard запрещал sockets и owner .env reads; real HTTP/key reads0.
+Actual Windows/hosted v2 quality/full CI этого source NOT_RUN.
+
+C0 разрешает **один** GPT-only25-case stage по
+`C0-M4.2-GPT-QUALITY-R1:ace29ce7d77564f8fecea84d4b7e734e6c8fbe56:OWNER_25_CASES_R1_15RUB`.
+Ceiling15 RUB внутри прежнего150, fresh reserve всех27 calls до POST;
+GPT/openai/flex/provider-default/auto,≤27 POST/2 READ/54 history/1 catalog,
+60s/case/1800s stage,32768/512 tokens и24576/32768 bytes. Text/tool v2, images
+synthetic_shapes_v1; прежние fixture identities/repeats/result schemas.
+Prior31 known/3 unknown/34 attempts, confirmed0.17932550/held7.120395585,
+remaining142.700278915; максимум61 attempts. Все old holds сохраняются,
+новый known/unknown отдельно. Report exclusive, no retry/fallback/resume.
+
+После одного report следующий paid шаг HOLD до C0 review. Technical completion
+даёт HUMAN_REVIEW_REQUIRED, manual PENDING; selected_model=null/runtime=false.
+Сохранённые GPT quality findings и Gemini/DeepSeek blockers не закрыты source
+tests; comparison75 не завершено. Compatibility дополнительных моделей DEFERRED.
+Повторного запроса бюджета150, reinstall или передачи ключа не требуется.
+
+Это bounded standalone EVAL_ONLY в прежнем scoped исключении, с разрешённой
+закрытой Gateway prompt delta и подтверждённой неизменностью v1. PR39 остаётся
+Draft/headcd60, CI41009211185 RED и root cause UNKNOWN. C0-M4-CI-OBSERVATION-01
+и полный CI интеграционного кандидата нужны до merge/runtime. Main/VM/DB/
+Telegram не меняются; другие исполнители HOLD, следующий — владелец.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,
