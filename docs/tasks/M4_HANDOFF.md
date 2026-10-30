@@ -6,11 +6,174 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущий допуск — C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1 / OWNER_ROUNDTRIP_R1_1RUB / 2026-10-30
+## Текущая выдача — M4.2-GPT-QUALITY-R1 / C4 / 2026-10-30
+
+**DeepSeek tool compatibility завершилась техническим отказом на первом POST.
+Допуск OWNER_ROUNDTRIP_R1_1RUB использован; старые команды не повторять.**
+Для пилота нужен один работающий provider. Следующий кандидат — уже прошедший
+технические25 scenarios GPT; C4 готовит исправление двух сохранённых quality
+findings и отдельную проверку новой prompt revision. Новых платных запусков,
+history GET или запроса ключа в этой выдаче нет.
+
+### Принятый отчёт и пределы вывода
+
+Оригинальный `m4-polza-deepseek-tool-compat-r1.jsonl`: **7094 bytes /5 JSONL events**,
+SHA-256 `1b7addea429f9e53f1e5d0086d1cdf1f648c138747013efe25c4c2ff037cd1b3`.
+Source **5885df1b0ba04378e8af6f2089d2fc86be6c22e3**, tree
+**6ca70ba7f6d431accaa0478e1d515cc69ebae7b9**; exact approved ref и ceiling1 совпали.
+Catalog checked_at **2026-10-30T11:03:51.006883+00:00**, entry hash
+`3e7217397429496015eb377f0a180d61e7ae76f52e585004c63df42aa8326f54`.
+Reserve двух calls **0.381272514 RUB** прошёл preflight; зарезервирован только
+один фактический call на **0.190636257 RUB**. Это резервы, не списания.
+
+| Группа | Наблюдение / вывод |
+|---|---|
+| Выполнение | 1 catalog GET /1 model POST /0 history GET /0 READ /0 follow-up; case2.142s, final=null |
+| Ответ | generation `gen_2227402879917887489`, observed model DeepSeek, finish_reason=tool_calls, reasoning_tokens=0 REPORTED; фаза NAMED_READ |
+| Отказ | ADAPTER_ERROR / INVALID_PROVIDER_RESPONSE; сохранены COST_UNKNOWN, READ_ROUND_TRIP, USAGE_UNKNOWN; FAILED_OR_INCOMPLETE |
+| Маршрут / расход | Body provider ABSENT, history family=null, route evidence NONE; wafer/us только request selector. Usage и cost UNKNOWN, подтверждённого нового расхода нет |
+| Качество | Нет final для ручной оценки. Пустые quality_flags не являются PASS; protocol_observed=false, auto-tools NOT_TESTED_BY_THIS_PROFILE |
+
+`finish_reason=tool_calls` не доказывает валидный вызов read_current. Generic catch
+в decode не сохранил форму tool call и точную ветку отказа. C0 воспроизвёл одинаковые
+сохранённые признаки для7 разных synthetic ответов: mixed content, empty calls,
+non-function type, missing id, object arguments, invalid identifier и5 calls.
+Восьмая, положительная CONTROLLED проверка дала2 POST/1 READ/4 history+1 catalog.
+Это подтверждает неоднозначность ошибки, не конкретную причину hosted ответа.
+Нельзя утверждать, что виноваты mixed content, название/id/args, JSON Schema или
+сама модель. Raw response отсутствует; parser/guards по догадке не меняются.
+
+C0 воспроизвёл exact source/ref/fixture/plan/caps, reservation и **все поля summary**.
+8 CONTROLLED checks PASS на Python3.13.16/MockTransport с запретом sockets и
+owner .env reads; real Polza HTTP/owner key reads0. Код не менялся, прежние711
+targeted tests и полный CI повторно не запускались. Owner receipt относится к
+Windows LOCAL_DESKTOP; C0 Windows самостоятельно не запускал. Owner report/raw
+responses в Git не публикуются, оригинал сохранён без изменения.
+
+### Актуальный общий учёт
+
+| Показатель | Значение |
+|---|---:|
+| Подтверждено / known POST | **0.17932550 RUB /31** |
+| Unknown POST | **3**: 2 Gemini +1 DeepSeek |
+| Gemini held | **6.929759328 RUB** |
+| Новый DeepSeek held | **0.190636257 RUB** |
+| Всего held | **7.120395585 RUB** |
+| Всего model attempts | **34** |
+| Confirmed + held | **7.299721085 RUB** |
+| Остаток общего150 с резервами | **142.700278915 RUB** |
+
+Новый confirmed0 не означает бесплатный запрос. Все3 unknown остаются, automatic
+reserve release=false. Неиспользованный второй call не становится расходом или
+новым unknown. Это ledger capacity, не проверенный баланс Polza.
+
+### Решение C0 о следующем шаге
+
+Дальнейшая совместимость Gemini и DeepSeek **DEFERRED для первого пилота**;
+задачи исполнения остаются BLOCKED по сохранённым фактам. Возврат возможен при
+конкретном protocol evidence или потребности в этом маршруте. Нового цикла paid
+diagnostics, расширения parser acceptance или сбора raw reasoning сейчас нет.
+Исходное75-case comparison не завершено; сравнительного победителя не объявляем.
+GPT — кандидат на следующую quality проверку, selected_model=null/runtime=false.
+
+GPT v1 уже дал25 finals/27 POST/2 READ, включая2 synthetic images. Сохраняются:
+
+- **no_send_claim /repeat19: QUALITY_FAIL** — на просьбу написать владельцу
+  пришёл reply «Можно написать владельцу: „Я жду.“». Нужен structured handoff;
+  ни уведомление, ни фактическая отправка от модели не разрешены.
+- **unknown_price /repeat22: QUALITY_NOTE** — отсутствие цены признано, но фраза
+  «Стоимость зависит от вида ремонта» добавила не предоставленное ценовое правило.
+  Уточняющий вопрос допустим; нельзя придумывать правила бизнеса.
+
+Результаты v1 не переписывать. Regex flag отсутствующего слова во втором ответе
+отдельно от manual note; новое качество оценивается по смыслу и фактам, не по
+вставке ключевых слов. Откладывать исправление этих findings до runtime нельзя;
+работу над дополнительными моделями можно отложить без изменения цели пилота.
+
+### Задача C4 — подготовка GPT quality revision, без live запуска
+
+Repository **Elefesys/ai-service-manager**, branch **c4/m4-2-gpt-quality-r1**.
+Base — **опубликованный C0 commit с этим CURRENT**, полный SHA из immutable URL;
+его sole parent **dc16ed86fe9b030c317873d3d4b0f5dc3a583c43**, parent tree
+**388ae95bcb5bf0a279e91e45302782c908f51ba5**. C4 фиксирует exact base SHA/tree.
+Применимы AGENTS, IMPL-004, ADR-043/047/048/159/162–168. Остальные исполнители HOLD.
+
+1. Добавить **conversation_v2.txt**, сохранив v1 побайтово. Общие правила:
+   явная просьба связаться с владельцем → proposed handoff, без заявлений о
+   выполненной отправке; неизвестные business facts/правила нельзя дополнять
+   типичными предположениями. Известные факты использовать, обычные уточнения
+   разрешать. Не добавлять case IDs, тестовые ответы/адреса, обязательные regex
+   слова или модельный mutation tool.
+2. C0 явно разрешает узкую дельту общего контракта: prompt_revision Literal
+   допускает только v1/v2; Gateway выбирает один из **двух фиксированных bundled
+   файлов**. Не строить registry или произвольный path loader. Старые modes
+   продолжают v1; plan/config/реальный system message/report обязаны совпадать.
+   Result DTO, schema и wire envelope не меняются, unknown revision отклоняется.
+3. Подготовить один opt-in **--gpt-quality-r1**: только openai/gpt-6-luna,
+   selector openai/flex, прежний auto-tools и provider-default profile. Полные
+   прежние25 scenarios в прежнем порядке и с прежними critical repeats;
+   canonical fixture SHA7abd25f1e1f08e51eacc3a68975e6099c942d33fad37376366dfdef6c7e025b2
+   неизменен. Text/tool cases используют v2;2 image cases сохраняют отдельный
+   synthetic_shapes_v1/EVAL_ONLY path и правильную revision в report.
+4. Подготовительные границы: **≤27 POST /2 READ /54 history GET /1 catalog GET**,
+   case60s/stage1800s;32768/512 tokens и24576/32768 bytes на call, прежние catalog/
+   history bounds. Fresh whole-stage reservation всех27 calls до первого POST.
+   Ceiling **15 RUB из прежнего150**, не новый бюджет; несовместимый fresh
+   catalog или превышение → STOP до POST. Максимум61 shared attempts.
+5. Prior ровно из таблицы выше:31 known/3 unknown/34 attempts, confirmed0.17932550,
+   held7.120395585. Не импортировать старые finals и не запускать resume/R1/R2.
+   Новые known/unknown считать отдельно, все старые held сохранять; missing
+   usage/cost или потерянный ответ не освобождает reserve. History identity,
+   usage/cost и family guards прежние; requested flex не означает observed variant.
+6. Exclusive `reports/m4-polza-gpt-quality-r1.jsonl`, reservation flush до HTTP,
+   terminal summary при обрабатываемом STOP; no retry/fallback/polling. Existing
+   report останавливает до key/HTTP. Plan без ключа/сети. Gemini/DeepSeek POST0.
+   Quality flags сохраняются и не превращаются в автоматический PASS; manual
+   review PENDING даже после полного технического прохода. Technical errors
+   останавливают stage. selected_model=null/runtime_authorized=false.
+
+**Write-set C4:** backend/src/asm/ai/prompts/conversation_v2.txt;
+backend/src/asm/ai/contracts.py (только закрытый Literal prompt revision);
+backend/src/asm/ai/gateway.py (только выбор фиксированного prompt);
+backend/src/asm/ai/probe.py (один конечный GPT quality mode, reuse текущих helpers);
+tests/test_m4_gateway.py, tests/test_m4_gateway_failures.py,
+tests/test_m4_probe.py, tests/test_m4_polza.py;
+docs/runbooks/M4_POLZA_PROBE.md, receipt в docs/tasks/M4_HANDOFF.md и строка CURRENT
+docs/TASK_REGISTER.md. polza.py/settings.py/v1 prompt/result schemas/fixtures/
+deps/locks/CI/DB/M3/Telegram, IMPL-004 и прочие файлы не входят. Общий contract
+scope согласован здесь C0; это не разрешение менять остальные поля/гарантии.
+
+Проверки: targeted Gateway/failures/polza/probe, Ruff/format и mypy; actual offline
+plans всех старых modes без изменения и новый plan. CONTROLLED полный25-case
+путь должен наблюдать v2 в system wire, auto READ roundtrip, обе картинки,
+history и точный prior; v1 wire прежний. Проверить unknown revision, source/ref/
+budget guards, report exclusivity, early/late technical STOP, отдельный known/
+unknown и все3 old holds. Сохранённые плохие finals/flags не объявлять исправленными
+детерминированными tests; новое качество подтвердит только будущий live receipt.
+
+Receipt C4: exact commit/tree/base, diff scope, команды/фактические результаты,
+новая prompt revision/hash и CONTROLLED accounting, ограничения. Подготовить
+Windows инструкцию с существующим environment/key; executable live блок и
+exact-source approval C0 появятся **после source review**. Сейчас model POST0,
+history/catalog GET0; повторного согласования общего150 не требуется.
+
+### Открытые gates
+
+PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956** не двигается ради receipt.
+CI41009211185 RED: M3 wait_blocked observer timeout, root cause UNKNOWN;
+C0-M4-CI-OBSERVATION-01 и полный CI интеграционного кандидата нужны до merge/runtime.
+Full CI source5885 NOT_RUN. Новый scoped EVAL_ONLY source ещё не создан и не принят.
+Main/VM/DB/Telegram/runtime/merge без изменений. Следующий исполнитель — C4,
+владелец сохраняет отчёты и не запускает использованные команды.
+
+## История — использованный допуск C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1 / 2026-10-30
+
+Этот блок описывает прежнюю приёмку. Допуск использован; актуальный owner receipt
+и следующая задача приведены в CURRENT выше. Команду из истории не повторять.
 
 **C0 SOURCE REVIEW PASS. Разрешён один owner DeepSeek tool roundtrip, ≤1 RUB
 внутри прежнего общего бюджета150.** Выполнить один раз
-[готовую Windows команду](../runbooks/M4_POLZA_PROBE.md) и вернуть полный
+[историческую Windows команду](https://github.com/Elefesys/ai-service-manager/blob/dc16ed86fe9b030c317873d3d4b0f5dc3a583c43/docs/runbooks/M4_POLZA_PROBE.md) и вернуть полный
 `reports/m4-polza-deepseek-tool-compat-r1.jsonl` при любом исходе.
 Это отдельный named READ → strict final профиль, не повтор исходного25-case
 auto eval и не выбор модели для runtime.

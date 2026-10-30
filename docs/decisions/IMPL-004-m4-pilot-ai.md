@@ -406,6 +406,50 @@ NOT_RUN и нужен до merge/runtime. Другие исполнители HO
 по готовой команде. Main/VM/DB/Telegram/merge не меняются; бюджет150 заново не
 запрашивается.
 
+**Решение C0 от2026-10-30 — tool receipt reviewed; один GPT quality candidate:**
+DeepSeek named profile source5885df1b0ba04378e8af6f2089d2fc86be6c22e3 выполнил
+1 model POST/1 catalog GET/0 history/0 READ/0 follow-up. Полный7094-byte report
+SHA2561b7addea429f9e53f1e5d0086d1cdf1f648c138747013efe25c4c2ff037cd1b3:
+finish_reason=tool_calls, generation gen_2227402879917887489, но decode вернул
+INVALID_PROVIDER_RESPONSE. Точная форма отказавшего call UNKNOWN;7 разных
+CONTROLLED форм дают те же признаки, positive control проходит. Это не
+доказательство неработоспособности tools у всей модели и не quality PASS/FAIL
+несуществующего final. Одноразовый допуск consumed, repeat не разрешён.
+
+Новый POST остаётся UNKNOWN с reserve0.190636257. Shared confirmed0.17932550/31,
+unknown3 (2 Gemini +1 DeepSeek), held7.120395585, всего34 attempts, remaining
+142.700278915 из прежнего150. Все held сохраняются; reported/unknown не считаются
+списанием0. C0 проверил exact accounting/plan и8 controlled cases, не менял код
+и не повторял неизменённый полный CI/711 targeted suite. Real HTTP/key reads0.
+
+Цель M4 — один работающий provider. Дальнейшая Gemini/DeepSeek compatibility
+DEFERRED для первого пилота до конкретного protocol evidence/потребности;
+задачи BLOCKED и прежние результаты сохранены. Новые paid diagnostics и raw
+capture не назначаются. Исходное75-case сравнение не завершено, selection=null.
+
+C4 получает **M4.2-GPT-QUALITY-R1**: versioned conversation_v2 для explicit owner
+contact → proposed handoff и запрета неподтверждённых business rules. Это
+исправляет кандидат по сохранённым no_send_claim19 QUALITY_FAIL и unknown_price22
+QUALITY_NOTE, а не переоценивает v1. Пустые flags/regex matching не заменяют
+ручную оценку. v1, result schema, canonical fixtures и прежние modes неизменны.
+По ADR-048 C0 явно разрешает узкий shared contract/Gateway scope: только закрытый
+Literal v1/v2 и выбор одного из двух фиксированных bundled prompt files.
+Никаких arbitrary prompt/path, нового registry или ослабления authorisation,
+typed tools, result validation, route/history/usage/cost/limit guards.
+
+Подготовить fixed GPT/openai/flex25-case mode с прежним auto-tools/provider profile,
+≤27 POST/2 READ/54 history/1 catalog,60s/case и1800s/stage, прежние token/byte bounds.
+Ceiling15 RUB из согласованного150; fresh reserve всех27 calls до POST, prior34/
+max61 shared attempts и все3 old holds. Новый report exclusive, без imports/resume,
+retry/fallback или автоматического model/runtime selection. Images сохраняют
+synthetic_shapes_v1; text/tool config/wire/report pin v2. Сейчас live POST/GET0;
+source review и exact-source C0 допуск требуются перед owner запуском, новый
+бюджет не запрашивается. Write-set/verification в CURRENT M4_HANDOFF.
+
+PR39 Draft/headcd60, CI41009211185 RED и C0-M4-CI-OBSERVATION-01 сохраняются;
+интеграционный full CI нужен до merge/runtime. Main/VM/DB/Telegram не меняются.
+Это подготовка нового EVAL_ONLY кандидата, а не готовый AI runtime.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,
