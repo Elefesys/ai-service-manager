@@ -1,4 +1,4 @@
-"""C2-M4-CI-OBSERVATION-R3: one disposable observer lifecycle validation."""
+"""C2-M4-CI-OBSERVATION-R4: one disposable prelock readiness validation."""
 
 import asyncio
 import functools
@@ -16,9 +16,9 @@ import sys
 import time
 from pathlib import Path
 
-BASE = "3123fab2d9ac99e66161c0358e8b572783581d5e"
-BASE_TREE = "925cd198f7247f2a327202b0a6d174766f38916e"
-BRANCH = "c2/m4-pg-observation-run-r3"
+BASE = "3e1ccf855c64bbabb18c65db666b9b5e85cefd3d"
+BASE_TREE = "f0477d995387a767abd87cadbcc15ae95d466582"
+BRANCH = "c2/m4-pg-observation-run-r4"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -94,6 +94,28 @@ NEW_NODEIDS = [
     )
     for case in cases
 ] + [MODULES[0] + "::test_m4_observation_command_preserves_summary"]
+R3_COLLECTION_SHA256 = "e82af894c99e85a529f54bc2e9bec51ee79f1067262ee467dc67fba0620992a4"
+DELAYED_NODEIDS = [
+    node.replace(
+        "test_post_lock_product_boundaries_with_actual_conversation_wait",
+        "test_post_lock_boundary_after_delayed_auth",
+    )
+    for node in NODEIDS
+]
+R4_NEW_NODEIDS = [
+    MODULES[0] + "::test_prelock_readiness_controlled_contract[" + case + "]"
+    for case in (
+        "matching",
+        "foreign",
+        "invalid_pid",
+        "not_ready",
+        "absent",
+        "completed",
+        "failed",
+        "cancelled",
+    )
+] + DELAYED_NODEIDS
+NEW_NODEIDS += R4_NEW_NODEIDS
 COMMAND_REPORT = "matrix-command"
 SUMMARY_REPORT = "matrix-summary.json"
 COLLECTED = []
@@ -103,6 +125,7 @@ WRITE_SET = {
     ".github/workflows/m4-pg-observation.yml",
     "scripts/m4_pg_observation.py",
     "tests/test_m3_1_control_postgres.py",
+    "tests/test_m3_1_control_api_postgres.py",
     "docs/tasks/M4_HANDOFF.md",
     "docs/TASK_REGISTER.md",
 }
@@ -125,7 +148,7 @@ def write(path, value):
 
 def record(kind, **fields):
     """Only bounded scalars in memory; no I/O, awaits, or database reads."""
-    if CASE is None or CASE["nodeid"] not in NODEIDS:
+    if CASE is None or CASE["nodeid"] not in NODEIDS + DELAYED_NODEIDS:
         return
     if kind == "request_scheduled":
         CASE["pending"] = fields.pop("pending")
@@ -138,7 +161,7 @@ def record(kind, **fields):
         return
     values = {}
     for name, value in fields.items():
-        if name in {"edge", "blocked_at", "released_at"}:
+        if name in {"edge", "blocked_at", "released_at", "evaluated_at"}:
             value = value.timestamp()
         if type(value) not in (int, float, bool, str, type(None)):
             CASE["invalid_fields"] += 1
@@ -265,12 +288,19 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
 
 def validate_collection(actual):
     existing = [node for node in actual if node not in NEW_NODEIDS]
+    retained = [node for node in actual if node not in R4_NEW_NODEIDS]
     require(
         len(actual) == 222 + len(NEW_NODEIDS)
         and len(set(actual)) == len(actual)
         and [node for node in actual if node in NEW_NODEIDS] == NEW_NODEIDS
         and hashlib.sha256(("\n".join(existing) + "\n").encode()).hexdigest()
         == EXISTING_COLLECTION_SHA256,
+        "SOURCE_COLLECTION_MISMATCH",
+    )
+    require(
+        len(retained) == 258
+        and hashlib.sha256(("\n".join(retained) + "\n").encode()).hexdigest()
+        == R3_COLLECTION_SHA256,
         "SOURCE_COLLECTION_MISMATCH",
     )
 
@@ -299,7 +329,7 @@ def summarize(cases, expected, exitstatus):
         "complete": complete,
         "result": "PASS" if passed else "FAIL",
         "server_wait_vs_event_loop_delay": "UNKNOWN",
-        "timings": "client monotonic spans for original matrix12; not server query durations",
+        "timings": "client monotonic spans for original12 and delayed12; not server query durations",
     }
 
 
@@ -632,7 +662,7 @@ def run(root):
         require(summary["result"] == "PASS" and summary["complete"], "MATRIX_EVIDENCE_INCOMPLETE")
         primary = {
             "outcome": "PASS",
-            "scope": "222 retained cases plus exact-target and reporter controls; historical timeout cause UNKNOWN",
+            "scope": "258 retained cases plus readiness/delayed-auth controls; historical timeout cause UNKNOWN",
         }
     except Exception as error:
         code = str(error)

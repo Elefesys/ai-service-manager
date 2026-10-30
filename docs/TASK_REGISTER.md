@@ -30,7 +30,7 @@ push/attempt1:10 SUCCESS/1 FAILURE. Actual main verification BLOCKED.
 | C2-M4-CI-OBSERVATION-R2 | Исторический 253 PASS/1 FAIL; evidence и recorder fix приняты. Lifecycle defect исправлен/проверен в R3; ref frozen |
 | C2-M4-CI-OBSERVATION-R3 | VERIFIED C0 SOURCE + TARGETED PG: 258 PASS, cleanup PASS; original222/R2 254 сохранены, foreign и observer fault checks PASS. C2 HOLD/ref frozen |
 | C0-M4-INTEGRATION-R1 | INTEGRATED PR39; verification BLOCKED actual main CI41108194917 |
-| C2-M4-CI-OBSERVATION-R4 | TODO / единственная выдача C2: target readiness / policy-edge synchronization и bounded failure facts; exact scope в HANDOFF |
+| C2-M4-CI-OBSERVATION-R4 | IN_PROGRESS / bounded prelock readiness + frozen/post-lock policy proof; local35 PASS, collection278 (258 retained +20 new). Один hosted run NOT_RUN; exact scope/semantic diff в HANDOFF |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 

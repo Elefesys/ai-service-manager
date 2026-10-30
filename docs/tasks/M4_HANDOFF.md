@@ -45,6 +45,56 @@ FOUNDATION_EVIDENCE_REFUSED — следствие primary test failure и не�
 поздних gates, не второй независимый дефект recorder. Остальные10 jobs SUCCESS
 проверены по fresh metadata; их payload заново не аудировался.
 
+### C2 R4 — подготовленный repair / hosted NOT_RUN
+
+Exact base **3e1ccf855c64bbabb18c65db666b9b5e85cefd3d**, tree
+**f0477d995387a767abd87cadbcc15ae95d466582**, sole parent main
+**997d2bf83b5402068ba1f62b23d5947fcfaf7d32**; base/main delta — только5
+coordination docs. Source будет sole child base на c2/m4-ci-observation-r4;
+execution c2/m4-pg-observation-run-r4 создаётся на base с одним FF на source.
+
+**Обоснование.** Main artifact13005201473 (3345961 bytes, SHA256
+746ec76aa30afa14c49893d3203e513cf5e50d1d1b95ac35232d21f189a6811c)
+подтверждает один timeout resume-activation-subscription в run41108194917,
+job124251519960; location target до cleanup и actual hosted trigger UNKNOWN.
+Архивные helper/matrix/consumer sources побайтово совпали с main/base.
+В source подтверждена зависимость обоих коротких окон от HTTP/auth/pool
+preparation. Controlled NO-DB reproduction с delay1.6s: base timeout1.500s,
+0 observer SQL, readiness ещё нет; repair preparation1.602s, затем matching
+query за0.00027s. Это доказательство scheduling coupling, не причины main FAIL.
+
+**Semantic diff.** Test-only task/PID barrier непосредственно перед реальным
+conversation_control_prepare/conversation_manual_prelock. HTTP/cookie/auth,
+workspace admission и Telegram observation остаются настоящими; monkeypatch
+делегирует оригиналам. Отдельный preparation bound5s конечен и превышает
+существующий pool timeout2s; нет retry. После readiness — committed DB edge
++1.1s, затем прежний observer1.5s. Барьер расположен до billing row locks,
+поэтому fixture update не ждёт target. На той же target transaction один
+billing_snapshot доказывает frozen policy: expiry ENABLED / activation DISABLED;
+production-consumed post-lock snapshot, без второго post-lock read, доказывает
+обратный результат. Это semantic assertion read, не failure diagnosis.
+Target PID должен совпасть с реальным waiter; blocked_at<edge<=released_at,
+release span<2s и исходные response/effects/replay assertions сохранены.
+Activation не может пройти на исходном ENABLED. Диагностика exception до cleanup
+сохраняет stage/query/PID/task и последние8 code frames из максимум32 await
+frames (с truncation flag), без locals/params/cookies/дополнительного SQL.
+
+**Проверки перед run.** Local controls35 PASS/13.57s; Ruff/format/compile5 PASS.
+Сохранены258 R3 ordered IDs (SHA256 e82af894c99e85a529f54bc2e9bec51ee79f1067262ee467dc67fba0620992a4),
+включая222 original; total278. Новые20: control module
+`test_prelock_readiness_controlled_contract[matching|foreign|invalid_pid|not_ready|absent|completed|failed|cancelled]`
+и API `test_post_lock_boundary_after_delayed_auth` для всех12 combinations
+resume/controlled/telegram × expiry/activation × subscription/mode. Последние
+вносят adverse auth delay1.6s и выполняют всю исправленную matrix до effects/replay.
+Existing observer algorithm/identity guards сохранены AST внутри diagnostic
+try/except; изменяемая matrix сознательно НЕ AST-identical. Остальные existing
+test functions, все прежние assertions и response/effects/replay block сохранены.
+Runner дополнительно проверяет точный ordered digest258; malformed collections5 refused.
+
+Один hosted targeted run ещё NOT_RUN; разрешение используется только после
+local proof. Никаких production/DDL/RLS/grants/deps/pins/generic CI изменений.
+Main/full CI/runtime остаются BLOCKED/HOLD до C0; historical cause UNKNOWN.
+
 ### C2-M4-CI-OBSERVATION-R4 — единственная текущая выдача
 
 **Результат для пилота:** устранить подтверждённый источник нестабильности

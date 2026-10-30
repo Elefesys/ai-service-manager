@@ -165,11 +165,69 @@ def require_pending(pending):
         raise AssertionError("LOCK_WAIT_TARGET_COMPLETED")
 
 
+def observe_wait_failure(stage, pending, error, query=None):
+    """Capture bounded task/code facts before caller cleanup; never frame locals."""
+    observe_wait(
+        "wait_failure",
+        stage=stage,
+        exception_type=type(error).__name__,
+        done=pending.done(),
+        cancelled=pending.cancelled(),
+        cancelling=pending.cancelling(),
+        query_active=query is not None,
+        target_pid=query[2] if query is not None else None,
+    )
+    coroutine = pending.get_coro()
+    frames = []
+    for depth in range(32):
+        frame = getattr(coroutine, "cr_frame", None)
+        if frame is None:
+            break
+        frames.append(
+            (
+                depth,
+                frame.f_code.co_filename.rsplit("/", 1)[-1],
+                frame.f_code.co_name,
+                frame.f_lineno,
+            )
+        )
+        coroutine = getattr(coroutine, "cr_await", None)
+    observe_wait("target_await_chain", frames_seen=len(frames), truncated=len(frames) == 32)
+    for depth, file, function, line in frames[-8:]:
+        observe_wait(
+            "target_await_frame",
+            depth=depth,
+            file=file,
+            function=function,
+            line=line,
+        )
+
+
+async def wait_ready(ready, *, pending):
+    """Separate finite preparation bound; readiness is not proof of a PG wait."""
+    try:
+        require_pending(pending)
+        done, _ = await asyncio.wait(
+            (ready, pending), timeout=5, return_when=asyncio.FIRST_COMPLETED
+        )
+        require_pending(pending)
+        if ready not in done:
+            raise TimeoutError("LOCK_WAIT_PREPARATION_TIMEOUT")
+        owner, pid = ready.result()
+        assert owner is pending, "LOCK_WAIT_FOREIGN_READINESS"
+        assert type(pid) is int and pid > 0, "LOCK_WAIT_READY_IDENTITY_UNAVAILABLE"
+        observe_wait("target_ready", target_pid=pid)
+        return pid
+    except BaseException as error:
+        observe_wait_failure("preparation", pending, error)
+        raise
+
+
 @contextmanager
 def target_query(pending):
     """Track only the target task's currently executing driver query, without SQL.
 
-    Call wait_blocked immediately after create_task, before yielding elsewhere.
+    Install before first target SQL, or before releasing a parked prelock target.
     A missed start, finished query or unavailable identity cannot prove a wait.
     """
     active = [None]
@@ -214,56 +272,63 @@ async def wait_blocked(connection, blocker, *, pending):
     # grants, SQL identity lookup or plugin is needed in the critical window.
     require_pending(pending)
     with target_query(pending) as active:
-        async with asyncio.timeout(1.5):
-            while True:
-                require_pending(pending)
-                query = active[0]
-                if query is None:
-                    # Give the target a turn without risking cancellation of SQL
-                    # on the blocker when there is no query to observe.
-                    await asyncio.sleep(0)
-                    continue
-                waiter = query[2]
-                assert waiter != blocker, "LOCK_WAIT_TARGET_IS_BLOCKER"
-                observe_wait("observer_execute_start", blocker_pid=blocker, target_pid=waiter)
-                try:
-                    rows = (
-                        (
-                            await connection.execute(
-                                # A second row waiter can queue behind the first.
-                                # Require its own wait and at most one intermediate
-                                # blocker leading back to the held serialization lock.
-                                text(
-                                    "SELECT waiting.pid,waiting.locktype,waiting.mode,waiting.granted "
-                                    "FROM pg_locks AS waiting "
-                                    "WHERE waiting.pid=:waiter AND NOT waiting.granted "
-                                    "AND (:blocker=ANY(pg_blocking_pids(waiting.pid)) OR EXISTS ("
-                                    "SELECT 1 FROM unnest(pg_blocking_pids(waiting.pid)) AS queue(pid) "
-                                    "WHERE :blocker=ANY(pg_blocking_pids(queue.pid))))"
-                                ),
-                                {"blocker": blocker, "waiter": waiter},
-                            )
-                        )
-                        .mappings()
-                        .all()
-                    )
-                except BaseException as error:
-                    observe_wait("observer_execute_end", exception_type=type(error).__name__)
+        try:
+            async with asyncio.timeout(1.5):
+                while True:
                     require_pending(pending)
-                    raise
-                observe_wait("observer_execute_end", returned_rows=len(rows))
-                require_pending(pending)
-                # The target must still be in that exact driver query after the
-                # observer await. A completed/replaced query cannot lend its PID.
-                if query is not None and active[0] is query and rows:
-                    assert query[1].info.backend_pid == waiter, "LOCK_WAIT_IDENTITY_CHANGED"
-                    assert all(row["granted"] is False and row["pid"] == waiter for row in rows), (
-                        "LOCK_WAIT_UNEXPECTED_WAITER"
-                    )
-                    for row in rows:
-                        observe_wait("returned_wait", waiter_pid=row["pid"], blocker_pid=blocker)
-                    return rows
-                await asyncio.sleep(0)
+                    query = active[0]
+                    if query is None:
+                        # Give the target a turn without risking cancellation of SQL
+                        # on the blocker when there is no query to observe.
+                        await asyncio.sleep(0)
+                        continue
+                    waiter = query[2]
+                    assert waiter != blocker, "LOCK_WAIT_TARGET_IS_BLOCKER"
+                    observe_wait("observer_execute_start", blocker_pid=blocker, target_pid=waiter)
+                    try:
+                        rows = (
+                            (
+                                await connection.execute(
+                                    # A second row waiter can queue behind the first.
+                                    # Require its own wait and at most one intermediate
+                                    # blocker leading back to the held serialization lock.
+                                    text(
+                                        "SELECT waiting.pid,waiting.locktype,waiting.mode,waiting.granted "
+                                        "FROM pg_locks AS waiting "
+                                        "WHERE waiting.pid=:waiter AND NOT waiting.granted "
+                                        "AND (:blocker=ANY(pg_blocking_pids(waiting.pid)) OR EXISTS ("
+                                        "SELECT 1 FROM unnest(pg_blocking_pids(waiting.pid)) AS queue(pid) "
+                                        "WHERE :blocker=ANY(pg_blocking_pids(queue.pid))))"
+                                    ),
+                                    {"blocker": blocker, "waiter": waiter},
+                                )
+                            )
+                            .mappings()
+                            .all()
+                        )
+                    except BaseException as error:
+                        observe_wait("observer_execute_end", exception_type=type(error).__name__)
+                        require_pending(pending)
+                        raise
+                    observe_wait("observer_execute_end", returned_rows=len(rows))
+                    require_pending(pending)
+                    # The target must still be in that exact driver query after the
+                    # observer await. A completed/replaced query cannot lend its PID.
+                    if query is not None and active[0] is query and rows:
+                        assert query[1].info.backend_pid == waiter, "LOCK_WAIT_IDENTITY_CHANGED"
+                        assert all(
+                            row["granted"] is False and row["pid"] == waiter for row in rows
+                        ), "LOCK_WAIT_UNEXPECTED_WAITER"
+                        for row in rows:
+                            observe_wait(
+                                "returned_wait", waiter_pid=row["pid"], blocker_pid=blocker
+                            )
+                        return rows
+                    await asyncio.sleep(0)
+
+        except BaseException as error:
+            observe_wait_failure("lock_observer", pending, error, active[0])
+            raise
 
 
 async def counts_control(h):
@@ -1557,3 +1622,82 @@ def test_m4_observation_command_preserves_summary(tmp_path):
     outer = json.loads((tmp_path / "evidence" / (COMMAND_REPORT + ".json")).read_text())
     assert outer["phase"] == COMMAND_REPORT and outer["command"] == command
     assert outer["exit_code"] == 0 and outer["seconds"] > 0
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "matching",
+        "foreign",
+        "invalid_pid",
+        "not_ready",
+        "absent",
+        "completed",
+        "failed",
+        "cancelled",
+    ],
+)
+async def test_prelock_readiness_controlled_contract(monkeypatch, scenario):
+    """No DB: preparation must not manufacture a wait or mask a target outcome."""
+    ready = asyncio.get_running_loop().create_future()
+    events = []
+    monkeypatch.setattr(
+        sys.modules[__name__], "observe_wait", lambda kind, **fields: events.append((kind, fields))
+    )
+    owner = asyncio.current_task()
+
+    async def target():
+        if scenario == "completed":
+            return
+        if scenario == "failed":
+            raise LookupError("preparation-failure")
+        if scenario == "cancelled":
+            raise asyncio.CancelledError("preparation-cancelled")
+        if scenario != "not_ready":
+            ready.set_result(
+                (
+                    owner if scenario == "foreign" else asyncio.current_task(),
+                    None if scenario == "invalid_pid" else 21,
+                )
+            )
+        await asyncio.Event().wait()
+
+    class NoSQL:
+        async def execute(self, *args):
+            raise AssertionError("readiness alone must not run observer SQL")
+
+    pending = asyncio.create_task(target())
+    try:
+        if scenario in {"matching", "absent"}:
+            assert await wait_ready(ready, pending=pending) == 21 and not pending.done()
+            if scenario == "absent":
+                with pytest.raises(TimeoutError):
+                    await wait_blocked(NoSQL(), 10, pending=pending)
+        else:
+            exception, match = {
+                "foreign": (AssertionError, "LOCK_WAIT_FOREIGN_READINESS"),
+                "invalid_pid": (AssertionError, "LOCK_WAIT_READY_IDENTITY_UNAVAILABLE"),
+                "not_ready": (TimeoutError, "LOCK_WAIT_PREPARATION_TIMEOUT"),
+                "completed": (AssertionError, "LOCK_WAIT_TARGET_COMPLETED"),
+                "failed": (LookupError, "preparation-failure"),
+                "cancelled": (asyncio.CancelledError, "preparation-cancelled"),
+            }[scenario]
+            with pytest.raises(exception, match=match):
+                await wait_ready(ready, pending=pending)
+        failures = [value for kind, value in events if kind == "wait_failure"]
+        if scenario != "matching":
+            assert len(failures) == 1
+            assert failures[0]["stage"] == (
+                "lock_observer" if scenario == "absent" else "preparation"
+            )
+            assert failures[0]["query_active"] is False and failures[0]["target_pid"] is None
+            assert failures[0]["cancelling"] == 0  # Recorded before our cleanup.
+        if scenario in {"foreign", "invalid_pid", "not_ready", "absent"}:
+            assert not pending.done() and not pending.cancelling()
+            frames = [value for kind, value in events if kind == "target_await_frame"]
+            assert 0 < len(frames) <= 8 and all(
+                set(f) == {"depth", "file", "function", "line"} for f in frames
+            )
+    finally:
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
