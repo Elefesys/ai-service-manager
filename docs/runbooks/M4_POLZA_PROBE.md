@@ -2,8 +2,8 @@
 
 **Ничего повторно запускать не нужно.** C0 принял18 новых ответов; вместе
 с7 сохранёнными из R1 получено **25 manual PASS**,2 READ и2 synthetic images.
-GPT/v2 выбран кандидатом для разработки первого runtime. Следующий шаг —
-[задача M4.3-CONTEXT-R1 для C4](../tasks/M4_HANDOFF.md).
+GPT/v2 выбран кандидатом для разработки первого runtime. C4 context/read/agent
+принят локально; следующий шаг — [исправление CI observation для C2](../tasks/M4_HANDOFF.md).
 
 ## Принятый отчёт
 
@@ -15,7 +15,7 @@ HUMAN_REVIEW_REQUIRED в файле означает, что runner остави
 C0 отдельно проверил все18 finals и признал6 regex flags ложными срабатываниями
 по смыслу: отрицания цены/отмены и корректные уточнения без ожидаемого слова.
 no_send_claim теперь handoff; unknown_price не добавляет вымышленное правило.
-Подробные per-case основания — в HANDOFF; исходный JSONL не меняется.
+Подробные per-case основания — в [приёмке GPT](https://github.com/Elefesys/ai-service-manager/blob/ed29ce8c104c5f1631ddb6af483588b7df5ff2a0/docs/tasks/M4_HANDOFF.md); исходный JSONL не меняется.
 
 | Учёт | RUB |
 |---|---:|
@@ -31,9 +31,10 @@ R2 p50 11.163s /p95 16.393s, N18, включая history; маленькая в�
 
 ## Дальше
 
-Передать C4 immutable ссылку на новый HANDOFF. C4 реализует context/read/agent
-на fixtures; ключ и Windows окружение сейчас не нужны. Сохранить R1, history
-и R2 reports; не удалять их ради повторного запуска.
+Передать C2 immutable ссылку на новый HANDOFF. C4 context/read/agent прошёл
+независимые1283 local tests и5 controlled adapter checks; live runtime ещё
+не подключён. C2 устраняет прежнее падение PostgreSQL-теста перед integration CI.
+Ключ и Windows окружение сейчас не нужны. Сохранить R1, history и R2 reports.
 
 Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`
 использован. [Прежняя команда](https://github.com/Elefesys/ai-service-manager/blob/5241eba3e38bd488cea052f894efb9b43b1f7d32/docs/runbooks/M4_POLZA_PROBE.md)

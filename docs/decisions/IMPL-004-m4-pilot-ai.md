@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: GPT quality принят, следующая выдача M4.3-CONTEXT-R1.
+Последнее решение ниже: C4 context принят локально; следующая выдача C2 CI observation.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -619,7 +619,7 @@ CI41009211185 RED/root cause UNKNOWN и C0-M4-CI-OBSERVATION-01 сохраняю
 full CI интеграционного кандидата нужен до merge/runtime. Gemini/DeepSeek
 DEFERRED, comparison75 не завершено. Main/VM/DB/Telegram/merge без изменений.
 
-**Актуальное решение C0 от2026-10-30: GPT quality R2 принят; переход к
+**Решение C0 от2026-10-30: GPT quality R2 принят; переход к
 M4.3-CONTEXT-R1.** Owner report SHA256 **f89ad00e49ab730f12a62f413142dd16ee7864bf4a026f9308662aa984750f35**,
 42789 bytes/39 events, source **7e48510311ab77c41f84b11becb2734ddb430690**, tree **23dad7ed0cf0e9974285db3881a1093e670fe443**.
 Exact ref/plan/schedule/DTO/flags/reservations и все summary fields проверены
@@ -662,6 +662,40 @@ PR39 Draft/headcd60, CI41009211185 RED/root cause UNKNOWN,
 C0-M4-CI-OBSERVATION-01/full integration CI остаются до merge/runtime.
 Полный M4/A01–A08 ещё не принят. В этом C0 шаге только4 coordination docs и
 PR body; C4 следующий, остальные HOLD. Main/VM/DB/Telegram/merge неизменны.
+
+**Актуальное решение C0 от2026-10-30: M4.3-CONTEXT-R1 принят в SOURCE +
+LOCAL UNIT scope; следующий C2-M4-CI-OBSERVATION-R1.** C4 source
+d07619234570b28dbc0917aebfc288fe38e63aa8, tree f900178c5f3053049500fff6bd876d7e244da948,
+sole parent ed29ce8c104c5f1631ddb6af483588b7df5ff2a0; exact7 paths.
+ContextBuilder над original stored V2/V3 JSON ограничивает model-visible поля,
+сохраняет current/owner факты, явно передаёт history/media ограничения.
+ConversationAgent — один Gateway/deadline/budget, максимум2 calls/1 READ,
+mandatory authority/read port на MODEL/READ/FOLLOWUP/CANDIDATE, без default-allow.
+Только candidate/STOP; production authority и durable guarantees не следуют
+из equality binding или DTO. Real PG adapter и атомарное принятие результата/
+send intent остаются M4.3-RUNTIME; CONTROLLED guards не обходятся.
+
+C0 независимо выполнил1283 targeted tests PASS21.67s, Ruff/format4, mypy73,
+5 controlled ContextBuilder/Agent→Gateway→PolzaAdapter checks. Последние
+покрыли READ/follow-up, authority revoke, stale native fence, foreign tool args,
+invalid read digest, wire privacy/correlation и budget retention. Real HTTP0/
+owner key reads0; это не hosted context quality, PG isolation или full CI.
+
+До runtime продолжения C2 исправляет открытый C0-M4-CI-OBSERVATION-01:
+CI41009211185 foundation803PASS/1FAIL, observer wait_blocked1.5s timeout,
+root cause UNKNOWN. Scope — два existing test modules и два receipt docs;
+реальная disposable PostgreSQL18 разрешена для targeted evidence. Production
+семантика/DDL/CI не меняются, assertions/time bounds не ослабляются. Нужны
+доказанная причина, минимальный repair, вся12-case matrix и отрицательные
+контроли, shared-helper consumers при изменении. Если нужен production change,
+C2 возвращает точную причину/paths C0. Общая CI optimization остаётся DEFERRED.
+Exact base/write-set/критерии — в CURRENT HANDOFF; C2 следующий, остальные HOLD.
+
+После C2 review C0 готовит integration candidate/full CI, затем runtime task.
+PR39 Draft/headcd60 и main51d7 прежние; новая приёмка не integration/enable.
+GPT/v2 selection, все old holds и shared ledger0.37505230 confirmed +
+7.585505548 held / remaining142.039442152 RUB сохранены. Новых paid probes нет.
+Route/data/backend/durable/Telegram gates и полный M4/A01–A08 остаются открыты.
 
 ## Что пересмотрено относительно baseline
 
