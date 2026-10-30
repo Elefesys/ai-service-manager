@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.2 GPT v2: receipt reviewed; metadata-only следующий шаг / 2026-10-30
+## CURRENT — M4.2 GPT history receipt принят; C4 готовит remaining18 / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**, PR38 merged;
@@ -18,43 +18,46 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.2-GEMINI-COMPATIBILITY | BLOCKED; дальнейшая совместимость DEFERRED для первого пилота |
 | M4.2-DEEPSEEK-EVAL-R1 | BLOCKED: READ_ROUND_TRIP, handoff «С», OWNER_25_CASES_R1 consumed |
 | M4.2-DEEPSEEK-TOOL-COMPAT-R1 | BLOCKED: INVALID_PROVIDER_RESPONSE на первом POST; exact cause/charge UNKNOWN. Допуск consumed, дальнейшая совместимость DEFERRED |
-| M4.2-GPT-QUALITY-R1 | BLOCKED: owner stage consumed;7 manual PASS/1 technical STOP/17 NOT_RUN. DETAIL/ATTEMPTS/INT, actual counter UNKNOWN; paid retry HOLD |
-| C0-M4.2-GPT-QUALITY-HISTORY-R1 | IN_PROGRESS: owner выполняет один metadata read≤2 history GET/0 POST для exact generation; C0 затем проверяет полный receipt |
+| M4.2-GPT-QUALITY-R1 | BLOCKED / исторический partial:7 manual PASS/1 technical STOP/17 NOT_RUN; actual attempts2 объясняет STOP, owner stage consumed |
+| C0-M4.2-GPT-QUALITY-HISTORY-R1 | VERIFIED metadata scope:2 GET/0 POST, exact ID/list/detail, attempts2, reported0.00743079; без settlement/runtime |
+| M4.2-GPT-QUALITY-R2 | IN_PROGRESS / C4: opt-in history semantics +18 remaining cases7–24; prepare≤18 POST/0 READ/10 RUB, сейчас HTTP0 |
 | C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 wait_blocked1.5s timeout, root cause UNKNOWN; последующие foundation gates не приняты |
 | M4.3-CONTEXT / M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-[Разбор C0](tasks/M4_HANDOFF.md), [готовая metadata-only команда](runbooks/M4_POLZA_PROBE.md),
-[решение](decisions/IMPL-004-m4-pilot-ai.md). Source **ace29ce7d77564f8fecea84d4b7e734e6c8fbe56**,
-tree **8a716c528a917c8a77a853c226699ba4a47ccc2b**. Owner report21904 bytes/21 events,
-SHA256 `b0d1cb8249b321792355a2b4d29e1a79ba6eae30847a5deee6fbafa36159017f`.
-10 model POST/20 history GET/1 catalog/2 READ;7 finals manual PASS.
-Case7 unknown_duration остановлен DETAIL/ATTEMPTS/INT: пришло integer!=1,
-значение не сохранено. Это не доказанный retry2/fallback или quality FAIL.
-17 cases8–24 NOT_RUN, включая no_send_claim19/images20–21/unknown_price22;
-прежние v1 findings не закрыты.799 source tests были приняты ранее; сейчас
-backend без изменений, полный suite/CI не повторялся.
+[Точная выдача C4 и evidence](tasks/M4_HANDOFF.md), [operator status](runbooks/M4_POLZA_PROBE.md),
+[решение C0](decisions/IMPL-004-m4-pilot-ai.md). Metadata report1633 bytes/4 events,
+SHA256 `bf09d2dba67de7fbbd1f9a88cde309ee0a135fc1df52ab0554f591beeb1fba24`, input original SHA
+`b0d1cb8249b321792355a2b4d29e1a79ba6eae30847a5deee6fbafa36159017f`.2 history GET/0 POST;
+exact gen_2227417601602097153, completed/OpenAI, attemptsCount2,
+usage694/118/812 и cost0.00743079 RUB совпали list/detail. Это reported metadata;
+final не восстановлен, flex/internal routes/причина второй попытки не доказаны.
 
-Shared150: **0.23889134 confirmed /40 known POST**, **4 unknown**, held
-**7.585505548**, всего44 attempts; confirmed+held7.824396888,
-remaining **142.175603112 RUB**. Это ledger capacity, не баланс аккаунта.
-Новые9 confirmed calls0.05956584; один unknown held0.465109963. Все old holds
-сохранены; cost неизвестного запроса не равен0 и автоматически не освобождается.
+Shared150 сохраняется: **confirmed0.23889134 /40 known**, **4 unknown**,
+held **7.585505548**, всего **44 client model POST**, remaining **142.175603112**.
+Provider attempts не client POST; cost0.00743079 HISTORY_REPORTED_ONLY, old hold
+0.465109963 не освобождён. Новых GET ради settlement не назначаем. R1 сохраняет
+7 manual PASS/2 READ; case7 без final,8–24 NOT_RUN; v1 findings не закрыты.
 
-Единственный следующий шаг — owner metadata read generation **gen_2227417601602097153**:
-≤2 bounded history GET (first5 с exact ID + exact detail),0 POST/catalog/READ,
-65536 bytes/15s каждый,45s overall; прежний source/venv/key. Новый exclusive
-`reports/m4-polza-gpt-quality-history-r1.jsonl`; input SHA проверяется до HTTP.
-No retry/pagination/polling/paid transition; raw responses/секреты не печатаются.
-Все reported amounts UNSETTLED до C0 review. Budget150 заново не запрашивается.
-C0 проверил exact accounting,4 controlled counter cases и15 metadata-reader
-cases; real HTTP/owner key reads0. C4/C1/C2/C3/C5/C6/C8 HOLD до metadata.
+**C4 M4.2-GPT-QUALITY-R2**, branch c4/m4-2-gpt-quality-r2. Base — полный SHA C0
+commit этого CURRENT из immutable URL, sole parent2197b3afd58dfa5de38af0ecc35fae0f3feafd85,
+parent tree072b6f41139e517e7e0cac7874950e8154eee36b; код accepted ace29.
+Новый opt-in GPT EVAL_ONLY profile принимает positive-int provider attempts
+отдельно от client POST; raw optional steps и strict type проверяются по C0
+решению. Default/старые modes/RouteReview/runtime неизменны. Reuse helpers,
+закрытый R2 schedule7–24,18 scenarios/0 READ/2 images, v2/fixtures прежние.
+Подготовить≤18 POST/36 history/1 catalog,case60s/stage1800s, ceiling10 из150,
+fresh whole-stage reserve, max62 shared client POST, все4 old holds. Новый
+exclusive m4-polza-gpt-quality-r2.jsonl; manual review/no selection/runtime.
+Write-set7 files и проверки в HANDOFF; сейчас нет live допуска/owner команды.
 
-PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**;
+C0: exact receipt/accounting/remaining schedule PASS и7 controlled verifier
+checks,0 real HTTP/key reads. Backend без изменений,799/full CI не повторялись.
+PR39 Draft/headcd60e5e16d8bcada53597d660a15f4d82640e956;
 [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
-FAILURE/10 из11: M3 wait_blocked1.5s timeout, root cause UNKNOWN; последующие
-foundation gates не приняты. Full CI интеграционного кандидата нужен до
-merge/runtime. Main/VM/DB/Telegram/merge не менялись; selection=null/runtime=false.
+RED/M3 observer timeout root cause UNKNOWN. C0-M4-CI-OBSERVATION-01/full
+integration CI нужны до merge/runtime. C1/C2/C3/C5/C6/C8 HOLD; следующий C4.
+Main/VM/DB/Telegram/merge не менялись. Бюджет150 повторно не запрашивается.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

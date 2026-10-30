@@ -6,7 +6,167 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущий шаг — C0-M4.2-GPT-QUALITY-HISTORY-R1 / только metadata GET / 2026-10-30
+## Текущая выдача — M4.2-GPT-QUALITY-R2 / C4 / 2026-10-30
+
+**Metadata receipt принят: attemptsCount=2. Наш invariant==1 остановил
+завершённую generation. C4 готовит узкое исправление history semantics и
+проверку оставшихся18 scenarios; новых HTTP сейчас нет.**
+Оба owner допуска R1 использованы, команды не повторять. Владелец передаёт C4
+immutable ссылку на этот HANDOFF; остальные исполнители HOLD.
+
+### Новое evidence и пределы вывода
+
+`m4-polza-gpt-quality-history-r1.jsonl`: **1633 bytes /4 JSONL events**,
+SHA256 `bf09d2dba67de7fbbd1f9a88cde309ee0a135fc1df52ab0554f591beeb1fba24`. Source
+**ace29ce7d77564f8fecea84d4b7e734e6c8fbe56**, input SHA256
+`b0d1cb8249b321792355a2b4d29e1a79ba6eae30847a5deee6fbafa36159017f` — exact исходный GPT v2 report.
+2 bounded history GET,0 model POST/catalog/READ; SHA256_MATCH и точный ID
+**gen_2227417601602097153** совпали. Receipt остаётся OBSERVED/UNSETTLED;
+automatic reserve release=false, runtime=false.
+
+| Поле | Наблюдение |
+|---|---|
+| List/detail identity | Одинаковый exact ID; status completed; request_type chat |
+| Модель / family | List openai/gpt-6-luna; list/detail OpenAI. Detail model не сохранена; flex variant не доказан |
+| Attempts | **2**, INT — счётчик Polza, не второй HTTP POST нашего runner |
+| Usage | List/detail694 input +118 output =812 total; original body reasoning75 REPORTED |
+| Cost | List/detail **0.00743079 RUB**, меньше retained reserve0.465109963; HISTORY_REPORTED_ONLY |
+| Protocol | completions /sync /stop; is_cancelled=false; has_parent=false, has_server_tools=false |
+| Steps | steps_count=null в проекции; missing/null/неподходящий raw type не различены |
+
+Original diagnostic DETAIL/ATTEMPTS/INT теперь объяснён конкретным числом2.
+Причина внутренних попыток, их отдельные маршруты и billable decomposition
+не наблюдались. Нельзя утверждать, что наш runner сделал retry, что все попытки
+шли через flex или что неизвестный final был правильным.
+
+[Polza history](https://polza.ai/docs/api-reference/history/generations) описывает
+attemptsCount как число попыток; invariant1 не задан. stepsCount относится к
+server-tool requests. [allow_fallbacks](https://polza.ai/docs/gaidy/provider-selection)
+описывает переход к другим providers. C0 пересматривает смешение provider
+attempts с client POST в новом EVAL_ONLY профиле; правила расхода/identity и
+запрет client retry/fallback остаются. Это явная поправка контракта, не замена
+неуспешного test expectation без решения о смысле поля.
+
+### Решение C0 по учёту и сохранённым результатам
+
+Reported0.00743079 фиксируется отдельно, **не переводит исходный unknown в
+confirmed автоматически**. Исходные body metering/final не сохранены, metadata
+проекция не равна полному protocol verification. C0 сохраняет conservative hold;
+новые GET только ради освобождения0.465109963 не назначаются. Оба report read-only.
+
+Shared150 без изменения: **confirmed0.23889134 /40 known client POST**,
+**4 unknown** (2 Gemini/1 DeepSeek/1 GPT), **held7.585505548**, всего **44 client
+model POST**, confirmed+held7.824396888, remaining **142.175603112 RUB**.
+Эти44 не являются суммой внутренних provider attempts; ledger capacity не баланс
+Polza. Новые2 GET не добавили model POST/списание в учёт.
+
+GPT v2 R1:7 завершённых scenarios/repeats0–6 manual PASS,2 READ пройдены;
+case7 unknown_duration NOT_ASSESSABLE,17 cases8–24 NOT_RUN. Price clarification5
+PASS с сохранённым lexical false positive. no_send_claim19/unknown_price22
+v1 findings ещё не закрыты. Images20/21 v2-stage ещё не запускались.
+
+### Задача C4 и точный scope
+
+Repository **Elefesys/ai-service-manager**, branch **c4/m4-2-gpt-quality-r2**.
+Base — **полный SHA опубликованного C0 commit из immutable URL этого HANDOFF**;
+его sole parent **2197b3afd58dfa5de38af0ecc35fae0f3feafd85**, parent tree
+**072b6f41139e517e7e0cac7874950e8154eee36b**. C4 фиксирует exact base SHA/tree.
+Код остаётся accepted ace29, prompt v2 SHA256
+`b420be44a7e4210de1151e5b0604b0fa9a08c19b1bfbedb8147f2a9b38455956`.
+Применимы AGENTS, IMPL-004, ADR-043/047/048/159/162–168.
+
+1. Новый явно opt-in GPT EVAL_ONLY history profile: attemptsCount — строгое
+   положительное целое, не bool/float/string/null/missing/0/negative. Сохранить
+   число в закрытом metadata поле;1/2/большее positive значение само по себе не
+   означает ошибку identity, extra client POST или право повторить запрос.
+   Счётчики client POST и reported provider attempts отдельны. Profile нельзя
+   включить для RouteReview/runtime, Gemini/DeepSeek или прежних CLI modes.
+   Default старого adapter/profile и старые plans сохраняются. Никакого registry.
+2. В этом же профиле raw stepsCount при отсутствии server tools/parent: missing
+   или null → NOT_APPLICABLE; int1 → ONE_REPORTED. bool/float/string/0/negative/
+   >1 отвергать. Проверять raw type, не пропускать неверный тип через lossy
+   projection. Наличие serverTools/parent по-прежнему запрещено. Это обработка
+   optional protocol metadata по смыслу поля; фактический второй hosted отказ
+   по steps не доказан. Остальные identity/model/family/status/finish/cancel/
+   usage/total/reasoning/cost/limit/deadline/reflection проверки сохранять.
+3. Подготовить **--gpt-quality-r2** как конечное продолжение только repeats7–24
+   исходного schedule:18 scenarios/18 model POST/0 READ/2 images. Первые7 не
+   выполнять заново. Source/hash R1 и history receipt, retained7/READ2 — fixed
+   C0-reviewed prior, не импорт произвольного report/resume и не автоматическая
+   переоценка finals. Исходный fixture/hash/порядок/repeat numbers неизменны;
+   v2 prompt, result/envelope v1 и image synthetic_shapes_v1 неизменны.
+   Reuse текущих runner/accounting helpers, без копии всех прежних modes.
+4. Только GPT/openai/flex/provider-default, прежний wire; отсутствие READ в
+   оставшихся cases означает tools не объявляются.≤18 POST/36 history GET/
+   1 catalog GET,0 Gemini/DeepSeek POST,60s/case/1800s stage,32768/512 tokens,
+   24576/32768 bytes; total token reservation599040. History/catalog bounds
+   прежние. Fresh reserve всех18 calls до первого POST; при несовместимом catalog
+   или превышении stage ceiling STOP до POST. **Ceiling10 RUB из прежнего150**,
+   не новый бюджет и не live допуск сейчас. По последним rates reserve8.371979334
+   помещается в10, но для следующего source требуется fresh catalog.
+5. Fixed prior40 known/4 unknown/44 client POST, confirmed0.23889134,
+   held7.585505548, remaining142.175603112; максимум62 shared client POST.
+   Все4 holds сохранять. При новом unknown его reservation остаётся; reported
+   count2 не удваивает charge/reservation и не доказывает billing каждой попытки.
+   Body/list/detail cost и usage должны совпасть и уложиться в прежний per-call
+   reserve. Catalog reservation остаётся CONDITIONAL_ESTIMATE;
+   flex variant NOT_OBSERVED, runtime billing guarantee не выводится.
+6. Новый exclusive `reports/m4-polza-gpt-quality-r2.jsonl`, reservation flush до
+   HTTP, source/ref/≤10 проверяются до paid path, existing output до key/HTTP.
+   Offline plan без сети/key. No retry/fallback/polling/arbitrary resume. Новый
+   stage summary отдельно от retained7;18 technical completions дают только
+   HUMAN_REVIEW_REQUIRED, manual PENDING. Ошибка останавливает stage, все
+   flags/finals сохраняются; selected_model=null/runtime=false. Полное качество
+   C0 проверит по R1+R2, не объявлять25 новых successful cases из18.
+
+**Write-set C4:** `backend/src/asm/ai/polza.py` (узкий opt-in history profile и
+typed observations), `backend/src/asm/ai/probe.py` (R2 schedule/prior/limits,
+reuse helpers), `tests/test_m4_polza.py`, `tests/test_m4_probe.py`,
+`docs/runbooks/M4_POLZA_PROBE.md`, receipt в `docs/tasks/M4_HANDOFF.md` и CURRENT
+`docs/TASK_REGISTER.md`. Ровно эти7 paths. Prompts/contracts/Gateway/schemas/
+fixtures/settings/deps/locks/CI/DB/M3/Telegram и IMPL-004 не менять.
+
+### Проверки и возврат
+
+Targeted Gateway/failures/polza/probe, Ruff/format/mypy. Старые8 actual offline
+CLI plans неизменны; новый plan exact18-case schedule/prior/≤10. CONTROLLED
+полный R2 обязан дойти до no_send_claim19,2 images и repeats22–24, наблюдать v2
+в text wire и прежнюю image revision, дать18 POST/0 READ/36 history/1 catalog.
+Provider attempts2 и другое positive число проходят только новый profile;
+invalid types/values останавливаются. Missing/null/1 steps и все invalid формы
+проверяются после успешного attempts gate, не маскируются ранним отказом.
+Отдельно проверить wrong ID/model/family/cost/usage/finish/cancel/serverTools/
+parent, oversize/deadline, ранний и поздний STOP, per-call/stage budget,
+exclusivity, все old holds и отсутствие auto-settlement. CONTROLLED READ
+roundtrip нового adapter profile проверяет отсутствие обхода tool guards;
+реальный R2 READ0. Плохой смысл final/quality flag не превращать в PASS тестом.
+
+Receipt C4: exact commit/tree/base,7-file scope, команды и фактические результаты,
+fixed profile revision/observations, R2 plan/accounting, ограничения. Готовая
+Windows инструкция использует прежние environment/key; executable paid block
+и exact-source C0 approval — **после source review**. Сейчас model POST и GET0.
+Не запускать full CI ради неизменённого M3 gate и не двигать PR39 head.
+
+### Проверено C0 и открытые gates
+
+C0 проверил exact receipt/source/input SHA/ID, list/detail usage/cost/family,
+unchanged ledger и fixed remaining schedule.7 CONTROLLED checks старого
+verifier: attempts2 даёт ATTEMPTS независимо от отсутствующего/null steps;
+при synthetic attempts1 missing/1 steps PASS, null/2 →STEPS, True прежний код
+ошибочно принимает по equality. Это условия отдельного local control, не raw
+hosted данные. Projection steps_count=null не различает4 проверенные raw формы.
+Python3.13.16/MockTransport/audit запрет sockets/owner .env; real HTTP/key reads0.
+Оба originals неизменны и не в Git; backend не менялся,799/full CI не повторялись.
+
+PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**; CI41009211185 RED,
+root cause M3 observer timeout UNKNOWN. C0-M4-CI-OBSERVATION-01 и full integration
+CI нужны до merge/runtime. Gemini/DeepSeek DEFERRED, selection=null/runtime=false.
+Main/VM/DB/Telegram/merge без изменений. Следующий исполнитель — **C4**, не owner.
+
+## История — metadata read назначен; теперь COMPLETED / 2026-10-30
+
+Следующий раздел — прежний pre-read receipt. Допуск использован; actual count2
+и текущая задача C4 приведены выше. Старые owner команды не повторять.
 
 **GPT v2: 7 завершённых scenarios вручную PASS; восьмой остановлен проверкой
 истории, остальные17 не запускались. Одноразовый paid допуск использован.**

@@ -525,6 +525,56 @@ Gemini/DeepSeek DEFERRED, PR39 Draft/headcd60 и CI41009211185 RED сохран�
 C0-M4-CI-OBSERVATION-01/full integration CI нужны до merge/runtime.
 Main/VM/DB/Telegram/merge без изменений, selection=null/runtime=false.
 
+**Решение C0 от2026-10-30 — history count2 принят; M4.2-GPT-QUALITY-R2:**
+Metadata receipt1633 bytes/4 events, SHA256bf09d2dba67de7fbbd1f9a88cde309ee0a135fc1df52ab0554f591beeb1fba24,
+exact input/ID gen_2227417601602097153:2 GET/0 POST, completed/OpenAI,
+attemptsCount2, usage694/118/812 и reported cost0.00743079 совпали list/detail.
+Original GPT v2 failed на integer==1. Счётчик provider attempts не число client
+POST, причина/внутренние маршруты не наблюдались. Detail model/steps в проекции
+null не доказывают raw null или отсутствие. Final не восстановлен.
+
+По [официальному history contract](https://polza.ai/docs/api-reference/history/generations)
+attemptsCount — количество попыток, stepsCount относится к server-tool requests;
+[allow_fallbacks](https://polza.ai/docs/gaidy/provider-selection) ограничивает
+другие providers, не обещает одну внутреннюю попытку. C0 явно пересматривает
+invariant только в новом opt-in GPT EVAL_ONLY profile: positive int attempts
+(без bool/coercion) сохраняется как metadata, не вызывает extra POST/READ.
+Без serverTools/parent raw steps missing/null = NOT_APPLICABLE, int1 допустим;
+все иные типы/0/negative/>1 отвергать. Default прежний profile/старые modes и
+RouteReview/runtime не меняются. Model/identity/family/finish/cancel/usage/cost/
+limits/reflection guards сохраняются; flex variant и routes отдельных attempts
+не объявлять доказанными. Это исправление смысла metadata, не снятие quality gate.
+
+Confirmed/held snapshot консервативно прежний:0.23889134/40 known,4 unknown,
+held7.585505548,44 client POST, remaining142.175603112 из150. Reported0.00743079
+не является автоматическим settlement: original body metering/final отсутствуют,
+проекция не полный protocol verification. Hold0.465109963 остаётся; новых
+запросов ради его освобождения не назначаем. Все source reports неизменны.
+
+C4 готовит fixed **--gpt-quality-r2** для remaining repeats7–24:18 scenarios,
+18 POST/0 READ/2 images/36 history/1 catalog. Retained7 manual PASS/2 READ
+с exact R1/history hashes — C0-reviewed prior, без report import/arbitrary resume
+или повторного исполнения первых7. Prompt conversation_v2/hash и fixtures/schema
+не меняются. Reuse helpers; manual PENDING даже после полного R2, technical STOP
+сохраняет finals/flags/accounting. Ни25 новых PASS, ни model selection/runtime
+не выводятся из18 результатов. Full quality review C0 объединит R1+R2.
+
+Подготовительный ceiling10 RUB из прежнего150, fresh18-call reservation до
+POST, max62 shared client POST и все4 holds;60s/case/1800s stage, прежние
+32768/512 token и24576/32768 byte bounds,599040 total token reservation.
+Exclusive новый r2 report, source/ref/amount gates, no retry/fallback/polling.
+Сейчас real HTTP0; source review и exact-source C0 допуск перед owner запуском.
+Write-set7 paths/проверки в HANDOFF; общий бюджет повторно не запрашивается.
+
+C0 receipt/ledger/schedule и7 controlled existing-verifier checks PASS,
+audit real sockets/owner key reads запрещал. C4 должен проверить весь известный
+набор полей после успешного attempts gate, включая strict raw steps type,
+late STOP/оба images/no_send_claim и unchanged defaults; не обходить guards.
+Backend этой docs-only выдачей не меняется,799/full CI не повторялись.
+PR39 Draft/headcd60, CI41009211185 RED/C0-M4-CI-OBSERVATION-01 сохраняются;
+full integration CI нужен до merge/runtime. Gemini/DeepSeek DEFERRED.
+Main/VM/DB/Telegram/merge без изменений; следующий C4, owner paid/history HOLD.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,
