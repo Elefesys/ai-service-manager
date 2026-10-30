@@ -155,6 +155,53 @@ C4 не выполняет paid/full CI и не двигает PR39/main. C0 п�
 receipt replay, затем один full CI нового candidate и выдаёт owner команду в уже
 согласованном150. C1/C2/C3/C5/C6/C8 HOLD. Runtime/VM/DB/Telegram/merge не затрагивать.
 
+### Возврат C4 — QUALITY-CONTINUATION-R1 / REVIEW / 2026-10-30
+
+Ветка `c4/m4-2-eval-quality-continuation-r1`; один candidate с sole parent
+**e93c156b5ddcf7dcc2351a21755eb759a6f99e80**, seed tree
+**65815e39fdf5d3cbe88b9907154779ce3900f532**. Exact candidate SHA/tree — в возврате
+C4; этот receipt входит в тот же commit. Изменены ровно5 разрешённых файлов:
+probe, test_m4_probe, runbook, CURRENT M4.2 row и этот короткий receipt.
+
+Experimental quality flags сохраняют pattern/match/final/revision и требуют
+human review, но не останавливают finite collection. Technical failures и
+обычный reviewed fail-fast сохранены. Один fixed-hash prefix проверяется до
+secret/HTTP; original30 events и исходный FORBIDDEN_CLAIM сохранены отдельно от
+scoped C0 manual verdict. Новый stage резервирует только13/27/27 по fresh rates,
+с prior0.09573737 и ceiling149.90426263. Summary учитывает все confirmed calls,
+включая flagged/failed cases; unknown charges/reservations отдельны, NOT_RUN явен.
+
+CONTROLLED CLI: **63 new finals/67 POST/4 READ/134 history GET +1 catalog**,
+aggregate75/81/6, точные repeats и0 replay POST за prefix12; GPT/Gemini/DeepSeek
+profiles проверены. Full experiment75/81/6 также PASS. Owner JSONL не читался
+и не публиковался: тестовые данные помечены CONTROLLED; production hash override
+отсутствует. Контракты/миграции/adapter/settings/gateway/prompt/schema/fixtures/
+model profiles/locks/CI не менялись; новых OPEN-вопросов по code scope нет.
+
+Frozen CPython3.13.16, uv0.13.4; фактические команды/результаты:
+
+```sh
+V=/workspace/scratch/b247f3420d30/m4-quality-validation-venv
+$V/bin/pytest -q tests/test_m4_probe.py tests/test_m4_polza.py tests/test_m4_gateway.py tests/test_m4_gateway_failures.py --tb=short
+# 443 passed in 6.72s
+$V/bin/ruff check backend/src/asm/ai/probe.py tests/test_m4_probe.py
+$V/bin/ruff format --check backend/src/asm/ai/probe.py tests/test_m4_probe.py
+$V/bin/mypy
+# Ruff/format PASS; Success: no issues found in 71 source files
+$V/bin/python -m asm.ai.probe
+$V/bin/python -m asm.ai.probe --plan
+$V/bin/python -m asm.ai.probe --plan --synthetic-experiment
+# 75 scenarios /81 POST /6 READ; price null; fixture SHA unchanged; runtime false
+git diff --check
+# PASS
+```
+
+[Runbook](../runbooks/M4_POLZA_PROBE.md) содержит одну Windows команду: прежний
+R1/key/env, fixed exclusive `reports/m4-polza-executable-eval-r2.jsonl`; заменить
+только accepted SHA и decision ref C0. C0: real-receipt offline replay/source review
+→ один full CI candidate → owner R2. C4 paid/real-owner replay/full CI/Windows live
+**NOT RUN**; PR39/main/VM/DB/Telegram/runtime/merge не затронуты.
+
 ## История triage — C0-M4.2-EVAL-SCORING-01 / 2026-10-30
 
 **OWNER R1 PARTIAL; literal matcher false positive CONFIRMED; FULL JSONL REQUIRED.**

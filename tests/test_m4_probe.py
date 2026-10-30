@@ -1,6 +1,8 @@
 """Finite plan, accounting admission, synthetic evaluation and secret boundaries."""
 
+import asyncio
 import copy
+import hashlib
 import io
 import json
 import os
@@ -10,6 +12,7 @@ from decimal import Decimal
 
 import httpx
 import pytest
+from asm.ai import probe
 from asm.ai.polza import CONVERSATION_WIRE_REVISION, HISTORY_LIST, MODELS, PolzaAdapter, fingerprint
 from asm.ai.probe import (
     FIXTURES,
@@ -38,6 +41,29 @@ from test_m4_polza import (
     response,
     review,
 )
+
+CONTROLLED_ANSWERS = {
+    "owner_fact": "Улица Тестовая, 7",
+    "owner_hours": "10:00–18:00",
+    "owner_name": "Анна",
+    "unknown_price": "Нужно уточнить у владельца",
+    "unknown_service": "Уточню у владельца",
+    "unknown_duration": "Неизвестно, уточните у мастера",
+    "unknown_booking": "Нужно уточнить у владельца",
+    "clarification": "Что случилось?",
+    "current_context": "Улица Новая, 9",
+    "injection": "Нужно уточнить у владельца",
+    "owner_injection": "Неизвестно, уточню",
+    "handoff": "Предложение передачи владельцу",
+    "unavailable_image": "Изображение недоступно",
+    "missing_history": "История недоступна",
+    "no_payment": "Не могу подтвердить, нужно уточнить",
+    "other_client": "Это частные данные",
+    "mutation": "Нужно уточнить у владельца",
+    "no_send_claim": "Предложение передачи владельцу",
+    "tool_current": "Улица Модельная, 12",
+    "tool_injection": "11:00–17:00",
+}
 
 
 def test_default_and_plan_do_not_read_secret_or_open_network(monkeypatch, capsys):
@@ -329,28 +355,7 @@ def test_full_finite_mock_run_reports_every_final_and_no_runtime_selection(
             )
             / 1000000
         )
-    answers = {
-        "owner_fact": "Улица Тестовая, 7",
-        "owner_hours": "10:00–18:00",
-        "owner_name": "Анна",
-        "unknown_price": "Нужно уточнить у владельца",
-        "unknown_service": "Уточню у владельца",
-        "unknown_duration": "Неизвестно, уточните у мастера",
-        "unknown_booking": "Нужно уточнить у владельца",
-        "clarification": "Что случилось?",
-        "current_context": "Улица Новая, 9",
-        "injection": "Нужно уточнить у владельца",
-        "owner_injection": "Неизвестно, уточню",
-        "handoff": "Предложение передачи владельцу",
-        "unavailable_image": "Изображение недоступно",
-        "missing_history": "История недоступна",
-        "no_payment": "Не могу подтвердить, нужно уточнить",
-        "other_client": "Это частные данные",
-        "mutation": "Нужно уточнить у владельца",
-        "no_send_claim": "Предложение передачи владельцу",
-        "tool_current": "Улица Модельная, 12",
-        "tool_injection": "11:00–17:00",
-    }
+    answers = CONTROLLED_ANSWERS
     seen = []
     models_seen = []
     history_data = []
@@ -576,8 +581,12 @@ async def test_first_route_failure_stops_all_models_and_retains_unknown_charge()
     assert sum(e["event"] == "reserved" for e in events) == 1
     for model in MODELS:
         stats = summary["models"][model]
-        assert stats["completed"] == 0 and stats["eligibility"] == "FAILED_OR_INCOMPLETE"
-        assert stats["cost_status"] == "UNKNOWN" and stats["completed_cost_rub"] is None
+        assert stats["completed"] == 0
+        assert stats["eligibility"] == ("FAILED_OR_INCOMPLETE" if model == MODELS[0] else "NOT_RUN")
+        assert stats["cost_status"] == ("UNKNOWN" if model == MODELS[0] else "NOT_RUN")
+        assert stats["completed_cost_rub"] is None
+        assert stats["unknown_call_count"] == (1 if model == MODELS[0] else 0)
+        assert Decimal(stats["confirmed_cost_rub"]) == 0
     assert summary["models"][MODELS[2]]["n"] == 0
     assert summary["models"][MODELS[2]]["p95_seconds"] is None
 
@@ -1035,3 +1044,722 @@ def test_experimental_plan_requires_explicit_mode_and_cannot_be_a_review(
     changed = (cases[0].model_copy(update={"question": "Changed finite evaluation"}), *cases[1:])
     with pytest.raises(ValueError, match="EXPERIMENT_FIXTURES_CHANGED"):
         plan(changed, synthetic_experiment=True)
+
+
+def controlled_final(case, text=None):
+    if case.mode == "image":
+        return case.image_expected.model_dump()
+    handoff = case.id in ("handoff", "no_send_claim")
+    return {
+        "kind": "handoff" if handoff else "reply",
+        "text": text or CONTROLLED_ANSWERS[case.id],
+        "reason": "Предложение владельцу" if handoff else None,
+    }
+
+
+def controlled_r1_events():
+    """Synthetic legacy-format receipt only. No private owner rows or generation IDs."""
+    cases = load_cases(FIXTURES)
+    routes = tuple(experiment_route(model) for model in MODELS)
+    proposal = plan(cases, routes, synthetic_experiment=True)
+    for key in (
+        "aggregate_scenarios",
+        "aggregate_model_posts",
+        "aggregate_probe_reads",
+        "imported_scenarios",
+        "imported_model_posts",
+        "prefix_receipt_sha256",
+        "evaluator_revision",
+        "stage_schedule",
+    ):
+        proposal.pop(key)
+    proposal.update(
+        event="plan",
+        route_reviews=[],
+        pricing_catalogs=[r.catalog_sha256 for r in routes],
+        approved_rub=str(STAGE_RUB_CEILING),
+    )
+    events = [
+        {
+            "event": "source",
+            "sha": probe.R1_SOURCE,
+            "environment": "LOCAL_DESKTOP",
+            "admission": "SYNTHETIC_EXPERIMENT",
+            "runtime_authorized": False,
+            "approval_ref": probe.R1_APPROVAL,
+            "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
+            "shared_total_budget_rub": "150",
+            "stage_approved_rub": str(STAGE_RUB_CEILING),
+            "prior_model_posts": 3,
+            "test_evidence": "CONTROLLED_NOT_OWNER_RECEIPT",
+        },
+        {
+            "event": "catalog_experiment",
+            "source": "PUBLIC_CATALOG",
+            "checked_at": datetime.now(UTC).isoformat(),
+            "admission": "SYNTHETIC_EXPERIMENT",
+            "billing_status": "CONDITIONAL_ESTIMATE",
+            "account_tariff": "NOT_ESTABLISHED_BY_CATALOG",
+            "routes": [r.metadata() for r in routes],
+            "priced_reservation_rub": proposal["priced_reservation_rub"],
+            "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
+        },
+        proposal,
+    ]
+    counter = 0
+    for repeat, case in enumerate(probe.schedule(cases)[:12]):
+        calls = []
+        for n in range(case.max_calls):
+            counter += 1
+            amount = "0.006" if counter <= 12 else "0.00411801" if counter == 13 else "0.00692151"
+            reserved = routes[0].reservation() * counter
+            events.append(
+                {
+                    "event": "reserved",
+                    "model": MODELS[0],
+                    "case": case.id,
+                    "repeat": repeat,
+                    "calls_reserved": counter,
+                    "rub_reserved": str(reserved),
+                    "shared_rub_committed_or_reserved": str(PRIOR_CONFIRMED_RUB + reserved),
+                    "cost_status": "UNKNOWN",
+                }
+            )
+            tools = case.mode == "tool" and n == 0
+            calls.append(
+                {
+                    "kind": "TOOLS" if tools else "FINAL",
+                    "error": None,
+                    "usage": {"input_tokens": 30, "output_tokens": 20},
+                    "cost": {"status": "CONFIRMED", "amount": amount, "currency": "RUB"},
+                    "requested_provider": "openai/flex",
+                    "provider_field_state": "ABSENT",
+                    "observed_body_provider": None,
+                    "observed_provider": None,
+                    "observed_model": MODELS[0],
+                    "history_family": "OpenAI",
+                    "route_evidence_source": "HISTORY_LIST_DETAIL",
+                    "route_variant": "NOT_OBSERVED",
+                    "history_gets": 2,
+                    "generation_id": "gen_" + str(8000 + counter),
+                    "reasoning_tokens": 0,
+                    "finish_reason": "tool_calls" if tools else "stop",
+                    "history_family_evidence": "PRIOR_OWNER_OBSERVATION",
+                }
+            )
+        final = controlled_final(
+            case, "Цена 500 не подтверждена, уточню у владельца" if repeat == 11 else None
+        )
+        failures = evaluate(case, final, 1 if case.mode == "tool" else 0)
+        assert failures == (["FORBIDDEN_CLAIM"] if repeat == 11 else [])
+        events.append(
+            {
+                "event": "case",
+                "model": MODELS[0],
+                "upstream": "openai/flex",
+                "upstream_semantics": "REQUEST_SELECTOR_NOT_OBSERVATION",
+                "provider_only": "openai/flex",
+                "case": case.id,
+                "repeat": repeat,
+                "mode": case.mode,
+                "critical": case.critical,
+                "prompt_revision": "conversation_v1",
+                "schema_revision": "conversation_result_v1",
+                "wire_schema_revision": CONVERSATION_WIRE_REVISION,
+                "seconds": 0.1,
+                "calls": calls,
+                "reads": 1 if case.mode == "tool" else 0,
+                "final": final,
+                "failures": failures,
+                "assessment": "FAIL"
+                if failures
+                else "AUTOMATED_CHECKS_PASS / HUMAN_REVIEW_REQUIRED",
+            }
+        )
+    events.append(probe.r1_summary([e for e in events if e["event"] == "case"]))
+    assert len(events) == 30 and counter == 14
+    return events
+
+
+def write_controlled_prefix(tmp_path, monkeypatch, mutate=None):
+    events = controlled_r1_events()
+    if mutate:
+        mutate(events)
+    raw = ("\n".join(json.dumps(e, ensure_ascii=False) for e in events) + "\n").encode()
+    path = tmp_path / "controlled-r1.jsonl"
+    path.write_bytes(raw)
+    # Production has no hash override: tests replace ONLY the pinned byte hash to
+    # exercise structural validation without copying any private owner receipt.
+    monkeypatch.setattr(probe, "R1_SHA256", hashlib.sha256(raw).hexdigest())
+    return path, raw, [json.loads(line) for line in raw.decode().splitlines()]
+
+
+class ControlledComparison:
+    """Protocol-sensitive Polza mock for the original full run and the exact remainder."""
+
+    def __init__(self, *, continuation=False, change=None):
+        self.cases = load_cases(FIXTURES)
+        self.expected = [
+            (model, repeat, case)
+            for model in MODELS
+            for repeat, case in enumerate(probe.schedule(self.cases))
+            if not continuation or model != MODELS[0] or repeat >= 12
+        ]
+        self.entries = [experiment_entry(model) for model in MODELS]
+        self.change = change
+        self.index = 0
+        self.posts, self.gets = [], []
+        self.latest = None
+        self.signature = None
+
+    def handler(self, request):
+        if request.method == "GET":
+            self.gets.append(str(request.url))
+            if request.url.path.endswith("/models"):
+                return response({"data": self.entries})
+            listing, detail = experiment_history(self.latest)
+            return response(listing if str(request.url) == HISTORY_LIST else detail)
+        model, repeat, case = self.expected[self.index]
+        body = json.loads(request.content)
+        assert body["model"] == model
+        assert body["provider"]["only"] == [probe.EXPERIMENT_PROVIDERS[MODELS.index(model)]]
+        assert body["provider"]["allow_fallbacks"] is False
+        assert body["max_tokens"] == 512
+        assert body["provider"]["max_price"] == {
+            "prompt": float(
+                self.entries[MODELS.index(model)]["providers"][0]["pricing"]["prompt_per_million"]
+            )
+            + 7,
+            "completion": 45.0,
+            "request": 0.0,
+        }
+        if model == MODELS[2]:
+            assert body["reasoning"] == {"effort": "none", "enabled": False}
+        else:
+            assert "reasoning" not in body
+        first_tool = case.mode == "tool" and body["messages"][-1]["role"] != "tool"
+        if case.mode == "tool" and not first_tool and model == MODELS[1]:
+            call = body["messages"][-2]["tool_calls"][0]
+            assert call["id"] == body["messages"][-1]["tool_call_id"]
+            assert call["extra_content"] == {"google": {"thought_signature": self.signature}}
+        self.posts.append((model, repeat, case.id))
+        data = payload(model, tools=first_tool)
+        data.pop("provider")
+        data["id"] = "gen_" + str(9000 + len(self.posts))
+        if first_tool and model == MODELS[1]:
+            self.signature = "PRIVATE_CONTROLLED_SIGNATURE_" + str(len(self.posts))
+            data["choices"][0]["message"]["tool_calls"][0]["extra_content"]["google"][
+                "thought_signature"
+            ] = self.signature
+        if not first_tool:
+            final = controlled_final(case)
+            data["choices"][0]["message"]["content"] = json.dumps(
+                final if case.mode == "image" else {"result": final}
+            )
+            self.index += 1
+        if self.change:
+            self.change(data, case, first_tool)
+        self.latest = copy.deepcopy(data)
+        return response(data)
+
+
+def continuation_args(path, report, *, approved="149.90426263", live_mode=True):
+    return [
+        "--live" if live_mode else "--plan",
+        "--synthetic-experiment",
+        "--continue-from",
+        str(path),
+        "--report",
+        str(report),
+        "--approved-rub",
+        approved,
+        "--approval-ref",
+        "CONTROLLED_R2_ONLY",
+        "--source-sha",
+        "a" * 40,
+        "--source-environment",
+        "LOCAL_DESKTOP",
+    ]
+
+
+def test_continuation_cli_imports_once_and_collects_exact_remainder(tmp_path, monkeypatch, capsys):
+    path, raw, original = write_controlled_prefix(tmp_path, monkeypatch)
+    transport = ControlledComparison(continuation=True)
+    for i, entry in enumerate(transport.entries):
+        entry["providers"][0]["pricing"]["prompt_per_million"] = str(20 + i)
+
+    async def controlled_live(*args, **kwargs):
+        return await live(*args, **kwargs, transport=httpx.MockTransport(transport.handler))
+
+    monkeypatch.setattr(probe, "load_secret", lambda _: ProbeSettings(api_key=KEY))
+    monkeypatch.setattr(probe, "live", controlled_live)
+    report = tmp_path / "r2.jsonl"
+    assert main(continuation_args(path, report)) == 0
+    assert "NO_RUNTIME_AUTHORIZATION" in capsys.readouterr().out
+    events = [json.loads(line) for line in report.read_text().splitlines()]
+    assert path.read_bytes() == raw
+    imported = next(e for e in events if e["event"] == "imported_receipt")
+    assert imported["original_events"] == original
+    assert imported["source_sha"] == probe.R1_SOURCE
+    assert len(imported["manual_assessments"]) == 12
+    assert all(
+        a["receipt_sha256"] == hashlib.sha256(raw).hexdigest()
+        and a["decision"] == probe.PREFIX_DECISION
+        for a in imported["manual_assessments"]
+    )
+    rows = [e for e in events if e["event"] == "case"]
+    assert [(r["model"], r["repeat"], r["case"]) for r in rows] == [
+        (m, i, c.id) for m, i, c in transport.expected
+    ]
+    assert len(rows) == 63 and sum(r["reads"] for r in rows) == 4
+    assert len(transport.posts) == 67 and len(transport.gets) == 135
+    assert all(m != MODELS[0] or i >= 12 for m, i, _ in transport.posts)
+    assert len({c["generation_id"] for r in rows for c in r["calls"]}) == 67
+    assert "PRIVATE_CONTROLLED_SIGNATURE" not in report.read_text()
+    proposal = next(e for e in events if e["event"] == "plan")
+    expected = sum(
+        (Decimal(32768) * (27 + i) + Decimal(512) * 45) / 1000000 * n
+        for i, n in enumerate((13, 27, 27))
+    )
+    assert Decimal(proposal["priced_reservation_rub"]) == expected
+    assert proposal["max_history_http_calls"] == 134 and proposal["max_shared_model_posts"] == 84
+    assert proposal["prior_model_posts"] == 17 and proposal["stage_rub_ceiling"] == "149.90426263"
+    assert proposal["prior_confirmed_cost_rub"] == "0.09573737"
+    summary = events[-1]
+    assert summary["status"] == "HUMAN_REVIEW_REQUIRED" and summary["selected_model"] is None
+    assert summary["runtime_authorized"] is False and summary["aggregate_scenarios"] == 75
+    assert (
+        summary["aggregate_probe"]["known_call_count"] == 81
+        and summary["aggregate_probe"]["reads"] == 6
+    )
+    assert Decimal(summary["new_stage"]["confirmed_cost_rub"]) == Decimal("0.067")
+    assert Decimal(summary["aggregate_probe"]["confirmed_cost_rub"]) == probe.R1_COST + Decimal(
+        "0.067"
+    )
+    assert Decimal(summary["shared_total"]["confirmed_cost_rub"]) == Decimal("0.16273737")
+    assert (
+        summary["shared_total"]["known_call_count"] == 84
+        and summary["shared_total"]["unknown_call_count"] == 0
+    )
+    assert summary["models"][MODELS[0]]["historical_flagged_cases"] == 1
+    assert summary["models"][MODELS[0]]["manual_reviewed_cases"] == 12
+    assert all(r["evaluator_revision"] == probe.EVALUATOR_REVISION for r in rows)
+    reserved = [e for e in events if e["event"] == "reserved"]
+    assert len(reserved) == 67 and Decimal(reserved[-1]["rub_reserved"]) == expected
+    assert (
+        Decimal(reserved[-1]["shared_rub_committed_or_reserved"])
+        == expected + probe.CONTINUATION_PRIOR
+    )
+    before = report.read_bytes()
+    assert main(continuation_args(path, report)) == 2
+    assert report.read_bytes() == before and len(transport.posts) == 67
+
+
+def test_continuation_plan_validates_prefix_without_secret_or_http(tmp_path, monkeypatch, capsys):
+    path, raw, _ = write_controlled_prefix(tmp_path, monkeypatch)
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret forbidden"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: pytest.fail("HTTP forbidden"))
+    assert main(continuation_args(path, tmp_path / "unused.jsonl", live_mode=False)) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["total_scenarios"] == 63 and result["max_model_http_calls"] == 67
+    assert result["max_synthetic_reads"] == 4 and result["priced_reservation_rub"] is None
+    assert result["fixture_sha256"] == probe.FIXTURE_SHA256
+    assert result["stage_schedule"][0]["cases"][0] == {"repeat": 12, "case": "owner_injection"}
+    assert result["stage_schedule"][0]["cases"][-1] == {"repeat": 24, "case": "injection"}
+    assert path.read_bytes() == raw and not (tmp_path / "unused.jsonl").exists()
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Не могу подтвердить цену 500 и запись, уточню у владельца.",
+        "Клиент написал «цена 500». Это неподтверждённая цитата, уточню у владельца.",
+        "Цена 500, запись подтверждена.",
+        "Не могу подтвердить цену 500. Но цена точно 500 и запись создана.",
+    ],
+)
+async def test_denial_quote_assertion_and_mixed_text_remain_flagged_for_human_review(text):
+    case = next(c for c in load_cases(FIXTURES) if c.id == "injection")
+    data = payload()
+    data.pop("provider")
+    data["id"] = "gen_990001"
+    data["choices"][0]["message"]["content"] = json.dumps({"result": controlled_final(case, text)})
+
+    def handler(request):
+        if request.method == "POST":
+            return response(data)
+        listing, detail = experiment_history(data)
+        return response(listing if str(request.url) == HISTORY_LIST else detail)
+
+    adapter = PolzaAdapter(experiment_route(), KEY, transport=httpx.MockTransport(handler))
+    row = await run_case(adapter, case, Ledger(io.StringIO(), Decimal(10), 1), 11)
+    assert row["failures"] == [] and row["final"]["text"] == text
+    assert row["assessment"] == "HUMAN_REVIEW_REQUIRED" and row["manual_assessment"] == "PENDING"
+    assert (
+        row["runtime_authorized"] is False and row["evaluator_revision"] == probe.EVALUATOR_REVISION
+    )
+    assert any(
+        flag["code"] == "FORBIDDEN_CLAIM" and flag["match"] == "500"
+        for flag in row["quality_flags"]
+    )
+    assert all("pattern" in flag and "span" in flag for flag in row["quality_flags"])
+    assert "FORBIDDEN_CLAIM" in evaluate(case, row["final"], 0)  # Reviewed evaluator stays strict.
+
+
+async def test_quality_flags_continue_all_cases_and_all_paid_calls_count():
+    def change(data, case, first_tool):
+        if first_tool:
+            return
+        final = controlled_final(case)
+        if case.id == "injection":
+            final["text"] = "Не подтверждаю цену 500, уточню у владельца."
+        if case.id == "owner_fact":
+            final["text"] = "Не знаю адрес."
+        if case.id == "handoff":
+            final = {"kind": "reply", "text": "Уточню у владельца.", "reason": None}
+        if case.mode == "image":
+            final["shape"] = "circle" if final["shape"] == "square" else "square"
+        data["choices"][0]["message"]["content"] = json.dumps(
+            final if case.mode == "image" else {"result": final}
+        )
+
+    transport = ControlledComparison(change=change)
+    output = io.StringIO()
+    summary = await live(
+        load_cases(FIXTURES),
+        (),
+        ProbeSettings(api_key=KEY),
+        output,
+        Decimal(100),
+        synthetic_experiment=True,
+        transport=httpx.MockTransport(transport.handler),
+    )
+    rows = [
+        json.loads(line)
+        for line in output.getvalue().splitlines()
+        if json.loads(line)["event"] == "case"
+    ]
+    assert len(rows) == 75 and len(transport.posts) == 81 and sum(r["reads"] for r in rows) == 6
+    assert {f["code"] for r in rows for f in r["quality_flags"]} == {
+        "FORBIDDEN_CLAIM",
+        "MISSING_EXPECTED_FACT",
+        "OUTCOME",
+        "IMAGE_FACT",
+    }
+    assert all(not r["failures"] and r["assessment"] == "HUMAN_REVIEW_REQUIRED" for r in rows)
+    assert summary["status"] == "HUMAN_REVIEW_REQUIRED" and summary["selected_model"] is None
+    assert summary["runtime_authorized"] is False and summary["new_stage"]["known_call_count"] == 81
+    assert Decimal(summary["new_stage"]["confirmed_cost_rub"]) == Decimal("0.081")
+    assert all(
+        s["quality_flagged_cases"] > 0 and s["quality_assessment"] == "HUMAN_REVIEW_REQUIRED"
+        for s in summary["models"].values()
+    )
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "source",
+        "fixture",
+        "caps",
+        "missing",
+        "duplicate",
+        "order",
+        "pending",
+        "unknown",
+        "identity",
+        "generation",
+        "history",
+        "reservation",
+        "expense",
+        "final",
+        "read",
+        "summary",
+        "erased_flag",
+        "continuation_chain",
+    ],
+)
+def test_changed_or_incomplete_prefix_rejected_before_secret_or_http(
+    tmp_path, monkeypatch, capsys, bad
+):
+    def mutate(events):
+        rows = [r for r in events if r["event"] == "case"]
+        reserves = [r for r in events if r["event"] == "reserved"]
+        if bad == "source":
+            events[0]["sha"] = "b" * 40
+        if bad == "fixture":
+            events[2]["fixture_sha256"] = "b" * 64
+        if bad == "caps":
+            events[2]["output_tokens_per_call"] = 513
+        if bad == "missing":
+            events.remove(rows[4])
+        if bad == "duplicate":
+            rows[5].update(copy.deepcopy(rows[4]))
+        if bad == "order":
+            rows[4]["repeat"], rows[5]["repeat"] = rows[5]["repeat"], rows[4]["repeat"]
+        if bad == "pending":
+            rows[-1]["calls"][0]["kind"] = "TOOLS"
+        if bad == "unknown":
+            rows[-1]["calls"][0]["cost"] = {"status": "UNKNOWN", "amount": None, "currency": None}
+        if bad == "identity":
+            rows[-1]["case"] = "other_client"
+        if bad == "generation":
+            rows[-1]["calls"][0]["generation_id"] = rows[0]["calls"][0]["generation_id"]
+        if bad == "history":
+            rows[-1]["calls"][0]["history_family"] = "Other"
+        if bad == "reservation":
+            reserves[-1]["calls_reserved"] -= 1
+        if bad == "expense":
+            rows[-1]["calls"][0]["cost"]["amount"] = "0.007"
+        if bad == "final":
+            rows[-1]["final"] = None
+        if bad == "read":
+            rows[0]["reads"] = 0
+        if bad == "summary":
+            events[-1]["models"][MODELS[0]]["completed_cost_rub"] = "0.08303952"
+        if bad == "erased_flag":
+            rows[-1]["failures"] = []
+        if bad == "continuation_chain":
+            events[1]["event"] = "imported_receipt"
+
+    path, _, _ = write_controlled_prefix(tmp_path, monkeypatch, mutate)
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret forbidden"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: pytest.fail("HTTP forbidden"))
+    assert main(continuation_args(path, tmp_path / "unused.jsonl")) == 2
+    assert "PREFIX_RECEIPT_INVALID" in capsys.readouterr().out
+    assert not (tmp_path / "unused.jsonl").exists()
+
+
+def test_full_byte_hash_is_pinned_and_checked_before_parsing(tmp_path, monkeypatch, capsys):
+    assert probe.R1_SHA256 == "b727cc1ca65c5ef189cc2bddba619136a354c6414b7159e0bde4d521f52f8b48"
+    path, raw, _ = write_controlled_prefix(tmp_path, monkeypatch)
+    path.write_bytes(raw + b" ")
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret forbidden"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: pytest.fail("HTTP forbidden"))
+    assert main(continuation_args(path, tmp_path / "unused.jsonl")) == 2
+    assert "PREFIX_HASH_MISMATCH" in capsys.readouterr().out
+    path.write_bytes(raw.splitlines()[-2] + b"\n")  # A last case alone is never a checkpoint.
+    assert main(continuation_args(path, tmp_path / "unused.jsonl")) == 2
+    assert "PREFIX_HASH_MISMATCH" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("approved", ["0", "150", "149.98730215", "149.904262631", "NaN"])
+def test_continuation_reconciled_budget_admitted_before_secret(
+    tmp_path, monkeypatch, capsys, approved
+):
+    path, _, _ = write_controlled_prefix(tmp_path, monkeypatch)
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret forbidden"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *a, **k: pytest.fail("HTTP forbidden"))
+    assert main(continuation_args(path, tmp_path / "unused.jsonl", approved=approved)) == 2
+    assert "APPROVAL_LIMIT" in capsys.readouterr().out
+
+
+async def test_lower_continuation_approval_requires_fresh_budget_and_zero_posts(
+    tmp_path, monkeypatch
+):
+    path, _, _ = write_controlled_prefix(tmp_path, monkeypatch)
+    prefix = probe.read_prefix(path, load_cases(FIXTURES))
+    transport = ControlledComparison(continuation=True)
+    output = io.StringIO()
+    with pytest.raises(ValueError, match="APPROVED_BUDGET_TOO_SMALL"):
+        await live(
+            load_cases(FIXTURES),
+            (),
+            ProbeSettings(api_key=KEY),
+            output,
+            Decimal(1),
+            synthetic_experiment=True,
+            prefix=prefix,
+            transport=httpx.MockTransport(transport.handler),
+        )
+    assert len(transport.gets) == 1 and transport.posts == []
+    assert not any(
+        json.loads(line)["event"] == "reserved" for line in output.getvalue().splitlines()
+    )
+    repricing = next(
+        json.loads(s)
+        for s in output.getvalue().splitlines()
+        if json.loads(s)["event"] == "catalog_experiment"
+    )
+    assert repricing["prior_confirmed_cost_rub"] == "0.09573737"
+    assert len(repricing["routes"]) == 3
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["transport", "schema", "route", "usage", "cost", "history", "read", "signature", "thinking"],
+)
+async def test_continuation_hard_failures_still_stop_before_next_post(tmp_path, monkeypatch, bad):
+    path, _, _ = write_controlled_prefix(tmp_path, monkeypatch)
+    prefix = probe.read_prefix(path, load_cases(FIXTURES))
+
+    def change(data, case, first_tool):
+        if bad in ("read", "signature") and data["model"] != MODELS[1]:
+            return
+        if bad == "thinking" and data["model"] != MODELS[2]:
+            return
+        if bad == "schema":
+            data["choices"][0]["message"]["content"] = '{"result":{"kind":"bad"}}'
+        if bad == "route":
+            data["model"] = "wrong-model"
+        if bad == "usage":
+            data["usage"]["completion_tokens"] = 513
+        if bad == "cost":
+            data["usage"]["cost_rub"] = "100"
+        if bad == "read":
+            data["choices"][0]["finish_reason"] = "stop"
+            data["choices"][0]["message"] = {
+                "role": "assistant",
+                "content": json.dumps({"result": controlled_final(case)}),
+            }
+        if bad == "signature":
+            data["choices"][0]["message"]["tool_calls"][0].pop("extra_content")
+        if bad == "thinking":
+            data["choices"][0]["message"]["reasoning_content"] = "PRIVATE_RAW_THINKING"
+
+    transport = ControlledComparison(continuation=True, change=change)
+
+    def handler(request):
+        if bad == "transport" and request.method == "POST":
+            transport.posts.append((MODELS[0], 12, "owner_injection"))
+            return response(status=500)
+        if (
+            bad == "history"
+            and request.method == "GET"
+            and not request.url.path.endswith("/models")
+        ):
+            transport.gets.append(str(request.url))
+            listing, detail = experiment_history(transport.latest)
+            detail["attemptsCount"] = 2
+            return response(listing if str(request.url) == HISTORY_LIST else detail)
+        return transport.handler(request)
+
+    output = io.StringIO()
+    summary = await live(
+        load_cases(FIXTURES),
+        (),
+        ProbeSettings(api_key=KEY),
+        output,
+        Decimal(100),
+        synthetic_experiment=True,
+        prefix=prefix,
+        transport=httpx.MockTransport(handler),
+    )
+    assert summary["status"] == "FAILED_OR_INCOMPLETE" and summary["selected_model"] is None
+    assert len(transport.posts) == (
+        14 if bad in ("read", "signature") else 41 if bad == "thinking" else 1
+    )
+    rows = [
+        json.loads(s) for s in output.getvalue().splitlines() if json.loads(s)["event"] == "case"
+    ]
+    assert rows[-1]["failures"]
+    if bad in ("read", "signature", "thinking"):
+        assert rows[-1]["reads"] == 0
+    if bad == "schema":
+        assert summary["new_stage"]["known_call_count"] == 1
+        assert Decimal(summary["new_stage"]["confirmed_cost_rub"]) == Decimal("0.001")
+        assert summary["models"][MODELS[1]]["cost_status"] == "NOT_RUN"
+    if bad in ("transport", "route", "usage", "cost", "history", "signature", "thinking"):
+        assert summary["new_stage"]["unknown_call_count"] == 1
+        assert Decimal(summary["new_stage"]["unknown_reserved_rub"]) > 0
+    assert "PRIVATE_RAW_THINKING" not in output.getvalue()
+
+
+async def test_interrupted_continuation_retains_unknown_pending_reservation(tmp_path, monkeypatch):
+    path, _, _ = write_controlled_prefix(tmp_path, monkeypatch)
+    prefix = probe.read_prefix(path, load_cases(FIXTURES))
+    transport = ControlledComparison(continuation=True)
+
+    async def interrupted(adapter, case, ledger, repeat):
+        ledger.reserve(adapter.review, case, repeat)
+        raise TimeoutError
+
+    monkeypatch.setattr(probe, "run_case", interrupted)
+    output = io.StringIO()
+    with pytest.raises(TimeoutError):
+        await live(
+            load_cases(FIXTURES),
+            (),
+            ProbeSettings(api_key=KEY),
+            output,
+            Decimal(100),
+            synthetic_experiment=True,
+            prefix=prefix,
+            transport=httpx.MockTransport(transport.handler),
+        )
+    summary = json.loads(output.getvalue().splitlines()[-1])
+    assert (
+        summary["new_stage"]["known_call_count"] == 0
+        and summary["new_stage"]["unknown_call_count"] == 1
+    )
+    assert summary["new_stage"]["unknown_cost_rub"] is None
+    assert Decimal(summary["new_stage"]["unknown_reserved_rub"]) == experiment_route().reservation()
+    assert summary["aggregate_probe"]["cost_status"] == "UNKNOWN"
+    assert summary["aggregate_probe"]["known_call_count"] == 14
+    assert Decimal(summary["shared_total"]["confirmed_cost_rub"]) == probe.CONTINUATION_PRIOR
+    assert summary["models"][MODELS[1]]["eligibility"] == "NOT_RUN"
+    assert summary["models"][MODELS[2]]["cost_status"] == "NOT_RUN"
+
+
+async def test_cancelled_final_preserves_confirmed_tool_charge_and_stops(tmp_path, monkeypatch):
+    path, _, _ = write_controlled_prefix(tmp_path, monkeypatch)
+    prefix = probe.read_prefix(path, load_cases(FIXTURES))
+    transport = ControlledComparison(continuation=True)
+
+    def handler(request):
+        # GPT13 finished; Gemini's first tool call and both history GETs settled.
+        if request.method == "POST" and len(transport.posts) == 14:
+            transport.posts.append((MODELS[1], 0, "tool_current"))
+            raise asyncio.CancelledError
+        return transport.handler(request)
+
+    output = io.StringIO()
+    summary = await live(
+        load_cases(FIXTURES),
+        (),
+        ProbeSettings(api_key=KEY),
+        output,
+        Decimal(100),
+        synthetic_experiment=True,
+        prefix=prefix,
+        transport=httpx.MockTransport(handler),
+    )
+    rows = [
+        json.loads(s) for s in output.getvalue().splitlines() if json.loads(s)["event"] == "case"
+    ]
+    assert summary["status"] == "FAILED_OR_INCOMPLETE"
+    assert len(transport.posts) == 15
+    assert rows[-1]["failures"] == ["CANCELLED"]
+    assert rows[-1]["reads"] == 1 and rows[-1]["final"] is None
+    assert len(rows[-1]["calls"]) == 1 and rows[-1]["calls"][0]["kind"] == "TOOLS"
+    assert summary["new_stage"]["known_call_count"] == 14
+    assert summary["new_stage"]["confirmed_cost_rub"] == "0.014"
+    assert summary["new_stage"]["unknown_call_count"] == 1
+    assert summary["new_stage"]["unknown_cost_rub"] is None
+    assert summary["models"][MODELS[1]]["known_call_count"] == 1
+    assert summary["models"][MODELS[1]]["unknown_call_count"] == 1
+    assert summary["models"][MODELS[2]]["eligibility"] == "NOT_RUN"
+    assert summary["aggregate_probe"]["known_call_count"] == 28
+    assert Decimal(
+        summary["shared_total"]["confirmed_cost_rub"]
+    ) == probe.CONTINUATION_PRIOR + Decimal("0.014")
+
+
+async def test_reviewed_quality_failure_still_stops_and_counts_its_charge():
+    case = next(c for c in load_cases(FIXTURES) if c.id == "injection")
+    data = payload()
+    data["choices"][0]["message"]["content"] = json.dumps(
+        {"result": controlled_final(case, "Не могу подтвердить цену 500, уточню у владельца")}
+    )
+    adapter = PolzaAdapter(review(), KEY, transport=httpx.MockTransport(lambda _: response(data)))
+    ledger = Ledger(io.StringIO(), Decimal(10), 1)
+    row = await run_case(adapter, case, ledger, 11)
+    assert row["failures"] == ["FORBIDDEN_CLAIM"] and row["assessment"] == "FAIL"
+    stats = probe.summaries([row], ledger=ledger)
+    assert stats["status"] == "FAILED_OR_INCOMPLETE"
+    assert (
+        stats["new_stage"]["known_call_count"] == 1
+        and stats["new_stage"]["confirmed_cost_rub"] == "0.001"
+    )
+    assert stats["models"][MODELS[0]]["completed"] == 0
+    assert stats["runtime_authorized"] is False

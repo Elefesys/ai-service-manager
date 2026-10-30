@@ -14,7 +14,7 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | IN_PROGRESS / C4 QUALITY-CONTINUATION-R1. Полный R1 receipt b727cc1c сверён: GPT12 cases/14 confirmed calls/2 READ, manual12 PASS; regex false positive в injection. ExpenseR1 0.08303952, shared prior0.09573737, остаток149.90426263 из150. C4: heuristic flags для human review, all-call accounting, один exact reviewed prefix →63 новых cases/≤67 POST/4 READ без replay; aggregate75/81/6. Sourceb1ff8f1/CI40915999616 SUCCESS11/11 unchanged. Новый paid запуск HOLD до возврата/review/CI; C1/C2/C3/C5/C6/C8 HOLD |
+| M4.2-PROBE | REVIEW / C4 QUALITY-CONTINUATION-R1 candidate от e93c156b5ddcf7dcc2351a21755eb759a6f99e80. 443 targeted PASS; Ruff/format/mypy71/plan/diff PASS. Controlled continuation: 63 новых cases/67 POST/4 READ/134 history GET +1 catalog, aggregate75/81/6; original12 сохранены без replay, heuristic flags требуют human review, все confirmed calls учтены. Exact R1 hash b727cc1c проверяется до secret/HTTP; shared prior0.09573737, новый stage≤149.90426263. Готовая Windows команда с прежним key/env/R1 и exclusive R2 — в runbook. C0 real-receipt replay/review → один full CI → owner paid; C4 paid/full CI NOT RUN, PR39/main без изменений. C1/C2/C3/C5/C6/C8 HOLD |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
 | M4.3-QUALITY | TODO; независимый scoped C8/eval |

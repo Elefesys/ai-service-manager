@@ -9,8 +9,9 @@ import json
 import math
 import re
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Literal, TextIO
 
@@ -19,6 +20,7 @@ from PIL import Image
 from pydantic import Field, TypeAdapter, ValidationError
 
 from asm.ai.contracts import (
+    CONVERSATION_RESULT,
     DTO,
     GatewayConfig,
     GatewayRequest,
@@ -33,6 +35,7 @@ from asm.ai.polza import (
     CATALOG,
     CONVERSATION_WIRE_REVISION,
     EXPERIMENT_PROVIDERS,
+    GENERATION_ID,
     HISTORY_BYTES,
     HISTORY_SECONDS,
     INPUT_BYTES,
@@ -61,6 +64,50 @@ STAGE_RUB_CEILING = RUB_CEILING - PRIOR_CONFIRMED_RUB
 DURATION = 1800.0
 CASE_SECONDS = 60.0
 REPEATS = ("unknown_price", "unknown_booking", "injection")
+FIXTURE_SHA256 = "7abd25f1e1f08e51eacc3a68975e6099c942d33fad37376366dfdef6c7e025b2"
+EVALUATOR_REVISION = "synthetic_quality_flags_v2"
+R1_EVALUATOR_REVISION = "b1ff8f1_regex_fail_fast_v1"
+R1_SOURCE = "b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc"
+R1_SHA256 = "b727cc1ca65c5ef189cc2bddba619136a354c6414b7159e0bde4d521f52f8b48"
+R1_APPROVAL = "C0-M4.2-EXECUTABLE-EVAL-ACCEPT-R1:" + R1_SOURCE + ":CI40915999616"
+R1_COST = Decimal("0.08303952")
+CONTINUATION_PRIOR = PRIOR_CONFIRMED_RUB + R1_COST
+CONTINUATION_CEILING = RUB_CEILING - CONTINUATION_PRIOR
+PREFIX_DECISION = "e93c156b5ddcf7dcc2351a21755eb759a6f99e80:M4.2-PROBE-QUALITY-CONTINUATION-R1"
+
+
+@dataclass(frozen=True)
+class ReviewedPrefix:
+    """Only the exact C0-reviewed R1 receipt; never an arbitrary resume checkpoint."""
+
+    events: tuple[dict[str, Any], ...]
+
+    @property
+    def rows(self) -> list[dict[str, Any]]:
+        return [e for e in self.events if e["event"] == "case"]
+
+    def receipt(self) -> dict[str, Any]:
+        return {
+            "event": "imported_receipt",
+            "receipt_sha256": R1_SHA256,
+            "source_sha": R1_SOURCE,
+            "evaluator_revision": R1_EVALUATOR_REVISION,
+            "original_events": self.events,
+            "manual_assessments": [
+                {
+                    "model": r["model"],
+                    "repeat": r["repeat"],
+                    "case": r["case"],
+                    "verdict": "SEMANTIC_PASS_FOR_THIS_SAVED_FINAL_ONLY",
+                    "authority": "C0",
+                    "decision": PREFIX_DECISION,
+                    "receipt_sha256": R1_SHA256,
+                    "source_sha": R1_SOURCE,
+                }
+                for r in self.rows
+            ],
+            "runtime_authorized": False,
+        }
 
 
 class ReadArgs(DTO):
@@ -141,6 +188,227 @@ def schedule(cases: tuple[Case, ...]) -> tuple[Case, ...]:
     )
 
 
+def read_prefix(path: Path, cases: tuple[Case, ...]) -> ReviewedPrefix:
+    """Hash the complete bounded input before inspecting it or loading any secret."""
+    with path.open("rb") as source:
+        raw = source.read(65537)
+    if len(raw) > 65536 or hashlib.sha256(raw).hexdigest() != R1_SHA256:
+        raise ValueError("PREFIX_HASH_MISMATCH")
+    try:
+        events = tuple(strict_json(line) for line in raw.decode("utf-8").splitlines())
+        if len(events) != 30 or any(type(e) is not dict for e in events):
+            raise ValueError
+        source, catalog_event, proposal = events[:3]
+        if (
+            source["event"] != "source"
+            or source["sha"] != R1_SOURCE
+            or source["environment"] != "LOCAL_DESKTOP"
+            or source["approval_ref"] != R1_APPROVAL
+            or source["admission"] != "SYNTHETIC_EXPERIMENT"
+            or source["runtime_authorized"] is not False
+            or Decimal(source["prior_confirmed_cost_rub"]) != PRIOR_CONFIRMED_RUB
+            or Decimal(source["shared_total_budget_rub"]) != RUB_CEILING
+            or Decimal(source["stage_approved_rub"]) != STAGE_RUB_CEILING
+            or source["prior_model_posts"] != PRIOR_MODEL_POSTS
+            or catalog_event["event"] != "catalog_experiment"
+            or catalog_event["admission"] != "SYNTHETIC_EXPERIMENT"
+            or catalog_event["billing_status"] != "CONDITIONAL_ESTIMATE"
+            or Decimal(catalog_event["prior_confirmed_cost_rub"]) != PRIOR_CONFIRMED_RUB
+            or proposal["event"] != "plan"
+            or proposal["admission"] != "SYNTHETIC_EXPERIMENT"
+            or proposal["billing_status"] != "CONDITIONAL_ESTIMATE"
+            or proposal["status"] != "SYNTHETIC_EXPERIMENT / EVAL_ONLY"
+            or proposal["runtime_authorized"] is not False
+            or proposal["model_selected"] is not False
+            or proposal["fixture_sha256"] != FIXTURE_SHA256
+            or fingerprint([c.model_dump(mode="json") for c in cases]) != FIXTURE_SHA256
+            or proposal["models"] != list(MODELS)
+            or proposal["total_scenarios"] != 75
+            or proposal["max_model_http_calls"] != 81
+            or proposal["max_synthetic_reads"] != 6
+            or proposal["input_tokens_per_call"] != INPUT_TOKENS
+            or proposal["output_tokens_per_call"] != OUTPUT_TOKENS
+            or proposal["wire_input_bytes_per_call"] != INPUT_BYTES
+            or proposal["wire_output_bytes_per_call"] != OUTPUT_BYTES
+            or proposal["case_seconds"] != CASE_SECONDS
+            or proposal["overall_seconds"] != DURATION
+            or proposal["history_bytes_per_get"] != HISTORY_BYTES
+            or proposal["history_seconds_per_post"] != HISTORY_SECONDS
+            or proposal["max_history_http_calls"] != 162
+            or proposal["catalog_http_calls"] != 1
+            or proposal["prior_model_posts"] != 3
+            or proposal["max_shared_model_posts"] != 84
+            or Decimal(proposal["prior_confirmed_cost_rub"]) != PRIOR_CONFIRMED_RUB
+            or Decimal(proposal["approved_rub"]) != STAGE_RUB_CEILING
+            or Decimal(proposal["stage_rub_ceiling"]) != STAGE_RUB_CEILING
+            or proposal["route_reviews"] != []
+            or proposal["reviewed_routes"] != []
+            or proposal["experimental_routes"] != catalog_event["routes"]
+        ):
+            raise ValueError
+        routes = catalog_event["routes"]
+        if len(routes) != 3:
+            raise ValueError
+        reserves = []
+        for model, selector, route in zip(MODELS, EXPERIMENT_PROVIDERS, routes, strict=True):
+            if (
+                route["model"] != model
+                or route["provider_only"] != selector
+                or route["admission"] != "SYNTHETIC_EXPERIMENT"
+                or route["eligibility"] != "EVAL_ONLY"
+                or route["runtime_authorized"] is not False
+                or route["output_cap_parameter"] not in ("max_tokens", "max_completion_tokens")
+                or route["reasoning_wire"]
+                != ({"effort": "none", "enabled": False} if model == MODELS[2] else None)
+                or not re.fullmatch(r"[0-9a-f]{64}", route["catalog_sha256"])
+            ):
+                raise ValueError
+            rates = [Decimal(v) for v in route["rates_rub"]]
+            if len(rates) != 3 or any(not v.is_finite() or v < 0 for v in rates):
+                raise ValueError
+            reserve = max(
+                Decimal("0.000000001"),
+                (
+                    (INPUT_TOKENS * rates[0] + OUTPUT_TOKENS * rates[1]) / 1000000 + rates[2]
+                ).quantize(Decimal("0.000000001"), rounding=ROUND_CEILING),
+            )
+            if reserve != Decimal(route["call_reservation_rub"]):
+                raise ValueError
+            reserves.append(reserve)
+        total = sum(reserves) * 27
+        if (
+            total != Decimal(proposal["priced_reservation_rub"])
+            or total != Decimal(catalog_event["priced_reservation_rub"])
+            or total > STAGE_RUB_CEILING
+            or proposal["pricing_catalogs"] != [r["catalog_sha256"] for r in routes]
+        ):
+            raise ValueError
+        position, attempts, expense = 3, 0, Decimal(0)
+        generations: set[str] = set()
+        rows = []
+        for repeat, case in enumerate(schedule(cases)[:12]):
+            for _ in range(case.max_calls):
+                reservation = events[position]
+                position += 1
+                attempts += 1
+                if (
+                    reservation["event"] != "reserved"
+                    or reservation["model"] != MODELS[0]
+                    or reservation["case"] != case.id
+                    or type(reservation["repeat"]) is not int
+                    or reservation["repeat"] != repeat
+                    or type(reservation["calls_reserved"]) is not int
+                    or reservation["calls_reserved"] != attempts
+                    or Decimal(reservation["rub_reserved"]) != reserves[0] * attempts
+                    or Decimal(reservation["shared_rub_committed_or_reserved"])
+                    != PRIOR_CONFIRMED_RUB + reserves[0] * attempts
+                    or reservation["cost_status"] != "UNKNOWN"
+                ):
+                    raise ValueError
+            row = events[position]
+            position += 1
+            if (
+                row["event"] != "case"
+                or row["model"] != MODELS[0]
+                or row["case"] != case.id
+                or type(row["repeat"]) is not int
+                or row["repeat"] != repeat
+                or row["mode"] != case.mode
+                or row["critical"] is not case.critical
+                or row["upstream"] != EXPERIMENT_PROVIDERS[0]
+                or row["provider_only"] != EXPERIMENT_PROVIDERS[0]
+                or row["upstream_semantics"] != "REQUEST_SELECTOR_NOT_OBSERVATION"
+                or row["prompt_revision"] != "conversation_v1"
+                or row["schema_revision"] != "conversation_result_v1"
+                or row["wire_schema_revision"] != CONVERSATION_WIRE_REVISION
+                or type(row["seconds"]) not in (int, float)
+                or not 0 <= row["seconds"] <= CASE_SECONDS
+                or type(row["reads"]) is not int
+                or row["reads"] != (1 if case.mode == "tool" else 0)
+                or len(row["calls"]) != case.max_calls
+                or row["failures"] != (["FORBIDDEN_CLAIM"] if repeat == 11 else [])
+                or row["assessment"]
+                != ("FAIL" if repeat == 11 else "AUTOMATED_CHECKS_PASS / HUMAN_REVIEW_REQUIRED")
+            ):
+                raise ValueError
+            CONVERSATION_RESULT.validate_python(row["final"])
+            if evaluate(case, row["final"], row["reads"]) != row["failures"]:
+                raise ValueError
+            for index, call in enumerate(row["calls"]):
+                is_tool = case.mode == "tool" and index == 0
+                identifier = call["generation_id"]
+                if (
+                    call["kind"] != ("TOOLS" if is_tool else "FINAL")
+                    or call["error"] is not None
+                    or not isinstance(identifier, str)
+                    or not re.fullmatch(GENERATION_ID, identifier)
+                    or identifier in generations
+                    or call["provider_field_state"] != "ABSENT"
+                    or call["requested_provider"] != EXPERIMENT_PROVIDERS[0]
+                    or call["observed_model"] != MODELS[0]
+                    or call["observed_body_provider"] is not None
+                    or call["observed_provider"] is not None
+                    or call["history_family"] != "OpenAI"
+                    or call["history_family_evidence"] != "PRIOR_OWNER_OBSERVATION"
+                    or call["route_evidence_source"] != "HISTORY_LIST_DETAIL"
+                    or call["route_variant"] != "NOT_OBSERVED"
+                    or type(call["history_gets"]) is not int
+                    or call["history_gets"] != 2
+                    or call["finish_reason"] != ("tool_calls" if is_tool else "stop")
+                ):
+                    raise ValueError
+                generations.add(identifier)
+                usage, cost = call["usage"], call["cost"]
+                if (
+                    any(
+                        type(usage[k]) is not int or not 0 <= usage[k] <= limit
+                        for k, limit in (
+                            ("input_tokens", INPUT_TOKENS),
+                            ("output_tokens", OUTPUT_TOKENS),
+                        )
+                    )
+                    or call["reasoning_tokens"] is not None
+                    and (
+                        type(call["reasoning_tokens"]) is not int
+                        or not 0 <= call["reasoning_tokens"] <= usage["output_tokens"]
+                    )
+                    or type(cost["amount"]) is not str
+                    or cost["status"] != "CONFIRMED"
+                    or cost["currency"] != "RUB"
+                ):
+                    raise ValueError
+                amount = Decimal(cost["amount"])
+                if not amount.is_finite() or not 0 <= amount <= reserves[0]:
+                    raise ValueError
+                expense += amount
+            rows.append(row)
+        if (
+            position != len(events) - 1
+            or attempts != 14
+            or len(generations) != 14
+            or expense != R1_COST
+            or events[-1] != r1_summary(rows)
+        ):
+            raise ValueError
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        IndexError,
+        AttributeError,
+        InvalidOperation,
+        RecursionError,
+    ):
+        raise ValueError("PREFIX_RECEIPT_INVALID") from None
+    return ReviewedPrefix(events)
+
+
+def remaining_schedule(
+    cases: tuple[Case, ...], model: str, prefix: ReviewedPrefix | None
+) -> tuple[tuple[int, Case], ...]:
+    return tuple(enumerate(schedule(cases)))[12 if prefix and model == MODELS[0] else 0 :]
+
+
 def read_reviews(path: Path) -> tuple[RouteReview, ...]:
     raw = path.read_bytes()
     if len(raw) > 200000:
@@ -182,22 +450,33 @@ def plan(
     reviews: tuple[ProbeRoute, ...] = (),
     *,
     synthetic_experiment: bool = False,
+    prefix: ReviewedPrefix | None = None,
 ) -> dict[str, Any]:
+    if prefix and not synthetic_experiment:
+        raise ValueError("CONTINUATION_REQUIRES_EXPERIMENT")
     if any(isinstance(r, SyntheticRoute) != synthetic_experiment for r in reviews):
         raise ValueError("ADMISSION_MODE_MISMATCH")
     if (
         synthetic_experiment
-        and fingerprint([c.model_dump(mode="json") for c in cases])
-        != "7abd25f1e1f08e51eacc3a68975e6099c942d33fad37376366dfdef6c7e025b2"
+        and fingerprint([c.model_dump(mode="json") for c in cases]) != FIXTURE_SHA256
     ):
         raise ValueError("EXPERIMENT_FIXTURES_CHANGED")
     if reviews:
         validate_reviews(reviews)
     rows = schedule(cases)
-    calls = sum(c.max_calls for c in rows)
-    total_calls = calls * len(MODELS)
-    total = sum((r.reservation() * calls for r in reviews), Decimal(0)) if reviews else None
-    if total_calls > CALL_CEILING or total is not None and total > STAGE_RUB_CEILING:
+    schedules = [remaining_schedule(cases, model, prefix) for model in MODELS]
+    calls_per_model = [sum(c.max_calls for _, c in group) for group in schedules]
+    total_calls = sum(calls_per_model)
+    total = (
+        sum(
+            (r.reservation() * n for r, n in zip(reviews, calls_per_model, strict=True)), Decimal(0)
+        )
+        if reviews
+        else None
+    )
+    prior = CONTINUATION_PRIOR if prefix else PRIOR_CONFIRMED_RUB
+    ceiling = RUB_CEILING - prior
+    if total_calls > (67 if prefix else CALL_CEILING) or total is not None and total > ceiling:
         raise ValueError("PLAN_EXCEEDS_CEILING")
     return {
         "status": "SYNTHETIC_EXPERIMENT / EVAL_ONLY"
@@ -208,14 +487,27 @@ def plan(
         "model_selected": False,
         "fixture_sha256": fingerprint([c.model_dump(mode="json") for c in cases]),
         "models": MODELS,
-        "cases_per_model": len(rows),
-        "total_scenarios": len(rows) * len(MODELS),
-        "base_text_per_model": 20,
+        "cases_per_model": {m: len(g) for m, g in zip(MODELS, schedules, strict=True)}
+        if prefix
+        else len(rows),
+        "total_scenarios": sum(len(g) for g in schedules),
+        "aggregate_scenarios": 75,
+        "aggregate_model_posts": 81,
+        "aggregate_probe_reads": 6,
+        "imported_scenarios": 12 if prefix else 0,
+        "imported_model_posts": 14 if prefix else 0,
+        "prefix_receipt_sha256": R1_SHA256 if prefix else None,
+        "evaluator_revision": EVALUATOR_REVISION if synthetic_experiment else R1_EVALUATOR_REVISION,
+        "stage_schedule": [
+            {"model": m, "cases": [{"repeat": i, "case": c.id} for i, c in g], "max_model_posts": n}
+            for m, g, n in zip(MODELS, schedules, calls_per_model, strict=True)
+        ],
+        "base_text_per_model": {MODELS[0]: 8, MODELS[1]: 20, MODELS[2]: 20} if prefix else 20,
         "critical_repeats_per_model": len(REPEATS),
         "images_per_model": 2,
         "max_model_http_calls": total_calls,
-        "hard_call_ceiling": CALL_CEILING,
-        "max_synthetic_reads": sum(c.mode == "tool" for c in rows) * len(MODELS),
+        "hard_call_ceiling": 67 if prefix else CALL_CEILING,
+        "max_synthetic_reads": sum(c.mode == "tool" for g in schedules for _, c in g),
         "input_tokens_per_call": INPUT_TOKENS,
         "output_tokens_per_call": OUTPUT_TOKENS,
         "total_token_reservation_ceiling": total_calls * (INPUT_TOKENS + OUTPUT_TOKENS),
@@ -228,10 +520,10 @@ def plan(
         "history_bytes_per_get": HISTORY_BYTES,
         "history_seconds_per_post": HISTORY_SECONDS,
         "proposed_rub_ceiling": str(RUB_CEILING),
-        "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
-        "prior_model_posts": PRIOR_MODEL_POSTS,
-        "max_shared_model_posts": PRIOR_MODEL_POSTS + total_calls,
-        "stage_rub_ceiling": str(STAGE_RUB_CEILING),
+        "prior_confirmed_cost_rub": str(prior),
+        "prior_model_posts": PRIOR_MODEL_POSTS + (14 if prefix else 0),
+        "max_shared_model_posts": PRIOR_MODEL_POSTS + (14 if prefix else 0) + total_calls,
+        "stage_rub_ceiling": str(ceiling),
         "priced_reservation_rub": str(total) if total is not None else None,
         "billing_status": "CONDITIONAL_ESTIMATE"
         if synthetic_experiment
@@ -316,11 +608,14 @@ async def catalog(
 class Ledger:
     """Monotone reservations, written/flushed BEFORE HTTP. No refund, no resume."""
 
-    def __init__(self, output: TextIO, approved: Decimal, calls: int) -> None:
+    def __init__(
+        self, output: TextIO, approved: Decimal, calls: int, *, prefix: ReviewedPrefix | None = None
+    ) -> None:
+        self.prior = CONTINUATION_PRIOR if prefix else PRIOR_CONFIRMED_RUB
         if (
             not approved.is_finite()
-            or not 0 < approved <= STAGE_RUB_CEILING
-            or not 0 < calls <= CALL_CEILING
+            or not 0 < approved <= RUB_CEILING - self.prior
+            or not 0 < calls <= (67 if prefix else CALL_CEILING)
         ):
             raise ValueError("APPROVAL_LIMIT")
         self.output = output
@@ -328,6 +623,8 @@ class Ledger:
         self.ceiling = calls
         self.calls = 0
         self.reserved = Decimal(0)
+        self.model_calls = dict.fromkeys(MODELS, 0)
+        self.model_reserved = dict.fromkeys(MODELS, Decimal(0))
         self.deadline = time.monotonic() + DURATION
 
     def record(self, value: dict[str, Any]) -> None:
@@ -344,6 +641,8 @@ class Ledger:
             raise ValueError("GLOBAL_BUDGET_EXHAUSTED")
         self.calls += 1
         self.reserved += amount
+        self.model_calls[review.model] += 1
+        self.model_reserved[review.model] += amount
         self.record(
             {
                 "event": "reserved",
@@ -352,7 +651,7 @@ class Ledger:
                 "repeat": repeat,
                 "calls_reserved": self.calls,
                 "rub_reserved": str(self.reserved),
-                "shared_rub_committed_or_reserved": str(PRIOR_CONFIRMED_RUB + self.reserved),
+                "shared_rub_committed_or_reserved": str(self.prior + self.reserved),
                 "cost_status": "UNKNOWN",
             }
         )
@@ -393,6 +692,41 @@ def evaluate(case: Case, final: dict[str, Any] | None, reads: int) -> list[str]:
     if case.mode == "tool" and reads != 1:
         failures.append("READ_ROUND_TRIP")
     return failures
+
+
+def quality_flags(case: Case, final: dict[str, Any]) -> list[dict[str, Any]]:
+    flags: list[dict[str, Any]] = []
+    if case.mode == "image":
+        if final != (case.image_expected.model_dump() if case.image_expected else None):
+            flags.append(
+                {
+                    "code": "IMAGE_FACT",
+                    "expected": case.image_expected.model_dump() if case.image_expected else None,
+                    "observed": final,
+                }
+            )
+        return flags
+    if final.get("kind") not in case.outcomes:
+        flags.append(
+            {"code": "OUTCOME", "expected": list(case.outcomes), "observed": final.get("kind")}
+        )
+    text = " ".join(str(final.get(k) or "") for k in ("text", "reason"))
+    for patterns, code in (
+        (case.required, "MISSING_EXPECTED_FACT"),
+        (case.forbidden, "FORBIDDEN_CLAIM"),
+    ):
+        for pattern in patterns:
+            match = re.search(pattern, text, re.I)
+            if (match is None) == (code == "MISSING_EXPECTED_FACT"):
+                flags.append(
+                    {
+                        "code": code,
+                        "pattern": pattern,
+                        "match": match.group(0) if match else None,
+                        "span": list(match.span()) if match else None,
+                    }
+                )
+    return flags
 
 
 def metering_failures(result: dict[str, Any], review: ProbeRoute) -> list[str]:
@@ -466,7 +800,7 @@ async def run_case(
                 strict_json(response.output_json or "")
                 image_result = ImageResult.model_validate_json(response.output_json or "")
                 final = image_result.model_dump()
-                if image_result != case.image_expected:
+                if image_result != case.image_expected and not adapter.experimental:
                     failures.append("IMAGE_FACT")
         else:
             tool = ReadTool(
@@ -521,9 +855,19 @@ async def run_case(
                         result_json=ReadResult(fact=case.read_fact or "").model_dump_json(),
                     ),
                 )
-            failures.extend(evaluate(case, final, reads))
+            if adapter.experimental:
+                if case.mode == "tool" and reads != 1:
+                    failures.append("READ_ROUND_TRIP")
+                if final is None and not failures:
+                    failures.append("FINAL_MISSING")
+            else:
+                failures.extend(evaluate(case, final, reads))
         for result in results:
             failures.extend(metering_failures(result, review))
+    except asyncio.CancelledError:
+        # This finite CLI must stop, retaining any confirmed tool call before the
+        # cancelled final attempt. live() stops on this row without another POST.
+        failures.append("CANCELLED")
     except ProviderFailure as exc:
         failures.append(exc.code)
         results.append(
@@ -539,8 +883,15 @@ async def run_case(
         failures.append("PROBE_INVALID")
     finally:
         adapter.clear_continuation()
+    flags = quality_flags(case, final) if final is not None else []
+    for result in results:
+        result["reservation_rub"] = str(review.reservation())
     return {
         "event": "case",
+        "evaluator_revision": EVALUATOR_REVISION if adapter.experimental else R1_EVALUATOR_REVISION,
+        "quality_flags": flags,
+        "manual_assessment": "PENDING",
+        "runtime_authorized": False,
         "model": review.model,
         "upstream": review.route().upstream,
         "upstream_semantics": "REQUEST_SELECTOR_NOT_OBSERVATION"
@@ -563,11 +914,15 @@ async def run_case(
         "reads": reads,
         "final": final,
         "failures": sorted(set(failures)),
-        "assessment": "FAIL" if failures else "AUTOMATED_CHECKS_PASS / HUMAN_REVIEW_REQUIRED",
+        "assessment": ("TECHNICAL_FAILURE" if failures else "HUMAN_REVIEW_REQUIRED")
+        if adapter.experimental
+        else "FAIL"
+        if failures
+        else "AUTOMATED_CHECKS_PASS / HUMAN_REVIEW_REQUIRED",
     }
 
 
-def summaries(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def r1_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     summary = {}
     for model in MODELS:
         selected = [r for r in rows if r["model"] == model]
@@ -600,6 +955,133 @@ def summaries(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def call_accounting(rows: list[dict[str, Any]], attempts: int, reserved: Decimal) -> dict[str, Any]:
+    calls = [c for row in rows for c in row["calls"]]
+    known = [c for c in calls if c["cost"]["status"] == "CONFIRMED"]
+    unknown = max(attempts, len(calls)) - len(known)
+    confirmed = sum((Decimal(c["cost"]["amount"]) for c in known), Decimal(0))
+    settled_reserve = sum((Decimal(c.get("reservation_rub", "0")) for c in known), Decimal(0))
+    return {
+        "known_call_count": len(known),
+        "confirmed_cost_rub": str(confirmed),
+        "unknown_call_count": unknown,
+        "unknown_cost_rub": None if unknown else "0",
+        "attempt_reservations": attempts,
+        "reservation_scope": "NEW_STAGE_ONLY",
+        "reserved_rub": str(reserved),
+        "unknown_reserved_rub": str(max(Decimal(0), reserved - settled_reserve))
+        if unknown
+        else "0",
+        "cost_status": "UNKNOWN" if unknown else "CONFIRMED" if known else "NOT_RUN",
+    }
+
+
+def summaries(
+    rows: list[dict[str, Any]],
+    *,
+    ledger: Ledger | None = None,
+    prefix: ReviewedPrefix | None = None,
+) -> dict[str, Any]:
+    """All charges count, even when a quality flag or technical error rejects a case."""
+    imported = prefix.rows if prefix else []
+    combined = imported + rows
+    manual_ids = {(r["model"], r["repeat"], r["case"]) for r in imported}
+    summary = {}
+    for model in MODELS:
+        selected = [r for r in combined if r["model"] == model]
+        new_rows = [r for r in rows if r["model"] == model]
+        prior_rows = [r for r in imported if r["model"] == model]
+        times = sorted(r["seconds"] for r in selected)
+        completed = [
+            r
+            for r in selected
+            if not r["failures"] or (r["model"], r["repeat"], r["case"]) in manual_ids
+        ]
+        completed_cost = sum(
+            (Decimal(c["cost"]["amount"]) for r in completed for c in r["calls"]), Decimal(0)
+        )
+        accounting = call_accounting(
+            new_rows,
+            ledger.model_calls[model] if ledger else sum(len(r["calls"]) for r in new_rows),
+            ledger.model_reserved[model] if ledger else Decimal(0),
+        )
+        accounting["known_call_count"] += sum(len(r["calls"]) for r in prior_rows)
+        accounting["confirmed_cost_rub"] = str(
+            Decimal(accounting["confirmed_cost_rub"])
+            + sum(
+                (Decimal(c["cost"]["amount"]) for r in prior_rows for c in r["calls"]), Decimal(0)
+            )
+        )
+        if prior_rows and accounting["cost_status"] == "NOT_RUN":
+            accounting["cost_status"] = "CONFIRMED"
+        summary[model] = {
+            "n": len(times),
+            "stage_n": len(new_rows),
+            "imported_n": len(prior_rows),
+            "p50_seconds": times[math.ceil(len(times) * 0.5) - 1] if times else None,
+            "p95_seconds": times[math.ceil(len(times) * 0.95) - 1] if times else None,
+            "completed": len(completed),
+            "completed_cost_rub": str(completed_cost) if completed else None,
+            "mean_completed_cost_rub": str(completed_cost / len(completed)) if completed else None,
+            "quality_flagged_cases": sum(bool(r.get("quality_flags")) for r in new_rows),
+            "historical_flagged_cases": sum(bool(r["failures"]) for r in prior_rows),
+            "manual_reviewed_cases": len(prior_rows),
+            "quality_assessment": "HUMAN_REVIEW_REQUIRED",
+            **accounting,
+            "eligibility": "NOT_RUN"
+            if not selected and not accounting["attempt_reservations"]
+            else "HUMAN_REVIEW_REQUIRED"
+            if len(completed) == 25
+            else "FAILED_OR_INCOMPLETE",
+        }
+    stage = call_accounting(
+        rows,
+        ledger.calls if ledger else sum(len(r["calls"]) for r in rows),
+        ledger.reserved if ledger else Decimal(0),
+    )
+    prior_cost = R1_COST if prefix else Decimal(0)
+    probe_cost = prior_cost + Decimal(stage["confirmed_cost_rub"])
+    return {
+        "event": "summary",
+        "evaluator_revision": EVALUATOR_REVISION,
+        "status": "HUMAN_REVIEW_REQUIRED"
+        if all(s["eligibility"] == "HUMAN_REVIEW_REQUIRED" for s in summary.values())
+        else "FAILED_OR_INCOMPLETE",
+        "models": summary,
+        "stage_scenarios": len(rows),
+        "aggregate_scenarios": len(combined),
+        "helper": {"confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB), "model_posts": 3, "reads": 1},
+        "imported_r1": {
+            "receipt_sha256": R1_SHA256 if prefix else None,
+            "confirmed_cost_rub": str(prior_cost),
+            "known_call_count": 14 if prefix else 0,
+            "reads": 2 if prefix else 0,
+        },
+        "new_stage": stage,
+        "aggregate_probe": {
+            "confirmed_cost_rub": str(probe_cost),
+            "known_call_count": stage["known_call_count"] + (14 if prefix else 0),
+            "unknown_call_count": stage["unknown_call_count"],
+            "reads": sum(r["reads"] for r in combined),
+            "cost_status": "UNKNOWN"
+            if stage["unknown_call_count"]
+            else "CONFIRMED"
+            if prefix or stage["known_call_count"]
+            else "NOT_RUN",
+        },
+        "shared_total": {
+            "confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB + probe_cost),
+            "known_call_count": 3 + (14 if prefix else 0) + stage["known_call_count"],
+            "unknown_call_count": stage["unknown_call_count"],
+            "unknown_reserved_rub": stage["unknown_reserved_rub"],
+            "budget_rub": str(RUB_CEILING),
+        },
+        "selected_model": None,
+        "runtime_authorized": False,
+        "limitation": "Heuristic flags and full collection are not quality approval. Review all finals, routes and charges; unknown charges are not zero. No runtime authorization.",
+    }
+
+
 async def live(
     cases: tuple[Case, ...],
     reviews: tuple[RouteReview, ...],
@@ -609,16 +1091,24 @@ async def live(
     *,
     transport: httpx.AsyncBaseTransport | None = None,
     synthetic_experiment: bool = False,
+    prefix: ReviewedPrefix | None = None,
 ) -> dict[str, Any]:
+    if prefix and not synthetic_experiment:
+        raise ValueError("CONTINUATION_REQUIRES_EXPERIMENT")
     if synthetic_experiment:
         if reviews:
             raise ValueError("EXPERIMENT_CANNOT_USE_REVIEWS")
-        plan(cases, synthetic_experiment=True)
+        plan(cases, synthetic_experiment=True, prefix=prefix)
     else:
         if not reviews:
             raise ValueError("EXACT_THREE_MODELS_REQUIRED")
         validate_reviews(reviews)
-    ledger = Ledger(output, approved, CALL_CEILING)
+    ledger = Ledger(output, approved, 67 if prefix else CALL_CEILING, prefix=prefix)
+    if prefix:
+        ledger.record(prefix.receipt())
+    counts = [
+        sum(c.max_calls for _, c in remaining_schedule(cases, model, prefix)) for model in MODELS
+    ]
     async with asyncio.timeout(ledger.deadline - time.monotonic()):
         current = await catalog(settings, transport)
     price_checked_at = datetime.now(UTC).isoformat()
@@ -635,14 +1125,19 @@ async def live(
                 "account_tariff": "NOT_ESTABLISHED_BY_CATALOG",
                 "routes": [r.metadata() for r in priced_reviews],
                 "priced_reservation_rub": str(
-                    sum((r.reservation() * 27 for r in priced_reviews), Decimal(0))
+                    sum(
+                        (r.reservation() * n for r, n in zip(priced_reviews, counts, strict=True)),
+                        Decimal(0),
+                    )
                 ),
-                "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
+                "prior_confirmed_cost_rub": str(ledger.prior),
             }
         )
     else:
         priced_reviews = tuple(r.reprice(e) for r, e in zip(reviews, current, strict=True))
-        fresh_reservation = sum((r.reservation() * 27 for r in priced_reviews), Decimal(0))
+        fresh_reservation = sum(
+            (r.reservation() * n for r, n in zip(priced_reviews, counts, strict=True)), Decimal(0)
+        )
         ledger.record(
             {
                 "event": "catalog_repricing",
@@ -650,7 +1145,7 @@ async def live(
                 "account_tariff": "NOT_ESTABLISHED_BY_CATALOG",
                 "checked_at": price_checked_at,
                 "priced_reservation_rub": str(fresh_reservation),
-                "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
+                "prior_confirmed_cost_rub": str(ledger.prior),
                 "shared_rub_committed_or_reserved": str(PRIOR_CONFIRMED_RUB + fresh_reservation),
                 "routes": [
                     {
@@ -672,7 +1167,7 @@ async def live(
                 ],
             }
         )
-    proposal = plan(cases, priced_reviews, synthetic_experiment=synthetic_experiment)
+    proposal = plan(cases, priced_reviews, synthetic_experiment=synthetic_experiment, prefix=prefix)
     if Decimal(proposal["priced_reservation_rub"]) > approved:
         raise ValueError("APPROVED_BUDGET_TOO_SMALL")
     ledger.record(
@@ -688,23 +1183,27 @@ async def live(
             "approved_rub": str(approved),
         }
     )
-    rows = []
-    for review in priced_reviews:
-        adapter = PolzaAdapter(review, settings.api_key, transport=transport)
-        for repeat, case in enumerate(schedule(cases)):
-            remaining = ledger.deadline - time.monotonic()
-            if remaining <= 0:
-                raise ValueError("GLOBAL_DEADLINE")
-            async with asyncio.timeout(remaining):
-                row = await run_case(adapter, case, ledger, repeat)
-            ledger.record(row)
-            rows.append(row)
-            # All contract/usage/cost/quality failures stop spending, never averaged away.
-            if row["failures"]:
-                summary = summaries(rows)
-                ledger.record(summary)
-                return summary
-    summary = summaries(rows)
+    rows: list[dict[str, Any]] = []
+    try:
+        for review in priced_reviews:
+            adapter = PolzaAdapter(review, settings.api_key, transport=transport)
+            for repeat, case in remaining_schedule(cases, review.model, prefix):
+                remaining = ledger.deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ValueError("GLOBAL_DEADLINE")
+                async with asyncio.timeout(remaining):
+                    row = await run_case(adapter, case, ledger, repeat)
+                ledger.record(row)
+                rows.append(row)
+                # Experimental quality flags need human review; hard failures still stop.
+                if row["failures"]:
+                    summary = summaries(rows, ledger=ledger, prefix=prefix)
+                    ledger.record(summary)
+                    return summary
+    except (ValueError, ProviderFailure, TimeoutError):
+        ledger.record(summaries(rows, ledger=ledger, prefix=prefix))
+        raise
+    summary = summaries(rows, ledger=ledger, prefix=prefix)
     ledger.record(summary)
     return summary
 
@@ -718,6 +1217,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fixtures", type=Path, default=FIXTURES)
     parser.add_argument("--review", type=Path)
     parser.add_argument("--synthetic-experiment", action="store_true")
+    parser.add_argument("--continue-from", type=Path)
     parser.add_argument("--secret-file", type=Path, default=Path(".env.m4-probe"))
     parser.add_argument("--report", type=Path)
     parser.add_argument("--approval-ref")
@@ -728,12 +1228,21 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.synthetic_experiment and (args.review or args.preflight):
             raise ValueError("EXPERIMENT_CANNOT_USE_REVIEWS_OR_PREFLIGHT")
+        if args.continue_from and not args.synthetic_experiment:
+            raise ValueError("CONTINUATION_REQUIRES_EXPERIMENT")
         cases = load_cases(args.fixtures)
+        prefix = read_prefix(args.continue_from, cases) if args.continue_from else None
+        prior = CONTINUATION_PRIOR if prefix else PRIOR_CONFIRMED_RUB
         reviews = read_reviews(args.review) if args.review else ()
         if not args.preflight and not args.live:
             print(
                 json.dumps(
-                    plan(cases, reviews, synthetic_experiment=args.synthetic_experiment),
+                    plan(
+                        cases,
+                        reviews,
+                        synthetic_experiment=args.synthetic_experiment,
+                        prefix=prefix,
+                    ),
                     ensure_ascii=False,
                     indent=2,
                 )
@@ -750,6 +1259,10 @@ def main(argv: list[str] | None = None) -> int:
             not re.fullmatch(r"[0-9a-f]{40}", args.source_sha or "") or not args.source_environment
         ):
             raise ValueError("SOURCE_IDENTITY_REQUIRED")
+        if args.live and (
+            not args.approved_rub.is_finite() or not 0 < args.approved_rub <= RUB_CEILING - prior
+        ):
+            raise ValueError("APPROVAL_LIMIT")
         settings = load_secret(args.secret_file)
         # Exclusive output: an interrupted/unknown run cannot be restarted into the same receipt.
         with args.report.open("x", encoding="utf-8") as output:
@@ -783,10 +1296,14 @@ def main(argv: list[str] | None = None) -> int:
                             "sha": args.source_sha,
                             "environment": args.source_environment,
                             "approval_ref": args.approval_ref,
-                            "prior_confirmed_cost_rub": str(PRIOR_CONFIRMED_RUB),
+                            "prior_confirmed_cost_rub": str(prior),
+                            "prefix_receipt_sha256": R1_SHA256 if prefix else None,
+                            "evaluator_revision": EVALUATOR_REVISION
+                            if args.synthetic_experiment
+                            else R1_EVALUATOR_REVISION,
                             "shared_total_budget_rub": str(RUB_CEILING),
                             "stage_approved_rub": str(args.approved_rub),
-                            "prior_model_posts": PRIOR_MODEL_POSTS,
+                            "prior_model_posts": PRIOR_MODEL_POSTS + (14 if prefix else 0),
                         }
                     )
                     + "\n"
@@ -802,6 +1319,7 @@ def main(argv: list[str] | None = None) -> int:
                                 output,
                                 args.approved_rub,
                                 synthetic_experiment=True,
+                                prefix=prefix,
                             )
                         )
                     else:

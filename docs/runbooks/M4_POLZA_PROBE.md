@@ -1,41 +1,145 @@
-# M4.2 — finite synthetic Polza experiment
+# M4.2 — quality flags и одно продолжение synthetic experiment
 
-**CURRENT: полный R1 receipt сверён; C4 QUALITY-CONTINUATION-R1; новый paid HOLD.**
-R1:12 GPT cases/14 confirmed calls/2 READ, manual12 PASS. Расход0.08303952 RUB,
-shared с helper0.09573737; остаток общего150 —149.90426263 RUB. Gemini/DeepSeek
-ещё не запускались. Regex500 нашёл упоминание внутри корректного отказа.
+**QUALITY-CONTINUATION-R1: candidate REVIEW; новый paid R2 NOT RUN.**
+Выдача C0 — [M4_HANDOFF](../tasks/M4_HANDOFF.md), решение —
+[IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md). Source R1
+**b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc** принят C0:399 targeted PASS и
+[CI40915999616](https://github.com/Elefesys/ai-service-manager/actions/runs/40915999616)
+SUCCESS11/11. Это прежний source; CI нового candidate выполняет C0 после review.
 
-C0 готовит через C4 оставшиеся63 cases/до67 POST/4 READ без повторения этого
-проверенного префикса. Quality flags будут сохранены для ручной оценки;
-protocol/metering/caps failures по-прежнему STOP. Новая команда появится после
-review конкретного candidate. Сейчас R1 JSONL сохранить неизменным, старый блок
-не повторять. SHA256 файла34940 bytes:
-`b727cc1ca65c5ef189cc2bddba619136a354c6414b7159e0bde4d521f52f8b48`.
-Точная [выдача и приёмка R1](../tasks/M4_HANDOFF.md), [решение C0](../decisions/IMPL-004-m4-pilot-ai.md).
+C0 проверил полный owner R1:12 GPT finals/14 confirmed POST/2 READ/28 history GET,
+manual12 semantic PASS в их synthetic scope. Regex500 нашёл упоминание внутри
+отказа подтверждать цену; исходный `FORBIDDEN_CLAIM` остаётся в историческом отчёте.
+Gemini/DeepSeek в R1 — NOT_RUN. Не повторять R1 и не редактировать его JSONL.
 
-Ниже сохранён исторический одноразовый допуск R1. Он уже использован и не
-разрешает заново выполнять приведённую команду. Source/CI остаются прежними.
+| Подтверждённый расход | RUB | Model POST / READ |
+|---|---:|---|
+| Старые helpers | 0.01269785 | 3 /1, отдельно от probe |
+| Сохранённый R1 | 0.08303952 | 14 /2 |
+| Shared prior | **0.09573737** | **17 /3** |
+| Остаток общего150 для нового этапа | **149.90426263** | ≤67 новых POST /4 READ |
 
+Reservation R1 **6.511539482 RUB** не равен списанию. Все14 calls подтверждены,
+unknown0, поэтому остаток рассчитан по expense, без повторного прибавления R1.
+Balance/key limit заново не запрашивался. Для R2 используется прежний key/env,
+без новой установки, ручного подсчёта или сочинения RouteReview.
 
-**Историческая приёмка R1: C0 source review PASS; CI11/11 SUCCESS; paid75 PARTIAL.**
-Source **b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc**, tree
-**75227361cac6f619d51d19acfc3e0c8e413fa530**; full CI
-[40915999616](https://github.com/Elefesys/ai-service-manager/actions/runs/40915999616),
-attempt1. C0 independently:399 targeted PASS, Ruff/format5, mypy71, offline plans,
-scope/diff PASS. Решение **C0-M4.2-EXECUTABLE-EVAL-ACCEPT-R1** и полный receipt —
-[M4_HANDOFF](../tasks/M4_HANDOFF.md). Experimental admission —
-[IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
+## Один принятый префикс
 
-Команда использует существующие `.venv` и `.env.m4-probe` владельца.
-Ключ повторно вводить, передавать в чат или переустанавливать зависимости не нужно.
-C0 допускает один новый finite synthetic experiment на этом source;
-самостоятельный повтор после STOP не входит в решение.
+`--continue-from` принимает только полный неизменённый
+`reports/m4-polza-executable-eval-r1.jsonl`, SHA256
+`b727cc1ca65c5ef189cc2bddba619136a354c6414b7159e0bde4d521f52f8b48` (owner34940 bytes).
+CLI читает ограниченный файл один раз, проверяет полный byte hash **до ключа/HTTP**,
+затем source/approval/fixture/plan, exact ordered12 cases,14 monotone reservations,
+unique generations, all confirmed RUB costs, READ/final completeness и terminal
+summary. Legacy summary воспроизводится неизменённым алгоритмом sourceb1ff8f1.
+Altered/missing/duplicate/out-of-order/pending/unknown receipt — STOP. Нет public
+hash override, arbitrary prefix, цепочки resumptions или принятия одного tail case.
 
-Общий согласованный бюджет **150 RUB** уже включает **0.01269785 RUB / 3 POST**
-предыдущих GPT observations. Новый этап ограничен **149.98730215 RUB**, меньшая
-явно заданная сумма сохраняет силу. Полный результат требует ручного review C0;
-`selected_model=null`, `runtime_authorized=false`. Клиентские данные, Telegram,
-БД, VM, runtime и merge в этот experiment не входят.
+Новый exclusive R2 report содержит `imported_receipt.original_events`: все30
+исходных событий, включая reservations/finals/flags и прежний summary. Они не
+пересчитываются и не стираются. Source SHA/receipt hash/legacy evaluator revision
+сохраняются как provenance;12 scoped `manual_assessments` C0 записаны отдельно
+по `(model, repeat, case)` и привязаны к этому hash/source. Они не относятся к
+любым новым ответам или совпадениям текста. Новые cases имеют evaluator revision
+`synthetic_quality_flags_v2`, новый source — в собственном `source` event.
+
+| Новый этап | Original repeats | Cases | POST ceiling | READ ceiling |
+|---|---|---:|---:|---:|
+| GPT | 12–24 | 13 | 13 | 0 |
+| Gemini | 0–24 | 25 | 27 | 2 |
+| DeepSeek | 0–24 | 25 | 27 | 2 |
+| R2 всего | без перенумерации | **63** | **67** | **4** |
+| Aggregate R1+R2 | полный исходный набор | **75** | **81** | **6** |
+
+GPT начинается с `owner_injection`12; после images20/21 остаются critical repeats
+`unknown_price`22, `unknown_booking`23, `injection`24. Ни одного нового POST за
+импортированные12 cases. Вместе с3 helper POST максимум84. R2 — отдельный stage
+с новым deadline1800s, не продолжение старого in-flight запроса. Gemini transient
+state и DeepSeek explicit none не меняются.
+
+## Quality и технические STOP
+
+Только в `SYNTHETIC_EXPERIMENT` required/forbidden regex, semantic expected outcome
+и valid image-fact mismatch записываются в `quality_flags`. Для regex сохраняются
+`code/pattern/match/span`, для outcome/image — expected/observed; case/final и
+revision остаются в отчёте. Отрицание, цитата, настоящее утверждение и смешанный
+ответ с тем же keyword остаются flagged. Никаких exemptions по «не могу», удаления
+500/777/999 из fixtures, parser отрицания или LLM grader нет.
+
+Quality flags не останавливают конечный сбор и не дают автоматического PASS.
+Даже без flags assessment — `HUMAN_REVIEW_REQUIRED`, manual assessment — PENDING.
+Transport/deadline/route/history/schema/usage/cost/call/byte/token errors,
+невалидный/отсутствующий final и неполный обязательный READ roundtrip остаются
+в `failures` и останавливают следующий POST. Обычный reviewed path по-прежнему
+останавливается также на quality failures. Ни один путь не выбирает модель
+или не включает runtime.
+
+Summary отдельно показывает helper, imported R1, new stage, aggregate probe и
+shared total. **Все confirmed calls** входят в сумму независимо от flags или
+отклонения case; `completed_cost_rub` — лишь стоимость завершённых cases,
+для расходов использовать `confirmed_cost_rub` и `known_call_count`.
+Unknown calls и pending reservations имеют отдельные counts/резерв; неизвестный
+расход — `null`, не0. Unstarted model — `NOT_RUN`, не оплаченная ошибка.
+Per-model reservation fields относятся к новому stage (`NEW_STAGE_ONLY`),
+импортированные confirmed charges уже погашают старые reservations.
+
+## Одна Windows команда после принятия C0
+
+Из обычного PowerShell на прежнем ПК заменить только `C0_ACCEPTED_FULL_SHA` и
+`C0_ACCEPTED_DECISION_REF`. C0 сначала проверяет source/план и replay реального
+R1 без HTTP/секрета, затем один full CI нового candidate и выдаёт запуск.
+Команда использует существующий `ASM-M4-Probe-4f86e7f`, `.venv` и `.env.m4-probe`;
+owner-only ACL ключа уже проверен. Файлы не переименовывать ради нового запуска.
+
+```powershell
+& {
+    $ErrorActionPreference = "Stop"
+    $Candidate = "C0_ACCEPTED_FULL_SHA"
+    $DecisionRef = "C0_ACCEPTED_DECISION_REF"
+    if ($Candidate -cnotmatch '^[0-9a-f]{40}$') { throw "Exact accepted SHA required" }
+    if ([string]::IsNullOrWhiteSpace($DecisionRef) -or $DecisionRef -eq "C0_ACCEPTED_DECISION_REF") {
+        throw "Exact C0 decision reference required"
+    }
+    $Repo = Join-Path $env:LOCALAPPDATA "ASM-M4-Probe-4f86e7f"
+    Set-Location -LiteralPath $Repo
+    $PriorReport = "reports\m4-polza-executable-eval-r1.jsonl"
+    $Report = "reports\m4-polza-executable-eval-r2.jsonl"
+    if (Test-Path -LiteralPath $Report) { throw "R2 report already exists; preserve it and do not replay" }
+    if (-not (Test-Path -LiteralPath $PriorReport -PathType Leaf)) { throw "Original complete R1 report required" }
+    $PriorHash = (Get-FileHash -LiteralPath $PriorReport -Algorithm SHA256).Hash
+    if ($PriorHash -ine "b727cc1ca65c5ef189cc2bddba619136a354c6414b7159e0bde4d521f52f8b48") {
+        throw "R1 receipt hash mismatch; do not edit the receipt"
+    }
+    $Dirty = git status --porcelain
+    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean checkout required" }
+    git fetch origin $Candidate
+    if ($LASTEXITCODE -ne 0) { throw "Candidate fetch failed" }
+    git switch --detach $Candidate
+    if ($LASTEXITCODE -ne 0) { throw "Candidate checkout failed" }
+    $Actual = git rev-parse HEAD
+    if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Source SHA mismatch" }
+    if (-not (Test-Path .\.venv\Scripts\python.exe)) { throw "Existing probe environment not found" }
+    if (-not (Test-Path .\.env.m4-probe)) { throw "Existing private probe secret not found" }
+    .\.venv\Scripts\python.exe -m asm.ai.probe --plan --synthetic-experiment --continue-from $PriorReport
+    if ($LASTEXITCODE -ne 0) { throw "Offline prefix validation/plan failed" }
+    Write-Host "Report: $Report"
+    .\.venv\Scripts\python.exe -m asm.ai.probe --live --synthetic-experiment --continue-from $PriorReport `
+        --secret-file .\.env.m4-probe --report $Report `
+        --approved-rub 149.90426263 --approval-ref $DecisionRef `
+        --source-sha $Candidate --source-environment LOCAL_DESKTOP
+    if ($LASTEXITCODE -ne 0) { throw "Probe stopped; preserve both reports for C0; do not replay" }
+    Write-Host "Report written; C0 must review all outputs, flags, routes and expenses"
+}
+```
+
+`--plan --continue-from` читает только receipt/fixtures, не ключ и не HTTP.
+До fresh catalog цена `null`. Live делает один catalog GET всех3 fixed routes,
+пересчитывает **13/27/27** POST по новым ставкам, записывает conditional plan и
+проверяет меньший explicit approval/остаток149.90426263 до первого нового POST.
+Старые104.745359386 при R1 rates — историческая арифметика, не новый тариф.
+Report создаётся exclusive (`x`). При STOP не повторять команду, не удалять отчёт
+и не выбирать другое имя ради replay; дальнейшее решение остаётся у C0.
 
 ## Профили и уровни evidence
 
@@ -69,66 +173,14 @@ synthetic images; объявленные strict schema/tools совместим�
 DeepSeek помечается `NOT_REPORTED`; наличие raw reasoning или ненулевых reasoning
 токенов останавливает probe до READ/final. Raw reasoning не сохраняется.
 
-## Архив команды R1 — повторно не запускать
-
-В обычном PowerShell на прежнем ПК выполнить блок целиком. Он использует
-существующий каталог ASM-M4-Probe-4f86e7f, проверяет точный source и
-сохранённый отчёт до любых Polza-запросов. `.env.m4-probe` остаётся локальным
-с уже проверенным owner-only ACL. Если каталог или prerequisite отличается —
-STOP без переустановки/удаления. Терминал может молчать до30 минут; progress
-пишется в JSONL, новый запуск в это время не выполнять.
-
-```powershell
-& {
-    $ErrorActionPreference = "Stop"
-    $Candidate = "b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc"
-    $DecisionRef = "C0-M4.2-EXECUTABLE-EVAL-ACCEPT-R1:b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc:CI40915999616"
-    $Repo = Join-Path $env:LOCALAPPDATA "ASM-M4-Probe-4f86e7f"
-    Set-Location -LiteralPath $Repo
-    $Report = "reports\m4-polza-executable-eval-r1.jsonl"
-    if (Test-Path -LiteralPath $Report) { throw "Report already exists; do not repeat the probe" }
-    $Dirty = git status --porcelain
-    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean checkout required" }
-    git fetch origin $Candidate
-    if ($LASTEXITCODE -ne 0) { throw "Candidate fetch failed" }
-    git switch --detach $Candidate
-    if ($LASTEXITCODE -ne 0) { throw "Candidate checkout failed" }
-    $Actual = git rev-parse HEAD
-    if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Source SHA mismatch" }
-    if (-not (Test-Path .\.venv\Scripts\python.exe)) { throw "Existing probe environment not found" }
-    if (-not (Test-Path .\.env.m4-probe)) { throw "Existing private probe secret not found" }
-    .\.venv\Scripts\python.exe -m asm.ai.probe --plan --synthetic-experiment
-    if ($LASTEXITCODE -ne 0) { throw "Offline plan failed" }
-    New-Item -ItemType Directory -Force -Path reports | Out-Null
-    Write-Host "Report: $Report"
-    .\.venv\Scripts\python.exe -m asm.ai.probe --live --synthetic-experiment `
-        --secret-file .\.env.m4-probe --report $Report `
-        --approved-rub 149.98730215 --approval-ref $DecisionRef `
-        --source-sha $Candidate --source-environment LOCAL_DESKTOP
-    $ProbeExit = $LASTEXITCODE
-    if (Test-Path -LiteralPath $Report) { Get-Content -LiteralPath $Report -Encoding UTF8 -Tail 3 }
-    if ($ProbeExit -ne 0) { throw "Probe stopped; preserve report and return it to C0; do not replay" }
-    Write-Host "Complete. Return the JSONL report to C0: $Report"
-}
-```
-
-Offline `--plan --synthetic-experiment` не читает secret и не делает HTTP; до fresh
-catalog цена в нём `null`. В `--live` выполняется **один** catalog GET, затем все
-проверки и запись свежего conditional plan, и только потом model POST.
-Отдельного preflight или review JSON для этой команды нет. Report создаётся
-exclusive (`x`); прерванный запуск нельзя возобновить или перезаписать тем же report.
-Фиксированное имя отчёта и exclusive open предотвращают случайный повтор этой команды;
-переименование/удаление отчёта не разрешает повторные расходы.
-При STOP сохранить JSONL и передать C0 для решения; unknown attempt не равен нулю.
-
 ## Расход, маршрут и протокол
 
 До POST записываются fresh catalog hash/date, фиксированный selector, declared
 capabilities, cap alias, reasoning profile, assumptions, все известные rates,
-резерв каждого call и всех81, prior/approved amounts. `catalog_experiment` не
-подменяет дату старого review. Данные прежнего каталога/старый резерв107.138276775
-не используются для live admission. Все три новые резерва должны поместиться
-в stage approval и остаток общего150.
+резерв каждого нового call и всех67, prior/approved amounts. `catalog_experiment` не
+подменяет дату старого review. Данные прежнего каталога и прежний резерв
+не используются для нового live admission. Все три новые резерва должны поместиться
+в stage approval и остаток149.90426263 общего150.
 
 В input-rate консервативно суммируются prompt, image, cache read/write и **весь**
 `input_audio_cache_per_million`; в output-rate — completion и internal reasoning;
@@ -168,21 +220,21 @@ validated tool call, возвращается ровно в
 [Polza routing](https://github.com/polza-ai/docs/blob/main/gaidy/provider-selection.mdx).
 Google documentation объясняет нужную wire форму, но не является live proof Polza.
 
-| Неизменённый предел | Значение |
+| Ограничение | Значение |
 |---|---|
-| Cases / model POST / READ | 75 / ≤81 новых / ≤6; prior3 +81 =≤84 POST |
-| Сценарии на модель | 20 text (включая2 READ roundtrip),3 critical repeats,2 PNG |
+| R2 cases / model POST / READ | 63 /≤67 новых /≤4; R1+R2=75/81/6, helper3+probe81≤84 POST |
+| Полный исходный набор на модель | 20 text (включая2 READ roundtrip),3 critical repeats,2 PNG; R2 skips12 GPT |
 | Input / output tokens | 32768 /512 на call |
 | Wire input / output bytes | 24576 /32768 на call |
 | Case / run deadline | 60 /1800 секунд; catalog/history внутри общего бюджета |
-| History | ≤2 GET/POST,≤162/этап;65536 bytes/GET;≤15s на обе проверки |
+| History | R2≤134 GET +R1=28 →probe≤162;65536 bytes/GET;≤15s на обе проверки |
 | Catalog | 1 GET перед первым POST;4MiB,20s |
 | Synthetic fixtures normalized SHA256 | `7abd25f1e1f08e51eacc3a68975e6099c942d33fad37376366dfdef6c7e025b2` |
-| Стоимость | prior0.01269785 +stage≤149.98730215 ≤общего150 RUB |
+| Стоимость | prior0.09573737 +R2≤149.90426263 ≤общего150 RUB |
 
 Каждый call резервируется/flush до возможного POST. Неизвестный charge сохраняет
-резерв. Deadline/transport/protocol/quality/usage/cost failure останавливает весь
-этап, без retry/repair/fallback. Canonical conversation schema не меняется:
+резерв. Deadline/transport/protocol/usage/cost failure останавливает весь
+этап, без retry/repair/fallback. Quality flags остаются для human review. Canonical conversation schema не меняется:
 wire root envelope `{result: ...}` сохраняет union/$defs/$ref; затем остаётся
 прежняя local DTO validation. PNG probe остаётся отдельным EVAL_ONLY путём.
 
@@ -209,37 +261,28 @@ quality, наблюдённые families/профили и расходы. Да�
 
 ## Проверки candidate
 
-В существующем CPython3.13 frozen окружении из корня checkout:
+Из корня checkout в существующем frozen CPython3.13 окружении:
 
 ```sh
-.venv/bin/pytest -q tests/test_m4_polza.py tests/test_m4_probe.py tests/test_m4_gateway.py tests/test_m4_gateway_failures.py
-.venv/bin/ruff check backend/src/asm/ai/polza.py backend/src/asm/ai/settings.py backend/src/asm/ai/probe.py tests/test_m4_polza.py tests/test_m4_probe.py
-.venv/bin/ruff format --check backend/src/asm/ai/polza.py backend/src/asm/ai/settings.py backend/src/asm/ai/probe.py tests/test_m4_polza.py tests/test_m4_probe.py
+.venv/bin/pytest -q tests/test_m4_probe.py tests/test_m4_polza.py tests/test_m4_gateway.py tests/test_m4_gateway_failures.py
+.venv/bin/ruff check backend/src/asm/ai/probe.py tests/test_m4_probe.py
+.venv/bin/ruff format --check backend/src/asm/ai/probe.py tests/test_m4_probe.py
 .venv/bin/mypy
 .venv/bin/python -m asm.ai.probe --plan
 .venv/bin/python -m asm.ai.probe --plan --synthetic-experiment
 git diff --check
 ```
 
-C4 candidate: **399 targeted PASS**, Ruff/format5 PASS, strict mypy71 PASS,
-default/оба offline plans и diff check PASS. Controlled полный CLI:75 finals,
-81 POST,6 READ,1 catalog +162 history GET; обе формы body provider. Mock требует
-разные signatures для Gemini roundtrips и explicit none на каждом DeepSeek POST.
-Проверены metadata/correlation/byte bounds, cross-run/case cleanup, changed family,
-unknown fee/capability, overbudget и actual usage/cost STOP.
+C4 использует CONTROLLED fixtures, без owner rows в Git. Полный controlled CLI
+проверяет continuation63/67/4/134 history+1 catalog и aggregate75/81/6, fresh rates,
+exact original order и отсутствие replay. Исходный full path75/81/6 тоже сохранён.
+Проверяются отрицание/цитата/утверждение/смешанный ответ, required/outcome/image flags,
+все hard STOP, invalid prefix/hash/budget, unknown pending charges и NOT_RUN.
+Фактические результаты candidate — в receipt M4_HANDOFF. Adapter/settings/gateway/
+contracts/prompt/schema/fixtures/model profiles/lock/CI остаются прежними.
 
-Локальная проверка **исторического** public snapshot10:43:36Z сохранила его дату:
-все3 fixed profiles проходят catalog admission, резерв81 равен111.008526759 RUB
-(включая audio cache). Это проверка совместимости формы snapshot с кодом,
-не новый fresh plan, не live/account proof и не обещание фактического списания.
-Windows PowerShell команда подготовлена для существующего окружения владельца;
-controlled CLI проверен на CPython3.13.16 Linux, Windows/Polza live не запускались.
-
-C0 проверил exact candidate b1ff8f1:399 targeted PASS, Ruff/format5 и mypy71,
-offline plans/scope PASS. Full CI40915999616 attempt1 — **11/11 SUCCESS**:
-2596 ordinary+155 subtests,804 PostgreSQL,54 browser,398 frontend tests.
-Tested merge fffe3720cb2f36b69c12d225bb0725915b3c7102 tree точно равен
-source tree75227361cac6f619d51d19acfc3e0c8e413fa530. Native/cleanup/durable/
-Docker29/6 migration shards PASS; CI не перезапускался. Старый78dabd8 CI40902629746
-также завершился SUCCESS11/11, но не использован вместо новой проверки.
-Приёмка не меняет source/PR head/main и не является runtime admission.
+C0 проверяет реальный34940-byte receipt своим экземпляром:
+`--plan --synthetic-experiment --continue-from reports/m4-polza-executable-eval-r1.jsonl`.
+Этот replay не загружает ключ и не делает HTTP. C4 не выдаёт controlled PASS за
+replay owner-файла, Windows/Polza live или приёмку модели. После review — один full
+CI нового source и owner запуск; PR39/main/VM/runtime/merge C4 не меняет.
