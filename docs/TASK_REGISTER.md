@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C2 repair R2 LOCAL READY; hosted validation pending / 2026-10-30
+## CURRENT — C2 repair R2 BLOCKED;253 PASS/1 FAIL; C2 HOLD / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**, PR38 merged;
@@ -25,14 +25,14 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | C0-M4-CI-OBSERVATION-01 | OPEN: historical timeout cause UNKNOWN; full integration CI впереди, PASS12 его не закрывает |
 | C2-M4-CI-OBSERVATION-R1 | Исторический BLOCKED local PG; SOURCE/SAVED-EVIDENCE audit принят. Заменён конкретной R2 выдачей |
 | C6-M4-PG-EXECUTOR-R1 | VERIFIED SOURCE + ACTUAL PG OBSERVATION C0: one run41082835484/attempt1, PG18.6,12 PASS/cleanup PASS. Matrix aggregate overwritten; raw completeness independently recovered. C6 HOLD/ref frozen |
-| C2-M4-CI-OBSERVATION-R2 | IN_PROGRESS / LOCAL READY: task+active-query PID guard,32 controls, separate command/aggregate files;25 local PASS, original222+32 collected. Единственный hosted validation pending;7 из8 разрешённых paths, guards source unchanged/included |
+| C2-M4-CI-OBSERVATION-R2 | BLOCKED: run41090382696/attempt1,253 PASS/1 FAIL; original222 PASS, new PG controls6/7. Foreign control: PendingRollbackError после expected timeout на blocker recheck. Reports complete/FAIL, cleanup PASS; evidence сохранён. Один допуск использован, execution ref frozen, C2 HOLD |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
-[Приёмка C6 и задача C2 R2](tasks/M4_HANDOFF.md),
+[Receipt C2 R2 и приёмка C6](tasks/M4_HANDOFF.md),
 [операторский итог](runbooks/M4_POLZA_PROBE.md),
 [решение C0](decisions/IMPL-004-m4-pilot-ai.md).
-Tested **a4ca08f9a6f8ed3642e4f82f156389588e6e05f6**, tree
+Accepted C6 tested **a4ca08f9a6f8ed3642e4f82f156389588e6e05f6**, tree
 **74e5242997d2efb9b2c7bd8b337c33ea41bae250**; receipt
 **38f6a53fa91d3d6933b64610d47997fa230c7038**, tree
 **a4479a265a024d1140deddc9d4e8ce022744834f**. Receipt changes2 docs only.
@@ -40,24 +40,43 @@ C0 сверил primary metadata/log/digest, source patch/AST, manifests и byte
 observation reconstruction;12 PID/time/outcome checks, cleanup подтверждены.
 9 controlled preflight + Ruff/format3/compile PASS; collect-only222, не PG PASS222.
 Два oracle false-success контролируемо воспроизведены без PG; это не cause
-исторического timeout. Recorder matrix.json collision также требует repair.
+исторического timeout. Эти findings были основанием R2 repair ниже.
 
-C2 base — новый published C0 SHA из immutable HANDOFF, sole parent38f6a53.
-Exact base9982bcc860a9f70ade0d965434198d086fa0acf0/tree15478e6f38dfd014ef9a24b5d04cf91cb1260cb1;
-local controlled old→new и reporter checks PASS, PostgreSQL на новом source NOT_RUN.
-Prep c2/m4-ci-observation-r2; execution c2/m4-pg-observation-run-r2,
-один expected-base/force=false FF/job≤25min/test≤600s после local checks.
-Четыре modules, все прежние222 + новые controls; business time bounds прежние.
-R1 source/ref/artifact неизменны; C0 отдельно решает integration gate после
-repair/full CI, старую причину не переписывает и не требует бесконечного replay.
+C2 exact base**9982bcc860a9f70ade0d965434198d086fa0acf0**,
+tree**15478e6f38dfd014ef9a24b5d04cf91cb1260cb1**, sole parent38f6a53.
+Tested source**44cbaa0e09e066b35894a11e7004ea651b1a54a2**,
+tree**59eba0e185bdbded59ceb92f0f7e9f8e433a3a15**, sole parent=base;
+7 allowed paths, guards unchanged/included. Local25 controlled/reporter PASS,
+254 collected, old→new/AST/Ruff/format/compile PASS. One hosted
+[run41090382696](https://github.com/Elefesys/ai-service-manager/actions/runs/41090382696),
+job124182422471, push exact source/attempt1:253 PASS/1 FAIL,254 IDs/762 phases;
+original222+matrix12 PASS, new32=31 PASS/1 FAIL. PG18.6/UID999/asm_test0013,
+runtime/migrator nonprivileged. Pytest256.50s, outer phase265.131817s,
+job300s; primary FAIL, both report files intact/complete=true/result=FAIL;
+owned cleanup PASS, source clean. Exact durations и failure trace — в HANDOFF.
+Foreign control caught expected timeout, затем blocker recheck получил
+PendingRollbackError; финальные held-lock/effect checks не завершены.
+Source указывает на cancellation/invalidated observer-blocker connection;
+точный момент инвалидации не traced. Это новый test lifecycle blocker,
+не установленная причина старого timeout и не production defect.
+Нужна узкая новая выдача C0 для control_postgres helper/control и docs;
+timeouts/held-lock/effects не ослаблять. После failure source не менялся.
+Original artifact12994870520/48745 bytes/SHA256
+2ff34032f09d32207e4b70bf6dc3af33824ba9ab5943f566c381574c19e33fc1;
+saved archive104482 bytes/SHA25647d4ace4199eefe5042c5547e5ade1d52bfd26ed896651553f6300ef5d7bd1c3,
+Library libfile_658babea614c819180feb63425ea5932. Полные manifests/logs/source diff/
+analysis сохранены. Prep c2/m4-ci-observation-r2 получает только2 docs receipt;
+execution c2/m4-pg-observation-run-r2 frozen на tested source. R1 ref/artifact
+неизменны, новых reruns/dispatch/full CI нет. C2 HOLD; C0 review следующим.
 
 GPT/v2 EVAL_ONLY/runtime=false; shared150 confirmed**0.37505230 RUB/58 known**,
 unknown4/held**7.585505548**, всего62 POST; committed7.960557848,
 remaining**142.039442152 RUB**. Holds/receipts прежние, capacity не account
 balance, reported0.00743079 UNSETTLED; новых paid действий нет.
 PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**;
-CI41009211185 RED, full CI поздних source NOT_RUN. C0 шаг4 docs/PR body,
-новых Actions/PG/model runs0. C1/C3/C4/C5/C6/C8 HOLD; следующий C2.
+CI41009211185 RED, full integration CI поздних source NOT_RUN. В этом C2 шаге
+ровно один targeted Actions/PG run; model runs0. C1/C2/C3/C4/C5/C6/C8 HOLD;
+следующий C0 review, historical timeout cause UNKNOWN/integration gate OPEN.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

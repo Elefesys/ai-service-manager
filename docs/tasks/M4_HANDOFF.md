@@ -6,17 +6,100 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2 observer repair R2 LOCAL READY; hosted validation pending / 2026-10-30
+## CURRENT — C2 observer repair R2 BLOCKED; one hosted run complete; C2 HOLD / 2026-10-30
 
-**C0 принимает C6-M4-PG-EXECUTOR-R1 в SOURCE + ACTUAL PG OBSERVATION scope.**
-Один GitHub run,12/12 PASS, cleanup PASS; среда для дальнейшей проверки есть.
-Историческая причина timeout UNKNOWN, C0-M4-CI-OBSERVATION-01 остаётся OPEN.
-Следующий исполнитель — **C2-M4-CI-OBSERVATION-R2**: исправить подтверждённый
-дефект наблюдателя тестов и конфликт файлов отчёта, затем один раз проверить
-четыре затронутых PostgreSQL modules. Владелец ничего локально не запускает.
-C6 HOLD; допуск R1 использован, execution ref не перемещать.
+**C2-M4-CI-OBSERVATION-R2:253 PASS/1 FAIL; все original222 PASS; cleanup PASS.**
+Единственный разрешённый hosted run использован. Новый PG-control foreign
+не завершил проверку из-за PendingRollbackError после ожидаемого timeout.
+Полный evidence сохранён; повторных запусков и post-failure source repair нет.
+Следующий шаг — C0 review и отдельная узкая выдача по lifecycle observer/blocker
+connection. C2/C6 HOLD, оба execution refs заморожены. Владелец ничего не запускает.
+Historical timeout cause UNKNOWN; C0-M4-CI-OBSERVATION-01/full integration CI OPEN.
 
-### C2 R2 — подготовленный source / 2026-10-30
+### Возврат C2 — C2-M4-CI-OBSERVATION-R2 / BLOCKED; C2 HOLD / 2026-10-30
+
+**Source/ref.** Base **9982bcc860a9f70ade0d965434198d086fa0acf0**, tree
+**15478e6f38dfd014ef9a24b5d04cf91cb1260cb1**. Tested source
+**44cbaa0e09e066b35894a11e7004ea651b1a54a2**, tree
+**59eba0e185bdbded59ceb92f0f7e9f8e433a3a15**, sole parent=base.
+Preparation c2/m4-ci-observation-r2; execution c2/m4-pg-observation-run-r2
+создан на base, затем ровно один FF expected_sha=base/force=false на source.
+Execution остаётся source; этот последующий receipt меняет только2 docs на
+preparation branch, sole parent=tested source. Новый PR не создавался.
+
+Source меняет7 разрешённых paths: tests/test_m3_1_control_postgres.py,
+tests/test_m3_1_control_api_postgres.py, tests/test_m3_1_provenance_postgres.py,
+scripts/m4_pg_observation.py, .github/workflows/m4-pg-observation.yml,
+docs/tasks/M4_HANDOFF.md, docs/TASK_REGISTER.md. Guards module byte-identical,
+включён в targeted validation. Backend/DDL/roles/grants/RLS/bootstrap/compose/
+Dockerfiles/deps/pins/CI core/native/AI без изменений. Local checks и old→new
+controlled reproduction — в подготовленном source receipt ниже и архиве.
+
+**Один hosted run.** [Run41090382696](https://github.com/Elefesys/ai-service-manager/actions/runs/41090382696),
+[job124182422471](https://github.com/Elefesys/ai-service-manager/actions/runs/41090382696/job/124182422471),
+FAILURE; push exact source, attempt1, один run найден для source/branch.
+Job2026-10-30T16:29:40Z–16:34:40Z,300s; ubuntu-24.04/contents:read,
+existing pinned actions/images, exact checkout. Один pytest четырёх modules.
+Build15.553411s, DB start9.334523s, schema1.768888s, versions1.067165s;
+pytest256.50s (JUnit256.494s), outer test phase265.131817s≤600s;
+owned cleanup0.314794s. Job≤25min. Нет rerun/dispatch/второго job/full CI.
+
+Collect/cases/JUnit: **254 ordered IDs/762 phases,253 PASS/1 FAIL,
+0 ERROR/SKIP/XFAIL/overflow/invalid fields**. Original222 PASS:44 control,
+39 control_api,35 guards,104 provenance. Новые32:25 controlled/reporter PASS,
+actual PG controls6 PASS/1 FAIL. Matching/absent/two_targets/completed/failed/
+cancelled PASS. Matrix12 PASS: exact target PID/held blocker, clocks
+blocked_at<edge≤released_at, HTTP/replay assertions, after-cleanup not cancelled.
+Max observer client span6.842738ms (telegram-expiry-mode); server execution и
+event-loop delay отдельно не измерены, historical timeout cause не установлена.
+
+**Единственная failure group — новый negative control foreign.**
+`tests/test_m3_1_control_postgres.py::test_wait_blocked_pg_target_controls[foreign]`:
+setup/teardown PASS, call1.543397s; PendingRollbackError на source line1330,
+повторный blocker.execute для проверки pg_blocking_pids после expected TimeoutError.
+Target успел выполнить SELECT, unrelated task ещё pending; затем SQLAlchemy
+отказывает в SQL из-за invalidated connection с ещё не откатанной транзакцией.
+Проверка сохранности чужой блокировки и финальный counts_control не завершены:
+это FAIL, а не успешный negative control и не production assertion failure.
+
+Source-supported механизм: observer продолжает SQL при отсутствующем active
+target query на том же blocker connection внутри asyncio.timeout(1.5).
+Отмена такого SQL может инвалидировать connection; source SQLAlchemy2.0.52
+подтверждает disconnect/invalidate→PendingRollbackError path. Точный момент
+отмены/инвалидации здесь не записан: detailed trace только для matrix12, поэтому
+механизм timing — вывод из source и traceback, не отдельное измерение PG.
+Нужна новая узкая выдача C0: tests/test_m3_1_control_postgres.py (helper/negative
+control lifecycle) и receipt docs, затем отдельный допуск validation. Не убирать
+held-lock/effect assertions и не откатывать blocker раньше ради PASS; production
+changes/новые grants/повышение timeouts по этому evidence не обоснованы.
+
+**Reports/environment.** Оба файла сохранены: matrix-command.json содержит
+phase/argv/budget600/exit1/duration; matrix-summary.json — cases=expected=254,
+complete=true,result=FAIL,pytest_exit=1. Primary FAIL/MATRIX_COMMAND_FAILED;
+collision устранён, completeness не подменяет результат. Actual PG18.6/
+server_version_num180006/server UID999, fresh asm_test/schema0013;
+asm_runtime/asm_migrator LOGIN без SUPERUSER/BYPASSRLS/CREATEDB/CREATEROLE.
+Python3.13.15/psycopg3.3.5/SQLAlchemy2.0.52/libpq180006; vector0.8.6/btree_gist1.8.
+Existing image pin/uv.lock digest подтверждены. Cleanup PASS, owned containers/
+networks/volumes пусты, source-preservation clean=true.
+
+**Evidence.** Original artifact**12994870520**,48745 bytes/25 files, SHA256
+**2ff34032f09d32207e4b70bf6dc3af33824ba9ab5943f566c381574c19e33fc1**.
+Все24 manifest members сверены. Saved **C2-M4-CI-OBSERVATION-R2-evidence.zip**,
+104482 bytes/31 files, SHA256
+**47d4ace4199eefe5042c5547e5ade1d52bfd26ed896651553f6300ef5d7bd1c3**;
+Library **libfile_658babea614c819180feb63425ea5932**. Внутри неизменённый original
+ZIP, metadata/log, exact source.patch, local tests/collection/AST audit,
+before_after.py и read-only analyze.py/analysis.json. Saved manifest30 members;
+analysis SHA256 **90b90a502e055a86b75e0f54f6b22ec966cf7d397845583d242c8fca66f32e5b**.
+Analyzer exit0 означает integrity PASS при test_outcome=FAIL, не зелёные tests.
+
+Main51d7d73752128715c6d98157445167c0cc0d894d, Draft PR39 head
+cd60e5e16d8bcada53597d660a15f4d82640e956, C6 R1 execution
+a4ca08f9a6f8ed3642e4f82f156389588e6e05f6 сохранены. Новых model/Telegram/live
+действий нет. C2 HOLD; приёмка repair и integration/full CI — отдельное решение C0.
+
+### C2 R2 — история подготовки source до hosted run / 2026-10-30
 
 Exact base **9982bcc860a9f70ade0d965434198d086fa0acf0**, tree
 **15478e6f38dfd014ef9a24b5d04cf91cb1260cb1**; sole parent38f6a53 и parent tree
