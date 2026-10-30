@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C4 context принят локально; следующая выдача C2 CI observation.
+Последнее решение ниже: C2 repair заблокирован средой; C6 получает disposable PG run.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -663,7 +663,7 @@ C0-M4-CI-OBSERVATION-01/full integration CI остаются до merge/runtime.
 Полный M4/A01–A08 ещё не принят. В этом C0 шаге только4 coordination docs и
 PR body; C4 следующий, остальные HOLD. Main/VM/DB/Telegram/merge неизменны.
 
-**Актуальное решение C0 от2026-10-30: M4.3-CONTEXT-R1 принят в SOURCE +
+**Решение C0 от2026-10-30: M4.3-CONTEXT-R1 принят в SOURCE +
 LOCAL UNIT scope; следующий C2-M4-CI-OBSERVATION-R1.** C4 source
 d07619234570b28dbc0917aebfc288fe38e63aa8, tree f900178c5f3053049500fff6bd876d7e244da948,
 sole parent ed29ce8c104c5f1631ddb6af483588b7df5ff2a0; exact7 paths.
@@ -696,6 +696,32 @@ PR39 Draft/headcd60 и main51d7 прежние; новая приёмка не i
 GPT/v2 selection, все old holds и shared ledger0.37505230 confirmed +
 7.585505548 held / remaining142.039442152 RUB сохранены. Новых paid probes нет.
 Route/data/backend/durable/Telegram gates и полный M4/A01–A08 остаются открыты.
+
+**Актуальное решение C0 от2026-10-30: C2 audit принят; C6-M4-PG-EXECUTOR-R1
+устраняет блокер среды.** Return560d445b169fe5487c002989af5857bc3c0d6c25/tree
+3250876da5a759d462ac138c468bb2ccd43a721c меняет2 docs, code прежний. C0 проверил
+C2 ZIP/hash/manifest, повторно получил original CI artifact12957949439,
+воспроизвёл read-only audit byte-exact и сверил saved evidence/log excerpts.
+803 PASS/1 FAIL и phase timings остаются историческими. C2 repair BLOCKED,
+root cause UNKNOWN, новые PG tests NOT_RUN. Local UID0-only/no capabilities
+и отсутствие PG/Docker подтверждены также C0; sandbox обходы не нужны.
+
+C6 получает точную6-path задачу: один temporary branch-only workflow и маленький
+diagnostic script, при необходимости hooks в двух test modules, два receipt
+docs. Подготовить и один раз запустить original12-case matrix на disposable
+GitHub runner/stock Docker с existing pinned PG18/asm_test/schema/roles.
+Finite20min job, отдельные setup/test/cleanup results, expected waiter PID и
+observer/request/DB-edge timings; assertions/time bounds/product state прежние.
+Один explicit expected-base fast-forward execution branch разрешён этой выдачей.
+Main/PR39/старые CI jobs не перемещаются/не повторяются; никаких VM/owner secrets.
+Точный source/base/branch/write-set и критерии — CURRENT HANDOFF.
+
+Это необходимый executor для прежнего repair, не общая CI optimization или
+новая runtime capability. Диагностический PASS12 не закрывает прежний timeout;
+после receipt C0 возвращает C2 необходимые repair/negative-control проверки,
+затем готовит integration/full CI. C4/GPT приёмки, все unknown holds и бюджет
+сохранены; runtime/data/route/durable/Telegram gates остаются открыты.
+В этом C0 шаге code/Actions/PG/paid calls0; C6 следующий, остальные HOLD.
 
 ## Что пересмотрено относительно baseline
 

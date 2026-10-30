@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C4 context VERIFIED LOCAL; C2 CI repair BLOCKED / 2026-10-30
+## CURRENT — C2 repair BLOCKED; C6 disposable PG ASSIGNED / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**, PR38 merged;
@@ -14,51 +14,47 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4-PLAN / M4.1-CONTRACT | INTEGRATED / VERIFIED docs и contract/fake scope; PR37/38 |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
 | M4.2-PROBE | REVIEW overall; GPT technical/quality subset VERIFIED, GPT/v2 выбран для разработки; comparison75 не завершено |
-| M4.2-GEMINI-DIAGNOSTIC-R1 | VERIFIED diagnostic scope; SIGNATURE_EXTRA_MISSING, charge UNKNOWN, допуск consumed |
-| M4.2-GEMINI-COMPATIBILITY | BLOCKED; compatibility DEFERRED для первого пилота |
-| M4.2-DEEPSEEK-EVAL-R1 | BLOCKED; READ_ROUND_TRIP, handoff «С»; допуск consumed |
-| M4.2-DEEPSEEK-TOOL-COMPAT-R1 | BLOCKED; INVALID_PROVIDER_RESPONSE, charge UNKNOWN, consumed; compatibility DEFERRED |
+| M4.2-GEMINI-DIAGNOSTIC-R1 | VERIFIED diagnostic scope; SIGNATURE_EXTRA_MISSING, charge UNKNOWN, consumed |
+| M4.2-GEMINI-COMPATIBILITY | BLOCKED; compatibility DEFERRED |
+| M4.2-DEEPSEEK-EVAL-R1 | BLOCKED; READ_ROUND_TRIP, handoff «С»; consumed |
+| M4.2-DEEPSEEK-TOOL-COMPAT-R1 | BLOCKED; INVALID_PROVIDER_RESPONSE, charge UNKNOWN; consumed/DEFERRED |
 | M4.2-GPT-QUALITY-R1 | Исторический partial:7 retained manual PASS/2 READ,1 technical STOP,17 NOT_RUN; consumed |
 | C0-M4.2-GPT-QUALITY-HISTORY-R1 | VERIFIED metadata only: attempts2/reported0.00743079; UNSETTLED |
 | M4.2-GPT-QUALITY-R2 | VERIFIED owner synthetic + C0 manual:18/18 PASS; составной R1+R2 PASS25,27 confirmed POST/2 READ/2 images; consumed |
-| M4.3-CONTEXT-R1 | VERIFIED SOURCE + LOCAL UNIT / принято C0, интеграция pending:1283 pytest PASS, Ruff/format4, mypy73; дополнительно5 controlled agent→Polza checks. Mandatory authority/read port, bounded V2/V3, ≤2 calls/1 READ. PG authority/durable/runtime не заявлены |
-| C0-M4-CI-OBSERVATION-01 | OPEN до merge/runtime: M3 wait_blocked timeout, root cause UNKNOWN; foundation gates не приняты |
-| C2-M4-CI-OBSERVATION-R1 | BLOCKED: exact source/saved CI audit выполнен; только UID0, non-root PG18 недоступен. Cause UNKNOWN, repair и новые PG matrix12/negatives/consumers NOT_RUN. Возврат C2 в HANDOFF; нужен owned non-root executor |
+| M4.3-CONTEXT-R1 | VERIFIED SOURCE + LOCAL UNIT; integration pending. Независимые1283 tests/static checks +5 controlled adapter checks PASS; PG authority/durable/runtime ещё нужны |
+| C0-M4-CI-OBSERVATION-01 | OPEN: прежний wait_blocked timeout; root cause UNKNOWN, foundation gates не приняты |
+| C2-M4-CI-OBSERVATION-R1 | BLOCKED; C0 принял SOURCE/SAVED-EVIDENCE audit560d445, не repair. Среда UID0-only без PG/Docker; matrix12/negatives/consumers NOT_RUN. C2 HOLD до PG evidence |
+| C6-M4-PG-EXECUTOR-R1 | TODO / ASSIGNED: подготовить и выполнить один branch-only GitHub job≤20min, fresh pinned PG18/asm_test, original matrix12 + bounded timing/PID hooks; exact scope в HANDOFF |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
-[Приёмка C4 и точная задача C2](tasks/M4_HANDOFF.md),
+[Приёмка C2 и задача C6](tasks/M4_HANDOFF.md),
 [операторский итог](runbooks/M4_POLZA_PROBE.md),
 [решение C0](decisions/IMPL-004-m4-pilot-ai.md).
-C4 source **d07619234570b28dbc0917aebfc288fe38e63aa8**, tree
-**f900178c5f3053049500fff6bd876d7e244da948**, sole parent
-**ed29ce8c104c5f1631ddb6af483588b7df5ff2a0**; exact7 paths.
-Независимый C0:1283 PASS21.67s, static checks и5 controlled adapter checks;
-real HTTP0/key reads0. Нового PostgreSQL/hosted/runtime/full CI evidence нет.
+C2 return **560d445b169fe5487c002989af5857bc3c0d6c25**, tree
+**3250876da5a759d462ac138c468bb2ccd43a721c**, sole parent
+**23f35d6c4a7f596cd58121e6a5aa39a686d7487e**; только2 docs, code unchanged.
+C0 проверил15958-byte archive/13 files, manifest12, consumer source4/originals11,
+заново скачал original CI artifact12957949439 и воспроизвёл audit byte-exact.
+6 saved copies/25 excerpt lines совпали с primary evidence; нового PG запуска нет.
+C0 подтвердил такой же local executor blocker; sandbox обходы не нужны.
 
-GPT/v2 выбран для разработки, route EVAL_ONLY/runtime=false; OpenAI family
-наблюдалась, flex variant NOT_OBSERVED. [GPT manual25/per-case receipt](https://github.com/Elefesys/ai-service-manager/blob/ed29ce8c104c5f1631ddb6af483588b7df5ff2a0/docs/tasks/M4_HANDOFF.md)
-и original JSONL остаются неизменными. Shared150: **confirmed0.37505230 /58 known**,
-**4 unknown /held7.585505548**, всего62 client POST; committed7.960557848,
-remaining**142.039442152 RUB**. Все holds сохранены; ledger capacity не баланс,
-reported0.00743079 UNSETTLED. Прежние owner refs consumed; новых paid calls нет.
+C6 prep branch c6/m4-pg-executor-r1; execution c6/m4-pg-observation-run-r1,
+base — published C0 SHA из immutable HANDOFF, sole parent560d445.
+Один разрешённый FF expected-base/force=false запускает только новую narrow lane,
+без PR и полного CI. Это scoped диагностика, не repair/новый release gate.
+C2 затем продолжает исходные repair/negative-control criteria по решению C0.
 
-PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956** остаётся;
+GPT/v2 development candidate/EVAL_ONLY/runtime=false сохранён. Shared150:
+confirmed**0.37505230 RUB/58 known**, unknown4/held**7.585505548**, всего62 POST;
+committed7.960557848, remaining**142.039442152 RUB**. Original reports и holds
+неизменны, reported0.00743079 UNSETTLED; capacity не баланс, paid refs consumed.
+
+PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**;
 [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
-RED:10/11 jobs, foundation803PG PASS/1FAIL. Stack observer timeout недостаточен
-для root-cause вывода; secondary completeness/tail gates не приняты.
-C2 branch c2/m4-ci-observation-r1, base — published C0 SHA из immutable HANDOFF,
-sole parent d07619234570b28dbc0917aebfc288fe38e63aa8. Точный4-file write-set и
-disposable PG scope в задаче; затем C0 review/integration/full CI.
-C1/C3/C4/C5/C6/C8 HOLD. Main/PR head/VM/live DB/Telegram/merge без изменений.
-
-C2 возврат на exact base **23f35d6c4a7f596cd58121e6a5aa39a686d7487e**, tree
-**7240ba43e0e88b0e3fe8e0a326ed1654dd457631**: только2 coordination docs,
-test/production source неизменен. Artifact12957949439 hash/source проверены;
-saved failed case call2.750032s не раскрывает observer/request timing. Missing
-expected waiter PID и per-query/DB-edge timestamps; нового PG evidence нет.
-[Receipt C2 и следующий шаг C0](tasks/M4_HANDOFF.md#возврат-c2--c2-m4-ci-observation-r1--blocked--2026-10-30).
-CI gate OPEN; C0 обеспечивает disposable PG executor до продолжения repair.
+10/11 SUCCESS, foundation803PG PASS/1FAIL. Root cause UNKNOWN; full CI поздних
+source NOT_RUN. Новый C0 шаг —4 docs/PR body, Actions/PG/model calls0.
+C1/C2/C3/C4/C5/C8 HOLD. Main/PR head/VM/live DB/Telegram/merge без изменений.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

@@ -6,125 +6,134 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C4 context принят локально; C2 PG BLOCKED / 2026-10-30
+## CURRENT — C2 audit принят; PG executor → C6 / 2026-10-30
 
-**M4.3-CONTEXT-R1 принят C0 в SOURCE + LOCAL UNIT scope.** Есть ограниченная
-проекция текущего контекста V2/V3, один READ и агент, возвращающий проверенный
-candidate. Реальный PG authority adapter, durable AIRun и AI→Telegram ещё нужны.
-Единственная выдача — **C2-M4-CI-OBSERVATION-R1**, теперь **BLOCKED**:
-saved evidence/source проверены, но среда C2 не позволяет запустить PostgreSQL18
-под non-root. Root cause остаётся UNKNOWN, CI gate OPEN; repair не заявлен.
-Возврат и конкретный missing fact ниже. Владельцу сейчас ничего запускать не нужно.
+**C0 принимает возврат C2 как SOURCE/SAVED-EVIDENCE audit, без repair.**
+C2-M4-CI-OBSERVATION-R1 остаётся BLOCKED: в среде чата нет PostgreSQL/Docker
+и доступного non-root UID. Причина прежнего timeout UNKNOWN, CI gate OPEN.
+Единственная следующая выдача — **C6-M4-PG-EXECUTOR-R1**: одна ограниченная
+диагностическая проверка12 cases в disposable GitHub runner, чтобы C2 получил
+измерения для исправления. Рабочая ВМ и действия владельца не нужны.
+Это устранение блокера среды внутри прежнего repair, не общая CI optimization.
 
-### Приёмка C4
+### Проверенный возврат C2
 
-Принятый source **d07619234570b28dbc0917aebfc288fe38e63aa8**, tree
-**f900178c5f3053049500fff6bd876d7e244da948**, sole parent
-**ed29ce8c104c5f1631ddb6af483588b7df5ff2a0**; branch c4/m4-3-context-r1.
-Ровно7 разрешённых paths, +2158/-1: ai/context.py, ai/agent.py, два соответствующих
-test modules, fixtures/m4_context_cases.json, HANDOFF receipt и CURRENT.
-Existing Gateway/adapter/contracts/prompt/schema/probe, M3/DB/DDL/entrypoints/
-deps/CI/frontend неизменны. Новый fixture:25437 bytes/6 cases, SHA256
-**45cfd0cd42dafee8553cb19d1474ffa83d3a8008e2f7719f961fdb7ed72d751b**.
+Source **560d445b169fe5487c002989af5857bc3c0d6c25**, tree
+**3250876da5a759d462ac138c468bb2ccd43a721c**, sole parent
+**23f35d6c4a7f596cd58121e6a5aa39a686d7487e**; branch c2/m4-ci-observation-r1.
+Ровно2 docs,+65/-6; все tests/production/DDL/CI byte-identical base.
+Evidence C2-M4-CI-OBSERVATION-R1-evidence.zip:15958 bytes/13 files,
+SHA256 **f35de110fb92550af28ca4f3e574bc471ba0bbebfaf185fad676c702fa7c1916**.
 
-ContextBuilder проверяет original stored JSON и carried binding/digest,
-составляет allowlist полей без служебных IDs/claim/fence/storage metadata.
-Current/owner facts не обрезаются; удаляются только целые старые history entries
-с явным coverage/truncation. Даже READY image остаётся IMAGES_NOT_READ.
-ConversationAgent использует один Gateway/deadline/budget, максимум2 calls/1 READ;
-mandatory authority/read port проверяется перед MODEL, READ, FOLLOWUP и CANDIDATE.
-Нет default-allow. Совпадение binding само по себе не доказывает полномочий:
-trusted principal и фактические проверки состояния принадлежат будущему PG port.
-Result — candidate либо STOP; runtime=false, application wiring отсутствует.
+C0 сверил все12 members с manifest,4 consumer source и11 originals; заново
+получил original [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
+artifact12957949439,3183628 bytes,
+SHA256 **d64cdfd69fc0de89c9bfe7bd29dcedbe8f4db453268f3d1aee24c3b080d2f78f**.
+Read-only audit.py воспроизвёл каждое поле C2 audit; SHA256
+**752e98df40772de1b644c1cf80656ef9a2d7da249dacac09df298b31d4b4e46d**.
+Все6 saved evidence copies совпали с original artifact;25 excerpt lines —
+со свежим job123916058014 log. Это независимая проверка сохранённого evidence,
+не повторный запуск tests. В среде C0 также UID/GID map0→0/1, CapEff/CapBnd0,
+NoNewPrivs1, PostgreSQL/Docker/Podman отсутствуют; обход ограничений не нужен.
 
-Независимая проверка C0 на exact source, Python3.13.16:
-**1283 pytest PASS /21.67s** (176 новых +916 M4 +191 M3 units),
-Ruff/format4 PASS, mypy73 PASS. Команда pytest -q охватывала
-tests/test_m4_context.py, test_m4_agent.py, test_m4_gateway.py,
-test_m4_gateway_failures.py, test_m4_polza.py, test_m4_probe.py,
-test_m3_1_turns.py, test_m3_1_guards.py, test_m3_1_native_context.py,
-test_m3_1_provenance.py; полный список/команды C4 сохранены в receipt ниже.
+Saved result803 PASS/1 FAIL, matrix11 PASS/1 FAIL. Failed
+controlled-activation-subscription: whole call phase2.750032s, не duration
+одного SQL. Stack wait_blocked1.5s / connection.execute(pg_locks) не доказывает
+ни early product rejection, ни event-loop/driver/SQL cause. Predicate helper
+не связывает найденный wait с expected operation PID — отдельное статическое
+ограничение, не доказанная причина timeout. New PG/repair/full CI NOT_RUN.
+[Исходная задача C2 и неизменённые критерии repair](https://github.com/Elefesys/ai-service-manager/blob/23f35d6c4a7f596cd58121e6a5aa39a686d7487e/docs/tasks/M4_HANDOFF.md#L57).
 
-Дополнительно C0 проверил настоящий ContextBuilder/ConversationAgent →
-ModelGateway → PolzaAdapter с MockTransport: **5/5 controlled checks PASS**.
-Успешный путь:2 mock POST/4 history GET/1 READ; отдельно отзыв доступа после
-первого ответа, stale native fence перед candidate, чужой client_id в tool args
-и повреждённый digest результата READ. Проверены отсутствие запрещённого
-follow-up/candidate, wire privacy/correlation, сохранение резервов и CLOSED
-при повторном run. Это тест адаптерного стыка, не hosted quality/PG isolation.
-Все проверки C0 под socket/key audit guard: **real HTTP0 / owner key reads0**.
-Новый full CI, реальные PostgreSQL/Telegram/runtime проверки не выполнялись.
+### Задача C6 — C6-M4-PG-EXECUTOR-R1
 
-### Точная задача C2 — C2-M4-CI-OBSERVATION-R1
+Repository **Elefesys/ai-service-manager**. Preparation branch
+**c6/m4-pg-executor-r1**; одноразовая execution branch
+**c6/m4-pg-observation-run-r1**. Base — **полный published C0 SHA из immutable
+URL этого HANDOFF**, sole parent **560d445b169fe5487c002989af5857bc3c0d6c25**,
+parent tree **3250876da5a759d462ac138c468bb2ccd43a721c**.
+Фиксировать exact base/source SHA и tree; общий диск с C0/C2 не предполагается.
+Прочитать AGENTS, IMPL-004, текущие compose/bootstrap/image pins и ADR-159–161.
+Existing native-context-db.yml показывает branch-only push lane; не менять его.
 
-Repository **Elefesys/ai-service-manager**, branch **c2/m4-ci-observation-r1**.
-Base — **полный SHA опубликованного C0 commit из immutable URL этого HANDOFF**;
-его sole parent **d07619234570b28dbc0917aebfc288fe38e63aa8**, parent tree
-**f900178c5f3053049500fff6bd876d7e244da948**. C2 фиксирует exact base SHA/tree.
-Dependencies: принятый M3, C0-M4-CI-OBSERVATION-01 и accepted source выше.
-Прочитать AGENTS, IMPL-004, применимые M3 control/product/PG contracts и
-ADR-159–165/168. Миграция не назначается; product/runtime scope не расширяется.
+**Разрешённый write-set —6 paths:** новая
+.github/workflows/m4-pg-observation.yml, новый scripts/m4_pg_observation.py,
+tests/test_m3_1_control_postgres.py и tests/test_m3_1_control_api_postgres.py
+только для временных diagnostic hooks, receipt docs/tasks/M4_HANDOFF.md,
+CURRENT docs/TASK_REGISTER.md. Если plugin в новом script даёт все нужные
+измерения без изменения tests, предпочесть это. Не строить новый общий runner.
+Никаких production repairs, изменений CI core/native lane, contracts, migrations,
+bootstrap/grants/RLS, Dockerfiles/compose, image/dependency pins или AI files.
 
-**Исходное evidence:** [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185),
-attempt1, PR head **cd60e5e16d8bcada53597d660a15f4d82640e956**,
-tested merge **17de13af07fedee18b49d7b7b64fbe409b832a12**.
-10/11 jobs SUCCESS; [foundation job123916058014](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185/job/123916058014)
-FAIL: **803 PG PASS/1 FAIL/2640 deselected,1477.61s**.
-Node: tests/test_m3_1_control_api_postgres.py::
-test_post_lock_product_boundaries_with_actual_conversation_wait[controlled-activation-subscription].
-Timeout в tests/test_m3_1_control_postgres.py:159, wait_blocked:
-asyncio.timeout(1.5), await connection.execute запроса pg_locks /
-pg_blocking_pids; CancelledError → TimeoutError. Остальные11 вариантов прошли.
-Причина UNKNOWN: stack не различает отсутствие нужного wait, задержку запроса/
-планирования и задержку SQL observer. Отмена pending task в cleanup не доказывает
-ранний product rejection. После unlock outcome assertions не достигнуты.
-FOUNDATION_EVIDENCE_REFUSED — вторичный отказ completeness gate; последующие
-downgrade/reupgrade/contracts/wheel/host smoke не завершены и не приняты.
-Оба разрешённых test files byte-identical этому PR head; логи заново прочитаны C0.
+1. Подготовить один job на **ubuntu-24.04**, timeout **20 minutes**, permissions
+   contents:read, pinned checkout/upload actions из текущих workflows,
+   checkout exact github.sha без сохранения credentials. Trigger только push
+   execution branch выше; никаких pull_request/push-main/workflow_call hooks.
+   Before run проверить changed paths, source ancestry, workflow scope,
+   Ruff/format/compile применимых Python. Не открывать PR: это запустит полный CI.
+2. C0 разрешает **один** targeted run после подготовки: создать execution ref
+   на точном C0 base, затем один fast-forward на подготовленный source с
+   expected_sha=base/force=false. Preparation ref не запускает job. Сохранить
+   before/after refs и actual event SHA/run_id/attempt1. Это явное исключение
+   для новой диагностической lane; старый запрет C2 на Actions остаётся.
+   PR39 head/main не двигать, старые runs не rerun/dispatch. Если ref уже
+   существует не на ожидаемом base — вернуть conflict, не перезаписывать.
+3. Использовать stock Docker disposable runner и **existing pinned DB_IMAGE**
+   pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a,
+   existing bootstrap/roles/миграции для fresh **asm_test**. Записать actual
+   server_version/server_version_num (major18), Python/driver/image versions
+   и non-root server identity. Frozen uv.lock и существующий development/checks
+   image; build/setup отдельными finite phases. Не устанавливать daemon на VM.
+   Только test services; storage-test допустим, если нужен existing harness.
+   API/worker/scheduler/frontend LOCAL services не поднимать.
+4. Собственные disposable resource names с run_id/attempt; private generated
+   TEST credentials, отсутствие чужих ресурсов до старта. Cleanup в always/
+   finally только созданного проекта, с отдельными primary/cleanup outcomes.
+   Credentials/DSN/.env/cookies не печатать и не загружать в artifacts.
+   No owner credentials, external model/Telegram calls или live DB. Не вызывать
+   полный scripts/ci.sh/check_backend.sh и не выдавать narrow job за их PASS.
+5. После штатного schema setup — **один** pytest invocation всей функции
+   tests/test_m3_1_control_api_postgres.py::
+   test_post_lock_product_boundaries_with_actual_conversation_wait,
+   все12 параметров caller×boundary×target в прежнем порядке. Сохранить collect
+   nodeids, JUnit и per-case outcomes; missing/skip/xfail не считать complete.
+   Original assertions/effects/replay остаются. Нельзя повышать1.5s observer/
+   1.1s edge, менять sleep/clock/product state, scheduling или error handling
+   ради PASS; никакого retry-loop и автоматического второго запуска.
+6. Узкие hooks фиксируют недостающие facts: blocker и expected operation backend
+   PID, request start/progress/completion до cleanup, existing DB edge/blocked/
+   released timestamps, monotonic начало/конец observer execute и returned wait
+   PIDs. Не выводить query duration из whole case duration. По возможности
+   отделить loop delay от driver/server wait; неизвестное оставить UNKNOWN.
+   Не добавлять DB reads/awaits или синхронную запись лога в критическое окно:
+   брать PID из уже открытого driver connection, существующие значения из
+   test flow, буферизовать bounded scalar events и выгружать после case.
+   Hooks только наблюдают, не подменяют predicate и не исправляют тест.
+   Превышение finite evidence buffer отмечать явно как incomplete evidence.
+7. Вернуть один источник и полный receipt: base/source/tree/paths, run/job URL,
+   event SHA/attempt, exact commands, setup/build/test durations отдельно,
+   actual PG18/roles,12 results, diagnostic observations, cleanup result,
+   artifact IDs/bytes/SHA256. До завершения job не писать PASS. Если tests
+   прошли — это новая12-case observation, **не доказательство исправления
+   старого timeout**. Если воспроизвелись — сохранить timing/состояние до
+   cancellation; если infra failure — точный stage/error, без скрытого retry.
 
-**Write-set — только4 paths:**
-tests/test_m3_1_control_postgres.py,
-tests/test_m3_1_control_api_postgres.py,
-receipt в docs/tasks/M4_HANDOFF.md и CURRENT docs/TASK_REGISTER.md.
-Production backend, RLS/grants/locks, migrations, settings/deps, CI/workflows/
-scripts, frontend и существующие AI files не менять. Если доказанная причина
-требует production change, вернуть C0 причину и минимальные дополнительные
-paths; не ослаблять тест под неизменённое поведение.
+После одного receipt C6 HOLD. C0 проверяет evidence и возвращает C2 только
+необходимую задачу repair/validation; закрытие C0-M4-CI-OBSERVATION-01 требует
+прежних положительных/отрицательных controls. Если причина не установлена,
+зафиксировать предел наблюдения и конкретное следующее измерение; no flaky claim.
+Общий CI интеграционного кандидата — после review repair. Diagnostic lane
+сама не становится новым release gate и не включается в main автоматически.
 
-1. Сопоставить saved failure с actual source и получить недостающий timing факт
-   ограниченной диагностикой внутри этих tests. Разрешены локальная disposable
-   PostgreSQL18/asm_test и существующий harness/schema/roles в отдельном checkout,
-   без owner/live credentials, VM или внешних API. Воспроизвести сбой либо
-   контролируемо воспроизвести установленную причину; исправить её минимально.
-   Это repair task с evidence, не новая общая диагностическая подсистема.
-2. Сохранить смысл проверки: настоящий нужный Conversation lock wait наблюдён
-   до product edge; реальный DB clock пересекает границу, пока blocker удержан;
-   затем post-lock effective check даёт прежний outcome и replay без новых effects.
-   Observer уже использует открытую blocker connection; OWNER read уже прогревает
-   Workspace pool, product update уже коммитится отдельно до запроса. Эти меры
-   нельзя повторно выдавать за новое исправление. Не принимать чужой lock за
-   ожидание проверяемой операции или completion за доказательство блокировки.
-3. Не повышать timeout/edge ради PASS, не подменять clock, не менять product state
-   после arming, не добавлять retry/skip/xfail и не ослаблять assertions. Все12
-   caller × boundary × target вариантов нужны, включая controlled activation
-   subscription. Добавить необходимые отрицательные контроли: отсутствие нужного
-   wait, посторонняя блокировка и early completion не могут дать ложный PASS.
-4. После исправления — все12 matrix cases на настоящем PostgreSQL, effects/replay
-   и целевые отрицательные контроли. Если изменён shared wait_blocked, проверить
-   все его consumer modules: test_m3_1_control_postgres.py,
-   test_m3_1_control_api_postgres.py, test_m3_1_guards_postgres.py,
-   test_m3_1_provenance_postgres.py. Последние два читать/запускать, не менять.
-   Ruff/format для изменённых Python files. Полный CI выполнит C0 после review
-   интеграционного кандидата; unchanged rerun-until-green не является проверкой.
-5. Вернуть commit/tree/base, exact changed paths, доказанную причину, before/after
-   и точные команды/результаты с source/PG version. Если bounded investigation
-   не установил причину, вернуть конкретный missing fact/блокер; gate остаётся
-   OPEN, не объявлять flaky или repaired по одному удачному запуску.
+### Остальной статус
 
-Actions rerun/dispatch, изменение main/PR head, merge/deploy, paid probe,
-реальные Polza/Telegram и live DB не входят в задачу. Следом C0 проверит repair,
-соберёт один integration candidate и выполнит full CI; затем выдаст runtime scope.
-C1/C3/C4/C5/C6/C8 HOLD; C2 — единственный следующий исполнитель.
+[C4 context/agent принят SOURCE + LOCAL UNIT](https://github.com/Elefesys/ai-service-manager/blob/23f35d6c4a7f596cd58121e6a5aa39a686d7487e/docs/tasks/M4_HANDOFF.md):
+1283 tests и5 controlled adapter checks PASS; PG authority/durable/Telegram ещё
+нужны. GPT/v2 selection и shared150 ledger прежние: confirmed0.37505230 RUB,
+held7.585505548, remaining142.039442152;4 unknown сохраняются. Paid HOLD.
+PR39 Draft/headcd60e5e16d8bcada53597d660a15f4d82640e956 и
+main51d7d73752128715c6d98157445167c0cc0d894d неизменны.
+В этом C0 шаге только4 coordination docs и PR body; Actions/PG/model calls0.
+C1/C2/C3/C4/C5/C8 HOLD; следующий исполнитель C6.
 
 ### Возврат C2 — C2-M4-CI-OBSERVATION-R1 / BLOCKED / 2026-10-30
 

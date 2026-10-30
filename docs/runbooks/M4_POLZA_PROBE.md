@@ -3,7 +3,8 @@
 **Ничего повторно запускать не нужно.** C0 принял18 новых ответов; вместе
 с7 сохранёнными из R1 получено **25 manual PASS**,2 READ и2 synthetic images.
 GPT/v2 выбран кандидатом для разработки первого runtime. C4 context/read/agent
-принят локально; следующий шаг — [исправление CI observation для C2](../tasks/M4_HANDOFF.md).
+принят локально; C2 repair заблокирован средой. Следующий шаг —
+[одноразовая PostgreSQL-диагностика для C6](../tasks/M4_HANDOFF.md).
 
 ## Принятый отчёт
 
@@ -31,10 +32,12 @@ R2 p50 11.163s /p95 16.393s, N18, включая history; маленькая в�
 
 ## Дальше
 
-Передать C2 immutable ссылку на новый HANDOFF. C4 context/read/agent прошёл
-независимые1283 local tests и5 controlled adapter checks; live runtime ещё
-не подключён. C2 устраняет прежнее падение PostgreSQL-теста перед integration CI.
-Ключ и Windows окружение сейчас не нужны. Сохранить R1, history и R2 reports.
+Передать C6 immutable ссылку на новый HANDOFF. C2 проверил старый CI, но в среде
+чата нет рабочего non-root PostgreSQL. C6 подготовит и один раз выполнит12
+диагностических cases в disposable GitHub runner; затем C2 продолжит repair.
+Рабочая ВМ, ключ Polza и Windows окружение сейчас не нужны. Сохранить reports.
+C4 context/read/agent уже принят локально:1283 tests и5 controlled checks;
+live runtime ещё не подключён.
 
 Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`
 использован. [Прежняя команда](https://github.com/Elefesys/ai-service-manager/blob/5241eba3e38bd488cea052f894efb9b43b1f7d32/docs/runbooks/M4_POLZA_PROBE.md)
