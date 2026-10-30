@@ -44,6 +44,29 @@ controlled-activation-subscription: whole call phase2.750032s, не duration
 ограничение, не доказанная причина timeout. New PG/repair/full CI NOT_RUN.
 [Исходная задача C2 и неизменённые критерии repair](https://github.com/Elefesys/ai-service-manager/blob/23f35d6c4a7f596cd58121e6a5aa39a686d7487e/docs/tasks/M4_HANDOFF.md#L57).
 
+### Подготовка C6 — C6-M4-PG-EXECUTOR-R1 / 2026-10-30
+
+Exact base **f93c0b70f287f8dd982159c4b0073b495481e29d**, tree
+**0c2452fbd73cf628ce18799e40a2b725d6cc8e02**; sole parent/tree совпали с
+выдачей. Source commit — прямой потомок base на c6/m4-pg-executor-r1;
+его полный SHA/tree фиксируются перед единственным execution FF и в artifact.
+Изменены только6 разрешённых paths. Новая lane выполняет original matrix12
+один раз после existing development build/bootstrap/migrations на fresh asm_test.
+Only postgres-test; storage не нужен fixtures этой функции. Credentials generated
+в private RUNNER_TEMP вне build context; evidence содержит только bounded scalars.
+
+Временные hooks в двух test modules сохраняют blocker/operation PID, request
+progress/completion до cleanup, существующие DB timestamps и observer spans.
+После удаления diagnostic hooks AST обоих test modules точно совпадает с base:
+assertions,1.5s timeout,1.1s edge, SQL predicate, awaits/sleep/replay не менялись.
+Ruff/format/compile и9 local preflight checks PASS (source AST/order, bounds,
+PID/progress, cancellation, failure redaction, completeness); это не PG evidence.
+Server wait и event-loop delay из client spans по отдельности остаются UNKNOWN.
+
+Real PG/Actions пока NOT_RUN. Подготовлен один run на execution branch;
+после него receipt будет дополнен только на preparation branch, чтобы не вызвать
+второй запуск. PR/main/PR39, рабочая VM и внешние model/Telegram calls не затронуты.
+
 ### Задача C6 — C6-M4-PG-EXECUTOR-R1
 
 Repository **Elefesys/ai-service-manager**. Preparation branch

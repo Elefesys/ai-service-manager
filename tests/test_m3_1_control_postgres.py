@@ -149,24 +149,39 @@ async def incoming(h, provider="CONTROLLED", number=1, *, process=True, message=
     return cid, rec, result
 
 
+def observe_wait(kind, **fields):
+    # Temporary C6 diagnostic hook; inert in every existing lane.
+    plugin = sys.modules.get("scripts.m4_pg_observation")
+    if plugin is not None:
+        plugin.record(kind, **fields)
+
+
 async def wait_blocked(connection, blocker, *, pending=None):
     # Observe through the already-open blocker connection: pool acquisition or
     # DNS for a separate observer must not consume this real-lock wait budget.
     async with asyncio.timeout(1.5):
         while True:
-            rows = (
-                (
-                    await connection.execute(
-                        text(
-                            "SELECT pid,locktype,mode,granted FROM pg_locks "
-                            "WHERE NOT granted AND :blocker=ANY(pg_blocking_pids(pid))"
-                        ),
-                        {"blocker": blocker},
+            observe_wait("observer_execute_start", blocker_pid=blocker)
+            try:
+                rows = (
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT pid,locktype,mode,granted FROM pg_locks "
+                                "WHERE NOT granted AND :blocker=ANY(pg_blocking_pids(pid))"
+                            ),
+                            {"blocker": blocker},
+                        )
                     )
+                    .mappings()
+                    .all()
                 )
-                .mappings()
-                .all()
-            )
+            except BaseException as error:
+                observe_wait("observer_execute_end", exception_type=type(error).__name__)
+                raise
+            observe_wait("observer_execute_end", returned_rows=len(rows))
+            for row in rows:
+                observe_wait("returned_wait", waiter_pid=row["pid"], blocker_pid=blocker)
             if rows:
                 # Cross-role pg_stat_activity hides wait_event_type from the
                 # unprivileged test roles. A non-granted lock plus this exact

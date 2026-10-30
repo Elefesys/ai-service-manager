@@ -1,0 +1,36 @@
+name: M4 bounded PostgreSQL observation
+
+on:
+  push:
+    branches: [c6/m4-pg-observation-run-r1]
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    if: github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 3
+          persist-credentials: false
+      - name: Build, initialize fresh asm_test, observe the original twelve cases once
+        run: python3 scripts/m4_pg_observation.py run
+      - name: Recover only owned resources and finalize evidence
+        if: always()
+        run: python3 scripts/m4_pg_observation.py cleanup
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: m4-pg-observation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/m4-pg-${{ github.run_id }}-${{ github.run_attempt }}/evidence/
+          retention-days: 7
+          if-no-files-found: error

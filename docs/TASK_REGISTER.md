@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C2 repair BLOCKED; C6 disposable PG ASSIGNED / 2026-10-30
+## CURRENT — C2 repair BLOCKED; C6 disposable PG IN_PROGRESS / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**, PR38 merged;
@@ -24,7 +24,7 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.3-CONTEXT-R1 | VERIFIED SOURCE + LOCAL UNIT; integration pending. Независимые1283 tests/static checks +5 controlled adapter checks PASS; PG authority/durable/runtime ещё нужны |
 | C0-M4-CI-OBSERVATION-01 | OPEN: прежний wait_blocked timeout; root cause UNKNOWN, foundation gates не приняты |
 | C2-M4-CI-OBSERVATION-R1 | BLOCKED; C0 принял SOURCE/SAVED-EVIDENCE audit560d445, не repair. Среда UID0-only без PG/Docker; matrix12/negatives/consumers NOT_RUN. C2 HOLD до PG evidence |
-| C6-M4-PG-EXECUTOR-R1 | TODO / ASSIGNED: подготовить и выполнить один branch-only GitHub job≤20min, fresh pinned PG18/asm_test, original matrix12 + bounded timing/PID hooks; exact scope в HANDOFF |
+| C6-M4-PG-EXECUTOR-R1 | IN_PROGRESS: narrow executor/hooks prepared from f93c0b7; local static/9 preflight checks PASS, real PG/Actions NOT_RUN. Next one branch-only job≤20min, fresh pinned PG18/asm_test, original matrix12; receipt in HANDOFF |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
