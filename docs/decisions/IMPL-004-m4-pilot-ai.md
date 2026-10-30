@@ -314,6 +314,28 @@ stage budget≤142.895148782, fresh whole-stage reservation до POST, обе с
 и готовая команда C0 нужны до live, бюджет150 заново не запрашивается. GPT quality
 findings, RED CI41009211185 и C0-M4-CI-OBSERVATION-01 не закрываются этим шагом.
 
+**Решение C0 от2026-10-30 — source DeepSeek принят, один OWNER stage:**
+source **5f5ece5426d675559c15fe1b74561dc6dddd456a**, tree **a5709d7a304cdb87970f2a1dc7783b77eabaee13**,
+sole parent2da7334e101f5de60771e869166a3ac86f38588e принят без code fixes.
+Независимые616 targeted PASS, Ruff/format4/mypy71,6 offline plans;127 controlled
+пар подтверждают неизменность history acceptance/error/GET counts. Exact CLI
+source/ref/amount проверены для полного прохода, history STOP и budget rejection.
+Реальные HTTP/owner key reads=0; Windows/live/full CI этого source NOT_RUN.
+
+C0 разрешает **один** DeepSeek-only25 scenarios/≤27 POST/≤2 synthetic READ по
+ref `C0-M4.2-DEEPSEEK-EVAL-R1:5f5ece5426d675559c15fe1b74561dc6dddd456a:OWNER_25_CASES_R1`.
+Explicit stage ceiling142.895148782 — остаток прежнего150 после prior confirmed
+0.17509189 и held6.929759328 за2 unknown Gemini; это не новый150 и не ожидаемый
+расход этапа. Fresh reserve всех27 calls≤ceiling до POST; fixed wafer/us,
+non-thinking/fixtures/prompt/schema и прежние caps сохраняются. Unknown и оба
+old reserves не освобождаются автоматически. GPT/Gemini POST0; no replay.
+
+Это scoped standalone EVAL_ONLY продолжение прежнего допуска, без application/
+M3/DB/Telegram действий. PR39 Draft/headcd60 и RED CI41009211185 не становятся
+accepted от этой проверки; C0-M4-CI-OBSERVATION-01 и полный CI нового source
+нужны до merge/runtime. Полный новый report → C0 для manual quality review,
+selected_model=null/runtime=false. После одного запуска новый paid шаг HOLD.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

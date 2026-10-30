@@ -6,7 +6,83 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-DEEPSEEK-EVAL-R1 / C4 / 2026-10-30
+## Текущий допуск — C0-M4.2-DEEPSEEK-EVAL-R1 / OWNER_25_CASES_R1 / 2026-10-30
+
+**Source review PASS; один OWNER DeepSeek-only stage разрешён в прежнем150 RUB.**
+Выполнить [готовый Windows блок](../runbooks/M4_POLZA_PROBE.md) один раз и вернуть
+полный `reports/m4-polza-deepseek-eval-r1.jsonl` при любом исходе.
+Только25 прежних DeepSeek scenarios/≤27 POST/≤2 synthetic READ; GPT/Gemini POST0.
+Это сбор результатов для ручного сравнения, не выбор модели и не runtime admission.
+
+Accepted source **5f5ece5426d675559c15fe1b74561dc6dddd456a**, tree **a5709d7a304cdb87970f2a1dc7783b77eabaee13**,
+sole parent **2da7334e101f5de60771e869166a3ac86f38588e**.
+Approval ref: `C0-M4.2-DEEPSEEK-EVAL-R1:5f5ece5426d675559c15fe1b74561dc6dddd456a:OWNER_25_CASES_R1`.
+Explicit stage ceiling **142.895148782 RUB** — остаток общего150 с уже удержанными
+резервами, не ожидаемая цена нового прогона и не новый бюджет.
+Whole-stage fresh reservation всех27 calls обязан поместиться в этот ceiling
+до первого POST. Missing/unknown route/capability/tariff либо превышение — STOP.
+
+### Проверка C0
+
+Сверены ancestry/tree и ровно7 разрешённых файлов. Code C4 принят без исправлений.
+В polza.py изменена только детализация verify_history (+NoReturn import);
+остальные методы/route classes/bounded transport по AST неизменны. В probe.py
+прежние functions неизменны кроме finite Ledger/main dispatch; новые функции
+ограничены prior/plan/summary/runner/CLI DeepSeek. Prompt/schema/canonical fixtures,
+settings/gateway/contracts/dependencies/locks/CI/DB/M3 не менялись.
+
+- **616 targeted pytest PASS (8.65s)**: probe/polza/gateway/gateway_failures.
+- Ruff/check и format4 PASS; mypy **71 source files PASS**.
+- 6 реальных offline CLI invocations PASS под audit guard, запрещающим real
+  sockets и owner .env reads. Полный suite/CI заново не запускался.
+- 127 CONTROLLED пар old/new history validator: acceptance, primary error и
+  список GET совпали; новая детализация не ослабила проверки.
+- Exact source/ref/amount из готовой команды проверены через CONTROLLED CLI:
+  полный проход25 finals/27 POST/2 READ/54 history+1 catalog; history failure
+  останавливает после1 POST, сохраняет3 shared unknown и LIST/PROVIDER/NULL;
+  превышение whole-stage budget останавливает после1 catalog,0 POST.
+  Старые6.929759328 held во всех исходах, selected_model=null/runtime=false.
+
+Это offline проверки кода на fake responses, не hosted DeepSeek evidence.
+Owner key/reальные Polza HTTP/Windows live со стороны C0 не использовались.
+Actual DeepSeek compatibility, quality и account tariff ещё UNKNOWN.
+
+### Учёт и границы одного запуска
+
+| Показатель | Допуск |
+|---|---|
+| Prior | 0.17509189 RUB/30 known POST +2 unknown Gemini POST, held6.929759328 RUB |
+| Новый stage | Explicit≤142.895148782; fresh27-call reserve до POST, каждая reservation flush до вызова |
+| Маршрут | Только deepseek/deepseek-v4.1-flash-1017 /wafer/us; explicit non-thinking, no fallback |
+| Case/order | Прежние25 repeat0–24:20 text,3 critical repeats,2 PNG; fixture7abd25f1…e025b2 |
+| HTTP/READ | 1 catalog/≤27 POST/≤54 history GET/≤2 synthetic READ; всего≤59 POST с прежними32 |
+| Tokens / bytes | 32768/512 и24576/32768 на call; token reservation ceiling898560 |
+| Time | Case60s/overall1800s; catalog4MiB/20s; history65536 bytes/15s verification budget |
+| Report | Exclusive reports/m4-polza-deepseek-eval-r1.jsonl, старые reports read-only |
+
+Unknown остаётся unknown; оба old reserves не снимаются даже при успешном новом
+stage. Actual cost/usage учитываются только после прежней history verification.
+Новый unknown удерживает свой резерв сверх старых. PROCESS kill может оставить
+только flushed prefix: сохранить файл, не повторять команду под новым именем.
+Technical STOP не разрешает replay/fallback. Quality flags не равны ни technical
+failure, ни PASS; все finals возвращаются C0 на ручную проверку.
+
+### Решение и незакрытые границы
+
+Это отдельный standalone EVAL_ONLY допуск после exact-source review. Он
+продолжает прежнее исключение для probe, не принимает красный M3 gate:
+PR39 остаётся Draft/headcd60e5e16d8bcada53597d660a15f4d82640e956,
+CI41009211185 RED, root cause observer timeout UNKNOWN. Full CI source5f5ece5
+NOT_RUN; C0-M4-CI-OBSERVATION-01 нужен до merge/runtime. Не переносить этот
+ограниченный допуск на application, DB, Telegram или runtime.
+
+GPT25 finals с no_send_claim19 QUALITY_FAIL и unknown_price22 QUALITY_NOTE
+сохраняются. Gemini BLOCKED; его2 unknown/0 final не становятся new PASS.
+После одного DeepSeek report следующие paid операции HOLD до C0 review.
+C1/C2/C3/C4/C5/C6/C8 HOLD, следующий исполнитель — владелец по готовому блоку.
+Main/VM/DB/Telegram/runtime/merge без изменений. Повторного запроса бюджета150 нет.
+
+## История выдачи — M4.2-DEEPSEEK-EVAL-R1 / C4 / 2026-10-30
 
 **Подготовить отдельный DeepSeek-only этап без платных вызовов.** Один Gemini
 diagnostic выполнен; допуск ONE_POST_R1_5RUB использован. Маршрут Gemini BLOCKED

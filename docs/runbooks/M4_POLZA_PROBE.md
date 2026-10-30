@@ -1,11 +1,74 @@
-# M4.2 — DeepSeek-only candidate / REVIEW / paid HOLD
+# M4.2 — готовый запуск отдельной проверки DeepSeek
 
-**Сейчас владельцу ничего запускать не нужно.** ONE_POST_R1_5RUB использован;
-`reports/m4-polza-gemini-diagnostic-r1.jsonl` принят C0. C4 подготовил отдельный
-DeepSeek-only25-case stage и CONTROLLED evidence. Платный этап HOLD до review
-конкретного source C0 и нового exact-source ref/explicit stage amount.
-[Точный handoff и ограничения](../tasks/M4_HANDOFF.md),
-[CURRENT](../TASK_REGISTER.md), [решение C0](../decisions/IMPL-004-m4-pilot-ai.md).
+**C0 проверил source и разрешил один DeepSeek-only stage в прежнем бюджете150 RUB.**
+25 прежних scenarios, максимум27 model POST и2 synthetic READ. GPT/Gemini не
+вызываются. Source **5f5ece5426d675559c15fe1b74561dc6dddd456a**, tree
+**a5709d7a304cdb87970f2a1dc7783b77eabaee13**; [приёмка C0](../tasks/M4_HANDOFF.md).
+
+Shared prior:0.17509189 RUB подтверждено, оба Gemini unknown удерживают
+6.929759328 RUB. Новый explicit stage ceiling **142.895148782 RUB** — оставшаяся
+часть150, **не ожидаемая стоимость прогона**. Fresh catalog пересчитает резерв
+всех27 calls до первого POST; если не помещается или route/capability/tariff
+не проходит прежние guards, этап остановится. Старые резервы не освобождаются.
+
+## Готовая Windows команда — один DeepSeek eval
+
+Выполни весь блок в обычном PowerShell на прежнем ПК. Ничего подставлять не надо.
+Он обновит только локальный checkout до принятого SHA и использует прежние
+`.venv` и `.env.m4-probe`; переустановка и новый ключ не нужны. Все старые reports
+сохраняются. При ошибке команда останавливается; не повторять её под новым именем.
+
+```powershell
+& {
+    $ErrorActionPreference = "Stop"
+    $Candidate = "5f5ece5426d675559c15fe1b74561dc6dddd456a"
+    $DecisionRef = "C0-M4.2-DEEPSEEK-EVAL-R1:5f5ece5426d675559c15fe1b74561dc6dddd456a:OWNER_25_CASES_R1"
+    $StageRub = "142.895148782"
+    $Repo = Join-Path $env:LOCALAPPDATA "ASM-M4-Probe-4f86e7f"
+    Set-Location -LiteralPath $Repo
+    $Report = "reports\m4-polza-deepseek-eval-r1.jsonl"
+    if (Test-Path -LiteralPath $Report) { throw "Preserve existing DeepSeek report; do not replay" }
+    $Dirty = git status --porcelain
+    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean checkout required; stop and return to C0" }
+    git fetch origin $Candidate
+    if ($LASTEXITCODE -ne 0) { throw "Source fetch failed" }
+    git checkout --detach $Candidate
+    if ($LASTEXITCODE -ne 0) { throw "Source checkout failed" }
+    $Actual = git rev-parse HEAD
+    if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Accepted source mismatch" }
+    $Dirty = git status --porcelain
+    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean accepted source required" }
+    if (-not (Test-Path .\.venv\Scripts\python.exe)) { throw "Existing environment required" }
+    if (-not (Test-Path .\.env.m4-probe)) { throw "Existing private key file required" }
+    .\.venv\Scripts\python.exe -m asm.ai.probe --plan --deepseek-eval
+    if ($LASTEXITCODE -ne 0) { throw "Offline DeepSeek plan failed" }
+    .\.venv\Scripts\python.exe -m asm.ai.probe --live --deepseek-eval `
+        --secret-file .\.env.m4-probe --report $Report `
+        --approved-rub $StageRub --approval-ref $DecisionRef `
+        --source-sha $Candidate --source-environment LOCAL_DESKTOP
+    $EvalExit = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $Report)) { throw "No DeepSeek receipt written; return STOP to C0 without retry" }
+    Write-Host "DeepSeek receipt: $Report"
+    if ($EvalExit -ne 0) { Write-Host "STOP/FAILED_OR_INCOMPLETE: preserve receipt; do not retry" }
+    Write-Host "Return the complete receipt to C0; no automatic retry or runtime approval"
+    Get-Content -LiteralPath $Report -Encoding UTF8
+}
+```
+
+CLI пишет подробности в файл, поэтому после offline plan PowerShell может
+некоторое время не показывать новые строки. Максимум1800s на весь stage,60s на
+case; history/catalog входят в лимит. Не запускать второй экземпляр. В конце
+команда напечатает **весь JSONL**; передай его C0 целиком, включая STOP.
+
+`PLAN_ONLY / PAID_NOT_AUTHORIZED` у offline plan означает, что сам план не даёт
+допуска. Единственный live допуск — exact source/ref/amount в блоке выше.
+Успешный итог **HUMAN_REVIEW_REQUIRED**: вызовы завершены, но все ответы/quality
+flags ещё нужно оценить. FAILED_OR_INCOMPLETE также вернуть C0 без повтора.
+После одного отчёта следующий paid шаг HOLD; runtime всегда false.
+
+Source прошёл независимую проверку C0:616 targeted tests/Ruff/format4/mypy71,6 offline
+plans и controlled exact-command checks. Windows/live ещё NOT_RUN. Полный CI
+этого source NOT_RUN; PR39 Draft и C0-M4-CI-OBSERVATION-01 остаются до merge/runtime.
 
 ## Что установил последний запуск
 
@@ -40,14 +103,14 @@ POST был допущен exact C0 ref/5 RUB. Нового допуска из 
 отчёты ради повторного запуска. R1/R2/history/diagnostic сохранить без изменений.
 Ключ, raw reasoning/response или signature C0 не нужны.
 
-## Подготовленный конечный режим, paid ещё не разрешён
+## Границы принятого DeepSeek этапа
 
 `--deepseek-eval` запускает один конечный режим только для `deepseek/deepseek-v4.1-flash-1017`
 через `wafer/us`, прежний `reasoning: {effort: "none", enabled: false}`.
 Прежние fixtures/prompt/schema/quality flags и порядок25 cases сохраняются.
 GPT уже собран; Gemini BLOCKED до доказанного protocol решения. Нет fallback,
-повтора GPT/Gemini или общего R3/resume. Только after-review exact-source ref
-и explicit stage ceiling смогут открыть live шаг в прежнем150.
+повтора GPT/Gemini или общего R3/resume. Exact-source ref
+и explicit stage ceiling для одного live шага указаны в готовом блоке выше.
 
 | Граница нового этапа | Реализованное ограничение |
 |---|---|
@@ -111,41 +174,13 @@ HISTORY_VERIFICATION_FAILED, но различимы без новой гене�
 primary; history diagnostic дополняет failure_history_error. Старый owner
 history отказ ретроспективно не классифицируется: его точная причина UNKNOWN.
 
-### Одна будущая Windows команда: параметры для C0
+### Порядок допуска и сохранения отчёта
 
-Активный live блок **не опубликован** до source review. C0 должен подставить
-один принятый полный SHA и отдельный допуск в одном PowerShell-блоке, сохранив
-существующие `%LOCALAPPDATA%\ASM-M4-Probe-4f86e7f`, `.venv` и `.env.m4-probe`.
-Никакой переустановки/нового ключа/нового общего бюджета150 не требуется.
-
-Порядок блока: проверить отсутствие нового report и clean checkout → fetch
-accepted SHA → detached checkout → проверить exact HEAD/clean source → проверить
-существующую `.venv`/private key file без печати содержимого → offline plan →
-единственный live вызов → показать путь и полный JSONL C0, включая STOP.
-После каждой git/Python команды проверять `$LASTEXITCODE`; существующий report
-останавливает до key/HTTP. Старые R1/R2/history/diagnostic файлы не открывать.
-
-| Аргумент единственного live вызова | Значение после review C0 |
-|---|---|
-| Модуль / режим | `asm.ai.probe`, `--live`, `--deepseek-eval` |
-| `--source-sha` | Полный accepted SHA, равный проверенному HEAD |
-| `--source-environment` | `LOCAL_DESKTOP` |
-| `--approval-ref` | `C0-M4.2-DEEPSEEK-EVAL-R1:<тот же SHA>:<новый C0 suffix>`; suffix A–Z/0–9/underscore,1–80 символов |
-| `--approved-rub` | Отдельно заданный C0 stage amount >0 и≤142.895148782; все27 свежих резервов должны поместиться |
-| `--secret-file` | `.\.env.m4-probe` |
-| `--report` | `reports\m4-polza-deepseek-eval-r1.jsonl`, exclusive |
-
-Offline шаг не тратит средства:
-
-```powershell
-.\.venv\Scripts\python.exe -m asm.ai.probe --plan --deepseek-eval
-```
-
-Старые R1/R2/ONE_POST refs, неверный source ref, отсутствующий/нечисловой/
-слишком большой amount, `--review`, `--continue-from`, `--synthetic-experiment`,
-`--preflight`, history/Gemini modes отклоняются до key/HTTP. План с approval
-аргументами также отвергается, чтобы не смешивать подготовку и запуск.
-После STOP нет retry/fallback/pagination или автоматического продолжения.
+Готовый блок выше содержит полный accepted SHA/ref/amount и проверяет checkout
+до API. CLI эксклюзивно создаёт report до key/HTTP. Старые R1/R2/ONE_POST refs,
+неверный source ref, нечисловой/слишком большой amount, конфликтующие режимы
+отклоняются. Plan не читает ключ и не выполняет HTTP. Новое unknown учитывается
+отдельно от двух старых; нет автоматического retry, pagination или resume.
 
 ### CONTROLLED пример, не реальный тариф или расход
 
@@ -156,7 +191,7 @@ cost0.20209189, unknown2/held6.929759328, remaining142.868148782; selected_model
 runtime_authorized=false. Эти числа воспроизводят fixture и не прогнозируют Polza.
 Unknown/отмена второго POST сохраняют первый confirmed call и новый резерв;
 STOP без case row после reserved тоже сохраняет unknown. Все поздние guards
-проверены отдельно от раннего preflight. Финальный receipt C4 — в handoff.
+проверены отдельно от раннего preflight. Независимая приёмка C0 и исходный receipt C4 — в handoff.
 
 ## Исторические команды и результаты
 

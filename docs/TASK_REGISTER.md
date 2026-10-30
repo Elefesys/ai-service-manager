@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.2 DeepSeek-only preparation / 2026-10-30
+## CURRENT — M4.2 DeepSeek-only owner eval / 2026-10-30
 
 Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**; PR38 merged,
@@ -15,52 +15,48 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38, exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
 | M4.2-PROBE | REVIEW: GPT25 finals/27 POST/2 READ, no_send_claim19 QUALITY_FAIL, unknown_price22 QUALITY_NOTE. Gemini2 failed POST/0 final. DeepSeek NOT_RUN; comparison/selection/runtime не приняты |
-| M4.2-GEMINI-DIAGNOSTIC-R1 | VERIFIED только diagnostic scope: owner4 events source68093c7 приняты, SIGNATURE_EXTRA_MISSING установлен; history после1 GET не прошла, оба charge UNKNOWN. ONE_POST_R1_5RUB использован, не replay approval |
-| M4.2-GEMINI-COMPATIBILITY | BLOCKED: extra_content отсутствует в tool call; иной carrier в owner receipt не наблюдён. Нет READ/continuation до точного Polza protocol evidence и проверки; новый paid diagnostic не выдан |
-| M4.2-DEEPSEEK-EVAL-R1 | REVIEW / C4 candidate: DeepSeek-only25/≤27 POST/≤2 READ, prior30 known+2 unknown/held6.929759328; fixed history stage/reason/type. CONTROLLED25/27/2 и616 targeted PASS, Ruff/format4/mypy71,6 offline plans PASS. Windows параметры готовы; paid HOLD до exact-source review/ref C0 |
+| M4.2-GEMINI-DIAGNOSTIC-R1 | VERIFIED только diagnostic scope: owner4 events source68093c7 приняты, SIGNATURE_EXTRA_MISSING установлен; history не сверена, оба charge UNKNOWN. ONE_POST_R1_5RUB использован |
+| M4.2-GEMINI-COMPATIBILITY | BLOCKED: extra_content отсутствует в tool call; иной carrier не наблюдён. Нет нового Gemini POST/READ/continuation |
+| M4.2-DEEPSEEK-EVAL-R1 | REVIEW / C0 SOURCE PASS, OWNER_25_CASES_R1 AUTHORIZED: source5f5ece5,25 scenarios/≤27 POST/≤2 READ, stage≤142.895148782 из прежнего150; оба old unknown held. Полный report → C0, no replay/runtime |
 | C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 wait_blocked1.5s timeout, root cause UNKNOWN; отсутствующие foundation gates не приняты |
 | M4.3-CONTEXT | TODO / HOLD |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
 | M4.3-QUALITY | TODO; scoped C8/eval |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-[Единственная выдача C4 и полный receipt](tasks/M4_HANDOFF.md),
-[статус операторских команд](runbooks/M4_POLZA_PROBE.md),
+[Приёмка и точный допуск C0](tasks/M4_HANDOFF.md),
+[готовый Windows блок](runbooks/M4_POLZA_PROBE.md),
 [решение C0](decisions/IMPL-004-m4-pilot-ai.md).
-Новый C4 branch `c4/m4-2-deepseek-eval-r1` от опубликованного seed этого CURRENT
-(полный SHA в immutable handoff URL и PR39 receipt), parent2a1848f7089efda50913e24a58fcf21cafe167fc.
-Write-set/критерии — в верхнем HANDOFF; C1/C2/C3/C5/C6/C8 HOLD. Владельцу пока
-не запускать команды; передать C4 ссылку. Существующий бюджет150 принят.
+Accepted source **5f5ece5426d675559c15fe1b74561dc6dddd456a**, tree **a5709d7a304cdb87970f2a1dc7783b77eabaee13**,
+sole parent **2da7334e101f5de60771e869166a3ac86f38588e**. C47-file scope принят
+без code fixes; AST прежних protected functions/methods неизменен. C0:
+616 targeted PASS8.65s, Ruff/format4, mypy71,6 offline plans;127 paired history
+variants сохранили acceptance/primary error/GET counts. Exact CLI source/ref/
+amount проверены для controlled25/27/2, history STOP и budget rejection0 POST.
+Реальные sockets/owner key reads запрещены; real HTTP=0, Windows/live NOT_RUN.
 
-Owner diagnostic source **68093c769f24ea63eca5185179c3eab5fafd1229**, tree
-**585f034acedec906d6859a25176ef430f808d578**:1 catalog/1 POST/1 history/0 READ/
-0 follow-up, TECHNICAL_FAILURE. Exact generation `gen_2227371816211582977`;
-354 input/172 output (156 reasoning внутри172), reported0.05269262 RUB только
-RESPONSE_BODY/FIELD_VALIDATED_ONLY. Primary SIGNATURE_EXTRA_MISSING;
-HISTORY_VERIFICATION_FAILED на списке до detail не раскрывает точную причину.
-Provider ABSENT/history family null, flex только requested selector. Runtime false.
-C0 проверил арифметику и8 CONTROLLED outcomes (positive history+7 независимых
-list failures), реальные HTTP/key/READ/follow-up=0. Source520 targeted checks
-сохраняются, полный suite/CI заново не выполнялся. Scope этой правки4 docs only.
+Владелец выполняет один DeepSeek stage по ref `C0-M4.2-DEEPSEEK-EVAL-R1:5f5ece5426d675559c15fe1b74561dc6dddd456a:OWNER_25_CASES_R1`,
+explicit stage ceiling142.895148782. Fresh reservation всех27 calls проверяется
+до POST; прежние25 fixtures, wafer/us/non-thinking и все guards сохраняются.
+Ceiling — предел допуска, не цена прогона. GPT/Gemini POST0. Новый exclusive
+reports/m4-polza-deepseek-eval-r1.jsonl вернуть полностью даже при STOP.
+Следующие paid операции после этого одного отчёта HOLD до review C0.
 
-Shared **0.17509189 RUB/30 confirmed POST +2 unknown Gemini POST**.
-Оба unknown reserve по3.464879664 = **6.929759328 RUB**; committed/held7.104851218,
-остаток прежнего150 **142.895148782 RUB**, не live account balance. Body amount
-не погашает резерв; stage confirmed0 не означает cost0. Следующий finite runner
-должен явно учитывать32 прошлых POST и оба резерва; старые CLI prior неактуальны
-для нового запуска. Новый paid/R3/replay/settlement сейчас не разрешены.
+Shared prior **0.17509189 RUB/30 confirmed POST +2 unknown Gemini POST**.
+Оба unknown reserve по3.464879664 = **6.929759328 RUB**; confirmed+held7.104851218,
+остаток общего150 **142.895148782 RUB**, не live account balance. Новый stage
+known/unknown отдельно; оба old reserves не снимаются. Diagnostic body
+reported0.05269262 не считается confirmed; old R2 ID утрачен, новый diagnostic
+ID gen_2227371816211582977 не подменяет его. Все old reports read-only.
 
-R1/R2/history/diagnostic reports остаются у владельца неизменными. R2 summary,
-встроенный R1 и quality flags ранее проверены C0 по текстовой копии; hash копии
-не превращается в hash исходного Windows JSONL. Новый DeepSeek stage не выдаёт
-этот prior snapshot за импортированные eval rows и не переоценивает GPT.
-
-PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956** не меняется.
+PR39 остаётся Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**.
 [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
-по sourcecd60 остаётся FAILURE/10 из11:2640 ordinary+155 subtests PASS,
+по sourcecd60 — FAILURE/10 из11:2640 ordinary+155 subtests PASS,
 803 PG PASS/1 M3 observer timeout,54 browser/398 frontend PASS. Причина UNKNOWN,
-последующие foundation gates не приняты. Full CI source68093c7 NOT_RUN;
-standalone diagnostic receipt не закрывает merge/runtime gates.
+последующие foundation gates не приняты. Full CI source5f5ece5 NOT_RUN.
+Этот exact-source standalone EVAL_ONLY допуск не закрывает C0-M4-CI-OBSERVATION-01
+и не разрешает merge/runtime. Неизменённый полный CI не повторялся.
+C1/C2/C3/C4/C5/C6/C8 HOLD; следующий исполнитель — владелец.
 Main/VM/DB/Telegram/runtime/merge без изменений.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
