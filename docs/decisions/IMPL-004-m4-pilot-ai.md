@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C6 PG observation принят; C2 исправляет observer/report в R2.
+Последнее решение ниже: R2 evidence проверен; C2 завершает lifecycle repair R3.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -723,7 +723,7 @@ Main/PR39/старые CI jobs не перемещаются/не повторя
 сохранены; runtime/data/route/durable/Telegram gates остаются открыты.
 В этом C0 шаге code/Actions/PG/paid calls0; C6 следующий, остальные HOLD.
 
-**Актуальное решение C0 от2026-10-30: C6 PG observation принят;
+**Предыдущее решение C0 от2026-10-30: C6 PG observation принят;
 C2-M4-CI-OBSERVATION-R2 назначен.** Source a4ca08f9a6f8ed3642e4f82f156389588e6e05f6,
 receipt38f6a53fa91d3d6933b64610d47997fa230c7038. Actual run41082835484/attempt1:
 12 PASS на fresh PG18.6/asm_test, expected waiter PID12/12, cleanup PASS.
@@ -752,6 +752,33 @@ C4/GPT scoped acceptance и unknown holds/shared150 сохранены. Runtime 
 data/backend/durable/Telegram gates остаются открыты. В этом C0 шаге только
 coordination docs/PR body и offline review; новых Actions/PG/model runs нет.
 C2 следующий, C6 и остальные HOLD; PR39/main без изменений.
+
+**Актуальное решение C0 от 2026-10-30: R2 evidence VERIFIED; узкий R3.**
+Source44cbaa0e09e066b35894a11e7004ea651b1a54a2 / receipt862c037bb8e5307a9991b9938567e2a910a20777
+проверены C0. Один hosted run41090382696: 253 PASS / 1 FAIL, original222 и
+matrix12 PASS, cleanup PASS. Recorder command/summary collision исправлен;
+complete=true/result=FAIL отражают фактический результат, не успешный repair.
+Независимые C0 metadata/artifact/AST и 25 controlled checks подтверждены.
+
+Новый foreign-control не завершил held-lock/effect assertions: после expected
+timeout повторный SQL на invalidated blocker вызывает PendingRollbackError.
+C0 controlled probe подтвердил SQL без active target identity и cancellation
+observer await; точный hosted момент инвалидации не traced. Это test lifecycle
+defect, не доказанная причина historical timeout и не production defect.
+
+C2-M4-CI-OBSERVATION-R3 ограничен helper/negative-control lifecycle и необходимой
+execution identity существующего runner/workflow; exact 5 paths в HANDOFF.
+Не выполнять observer SQL без active query, сохранить task/PID/result guards,
+не скрывать observer failure и не освобождать blocker ради PASS. Отдельное
+существующее TEST-role observer connection допустимо только для изоляции
+timeout/cancel controls, без новых grants/framework. Existing 254 cases,
+1.5s/1.1s/DB bounds и business effects сохраняются.
+После local checks разрешён один fresh hosted validation четырёх modules
+<=600s tests / <=25min job. R1/R2 frozen; новых paid/VM/production действий нет.
+
+R2 repair в целом остаётся BLOCKED до R3; historical cause UNKNOWN.
+После review — integration/full CI и runtime, без бесконечного replay старого
+timeout. GPT/C4 acceptance и shared150 ledger не изменены. PR39/main прежние.
 
 ## Что пересмотрено относительно baseline
 

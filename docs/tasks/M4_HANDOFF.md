@@ -6,15 +6,130 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2 observer repair R2 BLOCKED; one hosted run complete; C2 HOLD / 2026-10-30
+## CURRENT — C2 R2 evidence VERIFIED; lifecycle repair R3 назначен / 2026-10-30
 
-**C2-M4-CI-OBSERVATION-R2:253 PASS/1 FAIL; все original222 PASS; cleanup PASS.**
-Единственный разрешённый hosted run использован. Новый PG-control foreign
-не завершил проверку из-за PendingRollbackError после ожидаемого timeout.
-Полный evidence сохранён; повторных запусков и post-failure source repair нет.
-Следующий шаг — C0 review и отдельная узкая выдача по lifecycle observer/blocker
-connection. C2/C6 HOLD, оба execution refs заморожены. Владелец ничего не запускает.
-Historical timeout cause UNKNOWN; C0-M4-CI-OBSERVATION-01/full integration CI OPEN.
+C0 проверил [возврат C2 R2](https://github.com/Elefesys/ai-service-manager/commit/862c037bb8e5307a9991b9938567e2a910a20777).
+**253 PASS / 1 FAIL; original 222 PASS; cleanup PASS.** Evidence принят как
+достоверный отчёт о неуспешном прогоне. Исправление observer целиком ещё не
+принято: один новый foreign-control не дошёл до проверки сохранности блокировки.
+Recorder collision устранён и проверен; повторять этот repair не требуется.
+Следующий исполнитель — **C2-M4-CI-OBSERVATION-R3** ниже. Владелец ничего не
+запускает; C6 и остальные HOLD. Исторический timeout cause UNKNOWN,
+C0-M4-CI-OBSERVATION-01 / integration CI остаются OPEN.
+
+### Проверка C0 — результат R2
+
+Tested source **44cbaa0e09e066b35894a11e7004ea651b1a54a2**, tree
+**59eba0e185bdbded59ceb92f0f7e9f8e433a3a15**, sole parent
+**9982bcc860a9f70ade0d965434198d086fa0acf0**. Семь разрешённых paths;
+guards module, production, DDL, pins/deps и CI core сохранены.
+Receipt **862c037bb8e5307a9991b9938567e2a910a20777**, tree
+**fb5073c48c876f25c2dfd1eb11706eefd689ec06**, sole parent=tested source;
+изменены только HANDOFF/CURRENT. Это repair base, не runtime acceptance.
+
+[Run 41090382696](https://github.com/Elefesys/ai-service-manager/actions/runs/41090382696),
+job 124182422471: FAILURE, push exact source, attempt 1; fresh API показывает
+один run для source/execution branch. 254 ordered IDs / 762 phases согласованы
+между collection, cases и JUnit. Original 222 и matrix 12 PASS; новые
+controlled/reporter 25 PASS, actual PG controls 6 PASS / 1 FAIL.
+Файл matrix-command.json сохранён отдельно от matrix-summary.json:
+complete=true, result=FAIL, pytest_exit=1. Cleanup PASS, owned resources пусты,
+source clean. Actual PG 18.6 / asm_test / schema 0013, роли и image pin подтверждены.
+Pytest 256.50s, outer test phase 265.131817s, job 300s — разные интервалы.
+
+C0 сверил source ancestry/patch, fresh run/job/ref/digest и job log; 30 members
+saved manifest и 24 members original artifact. Original artifact 12994870520:
+48745 bytes, SHA256 **2ff34032f09d32207e4b70bf6dc3af33824ba9ab5943f566c381574c19e33fc1**.
+Saved ZIP: 104482 bytes, SHA256
+**47d4ace4199eefe5042c5547e5ade1d52bfd26ed896651553f6300ef5d7bd1c3**,
+Library libfile_658babea614c819180feb63425ea5932. Read-only analyze.py повторно
+дал byte-exact analysis.json, SHA256
+**90b90a502e055a86b75e0f54f6b22ec966cf7d397845583d242c8fca66f32e5b**.
+C0 offline: **25 controlled/reporter PASS (5.47s)**; Ruff/format/compile 5 PASS;
+collect-only 254, 5 malformed collections refused, 79 original business test
+functions/assertions и 9 callers сохранены. Old→new rejection воспроизведён.
+Нового Actions/PG/model запуска при этой проверке C0 не было.
+
+Единственная failure group — test_wait_blocked_pg_target_controls[foreign]:
+expected TimeoutError был пойман; затем повторный SQL на blocker упал с
+PendingRollbackError (line 1330, call 1.543397s). Финальная проверка held lock и
+counts_control не завершена. C0 отдельно контролируемо подтвердил: helper
+вызывает observer.execute даже при отсутствующем active target query и может
+отменить этот await по deadline. Это NO DATABASE reproduction пути отмены;
+оно не доказывает точный момент инвалидации в hosted run. SQLAlchemy 2.0.52
+source согласуется с invalidated connection + open transaction -> отказом
+повторного SQL. Старый timeout этим не объяснён; production defect не установлен.
+
+### Задача C2 — C2-M4-CI-OBSERVATION-R3
+
+Результат для пилота: завершить ограниченный test-helper repair, чтобы C0 мог
+перейти к integration/full CI и настоящему AI runtime. Новая диагностика или
+повторное исследование старого единичного timeout не нужны.
+
+Repository **Elefesys/ai-service-manager**. Preparation **c2/m4-ci-observation-r3**,
+execution **c2/m4-pg-observation-run-r3**. Base — полный published C0 SHA из
+immutable URL этой выдачи; sole parent **862c037bb8e5307a9991b9938567e2a910a20777**,
+parent tree **fb5073c48c876f25c2dfd1eb11706eefd689ec06**. Зафиксировать base/tree.
+Прочитать AGENTS, IMPL-004, ADR-159–161 и R2 receipt. R2 admission consumed;
+R1/R2 execution refs и исходные artifacts не менять.
+
+**Write-set — ровно 5 paths:** tests/test_m3_1_control_postgres.py,
+scripts/m4_pg_observation.py, .github/workflows/m4-pg-observation.yml,
+docs/tasks/M4_HANDOFF.md, docs/TASK_REGISTER.md.
+В runner/workflow разрешены только новая execution identity/base/tree/write-set
+и учёт необходимых узких regression cases. Consumer API/guards/provenance
+source уже принят в review; менять их, production, DDL/grants/RLS, bootstrap,
+compose/Dockerfiles, deps/pins, CI core/native, AI не требуется и не разрешено.
+
+1. Минимально исправить lifecycle helper/negative control. Не посылать observer
+   SQL без известного active target query; ожидание identity остаётся bounded
+   и отдаёт управление target. Сохранять exact task/query/PID, проверки pending
+   до принятия rows и после await, исходные ошибки/cancel target.
+   Не превращать unknown/finished/replaced query в положительный wait.
+2. Expected negative outcome не должен скрывать отменённый/сломанный observer.
+   После foreign/absent deadline проверить заявленные условия; в foreign —
+   тот же blocker backend и его открытая транзакция, unrelated waiter действительно
+   остаётся заблокирован до явного release, затем исходные effects/cleanup checks.
+   Не rollback/reconnect blocker ради успешного recheck и не ловить
+   PendingRollbackError как допустимый результат. Если для timeout/cancel controls
+   нужна отдельная observer connection, разрешено открыть её заранее через
+   существующий TEST engine/role и закрыть её собственную транзакцию; без новых
+   прав, pool/framework или подключения в product timing window.
+3. Сохранить все 254 R2 IDs/ожидания, original 222 business assertions и matrix 12.
+   Controlled fixtures адаптировать к смыслу событий: query_finished/query_replaced
+   сейчас зависят от второго SQL poll; после устранения пустого poll это не
+   надёжная точка синхронизации. Использовать явное событие target query, не
+   ослаблять assertions. Узко проверить отсутствие SQL при unknown identity и
+   cancellation/error path observer, включая сохранность blocker lifecycle.
+   Нужные новые controls допустимы, новая общая матрица/registry — нет.
+4. Timeout 1.5s, product edge 1.1s, DB bounds/clock/state и existing effects/replay
+   не увеличивать/не подменять. Не добавлять retries, sleeps ради PASS, skip/xfail
+   или ранний release. Ошибка observer должна давать FAIL с первичной причиной.
+   matrix-command.json / matrix-summary.json и строгие completeness/result gates
+   сохранить; missing/overflow/unknown outcome не PASS.
+
+**Validation уже разрешена в этой выдаче.** Сначала scoped controlled/report
+checks, Ruff/format/compile, collect-only всех четырёх modules с проверкой
+сохранности ordered original 222 и всех R2 cases. Затем один новый hosted job
+на исправленном source: fresh PG 18 / asm_test, прежние pins/roles/bootstrap,
+одна pytest invocation четырёх modules (254 + необходимые новые controls),
+test phase <=600s / job <=25min, owned cleanup. Отсутствие local PG не блокирует
+штатный hosted путь. Не запускать полный CI, rerun или старую R2 ветку.
+
+Tested source — один direct child C0 base. Создать новую execution ref на base,
+затем один FF на prepared source с expected_sha=base/force=false; workflow
+branch-only push, attempt 1. После результата execution ref frozen, отдельный
+docs receipt только на preparation branch. При failure сохранить все группы
+и cleanup, без автоматического второго запуска или post-failure source edits.
+
+Вернуть exact source/tree/parent/paths и команды, scoped results, один run/job/
+attempt, collect/cases/JUnit, обе report files, версии, primary/cleanup и
+artifact ID/bytes/SHA256. Отдельно показать, что foreign control завершил held-lock
+и final-effect assertions; controlled evidence не выдавать за real PG.
+C2 затем HOLD. C0 проверяет repair, готовит integration candidate/full CI и
+выдачу runtime. Историческая причина остаётся UNKNOWN; повторять старый CI ради
+случайного PASS не нужно. В этой выдаче нет model/Telegram/VM/live действий,
+нового owner budget, merge или движения PR39/main.
 
 ### Возврат C2 — C2-M4-CI-OBSERVATION-R2 / BLOCKED; C2 HOLD / 2026-10-30
 
@@ -185,7 +300,7 @@ C0 ограничивает следующий scope этими доказанн
 Его причина остаётся UNKNOWN в истории; закрытие integration gate — отдельное
 решение C0 после repair evidence и full CI, не автоматический вывод из PASS12.
 
-### Задача C2 — C2-M4-CI-OBSERVATION-R2
+### История задачи C2 — C2-M4-CI-OBSERVATION-R2; допуск использован
 
 Repository **Elefesys/ai-service-manager**, preparation
 **c2/m4-ci-observation-r2**, execution **c2/m4-pg-observation-run-r2**.
