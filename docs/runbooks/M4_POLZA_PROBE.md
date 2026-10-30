@@ -1,10 +1,67 @@
-# M4.2 — DeepSeek tool compatibility: кандидат для review C0
+# M4.2 — готовый DeepSeek tool roundtrip
 
-**Paid запуск HOLD.** Подготовлен отдельный `--deepseek-tool-compat`; новая
-exact-source команда появится только после review C0. Offline plan ниже не читает
-ключ и не обращается к сети. Использованный DeepSeek eval-r1 не повторять,
-в том числе с другим именем report. Все прежние reports сохранить.
-[Задача и receipt C4](../tasks/M4_HANDOFF.md), статус — [CURRENT](../TASK_REGISTER.md).
+**C0 принял код и разрешил один запуск: максимум2 model POST,1 synthetic READ
+и1 RUB внутри прежнего бюджета150.** Source **5885df1b0ba04378e8af6f2089d2fc86be6c22e3**,
+tree **6ca70ba7f6d431accaa0478e1d515cc69ebae7b9**; [приёмка C0](../tasks/M4_HANDOFF.md).
+Это отдельный named READ → strict final профиль. Предыдущий25-case auto eval
+не повторяется, старые отчёты и резервы Gemini сохраняются.
+
+## Готовая Windows команда — один DeepSeek tool roundtrip
+
+Выполни блок **один раз** в PowerShell. Он использует существующий checkout,
+окружение и `.env.m4-probe`; переустановка и замена ключа не нужны.
+
+```powershell
+& {
+    $ErrorActionPreference = "Stop"
+    $Candidate = "5885df1b0ba04378e8af6f2089d2fc86be6c22e3"
+    $CandidateTree = "6ca70ba7f6d431accaa0478e1d515cc69ebae7b9"
+    $DecisionRef = "C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1:5885df1b0ba04378e8af6f2089d2fc86be6c22e3:OWNER_ROUNDTRIP_R1_1RUB"
+    $StageRub = "1"
+    $Repo = Join-Path $env:LOCALAPPDATA "ASM-M4-Probe-4f86e7f"
+    Set-Location -LiteralPath $Repo
+    $Report = "reports\m4-polza-deepseek-tool-compat-r1.jsonl"
+    if (Test-Path -LiteralPath $Report) { throw "Preserve existing report; do not replay" }
+    $Dirty = git status --porcelain --untracked-files=normal
+    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean checkout required; return STOP to C0" }
+    git fetch origin $Candidate
+    if ($LASTEXITCODE -ne 0) { throw "Source fetch failed" }
+    git checkout --detach $Candidate
+    if ($LASTEXITCODE -ne 0) { throw "Source checkout failed" }
+    $Actual = git rev-parse HEAD
+    if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Accepted source mismatch" }
+    $ActualTree = git rev-parse 'HEAD^{tree}'
+    if ($LASTEXITCODE -ne 0 -or $ActualTree -cne $CandidateTree) { throw "Accepted tree mismatch" }
+    $Dirty = git status --porcelain --untracked-files=normal
+    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean accepted source required" }
+    if (-not (Test-Path -LiteralPath '.\.venv\Scripts\python.exe' -PathType Leaf)) { throw "Existing environment required" }
+    if (-not (Test-Path -LiteralPath '.\.env.m4-probe' -PathType Leaf)) { throw "Existing private key file required" }
+    New-Item -ItemType Directory -Path 'reports' -Force | Out-Null
+    .\.venv\Scripts\python.exe -m asm.ai.probe --plan --deepseek-tool-compat
+    if ($LASTEXITCODE -ne 0) { throw "Offline plan failed" }
+    .\.venv\Scripts\python.exe -m asm.ai.probe --live --deepseek-tool-compat `
+        --secret-file .\.env.m4-probe --report $Report `
+        --approved-rub $StageRub --approval-ref $DecisionRef `
+        --source-sha $Candidate --source-environment LOCAL_DESKTOP
+    $ProbeExit = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $Report)) { throw "No receipt written; return STOP to C0 without retry" }
+    Write-Host "DeepSeek compatibility receipt: $Report"
+    if ($ProbeExit -ne 0) { Write-Host "STOP/REVIEW_REQUIRED: preserve receipt; do not retry" }
+    Get-FileHash -LiteralPath $Report -Algorithm SHA256
+    Write-Host "Return the complete JSONL to C0; no retry or runtime approval"
+    Get-Content -LiteralPath $Report -Encoding UTF8
+}
+```
+
+После offline plan промежуточных строк может не быть. Общий лимит stage120s,
+roundtrip60s; не запускать второй экземпляр. В конце блок печатает весь JSONL
+и hash. Вернуть файл целиком даже при exit2/STOP. Старые reports не менять.
+
+Offline `PLAN_ONLY / PAID_NOT_AUTHORIZED` описывает только план. Допуск одного
+live шага задан exact source/ref/1 RUB в этом блоке. Сам план не запускает API.
+PROTOCOL_OBSERVED / HUMAN_REVIEW_REQUIRED ещё требует ручной оценки ответа.
+QUALITY_FLAGGED / HUMAN_REVIEW_REQUIRED и FAILED_OR_INCOMPLETE не разрешают
+retry. После одного отчёта следующий paid шаг HOLD до C0 review.
 
 ## Результат владельца
 
@@ -110,56 +167,6 @@ uv run --frozen --no-sync python -m asm.ai.probe --plan --deepseek-tool-compat
 remaining142.890915172. Fresh reservation пока null; selected_model=null,
 runtime_authorized=false. Это не preflight и не проверка владельческого ключа.
 
-## Windows-шаблон для последующей приёмки C0
-
-**Не является paid допуском.** C0 после source review должен опубликовать полные
-source/tree и новый ref `C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1:<source>:<C0_SUFFIX>`.
-Ниже placeholders намеренно останавливают блок до чтения ключа и HTTP.
-Не подставлять старый OWNER_25_CASES_R1. Работать в отдельном чистом checkout
-точного принятого source; `.env.m4-probe` остаётся только у владельца.
-
-```powershell
-$ErrorActionPreference = 'Stop'
-$ReviewedSource = 'C0_REVIEWED_FULL_SHA_REQUIRED'
-$ReviewedTree = 'C0_REVIEWED_TREE_REQUIRED'
-$ApprovalRef = 'C0_REVIEWED_APPROVAL_REF_REQUIRED'
-if ($ReviewedSource -cnotmatch '^[0-9a-f]{40}$' -or $ReviewedTree -cnotmatch '^[0-9a-f]{40}$') {
-    throw 'HOLD: нужен новый exact-source review C0'
-}
-if ($ApprovalRef -cnotmatch ('^C0-M4\.2-DEEPSEEK-TOOL-COMPAT-R1:' + $ReviewedSource + ':[A-Z0-9_]{1,80}$')) {
-    throw 'HOLD: нужен отдельный ref C0 для этого source'
-}
-$ActualSource = git rev-parse HEAD
-if ($LASTEXITCODE -ne 0 -or $ActualSource -cne $ReviewedSource) { throw 'SOURCE_MISMATCH' }
-$ActualTree = git rev-parse 'HEAD^{tree}'
-if ($LASTEXITCODE -ne 0 -or $ActualTree -cne $ReviewedTree) { throw 'TREE_MISMATCH' }
-$Dirty = git status --porcelain --untracked-files=normal
-if ($LASTEXITCODE -ne 0 -or $Dirty) { throw 'CHECKOUT_NOT_CLEAN' }
-$Report = 'reports/m4-polza-deepseek-tool-compat-r1.jsonl'
-if (Test-Path -LiteralPath $Report) { throw 'REPORT_EXISTS: не удалять и не повторять' }
-if (-not (Test-Path -LiteralPath '.env.m4-probe' -PathType Leaf)) { throw 'LOCAL_SECRET_FILE_REQUIRED' }
-uv sync --frozen
-if ($LASTEXITCODE -ne 0) { throw 'DEPENDENCIES_FAILED' }
-uv run --frozen --no-sync python -m asm.ai.probe --plan --deepseek-tool-compat
-if ($LASTEXITCODE -ne 0) { throw 'PLAN_FAILED' }
-New-Item -ItemType Directory -Path 'reports' -Force | Out-Null
-uv run --frozen --no-sync python -m asm.ai.probe --live --deepseek-tool-compat `
-    --source-sha $ReviewedSource --source-environment LOCAL_DESKTOP `
-    --approval-ref $ApprovalRef --approved-rub 1 `
-    --secret-file '.env.m4-probe' --report $Report
-$ProbeExit = $LASTEXITCODE
-Write-Host ('Probe exit=' + $ProbeExit + '; сохранить report при любом исходе, не повторять')
-if (Test-Path -LiteralPath $Report) {
-    Get-FileHash -LiteralPath $Report -Algorithm SHA256
-} else {
-    Write-Host 'Report отсутствует: вернуть точный STOP C0; не повторять самостоятельно'
-}
-```
-
-Файл создаётся exclusively; новый путь или удаление файла не являются новым
-допуском. Вернуть C0 полный JSONL с hash даже при STOP. Не публиковать в Git
-owner report, ключ, raw response/reasoning или account metadata.
-
 ## CONTROLLED receipt нового режима
 
 Только MockTransport, synthetic catalog/ответы; sockets и owner .env reads
@@ -180,7 +187,14 @@ reservation без case и попытка изменить второй wire н�
 
 ## Проверки и сохранённые ограничения
 
-C0 пересчитал все summary fields, caps, reservations и quality flags по5 events.
+Для source5885df1 C0: **711 targeted tests PASS11.25s**, Ruff/format4/mypy71,
+7 offline CLI plans (первые6 равны base), AST прежних definitions и4 controlled
+exact-command исхода PASS. Code fixes не потребовались. Реальные sockets и
+owner .env reads запрещены; Windows/hosted mode и полный CI source5885df1
+NOT_RUN. Переустановка не нужна: dependencies/lock не менялись.
+
+Исторический review owner eval-r1: C0 пересчитал summary, caps, reservations
+и quality flags по5 events.
 4 CONTROLLED проверки PASS: whole-stage STOP по такому final; длинный текст
 без обрезания; отказ правильного адреса без READ; положительный2-call roundtrip.
 MockTransport, sockets и owner .env reads запрещены. Source не менялся,
@@ -190,7 +204,7 @@ GPT25 finals/27 POST/2 READ сохраняются: no_send_claim19 QUALITY_FAIL
 unknown_price22 QUALITY_NOTE. Gemini BLOCKED,2 failed POST/0 final. Исходное
 75-case comparison не завершено; модель не выбрана, runtime_authorized=false.
 PR39 Draft/headcd60, CI41009211185 RED; root cause M3 observer timeout UNKNOWN,
-C0-M4-CI-OBSERVATION-01 и full CI нового source нужны до merge/runtime.
+C0-M4-CI-OBSERVATION-01 и full CI интеграционного кандидата нужны до merge/runtime.
 Main/VM/DB/Telegram этим отчётом не меняются.
 
 ## Использованные инструкции — только история

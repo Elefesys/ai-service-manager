@@ -375,6 +375,37 @@ findings, Gemini blocker, Draft PR39/headcd60, RED CI41009211185 и
 C0-M4-CI-OBSERVATION-01 сохраняются. Другие исполнители HOLD, следующий C4;
 владелец не запускает старые команды. Новый бюджет150 не запрашивается.
 
+**Решение C0 от2026-10-30 — source tool compatibility принят, один OWNER roundtrip:**
+Source **5885df1b0ba04378e8af6f2089d2fc86be6c22e3**, tree **6ca70ba7f6d431accaa0478e1d515cc69ebae7b9**,
+sole parent7e0870d8492d36a00ffac894e44b787c5af8ca47 принят без исправлений;
+7-file write-set соблюдён. C0:711 targeted PASS11.25s, Ruff/format4/mypy71,
+7 offline plans, прежние6 совпали с base. Все прежние polza definitions и
+constants неизменны, probe меняет только opt-in Ledger/main; protected
+contracts/prompt/schema/fixtures/gateway и зависимости не менялись.
+
+Разрешён **один** standalone owner run по
+`C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1:5885df1b0ba04378e8af6f2089d2fc86be6c22e3:OWNER_ROUNDTRIP_R1_1RUB`.
+Ceiling **1 RUB** из прежнего150, fresh reservation обоих calls≤1 до POST.
+Один tool_current: named read_current → verified history/typed synthetic READ
+→ none + strict final, ≤2 POST/1 READ/4 history GET/1 catalog, прежние
+32768/512 tokens и24576/32768 bytes, roundtrip60s/stage120s. GPT/Gemini POST0.
+Prior0.17932550/31 known +2 unknown held6.929759328,33 attempts, remaining
+142.890915172; всего≤35 attempts, old holds не освобождаются. Отдельный
+exclusive report, flush до HTTP, no retry/fallback/resume.
+
+Exact CLI source/ref/amount проверены CONTROLLED positive, short-final,
+late-history и budget-preflight исходами. Sockets/owner .env reads запрещены,
+real HTTP0; Windows/hosted compatibility ещё NOT_RUN. Это не runtime approval.
+PROTOCOL_OBSERVED требует manual review; quality flags и «С» не PASS.
+После одного receipt paid HOLD до C0. Исходный auto eval failure, GPT quality
+findings и Gemini blocker не переписываются; model selection=null/runtime=false.
+
+Продолжается ранее принятый scoped EVAL_ONLY допуск. PR39 Draft/headcd60,
+CI41009211185 RED и C0-M4-CI-OBSERVATION-01 сохраняются; full CI source5885df1
+NOT_RUN и нужен до merge/runtime. Другие исполнители HOLD, следующий — владелец
+по готовой команде. Main/VM/DB/Telegram/merge не меняются; бюджет150 заново не
+запрашивается.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

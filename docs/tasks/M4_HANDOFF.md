@@ -6,7 +6,84 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-DEEPSEEK-TOOL-COMPAT-R1 / C4 / 2026-10-30
+## Текущий допуск — C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1 / OWNER_ROUNDTRIP_R1_1RUB / 2026-10-30
+
+**C0 SOURCE REVIEW PASS. Разрешён один owner DeepSeek tool roundtrip, ≤1 RUB
+внутри прежнего общего бюджета150.** Выполнить один раз
+[готовую Windows команду](../runbooks/M4_POLZA_PROBE.md) и вернуть полный
+`reports/m4-polza-deepseek-tool-compat-r1.jsonl` при любом исходе.
+Это отдельный named READ → strict final профиль, не повтор исходного25-case
+auto eval и не выбор модели для runtime.
+
+Accepted source **5885df1b0ba04378e8af6f2089d2fc86be6c22e3**, tree **6ca70ba7f6d431accaa0478e1d515cc69ebae7b9**,
+sole parent **7e0870d8492d36a00ffac894e44b787c5af8ca47**.
+Approval ref: `C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1:5885df1b0ba04378e8af6f2089d2fc86be6c22e3:OWNER_ROUNDTRIP_R1_1RUB`.
+Explicit stage ceiling **1 RUB**; fresh reserve обоих calls должен поместиться
+в него до первого POST. Это потолок, не ожидаемая цена и не новый бюджет.
+
+### Независимая приёмка C0
+
+Ровно7 разрешённых файлов и ancestry/tree проверены; код C4 принят без исправлений.
+По AST все10 прежних definitions в polza.py неизменны; добавлены только
+ToolCompatRoute/ToolCompatAdapter. Из41 прежних definitions probe.py изменены
+только Ledger/main для opt-in prior/caps/dispatch; прежние constants и modes
+сохраняются. Contracts/settings/gateway/prompt/schema/fixtures/deps/locks/CI/DB/M3
+не менялись. Семантика tool_choice_function/none сверена с
+[официальным catalog contract Polza](https://polza.ai/docs/gaidy/models).
+
+- **711 targeted pytest PASS (11.25s)**: probe/polza/gateway/gateway_failures.
+- Ruff/check и format4 PASS; mypy **71 source files PASS**.
+- 7 actual offline CLI plans PASS; JSON первых6 совпал с принятой базой.
+- Exact source/ref/amount готовой команды проверены через CONTROLLED CLI:
+  positive2 POST/1 READ/4 history+1 catalog; short «С» даёт QUALITY_FLAGGED/exit2;
+  late history DETAIL/USAGE_OUTPUT/INT сохраняет первый known и новый unknown;
+  превышение whole-stage reserve даёт1 catalog/0 POST. Existing report всегда
+  останавливает повтор до secret/HTTP. Оба old Gemini holds сохранены.
+
+Проверки выполнены на Python3.13.16, MockTransport; audit guard запрещал реальные
+sockets и owner .env reads. Реальных Polza HTTP/owner key reads=0. C4 отдельно
+сообщил711 PASS9.78s; это не длительность проверки C0. Actual Windows/hosted
+compatibility/quality этого нового режима пока NOT_RUN. Full CI нового source
+NOT_RUN; неизменённый полный CI ради случайного PASS не запускался.
+
+### Границы одного запуска
+
+| Область | Допуск |
+|---|---|
+| Маршрут / case | Только deepseek/deepseek-v4.1-flash-1017 /wafer/us, прежний tool_current repeat0 |
+| Фазы | Named read_current → verified history/typed synthetic READ → tool_choice:none + прежний strict final envelope |
+| Семантика | На первой фазе response_format IGNORED_BY_DOCUMENTED_TOOL_MODE; auto tools NOT_TESTED_BY_THIS_PROFILE |
+| Сеть / READ | 1 catalog GET /≤2 model POST /≤4 history GET /≤1 synthetic READ; GPT/Gemini POST0 |
+| Tokens / bytes | 32768/512 и24576/32768 на call, total token reservation66560; прежний explicit non-thinking |
+| Время | Roundtrip60s вместе с history; stage120s; catalog4MiB/20s, history65536 bytes/15s verification |
+| Бюджет / prior | ≤1 RUB из150; prior0.17932550 confirmed/31 known +2 Gemini unknown, held6.929759328; всего33 prior attempts |
+| Report | Новый exclusive reports/m4-polza-deepseek-tool-compat-r1.jsonl, flush reservation до HTTP; old reports read-only |
+
+Remaining с обоими old reserves **142.890915172 RUB**, это ledger capacity,
+не баланс аккаунта. Всего≤35 model attempts. Новые known/unknown отдельно,
+старые6.929759328 held не снимаются. Полный reserve двух новых calls проверяется
+до POST; missing/unknown named/none declaration, rates/fees/caps — STOP без POST.
+Нет retry/fallback/polling/resume. Ошибка первой фазы исключает READ и follow-up;
+ошибка второй не разрешает третий call. Abrupt kill после reservation сохраняет
+UNKNOWN; не запускать заново под другим report name.
+
+### Результат и дальнейшие границы
+
+PROTOCOL_OBSERVED / HUMAN_REVIEW_REQUIRED — технически получены обе фазы;
+manual assessment ещё PENDING. QUALITY_FLAGGED / HUMAN_REVIEW_REQUIRED и
+FAILED_OR_INCOMPLETE также вернуть целиком, без повторов. Short «С» не PASS.
+После одного receipt следующий paid шаг HOLD до C0 review. selected_model=null,
+runtime_authorized=false. GPT quality findings, Gemini blocker и неуспешный
+DeepSeek auto eval сохраняются; полное75-case сравнение не завершено.
+
+Допуск — standalone EVAL_ONLY в ранее принятом scoped исключении. PR39 остаётся
+Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**, CI41009211185 RED,
+M3 observer timeout root cause UNKNOWN. C0-M4-CI-OBSERVATION-01 и полный CI
+интеграционного кандидата остаются до merge/runtime. Main/VM/DB/Telegram/merge
+не менялись. C1/C2/C3/C4/C5/C6/C8 HOLD; следующий исполнитель — владелец по готовой
+команде. Повторно подтверждать общий бюджет150 или менять ключ не требуется.
+
+## История выдачи — M4.2-DEEPSEEK-TOOL-COMPAT-R1 / C4 / 2026-10-30
 
 **DeepSeek eval-r1 остановлен на первом tool_current: 1 POST, 0 READ, 0 follow-up.**
 Допуск OWNER_25_CASES_R1 использован; прежнюю команду не повторять. C4 получает

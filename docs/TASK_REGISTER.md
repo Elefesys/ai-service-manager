@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.2 DeepSeek tool compatibility / 2026-10-30
+## CURRENT — M4.2 DeepSeek tool compatibility: один owner roundtrip / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**; PR38 merged,
@@ -13,48 +13,49 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 |---|---|
 | M4-PLAN / M4.1-CONTRACT | INTEGRATED / VERIFIED docs и contract/fake scope; PR37/38 |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | REVIEW: GPT25 finals/27 POST/2 READ; quality findings сохраняются. Gemini2 failed POST/0 final. DeepSeek1 failed scenario/1 schema-valid unusable final; остальные24 NOT_RUN. Comparison/selection/runtime не приняты |
-| M4.2-GEMINI-DIAGNOSTIC-R1 | VERIFIED только diagnostic scope; SIGNATURE_EXTRA_MISSING, history failed, ONE_POST_R1_5RUB использован |
-| M4.2-GEMINI-COMPATIBILITY | BLOCKED: tool signature carrier не установлен; новых Gemini вызовов нет |
-| M4.2-DEEPSEEK-EVAL-R1 | BLOCKED после owner receipt: READ_ROUND_TRIP, 1 POST/0 READ, handoff «С»; OWNER_25_CASES_R1 использован, no replay |
-| M4.2-DEEPSEEK-TOOL-COMPAT-R1 | REVIEW / C4 подготовил отдельный named read_current → none strict-final режим; ≤2 POST/1 READ/1 RUB, prior33 attempts и оба old holds сохранены. 711 targeted tests, Ruff/format4, mypy71,7 offline plans PASS. Receipt и неактивный Windows-шаблон готовы; paid POST0, новый exact-source допуск только после C0 review; исходный auto eval неизменён |
-| C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 wait_blocked1.5s timeout, root cause UNKNOWN; отсутствующие foundation gates не приняты |
+| M4.2-PROBE | REVIEW: GPT25 finals/27 POST/2 READ с quality findings; Gemini2 failed POST/0 final; DeepSeek auto eval1 failed scenario/24 NOT_RUN. Comparison/selection/runtime не приняты |
+| M4.2-GEMINI-DIAGNOSTIC-R1 | VERIFIED diagnostic scope; SIGNATURE_EXTRA_MISSING, charge UNKNOWN, допуск consumed |
+| M4.2-GEMINI-COMPATIBILITY | BLOCKED, новых Gemini вызовов нет |
+| M4.2-DEEPSEEK-EVAL-R1 | BLOCKED: READ_ROUND_TRIP, handoff «С», OWNER_25_CASES_R1 consumed; no replay |
+| M4.2-DEEPSEEK-TOOL-COMPAT-R1 | REVIEW / C0 SOURCE PASS, OWNER_ROUNDTRIP_R1_1RUB AUTHORIZED: source5885df1, один named READ→none strict final, ≤2 POST/1 READ/1 RUB из прежнего150. Полный report→C0; не auto-tools/quality/runtime approval |
+| C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 wait_blocked1.5s timeout, root cause UNKNOWN; последующие foundation gates не приняты |
 | M4.3-CONTEXT / M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-[Точная выдача, receipt и проверки C0](tasks/M4_HANDOFF.md),
-[инструкция владельцу](runbooks/M4_POLZA_PROBE.md),
+[Приёмка и точные границы](tasks/M4_HANDOFF.md),
+[готовая Windows команда](runbooks/M4_POLZA_PROBE.md),
 [решение C0](decisions/IMPL-004-m4-pilot-ai.md).
-Base C4 — полный SHA опубликованного C0 seed с этим CURRENT;
-parent **1dfc6ec3a22d1be38a4a3269af847775bfc6db10**.
-Branch `c4/m4-2-deepseek-tool-compat-r1`, write-set в handoff.
+Accepted source **5885df1b0ba04378e8af6f2089d2fc86be6c22e3**, tree **6ca70ba7f6d431accaa0478e1d515cc69ebae7b9**,
+sole parent **7e0870d8492d36a00ffac894e44b787c5af8ca47**.7-file scope принят
+без code fixes. C0:711 targeted PASS11.25s, Ruff/format4, mypy71;7 offline plans,
+первые6 равны base. Прежние polza definitions неизменны; probe — только
+opt-in Ledger/main; старые constants/fixtures/schema/prompt/contracts сохранены.
+Exact CLI source/ref/1 RUB: controlled positive, short final, late history и
+preflight budget STOP проверены; оба old held сохранены, report exclusive.
+Real HTTP/owner key reads0; фактический Windows/hosted режим ещё NOT_RUN.
 
-Owner DeepSeek source **5f5ece5426d675559c15fe1b74561dc6dddd456a**;
-полный JSONL7993 bytes/5 events SHA256
-`b2e716a962a8966aaff61f8eb8cec57419ea4d2b7c1375caf8b6578ec08ebfcc` принят.
-1 catalog/1 POST/2 history GET/0 READ; cost **0.00423361 RUB CONFIRMED**,
-usage575/31, reasoning0, history family Wafer, variant NOT_OBSERVED.
-READ_ROUND_TRIP и manual QUALITY_FAIL относятся к этому saved final.
-Wafer документирует JSON reply при auto+response_format; это конкретный
-protocol mismatch, а не доказанная неспособность DeepSeek к tools. Причина
-однобуквенного ответа UNKNOWN; parser сохраняет длинный текст в controlled test.
-4 CONTROLLED проверки и пересчёт всего summary PASS; real HTTP/owner key reads0.
-Ранее616 targeted tests не повторялись; новый code/full CI NOT_RUN.
+Единственный owner допуск:
+`C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1:5885df1b0ba04378e8af6f2089d2fc86be6c22e3:OWNER_ROUNDTRIP_R1_1RUB`.
+Whole-stage fresh reserve обоих calls≤1 RUB до POST;1 catalog/≤4 history,
+roundtrip60s/stage120s,32768/512 tokens и24576/32768 bytes на call.
+Новый reports/m4-polza-deepseek-tool-compat-r1.jsonl вернуть целиком при любом
+исходе. После одного receipt paid HOLD до C0; retry/fallback отсутствуют.
 
-Shared confirmed **0.17932550 RUB /31 known POST**, unknown2 Gemini/held
-**6.929759328 RUB**, всего33 POST; committed+held **7.109084828 RUB**;
-remaining **142.890915172 RUB** из прежнего150. Новых unknown0, старые резервы
-не сняты. Это ledger, не account balance. Старый source mode хранит прежний prior,
-повтор его команды запрещён. GPT no_send_claim19 QUALITY_FAIL и unknown_price22
-QUALITY_NOTE сохраняются; новый compatibility profile не сравнивается как auto PASS.
+Prior **0.17932550 RUB /31 known POST**,2 Gemini unknown/held **6.929759328 RUB**,
+всего33 attempts. Confirmed+held7.109084828; remaining **142.890915172 RUB**
+из150, не live account balance. Новый предел≤35 shared POST; old holds не
+снимаются. Forced profile не переписывает исходный auto failure; причина
+однобуквенного текста UNKNOWN. GPT no_send_claim19 QUALITY_FAIL и unknown_price22
+QUALITY_NOTE сохраняются. selected_model=null/runtime=false.
 
 PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**;
 [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
 FAILURE/10 из11 на cd60:2640 ordinary+155 subtests PASS,803 PG PASS/1 M3 observer
 timeout,54 browser/398 frontend PASS. Root cause UNKNOWN, последующие foundation
-gates не приняты. Full CI source5f5ece5 NOT_RUN. Нет новых CI/deployment/merge
-действий. C1/C2/C3/C5/C6/C8 HOLD; следующий исполнитель C4, владелец не запускает
-paid команды. Main/VM/DB/Telegram/runtime без изменений.
+gates не приняты. Full CI source5885df1 NOT_RUN; scoped standalone EVAL_ONLY
+допуск не закрывает CI debt и не разрешает merge/runtime. C1/C2/C3/C4/C5/C6/C8
+HOLD; следующий исполнитель — владелец по готовой команде. Main/VM/DB/Telegram/
+merge без изменений, повторного запроса бюджета150 нет.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 
