@@ -1,11 +1,19 @@
 # M4.2 — quality flags и одно продолжение synthetic experiment
 
-**QUALITY-CONTINUATION-R1: candidate REVIEW; новый paid R2 NOT RUN.**
-Выдача C0 — [M4_HANDOFF](../tasks/M4_HANDOFF.md), решение —
-[IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md). Source R1
-**b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc** принят C0:399 targeted PASS и
-[CI40915999616](https://github.com/Elefesys/ai-service-manager/actions/runs/40915999616)
-SUCCESS11/11. Это прежний source; CI нового candidate выполняет C0 после review.
+**OWNER R2 SYNTHETIC_ONLY AUTHORIZED; paid R2 NOT RUN; общий CI RED / merge HOLD.**
+Source **cd60e5e16d8bcada53597d660a15f4d82640e956**, tree
+**d3065a074d09a40fe15a62d4eaac0b9b8426458f**. C0 independently:443 targeted,
+Ruff/format2/mypy71/plans/diff PASS; реальный R1 принят без hash override,
+контролируемый остаток63/67/4 и aggregate75/81/6 PASS, owner key/HTTP=0.
+[Приёмка C0](../tasks/M4_HANDOFF.md), [решение](../decisions/IMPL-004-m4-pilot-ai.md).
+[CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
+завершён:10/11 SUCCESS;2640 unit+155 subtests PASS,803 PG PASS/1 FAIL.
+M3 lock observer исчерпал1.5s до проверки результата операции; cause ещё UNKNOWN.
+Foundation completeness/последующие gates не приняты. Полный CI не объявлен PASS.
+C0 разрешает один ограниченный запуск **только этого standalone CLI**: отдельная
+проверка67 controlled POST прошла с запрещёнными импортами БД/M3 и owner secret/
+реальной сетью. Merge/runtime ждут C0-M4-CI-OBSERVATION-01. Подробное основание и
+границы исключения записаны в IMPL-004 и handoff. Проверки/таймауты не ослаблены.
 
 C0 проверил полный owner R1:12 GPT finals/14 confirmed POST/2 READ/28 history GET,
 manual12 semantic PASS в их synthetic scope. Regex500 нашёл упоминание внутри
@@ -84,19 +92,19 @@ Unknown calls и pending reservations имеют отдельные counts/ре�
 Per-model reservation fields относятся к новому stage (`NEW_STAGE_ONLY`),
 импортированные confirmed charges уже погашают старые reservations.
 
-## Одна Windows команда после принятия C0
+## Готовая Windows команда — один локальный R2
 
-Из обычного PowerShell на прежнем ПК заменить только `C0_ACCEPTED_FULL_SHA` и
-`C0_ACCEPTED_DECISION_REF`. C0 сначала проверяет source/план и replay реального
-R1 без HTTP/секрета, затем один full CI нового candidate и выдаёт запуск.
+В обычном PowerShell на прежнем ПК выполнить блок целиком; ничего заменять
+не требуется. Exact source и ограниченное решение C0 уже указаны. Это один
+новый этап63 cases, без повторения R1; runtime/merge не разрешены этим решением.
 Команда использует существующий `ASM-M4-Probe-4f86e7f`, `.venv` и `.env.m4-probe`;
 owner-only ACL ключа уже проверен. Файлы не переименовывать ради нового запуска.
 
 ```powershell
 & {
     $ErrorActionPreference = "Stop"
-    $Candidate = "C0_ACCEPTED_FULL_SHA"
-    $DecisionRef = "C0_ACCEPTED_DECISION_REF"
+    $Candidate = "cd60e5e16d8bcada53597d660a15f4d82640e956"
+    $DecisionRef = "C0-M4.2-QUALITY-CONTINUATION-EVAL-R1:cd60e5e16d8bcada53597d660a15f4d82640e956:CI41009211185-SCOPED"
     if ($Candidate -cnotmatch '^[0-9a-f]{40}$') { throw "Exact accepted SHA required" }
     if ([string]::IsNullOrWhiteSpace($DecisionRef) -or $DecisionRef -eq "C0_ACCEPTED_DECISION_REF") {
         throw "Exact C0 decision reference required"

@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.1 INTEGRATED / VERIFIED; GPT READ live PASS / 2026-10-29
+## CURRENT — M4.2 quality continuation / C0 review / 2026-10-30
 
 Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**; PR38 слит владельцем,
@@ -14,36 +14,46 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | REVIEW / C4 QUALITY-CONTINUATION-R1 candidate от e93c156b5ddcf7dcc2351a21755eb759a6f99e80. 443 targeted PASS; Ruff/format/mypy71/plan/diff PASS. Controlled continuation: 63 новых cases/67 POST/4 READ/134 history GET +1 catalog, aggregate75/81/6; original12 сохранены без replay, heuristic flags требуют human review, все confirmed calls учтены. Exact R1 hash b727cc1c проверяется до secret/HTTP; shared prior0.09573737, новый stage≤149.90426263. Готовая Windows команда с прежним key/env/R1 и exclusive R2 — в runbook. C0 real-receipt replay/review → один full CI → owner paid; C4 paid/full CI NOT RUN, PR39/main без изменений. C1/C2/C3/C5/C6/C8 HOLD |
+| M4.2-PROBE | REVIEW / OWNER R2 SYNTHETIC_ONLY AUTHORIZED для cd60e5e:443 targeted,2640 unit+155 subtests, real R1 +controlled remainder63/67/4 PASS. Shared prior0.09573737, stage≤149.90426263; old12 без replay. CI41009211185 RED/10 из11: M3 lock observer timeout; scoped CLI isolation проверена, решение IMPL-004. Merge/runtime HOLD; после R2 полный JSONL → C0. |
+| C0-M4-CI-OBSERVATION-01 | TODO / до merge/runtime: разобрать M3 wait_blocked1.5s timeout и завершить отсутствующие foundation gates; причина задержки UNKNOWN. Тесты/таймауты неизменны; случайный rerun не выполнен. |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
 | M4.3-QUALITY | TODO; независимый scoped C8/eval |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-Единственная текущая выдача **M4.2-PROBE-QUALITY-CONTINUATION-R1 / C4**,
-ветка `c4/m4-2-eval-quality-continuation-r1` от опубликованного C0 seed (SHA/tree
-в PR39); parent746ad58775630a3f72b2fd8210693d70c0749b90, code baseb1ff8f1463e12ff65a64d692b7fc7718aa8d05fc.
-Exact scope/receipt/criteria — [M4_HANDOFF](tasks/M4_HANDOFF.md), решение — IMPL-004.
+C4 возврат принят по source review: **cd60e5e16d8bcada53597d660a15f4d82640e956**,
+tree **d3065a074d09a40fe15a62d4eaac0b9b8426458f**, parent e93c156b5ddcf7dcc2351a21755eb759a6f99e80.
+PR39 Draft/head cd60e5e. Точный [receipt C0 и следующий шаг](tasks/M4_HANDOFF.md),
+[операторская команда](runbooks/M4_POLZA_PROBE.md), решение IMPL-004.
 
-Полный R1 **34940 bytes/30 events**, SHA256
-**b727cc1ca65c5ef189cc2bddba619136a354c6414b7159e0bde4d521f52f8b48**.
-Source/fixture/plan/ordered cases/ledger/summary согласованы;14 unique generations,
-all14 CONFIRMED/RUB, unknown0,2 READ,28 history GET; все12 finals вручную PASS
-в их synthetic scope. Regex500 в корректном отказе остаётся историческим flag.
-R1 expense0.08303952 +helper0.01269785 =shared0.09573737, remaining149.90426263.
-Reservation6.524237332 не был списанием; account/key balance не запрашивался.
-Gemini/DeepSeek пока NOT_RUN. Исторический reserve81=111.256898868, остаток67
-при тех же rates104.745359386; для новых calls нужен fresh conditional plan.
+Реальный R1 b727cc1c/34940 bytes/30 events принят новым prefix loader без
+подмены hash, source/fixture/plan/ledger/summary согласованы. Старые12 finals
+вручную PASS в их synthetic scope;14 confirmed calls/2 READ/28 history GET.
+R1 expense0.08303952 +helpers0.01269785 =shared prior0.09573737,
+остаток общего150 —149.90426263. Reservation не является списанием;
+account/key GET не выполнялся. Gemini/DeepSeek live пока NOT_RUN.
 
-C0 явно разделил quality flags/manual assessment и hard protocol/metering STOP.
-Подготовить один continuation по exact receipt без повторных POST за12 cases;
-новые63/67/4, aggregate75/81/6, global helper+probe≤84 POST. Все calls оплачиваются
-и учитываются независимо от quality flags; original JSONL read-only. Нет нового
-LLM grader/helper/general resume platform. C4 source/targeted checks/готовая команда
-→ C0 actual-receipt replay/review → один full CI → owner запуск в прежнем бюджете.
-Новый live пока не выдан. Old code CI399 targeted/40915999616 SUCCESS11/11 не
-повторяется. PR39 остаётся Draft/headb1ff8f1; accepted main51d7d737, VM/DB/Telegram/
-runtime/merge без изменений. Остальные исполнители HOLD.
+C0 независимо:443 targeted PASS, Ruff/format2, mypy71, offline plans и
+actual receipt +controlled remainder63 cases/67 POST/4 READ PASS. Aggregate75/81/6,
+helper+probe≤84 POST. Все30 original events и scoped manual verdicts сохраняются;
+новые quality flags требуют review, технические failures останавливают этап.
+
+[CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
+**FAILURE /10 из11 SUCCESS**:2640 unit+155 subtests PASS,803 PG PASS/1 observer
+timeout; остальные11 вариантов матрицы и54 browser/398 frontend PASS.
+Foundation completeness отказал после PG failure; оставшиеся contracts/wheel/
+downgrade-reupgrade/host smoke не завершены. Все11 checkout logs/10 artifact
+IDs/digests сверены. Нельзя считать этот run зелёным.
+
+**C0 допускает только один LOCAL synthetic Polza R2** по готовому runbook в
+прежнем бюджете. Дополнительно controlled67 POST прошли с запрещённым импортом
+БД/M3; CLI не зависит от упавшего observer. Решение C0-M4.2-QUALITY-CONTINUATION-EVAL-R1
+явно записано в IMPL-004. C0-M4-CI-OBSERVATION-01 остаётся перед merge/runtime;
+исправления тестов и повтор полного CI здесь не выполнялись. C1/C2/C3/C4/C5/C6/C8 HOLD.
+Новый этап использует fresh catalog и deadline1800s; старые12 scenarios не
+повторяются. Original R1 неизменяем, R2 exclusive. Все новые outputs/charges
+требуют C0 review; runtime_authorized=false, модель не выбрана.
+Accepted main51d7d737/VM/DB/Telegram/runtime/merge без изменений.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

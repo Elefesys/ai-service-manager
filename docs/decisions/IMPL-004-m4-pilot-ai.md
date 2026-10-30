@@ -214,6 +214,29 @@ Imported prefix получает отдельный scoped C0 manual assessment,
 Это решение о реализации; новый paid запуск — после C0 review конкретного candidate.
 Точная выдача/негативные проверки/receipt format — QUALITY-CONTINUATION-R1 в handoff.
 
+**Решение C0 от2026-10-30 — отдельный допуск standalone R2 при красном M3 gate:**
+source cd60e5e16d8bcada53597d660a15f4d82640e956 прошёл source review,443 targeted,
+2640 ordinary+155 subtests и actual R1 loader/control continuation. CI41009211185
+остаётся FAILURE:10/11 jobs SUCCESS,803 PG PASS/1 FAIL. Единственный PG failure —
+1.5s observer timeout в M3 controlled-activation-subscription; причина задержки
+не установлена, assertions после освобождения lock не достигнуты. Secondary
+completeness отказал; незавершённые foundation gates не считаются PASS.
+
+C0 разрешает **один LOCAL synthetic CLI R2 / EVAL_ONLY** в ранее согласованном150
+с новым остатком149.90426263, exact R1 hash,63 scenarios/≤67 POST/4 READ и прежними
+per-call guards. Основание узкого допуска: изменены только probe/tests/docs;
+M3/DB code неизменен, standalone probe не импортирует/не вызывает эти modules.
+C0 independently выполнил real R1 +controlled67 POST при запрещённых импортах
+sqlalchemy/psycopg/asm.foundation/auth/messaging/tenancy, real network и secret
+file reads — PASS. Платных запросов эта проверка не выполняла.
+
+Это явное исключение **только для существующего bounded EVAL CLI**, а не зелёный
+CI, runtime admission, интеграция M3 или разрешение merge. Задача
+C0-M4-CI-OBSERVATION-01 должна быть разобрана до merge/runtime, с сохранением
+проверки настоящего lock wait и всех временных/продуктовых assertions. Полный
+прогон ради случайного PASS не повторялся, тесты не ослаблялись. Подтверждение
+новых Polza outputs/charges и выбор модели остаются после полного R2 review.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

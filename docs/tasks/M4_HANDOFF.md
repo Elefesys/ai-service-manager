@@ -6,7 +6,79 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-PROBE-QUALITY-CONTINUATION-R1 / C4 / 2026-10-30
+## Текущая приёмка — C0-M4.2-QUALITY-CONTINUATION-EVAL-R1 / 2026-10-30
+
+**Source review PASS; OWNER R2 EVAL_ONLY AUTHORIZED; общий CI RED / merge HOLD.**
+Candidate **cd60e5e16d8bcada53597d660a15f4d82640e956**, tree
+**d3065a074d09a40fe15a62d4eaac0b9b8426458f**, sole parent
+**e93c156b5ddcf7dcc2351a21755eb759a6f99e80**. PR39 Draft/head candidate,
+fast-forward от b1ff8f1; merge/main/VM/DB/Telegram/runtime не менялись.
+
+C0 независимо проверил ровно5 разрешённых файлов. Frozen CPython3.13.16:
+443 targeted pytest PASS (6.38s), Ruff/check+format2 PASS, mypy71 PASS,
+трёхрежимный offline plan75/81/6, diff/scope/clean worktree PASS.
+Adapter/contracts/prompt/schema/scenario fixtures/locks/CI неизменны.
+
+Реальный owner R1 принят новым loader **без подмены hash**, secret/HTTP запрещены:
+34940 bytes/30 events, SHA256
+**b727cc1ca65c5ef189cc2bddba619136a354c6414b7159e0bde4d521f52f8b48**.
+Offline CLI:63 новых cases/67 POST/4 READ, prior0.09573737,
+stage ceiling149.90426263. Все30 original events и12 scoped manual assessments
+сохранены; исходный файл побайтово не изменился.
+
+Real R1 + CONTROLLED remainder независимо прошёл63 new finals/67 mock POST/
+134 history GET+1 catalog, aggregate75/81/6, global helper+probe84 POST.
+Подтверждены exact order, zero replay первых12, all-call accounting, отдельные
+historical flags/manual verdicts и отсутствие Gemini signature в отчёте.
+Это проверка кода с fake новыми ответами; реальных Polza calls/owner secret reads=0.
+Quality flags не дают PASS/выбор модели; technical failures по-прежнему STOP.
+
+[CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185),
+pull_request attempt1, запущен для exact candidate. Tested merge
+**17de13af07fedee18b49d7b7b64fbe409b832a12**, tree совпадает с candidate.
+CI **FAILURE:10/11 SUCCESS**, без повторного прогона. Ordinary2640 +155 subtests
+PASS; PostgreSQL803 PASS/1 FAIL; browser54/frontend398 PASS. Primary failure:
+`tests/test_m3_1_control_api_postgres.py::test_post_lock_product_boundaries_with_actual_conversation_wait[controlled-activation-subscription]`.
+Наблюдатель `wait_blocked()` исчерпал1.5s в SELECT pg_locks/pg_blocking_pids;
+до assertions после освобождения Conversation lock тест не дошёл. Остальные11
+вариантов этой матрицы PASS. Тест, helper и M3 production source не менялись
+от b1ff8f1. Корневая причина задержки не установлена; это не объявляется flake.
+
+Secondary `FOUNDATION_EVIDENCE_REFUSED` — отказ completeness gate после primary
+PG failure. Последующие downgrade/reupgrade, contracts/wheel reproducibility и
+host smoke этапа foundation не завершены; PASS им не приписывается. Clean-source
+step SUCCESS. Все11 checkout logs совпали с tested merge;10 artifact IDs/digests
+сверены с upload logs, payload повторно не аудировался. Foundation artifact
+12957949439, SHA256 d64cdfd69fc0de89c9bfe7bd29dcedbe8f4db453268f3d1aee24c3b080d2f78f.
+
+Расход R1 0.08303952 +helpers0.01269785 =shared confirmed **0.09573737 RUB**,
+17 model POST. Остаток согласованного общего150 **149.90426263 RUB**.
+Новый этап:63 cases/до67 POST/4 READ/134 history GET+1 catalog, fresh conditional
+pricing, отдельный1800s deadline, прежние per-call limits. Original R1 read-only,
+fixed exclusive `reports/m4-polza-executable-eval-r2.jsonl`; никакого replay/retry.
+При STOP сохранить оба отчёта; дальнейший расход не запускается автоматически.
+После завершения все63 новых ответа/flags/routes/charges возвращаются C0 для
+ручной проверки; модель не выбрана, runtime_authorized=false.
+
+**Решение C0: ONE_OWNER_SYNTHETIC_R2_AUTHORIZED / EVAL_ONLY.**
+Допуск ограничен существующим локальным CLI Polza: он не импортирует и не
+вызывает PostgreSQL/M3. C0 повторил real R1 +controlled67 POST с запрещённым
+импортом sqlalchemy/psycopg/asm.foundation/auth/messaging/tenancy и запрещённым
+доступом к реальной сети и файлу ключа — PASS. Это проверка границы конкретного CLI.
+
+Общий красный CI сохраняется. **C0-M4-CI-OBSERVATION-01**: до merge/runtime
+C0 должен отдельно разобрать observer timeout и получить evidence всех
+незавершённых gates. Тесты/таймауты/assertions не ослабляются; новый полный CI
+ради случайного PASS не запускался. Это не приёмка M3 или всего PR.
+
+При согласованном ранее бюджете150 владелец может один раз выполнить готовый
+блок [runbook](../runbooks/M4_POLZA_PROBE.md).
+Approval ref: `C0-M4.2-QUALITY-CONTINUATION-EVAL-R1:cd60e5e16d8bcada53597d660a15f4d82640e956:CI41009211185-SCOPED`.
+После завершения вернуть полный R2 JSONL. При STOP не повторять команду.
+
+C1/C2/C3/C4/C5/C6/C8 HOLD. Эта docs-приёмка не меняет source, PR head или CI.
+
+## История выдачи — M4.2-PROBE-QUALITY-CONTINUATION-R1 / C4 / 2026-10-30
 
 **Результат:** исправить оценку finite synthetic experiment и собрать оставшиеся
 63 scenarios без повторных POST за12 уже проверенных ответов GPT. Один штатный
