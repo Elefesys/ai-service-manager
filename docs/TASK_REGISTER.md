@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.2 R2 STOP / Gemini diagnostic / 2026-10-30
+## CURRENT — M4.2 GET-only history / C0 acceptance / 2026-10-30
 
 Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**; PR38 слит владельцем,
@@ -15,7 +15,7 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
 | M4.2-PROBE | REVIEW / R2 STOP: GPT25/25 technical completion, один clear quality failure и один quality note. Gemini первый POST SIGNATURE_INVALID/charge UNKNOWN, DeepSeek NOT_RUN. Полное сравнение/selection/runtime не приняты. Разовый R2 допуск использован; replay HOLD. |
-| M4.2-GEMINI-DIAGNOSTIC-R1 | REVIEW / C4 candidate от affe545a468c9ec161421bbd52e6f390f3ad8f2c: фиксированные signature codes/безопасные metadata; body-only отдельно от exact-ID history-confirmed metering на failed call. GET-only CLI≤4 GET/0 POST, candidate не погашает старый unknown reserve3.464879664. Отдельный one-POST plan: Gemini tool_current0,0 READ/follow-up, shared remaining146.360028446. 519 targeted PASS; Ruff/format4/mypy71/5 offline plans/diff PASS; прежние full comparison/R1 continuation сохранены. Windows GET-only команда в runbook. Actual R2 shape/root cause остаются UNKNOWN; paid/full CI/owner HTTP NOT RUN. C0 review → history; paid diagnostic HOLD, CI41009211185 RED/observer OPEN. |
+| M4.2-GEMINI-DIAGNOSTIC-R1 | REVIEW / source review PASS; C4 cbc87bf +bounded C0 escaped-key fix68093c7.520 targeted/Ruff/format/mypy PASS. Один OWNER GET-only запуск готов (max4 history GET/0 POST); полный отчёт → C0. Paid diagnostic/R3 HOLD; C4 HOLD. |
 | C0-M4-CI-OBSERVATION-01 | TODO / до merge/runtime: разобрать M3 wait_blocked1.5s timeout и завершить отсутствующие foundation gates; причина задержки UNKNOWN. Тесты/таймауты неизменны; случайный rerun не выполнен. |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
@@ -25,10 +25,14 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 [Точный C4 scope, evidence и manual review](tasks/M4_HANDOFF.md),
 [текущее действие владельца](runbooks/M4_POLZA_PROBE.md),
 [решение C0](decisions/IMPL-004-m4-pilot-ai.md).
-Source/PR39 Draft head **cd60e5e16d8bcada53597d660a15f4d82640e956**,
-tree **d3065a074d09a40fe15a62d4eaac0b9b8426458f**. Repair code base тот же;
-новая C4 branch от C0 seed этой выдачи, полный SHA/tree в PR39 receipt.
-Parent C0 seed6e37623c804695c08cbb83d3fba8ee03ec9c4e1f.
+Итоговый reviewed source **68093c769f24ea63eca5185179c3eab5fafd1229**, tree
+**585f034acedec906d6859a25176ef430f808d578**, parent C4
+**cbc87bf6999157bdaa84e4d5e7d8219e83008998**. C0 delta ограничена decoded-key
+проверкой GET-only history и regression test: тест сначала FAIL на C4 candidate,
+затем520 targeted PASS. Owner key/реальные HTTP=0; Windows/live history NOT RUN.
+Готовая команда уже закрепляет этот SHA,0 model POST, max4 GET,60s overall.
+PR39 Draft/head остаётся **cd60e5e16d8bcada53597d660a15f4d82640e956**;
+новый full CI не запускался. C0 source review не означает merge/runtime acceptance.
 
 C0 прочитал33 events R2 из текстовой копии84220 bytes, hash6ca62d72…59b3fc0;
 это не подтверждённый hash оригинального Windows JSONL. Встроенный R1 точно
@@ -52,7 +56,8 @@ CLI isolation PASS. [CI41009211185](https://github.com/Elefesys/ai-service-manag
 не установлена. Foundation completeness и последующие gates не приняты.
 Разовый scoped standalone R2 был выполнен, исключение не означает зелёный CI
 или новый paid запуск. Нет нового полного CI/merge/runtime approval.
-C4 — единственный активный исполнитель. C1/C2/C3/C5/C6/C8 HOLD;
+C1/C2/C3/C4/C5/C6/C8 HOLD. Следующий шаг — один OWNER GET-only запуск;
+при UNKNOWN также вернуть отчёт без retry. Paid diagnostic/R3 не разрешены.
 main/VM/DB/Telegram/runtime без изменений. Оба owner reports сохраняются.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28

@@ -21,10 +21,13 @@ byte hash оригинального Windows R2 пока не подтвержд
 остаток прежнего общего150 с этим резервом **146.360028446 RUB**. Это не
 текущий баланс Polza и не обещание стоимости; нового бюджета150 нет.
 
-**C4 diagnostic candidate — REVIEW**, [текущая выдача и receipt](../tasks/M4_HANDOFF.md).
-Готовы GET-only сверка и отдельный offline план одного Gemini POST. Совместимость
-реального ответа не объявлена исправленной: форма подписи в R2 остаётся UNKNOWN.
-На ПК используются прежние окружение и ключ. Paid диагностический запуск HOLD.
+**GET-only процедура принята C0. Выполнить один Windows блок ниже.**
+Exact source **68093c769f24ea63eca5185179c3eab5fafd1229**, tree
+**585f034acedec906d6859a25176ef430f808d578**. C0 проверил возврат C4 cbc87bf и
+исправил один воспроизведённый случай escaped key echo в history JSON.
+520 targeted pytest PASS, Ruff/format4/mypy71 PASS; новые реальные HTTP=0.
+[Приёмка и ограничения](../tasks/M4_HANDOFF.md). Совместимость реального Gemini
+ответа ещё UNKNOWN; paid диагностический запуск HOLD. Окружение и ключ прежние.
 
 Новая процедура остаётся в существующем CLI. Completed GPT cases не повторяются;
 общий R3/resume ещё не реализован и не разрешён. Все old flags/finals/charges
@@ -34,6 +37,7 @@ byte hash оригинального Windows R2 пока не подтвержд
 PR39 остаётся Draft/headcd60; [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
 RED:10/11 jobs SUCCESS, M3 observer timeout, незавершённые foundation gates.
 C0-M4-CI-OBSERVATION-01 остаётся до merge/runtime; повтор CI ради PASS не выполнялся.
+Новый source ещё не проходил full CI; этот допуск относится только к GET-only CLI.
 
 ## Безопасные metadata при signature failure
 
@@ -98,14 +102,16 @@ cost, но `r2_charge_status=UNKNOWN`, `r2_charge_rub=null`,
 Исходные R1/R2 не открываются и не меняются. SHA текстовой копии R2 не используется
 как hash оригинального файла и не является новым continuation checkpoint.
 
-После review C0 подставить exact candidate SHA из возврата C4. Команда только
-читает history прежнего ключа и пишет новый exclusive
-`reports/m4-polza-r2-history-r1.jsonl`; source и результат доступны C0 для проверки.
+В обычном PowerShell на прежнем ПК выполнить весь блок: exact source уже указан,
+ничего заменять не требуется. Команда только читает history прежнего ключа и
+пишет новый exclusive `reports/m4-polza-r2-history-r1.jsonl`. В конце печатает
+его содержимое: передать C0 обе JSONL-строки даже при STOP/UNKNOWN. Максимум60s
+относится к history API, время git fetch в него не входит. Повтор не нужен.
 
 ```powershell
 & {
     $ErrorActionPreference = "Stop"
-    $Candidate = "C0_REVIEWED_FULL_SHA"
+    $Candidate = "68093c769f24ea63eca5185179c3eab5fafd1229"
     if ($Candidate -cnotmatch '^[0-9a-f]{40}$') { throw "Exact reviewed candidate SHA required" }
     $Repo = Join-Path $env:LOCALAPPDATA "ASM-M4-Probe-4f86e7f"
     Set-Location -LiteralPath $Repo
@@ -131,6 +137,7 @@ cost, но `r2_charge_status=UNKNOWN`, `r2_charge_rub=null`,
     Write-Host "History receipt: $Report"
     if ($HistoryExit -ne 0) { Write-Host "STOP/UNKNOWN: preserve receipt for C0; do not retry" }
     Write-Host "Preserve R1/R2; no charge settlement or paid launch is authorized by this report"
+    Get-Content -LiteralPath $Report -Encoding UTF8
 }
 ```
 

@@ -6,7 +6,61 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая выдача — M4.2-GEMINI-DIAGNOSTIC-R1 / C4 / 2026-10-30
+## Текущая приёмка — C0-M4.2-GEMINI-HISTORY-ACCEPT-R1 / 2026-10-30
+
+**Source review PASS; один OWNER GET-only запуск готов. Paid diagnostic/R3 HOLD.**
+Выполнить [готовый Windows блок](../runbooks/M4_POLZA_PROBE.md) и вернуть две
+строки `reports/m4-polza-r2-history-r1.jsonl`. Ни модель, ни READ/follow-up не
+вызываются; исходные R1/R2 сохраняются. Новый запрос бюджета не требуется.
+
+C4 candidate **cbc87bf6999157bdaa84e4d5e7d8219e83008998**, tree
+**88c625d8157a004bf7c1cc10c12f5ceee80b97dd**, sole parent
+**affe545a468c9ec161421bbd52e6f390f3ad8f2c**. C0 сверил все7 разрешённых файлов,
+protocol diagnostics, failure metering, closed history output и отдельный
+one-POST plan. 519 targeted PASS (7.35s), Ruff/format4/mypy71 PASS; sourcecd60
+loader/evaluator/plan/ledger, route profiles, wire schema и bounded_http
+не изменены по AST. Contracts/settings/gateway/prompt/cases/locks/CI/DB неизменны.
+
+C0 нашёл и ограниченно исправил **один конкретный дефект нового GET-only пути**:
+raw-byte secret check не обнаруживал ключ, JSON-escaped в allowlisted provider
+label. CONTROLLED ответ с фиктивным ключом воспроизвёл CANDIDATE_REQUIRES_C0 и
+попадание этого значения в отчёт. Регрессионный тест на cbc87bf сначала FAIL.
+После strict JSON parsing добавлена та же проверка decoded content, уже применяемая
+в прежнем adapter history path. Теперь UNKNOWN/HISTORY_PRIVATE_DATA после1 GET,
+без значения в отчёте. Дополнительных API запросов/зависимостей/режимов нет.
+Owner key не читался; фактическая утечка ключа владельца не наблюдалась.
+
+**Итоговый source 68093c769f24ea63eca5185179c3eab5fafd1229**, tree
+**585f034acedec906d6859a25176ef430f808d578**, sole parent cbc87bf6999157bdaa84e4d5e7d8219e83008998.
+C0 delta: только `probe.py` (+4/-1 строки) и один regression test (+31 строка).
+Финальный frozen CPython3.13.16: **520 targeted pytest PASS (7.10s)**,
+Ruff/check+format4 PASS, mypy71 PASS, diff check PASS; local/remote trees совпали.
+CONTROLLED suite проверяет успешные3 GET, no-match/ambiguous/mismatch/лимиты,
+exclusive report и отсутствие POST, а также diagnostic one-POST caps/STOP.
+Offline plans проверены с запрещёнными real network/key reads; Windows/live
+history **NOT RUN**. Реальные HTTP/чтение owner key со стороны C0=0.
+
+Сейчас разрешена только **одна read-only сверка**: max4 history GET,0 catalog/
+0 model POST/0 READ,65536 bytes/GET,15s/GET,60s overall; без retry/pagination.
+Anchor/фиксированное окно/ID list-detail проверяются. Найденная Gemini generation
+остаётся MODEL_TIME_CANDIDATE_ONLY: старый response ID утрачен. Нет автоматического
+погашения unknown reserve или запуска diagnostic. Report содержит source и
+history_reconciliation; UNKNOWN также возвращается C0, команда не повторяется.
+
+Shared confirmed0.17509189 RUB/30 calls +1 unknown Gemini; old reserve3.464879664,
+остаток общего150 с резервом146.360028446. GPT25 finals сохраняются, новый расход0.
+После owner receipt C0 отдельно решает достаточность связи с R2 и следующий
+конкретный Gemini diagnostic; одно готовое offline plan не является его допуском.
+
+PR39 остаётся **Draft/headcd60e5e16d8bcada53597d660a15f4d82640e956**.
+Новый source в этой приёмке не двигает PR head и не запускает full CI.
+CI41009211185 относится к прежнему cd60:RED/10 из11, M3 observer timeout;
+причина UNKNOWN, незавершённые foundation gates не приняты. Для нового source
+full CI NOT RUN; C0-M4-CI-OBSERVATION-01 остаётся перед merge/runtime.
+Никаких merge/main/VM/DB/Telegram/runtime изменений. C1/C2/C3/C4/C5/C6/C8 HOLD,
+следующий исполнитель — владелец с готовым GET-only блоком.
+
+## История выдачи — M4.2-GEMINI-DIAGNOSTIC-R1 / C4 / 2026-10-30
 
 **R2 STOP принят как evidence; новый paid запуск HOLD.** GPT собран полностью:
 25 scenarios /27 POST /2 READ. Первый Gemini POST остановился локально на
