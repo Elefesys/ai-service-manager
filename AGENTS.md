@@ -22,8 +22,9 @@ M3 закрыт в LOCAL/TEST; финальный receipt — в верхнем 
 План/IMPL-004 приняты C0 и интегрированы в PR #37. Единственная текущая
 выдача, её accepted/repair base, исполнитель и write-set — в верхнем
 M4_HANDOFF/CURRENT. M4.1 и C5 recovery интегрированы в PR #38; actual main CI PASS.
-Текущая работа C0 — integration/full CI принятых GPT/v2, context/agent и
-C2 test-helper изменений. Точный candidate/status — в CURRENT; остальные HOLD.
+Полный PR39 CI принят C0: 11/11 SUCCESS на зафиксированном candidate.
+Следующий шаг — merge владельцем, затем C0 сверяет actual main/CI и выдаёт
+runtime задачу. Точный candidate/receipt — в CURRENT; C1–C8 HOLD.
 Прежние paid допуски использованы; новых вызовов они не разрешают.
 Исторические HOLD/операторские команды M1–M3 не являются новой задачей M4.
 

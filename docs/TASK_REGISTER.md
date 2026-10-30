@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C2 R3 VERIFIED; C0 integration/full CI / 2026-10-31
+## CURRENT — PR39 full CI VERIFIED; merge владельцем / 2026-10-31
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**; PR38 merged,
@@ -21,18 +21,18 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.2-GPT-QUALITY-R1 | Исторический partial:7 retained PASS/2 READ,1 technical STOP,17 NOT_RUN; consumed |
 | C0-M4.2-GPT-QUALITY-HISTORY-R1 | VERIFIED metadata only: attempts2/reported0.00743079; UNSETTLED |
 | M4.2-GPT-QUALITY-R2 | VERIFIED owner synthetic + C0 manual18/18; составной25 PASS/27 confirmed POST/2 READ/2 images; consumed |
-| M4.3-CONTEXT-R1 | VERIFIED SOURCE + LOCAL UNIT; integration pending:1283 tests/static +5 controlled adapter checks PASS |
-| C0-M4-CI-OBSERVATION-01 | OPEN: confirmed helper/report defects исправлены R2/R3; historical cause UNKNOWN. Остался полный CI актуального кандидата |
+| M4.3-CONTEXT-R1 | VERIFIED SOURCE + LOCAL UNIT + cumulative PR CI; merge/main pending |
+| C0-M4-CI-OBSERVATION-01 | VERIFIED; gate закрыт для candidate1b7a6987: full CI11/11 SUCCESS. Historical timeout cause UNKNOWN |
 | C2-M4-CI-OBSERVATION-R1 | Исторический BLOCKED local PG; SOURCE/SAVED-EVIDENCE audit принят. Заменён конкретной R2 выдачей |
 | C6-M4-PG-EXECUTOR-R1 | VERIFIED SOURCE + ACTUAL PG OBSERVATION C0: one run41082835484/attempt1, PG18.6,12 PASS/cleanup PASS. Matrix aggregate overwritten; raw completeness independently recovered. C6 HOLD/ref frozen |
 | C2-M4-CI-OBSERVATION-R2 | Исторический 253 PASS/1 FAIL; evidence и recorder fix приняты. Lifecycle defect исправлен/проверен в R3; ref frozen |
 | C2-M4-CI-OBSERVATION-R3 | VERIFIED C0 SOURCE + TARGETED PG: 258 PASS, cleanup PASS; original222/R2 254 сохранены, foreign и observer fault checks PASS. C2 HOLD/ref frozen |
-| C0-M4-INTEGRATION-R1 | IN_PROGRESS: cumulative candidate в существующий PR39, один full CI; main/merge ещё впереди |
+| C0-M4-INTEGRATION-R1 | IN_PROGRESS / PR scope VERIFIED: candidate1b7a6987, CI41099431123/attempt1 все11 SUCCESS; C0 readiness, далее owner merge и actual main verification |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
 
-[Приёмка C0 R3 и integration task](tasks/M4_HANDOFF.md),
+[Приёмка C0 R3 и полного PR CI](tasks/M4_HANDOFF.md),
 [операторский итог](runbooks/M4_POLZA_PROBE.md), [решение C0](decisions/IMPL-004-m4-pilot-ai.md).
 
 C0 принял source **db46d06c3ee12b34f6a0630415454a56a128c9d9** /
@@ -57,15 +57,22 @@ Independent offline C0:27 PASS/5.69s, static/compile5 PASS; collected258,
 malformed5 refused, original79 business functions/9 callers/509 assertions
 сохранены. Controlled R2->R3 reproduction PASS, нового targeted PG run нет.
 
-C0-M4-INTEGRATION-R1: prep c0/m4-integration-r1, base receipt ea10472de.
-Candidate — опубликованный C0 commit этой приёмки, только5 coordination docs
-сверх cumulative source. Существующая PR39 branch c4/m4-2-probe получает один
-FF с expected head cd60e5e16d8bcada53597d660a15f4d82640e956/force=false.
-Это отдельный C0 integration step, прежние receipt-only запреты не действуют.
-R1/R2/R3 execution refs frozen. Один full pull_request CI, все11 jobs;
-full result пока NOT_RUN, старый red run не повторять. PR Draft до C0 readiness,
-merge у владельца; actual main verification и runtime task после него.
-C1–C8 HOLD; owner ничего не запускает, VM/live/paid действий нет.
+C0 принял PR39 head **1b7a6987d45511acfae0b32a4d4845ea976b1c21**, tree
+**13f5ab44994bb4ec2d5f89943fab714c28c11824**; sole parent=receipt ea10472de.
+[Full CI41099431123](https://github.com/Elefesys/ai-service-manager/actions/runs/41099431123),
+pull_request/attempt1: **11/11 SUCCESS**. Tested merge
+**099fd8060dabfa847b920dcda29486205f5f35e0**, parents accepted main51d7d737 +
+candidate1b7a6987; tree exact-equal candidate. 3289 ordinary +155 subtests,
+840 PG,54 browser/API/PG,398 frontend PASS; native/catalog/cleanup,
+durable/recovery, Docker29 и6 migration shards SUCCESS. Source/evidence gates
+и10 artifact ID/size/digest сверены с logs; payload повторно не аудировался.
+
+Observation gate закрыт для этого кандидата; historical cause UNKNOWN.
+Docs-only receipt — на c0/m4-integration-r1 отдельно от tested PR head;
+новый CI ради receipt не запускается. C0 обновляет PR body и снимает Draft.
+Следующий шаг владельца — merge PR39. После него C0 сверяет actual main/CI
+и выдаёт runtime задачу; до этого C1–C8 HOLD. R1/R2/R3 execution refs frozen.
+Старый red run не повторяется; VM/live/paid действий нет.
 
 GPT/v2 EVAL_ONLY/runtime=false; shared150 confirmed **0.37505230 RUB /58 known**,
 unknown4/held **7.585505548**, всего62 POST; committed7.960557848,

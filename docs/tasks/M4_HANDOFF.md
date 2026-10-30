@@ -6,15 +6,14 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2 R3 VERIFIED; C0 integration/full CI / 2026-10-31
+## CURRENT — PR39 full CI VERIFIED; готов к merge владельцем / 2026-10-31
 
-**C2-M4-CI-OBSERVATION-R3 принят C0: SOURCE + TARGETED POSTGRESQL VERIFIED.**
-258 PASS / 0 FAIL/SKIP/XFAIL, cleanup PASS; foreign и observer error/cancel
-controls завершили held-lock и final-effect проверки. Новый repair не нужен.
-Следующая работа — **C0-M4-INTEGRATION-R1**: включить принятый cumulative source
-в существующий PR39 и проверить полный CI. C1–C8 HOLD; владелец ничего не запускает.
-Причина historical timeout UNKNOWN; C0-M4-CI-OBSERVATION-01 остаётся OPEN
-только до проверки актуального общего кандидата. Runtime ещё не реализован.
+**C0 принял полный CI актуального PR39: 11/11 SUCCESS, attempt 1.**
+GPT/v2 probe, C4 context/agent и C2 helper repair прошли общий CI.
+C0-M4-CI-OBSERVATION-01 VERIFIED; gate для этого кандидата закрыт.
+Причина historical timeout остаётся UNKNOWN. Следующий шаг — merge PR39
+владельцем, затем C0 проверяет actual main/CI и выдаёт runtime задачу.
+C1–C8 HOLD; ПК/ВМ и Polza probe повторно запускать не нужно.
 
 ### Приёмка C0 — C2 R3
 
@@ -53,40 +52,70 @@ collect-only258, malformed collections5 refused, original79 business functions/
 unknown identity ->0 SQL, target получает управление, bounded timeout прежний.
 Новый targeted PG run у C0 не нужен и не запускался.
 
-### C0-M4-INTEGRATION-R1 — текущий общий кандидат
+### C0-M4-INTEGRATION-R1 — приёмка полного PR CI
 
-Repository Elefesys/ai-service-manager, существующий Draft PR39,
-head branch **c4/m4-2-probe**. C0 preparation **c0/m4-integration-r1**.
-Integration base — receipt **ea10472de268ceb9d656a0d5ddc11f093b653cd3** /
-tree **591d84a53c04790571cc687f125f66391bbc4f91**. C0 candidate — published
-commit этой приёмки (sole parent=receipt); source сверх receipt не меняется,
-только HANDOFF, CURRENT, IMPL-004, operator runbook и актуальная очередь AGENTS.
+[PR39](https://github.com/Elefesys/ai-service-manager/pull/39), branch
+**c4/m4-2-probe**, принят для merge владельцем. Head
+**1b7a6987d45511acfae0b32a4d4845ea976b1c21**, tree
+**13f5ab44994bb4ec2d5f89943fab714c28c11824**, sole parent
+**ea10472de268ceb9d656a0d5ddc11f093b653cd3**. Пять coordination docs сверх
+reviewed cumulative source; PR branch обновлена одним FF с expected old head
+cd60e5e16d8bcada53597d660a15f4d82640e956/force=false.
 
-Cumulative source включает reviewed Polza adapter/probe и GPT/v2 quality,
-C4 context/read/agent, C6 recorder и C2 R2/R3 test-helper repair. История
-последовательна: прежний PR head **cd60e5e16d8bcada53597d660a15f4d82640e956**
-— ancestor receipt; новых merge/cherry-pick конфликтов не требуется.
-Принятый main **51d7d73752128715c6d98157445167c0cc0d894d** не менять.
-Прежний запрет движения PR39 относился к промежуточным receipts; C0 теперь
-разрешает один FF существующей PR branch на проверенный cumulative candidate
-с expected old head/force=false. R1/R2/R3 execution refs frozen.
+[Run41099431123](https://github.com/Elefesys/ai-service-manager/actions/runs/41099431123),
+M0 verification, pull_request, **attempt1 / SUCCESS, все11 jobs SUCCESS**.
+Tested merge **099fd8060dabfa847b920dcda29486205f5f35e0**, parents
+main **51d7d73752128715c6d98157445167c0cc0d894d** + head1b7a6987;
+его tree exact-equal candidate13f5ab44. Checkout подтверждён по job logs.
+Run2026-10-30T17:30:35Z–18:25:58Z:55m23s — весь workflow, не время сборки.
 
-После FF — один штатный full pull_request CI актуального кандидата: все
-11 jobs, browser, ordinary unit/PG, native lane, durable/recovery, Docker29/
-migration и source/evidence gates. CI core/workflow/timeouts не менять.
-Записать PR head, tested merge SHA/tree, run/attempt, результаты/cleanup/artifacts.
-Прежний red CI41009211185 не перезапускать. Если новый run падает — разобрать
-все failure groups по фактам, не повторять тот же source ради PASS.
-Full CI на момент подготовки этого commit **NOT_RUN**; source scope R3 принят
-отдельно. Только actual full PASS позволяет C0 закрыть integration observation
-gate для кандидата; историческую причину timeout не переписывать.
+| Проверка | Job ID | Результат |
+|---|---:|---|
+| foundation | 124220522841 | 3289 ordinary +155 subtests PASS /438.20s;840 PostgreSQL PASS /1499.21s; static/format/types, contracts, reproducibility и HTTP smoke PASS |
+| browser | 124213618937 | 54 browser/API/PG PASS;398 frontend PASS |
+| foundation-durable | 124213619029 | normal durable/recovery, completeness и cleanup gates PASS |
+| native-context-db | 124213619387 | full carrier, fresh0013 catalog, owned cleanup/source gates SUCCESS |
+| docker29-compatibility | 124213618648 | exact Docker29, route/recovery/rollback PASS |
+| connect5 normal intent/image/state | 124213619064 /124213619192 /124213619313 | Все3 SUCCESS; state schema/negative cleanup и disposable gates PASS |
+| connect5 docker29 intent/image/state | 124213619133 /124213619030 /124213619003 | Все3 SUCCESS; state schema/negative cleanup и disposable gates PASS |
 
-PR остаётся Draft до полного результата; merge — владелец после C0 readiness.
-После merge C0 сверяет actual main/CI, затем выдаёт runtime работу. Для неё ещё
-нужны real PG authority, durable AIRun/result/send intent и AI->Outbox->Telegram;
-context/agent unit PASS и synthetic GPT quality этого не заменяют.
-Shared150 ledger и 4 unknown holds сохранены; paid refs consumed, новых model
-calls/owner credentials/VM/live DB/Telegram/deploy действий здесь нет.
+Ранее падавший controlled-activation-subscription, foreign/absent и оба actual
+observer fault controls прошли в foundation. Source preservation и исполнение
+обязательных evidence gates подтверждены. Foundation/normal-durable имеют
+FOUNDATION_COMPLETE_EVIDENCE_PASS с primary_exit=0/cleanup_exit=0 по контракту
+неизменённого gate. Native run и его cleanup step SUCCESS. Browser cleanup —
+best-effort по существующему script, отдельная проверка отсутствия ресурсов
+для него не заявляется. Stale pending steps в API snapshot foundation не
+использованы как evidence: завершение подтверждают полный job log и final result.
+
+Все10 artifacts связаны с run/head; ID/размер/SHA256 совпали с upload logs.
+Четыре intent/image uploads уже сверены при мониторинге; остальные6 — после
+завершения. Payload архивов повторно не аудировался; retention7 days.
+
+| Artifact ID | Область | Bytes | SHA256 ZIP |
+|---:|---|---:|---|
+| 13002360922 | foundation | 3345586 | 5f83f4659155839a247028642b05a52f14c195e4b2eca8f9c1880cff52fe45f0 |
+| 12997594040 | foundation-durable | 3113228 | 765c7ea7ee32d692c2a0b0ac37f27412d3b0f4779fc75e5ad304440359ce4cda |
+| 12998162778 | native | 3834053 | 71de774bf1545fe458ee7f97896e9ab08b170225221f638ba0060a332cea7cf5 |
+| 12997952258 | docker29 | 3075721 | b780674625cd6922665247fe27761b5d61cfbbe41ace4e777b2fb26c46559129 |
+| 12998296578 | normal-intent | 5625034 | d4acd3dd6ea2d8f6fdb17a4e9bad05b340aa1daaf1861291849bacdcc5c187c1 |
+| 12998061939 | normal-image | 5625064 | f3f1c9a7f9b2bf62c85e0cd24618ff680330c017b2438f3602695cb123bb8ad5 |
+| 12997629479 | normal-state | 20536762 | 95d2ce01a75d7ed2f32586a38cb3bdb3a59e1552663c905904da76b11256cc89 |
+| 12997831771 | docker29-intent | 5625917 | 8001924cba0f84082819fac7262d3ebc7186a662da1d44aff26a8c3879f97a7f |
+| 12997338018 | docker29-image | 5626003 | edcc0dfd2f0dd2804c8ef45a8e0a4ffe7b8dcc2147efff1cbd447cf05d55a64b |
+| 12997669676 | docker29-state | 20537654 | 680dabb296438d69a017e3f1f06bfb422e0fba03a504f90b7042815f6d771897 |
+
+C0-M4-CI-OBSERVATION-01 VERIFIED для candidate; historical timeout cause
+UNKNOWN. Новый repair/rerun не нужен. Этот docs-only receipt публикуется
+отдельно на **c0/m4-integration-r1**, sole parent=tested head1b7a6987;
+PR head не двигается ради записи итога. C0 обновляет PR body ссылкой на receipt
+и переводит PR из Draft в Ready. Actual main пока прежний; merge делает владелец.
+
+После merge C0 проверяет actual main tree и штатный push/main CI, затем выдаёт
+runtime работу. Real PG authority, durable AIRun/result/send intent и
+AI->Outbox->Telegram ещё нужны. M4 целиком не закрыт, runtime_authorized=false.
+Shared150 ledger/4 unknown holds сохранены; paid refs consumed.
+Новых model/VM/live DB/Telegram/deploy действий нет; R1/R2/R3 execution refs frozen.
 
 ### Возврат C2 — C2-M4-CI-OBSERVATION-R3 / REVIEW; C2 HOLD
 

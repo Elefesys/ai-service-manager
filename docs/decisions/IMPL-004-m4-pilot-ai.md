@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 R3 принят; C0 готовит integration candidate/full CI.
+Последнее решение ниже: полный PR39 CI принят; далее owner merge и actual main.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -780,7 +780,7 @@ R2 repair в целом остаётся BLOCKED до R3; historical cause UNKNO
 После review — integration/full CI и runtime, без бесконечного replay старого
 timeout. GPT/C4 acceptance и shared150 ledger не изменены. PR39/main прежние.
 
-**Актуальное решение C0 от 2026-10-31: C2 R3 VERIFIED, integration/full CI.**
+**Решение C0 от 2026-10-31: C2 R3 VERIFIED, integration/full CI.**
 Source db46d06c3ee12b34f6a0630415454a56a128c9d9, receipt
 ea10472de268ceb9d656a0d5ddc11f093b653cd3 принят SOURCE + TARGETED PG.
 Run41096329059/attempt1:258 PASS, cleanup PASS. Foreign held-lock/effects и
@@ -799,6 +799,22 @@ timeout cause UNKNOWN. Merge остаётся владельцу после C0 r
 Модельные расходы/holds не меняются. Настоящие PG authority, durable AIRun и
 AI->Outbox->Telegram ещё не реализованы; full source CI не является runtime
 или data/route approval. VM/Telegram/live/paid запусков эта выдача не разрешает.
+
+**Актуальное решение C0 от 2026-10-31: полный PR39 CI VERIFIED.**
+Candidate **1b7a6987d45511acfae0b32a4d4845ea976b1c21** принят по
+[run41099431123](https://github.com/Elefesys/ai-service-manager/actions/runs/41099431123):
+pull_request/attempt1,11/11 SUCCESS. Tested merge099fd8060dabfa847b920dcda29486205f5f35e0
+имеет tree13f5ab44994bb4ec2d5f89943fab714c28c11824, exact-equal candidate.
+Ordinary3289+155 subtests,PG840,browser54/frontend398, native/catalog/cleanup,
+durable,recovery,Docker29 и migration gates прошли; source/evidence и10 artifact
+metadata/upload digests сверены. C0-M4-CI-OBSERVATION-01 закрыт для кандидата;
+historical timeout cause UNKNOWN. Новый repair или повтор этого CI не нужен.
+
+Receipt остаётся на отдельной C0 branch, tested PR head сохраняется. C0
+обновляет body/Ready PR39; merge выполняет владелец. После merge проверяются
+actual main tree/CI, затем выдаётся узкая runtime задача. M4 не закрыт:
+реальные PG authority/durable AIRun/result/send intent/AI->Telegram ещё нужны.
+EVAL_ONLY/runtime=false, ledger/unknown holds и data/route gates не изменены.
 
 ## Что пересмотрено относительно baseline
 

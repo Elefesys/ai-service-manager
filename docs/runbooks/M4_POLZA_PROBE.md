@@ -4,7 +4,8 @@
 с7 сохранёнными из R1 получено **25 manual PASS**,2 READ и2 synthetic images.
 GPT/v2 выбран кандидатом для разработки первого runtime. C4 context/read/agent
 принят локально. C2 R3 принят: 258 PASS на PostgreSQL, cleanup PASS.
-Следующий шаг — [C0 integration/full CI](../tasks/M4_HANDOFF.md).
+Полный [PR39 CI](https://github.com/Elefesys/ai-service-manager/actions/runs/41099431123)
+принят C0: **11/11 SUCCESS**. Следующий шаг — merge PR39 владельцем.
 
 ## Принятый отчёт
 
@@ -34,10 +35,12 @@ R2 p50 11.163s /p95 16.393s, N18, включая history; маленькая в�
 
 C0 проверил R3: все 258 сценариев прошли, включая удержание блокировки после
 таймаута и ошибки/отмену observer SQL. Исправление принято.
-C0 собирает принятые изменения в существующем PR39 и проверяет один полный CI.
-Передавать новую задачу C2 или запускать что-либо на ПК/ВМ сейчас не нужно.
-После C0 readiness владелец сливает PR; затем actual main verification и
-подключение durable/runtime/Telegram. Ключ Polza сейчас не нужен, reports сохранить.
+C0 принял общий PR39 head1b7a6987: full CI41099431123/attempt1,11/11 SUCCESS.
+Владелец сливает [PR39](https://github.com/Elefesys/ai-service-manager/pull/39)
+после снятия Draft C0. Затем C0 проверяет actual main/CI и выдаёт задачу
+подключения durable/runtime/Telegram. Передавать новую задачу C2 или запускать
+что-либо на ПК/ВМ сейчас не нужно. Ключ Polza не нужен, reports сохранить.
+[Подробная приёмка CI](../tasks/M4_HANDOFF.md) опубликована отдельно от tested head.
 
 Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`
 использован. [Прежняя команда](https://github.com/Elefesys/ai-service-manager/blob/5241eba3e38bd488cea052f894efb9b43b1f7d32/docs/runbooks/M4_POLZA_PROBE.md)
@@ -46,6 +49,6 @@ Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER
 Это synthetic EVAL_ONLY: OpenAI family подтверждена в receipt, flex variant
 не наблюдался. Реальные данные, Telegram runtime и backend route ещё требуют
 соответствующей приёмки. Gemini/DeepSeek DEFERRED; сравнение75 не завершено.
-PR39 остаётся Draft до результата полного CI актуального кандидата. Старый
-CI41009211185 RED сохранён как история; его причина UNKNOWN. Никакого
-enable/deploy эта приёмка не выполняет.
+PR39 готов к merge по принятому CI; запись итога не меняет tested head.
+Старый CI41009211185 RED сохранён как история; его причина UNKNOWN.
+Никакого enable/deploy эта приёмка не выполняет.
