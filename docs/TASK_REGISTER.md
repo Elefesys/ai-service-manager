@@ -30,10 +30,23 @@ push/attempt1:10 SUCCESS/1 FAILURE. Actual main verification BLOCKED.
 | C2-M4-CI-OBSERVATION-R2 | Исторический 253 PASS/1 FAIL; evidence и recorder fix приняты. Lifecycle defect исправлен/проверен в R3; ref frozen |
 | C2-M4-CI-OBSERVATION-R3 | VERIFIED C0 SOURCE + TARGETED PG: 258 PASS, cleanup PASS; original222/R2 254 сохранены, foreign и observer fault checks PASS. C2 HOLD/ref frozen |
 | C0-M4-INTEGRATION-R1 | INTEGRATED PR39; verification BLOCKED actual main CI41108194917 |
-| C2-M4-CI-OBSERVATION-R4 | IN_PROGRESS / bounded prelock readiness + frozen/post-lock policy proof; local35 PASS, collection278 (258 retained +20 new). Один hosted run NOT_RUN; exact scope/semantic diff в HANDOFF |
+| C2-M4-CI-OBSERVATION-R4 | REVIEW / source249b3611; one run41124252930 SUCCESS,278 PASS/834 phases, cleanup PASS/source clean. Readiness + frozen/post-lock proof,258 retained +20 new; C2 HOLD, C0 full CI pending |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
+
+C2 R4 returned: source **249b36112adb72fb763207893eb50ab31c06eff7**, tree
+**5adefdd2eab41c564c7b5d967f071fd0895f0921**, direct child exact base3e1ccf85.
+[Targeted run41124252930](https://github.com/Elefesys/ai-service-manager/actions/runs/41124252930),
+job124298527733/attempt1:278 PASS/834 phases, все258 R3 retained +20new.
+Original12 и auth-delay12 подтверждают opposite frozen/post-lock policy и
+held-lock edge; unchanged1.1s/1.5s/<2s, original effects/replay. Local35 PASS,
+final readiness8 PASS; static/collection/source guards PASS. Cleanup/source PASS.
+Artifact13010446713:54105bytes, SHA2564992ed6357b730e9627903700466bc16bb0e38249ecef5510b81fb93e17e7296.
+Saved evidence libfile_a6be250149f48191a6622ece88ad61bf,3557409bytes/58files,
+SHA25693673bc1df2f6d5540c749214a9de2aaeb0413e7e9fb5edb1a67d2e4c9815ea3.
+Execution frozen; docs receipt sole child source/preparation. Historical main
+trigger UNKNOWN; full CI/acceptance next C0, runtime HOLD. [Receipt](tasks/M4_HANDOFF.md).
 
 [Приёмка C0 R3 и integration task](tasks/M4_HANDOFF.md),
 [операторский итог](runbooks/M4_POLZA_PROBE.md), [решение C0](decisions/IMPL-004-m4-pilot-ai.md).

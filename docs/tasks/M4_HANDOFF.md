@@ -45,7 +45,75 @@ FOUNDATION_EVIDENCE_REFUSED — следствие primary test failure и не�
 поздних gates, не второй независимый дефект recorder. Остальные10 jobs SUCCESS
 проверены по fresh metadata; их payload заново не аудировался.
 
-### C2 R4 — подготовленный repair / hosted NOT_RUN
+### Возврат C2 — C2-M4-CI-OBSERVATION-R4 / REVIEW; C2 HOLD
+
+**Source.** Tested source **249b36112adb72fb763207893eb50ab31c06eff7**, tree
+**5adefdd2eab41c564c7b5d967f071fd0895f0921**, sole parent repair base
+**3e1ccf855c64bbabb18c65db666b9b5e85cefd3d** / tree
+**f0477d995387a767abd87cadbcc15ae95d466582**. Base sole parent main
+**997d2bf83b5402068ba1f62b23d5947fcfaf7d32**, main tree13f5ab44; delta5
+coordination docs подтверждена. Source меняет ровно6 разрешённых paths.
+Preparation c2/m4-ci-observation-r4; execution c2/m4-pg-observation-run-r4
+создан на base, затем один FF expected_sha=base/force=false на source.
+Execution frozen. Этот receipt — sole child tested source, только2 docs
+на preparation. Main, merged PR39 head1b7a6987 и R1/R2/R3 execution refs сохранены.
+
+**Concrete before/after.** Controlled NO-DB delay1.6s: прежний helper timeout
+1.500083s до readiness, observer SQL0; оба прежних коротких окна уже истекли.
+Repair ждёт real task/PID prelock readiness отдельным bound5s, затем arm edge1.1s
+и прежний observer1.5s. В контроле preparation1.602066s, matching query0.000261s.
+Проверка не называет эту инъекцию доказанным trigger исторического main FAIL.
+В actual PG run original12 request-to-ready5.377–18.507ms, delayed12
+1608.312–1621.319ms; edge-to-observed5.447–11.788ms по обеим матрицам.
+Все24 подтверждают frozen policy противоположную production-consumed post-lock
+snapshot, точный waiter PID, blocked_at<edge<=released_at и span<2s.
+Activation начинается с DISABLED; expiry — с ENABLED. Полный исходный блок
+response/effects/replay сохранён, включая отсутствие эффектов на rejection
+и replay после повторного expiry. Barrier расположен до billing locks;
+HTTP/cookie/auth/PG/Telegram observation путь сохранён. Semantic diff и
+безопасная pre-cleanup диагностика описаны в pre-run snapshot ниже.
+
+**Actual run.** [41124252930](https://github.com/Elefesys/ai-service-manager/actions/runs/41124252930),
+job **124298527733**, push exact source, attempt1, один source/execution run:
+**SUCCESS; 278 PASS /834 phases**, failures0/skip0/xfail0. Ordered R3 258
+сохранены целиком; новые20 = readiness8 + actual delayed-auth12. Старые actual
+PG identity7 и observer SQL22012/cancel2 PASS. Raw cases/JUnit/collection
+согласованы; matrix-command и matrix-summary разные, complete=true/pytest_exit0.
+PG18.6 / asm_test / schema0013, serverUID999; asm_runtime/asm_migrator без
+SUPERUSER/BYPASSRLS/CREATEDB/CREATEROLE. Pins/versions сохранены.
+Cleanup PASS, owned containers/networks/volumes пусты; source clean.
+Pytest342.76s (JUnit342.744s), outer test353.078791s, job392s;
+build15.903341s, database-start9.333734s, schema2.569978s — отдельно.
+
+**Local/source evidence.** Controls35 PASS/13.57s; после уточнения bounded
+await frames повторно проверены readiness8 PASS/7.18s. Ruff/format/compile5 PASS;
+collection278, malformed5 refused. Existing83 test functions AST-identical,
+все532 прежних assertions сохранены. Modified matrix намеренно semantic diff;
+response/effects/replay block byte-identical. Observer loop/query/PID/error/cancel
+algorithm AST-identical внутри diagnostic try/except. Guards/provenance unchanged;
+11 architecture originals hash-verified. Source.patch и воспроизводимые
+preflight.py/before_after.py/analyze.py входят в evidence.
+
+**Artifacts.** Original targeted artifact **13010446713**, 54105 bytes /25 files,
+SHA256 **4992ed6357b730e9627903700466bc16bb0e38249ecef5510b81fb93e17e7296**;
+metadata и upload log совпали, manifest24 проверен. Main FAIL original ZIP
+13005201473 также сохранён неизменным: complete840, ровно1 failure group,
+primary1/cleanup0, source clean; target location/trigger до cleanup UNKNOWN.
+[Полный evidence ZIP](https://chatgpt.com/library?file_id=libfile_a6be250149f48191a6622ece88ad61bf&account_id=personal):
+**3557409 bytes /58 files**, SHA256
+**93673bc1df2f6d5540c749214a9de2aaeb0413e7e9fb5edb1a67d2e4c9815ea3**,
+manifest57; analysis SHA256
+**0f9ee7ca4c9f19b90ada239f6315f3e6b1909d3a4475bbe3290d57e25f4e24e4**.
+
+**Граница результата.** Подтверждены source-level timing coupling, bounded
+repair и actual assertions единственного targeted run. Historical hosted trigger,
+server wait vs event-loop delay остаются UNKNOWN. Полный CI/приёмка — следующий
+шаг C0; actual main verification BLOCKED до новой приёмки. Runtime HOLD,
+shared150/4 unknown holds без изменений. Production/DDL/RLS/grants/deps/pins,
+generic/native CI, paid calls, live DB/Telegram/deploy не менялись.
+
+### Подготовка C2 R4 — pre-run snapshot (история)
+
 
 Exact base **3e1ccf855c64bbabb18c65db666b9b5e85cefd3d**, tree
 **f0477d995387a767abd87cadbcc15ae95d466582**, sole parent main
