@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6 PG observation VERIFIED; C2 repair R2 ASSIGNED / 2026-10-30
+## CURRENT — C2 repair R2 LOCAL READY; hosted validation pending / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**, PR38 merged;
@@ -25,7 +25,7 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | C0-M4-CI-OBSERVATION-01 | OPEN: historical timeout cause UNKNOWN; full integration CI впереди, PASS12 его не закрывает |
 | C2-M4-CI-OBSERVATION-R1 | Исторический BLOCKED local PG; SOURCE/SAVED-EVIDENCE audit принят. Заменён конкретной R2 выдачей |
 | C6-M4-PG-EXECUTOR-R1 | VERIFIED SOURCE + ACTUAL PG OBSERVATION C0: one run41082835484/attempt1, PG18.6,12 PASS/cleanup PASS. Matrix aggregate overwritten; raw completeness independently recovered. C6 HOLD/ref frozen |
-| C2-M4-CI-OBSERVATION-R2 | TODO / ASSIGNED: exact-target waiter/pending guard, negative controls, recorder collision; one hosted222+ PG validation, exact8 paths в HANDOFF |
+| C2-M4-CI-OBSERVATION-R2 | IN_PROGRESS / LOCAL READY: task+active-query PID guard,32 controls, separate command/aggregate files;25 local PASS, original222+32 collected. Единственный hosted validation pending;7 из8 разрешённых paths, guards source unchanged/included |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
@@ -43,6 +43,8 @@ observation reconstruction;12 PID/time/outcome checks, cleanup подтверж�
 исторического timeout. Recorder matrix.json collision также требует repair.
 
 C2 base — новый published C0 SHA из immutable HANDOFF, sole parent38f6a53.
+Exact base9982bcc860a9f70ade0d965434198d086fa0acf0/tree15478e6f38dfd014ef9a24b5d04cf91cb1260cb1;
+local controlled old→new и reporter checks PASS, PostgreSQL на новом source NOT_RUN.
 Prep c2/m4-ci-observation-r2; execution c2/m4-pg-observation-run-r2,
 один expected-base/force=false FF/job≤25min/test≤600s после local checks.
 Четыре modules, все прежние222 + новые controls; business time bounds прежние.

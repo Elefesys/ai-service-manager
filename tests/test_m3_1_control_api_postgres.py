@@ -566,7 +566,7 @@ async def test_control_revocation_committed_while_authority_waits(api, revocatio
         pid = (await c.execute(text("SELECT pg_backend_pid()"))).scalar_one()
         task = asyncio.create_task(post(h, cid, expected=expected))
         try:
-            await wait_blocked(c, pid)
+            await wait_blocked(c, pid, pending=task)
             await tx.commit()
             result = await task
             assert result.status_code == (403 if revocation == "membership" else 401), result.json()

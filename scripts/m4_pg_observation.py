@@ -1,4 +1,4 @@
-"""C6-M4-PG-EXECUTOR-R1: one disposable matrix observation, never a repair."""
+"""C2-M4-CI-OBSERVATION-R2: one disposable exact-target observer validation."""
 
 import asyncio
 import functools
@@ -16,9 +16,9 @@ import sys
 import time
 from pathlib import Path
 
-BASE = "f93c0b70f287f8dd982159c4b0073b495481e29d"
-BASE_TREE = "0c2452fbd73cf628ce18799e40a2b725d6cc8e02"
-BRANCH = "c6/m4-pg-observation-run-r1"
+BASE = "9982bcc860a9f70ade0d965434198d086fa0acf0"
+BASE_TREE = "15478e6f38dfd014ef9a24b5d04cf91cb1260cb1"
+BRANCH = "c2/m4-pg-observation-run-r2"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -29,11 +29,77 @@ NODEIDS = [
         ("resume", "controlled", "telegram"), ("expiry", "activation"), ("subscription", "mode")
     )
 ]
+MODULES = [
+    "tests/test_m3_1_control_postgres.py",
+    "tests/test_m3_1_control_api_postgres.py",
+    "tests/test_m3_1_guards_postgres.py",
+    "tests/test_m3_1_provenance_postgres.py",
+]
+EXISTING_COLLECTION_SHA256 = "9d176494741dc88fe945c2f820d6d36f3f38b7e941593292236cde94f94772f0"
+NEW_NODEIDS = [
+    MODULES[0] + "::" + name + "[" + case + "]"
+    for name, cases in (
+        (
+            "test_wait_blocked_controlled_target_contract",
+            (
+                "matching",
+                "foreign",
+                "unknown",
+                "completed_before",
+                "failed_before",
+                "cancelled_before",
+                "completed_during",
+                "failed_during",
+                "cancelled_during",
+                "query_finished",
+                "query_replaced",
+            ),
+        ),
+        (
+            "test_wait_blocked_pg_target_controls",
+            (
+                "matching",
+                "foreign",
+                "absent",
+                "two_targets",
+                "completed",
+                "failed",
+                "cancelled",
+            ),
+        ),
+        (
+            "test_m4_observation_summary_rejects_incomplete",
+            (
+                "valid",
+                "missing_case",
+                "extra_case",
+                "reordered",
+                "missing_phase",
+                "duplicate_phase",
+                "skip",
+                "xfail",
+                "overflow",
+                "invalid",
+                "failed",
+                "exit",
+                "unknown_outcome",
+            ),
+        ),
+    )
+    for case in cases
+] + [MODULES[0] + "::test_m4_observation_command_preserves_summary"]
+COMMAND_REPORT = "matrix-command"
+SUMMARY_REPORT = "matrix-summary.json"
+COLLECTED = []
+
+
 WRITE_SET = {
     ".github/workflows/m4-pg-observation.yml",
     "scripts/m4_pg_observation.py",
     "tests/test_m3_1_control_postgres.py",
     "tests/test_m3_1_control_api_postgres.py",
+    "tests/test_m3_1_guards_postgres.py",
+    "tests/test_m3_1_provenance_postgres.py",
     "docs/tasks/M4_HANDOFF.md",
     "docs/TASK_REGISTER.md",
 }
@@ -56,7 +122,7 @@ def write(path, value):
 
 def record(kind, **fields):
     """Only bounded scalars in memory; no I/O, awaits, or database reads."""
-    if CASE is None:
+    if CASE is None or CASE["nodeid"] not in NODEIDS:
         return
     if kind == "request_scheduled":
         CASE["pending"] = fields.pop("pending")
@@ -135,10 +201,11 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
     from sqlalchemy.engine import Engine
 
     def pytest_collection_modifyitems(session, config, items):
-        actual = [item.nodeid for item in items]
-        write(Path("/evidence/collected.json"), actual)
-        require(actual == NODEIDS, "MATRIX_COLLECTION_MISMATCH")
-        module = items[0].module
+        global COLLECTED
+        COLLECTED = [item.nodeid for item in items]
+        write(Path("/evidence/collected.json"), COLLECTED)
+        validate_collection(COLLECTED)
+        module = next(item.module for item in items if item.nodeid in NODEIDS)
         module.post = request_wrapper(module.post)
         module.manual = request_wrapper(module.manual)
         event.listen(Engine, "before_cursor_execute", cursor_event)
@@ -187,25 +254,50 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
 
     def pytest_sessionfinish(session, exitstatus):
         flush_cases()
-        complete = [case["nodeid"] for case in CASES] == NODEIDS and all(
+        summary = summarize(CASES, COLLECTED, int(exitstatus))
+        write(Path("/evidence") / SUMMARY_REPORT, summary)
+        if summary["result"] != "PASS" and session.exitstatus == 0:
+            session.exitstatus = 1
+
+
+def validate_collection(actual):
+    existing = [node for node in actual if node not in NEW_NODEIDS]
+    require(
+        len(actual) == 222 + len(NEW_NODEIDS)
+        and len(set(actual)) == len(actual)
+        and [node for node in actual if node in NEW_NODEIDS] == NEW_NODEIDS
+        and hashlib.sha256(("\n".join(existing) + "\n").encode()).hexdigest()
+        == EXISTING_COLLECTION_SHA256,
+        "SOURCE_COLLECTION_MISMATCH",
+    )
+
+
+def summarize(cases, expected, exitstatus):
+    complete = (
+        bool(expected)
+        and [case["nodeid"] for case in cases] == expected
+        and all(
             [p["phase"] for p in case["phases"]] == ["setup", "call", "teardown"]
-            and all(p["outcome"] != "skipped" and not p["xfail"] for p in case["phases"])
+            and all(p["outcome"] in {"passed", "failed"} and not p["xfail"] for p in case["phases"])
             and not case["overflow"]
             and not case["invalid_fields"]
-            for case in CASES
+            for case in cases
         )
-        write(
-            Path("/evidence/matrix.json"),
-            {
-                "pytest_exit": int(exitstatus),
-                "cases": len(CASES),
-                "complete": complete,
-                "server_wait_vs_event_loop_delay": "UNKNOWN",
-                "timings": "client monotonic spans; not server query durations",
-            },
-        )
-        if not complete and session.exitstatus == 0:
-            session.exitstatus = 1
+    )
+    passed = (
+        complete
+        and exitstatus == 0
+        and all(p["outcome"] == "passed" for case in cases for p in case["phases"])
+    )
+    return {
+        "pytest_exit": exitstatus,
+        "cases": len(cases),
+        "expected": len(expected),
+        "complete": complete,
+        "result": "PASS" if passed else "FAIL",
+        "server_wait_vs_event_loop_delay": "UNKNOWN",
+        "timings": "client monotonic spans for original matrix12; not server query durations",
+    }
 
 
 def flush_cases():
@@ -516,7 +608,7 @@ def run(root):
         )
         phase(
             root,
-            "matrix",
+            COMMAND_REPORT,
             checks(
                 root,
                 "pytest",
@@ -528,14 +620,16 @@ def run(root):
                 "-o",
                 "cache_dir=/tmp/asm-pytest-cache",
                 "--junitxml=/evidence/junit.xml",
-                TARGET,
+                *MODULES,
                 plugin=True,
             ),
-            180,
+            600,
         )
+        summary = json.loads((root / "evidence" / SUMMARY_REPORT).read_text())
+        require(summary["result"] == "PASS" and summary["complete"], "MATRIX_EVIDENCE_INCOMPLETE")
         primary = {
             "outcome": "PASS",
-            "scope": "one original twelve-case observation; no repair claim",
+            "scope": "222 retained cases plus exact-target and reporter controls; historical timeout cause UNKNOWN",
         }
     except Exception as error:
         code = str(error)

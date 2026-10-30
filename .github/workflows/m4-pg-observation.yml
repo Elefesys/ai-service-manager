@@ -2,7 +2,7 @@ name: M4 bounded PostgreSQL observation
 
 on:
   push:
-    branches: [c6/m4-pg-observation-run-r1]
+    branches: [c2/m4-pg-observation-run-r2]
 
 permissions:
   contents: read
@@ -11,7 +11,7 @@ jobs:
   observe:
     if: github.run_attempt == 1
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
     env:
@@ -22,7 +22,7 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 3
           persist-credentials: false
-      - name: Build, initialize fresh asm_test, observe the original twelve cases once
+      - name: Build, initialize fresh asm_test, validate four consumer modules once
         run: python3 scripts/m4_pg_observation.py run
       - name: Recover only owned resources and finalize evidence
         if: always()

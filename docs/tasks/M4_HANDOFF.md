@@ -6,7 +6,7 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6 PG observation принят; C2 observer repair R2 / 2026-10-30
+## CURRENT — C2 observer repair R2 LOCAL READY; hosted validation pending / 2026-10-30
 
 **C0 принимает C6-M4-PG-EXECUTOR-R1 в SOURCE + ACTUAL PG OBSERVATION scope.**
 Один GitHub run,12/12 PASS, cleanup PASS; среда для дальнейшей проверки есть.
@@ -15,6 +15,36 @@
 дефект наблюдателя тестов и конфликт файлов отчёта, затем один раз проверить
 четыре затронутых PostgreSQL modules. Владелец ничего локально не запускает.
 C6 HOLD; допуск R1 использован, execution ref не перемещать.
+
+### C2 R2 — подготовленный source / 2026-10-30
+
+Exact base **9982bcc860a9f70ade0d965434198d086fa0acf0**, tree
+**15478e6f38dfd014ef9a24b5d04cf91cb1260cb1**; sole parent38f6a53 и parent tree
+a4479a265a024d1140deddc9d4e8ce022744834f подтверждены. Preparation/execution refs
+и допуск одного hosted job — по задаче ниже; source — direct child этого base.
+Из разрешённых8 paths изменены7: guards consumer уже передавал pending и его
+source сохранён; он включён в полный targeted run вместе с остальными3 modules.
+
+Observer требует pending Task и его активный driver query/PID из SQLAlchemy
+events. Unknown/finished/replaced query, чужой PID и completed/error/cancelled
+target не подтверждают wait; original target error сохраняется. Второй row
+waiter может стоять за первым: SQL требует собственный non-granted lock и путь
+к указанному blocker непосредственно либо через один queue predecessor.
+Все9 existing callers передают pending; provenance доказывает два разных PID.
+Timeout1.5s/edge1.1s/DB bounds, business assertions/effects/replay неизменны.
+
+Local Python3.13.16/frozen uv.lock: **25 controlled/reporter PASS /6.40s**;
+old helper воспроизвёл2 false successes, новый их отклонил. Collect-only
+**254=222 existing+32 controls**; original ordered SHA256
+**9d176494741dc88fe945c2f820d6d36f3f38b7e941593292236cde94f94772f0**.
+5 malformed collections отказаны; original business AST/79 test functions,
+decorators/assertions сохранены; Ruff/format5/compile5/diff-check PASS.
+32 новых cases:11 controlled oracle,7 real-PG controls,13 aggregate negatives/
+positive и1 actual command/report collision check. Это ещё не PG PASS.
+Recorder пишет matrix-command.json отдельно от matrix-summary.json; общий
+ordered254/phase/result/complete gate обязателен, подробные events только matrix12.
+Один pytest четырёх modules≤600s/job≤25min. Hosted run **NOT_RUN** на этом source
+receipt; после него отдельный docs receipt, execution ref остаётся tested source.
 
 ### Приёмка C6 и независимая проверка C0
 

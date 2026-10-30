@@ -596,9 +596,10 @@ async def test_original_and_material_workers_serialize_unknown_chat_without_dead
             {"id": h.telegram_connection},
         )
         e = asyncio.create_task(h.kernel.process_inbox(ce))
-        await wait_blocked(blocker, pid, pending=e)
+        edit_wait = await wait_blocked(blocker, pid, pending=e)
         o = asyncio.create_task(h.kernel.process_inbox(co))
-        await wait_blocked(blocker, pid, pending=o)
+        original_wait = await wait_blocked(blocker, pid, pending=o)
+        assert {r["pid"] for r in edit_wait}.isdisjoint(r["pid"] for r in original_wait)
     async with asyncio.timeout(5):
         await asyncio.gather(e, o)
     m = await current(h)
