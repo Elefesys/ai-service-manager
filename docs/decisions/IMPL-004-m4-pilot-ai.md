@@ -237,6 +237,34 @@ C0-M4-CI-OBSERVATION-01 должна быть разобрана до merge/runt
 прогон ради случайного PASS не повторялся, тесты не ослаблялись. Подтверждение
 новых Polza outputs/charges и выбор модели остаются после полного R2 review.
 
+**Решение C0 от2026-10-30 — R2 Gemini STOP и узкая диагностика:**
+разовый R2 допуск использован. Полная текстовая копия33 events проверена:
+GPT25 scenarios/27 confirmed POST/2 READ, Gemini1 attempted POST/0 READ/0 final,
+DeepSeek NOT_RUN. Summary/встроенный R1/новые flags воспроизведены offline.
+GPT no_send_claim19 — реальный неверный outcome reply вместо handoff;
+unknown_price22 содержит неподтверждённое обобщение. Whole-model quality PASS
+и runtime selection не выдаются по одному technical completion.
+
+Gemini остановлен локально на SIGNATURE_INVALID. Код проверяет signature до
+сохранения response ID/metering и объединяет несколько причин в одном detail.
+Actual wire shape неизвестен, поэтому нельзя объявить причиной missing field,
+слишком большую подпись либо несовместимость модели. C4 получает только
+M4.2-GEMINI-DIAGNOSTIC-R1: bounded safe diagnostics/metering на отказе, GET-only
+history сверка и отдельный пока не разрешённый к live запуску one-POST план.
+Новый общий resume, replay GPT, prompt/fixtures/profile changes не входят.
+Runtime DTO/guards не меняются, подпись не логируется и не заменяется заглушкой.
+Совместимость исправляется только по доказательству фактического wire format.
+
+Shared confirmed0.17509189 RUB/30 calls +1 unknown Gemini, reserve3.464879664;
+консервативный остаток общего150 —146.360028446. Unknown не превращается в0
+или точное списание по одной оценке. Потерянный ID ограничивает history correlation:
+совпадение model/time — candidate, не автоматическое погашение резерва.
+Hash присланного текста R2 не считается hash оригинального Windows JSONL.
+Оба отчёта сохраняются; новая paid операция только после review exact source
+и конкретных caps C0 в уже согласованном бюджете, без повторного запроса150.
+CI41009211185 и C0-M4-CI-OBSERVATION-01 остаются RED/OPEN перед merge/runtime;
+эта диагностика их не закрывает и не даёт нового full-CI PASS.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,
