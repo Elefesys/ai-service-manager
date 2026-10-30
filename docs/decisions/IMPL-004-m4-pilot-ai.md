@@ -7,6 +7,8 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
+Последнее решение ниже: GPT quality принят, следующая выдача M4.3-CONTEXT-R1.
+Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
 
@@ -616,6 +618,50 @@ Scoped standalone EVAL_ONLY не закрывает CI debt. PR39 Draft/headcd60
 CI41009211185 RED/root cause UNKNOWN и C0-M4-CI-OBSERVATION-01 сохраняются;
 full CI интеграционного кандидата нужен до merge/runtime. Gemini/DeepSeek
 DEFERRED, comparison75 не завершено. Main/VM/DB/Telegram/merge без изменений.
+
+**Актуальное решение C0 от2026-10-30: GPT quality R2 принят; переход к
+M4.3-CONTEXT-R1.** Owner report SHA256 **f89ad00e49ab730f12a62f413142dd16ee7864bf4a026f9308662aa984750f35**,
+42789 bytes/39 events, source **7e48510311ab77c41f84b11becb2734ddb430690**, tree **23dad7ed0cf0e9974285db3881a1093e670fe443**.
+Exact ref/plan/schedule/DTO/flags/reservations и все summary fields проверены
+локально; original files неизменны, новых C0 HTTP/key reads0.
+По receipt18 POST/36 history/1 catalog/0 READ/0 new unknown; manual PASS18.
+Вместе с retained R1 PASS7/2 READ —25 schedule positions,27 confirmed POST,
+2 synthetic images. Это составной результат двух source/profile revisions,
+не25 новых вызовов и не воспроизведение прежнего unknown final.
+Все6 R2 flags (7/11/15/18/22/24) — semantic PASS при сохранённых regex findings.
+V1 no_send_claim19 исправлен structured handoff; price22 теперь уточнение без
+неподтверждённого business rule. Качество принято для этой маленькой synthetic
+выборки; R2 N18/p50 11.163s/p95 16.393s включая history, не SLA.
+
+C0 **выбирает GPT/openai/flex, conversation_v2** как единственный кандидат
+первого runtime. Рекомендация «дешевейшая из прошедших» не превращается в
+заявление о проведённом трёхмодельном сравнении: только GPT завершил набор,
+Gemini/DeepSeek compatibility DEFERRED. Prompt SHA256 **b420be44a7e4210de1151e5b0604b0fa9a08c19b1bfbedb8147f2a9b38455956**,
+canonical result/envelope/fixtures и image revision неизменны. Выбор ручной,
+source-pinned; runtime route остаётся EVAL_ONLY. Raw report selected_model=null/
+manual PENDING не переписывается. OpenAI family наблюдалась, flex variant нет.
+gpt_eval_history_v2 остаётся только synthetic; production RouteReview и metering
+не наследуют допуск автоматически. Data permission/backend reachability,
+durable consumer и отправка требуют следующих runtime gates.
+
+Новый confirmed0.13616096 RUB/18 known. Shared150: **confirmed0.37505230/58
+known,4 unknown/held7.585505548,62 client POST**, committed7.960557848,
+remaining142.039442152. Старые4 holds сохранены, metadata reported0.00743079
+UNSETTLED. Capacity не account balance; новые retry/probe/settlement не назначены.
+Ref OWNER_REMAINING18_R2_10RUB consumed; все owner paid stages завершены.
+
+Следующий scope — уже запланированный **M4.3-CONTEXT-R1/C4**: bounded projection
+существующих M3 snapshots, один текущий-context READ, bounded ConversationAgent
+через ModelGateway на fixtures. Минимальная mandatory authority/read boundary
+проверяется controlled tests, без default-allow; actual PG authority и durable
+AIRun/Telegram — M4.3-RUNTIME. Нельзя считать UUID/DTO или fixture PASS доказанной
+PG авторизацией. Точный7-file scope/критерии/base — в CURRENT HANDOFF.
+Это не runtime enable, не новая очередь/registry/CRM и не клиентский Vision.
+
+PR39 Draft/headcd60, CI41009211185 RED/root cause UNKNOWN,
+C0-M4-CI-OBSERVATION-01/full integration CI остаются до merge/runtime.
+Полный M4/A01–A08 ещё не принят. В этом C0 шаге только4 coordination docs и
+PR body; C4 следующий, остальные HOLD. Main/VM/DB/Telegram/merge неизменны.
 
 ## Что пересмотрено относительно baseline
 
