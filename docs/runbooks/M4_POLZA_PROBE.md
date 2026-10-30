@@ -1,6 +1,17 @@
 # M4.2 — finite synthetic Polza experiment
 
-**C0 source review PASS; 11/11 SUCCESS; ONE_OWNER_SYNTHETIC_RUN_AUTHORIZED; paid75 NOT RUN.**
+**CURRENT: R1 выполнен частично; повтор/continuation HOLD.**
+Получен terminal tail: GPT12 scenarios/14 reserved calls, затем ложный
+FORBIDDEN_CLAIM в injection — matcher нашёл500 в корректном отказе подтверждать
+цену. Gemini/DeepSeek ещё не запускались. Полный исходный JSONL нужен C0 для
+сверки расходов/outputs и подготовки продолжения; не удалять/не переименовывать
+отчёт для повторного запуска. Подробности — [текущий handoff](../tasks/M4_HANDOFF.md).
+
+Ниже сохранён исторический одноразовый допуск R1. Он уже использован и не
+разрешает заново выполнять приведённую команду. Source/CI остаются прежними.
+
+
+**Историческая приёмка R1: C0 source review PASS; CI11/11 SUCCESS; paid75 PARTIAL.**
 Source **b1ff8f1463e12ff65a64d692b7fc7718aa8d05fc**, tree
 **75227361cac6f619d51d19acfc3e0c8e413fa530**; full CI
 [40915999616](https://github.com/Elefesys/ai-service-manager/actions/runs/40915999616),
@@ -52,7 +63,7 @@ synthetic images; объявленные strict schema/tools совместим�
 DeepSeek помечается `NOT_REPORTED`; наличие raw reasoning или ненулевых reasoning
 токенов останавливает probe до READ/final. Raw reasoning не сохраняется.
 
-## Одна Windows команда принятого source
+## Архив команды R1 — повторно не запускать
 
 В обычном PowerShell на прежнем ПК выполнить блок целиком. Он использует
 существующий каталог ASM-M4-Probe-4f86e7f, проверяет точный source и
