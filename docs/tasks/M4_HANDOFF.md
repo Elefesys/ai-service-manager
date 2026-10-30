@@ -6,18 +6,54 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — PR39 merged; main CI BLOCKED; C2 R4 / 2026-10-31
+## CURRENT — C2 R4 принят; C0 integration/full CI / 2026-10-31
 
-PR39 слит владельцем. Actual main **997d2bf83b5402068ba1f62b23d5947fcfaf7d32**,
-tree **13f5ab44994bb4ec2d5f89943fab714c28c11824**, exact-equal проверенному PR head
-1b7a6987d45511acfae0b32a4d4845ea976b1c21. Прежний PR CI41099431123/attempt1
-11/11 SUCCESS остаётся фактом; [C0 receipt](https://github.com/Elefesys/ai-service-manager/blob/5979261b4a353243973e7fabd8767c8875e4285a/docs/tasks/M4_HANDOFF.md).
-Новый [main run41108194917](https://github.com/Elefesys/ai-service-manager/actions/runs/41108194917),
-push/main/attempt1: **10 SUCCESS /1 FAILURE**. Main verification BLOCKED;
-C0-M4-CI-OBSERVATION-01 вновь открыт. Единственная выдача — **C2-M4-CI-OBSERVATION-R4**
-ниже. Остальные C1/C3–C8 HOLD; runtime/VM/paid работа не начинается.
+C0 принял **C2-M4-CI-OBSERVATION-R4** в SOURCE + TARGETED PG scope.
+Source **249b36112adb72fb763207893eb50ab31c06eff7**, tree
+**5adefdd2eab41c564c7b5d967f071fd0895f0921**, sole parent
+**3e1ccf855c64bbabb18c65db666b9b5e85cefd3d**; ровно6 разрешённых paths.
+Receipt **55a65c201fba62b7e447b32a98d1ca0a93a64ea4**, tree
+**986064d7aa5ee5df103493731b575b24ea1115be**, sole child source; только2 docs.
 
-### C0 — установленная ошибка main
+Подготовка настоящего HTTP/auth/workspace запроса теперь имеет отдельный
+конечный readiness bound5s; затем устанавливается прежний policy edge1.1s.
+Настоящий PG wait по точному task/PID/active query по-прежнему ограничен1.5s,
+lock release span<2s. Readiness не заменяет доказательство блокировки.
+Все12 исходных и12 delayed-auth cases доказали initial/frozen policy,
+противоположную реально потреблённому post-lock snapshot, crossing under lock,
+исходные response/effects/replay. Production/DDL/grants/core CI не менялись.
+
+[Единственный targeted run41124252930](https://github.com/Elefesys/ai-service-manager/actions/runs/41124252930),
+job124298527733, exact source/attempt1: **278 PASS /834 phases**, cleanup PASS,
+source clean. Все258 retained nodeids сохранены в порядке; добавлены readiness8
+и auth-delay12 (>=1.6s). PG18.6/asm_test/schema0013, runtime/migrator без
+superuser/BYPASSRLS. Pytest342.76s, outer test353.079s, build15.903s; job392s.
+
+C0 независимо сверил fresh run/ref/artifact metadata и upload log, source.patch,
+original ZIP, manifests57/24 и byte-identical analysis. Artifact13010446713:
+54105 bytes, SHA256 **4992ed6357b730e9627903700466bc16bb0e38249ecef5510b81fb93e17e7296**.
+Saved evidence libfile_a6be250149f48191a6622ece88ad61bf,3557409 bytes/58files,
+SHA256 **93673bc1df2f6d5540c749214a9de2aaeb0413e7e9fb5edb1a67d2e4c9815ea3**.
+C0 offline: **35 PASS/11.97s**, Ruff/format/compile5 PASS, collection278;
+83 existing test functions/532 assertions retained, effects/replay byte-identical,
+observer algorithm AST-identical. Controlled before/after: old1.5s timeout,
+repaired preparation1.602s then matching observation; это не PG evidence.
+Исторический trigger main failure остаётся UNKNOWN; нового targeted run C0 нет.
+
+Единственная текущая задача — **C0-M4-CI-REPAIR-INTEGRATION-R1**:
+ветка `c0/m4-ci-repair-integration-r1`, parent этого coordination commit = receipt55a65c2,
+write-set5: AGENTS, CURRENT/HANDOFF, IMPL-004, probe runbook. Создать новый Draft PR
+к main и один штатный full CI; code совпадает с source249b. C2/C1/C3–C8 HOLD,
+execution refs frozen. Merged PR39 не двигать, failed run41108194917 не повторять.
+Ready только после проверки полного CI; merge остаётся владельцу.
+
+Actual main **997d2bf83b5402068ba1f62b23d5947fcfaf7d32** всё ещё имеет failed
+run41108194917:10 SUCCESS/1 FAILURE. Main verification и observation gate
+не закрыты целевым PASS. После merge проверить фактический main source/run.
+Runtime/VM/Telegram/paid HOLD; GPT/C4 acceptance и shared150 ledger сохранены.
+Real PG authority/durable AIRun/AI→Outbox→Telegram ещё TODO, M4 не закрыт.
+
+### История C0 — установленная ошибка main
 
 [Foundation job124251519960](https://github.com/Elefesys/ai-service-manager/actions/runs/41108194917/job/124251519960):
 3289 ordinary +155 subtests PASS; PostgreSQL **839 PASS /1 FAIL**,1223.00s.
@@ -163,7 +199,7 @@ Runner дополнительно проверяет точный ordered digest
 local proof. Никаких production/DDL/RLS/grants/deps/pins/generic CI изменений.
 Main/full CI/runtime остаются BLOCKED/HOLD до C0; historical cause UNKNOWN.
 
-### C2-M4-CI-OBSERVATION-R4 — единственная текущая выдача
+### История выдачи C2-M4-CI-OBSERVATION-R4 — допуск использован; принят C0 выше
 
 **Результат для пилота:** устранить подтверждённый источник нестабильности
 проверки post-lock policy boundary либо вернуть точный BLOCKED с недостающим

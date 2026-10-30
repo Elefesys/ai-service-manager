@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: PR39 слит; actual main CI BLOCKED, узкая C2 R4.
+Последнее решение ниже: C2 R4 принят; C0 integration/full CI, main ещё BLOCKED.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -800,7 +800,7 @@ timeout cause UNKNOWN. Merge остаётся владельцу после C0 r
 AI->Outbox->Telegram ещё не реализованы; full source CI не является runtime
 или data/route approval. VM/Telegram/live/paid запусков эта выдача не разрешает.
 
-**Актуальное решение C0 от 2026-10-31: PR39 merged; main verification BLOCKED.**
+**Предыдущее решение C0 от 2026-10-31: PR39 merged; main verification BLOCKED.**
 Actual main997d2bf83b5402068ba1f62b23d5947fcfaf7d32 имеет тот же tree13f5ab44,
 что accepted PR candidate1b7a6987. PR CI41099431123:11/11 SUCCESS сохранён;
 main CI41108194917/attempt1:10 SUCCESS/1 FAILURE. Foundation839 PG PASS/1 FAIL
@@ -817,6 +817,21 @@ Failure-stage facts должны собираться до cancellation, без 
 Write-set6 и единственный targeted run после local proof заданы в HANDOFF;
 production/DDL/core CI не меняются. Runtime и actual main acceptance ждут repair.
 Новый paid/VM/Telegram запуск не разрешён; ledger и data/route gates прежние.
+
+**Актуальное решение C0 от 2026-10-31: R4 SOURCE + TARGETED PG VERIFIED.**
+Source249b36112adb72fb763207893eb50ab31c06eff7/receipt55a65c2 принят C0.
+One run41124252930/attempt1:278 PASS/834 phases, cleanup/source PASS. Readiness5s
+отделяет подготовку HTTP/auth от прежнего edge1.1s/observer1.5s/release<2s.
+Original12 + delayed-auth12 доказывают opposite frozen/post-lock policy,
+реальный exact task/PID/query wait и прежние effects/replay. C0 offline35 PASS,
+source/collection/artifact/controlled before-after PASS; historical trigger UNKNOWN.
+
+C0 готовит отдельный child receipt на c0/m4-ci-repair-integration-r1, новый
+Draft PR к main и один full CI. R4 execution ref frozen, C2/остальные HOLD.
+Main997d2bf8/run41108194917 остаётся FAILED; не переигрывать неизменённый run.
+Целевой PASS не закрывает main gate; Ready после full CI, merge владельцу,
+далее проверка actual main. Production/DDL/core CI/ledger не меняются.
+Новых VM/Telegram/paid/runtime действий нет; real durable AI bridge ещё TODO.
 
 ## Что пересмотрено относительно baseline
 
