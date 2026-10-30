@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.2 GPT quality v2: один owner запуск / 2026-10-30
+## CURRENT — M4.2 GPT v2: receipt reviewed; metadata-only следующий шаг / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**, PR38 merged;
@@ -18,45 +18,43 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.2-GEMINI-COMPATIBILITY | BLOCKED; дальнейшая совместимость DEFERRED для первого пилота |
 | M4.2-DEEPSEEK-EVAL-R1 | BLOCKED: READ_ROUND_TRIP, handoff «С», OWNER_25_CASES_R1 consumed |
 | M4.2-DEEPSEEK-TOOL-COMPAT-R1 | BLOCKED: INVALID_PROVIDER_RESPONSE на первом POST; exact cause/charge UNKNOWN. Допуск consumed, дальнейшая совместимость DEFERRED |
-| M4.2-GPT-QUALITY-R1 | REVIEW / C0 SOURCE PASS; OWNER_25_CASES_R1_15RUB AUTHORIZED: sourceace29ce7,25 cases/≤27 POST/2 READ/15 RUB внутри прежнего150. Один full receipt→C0, manual quality/runtime не приняты |
+| M4.2-GPT-QUALITY-R1 | BLOCKED: owner stage consumed;7 manual PASS/1 technical STOP/17 NOT_RUN. DETAIL/ATTEMPTS/INT, actual counter UNKNOWN; paid retry HOLD |
+| C0-M4.2-GPT-QUALITY-HISTORY-R1 | IN_PROGRESS: owner выполняет один metadata read≤2 history GET/0 POST для exact generation; C0 затем проверяет полный receipt |
 | C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 wait_blocked1.5s timeout, root cause UNKNOWN; последующие foundation gates не приняты |
 | M4.3-CONTEXT / M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-[Приёмка и точный допуск](tasks/M4_HANDOFF.md),
-[готовая Windows команда](runbooks/M4_POLZA_PROBE.md),
-[решение C0](decisions/IMPL-004-m4-pilot-ai.md).
-Accepted source **ace29ce7d77564f8fecea84d4b7e734e6c8fbe56**, tree **8a716c528a917c8a77a853c226699ba4a47ccc2b**,
-sole parent **07e18c70b02a3739fbe640d28c41ec0341f8452d**.11-file scope принят
-без code fixes. C0:799 targeted PASS13.15s, Ruff/format7, mypy71;8 actual
-offline plans, первые7 равны parent; wheel содержит byte-exact v1/v2.
-Contract delta только Literal v1/v2, Gateway только prompt selection; остальные
-методы/adapter/schema/fixtures/old constants/режимы сохранены. Exact CLI source/
-ref/15: complete, quality finding, late history и preflight budget STOP PASS;
-все3 held и report exclusivity сохранены. Real HTTP/owner key reads0;
-Windows/hosted v2 quality/full CI sourceace29ce7 NOT_RUN.
+[Разбор C0](tasks/M4_HANDOFF.md), [готовая metadata-only команда](runbooks/M4_POLZA_PROBE.md),
+[решение](decisions/IMPL-004-m4-pilot-ai.md). Source **ace29ce7d77564f8fecea84d4b7e734e6c8fbe56**,
+tree **8a716c528a917c8a77a853c226699ba4a47ccc2b**. Owner report21904 bytes/21 events,
+SHA256 `b0d1cb8249b321792355a2b4d29e1a79ba6eae30847a5deee6fbafa36159017f`.
+10 model POST/20 history GET/1 catalog/2 READ;7 finals manual PASS.
+Case7 unknown_duration остановлен DETAIL/ATTEMPTS/INT: пришло integer!=1,
+значение не сохранено. Это не доказанный retry2/fallback или quality FAIL.
+17 cases8–24 NOT_RUN, включая no_send_claim19/images20–21/unknown_price22;
+прежние v1 findings не закрыты.799 source tests были приняты ранее; сейчас
+backend без изменений, полный suite/CI не повторялся.
 
-Единственный owner ref: `C0-M4.2-GPT-QUALITY-R1:ace29ce7d77564f8fecea84d4b7e734e6c8fbe56:OWNER_25_CASES_R1_15RUB`.
-GPT/openai/flex/provider-default/auto; прежние25 cases,3 critical repeats и2 images.
-Text/tool v2 SHA256b420be44a7e4210de1151e5b0604b0fa9a08c19b1bfbedb8147f2a9b38455956; image revision прежняя.
-Fresh reserve всех27 calls≤15 до POST;≤54 history/1 catalog,case60s/stage1800s,
-32768/512 tokens и24576/32768 bytes. Full report вернуть при любом исходе,
-без retry/fallback/resume. HUMAN_REVIEW_REQUIRED не означает quality PASS.
+Shared150: **0.23889134 confirmed /40 known POST**, **4 unknown**, held
+**7.585505548**, всего44 attempts; confirmed+held7.824396888,
+remaining **142.175603112 RUB**. Это ledger capacity, не баланс аккаунта.
+Новые9 confirmed calls0.05956584; один unknown held0.465109963. Все old holds
+сохранены; cost неизвестного запроса не равен0 и автоматически не освобождается.
 
-Shared150 prior: **0.17932550 confirmed /31 known**, **3 unknown**, held
-**7.120395585**, всего34 attempts; committed_or_held7.299721085,
-remaining **142.700278915 RUB**, не баланс аккаунта. Максимум61 shared attempts;
-old holds не снимаются. GPT no_send_claim19 QUALITY_FAIL и unknown_price22
-QUALITY_NOTE остаются до нового hosted/manual evidence. Модель не выбрана,
-runtime=false; следующий paid шаг после одного receipt HOLD до C0 review.
+Единственный следующий шаг — owner metadata read generation **gen_2227417601602097153**:
+≤2 bounded history GET (first5 с exact ID + exact detail),0 POST/catalog/READ,
+65536 bytes/15s каждый,45s overall; прежний source/venv/key. Новый exclusive
+`reports/m4-polza-gpt-quality-history-r1.jsonl`; input SHA проверяется до HTTP.
+No retry/pagination/polling/paid transition; raw responses/секреты не печатаются.
+Все reported amounts UNSETTLED до C0 review. Budget150 заново не запрашивается.
+C0 проверил exact accounting,4 controlled counter cases и15 metadata-reader
+cases; real HTTP/owner key reads0. C4/C1/C2/C3/C5/C6/C8 HOLD до metadata.
 
 PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**;
 [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
-FAILURE/10 из11 на cd60:2640 ordinary+155 subtests PASS,803 PG PASS/1 M3 observer
-timeout,54 browser/398 frontend PASS. Root cause UNKNOWN, последующие foundation
-gates не приняты. Scoped EVAL_ONLY не закрывает CI debt; полный CI интеграционного
-кандидата нужен до merge/runtime. C1/C2/C3/C4/C5/C6/C8 HOLD, следующий — владелец
-по готовой команде. Main/VM/DB/Telegram/merge не менялись, бюджет150 не запрашивается снова.
+FAILURE/10 из11: M3 wait_blocked1.5s timeout, root cause UNKNOWN; последующие
+foundation gates не приняты. Full CI интеграционного кандидата нужен до
+merge/runtime. Main/VM/DB/Telegram/merge не менялись; selection=null/runtime=false.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

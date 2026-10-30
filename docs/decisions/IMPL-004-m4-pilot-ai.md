@@ -488,6 +488,43 @@ Draft/headcd60, CI41009211185 RED и root cause UNKNOWN. C0-M4-CI-OBSERVATION-01
 и полный CI интеграционного кандидата нужны до merge/runtime. Main/VM/DB/
 Telegram не меняются; другие исполнители HOLD, следующий — владелец.
 
+**Решение C0 от2026-10-30 — GPT v2 stage consumed; только exact metadata read:**
+Owner report sourceace29ce7d77564f8fecea84d4b7e734e6c8fbe56,21904 bytes/21 events,
+SHA256b0d1cb8249b321792355a2b4d29e1a79ba6eae30847a5deee6fbafa36159017f:10 POST/2 READ,
+7 finals manual PASS, eighth scenario unknown_duration технически остановлен,
+17 NOT_RUN. Полные quality25 и прежние findings no_send_claim19/unknown_price22
+не закрыты. Price clarification case5 допустим, regex false positive сохранён.
+
+Generation gen_2227417601602097153: HISTORY_VERIFICATION_FAILED / DETAIL / ATTEMPTS / INT.
+Код требует integer==1; фактическое число integer!=1 не сохранено. Документация
+[Polza history](https://polza.ai/docs/api-reference/history/generations) не задаёт
+invariant1; [allow_fallbacks](https://polza.ai/docs/gaidy/provider-selection)
+описывает другие providers, не количество внутренних attempts. Причина/стоимость
+внутренних попыток UNKNOWN. Не менять guards и не запускать paid probe по догадке.
+
+Новые confirmed0.05956584/9 known, unknown1/held0.465109963; shared
+confirmed0.23889134/40 known,4 unknown (2 Gemini/1 DeepSeek/1 GPT),
+held7.585505548,44 model attempts, confirmed+held7.824396888,
+remaining142.175603112 из прежнего150. Все old holds остаются; это не account
+balance, unknown charge не0. Исходный report и v1 evidence не изменяются.
+
+C0-M4.2-GPT-QUALITY-HISTORY-R1 разрешает owner один metadata-only read:
+≤2 history GET,0 model POST/catalog/READ; first5 должен содержать exact ID,
+затем exact-ID detail.65536 bytes/15s каждый,45s overall; no pagination/retry/
+polling, missing/ambiguous ID→STOP. Existing ace29 source/venv/private key;
+input SHA до key/HTTP, новый exclusive report. Только выбранные типизированные
+metadata, без /log, raw prompts/responses/reasoning/account/key labels.
+Никакого automatic settlement/reserve release/paid/runtime transition.
+Это сбор недостающего факта внутри прежней задачи, нового бюджета не нужно.
+
+C0 exact receipt accounting/plan/flags PASS,4 controlled counter checks и15
+checks точной операторской команды PASS; real HTTP/key reads0 под audit guard.
+Backend без изменений,799 source tests/full CI повторно не запускались.
+C4 и другие HOLD до metadata review; paid допуск OWNER_25_CASES_R1_15RUB consumed.
+Gemini/DeepSeek DEFERRED, PR39 Draft/headcd60 и CI41009211185 RED сохраняются.
+C0-M4-CI-OBSERVATION-01/full integration CI нужны до merge/runtime.
+Main/VM/DB/Telegram/merge без изменений, selection=null/runtime=false.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

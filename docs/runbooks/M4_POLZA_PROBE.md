@@ -1,121 +1,290 @@
-# M4.2 — готовая проверка GPT с conversation_v2
+# M4.2 — прочитать метаданные остановившегося GPT запроса
 
-**Код C4 принят. Разрешён один запуск: 25 сценариев, максимум27 запросов к модели,
-2 synthetic READ и15 RUB из прежнего общего бюджета150.** Это проверка качества
-новых инструкций; результат потребует ручной оценки.
+**Платный тест уже выполнен и остановлен. Сейчас — только чтение истории:
+максимум2 GET, без новых генераций, catalog запросов и READ.**
 
-Source **ace29ce7d77564f8fecea84d4b7e734e6c8fbe56**, tree **8a716c528a917c8a77a853c226699ba4a47ccc2b**;
-[приёмка C0](../tasks/M4_HANDOFF.md), [решение](../decisions/IMPL-004-m4-pilot-ai.md).
-Ключ и установленное окружение используются прежние. Переустановка не нужна.
+7 полученных ответов проверены C0: PASS. На восьмом сценарии verifier отказал
+из-за attemptsCount: пришло целое число, отличное от1, но само значение не
+сохранено. Получим его вместе с cost/usage существующей generation
+`gen_2227417601602097153`. [Разбор C0](../tasks/M4_HANDOFF.md),
+[решение](../decisions/IMPL-004-m4-pilot-ai.md).
 
-## Готовая Windows команда — один GPT quality запуск
+## Готовая Windows команда — один metadata read
 
-Выполни блок **один раз** в PowerShell. Он проверяет исходники, новую версию
-инструкций и отсутствие отчёта, показывает offline plan, затем запускает тест.
+Выполни весь блок **один раз** в PowerShell. Он использует прежние source,
+окружение и ключ, проверяет hash исходного отчёта и создаёт отдельный JSONL.
+Ничего переустанавливать, обновлять или передавать ключ не нужно.
 
 ```powershell
 & {
     $ErrorActionPreference = "Stop"
     $Candidate = "ace29ce7d77564f8fecea84d4b7e734e6c8fbe56"
     $CandidateTree = "8a716c528a917c8a77a853c226699ba4a47ccc2b"
-    $PromptHash = "b420be44a7e4210de1151e5b0604b0fa9a08c19b1bfbedb8147f2a9b38455956"
-    $DecisionRef = "C0-M4.2-GPT-QUALITY-R1:ace29ce7d77564f8fecea84d4b7e734e6c8fbe56:OWNER_25_CASES_R1_15RUB"
-    $StageRub = "15"
     $Repo = Join-Path $env:LOCALAPPDATA "ASM-M4-Probe-4f86e7f"
     Set-Location -LiteralPath $Repo
-    $Report = "reports\m4-polza-gpt-quality-r1.jsonl"
-    if (Test-Path -LiteralPath $Report) { throw "Preserve existing report; do not replay" }
-    $Dirty = git status --porcelain --untracked-files=normal
-    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean checkout required; return STOP to C0" }
-    git fetch origin $Candidate
-    if ($LASTEXITCODE -ne 0) { throw "Source fetch failed" }
-    git checkout --detach $Candidate
-    if ($LASTEXITCODE -ne 0) { throw "Source checkout failed" }
     $Actual = git rev-parse HEAD
-    if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Accepted source mismatch" }
+    if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Existing accepted source required; return STOP to C0" }
     $ActualTree = git rev-parse 'HEAD^{tree}'
     if ($LASTEXITCODE -ne 0 -or $ActualTree -cne $CandidateTree) { throw "Accepted tree mismatch" }
     $Dirty = git status --porcelain --untracked-files=normal
     if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean accepted source required" }
-    $ActualPromptHash = (Get-FileHash -LiteralPath '.\backend\src\asm\ai\prompts\conversation_v2.txt' -Algorithm SHA256).Hash
-    if ($ActualPromptHash -ine $PromptHash) { throw "Accepted prompt mismatch" }
     if (-not (Test-Path -LiteralPath '.\.venv\Scripts\python.exe' -PathType Leaf)) { throw "Existing environment required" }
     if (-not (Test-Path -LiteralPath '.\.env.m4-probe' -PathType Leaf)) { throw "Existing private key file required" }
-    New-Item -ItemType Directory -Path 'reports' -Force | Out-Null
-    .\.venv\Scripts\python.exe -m asm.ai.probe --plan --gpt-quality-r1
-    if ($LASTEXITCODE -ne 0) { throw "Offline plan failed" }
-    .\.venv\Scripts\python.exe -m asm.ai.probe --live --gpt-quality-r1 `
-        --secret-file .\.env.m4-probe --report $Report `
-        --approved-rub $StageRub --approval-ref $DecisionRef `
-        --source-sha $Candidate --source-environment LOCAL_DESKTOP
-    $ProbeExit = $LASTEXITCODE
-    if (-not (Test-Path -LiteralPath $Report)) { throw "No receipt written; return STOP to C0 without retry" }
-    Write-Host "GPT quality receipt: $Report"
-    if ($ProbeExit -ne 0) { Write-Host "STOP: preserve receipt; do not retry" }
+    $Report = "reports\m4-polza-gpt-quality-history-r1.jsonl"
+    if (Test-Path -LiteralPath $Report) { throw "Preserve existing history receipt; do not repeat" }
+    $ReadOnlyScript = @'
+import asyncio
+import hashlib
+import json
+from decimal import Decimal
+from pathlib import Path
+
+from asm.ai.contracts import Cost, strict_json
+from asm.ai.polza import HISTORY, HISTORY_LIST, bounded_http
+from asm.ai.settings import load_secret
+
+TARGET = "gen_2227417601602097153"
+SOURCE = "ace29ce7d77564f8fecea84d4b7e734e6c8fbe56"
+DIGEST = "b0d1cb8249b321792355a2b4d29e1a79ba6eae30847a5deee6fbafa36159017f"
+INPUT = Path("reports/m4-polza-gpt-quality-r1.jsonl")
+OUTPUT = Path("reports/m4-polza-gpt-quality-history-r1.jsonl")
+
+
+def integer(value):
+    return value if type(value) is int and abs(value) <= 10000000 else None
+
+
+def label(value, allowed):
+    return value if type(value) is str and value in allowed else None
+
+
+def money(value):
+    try:
+        if type(value) not in (str, int, float):
+            return None
+        cost = Cost(status="CONFIRMED", amount=Decimal(str(value)), currency="RUB")
+        return str(cost.amount)
+    except (ValueError, TypeError, ArithmeticError):
+        return None
+
+
+def project(row, detail=False):
+    usage = row.get("usage")
+    usage = usage if type(usage) is dict else {}
+    result = {
+        "id": TARGET,
+        "model": label(row.get("model"), ("openai/gpt-6-luna", "gpt-6-luna")),
+        "provider": label(
+            row.get("finalEndpointSlug" if detail else "provider"), ("OpenAI",)
+        ),
+        "status": label(row.get("status"), ("completed", "failed", "pending")),
+        "request_type": label(
+            row.get("requestType"), ("chat", "image", "video", "audio")
+        ),
+        "reported_cost_rub": money(row.get("clientCost" if detail else "cost")),
+        "usage": {
+            k: integer(usage.get(k))
+            for k in ("prompt_tokens", "completion_tokens", "total_tokens")
+        },
+    }
+    if detail:
+        result.update(
+            attempts_count=integer(row.get("attemptsCount")),
+            attempts_count_type={
+                int: "INT",
+                str: "STRING",
+                float: "FLOAT",
+                bool: "BOOL",
+                type(None): "NULL",
+                list: "ARRAY",
+                dict: "OBJECT",
+            }.get(type(row.get("attemptsCount")), "OTHER")
+            if "attemptsCount" in row
+            else "MISSING",
+            api_type=label(
+                row.get("apiType"),
+                ("completions", "chat_completions", "responses", "media"),
+            ),
+            response_mode=label(row.get("responseMode"), ("sync", "stream", "async")),
+            finish_reason=label(
+                row.get("finishReason"),
+                ("stop", "length", "tool_calls", "content_filter"),
+            ),
+            is_cancelled=row.get("isCancelled")
+            if type(row.get("isCancelled")) is bool
+            else None,
+            steps_count=integer(row.get("stepsCount")),
+            has_parent=bool(row.get("parentGenerationId")),
+            has_server_tools=bool(row.get("serverTools")),
+        )
+    return result
+
+
+def main():
+    try:
+        output = OUTPUT.open("x", encoding="utf-8")
+    except OSError:
+        print("STOP / REPORT_EXISTS_OR_CANNOT_CREATE / NO_HTTP")
+        return 2
+    with output:
+        gets = 0
+
+        def emit(row):
+            output.write(json.dumps(row, ensure_ascii=False) + "\n")
+            output.flush()
+
+        emit(
+            {
+                "event": "source",
+                "mode": "GPT_QUALITY_HISTORY_R1",
+                "source_sha": SOURCE,
+                "input_sha256": DIGEST,
+                "input_validation": "PENDING",
+                "generation_id": TARGET,
+                "max_history_gets": 2,
+                "bytes_per_get": 65536,
+                "seconds_per_get": 15,
+                "overall_seconds": 45,
+                "model_posts": 0,
+                "catalog_gets": 0,
+                "reads": 0,
+                "cost_status": "UNSETTLED",
+                "automatic_reserve_release": False,
+                "runtime_authorized": False,
+            }
+        )
+        try:
+            with INPUT.open("rb") as source_file:
+                raw = source_file.read(65537)
+            if len(raw) > 65536 or hashlib.sha256(raw).hexdigest() != DIGEST:
+                raise ValueError
+            settings = load_secret(Path(".env.m4-probe"))
+
+            async def inspect():
+                nonlocal gets
+
+                async def get(url):
+                    nonlocal gets
+                    gets += 1
+                    emit(
+                        {
+                            "event": "history_get",
+                            "index": gets,
+                            "target": "LIST_FIRST_5"
+                            if gets == 1
+                            else "EXACT_ID_DETAIL",
+                            "model_posts": 0,
+                        }
+                    )
+                    body = await bounded_http(
+                        settings.api_key, url, body=None, seconds=15, maximum=65536
+                    )
+                    data = strict_json(body.decode("utf-8"))
+                    if settings.api_key.get_secret_value() in json.dumps(
+                        data, ensure_ascii=False
+                    ):
+                        raise ValueError
+                    return data
+
+                async with asyncio.timeout(45):
+                    listing = await get(HISTORY_LIST)
+                    items = listing.get("items") if type(listing) is dict else None
+                    if (
+                        type(items) is not list
+                        or len(items) > 5
+                        or any(type(item) is not dict for item in items)
+                    ):
+                        raise ValueError
+                    matches = [item for item in items if item.get("id") == TARGET]
+                    if len(matches) != 1:
+                        raise ValueError
+                    detail = await get(HISTORY + "/" + TARGET)
+                    if type(detail) is not dict or detail.get("id") != TARGET:
+                        raise ValueError
+                    return {
+                        "generation": project(matches[0]),
+                        "detail": project(detail, True),
+                    }
+
+            metadata = asyncio.run(inspect())
+            emit(
+                {
+                    "event": "metadata",
+                    "status": "OBSERVED / C0_REVIEW_REQUIRED",
+                    "input_validation": "SHA256_MATCH",
+                    "history_gets": gets,
+                    **metadata,
+                    "model_posts": 0,
+                    "cost_status": "UNSETTLED",
+                    "automatic_reserve_release": False,
+                    "runtime_authorized": False,
+                }
+            )
+        # Provider/credential exception text must never reach the operator report.
+        except (Exception, KeyboardInterrupt, asyncio.CancelledError):  # noqa: BLE001
+            emit(
+                {
+                    "event": "stop",
+                    "status": "STOP / UNKNOWN",
+                    "history_gets": gets,
+                    "model_posts": 0,
+                    "cost_status": "UNSETTLED",
+                    "automatic_reserve_release": False,
+                    "runtime_authorized": False,
+                }
+            )
+            print("REPORT_WRITTEN / STOP / NO_PAID_TRANSITION")
+            return 2
+    print("REPORT_WRITTEN / METADATA_ONLY / NO_PAID_TRANSITION")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+'@
+    $ReadOnlyScript | .\.venv\Scripts\python.exe -
+    $ReadExit = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $Report)) { throw "No receipt; return STOP to C0 without retry" }
+    Write-Host "History receipt: $Report"
+    if ($ReadExit -ne 0) { Write-Host "STOP: preserve receipt; do not retry" }
     Get-FileHash -LiteralPath $Report -Algorithm SHA256
-    Write-Host "Return the complete JSONL to C0; no retry or runtime approval"
     Get-Content -LiteralPath $Report -Encoding UTF8
 }
 ```
 
-После плана консоль может некоторое время не печатать строки. Общий лимит —
-**30 минут**, на один сценарий вместе с READ/follow-up/history —60 секунд.
-Не запускай второй экземпляр. В конце блок печатает hash и полный JSONL.
-Верни файл целиком даже при STOP; отчёты предыдущих запусков сохраняются.
+Верни **полный `reports/m4-polza-gpt-quality-history-r1.jsonl`**, даже при STOP.
+Ожидаемое успешное окончание: `METADATA_ONLY / NO_PAID_TRANSITION` — метаданные
+получены, но расход и причина ещё требуют C0 review. Общий лимит45 секунд.
+Не удалять/переименовывать отчёт ради повторного запуска; paid тест не повторять.
 
-Offline `PLAN_ONLY / PAID_NOT_AUTHORIZED` описывает план и не обращается к API.
-Единственный live допуск задан exact source/ref/15 в блоке выше. Fresh catalog
-должен подтвердить прежний route/capabilities/rates/fees; если резерв всех27 calls
-больше15 RUB, выполнение остановится до model POST.15 — потолок, не ожидаемая цена.
+## Границы и текущий учёт
 
-## Что проверяем
+Source **ace29ce7d77564f8fecea84d4b7e734e6c8fbe56**, tree **8a716c528a917c8a77a853c226699ba4a47ccc2b**;
+исходный report21904 bytes/21 events, SHA256 `b0d1cb8249b321792355a2b4d29e1a79ba6eae30847a5deee6fbafa36159017f`.
+Команда читает только first5 history и detail точного ID; missing/duplicate ID,
+невалидный HTTP/JSON или превышение bounds → STOP. Без pagination/polling/retry.
+Каждый GET≤65536 bytes/15s. В report только выбранные metadata; raw request,
+response, reasoning, account/key labels и /log не сохраняются. Сам исходный
+report неизменен. Cost из history обозначен reported/UNSETTLED; автоматического
+освобождения резервов, settlement или перехода к новой генерации нет.
 
-Только openai/gpt-6-luna, request selector openai/flex, provider-default и прежний
-auto-tools. Те же25 сценариев,3 critical repeats и2 изображения. Новая
-conversation_v2 требует proposed handoff при просьбе связаться с владельцем
-и запрещает придумывать правила бизнеса; известные факты/уточнения разрешены.
-Прежние v1 ответы и их оценки сохраняются, schema и fixtures не менялись.
-
-Text/tool config/system message/report используют v2/hash выше. Изображения
-сохраняют synthetic_shapes_v1/EVAL_ONLY. Максимумы:27 model POST/2 READ/54 history
-GET/1 catalog GET,32768/512 tokens и24576/32768 bytes на call. No retry/fallback/
-polling/resume. Запрошенный flex не подтверждает вариант маршрута; identity,
-family, usage и cost проверяются по истории прежними правилами.
-
-**HUMAN_REVIEW_REQUIRED** означает завершённые технические сценарии; даже
-exit0 и отсутствие flags не являются quality PASS. C0 проверит каждый final.
-При technical error будет FAILED_OR_INCOMPLETE/exit2; полный report нужен и в
-этом случае. После одного отчёта новый платный шаг HOLD до C0 review.
-selected_model=null/runtime_authorized=false во всех исходах.
-
-## Бюджет перед запуском
-
-| Показатель | Значение |
+| Показатель после GPT v2 | Значение |
 |---|---:|
-| Общий бюджет | 150 RUB |
-| Подтверждённый расход / known POST | **0.17932550 RUB /31** |
-| Unknown POST | **3**: 2 Gemini +1 DeepSeek |
-| Held по этим запросам | **7.120395585 RUB** |
-| Всего прежних model attempts | **34** |
-| Confirmed + held | **7.299721085 RUB** |
-| Остаток с резервами | **142.700278915 RUB** |
-| Потолок нового этапа | **15 RUB /27 POST** |
+| Новые model POST / confirmed | 10 /0.05956584 RUB за9 known calls |
+| Новый unknown / held | 1 /0.465109963 RUB |
+| Shared confirmed / known POST | 0.23889134 RUB /40 |
+| Shared unknown / held | 4 /7.585505548 RUB |
+| Всего model attempts | 44 |
+| Остаток общего150 с резервами | 142.175603112 RUB |
 
-Все3 old holds остаются; новые confirmed/unknown учитываются отдельно. Максимум
-61 shared attempts. Это ledger capacity, не баланс аккаунта; резерв не равен
-списанию. При потере ответа reservation остаётся UNKNOWN, повтор не разрешён.
-Не удалять/не переименовывать файл, чтобы обойти existing-report guard.
+Это ledger capacity, не проверенный баланс Polza; reserve не списание, unknown
+не charge0. Старые holds сохранены. Из25 scenarios только7 завершены, восьмой
+technical STOP,17 NOT_RUN. Передача владельцу19, images20/21 и price22 ещё не
+проверены; quality/runtime не приняты, C4 HOLD до metadata.
 
-## Проверено C0
-
-799 targeted tests PASS13.15s; Ruff/format7, mypy71,8 actual offline plans,
-первые7 равны parent; wheel с byte-exact v1/v2. Exact CLI source/ref/15 проверен
-через MockTransport: полный25-case путь, сохранённый quality finding, late
-history STOP и превышение whole-stage reserve. Все3 old holds и exclusivity
-сохраняются. Реальные Polza HTTP/owner key reads0; actual Windows/hosted v2
-quality/full CI нового source NOT_RUN. [Полный receipt C4](https://github.com/Elefesys/ai-service-manager/blob/ace29ce7d77564f8fecea84d4b7e734e6c8fbe56/docs/tasks/M4_HANDOFF.md).
-
-PR39 остаётся Draft/headcd60; RED CI41009211185 и C0-M4-CI-OBSERVATION-01 не закрыты.
-Full CI интеграционного кандидата нужен до merge/runtime. Main/VM/DB/Telegram/
-merge не менялись. Gemini/DeepSeek compatibility DEFERRED, исходное75-case
-comparison не завершено. Текущая проба не включает AI runtime или Telegram bridge.
+C0 проверил исходный report/accounting и4 controlled counter cases; точный
+Python блок выше прошёл15 checks с MockTransport/audit запретом real network
+и owner secret reads. Windows PowerShell самостоятельно C0 не запускался;
+реальная metadata retrieval ещё NOT_RUN. Backend/guards не менялись.
+PR39 Draft/headcd60, RED CI41009211185 и C0-M4-CI-OBSERVATION-01 остаются.
+Main/VM/DB/Telegram/merge без изменений; full integration CI нужен до runtime.
