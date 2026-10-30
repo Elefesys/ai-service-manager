@@ -6,18 +6,94 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2 lifecycle repair R3 LOCAL READY; hosted validation pending / 2026-10-30
+## CURRENT — C2 lifecycle repair R3 REVIEW;258 PASS/cleanup PASS; C2 HOLD
 
-C0 проверил [возврат C2 R2](https://github.com/Elefesys/ai-service-manager/commit/862c037bb8e5307a9991b9938567e2a910a20777).
-**253 PASS / 1 FAIL; original 222 PASS; cleanup PASS.** Evidence принят как
-достоверный отчёт о неуспешном прогоне. Исправление observer целиком ещё не
-принято: один новый foreign-control не дошёл до проверки сохранности блокировки.
-Recorder collision устранён и проверен; повторять этот repair не требуется.
-Следующий исполнитель — **C2-M4-CI-OBSERVATION-R3** ниже. Владелец ничего не
-запускает; C6 и остальные HOLD. Исторический timeout cause UNKNOWN,
-C0-M4-CI-OBSERVATION-01 / integration CI остаются OPEN.
+C2 завершил единственный разрешённый R3 hosted run: **258 PASS,0 FAIL/SKIP/XFAIL**.
+Foreign control прошёл held-lock/final-effects checks; observer error/cancel
+controls PASS, cleanup PASS. Evidence сохранён; execution ref frozen.
+Следующий шаг — C0 review repair и integration/full CI. C2/C6 и остальные HOLD;
+владелец ничего не запускает. Исторический timeout cause UNKNOWN,
+C0-M4-CI-OBSERVATION-01 и runtime/integration gates остаются OPEN.
 
-### C2 R3 — подготовленный source / 2026-10-30
+### Возврат C2 — C2-M4-CI-OBSERVATION-R3 / REVIEW; C2 HOLD
+
+**Source/ref.** Base **3123fab2d9ac99e66161c0358e8b572783581d5e**, tree
+**925cd198f7247f2a327202b0a6d174766f38916e**, sole parent **862c037bb8e5307a9991b9938567e2a910a20777**,
+parent tree **fb5073c48c876f25c2dfd1eb11706eefd689ec06**. Tested source
+**db46d06c3ee12b34f6a0630415454a56a128c9d9**, tree
+**d5e69122916cb66c4502060a7c50421da6b02e59**, sole parent=base.
+Preparation c2/m4-ci-observation-r3; execution c2/m4-pg-observation-run-r3
+создан на base, затем один FF expected_sha=base/force=false на source.
+Execution frozen; этот последующий receipt — только2 docs на preparation,
+sole parent=tested source. Ровно5 source paths: tests/test_m3_1_control_postgres.py,
+scripts/m4_pg_observation.py, .github/workflows/m4-pg-observation.yml,
+docs/tasks/M4_HANDOFF.md, docs/TASK_REGISTER.md; +176/-20. Consumer API/guards/
+provenance byte-identical; production/DDL/grants/RLS/bootstrap/deps/pins/CI core прежние.
+
+**Repair/local.** При отсутствии active target query helper ждёт в прежнем deadline
+и отдаёт управление target без SQL. Task/query/PID/pending/original error/cancel contract,
+1.5s observer/1.1s edge/DB bounds сохранены. Controlled query-change fixtures
+используют события target; observer errors не маскируются expected timeout.
+Local27 controlled/reporter PASS /6.24s, collect258 /3.34s; все254 R2 IDs и
+original222 order сохранены. Original79 business functions/9 callers и509 R2
+assertions сохранены,5 malformed collections refused, Ruff/format/compile5 и
+diff-check PASS. Controlled R2→R3: unknown identity SQL await/cancel→0 SQL calls;
+target получает управление. Local actual PG NOT_RUN; команды/preflight в архиве.
+Runner functions/report gates сохранены; только identity/write-set/4 new IDs.
+
+**Один hosted run.** [Run41096329059](https://github.com/Elefesys/ai-service-manager/actions/runs/41096329059),
+[job124202940822](https://github.com/Elefesys/ai-service-manager/actions/runs/41096329059/job/124202940822):
+SUCCESS, push exact source, attempt1; fresh API показывает один run source/branch.
+Job2026-10-30T17:09:30Z–17:15:11Z,341s; ubuntu-24.04, contents:read,
+existing pinned actions/images, exact checkout. Один pytest4 modules:
+**258 PASS/0 FAIL/ERROR/SKIP/XFAIL,258 ordered IDs/774 phases**. Original222 и
+все254 R2 PASS; новые4 PASS. Control80/control_api39/guards35/provenance104.
+Actual PG controls7/7 плюс новые observer fault controls2/2 PASS;
+27 controlled/reporter отдельно. Build16.810060s, DB start9.035757s,
+schema2.571364s, versions1.518274s, pytest294.96s (JUnit294.948s),
+outer phase302.370017s≤600s; owned cleanup0.315690s, job≤25min.
+
+**Foreign завершён.** test_wait_blocked_pg_target_controls[foreign]: setup/call/
+teardown PASS, call1.573688808s. После expected deadline сохранены тот же backend,
+исходная открытая transaction и actual unrelated wait до явного release;
+затем waiter завершён и final counts_control snapshot совпал. Нет раннего
+rollback/reconnect blocker или допустимого PendingRollbackError. Это exact-source
+assertions+passing call evidence; detailed trace по-прежнему только matrix12.
+Новые PG observer controls error/cancelled: call0.074714359s/0.089671861s PASS.
+Отдельное заранее открытое TEST connection получает реальный SQL22012 или
+отмену после observed PG wait; primary error/cancel сохранён, blocker жив,
+rollback только observer transaction до explicit blocker release; effects равны.
+Source locations отдельно сохранены в lifecycle-source-assertions.json.
+
+**Reports/environment.** matrix-command.json: phase/argv/budget600/exit0/duration;
+matrix-summary.json: complete=true,result=PASS,pytest_exit=0,cases=expected=258.
+Primary PASS, no overflow/invalid fields. Matrix12 PID/clock/HTTP outcomes PASS;
+blocked_at<edge≤released_at, after-cleanup not cancelled. Max observer client
+span8.400379ms (telegram-activation-subscription); server/loop decomposition UNKNOWN.
+Actual PostgreSQL18.6/server_version_num180006/server UID999, fresh asm_test/schema0013;
+asm_migrator/asm_runtime LOGIN без SUPERUSER/BYPASSRLS/CREATEDB/CREATEROLE.
+Python3.13.15/psycopg3.3.5/SQLAlchemy2.0.52/libpq180006, vector0.8.6/btree_gist1.8.
+Pins/uv.lock подтверждены. Cleanup PASS: owned containers/networks/volumes пусты,
+source-preservation clean=true.
+
+**Evidence.** Original artifact**12995389146**,47103 bytes/25 files, SHA256
+**e720b7d41711938004a918ea9687b20959a88cb87d9b2c2ae98d57d2aa0b4f04**;
+все24 manifest members сверены. Saved **C2-M4-CI-OBSERVATION-R3-evidence.zip**,
+102359 bytes/31 files, SHA256
+**5db8ffce62c2e1afe5d5b567861cc5f30b77e3cff0ae565870426087c8e39bee**;
+Library **libfile_563484deac3c8191aed3a4d1cc5b339a**. Saved manifest30 members;
+original ZIP неизменён, source.patch/metadata/log/local checks и read-only analyzer
+сохранены. analysis.json SHA256
+**6219248e33709a64fa9780cc59e5bae80d16ac4975d7dfa641eeff68744734aa**;
+source.patch SHA256 **958237182910e045571160fe1aff5a603a8b97e72d6ddcd392219ade79a50a35**.
+
+Main **51d7d73752128715c6d98157445167c0cc0d894d**, Draft PR39/head **cd60e5e16d8bcada53597d660a15f4d82640e956**,
+C6 R1 execution **a4ca08f9a6f8ed3642e4f82f156389588e6e05f6** и C2 R2 execution
+44cbaa0e09e066b35894a11e7004ea651b1a54a2 сохранены. Reruns/dispatch/full CI,
+model/Telegram/VM/live действий нет. C2 HOLD; C0 review/integration/full CI далее.
+Historical timeout cause UNKNOWN; scoped PASS не закрывает весь M4/runtime gate.
+
+### C2 R3 — история подготовки source до hosted run / 2026-10-30
 
 Exact base **3123fab2d9ac99e66161c0358e8b572783581d5e**, tree
 **925cd198f7247f2a327202b0a6d174766f38916e**; sole parent
