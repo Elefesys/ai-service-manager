@@ -3,8 +3,8 @@
 **Ничего повторно запускать не нужно.** C0 принял18 новых ответов; вместе
 с7 сохранёнными из R1 получено **25 manual PASS**,2 READ и2 synthetic images.
 GPT/v2 выбран кандидатом для разработки первого runtime. C4 context/read/agent
-принят локально. C2 получил 253 PASS / 1 FAIL на PostgreSQL; следующий шаг —
-[узкое исправление lifecycle теста для C2](../tasks/M4_HANDOFF.md).
+принят локально. C2 R3 принят: 258 PASS на PostgreSQL, cleanup PASS.
+Следующий шаг — [C0 integration/full CI](../tasks/M4_HANDOFF.md).
 
 ## Принятый отчёт
 
@@ -32,14 +32,12 @@ R2 p50 11.163s /p95 16.393s, N18, включая history; маленькая в�
 
 ## Дальше
 
-Передать C2 immutable ссылку на текущую задачу R3 в HANDOFF.
-C0 проверил R2: все 222 прежних сценария прошли, исправление записи отчёта
-подтверждено. Упал один новый отрицательный тест: после ожидаемого timeout
-он использовал соединение с прерванной транзакцией. C2 исправляет lifecycle,
-сохраняет проверки удерживаемой блокировки и выполняет один новый hosted
-прогон исправленного source. Старый timeout cause остаётся UNKNOWN.
-Рабочая ВМ, ключ Polza и Windows окружение сейчас не нужны. Сохранить reports.
-C4 context/read/agent принят локально; live runtime ещё не подключён.
+C0 проверил R3: все 258 сценариев прошли, включая удержание блокировки после
+таймаута и ошибки/отмену observer SQL. Исправление принято.
+C0 собирает принятые изменения в существующем PR39 и проверяет один полный CI.
+Передавать новую задачу C2 или запускать что-либо на ПК/ВМ сейчас не нужно.
+После C0 readiness владелец сливает PR; затем actual main verification и
+подключение durable/runtime/Telegram. Ключ Polza сейчас не нужен, reports сохранить.
 
 Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`
 использован. [Прежняя команда](https://github.com/Elefesys/ai-service-manager/blob/5241eba3e38bd488cea052f894efb9b43b1f7d32/docs/runbooks/M4_POLZA_PROBE.md)
@@ -48,6 +46,6 @@ Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER
 Это synthetic EVAL_ONLY: OpenAI family подтверждена в receipt, flex variant
 не наблюдался. Реальные данные, Telegram runtime и backend route ещё требуют
 соответствующей приёмки. Gemini/DeepSeek DEFERRED; сравнение75 не завершено.
-PR39 остаётся Draft/headcd60; CI41009211185 RED, вопрос M3 observation и полный
-CI интеграционного кандидата остаются до merge/runtime. Никакого enable/deploy
-этот отчёт не выполняет.
+PR39 остаётся Draft до результата полного CI актуального кандидата. Старый
+CI41009211185 RED сохранён как история; его причина UNKNOWN. Никакого
+enable/deploy эта приёмка не выполняет.

@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: R2 evidence проверен; C2 завершает lifecycle repair R3.
+Последнее решение ниже: C2 R3 принят; C0 готовит integration candidate/full CI.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -753,7 +753,7 @@ data/backend/durable/Telegram gates остаются открыты. В этом
 coordination docs/PR body и offline review; новых Actions/PG/model runs нет.
 C2 следующий, C6 и остальные HOLD; PR39/main без изменений.
 
-**Актуальное решение C0 от 2026-10-30: R2 evidence VERIFIED; узкий R3.**
+**Предыдущее решение C0 от 2026-10-30: R2 evidence VERIFIED; узкий R3.**
 Source44cbaa0e09e066b35894a11e7004ea651b1a54a2 / receipt862c037bb8e5307a9991b9938567e2a910a20777
 проверены C0. Один hosted run41090382696: 253 PASS / 1 FAIL, original222 и
 matrix12 PASS, cleanup PASS. Recorder command/summary collision исправлен;
@@ -779,6 +779,26 @@ timeout/cancel controls, без новых grants/framework. Existing 254 cases,
 R2 repair в целом остаётся BLOCKED до R3; historical cause UNKNOWN.
 После review — integration/full CI и runtime, без бесконечного replay старого
 timeout. GPT/C4 acceptance и shared150 ledger не изменены. PR39/main прежние.
+
+**Актуальное решение C0 от 2026-10-31: C2 R3 VERIFIED, integration/full CI.**
+Source db46d06c3ee12b34f6a0630415454a56a128c9d9, receipt
+ea10472de268ceb9d656a0d5ddc11f093b653cd3 принят SOURCE + TARGETED PG.
+Run41096329059/attempt1:258 PASS, cleanup PASS. Foreign held-lock/effects и
+два actual observer error/cancel controls прошли; original222/R2 254, 509
+assertions и прежние timeouts сохранены. C0 сверил metadata/source/artifacts,
+повторил offline27/static/collection/controlled checks. Нового repair не нужно.
+
+C0 разрешает FF существующей PR39 branch с old cd60e5e на cumulative candidate
+после docs acceptance и один штатный full CI, без изменения CI core/лимитов.
+Accepted GPT/v2 adapter/probe, C4 context/agent и C2 test-helper source входят
+в общий кандидат. R1/R2/R3 execution refs сохраняются. Полный PASS ещё NOT_RUN
+на момент этой записи; scoped R3 PASS не означает integration/main acceptance.
+Приёмка актуального CI позволит закрыть observation gate, сохранив historical
+timeout cause UNKNOWN. Merge остаётся владельцу после C0 readiness.
+
+Модельные расходы/holds не меняются. Настоящие PG authority, durable AIRun и
+AI->Outbox->Telegram ещё не реализованы; full source CI не является runtime
+или data/route approval. VM/Telegram/live/paid запусков эта выдача не разрешает.
 
 ## Что пересмотрено относительно baseline
 

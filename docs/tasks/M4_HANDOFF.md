@@ -6,14 +6,87 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2 lifecycle repair R3 REVIEW;258 PASS/cleanup PASS; C2 HOLD
+## CURRENT — C2 R3 VERIFIED; C0 integration/full CI / 2026-10-31
 
-C2 завершил единственный разрешённый R3 hosted run: **258 PASS,0 FAIL/SKIP/XFAIL**.
-Foreign control прошёл held-lock/final-effects checks; observer error/cancel
-controls PASS, cleanup PASS. Evidence сохранён; execution ref frozen.
-Следующий шаг — C0 review repair и integration/full CI. C2/C6 и остальные HOLD;
-владелец ничего не запускает. Исторический timeout cause UNKNOWN,
-C0-M4-CI-OBSERVATION-01 и runtime/integration gates остаются OPEN.
+**C2-M4-CI-OBSERVATION-R3 принят C0: SOURCE + TARGETED POSTGRESQL VERIFIED.**
+258 PASS / 0 FAIL/SKIP/XFAIL, cleanup PASS; foreign и observer error/cancel
+controls завершили held-lock и final-effect проверки. Новый repair не нужен.
+Следующая работа — **C0-M4-INTEGRATION-R1**: включить принятый cumulative source
+в существующий PR39 и проверить полный CI. C1–C8 HOLD; владелец ничего не запускает.
+Причина historical timeout UNKNOWN; C0-M4-CI-OBSERVATION-01 остаётся OPEN
+только до проверки актуального общего кандидата. Runtime ещё не реализован.
+
+### Приёмка C0 — C2 R3
+
+Tested source **db46d06c3ee12b34f6a0630415454a56a128c9d9**, tree
+**d5e69122916cb66c4502060a7c50421da6b02e59**, sole parent
+**3123fab2d9ac99e66161c0358e8b572783581d5e**. Ровно 5 разрешённых paths.
+Receipt **ea10472de268ceb9d656a0d5ddc11f093b653cd3**, tree
+**591d84a53c04790571cc687f125f66391bbc4f91**, sole parent=tested source;
+только 2 docs. Consumer API/guards/provenance, production/DDL/grants/pins/CI core
+сохранены. Target identity/pending/error contract и 1.5s/1.1s bounds прежние.
+
+[Run 41096329059](https://github.com/Elefesys/ai-service-manager/actions/runs/41096329059),
+job 124202940822: SUCCESS, push exact source, attempt 1; один run source/branch.
+258 ordered IDs / 774 phases совпали с JUnit; original 222, retained R2 254
+и новые 4 PASS. Foreign после deadline проверяет исходные backend/transaction
+и чужую блокировку до release; затем waiter завершён и effects совпали.
+Новые PG faults используют отдельное заранее открытое TEST connection:
+SQL22012/cancel сохраняют primary outcome и held blocker, закрывают только
+observer transaction. Это source assertions + actual passing calls; подробный
+trace остаётся только для original matrix 12, server/loop timings UNKNOWN.
+Оба report files сохранены: complete=true/result=PASS/pytest_exit=0.
+PG 18.6 / asm_test / schema0013, роли/pins/versions подтверждены; cleanup PASS,
+owned inventory пуст, source clean. Pytest 294.96s, outer phase302.370017s,
+job341s; build16.810060s и database-start9.035757s отражены отдельно.
+
+C0 сверил fresh GitHub run/job/ref/digest/log, exact source.patch, manifests
+30/24 и byte-exact analyzer output. Original artifact **12995389146**,
+47103 bytes, SHA256 **e720b7d41711938004a918ea9687b20959a88cb87d9b2c2ae98d57d2aa0b4f04**.
+Saved ZIP102359 bytes, SHA256
+**5db8ffce62c2e1afe5d5b567861cc5f30b77e3cff0ae565870426087c8e39bee**,
+Library libfile_563484deac3c8191aed3a4d1cc5b339a. Analysis SHA256
+**6219248e33709a64fa9780cc59e5bae80d16ac4975d7dfa641eeff68744734aa**.
+Independent offline C0: **27 PASS /5.69s**, Ruff/format/compile5 PASS,
+collect-only258, malformed collections5 refused, original79 business functions/
+9 callers и509 R2 assertions сохранены. Controlled R2->R3 воспроизведён:
+unknown identity ->0 SQL, target получает управление, bounded timeout прежний.
+Новый targeted PG run у C0 не нужен и не запускался.
+
+### C0-M4-INTEGRATION-R1 — текущий общий кандидат
+
+Repository Elefesys/ai-service-manager, существующий Draft PR39,
+head branch **c4/m4-2-probe**. C0 preparation **c0/m4-integration-r1**.
+Integration base — receipt **ea10472de268ceb9d656a0d5ddc11f093b653cd3** /
+tree **591d84a53c04790571cc687f125f66391bbc4f91**. C0 candidate — published
+commit этой приёмки (sole parent=receipt); source сверх receipt не меняется,
+только HANDOFF, CURRENT, IMPL-004, operator runbook и актуальная очередь AGENTS.
+
+Cumulative source включает reviewed Polza adapter/probe и GPT/v2 quality,
+C4 context/read/agent, C6 recorder и C2 R2/R3 test-helper repair. История
+последовательна: прежний PR head **cd60e5e16d8bcada53597d660a15f4d82640e956**
+— ancestor receipt; новых merge/cherry-pick конфликтов не требуется.
+Принятый main **51d7d73752128715c6d98157445167c0cc0d894d** не менять.
+Прежний запрет движения PR39 относился к промежуточным receipts; C0 теперь
+разрешает один FF существующей PR branch на проверенный cumulative candidate
+с expected old head/force=false. R1/R2/R3 execution refs frozen.
+
+После FF — один штатный full pull_request CI актуального кандидата: все
+11 jobs, browser, ordinary unit/PG, native lane, durable/recovery, Docker29/
+migration и source/evidence gates. CI core/workflow/timeouts не менять.
+Записать PR head, tested merge SHA/tree, run/attempt, результаты/cleanup/artifacts.
+Прежний red CI41009211185 не перезапускать. Если новый run падает — разобрать
+все failure groups по фактам, не повторять тот же source ради PASS.
+Full CI на момент подготовки этого commit **NOT_RUN**; source scope R3 принят
+отдельно. Только actual full PASS позволяет C0 закрыть integration observation
+gate для кандидата; историческую причину timeout не переписывать.
+
+PR остаётся Draft до полного результата; merge — владелец после C0 readiness.
+После merge C0 сверяет actual main/CI, затем выдаёт runtime работу. Для неё ещё
+нужны real PG authority, durable AIRun/result/send intent и AI->Outbox->Telegram;
+context/agent unit PASS и synthetic GPT quality этого не заменяют.
+Shared150 ledger и 4 unknown holds сохранены; paid refs consumed, новых model
+calls/owner credentials/VM/live DB/Telegram/deploy действий здесь нет.
 
 ### Возврат C2 — C2-M4-CI-OBSERVATION-R3 / REVIEW; C2 HOLD
 
@@ -169,7 +242,7 @@ counts_control не завершена. C0 отдельно контролиру
 source согласуется с invalidated connection + open transaction -> отказом
 повторного SQL. Старый timeout этим не объяснён; production defect не установлен.
 
-### Задача C2 — C2-M4-CI-OBSERVATION-R3
+### История задачи C2 — C2-M4-CI-OBSERVATION-R3; допуск использован
 
 Результат для пилота: завершить ограниченный test-helper repair, чтобы C0 мог
 перейти к integration/full CI и настоящему AI runtime. Новая диагностика или
