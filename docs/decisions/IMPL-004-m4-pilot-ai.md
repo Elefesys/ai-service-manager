@@ -575,6 +575,48 @@ PR39 Draft/headcd60, CI41009211185 RED/C0-M4-CI-OBSERVATION-01 сохраняю�
 full integration CI нужен до merge/runtime. Gemini/DeepSeek DEFERRED.
 Main/VM/DB/Telegram/merge без изменений; следующий C4, owner paid/history HOLD.
 
+**Решение C0 от2026-10-30 — GPT R2 source принят; один remaining18 owner stage:**
+Source **7e48510311ab77c41f84b11becb2734ddb430690**, tree **23dad7ed0cf0e9974285db3881a1093e670fe443**,
+sole parente07edeede77e4426e362531b2b6cde6ca6bc436d.7 разрешённых paths,
+код принят без fixes. Новый opt-in gpt_eval_history_v2 только exact synthetic
+GPT; provider attempts strict positive int отдельно от client POST. List/detail
+raw steps missing/null NOT_APPLICABLE, strict int1 ONE_REPORTED; nonnull server
+context запрещён. Identity/model/family/usage/cost/finish/cancel/limit/reflection
+guards сохранены. Default strict_v1/старые modes и RouteReview/runtime прежние.
+Prompts/Gateway/contracts/schema/fixtures/settings/deps/CI/DB/M3 не менялись.
+
+C0 независимо:916 targeted PASS15.06s, Ruff/format4, mypy71;9 actual offline
+CLI variants,8 старых stdout byte-exact e07. Exact source/ref/10 CONTROLLED:
+complete18/retained quality flag/late DETAIL-STEPS-BOOL/whole-stage budget STOP;
+all4 holds и exclusivity до key/HTTP сохранены. Real HTTP/owner key reads0 под
+audit guard. Windows/hosted R2/full CI нового source NOT_RUN, код не исправлялся.
+
+Разрешён один EVAL_ONLY stage по ref
+`C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`.
+Ceiling10 RUB из прежнего150, не новый бюджет. Fixed repeats7–24:18 scenarios,
+≤18 model POST/0 READ/2 images/36 history/1 catalog; fresh18-call reservation
+до POST,case60s/stage1800s,32768/512 tokens,24576/32768 bytes,599040 total tokens.
+GPT/openai/flex/provider-default; v2/hash и canonical fixture прежние.
+Retained7 manual PASS/READ2 из R1 не повторять/не импортировать/не переоценивать.
+
+Prior confirmed0.23889134/40 known,4 unknown/held7.585505548,44 client POST,
+remaining142.175603112, max62 shared. Все4 holds остаются, reported0.00743079
+не settlement и не освобождает GPT hold0.465109963. Это ledger capacity, не
+баланс Polza; catalog reserve CONDITIONAL_ESTIMATE и flex variant NOT_OBSERVED.
+Новый exclusive reports/m4-polza-gpt-quality-r2.jsonl, source/ref/amount и input
+report hashes в ready command; existing output до key/HTTP. No retry/fallback/
+polling/arbitrary resume. После одного receipt paid HOLD до C0 review.
+
+18 technical completions →HUMAN_REVIEW_REQUIRED/manual PENDING; не quality PASS25.
+V1 no_send_claim19/unknown_price22 findings не закрыты unit tests; C0 оценит
+полные R1+R2 finals. selection=null/runtime=false. Key/environment прежние,
+reinstall и повторное подтверждение150 не нужны. Следующий исполнитель owner.
+
+Scoped standalone EVAL_ONLY не закрывает CI debt. PR39 Draft/headcd60,
+CI41009211185 RED/root cause UNKNOWN и C0-M4-CI-OBSERVATION-01 сохраняются;
+full CI интеграционного кандидата нужен до merge/runtime. Gemini/DeepSeek
+DEFERRED, comparison75 не завершено. Main/VM/DB/Telegram/merge без изменений.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,
