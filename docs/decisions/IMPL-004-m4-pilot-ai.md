@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 repair заблокирован средой; C6 получает disposable PG run.
+Последнее решение ниже: C6 PG observation принят; C2 исправляет observer/report в R2.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -697,7 +697,7 @@ GPT/v2 selection, все old holds и shared ledger0.37505230 confirmed +
 7.585505548 held / remaining142.039442152 RUB сохранены. Новых paid probes нет.
 Route/data/backend/durable/Telegram gates и полный M4/A01–A08 остаются открыты.
 
-**Актуальное решение C0 от2026-10-30: C2 audit принят; C6-M4-PG-EXECUTOR-R1
+**Решение C0 от2026-10-30: C2 audit принят; C6-M4-PG-EXECUTOR-R1
 устраняет блокер среды.** Return560d445b169fe5487c002989af5857bc3c0d6c25/tree
 3250876da5a759d462ac138c468bb2ccd43a721c меняет2 docs, code прежний. C0 проверил
 C2 ZIP/hash/manifest, повторно получил original CI artifact12957949439,
@@ -722,6 +722,36 @@ Main/PR39/старые CI jobs не перемещаются/не повторя
 затем готовит integration/full CI. C4/GPT приёмки, все unknown holds и бюджет
 сохранены; runtime/data/route/durable/Telegram gates остаются открыты.
 В этом C0 шаге code/Actions/PG/paid calls0; C6 следующий, остальные HOLD.
+
+**Актуальное решение C0 от2026-10-30: C6 PG observation принят;
+C2-M4-CI-OBSERVATION-R2 назначен.** Source a4ca08f9a6f8ed3642e4f82f156389588e6e05f6,
+receipt38f6a53fa91d3d6933b64610d47997fa230c7038. Actual run41082835484/attempt1:
+12 PASS на fresh PG18.6/asm_test, expected waiter PID12/12, cleanup PASS.
+C0 независимо сверил GitHub metadata/log/digest, source/AST/manifests, byte-exact
+analyze output;9 controlled preflight/static checks PASS. Aggregate matrix.json
+был перезаписан outer command, но raw cases/collect/JUnit/events достаточны:
+R1 принят как observation с этим ограничением, исходные bytes сохранены.
+
+Исторический timeout не воспроизведён, cause UNKNOWN. C0 контролируемо подтвердил
+конкретный test-oracle дефект: foreign waiter/nonempty rows позволяют success
+для неподходящего либо уже completed target. Поэтому следующая задача — строгая
+привязка wait к actual target PID/task на всех9 call sites, negative controls
+и устранение filename collision. Не выдавать эти дефекты за причину старого timeout.
+222 existing cases четырёх consumer modules собраны C0 collect-only; PG222 не заявлен.
+
+C2 явно разрешены8 paths из HANDOFF, включая четыре test modules и узкие изменения
+уже подготовленного executor/workflow. Один новый branch-only job≤25min,
+test phase≤600s для222+ новых cases; business limits1.5s/1.1s/clock/state и
+production semantics прежние. Это новый repaired-source validation, не rerun
+старого job. R1 refs/receipt/artifact frozen, no owner VM/credentials/paid calls.
+После return C0 review/integration/full CI; historical cause остаётся UNKNOWN
+в истории, integration gate закрывается отдельным решением по актуальному
+evidence. Бесконечное воспроизведение единичного timeout не становится целью.
+
+C4/GPT scoped acceptance и unknown holds/shared150 сохранены. Runtime route/
+data/backend/durable/Telegram gates остаются открыты. В этом C0 шаге только
+coordination docs/PR body и offline review; новых Actions/PG/model runs нет.
+C2 следующий, C6 и остальные HOLD; PR39/main без изменений.
 
 ## Что пересмотрено относительно baseline
 

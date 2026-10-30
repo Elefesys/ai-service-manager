@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6 PG observation REVIEW; C6 HOLD / 2026-10-30
+## CURRENT — C6 PG observation VERIFIED; C2 repair R2 ASSIGNED / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**, PR38 merged;
@@ -13,60 +13,49 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 |---|---|
 | M4-PLAN / M4.1-CONTRACT | INTEGRATED / VERIFIED docs и contract/fake scope; PR37/38 |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | REVIEW overall; GPT technical/quality subset VERIFIED, GPT/v2 выбран для разработки; comparison75 не завершено |
+| M4.2-PROBE | REVIEW overall; GPT technical/quality subset VERIFIED, GPT/v2 выбран; comparison75 не завершено |
 | M4.2-GEMINI-DIAGNOSTIC-R1 | VERIFIED diagnostic scope; SIGNATURE_EXTRA_MISSING, charge UNKNOWN, consumed |
 | M4.2-GEMINI-COMPATIBILITY | BLOCKED; compatibility DEFERRED |
 | M4.2-DEEPSEEK-EVAL-R1 | BLOCKED; READ_ROUND_TRIP, handoff «С»; consumed |
-| M4.2-DEEPSEEK-TOOL-COMPAT-R1 | BLOCKED; INVALID_PROVIDER_RESPONSE, charge UNKNOWN; consumed/DEFERRED |
-| M4.2-GPT-QUALITY-R1 | Исторический partial:7 retained manual PASS/2 READ,1 technical STOP,17 NOT_RUN; consumed |
+| M4.2-DEEPSEEK-TOOL-COMPAT-R1 | BLOCKED; INVALID_PROVIDER_RESPONSE/charge UNKNOWN; consumed/DEFERRED |
+| M4.2-GPT-QUALITY-R1 | Исторический partial:7 retained PASS/2 READ,1 technical STOP,17 NOT_RUN; consumed |
 | C0-M4.2-GPT-QUALITY-HISTORY-R1 | VERIFIED metadata only: attempts2/reported0.00743079; UNSETTLED |
-| M4.2-GPT-QUALITY-R2 | VERIFIED owner synthetic + C0 manual:18/18 PASS; составной R1+R2 PASS25,27 confirmed POST/2 READ/2 images; consumed |
-| M4.3-CONTEXT-R1 | VERIFIED SOURCE + LOCAL UNIT; integration pending. Независимые1283 tests/static checks +5 controlled adapter checks PASS; PG authority/durable/runtime ещё нужны |
-| C0-M4-CI-OBSERVATION-01 | OPEN: прежний wait_blocked timeout; root cause UNKNOWN, foundation gates не приняты |
-| C2-M4-CI-OBSERVATION-R1 | BLOCKED; C0 принял SOURCE/SAVED-EVIDENCE audit560d445, не repair. Среда UID0-only без PG/Docker; matrix12/negatives/consumers NOT_RUN. C2 HOLD до C0 review нового C6 PG evidence |
-| C6-M4-PG-EXECUTOR-R1 | REVIEW / C6 HOLD: source a4ca08f, one Actions41082835484/job124156161812/attempt1 SUCCESS; original matrix12 PASS on real pinned PG18.6, cleanup PASS, waiter PID12/12. Historical cause UNKNOWN/full CI OPEN; full receipt in HANDOFF |
+| M4.2-GPT-QUALITY-R2 | VERIFIED owner synthetic + C0 manual18/18; составной25 PASS/27 confirmed POST/2 READ/2 images; consumed |
+| M4.3-CONTEXT-R1 | VERIFIED SOURCE + LOCAL UNIT; integration pending:1283 tests/static +5 controlled adapter checks PASS |
+| C0-M4-CI-OBSERVATION-01 | OPEN: historical timeout cause UNKNOWN; full integration CI впереди, PASS12 его не закрывает |
+| C2-M4-CI-OBSERVATION-R1 | Исторический BLOCKED local PG; SOURCE/SAVED-EVIDENCE audit принят. Заменён конкретной R2 выдачей |
+| C6-M4-PG-EXECUTOR-R1 | VERIFIED SOURCE + ACTUAL PG OBSERVATION C0: one run41082835484/attempt1, PG18.6,12 PASS/cleanup PASS. Matrix aggregate overwritten; raw completeness independently recovered. C6 HOLD/ref frozen |
+| C2-M4-CI-OBSERVATION-R2 | TODO / ASSIGNED: exact-target waiter/pending guard, negative controls, recorder collision; one hosted222+ PG validation, exact8 paths в HANDOFF |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
-[Приёмка C2 и задача C6](tasks/M4_HANDOFF.md),
+[Приёмка C6 и задача C2 R2](tasks/M4_HANDOFF.md),
 [операторский итог](runbooks/M4_POLZA_PROBE.md),
 [решение C0](decisions/IMPL-004-m4-pilot-ai.md).
-C2 return **560d445b169fe5487c002989af5857bc3c0d6c25**, tree
-**3250876da5a759d462ac138c468bb2ccd43a721c**, sole parent
-**23f35d6c4a7f596cd58121e6a5aa39a686d7487e**; только2 docs, code unchanged.
-C0 проверил15958-byte archive/13 files, manifest12, consumer source4/originals11,
-заново скачал original CI artifact12957949439 и воспроизвёл audit byte-exact.
-6 saved copies/25 excerpt lines совпали с primary evidence; нового PG запуска нет.
-C0 подтвердил такой же local executor blocker; sandbox обходы не нужны.
+Tested **a4ca08f9a6f8ed3642e4f82f156389588e6e05f6**, tree
+**74e5242997d2efb9b2c7bd8b337c33ea41bae250**; receipt
+**38f6a53fa91d3d6933b64610d47997fa230c7038**, tree
+**a4479a265a024d1140deddc9d4e8ce022744834f**. Receipt changes2 docs only.
+C0 сверил primary metadata/log/digest, source patch/AST, manifests и byte-exact
+observation reconstruction;12 PID/time/outcome checks, cleanup подтверждены.
+9 controlled preflight + Ruff/format3/compile PASS; collect-only222, не PG PASS222.
+Два oracle false-success контролируемо воспроизведены без PG; это не cause
+исторического timeout. Recorder matrix.json collision также требует repair.
 
-C6 tested source **a4ca08f9a6f8ed3642e4f82f156389588e6e05f6**, tree
-**74e5242997d2efb9b2c7bd8b337c33ea41bae250**, sole parent
-**f93c0b70f287f8dd982159c4b0073b495481e29d**. Exact6-path observation;
-original assertions/timeouts/replay preserved. Run41082835484:12 PASS, no skips/
-xfails, primary/cleanup PASS. Artifact12990572117:26822 bytes, SHA256
-**0c0e8b8fa46a0c8d33a39dd74d0df3e3e7c12e77c744db1844d6a22ef39e5b90**.
-Saved evidence55293 bytes/10 files, SHA256
-**8d4418561c9e807314dbf9bbf8c6d9d8e1beda91c7c27662ec0f9c85a02eb23d**.
-Raw case evidence complete; aggregate filename collision disclosed in HANDOFF.
-No repair/full CI/VM/model calls. C6 HOLD; C0 review→C2 original negative controls.
-Execution ref frozen at tested source; this receipt is docs-only on preparation.
+C2 base — новый published C0 SHA из immutable HANDOFF, sole parent38f6a53.
+Prep c2/m4-ci-observation-r2; execution c2/m4-pg-observation-run-r2,
+один expected-base/force=false FF/job≤25min/test≤600s после local checks.
+Четыре modules, все прежние222 + новые controls; business time bounds прежние.
+R1 source/ref/artifact неизменны; C0 отдельно решает integration gate после
+repair/full CI, старую причину не переписывает и не требует бесконечного replay.
 
-C6 prep branch c6/m4-pg-executor-r1; execution c6/m4-pg-observation-run-r1,
-base — published C0 SHA из immutable HANDOFF, sole parent560d445.
-Один разрешённый FF expected-base/force=false запускает только новую narrow lane,
-без PR и полного CI. Это scoped диагностика, не repair/новый release gate.
-C2 затем продолжает исходные repair/negative-control criteria по решению C0.
-
-GPT/v2 development candidate/EVAL_ONLY/runtime=false сохранён. Shared150:
-confirmed**0.37505230 RUB/58 known**, unknown4/held**7.585505548**, всего62 POST;
-committed7.960557848, remaining**142.039442152 RUB**. Original reports и holds
-неизменны, reported0.00743079 UNSETTLED; capacity не баланс, paid refs consumed.
-
+GPT/v2 EVAL_ONLY/runtime=false; shared150 confirmed**0.37505230 RUB/58 known**,
+unknown4/held**7.585505548**, всего62 POST; committed7.960557848,
+remaining**142.039442152 RUB**. Holds/receipts прежние, capacity не account
+balance, reported0.00743079 UNSETTLED; новых paid действий нет.
 PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**;
-[CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
-10/11 SUCCESS, foundation803PG PASS/1FAIL. Root cause UNKNOWN; full CI поздних
-source NOT_RUN. Новый C0 шаг —4 docs/PR body, Actions/PG/model calls0.
-C1/C2/C3/C4/C5/C8 HOLD. Main/PR head/VM/live DB/Telegram/merge без изменений.
+CI41009211185 RED, full CI поздних source NOT_RUN. C0 шаг4 docs/PR body,
+новых Actions/PG/model runs0. C1/C3/C4/C5/C6/C8 HOLD; следующий C2.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 

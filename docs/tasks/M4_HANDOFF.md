@@ -6,43 +6,152 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6 PG observation12 PASS; C0 review / C6 HOLD / 2026-10-30
+## CURRENT — C6 PG observation принят; C2 observer repair R2 / 2026-10-30
 
-C0 ранее принял C2 SOURCE/SAVED-EVIDENCE audit без repair; локальный PG executor
-у C2 отсутствовал. **C6 выполнил один разрешённый disposable GitHub run:12 PASS,
-cleanup PASS; evidence ниже передаётся C0 на REVIEW. C6 HOLD.**
-Причина прежнего timeout UNKNOWN, CI gate OPEN. C2 ждёт решения C0 о продолжении
-исходных repair/negative controls на основании нового evidence. Рабочая ВМ и
-действия владельца не потребовались. Это observation внутри прежнего repair,
-не общая CI optimization и не новый release gate.
+**C0 принимает C6-M4-PG-EXECUTOR-R1 в SOURCE + ACTUAL PG OBSERVATION scope.**
+Один GitHub run,12/12 PASS, cleanup PASS; среда для дальнейшей проверки есть.
+Историческая причина timeout UNKNOWN, C0-M4-CI-OBSERVATION-01 остаётся OPEN.
+Следующий исполнитель — **C2-M4-CI-OBSERVATION-R2**: исправить подтверждённый
+дефект наблюдателя тестов и конфликт файлов отчёта, затем один раз проверить
+четыре затронутых PostgreSQL modules. Владелец ничего локально не запускает.
+C6 HOLD; допуск R1 использован, execution ref не перемещать.
 
-### Проверенный возврат C2
+### Приёмка C6 и независимая проверка C0
 
-Source **560d445b169fe5487c002989af5857bc3c0d6c25**, tree
-**3250876da5a759d462ac138c468bb2ccd43a721c**, sole parent
-**23f35d6c4a7f596cd58121e6a5aa39a686d7487e**; branch c2/m4-ci-observation-r1.
-Ровно2 docs,+65/-6; все tests/production/DDL/CI byte-identical base.
-Evidence C2-M4-CI-OBSERVATION-R1-evidence.zip:15958 bytes/13 files,
-SHA256 **f35de110fb92550af28ca4f3e574bc471ba0bbebfaf185fad676c702fa7c1916**.
+Tested source **a4ca08f9a6f8ed3642e4f82f156389588e6e05f6**, tree
+**74e5242997d2efb9b2c7bd8b337c33ea41bae250**, sole parent
+**f93c0b70f287f8dd982159c4b0073b495481e29d**. Ровно6 разрешённых paths.
+Receipt **38f6a53fa91d3d6933b64610d47997fa230c7038**, tree
+**a4479a265a024d1140deddc9d4e8ce022744834f**, sole parent=tested source;
+только2 docs. Production/DDL/CI core/deps/pins без изменений.
 
-C0 сверил все12 members с manifest,4 consumer source и11 originals; заново
-получил original [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
-artifact12957949439,3183628 bytes,
-SHA256 **d64cdfd69fc0de89c9bfe7bd29dcedbe8f4db453268f3d1aee24c3b080d2f78f**.
-Read-only audit.py воспроизвёл каждое поле C2 audit; SHA256
-**752e98df40772de1b644c1cf80656ef9a2d7da249dacac09df298b31d4b4e46d**.
-Все6 saved evidence copies совпали с original artifact;25 excerpt lines —
-со свежим job123916058014 log. Это независимая проверка сохранённого evidence,
-не повторный запуск tests. В среде C0 также UID/GID map0→0/1, CapEff/CapBnd0,
-NoNewPrivs1, PostgreSQL/Docker/Podman отсутствуют; обход ограничений не нужен.
+[Run41082835484](https://github.com/Elefesys/ai-service-manager/actions/runs/41082835484),
+job124156161812: SUCCESS, push exact source, attempt1, один run для source/branch.
+Execution c6/m4-pg-observation-run-r1 остаётся a4ca08f9; main/PR39 прежние.
+Actual PostgreSQL18.6/server_version_num180006, server UID999, fresh asm_test,
+schema0013, asm_runtime/asm_migrator без SUPERUSER/BYPASSRLS/CREATEDB/CREATEROLE.
+Existing DB image pin/roles/bootstrap и Python3.13.15/psycopg3.3.5 подтверждены.
 
-Saved result803 PASS/1 FAIL, matrix11 PASS/1 FAIL. Failed
-controlled-activation-subscription: whole call phase2.750032s, не duration
-одного SQL. Stack wait_blocked1.5s / connection.execute(pg_locks) не доказывает
-ни early product rejection, ни event-loop/driver/SQL cause. Predicate helper
-не связывает найденный wait с expected operation PID — отдельное статическое
-ограничение, не доказанная причина timeout. New PG/repair/full CI NOT_RUN.
-[Исходная задача C2 и неизменённые критерии repair](https://github.com/Elefesys/ai-service-manager/blob/23f35d6c4a7f596cd58121e6a5aa39a686d7487e/docs/tasks/M4_HANDOFF.md#L57).
+Original artifact12990572117: **26822 bytes/24 files**, SHA256
+**0c0e8b8fa46a0c8d33a39dd74d0df3e3e7c12e77c744db1844d6a22ef39e5b90**.
+C6 saved archive:55293 bytes/10 files, SHA256
+**8d4418561c9e807314dbf9bbf8c6d9d8e1beda91c7c27662ec0f9c85a02eb23d**.
+C0 сверил оба manifest (9/23 members), primary GitHub artifact digest, свежие
+run/job/ref metadata и полный job log; source.patch byte-exact Git diff.
+Read-only analyze.py воспроизвёл observation.json byte-exact, SHA256
+**9a7b900cb57ee84b2bfb33339737d7a4124c4104c5a65f247e4d5d870c421449**.
+Все12 IDs/36 phases/JUnit, expected waiter PID12/12, blocked<edge≤released,
+HTTP outcomes/replay assertions, no cancellation/overflow, cleanup подтверждены.
+
+Отдельно C0 повторил9 controlled preflight checks, Ruff/format3/compile:
+PASS. После снятия только hooks оба test AST равны base. Local PG не запускался.
+Независимый collect-only четырёх consumer modules дал **222 existing cases**
+(44 control,39 control_api,35 guards,104 provenance), не222 PASS.
+Контролируемые проверки C0 под socket/key guard показали два ложных успеха
+existing wait_blocked: посторонняя returned row при target без DB wait;
+та же nonempty row при уже completed target. При empty rows completed target
+отклоняется. Это SOURCE + CONTROLLED reproduction дефекта oracle, не PG
+reproduction исторического timeout и не найденный production defect.
+
+### Что исправляем, а что пока неизвестно
+
+- Старый timeout [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
+  не воспроизведён. Новый max observer client span354.304028ms приходится на
+  telegram-activation-mode; server/driver/event-loop составляющие UNKNOWN.
+  Max gap0.616835ms не независимое измерение loop lag. Случайный PASS не repair.
+- Подтверждённый дефект helper: наблюдение связано с blocker PID, но не exact
+  target operation PID; return rows предшествует pending.done(). В частности,
+  при двух ожидающих операциях в provenance первый waiter может замаскировать
+  отсутствие второго. Все9 call sites в4 modules должны получить строгий contract.
+- В recorder outer phase перезаписывает plugin aggregate в matrix.json.
+  R1 actual results приняты по сохранённым cases/collect/JUnit/events; исходные
+  файлы не исправлялись. В R2 два разных файла и явная проверка полноты обязательны.
+
+C0 ограничивает следующий scope этими доказанными дефектами и проверкой нового
+кандидата. Не требуется бесконечно воспроизводить прежний единичный timeout.
+Его причина остаётся UNKNOWN в истории; закрытие integration gate — отдельное
+решение C0 после repair evidence и full CI, не автоматический вывод из PASS12.
+
+### Задача C2 — C2-M4-CI-OBSERVATION-R2
+
+Repository **Elefesys/ai-service-manager**, preparation
+**c2/m4-ci-observation-r2**, execution **c2/m4-pg-observation-run-r2**.
+Base — **полный published C0 SHA из immutable URL этого HANDOFF**;
+sole parent **38f6a53fa91d3d6933b64610d47997fa230c7038**, parent tree
+**a4479a265a024d1140deddc9d4e8ce022744834f**. Зафиксировать base/source/tree.
+Прочитать AGENTS, IMPL-004, ADR-159–161 и accepted C6 receipt ниже.
+Прежняя R1 выдача C2 заменена этой конкретной repair/validation задачей.
+
+**Write-set —8 paths:** tests/test_m3_1_control_postgres.py,
+tests/test_m3_1_control_api_postgres.py, tests/test_m3_1_guards_postgres.py,
+tests/test_m3_1_provenance_postgres.py, scripts/m4_pg_observation.py,
+.github/workflows/m4-pg-observation.yml, receipt docs/tasks/M4_HANDOFF.md,
+CURRENT docs/TASK_REGISTER.md. Допуск на два дополнительных consumer modules
+и узкие executor изменения дан C0 здесь. Backend/DDL/roles/grants/RLS,
+bootstrap/compose/Dockerfiles/deps/pins/CI core/native lane/AI не менять.
+Новых миграций, framework, dashboard или диагностического registry не нужно.
+
+1. Минимально усилить wait_blocked: success только для exact backend PID
+   проверяемой операции, связанного с её реальным task/connection. Чужой waiter,
+   неизвестная identity, completed/failed/cancelled target не подтверждают wait.
+   Проверять pending до принятия rows и после await observer SQL; не маскировать
+   exception target и не принимать PID только потому, что он не равен blocker.
+   Contract должен работать без включённого C6 plugin. Адаптировать все9 callers,
+   включая прежние pending=None и второй concurrent waiter в provenance.
+   Узкий test-only захват PID из existing driver connection/события допустим;
+   не расширять production grants и не ставить business authority в diagnostics.
+2. Добавить положительные и отрицательные controls: matching real target wait;
+   посторонний waiter при отсутствии нужного wait; два разных target у одного
+   blocker; раннее completion/error/cancel; отсутствие нужной блокировки.
+   Показать old→new controlled behavior и actual PG результат corrected cases.
+   Original222 IDs, business assertions/effects/replay и matrix12 сохраняются.
+   Не повышать1.5s observer/1.1s edge/DB timeouts, не подменять clock/state/sleep
+   или retry/skip/xfail ради PASS. Failure должен происходить по проверяемой
+   причине, не из-за сломанного fixture/setup.
+3. Исправить filename collision, например matrix-command.json для outer phase,
+   matrix-summary.json для plugin aggregate. Report regression проверяет, что
+   phase/command/result/complete все сохраняются и missing/skip/xfail/overflow/
+   incomplete не превращаются в PASS. Old artifact R1 неизменен.
+   Расширить существующий narrow runner только на четыре modules выше и новые
+   controls. Собрать exact ordered nodeids с source; все прежние222 обязательны.
+   Diagnostic hooks должны корректно работать при таком collection (не считать
+   items[0].module всегда control_api); detailed matrix timings нужны только
+   для прежних12 cases, общий result/phase учёт — для всех.
+4. До hosted run — scoped diff/source guards, Ruff/format/compile, controlled
+   negative/reporter checks, collect-only. Local отсутствие PG не блокер:
+   использовать уже проверенный disposable GitHub route, без попыток обхода
+   ограничений chat sandbox. Адаптировать BASE/BASE_TREE/BRANCH/WRITE_SET recorder
+   к этой выдаче. Сохранить exact-source/attempt1/ownership/clean-source guards.
+5. Разрешён **один новый targeted GitHub job** после подготовки, без PR:
+   workflow только push execution branch R2, ubuntu-24.04, contents:read,
+   pinned actions/images, exact github.sha. Создать execution ref на C0 base,
+   один FF expected_sha=base/force=false на подготовленный direct-child source.
+   Preparation ref не запускает job; существующие R1 refs/runs не трогать.
+   Job≤25min, test phase≤600s для222+новых cases (вместо12); это бюджет полного
+   набора, не изменение проверяемых business time bounds. Один pytest invocation
+   четырёх modules на fresh PG18/asm_test; build/schema/roles/private TEST
+   credentials/owned cleanup и сохранение evidence — прежние.
+6. Return source/base/tree/paths, before/after findings, local commands/results,
+   один run/job/event SHA/attempt, collect IDs/JUnit/results/trace и оба summary
+   files, actual PG/roles, отдельные durations/primary/cleanup, artifact IDs/
+   bytes/hashes. Если любой новый failure — сохранить весь evidence и точную
+   группу/причину, без автоматического retry или следующего запуска. Не выдавать
+   corrected oracle за установленную причину старого timeout.
+
+C2 после receipt HOLD; C0 review и integration/full CI следом. Новых Actions
+reruns/dispatch/полного CI/main/PR39 движения, VM/SSH/live DB/Telegram/Polza нет.
+C6/C1/C3/C4/C5/C8 HOLD. При доказанной необходимости production change вернуть
+точную причину и минимальные paths C0; не ослаблять проверки.
+
+### Сохранённый статус
+
+C4 context/agent SOURCE + LOCAL UNIT принят; GPT/v2 — development candidate,
+EVAL_ONLY/runtime=false. Shared150 без изменений: confirmed0.37505230 RUB/
+58 known POST,4 unknown/held7.585505548,62 POST всего; remaining142.039442152.
+Old holds/receipts сохранены, paid refs consumed. PR39 Draft/head
+cd60e5e16d8bcada53597d660a15f4d82640e956, main51d7d73752128715c6d98157445167c0cc0d894d.
+В этом C0 шаге только4 coordination docs/PR body, новых PG/Actions/model runs0.
+Runtime/data/route/durable/Telegram и полный M4 остаются открыты.
 
 ### Возврат C6 — C6-M4-PG-EXECUTOR-R1 / REVIEW; C6 HOLD / 2026-10-30
 
@@ -168,7 +277,7 @@ foreign waiter/early completion и, если нужен causal diagnosis нов�
 независимое измерение loop lag плюс согласованные driver/server timings.
 Повторный запуск ради случайного PASS не выполнялся. **C6 HOLD.**
 
-### Задача C6 — C6-M4-PG-EXECUTOR-R1
+### История — задача C6-M4-PG-EXECUTOR-R1; допуск использован
 
 Repository **Elefesys/ai-service-manager**. Preparation branch
 **c6/m4-pg-executor-r1**; одноразовая execution branch
