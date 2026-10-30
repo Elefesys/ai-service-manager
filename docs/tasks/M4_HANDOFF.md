@@ -191,6 +191,131 @@ C0-M4-CI-OBSERVATION-01 до merge/runtime, не «flake» и не снятый 
 В этом C0 return меняются только4 coordination docs и PR body. Main/VM/DB/
 Telegram/merge без изменений; C1/C2/C3/C5/C6/C8 HOLD, следующий исполнитель C4.
 
+## C4 receipt — M4.3-CONTEXT-R1 / REVIEW / 2026-10-30
+
+Ветка **c4/m4-3-context-r1**, exact base **ed29ce8c104c5f1631ddb6af483588b7df5ff2a0**,
+base tree **7d794dd70b37df4cff2ecf9fc5e3c18f3399d5de**. Base sole parent
+**5241eba3e38bd488cea052f894efb9b43b1f7d32**, parent tree
+**478856f80d66ebc29c46423250254be37bedb495** сверены. Один candidate commit поверх
+base; его exact commit/tree — во внешнем Git receipt C4, без self-SHA docs commit.
+
+### Результат и model-visible граница
+
+`context.py` содержит ContextBuilder, closed ContextView/VisibleMessage и частный
+ContextBinding/NativeFence. Builder использует existing parse_snapshot/
+parse_guarded_snapshot, принимает original saved **JSON mapping** V2/V3, включая
+guarded формы. V1/invalid/digest mismatch → typed stop; нет преобразования V1 в
+выдуманный вопрос. Уже разобранный V3 DTO надо сопровождать исходным saved JSON:
+повторный model_dump может нормализовать datetime и изменить подписанные bytes.
+Builder не пересчитывает/«исправляет» исходный digest. V2 historical codec не
+менялся; его stored identity/digest должен проверять будущий authority adapter.
+
+Модель получает только current material text/caption, state/changed/media limits,
+неидентифицирующие provenance/time и delivery status; отдельно owner-confirmed text,
+bounded recent history и coverage. Current передаётся как user data, owner/recent
+как context data; READ result имеет тот же closed allowlist. System prompt остаётся
+bundled conversation_v2. Snapshot/HumanContextRevision целиком не сериализуются в
+model input; UUID/actor/claim/control/fence/file/storage/private revision fields
+остаются в серверной части. Нет media fetch, даже ORIGINAL_READY → image_read=false.
+
+Current и recent сохраняют порядок. Один message удаляется из recent, если уже
+есть в current; V3 parser проверяет current/version совпадение. Несогласованная
+старая projection — отказ, не восстановление deleted/replaced content. Hidden
+states не несут text. MEDIA_REPLACED_UNAVAILABLE, OWNER_TEXT, source coverage,
+history_truncated и native-media limits видны. V2 отсутствие owner/history
+помечено UNAVAILABLE_V2, неизвестная полнота — null, не полная история.
+
+Default projection budget **8192 UTF-8 bytes /8 recent messages**, closed limits
+512–16384 bytes/0–16 recent; полный Gateway input и token/cost budget проверяются
+прежним Gateway. При нехватке места удаляются только целые старейшие recent entries,
+с history_omitted/history_truncated. Owner/current не режутся и не суммаризуются:
+если они не помещаются — CONTEXT_TOO_LARGE до model/READ. CANONICAL_COMPLETE остаётся
+отдельным **source** статусом; локальное усечение явно отмечено и для этого случая.
+
+### Interface следующему runtime исполнителю
+
+- `ContextBinding`: server-supplied Workspace/Client/conversation/business/connection,
+  job/turn, turn/context/control revisions, activation fence, Resume receipt,
+  snapshot digest; для V3 NativeFence с owner revision/policy/observation/checkpoint.
+  Это expected state, **не разрешение**. Unguarded snapshots не содержат все scope
+  IDs: их соответствие обязан подтвердить authority port, а не совпадение UUID.
+- `ContextAuthority.authorize(binding, boundary) -> AuthorityDecision` обязательно
+  вызывается на **MODEL / READ / FOLLOWUP / CANDIDATE**. Нужны свежие permissions,
+  AI admission, tenant/client/business binding, control/input/native state и Resume
+  fence. Port сам владеет trusted principal/job claim; ALLOWED — явное утверждение
+  этих проверок. Missing/invalid/error/denied/stale decision — STOP. Реализация
+  есть только как test double, production/default-allow реализации нет.
+- `ContextAuthority.read_current(binding) -> ContextRead` обязан атомарно проверить
+  разрешение у самой read boundary и вернуть snapshot того же conversation.
+  Agent проверяет returned binding и original snapshot fingerprint, заново строит
+  allowlisted view, затем требует fresh FOLLOWUP decision. Новая редакция/fence/
+  foreign context не уходит во второй model call. Args единственного `read_context`
+  — строго `{query: current}`; никаких model-supplied scope IDs/SQL/URL.
+- `ConversationAgent(config_v2, adapter, authority).run(binding, raw_snapshot,
+  run_id=..., deadline=...) -> AgentOutcome`. Один экземпляр — одна попытка;
+  один existing ModelGateway, max2 calls/1 READ, общий deadline охватывает authority,
+  READ, model и candidate gate. Existing total token/cost reservations не сбрасываются.
+  `EVAL_ONLY` и conversation_v2 обязательны; route approval/runtime wiring не добавлены.
+- `AgentOutcome` — CANDIDATE с validated reply/handoff/no_reply либо STOP без
+  candidate. Call observations сохраняют только kind/error/usage/cost, не rejected
+  FINAL text. Budget/reads сохраняются при cancellation/ошибке; unknown cost не0
+  и не refund. Повторный/concurrent run на том же agent → CLOSED без нового Gateway.
+  Handoff — proposal; escalation/send/acceptance intent не вызываются.
+
+Fresh checks здесь не атомарны с будущим durable acceptance/send и не дают
+долгоживущее разрешение. Следующий M4.3-RUNTIME обязан реализовать настоящий PG
+authority/read adapter, trusted principal/claim и атомарные durable fences,
+AIRun/recovery/Outbox/escalation по действующим M3 guards. Перезапуск процесса
+не покрыт in-memory single-use guard. CONTROLLED_GUARDS_V1 не подменяет provider;
+нет application entrypoint/worker/Polza/Telegram wiring и никаких migrations.
+
+### Фактические проверки
+
+Python **3.13.16**, isolated frozen/offline uv environment
+`/workspace/scratch/b247f3420d30/m4-context-validation-venv` (`C4_ENV` ниже).
+`C4_AUDIT=/workspace/scratch/b247f3420d30/m4-deepseek-checks`: внешний temporary
+audit harness запрещает socket connect/getaddrinfo/bind/sendto и owner .env reads;
+pytest secret fixtures допускаются только в pytest temporary directory.
+
+```bash
+PYTHONPATH="$C4_AUDIT" "$C4_ENV/bin/pytest" -q tests/test_m4_context.py tests/test_m4_agent.py tests/test_m4_gateway.py tests/test_m4_gateway_failures.py tests/test_m4_polza.py tests/test_m4_probe.py tests/test_m3_1_turns.py tests/test_m3_1_guards.py tests/test_m3_1_native_context.py tests/test_m3_1_provenance.py --tb=short
+"$C4_ENV/bin/ruff" check backend/src/asm/ai/context.py backend/src/asm/ai/agent.py tests/test_m4_context.py tests/test_m4_agent.py
+"$C4_ENV/bin/ruff" format --check backend/src/asm/ai/context.py backend/src/asm/ai/agent.py tests/test_m4_context.py tests/test_m4_agent.py
+"$C4_ENV/bin/mypy" backend/src
+```
+
+**1283 PASS /21.83s**:176 new context/agent,916 retained M4,191 related M3 unit.
+Ruff/format **4 files PASS**, mypy **73 files PASS**. Existing M3/AI source,
+contracts/Gateway/prompts/probe fixtures и source architecture byte-unchanged.
+New synthetic fixture:6 V2/V3/guarded/canonical/owner/Unicode-adversarial cases,
+**25437 bytes**, SHA256 **45cfd0cd42dafee8553cb19d1474ffa83d3a8008e2f7719f961fdb7ed72d751b**.
+
+Проверены projection/privacy, exact Unicode/bytes, owner/current retention,
+history dedup/order/truncation, current edit/delete/uncertainty/unsupported states,
+все5 visible media states и native-media limitations. Actual Gateway + FakeAdapter:
+one-call reply/handoff/no_reply, READ→follow-up с одним Gateway/deadline/budget,
+foreign scope и stale/revoked authority на каждой из4 boundaries, изменения во
+время model/READ awaits, Resume receipt и native observation changes, malformed/
+missing authority, changed V2 material при прежнем digest, invalid args/tool/result
+correlation, extra READ, refusal/invalid/truncated/oversize/429/5xx, exhaustion,
+deadline/cancellation/concurrent repeat. У каждого отказа проверено отсутствие
+candidate и запрещённого model/READ эффекта; rejected final не попадает в trace.
+Synthetic injection остаётся data и не открывает mutation/foreign READ; это
+детерминированная проверка границ, не новое hosted semantic качество.
+
+### Scope и gates
+
+Ровно7 paths: новые `backend/src/asm/ai/context.py`, `backend/src/asm/ai/agent.py`,
+`tests/test_m4_context.py`, `tests/test_m4_agent.py`, `tests/fixtures/m4_context_cases.json`;
+insert-only этот receipt и одна CURRENT row в `docs/TASK_REGISTER.md`.
+Settings/entrypoints/deps/locks/CI/frontend/runbook/IMPL-004 и все M3/DB/migrations
+не менялись. Настоящие HTTP/key reads/Telegram/DB mutations **0**.
+Hosted context quality, PG/RLS authority, durable replay/runtime и full integration
+CI **NOT_RUN / NOT_PROVEN**. PR39 Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**,
+main **51d7d73752128715c6d98157445167c0cc0d894d** не двигались. CI41009211185 RED,
+C0-M4-CI-OBSERVATION-01/root cause UNKNOWN и M4.3-RUNTIME gates сохраняются.
+Следующий шаг — C0 source/interface review; новые paid probes не нужны.
+
 ## История выдачи — M4.2-GPT-QUALITY-R2 / C4 completed, source принят / 2026-10-30
 
 Ниже — историческая подготовительная задача и receipt C4. Её запрет live

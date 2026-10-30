@@ -21,7 +21,7 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.2-GPT-QUALITY-R1 | Исторический partial:7 retained manual PASS/2 READ,1 technical STOP,17 NOT_RUN; consumed |
 | C0-M4.2-GPT-QUALITY-HISTORY-R1 | VERIFIED metadata only: attempts2/reported0.00743079; UNSETTLED |
 | M4.2-GPT-QUALITY-R2 | VERIFIED owner synthetic + C0 manual scope:18/18 PASS; вместе с R1 PASS25,27 confirmed POST/2 READ/2 images; owner ref consumed |
-| M4.3-CONTEXT-R1 | TODO / ASSIGNED C4: ContextBuilder, один READ и bounded agent на fixtures; exact7 paths в HANDOFF |
+| M4.3-CONTEXT-R1 | REVIEW / C4 candidate c4/m4-3-context-r1: bounded V2/V3 projection, mandatory authority/read port, conversation_v2 agent≤2 calls/1 READ;1283 targeted PASS, Ruff/format4/mypy73. Exact7 paths; real HTTP/key/Telegram/DB mutation0; PG authority/durable/runtime acceptance впереди |
 | C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 observer timeout, root cause UNKNOWN; foundation gates не приняты |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
