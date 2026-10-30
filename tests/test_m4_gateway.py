@@ -245,3 +245,21 @@ async def test_cancellation_keeps_reservation_and_closes_request():
         await task
     assert gateway.budget.calls_used == 1
     assert (await gateway.call()).error == "CLOSED" and len(adapter.requests) == 1
+
+
+@pytest.mark.parametrize("revision", ["conversation_v1", "conversation_v2"])
+async def test_gpt_quality_prompt_revision_is_pinned_through_read_roundtrip(revision):
+    cfg = GatewayConfig.model_validate(config().model_dump() | {"prompt_revision": revision})
+    adapter = FakeAdapter(cfg.route, ("tools", "reply"))
+    gw = ModelGateway(cfg, request(), adapter)
+    first = await gw.call()
+    assert first.kind == "TOOLS"
+    final = await gw.call(tool_results(first))
+    assert final.kind == "FINAL"
+    bundled = files("asm.ai").joinpath("prompts/" + revision + ".txt").read_text("utf-8")
+    assert len(adapter.requests) == 2
+    for seen in adapter.requests:
+        assert seen.config.prompt_revision == revision and seen.prompt == bundled
+        assert seen.config.schema_revision == "conversation_result_v1"
+        assert json.loads(seen.output_schema_json) == CONVERSATION_RESULT.json_schema()
+    assert (await gw.call()).error == "CLOSED"

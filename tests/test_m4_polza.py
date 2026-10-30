@@ -6,6 +6,7 @@ import io
 import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from importlib.resources import files
 
 import httpx
 import pytest
@@ -1844,3 +1845,49 @@ def test_tool_compat_cannot_admit_another_model_or_unreviewed_profile():
             ToolCompatRoute.from_catalog(experiment_entry(model), datetime.now(UTC))
     with pytest.raises(ValueError, match="TOOL_COMPAT_ROUTE_REQUIRED"):
         ToolCompatAdapter(experiment_route(MODELS[2]), KEY)
+
+
+async def test_gpt_quality_changes_only_system_prompt_on_original_auto_wires():
+    wires = []
+    for quality in (False, True):
+        posts, counted = [], []
+        latest = None
+
+        def handler(request):
+            nonlocal latest
+            if request.method == "POST":
+                posts.append(json.loads(request.content))
+                latest = payload(MODELS[0], tools=len(posts) == 1)
+                latest["id"] = "gen_" + str(700 + len(posts))
+                return response(latest)
+            listing, detail = experiment_history(latest)
+            return response(listing if str(request.url) == HISTORY_LIST else detail)
+
+        adapter = PolzaAdapter(
+            experiment_route(MODELS[0]), KEY, transport=httpx.MockTransport(handler)
+        )
+        original_count = adapter.count_input_tokens
+
+        def count(request):
+            counted.append(request)
+            return original_count(request)
+
+        adapter.count_input_tokens = count
+        case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+        row = await run_case(
+            adapter, case, Ledger(io.StringIO(), Decimal(15), 2, gpt_quality=quality), 0
+        )
+        revision = "conversation_v2" if quality else "conversation_v1"
+        bundled = files("asm.ai").joinpath("prompts/" + revision + ".txt").read_text("utf-8")
+        assert not row["failures"] and row["reads"] == 1 and len(posts) == 2
+        assert row["prompt_revision"] == revision
+        assert all(r.config.prompt_revision == revision and r.prompt == bundled for r in counted)
+        assert all(p["messages"][0] == {"role": "system", "content": bundled} for p in posts)
+        assert all(p["tool_choice"] == "auto" and "reasoning" not in p for p in posts)
+        assert all(
+            p["response_format"]["json_schema"]["name"] == CONVERSATION_WIRE_REVISION for p in posts
+        )
+        wires.append(posts)
+    for old, new in zip(*wires, strict=True):
+        new["messages"][0] = old["messages"][0]
+        assert old == new  # Provider, schema, caps, tools, messages and READ correlation unchanged.

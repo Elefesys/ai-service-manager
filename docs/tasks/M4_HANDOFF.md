@@ -166,6 +166,76 @@ Full CI source5885 NOT_RUN. Новый scoped EVAL_ONLY source ещё не со�
 Main/VM/DB/Telegram/runtime/merge без изменений. Следующий исполнитель — C4,
 владелец сохраняет отчёты и не запускает использованные команды.
 
+### C4 receipt — M4.2-GPT-QUALITY-R1 / 2026-10-30
+
+**REVIEW; Polza API POST/catalog/history GET0, owner key reads0.**
+Branch `c4/m4-2-gpt-quality-r1`; exact sole parent/base
+**07e18c70b02a3739fbe640d28c41ec0341f8452d**, base tree
+**f7adc84145d6857924f32993ff19b883d81ff65d**. Один candidate commit;
+его SHA/tree возвращаются после публикации, без self-SHA в собственном дереве.
+Write-set ровно11 разрешённых файлов, без migrations/runtime changes.
+
+Добавлен conversation_v2, SHA256
+`b420be44a7e4210de1151e5b0604b0fa9a08c19b1bfbedb8147f2a9b38455956`:
+explicit owner contact → proposed handoff; никаких claims об отправке и
+типичных, но неподтверждённых business rules. Известные факты и обычные уточнения
+разрешены. Нет fixture IDs/ответов/адресов/обязательных regex слов/mutation tools.
+v1 побайтово прежний, SHA256
+`1ba9d9638b601d5890c6f1acc038d670cd5a8360105816ad7fea5298d458cee0`.
+Единственная contract дельта — Literal v1/v2; Gateway меняет только выбор
+одного из двух fixed bundled files. Unknown revision отклоняется до чтения файла.
+Result DTO/schema/envelope прежние; остальные методы Gateway не менялись.
+
+Opt-in `--gpt-quality-r1` использует GPT/openai/flex/provider-default и прежний
+auto-tools. Тот же25-case порядок/repeats/fixture SHA; text/tool v2 совпадает
+в plan/config/system wire/report. Две картинки остаются synthetic_shapes_v1.
+Fresh27-call reserve до POST, ceiling15 из150;31 known/3 unknown/34 prior attempts,
+confirmed0.17932550/held7.120395585 и≤61 shared. Все old holds сохранены,
+новый confirmed/unknown отдельно; exclusive report и flushed reservations,
+terminal summary при обрабатываемом STOP, no retry/fallback/resume/imports.
+Полный technical проход оставляет manual PENDING и HUMAN_REVIEW_REQUIRED.
+
+Проверки: Python3.13.16, отдельный venv из frozen uv.lock. Pytest и actual
+offline CLI под audit guard (запрет sockets и owner .env reads; synthetic test
+secret files допустимы). Полный CI и Windows live не запускались.
+
+```text
+pytest -q tests/test_m4_gateway.py tests/test_m4_gateway_failures.py tests/test_m4_polza.py tests/test_m4_probe.py --tb=short
+799 passed in 12.44s (711 прежних +88 новых)
+ruff check backend/src/asm/ai/contracts.py backend/src/asm/ai/gateway.py backend/src/asm/ai/probe.py tests/test_m4_gateway.py tests/test_m4_gateway_failures.py tests/test_m4_polza.py tests/test_m4_probe.py
+All checks passed!
+ruff format --check backend/src/asm/ai/contracts.py backend/src/asm/ai/gateway.py backend/src/asm/ai/probe.py tests/test_m4_gateway.py tests/test_m4_gateway_failures.py tests/test_m4_polza.py tests/test_m4_probe.py
+7 files already formatted
+mypy backend/src
+Success: no issues found in 71 source files
+python -m build --wheel --no-isolation --outdir /workspace/scratch/b247f3420d30/m4-gpt-quality-build
+Successfully built ai_service_manager-0.0.1-py3-none-any.whl
+```
+
+8 actual CLI invocations (`python -m asm.ai.probe`): default; --plan;
+--plan --synthetic-experiment; --plan --history-r2; --plan --gemini-diagnostic;
+--plan --deepseek-eval; --plan --deepseek-tool-compat; --plan --gpt-quality-r1.
+JSON первых7 совпал с base. Wheel содержит byte-exact v1/v2. По AST прежние
+probe definitions изменены только Ledger/configuration/run_case/main;
+старые plan/runner/summary/evaluator definitions неизменны. polza.py/settings.py,
+v1/schema/fixtures/deps/locks/CI/DB/M3/IMPL-004 не менялись.
+
+CONTROLLED полный путь:25 finals/27 POST/2 READ/2 images/54 history+1 catalog,
+v2 в actual wire; old v1 wire отличается только system prompt при opt-in.
+Fake reserve7.699968000, charge0.027; shared confirmed0.20632550/58 known,
+held7.120395585/3 unknown,61 attempts, remaining142.673278915. Это не реальные
+расходы и не hosted evidence. Late failures достигли follow-up/image/последнего
+case; first charge сохраняется отдельно от нового unknown. Подставные плохие
+finals/flags не скрыты; отсутствие regex flag не закрывает semantic finding.
+
+[Runbook](../runbooks/M4_POLZA_PROBE.md) содержит offline Windows plan с прежним
+environment/key и CONTROLLED receipt. Executable live block/exact-source approval
+публикует C0 после review. Старые findings/receipts не переоценены; фактическое
+качество v2 UNKNOWN, selected_model=null/runtime=false. GPT — кандидат, не
+победитель незавершённого сравнения. Gemini/DeepSeek compatibility DEFERRED.
+PR39 Draft/headcd60 и main51d7 не двигаются; RED CI41009211185/root cause UNKNOWN,
+C0-M4-CI-OBSERVATION-01 и интеграционный full CI остаются gates до merge/runtime.
+
 ## История — использованный допуск C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1 / 2026-10-30
 
 Этот блок описывает прежнюю приёмку. Допуск использован; актуальный owner receipt

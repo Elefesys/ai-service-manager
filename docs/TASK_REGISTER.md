@@ -18,7 +18,7 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.2-GEMINI-COMPATIBILITY | BLOCKED; дальнейшая совместимость DEFERRED для первого пилота |
 | M4.2-DEEPSEEK-EVAL-R1 | BLOCKED: READ_ROUND_TRIP, handoff «С», OWNER_25_CASES_R1 consumed |
 | M4.2-DEEPSEEK-TOOL-COMPAT-R1 | BLOCKED: named phase1 POST/0 READ/0 history/0 final, INVALID_PROVIDER_RESPONSE; exact cause UNKNOWN, charge UNKNOWN. OWNER_ROUNDTRIP_R1_1RUB consumed; дальнейшая совместимость DEFERRED |
-| M4.2-GPT-QUALITY-R1 | TODO / ASSIGNED C4: versioned v2 prompt и отдельный GPT-only25-case quality mode; подготовка без live. Точный write-set/границы в HANDOFF |
+| M4.2-GPT-QUALITY-R1 | REVIEW / C4: conversation_v2 и отдельный GPT-only25-case mode готовы; v1/schema/fixtures сохранены. 799 targeted tests, Ruff/format7, mypy71,8 offline plans и wheel PASS. Prior34/3 unknown held7.120395585, ceiling15/≤27 POST; API POST/GET0. Receipt/offline Windows instruction готовы; live только после exact-source C0 review, качество v2 пока UNKNOWN |
 | C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 wait_blocked1.5s timeout, root cause UNKNOWN; последующие foundation gates не приняты |
 | M4.3-CONTEXT / M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |

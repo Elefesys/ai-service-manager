@@ -410,3 +410,18 @@ async def test_unconfirmed_or_invalid_local_token_count_fails_closed(count, erro
     adapter = Counter(cfg.route)
     result = await ModelGateway(cfg, request(), adapter).call()
     assert result.error == error and not adapter.requests
+
+
+@pytest.mark.parametrize(
+    "revision",
+    ["conversation_v3", "conversation_v2.txt", "../conversation_v2", "/tmp/custom.txt", "", None],
+)
+def test_gpt_quality_unknown_prompt_never_loads_a_file_or_calls_adapter(monkeypatch, revision):
+    import asm.ai.gateway as gateway_module
+
+    monkeypatch.setattr(gateway_module, "files", lambda _: pytest.fail("unknown prompt file read"))
+    cfg = config().model_copy(update={"prompt_revision": revision})
+    adapter = FakeAdapter(cfg.route)
+    with pytest.raises(ValidationError):
+        ModelGateway(cfg, request(), adapter)
+    assert not adapter.requests

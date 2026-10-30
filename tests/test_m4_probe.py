@@ -9,6 +9,7 @@ import os
 import time
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from importlib.resources import files
 
 import httpx
 import pytest
@@ -3452,3 +3453,707 @@ async def test_tool_compat_missing_case_after_reservation_is_unknown(monkeypatch
     assert summary["shared_total"]["unknown_call_count"] == 3
     assert Decimal(summary["shared_total"]["unknown_reserved_rub"]) == Decimal("7.214943328")
     assert not mock.posts  # Reservation is not asserted to be an observed POST.
+
+
+class ControlledGptQuality(ControlledComparison):
+    """CONTROLLED GPT-only traffic; the prompt is observed, never executed by an LLM."""
+
+    def __init__(self, *, change=None):
+        super().__init__(change=change)
+        self.expected = [item for item in self.expected if item[0] == MODELS[0]]
+        self.entries[0]["providers"][0]["pricing"]["prompt_per_million"] = "1"
+        provider = self.entries[0]["providers"][0]
+        provider.pop("reasoning")
+        for name in ("reasoning_toggle", "reasoning_effort"):
+            provider["capabilities"].pop(name)
+        provider["supported_parameters"] = [
+            p for p in provider["supported_parameters"] if not p.startswith("reasoning")
+        ]
+        self.prompt = files("asm.ai").joinpath("prompts/conversation_v2.txt").read_text("utf-8")
+        self.wires = []
+
+    def handler(self, request):
+        if request.url.path.endswith("/models"):
+            self.gets.append(str(request.url))
+            return response({"data": [self.entries[0]]})  # No other model even in the fake catalog.
+        if request.method == "POST":
+            body = json.loads(request.content)
+            _, repeat, case = self.expected[self.index]
+            assert len(self.gets) == 1 + 2 * len(self.posts)
+            assert body["model"] == MODELS[0] and "reasoning" not in body
+            assert "reasoning_effort" not in body
+            if case.mode == "image":
+                assert body["response_format"]["json_schema"]["name"] == "synthetic_shapes_v1"
+                assert body["messages"] == [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": case.question},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": "data:image/png;base64," + case.image_base64},
+                            },
+                        ],
+                    }
+                ]
+                assert "tools" not in body and "tool_choice" not in body
+            else:
+                from asm.ai.polza import conversation_wire_schema
+
+                assert body["messages"][0] == {"role": "system", "content": self.prompt}
+                assert body["response_format"] == {
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": CONVERSATION_WIRE_REVISION,
+                        "strict": True,
+                        "schema": conversation_wire_schema(probe.CONVERSATION_RESULT.json_schema()),
+                    },
+                }
+                if case.mode == "tool":
+                    assert body["tool_choice"] == "auto" and len(body["tools"]) == 1
+                    if body["messages"][-1]["role"] == "tool":
+                        assistant, result = body["messages"][-2:]
+                        assert (
+                            assistant["tool_calls"]
+                            == self.latest["choices"][0]["message"]["tool_calls"]
+                        )
+                        assert result["tool_call_id"] == assistant["tool_calls"][0]["id"]
+                        assert json.loads(result["content"]) == {"fact": case.read_fact}
+                else:
+                    assert "tools" not in body and "tool_choice" not in body
+            self.wires.append((repeat, case.mode, body))
+        return super().handler(request)
+
+
+def gpt_quality_args(report):
+    source = "f" * 40  # CONTROLLED_ONLY, not a live C0 authorization.
+    return [
+        "--gpt-quality-r1",
+        "--live",
+        "--report",
+        str(report),
+        "--source-sha",
+        source,
+        "--source-environment",
+        "LOCAL_DESKTOP",
+        "--approved-rub",
+        "15",
+        "--approval-ref",
+        "C0-M4.2-GPT-QUALITY-R1:" + source + ":CONTROLLED_ONLY",
+    ]
+
+
+async def controlled_gpt_quality(mock, *, approved=Decimal(15), handler=None):
+    output = io.StringIO()
+    summary = await probe.run_gpt_quality(
+        load_cases(FIXTURES),
+        ProbeSettings(api_key=KEY),
+        output,
+        approved,
+        transport=httpx.MockTransport(handler or mock.handler),
+    )
+    events = [json.loads(line) for line in output.getvalue().splitlines()]
+    assert events[-1] == summary and summary["manual_assessment"] == "PENDING"
+    assert summary["selected_model"] is None and not summary["runtime_authorized"]
+    assert not summary["shared_total"]["old_unknown_reserve_released"]
+    assert Decimal(summary["shared_total"]["unknown_reserved_rub"]) >= Decimal("7.120395585")
+    return summary, events
+
+
+@pytest.mark.parametrize("args", [["--gpt-quality-r1"], ["--plan", "--gpt-quality-r1"]])
+def test_gpt_quality_offline_plan_pins_v2_full_original_schedule_and_prior(
+    monkeypatch, capsys, args
+):
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    assert main(args) == 0
+    p = json.loads(capsys.readouterr().out)
+    cases = probe.schedule(load_cases(FIXTURES))
+    assert p["stage_schedule"] == [
+        {
+            "repeat": i,
+            "case": c.id,
+            "prompt_revision": "synthetic_shapes_v1" if c.mode == "image" else "conversation_v2",
+        }
+        for i, c in enumerate(cases)
+    ]
+    assert (p["total_scenarios"], p["images"], p["critical_repeats"]) == (25, 2, 3)
+    assert (p["max_model_http_calls"], p["max_synthetic_reads"], p["max_history_http_calls"]) == (
+        27,
+        2,
+        54,
+    )
+    assert (p["catalog_http_calls"], p["max_shared_model_posts"]) == (1, 61)
+    assert (p["case_seconds"], p["overall_seconds"]) == (60, 1800)
+    assert (p["input_tokens_per_call"], p["output_tokens_per_call"]) == (32768, 512)
+    assert (p["wire_input_bytes_per_call"], p["wire_output_bytes_per_call"]) == (24576, 32768)
+    assert p["total_token_reservation_ceiling"] == 898560
+    assert p["models"] == [MODELS[0]] and p["provider_only"] == "openai/flex"
+    assert p["reasoning_profile"] == "PROVIDER_DEFAULT" and p["tool_choice"] == "auto"
+    assert p["gemini_posts"] == p["deepseek_posts"] == 0
+    assert p["prompt_revision"] == "conversation_v2"
+    prompt = files("asm.ai").joinpath("prompts/conversation_v2.txt").read_bytes()
+    assert p["prompt_sha256"] == hashlib.sha256(prompt).hexdigest()
+    assert p["fixture_sha256"] == probe.FIXTURE_SHA256 and p["stage_rub_ceiling"] == "15"
+    assert p["priced_reservation_rub"] is None and p["status"] == "PLAN_ONLY / PAID_NOT_AUTHORIZED"
+    assert p["prior"]["confirmed_cost_rub"] == "0.17932550"
+    assert p["prior"]["known_call_count"] == 31 and p["prior"]["unknown_call_count"] == 3
+    assert p["prior"]["model_posts"] == 34 and p["prior"]["imported_cases"] == 0
+    assert p["prior"]["unknown_reserved_rub"] == "7.120395585"
+    assert p["prior"]["committed_or_held_rub"] == "7.299721085"
+    assert p["prior"]["remaining_with_unknown_held_rub"] == "142.700278915"
+    assert p["manual_assessment"] == "PENDING" and not p["runtime_authorized"]
+
+
+@pytest.mark.parametrize("quality_findings", [False, True])
+def test_gpt_quality_controlled_full_cli_observes_v2_tools_images_and_accounting(
+    tmp_path, monkeypatch, capsys, quality_findings
+):
+    import asm.ai.polza as polza
+
+    def change(data, case, first_tool):
+        if quality_findings and not first_tool:
+            # Synthetic examples of the reviewed problems, not copied owner receipts.
+            if case.id == "no_send_claim":
+                data["choices"][0]["message"]["content"] = json.dumps(
+                    {
+                        "result": {
+                            "kind": "reply",
+                            "text": "Можно написать владельцу: «Я жду.»",
+                            "reason": None,
+                        }
+                    }
+                )
+            elif case.id == "unknown_price":
+                data["choices"][0]["message"]["content"] = json.dumps(
+                    {
+                        "result": {
+                            "kind": "reply",
+                            "text": "Цена неизвестна. Стоимость зависит от вида ремонта.",
+                            "reason": None,
+                        }
+                    }
+                )  # Regex can be clear while semantic review is still needed.
+
+    mock = ControlledGptQuality(change=change)
+    report = tmp_path / "m4-polza-gpt-quality-r1.jsonl"
+    old_report = tmp_path / "m4-polza-executable-eval-r1.jsonl"
+    old_bytes = b"CONTROLLED old v1 receipt; not a real owner report\r\n"
+    old_report.write_bytes(old_bytes)
+    original, original_http = probe.run_gpt_quality, polza.bounded_http
+    limits = []
+    configs = []
+    original_configuration = probe.configuration
+
+    def configuration(*args, **kwargs):
+        cfg = original_configuration(*args, **kwargs)
+        configs.append(cfg)
+        return cfg
+
+    async def bounded(key, url, **kwargs):
+        limits.append((url, kwargs["seconds"], kwargs["maximum"], kwargs["body"] is not None))
+        return await original_http(key, url, **kwargs)
+
+    def handler(request):
+        if request.method == "POST":
+            saved = [json.loads(line) for line in report.read_text().splitlines()]
+            reserved = saved[-1]
+            assert (
+                reserved["event"] == "reserved"
+                and reserved["calls_reserved"] == len(mock.posts) + 1
+            )
+            amount = Decimal("0.285184000") * reserved["calls_reserved"]
+            assert Decimal(reserved["rub_reserved"]) == amount
+            assert (
+                Decimal(reserved["shared_rub_committed_or_reserved"])
+                == Decimal("7.299721085") + amount
+            )
+        return mock.handler(request)
+
+    async def run(cases, settings, output, approved):
+        return await original(
+            cases, settings, output, approved, transport=httpx.MockTransport(handler)
+        )
+
+    monkeypatch.setattr(probe, "load_secret", lambda _: ProbeSettings(api_key=KEY))
+    monkeypatch.setattr(probe, "run_gpt_quality", run)
+    monkeypatch.setattr(probe, "configuration", configuration)
+    monkeypatch.setattr(probe, "bounded_http", bounded)
+    monkeypatch.setattr(polza, "bounded_http", bounded)
+    assert main(gpt_quality_args(report)) == 0
+    events = [json.loads(line) for line in report.read_text().splitlines()]
+    source, p, summary = events[0], events[1], events[-1]
+    rows = [e for e in events if e["event"] == "case"]
+    assert source["event"] == "source" and p["event"] == "plan"
+    assert source["prior"] == p["prior"] == summary["prior"] == probe.gpt_quality_prior()
+    assert (
+        source["prompt_sha256"]
+        == p["prompt_sha256"]
+        == hashlib.sha256(mock.prompt.encode()).hexdigest()
+    )
+    assert (
+        source["prompt_revision"]
+        == p["prompt_revision"]
+        == summary["prompt_revision"]
+        == "conversation_v2"
+    )
+    assert all(c.prompt_revision == "conversation_v2" for c in configs) and len(configs) == 23
+    assert len(rows) == 25 and sum(r["reads"] for r in rows) == 2
+    assert [{k: r[k] for k in ("repeat", "case", "prompt_revision")} for r in rows] == p[
+        "stage_schedule"
+    ]
+    assert all(
+        not r["failures"] and r["final"] is not None and r["manual_assessment"] == "PENDING"
+        for r in rows
+    )
+    assert len(mock.wires) == len(mock.posts) == 27 and len(mock.gets) == 55
+    assert sum(mode == "image" for _, mode, _ in mock.wires) == 2
+    assert summary["models"][MODELS[0]]["completed"] == 25
+    assert (
+        summary["status"] == "HUMAN_REVIEW_REQUIRED" and summary["manual_assessment"] == "PENDING"
+    )
+    assert not summary["runtime_authorized"] and summary["selected_model"] is None
+    assert Decimal(p["priced_reservation_rub"]) == Decimal("7.699968000")
+    assert (
+        summary["new_stage"]["known_call_count"] == 27
+        and summary["new_stage"]["unknown_call_count"] == 0
+    )
+    assert Decimal(summary["new_stage"]["confirmed_cost_rub"]) == Decimal("0.027")
+    assert (
+        summary["shared_total"]["known_call_count"] == 58
+        and summary["shared_total"]["unknown_call_count"] == 3
+    )
+    assert summary["shared_total"]["model_post_reservations"] == 61
+    assert Decimal(summary["shared_total"]["confirmed_cost_rub"]) == Decimal("0.20632550")
+    assert summary["shared_total"]["unknown_reserved_rub"] == "7.120395585"
+    assert Decimal(summary["shared_total"]["remaining_with_unknown_held_rub"]) == Decimal(
+        "142.673278915"
+    )
+    assert all(
+        c["history_gets"] == 2
+        and c["history_family"] == "OpenAI"
+        and c["route_variant"] == "NOT_OBSERVED"
+        for r in rows
+        for c in r["calls"]
+    )
+    assert limits[0][1:3] == (20, 4194304)
+    assert sum(post for _, _, _, post in limits) == 27
+    assert sum(not post for _, _, _, post in limits) == 55
+    assert all(
+        0 < seconds <= (60 if post else 15) and maximum == (32768 if post else 65536)
+        for _, seconds, maximum, post in limits[1:]
+    )
+    if quality_findings:
+        assert rows[19]["case"] == "no_send_claim" and rows[19]["final"]["kind"] == "reply"
+        assert [f["code"] for f in rows[19]["quality_flags"]] == ["OUTCOME"]
+        assert rows[22]["case"] == "unknown_price" and not rows[22]["quality_flags"]
+        assert "зависит" in rows[22]["final"]["text"] and rows[22]["manual_assessment"] == "PENDING"
+    else:
+        assert all(not r["quality_flags"] for r in rows)
+    assert old_report.read_bytes() == old_bytes
+    assert (
+        KEY.get_secret_value() not in report.read_text()
+        and "PRIVATE_ACCOUNT_METADATA" not in report.read_text()
+    )
+    saved = report.read_bytes()
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("replay secret"))
+    assert main(gpt_quality_args(report)) == 2
+    assert report.read_bytes() == saved and len(mock.posts) == 27
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize(
+    "bad,code",
+    [
+        ("missing_model", "MODEL_UNAVAILABLE"),
+        ("route", "EXPERIMENT_ROUTE_NOT_UNIQUE"),
+        ("duplicate", "EXPERIMENT_ROUTE_NOT_UNIQUE"),
+        ("unofficial", "OFFICIAL_ROUTE_UNKNOWN"),
+        ("tools", "CAPABILITY_UNKNOWN"),
+        ("schema", "CAPABILITY_UNKNOWN"),
+        ("image", "IMAGE_CAPABILITY_UNKNOWN"),
+        ("parameter", "PARAMETER_UNSUPPORTED"),
+        ("cap", "OUTPUT_CAP_PARAMETER_UNSUPPORTED"),
+        ("context", "CONTEXT_LIMIT_UNKNOWN"),
+        ("currency", "CURRENCY_UNKNOWN"),
+        ("fee", "TARIFF_UNKNOWN"),
+        ("null_fee", "TARIFF_UNKNOWN"),
+        ("whole_stage", "APPROVED_BUDGET_TOO_SMALL"),
+        ("approval", "APPROVED_BUDGET_TOO_SMALL"),
+    ],
+)
+async def test_gpt_quality_preflight_checks_selected_route_and_all_27_reserves(bad, code):
+    mock = ControlledGptQuality()
+    p = mock.entries[0]["providers"][0]
+    if bad == "missing_model":
+        mock.entries[0]["id"] = MODELS[1]
+    elif bad == "route":
+        p["name"] = "other/route"
+    elif bad == "duplicate":
+        mock.entries[0]["providers"].append(copy.deepcopy(p))
+    elif bad == "unofficial":
+        p["is_unofficial"] = True
+    elif bad in ("tools", "schema", "image"):
+        p["capabilities"][
+            {"tools": "tools", "schema": "json_schema_strict", "image": "input_image"}[bad]
+        ]["status"] = "unknown"
+    elif bad in ("parameter", "cap"):
+        p["supported_parameters"].remove("tool_choice" if bad == "parameter" else "max_tokens")
+    elif bad == "context":
+        p["context_length"] = 32768
+    elif bad == "currency":
+        p["pricing"]["currency"] = "USD"
+    elif bad == "fee":
+        p["pricing"]["unexpected_fee"] = 0
+    elif bad == "null_fee":
+        p["pricing"]["audio_per_million"] = None
+    elif bad == "whole_stage":
+        p["pricing"]["prompt_per_million"] = "10"
+    summary, events = await controlled_gpt_quality(
+        mock, approved=Decimal("7.5") if bad == "approval" else Decimal(15)
+    )
+    assert summary["status"] == "FAILED_OR_INCOMPLETE" and summary["error"] == code
+    assert len(mock.gets) == 1 and not mock.posts
+    assert summary["new_stage"]["attempt_reservations"] == 0
+    assert summary["shared_total"]["model_post_reservations"] == 34
+    assert summary["shared_total"]["unknown_reserved_rub"] == "7.120395585"
+    assert summary["shared_total"]["remaining_with_unknown_held_rub"] == "142.700278915"
+    assert not any(e["event"] == "reserved" for e in events)
+
+
+@pytest.mark.parametrize("phase", [1, 2])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "usage",
+        "cost",
+        "usage_limit",
+        "cost_limit",
+        "model",
+        "id",
+        "transport",
+        "cancel",
+        "list",
+        "detail",
+        "history_usage",
+        "history_cost",
+        "family",
+        "tool",
+    ],
+)
+async def test_gpt_quality_early_and_followup_failures_keep_confirmed_and_unknown_separate(
+    phase, bad
+):
+    def change(data, case, first_tool):
+        if (1 if first_tool else 2) != phase:
+            return
+        if bad == "usage":
+            data["usage"].pop("prompt_tokens")
+        elif bad == "cost":
+            data["usage"].pop("cost_rub")
+        elif bad == "usage_limit":
+            data["usage"]["completion_tokens"] = 513
+        elif bad == "cost_limit":
+            data["usage"]["cost_rub"] = 2
+        elif bad == "model":
+            data["model"] = MODELS[1]
+        elif bad == "id":
+            data.pop("id")
+        elif bad == "tool":
+            data["choices"] = payload(MODELS[0], tools=True)["choices"]
+            data["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"] = (
+                '{"key":"other"}'
+            )
+
+    mock = ControlledGptQuality(change=change)
+
+    def handler(request):
+        if request.method == "POST":
+            result = mock.handler(request)
+            if len(mock.posts) == phase:
+                if bad == "transport":
+                    raise httpx.ReadError("PRIVATE_TRANSPORT")
+                if bad == "cancel":
+                    raise asyncio.CancelledError
+            return result
+        if len(mock.posts) == phase and bad in (
+            "list",
+            "detail",
+            "history_usage",
+            "history_cost",
+            "family",
+        ):
+            mock.gets.append(str(request.url))
+            listing, detail = experiment_history(mock.latest)
+            if bad == "list":
+                listing["items"][0]["id"] = "gen_999"
+            elif bad == "detail":
+                detail["id"] = "gen_999"
+            elif bad == "history_usage":
+                detail["usage"]["completion_tokens"] += 1
+            elif bad == "history_cost":
+                detail["clientCost"] = "0.002"
+            elif bad == "family":
+                listing["items"][0]["provider"] = detail["finalEndpointSlug"] = "other-family"
+            return response(listing if str(request.url) == HISTORY_LIST else detail)
+        return mock.handler(request)
+
+    summary, events = await controlled_gpt_quality(mock, handler=handler)
+    row = next(e for e in events if e["event"] == "case")
+    assert summary["status"] == "FAILED_OR_INCOMPLETE" and row["failures"]
+    assert len(mock.posts) == phase and row["reads"] == phase - 1
+    if phase == 2:
+        assert (
+            row["calls"][0]["kind"] == "TOOLS" and row["calls"][0]["cost"]["status"] == "CONFIRMED"
+        )
+        assert mock.wires[1][2]["tool_choice"] == "auto"
+    known = phase if bad == "tool" else phase - 1
+    unknown = phase - known
+    stage, shared = summary["new_stage"], summary["shared_total"]
+    assert stage["known_call_count"] == known and stage["unknown_call_count"] == unknown
+    assert Decimal(stage["confirmed_cost_rub"]) == Decimal("0.001") * known
+    assert Decimal(stage["unknown_reserved_rub"]) == Decimal("0.285184000") * unknown
+    assert shared["known_call_count"] == 31 + known and shared["unknown_call_count"] == 3 + unknown
+    assert shared["model_post_reservations"] == 34 + phase
+    assert (
+        Decimal(shared["unknown_reserved_rub"])
+        == Decimal("7.120395585") + Decimal("0.285184000") * unknown
+    )
+    assert (
+        Decimal(shared["remaining_with_unknown_held_rub"])
+        == Decimal("142.700278915") - Decimal("0.001") * known - Decimal("0.285184000") * unknown
+    )
+    assert "PRIVATE_" not in json.dumps(events) and KEY.get_secret_value() not in json.dumps(events)
+
+
+@pytest.mark.parametrize(
+    "target,bad",
+    [(1, "early_final"), (23, "image_schema"), (27, "final_schema"), (27, "history_cost")],
+)
+async def test_gpt_quality_late_cases_are_reached_before_stop(target, bad):
+    def change(data, case, first_tool):
+        if len(mock.posts) != target:
+            return
+        if bad == "early_final":
+            data["choices"] = payload(MODELS[0])["choices"]
+        elif bad in ("image_schema", "final_schema"):
+            data["choices"][0]["message"]["content"] = '{"bogus":true}'
+
+    mock = ControlledGptQuality(change=change)
+
+    def handler(request):
+        if (
+            bad == "history_cost"
+            and len(mock.posts) == target
+            and str(request.url).startswith(probe.HISTORY)
+        ):
+            mock.gets.append(str(request.url))
+            listing, detail = experiment_history(mock.latest)
+            detail["clientCost"] = "0.5"
+            return response(listing if str(request.url) == HISTORY_LIST else detail)
+        return mock.handler(request)
+
+    summary, events = await controlled_gpt_quality(mock, handler=handler)
+    rows = [e for e in events if e["event"] == "case"]
+    assert len(mock.posts) == target and rows[-1]["failures"]
+    assert all(not r["failures"] for r in rows[:-1])
+    assert summary["status"] == "FAILED_OR_INCOMPLETE"
+    known = target - int(bad == "history_cost")
+    assert summary["new_stage"]["known_call_count"] == known
+    assert summary["new_stage"]["unknown_call_count"] == target - known
+    if target == 1:
+        assert rows[-1]["failures"] == ["READ_ROUND_TRIP"] and rows[-1]["reads"] == 0
+    else:
+        assert sum(r["reads"] for r in rows) == 2
+        assert rows[-1]["repeat"] == target - 3
+        assert rows[-1]["prompt_revision"] == (
+            "synthetic_shapes_v1" if target == 23 else "conversation_v2"
+        )
+        assert summary["models"][MODELS[0]]["completed"] == len(rows) - 1
+
+
+@pytest.mark.parametrize("where", ["catalog", "post", "history", "case"])
+async def test_gpt_quality_deadlines_stop_with_first_charge_preserved(monkeypatch, where):
+    mock = ControlledGptQuality()
+
+    async def handler(request):
+        is_post = request.method == "POST"
+        phase = len(mock.posts) + int(is_post)
+        if where == "case" and is_post and phase == 1:
+            await asyncio.sleep(0.015)
+        if (
+            where == "catalog"
+            and request.url.path.endswith("/models")
+            or where in ("post", "case")
+            and is_post
+            and phase == 2
+            or where == "history"
+            and not is_post
+            and phase == 2
+        ):
+            if is_post:
+                mock.handler(request)
+            await asyncio.sleep(1)
+            pytest.fail("timeout did not cancel")
+        return mock.handler(request)
+
+    monkeypatch.setattr(probe, "CASE_SECONDS" if where == "case" else "DURATION", 0.05)
+    summary, events = await controlled_gpt_quality(mock, handler=handler)
+    assert summary["status"] == "FAILED_OR_INCOMPLETE"
+    assert summary["new_stage"]["known_call_count"] == (0 if where == "catalog" else 1)
+    assert summary["new_stage"]["unknown_call_count"] == (0 if where == "catalog" else 1)
+    assert len(mock.posts) == (0 if where == "catalog" else 2)
+    if where != "catalog":
+        row = next(e for e in events if e["event"] == "case")
+        assert row["reads"] == 1 and row["calls"][0]["kind"] == "TOOLS"
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "old_ref",
+        "wrong_source",
+        "empty_suffix",
+        "missing_ref",
+        "missing_amount",
+        "too_much",
+        "zero",
+        "nan",
+        "inf",
+        "report",
+        "source",
+        "environment",
+        "plan",
+        "preflight",
+        "review",
+        "continue",
+        "synthetic",
+        "deepseek",
+        "compat",
+        "gemini",
+        "history",
+    ],
+)
+def test_gpt_quality_cli_guards_before_key_and_http(tmp_path, monkeypatch, capsys, bad):
+    report = tmp_path / "m4-polza-gpt-quality-r1.jsonl"
+    argv = gpt_quality_args(report)
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    if bad in ("old_ref", "wrong_source", "empty_suffix"):
+        argv[-1] = (
+            "C0-M4.2-DEEPSEEK-EVAL-R1:" + "f" * 40 + ":CONTROLLED_ONLY"
+            if bad == "old_ref"
+            else "C0-M4.2-GPT-QUALITY-R1:" + "e" * 40 + ":CONTROLLED_ONLY"
+            if bad == "wrong_source"
+            else "C0-M4.2-GPT-QUALITY-R1:" + "f" * 40 + ":"
+        )
+    elif bad in ("missing_ref", "missing_amount", "environment"):
+        i = argv.index(
+            {
+                "missing_ref": "--approval-ref",
+                "missing_amount": "--approved-rub",
+                "environment": "--source-environment",
+            }[bad]
+        )
+        del argv[i : i + 2]
+    elif bad in ("too_much", "zero", "nan", "inf"):
+        argv[argv.index("--approved-rub") + 1] = {
+            "too_much": "15.000000001",
+            "zero": "0",
+            "nan": "NaN",
+            "inf": "Infinity",
+        }[bad]
+    elif bad == "report":
+        argv[argv.index("--report") + 1] = str(tmp_path / "old.jsonl")
+    elif bad == "source":
+        argv[argv.index("--source-sha") + 1] = "short"
+    elif bad in ("plan", "preflight"):
+        argv[argv.index("--live")] = "--" + bad
+    else:
+        argv += {
+            "review": ["--review", "absent.json"],
+            "continue": ["--continue-from", "absent.jsonl"],
+            "synthetic": ["--synthetic-experiment"],
+            "deepseek": ["--deepseek-eval"],
+            "compat": ["--deepseek-tool-compat"],
+            "gemini": ["--gemini-diagnostic"],
+            "history": ["--history-r2"],
+        }[bad]
+    if bad in ("deepseek", "compat", "gemini", "history"):
+        with pytest.raises(SystemExit) as exc:
+            main(argv)
+        assert exc.value.code == 2
+    else:
+        assert main(argv) == 2
+    assert not report.exists() and not (tmp_path / "old.jsonl").exists()
+    capsys.readouterr()
+
+
+def test_gpt_quality_limits_and_freshness_cannot_borrow_prior_or_change_fixtures():
+    mock = ControlledGptQuality()
+    route = probe.SyntheticRoute.from_catalog(mock.entries[0], datetime.now(UTC))
+    case = probe.schedule(mock.cases)[0]
+    ledger = Ledger(io.StringIO(), Decimal(15), 27, gpt_quality=True)
+    for _ in range(27):
+        ledger.reserve(route, case, 0)
+    with pytest.raises(ValueError, match="GLOBAL_BUDGET_EXHAUSTED"):
+        ledger.reserve(route, case, 0)
+    assert ledger.calls == 27 and ledger.reserved == Decimal("7.699968000")
+    for approved, calls in ((Decimal("15.000000001"), 27), (Decimal(15), 28), (Decimal(0), 27)):
+        with pytest.raises(ValueError, match="APPROVAL_LIMIT"):
+            Ledger(io.StringIO(), approved, calls, gpt_quality=True)
+    for other_mode in ("deepseek", "tool_compat"):
+        with pytest.raises(ValueError, match="GPT_QUALITY_MODE_CONFLICT"):
+            Ledger(io.StringIO(), Decimal(15), 27, gpt_quality=True, **{other_mode: True})
+    for other_route in (
+        experiment_route(MODELS[1]),
+        experiment_route(MODELS[2]),
+        review(MODELS[0]),
+    ):
+        with pytest.raises(ValueError, match="GPT_QUALITY_ROUTE_REQUIRED"):
+            ledger.reserve(other_route, case, 0)
+        with pytest.raises(ValueError, match="GPT_QUALITY_ROUTE_REQUIRED"):
+            probe.gpt_quality_plan(mock.cases, other_route)
+    with pytest.raises(ValueError, match="EXPERIMENT_FIXTURES_CHANGED"):
+        probe.gpt_quality_plan(mock.cases[1:])
+    stale = probe.SyntheticRoute.from_catalog(
+        mock.entries[0], datetime.now(UTC) - timedelta(days=2)
+    )
+    with pytest.raises(ValueError, match="REVIEW_EXPIRED"):
+        probe.gpt_quality_plan(mock.cases, stale)
+
+
+def test_gpt_quality_key_failure_writes_zero_attempt_summary(tmp_path, monkeypatch, capsys):
+    report = tmp_path / "m4-polza-gpt-quality-r1.jsonl"
+
+    def fail(_):
+        raise OSError("PRIVATE_PATH")
+
+    monkeypatch.setattr(probe, "load_secret", fail)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    assert main(gpt_quality_args(report)) == 2
+    source, summary = [json.loads(line) for line in report.read_text().splitlines()]
+    assert source["event"] == "source" and summary["event"] == "summary"
+    assert summary["new_stage"]["attempt_reservations"] == 0
+    assert summary["shared_total"]["remaining_with_unknown_held_rub"] == "142.700278915"
+    assert "PRIVATE_" not in report.read_text()
+    capsys.readouterr()
+
+
+async def test_gpt_quality_lost_response_without_case_row_keeps_all_old_holds(monkeypatch):
+    mock = ControlledGptQuality()
+
+    async def lost(adapter, case, ledger, repeat):
+        ledger.reserve(adapter.review, case, repeat)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(probe, "run_case", lost)
+    summary, events = await controlled_gpt_quality(mock)
+    assert [e["event"] for e in events] == ["plan", "reserved", "summary"]
+    assert summary["error"] == "CANCELLED" and not mock.posts
+    assert (
+        summary["new_stage"]["known_call_count"] == 0
+        and summary["new_stage"]["unknown_call_count"] == 1
+    )
+    assert summary["shared_total"]["unknown_call_count"] == 4
+    assert Decimal(summary["shared_total"]["unknown_reserved_rub"]) == Decimal("7.405579585")
