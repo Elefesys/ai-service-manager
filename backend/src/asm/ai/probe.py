@@ -39,6 +39,7 @@ from asm.ai.polza import (
     CONVERSATION_WIRE_REVISION,
     EXPERIMENT_PROVIDERS,
     GENERATION_ID,
+    GPT_HISTORY_PROFILE,
     HISTORY,
     HISTORY_BYTES,
     HISTORY_LIST,
@@ -105,6 +106,10 @@ GPT_QUALITY_DECISION = "07e18c70b02a3739fbe640d28c41ec0341f8452d:M4.2-GPT-QUALIT
 GPT_QUALITY_PRIOR_CONFIRMED = Decimal("0.17932550")
 GPT_QUALITY_PRIOR_HELD = Decimal("7.120395585")
 GPT_QUALITY_CEILING = Decimal(15)
+GPT_QUALITY_R2_DECISION = "e07edeede77e4426e362531b2b6cde6ca6bc436d:M4.2-GPT-QUALITY-R2"
+GPT_QUALITY_R2_CONFIRMED = Decimal("0.23889134")
+GPT_QUALITY_R2_HELD = Decimal("7.585505548")
+GPT_QUALITY_R2_CEILING = Decimal(10)
 
 
 @dataclass(frozen=True)
@@ -652,7 +657,10 @@ class Ledger:
         deepseek: bool = False,
         tool_compat: bool = False,
         gpt_quality: bool = False,
+        gpt_quality_r2: bool = False,
     ) -> None:
+        if gpt_quality_r2 and (prefix or deepseek or tool_compat or gpt_quality):
+            raise ValueError("GPT_QUALITY_MODE_CONFLICT")
         if gpt_quality and (prefix or deepseek or tool_compat):
             raise ValueError("GPT_QUALITY_MODE_CONFLICT")
         if tool_compat and (deepseek or prefix):
@@ -662,8 +670,11 @@ class Ledger:
         self.deepseek = deepseek
         self.tool_compat = tool_compat
         self.gpt_quality = gpt_quality
+        self.gpt_quality_r2 = gpt_quality_r2
         self.prior = (
-            GPT_QUALITY_PRIOR_CONFIRMED + GPT_QUALITY_PRIOR_HELD
+            GPT_QUALITY_R2_CONFIRMED + GPT_QUALITY_R2_HELD
+            if gpt_quality_r2
+            else GPT_QUALITY_PRIOR_CONFIRMED + GPT_QUALITY_PRIOR_HELD
             if gpt_quality
             else TOOL_COMPAT_PRIOR_CONFIRMED + TOOL_COMPAT_PRIOR_HELD
             if tool_compat
@@ -680,10 +691,14 @@ class Ledger:
             and approved > TOOL_COMPAT_CEILING
             or gpt_quality
             and approved > GPT_QUALITY_CEILING
+            or gpt_quality_r2
+            and approved > GPT_QUALITY_R2_CEILING
             or not 0
             < calls
             <= (
-                2
+                18
+                if gpt_quality_r2
+                else 2
                 if tool_compat
                 else 27
                 if deepseek or gpt_quality
@@ -707,10 +722,14 @@ class Ledger:
         self.output.flush()
 
     def reserve(self, review: ProbeRoute, case: Case, repeat: int) -> None:
-        if self.gpt_quality and (
+        if (self.gpt_quality or self.gpt_quality_r2) and (
             not isinstance(review, SyntheticRoute) or review.model != MODELS[0]
         ):
             raise ValueError("GPT_QUALITY_ROUTE_REQUIRED")
+        if self.gpt_quality_r2 and (
+            not 7 <= repeat <= 24 or case.mode == "tool" or case.max_calls != 1
+        ):
+            raise ValueError("GPT_QUALITY_R2_REMAINDER_REQUIRED")
         if self.tool_compat and (
             not isinstance(review, ToolCompatRoute) or case.id != "tool_current" or repeat != 0
         ):
@@ -840,7 +859,7 @@ async def run_case(
     case_deadline = min(started + CASE_SECONDS, ledger.deadline)
     review = adapter.review
     prompt_revision: Literal["conversation_v1", "conversation_v2"] = (
-        "conversation_v2" if ledger.gpt_quality else "conversation_v1"
+        "conversation_v2" if ledger.gpt_quality or ledger.gpt_quality_r2 else "conversation_v1"
     )
     results: list[dict[str, Any]] = []
     final: dict[str, Any] | None = None
@@ -1906,23 +1925,85 @@ def gpt_quality_plan(
     }
 
 
+def gpt_quality_r2_prior() -> dict[str, Any]:
+    """Fixed C0 review, not an import or settlement of either original report."""
+    committed = GPT_QUALITY_R2_CONFIRMED + GPT_QUALITY_R2_HELD
+    return {
+        "authority": "C0_REVIEWED_ACCOUNTING_SNAPSHOT",
+        "decision": GPT_QUALITY_R2_DECISION,
+        "confirmed_cost_rub": str(GPT_QUALITY_R2_CONFIRMED),
+        "known_call_count": 40,
+        "unknown_call_count": 4,
+        "model_posts": 44,
+        "unknown_cost_rub": None,
+        "unknown_reserved_rub": str(GPT_QUALITY_R2_HELD),
+        "committed_or_held_rub": str(committed),
+        "remaining_with_unknown_held_rub": str(RUB_CEILING - committed),
+        "imported_cases": 0,
+        "automatic_reserve_release": False,
+        "retained_results": {
+            "source_sha": "ace29ce7d77564f8fecea84d4b7e734e6c8fbe56",
+            "source_tree": "8a716c528a917c8a77a853c226699ba4a47ccc2b",
+            "report_sha256": "b0d1cb8249b321792355a2b4d29e1a79ba6eae30847a5deee6fbafa36159017f",
+            "history_receipt_sha256": "bf09d2dba67de7fbbd1f9a88cde309ee0a135fc1df52ab0554f591beeb1fba24",
+            "manual_pass_repeats": list(range(7)),
+            "completed_scenarios": 7,
+            "reads": 2,
+            "reassessed": False,
+            "unknown_repeat": 7,
+            "unknown_generation_id": "gen_2227417601602097153",
+            "reported_cost_rub": "0.00743079",
+            "reported_cost_status": "HISTORY_REPORTED_ONLY / UNSETTLED",
+            "retained_unknown_reserve_rub": "0.465109963",
+        },
+    }
+
+
+def gpt_quality_r2_plan(
+    cases: tuple[Case, ...], review: SyntheticRoute | None = None
+) -> dict[str, Any]:
+    proposal = gpt_quality_plan(cases, review)
+    return proposal | {
+        "mode": "GPT_QUALITY_R2",
+        "decision": GPT_QUALITY_R2_DECISION,
+        "prior": gpt_quality_r2_prior(),
+        "history_profile": GPT_HISTORY_PROFILE,
+        "provider_attempts_semantics": "POSITIVE_INTEGER / NOT_CLIENT_POST_COUNT",
+        "steps_semantics": "MISSING_OR_NULL_NOT_APPLICABLE / STRICT_INT_ONE_REPORTED",
+        "tool_choice": "NOT_DECLARED",
+        "stage_schedule": proposal["stage_schedule"][7:],
+        "total_scenarios": 18,
+        "base_text": 13,
+        "retained_scenarios": 7,
+        "max_model_http_calls": 18,
+        "max_synthetic_reads": 0,
+        "max_shared_model_posts": 62,
+        "max_history_http_calls": 36,
+        "total_token_reservation_ceiling": 18 * (INPUT_TOKENS + OUTPUT_TOKENS),
+        "stage_rub_ceiling": str(GPT_QUALITY_R2_CEILING),
+        "priced_reservation_rub": str(review.reservation() * 18) if review else None,
+    }
+
+
 def gpt_quality_summary(
     rows: list[dict[str, Any]], ledger: Ledger, error: str | None = None
 ) -> dict[str, Any]:
     stage = call_accounting(rows, ledger.calls, ledger.reserved)
-    known = GPT_QUALITY_PRIOR_CONFIRMED + Decimal(stage["confirmed_cost_rub"])
-    held = GPT_QUALITY_PRIOR_HELD + Decimal(stage["unknown_reserved_rub"])
+    prior = gpt_quality_r2_prior() if ledger.gpt_quality_r2 else gpt_quality_prior()
+    known = Decimal(prior["confirmed_cost_rub"]) + Decimal(stage["confirmed_cost_rub"])
+    held = Decimal(prior["unknown_reserved_rub"]) + Decimal(stage["unknown_reserved_rub"])
     times = sorted(r["seconds"] for r in rows)
     completed = sum(not r["failures"] and r["final"] is not None for r in rows)
     return {
         "event": "summary",
-        "mode": "GPT_QUALITY_R1",
-        "decision": GPT_QUALITY_DECISION,
+        "mode": "GPT_QUALITY_R2" if ledger.gpt_quality_r2 else "GPT_QUALITY_R1",
+        "decision": prior["decision"],
+        **({"history_profile": GPT_HISTORY_PROFILE} if ledger.gpt_quality_r2 else {}),
         "evaluator_revision": EVALUATOR_REVISION,
         "prompt_revision": "conversation_v2",
         "image_revision": "synthetic_shapes_v1/EVAL_ONLY",
         "status": "HUMAN_REVIEW_REQUIRED"
-        if completed == 25 and not error
+        if completed == (18 if ledger.gpt_quality_r2 else 25) and not error
         else "FAILED_OR_INCOMPLETE",
         "error": error,
         "models": {
@@ -1938,13 +2019,13 @@ def gpt_quality_summary(
         },
         "manual_assessment": "PENDING",
         "stage_scenarios": len(rows),
-        "prior": gpt_quality_prior(),
+        "prior": prior,
         "new_stage": stage,
         "shared_total": {
             "confirmed_cost_rub": str(known),
-            "known_call_count": 31 + stage["known_call_count"],
-            "unknown_call_count": 3 + stage["unknown_call_count"],
-            "model_post_reservations": 34 + ledger.calls,
+            "known_call_count": prior["known_call_count"] + stage["known_call_count"],
+            "unknown_call_count": prior["unknown_call_count"] + stage["unknown_call_count"],
+            "model_post_reservations": prior["model_posts"] + ledger.calls,
             "unknown_cost_rub": None,
             "unknown_reserved_rub": str(held),
             "budget_rub": str(RUB_CEILING),
@@ -1965,16 +2046,24 @@ async def run_gpt_quality(
     approved: Decimal,
     *,
     transport: httpx.AsyncBaseTransport | None = None,
+    remaining: bool = False,
 ) -> dict[str, Any]:
-    gpt_quality_plan(cases)
-    ledger = Ledger(output, approved, 27, gpt_quality=True)
+    make_plan = gpt_quality_r2_plan if remaining else gpt_quality_plan
+    make_plan(cases)
+    ledger = Ledger(
+        output,
+        approved,
+        18 if remaining else 27,
+        gpt_quality=not remaining,
+        gpt_quality_r2=remaining,
+    )
     rows: list[dict[str, Any]] = []
     error = None
     try:
         async with asyncio.timeout(ledger.deadline - time.monotonic()):
             entries = await catalog(settings, transport, models=(MODELS[0],))
             review = SyntheticRoute.from_catalog(entries[0], datetime.now(UTC))
-            proposal = gpt_quality_plan(cases, review)
+            proposal = make_plan(cases, review)
             fits = Decimal(proposal["priced_reservation_rub"]) <= approved
             ledger.record(
                 {
@@ -1986,8 +2075,15 @@ async def run_gpt_quality(
             )
             if not fits:
                 raise ValueError("APPROVED_BUDGET_TOO_SMALL")
-            adapter = PolzaAdapter(review, settings.api_key, transport=transport)
+            adapter = PolzaAdapter(
+                review,
+                settings.api_key,
+                transport=transport,
+                history_profile="gpt_eval_history_v2" if remaining else "strict_v1",
+            )
             for repeat, case in enumerate(schedule(cases)):
+                if remaining and repeat < 7:
+                    continue
                 if time.monotonic() >= ledger.deadline:
                     raise ValueError("GLOBAL_DEADLINE")
                 row = await run_case(adapter, case, ledger, repeat)
@@ -2013,11 +2109,13 @@ async def run_gpt_quality(
     return summary
 
 
-def gpt_quality_main(args: argparse.Namespace) -> int:
+def gpt_quality_main(args: argparse.Namespace, *, remaining: bool = False) -> int:
     if args.review or args.continue_from or args.synthetic_experiment or args.preflight:
         raise ValueError("GPT_QUALITY_MODE_CONFLICT")
     cases = load_cases(args.fixtures)
-    proposal = gpt_quality_plan(cases)
+    proposal = gpt_quality_r2_plan(cases) if remaining else gpt_quality_plan(cases)
+    revision = "R2" if remaining else "R1"
+    ceiling = GPT_QUALITY_R2_CEILING if remaining else GPT_QUALITY_CEILING
     if not args.live:
         if args.approval_ref or args.approved_rub is not None:
             raise ValueError("GPT_QUALITY_MODE_CONFLICT")
@@ -2025,19 +2123,19 @@ def gpt_quality_main(args: argparse.Namespace) -> int:
         return 0
     if (
         not args.report
-        or args.report.name != "m4-polza-gpt-quality-r1.jsonl"
+        or args.report.name != f"m4-polza-gpt-quality-{revision.lower()}.jsonl"
         or not re.fullmatch(r"[0-9a-f]{40}", args.source_sha or "")
         or not args.source_environment
     ):
         raise ValueError("SOURCE_AND_EXCLUSIVE_REPORT_REQUIRED")
     if (
         not re.fullmatch(
-            "C0-M4.2-GPT-QUALITY-R1:" + args.source_sha + r":[A-Z0-9_]{1,80}",
+            f"C0-M4.2-GPT-QUALITY-{revision}:" + args.source_sha + r":[A-Z0-9_]{1,80}",
             args.approval_ref or "",
         )
         or args.approved_rub is None
         or not args.approved_rub.is_finite()
-        or not 0 < args.approved_rub <= GPT_QUALITY_CEILING
+        or not 0 < args.approved_rub <= ceiling
     ):
         raise ValueError("SEPARATE_GPT_QUALITY_APPROVAL_REQUIRED")
     with args.report.open("x", encoding="utf-8") as output:
@@ -2048,10 +2146,11 @@ def gpt_quality_main(args: argparse.Namespace) -> int:
                 "mode": proposal["mode"],
                 "sha": args.source_sha,
                 "environment": args.source_environment,
-                "decision": GPT_QUALITY_DECISION,
+                "decision": proposal["decision"],
+                **({"history_profile": GPT_HISTORY_PROFILE} if remaining else {}),
                 "prompt_revision": proposal["prompt_revision"],
                 "prompt_sha256": proposal["prompt_sha256"],
-                "prior": gpt_quality_prior(),
+                "prior": proposal["prior"],
                 "approval_ref": args.approval_ref,
                 "approved_rub": str(args.approved_rub),
                 "runtime_authorized": False,
@@ -2063,11 +2162,23 @@ def gpt_quality_main(args: argparse.Namespace) -> int:
             write_metadata(
                 output,
                 gpt_quality_summary(
-                    [], Ledger(output, args.approved_rub, 27, gpt_quality=True), safe_error(exc)
+                    [],
+                    Ledger(
+                        output,
+                        args.approved_rub,
+                        18 if remaining else 27,
+                        gpt_quality=not remaining,
+                        gpt_quality_r2=remaining,
+                    ),
+                    safe_error(exc),
                 ),
             )
             raise
-        result = asyncio.run(run_gpt_quality(cases, settings, output, args.approved_rub))
+        result = asyncio.run(
+            run_gpt_quality(cases, settings, output, args.approved_rub, remaining=True)
+            if remaining
+            else run_gpt_quality(cases, settings, output, args.approved_rub)
+        )
         print("REPORT_WRITTEN / " + result["status"] + " / NO_RUNTIME_AUTHORIZATION")
         return 0 if result["status"] == "HUMAN_REVIEW_REQUIRED" else 2
 
@@ -2591,6 +2702,7 @@ def main(argv: list[str] | None = None) -> int:
     diagnostic_mode.add_argument("--deepseek-eval", action="store_true")
     diagnostic_mode.add_argument("--deepseek-tool-compat", action="store_true")
     diagnostic_mode.add_argument("--gpt-quality-r1", action="store_true")
+    diagnostic_mode.add_argument("--gpt-quality-r2", action="store_true")
     parser.add_argument("--continue-from", type=Path)
     parser.add_argument("--secret-file", type=Path, default=Path(".env.m4-probe"))
     parser.add_argument("--report", type=Path)
@@ -2600,6 +2712,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-environment", choices=("LOCAL_DESKTOP", "LOCAL_BACKEND"))
     args = parser.parse_args(argv)
     try:
+        if args.gpt_quality_r2:
+            return gpt_quality_main(args, remaining=True)
         if args.gpt_quality_r1:
             return gpt_quality_main(args)
         if args.deepseek_tool_compat:

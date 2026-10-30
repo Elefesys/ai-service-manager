@@ -23,6 +23,7 @@ from asm.ai.polza import (
     CONVERSATION_WIRE_REVISION,
     ENDPOINT,
     EXPERIMENT_PROVIDERS,
+    GPT_HISTORY_PROFILE,
     HISTORY,
     HISTORY_LIST,
     INPUT_TOKENS,
@@ -1891,3 +1892,231 @@ async def test_gpt_quality_changes_only_system_prompt_on_original_auto_wires():
     for old, new in zip(*wires, strict=True):
         new["messages"][0] = old["messages"][0]
         assert old == new  # Provider, schema, caps, tools, messages and READ correlation unchanged.
+
+
+HISTORY_MISSING = object()
+
+
+class ControlledGptHistory:
+    """Synthetic raw list/detail values, never an owner receipt or real API."""
+
+    def __init__(self, *, attempts=2, steps=None, change=None, profile=GPT_HISTORY_PROFILE):
+        self.attempts, self.steps, self.change = attempts, steps, change
+        self.posts, self.gets = [], []
+        self.latest = None
+        self.adapter = PolzaAdapter(
+            experiment_route(MODELS[0]),
+            KEY,
+            transport=httpx.MockTransport(self.handler),
+            history_profile=profile,
+        )
+
+    def handler(self, request):
+        if request.method == "POST":
+            self.posts.append(json.loads(request.content))
+            data = payload(tools=len(self.posts) == 1)
+            data.pop("provider")
+            data["id"] = "gen_" + str(8100 + len(self.posts))
+            if self.change:
+                self.change("BODY", data, len(self.posts))
+            self.latest = copy.deepcopy(data)
+            return response(data)
+        self.gets.append(str(request.url))
+        listing, detail = experiment_history(self.latest)
+        if self.attempts is HISTORY_MISSING:
+            detail.pop("attemptsCount")
+        else:
+            detail["attemptsCount"] = self.attempts
+        if self.steps is not HISTORY_MISSING:
+            listing["items"][0]["stepsCount"] = detail["stepsCount"] = self.steps
+        stage = "LIST" if str(request.url) == HISTORY_LIST else "DETAIL"
+        data = listing["items"][0] if stage == "LIST" else detail
+        if self.change:
+            self.change(stage, data, len(self.posts))
+        return response(listing if stage == "LIST" else detail)
+
+    async def run(self):
+        case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+        return await run_case(
+            self.adapter, case, Ledger(io.StringIO(), Decimal(15), 2, gpt_quality=True), 0
+        )
+
+
+@pytest.mark.parametrize("attempts", [1, 2, 17])
+@pytest.mark.parametrize("steps", [HISTORY_MISSING, None, 1])
+async def test_gpt_history_positive_attempts_and_optional_raw_steps_roundtrip(attempts, steps):
+    mock = ControlledGptHistory(attempts=attempts, steps=steps)
+    row = await mock.run()
+    assert not row["failures"] and row["reads"] == 1 and row["final"]["kind"] == "reply"
+    assert len(mock.posts) == 2 and len(mock.gets) == 4
+    for call in row["calls"]:
+        assert call["history_profile"] == {
+            "revision": GPT_HISTORY_PROFILE,
+            "provider_attempts": attempts,
+            "detail_steps": "ONE_REPORTED" if steps == 1 else "NOT_APPLICABLE",
+            "list_steps": "ONE_REPORTED" if steps == 1 else "NOT_APPLICABLE",
+        }
+        assert call["history_family"] == "OpenAI" and call["route_variant"] == "NOT_OBSERVED"
+        assert call["cost"]["status"] == "CONFIRMED" and call["cost"]["amount"] == "0.001"
+    # Reported attempts do not multiply charge, client calls or READ executions.
+    assert mock.posts[1]["messages"][-1]["tool_call_id"] == "read-1"
+    assert all(p["tool_choice"] == "auto" for p in mock.posts)
+    assert "PRIVATE_ACCOUNT_METADATA" not in json.dumps(row)
+
+
+@pytest.mark.parametrize("attempts", [HISTORY_MISSING, None, True, False, 2.0, "2", 0, -1, [], {}])
+async def test_gpt_history_invalid_attempts_stop_before_read(attempts):
+    mock = ControlledGptHistory(attempts=attempts, steps=1)
+    row = await mock.run()
+    assert row["failures"] and row["final"] is None and row["reads"] == 0
+    assert len(mock.posts) == 1 and len(mock.gets) == 2
+    call = row["calls"][0]
+    assert call["cost"]["status"] == "UNKNOWN"
+    assert call["history_diagnostic"]["reason"] == "ATTEMPTS"
+    assert call["history_profile"]["provider_attempts"] is None
+    assert call["history_profile"]["detail_steps"] is None
+
+
+@pytest.mark.parametrize("stage", ["LIST", "DETAIL"])
+@pytest.mark.parametrize("steps", [True, False, 1.0, "1", 0, -1, 2, [], {}])
+async def test_gpt_history_steps_rejection_is_after_successful_attempts_gate(stage, steps):
+    def change(at, row, _):
+        if at == stage:
+            row["stepsCount"] = steps
+
+    mock = ControlledGptHistory(attempts=2, steps=None, change=change)
+    row = await mock.run()
+    call = row["calls"][0]
+    assert row["failures"] and row["reads"] == 0 and len(mock.posts) == 1
+    assert len(mock.gets) == 2 and call["cost"]["status"] == "UNKNOWN"
+    assert call["history_profile"]["provider_attempts"] == 2
+    assert call["history_diagnostic"]["stage"] == stage
+    assert call["history_diagnostic"]["reason"] == "STEPS"
+
+
+@pytest.mark.parametrize(
+    "stage,field,value,reason",
+    [
+        ("LIST", "id", "gen_123", "ID_MATCH_COUNT"),
+        ("LIST", "model", "wrong", "MODEL"),
+        ("LIST", "provider", "Other", "PROVIDER"),
+        ("LIST", "cost", "0.002", "COST"),
+        ("LIST", "prompt_tokens", True, "USAGE_INPUT"),
+        ("LIST", "total_tokens", 1, "USAGE_TOTAL"),
+        ("DETAIL", "id", "gen_123", "GENERATION_ID"),
+        ("DETAIL", "model", "wrong", "MODEL"),
+        ("DETAIL", "finalEndpointSlug", "Other", "PROVIDER"),
+        ("DETAIL", "requestType", "image", "REQUEST_TYPE"),
+        ("DETAIL", "status", "pending", "STATUS"),
+        ("DETAIL", "apiType", "responses", "API_TYPE"),
+        ("DETAIL", "responseMode", "stream", "RESPONSE_MODE"),
+        ("DETAIL", "isCancelled", True, "CANCELLED"),
+        ("DETAIL", "finishReason", "length", "FINISH_REASON"),
+        ("DETAIL", "clientCost", "0.002", "COST"),
+        ("DETAIL", "clientCost", "NaN", "COST"),
+        ("DETAIL", "completion_tokens", 1, "USAGE_OUTPUT"),
+        ("DETAIL", "reasoning_tokens", 1, "USAGE_REASONING"),
+        ("LIST", "serverTools", {}, "SERVER_TOOLS"),
+        ("DETAIL", "serverTools", {"steps": 1}, "SERVER_TOOLS"),
+        ("DETAIL", "serverTools", False, "SERVER_TOOLS"),
+        ("LIST", "parentGenerationId", "gen_12", "PARENT_GENERATION"),
+        ("DETAIL", "parentGenerationId", "gen_12", "PARENT_GENERATION"),
+        ("DETAIL", "parentGenerationId", "", "PARENT_GENERATION"),
+        ("DETAIL", "private", KEY.get_secret_value(), "PRIVATE_REFLECTION"),
+    ],
+)
+async def test_gpt_history_profile_keeps_identity_metering_and_server_tool_guards(
+    stage, field, value, reason
+):
+    def change(at, row, _):
+        if at == stage:
+            if field in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                row["usage"][field] = value
+            elif field == "reasoning_tokens":
+                row["usage"]["completion_tokens_details"] = {field: value}
+            else:
+                row[field] = value
+
+    mock = ControlledGptHistory(change=change)
+    row = await mock.run()
+    assert row["failures"] and row["final"] is None and row["reads"] == 0
+    assert len(mock.posts) == 1 and len(mock.gets) <= 2
+    assert row["calls"][0]["history_diagnostic"]["reason"] == reason
+    assert row["calls"][0]["cost"]["status"] == "UNKNOWN"
+    assert KEY.get_secret_value() not in json.dumps(row)
+
+
+@pytest.mark.parametrize("bad", ["name", "arguments", "correlation"])
+async def test_gpt_history_profile_does_not_bypass_gateway_tool_guards(bad):
+    def change(stage, data, _):
+        if stage == "BODY" and bad != "correlation":
+            fn = data["choices"][0]["message"]["tool_calls"][0]["function"]
+            fn["name" if bad == "name" else "arguments"] = (
+                "mutate_price" if bad == "name" else '{"key":"other_client"}'
+            )
+
+    mock = ControlledGptHistory(change=change)
+    gw = gateway(mock.adapter, tools=True)
+    result = await gw.call()
+    if bad == "correlation":
+        assert result.kind == "TOOLS"
+        result = await gw.call(
+            (ToolResult(call_id="wrong", name="read_current", result_json='{"fact":"current"}'),)
+        )
+    assert result.kind == "ERROR" and len(mock.posts) == 1 and len(mock.gets) == 2
+    assert mock.adapter.observation["history_profile"]["provider_attempts"] == 2
+
+
+async def test_gpt_history_opt_in_changes_no_wire_and_does_not_enable_old_modes():
+    old = ControlledGptHistory(attempts=1, steps=HISTORY_MISSING, profile="strict_v1")
+    new = ControlledGptHistory(attempts=2, steps=None)
+    old_row, new_row = await old.run(), await new.run()
+    assert not old_row["failures"] and not new_row["failures"]
+    assert old.posts == new.posts
+    assert all("history_profile" not in c for c in old_row["calls"])
+    # Preserve the exact historical semantics, including the old equality check.
+    for attempts, steps, passes in (
+        (2, HISTORY_MISSING, False),
+        (17, 1, False),
+        (1, None, False),
+        (1, True, True),
+    ):
+        legacy = ControlledGptHistory(attempts=attempts, steps=steps, profile="strict_v1")
+        row = await legacy.run()
+        assert (not row["failures"]) is passes
+    for route in (review(MODELS[0]), experiment_route(MODELS[1]), experiment_route(MODELS[2])):
+        with pytest.raises(ValueError, match="GPT_HISTORY_PROFILE_REQUIRES_SYNTHETIC_GPT"):
+            PolzaAdapter(route, KEY, history_profile=GPT_HISTORY_PROFILE)
+    for invalid in (None, True, "runtime", "unknown"):
+        with pytest.raises(ValueError, match="GPT_HISTORY_PROFILE_REQUIRES_SYNTHETIC_GPT"):
+            PolzaAdapter(experiment_route(MODELS[0]), KEY, history_profile=invalid)
+
+
+@pytest.mark.parametrize("boundary", ["input_bytes", "input_tokens", "history_deadline"])
+async def test_gpt_history_profile_retains_per_call_input_and_history_deadlines(
+    monkeypatch, boundary
+):
+    import asm.ai.polza as polza
+
+    mock = ControlledGptHistory()
+    if boundary in ("input_bytes", "input_tokens"):
+        gw = gateway(mock.adapter, tools=True, limits={boundary: 1})
+        result = await gw.call()
+        assert result.kind == "ERROR" and not mock.posts and not mock.gets
+    else:
+        original = mock.handler
+
+        async def delayed(request):
+            if request.method == "GET" and str(request.url) != HISTORY_LIST:
+                await asyncio.sleep(1)
+                pytest.fail("history deadline did not cancel")
+            return original(request)
+
+        mock.adapter._transport = httpx.MockTransport(delayed)
+        monkeypatch.setattr(polza, "HISTORY_SECONDS", 0.02)
+        row = await mock.run()
+        call = row["calls"][0]
+        assert row["failures"] and row["reads"] == 0 and row["final"] is None
+        assert len(mock.posts) == 1 and call["history_gets"] == 2
+        assert call["cost"]["status"] == "UNKNOWN"
+        assert call["history_diagnostic"]["stage"] == "DETAIL"

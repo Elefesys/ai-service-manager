@@ -36,6 +36,7 @@ HISTORY_LIST = HISTORY + "?requestType=chat&page=1&limit=5&sortBy=createdAt&sort
 GENERATION_ID = r"gen_[0-9]{1,64}"
 HISTORY_BYTES = 65536
 HISTORY_SECONDS = 15.0
+GPT_HISTORY_PROFILE = "gpt_eval_history_v2"
 MODELS = (
     "openai/gpt-6-luna",
     "google/gemini-3.8-flash",
@@ -96,6 +97,15 @@ class HistoryReview(DTO):
 
     provider: Identifier
     evidence: Evidence
+
+
+class GptHistoryObservation(DTO):
+    """Closed EVAL_ONLY metadata; provider attempts never count as client POSTs."""
+
+    revision: Literal["gpt_eval_history_v2"] = "gpt_eval_history_v2"
+    provider_attempts: Annotated[int, Field(strict=True, gt=0)] | None = None
+    detail_steps: Literal["NOT_APPLICABLE", "ONE_REPORTED"] | None = None
+    list_steps: Literal["NOT_APPLICABLE", "ONE_REPORTED"] | None = None
 
 
 class CatalogRoute(DTO):
@@ -528,6 +538,7 @@ class PolzaAdapter:
         key: SecretStr,
         *,
         transport: httpx.AsyncBaseTransport | None = None,
+        history_profile: Literal["strict_v1", "gpt_eval_history_v2"] = "strict_v1",
     ) -> None:
         self.review: ProbeRoute = (
             SyntheticRoute.model_validate(review)
@@ -535,6 +546,12 @@ class PolzaAdapter:
             else RouteReview.model_validate(review)
         )
         self.experimental = isinstance(self.review, SyntheticRoute)
+        if history_profile not in ("strict_v1", GPT_HISTORY_PROFILE) or (
+            history_profile == GPT_HISTORY_PROFILE
+            and (type(review) is not SyntheticRoute or self.review.model != MODELS[0])
+        ):
+            raise ValueError("GPT_HISTORY_PROFILE_REQUIRES_SYNTHETIC_GPT")
+        self.history_profile = history_profile
         self.non_thinking = self.experimental and review.model == MODELS[2]
         self._history_family: str | None = (
             ("OpenAI" if review.model == MODELS[0] else None)
@@ -1012,8 +1029,8 @@ class PolzaAdapter:
 
     async def verify_history(self, result_usage: Usage, result_cost: Cost, deadline: float) -> None:
         """Two bounded GETs before returning TOOLS/OUTPUT, including the image path."""
-        # Fixed branch/type diagnostics only. Never retain a history value, raw
-        # response, arbitrary key, exception text, account label or opaque token.
+        # Fixed diagnostics plus opt-in typed attempts/steps only; no raw response,
+        # arbitrary keys, exception text, account labels or opaque tokens.
         stage = "PREFLIGHT"
         diagnostic: dict[str, str] = {}
         missing = object()
@@ -1050,6 +1067,53 @@ class PolzaAdapter:
             self.observation["history_diagnostic"] = dict(diagnostic)
             raise PolzaFailure("ADAPTER_ERROR", detail)
 
+        profile = GptHistoryObservation() if self.history_profile == GPT_HISTORY_PROFILE else None
+
+        def observe(**values: Any) -> None:
+            nonlocal profile
+            assert profile is not None
+            profile = GptHistoryObservation.model_validate(profile.model_dump() | values)
+            self.observation["history_profile"] = profile.model_dump()
+
+        def attempts_match(row: Any) -> bool:
+            attempts = field(row, "attemptsCount", "ATTEMPTS", None)
+            if type(attempts) is not int:
+                return False
+            if profile is None:
+                return attempts == 1
+            if attempts <= 0:
+                return False
+            observe(provider_attempts=attempts)
+            return True
+
+        def no_server_context(row: Any) -> bool:
+            for key, reason in (
+                ("serverTools", "SERVER_TOOLS"),
+                ("parentGenerationId", "PARENT_GENERATION"),
+            ):
+                value = field(row, key, reason, None)
+                has_context = value is not None if profile is not None else bool(value)
+                if has_context:
+                    return False
+            return True
+
+        def steps_match(row: Any, *, detail: bool) -> bool:
+            if profile is None:
+                return bool(field(row, "stepsCount", "STEPS", 1) == 1)
+            steps = field(row, "stepsCount", "STEPS", None)
+            if steps is not None and (type(steps) is not int or steps != 1):
+                return False
+            observe(
+                **{
+                    "detail_steps" if detail else "list_steps": "NOT_APPLICABLE"
+                    if steps is None
+                    else "ONE_REPORTED"
+                }
+            )
+            return True
+
+        if profile is not None:
+            observe()
         identifier = self.observation["generation_id"]
         if not self.experimental and self._history_family is None:
             reject("HISTORY_REVIEW_REQUIRED", "REVIEW_REQUIRED")
@@ -1166,17 +1230,21 @@ class PolzaAdapter:
                 not in ("chat_completions", "completions")
                 or field(detail, "responseMode", "RESPONSE_MODE", None) != "sync"
                 or field(detail, "isCancelled", "CANCELLED", None) is not False
-                or type(field(detail, "attemptsCount", "ATTEMPTS", None)) is not int
-                or detail["attemptsCount"] != 1
+                or not attempts_match(detail)
                 or field(detail, "finishReason", "FINISH_REASON", None)
                 != self.observation["finish_reason"]
                 or "model" in detail
                 and field(detail, "model", "MODEL") != selected[0]["model"]
-                or field(detail, "serverTools", "SERVER_TOOLS", None)
-                or field(detail, "parentGenerationId", "PARENT_GENERATION", None)
-                or field(detail, "stepsCount", "STEPS", 1) != 1
+                or not no_server_context(detail)
+                or not steps_match(detail, detail=True)
             ):
                 raise ValueError
+            if profile is not None:
+                # The list also documents optional server-tool metadata. Validate
+                # its raw values after the attempts gate, without lossy projection.
+                stage = "LIST"
+                if not no_server_context(selected[0]) or not steps_match(selected[0], detail=False):
+                    raise ValueError
         except (ValueError, TypeError, KeyError, AttributeError, InvalidOperation, RecursionError):
             self.observation["history_diagnostic"] = dict(diagnostic)
             raise PolzaFailure("ADAPTER_ERROR", "HISTORY_VERIFICATION_FAILED") from None

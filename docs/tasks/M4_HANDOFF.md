@@ -163,6 +163,120 @@ root cause M3 observer timeout UNKNOWN. C0-M4-CI-OBSERVATION-01 и full integrat
 CI нужны до merge/runtime. Gemini/DeepSeek DEFERRED, selection=null/runtime=false.
 Main/VM/DB/Telegram/merge без изменений. Следующий исполнитель — **C4**, не owner.
 
+## C4 receipt — M4.2-GPT-QUALITY-R2 / REVIEW / 2026-10-30
+
+Кандидат подготовлен на **c4/m4-2-gpt-quality-r2**, один commit поверх exact base
+**e07edeede77e4426e362531b2b6cde6ca6bc436d**, base tree
+**73c6d4fc4c82a51363c6853b231a6251422c0a3c**. Base sole parent
+**2197b3afd58dfa5de38af0ecc35fae0f3feafd85**, parent tree
+**072b6f41139e517e7e0cac7874950e8154eee36b** сверены. Exact candidate commit/tree
+передаются во внешнем Git receipt C4: self-SHA не требует второго docs commit.
+
+### Реализованный контракт
+
+- В `polza.py` добавлен закрытый opt-in **gpt_eval_history_v2**, разрешённый
+  только exact SyntheticRoute/GPT; RouteReview/runtime/Gemini/DeepSeek отклоняются.
+  Прежний default **strict_v1** сохраняет acceptance/diagnostics, включая старую
+  equality-семантику steps. Старые CLI не выбирают новый профиль.
+- В новом профиле attemptsCount — strict positive int;1/2/17 проходят,
+  missing/null/bool/float/string/0/negative/array/object отклоняются. Число
+  сохраняется в closed DTO `history_profile.provider_attempts`, вместе с revision,
+  `detail_steps` и `list_steps`. Ни client POST count, ни charge/reservation от
+  этого числа не умножаются. Внутренние причины/маршруты/billing не установлены.
+- Raw stepsCount **обоих list/detail** проверяется после успешного attempts gate:
+  missing/null → NOT_APPLICABLE, strict int1 → ONE_REPORTED. bool/float/string/
+  0/negative/>1/array/object — STOP; это не проекция null. Любой nonnull
+  serverTools/parent в новом профиле запрещён, включая пустое/неверно типизированное
+  значение. Detail checks не маскируются ранним отказом attempts. Null в closed
+  observation означает ещё не выполненную проверку, а не успешный protocol.
+- Identity/model/family/status/finish/cancel, body/list/detail usage/total/reasoning/
+  cost, reserve/bytes/deadline/reflection и typed READ/correlation guards сохранены.
+  Default и новый profile дают одинаковые request bytes. Официальные источники:
+  [history metadata](https://polza.ai/docs/api-reference/history/generations),
+  [provider selection](https://polza.ai/docs/gaidy/provider-selection); поправка
+  semantics разрешена текущим C0 handoff, не выведена из synthetic PASS.
+
+`--gpt-quality-r2` переиспользует `run_gpt_quality`, `gpt_quality_main/summary`,
+`run_case`, Ledger и accounting helpers. Добавлены только fixed R2 plan/prior;
+нет копии всех runners, произвольного report loader или нового resume framework.
+Только original repeats7–24:18 scenarios/≤18 POST/0 READ/2 images. Tools не
+объявляются. GPT/openai/flex/provider-default, wire и canonical fixtures неизменны.
+Conversation v2 SHA256 **b420be44a7e4210de1151e5b0604b0fa9a08c19b1bfbedb8147f2a9b38455956**,
+fixture SHA256 **7abd25f1e1f08e51eacc3a68975e6099c942d33fad37376366dfdef6c7e025b2**;
+result/envelope v1 и image synthetic_shapes_v1 прежние.
+
+Fresh reserve всех18 calls≤explicit approved≤10 проверяется до первого POST;
+ceiling10 из прежнего150.≤36 history GET/1 catalog,60s/case/1800s stage,
+32768/512 tokens,24576/32768 bytes/call, total599040 tokens; прежние catalog/history
+bounds. Source40/ref/amount проверяются до paid path, exclusive output
+`m4-polza-gpt-quality-r2.jsonl` — до key/HTTP. Reservation flush до HTTP;
+unknown сохраняет reserve.18 technical completions → HUMAN_REVIEW_REQUIRED,
+manual PENDING; technical failure → STOP с сохранёнными finals/flags.
+
+Fixed C0 prior:40 known/4 unknown/44 client POST, confirmed0.23889134,
+held7.585505548, committed7.824396888, remaining142.175603112; максимум62 shared.
+R1 source/tree, оба exact report hashes, retained7/READ2 и unknown repeat7
+сохранены как review snapshot. Отчёты не читаются, finals не импортируются и
+не переоцениваются. Reported0.00743079/HISTORY_REPORTED_ONLY не уменьшает old
+GPT hold0.465109963. Все4 holds сохранены, automatic reserve release=false.
+
+### Проверки на candidate content
+
+Python **3.13.16**, отдельный frozen/offline uv environment
+`/workspace/scratch/b247f3420d30/m4-gpt-quality-r2-validation-venv`.
+`C4_ENV` ниже обозначает этот путь; `C4_AUDIT` — внешний временный audit harness
+`/workspace/scratch/b247f3420d30/m4-deepseek-checks`, запрещающий socket connect/
+getaddrinfo/bind/sendto и чтение owner `.env` (разрешены только pytest temp fixtures).
+
+```bash
+PYTHONPATH="$C4_AUDIT" "$C4_ENV/bin/pytest" -q tests/test_m4_gateway.py tests/test_m4_gateway_failures.py tests/test_m4_polza.py tests/test_m4_probe.py --tb=short
+"$C4_ENV/bin/ruff" check backend/src/asm/ai/polza.py backend/src/asm/ai/probe.py tests/test_m4_polza.py tests/test_m4_probe.py
+"$C4_ENV/bin/ruff" format --check backend/src/asm/ai/polza.py backend/src/asm/ai/probe.py tests/test_m4_polza.py tests/test_m4_probe.py
+"$C4_ENV/bin/mypy" backend/src
+```
+
+Фактически **916 PASS /15.33s** (799 прежних +117 новых), Ruff/format **4 files PASS**,
+mypy **71 files PASS**.9 actual offline CLI variants через `python -m asm.ai.probe`:
+default, `--plan`, и `--plan` с synthetic-experiment/history-r2/gemini-diagnostic/
+deepseek-eval/deepseek-tool-compat/gpt-quality-r1/gpt-quality-r2. Все8 прежних stdout
+**побайтово равны exact e07 base**; новый plan exact18/prior/ceiling10. Во всех
+child processes включён audit запрет sockets/owner key reads.
+
+CONTROLLED full R2, в том числе с сохранёнными synthetic quality findings,
+дошёл до no_send_claim19, images20/21 и repeats22–24:18 POST/0 READ/36 history/
+1 catalog. Проверены actual v2 text wire, прежний image wire, отсутствие tools,
+flush до mock HTTP, source/ref, exclusive output и сохранность обоих old reports.
+Bad semantic reply сохраняет OUTCOME flag; неподтверждённое обобщение может не
+дать regex flag, но manual остаётся PENDING. Это проверка runner, не LLM quality.
+
+CONTROLLED arithmetic: reserve0.285184000/call, full5.133312000; known0.018/18,
+shared0.25689134/58 known,4 unknown/held7.585505548,62 reservations,
+remaining142.157603112. Это synthetic rates/charges, не hosted spend. Новый unknown
+добавляет0.285184000 к held →7.870689548. Reported attempts1/2/17 не изменяют суммы.
+Ранние/поздние STOP, schema/history/usage/cost/model/tool/oversize/transport,
+per-call/stage deadlines и limits, preflight budget/catalog refusal, key failure
+и cancellation без case row сохраняют учёт. Отдельный CONTROLLED READ roundtrip
+нового adapter profile прошёл2 POST/1 READ/4 GET; неверные name/args/correlation
+не обходят Gateway. Реальный R2 schedule при этом READ0.
+
+### Границы и возврат
+
+Ровно7 paths: `backend/src/asm/ai/polza.py`, `backend/src/asm/ai/probe.py`,
+`tests/test_m4_polza.py`, `tests/test_m4_probe.py`, `docs/runbooks/M4_POLZA_PROBE.md`,
+insert-only этот receipt и одна CURRENT row в `docs/TASK_REGISTER.md`.
+Prompts/contracts/Gateway/schemas/fixtures/settings/deps/locks/CI/DB/M3/Telegram/
+IMPL-004 и архитектурные originals не менялись. Новых migrations/contracts нет.
+
+Настоящих Polza model POST/catalog/history GET **0**, owner key reads **0**.
+Windows/live/full CI **NOT_RUN**. [Windows offline instruction](../runbooks/M4_POLZA_PROBE.md)
+готова в прежнем environment; executable paid block/exact-source approval выдаёт
+C0 после source review. Старые owner допуски consumed; бюджет150 заново не нужен.
+V2 whole quality/no_send_claim19/unknown_price22 ещё не приняты; selected_model=null,
+runtime=false. Gemini/DeepSeek DEFERRED. PR39 Draft/head
+**cd60e5e16d8bcada53597d660a15f4d82640e956**, main
+**51d7d73752128715c6d98157445167c0cc0d894d** не двигались; CI41009211185 RED,
+C0-M4-CI-OBSERVATION-01 OPEN/root cause UNKNOWN остаются до merge/runtime.
+
 ## История — metadata read назначен; теперь COMPLETED / 2026-10-30
 
 Следующий раздел — прежний pre-read receipt. Допуск использован; actual count2

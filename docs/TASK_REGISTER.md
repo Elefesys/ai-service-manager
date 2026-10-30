@@ -20,7 +20,7 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.2-DEEPSEEK-TOOL-COMPAT-R1 | BLOCKED: INVALID_PROVIDER_RESPONSE на первом POST; exact cause/charge UNKNOWN. Допуск consumed, дальнейшая совместимость DEFERRED |
 | M4.2-GPT-QUALITY-R1 | BLOCKED / исторический partial:7 manual PASS/1 technical STOP/17 NOT_RUN; actual attempts2 объясняет STOP, owner stage consumed |
 | C0-M4.2-GPT-QUALITY-HISTORY-R1 | VERIFIED metadata scope:2 GET/0 POST, exact ID/list/detail, attempts2, reported0.00743079; без settlement/runtime |
-| M4.2-GPT-QUALITY-R2 | IN_PROGRESS / C4: opt-in history semantics +18 remaining cases7–24; prepare≤18 POST/0 READ/10 RUB, сейчас HTTP0 |
+| M4.2-GPT-QUALITY-R2 | REVIEW / C4 candidate c4/m4-2-gpt-quality-r2: opt-in gpt_eval_history_v2 +18 remaining cases7–24;916 targeted PASS, Ruff/format4/mypy71,9 offline CLI variants (old8 unchanged).≤18 POST/0 READ/10 RUB; real HTTP0, fixed prior/4 holds preserved; exact-source C0 review before live |
 | C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 wait_blocked1.5s timeout, root cause UNKNOWN; последующие foundation gates не приняты |
 | M4.3-CONTEXT / M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |

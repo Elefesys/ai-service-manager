@@ -1,9 +1,9 @@
-# M4.2 — история GPT проверена; следующий шаг C4
+# M4.2 — GPT quality R2 готов к source review C0
 
-**Сейчас владельцу запускать команды не нужно.** Metadata read завершён:
-Polza вернула attemptsCount2, а наш verifier требовал1. Подготовлена
-[задача C4](../tasks/M4_HANDOFF.md) на исправление semantics и оставшиеся18
-scenarios. Передай C4 immutable ссылку на HANDOFF этой версии.
+**Кандидат C4 — REVIEW; нового live допуска пока нет.** Отдельный режим
+`--gpt-quality-r2` готов для оставшихся18 scenarios после проверки C0.
+Новый `gpt_eval_history_v2` принимает строго положительный целый attemptsCount,
+отдельно от client POST. Default adapter и прежние CLI modes сохраняются.
 
 ## Принятый результат
 
@@ -24,17 +24,58 @@ remaining **142.175603112 RUB**. Reported amount неизвестного ран
 сохранён отдельно; old hold0.465109963 не освобождён. Это ledger capacity,
 не account balance. Новых history запросов ради settlement не требуется.
 
-## Что будет после C4
+## Windows: доступная сейчас offline проверка
 
-Готовится отдельный fixed stage18 scenarios (repeats7–24),≤18 model POST,
-0 READ,2 images,36 history GET/1 catalog; ceiling10 RUB из прежнего150.
-Первые7 scenarios и обе READ проверки не повторяются. Source/plan пройдут C0
-review, затем здесь появится готовая Windows команда с существующим environment
-и ключом. Общий бюджет заново подтверждать не нужно.
+В PowerShell из корня checkout кандидата `c4/m4-2-gpt-quality-r2`, в прежнем
+локальном environment с уже установленными frozen dependencies:
+
+```powershell
+$ErrorActionPreference = 'Stop'
+uv run --frozen --offline python -m asm.ai.probe --plan --gpt-quality-r2
+if ($LASTEXITCODE -ne 0) { throw 'OFFLINE_PLAN_FAILED' }
+```
+
+План не читает key и не делает HTTP. Существующий key/environment сохранить;
+ключ не печатать и не переносить в команду. Ожидаются:
+
+- `GPT_QUALITY_R2`, только `openai/gpt-6-luna`, selector `openai/flex`,
+  provider-default; tools/tool_choice не объявлены, поскольку новых READ0.
+- Original repeats7–24:18 scenarios/≤18 POST,2 images,≤36 history GET/1 catalog;
+  retained7/READ2 отдельно. Prompt v2 и обе schema revisions v1 неизменны,
+  images используют прежний `synthetic_shapes_v1/EVAL_ONLY`.
+- 60s/case,1800s stage;32768/512 tokens,24576/32768 bytes/call;
+  total token reservation599040; catalog4MiB/20s, history65536 bytes/15s на POST.
+- Ceiling10 RUB в прежнем150; fixed prior40 known/4 unknown/44 client POST,
+  confirmed0.23889134/held7.585505548. Maximum62 shared client POST.
+  Fresh catalog должен подтвердить reserve **всех18 calls до первого POST**;
+  offline `priced_reservation_rub=null` не является разрешением или ценой.
+
+Профиль проверяет raw stepsCount в list/detail: missing/null → NOT_APPLICABLE,
+строгий int1 → ONE_REPORTED. bool/float/string/0/negative/>1 — STOP. Любой
+nonnull serverTools/parent запрещён; остальные identity/metering/limit checks
+сохраняются. Закрытые `history_profile.provider_attempts/detail_steps/list_steps`
+содержат только проверенные metadata; null означает, что проверка не достигнута.
+Число попыток не умножает ledger charge/reservation, не доказывает стоимость или
+маршрут каждой попытки. Flex variant остаётся NOT_OBSERVED.
+
+После source review C0 опубликует один executable paid block с exact source SHA,
+соответствующим ref `C0-M4.2-GPT-QUALITY-R2:<source40>:<suffix>` и explicit amount≤10.
+Сейчас такого допуска/paid block нет. Нового подтверждения общего150 не требуется.
+Будущий output — exclusive `reports/m4-polza-gpt-quality-r2.jsonl`; existing output
+останавливает запуск до key/HTTP. No retry/fallback/polling/arbitrary resume.
+Reservation flush предшествует HTTP; новый unknown сохраняет полный резерв.
+Metadata receipt R1 не освобождает старый GPT hold0.465109963.
+
+18 technical completions означают только HUMAN_REVIEW_REQUIRED/manual PENDING.
+Любой technical failure останавливает этап; finals/flags сохраняются. C0 оценит
+качество по R1+R2, включая no_send_claim19/unknown_price22, отдельно от технического
+статуса. Не считать18 новых finals доказательством25 новых successful cases.
 
 Старые paid/history команды использованы. Все отчёты сохранить; не удалять и
 не переименовывать их для повторного запуска. Нового live допуска сейчас нет.
-Код provider/prompt/guards пока не исправлен; эта версия меняет только4 docs.
+Локально916 targeted PASS, Ruff/format4/mypy71 и9 offline CLI variants;
+старые8 plans побайтово совпали с base. Это CONTROLLED evidence: настоящих Polza
+POST/catalog/history GET0, owner key reads0. Windows/live/full CI NOT_RUN.
 
 [Точный scope и проверки C4](../tasks/M4_HANDOFF.md) ·
 [Решение C0](../decisions/IMPL-004-m4-pilot-ai.md).

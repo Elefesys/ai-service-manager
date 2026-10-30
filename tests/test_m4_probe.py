@@ -4157,3 +4157,518 @@ async def test_gpt_quality_lost_response_without_case_row_keeps_all_old_holds(mo
     )
     assert summary["shared_total"]["unknown_call_count"] == 4
     assert Decimal(summary["shared_total"]["unknown_reserved_rub"]) == Decimal("7.405579585")
+
+
+class ControlledGptRemainder(ControlledGptQuality):
+    """Same wire control, only original repeats 7–24; raw optional history metadata."""
+
+    def __init__(self, *, change=None):
+        super().__init__(change=change)
+        self.expected = [item for item in self.expected if item[1] >= 7]
+
+    def handler(self, request):
+        if request.method == "GET" and not request.url.path.endswith("/models"):
+            self.gets.append(str(request.url))
+            listing, detail = experiment_history(self.latest)
+            detail["attemptsCount"] = (1, 2, 17)[(len(self.posts) - 1) % 3]
+            if len(self.posts) % 3:
+                listing["items"][0]["stepsCount"] = detail["stepsCount"] = (
+                    None if len(self.posts) % 3 == 1 else 1
+                )
+            return response(listing if str(request.url) == HISTORY_LIST else detail)
+        return super().handler(request)
+
+
+def gpt_remainder_args(report):
+    args = gpt_quality_args(report)
+    args[0] = "--gpt-quality-r2"
+    args[args.index("--approved-rub") + 1] = "10"
+    args[-1] = args[-1].replace("QUALITY-R1:", "QUALITY-R2:")
+    return args
+
+
+async def controlled_gpt_remainder(mock, *, approved=Decimal(10), handler=None):
+    output = io.StringIO()
+    summary = await probe.run_gpt_quality(
+        mock.cases,
+        ProbeSettings(api_key=KEY),
+        output,
+        approved,
+        transport=httpx.MockTransport(handler or mock.handler),
+        remaining=True,
+    )
+    events = [json.loads(line) for line in output.getvalue().splitlines()]
+    assert events[-1] == summary and summary["manual_assessment"] == "PENDING"
+    assert not summary["runtime_authorized"] and summary["selected_model"] is None
+    assert summary["prior"] == probe.gpt_quality_r2_prior()
+    assert not summary["shared_total"]["old_unknown_reserve_released"]
+    assert Decimal(summary["shared_total"]["unknown_reserved_rub"]) >= Decimal("7.585505548")
+    return summary, events
+
+
+def test_gpt_remainder_plan_is_offline_and_pins_original_identities_and_reviewed_prior(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    assert main(["--plan", "--gpt-quality-r2"]) == 0
+    p = json.loads(capsys.readouterr().out)
+    original = probe.gpt_quality_plan(load_cases(FIXTURES))
+    assert p["stage_schedule"] == original["stage_schedule"][7:]
+    assert [e["repeat"] for e in p["stage_schedule"]] == list(range(7, 25))
+    assert p["fixture_sha256"] == "7abd25f1e1f08e51eacc3a68975e6099c942d33fad37376366dfdef6c7e025b2"
+    assert p["prompt_sha256"] == "b420be44a7e4210de1151e5b0604b0fa9a08c19b1bfbedb8147f2a9b38455956"
+    for field in (
+        "image_revision",
+        "schema_revision",
+        "wire_schema_revision",
+        "models",
+        "provider_only",
+        "reasoning_profile",
+        "case_seconds",
+        "overall_seconds",
+        "input_tokens_per_call",
+        "output_tokens_per_call",
+        "wire_input_bytes_per_call",
+        "wire_output_bytes_per_call",
+        "catalog_bytes",
+        "history_bytes_per_get",
+        "history_seconds_per_post",
+        "catalog_seconds",
+    ):
+        assert p[field] == original[field]
+    assert (p["total_scenarios"], p["retained_scenarios"], p["images"], p["base_text"]) == (
+        18,
+        7,
+        2,
+        13,
+    )
+    assert (p["max_model_http_calls"], p["max_history_http_calls"], p["max_synthetic_reads"]) == (
+        18,
+        36,
+        0,
+    )
+    assert p["max_shared_model_posts"] == 62 and p["total_token_reservation_ceiling"] == 599040
+    assert p["stage_rub_ceiling"] == "10" and p["priced_reservation_rub"] is None
+    assert p["tool_choice"] == "NOT_DECLARED" and p["history_profile"] == "gpt_eval_history_v2"
+    assert p["prior"]["known_call_count"] == 40 and p["prior"]["unknown_call_count"] == 4
+    assert p["prior"]["confirmed_cost_rub"] == "0.23889134"
+    assert p["prior"]["unknown_reserved_rub"] == "7.585505548"
+    assert p["prior"]["remaining_with_unknown_held_rub"] == "142.175603112"
+    retained = p["prior"]["retained_results"]
+    assert retained["manual_pass_repeats"] == list(range(7)) and retained["reads"] == 2
+    assert (
+        retained["report_sha256"]
+        == "b0d1cb8249b321792355a2b4d29e1a79ba6eae30847a5deee6fbafa36159017f"
+    )
+    assert (
+        retained["history_receipt_sha256"]
+        == "bf09d2dba67de7fbbd1f9a88cde309ee0a135fc1df52ab0554f591beeb1fba24"
+    )
+    assert retained["reported_cost_status"] == "HISTORY_REPORTED_ONLY / UNSETTLED"
+    assert not retained["reassessed"] and p["prior"]["imported_cases"] == 0
+    assert not p["runtime_authorized"] and p["manual_assessment"] == "PENDING"
+
+
+@pytest.mark.parametrize("quality_findings", [False, True])
+def test_gpt_remainder_full_cli_reaches_late_cases_and_keeps_quality_pending(
+    tmp_path, monkeypatch, capsys, quality_findings
+):
+    import asm.ai.polza as polza
+
+    def change(data, case, _):
+        if quality_findings and case.id in ("no_send_claim", "unknown_price"):
+            data["choices"][0]["message"]["content"] = json.dumps(
+                {
+                    "result": {
+                        "kind": "reply",
+                        "reason": None,
+                        "text": "Можно написать владельцу: «Я жду.»"
+                        if case.id == "no_send_claim"
+                        else "Цена неизвестна. Стоимость зависит от вида ремонта.",
+                    }
+                }
+            )
+
+    mock = ControlledGptRemainder(change=change)
+    report = tmp_path / "m4-polza-gpt-quality-r2.jsonl"
+    originals = [
+        tmp_path / name
+        for name in ("m4-polza-gpt-quality-r1.jsonl", "m4-polza-gpt-quality-history-r1.jsonl")
+    ]
+    for path in originals:
+        path.write_bytes(b"CONTROLLED original, do not import or settle\r\n")
+    original_run, original_http = probe.run_gpt_quality, polza.bounded_http
+    limits = []
+
+    async def bounded(key, url, **kwargs):
+        limits.append((url, kwargs["seconds"], kwargs["maximum"], kwargs["body"] is not None))
+        return await original_http(key, url, **kwargs)
+
+    def handler(request):
+        if request.method == "POST":
+            events = [json.loads(line) for line in report.read_text().splitlines()]
+            reserved = events[-1]  # Already flushed to the file before the external boundary.
+            assert reserved["event"] == "reserved"
+            assert reserved["calls_reserved"] == len(mock.posts) + 1
+            assert reserved["repeat"] == 7 + len(mock.posts)
+            amount = Decimal("0.285184000") * reserved["calls_reserved"]
+            assert Decimal(reserved["rub_reserved"]) == amount
+            assert (
+                Decimal(reserved["shared_rub_committed_or_reserved"])
+                == Decimal("7.824396888") + amount
+            )
+        return mock.handler(request)
+
+    async def run(*args, **kwargs):
+        assert kwargs == {"remaining": True}
+        return await original_run(*args, **kwargs, transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr(probe, "load_secret", lambda _: ProbeSettings(api_key=KEY))
+    monkeypatch.setattr(probe, "run_gpt_quality", run)
+    monkeypatch.setattr(probe, "bounded_http", bounded)
+    monkeypatch.setattr(polza, "bounded_http", bounded)
+    assert main(gpt_remainder_args(report)) == 0
+    events = [json.loads(line) for line in report.read_text().splitlines()]
+    source, p, summary = events[0], events[1], events[-1]
+    rows = [e for e in events if e["event"] == "case"]
+    assert source["prior"] == p["prior"] == summary["prior"] == probe.gpt_quality_r2_prior()
+    assert (
+        source["history_profile"]
+        == p["history_profile"]
+        == summary["history_profile"]
+        == "gpt_eval_history_v2"
+    )
+    assert len(mock.posts) == len(rows) == len(mock.wires) == 18 and len(mock.gets) == 37
+    assert [(r["repeat"], r["case"]) for r in rows] == [(i, c.id) for _, i, c in mock.expected]
+    assert all(r["reads"] == 0 and not r["failures"] and r["final"] is not None for r in rows)
+    assert all("tools" not in wire and "tool_choice" not in wire for _, _, wire in mock.wires)
+    assert sum(mode == "image" for _, mode, _ in mock.wires) == 2
+    assert [{k: r[k] for k in ("repeat", "case", "prompt_revision")} for r in rows] == p[
+        "stage_schedule"
+    ]
+    assert summary["status"] == "HUMAN_REVIEW_REQUIRED" and summary["stage_scenarios"] == 18
+    assert summary["models"][MODELS[0]]["completed"] == 18
+    assert summary["manual_assessment"] == "PENDING" and not summary["runtime_authorized"]
+    assert summary["selected_model"] is None and "aggregate_scenarios" not in summary
+    assert p["priced_reservation_rub"] == "5.133312000"
+    assert (
+        summary["new_stage"]["known_call_count"] == 18
+        and summary["new_stage"]["unknown_call_count"] == 0
+    )
+    assert Decimal(summary["new_stage"]["confirmed_cost_rub"]) == Decimal("0.018")
+    assert summary["shared_total"]["model_post_reservations"] == 62
+    assert (
+        summary["shared_total"]["known_call_count"] == 58
+        and summary["shared_total"]["unknown_call_count"] == 4
+    )
+    assert Decimal(summary["shared_total"]["confirmed_cost_rub"]) == Decimal("0.25689134")
+    assert summary["shared_total"]["unknown_reserved_rub"] == "7.585505548"
+    assert Decimal(summary["shared_total"]["remaining_with_unknown_held_rub"]) == Decimal(
+        "142.157603112"
+    )
+    for i, row in enumerate(rows):
+        call = row["calls"][0]
+        assert call["history_profile"]["provider_attempts"] == (1, 2, 17)[i % 3]
+        assert call["history_gets"] == 2 and call["route_variant"] == "NOT_OBSERVED"
+    assert limits[0][1:3] == (20, 4194304)
+    assert sum(post for _, _, _, post in limits) == 18
+    assert all(
+        0 < seconds <= (60 if post else 15) and maximum == (32768 if post else 65536)
+        for _, seconds, maximum, post in limits[1:]
+    )
+    if quality_findings:
+        contact = next(r for r in rows if r["repeat"] == 19)
+        price = next(r for r in rows if r["repeat"] == 22)
+        assert contact["final"]["kind"] == "reply" and [
+            f["code"] for f in contact["quality_flags"]
+        ] == ["OUTCOME"]
+        assert "зависит" in price["final"]["text"] and not price["quality_flags"]
+        assert contact["manual_assessment"] == price["manual_assessment"] == "PENDING"
+    saved = report.read_bytes()
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret on existing output"))
+    assert main(gpt_remainder_args(report)) == 2
+    assert report.read_bytes() == saved
+    assert all(
+        path.read_bytes() == b"CONTROLLED original, do not import or settle\r\n"
+        for path in originals
+    )
+    assert (
+        KEY.get_secret_value() not in report.read_text()
+        and "PRIVATE_ACCOUNT_METADATA" not in report.read_text()
+    )
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize("bad", ["route", "duplicate", "image", "fee", "whole_stage", "approval"])
+async def test_gpt_remainder_preflight_reserves_all_eighteen_before_post(bad):
+    mock = ControlledGptRemainder()
+    p = mock.entries[0]["providers"][0]
+    if bad == "route":
+        p["name"] = "different/route"
+    elif bad == "duplicate":
+        mock.entries[0]["providers"].append(copy.deepcopy(p))
+    elif bad == "image":
+        p["capabilities"]["input_image"]["status"] = "unknown"
+    elif bad == "fee":
+        p["pricing"]["new_fee"] = 0
+    elif bad == "whole_stage":
+        p["pricing"]["prompt_per_million"] = "10"
+    summary, events = await controlled_gpt_remainder(
+        mock, approved=Decimal(5) if bad == "approval" else Decimal(10)
+    )
+    assert summary["status"] == "FAILED_OR_INCOMPLETE" and summary["error"]
+    assert len(mock.gets) == 1 and not mock.posts
+    assert summary["new_stage"]["attempt_reservations"] == 0
+    assert summary["shared_total"]["model_post_reservations"] == 44
+    assert summary["shared_total"]["remaining_with_unknown_held_rub"] == "142.175603112"
+    assert not any(e["event"] == "reserved" for e in events)
+
+
+@pytest.mark.parametrize(
+    "target,bad",
+    [
+        (7, "attempts"),
+        (7, "tool"),
+        (7, "usage"),
+        (7, "cost"),
+        (7, "model"),
+        (8, "transport"),
+        (19, "steps"),
+        (20, "schema"),
+        (21, "oversize"),
+        (22, "history_cost"),
+        (23, "history_usage"),
+        (24, "attempts"),
+        (24, "schema"),
+        (24, "history_oversize"),
+    ],
+)
+async def test_gpt_remainder_early_and_late_stops_preserve_prior_and_new_unknown(target, bad):
+    def change(data, case, _):
+        if mock.expected[mock.index - 1][1] != target:
+            return
+        if bad == "schema":
+            data["choices"][0]["message"]["content"] = "{}"
+        elif bad == "tool":
+            data["choices"] = payload(tools=True)["choices"]
+        elif bad == "usage":
+            data["usage"]["completion_tokens"] = 513
+        elif bad == "cost":
+            data["usage"]["cost_rub"] = "1"
+        elif bad == "model":
+            data["model"] = MODELS[1]
+
+    mock = ControlledGptRemainder(change=change)
+
+    def handler(request):
+        result = mock.handler(request)
+        if not mock.posts or mock.posts[-1][1] != target:
+            return result
+        if request.method == "POST":
+            if bad == "transport":
+                raise httpx.ReadError("PRIVATE_TRANSPORT")
+            if bad == "oversize":
+                return response(raw=b"x" * 32769)
+        elif str(request.url) != HISTORY_LIST and not request.url.path.endswith("/models"):
+            _, detail = experiment_history(mock.latest)
+            detail.update(attemptsCount=2, stepsCount=None)
+            if bad == "attempts":
+                detail["attemptsCount"] = True
+            elif bad == "steps":
+                detail["stepsCount"] = True
+            elif bad == "history_cost":
+                detail["clientCost"] = "0.002"
+            elif bad == "history_usage":
+                detail["usage"]["prompt_tokens"] += 1
+            elif bad == "history_oversize":
+                return response(raw=b"x" * 65537)
+            return response(detail)
+        return result
+
+    summary, events = await controlled_gpt_remainder(mock, handler=handler)
+    rows = [e for e in events if e["event"] == "case"]
+    assert summary["status"] == "FAILED_OR_INCOMPLETE"
+    assert len(mock.posts) == len(rows) == target - 6 and rows[-1]["repeat"] == target
+    assert rows[-1]["failures"] and rows[-1]["final"] is None and all(r["reads"] == 0 for r in rows)
+    unknown = 0 if bad in ("schema", "tool") else 1
+    assert summary["new_stage"]["unknown_call_count"] == unknown
+    assert summary["new_stage"]["known_call_count"] == len(mock.posts) - unknown
+    assert summary["shared_total"]["unknown_call_count"] == 4 + unknown
+    assert (
+        Decimal(summary["shared_total"]["unknown_reserved_rub"])
+        == Decimal("7.585505548") + Decimal("0.285184000") * unknown
+    )
+    assert summary["shared_total"]["model_post_reservations"] == 44 + len(mock.posts)
+    assert "PRIVATE_TRANSPORT" not in json.dumps(events)
+
+
+@pytest.mark.parametrize("where", ["catalog", "post", "history", "case"])
+async def test_gpt_remainder_deadline_stops_and_keeps_earlier_settlement(monkeypatch, where):
+    mock = ControlledGptRemainder()
+
+    async def handler(request):
+        is_post = request.method == "POST"
+        phase = len(mock.posts) + int(is_post)
+        if (
+            where == "catalog"
+            and request.url.path.endswith("/models")
+            or where in ("post", "case")
+            and is_post
+            and phase == 2
+            or where == "history"
+            and not is_post
+            and phase == 2
+        ):
+            if is_post:
+                mock.handler(request)
+            await asyncio.sleep(1)
+            pytest.fail("deadline did not cancel")
+        return mock.handler(request)
+
+    monkeypatch.setattr(probe, "CASE_SECONDS" if where == "case" else "DURATION", 0.08)
+    summary, _ = await controlled_gpt_remainder(mock, handler=handler)
+    assert summary["status"] == "FAILED_OR_INCOMPLETE"
+    assert summary["new_stage"]["known_call_count"] == (0 if where == "catalog" else 1)
+    assert summary["new_stage"]["unknown_call_count"] == (0 if where == "catalog" else 1)
+    assert len(mock.posts) == (0 if where == "catalog" else 2)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "r1_ref",
+        "source",
+        "budget",
+        "nan",
+        "zero",
+        "report",
+        "environment",
+        "review",
+        "resume",
+        "synthetic",
+        "preflight",
+        "plan",
+        "r1",
+        "deepseek",
+        "compat",
+        "gemini",
+        "history",
+    ],
+)
+def test_gpt_remainder_cli_invalid_admission_never_reads_key_or_calls_http(
+    tmp_path, monkeypatch, capsys, bad
+):
+    report = tmp_path / "m4-polza-gpt-quality-r2.jsonl"
+    args = gpt_remainder_args(report)
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    if bad == "r1_ref":
+        args[-1] = args[-1].replace("QUALITY-R2:", "QUALITY-R1:")
+    elif bad == "source":
+        args[args.index("--source-sha") + 1] = "a" * 40
+    elif bad in ("budget", "nan", "zero"):
+        args[args.index("--approved-rub") + 1] = {
+            "budget": "10.000000001",
+            "nan": "NaN",
+            "zero": "0",
+        }[bad]
+    elif bad == "report":
+        args[args.index("--report") + 1] = str(tmp_path / "m4-polza-gpt-quality-r1.jsonl")
+    elif bad == "environment":
+        i = args.index("--source-environment")
+        del args[i : i + 2]
+    elif bad in ("plan", "preflight"):
+        args[args.index("--live")] = "--" + bad
+    else:
+        args += {
+            "review": ["--review", "absent"],
+            "resume": ["--continue-from", "absent"],
+            "synthetic": ["--synthetic-experiment"],
+            "r1": ["--gpt-quality-r1"],
+            "deepseek": ["--deepseek-eval"],
+            "compat": ["--deepseek-tool-compat"],
+            "gemini": ["--gemini-diagnostic"],
+            "history": ["--history-r2"],
+        }[bad]
+    if bad in ("r1", "deepseek", "compat", "gemini", "history"):
+        with pytest.raises(SystemExit) as exc:
+            main(args)
+        assert exc.value.code == 2
+    else:
+        assert main(args) == 2
+    assert not report.exists()
+    capsys.readouterr()
+
+
+def test_gpt_remainder_ledger_cannot_spend_prior_replay_prefix_or_exceed_limits():
+    mock = ControlledGptRemainder()
+    route = probe.SyntheticRoute.from_catalog(mock.entries[0], datetime.now(UTC))
+    case = probe.schedule(mock.cases)[7]
+    ledger = Ledger(io.StringIO(), Decimal(10), 18, gpt_quality_r2=True)
+    for repeat in range(7, 25):
+        ledger.reserve(route, case, repeat)
+    with pytest.raises(ValueError, match="GLOBAL_BUDGET_EXHAUSTED"):
+        ledger.reserve(route, case, 24)
+    for approved, calls in ((Decimal("10.1"), 18), (Decimal(10), 19), (Decimal(0), 18)):
+        with pytest.raises(ValueError, match="APPROVAL_LIMIT"):
+            Ledger(io.StringIO(), approved, calls, gpt_quality_r2=True)
+    small = Ledger(io.StringIO(), Decimal("0.285183999"), 1, gpt_quality_r2=True)
+    with pytest.raises(ValueError, match="GLOBAL_BUDGET_EXHAUSTED"):
+        small.reserve(route, case, 7)
+    assert small.calls == 0
+    for other in ("gpt_quality", "deepseek", "tool_compat", "prefix"):
+        with pytest.raises(ValueError, match="GPT_QUALITY_MODE_CONFLICT"):
+            Ledger(io.StringIO(), Decimal(10), 18, gpt_quality_r2=True, **{other: True})
+    for repeat in (0, 6, 25):
+        with pytest.raises(ValueError, match="GPT_QUALITY_R2_REMAINDER_REQUIRED"):
+            ledger.reserve(route, case, repeat)
+    with pytest.raises(ValueError, match="GPT_QUALITY_R2_REMAINDER_REQUIRED"):
+        ledger.reserve(route, probe.schedule(mock.cases)[0], 7)
+    for other_route in (
+        review(MODELS[0]),
+        experiment_route(MODELS[1]),
+        experiment_route(MODELS[2]),
+    ):
+        with pytest.raises(ValueError, match="GPT_QUALITY_ROUTE_REQUIRED"):
+            ledger.reserve(other_route, case, 7)
+    with pytest.raises(ValueError, match="EXPERIMENT_FIXTURES_CHANGED"):
+        probe.gpt_quality_r2_plan(mock.cases[1:])
+    stale = probe.SyntheticRoute.from_catalog(
+        mock.entries[0], datetime.now(UTC) - timedelta(days=2)
+    )
+    with pytest.raises(ValueError, match="REVIEW_EXPIRED"):
+        probe.gpt_quality_r2_plan(mock.cases, stale)
+
+
+def test_gpt_remainder_key_failure_is_terminal_and_keeps_all_holds(tmp_path, monkeypatch, capsys):
+    report = tmp_path / "m4-polza-gpt-quality-r2.jsonl"
+
+    def fail(_):
+        raise OSError("PRIVATE_PATH")
+
+    monkeypatch.setattr(probe, "load_secret", fail)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    assert main(gpt_remainder_args(report)) == 2
+    source, summary = [json.loads(line) for line in report.read_text().splitlines()]
+    assert source["mode"] == "GPT_QUALITY_R2" and summary["event"] == "summary"
+    assert summary["new_stage"]["attempt_reservations"] == 0
+    assert summary["shared_total"]["remaining_with_unknown_held_rub"] == "142.175603112"
+    assert "PRIVATE_" not in report.read_text()
+    capsys.readouterr()
+
+
+async def test_gpt_remainder_cancelled_reservation_without_row_is_still_unknown(monkeypatch):
+    mock = ControlledGptRemainder()
+
+    async def lost(adapter, case, ledger, repeat):
+        ledger.reserve(adapter.review, case, repeat)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(probe, "run_case", lost)
+    summary, events = await controlled_gpt_remainder(mock)
+    assert [e["event"] for e in events] == ["plan", "reserved", "summary"]
+    assert summary["error"] == "CANCELLED" and not mock.posts
+    assert summary["shared_total"]["unknown_call_count"] == 5
+    assert summary["shared_total"]["model_post_reservations"] == 45
+    assert Decimal(summary["shared_total"]["unknown_reserved_rub"]) == Decimal("7.870689548")
