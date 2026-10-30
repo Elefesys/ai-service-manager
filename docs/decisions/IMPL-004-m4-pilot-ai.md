@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 R3 принят; C0 готовит integration candidate/full CI.
+Последнее решение ниже: PR39 слит; actual main CI BLOCKED, узкая C2 R4.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -780,7 +780,7 @@ R2 repair в целом остаётся BLOCKED до R3; historical cause UNKNO
 После review — integration/full CI и runtime, без бесконечного replay старого
 timeout. GPT/C4 acceptance и shared150 ledger не изменены. PR39/main прежние.
 
-**Актуальное решение C0 от 2026-10-31: C2 R3 VERIFIED, integration/full CI.**
+**Предыдущее решение C0 от 2026-10-31: C2 R3 VERIFIED, integration/full CI.**
 Source db46d06c3ee12b34f6a0630415454a56a128c9d9, receipt
 ea10472de268ceb9d656a0d5ddc11f093b653cd3 принят SOURCE + TARGETED PG.
 Run41096329059/attempt1:258 PASS, cleanup PASS. Foreign held-lock/effects и
@@ -799,6 +799,24 @@ timeout cause UNKNOWN. Merge остаётся владельцу после C0 r
 Модельные расходы/holds не меняются. Настоящие PG authority, durable AIRun и
 AI->Outbox->Telegram ещё не реализованы; full source CI не является runtime
 или data/route approval. VM/Telegram/live/paid запусков эта выдача не разрешает.
+
+**Актуальное решение C0 от 2026-10-31: PR39 merged; main verification BLOCKED.**
+Actual main997d2bf83b5402068ba1f62b23d5947fcfaf7d32 имеет тот же tree13f5ab44,
+что accepted PR candidate1b7a6987. PR CI41099431123:11/11 SUCCESS сохранён;
+main CI41108194917/attempt1:10 SUCCESS/1 FAILURE. Foundation839 PG PASS/1 FAIL
+resume-activation-subscription, timeout1.5s при active query=None. Место ожидания
+target до cleanup UNKNOWN; source drift при merge отсутствует. Generic evidence
+complete=true/840, primary_exit1/cleanup_exit0; secondary gate refusal ожидаем.
+
+C0 вновь открывает observation gate и выдаёт C2-M4-CI-OBSERVATION-R4:
+минимальный test synchronization repair с доказанным before/after, либо точный
+BLOCKED; допустима bounded readiness до измеряемой фазы при сохранении смысла
+policy snapshots,1.1s edge и1.5s actual lock observation. Нельзя просто поднять
+таймаут или объявить очередной PASS причиной. R3 fixes/guards/assertions сохраняются.
+Failure-stage facts должны собираться до cancellation, без секретов/SQL parameters.
+Write-set6 и единственный targeted run после local proof заданы в HANDOFF;
+production/DDL/core CI не меняются. Runtime и actual main acceptance ждут repair.
+Новый paid/VM/Telegram запуск не разрешён; ledger и data/route gates прежние.
 
 ## Что пересмотрено относительно baseline
 

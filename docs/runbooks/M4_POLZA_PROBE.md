@@ -4,7 +4,8 @@
 с7 сохранёнными из R1 получено **25 manual PASS**,2 READ и2 synthetic images.
 GPT/v2 выбран кандидатом для разработки первого runtime. C4 context/read/agent
 принят локально. C2 R3 принят: 258 PASS на PostgreSQL, cleanup PASS.
-Следующий шаг — [C0 integration/full CI](../tasks/M4_HANDOFF.md).
+PR39 слит; PR CI прошёл, но проверка main нашла один timeout теста блокировки.
+Следующий шаг — [C2 R4](../tasks/M4_HANDOFF.md); повторять Polza probe не нужно.
 
 ## Принятый отчёт
 
@@ -32,12 +33,12 @@ R2 p50 11.163s /p95 16.393s, N18, включая history; маленькая в�
 
 ## Дальше
 
-C0 проверил R3: все 258 сценариев прошли, включая удержание блокировки после
-таймаута и ошибки/отмену observer SQL. Исправление принято.
-C0 собирает принятые изменения в существующем PR39 и проверяет один полный CI.
-Передавать новую задачу C2 или запускать что-либо на ПК/ВМ сейчас не нужно.
-После C0 readiness владелец сливает PR; затем actual main verification и
-подключение durable/runtime/Telegram. Ключ Polza сейчас не нужен, reports сохранить.
+R3 scope принят, PR39 слит. Main CI41108194917:10 jobs SUCCESS,
+foundation839 PostgreSQL PASS/1 FAIL (resume-activation-subscription,
+observer timeout1.5s). Это проверка синхронизации HTTP/PostgreSQL, без вызовов ИИ.
+C0 подготовил [точечную задачу C2 R4](../tasks/M4_HANDOFF.md).
+После repair и проверки main продолжим durable/runtime/Telegram.
+На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.
 
 Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`
 использован. [Прежняя команда](https://github.com/Elefesys/ai-service-manager/blob/5241eba3e38bd488cea052f894efb9b43b1f7d32/docs/runbooks/M4_POLZA_PROBE.md)
@@ -46,6 +47,6 @@ Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER
 Это synthetic EVAL_ONLY: OpenAI family подтверждена в receipt, flex variant
 не наблюдался. Реальные данные, Telegram runtime и backend route ещё требуют
 соответствующей приёмки. Gemini/DeepSeek DEFERRED; сравнение75 не завершено.
-PR39 остаётся Draft до результата полного CI актуального кандидата. Старый
-CI41009211185 RED сохранён как история; его причина UNKNOWN. Никакого
-enable/deploy эта приёмка не выполняет.
+PR39 уже merged. Actual main verification BLOCKED до R4 review;
+прежний PR PASS и новый main FAIL сохранены раздельно. Причина задержки
+целевого запроса UNKNOWN. Никакого enable/deploy эта приёмка не выполняет.

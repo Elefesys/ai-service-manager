@@ -6,15 +6,112 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2 R3 VERIFIED; C0 integration/full CI / 2026-10-31
+## CURRENT — PR39 merged; main CI BLOCKED; C2 R4 / 2026-10-31
 
-**C2-M4-CI-OBSERVATION-R3 принят C0: SOURCE + TARGETED POSTGRESQL VERIFIED.**
-258 PASS / 0 FAIL/SKIP/XFAIL, cleanup PASS; foreign и observer error/cancel
-controls завершили held-lock и final-effect проверки. Новый repair не нужен.
-Следующая работа — **C0-M4-INTEGRATION-R1**: включить принятый cumulative source
-в существующий PR39 и проверить полный CI. C1–C8 HOLD; владелец ничего не запускает.
-Причина historical timeout UNKNOWN; C0-M4-CI-OBSERVATION-01 остаётся OPEN
-только до проверки актуального общего кандидата. Runtime ещё не реализован.
+PR39 слит владельцем. Actual main **997d2bf83b5402068ba1f62b23d5947fcfaf7d32**,
+tree **13f5ab44994bb4ec2d5f89943fab714c28c11824**, exact-equal проверенному PR head
+1b7a6987d45511acfae0b32a4d4845ea976b1c21. Прежний PR CI41099431123/attempt1
+11/11 SUCCESS остаётся фактом; [C0 receipt](https://github.com/Elefesys/ai-service-manager/blob/5979261b4a353243973e7fabd8767c8875e4285a/docs/tasks/M4_HANDOFF.md).
+Новый [main run41108194917](https://github.com/Elefesys/ai-service-manager/actions/runs/41108194917),
+push/main/attempt1: **10 SUCCESS /1 FAILURE**. Main verification BLOCKED;
+C0-M4-CI-OBSERVATION-01 вновь открыт. Единственная выдача — **C2-M4-CI-OBSERVATION-R4**
+ниже. Остальные C1/C3–C8 HOLD; runtime/VM/paid работа не начинается.
+
+### C0 — установленная ошибка main
+
+[Foundation job124251519960](https://github.com/Elefesys/ai-service-manager/actions/runs/41108194917/job/124251519960):
+3289 ordinary +155 subtests PASS; PostgreSQL **839 PASS /1 FAIL**,1223.00s.
+Единственный failing node:
+`tests/test_m3_1_control_api_postgres.py::test_post_lock_product_boundaries_with_actual_conversation_wait[resume-activation-subscription]`.
+Таймаут1.5s в wait_blocked; конечный await — asyncio.sleep(0), active query=None.
+Это не доказывает отсутствие query во всём интервале, перегрузку runner или
+production defect. Где именно pending task ждала до cleanup, в этом run UNKNOWN.
+CancelledError в helper — механизм asyncio.timeout; cancelled target в traceback
+отражает последующий test cleanup, не доказанную исходную причину.
+
+Остальные11 cases этой матрицы, включая старый controlled-activation-subscription,
+foreign/absent и оба actual PG observer error/cancel controls PASS. R2/R3
+исправления foreign/lifecycle/report сохраняются; их не откатывать.
+Сборка31.130417s, unit314.60s, PG1223.00s — разные фазы.
+
+C0 скачал original artifact **13005201473**,3345961 bytes/17 files, SHA256
+**746ec76aa30afa14c49893d3203e513cf5e50d1d1b95ac35232d21f189a6811c**;
+metadata/upload log/actual ZIP совпали. binding/tested-commit/source archive
+подтверждают actual main/tree. Relevant test/helper/CI source совпадает с PR.
+generic-result: complete=true,completed=expected=840,pytest_exit=1,evidence_failed=false.
+2520 phases: setup840 PASS,call839 PASS/1 FAIL,teardown840 PASS; issues пуст.
+execution: **primary_exit=1,cleanup_exit=0**, worktree-status пуст.
+FOUNDATION_EVIDENCE_REFUSED — следствие primary test failure и недостигнутых
+поздних gates, не второй независимый дефект recorder. Остальные10 jobs SUCCESS
+проверены по fresh metadata; их payload заново не аудировался.
+
+### C2-M4-CI-OBSERVATION-R4 — единственная текущая выдача
+
+**Результат для пилота:** устранить подтверждённый источник нестабильности
+проверки post-lock policy boundary либо вернуть точный BLOCKED с недостающим
+фактом. Ещё один зелёный прогон без объяснённого изменения не закрывает задачу.
+
+Repository **Elefesys/ai-service-manager**. Repair base — полный SHA published
+C0 commit этой выдачи из immutable URL, direct child actual main
+**997d2bf83b5402068ba1f62b23d5947fcfaf7d32**. Перед работой записать полный
+base SHA/tree и сверить parent/source; source сверх main содержит только5
+coordination docs. Preparation **c2/m4-ci-observation-r4**; execution
+**c2/m4-pg-observation-run-r4**. R1/R2/R3 refs frozen; merged PR39 не двигать.
+Dependencies: accepted R3 source/targeted run + PR PASS + этот main FAIL.
+Применимы AGENTS, IMPL-004 и retained M3 CONTROL/post-lock policy contracts.
+
+Разрешены ровно6 paths:
+
+- `tests/test_m3_1_control_postgres.py` — helper, его узкие controls;
+- `tests/test_m3_1_control_api_postgres.py` — только матрица post-lock boundary и необходимые regression controls;
+- `scripts/m4_pg_observation.py` — bounded evidence/identity/collection существующего runner;
+- `.github/workflows/m4-pg-observation.yml` — только R4 execution identity;
+- `docs/tasks/M4_HANDOFF.md` и `docs/TASK_REGISTER.md` — receipt/current.
+
+1. Проверить путь target от request start/auth/pool до tracked SQL и ожидания
+   Conversation. Сопоставить1.5s observer deadline и1.1s policy edge: оба сейчас
+   начинаются до доказанного целевого wait. Это область проверки, не объявленная
+   причина hosted failure. При timeout до cancellation сохранить ограниченные
+   безопасные stage/query/PID/task facts в существующей диагностике; без locals,
+   SQL parameters, cookies, дополнительных DB reads или нового framework.
+2. На воспроизводимом контроле показать, что меняется и почему. Минимально
+   исправить синхронизацию fixture/helper; замена sleep(0), прогрев или увеличение
+   лимита сами по себе не являются доказательством причины. Допустима явная
+   readiness barrier перед измеряемой фазой, но с конечным отдельным bound и
+   сохранением реального HTTP/auth/PG пути. Обосновать границу измерения; не
+   скрывать delay повтором/перезапуском или переносом deadline после потери edge.
+3. Если edge устанавливается после readiness, доказать прежний смысл всех12
+   случаев: initial/frozen policy противоположна post-lock результату, реальный
+   target blocked до edge, edge пересечён под held lock, release только после.
+   В частности activation не должна PASS по уже active первоначальному snapshot.
+   Сохранить1.1s DB clock interval,1.5s lock observer, release span<2s, original
+   response/effects/replay assertions и R3 task/query/PID/error/cancel guards.
+4. Regression должен отличать задержку подготовки от отсутствующего/чужого/
+   завершившегося target и от observer failure. Проверить expiry и activation,
+   subscription и mode, всех3 callers; нельзя получить PASS до effect/replay
+   assertions. Если факты указывают на production defect или требуют расширения
+   write-set — вернуть BLOCKED с конкретным доказательством, без чужого кода.
+
+Production/DDL/RLS/grants/deps/pins, generic/native CI и их timeouts неизменны.
+Нельзя skip/xfail, ослаблять assertion, освобождать blocker ради PASS или
+выдавать чужой waiter за target. Сохранить все258 R3 node IDs и их порядок;
+новые controls перечислить отдельно. Согласованное изменение порядка fixture
+описать как semantic diff, не обещать AST-identical изменяемой matrix function.
+
+После local reproduction/regression/static/collection и source explanation
+разрешён **один** hosted targeted run всех4 существующих modules: tests<=600s,
+job<=25min, disposable asm_test, прежние images/roles. Existing runner должен
+проверять точный R4 base/write-set/ordered collection и сохранять разные
+command/summary, primary failure, bounded trace и owned cleanup. Execution branch
+создать на base, затем один FF expected_sha=base/force=false на tested source;
+после run frozen. Не запускать отдельный observation-only replay без repair
+обоснования; при недостатке evidence вернуть BLOCKED. Полный CI — C0 после review.
+
+Вернуть source SHA/tree, concrete before/after, retained/new cases, actual run/
+job/artifact/digest, complete reports и cleanup/source result; отдельно отметить
+что доказано и что UNKNOWN. Docs receipt — sole child tested source на preparation.
+Никаких rerun этого main/старых runs, новых paid calls, owner secrets, VM,
+live DB/Telegram/deploy. Runtime HOLD; shared150 и4 unknown holds прежние.
 
 ### Приёмка C0 — C2 R3
 
@@ -53,40 +150,13 @@ collect-only258, malformed collections5 refused, original79 business functions/
 unknown identity ->0 SQL, target получает управление, bounded timeout прежний.
 Новый targeted PG run у C0 не нужен и не запускался.
 
-### C0-M4-INTEGRATION-R1 — текущий общий кандидат
+### C0-M4-INTEGRATION-R1 — история PR39
 
-Repository Elefesys/ai-service-manager, существующий Draft PR39,
-head branch **c4/m4-2-probe**. C0 preparation **c0/m4-integration-r1**.
-Integration base — receipt **ea10472de268ceb9d656a0d5ddc11f093b653cd3** /
-tree **591d84a53c04790571cc687f125f66391bbc4f91**. C0 candidate — published
-commit этой приёмки (sole parent=receipt); source сверх receipt не меняется,
-только HANDOFF, CURRENT, IMPL-004, operator runbook и актуальная очередь AGENTS.
-
-Cumulative source включает reviewed Polza adapter/probe и GPT/v2 quality,
-C4 context/read/agent, C6 recorder и C2 R2/R3 test-helper repair. История
-последовательна: прежний PR head **cd60e5e16d8bcada53597d660a15f4d82640e956**
-— ancestor receipt; новых merge/cherry-pick конфликтов не требуется.
-Принятый main **51d7d73752128715c6d98157445167c0cc0d894d** не менять.
-Прежний запрет движения PR39 относился к промежуточным receipts; C0 теперь
-разрешает один FF существующей PR branch на проверенный cumulative candidate
-с expected old head/force=false. R1/R2/R3 execution refs frozen.
-
-После FF — один штатный full pull_request CI актуального кандидата: все
-11 jobs, browser, ordinary unit/PG, native lane, durable/recovery, Docker29/
-migration и source/evidence gates. CI core/workflow/timeouts не менять.
-Записать PR head, tested merge SHA/tree, run/attempt, результаты/cleanup/artifacts.
-Прежний red CI41009211185 не перезапускать. Если новый run падает — разобрать
-все failure groups по фактам, не повторять тот же source ради PASS.
-Full CI на момент подготовки этого commit **NOT_RUN**; source scope R3 принят
-отдельно. Только actual full PASS позволяет C0 закрыть integration observation
-gate для кандидата; историческую причину timeout не переписывать.
-
-PR остаётся Draft до полного результата; merge — владелец после C0 readiness.
-После merge C0 сверяет actual main/CI, затем выдаёт runtime работу. Для неё ещё
-нужны real PG authority, durable AIRun/result/send intent и AI->Outbox->Telegram;
-context/agent unit PASS и synthetic GPT quality этого не заменяют.
-Shared150 ledger и 4 unknown holds сохранены; paid refs consumed, новых model
-calls/owner credentials/VM/live DB/Telegram/deploy действий здесь нет.
+Candidate1b7a6987, tree13f5ab44 принят по PR run41099431123/attempt1,
+11/11 SUCCESS. [Полный receipt C0](https://github.com/Elefesys/ai-service-manager/blob/5979261b4a353243973e7fabd8767c8875e4285a/docs/tasks/M4_HANDOFF.md)
+сохранён на отдельной branch. Владелец слил PR39 в997d2bf8 с тем же tree.
+Новый main run41108194917 дал839 PG PASS/1 FAIL; верхняя R4 выдача заменяет
+прежний переход к runtime. R3 scope принят; actual main verification BLOCKED.
 
 ### Возврат C2 — C2-M4-CI-OBSERVATION-R3 / REVIEW; C2 HOLD
 
