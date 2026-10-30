@@ -1837,6 +1837,37 @@ async def test_readonly_r2_history_is_only_a_candidate_and_holds_unknown_reserve
     assert not any("/log" in str(r.url) or "children" in str(r.url) for r in seen)
 
 
+async def test_readonly_history_rejects_escaped_key_before_reporting_metadata():
+    listing, details = controlled_r2_history()
+    secret = KEY.get_secret_value()
+    candidate = listing["items"][0]
+    candidate["provider"] = secret
+    details[candidate["id"]]["finalEndpointSlug"] = secret
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        assert request.method == "GET"
+        body = (
+            listing
+            if str(request.url) == HISTORY_LIST
+            else details[request.url.path.rsplit("/", 1)[1]]
+        )
+        escaped = "".join(f"\\u{ord(char):04x}" for char in secret)
+        raw = json.dumps(body).replace(secret, escaped).encode()
+        assert secret.encode() not in raw
+        return response(raw=raw)
+
+    result = await probe.reconcile_r2_history(
+        ProbeSettings(api_key=KEY), transport=httpx.MockTransport(handler)
+    )
+    assert result["status"] == "UNKNOWN"
+    assert result["error"] == "HISTORY_PRIVATE_DATA"
+    assert result["candidate"] is None and len(seen) == result["history_gets"] == 1
+    assert secret not in json.dumps(result)
+    assert result["model_posts"] == 0 and result["automatic_reserve_release"] is False
+
+
 @pytest.mark.parametrize(
     "bad",
     [

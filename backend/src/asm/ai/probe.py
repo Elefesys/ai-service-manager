@@ -1416,7 +1416,10 @@ async def reconcile_r2_history(
         )
         if settings.api_key.get_secret_value().encode() in raw:
             raise ValueError("HISTORY_PRIVATE_DATA")
-        return strict_json(raw.decode())
+        data = strict_json(raw.decode())
+        if settings.api_key.get_secret_value() in json.dumps(data, ensure_ascii=False):
+            raise ValueError("HISTORY_PRIVATE_DATA")
+        return data
 
     try:
         async with asyncio.timeout(HISTORY_RECONCILE_SECONDS):
