@@ -1659,7 +1659,14 @@ async def test_continuation_hard_failures_still_stop_before_next_post(tmp_path, 
         assert summary["new_stage"]["known_call_count"] == 1
         assert Decimal(summary["new_stage"]["confirmed_cost_rub"]) == Decimal("0.001")
         assert summary["models"][MODELS[1]]["cost_status"] == "NOT_RUN"
-    if bad in ("transport", "route", "usage", "cost", "history", "signature", "thinking"):
+    if bad == "signature":
+        assert rows[-1]["calls"][0]["error_detail"] == "SIGNATURE_EXTRA_MISSING"
+        assert rows[-1]["calls"][0]["metering_source"] == "HISTORY_LIST_DETAIL"
+        assert rows[-1]["calls"][0]["history_gets"] == 2
+        assert summary["new_stage"]["known_call_count"] == 14
+        assert summary["new_stage"]["confirmed_cost_rub"] == "0.014"
+        assert summary["new_stage"]["unknown_call_count"] == 0
+    if bad in ("transport", "route", "usage", "cost", "history", "thinking"):
         assert summary["new_stage"]["unknown_call_count"] == 1
         assert Decimal(summary["new_stage"]["unknown_reserved_rub"]) > 0
     assert "PRIVATE_RAW_THINKING" not in output.getvalue()
@@ -1763,3 +1770,513 @@ async def test_reviewed_quality_failure_still_stops_and_counts_its_charge():
     )
     assert stats["models"][MODELS[0]]["completed"] == 0
     assert stats["runtime_authorized"] is False
+
+
+def controlled_r2_history():
+    """Synthetic history only; the fixed public anchor is from C0's task, not an owner file."""
+    anchor_data = payload()
+    anchor_data.update(id=probe.R2_ANCHOR)
+    anchor_data["usage"] = {
+        "prompt_tokens": 521,
+        "completion_tokens": 114,
+        "cost_rub": "0.00631386",
+    }
+    candidate_data = payload(MODELS[1], tools=True)
+    candidate_data["id"] = "gen_90020001"
+    listing_a, detail_a = experiment_history(anchor_data)
+    listing_c, detail_c = experiment_history(candidate_data)
+    for listing, detail, start in ((listing_a, detail_a, 95), (listing_c, detail_c, 99)):
+        stamp = probe.R2_CATALOG_AT + timedelta(seconds=start)
+        listing["items"][0]["createdAt"] = detail["createdAt"] = stamp.isoformat()
+        detail["completedAt"] = (stamp + timedelta(seconds=2)).isoformat()
+        detail["PRIVATE_EXTRA_KEY"] = "PRIVATE_SIGNATURE_AND_REASONING_NOT_FOR_REPORT"
+    listing = {
+        "items": listing_c["items"] + listing_a["items"],
+        "meta": {"page": 1, "limit": 5, "total": 31, "totalPages": 7},
+    }
+    return listing, {probe.R2_ANCHOR: detail_a, candidate_data["id"]: detail_c}
+
+
+def history_fixture_transport(listing, details, seen):
+    def handler(request):
+        seen.append(request)
+        assert request.method == "GET" and request.url.path.startswith(
+            "/api/v1/history/generations"
+        )
+        return response(
+            listing
+            if str(request.url) == HISTORY_LIST
+            else details[request.url.path.rsplit("/", 1)[1]]
+        )
+
+    return httpx.MockTransport(handler)
+
+
+async def test_readonly_r2_history_is_only_a_candidate_and_holds_unknown_reserve():
+    listing, details = controlled_r2_history()
+    seen = []
+    result = await probe.reconcile_r2_history(
+        ProbeSettings(api_key=KEY), transport=history_fixture_transport(listing, details, seen)
+    )
+    assert result["status"] == "CANDIDATE_REQUIRES_C0"
+    assert result["history_gets"] == len(seen) == 3
+    assert (
+        result["candidate"]["id"] == "gen_90020001" and result["candidate"]["cost_rub"] == "0.001"
+    )
+    assert result["anchor"]["id"] == probe.R2_ANCHOR
+    assert result["r2_charge_status"] == "UNKNOWN" and result["r2_charge_rub"] is None
+    assert result["candidate_is_exact_response_correlation"] is False
+    assert result["prior_unknown_reserved_rub"] == "3.464879664"
+    assert result["remaining_with_unknown_held_rub"] == "146.360028446"
+    assert (
+        result["automatic_reserve_release"] is False and result["auto_transition_to_paid"] is False
+    )
+    assert result["model_posts"] == result["reads"] == result["catalog_gets"] == 0
+    assert result["signature_shape"] == "NOT_AVAILABLE_FROM_HISTORY"
+    assert "PRIVATE" not in json.dumps(result) and "thought_signature" not in json.dumps(result)
+    assert not any("/log" in str(r.url) or "children" in str(r.url) for r in seen)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "no_match",
+        "ambiguous",
+        "anchor_missing",
+        "anchor_cost",
+        "anchor_usage",
+        "anchor_finish",
+        "duplicate_id",
+        "order",
+        "window",
+        "naive_time",
+        "id",
+        "model",
+        "time",
+        "cost",
+        "usage",
+        "unknown_cost",
+        "pending",
+        "provider",
+        "attempts",
+        "completed_time",
+        "usage_cap",
+        "page",
+        "currency",
+    ],
+)
+async def test_readonly_history_unknown_cases_never_release_or_send(bad):
+    listing, details = controlled_r2_history()
+    candidate, anchor = listing["items"]
+    candidate_detail = details[candidate["id"]]
+    if bad == "no_match":
+        candidate["model"] = MODELS[2]
+    if bad == "ambiguous":
+        listing["items"].insert(0, candidate | {"id": "gen_90020002"})
+    if bad == "anchor_missing":
+        listing["items"].pop()
+    if bad == "anchor_cost":
+        anchor["cost"] = "0.02"
+    if bad == "anchor_usage":
+        anchor["usage"]["prompt_tokens"] = 522
+    if bad == "anchor_finish":
+        details[probe.R2_ANCHOR]["finishReason"] = "tool_calls"
+    if bad == "duplicate_id":
+        listing["items"].insert(0, candidate.copy())
+    if bad == "order":
+        listing["items"].reverse()
+    if bad == "window":
+        candidate["createdAt"] = (probe.R2_CATALOG_AT + timedelta(seconds=1801)).isoformat()
+    if bad == "naive_time":
+        candidate["createdAt"] = "2026-10-30T06:42:39"
+    if bad == "id":
+        candidate_detail["id"] = "gen_123"
+    if bad == "model":
+        candidate_detail["model"] = MODELS[0]
+    if bad == "time":
+        candidate_detail["createdAt"] = anchor["createdAt"]
+    if bad == "cost":
+        candidate_detail["clientCost"] = "0.002"
+    if bad == "usage":
+        candidate_detail["usage"]["completion_tokens"] += 1
+    if bad == "unknown_cost":
+        candidate_detail["clientCost"] = None
+    if bad == "pending":
+        candidate_detail["status"] = "pending"
+    if bad == "provider":
+        candidate_detail["finalEndpointSlug"] = "different-family"
+    if bad == "attempts":
+        candidate_detail["attemptsCount"] = 2
+    if bad == "completed_time":
+        candidate_detail["completedAt"] = anchor["createdAt"]
+    if bad == "usage_cap":
+        candidate_detail["usage"]["completion_tokens"] = 513
+    if bad == "page":
+        listing["meta"]["page"] = 2
+    if bad == "currency":
+        candidate_detail["currency"] = "USD"
+    seen = []
+    result = await probe.reconcile_r2_history(
+        ProbeSettings(api_key=KEY), transport=history_fixture_transport(listing, details, seen)
+    )
+    assert result["status"] == "UNKNOWN" and result["r2_charge_rub"] is None
+    assert result["candidate"] is None and len(seen) <= 3
+    assert result["prior_unknown_reserved_rub"] == "3.464879664"
+    assert result["remaining_with_unknown_held_rub"] == "146.360028446"
+    assert result["model_posts"] == result["reads"] == 0
+
+
+@pytest.mark.parametrize("bad", ["oversize", "transport", "deadline", "get_limit", "key_echo"])
+async def test_history_caps_no_retry_and_no_unbounded_fetch(monkeypatch, bad):
+    listing, details = controlled_r2_history()
+    seen, bounds = [], []
+    original = probe.bounded_http
+
+    async def bounded(*args, **kwargs):
+        bounds.append((kwargs["seconds"], kwargs["maximum"]))
+        assert kwargs["body"] is None
+        if bad == "deadline":
+            raise TimeoutError
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(probe, "bounded_http", bounded)
+    if bad == "get_limit":
+        monkeypatch.setattr(probe, "HISTORY_RECONCILE_GETS", 1)
+
+    def handler(request):
+        seen.append(request)
+        assert request.method == "GET"
+        if bad == "oversize":
+            return response(raw=b"x" * 65537)
+        if bad == "transport":
+            return response(status=503)
+        if bad == "key_echo":
+            return response({"items": [], "extra": KEY.get_secret_value()})
+        return response(
+            listing
+            if str(request.url) == HISTORY_LIST
+            else details[request.url.path.rsplit("/", 1)[1]]
+        )
+
+    result = await probe.reconcile_r2_history(
+        ProbeSettings(api_key=KEY), transport=httpx.MockTransport(handler)
+    )
+    assert result["status"] == "UNKNOWN" and len(bounds) == 1
+    assert all(0 < seconds <= 15 and maximum == 65536 for seconds, maximum in bounds)
+    assert result["history_gets"] == 1
+    assert KEY.get_secret_value() not in json.dumps(result)
+
+
+def diagnostic_args(report, *, history=False):
+    return [
+        "--history-r2" if history else "--gemini-diagnostic",
+        "--report",
+        str(report),
+        "--source-sha",
+        "a" * 40,
+        "--source-environment",
+        "LOCAL_DESKTOP",
+    ]
+
+
+def test_readonly_cli_is_exclusive_and_never_opens_owner_reports(tmp_path, monkeypatch, capsys):
+    listing, details = controlled_r2_history()
+    seen = []
+    original_client = httpx.AsyncClient
+    transport = history_fixture_transport(listing, details, seen)
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: original_client(**(kwargs | {"transport": transport})),
+    )
+    monkeypatch.setattr(probe, "load_secret", lambda _: ProbeSettings(api_key=KEY))
+    owner_r1, owner_r2 = tmp_path / "r1.jsonl", tmp_path / "r2.jsonl"
+    owner_r1.write_bytes(b"CONTROLLED ORIGINAL R1")
+    owner_r2.write_bytes(b"CONTROLLED ORIGINAL R2")
+    report = tmp_path / "history.jsonl"
+    args = diagnostic_args(report, history=True)
+    assert main(args) == 0
+    assert "CANDIDATE_REQUIRES_C0" in capsys.readouterr().out
+    assert len(seen) == 3
+    events = [json.loads(s) for s in report.read_text().splitlines()]
+    assert [e["event"] for e in events] == ["source", "history_reconciliation"]
+    monkeypatch.setattr(
+        probe, "load_secret", lambda _: pytest.fail("existing report must precede key")
+    )
+    assert main(args) == 2 and len(seen) == 3
+    assert owner_r1.read_bytes() == b"CONTROLLED ORIGINAL R1"
+    assert owner_r2.read_bytes() == b"CONTROLLED ORIGINAL R2"
+
+
+@pytest.mark.parametrize(
+    "args", [["--plan", "--history-r2"], ["--gemini-diagnostic"], ["--plan", "--gemini-diagnostic"]]
+)
+def test_diagnostic_plans_are_offline_and_do_not_authorize_spending(monkeypatch, capsys, args):
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("no key"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: pytest.fail("no HTTP"))
+    assert main(args) == 0
+    proposal = json.loads(capsys.readouterr().out)
+    assert proposal["remaining_with_unknown_held_rub"] == "146.360028446"
+    assert proposal["runtime_authorized"] is False and proposal["reads"] == 0
+    if "--gemini-diagnostic" in args:
+        assert proposal["max_model_posts"] == 1 and proposal["followup_posts"] == 0
+        assert (
+            proposal["priced_reservation_rub"] is None
+            and proposal["live_requires_separate_c0_decision"] is True
+        )
+        assert proposal["overall_seconds"] == 120
+    else:
+        assert proposal["model_posts"] == proposal["catalog_gets"] == 0
+        assert proposal["max_history_gets"] == 4 and proposal["overall_seconds"] == 60
+
+
+class GeminiDiagnosticTransport:
+    def __init__(self, bad=None):
+        self.bad, self.seen = bad, []
+        self.data = payload(MODELS[1], tools=True)
+        self.data["id"] = "gen_90030001"
+        self.data.pop("provider")
+        if bad in ("signature", "signature_history", "signature_history_cancel", "missing_id"):
+            self.data["choices"][0]["message"]["tool_calls"][0].pop("extra_content")
+        if bad == "missing_id":
+            self.data.pop("id")
+        if bad == "usage":
+            self.data["usage"]["completion_tokens"] = 513
+        if bad == "cost":
+            self.data["usage"]["cost_rub"] = "100"
+        if bad == "route":
+            self.data["model"] = MODELS[0]
+        if bad == "tool_contract":
+            self.data["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = (
+                "unlisted_tool"
+            )
+
+    def handler(self, request):
+        self.seen.append(request)
+        if request.method == "POST":
+            assert sum(r.method == "POST" for r in self.seen) == 1
+            body = json.loads(request.content)
+            assert body["model"] == MODELS[1] and body["provider"]["only"] == [
+                "google-ai-studio/flex"
+            ]
+            assert body["provider"]["allow_fallbacks"] is False and body["max_tokens"] == 512
+            assert "reasoning" not in body and not any(
+                m["role"] == "tool" for m in body["messages"]
+            )
+            if self.bad == "transport":
+                return response(status=503)
+            if self.bad == "cancel":
+                raise asyncio.CancelledError
+            return response(self.data)
+        if request.url.path.endswith("/models"):
+            entry = experiment_entry(MODELS[1])
+            if self.bad == "expensive":
+                entry["providers"][0]["pricing"]["prompt_per_million"] = "10000"
+            return response({"data": [entry]})
+        if self.bad == "signature_history_cancel":
+            raise asyncio.CancelledError
+        listing, detail = experiment_history(self.data)
+        if self.bad in ("history", "signature_history"):
+            detail["attemptsCount"] = 2
+        return response(listing if str(request.url) == HISTORY_LIST else detail)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        None,
+        "signature",
+        "signature_history",
+        "signature_history_cancel",
+        "missing_id",
+        "usage",
+        "cost",
+        "route",
+        "transport",
+        "history",
+        "cancel",
+        "tool_contract",
+    ],
+)
+async def test_gemini_diagnostic_one_post_never_reads_or_continues(bad):
+    transport = GeminiDiagnosticTransport(bad)
+    output = io.StringIO()
+    result = await probe.run_gemini_diagnostic(
+        load_cases(FIXTURES),
+        ProbeSettings(api_key=KEY),
+        output,
+        Decimal(5),
+        transport=httpx.MockTransport(transport.handler),
+    )
+    assert sum(r.method == "POST" for r in transport.seen) == 1
+    assert sum(r.url.path.endswith("/models") for r in transport.seen) == 1
+    history = [r for r in transport.seen if "/history/" in r.url.path]
+    assert len(history) <= 2
+    assert result["reads"] == result["followup_posts"] == 0 and result["roundtrip_pass"] is False
+    assert result["old_unknown_reserve_released"] is False and result["runtime_authorized"] is False
+    assert (
+        "CONTROLLED_OPAQUE_SIGNATURE" not in output.getvalue()
+        and "PRIVATE" not in output.getvalue()
+    )
+    events = [json.loads(s) for s in output.getvalue().splitlines()]
+    assert [e["event"] for e in events] == ["diagnostic_plan", "reserved", "gemini_diagnostic"]
+    assert (
+        Decimal(events[1]["shared_rub_committed_or_reserved"])
+        == probe.R2_CONFIRMED_RUB
+        + probe.R2_UNKNOWN_RESERVE
+        + experiment_route(MODELS[1]).reservation()
+    )
+    if bad is None:
+        assert result["status"] == "TOOLS_OBSERVED / ROUNDTRIP_NOT_RUN" and result["failures"] == []
+        assert result["call"]["signature_diagnostic"]["code"] == "SIGNATURE_VALID"
+    else:
+        assert result["status"] == "TECHNICAL_FAILURE" and result["failures"]
+    if bad in (None, "signature", "tool_contract"):
+        assert result["call"]["metering_source"] == "HISTORY_LIST_DETAIL"
+        assert len(history) == 2 and result["new_known_call_count"] == 1
+        assert result["new_confirmed_cost_rub"] == "0.001" and result["new_unknown_call_count"] == 0
+        assert result["shared_unknown_reserved_rub"] == "3.464879664"
+        assert result["remaining_with_unknown_held_rub"] == "146.359028446"
+    else:
+        assert result["new_unknown_call_count"] == 1 and result["new_unknown_cost_rub"] is None
+        assert (
+            Decimal(result["shared_unknown_reserved_rub"])
+            == probe.R2_UNKNOWN_RESERVE + experiment_route(MODELS[1]).reservation()
+        )
+    if bad in ("signature", "signature_history", "signature_history_cancel", "missing_id"):
+        assert result["call"]["error_detail"] == "SIGNATURE_EXTRA_MISSING"
+        assert result["call"]["body_metering"]["reported_cost_rub"] == "0.001"
+    if bad == "signature_history":
+        assert result["call"]["failure_history_error"] == "HISTORY_VERIFICATION_FAILED"
+
+
+@pytest.mark.parametrize("bad,approved", [(None, Decimal("0.01")), ("expensive", Decimal(100))])
+async def test_diagnostic_fresh_reserve_over_approval_never_posts(bad, approved):
+    transport = GeminiDiagnosticTransport(bad)
+    output = io.StringIO()
+    with pytest.raises(ValueError, match="APPROVED_BUDGET_TOO_SMALL|PLAN_EXCEEDS_CEILING"):
+        await probe.run_gemini_diagnostic(
+            load_cases(FIXTURES),
+            ProbeSettings(api_key=KEY),
+            output,
+            approved,
+            transport=httpx.MockTransport(transport.handler),
+        )
+    assert len(transport.seen) == 1 and transport.seen[0].method == "GET"
+    assert '"event": "reserved"' not in output.getvalue()
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "old_approval",
+        "wrong_source",
+        "no_approval",
+        "too_high",
+        "zero",
+        "nan",
+        "mix",
+        "history_live",
+    ],
+)
+def test_diagnostic_cli_refuses_old_admission_and_conflicting_modes_before_key(
+    tmp_path, monkeypatch, capsys, bad
+):
+    args = diagnostic_args(tmp_path / "unused.jsonl") + [
+        "--live",
+        "--approved-rub",
+        "5",
+        "--approval-ref",
+        "C0-M4.2-GEMINI-DIAGNOSTIC-R1:" + "a" * 40 + ":CONTROLLED",
+    ]
+    if bad == "old_approval":
+        args[-1] = "C0-M4.2-QUALITY-CONTINUATION-EVAL-R1:OLD_CI"
+    if bad == "wrong_source":
+        args[-1] = "C0-M4.2-GEMINI-DIAGNOSTIC-R1:" + "b" * 40 + ":CONTROLLED"
+    if bad == "no_approval":
+        args = args[:-2]
+    if bad in ("too_high", "zero", "nan"):
+        args[args.index("--approved-rub") + 1] = {
+            "too_high": "149.90426263",
+            "zero": "0",
+            "nan": "NaN",
+        }[bad]
+    if bad == "mix":
+        args += ["--synthetic-experiment"]
+    if bad == "history_live":
+        args[0] = "--history-r2"
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("no key before admission"))
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda **kwargs: pytest.fail("no HTTP before admission")
+    )
+    assert main(args) == 2
+    assert "PROBE_STOPPED" in capsys.readouterr().out and not (tmp_path / "unused.jsonl").exists()
+
+
+def test_controlled_diagnostic_cli_records_one_attempt_and_is_exclusive(
+    tmp_path, monkeypatch, capsys
+):
+    transport = GeminiDiagnosticTransport()
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: original_client(
+            **(kwargs | {"transport": httpx.MockTransport(transport.handler)})
+        ),
+    )
+    monkeypatch.setattr(probe, "load_secret", lambda _: ProbeSettings(api_key=KEY))
+    report = tmp_path / "diagnostic.jsonl"
+    args = diagnostic_args(report) + [
+        "--live",
+        "--approved-rub",
+        "5",
+        "--approval-ref",
+        "C0-M4.2-GEMINI-DIAGNOSTIC-R1:" + "a" * 40 + ":CONTROLLED",
+    ]
+    assert main(args) == 0
+    assert "ROUNDTRIP_NOT_RUN" in capsys.readouterr().out
+    events = [json.loads(s) for s in report.read_text().splitlines()]
+    assert [e["event"] for e in events] == [
+        "source",
+        "diagnostic_plan",
+        "reserved",
+        "gemini_diagnostic",
+    ]
+    assert events[-1]["reads"] == events[-1]["followup_posts"] == 0
+    assert len(transport.seen) == 4
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("exclusive receipt before key"))
+    assert main(args) == 2 and len(transport.seen) == 4
+
+
+async def test_readonly_overall_deadline_cancels_pending_get_without_retry(monkeypatch):
+    seen = []
+
+    async def stalled(*args, **kwargs):
+        seen.append(kwargs)
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(probe, "HISTORY_RECONCILE_SECONDS", 0.01)
+    monkeypatch.setattr(probe, "bounded_http", stalled)
+    result = await probe.reconcile_r2_history(ProbeSettings(api_key=KEY))
+    assert result["status"] == "UNKNOWN" and result["error"] == "HISTORY_DEADLINE"
+    assert len(seen) == result["history_gets"] == 1
+    assert seen[0]["seconds"] <= 0.01 and seen[0]["body"] is None
+
+
+async def test_diagnostic_stage_deadline_cancels_catalog_before_post(monkeypatch):
+    called = []
+
+    async def stalled(*args, **kwargs):
+        called.append(kwargs)
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(probe, "GEMINI_DIAGNOSTIC_SECONDS", 0.01)
+    monkeypatch.setattr(probe, "catalog", stalled)
+    output = io.StringIO()
+    with pytest.raises(TimeoutError):
+        await probe.run_gemini_diagnostic(
+            load_cases(FIXTURES), ProbeSettings(api_key=KEY), output, Decimal(5)
+        )
+    assert len(called) == 1 and called[0]["models"] == (MODELS[1],)
+    assert output.getvalue() == ""

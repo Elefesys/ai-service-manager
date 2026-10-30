@@ -22,12 +22,14 @@ from pydantic import Field, TypeAdapter, ValidationError
 from asm.ai.contracts import (
     CONVERSATION_RESULT,
     DTO,
+    Cost,
     GatewayConfig,
     GatewayRequest,
     Limits,
     Message,
     ReadTool,
     ToolResult,
+    Usage,
     strict_json,
 )
 from asm.ai.gateway import ModelGateway, ProviderFailure
@@ -36,7 +38,9 @@ from asm.ai.polza import (
     CONVERSATION_WIRE_REVISION,
     EXPERIMENT_PROVIDERS,
     GENERATION_ID,
+    HISTORY,
     HISTORY_BYTES,
+    HISTORY_LIST,
     HISTORY_SECONDS,
     INPUT_BYTES,
     INPUT_TOKENS,
@@ -74,6 +78,16 @@ R1_COST = Decimal("0.08303952")
 CONTINUATION_PRIOR = PRIOR_CONFIRMED_RUB + R1_COST
 CONTINUATION_CEILING = RUB_CEILING - CONTINUATION_PRIOR
 PREFIX_DECISION = "e93c156b5ddcf7dcc2351a21755eb759a6f99e80:M4.2-PROBE-QUALITY-CONTINUATION-R1"
+DIAGNOSTIC_DECISION = "affe545a468c9ec161421bbd52e6f390f3ad8f2c:M4.2-GEMINI-DIAGNOSTIC-R1"
+R2_SOURCE = "cd60e5e16d8bcada53597d660a15f4d82640e956"
+R2_ANCHOR = "gen_2227337132904026113"
+R2_CATALOG_AT = datetime.fromisoformat("2026-10-30T06:41:00.956181+00:00")
+R2_CONFIRMED_RUB = Decimal("0.17509189")
+R2_UNKNOWN_RESERVE = Decimal("3.464879664")
+DIAGNOSTIC_CEILING = RUB_CEILING - R2_CONFIRMED_RUB - R2_UNKNOWN_RESERVE
+HISTORY_RECONCILE_SECONDS = 60.0
+HISTORY_RECONCILE_GETS = 4
+GEMINI_DIAGNOSTIC_SECONDS = 120.0
 
 
 @dataclass(frozen=True)
@@ -571,10 +585,10 @@ def plan(
     }
 
 
-def catalog_subset(data: Any) -> list[dict[str, Any]]:
+def catalog_subset(data: Any, models: tuple[str, ...] = MODELS) -> list[dict[str, Any]]:
     """Retain model modalities and complete provider configuration for drift checks."""
     result = []
-    for model in MODELS:
+    for model in models:
         matches = [m for m in data["data"] if m.get("id") == model]
         if len(matches) != 1:
             raise ValueError("MODEL_UNAVAILABLE")
@@ -589,7 +603,10 @@ def catalog_subset(data: Any) -> list[dict[str, Any]]:
 
 
 async def catalog(
-    settings: ProbeSettings, transport: httpx.AsyncBaseTransport | None = None
+    settings: ProbeSettings,
+    transport: httpx.AsyncBaseTransport | None = None,
+    *,
+    models: tuple[str, ...] = MODELS,
 ) -> list[dict[str, Any]]:
     raw = await bounded_http(
         settings.api_key,
@@ -599,7 +616,7 @@ async def catalog(
         maximum=4 * 1024 * 1024,
         transport=transport,
     )
-    selected = catalog_subset(strict_json(raw.decode()))
+    selected = catalog_subset(strict_json(raw.decode()), models)
     if settings.api_key.get_secret_value() in json.dumps(selected, ensure_ascii=False):
         raise ValueError("INVALID_CATALOG")
     return selected
@@ -833,6 +850,13 @@ async def run_case(
                         **adapter.observation,
                     }
                 )
+                settled = adapter.failure_metering() if response_gw.kind == "ERROR" else None
+                if settled:
+                    results[-1].update(
+                        usage=settled[0].model_dump(),
+                        cost=settled[1].model_dump(mode="json"),
+                        metering_source="HISTORY_LIST_DETAIL",
+                    )
                 if response_gw.kind == "FINAL":
                     final = response_gw.result.model_dump() if response_gw.result else None
                     break
@@ -1208,6 +1232,507 @@ async def live(
     return summary
 
 
+def diagnostic_budget() -> dict[str, Any]:
+    return {
+        "shared_budget_rub": str(RUB_CEILING),
+        "prior_confirmed_rub": str(R2_CONFIRMED_RUB),
+        "prior_confirmed_posts": 30,
+        "prior_unknown_posts": 1,
+        "prior_unknown_cost_rub": None,
+        "prior_unknown_reserved_rub": str(R2_UNKNOWN_RESERVE),
+        "remaining_with_unknown_held_rub": str(DIAGNOSTIC_CEILING),
+        "automatic_reserve_release": False,
+    }
+
+
+def history_r2_plan() -> dict[str, Any]:
+    return {
+        "mode": "R2_HISTORY_ONLY",
+        "decision": DIAGNOSTIC_DECISION,
+        "r2_source_sha": R2_SOURCE,
+        "lost_response_id": None,
+        "anchor_id": R2_ANCHOR,
+        "anchor_model": MODELS[0],
+        "anchor_cost_rub": "0.00631386",
+        "anchor_usage": [521, 114],
+        "stage_from": R2_CATALOG_AT.isoformat(),
+        "stage_to": (R2_CATALOG_AT + timedelta(seconds=DURATION)).isoformat(),
+        "list_scope": "FIRST_PAGE_5_NEWEST; ANCHOR_MUST_BE_PRESENT; NO_PAGINATION",
+        "max_history_gets": HISTORY_RECONCILE_GETS,
+        "history_bytes_per_get": HISTORY_BYTES,
+        "seconds_per_get": HISTORY_SECONDS,
+        "overall_seconds": HISTORY_RECONCILE_SECONDS,
+        "model_posts": 0,
+        "catalog_gets": 0,
+        "reads": 0,
+        "correlation": "MODEL_TIME_CANDIDATE_ONLY",
+        "signature_shape": "NOT_AVAILABLE_FROM_HISTORY",
+        "auto_transition_to_paid": False,
+        "runtime_authorized": False,
+        **diagnostic_budget(),
+    }
+
+
+def history_time(value: Any) -> datetime:
+    if type(value) is not str or len(value) > 40:
+        raise ValueError("HISTORY_TIME_INVALID")
+    when = datetime.fromisoformat(value)
+    if when.tzinfo is None or when.utcoffset() is None:
+        raise ValueError("HISTORY_TIME_INVALID")
+    when = when.astimezone(UTC)
+    if not R2_CATALOG_AT <= when < R2_CATALOG_AT + timedelta(seconds=DURATION):
+        raise ValueError("HISTORY_TIME_OUTSIDE_STAGE")
+    return when
+
+
+def history_metadata(row: Any, model: str, *, detail: bool = False) -> dict[str, Any]:
+    """Closed receipt fields only; account/key names, logs and extra keys are discarded."""
+    if (
+        type(row) is not dict
+        or type(row.get("id")) is not str
+        or not re.fullmatch(GENERATION_ID, row["id"])
+        or row.get("model", model if detail else None) not in (model, model.split("/", 1)[1])
+        or row.get("requestType") != "chat"
+        or row.get("status") != "completed"
+        or type(row.get("usage")) is not dict
+    ):
+        raise ValueError("HISTORY_IDENTITY_OR_STATUS_INVALID")
+    usage = row["usage"]
+    normalized = Usage(
+        input_tokens=usage.get("prompt_tokens"), output_tokens=usage.get("completion_tokens")
+    )
+    if (
+        normalized.input_tokens is None
+        or normalized.output_tokens is None
+        or normalized.input_tokens > INPUT_TOKENS
+        or normalized.output_tokens > OUTPUT_TOKENS
+        or "total_tokens" in usage
+        and (
+            type(usage["total_tokens"]) is not int
+            or usage["total_tokens"] != normalized.input_tokens + normalized.output_tokens
+        )
+    ):
+        raise ValueError("HISTORY_USAGE_INVALID")
+    amount = row.get("clientCost" if detail else "cost")
+    if type(amount) not in (str, int, float) or ("currency" in row and row["currency"] != "RUB"):
+        raise ValueError("HISTORY_COST_UNKNOWN")
+    cost = Cost(status="CONFIRMED", amount=Decimal(str(amount)), currency="RUB")
+    provider = row.get("finalEndpointSlug" if detail else "provider")
+    if type(provider) is not str or not re.fullmatch(r"[a-zA-Z0-9_.:/-]{1,128}", provider):
+        raise ValueError("HISTORY_PROVIDER_UNKNOWN")
+    stamp = history_time(row.get("createdAt"))
+    result = {
+        "id": row["id"],
+        "model": model,
+        "provider_family": provider,
+        "created_at": stamp.isoformat(),
+        "usage": normalized.model_dump(),
+        "cost_rub": str(cost.amount),
+        "currency": "RUB",
+        "status": "completed",
+    }
+    reasoning = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+    if reasoning is not None and (
+        type(reasoning) is not int or not 0 <= reasoning <= normalized.output_tokens
+    ):
+        raise ValueError("HISTORY_REASONING_INVALID")
+    result["reasoning_tokens"] = reasoning
+    if detail:
+        finish = row.get("finishReason")
+        end = history_time(row.get("completedAt"))
+        if (
+            row.get("apiType") not in ("chat_completions", "completions")
+            or row.get("responseMode") != "sync"
+            or row.get("isCancelled") is not False
+            or type(row.get("attemptsCount")) is not int
+            or row["attemptsCount"] != 1
+            or finish not in ("stop", "tool_calls", "length", "content_filter")
+            or end < stamp
+            or row.get("parentGenerationId")
+            or row.get("serverTools")
+            or type(row.get("stepsCount", 1)) is not int
+            or row.get("stepsCount", 1) != 1
+        ):
+            raise ValueError("HISTORY_PROTOCOL_INVALID")
+        result.update(completed_at=end.isoformat(), finish_reason=finish, attempts_count=1)
+    return result
+
+
+def match_history_pair(listed: dict[str, Any], detail: dict[str, Any]) -> None:
+    for key in (
+        "id",
+        "model",
+        "provider_family",
+        "created_at",
+        "usage",
+        "cost_rub",
+        "currency",
+        "status",
+    ):
+        # Decimal normalization permits 0.001 and 0.0010 without changing the amount.
+        if (
+            Decimal(listed[key]) != Decimal(detail[key])
+            if key == "cost_rub"
+            else listed[key] != detail[key]
+        ):
+            raise ValueError("HISTORY_LIST_DETAIL_MISMATCH")
+    if (
+        listed["reasoning_tokens"] is not None
+        and listed["reasoning_tokens"] != detail["reasoning_tokens"]
+    ):
+        raise ValueError("HISTORY_LIST_DETAIL_MISMATCH")
+
+
+async def reconcile_r2_history(
+    settings: ProbeSettings,
+    *,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "event": "history_reconciliation",
+        **history_r2_plan(),
+        "status": "UNKNOWN",
+        "r2_charge_status": "UNKNOWN",
+        "r2_charge_rub": None,
+        "history_gets": 0,
+        "candidate": None,
+        "anchor": None,
+        "candidate_is_exact_response_correlation": False,
+    }
+    deadline = time.monotonic() + HISTORY_RECONCILE_SECONDS
+
+    async def get(url: str) -> Any:
+        remaining = deadline - time.monotonic()
+        if result["history_gets"] >= HISTORY_RECONCILE_GETS or remaining <= 0:
+            raise ValueError("HISTORY_GET_OR_DEADLINE_LIMIT")
+        result["history_gets"] += 1
+        raw = await bounded_http(
+            settings.api_key,
+            url,
+            body=None,
+            seconds=min(HISTORY_SECONDS, remaining),
+            maximum=HISTORY_BYTES,
+            transport=transport,
+        )
+        if settings.api_key.get_secret_value().encode() in raw:
+            raise ValueError("HISTORY_PRIVATE_DATA")
+        return strict_json(raw.decode())
+
+    try:
+        async with asyncio.timeout(HISTORY_RECONCILE_SECONDS):
+            listing = await get(HISTORY_LIST)
+            items = listing["items"]
+            if type(items) is not list or len(items) > 5 or any(type(r) is not dict for r in items):
+                raise ValueError("HISTORY_LIST_INVALID")
+            if "meta" in listing and (
+                listing["meta"].get("page") != 1 or listing["meta"].get("limit") != 5
+            ):
+                raise ValueError("HISTORY_PAGE_INVALID")
+            identifiers = [r.get("id") for r in items]
+            if any(
+                type(v) is not str or not re.fullmatch(GENERATION_ID, v) for v in identifiers
+            ) or len(set(identifiers)) != len(items):
+                raise ValueError("HISTORY_IDS_INVALID")
+            anchors = [r for r in items if r["id"] == R2_ANCHOR]
+            if len(anchors) != 1:
+                raise ValueError("HISTORY_ANCHOR_ABSENT")
+            anchor = history_metadata(anchors[0], MODELS[0])
+            if (
+                Decimal(anchor["cost_rub"]) != Decimal("0.00631386")
+                or anchor["usage"] != {"input_tokens": 521, "output_tokens": 114}
+                or anchor["provider_family"] != "OpenAI"
+            ):
+                raise ValueError("HISTORY_ANCHOR_MISMATCH")
+            # Only rows newer than the known anchor can be the missing request.
+            # Older rows need not be in the stage; no omitted later page can add a newer candidate.
+            stamps = [datetime.fromisoformat(r["createdAt"]) for r in items]
+            if any(t.tzinfo is None or t.utcoffset() is None for t in stamps) or stamps != sorted(
+                stamps, reverse=True
+            ):
+                raise ValueError("HISTORY_ORDER_INVALID")
+            candidates = [
+                r
+                for r, t in zip(items, stamps, strict=True)
+                if r.get("model") in (MODELS[1], MODELS[1].split("/", 1)[1])
+                and history_time(anchor["created_at"])
+                < t
+                < R2_CATALOG_AT + timedelta(seconds=DURATION)
+            ]
+            if len(candidates) != 1:
+                raise ValueError("HISTORY_NO_CANDIDATE" if not candidates else "HISTORY_AMBIGUOUS")
+            candidate = history_metadata(candidates[0], MODELS[1])
+            candidate_detail = history_metadata(
+                await get(HISTORY + "/" + candidate["id"]), MODELS[1], detail=True
+            )
+            match_history_pair(candidate, candidate_detail)
+            anchor_detail = history_metadata(
+                await get(HISTORY + "/" + R2_ANCHOR), MODELS[0], detail=True
+            )
+            match_history_pair(anchor, anchor_detail)
+            if anchor_detail["finish_reason"] != "stop" or history_time(
+                candidate_detail["created_at"]
+            ) < history_time(anchor_detail["completed_at"]):
+                raise ValueError("HISTORY_ANCHOR_ORDER_MISMATCH")
+            result.update(
+                status="CANDIDATE_REQUIRES_C0",
+                candidate=candidate_detail,
+                anchor=anchor_detail,
+                candidate_evidence="HISTORY_LIST_DETAIL / MODEL_TIME_ONLY",
+                candidate_within_old_reserve=Decimal(candidate_detail["cost_rub"])
+                <= R2_UNKNOWN_RESERVE,
+                model_evidence="LIST_MODEL_WITH_EXACT_DETAIL_ID; OPTIONAL_DETAIL_MODEL_CHECKED",
+            )
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        InvalidOperation,
+        RecursionError,
+        ProviderFailure,
+        TimeoutError,
+    ) as exc:
+        result["error"] = "HISTORY_DEADLINE" if isinstance(exc, TimeoutError) else safe_error(exc)
+    return result
+
+
+def gemini_diagnostic_plan(
+    cases: tuple[Case, ...], review: SyntheticRoute | None = None
+) -> dict[str, Any]:
+    if fingerprint([c.model_dump(mode="json") for c in cases]) != FIXTURE_SHA256:
+        raise ValueError("EXPERIMENT_FIXTURES_CHANGED")
+    if review is not None and review.model != MODELS[1]:
+        raise ValueError("DIAGNOSTIC_MODEL_MISMATCH")
+    reserve = review.reservation() if review else None
+    if reserve is not None and reserve > DIAGNOSTIC_CEILING:
+        raise ValueError("PLAN_EXCEEDS_CEILING")
+    return {
+        "mode": "GEMINI_PROTOCOL_DIAGNOSTIC",
+        "status": "PLAN_ONLY / PAID_NOT_AUTHORIZED",
+        "decision": DIAGNOSTIC_DECISION,
+        "model": MODELS[1],
+        "provider_only": EXPERIMENT_PROVIDERS[1],
+        "case": "tool_current",
+        "repeat": 0,
+        "fixture_sha256": FIXTURE_SHA256,
+        "profile": "PROVIDER_DEFAULT / TRANSIENT_GOOGLE_SIGNATURE",
+        "route": review.metadata() if review else None,
+        "max_model_posts": 1,
+        "max_catalog_gets": 1,
+        "max_exact_id_history_gets": 2,
+        "reads": 0,
+        "followup_posts": 0,
+        "gpt_posts": 0,
+        "roundtrip_pass": False,
+        "input_tokens": INPUT_TOKENS,
+        "output_tokens": OUTPUT_TOKENS,
+        "input_bytes": INPUT_BYTES,
+        "output_bytes": OUTPUT_BYTES,
+        "case_seconds": CASE_SECONDS,
+        "overall_seconds": GEMINI_DIAGNOSTIC_SECONDS,
+        "history_bytes_per_get": HISTORY_BYTES,
+        "history_seconds_per_post": HISTORY_SECONDS,
+        "priced_reservation_rub": str(reserve) if reserve is not None else None,
+        "billing_status": "CONDITIONAL_ESTIMATE",
+        "runtime_authorized": False,
+        "live_requires_separate_c0_decision": True,
+        **diagnostic_budget(),
+    }
+
+
+def write_metadata(output: TextIO, value: dict[str, Any]) -> None:
+    output.write(json.dumps(value, ensure_ascii=False, allow_nan=False) + "\n")
+    output.flush()
+
+
+async def run_gemini_diagnostic(
+    cases: tuple[Case, ...],
+    settings: ProbeSettings,
+    output: TextIO,
+    approved: Decimal,
+    *,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> dict[str, Any]:
+    gemini_diagnostic_plan(cases)
+    if not approved.is_finite() or not 0 < approved <= DIAGNOSTIC_CEILING:
+        raise ValueError("APPROVAL_LIMIT")
+    deadline = time.monotonic() + GEMINI_DIAGNOSTIC_SECONDS
+    async with asyncio.timeout(GEMINI_DIAGNOSTIC_SECONDS):
+        entries = await catalog(settings, transport, models=(MODELS[1],))
+        review = SyntheticRoute.from_catalog(entries[0], datetime.now(UTC))
+        proposal = gemini_diagnostic_plan(cases, review)
+        write_metadata(
+            output, {"event": "diagnostic_plan", **proposal, "approved_rub": str(approved)}
+        )
+        reserve = review.reservation()
+        if reserve > approved:
+            raise ValueError("APPROVED_BUDGET_TOO_SMALL")
+        case = next(c for c in cases if c.id == "tool_current")
+        adapter = PolzaAdapter(review, settings.api_key, transport=transport)
+        config = configuration(review, case)
+        # Keep the original Gateway tool validation, which requires continuation
+        # capacity. This finite diagnostic invokes call() exactly once, reserves
+        # only that POST and never creates a ToolResult or performs another call.
+        request = GatewayRequest(
+            run_id="tool_current_0",
+            deadline=datetime.now(UTC)
+            + timedelta(seconds=min(CASE_SECONDS, deadline - time.monotonic())),
+            messages=(
+                Message(role="context", text=case.context),
+                Message(role="user", text=case.question),
+            ),
+            tools=(
+                ReadTool(
+                    name="read_current",
+                    revision="synthetic_v1",
+                    description="Read only the current synthetic fixture fact.",
+                    arguments=ReadArgs,
+                    result=ReadResult,
+                ),
+            ),
+        )
+        gateway = ModelGateway(config, request, adapter)
+        write_metadata(
+            output,
+            {
+                "event": "reserved",
+                "model": MODELS[1],
+                "case": case.id,
+                "repeat": 0,
+                "calls_reserved": 1,
+                "rub_reserved": str(reserve),
+                "cost_status": "UNKNOWN",
+                "shared_rub_committed_or_reserved": str(
+                    R2_CONFIRMED_RUB + R2_UNKNOWN_RESERVE + reserve
+                ),
+            },
+        )
+        usage, cost = Usage(), Cost()
+        kind: str = "ERROR"
+        error: str | None = None
+        try:
+            response = await gateway.call()
+            kind, error, usage, cost = response.kind, response.error, response.usage, response.cost
+            settled = adapter.failure_metering() if kind == "ERROR" else None
+            if settled:
+                usage, cost = settled
+        except asyncio.CancelledError:
+            error = "CANCELLED"
+        finally:
+            adapter.clear_continuation()
+        call = {
+            "kind": kind,
+            "error": error,
+            "usage": usage.model_dump(),
+            "cost": cost.model_dump(mode="json"),
+            "metering_source": "HISTORY_LIST_DETAIL" if cost.status == "CONFIRMED" else "UNKNOWN",
+            **adapter.observation,
+        }
+        failures = metering_failures(call, review)
+        if error or kind != "TOOLS":
+            failures.append(error or "DIAGNOSTIC_TOOLS_NOT_OBSERVED")
+        known = cost.status == "CONFIRMED"
+        expense = cost.amount if cost.amount is not None else Decimal(0)
+        unknown_reserve = Decimal(0) if known else reserve
+        result = {
+            "event": "gemini_diagnostic",
+            "model": MODELS[1],
+            "case": case.id,
+            "repeat": 0,
+            "status": "TECHNICAL_FAILURE" if failures else "TOOLS_OBSERVED / ROUNDTRIP_NOT_RUN",
+            "failures": sorted(set(failures)),
+            "call": call,
+            "attempt_reservations": 1,
+            "reads": 0,
+            "followup_posts": 0,
+            "roundtrip_pass": False,
+            "runtime_authorized": False,
+            "new_confirmed_cost_rub": str(expense),
+            "new_known_call_count": int(known),
+            "new_unknown_call_count": int(not known),
+            "shared_known_call_count": 30 + int(known),
+            "shared_unknown_call_count": 1 + int(not known),
+            "new_unknown_cost_rub": None if not known else "0",
+            "new_unknown_reserved_rub": str(unknown_reserve),
+            "shared_confirmed_cost_rub": str(R2_CONFIRMED_RUB + expense),
+            "shared_unknown_reserved_rub": str(R2_UNKNOWN_RESERVE + unknown_reserve),
+            "remaining_with_unknown_held_rub": str(DIAGNOSTIC_CEILING - expense - unknown_reserve),
+            "old_unknown_reserve_released": False,
+            "selected_model": None,
+        }
+        write_metadata(output, result)
+        return result
+
+
+def diagnostic_main(args: argparse.Namespace) -> int:
+    if args.review or args.continue_from or args.synthetic_experiment or args.preflight:
+        raise ValueError("DIAGNOSTIC_MODE_CONFLICT")
+    if args.history_r2 and (args.live or args.approved_rub is not None or args.approval_ref):
+        raise ValueError("HISTORY_MODE_CANNOT_SPEND")
+    cases = load_cases(args.fixtures) if args.gemini_diagnostic else ()
+    proposal = gemini_diagnostic_plan(cases) if args.gemini_diagnostic else history_r2_plan()
+    if args.plan or args.gemini_diagnostic and not args.live:
+        print(json.dumps(proposal, ensure_ascii=False, indent=2))
+        return 0
+    if (
+        not args.report
+        or not re.fullmatch(r"[0-9a-f]{40}", args.source_sha or "")
+        or not args.source_environment
+    ):
+        raise ValueError("SOURCE_AND_EXCLUSIVE_REPORT_REQUIRED")
+    if args.gemini_diagnostic and (
+        not args.approval_ref
+        or not args.approval_ref.startswith("C0-M4.2-GEMINI-DIAGNOSTIC-R1:" + args.source_sha + ":")
+        or args.approved_rub is None
+        or not args.approved_rub.is_finite()
+        or not 0 < args.approved_rub <= DIAGNOSTIC_CEILING
+    ):
+        raise ValueError("SEPARATE_DIAGNOSTIC_APPROVAL_REQUIRED")
+    with args.report.open("x", encoding="utf-8") as output:
+        settings = load_secret(args.secret_file)
+        write_metadata(
+            output,
+            {
+                "event": "source",
+                "mode": proposal["mode"],
+                "sha": args.source_sha,
+                "environment": args.source_environment,
+                "decision": DIAGNOSTIC_DECISION,
+                "approval_ref": args.approval_ref,
+                "runtime_authorized": False,
+            },
+        )
+        if args.history_r2:
+            result = asyncio.run(reconcile_r2_history(settings))
+            write_metadata(output, result)
+            print("REPORT_WRITTEN / " + result["status"] + " / NO_PAID_TRANSITION")
+            return 0 if result["status"] == "CANDIDATE_REQUIRES_C0" else 2
+        try:
+            result = asyncio.run(run_gemini_diagnostic(cases, settings, output, args.approved_rub))
+        except (
+            ValueError,
+            TypeError,
+            KeyError,
+            AttributeError,
+            RecursionError,
+            ProviderFailure,
+            TimeoutError,
+        ) as exc:
+            write_metadata(
+                output,
+                {
+                    "event": "stopped",
+                    "error": safe_error(exc),
+                    "cost_status": "UNKNOWN",
+                    "no_automatic_retry": True,
+                    "runtime_authorized": False,
+                },
+            )
+            raise
+        print("REPORT_WRITTEN / " + result["status"] + " / NO_READ_OR_FOLLOWUP")
+        return 2 if result["failures"] else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
@@ -1217,6 +1742,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fixtures", type=Path, default=FIXTURES)
     parser.add_argument("--review", type=Path)
     parser.add_argument("--synthetic-experiment", action="store_true")
+    diagnostic_mode = parser.add_mutually_exclusive_group()
+    diagnostic_mode.add_argument("--history-r2", action="store_true")
+    diagnostic_mode.add_argument("--gemini-diagnostic", action="store_true")
     parser.add_argument("--continue-from", type=Path)
     parser.add_argument("--secret-file", type=Path, default=Path(".env.m4-probe"))
     parser.add_argument("--report", type=Path)
@@ -1226,6 +1754,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-environment", choices=("LOCAL_DESKTOP", "LOCAL_BACKEND"))
     args = parser.parse_args(argv)
     try:
+        if args.history_r2 or args.gemini_diagnostic:
+            return diagnostic_main(args)
         if args.synthetic_experiment and (args.review or args.preflight):
             raise ValueError("EXPERIMENT_CANNOT_USE_REVIEWS_OR_PREFLIGHT")
         if args.continue_from and not args.synthetic_experiment:

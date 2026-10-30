@@ -1168,7 +1168,27 @@ async def test_gemini_invalid_signature_stops_before_read_and_continuation(bad):
     case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
     row = await run_case(adapter, case, Ledger(io.StringIO(), Decimal(10), 2), 0)
     assert len(posts) == 1 and row["reads"] == 0 and row["final"] is None
-    assert row["calls"][0]["error_detail"] == "SIGNATURE_INVALID"
+    expected = {
+        "missing": "SIGNATURE_EXTRA_MISSING",
+        "wrong_path": "SIGNATURE_GOOGLE_MISSING",
+        "extra": "SIGNATURE_EXTRA_KEYS",
+        "null": "SIGNATURE_NULL",
+        "empty": "SIGNATURE_EMPTY",
+        "number": "SIGNATURE_TYPE",
+        "oversized": "SIGNATURE_OVERSIZE",
+        "control": "SIGNATURE_CONTROL",
+    }[bad]
+    assert row["calls"][0]["error_detail"] == expected
+    diagnostic = row["calls"][0]["signature_diagnostic"]
+    assert diagnostic["code"] == expected
+    assert diagnostic["byte_limit"] == SIGNATURE_BYTES
+    assert (
+        diagnostic["utf8_bytes_bounded"] is None
+        or diagnostic["utf8_bytes_bounded"] <= SIGNATURE_BYTES + 1
+    )
+    assert row["calls"][0]["body_metering"]["reported_cost_rub"] == "0.001"
+    assert row["calls"][0]["body_metering"]["verification"] == "FIELD_VALIDATED_ONLY"
+    assert row["calls"][0]["cost"]["status"] == "UNKNOWN"
     assert "PRIVATE" not in json.dumps(row)
     assert adapter._continuation is None and adapter._run_key is None
 
@@ -1466,3 +1486,119 @@ async def test_gemini_signature_reflection_never_enters_observations_or_dto(fiel
     assert row["reads"] == 0 and row["final"] is None
     assert row["calls"][0]["error_detail"] == "SIGNATURE_IN_RESPONSE"
     assert signature not in json.dumps(row) and adapter._continuation is None
+
+
+@pytest.mark.parametrize(
+    "shape,code",
+    [
+        (None, "SIGNATURE_EXTRA_TYPE"),
+        ({"google": None}, "SIGNATURE_GOOGLE_TYPE"),
+        ({"google": {}}, "SIGNATURE_FIELD_MISSING"),
+        (
+            {"google": {"thought_signature": "PRIVATE_OPAQUE", "PRIVATE_KEY": "PRIVATE_VALUE"}},
+            "SIGNATURE_GOOGLE_KEYS",
+        ),
+        ({"google": {"thought_signature": True}}, "SIGNATURE_TYPE"),
+        ({"google": {"thought_signature": {"PRIVATE_KEY": "PRIVATE_VALUE"}}}, "SIGNATURE_TYPE"),
+    ],
+)
+async def test_signature_container_diagnostics_do_not_expose_keys_or_values(shape, code):
+    data = payload(MODELS[1], tools=True)
+    data["id"] = "gen_9001"
+    data["choices"][0]["message"]["tool_calls"][0]["extra_content"] = shape
+    adapter = PolzaAdapter(
+        review(MODELS[1]), KEY, transport=httpx.MockTransport(lambda _: response(data))
+    )
+    case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+    row = await run_case(adapter, case, Ledger(io.StringIO(), Decimal(10), 2), 0)
+    call = row["calls"][0]
+    assert call["error_detail"] == code and call["signature_diagnostic"]["code"] == code
+    assert call["generation_id"] == "gen_9001" and call["observed_model"] == MODELS[1]
+    assert call["body_metering"]["usage"] == {"input_tokens": 30, "output_tokens": 20}
+    assert call["body_metering"]["reported_cost_rub"] == "0.001"
+    assert call["route_evidence_source"] == "BODY" and call["history_family"] is None
+    assert call["cost"]["status"] == "UNKNOWN" and call["history_gets"] == 0
+    assert "PRIVATE" not in json.dumps(row) and row["reads"] == 0
+    assert adapter._continuation is None and adapter._diagnostic_redactions == ()
+
+
+@pytest.mark.parametrize("field", ["provider", "id", "reasoning"])
+async def test_malformed_signature_reflection_is_redacted_from_failure_metadata(field):
+    hidden = "gen_90015555" if field == "id" else "PRIVATE_MALFORMED_VALUE"
+    data = payload(MODELS[1], tools=True)
+    data["id"] = "gen_9001"
+    data["choices"][0]["message"]["tool_calls"][0]["extra_content"]["PRIVATE_KEY"] = hidden
+    if field == "reasoning":
+        data["choices"][0]["message"]["reasoning_content"] = hidden
+        data["provider"] = hidden
+    else:
+        data[field] = hidden
+    adapter = PolzaAdapter(
+        review(MODELS[1]), KEY, transport=httpx.MockTransport(lambda _: response(data))
+    )
+    row = await run_case(
+        adapter,
+        next(c for c in load_cases(FIXTURES) if c.id == "tool_current"),
+        Ledger(io.StringIO(), Decimal(10), 2),
+        0,
+    )
+    assert row["calls"][0]["error_detail"] == "SIGNATURE_EXTRA_KEYS"
+    assert hidden not in json.dumps(row) and "PRIVATE_KEY" not in json.dumps(row)
+    assert row["reads"] == 0 and row["final"] is None
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "usage_type",
+        "usage_cap",
+        "reasoning",
+        "total",
+        "cost_null",
+        "cost_bool",
+        "cost_nan",
+        "cost_alias",
+        "cost_currency",
+    ],
+)
+async def test_signature_failure_keeps_only_validated_metering_fields(bad):
+    data = payload(MODELS[1], tools=True)
+    data["id"] = "gen_9001"
+    data["choices"][0]["message"]["tool_calls"][0].pop("extra_content")
+    if bad == "usage_type":
+        data["usage"]["prompt_tokens"] = True
+    if bad == "usage_cap":
+        data["usage"]["completion_tokens"] = 513
+    if bad == "reasoning":
+        data["usage"]["completion_tokens_details"] = {"reasoning_tokens": 21}
+    if bad == "total":
+        data["usage"]["total_tokens"] = 51
+    if bad == "cost_null":
+        data["usage"]["cost_rub"] = None
+    if bad == "cost_bool":
+        data["usage"]["cost_rub"] = True
+    if bad == "cost_nan":
+        data["usage"]["cost_rub"] = "NaN"
+    if bad == "cost_alias":
+        data["usage"]["cost"] = "0.002"
+    if bad == "cost_currency":
+        data["usage"]["currency"] = "USD"
+    adapter = PolzaAdapter(
+        experiment_route(MODELS[1]), KEY, transport=httpx.MockTransport(lambda _: response(data))
+    )
+    row = await run_case(
+        adapter,
+        next(c for c in load_cases(FIXTURES) if c.id == "tool_current"),
+        Ledger(io.StringIO(), Decimal(10), 2),
+        0,
+    )
+    call = row["calls"][0]
+    assert call["error_detail"] == "SIGNATURE_EXTRA_MISSING"
+    assert call["cost"]["status"] == "UNKNOWN" and call["history_gets"] == 0
+    assert call["body_metering"]["reported_cost_rub"] == (
+        None if bad.startswith("cost_") else "0.001"
+    )
+    assert call["body_metering"]["usage"]["input_tokens"] == (
+        30 if bad.startswith("cost_") else None
+    )
+    assert row["reads"] == 0 and row["final"] is None

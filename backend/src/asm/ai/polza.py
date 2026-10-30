@@ -526,6 +526,7 @@ class PolzaAdapter:
         )
         self._run_key: tuple[str, str, str] | None = None
         self._continuation: tuple[ToolCall, str] | None = None
+        self._diagnostic_redactions: tuple[str, ...] = ()
         self._key = key
         self._transport = transport
         self.observation: dict[str, Any] = {}
@@ -545,6 +546,7 @@ class PolzaAdapter:
     def clear_continuation(self) -> None:
         self._run_key = None
         self._continuation = None
+        self._diagnostic_redactions = ()
 
     def continuation_call(self, call: ToolCall) -> dict[str, Any]:
         wire: dict[str, Any] = {
@@ -560,26 +562,240 @@ class PolzaAdapter:
         return wire
 
     @staticmethod
-    def google_signature(calls: Any) -> str:
+    def signature_metadata(calls: Any) -> dict[str, Any]:
+        """Closed categories only: never values, arbitrary keys or a signature hash."""
+        metadata: dict[str, Any] = {
+            "code": "SIGNATURE_CORRELATION_FAILED",
+            "expected_field_present": None,
+            "shape_category": "CALL_CONTAINER",
+            "field_type": "UNKNOWN",
+            "utf8_bytes_bounded": None,
+            "byte_limit": SIGNATURE_BYTES,
+            "length_exceeds_limit": None,
+        }
         if type(calls) is not list or len(calls) != 1 or type(calls[0]) is not dict:
-            raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_CORRELATION_FAILED")
-        extra = calls[0].get("extra_content")
-        if (
-            type(extra) is not dict
-            or set(extra) != {"google"}
-            or type(extra["google"]) is not dict
-            or set(extra["google"]) != {"thought_signature"}
+            return metadata
+        node = calls[0]
+        for key, missing, wrong_type, extra_keys in (
+            ("extra_content", "EXTRA_MISSING", "EXTRA_TYPE", "EXTRA_KEYS"),
+            ("google", "GOOGLE_MISSING", "GOOGLE_TYPE", "GOOGLE_KEYS"),
         ):
-            raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_INVALID")
-        signature = extra["google"]["thought_signature"]
-        if (
-            type(signature) is not str
-            or not signature.strip()
-            or not signature.isprintable()
-            or len(signature.encode()) > SIGNATURE_BYTES
-        ):
-            raise PolzaFailure("ADAPTER_ERROR", "SIGNATURE_INVALID")
-        return signature
+            metadata["shape_category"] = (
+                "EXTRA_CONTENT" if key == "extra_content" else "GOOGLE_CONTAINER"
+            )
+            if key not in node:
+                metadata["expected_field_present"] = False
+                metadata["code"] = "SIGNATURE_" + missing
+                return metadata
+            child = node[key]
+            if type(child) is not dict:
+                metadata["code"] = "SIGNATURE_" + wrong_type
+                return metadata
+            expected = "google" if key == "extra_content" else "thought_signature"
+            if expected in child and len(child) != 1:
+                metadata["code"] = "SIGNATURE_" + extra_keys
+                # Presence/type/length remain UNKNOWN until the expected path is closed.
+                return metadata
+            node = child
+        if "thought_signature" not in node:
+            metadata["expected_field_present"] = False
+            metadata["code"] = "SIGNATURE_FIELD_MISSING"
+            return metadata
+        value = node["thought_signature"]
+        metadata["shape_category"] = "EXPECTED_FIELD"
+        metadata["expected_field_present"] = True
+        metadata["field_type"] = {
+            str: "STRING",
+            type(None): "NULL",
+            int: "NUMBER",
+            float: "NUMBER",
+            bool: "BOOLEAN",
+            list: "ARRAY",
+            dict: "OBJECT",
+        }.get(type(value), "UNKNOWN")
+        if value is None:
+            metadata["code"] = "SIGNATURE_NULL"
+        elif type(value) is not str:
+            metadata["code"] = "SIGNATURE_TYPE"
+        else:
+            try:
+                size = len(value.encode("utf-8"))
+            except UnicodeError:
+                metadata["code"] = "SIGNATURE_ENCODING"
+                return metadata
+            metadata["utf8_bytes_bounded"] = min(size, SIGNATURE_BYTES + 1)
+            metadata["length_exceeds_limit"] = size > SIGNATURE_BYTES
+            metadata["code"] = (
+                "SIGNATURE_EMPTY"
+                if not value.strip()
+                else "SIGNATURE_CONTROL"
+                if not value.isprintable()
+                else "SIGNATURE_OVERSIZE"
+                if size > SIGNATURE_BYTES
+                else "SIGNATURE_VALID"
+            )
+        return metadata
+
+    @staticmethod
+    def google_signature(calls: Any) -> str:
+        metadata = PolzaAdapter.signature_metadata(calls)
+        if metadata["code"] != "SIGNATURE_VALID":
+            raise PolzaFailure("ADAPTER_ERROR", metadata["code"])
+        value: str = calls[0]["extra_content"]["google"]["thought_signature"]
+        return value
+
+    def observe_signature_failure(self, data: dict[str, Any]) -> None:
+        """Retain validated body metadata without turning it into verified history."""
+        opaque: list[str] = [self._key.get_secret_value()]
+        if self._continuation:
+            opaque.append(self._continuation[1])
+
+        def redact_values(value: Any) -> None:
+            if (
+                type(value) is str
+                and value
+                and value not in ("assistant", "function", "tool_calls", "stop", "read_current")
+            ):
+                opaque.append(value)
+            elif type(value) is dict:
+                for k, v in value.items():
+                    if k not in {
+                        "index",
+                        "message",
+                        "role",
+                        "content",
+                        "tool_calls",
+                        "id",
+                        "type",
+                        "function",
+                        "name",
+                        "arguments",
+                        "extra_content",
+                        "google",
+                        "thought_signature",
+                        "reasoning",
+                        "reasoning_content",
+                        "reasoning_details",
+                        "refusal",
+                        "finish_reason",
+                    }:
+                        redact_values(k)
+                    redact_values(v)
+            elif type(value) is list:
+                for v in value:
+                    redact_values(v)
+
+        # All message strings/keys are excluded, including malformed extra content,
+        # a signature at a wrong path, raw reasoning and reflected continuation data.
+        redact_values(data.get("choices"))
+        self._diagnostic_redactions = tuple(opaque)
+
+        def label(value: Any, pattern: str) -> str | None:
+            return (
+                value
+                if (
+                    type(value) is str
+                    and re.fullmatch(pattern, value)
+                    and not any(v in value for v in opaque)
+                )
+                else None
+            )
+
+        self.observation.update(
+            requested_provider=self.review.provider_name,
+            provider_field_state="PRESENT" if "provider" in data else "ABSENT",
+            generation_id=label(data.get("id"), GENERATION_ID),
+            observed_model=label(data.get("model"), r"[a-zA-Z0-9_.:/-]{1,128}"),
+            observed_provider=label(data.get("provider"), r"[a-zA-Z0-9_.:/-]{1,128}"),
+            history_family=None,
+            history_gets=0,
+            route_evidence_source="NONE",
+            route_variant="NOT_OBSERVED",
+            body_metadata_evidence="RESPONSE_BODY / FIELD_VALIDATED_ONLY",
+        )
+        self.observation["observed_body_provider"] = self.observation["observed_provider"]
+        if self.observation["observed_provider"] is not None:
+            self.observation["route_evidence_source"] = "BODY"
+        usage, cost = Usage(), Cost()
+        body_usage = data.get("usage")
+        if type(body_usage) is dict:
+            try:
+                if any(v in json.dumps(body_usage, ensure_ascii=False) for v in opaque):
+                    raise ValueError
+                proposed = Usage(
+                    input_tokens=body_usage.get("prompt_tokens"),
+                    output_tokens=body_usage.get("completion_tokens"),
+                )
+                reasoning = (body_usage.get("completion_tokens_details") or {}).get(
+                    "reasoning_tokens"
+                )
+                if (
+                    proposed.input_tokens is not None
+                    and proposed.input_tokens <= INPUT_TOKENS
+                    and proposed.output_tokens is not None
+                    and proposed.output_tokens <= OUTPUT_TOKENS
+                    and (
+                        reasoning is None
+                        or type(reasoning) is int
+                        and 0 <= reasoning <= proposed.output_tokens
+                    )
+                    and body_usage.get(
+                        "total_tokens", proposed.input_tokens + proposed.output_tokens
+                    )
+                    == proposed.input_tokens + proposed.output_tokens
+                    and (
+                        "total_tokens" not in body_usage or type(body_usage["total_tokens"]) is int
+                    )
+                    and all(
+                        (body_usage.get(k) or {}).get("audio_tokens") in (None, 0)
+                        for k in ("prompt_tokens_details", "completion_tokens_details")
+                    )
+                    and not any((body_usage.get("server_tool_use") or {}).values())
+                ):
+                    usage = proposed
+                    self.observation["reasoning_tokens"] = reasoning
+            except (ValueError, TypeError, AttributeError):
+                pass
+            try:
+                amount = body_usage.get("cost_rub", body_usage.get("cost"))
+                if any(v in json.dumps(amount, ensure_ascii=False) for v in opaque):
+                    raise ValueError
+                if type(amount) not in (str, int, float):
+                    raise ValueError
+                if any(
+                    "currency" in part and part["currency"] != "RUB" for part in (data, body_usage)
+                ):
+                    raise ValueError
+                if (
+                    "cost_rub" in body_usage
+                    and "cost" in body_usage
+                    and Decimal(str(amount)) != Decimal(str(body_usage["cost"]))
+                ):
+                    raise ValueError
+                cost = Cost(status="CONFIRMED", amount=Decimal(str(amount)), currency="RUB")
+            except (ValueError, TypeError, InvalidOperation):
+                pass
+        self.observation.setdefault("reasoning_tokens", None)
+        reason = data["choices"][0].get("finish_reason")
+        self.observation["finish_reason"] = (
+            reason if reason in ("stop", "tool_calls", "length", "content_filter") else None
+        )
+        self.observation["body_metering"] = {
+            "source": "RESPONSE_BODY",
+            "verification": "FIELD_VALIDATED_ONLY",
+            "usage": usage.model_dump(),
+            "reported_cost_rub": str(cost.amount) if cost.amount is not None else None,
+            "currency": cost.currency,
+        }
+
+    def failure_metering(self) -> tuple[Usage, Cost] | None:
+        """Body-only amounts remain reported, never confirmed ledger settlements."""
+        body = self.observation.get("body_metering")
+        if not body or self.observation.get("route_evidence_source") != "HISTORY_LIST_DETAIL":
+            return None
+        return Usage.model_validate(body["usage"]), Cost(
+            status="CONFIRMED", amount=Decimal(body["reported_cost_rub"]), currency="RUB"
+        )
 
     def wire(self, request: AdapterRequest) -> bytes:
         if request.config.route != self.capabilities.route:
@@ -733,20 +949,49 @@ class PolzaAdapter:
                     or (isinstance(self.review, RouteReview) and self.review.history is not None),
                 )
                 if self.experimental or self.observation["provider_field_state"] == "ABSENT":
-                    await self.verify_history(result, deadline)
+                    await self.verify_history(result.usage, result.cost, deadline)
                 keep_continuation = result.kind == "TOOLS"
                 return result
         except TimeoutError:
             self.observation["error_detail"] = "REQUEST_DEADLINE"
             raise PolzaFailure("TIMEOUT", "REQUEST_DEADLINE") from None
         except PolzaFailure as exc:
+            # Diagnose this same generation before stopping; never retry the POST,
+            # return TOOLS, or execute READ after a signature failure.
             self.observation["error_detail"] = exc.detail
+            body_metering = self.observation.get("body_metering")
+            if (
+                self.experimental
+                and exc.detail.startswith("SIGNATURE_")
+                and exc.detail != "SIGNATURE_IN_RESPONSE"
+                and body_metering
+                and self.observation.get("observed_model") == self.review.model
+                and self.observation.get("generation_id") is not None
+                and (
+                    self.observation.get("provider_field_state") == "ABSENT"
+                    or self.observation.get("observed_provider") is not None
+                )
+            ):
+                try:
+                    await self.verify_history(
+                        Usage.model_validate(body_metering["usage"]),
+                        Cost(
+                            status="CONFIRMED",
+                            amount=Decimal(body_metering["reported_cost_rub"]),
+                            currency="RUB",
+                        ),
+                        deadline,
+                    )
+                except PolzaFailure as history_error:
+                    self.observation["failure_history_error"] = history_error.detail
+                except (ValueError, TypeError, InvalidOperation):
+                    self.observation["failure_history_error"] = "HISTORY_METERING_UNKNOWN"
             raise
         finally:
             if not keep_continuation:
                 self.clear_continuation()
 
-    async def verify_history(self, result: AdapterResponse, deadline: float) -> None:
+    async def verify_history(self, result_usage: Usage, result_cost: Cost, deadline: float) -> None:
         """Two bounded GETs before returning TOOLS/OUTPUT, including the image path."""
         identifier = self.observation["generation_id"]
         if not self.experimental and self._history_family is None:
@@ -754,20 +999,20 @@ class PolzaAdapter:
         if identifier is None:
             raise PolzaFailure("ADAPTER_ERROR", "GENERATION_ID_INVALID")
         if (
-            result.usage.input_tokens is None
-            or result.usage.output_tokens is None
-            or result.cost.status != "CONFIRMED"
+            result_usage.input_tokens is None
+            or result_usage.output_tokens is None
+            or result_cost.status != "CONFIRMED"
         ):
             raise PolzaFailure("ADAPTER_ERROR", "HISTORY_METERING_UNKNOWN")
         if (
-            result.usage.input_tokens > INPUT_TOKENS
-            or result.usage.output_tokens > OUTPUT_TOKENS
-            or result.cost.amount is None
-            or result.cost.amount > self.review.reservation()
+            result_usage.input_tokens > INPUT_TOKENS
+            or result_usage.output_tokens > OUTPUT_TOKENS
+            or result_cost.amount is None
+            or result_cost.amount > self.review.reservation()
         ):
             raise PolzaFailure("ADAPTER_ERROR", "HISTORY_METERING_LIMIT")
         deadline = min(deadline, time.monotonic() + HISTORY_SECONDS)
-        total_tokens = result.usage.input_tokens + result.usage.output_tokens
+        total_tokens = result_usage.input_tokens + result_usage.output_tokens
 
         async def get(url: str) -> Any:
             remaining = deadline - time.monotonic()
@@ -788,6 +1033,7 @@ class PolzaAdapter:
                 self._key.get_secret_value() in serialized
                 or self._continuation
                 and self._continuation[1] in serialized
+                or any(value in serialized for value in self._diagnostic_redactions)
             ):
                 raise ValueError
             return data
@@ -803,12 +1049,12 @@ class PolzaAdapter:
                 and row["requestType"] == "chat"
                 and row["status"] == "completed"
                 and money.is_finite()
-                and money == result.cost.amount
+                and money == result_cost.amount
                 and all(
                     type(usage.get(k)) is int and usage[k] == v
                     for k, v in (
-                        ("prompt_tokens", result.usage.input_tokens),
-                        ("completion_tokens", result.usage.output_tokens),
+                        ("prompt_tokens", result_usage.input_tokens),
+                        ("completion_tokens", result_usage.output_tokens),
                     )
                 )
                 and (
@@ -959,6 +1205,7 @@ class PolzaAdapter:
         return await self._send(body, seconds, OUTPUT_BYTES)
 
     def decode(self, raw: bytes, *, history_pending: bool = False) -> AdapterResponse:
+        data: Any = None
         try:
             if self._key.get_secret_value().encode() in raw:
                 raise ValueError
@@ -969,6 +1216,7 @@ class PolzaAdapter:
             message = choices[0]["message"]
             calls = message.get("tool_calls")
             if self.review.model == MODELS[1] and calls:
+                self.observation["signature_diagnostic"] = self.signature_metadata(calls)
                 signature = self.google_signature(calls)
                 extra = calls[0].pop("extra_content")
                 try:
@@ -1101,6 +1349,14 @@ class PolzaAdapter:
             return AdapterResponse(
                 kind="OUTPUT", output_json=message["content"], usage=usage, cost=cost
             )
+        except PolzaFailure as exc:
+            if (
+                exc.detail.startswith("SIGNATURE_")
+                and exc.detail != "SIGNATURE_IN_RESPONSE"
+                and type(data) is dict
+            ):
+                self.observe_signature_failure(data)
+            raise
         except (
             ValueError,
             TypeError,

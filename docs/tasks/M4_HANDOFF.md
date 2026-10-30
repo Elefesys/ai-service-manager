@@ -155,6 +155,59 @@ read-only Windows команду, отдельный bounded diagnostic plan и 
 C4 — единственный активный исполнитель; остальные HOLD. Новый shared budget
 не запрашивается; paid вызовы, merge/main/VM/DB/Telegram/runtime сейчас не разрешены.
 
+### Возврат C4 — GEMINI-DIAGNOSTIC-R1 / REVIEW / 2026-10-30
+
+Ветка `c4/m4-2-gemini-diagnostic-r1`, один candidate с sole parent
+**affe545a468c9ec161421bbd52e6f390f3ad8f2c**, seed tree
+**2852b21f7c4aa361cb7a05a31cd4ba1fdf8f2569**. Exact candidate SHA/tree — в возврате
+C4; этот receipt входит в тот же commit. Ровно7 разрешённых файлов: polza/probe,
+два test_m4 файла, runbook, только CURRENT diagnostic row и этот receipt.
+
+Все8 прежних signature negatives имеют отдельные фиксированные codes; добавлены
+safe shape/presence/type/bounded-length metadata. Raw signature/keys/values/reasoning
+не логируются, reflection/correlation/очистка state сохранены. Validated body
+metadata отделены от history evidence. На signature failure возможны только
+прежние≤2 exact-ID GET: подтверждённый charge учитывается при сохранённом STOP;
+history failure не скрывает основной signature code, body-only cost не погашает резерв.
+
+`--history-r2`:0 POST/0 catalog/0 READ, hard≤4 GET/65536 bytes/15s each/60s overall,
+bounded first page5 с обязательным anchor; успешная controlled ветка3 GET.
+Unique model/time candidate не является exact R2 correlation, old reserve не
+освобождается. `--gemini-diagnostic` default — offline plan; отдельный scoped
+approval нужен для≤1 POST/1 catalog/≤2 history/0 READ/0 follow-up/120s. Используется
+обычная Gateway tool validation, вызываемая ровно один раз; roundtrip PASS не выдаётся.
+Prior confirmed0.17509189 и old unknown3.464879664 сохранены; ceiling146.360028446.
+
+Frozen CPython3.13.16 / uv0.13.4, CONTROLLED transport; фактические проверки:
+
+```sh
+V=/workspace/scratch/b247f3420d30/m4-gemini-validation-venv
+$V/bin/pytest -q tests/test_m4_probe.py tests/test_m4_polza.py tests/test_m4_gateway.py tests/test_m4_gateway_failures.py --tb=short
+# 519 passed in 7.54s
+$V/bin/ruff check backend/src/asm/ai/probe.py backend/src/asm/ai/polza.py tests/test_m4_probe.py tests/test_m4_polza.py
+$V/bin/ruff format --check backend/src/asm/ai/probe.py backend/src/asm/ai/polza.py tests/test_m4_probe.py tests/test_m4_polza.py
+$V/bin/mypy
+# Ruff/format4 PASS; Success: no issues found in 71 source files
+$V/bin/python -m asm.ai.probe
+$V/bin/python -m asm.ai.probe --plan
+$V/bin/python -m asm.ai.probe --plan --synthetic-experiment
+$V/bin/python -m asm.ai.probe --plan --history-r2
+$V/bin/python -m asm.ai.probe --plan --gemini-diagnostic
+# 5 offline plans PASS; full75/81/6 retained; new plans never read key/HTTP
+git diff --check
+# PASS
+```
+
+AST comparison подтвердил неизменность route profiles, wire schema, bounded HTTP,
+original evaluator/plan/R1 loader/schedule; canonical fixture SHA7abd25f1…e025b2
+прежний. Settings/contracts/gateway/prompt/schema/cases/dependencies/CI/DB не менялись.
+[Runbook](../runbooks/M4_POLZA_PROBE.md) содержит одну Windows GET-only команду
+и отдельный bounded diagnostic plan без paid команды. Owner reports/key и реальные
+Polza HTTP не использовались; Windows/live/full CI NOT RUN. Actual R2 wire shape,
+конкретная причина старого отказа и lost-ID charge correlation остаются UNKNOWN.
+Общий R3/resume/GPT replay не реализован. PR39/main/VM/Telegram/runtime/merge без
+изменений; CI41009211185 RED и C0-M4-CI-OBSERVATION-01 OPEN не закрываются этим receipt.
+
 ## История приёмки — C0-M4.2-QUALITY-CONTINUATION-EVAL-R1 / 2026-10-30
 
 Разовый owner R2 ниже уже выполнен и остановлен. Его допуск не переносится на retry.
