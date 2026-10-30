@@ -6,14 +6,15 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C4 context принят локально; C2 CI observation / 2026-10-30
+## CURRENT — C4 context принят локально; C2 PG BLOCKED / 2026-10-30
 
 **M4.3-CONTEXT-R1 принят C0 в SOURCE + LOCAL UNIT scope.** Есть ограниченная
 проекция текущего контекста V2/V3, один READ и агент, возвращающий проверенный
 candidate. Реальный PG authority adapter, durable AIRun и AI→Telegram ещё нужны.
-Следующая единственная выдача — **C2-M4-CI-OBSERVATION-R1**: исправить известный
-сбой PostgreSQL-проверки перед интеграцией. Это устранение открытого CI gate,
-не общая оптимизация CI. Владельцу сейчас ничего запускать не нужно.
+Единственная выдача — **C2-M4-CI-OBSERVATION-R1**, теперь **BLOCKED**:
+saved evidence/source проверены, но среда C2 не позволяет запустить PostgreSQL18
+под non-root. Root cause остаётся UNKNOWN, CI gate OPEN; repair не заявлен.
+Возврат и конкретный missing fact ниже. Владельцу сейчас ничего запускать не нужно.
 
 ### Приёмка C4
 
@@ -124,6 +125,56 @@ Actions rerun/dispatch, изменение main/PR head, merge/deploy, paid prob
 реальные Polza/Telegram и live DB не входят в задачу. Следом C0 проверит repair,
 соберёт один integration candidate и выполнит full CI; затем выдаст runtime scope.
 C1/C3/C4/C5/C6/C8 HOLD; C2 — единственный следующий исполнитель.
+
+### Возврат C2 — C2-M4-CI-OBSERVATION-R1 / BLOCKED / 2026-10-30
+
+Ветка **c2/m4-ci-observation-r1**; [исходная выдача](https://github.com/Elefesys/ai-service-manager/blob/23f35d6c4a7f596cd58121e6a5aa39a686d7487e/docs/tasks/M4_HANDOFF.md#L57).
+Exact base **23f35d6c4a7f596cd58121e6a5aa39a686d7487e**, tree
+**7240ba43e0e88b0e3fe8e0a326ed1654dd457631**; sole parent d07619234570b28dbc0917aebfc288fe38e63aa8
+и parent tree f900178c5f3053049500fff6bd876d7e244da948 подтверждены.
+Возврат меняет только receipt этого HANDOFF и CURRENT TASK_REGISTER; Python,
+product contracts, migrations и все остальные paths остаются byte-identical base.
+
+Заново прочитаны job123916058014 и artifact **12957949439** CI41009211185/attempt1:
+3183628 bytes, SHA256 **d64cdfd69fc0de89c9bfe7bd29dcedbe8f4db453268f3d1aee24c3b080d2f78f**.
+Saved tested merge17de13af07fedee18b49d7b7b64fbe409b832a12/worktree clean;
+четыре consumer modules совпали побайтово с base и source manifest артефакта.
+Все11 приложенных оригиналов совпали с repository SOURCE_MANIFEST.
+Фактический saved result:804 completed,803 PASS/1 FAIL; primary_exit1/cleanup_exit0.
+Упавший matrix index348: setup **0.633252s**, call **2.750032s**, teardown
+**0.060543s**; остальные11 call **1.256608–1.302877s**. Это времена целых фаз,
+не одного observer SQL. В artifact нет per-query timing/expected waiter PID;
+CancelledError в execute и cancelled pending после finally не устанавливают причину.
+
+Статический предел helper: predicate связывает wait только с blocker PID,
+не с PID проверяемой операции; nonempty rows возвращаются до pending.done().
+Нужно исключить постороннего waiter и early completion отрицательными контролями.
+Это наблюдение по source, **не PG reproduction и не доказанная причина timeout**.
+Существующие opened blocker, OWNER pool warm-up и committed fixture update учтены;
+новым исправлением они не объявляются. Обнаружено9 call sites в4 consumer modules.
+
+Блокер воспроизводим: uid_map/gid_map только `0 0 1`, CapEff/CapBnd0,
+NoNewPrivs1; postgres/initdb/pg_ctl/psql/docker/podman отсутствуют.
+`setpriv --reuid=65534 --regid=65534 --clear-groups id` → exit127,
+`setresuid failed: Invalid argument`. PostgreSQL не установлен/не запущен;
+нового server-version evidence нет. Saved CI Python3.13.15; DB image pin сохранён
+в evidence, patch version PG по этому артефакту не заявлен. Обходов sandbox нет.
+
+Проверки возврата: `python3 audit.py CHECKOUT EXTRACTED_ARTIFACT PROJECT_SOURCES
+reproducible-audit.json` (stdlib script в evidence) —4 source/11 originals/12 saved
+matrix records подтверждены; `git diff --check` PASS. Это source/evidence audit.
+Новые real PG matrix12, effects/replay, negatives и shared consumers **NOT_RUN**;
+Ruff/format не запускались: Python не менялся. Full CI/rerun/dispatch **NOT_RUN**.
+Before/after test behavior отсутствует; speculative repair не коммитится.
+
+Evidence: **C2-M4-CI-OBSERVATION-R1-evidence.zip**,15958 bytes/13 files,
+SHA256 **f35de110fb92550af28ca4f3e574bc471ba0bbebfaf185fad676c702fa7c1916**.
+Missing fact: DB edge относительно request start; expected operation PID/exact
+lock wait; начало/конец каждого observer execute; request progress до cleanup;
+разделение задержки event loop и SQL observer. Следующий шаг C0 — предоставить
+исполнителю owned non-root PostgreSQL18/asm_test с existing harness/schema/roles
+для bounded diagnosis и затем прежней matrix/negatives. Owner/live credentials
+не нужны. C0-M4-CI-OBSERVATION-01 остаётся OPEN, runtime/integration HOLD.
 
 ### Сохранённые решения и gates
 

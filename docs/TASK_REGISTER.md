@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C4 context VERIFIED LOCAL; C2 CI repair ASSIGNED / 2026-10-30
+## CURRENT — C4 context VERIFIED LOCAL; C2 CI repair BLOCKED / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**, PR38 merged;
@@ -23,7 +23,7 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.2-GPT-QUALITY-R2 | VERIFIED owner synthetic + C0 manual:18/18 PASS; составной R1+R2 PASS25,27 confirmed POST/2 READ/2 images; consumed |
 | M4.3-CONTEXT-R1 | VERIFIED SOURCE + LOCAL UNIT / принято C0, интеграция pending:1283 pytest PASS, Ruff/format4, mypy73; дополнительно5 controlled agent→Polza checks. Mandatory authority/read port, bounded V2/V3, ≤2 calls/1 READ. PG authority/durable/runtime не заявлены |
 | C0-M4-CI-OBSERVATION-01 | OPEN до merge/runtime: M3 wait_blocked timeout, root cause UNKNOWN; foundation gates не приняты |
-| C2-M4-CI-OBSERVATION-R1 | TODO / ASSIGNED C2: доказать и минимально исправить cause внутри2 test modules; реальные PG matrix12/negative controls, shared-helper consumers при изменении |
+| C2-M4-CI-OBSERVATION-R1 | BLOCKED: exact source/saved CI audit выполнен; только UID0, non-root PG18 недоступен. Cause UNKNOWN, repair и новые PG matrix12/negatives/consumers NOT_RUN. Возврат C2 в HANDOFF; нужен owned non-root executor |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
@@ -51,6 +51,14 @@ C2 branch c2/m4-ci-observation-r1, base — published C0 SHA из immutable HAND
 sole parent d07619234570b28dbc0917aebfc288fe38e63aa8. Точный4-file write-set и
 disposable PG scope в задаче; затем C0 review/integration/full CI.
 C1/C3/C4/C5/C6/C8 HOLD. Main/PR head/VM/live DB/Telegram/merge без изменений.
+
+C2 возврат на exact base **23f35d6c4a7f596cd58121e6a5aa39a686d7487e**, tree
+**7240ba43e0e88b0e3fe8e0a326ed1654dd457631**: только2 coordination docs,
+test/production source неизменен. Artifact12957949439 hash/source проверены;
+saved failed case call2.750032s не раскрывает observer/request timing. Missing
+expected waiter PID и per-query/DB-edge timestamps; нового PG evidence нет.
+[Receipt C2 и следующий шаг C0](tasks/M4_HANDOFF.md#возврат-c2--c2-m4-ci-observation-r1--blocked--2026-10-30).
+CI gate OPEN; C0 обеспечивает disposable PG executor до продолжения repair.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 
