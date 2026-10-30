@@ -40,6 +40,7 @@ from test_m4_polza import (
     payload,
     response,
     review,
+    tool_compat_entry,
 )
 
 CONTROLLED_ANSWERS = {
@@ -2831,3 +2832,623 @@ def test_deepseek_key_failure_writes_zero_attempt_summary(tmp_path, monkeypatch,
     assert summary["shared_total"]["unknown_call_count"] == 2
     assert summary["shared_total"]["remaining_with_unknown_held_rub"] == "142.895148782"
     capsys.readouterr()
+
+
+class ControlledToolCompat(ControlledComparison):
+    """Observe both exact wire phases; never contacts Polza or imports owner data."""
+
+    def __init__(self, *, change=None):
+        super().__init__(deepseek=True, change=change)
+        self.entries[2] = tool_compat_entry()
+        self.tool_case = next(c for c in self.cases if c.id == "tool_current")
+        self.wires = []
+
+    def handler(self, request):
+        if request.url.path.endswith("/models"):
+            self.gets.append(str(request.url))
+            return response({"data": [self.entries[2]]})
+        if request.method == "POST":
+            body = json.loads(request.content)
+            phase = len(self.posts)
+            assert phase < 2
+            assert body["tool_choice"] == (
+                {"type": "function", "function": {"name": "read_current"}} if phase == 0 else "none"
+            )
+            assert len(body["tools"]) == 1
+            function = body["tools"][0]["function"]
+            assert function["name"] == "read_current" and function["strict"] is True
+            assert function["parameters"] == probe.ReadArgs.model_json_schema()
+            from asm.ai.polza import conversation_wire_schema
+
+            assert body["response_format"] == {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": CONVERSATION_WIRE_REVISION,
+                    "strict": True,
+                    "schema": conversation_wire_schema(probe.CONVERSATION_RESULT.json_schema()),
+                },
+            }
+            case = self.tool_case
+            assert case.id == "tool_current"
+            if phase == 0:
+                assert [m["role"] for m in body["messages"]] == ["system", "user", "user"]
+            else:
+                assert len(self.gets) == 3  # Catalog and BOTH first-call history GETs before READ.
+                assert body["messages"][:-2] == self.wires[0]["messages"]
+                assistant, result = body["messages"][-2:]
+                assert assistant["role"] == "assistant" and result["role"] == "tool"
+                assert assistant["tool_calls"] == self.latest["choices"][0]["message"]["tool_calls"]
+                assert result["tool_call_id"] == assistant["tool_calls"][0]["id"]
+                assert json.loads(result["content"]) == {"fact": case.read_fact}
+            self.wires.append(body)
+        return super().handler(request)
+
+
+def tool_compat_args(report):
+    source = "e" * 40  # CONTROLLED_ONLY, not a live C0 admission.
+    return [
+        "--deepseek-tool-compat",
+        "--live",
+        "--report",
+        str(report),
+        "--source-sha",
+        source,
+        "--source-environment",
+        "LOCAL_DESKTOP",
+        "--approved-rub",
+        "1",
+        "--approval-ref",
+        "C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1:" + source + ":CONTROLLED_ONLY",
+    ]
+
+
+async def controlled_tool_compat(mock, *, approved=Decimal(1), handler=None):
+    output = io.StringIO()
+    summary = await probe.run_tool_compat(
+        load_cases(FIXTURES),
+        ProbeSettings(api_key=KEY),
+        output,
+        approved,
+        transport=httpx.MockTransport(handler or mock.handler),
+    )
+    events = [json.loads(line) for line in output.getvalue().splitlines()]
+    assert events[-1] == summary
+    assert not summary["runtime_authorized"] and summary["selected_model"] is None
+    assert not summary["shared_total"]["old_unknown_reserve_released"]
+    assert Decimal(summary["shared_total"]["unknown_reserved_rub"]) >= Decimal("6.929759328")
+    return summary, events
+
+
+@pytest.mark.parametrize("args", [["--deepseek-tool-compat"], ["--plan", "--deepseek-tool-compat"]])
+def test_tool_compat_plan_no_key_network_and_separate_prior(monkeypatch, capsys, args):
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    assert main(args) == 0
+    p = json.loads(capsys.readouterr().out)
+    assert p["stage_schedule"] == [{"repeat": 0, "case": "tool_current"}]
+    assert p["models"] == [MODELS[2]] and p["provider_only"] == "wafer/us"
+    assert (p["max_model_http_calls"], p["max_synthetic_reads"], p["max_history_http_calls"]) == (
+        2,
+        1,
+        4,
+    )
+    assert (p["catalog_http_calls"], p["max_shared_model_posts"]) == (1, 35)
+    assert (p["roundtrip_seconds"], p["overall_seconds"]) == (60, 120)
+    assert (p["catalog_bytes"], p["catalog_seconds"]) == (4194304, 20)
+    assert (p["history_bytes_per_get"], p["history_seconds_per_post"]) == (65536, 15)
+    assert (p["input_tokens_per_call"], p["output_tokens_per_call"]) == (32768, 512)
+    assert (p["wire_input_bytes_per_call"], p["wire_output_bytes_per_call"]) == (24576, 32768)
+    assert p["stage_rub_ceiling"] == "1" and p["priced_reservation_rub"] is None
+    assert p["prior"]["confirmed_cost_rub"] == "0.17932550"
+    assert p["prior"]["known_call_count"] == 31 and p["prior"]["model_posts"] == 33
+    assert p["prior"]["unknown_call_count"] == 2
+    assert p["prior"]["committed_or_held_rub"] == "7.109084828"
+    assert p["prior"]["remaining_with_unknown_held_rub"] == "142.890915172"
+    assert p["phases"][0]["response_format_semantics"] == "IGNORED_BY_DOCUMENTED_TOOL_MODE"
+    assert p["phases"][1]["tool_choice"] == "none"
+    assert p["auto_tools_compatibility"] == "NOT_TESTED_BY_THIS_PROFILE"
+    assert p["status"] == "PLAN_ONLY / PAID_NOT_AUTHORIZED"
+    assert probe.deepseek_prior()["model_posts"] == 32  # Historical mode is immutable.
+
+
+def test_tool_compat_complete_cli_wires_history_reservations_and_bounds(
+    tmp_path, monkeypatch, capsys
+):
+    import asm.ai.polza as polza
+
+    mock = ControlledToolCompat()
+    report = tmp_path / "m4-polza-deepseek-tool-compat-r1.jsonl"
+    original = probe.run_tool_compat
+    original_http = polza.bounded_http
+    limits = []
+
+    async def bounded(key, url, **kwargs):
+        limits.append((url, kwargs["seconds"], kwargs["maximum"], kwargs["body"] is not None))
+        return await original_http(key, url, **kwargs)
+
+    def handler(request):
+        if request.method == "POST":
+            saved = [json.loads(line) for line in report.read_text().splitlines()]
+            reservation = saved[-1]
+            assert reservation["event"] == "reserved"
+            assert reservation["calls_reserved"] == len(mock.posts) + 1
+            amount = Decimal("0.285184000") * reservation["calls_reserved"]
+            assert Decimal(reservation["rub_reserved"]) == amount
+            assert (
+                Decimal(reservation["shared_rub_committed_or_reserved"])
+                == Decimal("7.109084828") + amount
+            )
+        return mock.handler(request)
+
+    async def run(cases, settings, output, approved):
+        return await original(
+            cases, settings, output, approved, transport=httpx.MockTransport(handler)
+        )
+
+    monkeypatch.setattr(probe, "load_secret", lambda _: ProbeSettings(api_key=KEY))
+    monkeypatch.setattr(probe, "run_tool_compat", run)
+    monkeypatch.setattr(probe, "bounded_http", bounded)
+    monkeypatch.setattr(polza, "bounded_http", bounded)
+    assert main(tool_compat_args(report)) == 0
+    events = [json.loads(line) for line in report.read_text().splitlines()]
+    assert [e["event"] for e in events] == [
+        "source",
+        "plan",
+        "reserved",
+        "reserved",
+        "case",
+        "summary",
+    ]
+    source, p, _, _, row, summary = events
+    assert source["prior"] == p["prior"] == summary["prior"] == probe.tool_compat_prior()
+    assert Decimal(p["priced_reservation_rub"]) == Decimal("0.570368000")
+    assert row["reads"] == 1 and not row["failures"] and not row["quality_flags"]
+    assert row["final"] == controlled_final(mock.tool_case)
+    assert [c["compatibility_phase"] for c in row["calls"]] == ["NAMED_READ", "STRICT_FINAL"]
+    assert all(c["cost"]["status"] == "CONFIRMED" and c["history_gets"] == 2 for c in row["calls"])
+    assert all(c["route_variant"] == "NOT_OBSERVED" for c in row["calls"])
+    assert summary["status"] == "PROTOCOL_OBSERVED / HUMAN_REVIEW_REQUIRED"
+    assert summary["manual_assessment"] == "PENDING" and summary["protocol_observed"]
+    assert summary["shared_total"]["model_post_reservations"] == 35
+    assert summary["shared_total"]["known_call_count"] == 33
+    assert summary["shared_total"]["unknown_call_count"] == 2
+    assert Decimal(summary["shared_total"]["confirmed_cost_rub"]) == Decimal("0.18132550")
+    assert Decimal(summary["shared_total"]["unknown_reserved_rub"]) == Decimal("6.929759328")
+    assert (len(mock.posts), len(mock.gets)) == (2, 5)
+    assert [(n, maximum) for _, _, maximum, n in limits] == [
+        (False, 4194304),
+        (True, 32768),
+        (False, 65536),
+        (False, 65536),
+        (True, 32768),
+        (False, 65536),
+        (False, 65536),
+    ]
+    assert limits[0][1] == 20
+    assert 0 < limits[4][1] < limits[1][1] <= 60
+    assert all(0 < limits[i][1] <= 15 for i in (2, 3, 5, 6))
+    assert all(
+        s not in report.read_text() for s in (KEY.get_secret_value(), "PRIVATE_ACCOUNT_METADATA")
+    )
+    saved = report.read_bytes()
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("replay secret"))
+    assert main(tool_compat_args(report)) == 2
+    assert report.read_bytes() == saved and len(mock.posts) == 2
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize(
+    "bad,code",
+    [
+        ("named", "TOOL_CHOICE_FUNCTION_UNSUPPORTED"),
+        ("none", "TOOL_CHOICE_NONE_UNSUPPORTED"),
+        ("route", "EXPERIMENT_ROUTE_NOT_UNIQUE"),
+        ("duplicate", "EXPERIMENT_ROUTE_NOT_UNIQUE"),
+        ("tools", "CAPABILITY_UNKNOWN"),
+        ("schema", "CAPABILITY_UNKNOWN"),
+        ("reasoning", "NON_THINKING_UNSUPPORTED"),
+        ("parameter", "PARAMETER_UNSUPPORTED"),
+        ("cap", "OUTPUT_CAP_PARAMETER_UNSUPPORTED"),
+        ("context", "CONTEXT_LIMIT_UNKNOWN"),
+        ("fee", "TARIFF_UNKNOWN"),
+        ("null_fee", "TARIFF_UNKNOWN"),
+        ("whole_stage", "APPROVED_BUDGET_TOO_SMALL"),
+        ("approval", "APPROVED_BUDGET_TOO_SMALL"),
+    ],
+)
+async def test_tool_compat_full_preflight_before_first_post(bad, code):
+    mock = ControlledToolCompat()
+    p = mock.entries[2]["providers"][0]
+    if bad in ("named", "none", "tools", "schema", "reasoning"):
+        name = {
+            "named": "tool_choice_function",
+            "none": "tool_choice_none",
+            "tools": "tools",
+            "schema": "json_schema_strict",
+            "reasoning": "reasoning_toggle",
+        }[bad]
+        p["capabilities"][name]["status"] = "unknown"
+    elif bad == "route":
+        p["name"] = "other/route"
+    elif bad == "duplicate":
+        mock.entries[2]["providers"].append(copy.deepcopy(p))
+    elif bad in ("parameter", "cap"):
+        p["supported_parameters"].remove("tool_choice" if bad == "parameter" else "max_tokens")
+    elif bad == "context":
+        p["context_length"] = 32768
+    elif bad == "fee":
+        p["pricing"]["unexpected_fee"] = 0
+    elif bad == "null_fee":
+        p["pricing"]["audio_per_million"] = None
+    elif bad == "whole_stage":
+        p["pricing"]["prompt_per_million"] = "10"  # One fits 1 RUB, two do not.
+    summary, events = await controlled_tool_compat(
+        mock, approved=Decimal("0.3") if bad == "approval" else Decimal(1)
+    )
+    assert summary["status"] == "FAILED_OR_INCOMPLETE" and summary["error"] == code
+    assert (len(mock.posts), len(mock.gets)) == (0, 1)
+    assert summary["new_stage"]["attempt_reservations"] == 0
+    assert summary["shared_total"]["remaining_with_unknown_held_rub"] == "142.890915172"
+    assert not any(e["event"] == "reserved" for e in events)
+
+
+@pytest.mark.parametrize("phase", [1, 2])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "usage",
+        "cost",
+        "usage_limit",
+        "cost_limit",
+        "model",
+        "id",
+        "reasoning",
+        "reasoning_tokens",
+        "transport",
+        "cancel",
+        "oversize",
+        "list",
+        "detail",
+        "history_usage",
+        "history_cost",
+        "family",
+    ],
+)
+async def test_tool_compat_failures_reach_each_phase_and_preserve_holds(phase, bad):
+    def change(data, case, first_tool):
+        if (1 if first_tool else 2) != phase:
+            return
+        if bad == "usage":
+            data["usage"].pop("prompt_tokens")
+        elif bad == "cost":
+            data["usage"].pop("cost_rub")
+        elif bad == "usage_limit":
+            data["usage"]["completion_tokens"] = 513
+        elif bad == "cost_limit":
+            data["usage"]["cost_rub"] = 2
+        elif bad == "model":
+            data["model"] = MODELS[0]
+        elif bad == "id":
+            data.pop("id")
+        elif bad == "reasoning":
+            data["choices"][0]["message"]["reasoning_content"] = "PRIVATE_RAW_REASONING"
+        elif bad == "reasoning_tokens":
+            data["usage"]["completion_tokens_details"] = {"reasoning_tokens": 1}
+
+    mock = ControlledToolCompat(change=change)
+
+    def handler(request):
+        if request.method == "POST":
+            result = mock.handler(request)
+            if len(mock.posts) == phase:
+                if bad == "transport":
+                    raise httpx.ReadError("PRIVATE_TRANSPORT")
+                if bad == "cancel":
+                    raise asyncio.CancelledError
+                if bad == "oversize":
+                    return response(raw=b"x" * 32769)
+            return result
+        if len(mock.posts) == phase and bad in (
+            "list",
+            "detail",
+            "history_usage",
+            "history_cost",
+            "family",
+        ):
+            mock.gets.append(str(request.url))
+            listing, detail = experiment_history(mock.latest)
+            if bad == "list":
+                listing["items"][0]["id"] = "gen_999"
+            elif bad == "detail":
+                detail["id"] = "gen_999"
+            elif bad == "history_usage":
+                detail["usage"]["completion_tokens"] += 1
+            elif bad == "history_cost":
+                detail["clientCost"] = "0.002"
+            elif bad == "family":
+                # First call: disagree within the same pair. Second: internally
+                # consistent family drift against the first confirmed call.
+                detail["finalEndpointSlug"] = "other-family"
+                if phase == 2:
+                    listing["items"][0]["provider"] = "other-family"
+            return response(listing if str(request.url) == HISTORY_LIST else detail)
+        return mock.handler(request)
+
+    summary, events = await controlled_tool_compat(mock, handler=handler)
+    row = next(e for e in events if e["event"] == "case")
+    assert summary["status"] == "FAILED_OR_INCOMPLETE" and row["failures"]
+    assert len(mock.posts) == phase and row["reads"] == phase - 1
+    if phase == 2:
+        assert (
+            row["calls"][0]["kind"] == "TOOLS" and row["calls"][0]["cost"]["status"] == "CONFIRMED"
+        )
+        assert mock.wires[1]["tool_choice"] == "none"
+    stage, shared = summary["new_stage"], summary["shared_total"]
+    assert stage["known_call_count"] == phase - 1 and stage["unknown_call_count"] == 1
+    assert Decimal(stage["unknown_reserved_rub"]) == Decimal("0.285184000")
+    assert shared["known_call_count"] == 31 + phase - 1 and shared["unknown_call_count"] == 3
+    assert Decimal(shared["unknown_reserved_rub"]) == Decimal("7.214943328")
+    assert shared["model_post_reservations"] == 33 + phase
+    assert "PRIVATE_" not in json.dumps(events) and KEY.get_secret_value() not in json.dumps(events)
+
+
+@pytest.mark.parametrize(
+    "bad", ["tool_name", "tool_args", "multiple", "early_final", "schema", "extra_tool", "short"]
+)
+async def test_tool_compat_tool_contract_and_final_quality_are_distinct(bad):
+    def change(data, case, first_tool):
+        message = data["choices"][0]["message"]
+        if first_tool and bad in ("tool_name", "tool_args", "multiple"):
+            call = message["tool_calls"][0]
+            if bad == "tool_name":
+                call["function"]["name"] = "mutate"
+            elif bad == "tool_args":
+                call["function"]["arguments"] = '{"key":"other"}'
+            else:
+                message["tool_calls"].append(copy.deepcopy(call) | {"id": "read-2"})
+        if first_tool and bad == "early_final":
+            message.pop("tool_calls")
+            message["content"] = json.dumps({"result": controlled_final(case)})
+            data["choices"][0]["finish_reason"] = "stop"
+        if not first_tool:
+            if bad == "schema":
+                message["content"] = '{"result":{"kind":"bogus"}}'
+            elif bad == "extra_tool":
+                data["choices"] = payload(MODELS[2], tools=True)["choices"]
+            elif bad == "short":
+                message["content"] = json.dumps(
+                    {"result": {"kind": "handoff", "text": "С", "reason": "С"}}
+                )
+
+    mock = ControlledToolCompat(change=change)
+    summary, events = await controlled_tool_compat(mock)
+    row = next(e for e in events if e["event"] == "case")
+    late = bad in ("schema", "extra_tool", "short")
+    assert len(mock.posts) == (2 if late else 1) and row["reads"] == (1 if late else 0)
+    assert summary["new_stage"]["known_call_count"] == len(mock.posts)
+    assert summary["shared_total"]["unknown_call_count"] == 2
+    if bad == "short":
+        assert not row["failures"] and row["final"]["text"] == "С"
+        assert [f["code"] for f in row["quality_flags"]] == [
+            "OUTCOME",
+            "MISSING_EXPECTED_FACT",
+            "MISSING_EXPECTED_FACT",
+        ]
+        assert summary["status"] == "QUALITY_FLAGGED / HUMAN_REVIEW_REQUIRED"
+        assert summary["manual_assessment"] == "PENDING"
+    else:
+        assert summary["status"] == "FAILED_OR_INCOMPLETE" and row["failures"]
+        if bad == "schema":
+            assert "INVALID_OUTPUT" in row["failures"]
+        if bad == "early_final":
+            assert row["failures"] == ["READ_ROUND_TRIP"]
+
+
+@pytest.mark.parametrize(
+    "where",
+    ["catalog", "first_post", "first_history", "second_post", "second_history", "roundtrip"],
+)
+async def test_tool_compat_real_timeouts_keep_first_settlement_and_terminal_summary(
+    monkeypatch, where
+):
+    mock = ControlledToolCompat()
+    second = where in ("second_post", "second_history", "roundtrip")
+
+    async def handler(request):
+        is_catalog = request.url.path.endswith("/models")
+        is_post = request.method == "POST"
+        phase = len(mock.posts) + int(is_post)
+        if where == "roundtrip" and is_post and phase == 1:
+            await asyncio.sleep(0.02)
+        if (
+            where == "catalog"
+            and is_catalog
+            or where in ("first_post", "second_post", "roundtrip")
+            and is_post
+            and phase == (2 if second else 1)
+            or where in ("first_history", "second_history")
+            and not is_catalog
+            and not is_post
+            and phase == (2 if second else 1)
+        ):
+            if is_post:
+                mock.handler(request)  # Observe the actual second wire before stalling.
+            await asyncio.sleep(1)
+            pytest.fail("timeout did not cancel")
+        return mock.handler(request)
+
+    if where == "roundtrip":
+        monkeypatch.setattr(probe, "CASE_SECONDS", 0.05)
+    else:
+        monkeypatch.setattr(probe, "TOOL_COMPAT_SECONDS", 0.05)
+    summary, events = await controlled_tool_compat(mock, handler=handler)
+    assert summary["status"] == "FAILED_OR_INCOMPLETE"
+    stage = summary["new_stage"]
+    assert stage["known_call_count"] == int(second)
+    assert stage["unknown_call_count"] == (0 if where == "catalog" else 1)
+    assert summary["reads"] == int(second)
+    assert len(mock.posts) == (0 if where == "catalog" else 2 if second else 1)
+    if where == "roundtrip":
+        row = next(e for e in events if e["event"] == "case")
+        assert row["calls"][0]["kind"] == "TOOLS" and row["calls"][-1]["error"] == "TIMEOUT"
+
+
+@pytest.mark.parametrize("phase", [1, 2])
+async def test_tool_compat_second_wire_cannot_be_changed_to_auto(monkeypatch, phase):
+    original = probe.ToolCompatAdapter._send
+    mock = ControlledToolCompat()
+
+    async def changed(self, body, seconds, maximum):
+        if self._compat_attempts == phase - 1:
+            value = json.loads(body)
+            value["tool_choice"] = "auto"
+            body = probe.encode(value)
+        return await original(self, body, seconds, maximum)
+
+    monkeypatch.setattr(probe.ToolCompatAdapter, "_send", changed)
+    summary, events = await controlled_tool_compat(mock)
+    row = next(e for e in events if e["event"] == "case")
+    assert len(mock.posts) == phase - 1 and row["reads"] == phase - 1
+    assert row["calls"][-1]["error_detail"] == "TOOL_COMPAT_PAYLOAD_INVALID"
+    # A flushed reservation is conservatively held even if the wire guard stops it.
+    assert summary["new_stage"]["unknown_call_count"] == 1
+    assert summary["new_stage"]["known_call_count"] == phase - 1
+
+
+def test_tool_compat_ledger_caps_cannot_borrow_prior_or_use_other_cases():
+    route = probe.ToolCompatRoute.from_catalog(tool_compat_entry(), datetime.now(UTC))
+    cases = load_cases(FIXTURES)
+    case = next(c for c in cases if c.id == "tool_current")
+    ledger = Ledger(io.StringIO(), Decimal(1), 2, tool_compat=True)
+    ledger.reserve(route, case, 0)
+    ledger.reserve(route, case, 0)
+    with pytest.raises(ValueError, match="GLOBAL_BUDGET_EXHAUSTED"):
+        ledger.reserve(route, case, 0)
+    assert ledger.calls == 2 and ledger.reserved == Decimal("0.570368000")
+    for approved, calls in ((Decimal("1.000000001"), 2), (Decimal(1), 3), (Decimal(0), 2)):
+        with pytest.raises(ValueError, match="APPROVAL_LIMIT"):
+            Ledger(io.StringIO(), approved, calls, tool_compat=True)
+    with pytest.raises(ValueError, match="TOOL_COMPAT_MODE_CONFLICT"):
+        Ledger(io.StringIO(), Decimal(1), 2, tool_compat=True, deepseek=True)
+    for invalid_route, invalid_case, repeat in (
+        (experiment_route(MODELS[2]), case, 0),
+        (route, cases[0], 0),
+        (route, case, 1),
+    ):
+        with pytest.raises(ValueError, match="TOOL_COMPAT_ROUTE_REQUIRED"):
+            ledger.reserve(invalid_route, invalid_case, repeat)
+    expired = Ledger(io.StringIO(), Decimal(1), 2, tool_compat=True)
+    expired.deadline = time.monotonic() - 1
+    with pytest.raises(ValueError, match="GLOBAL_BUDGET_EXHAUSTED"):
+        expired.reserve(route, case, 0)
+    with pytest.raises(ValueError, match="EXPERIMENT_FIXTURES_CHANGED"):
+        probe.tool_compat_plan(cases[1:])
+    stale = probe.ToolCompatRoute.from_catalog(
+        tool_compat_entry(), datetime.now(UTC) - timedelta(days=2)
+    )
+    with pytest.raises(ValueError, match="REVIEW_EXPIRED"):
+        probe.tool_compat_plan(cases, stale)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "old_ref",
+        "wrong_source",
+        "empty_suffix",
+        "zero",
+        "too_much",
+        "nan",
+        "missing_amount",
+        "report",
+        "source",
+        "plan",
+        "preflight",
+        "review",
+        "continuation",
+        "synthetic",
+        "deepseek",
+        "gemini",
+        "history",
+    ],
+)
+def test_tool_compat_cli_guards_run_before_secret_or_network(tmp_path, monkeypatch, capsys, bad):
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    report = tmp_path / "m4-polza-deepseek-tool-compat-r1.jsonl"
+    argv = tool_compat_args(report)
+    if bad in ("old_ref", "wrong_source", "empty_suffix"):
+        argv[-1] = (
+            "C0-M4.2-DEEPSEEK-EVAL-R1:" + "e" * 40 + ":CONTROLLED_ONLY"
+            if bad == "old_ref"
+            else "C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1:" + "d" * 40 + ":CONTROLLED_ONLY"
+            if bad == "wrong_source"
+            else "C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1:" + "e" * 40 + ":"
+        )
+    elif bad in ("zero", "too_much", "nan"):
+        argv[argv.index("--approved-rub") + 1] = {
+            "zero": "0",
+            "too_much": "1.000000001",
+            "nan": "NaN",
+        }[bad]
+    elif bad == "missing_amount":
+        i = argv.index("--approved-rub")
+        del argv[i : i + 2]
+    elif bad == "report":
+        argv[argv.index("--report") + 1] = str(tmp_path / "old-eval.jsonl")
+    elif bad == "source":
+        argv[argv.index("--source-sha") + 1] = "short"
+    elif bad in ("plan", "preflight"):
+        argv[argv.index("--live")] = "--" + bad
+    else:
+        argv += {
+            "review": ["--review", "absent.json"],
+            "continuation": ["--continue-from", "absent.jsonl"],
+            "synthetic": ["--synthetic-experiment"],
+            "deepseek": ["--deepseek-eval"],
+            "gemini": ["--gemini-diagnostic"],
+            "history": ["--history-r2"],
+        }[bad]
+    if bad in ("deepseek", "gemini", "history"):
+        with pytest.raises(SystemExit) as exc:
+            main(argv)
+        assert exc.value.code == 2
+    else:
+        assert main(argv) == 2
+    assert not report.exists() and not (tmp_path / "old-eval.jsonl").exists()
+    capsys.readouterr()
+
+
+def test_tool_compat_key_failure_leaves_terminal_zero_attempt_receipt(
+    tmp_path, monkeypatch, capsys
+):
+    report = tmp_path / "m4-polza-deepseek-tool-compat-r1.jsonl"
+
+    def fail(_):
+        raise OSError("PRIVATE_PATH")
+
+    monkeypatch.setattr(probe, "load_secret", fail)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    assert main(tool_compat_args(report)) == 2
+    source, summary = [json.loads(line) for line in report.read_text().splitlines()]
+    assert source["event"] == "source" and summary["event"] == "summary"
+    assert summary["new_stage"]["attempt_reservations"] == 0
+    assert summary["shared_total"]["remaining_with_unknown_held_rub"] == "142.890915172"
+    assert "PRIVATE_" not in report.read_text()
+    capsys.readouterr()
+
+
+async def test_tool_compat_missing_case_after_reservation_is_unknown(monkeypatch):
+    mock = ControlledToolCompat()
+
+    async def lost(adapter, case, ledger, repeat):
+        ledger.reserve(adapter.review, case, repeat)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(probe, "run_case", lost)
+    summary, events = await controlled_tool_compat(mock)
+    assert [e["event"] for e in events] == ["plan", "reserved", "summary"]
+    assert summary["error"] == "CANCELLED" and summary["new_stage"]["unknown_call_count"] == 1
+    assert summary["shared_total"]["unknown_call_count"] == 3
+    assert Decimal(summary["shared_total"]["unknown_reserved_rub"]) == Decimal("7.214943328")
+    assert not mock.posts  # Reservation is not asserted to be an observed POST.

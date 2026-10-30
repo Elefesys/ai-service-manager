@@ -1,8 +1,10 @@
-# M4.2 — DeepSeek остановлен, следующая подготовка у C4
+# M4.2 — DeepSeek tool compatibility: кандидат для review C0
 
-**Сейчас ничего не запускать.** Один разрешённый DeepSeek eval-r1 выполнен и
-остановлен на первом сценарии. Не повторять команду, в том числе с другим
-именем report. Сохранить все reports и передать C4 [актуальный handoff](../tasks/M4_HANDOFF.md).
+**Paid запуск HOLD.** Подготовлен отдельный `--deepseek-tool-compat`; новая
+exact-source команда появится только после review C0. Offline plan ниже не читает
+ключ и не обращается к сети. Использованный DeepSeek eval-r1 не повторять,
+в том числе с другим именем report. Все прежние reports сохранить.
+[Задача и receipt C4](../tasks/M4_HANDOFF.md), статус — [CURRENT](../TASK_REGISTER.md).
 
 ## Результат владельца
 
@@ -55,18 +57,126 @@ Polza этот report не показывает. Отсутствие READ не 
 Это расчёт общего ledger, не проверка счёта Polza. Оба старых Gemini unknown
 остаются; диагностический body amount0.05269262 не погашает их.
 
-## Что готовит C4
+## Подготовленный режим
 
-Отдельный конечный compatibility profile: named `read_current` → проверка
-tool call/истории → один synthetic READ → final с `tool_choice:none` и прежней
-строгой схемой. Максимум2 POST/1 READ/4 history GET/1 catalog; подготовительный
-ceiling1 RUB внутри прежнего150, новый prior из таблицы выше. Exact limits,
-write-set и критерии — в handoff. Ключ владельца и реальные вызовы C4 не нужны.
+Только прежний `tool_current`, repeat0. Первый request содержит один
+`read_current` и named `tool_choice:{type:"function",function:{name:"read_current"}}`.
+Response format в этой фазе явно помечен `IGNORED_BY_DOCUMENTED_TOOL_MODE`.
+После проверок tool name/typed args, identity/usage/cost по history выполняется
+один synthetic READ. Второй request сохраняет tool declaration и историю
+assistant/tool, задаёт `tool_choice:"none"` и прежний strict
+`conversation_result_envelope_v1`. Local DTO и factual quality flags прежние.
 
-Этот профиль проверяет управляемый tool roundtrip; он не подменяет исходное
-auto-tools сравнение. При успешном source review C0 опубликует новую команду.
-Сейчас **нет нового live допуска**. Не запускать отдельно сохранённый старый
-DeepSeek mode: у него уже устаревший prior. Бюджет150 заново подтверждать не нужно.
+В fresh selected `wafer/us` нужны `supported` для
+[`tool_choice_function` и `tool_choice_none`](https://polza.ai/docs/gaidy/models),
+а также прежние tools/strict schema/non-thinking/rates/fees/caps. Missing,
+unknown, ignored или rejected — STOP до POST. `supported_parameters:tool_choice`
+сам по себе недостаточен. `reasoning:{effort:"none",enabled:false}` обеих фаз
+не меняется. Декларации каталога не доказывают фактический маршрут или тариф аккаунта.
+
+| Ограничение | Значение |
+|---|---|
+| HTTP / READ | 1 catalog GET / ≤2 model POST / ≤4 history GET / ≤1 synthetic READ |
+| Route | Только DeepSeek, selector `wafer/us`; observed family отдельно, variant NOT_OBSERVED |
+| Tokens / bytes на call | Input/output32768/512; wire bytes24576/32768 |
+| Время | Общие60s на весь model roundtrip;120s на stage |
+| Catalog / history | 4MiB/20s;65536 bytes на history GET,15s verification на POST |
+| Stage reserve | ≤1 RUB; резерв обоих calls должен поместиться до первого POST |
+| Shared ledger | Prior33 attempts; максимум35; оба старых Gemini holds сохраняются |
+
+Никаких retry/fallback/history polling. Ошибка первой фазы исключает READ и
+второй POST. Reservations монотонны и flush до HTTP; отсутствие результата
+после reservation остаётся UNKNOWN. Summary сохраняется при обрабатываемом STOP;
+после аварийного завершения процесса последняя reservation также не разрешает replay.
+
+`PROTOCOL_OBSERVED / HUMAN_REVIEW_REQUIRED` означает только две проверенные
+фазы. Ручная оценка факта остаётся PENDING, даже без regex flags. Ответ «С»
+сохраняется целиком и даёт `QUALITY_FLAGGED / HUMAN_REVIEW_REQUIRED`, exit2.
+Прочие STOP — `FAILED_OR_INCOMPLETE`, exit2. Ни один статус не завершает25-case
+comparison, не подтверждает auto-tools, не выбирает модель и не допускает runtime.
+Старый DeepSeek mode имеет прежний prior: его consumed команду не запускать.
+Бюджет150 заново подтверждать не нужно.
+
+## Offline plan
+
+Из корня checkout с установленными locked dependencies:
+
+```powershell
+uv run --frozen --no-sync python -m asm.ai.probe --plan --deepseek-tool-compat
+```
+
+Ожидается `DEEPSEEK_TOOL_COMPAT_R1 / PLAN_ONLY / PAID_NOT_AUTHORIZED`, один
+`tool_current`,2 calls/1 READ/4 history, ceiling1, prior0.17932550+6.929759328,
+remaining142.890915172. Fresh reservation пока null; selected_model=null,
+runtime_authorized=false. Это не preflight и не проверка владельческого ключа.
+
+## Windows-шаблон для последующей приёмки C0
+
+**Не является paid допуском.** C0 после source review должен опубликовать полные
+source/tree и новый ref `C0-M4.2-DEEPSEEK-TOOL-COMPAT-R1:<source>:<C0_SUFFIX>`.
+Ниже placeholders намеренно останавливают блок до чтения ключа и HTTP.
+Не подставлять старый OWNER_25_CASES_R1. Работать в отдельном чистом checkout
+точного принятого source; `.env.m4-probe` остаётся только у владельца.
+
+```powershell
+$ErrorActionPreference = 'Stop'
+$ReviewedSource = 'C0_REVIEWED_FULL_SHA_REQUIRED'
+$ReviewedTree = 'C0_REVIEWED_TREE_REQUIRED'
+$ApprovalRef = 'C0_REVIEWED_APPROVAL_REF_REQUIRED'
+if ($ReviewedSource -cnotmatch '^[0-9a-f]{40}$' -or $ReviewedTree -cnotmatch '^[0-9a-f]{40}$') {
+    throw 'HOLD: нужен новый exact-source review C0'
+}
+if ($ApprovalRef -cnotmatch ('^C0-M4\.2-DEEPSEEK-TOOL-COMPAT-R1:' + $ReviewedSource + ':[A-Z0-9_]{1,80}$')) {
+    throw 'HOLD: нужен отдельный ref C0 для этого source'
+}
+$ActualSource = git rev-parse HEAD
+if ($LASTEXITCODE -ne 0 -or $ActualSource -cne $ReviewedSource) { throw 'SOURCE_MISMATCH' }
+$ActualTree = git rev-parse 'HEAD^{tree}'
+if ($LASTEXITCODE -ne 0 -or $ActualTree -cne $ReviewedTree) { throw 'TREE_MISMATCH' }
+$Dirty = git status --porcelain --untracked-files=normal
+if ($LASTEXITCODE -ne 0 -or $Dirty) { throw 'CHECKOUT_NOT_CLEAN' }
+$Report = 'reports/m4-polza-deepseek-tool-compat-r1.jsonl'
+if (Test-Path -LiteralPath $Report) { throw 'REPORT_EXISTS: не удалять и не повторять' }
+if (-not (Test-Path -LiteralPath '.env.m4-probe' -PathType Leaf)) { throw 'LOCAL_SECRET_FILE_REQUIRED' }
+uv sync --frozen
+if ($LASTEXITCODE -ne 0) { throw 'DEPENDENCIES_FAILED' }
+uv run --frozen --no-sync python -m asm.ai.probe --plan --deepseek-tool-compat
+if ($LASTEXITCODE -ne 0) { throw 'PLAN_FAILED' }
+New-Item -ItemType Directory -Path 'reports' -Force | Out-Null
+uv run --frozen --no-sync python -m asm.ai.probe --live --deepseek-tool-compat `
+    --source-sha $ReviewedSource --source-environment LOCAL_DESKTOP `
+    --approval-ref $ApprovalRef --approved-rub 1 `
+    --secret-file '.env.m4-probe' --report $Report
+$ProbeExit = $LASTEXITCODE
+Write-Host ('Probe exit=' + $ProbeExit + '; сохранить report при любом исходе, не повторять')
+if (Test-Path -LiteralPath $Report) {
+    Get-FileHash -LiteralPath $Report -Algorithm SHA256
+} else {
+    Write-Host 'Report отсутствует: вернуть точный STOP C0; не повторять самостоятельно'
+}
+```
+
+Файл создаётся exclusively; новый путь или удаление файла не являются новым
+допуском. Вернуть C0 полный JSONL с hash даже при STOP. Не публиковать в Git
+owner report, ключ, raw response/reasoning или account metadata.
+
+## CONTROLLED receipt нового режима
+
+Только MockTransport, synthetic catalog/ответы; sockets и owner .env reads
+запрещены audit guard. Фактических Polza API HTTP0, paid POST0. Два наблюдённых
+wire requests: named read_current → none;2 POST/1 READ/4 history+1 catalog.
+Fake rates8/45/0 RUB дают reserve0.285184000 на call и0.570368000 на stage.
+Подставной charge0.001+0.001, новый confirmed0.002; shared confirmed0.18132550,
+held6.929759328, remaining142.888915172. Это тест арифметики, не новый расход.
+Тестовый final: `{"kind":"reply","text":"Улица Модельная, 12","reason":null}`;
+manual PENDING, variant NOT_OBSERVED, selected_model=null/runtime=false.
+
+Отказы проверены отдельно на обеих фазах. Late STOP сохраняет known первого
+call0.001 и UNKNOWN второго: new held0.285184000, shared held7.214943328.
+Неверные tool name/args, лишний tool, early final, late schema, «С», family
+drift, history identity/usage/cost, non-thinking, limits, отмена, таймаут,
+reservation без case и попытка изменить второй wire на auto проверены.
+Прежний адаптер по-прежнему отправляет auto/auto. Точные checks — в receipt C4.
 
 ## Проверки и сохранённые ограничения
 

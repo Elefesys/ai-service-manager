@@ -31,6 +31,8 @@ from asm.ai.polza import (
     PolzaAdapter,
     RouteReview,
     SyntheticRoute,
+    ToolCompatAdapter,
+    ToolCompatRoute,
     bounded_http,
     conversation_wire_schema,
     encode,
@@ -134,6 +136,21 @@ def experiment_entry(model=MODELS[0]):
 
 def experiment_route(model=MODELS[0]):
     return SyntheticRoute.from_catalog(experiment_entry(model), datetime.now(UTC))
+
+
+def tool_compat_entry():
+    """CONTROLLED declared route/rates only, not the owner's fetched catalog."""
+    entry = experiment_entry(MODELS[2])
+    provider = entry["providers"][0]
+    provider["capabilities"].update(
+        {
+            "tool_choice_function": {"status": "supported"},
+            "tool_choice_none": {"status": "supported"},
+        }
+    )
+    # Two full reservations must fit the new 1 RUB ceiling; no relaxed limits.
+    provider["pricing"]["prompt_per_million"] = "1"
+    return entry
 
 
 def experiment_history(data, family=None):
@@ -1736,3 +1753,94 @@ async def test_history_diagnostics_never_echo_raw_or_json_escaped_private_input(
     rendered = json.dumps(adapter.observation)
     assert KEY.get_secret_value() not in rendered and "PRIVATE_KEY" not in rendered
     assert "PRIVATE_ACCOUNT_METADATA" not in rendered
+
+
+@pytest.mark.parametrize("profile", [False, True])
+async def test_tool_compat_is_opt_in_and_closed_after_one_roundtrip(profile):
+    route = ToolCompatRoute.from_catalog(tool_compat_entry(), datetime.now(UTC))
+    posts, requests = [], []
+    latest = None
+
+    def handler(request):
+        nonlocal latest
+        if request.method == "POST":
+            posts.append(json.loads(request.content))
+            latest = payload(MODELS[2], tools=len(posts) == 1)
+            latest["id"] = "gen_" + str(600 + len(posts))
+            return response(latest)
+        listing, detail = experiment_history(latest)
+        return response(listing if str(request.url) == HISTORY_LIST else detail)
+
+    adapter = (ToolCompatAdapter if profile else PolzaAdapter)(
+        route, KEY, transport=httpx.MockTransport(handler)
+    )
+    original_count = adapter.count_input_tokens
+
+    def count(request):
+        requests.append(request)
+        first, second = adapter.wire(request), adapter.wire(request)
+        assert first == second
+        return original_count(request)
+
+    adapter.count_input_tokens = count
+    case = next(c for c in load_cases(FIXTURES) if c.id == "tool_current")
+    row = await run_case(
+        adapter, case, Ledger(io.StringIO(), Decimal(1), 2, tool_compat=profile), 0
+    )
+    assert not row["failures"] and row["reads"] == 1 and len(posts) == 2
+    assert [p["tool_choice"] for p in posts] == (
+        [{"type": "function", "function": {"name": "read_current"}}, "none"]
+        if profile
+        else ["auto", "auto"]
+    )
+    assert posts[0]["response_format"] == posts[1]["response_format"]
+    if profile:
+        with pytest.raises(ProviderFailure, match="ADAPTER_ERROR"):
+            adapter.wire(requests[0])  # No retry/replay even if continuation was cleared.
+        fresh = ToolCompatAdapter(
+            route, KEY, transport=httpx.MockTransport(lambda _: pytest.fail("HTTP"))
+        )
+        with pytest.raises(ProviderFailure) as exc:
+            fresh.wire(requests[-1])  # Cannot start with a caller-supplied tool exchange.
+        assert exc.value.detail == "TOOL_COMPAT_PHASE_INVALID"
+        raw = fresh.wire(requests[0])
+        for field, value in (
+            ("tool_choice", "auto"),
+            ("tool_choice", "required"),
+            ("tool_choice", "none"),
+            ("tools", []),
+            ("response_format", {}),
+            ("reasoning", {"enabled": True}),
+        ):
+            altered = json.loads(raw)
+            altered[field] = value
+            with pytest.raises(ProviderFailure) as exc:
+                fresh.check_payload(encode(altered))
+            assert exc.value.detail == "TOOL_COMPAT_PAYLOAD_INVALID"
+        with pytest.raises(ProviderFailure) as exc:
+            await fresh.image_probe(raw, 1)
+        assert exc.value.detail == "TOOL_COMPAT_RAW_PATH_FORBIDDEN"
+        assert fresh._compat_attempts == 0
+
+
+@pytest.mark.parametrize("capability", ["tool_choice_function", "tool_choice_none"])
+@pytest.mark.parametrize("status", [None, "unknown", "rejected", "ignored"])
+def test_tool_compat_named_and_none_declarations_are_required(capability, status):
+    entry = tool_compat_entry()
+    caps = entry["providers"][0]["capabilities"]
+    if status is None:
+        caps.pop(capability)
+    else:
+        caps[capability]["status"] = status
+    with pytest.raises(ValueError, match=capability.upper() + "_UNSUPPORTED"):
+        ToolCompatRoute.from_catalog(entry, datetime.now(UTC))
+    # The historical SyntheticRoute contract is unchanged by the new profile.
+    assert SyntheticRoute.from_catalog(entry, datetime.now(UTC)).model == MODELS[2]
+
+
+def test_tool_compat_cannot_admit_another_model_or_unreviewed_profile():
+    for model in MODELS[:2]:
+        with pytest.raises(ValueError, match="TOOL_COMPAT_ROUTE_REQUIRED"):
+            ToolCompatRoute.from_catalog(experiment_entry(model), datetime.now(UTC))
+    with pytest.raises(ValueError, match="TOOL_COMPAT_ROUTE_REQUIRED"):
+        ToolCompatAdapter(experiment_route(MODELS[2]), KEY)

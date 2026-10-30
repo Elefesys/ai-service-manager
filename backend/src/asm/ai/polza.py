@@ -502,6 +502,25 @@ async def bounded_http(
         raise PolzaFailure("UNAVAILABLE", "TRANSPORT_FAILURE") from None
 
 
+class ToolCompatRoute(SyntheticRoute):
+    """One DeepSeek named-read/none-final experiment; not the original auto eval."""
+
+    @classmethod
+    def from_catalog(cls, entry: dict[str, Any], checked_at: datetime) -> "ToolCompatRoute":
+        return cls.model_validate(super().from_catalog(entry, checked_at))
+
+    def provider(self) -> dict[str, Any]:
+        if self.model != MODELS[2]:
+            raise ValueError("TOOL_COMPAT_ROUTE_REQUIRED")
+        provider = super().provider()
+        # Polza's documented names, not an inferred meaning of tools support:
+        # https://polza.ai/docs/gaidy/models#возможности-провайдера-capabilities
+        for name in ("tool_choice_function", "tool_choice_none"):
+            if provider["capabilities"].get(name, {}).get("status") != "supported":
+                raise ValueError(name.upper() + "_UNSUPPORTED")
+        return provider
+
+
 class PolzaAdapter:
     def __init__(
         self,
@@ -1419,3 +1438,103 @@ class PolzaAdapter:
             RecursionError,
         ):
             raise PolzaFailure("ADAPTER_ERROR", "INVALID_PROVIDER_RESPONSE") from None
+
+
+class ToolCompatAdapter(PolzaAdapter):
+    """Closed EVAL_ONLY two-phase profile. No caller-supplied tool_choice or raw path."""
+
+    def __init__(
+        self,
+        review: ToolCompatRoute,
+        key: SecretStr,
+        *,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        if not isinstance(review, ToolCompatRoute):
+            raise ValueError("TOOL_COMPAT_ROUTE_REQUIRED")
+        super().__init__(review, key, transport=transport)
+        self.review = ToolCompatRoute.model_validate(review)
+        self._compat_first: AdapterRequest | None = None
+        self._compat_call: ToolCall | None = None
+        self._compat_wire: bytes | None = None
+        self._compat_attempts = 0
+        self._compat_stopped = False
+
+    def wire(self, request: AdapterRequest) -> bytes:
+        tools = request.request.tools
+        exchanges = request.exchanges
+        if (
+            self._compat_stopped
+            or request.request.run_id != "tool_current_0"
+            or len(tools) != 1
+            or tools[0].name != "read_current"
+            or tools[0].arguments.model_json_schema()
+            != {
+                "type": "object",
+                "title": "ReadArgs",
+                "additionalProperties": False,
+                "properties": {"key": {"const": "current", "title": "Key", "type": "string"}},
+                "required": ["key"],
+            }
+            or len(exchanges) != self._compat_attempts
+            or len(exchanges) > 1
+            or self._compat_first is not None
+            and (
+                request.request != self._compat_first.request
+                or request.config != self._compat_first.config
+            )
+            or exchanges
+            and (
+                self._compat_call is None
+                or exchanges[0].calls != (self._compat_call,)
+                or len(exchanges[0].results) != 1
+                or exchanges[0].results[0].call_id != self._compat_call.call_id
+                or exchanges[0].results[0].name != "read_current"
+            )
+        ):
+            raise PolzaFailure("ADAPTER_ERROR", "TOOL_COMPAT_PHASE_INVALID")
+        body = strict_json(super().wire(request).decode())
+        body["tool_choice"] = (
+            "none" if exchanges else {"type": "function", "function": {"name": "read_current"}}
+        )
+        self._compat_first = self._compat_first or request
+        self._compat_wire = encode(body)
+        return self._compat_wire
+
+    def check_payload(self, raw: bytes) -> None:
+        if self._compat_stopped or self._compat_attempts >= 2 or raw != self._compat_wire:
+            raise PolzaFailure("ADAPTER_ERROR", "TOOL_COMPAT_PAYLOAD_INVALID")
+        super().check_payload(raw)
+        # count_input_tokens/wire may run repeatedly; consume only at the HTTP boundary.
+        self._compat_wire = None
+        self._compat_attempts += 1
+
+    async def complete(self, request: AdapterRequest) -> AdapterResponse:
+        try:
+            result = await super().complete(request)
+            if (
+                self._compat_attempts == 1
+                and result.kind == "TOOLS"
+                and len(result.tool_calls) == 1
+            ):
+                # _send has already verified history identity, usage and cost.
+                # Gateway validates the typed call before the runner can execute READ.
+                self._compat_call = result.tool_calls[0]
+            else:
+                self._compat_stopped = True
+            return result
+        except BaseException:
+            self._compat_stopped = True
+            raise
+        finally:
+            self._compat_wire = None
+            self.observation.update(
+                compatibility_phase="STRICT_FINAL" if request.exchanges else "NAMED_READ",
+                response_format_semantics="STRICT_FINAL_ENVELOPE"
+                if request.exchanges
+                else "IGNORED_BY_DOCUMENTED_TOOL_MODE",
+                auto_tools_compatibility="NOT_TESTED_BY_THIS_PROFILE",
+            )
+
+    async def image_probe(self, body: bytes, seconds: float) -> AdapterResponse:
+        raise PolzaFailure("ADAPTER_ERROR", "TOOL_COMPAT_RAW_PATH_FORBIDDEN")

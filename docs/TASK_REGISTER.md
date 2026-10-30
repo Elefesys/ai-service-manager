@@ -17,7 +17,7 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.2-GEMINI-DIAGNOSTIC-R1 | VERIFIED только diagnostic scope; SIGNATURE_EXTRA_MISSING, history failed, ONE_POST_R1_5RUB использован |
 | M4.2-GEMINI-COMPATIBILITY | BLOCKED: tool signature carrier не установлен; новых Gemini вызовов нет |
 | M4.2-DEEPSEEK-EVAL-R1 | BLOCKED после owner receipt: READ_ROUND_TRIP, 1 POST/0 READ, handoff «С»; OWNER_25_CASES_R1 использован, no replay |
-| M4.2-DEEPSEEK-TOOL-COMPAT-R1 | TODO / единственная выдача C4: offline подготовка отдельного named-tool → strict-final режима, ≤2 POST/1 READ/1 RUB после будущего exact-source review. Сейчас paid POST0; исходный auto eval не переписывается |
+| M4.2-DEEPSEEK-TOOL-COMPAT-R1 | REVIEW / C4 подготовил отдельный named read_current → none strict-final режим; ≤2 POST/1 READ/1 RUB, prior33 attempts и оба old holds сохранены. 711 targeted tests, Ruff/format4, mypy71,7 offline plans PASS. Receipt и неактивный Windows-шаблон готовы; paid POST0, новый exact-source допуск только после C0 review; исходный auto eval неизменён |
 | C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 wait_blocked1.5s timeout, root cause UNKNOWN; отсутствующие foundation gates не приняты |
 | M4.3-CONTEXT / M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |

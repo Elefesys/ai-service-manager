@@ -138,6 +138,62 @@ GPT25 finals и его no_send_claim19 QUALITY_FAIL/unknown_price22 QUALITY_NOTE
 Telegram/merge без изменений. Владелец сейчас ничего не запускает и передаёт
 этот handoff C4; бюджет150 повторно не запрашивается.
 
+### C4 receipt — M4.2-DEEPSEEK-TOOL-COMPAT-R1 / 2026-10-30
+
+**REVIEW, paid POST0.** Branch `c4/m4-2-deepseek-tool-compat-r1`, sole parent/base
+**7e0870d8492d36a00ffac894e44b787c5af8ca47**, base tree
+**f36e530b6817670af3e70810ca42587ce7d8847d**.
+Candidate SHA/tree возвращаются после публикации одного commit; self-SHA не
+встраивается в собственное дерево. Изменены только7 разрешённых файлов.
+
+Добавлены `ToolCompatRoute`/`ToolCompatAdapter` и отдельный CLI
+`--deepseek-tool-compat`. Fresh selected route требует documented
+tool_choice_function/none supported. Wire закрыт на один tool_current:
+named read_current → validated history/typed READ → none strict final.
+Первый response_format — IGNORED_BY_DOCUMENTED_TOOL_MODE; auto semantics
+NOT_TESTED_BY_THIS_PROFILE. Нет произвольного tool_choice/raw image path,
+перезапуска адаптера или третьего call. `PolzaAdapter` и все прежние definitions
+в polza.py по AST неизменны. В probe.py старые definitions изменены только
+Ledger (отдельный finite opt-in prior/caps) и main (dispatch); run_case,
+catalog, evaluators, старые plans/runner/summary не менялись.
+
+Prior0.17932550/31 known +2 unknown held6.929759328;33 attempts,
+remaining142.890915172. Ceiling1 RUB, оба call reserves до POST, ≤35 shared;
+120s stage/60s whole roundtrip, остальные caps без изменений. Exclusive
+report, flush до HTTP и terminal summary сохраняют unknown reservation даже
+без case. Old held не освобождаются. Short final «С» не PASS; local DTO,
+фактический saved final и quality flags сохранены, manual PENDING.
+
+Проверено на Python3.13.16, frozen uv.lock, отдельный validation venv.
+Targeted pytest и реальные offline CLI под audit guard: запрещены real sockets
+и owner .env reads (pytest создаёт только synthetic secret fixtures).
+
+```text
+pytest -q tests/test_m4_probe.py tests/test_m4_polza.py tests/test_m4_gateway.py tests/test_m4_gateway_failures.py --tb=short
+711 passed in 9.78s (616 прежних +95 новых)
+ruff check backend/src/asm/ai/polza.py backend/src/asm/ai/probe.py tests/test_m4_polza.py tests/test_m4_probe.py
+All checks passed!
+ruff format --check backend/src/asm/ai/polza.py backend/src/asm/ai/probe.py tests/test_m4_polza.py tests/test_m4_probe.py
+4 files already formatted
+mypy backend/src
+Success: no issues found in 71 source files
+```
+
+7 actual CLI plans PASS: default, --plan, --plan --synthetic-experiment,
+--plan --history-r2, --plan --gemini-diagnostic, --plan --deepseek-eval,
+--plan --deepseek-tool-compat. JSON первых6 совпал с base. Canonical fixture
+fingerprint прежний. Positive/late failures наблюдали оба wire, в том числе
+none-final, READ/history correlation, timeouts и reserves; ранние отказы
+не подменяют поздние проверки. Safe CONTROLLED receipt, offline command и
+неактивный Windows-шаблон — [в runbook](../runbooks/M4_POLZA_PROBE.md).
+
+Hosted compatibility/quality/account tariff остаются UNKNOWN. Новый live ref
+проверяется на имя задачи и exact source; CLI не удостоверяет полномочия C0,
+оператор использует только будущую опубликованную C0 команду. Windows live
+не запускался. Full CI не запускался; PR39 Draft/headcd60 и main51d7 неизменны,
+CI41009211185 RED/observer root cause UNKNOWN и C0-M4-CI-OBSERVATION-01 OPEN
+сохранены. Runtime/model selection/merge/VM/DB/Telegram не разрешены.
+
 ## История — использованный допуск C0-M4.2-DEEPSEEK-EVAL-R1 / 2026-10-30
 
 **Source review PASS; один OWNER DeepSeek-only stage разрешён в прежнем150 RUB.**
