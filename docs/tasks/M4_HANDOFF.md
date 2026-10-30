@@ -6,7 +6,7 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2 R2 evidence VERIFIED; lifecycle repair R3 назначен / 2026-10-30
+## CURRENT — C2 lifecycle repair R3 LOCAL READY; hosted validation pending / 2026-10-30
 
 C0 проверил [возврат C2 R2](https://github.com/Elefesys/ai-service-manager/commit/862c037bb8e5307a9991b9938567e2a910a20777).
 **253 PASS / 1 FAIL; original 222 PASS; cleanup PASS.** Evidence принят как
@@ -16,6 +16,39 @@ Recorder collision устранён и проверен; повторять эт
 Следующий исполнитель — **C2-M4-CI-OBSERVATION-R3** ниже. Владелец ничего не
 запускает; C6 и остальные HOLD. Исторический timeout cause UNKNOWN,
 C0-M4-CI-OBSERVATION-01 / integration CI остаются OPEN.
+
+### C2 R3 — подготовленный source / 2026-10-30
+
+Exact base **3123fab2d9ac99e66161c0358e8b572783581d5e**, tree
+**925cd198f7247f2a327202b0a6d174766f38916e**; sole parent
+862c037bb8e5307a9991b9938567e2a910a20777, parent tree
+fb5073c48c876f25c2dfd1eb11706eefd689ec06 подтверждены. Source — один direct child
+base, ровно5 разрешённых paths. Preparation c2/m4-ci-observation-r3;
+execution c2/m4-pg-observation-run-r3 и один FF/job по допуску ниже.
+
+Helper при unknown/finished query отдаёт управление target внутри прежнего
+1.5s deadline и не выполняет SQL. Task/query/PID/pending/error guards сохранены.
+Controlled query_finished/query_replaced теперь синхронизированы явным событием
+target query, не номером пустого poll. Unknown case требует0 SQL calls.
+Foreign/absent после expected deadline проверяют исходный backend/transaction
+без rollback/reconnect; foreign сохраняет held-wait assertion, затем ждёт
+завершения unrelated waiter только после явного release и проверяет final effects.
+Отдельные PG fault controls заранее открывают observer через existing TEST role:
+real SQL22012 или cancellation после доказанного wait observer. Они сохраняют
+primary error/cancel, проверяют held blocker и закрывают только собственную
+observer transaction до явного release blocker. Production/timeouts/clock прежние.
+
+Local Python3.13.16/frozen uv.lock: **27 controlled/reporter PASS /6.24s**;
+collect-only **258=254 R2+4**. Новые4 —2 controlled observer error/cancel и2 PG
+observer lifecycle cases. Все original222 и R2 IDs сохраняют order; original
+79 business functions/9 callers и все R2 test assertions сохранены, три consumer
+modules byte-identical. Runner functions/report gates неизменны;5 malformed
+collections refused, Ruff/format/compile5/diff-check PASS.
+Controlled R2→R3 при unknown identity:1 SQL await/cancel→0 SQL calls/no observer
+cancel; обе стороны дают bounded TimeoutError, target получил управление.
+Это NO DATABASE evidence, не reproduction исторического timeout.
+Hosted actual PG **NOT_RUN** на этом source receipt. Следом один targeted
+pytest всех4 modules≤600s/job≤25min; затем отдельный docs receipt и C2 HOLD.
 
 ### Проверка C0 — результат R2
 

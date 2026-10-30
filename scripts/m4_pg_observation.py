@@ -1,4 +1,4 @@
-"""C2-M4-CI-OBSERVATION-R2: one disposable exact-target observer validation."""
+"""C2-M4-CI-OBSERVATION-R3: one disposable observer lifecycle validation."""
 
 import asyncio
 import functools
@@ -16,9 +16,9 @@ import sys
 import time
 from pathlib import Path
 
-BASE = "9982bcc860a9f70ade0d965434198d086fa0acf0"
-BASE_TREE = "15478e6f38dfd014ef9a24b5d04cf91cb1260cb1"
-BRANCH = "c2/m4-pg-observation-run-r2"
+BASE = "3123fab2d9ac99e66161c0358e8b572783581d5e"
+BASE_TREE = "925cd198f7247f2a327202b0a6d174766f38916e"
+BRANCH = "c2/m4-pg-observation-run-r3"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -53,6 +53,8 @@ NEW_NODEIDS = [
                 "cancelled_during",
                 "query_finished",
                 "query_replaced",
+                "observer_error",
+                "observer_cancelled",
             ),
         ),
         (
@@ -66,6 +68,10 @@ NEW_NODEIDS = [
                 "failed",
                 "cancelled",
             ),
+        ),
+        (
+            "test_wait_blocked_pg_observer_failure_preserves_blocker",
+            ("error", "cancelled"),
         ),
         (
             "test_m4_observation_summary_rejects_incomplete",
@@ -97,9 +103,6 @@ WRITE_SET = {
     ".github/workflows/m4-pg-observation.yml",
     "scripts/m4_pg_observation.py",
     "tests/test_m3_1_control_postgres.py",
-    "tests/test_m3_1_control_api_postgres.py",
-    "tests/test_m3_1_guards_postgres.py",
-    "tests/test_m3_1_provenance_postgres.py",
     "docs/tasks/M4_HANDOFF.md",
     "docs/TASK_REGISTER.md",
 }

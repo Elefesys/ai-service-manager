@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — R2 evidence принят; C2 lifecycle repair R3 / 2026-10-30
+## CURRENT — C2 lifecycle repair R3 LOCAL READY; hosted validation pending / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**; PR38 merged,
@@ -26,7 +26,7 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | C2-M4-CI-OBSERVATION-R1 | Исторический BLOCKED local PG; SOURCE/SAVED-EVIDENCE audit принят. Заменён конкретной R2 выдачей |
 | C6-M4-PG-EXECUTOR-R1 | VERIFIED SOURCE + ACTUAL PG OBSERVATION C0: one run41082835484/attempt1, PG18.6,12 PASS/cleanup PASS. Matrix aggregate overwritten; raw completeness independently recovered. C6 HOLD/ref frozen |
 | C2-M4-CI-OBSERVATION-R2 | BLOCKED repair; evidence VERIFIED C0: original 222 PASS, new 31 PASS / 1 FAIL; recorder fix VERIFIED. Foreign-control lifecycle требует R3. Run/ref frozen, admission consumed |
-| C2-M4-CI-OBSERVATION-R3 | TODO / ASSIGNED C2: узкий observer/negative-control lifecycle repair; 5 paths и один новый targeted hosted validation по HANDOFF |
+| C2-M4-CI-OBSERVATION-R3 | IN_PROGRESS / LOCAL READY: no SQL without active target query; foreign/absent backend/transaction checks, observer error/cancel controls.27 local PASS;258 collected=254 R2+4;5 paths. Один разрешённый hosted validation pending |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
@@ -65,10 +65,17 @@ Offline C0: 25 PASS / 5.47s, Ruff/format/compile 5 PASS, collect-only 254,
 это не real PG reproduction. Нового Actions/PG/model run у C0 не было.
 
 C2 R3: preparation c2/m4-ci-observation-r3, execution c2/m4-pg-observation-run-r3.
-Exact base — опубликованный C0 SHA этой выдачи, sole parent receipt862c037.
+Exact base **3123fab2d9ac99e66161c0358e8b572783581d5e**, tree
+**925cd198f7247f2a327202b0a6d174766f38916e**, sole parent receipt862c037.
 Пять paths: control_postgres test, existing runner/workflow и HANDOFF/CURRENT.
-Минимальный lifecycle fix, negative/positive preservation, 254 retained cases;
-один новый corrected-source hosted run <=600s tests / <=25min job.
+Local27 controlled/reporter PASS /6.24s; collect-only258, все254 R2 и original222
+ordered IDs сохранены;79 business functions/9 callers/R2 assertions сохранены.
+Три consumer modules byte-identical, Ruff/format/compile5/diff-check PASS;
+5 malformed collections refused. Controlled unknown identity: R2 SQL await был
+отменён по deadline, R3 не выполняет SQL; это не PG reproduction.
+Foreign/absent проверяют исходный blocker backend/transaction и final effects;
+новые2 actual PG observer fault controls пока NOT_RUN. Один новый corrected-source
+hosted run <=600s tests / <=25min job разрешён и ожидает prepared source.
 No blocker rollback/reconnect ради PASS; 1.5s/1.1s/DB bounds сохранены.
 R1/R2 refs/artifacts frozen, retries/full CI/production/VM/paid запрещены здесь.
 После receipt C0 review/integration/full CI; C2 следующий, остальные HOLD.
