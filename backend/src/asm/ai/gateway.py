@@ -91,7 +91,12 @@ class ModelGateway:
         self._seen: set[str] = set()
         self._closed = False
         self._busy = False
-        self._prompt = files("asm.ai").joinpath("prompts/conversation_v1.txt").read_text("utf-8")
+        prompt_path = (
+            "prompts/conversation_v2.txt"
+            if self._config.prompt_revision == "conversation_v2"
+            else "prompts/conversation_v1.txt"
+        )
+        self._prompt = files("asm.ai").joinpath(prompt_path).read_text("utf-8")
         self._schema = (
             files("asm.ai").joinpath("schemas/conversation_result_v1.json").read_text("utf-8")
         )

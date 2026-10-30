@@ -25,7 +25,14 @@ from test_m2_1_postgres import messaging as messaging
 from test_m2_1_postgres import query
 from test_m2_3_db_postgres import observed
 from test_m2_3_db_postgres import telegram as telegram
-from test_m3_1_control_postgres import body, counts_control, incoming, state, wait_blocked
+from test_m3_1_control_postgres import (
+    body,
+    counts_control,
+    incoming,
+    observe_wait,
+    state,
+    wait_blocked,
+)
 from test_m3_1_control_postgres import control as control
 from test_tenancy_postgres import UA, A, B
 from test_tenancy_postgres import db as db
@@ -230,26 +237,35 @@ async def test_post_lock_product_boundaries_with_actual_conversation_wait(
                 ws=A,
             )
         )[0]["edge"]
+        observe_wait("edge_committed", edge=edge, blocker_pid=pid)
         task = asyncio.create_task(
             post(h, cid, "resume", expected=expected) if caller == "resume" else manual(h, cid)
+        )
+        observe_wait(
+            "request_scheduled", pending=task, engine=h.auth.service.tenancy._engine.sync_engine
         )
         try:
             await wait_blocked(c, pid, pending=task)
             blocked_at = (await c.execute(text("SELECT clock_timestamp()"))).scalar_one()
+            observe_wait("blocked_clock", blocked_at=blocked_at)
             assert blocked_at < edge and not task.done()
             # Database wall time crosses the half-open bound. No data mutation,
             # fake clock, rescheduling or extended DB timeout releases this wait.
             await asyncio.sleep(max(0, (edge - blocked_at).total_seconds()) + 0.03)
             released_at = (await c.execute(text("SELECT clock_timestamp()"))).scalar_one()
+            observe_wait("released_clock", released_at=released_at)
             assert edge <= released_at and (released_at - blocked_at).total_seconds() < 2
             await transaction.commit()
+            observe_wait("blocker_commit_completed")
             response = await task
         finally:
+            observe_wait("before_cleanup", pending=task)
             if transaction.is_active:
                 await transaction.rollback()
             if not task.done():
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
+            observe_wait("after_cleanup", pending=task)
     after = await state(h, cid)
     if boundary == "expiry":
         assert response.status_code == 409 and response.json() == {"error": {"code": "NOT_ALLOWED"}}
@@ -550,7 +566,7 @@ async def test_control_revocation_committed_while_authority_waits(api, revocatio
         pid = (await c.execute(text("SELECT pg_backend_pid()"))).scalar_one()
         task = asyncio.create_task(post(h, cid, expected=expected))
         try:
-            await wait_blocked(c, pid)
+            await wait_blocked(c, pid, pending=task)
             await tx.commit()
             result = await task
             assert result.status_code == (403 if revocation == "membership" else 401), result.json()

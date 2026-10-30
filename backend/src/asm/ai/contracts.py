@@ -76,7 +76,7 @@ class Limits(DTO):
 class GatewayConfig(DTO):
     revision: Identifier
     route: Route
-    prompt_revision: Literal["conversation_v1"]
+    prompt_revision: Literal["conversation_v1", "conversation_v2"]
     schema_revision: Literal["conversation_result_v1"]
     limits: Limits
 

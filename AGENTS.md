@@ -21,8 +21,10 @@ M3 закрыт в LOCAL/TEST; финальный receipt — в верхнем 
 [TASK_REGISTER](docs/TASK_REGISTER.md), затем относящиеся к задаче исходные ADR.
 План/IMPL-004 приняты C0 и интегрированы в PR #37. Единственная текущая
 выдача, её accepted/repair base, исполнитель и write-set — в верхнем
-M4_HANDOFF/CURRENT. После возврата C4 текущий blocker PR38 исправляет C5;
-C4 HOLD, M4.2 ждёт полного CI и приёмки.
+M4_HANDOFF/CURRENT. M4.1 и C5 recovery интегрированы в PR #38; actual main CI PASS.
+Текущая работа C0 — integration/full CI принятых GPT/v2, context/agent и
+C2 test-helper изменений. Точный candidate/status — в CURRENT; остальные HOLD.
+Прежние paid допуски использованы; новых вызовов они не разрешают.
 Исторические HOLD/операторские команды M1–M3 не являются новой задачей M4.
 
 Цель — один агент/один рабочий AI provider и инструменты чтения; provider-neutral

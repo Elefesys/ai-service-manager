@@ -3,7 +3,7 @@
 import asyncio
 import json
 import sys
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -13,7 +13,9 @@ from asm.conversations.control import ControlCode, ControlError, control_fingerp
 from asm.conversations.http_models import ControlCommandRequest
 from asm.conversations.turns import TurnSnapshot, consume
 from asm.tenancy import AuthenticatedAccount, TenancyError
+from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError
 from test_m2_1_models import event
 from test_m2_1_postgres import command, ingest, query
@@ -149,35 +151,119 @@ async def incoming(h, provider="CONTROLLED", number=1, *, process=True, message=
     return cid, rec, result
 
 
-async def wait_blocked(connection, blocker, *, pending=None):
-    # Observe through the already-open blocker connection: pool acquisition or
-    # DNS for a separate observer must not consume this real-lock wait budget.
-    async with asyncio.timeout(1.5):
-        while True:
-            rows = (
-                (
-                    await connection.execute(
-                        text(
-                            "SELECT pid,locktype,mode,granted FROM pg_locks "
-                            "WHERE NOT granted AND :blocker=ANY(pg_blocking_pids(pid))"
-                        ),
-                        {"blocker": blocker},
+def observe_wait(kind, **fields):
+    # Optional diagnostics; the task/PID wait proof never depends on the plugin.
+    plugin = sys.modules.get("scripts.m4_pg_observation")
+    if plugin is not None:
+        plugin.record(kind, **fields)
+
+
+def require_pending(pending):
+    assert isinstance(pending, asyncio.Task), "LOCK_WAIT_REQUIRES_TARGET_TASK"
+    if pending.done():
+        pending.result()  # Preserve the target's original error/cancellation.
+        raise AssertionError("LOCK_WAIT_TARGET_COMPLETED")
+
+
+@contextmanager
+def target_query(pending):
+    """Track only the target task's currently executing driver query, without SQL.
+
+    Call wait_blocked immediately after create_task, before yielding elsewhere.
+    A missed start, finished query or unavailable identity cannot prove a wait.
+    """
+    active = [None]
+
+    def belongs_to_target():
+        try:
+            return asyncio.current_task() is pending
+        except RuntimeError:  # An unrelated synchronous engine on another thread.
+            return False
+
+    def before(connection, cursor, statement, parameters, context, many):
+        if belongs_to_target():
+            driver = connection.connection.driver_connection
+            pid = driver.info.backend_pid
+            assert type(pid) is int and pid > 0, "LOCK_WAIT_TARGET_IDENTITY_UNAVAILABLE"
+            active[0] = (context, driver, pid)
+
+    def after(connection, cursor, statement, parameters, context, many):
+        if belongs_to_target():
+            active[0] = None
+
+    def failed(context):
+        if belongs_to_target():
+            active[0] = None
+
+    listeners = (
+        ("before_cursor_execute", before),
+        ("after_cursor_execute", after),
+        ("handle_error", failed),
+    )
+    for name, callback in listeners:
+        sqlalchemy_event.listen(Engine, name, callback)
+    try:
+        yield active
+    finally:
+        for name, callback in listeners:
+            sqlalchemy_event.remove(Engine, name, callback)
+
+
+async def wait_blocked(connection, blocker, *, pending):
+    # The existing blocker observes a task-bound backend; no extra connection,
+    # grants, SQL identity lookup or plugin is needed in the critical window.
+    require_pending(pending)
+    with target_query(pending) as active:
+        async with asyncio.timeout(1.5):
+            while True:
+                require_pending(pending)
+                query = active[0]
+                if query is None:
+                    # Give the target a turn without risking cancellation of SQL
+                    # on the blocker when there is no query to observe.
+                    await asyncio.sleep(0)
+                    continue
+                waiter = query[2]
+                assert waiter != blocker, "LOCK_WAIT_TARGET_IS_BLOCKER"
+                observe_wait("observer_execute_start", blocker_pid=blocker, target_pid=waiter)
+                try:
+                    rows = (
+                        (
+                            await connection.execute(
+                                # A second row waiter can queue behind the first.
+                                # Require its own wait and at most one intermediate
+                                # blocker leading back to the held serialization lock.
+                                text(
+                                    "SELECT waiting.pid,waiting.locktype,waiting.mode,waiting.granted "
+                                    "FROM pg_locks AS waiting "
+                                    "WHERE waiting.pid=:waiter AND NOT waiting.granted "
+                                    "AND (:blocker=ANY(pg_blocking_pids(waiting.pid)) OR EXISTS ("
+                                    "SELECT 1 FROM unnest(pg_blocking_pids(waiting.pid)) AS queue(pid) "
+                                    "WHERE :blocker=ANY(pg_blocking_pids(queue.pid))))"
+                                ),
+                                {"blocker": blocker, "waiter": waiter},
+                            )
+                        )
+                        .mappings()
+                        .all()
                     )
-                )
-                .mappings()
-                .all()
-            )
-            if rows:
-                # Cross-role pg_stat_activity hides wait_event_type from the
-                # unprivileged test roles. A non-granted lock plus this exact
-                # blocker proves the wait without widening production grants.
-                assert all(row["granted"] is False and row["pid"] != blocker for row in rows)
-                return rows
-            if pending is not None:
-                # Report an early rejection/completion instead of hiding it behind
-                # an observer timeout; no successful response substitutes for a wait.
-                assert not pending.done(), pending.result()
-            await asyncio.sleep(0)
+                except BaseException as error:
+                    observe_wait("observer_execute_end", exception_type=type(error).__name__)
+                    require_pending(pending)
+                    raise
+                observe_wait("observer_execute_end", returned_rows=len(rows))
+                require_pending(pending)
+                # The target must still be in that exact driver query after the
+                # observer await. A completed/replaced query cannot lend its PID.
+                if query is not None and active[0] is query and rows:
+                    assert query[1].info.backend_pid == waiter, "LOCK_WAIT_IDENTITY_CHANGED"
+                    assert all(row["granted"] is False and row["pid"] == waiter for row in rows), (
+                        "LOCK_WAIT_UNEXPECTED_WAITER"
+                    )
+                    for row in rows:
+                        observe_wait("returned_wait", waiter_pid=row["pid"], blocker_pid=blocker)
+                    return rows
+                await asyncio.sleep(0)
 
 
 async def counts_control(h):
@@ -586,7 +672,7 @@ async def test_ingress_capture_serializes_resume_and_rollbacks(control, provider
         blocker = (await c.execute(text("SELECT pg_backend_pid()"))).scalar_one()
         task = asyncio.create_task(execute(h, cid, "RESUME", "after-ingress", before))
         try:
-            await wait_blocked(c, blocker)
+            await wait_blocked(c, blocker, pending=task)
             assert not task.done()
             await (tx.commit() if commit_ingress else tx.rollback())
             await task
@@ -732,7 +818,7 @@ async def test_resume_held_transaction_forces_later_ingress_capture(control, pro
         pid = (await c.execute(text("SELECT pg_backend_pid()"))).scalar_one()
         pending = asyncio.create_task(incoming(h, provider, 123, process=False))
         try:
-            await wait_blocked(c, pid)
+            await wait_blocked(c, pid, pending=pending)
             assert not pending.done()
             await tx.commit()
             receipt = await pending
@@ -1051,3 +1137,423 @@ async def test_control_preserves_committed_observed_receipt_and_token_replay(con
         == jobs
     )
     assert not h.ledger.exists()
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "matching",
+        "foreign",
+        "unknown",
+        "completed_before",
+        "failed_before",
+        "cancelled_before",
+        "completed_during",
+        "failed_during",
+        "cancelled_during",
+        "query_finished",
+        "query_replaced",
+        "observer_error",
+        "observer_cancelled",
+    ],
+)
+async def test_wait_blocked_controlled_target_contract(monkeypatch, scenario):
+    """Controlled scheduling checks; real PostgreSQL controls are separate below."""
+    from types import SimpleNamespace
+
+    callbacks, calls = {}, []
+    entered, release = asyncio.Event(), asyncio.Event()
+    driver = SimpleNamespace(info=SimpleNamespace(backend_pid=21))
+    connection = SimpleNamespace(connection=SimpleNamespace(driver_connection=driver))
+    context = object()
+
+    def listen(engine, name, callback):
+        assert engine is Engine
+        callbacks[name] = callback
+
+    def remove(engine, name, callback):
+        assert engine is Engine and callbacks.pop(name) is callback
+
+    monkeypatch.setattr(sqlalchemy_event, "listen", listen)
+    monkeypatch.setattr(sqlalchemy_event, "remove", remove)
+
+    async def target():
+        if not scenario.endswith("_before"):
+            if scenario != "unknown":
+                callbacks["before_cursor_execute"](connection, None, "", None, context, False)
+            entered.set()
+            await release.wait()
+        if scenario.startswith("failed"):
+            raise LookupError("target-failure")
+        if scenario.startswith("cancelled"):
+            raise asyncio.CancelledError("target-cancelled")
+        return "finished"
+
+    pending = asyncio.create_task(target())
+
+    class Observer:
+        async def execute(self, statement, parameters):
+            calls.append(parameters)
+            assert parameters["waiter"] == 21, "unknown identity must not execute SQL"
+            await entered.wait()
+            if scenario == "observer_error":
+                raise LookupError("observer-failure")
+            if scenario == "observer_cancelled":
+                raise asyncio.CancelledError("observer-cancelled")
+            stale_query = scenario.startswith("query_") and not changed.is_set()
+            if scenario.endswith("_during"):
+                release.set()
+                await asyncio.gather(pending, return_exceptions=True)
+                if scenario == "failed_during":
+                    raise RuntimeError("observer-error-must-not-mask-target")
+            elif stale_query:
+                # Dispatch these events on the actual target task, not the observer.
+                release.set()
+                await changed.wait()
+            row = {
+                "pid": 22 if scenario in {"foreign", "unknown"} else 21,
+                "locktype": "transactionid",
+                "mode": "ShareLock",
+                "granted": False,
+            }
+            rows = [row]
+            if scenario.startswith("query_") and not stale_query:
+                rows = []
+            return SimpleNamespace(mappings=lambda: SimpleNamespace(all=lambda: rows))
+
+    changed = asyncio.Event()
+    if scenario.startswith("query_"):
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+
+        async def changing_query():
+            callbacks["before_cursor_execute"](connection, None, "", None, context, False)
+            entered.set()
+            await release.wait()
+            callbacks["after_cursor_execute"](connection, None, "", None, context, False)
+            if scenario == "query_replaced":
+                callbacks["before_cursor_execute"](connection, None, "", None, object(), False)
+            changed.set()
+            await asyncio.Event().wait()
+
+        pending = asyncio.create_task(changing_query())
+    try:
+        if scenario.endswith("_before"):
+            await asyncio.gather(pending, return_exceptions=True)
+        if scenario == "matching":
+            rows = await wait_blocked(Observer(), 10, pending=pending)
+            assert {row["pid"] for row in rows} == {21} and not pending.done()
+        else:
+            exception, match = {
+                "foreign": (AssertionError, "LOCK_WAIT_UNEXPECTED_WAITER"),
+                "unknown": (TimeoutError, None),
+                "completed_before": (AssertionError, "LOCK_WAIT_TARGET_COMPLETED"),
+                "completed_during": (AssertionError, "LOCK_WAIT_TARGET_COMPLETED"),
+                "failed_before": (LookupError, "target-failure"),
+                "failed_during": (LookupError, "target-failure"),
+                "cancelled_before": (asyncio.CancelledError, None),
+                "cancelled_during": (asyncio.CancelledError, None),
+                "query_finished": (TimeoutError, None),
+                "query_replaced": (TimeoutError, None),
+                "observer_error": (LookupError, "observer-failure"),
+                "observer_cancelled": (asyncio.CancelledError, "observer-cancelled"),
+            }[scenario]
+            with pytest.raises(exception, match=match):
+                await wait_blocked(Observer(), 10, pending=pending)
+        if scenario.endswith("_before") or scenario == "unknown":
+            assert calls == []
+        if not scenario.endswith("_before"):
+            assert entered.is_set(), "identity wait must yield to the target"
+        if scenario.startswith("query_"):
+            assert changed.is_set() and not pending.done()
+            assert (len(calls) == 1) is (scenario == "query_finished")
+        if scenario.startswith("observer_"):
+            assert len(calls) == 1 and not pending.done()
+    finally:
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+    assert callbacks == {}, "observer listeners must be removed on every exit"
+
+
+@pytest.mark.parametrize(
+    "scenario", ["matching", "foreign", "absent", "two_targets", "completed", "failed", "cancelled"]
+)
+async def test_wait_blocked_pg_target_controls(control, scenario):
+    h = control
+    cid, _, _ = await incoming(h)
+    before = await counts_control(h)
+    targets = []
+    ready = asyncio.Event()
+
+    async def locked():
+        async with h.migrator.begin() as c:
+            return (
+                await c.execute(
+                    text("SELECT id FROM app.conversations WHERE id=:id FOR NO KEY UPDATE"),
+                    {"id": cid},
+                )
+            ).scalar_one()
+
+    async def idle():
+        async with h.migrator.begin() as c:
+            assert (await c.execute(text("SELECT 1"))).scalar_one() == 1
+            ready.set()
+            if scenario == "completed":
+                return "finished"
+            if scenario == "failed":
+                raise LookupError("actual-target-failure")
+            if scenario == "cancelled":
+                raise asyncio.CancelledError("actual-target-cancelled")
+            await asyncio.Event().wait()
+
+    async with h.migrator.connect() as blocker:
+        tx = await blocker.begin()
+        await blocker.execute(
+            text("SELECT id FROM app.conversations WHERE id=:id FOR NO KEY UPDATE"), {"id": cid}
+        )
+        pid = (await blocker.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+        try:
+            if scenario != "absent":
+                first = asyncio.create_task(locked())
+                targets.append(first)
+                first_rows = await wait_blocked(blocker, pid, pending=first)
+                first_pid = first_rows[0]["pid"]
+                assert first_pid != pid and not first.done()
+            if scenario == "two_targets":
+                second = asyncio.create_task(locked())
+                targets.append(second)
+                second_rows = await wait_blocked(blocker, pid, pending=second)
+                assert {r["pid"] for r in first_rows}.isdisjoint(r["pid"] for r in second_rows)
+                assert not first.done() and not second.done()
+            elif scenario not in {"matching"}:
+                target = asyncio.create_task(idle())
+                targets.append(target)
+                if scenario in {"completed", "failed", "cancelled"}:
+                    await asyncio.gather(target, return_exceptions=True)
+                    exception = {
+                        "completed": AssertionError,
+                        "failed": LookupError,
+                        "cancelled": asyncio.CancelledError,
+                    }[scenario]
+                    match = {
+                        "completed": "LOCK_WAIT_TARGET_COMPLETED",
+                        "failed": "actual-target-failure",
+                        "cancelled": None,
+                    }[scenario]
+                else:
+                    exception, match = TimeoutError, None
+                with pytest.raises(exception, match=match):
+                    await wait_blocked(blocker, pid, pending=target)
+                assert ready.is_set(), "negative control must execute its real SELECT"
+                assert not blocker.closed and not blocker.invalidated
+                assert tx.is_active and blocker.get_transaction() is tx
+                assert (await blocker.execute(text("SELECT pg_backend_pid()"))).scalar_one() == pid
+                if scenario in {"foreign", "absent"}:
+                    assert not target.done() and not target.cancelling()
+                if scenario != "absent":
+                    assert not first.done()
+                    # The unrelated waiter is still genuinely blocked on this connection.
+                    assert (
+                        await blocker.execute(
+                            text("SELECT :blocker=ANY(pg_blocking_pids(:waiter))"),
+                            {"blocker": pid, "waiter": first_pid},
+                        )
+                    ).scalar_one()
+            await tx.rollback()
+            if scenario in {"matching", "two_targets"}:
+                assert all(value == cid for value in await asyncio.gather(*targets))
+            elif scenario != "absent":
+                assert await first == cid
+        finally:
+            if tx.is_active:
+                await tx.rollback()
+            for task in targets:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*targets, return_exceptions=True)
+    assert await counts_control(h) == before
+
+
+@pytest.mark.parametrize("failure", ["error", "cancelled"])
+async def test_wait_blocked_pg_observer_failure_preserves_blocker(control, failure):
+    """Real observer SQL error/cancellation may break only its own connection."""
+    h = control
+    cid, _, _ = await incoming(h)
+    before = await counts_control(h)
+    lock = text("SELECT id FROM app.conversations WHERE id=:id FOR NO KEY UPDATE")
+    targets = []
+    target_pid = None
+
+    async def locked():
+        async with h.migrator.begin() as connection:
+            return (await connection.execute(lock, {"id": cid})).scalar_one()
+
+    # Both connections and their identities are ready before any held-lock window.
+    async with h.migrator.connect() as blocker, h.migrator.connect() as observer:
+        tx, observer_tx = await blocker.begin(), await observer.begin()
+        pid = (await blocker.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+        observer_pid = (await observer.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+        assert observer_pid != pid
+        await blocker.execute(lock, {"id": cid})
+
+        class FaultObserver:
+            async def execute(self, statement, parameters):
+                nonlocal target_pid
+                result = await observer.execute(statement, parameters)
+                if not result.mappings().all():
+                    return result
+                # Inject the fault only after actual target wait was observed.
+                target_pid = parameters["waiter"]
+                if failure == "error":
+                    return await observer.execute(text("SELECT 1/0"))
+                return await observer.execute(lock, {"id": cid})
+
+        async def observe():
+            target = asyncio.create_task(locked())
+            targets.append(target)
+            return await wait_blocked(FaultObserver(), pid, pending=target)
+
+        observing = asyncio.create_task(observe())
+        try:
+            if failure == "cancelled":
+                # Cancel only after PostgreSQL confirms the observer itself waits.
+                rows = await wait_blocked(blocker, pid, pending=observing)
+                assert {row["pid"] for row in rows} == {observer_pid}
+                observing.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await observing
+            else:
+                with pytest.raises(DBAPIError) as raised:
+                    await observing
+                assert raised.value.orig.sqlstate == "22012"
+            assert target_pid not in {None, pid, observer_pid}
+            assert len(targets) == 1 and not targets[0].done()
+            assert not blocker.closed and not blocker.invalidated
+            assert tx.is_active and blocker.get_transaction() is tx
+            assert (await blocker.execute(text("SELECT pg_backend_pid()"))).scalar_one() == pid
+            assert (
+                await blocker.execute(
+                    text("SELECT :blocker=ANY(pg_blocking_pids(:waiter))"),
+                    {"blocker": pid, "waiter": target_pid},
+                )
+            ).scalar_one()
+            # Recover only the deliberately failed observer transaction.
+            await observer_tx.rollback()
+            assert observer.get_transaction() is None
+            assert tx.is_active and blocker.get_transaction() is tx
+            await tx.rollback()
+            assert await targets[0] == cid
+        finally:
+            if not observing.done():
+                observing.cancel()
+            await asyncio.gather(observing, return_exceptions=True)
+            if observer_tx.is_active:
+                await observer_tx.rollback()
+            if tx.is_active:
+                await tx.rollback()
+            for task in targets:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*targets, return_exceptions=True)
+    assert await counts_control(h) == before
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "valid",
+        "missing_case",
+        "extra_case",
+        "reordered",
+        "missing_phase",
+        "duplicate_phase",
+        "skip",
+        "xfail",
+        "overflow",
+        "invalid",
+        "failed",
+        "exit",
+        "unknown_outcome",
+    ],
+)
+def test_m4_observation_summary_rejects_incomplete(defect):
+    from copy import deepcopy
+
+    from scripts.m4_pg_observation import summarize
+
+    expected = ["first", "second"]
+    cases = [
+        {
+            "nodeid": name,
+            "overflow": 0,
+            "invalid_fields": 0,
+            "phases": [
+                {"phase": phase, "outcome": "passed", "xfail": False}
+                for phase in ["setup", "call", "teardown"]
+            ],
+        }
+        for name in expected
+    ]
+    status = 0
+    if defect == "missing_case":
+        cases.pop()
+    elif defect == "extra_case":
+        cases.append(deepcopy(cases[-1]))
+    elif defect == "reordered":
+        cases.reverse()
+    elif defect == "missing_phase":
+        cases[0]["phases"].pop()
+    elif defect == "duplicate_phase":
+        cases[0]["phases"].append(deepcopy(cases[0]["phases"][-1]))
+    elif defect in {"skip", "failed", "unknown_outcome"}:
+        cases[0]["phases"][1]["outcome"] = {
+            "skip": "skipped",
+            "failed": "failed",
+            "unknown_outcome": "UNKNOWN",
+        }[defect]
+    elif defect == "xfail":
+        cases[0]["phases"][1]["xfail"] = True
+    elif defect == "overflow":
+        cases[0]["overflow"] = 1
+    elif defect == "invalid":
+        cases[0]["invalid_fields"] = 1
+    elif defect == "exit":
+        status = 1
+    result = summarize(cases, expected, status)
+    assert result["pytest_exit"] == status
+    assert result["cases"] == len(cases) and result["expected"] == len(expected)
+    assert (result["result"] == "PASS") is (defect == "valid")
+    assert result["complete"] is (defect in {"valid", "failed", "exit"})
+
+
+def test_m4_observation_command_preserves_summary(tmp_path):
+    from scripts.m4_pg_observation import COMMAND_REPORT, SUMMARY_REPORT, phase, summarize, write
+
+    (tmp_path / "evidence").mkdir()
+    (tmp_path / "private").mkdir()
+    summary_path = tmp_path / "evidence" / SUMMARY_REPORT
+    summary = summarize(
+        [
+            {
+                "nodeid": "one",
+                "overflow": 0,
+                "invalid_fields": 0,
+                "phases": [
+                    {"phase": p, "outcome": "passed", "xfail": False}
+                    for p in ["setup", "call", "teardown"]
+                ],
+            }
+        ],
+        ["one"],
+        0,
+    )
+    write(summary_path, summary)
+    before = summary_path.read_bytes()
+    command = [sys.executable, "-c", 'print("controlled command")']
+    phase(tmp_path, COMMAND_REPORT, command, 5)
+    assert summary_path.read_bytes() == before
+    assert json.loads(summary_path.read_text())["result"] == "PASS"
+    assert json.loads(summary_path.read_text())["complete"] is True
+    outer = json.loads((tmp_path / "evidence" / (COMMAND_REPORT + ".json")).read_text())
+    assert outer["phase"] == COMMAND_REPORT and outer["command"] == command
+    assert outer["exit_code"] == 0 and outer["seconds"] > 0
