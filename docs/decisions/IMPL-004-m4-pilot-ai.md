@@ -336,6 +336,45 @@ accepted от этой проверки; C0-M4-CI-OBSERVATION-01 и полный
 нужны до merge/runtime. Полный новый report → C0 для manual quality review,
 selected_model=null/runtime=false. После одного запуска новый paid шаг HOLD.
 
+**Решение C0 от2026-10-30 — DeepSeek eval-r1 consumed, отдельный tool compatibility profile:**
+Владелец передал полный7993-byte/5-event report source5f5ece5426d675559c15fe1b74561dc6dddd456a,
+SHA256 b2e716a962a8966aaff61f8eb8cec57419ea4d2b7c1375caf8b6578ec08ebfcc.
+1 POST/2 history GET/0 READ, schema-valid handoff «С»/«С», READ_ROUND_TRIP.
+Только этот final получает manual QUALITY_FAIL; остальные24 scenarios NOT_RUN.
+Usage575/31, reasoning0, finish_reason stop; history family Wafer, variant NOT_OBSERVED,
+cost0.00423361 CONFIRMED. Shared confirmed0.17932550/31 known POST,2 Gemini unknown/
+held6.929759328, всего33 attempts, remaining142.890915172 из прежнего150.
+Старые unknown не погашены; исходный25-case допуск использован и не повторяется.
+
+[Wafer Structured outputs](https://docs.wafer.ai/serverless/chat-completions#structured-outputs)
+документирует JSON reply при auto+response_format и tool call при required/named,
+когда response_format игнорируется. Наш исходный payload использует первую
+комбинацию; наблюдение согласуется с этим ограничением, не доказывает внутренний
+Polza path. [Combined capability flag](https://docs.wafer.ai/serverless/models#capability-flags)
+не сертифицирует нужную auto-tools семантику. Причина однобуквенного final UNKNOWN;
+местный parser не обрезает длинный текст в controlled проверке.
+
+C4 получает M4.2-DEEPSEEK-TOOL-COMPAT-R1: offline подготовить отдельный opt-in
+named read_current → history/validated synthetic READ → strict final с none.
+Это **новый явно помеченный экспериментальный protocol profile**, не изменение
+исходного auto eval и не обход его неуспеха. Успех такого профиля подтверждает
+только управляемый roundtrip; автоматический выбор инструмента,25-case quality,
+одинаковость сравнения моделей и runtime admission из него не следуют.
+
+≤2 POST/1 READ/4 history GET/1 catalog, same32768/512 tokens и24576/32768 bytes,
+model roundtrip60s/overall120s; подготовительный ceiling1 RUB из текущего остатка.
+Новый prior33 attempts с обоими held, fresh reservation обоих calls до POST,
+exclusive report, zero retry/fallback и новый exact-source C0 ref после review.
+Сейчас paid POST0. Нельзя менять canonical prompt/schema/fixtures/contracts/Gateway,
+ослаблять identity/metering/READ guards или вводить общий resume/framework.
+Short-text/regex гипотеза не даёт допуска к изменению wire schema по догадке.
+
+C0 воспроизвёл summary и4 CONTROLLED случая; real HTTP/owner key reads0.
+Code не менялся; неизменённые616 targeted/full CI не повторялись. GPT quality
+findings, Gemini blocker, Draft PR39/headcd60, RED CI41009211185 и
+C0-M4-CI-OBSERVATION-01 сохраняются. Другие исполнители HOLD, следующий C4;
+владелец не запускает старые команды. Новый бюджет150 не запрашивается.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

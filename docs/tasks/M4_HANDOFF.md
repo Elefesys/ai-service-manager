@@ -6,7 +6,139 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущий допуск — C0-M4.2-DEEPSEEK-EVAL-R1 / OWNER_25_CASES_R1 / 2026-10-30
+## Текущая выдача — M4.2-DEEPSEEK-TOOL-COMPAT-R1 / C4 / 2026-10-30
+
+**DeepSeek eval-r1 остановлен на первом tool_current: 1 POST, 0 READ, 0 follow-up.**
+Допуск OWNER_25_CASES_R1 использован; прежнюю команду не повторять. C4 получает
+только подготовку отдельной двухшаговой проверки по документированному режиму
+Wafer. Это выяснит, способен ли выбранный маршрут выполнить нужное пилоту чтение
+и вернуть содержательный structured final. Проверка не выбирает модель, не
+превращает forced tool call в успешный autonomous/auto-tools eval и не включает runtime.
+
+### Принятый отчёт владельца
+
+Получен файл `m4-polza-deepseek-eval-r1.jsonl`: **7993 bytes, 5 JSONL events**
+(source/plan/reserved/case/summary), SHA-256
+`b2e716a962a8966aaff61f8eb8cec57419ea4d2b7c1375caf8b6578ec08ebfcc`.
+Это hash переданного файла, не копии console text. Оригинал сохранён без изменений;
+owner report/raw responses в Git не публикуются. Source
+**5f5ece5426d675559c15fe1b74561dc6dddd456a**, tree
+**a5709d7a304cdb87970f2a1dc7783b77eabaee13**, exact OWNER_25_CASES_R1 ref совпал.
+Catalog checked_at **2026-10-30T10:03:53.644576+00:00** (UTC), entry SHA
+`63b51ec143fff7656f362be4d32352ff3a19a618e58e901a20f7b0a6ab0d6fda`.
+Whole-stage reserve **5.147178939 RUB** поместился в допущенный остаток;
+зарезервирован только один фактический POST на **0.190636257 RUB**.
+
+| Группа | Наблюдение / вывод |
+|---|---|
+| API / metering | generation `gen_2227387791288176641`, observed model DeepSeek, body provider ABSENT; history list+detail подтвердили family `Wafer`, usage575/31 и **0.00423361 RUB**. `wafer/us` остаётся request selector, вариант `us` не наблюдён |
+| Non-thinking / длина | reasoning_tokens=0 REPORTED; finish_reason=stop, output31 при cap512. Это не наблюдение token truncation |
+| Tool / final | FINAL `{"kind":"handoff","text":"С","reason":"С"}`, reads0. Runner правильно остановился по READ_ROUND_TRIP; adapter/history ошибок нет |
+| Качество | Ручной **QUALITY_FAIL для этого saved final**: нет вызова обязательного READ, адреса и содержательного handoff. Сохранены OUTCOME и оба MISSING_EXPECTED_FACT. Это не оценка остальных24 cases или всех маршрутов модели |
+| Завершённость | 1 attempted scenario/1 schema-valid final/0 успешно завершённых scenarios. Остальные24 NOT_RUN, image и roundtrip не проверены; p50=p95=3.163s при n1 не характеризуют скорость модели |
+
+### Причина отсутствия READ и пределы вывода
+
+C0 сверил [официальный Wafer Chat Completions / Structured outputs](https://docs.wafer.ai/serverless/chat-completions#structured-outputs)
+2026-10-30: при совместных `tools` + `response_format` и `tool_choice:auto`
+ограничение схемой направляет запрос в JSON-ответ; для tool call нужен `required`
+или named function, при котором response_format игнорируется. В исходном
+`PolzaAdapter.wire()` отправляется именно auto + strict JSON Schema.
+Это документированное несовпадение режима с ожидаемым auto READ; результат
+согласуется с ним. Receipt не показывает внутреннюю обработку Polza/Wafer,
+поэтому полную причинность и фактический вариант маршрута не объявлять доказанными.
+Флаг [tools_with_response_format](https://docs.wafer.ai/serverless/models#capability-flags)
+означает допустимость полей вместе, не равен нужному поведению выбора инструмента.
+
+Причина однобуквенных text/reason отдельно **UNKNOWN**. Canonical `pattern:"\\S"`
+и minLength1 допускают непустые строки, включая одну букву; по
+[JSON Schema](https://json-schema.org/understanding-json-schema/reference/string#regular-expressions)
+pattern ищет совпадение внутри строки, не требует её длины1. Нет evidence,
+что hosted decoder применил full-match; не объявлять это найденной причиной.
+Не менять regex, prompt, union или minimum length по догадке ради PASS.
+
+C0 воспроизвёл все summary fields, prior, reservations и quality flags на exact
+source. **4 CONTROLLED проверки PASS** с MockTransport: такой же short final
+останавливает весь stage после1 POST; длинный handoff сохраняется целиком;
+правильный адрес без READ также не проходит; положительный tool→final проходит
+2 POST/1 READ/4 history GET. Fake catalog использует reported aggregate rates
+только для арифметики и не восстанавливает actual entry/hash. Sockets и owner
+.env reads запрещены audit guard; real HTTP=0. Source не изменён, прежние616
+targeted tests и полный CI заново не запускались.
+
+### Актуальный общий учёт
+
+| Показатель | Значение |
+|---|---:|
+| Подтверждено / known POST | **0.17932550 RUB /31** |
+| Unknown | 2 Gemini POST, прежние резервы **6.929759328 RUB** |
+| Всего model attempts | **33** |
+| Confirmed + held | **7.109084828 RUB** |
+| Остаток общего150 с резервами | **142.890915172 RUB** |
+
+Новый DeepSeek charge settled по report, новых unknown нет. Whole-stage reserve
+5.147178939 и call reserve0.190636257 не являются расходом. Оба Gemini reserves
+остаются; их body amounts не считаются confirmed. Это ledger, не баланс Polza.
+
+### Задача C4: один конечный compatibility profile, без live запуска
+
+Repository **Elefesys/ai-service-manager**, branch **c4/m4-2-deepseek-tool-compat-r1**.
+Начать от **опубликованного C0 commit с этим CURRENT**, то есть полного SHA из
+immutable handoff URL. Его parent **1dfc6ec3a22d1be38a4a3269af847775bfc6db10**;
+записать собственные base SHA/tree в receipt. Применимы AGENTS, IMPL-004 и
+принятые M4 contracts. C1/C2/C3/C5/C6/C8 HOLD.
+
+1. Подготовить отдельный opt-in EVAL_ONLY режим для прежнего `tool_current`:
+   первый request — named `read_current`, один объявленный tool; после validated
+   tool call, history и synthetic READ — один final request с `tool_choice:none`
+   и прежним strict conversation_result_envelope_v1. Семантика response_format
+   на первой фазе явно IGNORED_BY_DOCUMENTED_TOOL_MODE, а не доказанный combined
+   schema+auto-tools PASS. Не добавлять принудительный вызов в обычный25-case eval.
+2. До POST проверить fresh выбранный `wafer/us` route и declarations named/none
+   tool choice, tools, strict schema, non-thinking, rates/fees и прежние caps.
+   `reasoning:{effort:"none",enabled:false}` сохраняется. Обе wire-фазы строго
+   ограничены этим режимом; caller не получает произвольный tool_choice/payload.
+   Обычный Polza/Gateway, старые modes и их saved results не меняются.
+3. Максимум **1 catalog GET /2 model POST /4 history GET /1 synthetic READ**;
+   только DeepSeek, без retry/fallback/history polling/других моделей. Input/output
+   32768/512 tokens,24576/32768 bytes; на model roundtrip вместе60s, общий120s;
+   catalog4MiB/20s, history65536 bytes/15s verification. Ошибка первой фазы
+   исключает READ/второй POST; неверный tool/args/identity/cost/usage также STOP.
+   Final обязан пройти прежний local DTO и ручную оценку факта; «С» не PASS.
+4. Отдельный report `reports/m4-polza-deepseek-tool-compat-r1.jsonl`, exclusive
+   creation и flush reservations до HTTP. Отдельный C0 reviewed prior из таблицы
+   выше; ≤35 shared POST, оба old unknown held. Подготовить stage ceiling **1 RUB**
+   из прежнего150; fresh reserve обоих calls обязан поместиться до первого POST.
+   Новые known/unknown и held считать отдельно, завершать receipt даже при STOP.
+   Отсутствующий ответ после reservation остаётся UNKNOWN, не retry.
+5. Offline plan без ключа/сети; live только с новой exact-source C0 командой после
+   review. **В этой выдаче paid POST0**. Не строить общий resume, registry или
+   новый диагностический framework. Готовый двухфазный успех — только protocol
+   observation, не завершение25-case comparison, выбор модели или runtime admission.
+
+Write-set: `backend/src/asm/ai/polza.py`, `backend/src/asm/ai/probe.py`,
+`tests/test_m4_polza.py`, `tests/test_m4_probe.py`, runbook, C4 receipt в этом handoff
+и одна CURRENT row в TASK_REGISTER. Contracts/settings/gateway/prompt/canonical
+schema/fixtures/deps/locks/CI/DB/M3 вне write-set; C0 не разрешает скрыто менять
+критерий исходного eval. Если режим нельзя изолировать без этих изменений —
+вернуть конкретный blocker и минимальный proposal, без расширения scope.
+
+Проверки должны наблюдать оба wire requests и положительный roundtrip, затем
+отказы первого/второго шага, неподдерживаемый catalog, history mismatch,
+non-thinking violation, reservation/timeout и старый auto mode. Не маскировать
+поздние ветки ранней ошибкой. Ключ/signature/raw reasoning/owner report в тестах
+и Git не нужны. Вернуть commit/tree/base, delta и точные checks, безопасный
+CONTROLLED receipt, offline plan и Windows шаблон для последующей приёмки C0.
+
+PR39 остаётся Draft/head **cd60e5e16d8bcada53597d660a15f4d82640e956**;
+CI41009211185 RED, M3 observer timeout root cause UNKNOWN.
+C0-M4-CI-OBSERVATION-01 и full CI нового source нужны до merge/runtime.
+GPT25 finals и его no_send_claim19 QUALITY_FAIL/unknown_price22 QUALITY_NOTE
+сохранены; Gemini BLOCKED. Runtime/selected model не разрешены. Main/VM/DB/
+Telegram/merge без изменений. Владелец сейчас ничего не запускает и передаёт
+этот handoff C4; бюджет150 повторно не запрашивается.
+
+## История — использованный допуск C0-M4.2-DEEPSEEK-EVAL-R1 / 2026-10-30
 
 **Source review PASS; один OWNER DeepSeek-only stage разрешён в прежнем150 RUB.**
 Выполнить [готовый Windows блок](../runbooks/M4_POLZA_PROBE.md) один раз и вернуть

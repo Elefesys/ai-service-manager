@@ -1,231 +1,94 @@
-# M4.2 — готовый запуск отдельной проверки DeepSeek
+# M4.2 — DeepSeek остановлен, следующая подготовка у C4
 
-**C0 проверил source и разрешил один DeepSeek-only stage в прежнем бюджете150 RUB.**
-25 прежних scenarios, максимум27 model POST и2 synthetic READ. GPT/Gemini не
-вызываются. Source **5f5ece5426d675559c15fe1b74561dc6dddd456a**, tree
-**a5709d7a304cdb87970f2a1dc7783b77eabaee13**; [приёмка C0](../tasks/M4_HANDOFF.md).
+**Сейчас ничего не запускать.** Один разрешённый DeepSeek eval-r1 выполнен и
+остановлен на первом сценарии. Не повторять команду, в том числе с другим
+именем report. Сохранить все reports и передать C4 [актуальный handoff](../tasks/M4_HANDOFF.md).
 
-Shared prior:0.17509189 RUB подтверждено, оба Gemini unknown удерживают
-6.929759328 RUB. Новый explicit stage ceiling **142.895148782 RUB** — оставшаяся
-часть150, **не ожидаемая стоимость прогона**. Fresh catalog пересчитает резерв
-всех27 calls до первого POST; если не помещается или route/capability/tariff
-не проходит прежние guards, этап остановится. Старые резервы не освобождаются.
+## Результат владельца
 
-## Готовая Windows команда — один DeepSeek eval
+Source **5f5ece5426d675559c15fe1b74561dc6dddd456a**, исходный
+`reports/m4-polza-deepseek-eval-r1.jsonl` принят целиком:7993 bytes/5 events,
+SHA256 `b2e716a962a8966aaff61f8eb8cec57419ea4d2b7c1375caf8b6578ec08ebfcc`.
+Approval OWNER_25_CASES_R1 использован; это не разрешение на retry.
 
-Выполни весь блок в обычном PowerShell на прежнем ПК. Ничего подставлять не надо.
-Он обновит только локальный checkout до принятого SHA и использует прежние
-`.venv` и `.env.m4-probe`; переустановка и новый ключ не нужны. Все старые reports
-сохраняются. При ошибке команда останавливается; не повторять её под новым именем.
+- Первый `tool_current`:1 model POST,2 history GET,0 synthetic READ и0 follow-up.
+  До него выполнен1 catalog GET.
+- Вместо tool call пришёл schema-valid final
+  `{"kind":"handoff","text":"С","reason":"С"}`. Ошибка `READ_ROUND_TRIP`
+  правильно остановила stage. Ручная оценка этого ответа — QUALITY_FAIL.
+- Usage575/31, reported reasoning0; finish_reason=stop, а не length. History
+  подтвердили family `Wafer` и расход **0.00423361 RUB**. Generation
+  `gen_2227387791288176641`; вариант `us` не наблюдён, только запрошен.
+- Из25 сценариев попытка была только у первого; успешно завершённых0.
+  Остальные24, включая изображения, NOT_RUN. Нельзя делать вывод о качестве
+  всей модели или считать n1 достоверным сравнением скорости/цены.
 
-```powershell
-& {
-    $ErrorActionPreference = "Stop"
-    $Candidate = "5f5ece5426d675559c15fe1b74561dc6dddd456a"
-    $DecisionRef = "C0-M4.2-DEEPSEEK-EVAL-R1:5f5ece5426d675559c15fe1b74561dc6dddd456a:OWNER_25_CASES_R1"
-    $StageRub = "142.895148782"
-    $Repo = Join-Path $env:LOCALAPPDATA "ASM-M4-Probe-4f86e7f"
-    Set-Location -LiteralPath $Repo
-    $Report = "reports\m4-polza-deepseek-eval-r1.jsonl"
-    if (Test-Path -LiteralPath $Report) { throw "Preserve existing DeepSeek report; do not replay" }
-    $Dirty = git status --porcelain
-    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean checkout required; stop and return to C0" }
-    git fetch origin $Candidate
-    if ($LASTEXITCODE -ne 0) { throw "Source fetch failed" }
-    git checkout --detach $Candidate
-    if ($LASTEXITCODE -ne 0) { throw "Source checkout failed" }
-    $Actual = git rev-parse HEAD
-    if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Accepted source mismatch" }
-    $Dirty = git status --porcelain
-    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean accepted source required" }
-    if (-not (Test-Path .\.venv\Scripts\python.exe)) { throw "Existing environment required" }
-    if (-not (Test-Path .\.env.m4-probe)) { throw "Existing private key file required" }
-    .\.venv\Scripts\python.exe -m asm.ai.probe --plan --deepseek-eval
-    if ($LASTEXITCODE -ne 0) { throw "Offline DeepSeek plan failed" }
-    .\.venv\Scripts\python.exe -m asm.ai.probe --live --deepseek-eval `
-        --secret-file .\.env.m4-probe --report $Report `
-        --approved-rub $StageRub --approval-ref $DecisionRef `
-        --source-sha $Candidate --source-environment LOCAL_DESKTOP
-    $EvalExit = $LASTEXITCODE
-    if (-not (Test-Path -LiteralPath $Report)) { throw "No DeepSeek receipt written; return STOP to C0 without retry" }
-    Write-Host "DeepSeek receipt: $Report"
-    if ($EvalExit -ne 0) { Write-Host "STOP/FAILED_OR_INCOMPLETE: preserve receipt; do not retry" }
-    Write-Host "Return the complete receipt to C0; no automatic retry or runtime approval"
-    Get-Content -LiteralPath $Report -Encoding UTF8
-}
-```
+## Почему не было вызова инструмента
 
-CLI пишет подробности в файл, поэтому после offline plan PowerShell может
-некоторое время не показывать новые строки. Максимум1800s на весь stage,60s на
-case; history/catalog входят в лимит. Не запускать второй экземпляр. В конце
-команда напечатает **весь JSONL**; передай его C0 целиком, включая STOP.
+В [официальной документации Wafer](https://docs.wafer.ai/serverless/chat-completions#structured-outputs)
+указано: при `tools` + `response_format` и `tool_choice:auto` сервер формирует
+JSON-ответ; для tool call нужен `required` или named function. Во втором случае
+response_format игнорируется. Наша исходная проба отправляет первую комбинацию.
+Наблюдение согласуется с документированным ограничением; внутреннюю обработку
+Polza этот report не показывает. Отсутствие READ не доказывает, что DeepSeek
+вообще не умеет вызывать функции.
 
-`PLAN_ONLY / PAID_NOT_AUTHORIZED` у offline plan означает, что сам план не даёт
-допуска. Единственный live допуск — exact source/ref/amount в блоке выше.
-Успешный итог **HUMAN_REVIEW_REQUIRED**: вызовы завершены, но все ответы/quality
-flags ещё нужно оценить. FAILED_OR_INCOMPLETE также вернуть C0 без повтора.
-После одного отчёта следующий paid шаг HOLD; runtime всегда false.
+Отдельная причина текста «С» пока UNKNOWN. Наш parser не обрезает строки:
+в controlled проверке длинный handoff проходит неизменным. Одну букву допускает
+прежний DTO; валидный JSON не означает полезный ответ. Не менять schema/prompt
+или отключать проверки ради этого результата.
 
-Source прошёл независимую проверку C0:616 targeted tests/Ruff/format4/mypy71,6 offline
-plans и controlled exact-command checks. Windows/live ещё NOT_RUN. Полный CI
-этого source NOT_RUN; PR39 Draft и C0-M4-CI-OBSERVATION-01 остаются до merge/runtime.
+## Общий бюджет после этой попытки
 
-## Что установил последний запуск
-
-Source68093c769f24ea63eca5185179c3eab5fafd1229,1 catalog GET/1 Gemini POST/
-1 history GET/0 READ/0 follow-up; TECHNICAL_FAILURE. Primary
-`SIGNATURE_EXTRA_MISSING` означает отсутствие `extra_content` в tool call.
-Ответ завершился `tool_calls`, но принятого READ roundtrip нет. Размер signature
-не измерен; receipt не сообщает о других возможных местах её передачи.
-
-Generation `gen_2227371816211582977`, model google/gemini-3.8-flash:
-354 входных/172 выходных токена,156 reasoning уже входят в172. Body сообщает
-**0.05269262 RUB**, уровень **FIELD_VALIDATED_ONLY**. Сверка истории отказала
-после первого GET с `HISTORY_VERIFICATION_FAILED`, до запроса detail. Точная
-причина неизвестна; это не установленная ошибка provider label или стоимости.
-Provider в body отсутствует, history family неизвестна. Flex только запрошен.
-
-Поле `new_confirmed_cost_rub=0` означает отсутствие подтверждённого списания,
-а не бесплатный запрос. План внутри receipt сохраняет PLAN_ONLY, но конкретный
-POST был допущен exact C0 ref/5 RUB. Нового допуска из этого плана не следует.
-
-| Общий учёт | Значение |
+| Показатель | Значение |
 |---|---:|
-| Принятый бюджет | 150 RUB |
-| Подтверждённый расход / POST | 0.17509189 RUB /30 |
+| Общий бюджет | 150 RUB |
+| Подтверждённый расход / known POST | **0.17932550 RUB /31** |
 | Unknown POST | 2 Gemini |
-| Удержанные резервы обоих unknown | 6.929759328 RUB |
-| Confirmed + held | 7.104851218 RUB |
-| Остаток с учётом резервов | **142.895148782 RUB** |
+| Их удержанные резервы | **6.929759328 RUB** |
+| Всего model attempts | 33 |
+| Confirmed + held | 7.109084828 RUB |
+| Остаток с резервами | **142.890915172 RUB** |
 
-Это расчёт лимита, не проверка остатка счёта Polza. Оба old unknown остаются
-отдельно; body amount не погашает ни один из них. Не удалять/переименовывать
-отчёты ради повторного запуска. R1/R2/history/diagnostic сохранить без изменений.
-Ключ, raw reasoning/response или signature C0 не нужны.
+Новый DeepSeek charge подтверждён, новых unknown нет. Его whole-stage reserve
+5.147178939 и call reserve0.190636257 RUB — лимиты резервирования, не списания.
+Это расчёт общего ledger, не проверка счёта Polza. Оба старых Gemini unknown
+остаются; диагностический body amount0.05269262 не погашает их.
 
-## Границы принятого DeepSeek этапа
+## Что готовит C4
 
-`--deepseek-eval` запускает один конечный режим только для `deepseek/deepseek-v4.1-flash-1017`
-через `wafer/us`, прежний `reasoning: {effort: "none", enabled: false}`.
-Прежние fixtures/prompt/schema/quality flags и порядок25 cases сохраняются.
-GPT уже собран; Gemini BLOCKED до доказанного protocol решения. Нет fallback,
-повтора GPT/Gemini или общего R3/resume. Exact-source ref
-и explicit stage ceiling для одного live шага указаны в готовом блоке выше.
+Отдельный конечный compatibility profile: named `read_current` → проверка
+tool call/истории → один synthetic READ → final с `tool_choice:none` и прежней
+строгой схемой. Максимум2 POST/1 READ/4 history GET/1 catalog; подготовительный
+ceiling1 RUB внутри прежнего150, новый prior из таблицы выше. Exact limits,
+write-set и критерии — в handoff. Ключ владельца и реальные вызовы C4 не нужны.
 
-| Граница нового этапа | Реализованное ограничение |
-|---|---|
-| Cases / POST / READ | 25 /≤27 /≤2;20 text,3 critical repeats,2 synthetic PNG |
-| Другие модели | GPT POST0, Gemini POST0 |
-| Catalog | 1 fresh GET,4MiB/20s; проверяется только выбранный DeepSeek entry |
-| History | ≤54 GET,65536 bytes/GET, прежний15s verification budget на call |
-| Tokens / wire bytes | 32768/512 и24576/32768 на call; total token reservation≤898560 |
-| Case / whole stage | 60 /1800s; catalog/history внутри общего deadline |
-| Prior | confirmed0.17509189, known30, unknown2, held6.929759328, всего32 POST |
-| Новое stage approval | Explicit amount≤142.895148782; fresh reserve всех27 calls≤amount до первого POST |
-| Совокупный call ceiling | 59 с прежними32 |
-| Report | Новый exclusive reports/m4-polza-deepseek-eval-r1.jsonl; старые файлы не трогать |
-| Итог | Все finals/flags и отдельный new-stage accounting; selected_model=null/runtime_authorized=false |
+Этот профиль проверяет управляемый tool roundtrip; он не подменяет исходное
+auto-tools сравнение. При успешном source review C0 опубликует новую команду.
+Сейчас **нет нового live допуска**. Не запускать отдельно сохранённый старый
+DeepSeek mode: у него уже устаревший prior. Бюджет150 заново подтверждать не нужно.
 
-До POST обязательны прежние SyntheticRoute guards: unique official selector,
-declared tools/strict schema/image, поддерживаемый output cap, non-thinking
-toggle/effort, все rates/fees. Неизвестная цена/возможность — STOP до POST.
-Каталог не доказывает hosted behavior. Actual history identity/provider/usage/
-cost проверяются до READ и принятия final. Смена family/route, raw reasoning или
-ненулевые reasoning tokens DeepSeek остаются техническими STOP, не обходятся.
+## Проверки и сохранённые ограничения
 
-`history_diagnostic` уточняет существующие ветки проверки без изменения
-acceptance и основного error, дополнительных GET/POST и raw metadata. Unknown charge удерживает новый резерв
-сверх обоих старых; cancellation/crash после reservation не разрешают replay.
-Quality flags сами по себе не превращают завершённый ответ в technical STOP
-или quality PASS; ручная оценка всех finals остаётся необходимой.
+C0 пересчитал все summary fields, caps, reservations и quality flags по5 events.
+4 CONTROLLED проверки PASS: whole-stage STOP по такому final; длинный текст
+без обрезания; отказ правильного адреса без READ; положительный2-call roundtrip.
+MockTransport, sockets и owner .env reads запрещены. Source не менялся,
+прежние616 targeted checks и полный CI не повторялись. Это не новый hosted PASS.
 
-`--plan --deepseek-eval` и `--deepseek-eval` без `--live` работают без key/HTTP.
-В live report записываются source/decision/prior, safe fresh catalog/plan,
-flushed reservations, фактические cases и terminal summary. Offline status —
-PLAN_ONLY; fresh live plan — ADMITTED / EVAL_ONLY лишь при выполненном budget
-check, иначе REJECTED / STAGE_BUDGET. Это не автоматический model quality PASS.
-Catalog/метаданные произвольных полей не копируются в report.
+GPT25 finals/27 POST/2 READ сохраняются: no_send_claim19 QUALITY_FAIL,
+unknown_price22 QUALITY_NOTE. Gemini BLOCKED,2 failed POST/0 final. Исходное
+75-case comparison не завершено; модель не выбрана, runtime_authorized=false.
+PR39 Draft/headcd60, CI41009211185 RED; root cause M3 observer timeout UNKNOWN,
+C0-M4-CI-OBSERVATION-01 и full CI нового source нужны до merge/runtime.
+Main/VM/DB/Telegram этим отчётом не меняются.
 
-Summary содержит только новые DeepSeek rows; GPT_REVIEWED/Gemini BLOCKED —
-отдельный reviewed C0 prior, не импорт и не новые PASS. Каждая reservation
-монотонно увеличивается до POST; settled новые calls учитываются по фактической
-стоимости, unknown сохраняют свой полный резерв. Старые6.929759328 удержаны
-всегда. Hard process kill может оставить только prefix с reserved без summary:
-сохранить весь файл, считать attempt UNKNOWN, не перезапускать под новым именем.
-Обычные технические STOP/timeout/cancellation сохраняют terminal summary.
+## Использованные инструкции — только история
 
-### Безопасная детализация history STOP
+- [DeepSeek eval-r1](https://github.com/Elefesys/ai-service-manager/blob/1dfc6ec3a22d1be38a4a3269af847775bfc6db10/docs/runbooks/M4_POLZA_PROBE.md): consumed, не повторять.
+- [Gemini diagnostic-r1](https://github.com/Elefesys/ai-service-manager/blob/2a1848f7089efda50913e24a58fcf21cafe167fc/docs/runbooks/M4_POLZA_PROBE.md): consumed, SIGNATURE_EXTRA_MISSING, charge UNKNOWN.
+- [History-r1](https://github.com/Elefesys/ai-service-manager/blob/c94d2ff7923c930a8e3d1983b9a05f07414eb967/docs/runbooks/M4_POLZA_PROBE.md): UNKNOWN/HISTORY_PROVIDER_UNKNOWN,0 POST.
+- [R2](https://github.com/Elefesys/ai-service-manager/blob/6e37623c804695c08cbb83d3fba8ee03ec9c4e1f/docs/runbooks/M4_POLZA_PROBE.md): stopped, не replay/resume approval.
 
-Дополнительный объект имеет ровно `stage`, `reason`, `observed_type`. Stage:
-PREFLIGHT/LIST/DETAIL; тип: MISSING/NULL/BOOL/INT/FLOAT/STRING/ARRAY/OBJECT/OTHER.
-Нет значения/длины/hash поля, произвольных labels/keys или exception text.
-
-| Проверка | Примеры fixed reason |
-|---|---|
-| До GET | REVIEW_REQUIRED, GENERATION_ID, METERING_UNKNOWN, METERING_LIMIT |
-| Получение и decode | DEADLINE, TRANSPORT, JSON, PRIVATE_REFLECTION |
-| Выбор list row | ITEMS, ID_MATCH_COUNT, MODEL, PROVIDER |
-| Сверка body и history | GENERATION_ID, REQUEST_TYPE, STATUS, COST, USAGE_INPUT, USAGE_OUTPUT, USAGE_TOTAL, USAGE_REASONING |
-| Detail boundary | API_TYPE, RESPONSE_MODE, CANCELLED, ATTEMPTS, FINISH_REASON, MODEL, SERVER_TOOLS, PARENT_GENERATION, STEPS |
-
-Например LIST/PROVIDER/NULL и DETAIL/API_TYPE/STRING дают прежний
-HISTORY_VERIFICATION_FAILED, но различимы без новой генерации. TRANSPORT
-сохраняет прежний HTTP/timeout error. Для Gemini primary signature error остаётся
-primary; history diagnostic дополняет failure_history_error. Старый owner
-history отказ ретроспективно не классифицируется: его точная причина UNKNOWN.
-
-### Порядок допуска и сохранения отчёта
-
-Готовый блок выше содержит полный accepted SHA/ref/amount и проверяет checkout
-до API. CLI эксклюзивно создаёт report до key/HTTP. Старые R1/R2/ONE_POST refs,
-неверный source ref, нечисловой/слишком большой amount, конфликтующие режимы
-отклоняются. Plan не читает ключ и не выполняет HTTP. Новое unknown учитывается
-отдельно от двух старых; нет автоматического retry, pagination или resume.
-
-### CONTROLLED пример, не реальный тариф или расход
-
-Полный mock с двумя намеренными quality flags дошёл до25 finals/27 POST/2 READ/
-54 history GET/1 catalog. Plan: rates17/45/0, reserve **15.662592000 RUB**;
-summary: HUMAN_REVIEW_REQUIRED, new known27/cost0.027/unknown0. Shared known57/
-cost0.20209189, unknown2/held6.929759328, remaining142.868148782; selected_model=null,
-runtime_authorized=false. Эти числа воспроизводят fixture и не прогнозируют Polza.
-Unknown/отмена второго POST сохраняют первый confirmed call и новый резерв;
-STOP без case row после reserved тоже сохраняет unknown. Все поздние guards
-проверены отдельно от раннего preflight. Независимая приёмка C0 и исходный receipt C4 — в handoff.
-
-## Исторические команды и результаты
-
-- [Использованный Gemini diagnostic ONE_POST_R1_5RUB](https://github.com/Elefesys/ai-service-manager/blob/2a1848f7089efda50913e24a58fcf21cafe167fc/docs/runbooks/M4_POLZA_PROBE.md): завершён, не повторять.
-- [Использованный GET-only history-r1](https://github.com/Elefesys/ai-service-manager/blob/c94d2ff7923c930a8e3d1983b9a05f07414eb967/docs/runbooks/M4_POLZA_PROBE.md): UNKNOWN/HISTORY_PROVIDER_UNKNOWN,0 POST; не повторять.
-- [R2](https://github.com/Elefesys/ai-service-manager/blob/6e37623c804695c08cbb83d3fba8ee03ec9c4e1f/docs/runbooks/M4_POLZA_PROBE.md): остановлен, не replay/resume approval.
-
-Source68093c7 сохраняет старые CLI priors для воспроизводимости; они не учитывают
-последний диагностический POST и не годятся как лимит нового этапа. GPT25 finals /
-27 POST/2 READ сохранены: no_send_claim19 QUALITY_FAIL, unknown_price22 QUALITY_NOTE.
-Gemini2 attempts/0 final, DeepSeek NOT_RUN. Full comparison75 cases не завершена.
-
-## Протокол и проверка C0
-
-[Google protocol](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures#signatures-for-openai-compatibility)
-задаёт `tool_calls[].extra_content.google.thought_signature`. В проверенных
-2026-10-30 [Polza tools](https://polza.ai/docs/gaidy/tool-calling),
-[reasoning](https://polza.ai/docs/osobennosti/reasoning-tokens) и
-[chat API](https://polza.ai/docs/api-reference/chat/completions) не найден
-альтернативный signature carrier; это не вывод о всех возможностях сервиса.
-Текущий report доказывает только отсутствие ожидаемого блока. Gemini остаётся
-BLOCKED, не quality FAIL. Не убирать validator, не вставлять dummy signature,
-не копировать весь raw message/reasoning и не менять thinking наугад.
-
-[Polza history contract](https://polza.ai/docs/api-reference/history/generations)
-описывает metadata отдельно от model response. C0 воспроизвёл8 CONTROLLED
-вариантов exact source: positive history подтверждает расход, сохраняя signature
-ERROR;7 разных list failures дают тот же generic error после1 GET. Поэтому
-конкретная причина реального history отказа остаётся UNKNOWN. Реальная сеть,
-owner key, READ/follow-up в проверках C0 не использованы. Арифметика receipt PASS.
-
-Исторический source68093c7 прошёл520 targeted tests. Новый C4 candidate:
-616 targeted tests PASS, Ruff/check+format4 и mypy71 PASS,6 offline CLI plans
-PASS. Real sockets/owner key reads запрещены в проверках; paid/Windows live и
-полный suite/CI NOT_RUN. PR39 Draft/headcd60,
-CI41009211185 RED; C0-M4-CI-OBSERVATION-01 остаётся до merge/runtime. Полный CI
-source68093c7 NOT_RUN. Пилот, Telegram и live DB этим receipt не запускаются.
+Все исходные файлы сохранить. Ключ, raw response/reasoning или signature
+передавать C0/C4 не нужно.
