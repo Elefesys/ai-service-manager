@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M4.2 GET-only history / C0 acceptance / 2026-10-30
+## CURRENT — M4.2 один Gemini diagnostic / 2026-10-30
 
 Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**; PR38 слит владельцем,
@@ -15,7 +15,7 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
 | M4.2-PROBE | REVIEW / R2 STOP: GPT25/25 technical completion, один clear quality failure и один quality note. Gemini первый POST SIGNATURE_INVALID/charge UNKNOWN, DeepSeek NOT_RUN. Полное сравнение/selection/runtime не приняты. Разовый R2 допуск использован; replay HOLD. |
-| M4.2-GEMINI-DIAGNOSTIC-R1 | REVIEW / source review PASS; C4 cbc87bf +bounded C0 escaped-key fix68093c7.520 targeted/Ruff/format/mypy PASS. Один OWNER GET-only запуск готов (max4 history GET/0 POST); полный отчёт → C0. Paid diagnostic/R3 HOLD; C4 HOLD. |
+| M4.2-GEMINI-DIAGNOSTIC-R1 | REVIEW / OWNER ONE_POST_R1_5RUB AUTHORIZED: source68093c7,≤1 Gemini POST/0 READ/follow-up, stage reserve≤5 из прежнего150. History-r1 UNKNOWN/HISTORY_PROVIDER_UNKNOWN после1 GET принят; old charge/reserve сохраняются. Полный новый receipt → C0; дальнейший paid/R3 HOLD. |
 | C0-M4-CI-OBSERVATION-01 | TODO / до merge/runtime: разобрать M3 wait_blocked1.5s timeout и завершить отсутствующие foundation gates; причина задержки UNKNOWN. Тесты/таймауты неизменны; случайный rerun не выполнен. |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
@@ -30,7 +30,10 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **cbc87bf6999157bdaa84e4d5e7d8219e83008998**. C0 delta ограничена decoded-key
 проверкой GET-only history и regression test: тест сначала FAIL на C4 candidate,
 затем520 targeted PASS. Owner key/реальные HTTP=0; Windows/live history NOT RUN.
-Готовая команда уже закрепляет этот SHA,0 model POST, max4 GET,60s overall.
+History-r1 уже вернулся UNKNOWN/HISTORY_PROVIDER_UNKNOWN после1 GET/0 POST;
+provider value/тип/конкретная row не сохранены. Допуск GET-only использован.
+Теперь готов один Gemini diagnostic:1 catalog/≤1 POST/≤2 history/0 READ/follow-up,
+120s overall, explicit reserve≤5 RUB. Полный отчёт → C0; автоматического retry нет.
 PR39 Draft/head остаётся **cd60e5e16d8bcada53597d660a15f4d82640e956**;
 новый full CI не запускался. C0 source review не означает merge/runtime acceptance.
 
@@ -56,8 +59,10 @@ CLI isolation PASS. [CI41009211185](https://github.com/Elefesys/ai-service-manag
 не установлена. Foundation completeness и последующие gates не приняты.
 Разовый scoped standalone R2 был выполнен, исключение не означает зелёный CI
 или новый paid запуск. Нет нового полного CI/merge/runtime approval.
-C1/C2/C3/C4/C5/C6/C8 HOLD. Следующий шаг — один OWNER GET-only запуск;
-при UNKNOWN также вернуть отчёт без retry. Paid diagnostic/R3 не разрешены.
+C1/C2/C3/C4/C5/C6/C8 HOLD. Следующий шаг — один OWNER Gemini diagnostic
+по точному ref ONE_POST_R1_5RUB. Old reserve3.464879664 сохраняется независимо
+от результата; unknown provider label в history не подменяется догадкой.
+Полный report вернуть даже при STOP; дальнейший paid/R3 HOLD.
 main/VM/DB/Telegram/runtime без изменений. Оба owner reports сохраняются.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28

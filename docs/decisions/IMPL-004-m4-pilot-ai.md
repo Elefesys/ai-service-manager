@@ -265,6 +265,27 @@ Hash присланного текста R2 не считается hash ори�
 CI41009211185 и C0-M4-CI-OBSERVATION-01 остаются RED/OPEN перед merge/runtime;
 эта диагностика их не закрывает и не даёт нового full-CI PASS.
 
+**Решение C0 от2026-10-30 — один Gemini diagnostic после history UNKNOWN:**
+owner GET-only receipt source68093c7 вернул HISTORY_PROVIDER_UNKNOWN после1 GET,
+0 POST. В actual report нет значения/типа provider или конкретной выбранной row;
+ни название с пробелами, ни отсутствие поля не объявляются установленной причиной.
+Старый Gemini charge/response shape UNKNOWN, резерв3.464879664 сохраняется.
+
+C0 разрешает один explicit diagnostic на source **68093c769f24ea63eca5185179c3eab5fafd1229**
+по ref ONE_POST_R1_5RUB:1 catalog GET/≤1 Gemini POST/≤2 history GET/0 READ/follow-up,
+120s overall, прежние per-call caps, stage conditional reserve≤5 RUB в общем150.
+Основание: source review520 targeted PASS и controlled exact-arguments valid/
+signature-failure/history-mismatch CLI, без реальной сети/key/DB/M3 действий.
+Неизвестный старый charge не требует нового150 и не блокирует это измерение,
+поскольку весь его reserve удерживается сверх confirmed0.17509189; новый reserve
+проверяется до POST. Это отдельное наблюдение, не автоматический retry или R3.
+
+Допуск узко расширяет текущий standalone EVAL_ONLY шаг; общий CI всё ещё RED,
+full CI нового source NOT RUN, C0-M4-CI-OBSERVATION-01 остаётся до merge/runtime.
+Provider validator не ослабляется, unknown route не сертифицируется; signed tool
+continuation/READ не выполняются. После одного отчёта следующий paid шаг HOLD
+до C0 review. Новый code/helper/общий resume в этом решении не создаётся.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

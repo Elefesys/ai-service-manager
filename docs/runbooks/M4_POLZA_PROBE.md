@@ -1,43 +1,79 @@
-# M4.2 — R2 остановлен на первом Gemini запросе
+# M4.2 — один запрос Gemini для диагностики подписи
 
-**Повторять R1/R2 не нужно. Разовый допуск R2 использован; новый paid запуск HOLD.**
-Сохранить `reports/m4-polza-executable-eval-r1.jsonl` и
-`reports/m4-polza-executable-eval-r2.jsonl` без изменений. Не удалять/переименовывать
-отчёт ради повторного запуска. Ключ и `.env.m4-probe` остаются на прежнем ПК.
-
-C0 прочитал полный переданный текст R2:33 events,84220 bytes. Встроенный R1,
-порядок cases/reservations, summary и quality flags проверены offline по
-source `cd60e5e16d8bcada53597d660a15f4d82640e956`. Это проверка содержания копии;
-byte hash оригинального Windows R2 пока не подтверждён.
-
-| Модель | Результат |
-|---|---|
-| GPT | 25 scenarios завершены,27 confirmed POST/2 READ. Есть неверный reply вместо handoff в no_send_claim19 и неподтверждённое обобщение о цене в unknown_price22. Модель целиком не принята |
-| Gemini | Первый tool_current0 POST остановлен: SIGNATURE_INVALID,0 READ/0 final. Стоимость/usage/actual route UNKNOWN |
-| DeepSeek | NOT_RUN,0 POST |
-
-Подтверждённый общий расход **0.17509189 RUB**, включая helpers/R1/R2.
-Для неизвестного Gemini charge удерживается резерв **3.464879664 RUB**;
-остаток прежнего общего150 с этим резервом **146.360028446 RUB**. Это не
-текущий баланс Polza и не обещание стоимости; нового бюджета150 нет.
-
-**GET-only процедура принята C0. Выполнить один Windows блок ниже.**
+**C0 принял один OWNER diagnostic: ≤1 Gemini POST, резерв этапа≤5 RUB в прежнем150.**
+Это отдельное измерение формы protocol metadata. GPT/DeepSeek не вызываются,
+READ/follow-up не выполняются; R1/R2 и history report сохраняются без изменений.
 Exact source **68093c769f24ea63eca5185179c3eab5fafd1229**, tree
-**585f034acedec906d6859a25176ef430f808d578**. C0 проверил возврат C4 cbc87bf и
-исправил один воспроизведённый случай escaped key echo в history JSON.
-520 targeted pytest PASS, Ruff/format4/mypy71 PASS; новые реальные HTTP=0.
-[Приёмка и ограничения](../tasks/M4_HANDOFF.md). Совместимость реального Gemini
-ответа ещё UNKNOWN; paid диагностический запуск HOLD. Окружение и ключ прежние.
+**585f034acedec906d6859a25176ef430f808d578**. Code не менялся после приёмки:
+520 targeted pytest/Ruff/format4/mypy71 PASS. [Решение C0](../tasks/M4_HANDOFF.md).
 
-Новая процедура остаётся в существующем CLI. Completed GPT cases не повторяются;
-общий R3/resume ещё не реализован и не разрешён. Все old flags/finals/charges
-сохраняются, runtime_authorized=false. Подробные результаты и ограничения —
-[receipt C0](../tasks/M4_HANDOFF.md), [решение IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
+Owner history-r1 завершился UNKNOWN/HISTORY_PROVIDER_UNKNOWN после1 GET,
+0 model POST/0 catalog/0 READ. Поле provider в выбранной строке списка не прошло
+существующий validator. Report не сохраняет его значение/тип или конкретную строку:
+нельзя заключить, что виновата Gemini, пробел в названии либо отсутствие поля.
+Charge старого запроса и форма его signature остаются UNKNOWN; GET не повторяем.
 
-PR39 остаётся Draft/headcd60; [CI41009211185](https://github.com/Elefesys/ai-service-manager/actions/runs/41009211185)
-RED:10/11 jobs SUCCESS, M3 observer timeout, незавершённые foundation gates.
-C0-M4-CI-OBSERVATION-01 остаётся до merge/runtime; повтор CI ради PASS не выполнялся.
-Новый source ещё не проходил full CI; этот допуск относится только к GET-only CLI.
+Shared confirmed **0.17509189 RUB/30 calls**, old unknown **1 POST**, удержанный
+резерв **3.464879664 RUB**, остаток общего150 с ним **146.360028446 RUB**.
+Новый этап получает только **5 RUB** из этого остатка. Fresh catalog пересчитает
+условный резерв именно одного запроса; если он больше5, модель не вызывается.
+Резерв не равен списанию/гарантированной цене. Old unknown не погашается, новый
+charge/резерв записывается отдельно; максимум32 model POST вместе с прошлыми31.
+
+## Готовая Windows команда — один Gemini diagnostic
+
+На прежнем ПК выполнить весь блок в обычном PowerShell. Ничего заменять не надо:
+используются уже установленный source, `.venv` и `.env.m4-probe`. Checkout не
+переключается: другой SHA или dirty source останавливают команду до API.
+В конце вернуть C0 **все JSONL-строки** нового report, даже при TECHNICAL_FAILURE.
+Повтор, другое имя отчёта и удаление файла ради нового запуска не разрешены.
+
+```powershell
+& {
+    $ErrorActionPreference = "Stop"
+    $Candidate = "68093c769f24ea63eca5185179c3eab5fafd1229"
+    $DecisionRef = "C0-M4.2-GEMINI-DIAGNOSTIC-R1:68093c769f24ea63eca5185179c3eab5fafd1229:ONE_POST_R1_5RUB"
+    $Repo = Join-Path $env:LOCALAPPDATA "ASM-M4-Probe-4f86e7f"
+    Set-Location -LiteralPath $Repo
+    $Report = "reports\m4-polza-gemini-diagnostic-r1.jsonl"
+    if (Test-Path -LiteralPath $Report) { throw "Preserve existing diagnostic report; do not replay" }
+    $Actual = git rev-parse HEAD
+    if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Expected the reviewed source already used for history; stop and return to C0" }
+    $Dirty = git status --porcelain
+    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean checkout required" }
+    if (-not (Test-Path .\.venv\Scripts\python.exe)) { throw "Existing environment required" }
+    if (-not (Test-Path .\.env.m4-probe)) { throw "Existing private key file required" }
+    .\.venv\Scripts\python.exe -m asm.ai.probe --plan --gemini-diagnostic
+    if ($LASTEXITCODE -ne 0) { throw "Offline diagnostic plan failed" }
+    .\.venv\Scripts\python.exe -m asm.ai.probe --live --gemini-diagnostic `
+        --secret-file .\.env.m4-probe --report $Report `
+        --approved-rub 5 --approval-ref $DecisionRef `
+        --source-sha $Candidate --source-environment LOCAL_DESKTOP
+    $DiagnosticExit = $LASTEXITCODE
+    if (-not (Test-Path -LiteralPath $Report)) { throw "No diagnostic receipt written; return STOP to C0 without retry" }
+    Write-Host "Diagnostic receipt: $Report"
+    if ($DiagnosticExit -ne 0) { Write-Host "STOP/TECHNICAL_FAILURE: preserve receipt for C0; do not retry" }
+    Write-Host "Return the complete receipt; no READ, follow-up or runtime approval"
+    Get-Content -LiteralPath $Report -Encoding UTF8
+}
+```
+
+Перед POST будет1 catalog GET; после него≤2 bounded exact-ID history GET.
+Overall120s, model call≤60s с history; tokens32768/512, wire bytes24576/32768.
+Три прежних отчёта не открываются/не перезаписываются. Имя нового файла фиксировано,
+создание exclusive. И при valid signature результат только TOOLS_OBSERVED /
+ROUNDTRIP_NOT_RUN; это не успешный READ roundtrip и не выбор модели для runtime.
+Если verification history снова откажет, signature diagnostics и доступные body
+metadata всё равно нужны C0; неизвестный новый charge сохраняет свой резерв.
+
+`--plan` по-прежнему печатает PLAN_ONLY / PAID_NOT_AUTHORIZED: сам план не является
+допуском. Единственный live допуск — exact source/ref и explicit5 в блоке выше.
+После этого запуска новые paid действия HOLD до разбора отчёта C0.
+
+PR39 Draft/headcd60 не меняется. CI41009211185 RED по прежнему M3 observer;
+full CI source68093c7 NOT RUN, C0-M4-CI-OBSERVATION-01 остаётся до merge/runtime.
+C0 принимает только этот отдельно проверенный standalone diagnostic CLI;
+DB/M3/Telegram/runtime/merge разрешения из него не следуют.
 
 ## Безопасные metadata при signature failure
 
@@ -102,46 +138,13 @@ cost, но `r2_charge_status=UNKNOWN`, `r2_charge_rub=null`,
 Исходные R1/R2 не открываются и не меняются. SHA текстовой копии R2 не используется
 как hash оригинального файла и не является новым continuation checkpoint.
 
-В обычном PowerShell на прежнем ПК выполнить весь блок: exact source уже указан,
-ничего заменять не требуется. Команда только читает history прежнего ключа и
-пишет новый exclusive `reports/m4-polza-r2-history-r1.jsonl`. В конце печатает
-его содержимое: передать C0 обе JSONL-строки даже при STOP/UNKNOWN. Максимум60s
-относится к history API, время git fetch в него не входит. Повтор не нужен.
+**Историческая GET-only процедура уже выполнена.** Получены две строки
+source/history_reconciliation со статусом UNKNOWN и HISTORY_PROVIDER_UNKNOWN,
+history_gets1. Исходный report сохранён, новый GET/retry не предлагается.
+[Команда использованного history-r1](https://github.com/Elefesys/ai-service-manager/blob/c94d2ff7923c930a8e3d1983b9a05f07414eb967/docs/runbooks/M4_POLZA_PROBE.md)
+остаётся историческим источником; её допуск использован.
 
-```powershell
-& {
-    $ErrorActionPreference = "Stop"
-    $Candidate = "68093c769f24ea63eca5185179c3eab5fafd1229"
-    if ($Candidate -cnotmatch '^[0-9a-f]{40}$') { throw "Exact reviewed candidate SHA required" }
-    $Repo = Join-Path $env:LOCALAPPDATA "ASM-M4-Probe-4f86e7f"
-    Set-Location -LiteralPath $Repo
-    $Report = "reports\m4-polza-r2-history-r1.jsonl"
-    if (Test-Path -LiteralPath $Report) { throw "Preserve existing history receipt; do not replay" }
-    $Dirty = git status --porcelain
-    if ($LASTEXITCODE -ne 0 -or $Dirty) { throw "Clean checkout required" }
-    git fetch origin $Candidate
-    if ($LASTEXITCODE -ne 0) { throw "Candidate fetch failed" }
-    git switch --detach $Candidate
-    if ($LASTEXITCODE -ne 0) { throw "Candidate checkout failed" }
-    $Actual = git rev-parse HEAD
-    if ($LASTEXITCODE -ne 0 -or $Actual -cne $Candidate) { throw "Source SHA mismatch" }
-    if (-not (Test-Path .\.venv\Scripts\python.exe)) { throw "Existing environment required" }
-    if (-not (Test-Path .\.env.m4-probe)) { throw "Existing private key file required" }
-    .\.venv\Scripts\python.exe -m asm.ai.probe --plan --history-r2
-    if ($LASTEXITCODE -ne 0) { throw "Offline history plan failed" }
-    .\.venv\Scripts\python.exe -m asm.ai.probe --history-r2 `
-        --secret-file .\.env.m4-probe --report $Report `
-        --source-sha $Candidate --source-environment LOCAL_DESKTOP
-    $HistoryExit = $LASTEXITCODE
-    if (-not (Test-Path -LiteralPath $Report)) { throw "No receipt written; preserve R1/R2 and report STOP to C0" }
-    Write-Host "History receipt: $Report"
-    if ($HistoryExit -ne 0) { Write-Host "STOP/UNKNOWN: preserve receipt for C0; do not retry" }
-    Write-Host "Preserve R1/R2; no charge settlement or paid launch is authorized by this report"
-    Get-Content -LiteralPath $Report -Encoding UTF8
-}
-```
-
-## Отдельный Gemini diagnostic plan — paid HOLD
+## Ограничения принятого однократного diagnostic
 
 Offline команда `python -m asm.ai.probe --plan --gemini-diagnostic` не читает
 ключ и не выполняет HTTP. По умолчанию `--gemini-diagnostic` также печатает план.
@@ -156,7 +159,7 @@ Offline команда `python -m asm.ai.probe --plan --gemini-diagnostic` не 
 | Tokens / wire bytes | Прежние32768/512 и24576/32768 на call |
 | Deadline | Общий120s; per-call60s с history, прежние≤15s на exact-ID verification |
 | Prior | Confirmed0.17509189 +old unknown reserve3.464879664; вместе31 прошлый POST |
-| Новый stage | ≤146.360028446 RUB и не более меньшего explicit approval; один fresh reserve до POST |
+| Новый stage | Explicit approval5 RUB из остатка146.360028446; один fresh reserve≤5 до POST |
 | После ответа | Новый confirmed cost либо удержанный unknown reserve отдельно; старый unknown автоматически не снимается |
 
 Gateway сохраняет обычную проверку tool contract/correlation. Его внутренние
@@ -166,11 +169,12 @@ Gateway ровно один раз, резервирует только один
 Сигнатура остаётся transient и очищается перед записью результата.
 
 Цена до fresh catalog — null; старый Gemini reserve не становится новым тарифом.
-Полный admission требует отдельного решения C0 по exact candidate и этому плану.
-CLI ожидает новый approval ref формы
+C0 выдал ровно один admission в блоке выше; это не общий допуск повторять режим.
+CLI ожидает approval ref формы
 `C0-M4.2-GEMINI-DIAGNOSTIC-R1:<exact source SHA>:<decision>` и explicit amount;
 старый R2 ref и budget, не учитывающий unknown reserve, отклоняются до key/HTTP.
-Здесь нет готовой paid команды или автоматического перехода из history режима.
+Готовая команда выше содержит новый exact ref и amount5; автоматического перехода
+из history режима по-прежнему нет.
 
 UNKNOWN остаются actual R2 wire representation, причина конкретного старого
 SIGNATURE_INVALID и связь model/time candidate с утраченным response ID.

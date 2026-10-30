@@ -6,7 +6,75 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## Текущая приёмка — C0-M4.2-GEMINI-HISTORY-ACCEPT-R1 / 2026-10-30
+## Текущий допуск — C0-M4.2-GEMINI-DIAGNOSTIC-R1 / ONE_POST_R1_5RUB / 2026-10-30
+
+**Один OWNER Gemini diagnostic разрешён в прежнем бюджете150.**
+Готовый [Windows блок](../runbooks/M4_POLZA_PROBE.md): **≤1 model POST,
+0 READ/0 follow-up, резерв нового этапа≤5 RUB**. Не повторяет GPT или полный R2.
+Source **68093c769f24ea63eca5185179c3eab5fafd1229**, tree
+**585f034acedec906d6859a25176ef430f808d578**, ранее проверенный520 targeted /
+Ruff/format4/mypy71. Code не меняется этой записью; полный CI не повторяется.
+Approval ref: `C0-M4.2-GEMINI-DIAGNOSTIC-R1:68093c769f24ea63eca5185179c3eab5fafd1229:ONE_POST_R1_5RUB`.
+
+### Возврат owner history-r1
+
+Получены обе строки из `reports/m4-polza-r2-history-r1.jsonl`: source68093c7 /
+LOCAL_DESKTOP; reconciliation **UNKNOWN**, error **HISTORY_PROVIDER_UNKNOWN**,
+history_gets1, model_posts0, catalog_gets0, reads0. Candidate/anchor=null,
+old charge UNKNOWN, automatic_reserve_release=false. Это отказ в metadata
+validation после ответа списка, не новая генерация и не факт неправильного ключа.
+
+В exact source этот code означает: поле `provider` в выбранной list row
+не строка либо не соответствует `[a-zA-Z0-9_.:/-]{1,128}`. Возможно также отсутствие
+поля. При1 GET это может быть и known GPT anchor, и Gemini candidate: assignments
+в report происходят лишь после всей сверки. Raw value/type не сохранены;
+конкретная строка/форма UNKNOWN. C0 подтвердил неоднозначность шестью controlled
+вариантами (обе rows × null/object/строка с пробелами), все дали тот же1 GET/code.
+Это проверка диагностики, не утверждение о реальном значении provider.
+
+History-r1 допуск использован. Повтор того же GET не восстанавливает утраченную
+signature из R2 и не является нужным условием следующего малого измерения.
+Old charge не погашается. Нет изменения provider validator или принятия
+неизвестной route по догадке; проверить его реальную форму можно позже по evidence.
+
+### Обоснование и точные границы одного POST
+
+Нужен новый ответ Gemini, чтобы увидеть фиксированную причину signature rejection
+и available metering/generation ID. Existing diagnostic mode уже готов и
+не возобновляет незавершённый R2 tool exchange. Его roundtrip_pass всегда false.
+Вызовы только `google/gemini-3.8-flash` / `google-ai-studio/flex`, прежние
+provider default/prompt/schema/fixture. GPT/DeepSeek POST0; runtime false.
+
+Shared prior: **0.17509189 RUB/30 confirmed calls +1 unknown call**,
+unknown reserve **3.464879664**, остаток150 с резервом **146.360028446 RUB**.
+Explicit stage approval **5 RUB**, fresh catalog/reserve≤5 до единственного POST;
+больше5 — STOP до POST. Это условный резерв, не обещание фактического billing.
+Новое known/unknown считается отдельно; old reserve удерживается при любом
+исходе. Суммарно≤32 model POST после этапа, не новый общий150.
+
+Limits:1 catalog GET/≤1 POST/≤2 exact-ID history GET; overall120s,
+model≤60s с verification; input/output32768/512 tokens,24576/32768 bytes;
+history≤65536 bytes, существующий15s budget проверки. Даже при valid TOOLS нет
+READ/ToolResult/follow-up. Technical failure либо UNKNOWN не запускает retry.
+Новый exclusive `reports/m4-polza-gemini-diagnostic-r1.jsonl`, все предыдущие
+reports read-only. Вернуть **полный новый report при любом исходе**; code0 с
+TOOLS_OBSERVED означает только metadata observation, не модель/runtime PASS.
+
+C0 дополнительно проверил exact source/ref/amount5 через CONTROLLED CLI для
+valid signature, missing signature и history mismatch: каждый раз1 catalog /
+1 POST /2 history /0 READ/follow-up,4 receipt events. При mismatch old+new unknown
+reservations сохраняются. Real sockets/чтение owner key/новые DB/M3 imports
+в этих проверках запрещены; реальные HTTP=0. Windows/live diagnostic ещё NOT RUN.
+520-test source receipt остаётся ниже, полный неизменённый suite заново не гонялся.
+
+Это узкое продолжение ранее принятого standalone EVAL_ONLY допуска, не приёмка
+M3. PR39 остаётся Draft/headcd60; CI41009211185 RED и причина M3 observer timeout
+UNKNOWN; full CI source68093c7 NOT RUN. C0-M4-CI-OBSERVATION-01 нужен до merge/runtime.
+C1/C2/C3/C4/C5/C6/C8 HOLD, следующий исполнитель — владелец по готовому блоку.
+Main/VM/DB/Telegram/runtime/merge не меняются. После одного POST дальнейшие paid
+действия HOLD до review C0; повторного согласования уже принятого бюджета150 нет.
+
+## История приёмки — C0-M4.2-GEMINI-HISTORY-ACCEPT-R1 / 2026-10-30
 
 **Source review PASS; один OWNER GET-only запуск готов. Paid diagnostic/R3 HOLD.**
 Выполнить [готовый Windows блок](../runbooks/M4_POLZA_PROBE.md) и вернуть две
