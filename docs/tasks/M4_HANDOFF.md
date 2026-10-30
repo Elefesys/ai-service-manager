@@ -165,6 +165,70 @@ CI41009211185 RED и C0-M4-CI-OBSERVATION-01 остаются до merge/runtime
 full CI NOT_RUN. C1/C2/C3/C5/C6/C8 HOLD, единственная выдача — C4 выше.
 Main/VM/DB/Telegram/runtime/merge не меняются.
 
+## C4 receipt — M4.2-DEEPSEEK-EVAL-R1 / REVIEW / 2026-10-30
+
+Fetched immutable base **2da7334e101f5de60771e869166a3ac86f38588e**, tree
+**68a15481050ca36ac95029e96fee89f421d743c3**, sole parent
+**2a1848f7089efda50913e24a58fcf21cafe167fc** подтверждены GitHub и local git.
+Candidate публикуется одним commit с sole parent=base в
+`c4/m4-2-deepseek-eval-r1`; полный commit/tree возвращаются отдельно после publish.
+
+Write-set: только probe.py/polza.py, оба test_m4_probe/test_m4_polza, runbook,
+эта вставка и одна CURRENT task row. В polza.py изменён только verify_history
+(и typing import): fixed stage/reason/type дополняют прежний primary error;
+те же acceptance/≤2 GET/bytes/deadline, без raw metadata и новых запросов.
+AST: старые probe functions неизменны, кроме Ledger/main для finite dispatch;
+новые5 функций — prior/plan/summary/runner/CLI. Schedule/run_case/quality_flags,
+full comparison/R1 loader, Gemini/history modes/source facts, contracts/gateway,
+profiles/fees/caps/prompt/schema/canonical fixtures и IMPL-004 не менялись.
+
+`--deepseek-eval` — только DeepSeek/wafer/us, explicit non-thinking;25 исходных
+cases/repeat0–24,≤27 POST/2 READ/54 history/1 fresh catalog. Полный SyntheticRoute
+preflight, whole-stage reservation до POST,32768/512 tokens,24576/32768 bytes,
+60/1800s, history65536/15s, catalog4MiB/20s и token ceiling898560 сохранены.
+Новый reviewed C0 snapshot:0.17509189/30 known+2 unknown, held6.929759328,
+remaining142.895148782;32 prior POST/≤59 shared reservations. Prior отдельно,
+GPT/Gemini POST0; old unknown не погашаются. Cases/flags требуют human review;
+selected_model=null/runtime_authorized=false. Summary сохраняется при technical
+STOP/cancellation; abrupt kill оставляет flushed reservation UNKNOWN, без replay.
+
+CONTROLLED пример полного прохода: plan rates17/45/0,27-call reserve15.662592000;
+25 finals/27 POST/2 READ/54 history GET,2 quality flags; HUMAN_REVIEW_REQUIRED.
+New known27/cost0.027/unknown0; shared known57/cost0.20209189, unknown2/
+held6.929759328, remaining142.868148782. Это fixture, не hosted тариф/расход.
+List/DETAIL failures различимы; late schema STOP, missing metering, raw/escaped
+key, non-thinking violation, transport/size/cancellation/deadline и interruption
+после reserved сохраняют правильный known/unknown ledger без следующего POST.
+Exclusive report, old refs/wrong SHA/conflicting modes/amounts отказывают до key/HTTP.
+
+Финальные проверки из checkout `/workspace/scratch/b247f3420d30/m4-2-deepseek-eval-r1`:
+CPython3.13.16; frozen offline uv sync,58 packages. `V` ниже —
+`/workspace/scratch/b247f3420d30/m4-deepseek-validation-venv`; `G` — временный
+validation harness `/workspace/scratch/b247f3420d30/m4-deepseek-checks`.
+Его sitecustomize audit hook запрещал socket.connect/getaddrinfo/bind/sendto и
+owner .env reads; разрешались только synthetic secret files pytest tmp_path.
+
+```bash
+PYTHONPATH="$G" "$V/bin/pytest" -q tests/test_m4_probe.py tests/test_m4_polza.py tests/test_m4_gateway.py tests/test_m4_gateway_failures.py --tb=short
+# 616 passed in 8.24s
+"$V/bin/ruff" check backend/src/asm/ai/probe.py backend/src/asm/ai/polza.py tests/test_m4_probe.py tests/test_m4_polza.py
+"$V/bin/ruff" format --check backend/src/asm/ai/probe.py backend/src/asm/ai/polza.py tests/test_m4_probe.py tests/test_m4_polza.py
+"$V/bin/mypy"
+# PASS / 4 files formatted / no issues in 71 source files
+```
+
+Реальные CLI offline invocations через тот же Python/audit hook: `-m asm.ai.probe`
+без flags, `--plan`, `--plan --synthetic-experiment`, `--plan --history-r2`,
+`--plan --gemini-diagnostic`, `--plan --deepseek-eval` — все6 PASS.
+Existing full75/81/6, continuation63/67/4, Gemini diagnostic/history regressions PASS.
+`git diff --check`/scope PASS. Owner key/reports/real Polza/Windows live/full CI
+NOT_RUN. Actual DeepSeek compatibility/quality/cost ещё UNKNOWN.
+
+[Windows порядок и точные параметры](../runbooks/M4_POLZA_PROBE.md) готовы C0;
+активного live блока нет до принятия SHA и отдельного нового ref/stage amount.
+Общий150 повторно не запрашивается. PR39 Draft/headcd60, main51d7, CI41009211185
+RED и C0-M4-CI-OBSERVATION-01 OPEN сохраняются; merge/runtime не разрешены.
+
 ## История использованного допуска — C0-M4.2-GEMINI-DIAGNOSTIC-R1 / ONE_POST_R1_5RUB / 2026-10-30
 
 **Один OWNER Gemini diagnostic разрешён в прежнем бюджете150.**

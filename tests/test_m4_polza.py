@@ -1602,3 +1602,137 @@ async def test_signature_failure_keeps_only_validated_metering_fields(bad):
         30 if bad.startswith("cost_") else None
     )
     assert row["reads"] == 0 and row["final"] is None
+
+
+@pytest.mark.parametrize(
+    "stage,field,value,reason,kind",
+    [
+        ("LIST", "items", None, "ITEMS", "NULL"),
+        ("LIST", "no_id", None, "ID_MATCH_COUNT", "INT"),
+        ("LIST", "duplicate", None, "ID_MATCH_COUNT", "INT"),
+        ("LIST", "model", "wrong", "MODEL", "STRING"),
+        ("LIST", "provider", None, "PROVIDER", "NULL"),
+        ("LIST", "provider", {"PRIVATE_KEY": "PRIVATE_VALUE"}, "PROVIDER", "OBJECT"),
+        ("LIST", "provider", "private spaces", "PROVIDER", "STRING"),
+        ("LIST", "missing_provider", None, "PROVIDER", "MISSING"),
+        ("LIST", "cost", "0.02", "COST", "STRING"),
+        ("LIST", "cost", "NaN", "COST", "STRING"),
+        ("LIST", "cost", [], "COST", "ARRAY"),
+        ("LIST", "prompt_tokens", True, "USAGE_INPUT", "BOOL"),
+        ("LIST", "completion_tokens", 999, "USAGE_OUTPUT", "INT"),
+        ("LIST", "total_tokens", 999, "USAGE_TOTAL", "INT"),
+        ("LIST", "reasoning_tokens", 1, "USAGE_REASONING", "INT"),
+        ("DETAIL", "clientCost", "0.02", "COST", "STRING"),
+        ("DETAIL", "finalEndpointSlug", None, "PROVIDER", "NULL"),
+        ("DETAIL", "id", "gen_999", "GENERATION_ID", "STRING"),
+        ("DETAIL", "model", "wrong", "MODEL", "STRING"),
+        ("DETAIL", "requestType", "embedding", "REQUEST_TYPE", "STRING"),
+        ("DETAIL", "status", "failed", "STATUS", "STRING"),
+        ("DETAIL", "apiType", "private", "API_TYPE", "STRING"),
+        ("DETAIL", "responseMode", "async", "RESPONSE_MODE", "STRING"),
+        ("DETAIL", "isCancelled", True, "CANCELLED", "BOOL"),
+        ("DETAIL", "attemptsCount", 2, "ATTEMPTS", "INT"),
+        ("DETAIL", "finishReason", "length", "FINISH_REASON", "STRING"),
+        ("DETAIL", "serverTools", ["PRIVATE_TOOL"], "SERVER_TOOLS", "ARRAY"),
+        ("DETAIL", "parentGenerationId", "PRIVATE_ID", "PARENT_GENERATION", "STRING"),
+        ("DETAIL", "stepsCount", 2, "STEPS", "INT"),
+    ],
+)
+async def test_history_branch_diagnostics_keep_acceptance_and_primary_error(
+    stage, field, value, reason, kind
+):
+    data = payload(MODELS[2], tools=True)
+    data.pop("provider")
+    data["id"] = "gen_123"
+    listing, detail = experiment_history(data)
+    row = listing["items"][0] if stage == "LIST" else detail
+    if field == "items":
+        listing["items"] = value
+    elif field == "no_id":
+        listing["items"] = []
+    elif field == "duplicate":
+        listing["items"] *= 2
+    elif field == "missing_provider":
+        row.pop("provider")
+    elif field in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        row["usage"][field] = value
+    elif field == "reasoning_tokens":
+        row["usage"]["completion_tokens_details"] = {field: value}
+    else:
+        row[field] = value
+    seen = []
+
+    def handler(request):
+        seen.append(request.method)
+        if request.method == "POST":
+            return response(data)
+        return response(listing if str(request.url) == HISTORY_LIST else detail)
+
+    adapter = PolzaAdapter(experiment_route(MODELS[2]), KEY, transport=httpx.MockTransport(handler))
+    gw = gateway(adapter, tools=True)
+    result = await gw.call()
+    assert result.kind == "ERROR" and result.error == "ADAPTER_ERROR"
+    assert result.budget.reads_reserved == 0
+    assert adapter.observation["error_detail"] == "HISTORY_VERIFICATION_FAILED"
+    assert adapter.observation["history_diagnostic"] == {
+        "stage": stage,
+        "reason": reason,
+        "observed_type": kind,
+    }
+    assert seen == ["POST"] + ["GET"] * (1 if stage == "LIST" else 2)
+    assert "PRIVATE" not in json.dumps(adapter.observation)
+    assert (await gw.call()).kind == "ERROR" and seen.count("POST") == 1
+
+
+@pytest.mark.parametrize(
+    "stage,bad,reason",
+    [
+        ("LIST", "json", "JSON"),
+        ("DETAIL", "json", "JSON"),
+        ("LIST", "escaped_key", "PRIVATE_REFLECTION"),
+        ("DETAIL", "escaped_key", "PRIVATE_REFLECTION"),
+        ("LIST", "oversize", "TRANSPORT"),
+        ("DETAIL", "transport", "TRANSPORT"),
+    ],
+)
+async def test_history_diagnostics_never_echo_raw_or_json_escaped_private_input(stage, bad, reason):
+    data = payload(MODELS[2], tools=True)
+    data.pop("provider")
+    data["id"] = "gen_123"
+    listing, detail = experiment_history(data)
+    seen = []
+
+    def handler(request):
+        seen.append(request.method)
+        if request.method == "POST":
+            return response(data)
+        current = "LIST" if str(request.url) == HISTORY_LIST else "DETAIL"
+        row = listing if current == "LIST" else detail
+        if current == stage:
+            if bad == "json":
+                return response(raw=b'{"PRIVATE_KEY":')
+            if bad == "oversize":
+                return response(raw=b"x" * 65537)
+            if bad == "transport":
+                raise httpx.ReadError("PRIVATE_ACCOUNT_METADATA")
+            row["private"] = KEY.get_secret_value()
+            raw = (
+                json.dumps(row)
+                .replace(
+                    KEY.get_secret_value(),
+                    "".join(f"\\u{ord(c):04x}" for c in KEY.get_secret_value()),
+                )
+                .encode()
+            )
+            return response(raw=raw)
+        return response(row)
+
+    adapter = PolzaAdapter(experiment_route(MODELS[2]), KEY, transport=httpx.MockTransport(handler))
+    result = await gateway(adapter, tools=True).call()
+    assert result.kind == "ERROR"
+    diag = adapter.observation["history_diagnostic"]
+    assert diag["stage"] == stage and diag["reason"] == reason
+    assert seen == ["POST"] + ["GET"] * (1 if stage == "LIST" else 2)
+    rendered = json.dumps(adapter.observation)
+    assert KEY.get_secret_value() not in rendered and "PRIVATE_KEY" not in rendered
+    assert "PRIVATE_ACCOUNT_METADATA" not in rendered

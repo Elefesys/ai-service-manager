@@ -7,7 +7,7 @@ import re
 import time
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, NoReturn
 
 import httpx
 from pydantic import Field, SecretStr
@@ -993,32 +993,72 @@ class PolzaAdapter:
 
     async def verify_history(self, result_usage: Usage, result_cost: Cost, deadline: float) -> None:
         """Two bounded GETs before returning TOOLS/OUTPUT, including the image path."""
+        # Fixed branch/type diagnostics only. Never retain a history value, raw
+        # response, arbitrary key, exception text, account label or opaque token.
+        stage = "PREFLIGHT"
+        diagnostic: dict[str, str] = {}
+        missing = object()
+
+        def mark(reason: str, value: Any = missing) -> None:
+            diagnostic.update(
+                stage=stage,
+                reason=reason,
+                observed_type="MISSING"
+                if value is missing
+                else {
+                    type(None): "NULL",
+                    bool: "BOOL",
+                    int: "INT",
+                    float: "FLOAT",
+                    str: "STRING",
+                    list: "ARRAY",
+                    dict: "OBJECT",
+                }.get(type(value), "OTHER"),
+            )
+
+        def field(row: Any, key: str, reason: str, default: Any = missing) -> Any:
+            mark(reason, row)
+            value = row.get(key, missing)
+            mark(reason, value)
+            if value is missing:
+                if default is missing:
+                    raise ValueError
+                return default
+            return value
+
+        def reject(detail: str, reason: str) -> NoReturn:
+            mark(reason)
+            self.observation["history_diagnostic"] = dict(diagnostic)
+            raise PolzaFailure("ADAPTER_ERROR", detail)
+
         identifier = self.observation["generation_id"]
         if not self.experimental and self._history_family is None:
-            raise PolzaFailure("ADAPTER_ERROR", "HISTORY_REVIEW_REQUIRED")
+            reject("HISTORY_REVIEW_REQUIRED", "REVIEW_REQUIRED")
         if identifier is None:
-            raise PolzaFailure("ADAPTER_ERROR", "GENERATION_ID_INVALID")
+            reject("GENERATION_ID_INVALID", "GENERATION_ID")
         if (
             result_usage.input_tokens is None
             or result_usage.output_tokens is None
             or result_cost.status != "CONFIRMED"
         ):
-            raise PolzaFailure("ADAPTER_ERROR", "HISTORY_METERING_UNKNOWN")
+            reject("HISTORY_METERING_UNKNOWN", "METERING_UNKNOWN")
         if (
             result_usage.input_tokens > INPUT_TOKENS
             or result_usage.output_tokens > OUTPUT_TOKENS
             or result_cost.amount is None
             or result_cost.amount > self.review.reservation()
         ):
-            raise PolzaFailure("ADAPTER_ERROR", "HISTORY_METERING_LIMIT")
+            reject("HISTORY_METERING_LIMIT", "METERING_LIMIT")
         deadline = min(deadline, time.monotonic() + HISTORY_SECONDS)
         total_tokens = result_usage.input_tokens + result_usage.output_tokens
 
         async def get(url: str) -> Any:
+            mark("DEADLINE")
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise PolzaFailure("TIMEOUT", "HISTORY_DEADLINE")
             self.observation["history_gets"] += 1
+            mark("TRANSPORT")
             raw = await bounded_http(
                 self._key,
                 url,
@@ -1027,7 +1067,9 @@ class PolzaAdapter:
                 maximum=HISTORY_BYTES,
                 transport=self._transport,
             )
+            mark("JSON")
             data = strict_json(raw.decode())
+            mark("PRIVATE_REFLECTION", data)
             serialized = json.dumps(data, ensure_ascii=False)
             if (
                 self._key.get_secret_value() in serialized
@@ -1039,51 +1081,54 @@ class PolzaAdapter:
             return data
 
         def matches(row: Any, *, detail: bool) -> bool:
-            usage = row["usage"]
-            amount = row["clientCost" if detail else "cost"]
+            usage = field(row, "usage", "USAGE")
+            amount = field(row, "clientCost" if detail else "cost", "COST")
             if type(amount) not in (str, int, float):
                 return False
             money = Decimal(str(amount))
-            return (
-                row["id"] == identifier
-                and row["requestType"] == "chat"
-                and row["status"] == "completed"
-                and money.is_finite()
-                and money == result_cost.amount
-                and all(
-                    type(usage.get(k)) is int and usage[k] == v
-                    for k, v in (
-                        ("prompt_tokens", result_usage.input_tokens),
-                        ("completion_tokens", result_usage.output_tokens),
-                    )
-                )
-                and (
-                    "total_tokens" not in usage
-                    or type(usage["total_tokens"]) is int
-                    and usage["total_tokens"] == total_tokens
-                )
-                and (
-                    (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") is None
-                    or type(usage["completion_tokens_details"]["reasoning_tokens"]) is int
-                    and usage["completion_tokens_details"]["reasoning_tokens"]
-                    == self.observation["reasoning_tokens"]
-                )
+            if field(row, "id", "GENERATION_ID") != identifier:
+                return False
+            if field(row, "requestType", "REQUEST_TYPE") != "chat":
+                return False
+            if field(row, "status", "STATUS") != "completed":
+                return False
+            mark("COST", amount)
+            if not money.is_finite() or money != result_cost.amount:
+                return False
+            for key, expected, reason in (
+                ("prompt_tokens", result_usage.input_tokens, "USAGE_INPUT"),
+                ("completion_tokens", result_usage.output_tokens, "USAGE_OUTPUT"),
+            ):
+                value = field(usage, key, reason, None)
+                if type(value) is not int or value != expected:
+                    return False
+            mark("USAGE_TOTAL", usage)
+            if "total_tokens" in usage:
+                value = field(usage, "total_tokens", "USAGE_TOTAL")
+                if type(value) is not int or value != total_tokens:
+                    return False
+            details = field(usage, "completion_tokens_details", "USAGE_REASONING", None)
+            reasoning = field(details or {}, "reasoning_tokens", "USAGE_REASONING", None)
+            return reasoning is None or (
+                type(reasoning) is int and reasoning == self.observation["reasoning_tokens"]
             )
 
         try:
+            stage = "LIST"
             listing = await get(HISTORY_LIST)
-            items = listing["items"]
+            items = field(listing, "items", "ITEMS")
             if type(items) is not list or len(items) > 5 or any(type(r) is not dict for r in items):
                 raise ValueError
             selected = [r for r in items if r.get("id") == identifier]
-            if (
-                len(selected) != 1
-                or not matches(selected[0], detail=False)
-                or selected[0].get("model")
-                not in (self.review.model, self.review.model.split("/", 1)[1])
+            mark("ID_MATCH_COUNT", len(selected))
+            if len(selected) != 1 or not matches(selected[0], detail=False):
+                raise ValueError
+            if field(selected[0], "model", "MODEL", None) not in (
+                self.review.model,
+                self.review.model.split("/", 1)[1],
             ):
                 raise ValueError
-            family = selected[0].get("provider")
+            family = field(selected[0], "provider", "PROVIDER", None)
             if (
                 type(family) is not str
                 or not re.fullmatch(r"[a-zA-Z0-9_.:/-]{1,128}", family)
@@ -1091,27 +1136,34 @@ class PolzaAdapter:
                 and family != self._history_family
             ):
                 raise ValueError
+            stage = "DETAIL"
             detail = await get(HISTORY + "/" + identifier)
             if (
-                detail.get("finalEndpointSlug") != family
+                field(detail, "finalEndpointSlug", "PROVIDER", None) != family
                 or not matches(detail, detail=True)
                 # Polza documents chat_completions; the owner's three real
                 # 2026-10-29 generations report completions for this same endpoint.
-                or detail.get("apiType") not in ("chat_completions", "completions")
-                or detail.get("responseMode") != "sync"
-                or detail.get("isCancelled") is not False
-                or type(detail.get("attemptsCount")) is not int
+                or field(detail, "apiType", "API_TYPE", None)
+                not in ("chat_completions", "completions")
+                or field(detail, "responseMode", "RESPONSE_MODE", None) != "sync"
+                or field(detail, "isCancelled", "CANCELLED", None) is not False
+                or type(field(detail, "attemptsCount", "ATTEMPTS", None)) is not int
                 or detail["attemptsCount"] != 1
-                or detail.get("finishReason") != self.observation["finish_reason"]
+                or field(detail, "finishReason", "FINISH_REASON", None)
+                != self.observation["finish_reason"]
                 or "model" in detail
-                and detail["model"] != selected[0]["model"]
-                or detail.get("serverTools")
-                or detail.get("parentGenerationId")
-                or detail.get("stepsCount", 1) != 1
+                and field(detail, "model", "MODEL") != selected[0]["model"]
+                or field(detail, "serverTools", "SERVER_TOOLS", None)
+                or field(detail, "parentGenerationId", "PARENT_GENERATION", None)
+                or field(detail, "stepsCount", "STEPS", 1) != 1
             ):
                 raise ValueError
         except (ValueError, TypeError, KeyError, AttributeError, InvalidOperation, RecursionError):
+            self.observation["history_diagnostic"] = dict(diagnostic)
             raise PolzaFailure("ADAPTER_ERROR", "HISTORY_VERIFICATION_FAILED") from None
+        except (PolzaFailure, asyncio.CancelledError, TimeoutError):
+            self.observation["history_diagnostic"] = dict(diagnostic)
+            raise
         self._history_family = family
         self.observation.update(
             history_family=family,

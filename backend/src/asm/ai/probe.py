@@ -88,6 +88,11 @@ DIAGNOSTIC_CEILING = RUB_CEILING - R2_CONFIRMED_RUB - R2_UNKNOWN_RESERVE
 HISTORY_RECONCILE_SECONDS = 60.0
 HISTORY_RECONCILE_GETS = 4
 GEMINI_DIAGNOSTIC_SECONDS = 120.0
+DEEPSEEK_DECISION = "2da7334e101f5de60771e869166a3ac86f38588e:M4.2-DEEPSEEK-EVAL-R1"
+# A separate reviewed C0 snapshot, not a receipt hash or a resume cursor.
+DEEPSEEK_PRIOR_CONFIRMED = Decimal("0.17509189")
+DEEPSEEK_PRIOR_HELD = Decimal("6.929759328")
+DEEPSEEK_CEILING = RUB_CEILING - DEEPSEEK_PRIOR_CONFIRMED - DEEPSEEK_PRIOR_HELD
 
 
 @dataclass(frozen=True)
@@ -626,13 +631,28 @@ class Ledger:
     """Monotone reservations, written/flushed BEFORE HTTP. No refund, no resume."""
 
     def __init__(
-        self, output: TextIO, approved: Decimal, calls: int, *, prefix: ReviewedPrefix | None = None
+        self,
+        output: TextIO,
+        approved: Decimal,
+        calls: int,
+        *,
+        prefix: ReviewedPrefix | None = None,
+        deepseek: bool = False,
     ) -> None:
-        self.prior = CONTINUATION_PRIOR if prefix else PRIOR_CONFIRMED_RUB
+        if deepseek and prefix:
+            raise ValueError("DEEPSEEK_MODE_CONFLICT")
+        self.deepseek = deepseek
+        self.prior = (
+            DEEPSEEK_PRIOR_CONFIRMED + DEEPSEEK_PRIOR_HELD
+            if deepseek
+            else CONTINUATION_PRIOR
+            if prefix
+            else PRIOR_CONFIRMED_RUB
+        )
         if (
             not approved.is_finite()
             or not 0 < approved <= RUB_CEILING - self.prior
-            or not 0 < calls <= (67 if prefix else CALL_CEILING)
+            or not 0 < calls <= (27 if deepseek else 67 if prefix else CALL_CEILING)
         ):
             raise ValueError("APPROVAL_LIMIT")
         self.output = output
@@ -649,6 +669,8 @@ class Ledger:
         self.output.flush()
 
     def reserve(self, review: ProbeRoute, case: Case, repeat: int) -> None:
+        if self.deepseek and (not isinstance(review, SyntheticRoute) or review.model != MODELS[2]):
+            raise ValueError("DEEPSEEK_ROUTE_REQUIRED")
         amount = review.reservation()
         if (
             time.monotonic() >= self.deadline
@@ -1232,6 +1254,253 @@ async def live(
     return summary
 
 
+def deepseek_prior() -> dict[str, Any]:
+    return {
+        "authority": "C0_REVIEWED_ACCOUNTING_SNAPSHOT",
+        "decision": DEEPSEEK_DECISION,
+        "confirmed_cost_rub": str(DEEPSEEK_PRIOR_CONFIRMED),
+        "known_call_count": 30,
+        "unknown_call_count": 2,
+        "model_posts": 32,
+        "unknown_cost_rub": None,
+        "unknown_reserved_rub": str(DEEPSEEK_PRIOR_HELD),
+        "remaining_with_unknown_held_rub": str(DEEPSEEK_CEILING),
+        "gpt": "GPT_REVIEWED / QUALITY_FINDINGS_REMAIN",
+        "gemini": "BLOCKED / TOOL_CONTINUATION",
+        "imported_cases": 0,
+        "automatic_reserve_release": False,
+    }
+
+
+def deepseek_plan(cases: tuple[Case, ...], review: SyntheticRoute | None = None) -> dict[str, Any]:
+    if fingerprint([c.model_dump(mode="json") for c in cases]) != FIXTURE_SHA256:
+        raise ValueError("EXPERIMENT_FIXTURES_CHANGED")
+    if review:
+        if not isinstance(review, SyntheticRoute) or review.model != MODELS[2]:
+            raise ValueError("DEEPSEEK_ROUTE_REQUIRED")
+        review.fresh()
+        review.route()
+    reserve = review.reservation() * 27 if review else None
+    if reserve is not None and reserve > DEEPSEEK_CEILING:
+        raise ValueError("PLAN_EXCEEDS_CEILING")
+    return {
+        "mode": "DEEPSEEK_EVAL_R1",
+        "status": "PLAN_ONLY / PAID_NOT_AUTHORIZED",
+        "decision": DEEPSEEK_DECISION,
+        "admission": "SYNTHETIC_EXPERIMENT",
+        "prior": deepseek_prior(),
+        "models": [MODELS[2]],
+        "provider_only": EXPERIMENT_PROVIDERS[2],
+        "reasoning_wire": {"effort": "none", "enabled": False},
+        "upstream_semantics": "REQUEST_SELECTOR_NOT_OBSERVATION",
+        "fixture_sha256": FIXTURE_SHA256,
+        "evaluator_revision": EVALUATOR_REVISION,
+        "prompt_revision": "conversation_v1",
+        "schema_revision": "conversation_result_v1",
+        "wire_schema_revision": CONVERSATION_WIRE_REVISION,
+        "image_revision": "synthetic_shapes_v1/EVAL_ONLY",
+        "stage_schedule": [{"repeat": i, "case": c.id} for i, c in enumerate(schedule(cases))],
+        "total_scenarios": 25,
+        "base_text": 20,
+        "critical_repeats": 3,
+        "images": 2,
+        "max_model_http_calls": 27,
+        "max_synthetic_reads": 2,
+        "gpt_posts": 0,
+        "gemini_posts": 0,
+        "max_shared_model_posts": 59,
+        "catalog_http_calls": 1,
+        "catalog_bytes": 4 * 1024 * 1024,
+        "catalog_seconds": 20,
+        "max_history_http_calls": 54,
+        "history_bytes_per_get": HISTORY_BYTES,
+        "history_seconds_per_post": HISTORY_SECONDS,
+        "input_tokens_per_call": INPUT_TOKENS,
+        "output_tokens_per_call": OUTPUT_TOKENS,
+        "total_token_reservation_ceiling": 27 * (INPUT_TOKENS + OUTPUT_TOKENS),
+        "wire_input_bytes_per_call": INPUT_BYTES,
+        "wire_output_bytes_per_call": OUTPUT_BYTES,
+        "case_seconds": CASE_SECONDS,
+        "overall_seconds": DURATION,
+        "shared_budget_rub": str(RUB_CEILING),
+        "stage_rub_ceiling": str(DEEPSEEK_CEILING),
+        "priced_reservation_rub": str(reserve) if reserve is not None else None,
+        "billing_status": "CONDITIONAL_ESTIMATE" if review else "FRESH_CATALOG_REQUIRED",
+        "catalog_sha256": review.catalog_sha256 if review else None,
+        "catalog_checked_at": review.checked_at.isoformat() if review else None,
+        # Deliberately no raw catalog, reasoning or arbitrary provider metadata.
+        "rates_rub": [str(v) for v in review.rates()] if review else None,
+        "output_cap_parameter": review.output_cap_parameter if review else None,
+        "catalog_evidence": "DECLARATION_ONLY / NOT_ACCOUNT_OR_RUNTIME_PROOF",
+        "bounds": "ASSUMED_WIRE_BYTES_PLUS_4096 / TOTAL_OUTPUT_INCLUDING_REASONING",
+        "fee_assumptions": "ADDITIVE_RATES / AUDIO_SEARCH_EXCLUDED_BY_FINITE_PAYLOAD",
+        "selected_model": None,
+        "runtime_authorized": False,
+    }
+
+
+def deepseek_summary(
+    rows: list[dict[str, Any]], ledger: Ledger, error: str | None = None
+) -> dict[str, Any]:
+    stage = call_accounting(rows, ledger.calls, ledger.reserved)
+    known = DEEPSEEK_PRIOR_CONFIRMED + Decimal(stage["confirmed_cost_rub"])
+    held = DEEPSEEK_PRIOR_HELD + Decimal(stage["unknown_reserved_rub"])
+    times = sorted(r["seconds"] for r in rows)
+    completed = sum(not r["failures"] and r["final"] is not None for r in rows)
+    return {
+        "event": "summary",
+        "mode": "DEEPSEEK_EVAL_R1",
+        "decision": DEEPSEEK_DECISION,
+        "evaluator_revision": EVALUATOR_REVISION,
+        "status": "HUMAN_REVIEW_REQUIRED"
+        if completed == 25 and not error
+        else "FAILED_OR_INCOMPLETE",
+        "error": error,
+        "models": {
+            MODELS[2]: {
+                "n": len(rows),
+                "completed": completed,
+                "reads": sum(r["reads"] for r in rows),
+                "quality_flagged_cases": sum(bool(r["quality_flags"]) for r in rows),
+                "quality_assessment": "HUMAN_REVIEW_REQUIRED",
+                "p50_seconds": times[math.ceil(len(times) * 0.5) - 1] if times else None,
+                "p95_seconds": times[math.ceil(len(times) * 0.95) - 1] if times else None,
+            }
+        },
+        "stage_scenarios": len(rows),
+        "prior": deepseek_prior(),
+        "new_stage": stage,
+        "shared_total": {
+            "confirmed_cost_rub": str(known),
+            "known_call_count": 30 + stage["known_call_count"],
+            "unknown_call_count": 2 + stage["unknown_call_count"],
+            "model_post_reservations": 32 + ledger.calls,
+            "unknown_cost_rub": None,
+            "unknown_reserved_rub": str(held),
+            "budget_rub": str(RUB_CEILING),
+            "committed_or_held_rub": str(known + held),
+            "remaining_with_unknown_held_rub": str(RUB_CEILING - known - held),
+            "old_unknown_reserve_released": False,
+        },
+        "no_automatic_retry": True,
+        "selected_model": None,
+        "runtime_authorized": False,
+    }
+
+
+async def run_deepseek(
+    cases: tuple[Case, ...],
+    settings: ProbeSettings,
+    output: TextIO,
+    approved: Decimal,
+    *,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> dict[str, Any]:
+    deepseek_plan(cases)
+    ledger = Ledger(output, approved, 27, deepseek=True)
+    rows: list[dict[str, Any]] = []
+    error = None
+    try:
+        async with asyncio.timeout(ledger.deadline - time.monotonic()):
+            entries = await catalog(settings, transport, models=(MODELS[2],))
+            review = SyntheticRoute.from_catalog(entries[0], datetime.now(UTC))
+            proposal = deepseek_plan(cases, review)
+            fits = Decimal(proposal["priced_reservation_rub"]) <= approved
+            ledger.record(
+                {
+                    "event": "plan",
+                    **proposal,
+                    "approved_rub": str(approved),
+                    "status": "ADMITTED / EVAL_ONLY" if fits else "REJECTED / STAGE_BUDGET",
+                }
+            )
+            if not fits:
+                raise ValueError("APPROVED_BUDGET_TOO_SMALL")
+            adapter = PolzaAdapter(review, settings.api_key, transport=transport)
+            for repeat, case in enumerate(schedule(cases)):
+                if time.monotonic() >= ledger.deadline:
+                    raise ValueError("GLOBAL_DEADLINE")
+                row = await run_case(adapter, case, ledger, repeat)
+                rows.append(row)
+                ledger.record(row)
+                if row["failures"]:
+                    break
+    except asyncio.CancelledError:
+        error = "CANCELLED"
+    except TimeoutError:
+        error = "GLOBAL_DEADLINE"
+    except (
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        RecursionError,
+        ProviderFailure,
+    ) as exc:
+        error = safe_error(exc)
+    summary = deepseek_summary(rows, ledger, error)
+    ledger.record(summary)
+    return summary
+
+
+def deepseek_main(args: argparse.Namespace) -> int:
+    if args.review or args.continue_from or args.synthetic_experiment or args.preflight:
+        raise ValueError("DEEPSEEK_MODE_CONFLICT")
+    cases = load_cases(args.fixtures)
+    proposal = deepseek_plan(cases)
+    if not args.live:
+        if args.approval_ref or args.approved_rub is not None:
+            raise ValueError("DEEPSEEK_MODE_CONFLICT")
+        print(json.dumps(proposal, ensure_ascii=False, indent=2))
+        return 0
+    if (
+        not args.report
+        or not re.fullmatch(r"[0-9a-f]{40}", args.source_sha or "")
+        or not args.source_environment
+    ):
+        raise ValueError("SOURCE_AND_EXCLUSIVE_REPORT_REQUIRED")
+    if (
+        not re.fullmatch(
+            "C0-M4.2-DEEPSEEK-EVAL-R1:" + args.source_sha + r":[A-Z0-9_]{1,80}",
+            args.approval_ref or "",
+        )
+        or args.approved_rub is None
+        or not args.approved_rub.is_finite()
+        or not 0 < args.approved_rub <= DEEPSEEK_CEILING
+    ):
+        raise ValueError("SEPARATE_DEEPSEEK_APPROVAL_REQUIRED")
+    # Exclusive creation precedes key access. Neither file renaming nor a crash
+    # grants replay: a reserved attempt remains unknown until a separate C0 review.
+    with args.report.open("x", encoding="utf-8") as output:
+        write_metadata(
+            output,
+            {
+                "event": "source",
+                "mode": "DEEPSEEK_EVAL_R1",
+                "sha": args.source_sha,
+                "environment": args.source_environment,
+                "decision": DEEPSEEK_DECISION,
+                "prior": deepseek_prior(),
+                "approval_ref": args.approval_ref,
+                "approved_rub": str(args.approved_rub),
+                "runtime_authorized": False,
+            },
+        )
+        try:
+            settings = load_secret(args.secret_file)
+        except (OSError, ValueError) as exc:
+            write_metadata(
+                output,
+                deepseek_summary(
+                    [], Ledger(output, args.approved_rub, 27, deepseek=True), safe_error(exc)
+                ),
+            )
+            raise
+        result = asyncio.run(run_deepseek(cases, settings, output, args.approved_rub))
+        print("REPORT_WRITTEN / " + result["status"] + " / NO_RUNTIME_AUTHORIZATION")
+        return 0 if result["status"] == "HUMAN_REVIEW_REQUIRED" else 2
+
+
 def diagnostic_budget() -> dict[str, Any]:
     return {
         "shared_budget_rub": str(RUB_CEILING),
@@ -1748,6 +2017,7 @@ def main(argv: list[str] | None = None) -> int:
     diagnostic_mode = parser.add_mutually_exclusive_group()
     diagnostic_mode.add_argument("--history-r2", action="store_true")
     diagnostic_mode.add_argument("--gemini-diagnostic", action="store_true")
+    diagnostic_mode.add_argument("--deepseek-eval", action="store_true")
     parser.add_argument("--continue-from", type=Path)
     parser.add_argument("--secret-file", type=Path, default=Path(".env.m4-probe"))
     parser.add_argument("--report", type=Path)
@@ -1757,6 +2027,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-environment", choices=("LOCAL_DESKTOP", "LOCAL_BACKEND"))
     args = parser.parse_args(argv)
     try:
+        if args.deepseek_eval:
+            return deepseek_main(args)
         if args.history_r2 or args.gemini_diagnostic:
             return diagnostic_main(args)
         if args.synthetic_experiment and (args.review or args.preflight):

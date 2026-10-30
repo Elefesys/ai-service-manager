@@ -1197,13 +1197,14 @@ def write_controlled_prefix(tmp_path, monkeypatch, mutate=None):
 class ControlledComparison:
     """Protocol-sensitive Polza mock for the original full run and the exact remainder."""
 
-    def __init__(self, *, continuation=False, change=None):
+    def __init__(self, *, continuation=False, deepseek=False, change=None):
         self.cases = load_cases(FIXTURES)
         self.expected = [
             (model, repeat, case)
             for model in MODELS
             for repeat, case in enumerate(probe.schedule(self.cases))
             if not continuation or model != MODELS[0] or repeat >= 12
+            if not deepseek or model == MODELS[2]
         ]
         self.entries = [experiment_entry(model) for model in MODELS]
         self.change = change
@@ -2311,3 +2312,522 @@ async def test_diagnostic_stage_deadline_cancels_catalog_before_post(monkeypatch
         )
     assert len(called) == 1 and called[0]["models"] == (MODELS[1],)
     assert output.getvalue() == ""
+
+
+def deepseek_args(report):
+    source = "d" * 40  # CONTROLLED source/ref only, never owner paid admission.
+    return [
+        "--deepseek-eval",
+        "--live",
+        "--report",
+        str(report),
+        "--source-sha",
+        source,
+        "--source-environment",
+        "LOCAL_DESKTOP",
+        "--approved-rub",
+        str(probe.DEEPSEEK_CEILING),
+        "--approval-ref",
+        "C0-M4.2-DEEPSEEK-EVAL-R1:" + source + ":CONTROLLED_ONLY",
+    ]
+
+
+@pytest.mark.parametrize("args", [["--deepseek-eval"], ["--plan", "--deepseek-eval"]])
+def test_deepseek_plan_is_offline_and_keeps_two_old_unknowns(monkeypatch, capsys, args):
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret"))
+    assert main(args) == 0
+    p = json.loads(capsys.readouterr().out)
+    assert p["models"] == [MODELS[2]] and p["provider_only"] == "wafer/us"
+    assert p["reasoning_wire"] == {"effort": "none", "enabled": False}
+    assert p["stage_schedule"] == [
+        {"repeat": i, "case": c.id} for i, c in enumerate(probe.schedule(load_cases(FIXTURES)))
+    ]
+    assert (p["total_scenarios"], p["max_model_http_calls"], p["max_synthetic_reads"]) == (
+        25,
+        27,
+        2,
+    )
+    assert (p["catalog_http_calls"], p["max_history_http_calls"]) == (1, 54)
+    assert p["total_token_reservation_ceiling"] == 898560
+    assert p["max_shared_model_posts"] == 59
+    assert p["prior"]["confirmed_cost_rub"] == "0.17509189"
+    assert p["prior"]["unknown_reserved_rub"] == "6.929759328"
+    assert p["prior"]["unknown_call_count"] == 2 and p["prior"]["model_posts"] == 32
+    assert p["stage_rub_ceiling"] == "142.895148782"
+    assert p["priced_reservation_rub"] is None and p["selected_model"] is None
+    assert not p["runtime_authorized"] and p["status"] == "PLAN_ONLY / PAID_NOT_AUTHORIZED"
+    assert p["decision"] == probe.DEEPSEEK_DECISION
+
+
+def test_deepseek_controlled_cli_reaches_all_finals_and_summary(tmp_path, monkeypatch, capsys):
+    def change(data, case, first_tool):
+        data["privateMetadata"] = {"account": "PRIVATE_ACCOUNT", "signature": "PRIVATE_SIGNATURE"}
+        if case.id == "unknown_price":
+            # Keep the original schema envelope, so quality flags rather than
+            # an early schema STOP are actually exercised.
+            data["choices"][0]["message"]["content"] = json.dumps(
+                {"result": controlled_final(case, "Цена 500 рублей")}
+            )
+
+    mock = ControlledComparison(deepseek=True, change=change)
+    mock.entries[2]["providers"][0]["reasoning"]["private"] = "PRIVATE_CATALOG_REASONING"
+    report = tmp_path / "m4-polza-deepseek-eval-r1.jsonl"
+    originals = [tmp_path / name for name in ("r1.jsonl", "r2.jsonl", "diagnostic.jsonl")]
+    for path in originals:
+        path.write_bytes(b"CONTROLLED historical receipt; must remain unchanged\r\n")
+    original_bytes = [p.read_bytes() for p in originals]
+    original_run = probe.run_deepseek
+    seen_limits = []
+    import asm.ai.polza as polza
+
+    original_http = polza.bounded_http
+
+    async def bounded(key, url, **kwargs):
+        seen_limits.append((url, kwargs["seconds"], kwargs["maximum"], kwargs["body"] is None))
+        return await original_http(key, url, **kwargs)
+
+    def handler(request):
+        if request.method == "POST":
+            events = [json.loads(line) for line in report.read_text().splitlines()]
+            before = events[-1]  # The reservation must already be flushed to disk.
+            assert before["event"] == "reserved"
+            assert before["calls_reserved"] == len(mock.posts) + 1
+            amount = experiment_route(MODELS[2]).reservation() * before["calls_reserved"]
+            assert Decimal(before["rub_reserved"]) == amount
+            assert (
+                Decimal(before["shared_rub_committed_or_reserved"])
+                == Decimal("7.104851218") + amount
+            )
+        if request.url.path.endswith("/models"):
+            mock.gets.append(str(request.url))
+            # A selected-model-only catalog is sufficient; other candidates are
+            # absent, so no accidental full-three-model preflight can pass.
+            return response({"data": [mock.entries[2]]})
+        return mock.handler(request)
+
+    async def controlled(cases, settings, output, approved):
+        return await original_run(
+            cases, settings, output, approved, transport=httpx.MockTransport(handler)
+        )
+
+    monkeypatch.setattr(probe, "load_secret", lambda _: ProbeSettings(api_key=KEY))
+    monkeypatch.setattr(probe, "run_deepseek", controlled)
+    monkeypatch.setattr(probe, "bounded_http", bounded)
+    monkeypatch.setattr(polza, "bounded_http", bounded)
+    assert main(deepseek_args(report)) == 0
+    events = [json.loads(line) for line in report.read_text().splitlines()]
+    assert [e["event"] for e in events[:2]] == ["source", "plan"]
+    source, p, summary = events[0], events[1], events[-1]
+    assert source["prior"] == p["prior"] == summary["prior"] == probe.deepseek_prior()
+    assert Decimal(p["priced_reservation_rub"]) == experiment_route(MODELS[2]).reservation() * 27
+    rows = [e for e in events if e["event"] == "case"]
+    assert len(rows) == 25 and all(r["final"] is not None and not r["failures"] for r in rows)
+    assert [r["repeat"] for r in rows] == list(range(25))
+    assert len(mock.posts) == 27 and {p[0] for p in mock.posts} == {MODELS[2]}
+    assert len(mock.gets) == 55 and sum(r["reads"] for r in rows) == 2
+    assert set(summary["models"]) == {MODELS[2]}
+    assert summary["models"][MODELS[2]]["completed"] == 25
+    assert summary["models"][MODELS[2]]["quality_flagged_cases"] >= 2
+    assert summary["status"] == "HUMAN_REVIEW_REQUIRED"
+    assert summary["selected_model"] is None and not summary["runtime_authorized"]
+    assert summary["new_stage"]["known_call_count"] == 27
+    assert summary["new_stage"]["confirmed_cost_rub"] == "0.027"
+    shared = summary["shared_total"]
+    assert shared["known_call_count"] == 57 and shared["unknown_call_count"] == 2
+    assert shared["model_post_reservations"] == 59
+    assert shared["confirmed_cost_rub"] == "0.20209189"
+    assert shared["unknown_reserved_rub"] == "6.929759328"
+    assert shared["remaining_with_unknown_held_rub"] == "142.868148782"
+    assert not shared["old_unknown_reserve_released"]
+    assert len(seen_limits) == 82
+    for url, seconds, maximum, is_get in seen_limits:
+        if url == polza.CATALOG:
+            assert seconds == 20 and maximum == 4 * 1024 * 1024 and is_get
+        elif is_get:
+            assert 0 < seconds <= 15 and maximum == 65536
+        else:
+            assert 0 < seconds <= 60 and maximum == 32768
+    rendered = report.read_text()
+    assert all(s not in rendered for s in (KEY.get_secret_value(), "PRIVATE_", "reasoning_content"))
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("existing report before key"))
+    assert main(deepseek_args(report)) == 2
+    assert report.read_text() == rendered and [p.read_bytes() for p in originals] == original_bytes
+    assert "PRIVATE_" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "bad,code",
+    [
+        ("missing_model", "MODEL_UNAVAILABLE"),
+        ("duplicate", "EXPERIMENT_ROUTE_NOT_UNIQUE"),
+        ("route", "EXPERIMENT_ROUTE_NOT_UNIQUE"),
+        ("unofficial", "OFFICIAL_ROUTE_UNKNOWN"),
+        ("tools", "CAPABILITY_UNKNOWN"),
+        ("schema", "CAPABILITY_UNKNOWN"),
+        ("image", "IMAGE_CAPABILITY_UNKNOWN"),
+        ("cap", "OUTPUT_CAP_PARAMETER_UNSUPPORTED"),
+        ("context", "CONTEXT_LIMIT_UNKNOWN"),
+        ("currency", "CURRENCY_UNKNOWN"),
+        ("fee", "TARIFF_UNKNOWN"),
+        ("null_fee", "TARIFF_UNKNOWN"),
+        ("toggle", "NON_THINKING_UNSUPPORTED"),
+        ("effort", "NON_THINKING_UNSUPPORTED"),
+        ("mandatory", "NON_THINKING_UNSUPPORTED"),
+        ("parameter", "NON_THINKING_UNSUPPORTED"),
+        ("whole_stage", "PLAN_EXCEEDS_CEILING"),
+        ("approval", "APPROVED_BUDGET_TOO_SMALL"),
+    ],
+)
+async def test_deepseek_complete_preflight_stops_before_any_post(bad, code):
+    entry = experiment_entry(MODELS[2])
+    p = entry["providers"][0]
+    if bad == "missing_model":
+        entry["id"] = MODELS[1]
+    elif bad == "duplicate":
+        entry["providers"].append(copy.deepcopy(p))
+    elif bad == "route":
+        p["name"] = "other/route"
+    elif bad == "unofficial":
+        p["is_unofficial"] = True
+    elif bad in ("tools", "schema", "image"):
+        p["capabilities"][
+            {"tools": "tools", "schema": "json_schema_strict", "image": "input_image"}[bad]
+        ]["status"] = "unknown"
+    elif bad == "cap":
+        p["supported_parameters"].remove("max_tokens")
+    elif bad == "context":
+        p["context_length"] = 32768
+    elif bad == "currency":
+        p["pricing"]["currency"] = "USD"
+    elif bad == "fee":
+        p["pricing"]["unexpected"] = 0
+    elif bad == "null_fee":
+        p["pricing"]["audio_per_million"] = None
+    elif bad == "toggle":
+        p["capabilities"]["reasoning_toggle"]["status"] = "unknown"
+    elif bad == "effort":
+        p["capabilities"]["reasoning_effort"]["values"] = ["low"]
+    elif bad == "mandatory":
+        p["reasoning"]["mandatory"] = True
+    elif bad == "parameter":
+        p["supported_parameters"].remove("reasoning_effort")
+    elif bad == "whole_stage":
+        p["pricing"]["prompt_per_million"] = "200"
+    seen = []
+
+    def handler(request):
+        seen.append(str(request.url))
+        assert request.method == "GET" and request.url.path.endswith("/models")
+        return response({"data": [entry]})
+
+    output = io.StringIO()
+    result = await probe.run_deepseek(
+        load_cases(FIXTURES),
+        ProbeSettings(api_key=KEY),
+        output,
+        Decimal(1) if bad == "approval" else probe.DEEPSEEK_CEILING,
+        transport=httpx.MockTransport(handler),
+    )
+    assert len(seen) == 1 and result["status"] == "FAILED_OR_INCOMPLETE"
+    assert result["error"] == code
+    assert result["new_stage"]["attempt_reservations"] == 0
+    assert result["shared_total"]["unknown_reserved_rub"] == "6.929759328"
+    assert json.loads(output.getvalue().splitlines()[-1]) == result
+    assert '"event": "reserved"' not in output.getvalue()
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "list",
+        "detail",
+        "usage",
+        "cost",
+        "usage_limit",
+        "cost_limit",
+        "route",
+        "reasoning",
+        "raw_key",
+        "escaped_key",
+        "invalid_tool",
+        "late_schema",
+        "transport_second",
+        "cancel_second",
+        "oversize_second",
+    ],
+)
+async def test_deepseek_technical_stop_retains_new_and_both_old_reserves(bad):
+    def change(data, case, first_tool):
+        if bad == "late_schema":
+            if case.id == "owner_fact":
+                data["choices"][0]["message"]["content"] = '{"result":{"kind":"bogus"}}'
+        elif bad == "usage":
+            data["usage"].pop("prompt_tokens")
+        elif bad == "cost":
+            data["usage"].pop("cost_rub")
+        elif bad == "usage_limit":
+            data["usage"]["completion_tokens"] = 513
+        elif bad == "cost_limit":
+            data["usage"]["cost_rub"] = 100
+        elif bad == "route":
+            data["model"] = MODELS[0]
+        elif bad == "reasoning":
+            data["choices"][0]["message"]["reasoning_content"] = "PRIVATE_RAW_REASONING"
+        elif bad in ("raw_key", "escaped_key"):
+            data["choices"][0]["message"]["content"] = KEY.get_secret_value()
+        elif bad == "invalid_tool":
+            data["choices"][0]["message"]["tool_calls"][0]["function"]["name"] = "mutate"
+
+    mock = ControlledComparison(deepseek=True, change=change)
+
+    def handler(request):
+        if request.method == "POST":
+            result = mock.handler(request)
+            if len(mock.posts) == 2:
+                if bad == "transport_second":
+                    raise httpx.ReadError("PRIVATE_TRANSPORT")
+                if bad == "cancel_second":
+                    raise asyncio.CancelledError
+                if bad == "oversize_second":
+                    return response(raw=b"x" * 32769)
+            if bad == "escaped_key":
+                return response(
+                    raw=json.dumps(mock.latest)
+                    .replace(
+                        KEY.get_secret_value(),
+                        "".join(f"\\u{ord(c):04x}" for c in KEY.get_secret_value()),
+                    )
+                    .encode()
+                )
+            return result
+        if bad in ("list", "detail") and not request.url.path.endswith("/models"):
+            mock.gets.append(str(request.url))
+            listing, detail = experiment_history(mock.latest)
+            listing["items"][0]["provider"] = (
+                None if bad == "list" else listing["items"][0]["provider"]
+            )
+            detail["apiType"] = "PRIVATE_API_TYPE" if bad == "detail" else "completions"
+            return response(listing if str(request.url) == HISTORY_LIST else detail)
+        return mock.handler(request)
+
+    output = io.StringIO()
+    summary = await probe.run_deepseek(
+        load_cases(FIXTURES),
+        ProbeSettings(api_key=KEY),
+        output,
+        probe.DEEPSEEK_CEILING,
+        transport=httpx.MockTransport(handler),
+    )
+    events = [json.loads(line) for line in output.getvalue().splitlines()]
+    rows = [e for e in events if e["event"] == "case"]
+    assert events[-1] == summary and summary["status"] == "FAILED_OR_INCOMPLETE"
+    assert rows[-1]["failures"] and all(not r["failures"] for r in rows[:-1])
+    assert all(p[0] == MODELS[2] for p in mock.posts)
+    assert len(mock.posts) == (5 if bad == "late_schema" else 2 if bad.endswith("second") else 1)
+    stage, shared = summary["new_stage"], summary["shared_total"]
+    known = (
+        5 if bad == "late_schema" else 1 if bad.endswith("second") or bad == "invalid_tool" else 0
+    )
+    unknown = len(mock.posts) - known
+    reserve = experiment_route(MODELS[2]).reservation()
+    assert stage["known_call_count"] == known and stage["unknown_call_count"] == unknown
+    assert Decimal(stage["confirmed_cost_rub"]) == Decimal("0.001") * known
+    assert Decimal(stage["unknown_reserved_rub"]) == reserve * unknown
+    assert shared["known_call_count"] == 30 + known
+    assert shared["unknown_call_count"] == 2 + unknown
+    assert Decimal(shared["unknown_reserved_rub"]) == Decimal("6.929759328") + reserve * unknown
+    assert Decimal(shared["remaining_with_unknown_held_rub"]) == (
+        probe.DEEPSEEK_CEILING - Decimal("0.001") * known - reserve * unknown
+    )
+    assert not shared["old_unknown_reserve_released"] and summary["no_automatic_retry"]
+    assert summary["selected_model"] is None and not summary["runtime_authorized"]
+    if bad in ("list", "detail"):
+        call = rows[0]["calls"][0]
+        assert rows[0]["reads"] == 0 and call["error_detail"] == "HISTORY_VERIFICATION_FAILED"
+        assert call["history_diagnostic"]["stage"] == bad.upper()
+        assert call["history_diagnostic"]["reason"] == ("PROVIDER" if bad == "list" else "API_TYPE")
+    assert KEY.get_secret_value() not in output.getvalue() and "PRIVATE_" not in output.getvalue()
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "r1",
+        "r2",
+        "one_post",
+        "wrong_source",
+        "empty_suffix",
+        "amount_missing",
+        "over_limit",
+        "zero",
+        "nan",
+        "review",
+        "continue",
+        "experiment",
+        "preflight",
+        "history",
+        "diagnostic",
+        "plan_with_approval",
+        "changed_fixtures",
+    ],
+)
+def test_deepseek_cli_rejects_old_refs_and_modes_before_key_or_http(
+    tmp_path, monkeypatch, capsys, bad
+):
+    report = tmp_path / "report.jsonl"
+    argv = deepseek_args(report)
+    if bad in ("r1", "r2", "one_post", "wrong_source", "empty_suffix"):
+        argv[argv.index("--approval-ref") + 1] = {
+            "r1": probe.R1_APPROVAL,
+            "r2": "C0-M4.2-PROBE-QUALITY-CONTINUATION-R1:" + "d" * 40 + ":CI41009211185-SCOPED",
+            "one_post": "C0-M4.2-GEMINI-DIAGNOSTIC-R1:" + "d" * 40 + ":ONE_POST_R1_5RUB",
+            "wrong_source": "C0-M4.2-DEEPSEEK-EVAL-R1:" + "e" * 40 + ":CONTROLLED",
+            "empty_suffix": "C0-M4.2-DEEPSEEK-EVAL-R1:" + "d" * 40 + ":",
+        }[bad]
+    elif bad == "amount_missing":
+        i = argv.index("--approved-rub")
+        del argv[i : i + 2]
+    elif bad in ("over_limit", "zero", "nan"):
+        argv[argv.index("--approved-rub") + 1] = {
+            "over_limit": "142.895148783",
+            "zero": "0",
+            "nan": "NaN",
+        }[bad]
+    elif bad in ("review", "continue"):
+        argv += ["--review" if bad == "review" else "--continue-from", "MUST_NOT_READ"]
+    elif bad == "experiment":
+        argv += ["--synthetic-experiment"]
+    elif bad == "preflight":
+        argv[argv.index("--live")] = "--preflight"
+    elif bad in ("history", "diagnostic"):
+        argv += ["--history-r2" if bad == "history" else "--gemini-diagnostic"]
+    elif bad == "plan_with_approval":
+        argv[argv.index("--live")] = "--plan"
+    elif bad == "changed_fixtures":
+        changed = json.loads(FIXTURES.read_text())
+        changed[0]["question"] = "changed"
+        fixtures = tmp_path / "cases.json"
+        fixtures.write_text(json.dumps(changed))
+        argv += ["--fixtures", str(fixtures)]
+    monkeypatch.setattr(probe, "load_secret", lambda _: pytest.fail("secret"))
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    if bad in ("history", "diagnostic"):
+        with pytest.raises(SystemExit) as exc:
+            main(argv)
+        assert exc.value.code == 2
+    else:
+        assert main(argv) == 2
+    assert not report.exists()
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize("where", ["catalog", "post", "history", "case"])
+async def test_deepseek_actual_deadlines_stop_and_write_terminal_summary(monkeypatch, where):
+    mock = ControlledComparison(deepseek=True)
+
+    async def handler(request):
+        if (
+            where == "catalog"
+            and request.url.path.endswith("/models")
+            or where in ("post", "case")
+            and request.method == "POST"
+            or where == "history"
+            and request.method == "GET"
+            and not request.url.path.endswith("/models")
+        ):
+            await asyncio.sleep(1)
+            pytest.fail("deadline did not cancel")
+        return mock.handler(request)
+
+    if where == "case":
+        monkeypatch.setattr(probe, "CASE_SECONDS", 0.03)
+    else:
+        monkeypatch.setattr(probe, "DURATION", 0.03)
+    output = io.StringIO()
+    result = await probe.run_deepseek(
+        load_cases(FIXTURES),
+        ProbeSettings(api_key=KEY),
+        output,
+        probe.DEEPSEEK_CEILING,
+        transport=httpx.MockTransport(handler),
+    )
+    assert json.loads(output.getvalue().splitlines()[-1]) == result
+    assert result["status"] == "FAILED_OR_INCOMPLETE"
+    assert result["new_stage"]["unknown_call_count"] == (0 if where == "catalog" else 1)
+    assert result["shared_total"]["unknown_call_count"] == (2 if where == "catalog" else 3)
+    assert not result["shared_total"]["old_unknown_reserve_released"]
+
+
+def test_deepseek_monotone_limits_cannot_borrow_old_reserves_or_other_routes():
+    case = probe.schedule(load_cases(FIXTURES))[0]
+    route = experiment_route(MODELS[2])
+    ledger = Ledger(io.StringIO(), probe.DEEPSEEK_CEILING, 27, deepseek=True)
+    for i in range(27):
+        ledger.reserve(route, case, i)
+    with pytest.raises(ValueError, match="GLOBAL_BUDGET_EXHAUSTED"):
+        ledger.reserve(route, case, 27)
+    with pytest.raises(ValueError, match="DEEPSEEK_ROUTE_REQUIRED"):
+        ledger.reserve(experiment_route(MODELS[0]), case, 0)
+    with pytest.raises(ValueError, match="APPROVAL_LIMIT"):
+        Ledger(io.StringIO(), probe.DEEPSEEK_CEILING + Decimal("0.000000001"), 27, deepseek=True)
+    assert ledger.calls == 27 and ledger.reserved == route.reservation() * 27
+    ledger = Ledger(io.StringIO(), route.reservation(), 27, deepseek=True)
+    ledger.reserve(route, case, 0)
+    with pytest.raises(ValueError, match="GLOBAL_BUDGET_EXHAUSTED"):
+        ledger.reserve(route, case, 1)
+    ledger = Ledger(io.StringIO(), probe.DEEPSEEK_CEILING, 27, deepseek=True)
+    ledger.deadline = time.monotonic() - 1
+    with pytest.raises(ValueError, match="GLOBAL_BUDGET_EXHAUSTED"):
+        ledger.reserve(route, case, 0)
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_deepseek_interruption_without_case_row_keeps_flushed_reservation(
+    monkeypatch, cancel
+):
+    output = io.StringIO()
+
+    async def interrupted(adapter, case, ledger, repeat):
+        ledger.reserve(adapter.review, case, repeat)
+        assert json.loads(output.getvalue().splitlines()[-1])["event"] == "reserved"
+        if cancel:
+            raise asyncio.CancelledError
+        raise ValueError("CONTROLLED_INTERRUPTION")
+
+    monkeypatch.setattr(probe, "run_case", interrupted)
+    mock = ControlledComparison(deepseek=True)
+    summary = await probe.run_deepseek(
+        load_cases(FIXTURES),
+        ProbeSettings(api_key=KEY),
+        output,
+        probe.DEEPSEEK_CEILING,
+        transport=httpx.MockTransport(mock.handler),
+    )
+    assert summary["stage_scenarios"] == 0 and summary["status"] == "FAILED_OR_INCOMPLETE"
+    assert summary["error"] == ("CANCELLED" if cancel else "CONTROLLED_INTERRUPTION")
+    assert summary["new_stage"]["unknown_call_count"] == 1
+    assert summary["shared_total"]["known_call_count"] == 30
+    assert summary["shared_total"]["unknown_call_count"] == 3
+    assert Decimal(summary["shared_total"]["unknown_reserved_rub"]) == (
+        probe.DEEPSEEK_PRIOR_HELD + experiment_route(MODELS[2]).reservation()
+    )
+    assert not mock.posts and len(mock.gets) == 1
+    assert json.loads(output.getvalue().splitlines()[-1]) == summary
+
+
+def test_deepseek_key_failure_writes_zero_attempt_summary(tmp_path, monkeypatch, capsys):
+    report = tmp_path / "report.jsonl"
+
+    def fail(_):
+        raise ValueError("PRIVATE_SECRET_FILE_INVALID")
+
+    monkeypatch.setattr(probe, "load_secret", fail)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: pytest.fail("network"))
+    assert main(deepseek_args(report)) == 2
+    source, summary = [json.loads(line) for line in report.read_text().splitlines()]
+    assert source["event"] == "source" and summary["event"] == "summary"
+    assert summary["new_stage"]["attempt_reservations"] == 0
+    assert summary["shared_total"]["unknown_call_count"] == 2
+    assert summary["shared_total"]["remaining_with_unknown_held_rub"] == "142.895148782"
+    capsys.readouterr()

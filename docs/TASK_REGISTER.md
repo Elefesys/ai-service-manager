@@ -17,7 +17,7 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.2-PROBE | REVIEW: GPT25 finals/27 POST/2 READ, no_send_claim19 QUALITY_FAIL, unknown_price22 QUALITY_NOTE. Gemini2 failed POST/0 final. DeepSeek NOT_RUN; comparison/selection/runtime не приняты |
 | M4.2-GEMINI-DIAGNOSTIC-R1 | VERIFIED только diagnostic scope: owner4 events source68093c7 приняты, SIGNATURE_EXTRA_MISSING установлен; history после1 GET не прошла, оба charge UNKNOWN. ONE_POST_R1_5RUB использован, не replay approval |
 | M4.2-GEMINI-COMPATIBILITY | BLOCKED: extra_content отсутствует в tool call; иной carrier в owner receipt не наблюдён. Нет READ/continuation до точного Polza protocol evidence и проверки; новый paid diagnostic не выдан |
-| M4.2-DEEPSEEK-EVAL-R1 | TODO / ISSUED C4: подготовить конечный DeepSeek-only25/≤27 POST/≤2 READ с prior30 known+2 unknown, без GPT/Gemini replay. Offline code/CONTROLLED review, paid HOLD до exact-source review C0 |
+| M4.2-DEEPSEEK-EVAL-R1 | REVIEW / C4 candidate: DeepSeek-only25/≤27 POST/≤2 READ, prior30 known+2 unknown/held6.929759328; fixed history stage/reason/type. CONTROLLED25/27/2 и616 targeted PASS, Ruff/format4/mypy71,6 offline plans PASS. Windows параметры готовы; paid HOLD до exact-source review/ref C0 |
 | C0-M4-CI-OBSERVATION-01 | TODO до merge/runtime: M3 wait_blocked1.5s timeout, root cause UNKNOWN; отсутствующие foundation gates не приняты |
 | M4.3-CONTEXT | TODO / HOLD |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
