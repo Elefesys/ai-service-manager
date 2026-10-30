@@ -1,11 +1,17 @@
 # M4.2 — finite synthetic Polza experiment
 
-**CURRENT: R1 выполнен частично; повтор/continuation HOLD.**
-Получен terminal tail: GPT12 scenarios/14 reserved calls, затем ложный
-FORBIDDEN_CLAIM в injection — matcher нашёл500 в корректном отказе подтверждать
-цену. Gemini/DeepSeek ещё не запускались. Полный исходный JSONL нужен C0 для
-сверки расходов/outputs и подготовки продолжения; не удалять/не переименовывать
-отчёт для повторного запуска. Подробности — [текущий handoff](../tasks/M4_HANDOFF.md).
+**CURRENT: полный R1 receipt сверён; C4 QUALITY-CONTINUATION-R1; новый paid HOLD.**
+R1:12 GPT cases/14 confirmed calls/2 READ, manual12 PASS. Расход0.08303952 RUB,
+shared с helper0.09573737; остаток общего150 —149.90426263 RUB. Gemini/DeepSeek
+ещё не запускались. Regex500 нашёл упоминание внутри корректного отказа.
+
+C0 готовит через C4 оставшиеся63 cases/до67 POST/4 READ без повторения этого
+проверенного префикса. Quality flags будут сохранены для ручной оценки;
+protocol/metering/caps failures по-прежнему STOP. Новая команда появится после
+review конкретного candidate. Сейчас R1 JSONL сохранить неизменным, старый блок
+не повторять. SHA256 файла34940 bytes:
+`b727cc1ca65c5ef189cc2bddba619136a354c6414b7159e0bde4d521f52f8b48`.
+Точная [выдача и приёмка R1](../tasks/M4_HANDOFF.md), [решение C0](../decisions/IMPL-004-m4-pilot-ai.md).
 
 Ниже сохранён исторический одноразовый допуск R1. Он уже использован и не
 разрешает заново выполнять приведённую команду. Source/CI остаются прежними.

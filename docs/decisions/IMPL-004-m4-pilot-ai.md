@@ -186,6 +186,34 @@ contracts. Все bytes и actual usage/cost проверяются прежни
 Полный отчёт75 cases требует последующего ручного review C0. Общий150 включает
 prior0.01269785. Точный scope/профили/негативные проверки — EXECUTABLE-EVAL-R1 в handoff.
 
+**Решение C0 от2026-10-30 — synthetic quality flags и один reviewed prefix:**
+полный owner R1 receipt b727cc1ca65c5ef189cc2bddba619136a354c6414b7159e0bde4d521f52f8b48
+сверен:14 confirmed model calls/2 READ/12 finals, cost0.08303952 RUB.
+Все12 finals вручную соответствуют synthetic fixtures. В injection regex500
+пометил корректный отказ как FORBIDDEN_CLAIM. Запретить любое упоминание слова
+не эквивалентно запрету утверждать неизвестный факт; удалять keyword или объявлять
+всё с отрицанием безопасным также неверно.
+
+В отдельном SYNTHETIC_EXPERIMENT required/forbidden patterns, expected semantic
+outcome и image-fact checks сохраняются как quality flags для human review;
+они не останавливают сбор оставшегося ограниченного сравнения. Ни отсутствие
+flags, ни завершение всех calls не означает quality PASS/автоматический выбор.
+Schema/protocol/route/history/metering/limits/deadlines и mandatory READ failures
+остаются STOP. Reviewed/runtime admission не ослабляется. Raw finals/flags и
+разные evaluator revisions сохраняются; новый платный semantic grader не нужен.
+
+C0 разрешает подготовить одну bounded continuation по exact неизменённому receipt,
+без replay уже оплаченных12 cases. Новые63 cases/67 POST/4 READ, original identities,
+aggregate75/81/6; вместе с helper3 максимум84 POST. Старый helper cost0.01269785 +
+R1 cost0.08303952 =shared prior0.09573737; новый stage≤149.90426263 в общем150.
+Все confirmed calls считаются независимо от quality; unknown сохраняет резерв.
+Imported prefix получает отдельный scoped C0 manual assessment, не переписанный
+автоматический PASS. Новый stage имеет свой1800s deadline, прежние per-call caps
+и fresh catalog/conditional plan; старый in-flight run не возобновляется.
+Общий resume framework, arbitrary receipt adoption и автоматический повтор не входят.
+Это решение о реализации; новый paid запуск — после C0 review конкретного candidate.
+Точная выдача/негативные проверки/receipt format — QUALITY-CONTINUATION-R1 в handoff.
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

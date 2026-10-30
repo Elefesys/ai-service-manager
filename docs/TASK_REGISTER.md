@@ -14,35 +14,36 @@ Accepted actual main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4-PLAN | INTEGRATED / VERIFIED docs-only; PR37 + C0 acceptance |
 | M4.1-CONTRACT | INTEGRATED / VERIFIED contract/fake scope; PR38 и exact main CI PASS |
 | C5-M4.1-CI-RECOVERY-R1 | INTEGRATED / VERIFIED; C5 HOLD |
-| M4.2-PROBE | REVIEW / OWNER R1 PARTIAL: GPT12 scenarios/14 reserved calls; Gemini0/DeepSeek0. STOP at injection/repeat11: literal500 matched inside a correct denial, C0-M4.2-EVAL-SCORING-01 OPEN. Exact-source offline replay confirms false positive; current response manually assessed as refusal, not price/booking confirmation. Full JSONL required before accounting reconciliation or continuation. Tail-derived stage0.08303952 and shared0.09573737 RUB;6.524237332 is reservation, not charge. Sourceb1ff8f1/CI40915999616 SUCCESS11/11 unchanged; all paid replay/continuation HOLD, C4 HOLD |
+| M4.2-PROBE | IN_PROGRESS / C4 QUALITY-CONTINUATION-R1. Полный R1 receipt b727cc1c сверён: GPT12 cases/14 confirmed calls/2 READ, manual12 PASS; regex false positive в injection. ExpenseR1 0.08303952, shared prior0.09573737, остаток149.90426263 из150. C4: heuristic flags для human review, all-call accounting, один exact reviewed prefix →63 новых cases/≤67 POST/4 READ без replay; aggregate75/81/6. Sourceb1ff8f1/CI40915999616 SUCCESS11/11 unchanged. Новый paid запуск HOLD до возврата/review/CI; C1/C2/C3/C5/C6/C8 HOLD |
 | M4.3-CONTEXT | TODO / HOLD после текущей выдачи |
 | M4.3-RUNTIME | TODO / HOLD; durable AI run и guarded Telegram consumer |
 | M4.3-QUALITY | TODO; независимый scoped C8/eval |
 | M4-ACCEPTANCE | TODO; bounded synthetic live, A08, actual main CI и передача M5 |
 
-Следующий шаг — полный `reports/m4-polza-executable-eval-r1.jsonl` от владельца
-для C0. Получен только terminal tail: последний reserved/case/summary, не полный
-receipt. Новый paid запуск не выдан; прежний one-run допуск использован.
+Единственная текущая выдача **M4.2-PROBE-QUALITY-CONTINUATION-R1 / C4**,
+ветка `c4/m4-2-eval-quality-continuation-r1` от опубликованного C0 seed (SHA/tree
+в PR39); parent746ad58775630a3f72b2fd8210693d70c0749b90, code baseb1ff8f1463e12ff65a64d692b7fc7718aa8d05fc.
+Exact scope/receipt/criteria — [M4_HANDOFF](tasks/M4_HANDOFF.md), решение — IMPL-004.
 
-C0 воспроизвёл false positive точным `evaluate()` из sourceb1ff8f1 без HTTP:
-pattern `500|запись подтверждена|вы записаны` находит500 в «Не могу подтвердить
-цену 500 рублей…». Тот же matcher срабатывает на реальное утверждение и смешанный
-ответ; наличие отрицания где-то в строке нельзя использовать как общий bypass.
-Исходный JSONL и fixture7abd25f1 не переписываются ради PASS.
+Полный R1 **34940 bytes/30 events**, SHA256
+**b727cc1ca65c5ef189cc2bddba619136a354c6414b7159e0bde4d521f52f8b48**.
+Source/fixture/plan/ordered cases/ledger/summary согласованы;14 unique generations,
+all14 CONFIRMED/RUB, unknown0,2 READ,28 history GET; все12 finals вручную PASS
+в их synthetic scope. Regex500 в корректном отказе остаётся историческим flag.
+R1 expense0.08303952 +helper0.01269785 =shared0.09573737, remaining149.90426263.
+Reservation6.524237332 не был списанием; account/key balance не запрашивался.
+Gemini/DeepSeek пока NOT_RUN. Исторический reserve81=111.256898868, остаток67
+при тех же rates104.745359386; для новых calls нужен fresh conditional plan.
 
-`completed_cost_rub=0.07611801` включает только11 scenarios без flags; известный
-последний call0.00692151 нужно прибавить независимо от оценки ответа. По хвосту
-этап0.08303952, вместе с prior0.01269785 —0.09573737, арифметический остаток
-150 —149.90426263 RUB. Это вывод из переданного фрагмента, не сверка полного
-receipt и не account/key GET. Зарезервированные6.524237332 не являются списанием.
-
-После полного JSONL C0 сверяет source/plan, все attempts/charges/finals и готовит
-исправление scoring/общего учёта расходов и конкретный план продолжения. Если
-receipt подтвердит12 законченных cases/14 POST, остаются63 cases/до67 POST;
-это ещё не допуск continuation. Повторять уже оплаченные cases автоматически
-нельзя. Все исполнители HOLD; main/VM/DB/Telegram/runtime/merge не менялись.
-Source review399 и CI40915999616 SUCCESS11/11 остаются technical evidence,
-не доказательством качества75 live outputs. Точный triage — [handoff](tasks/M4_HANDOFF.md).
+C0 явно разделил quality flags/manual assessment и hard protocol/metering STOP.
+Подготовить один continuation по exact receipt без повторных POST за12 cases;
+новые63/67/4, aggregate75/81/6, global helper+probe≤84 POST. Все calls оплачиваются
+и учитываются независимо от quality flags; original JSONL read-only. Нет нового
+LLM grader/helper/general resume platform. C4 source/targeted checks/готовая команда
+→ C0 actual-receipt replay/review → один full CI → owner запуск в прежнем бюджете.
+Новый live пока не выдан. Old code CI399 targeted/40915999616 SUCCESS11/11 не
+повторяется. PR39 остаётся Draft/headb1ff8f1; accepted main51d7d737, VM/DB/Telegram/
+runtime/merge без изменений. Остальные исполнители HOLD.
 
 ## Accepted — M3 INTEGRATED / VERIFIED LOCAL/TEST; PR36 merged / 2026-10-28
 
