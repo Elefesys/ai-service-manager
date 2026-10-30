@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C2 repair BLOCKED; C6 disposable PG IN_PROGRESS / 2026-10-30
+## CURRENT — C6 PG observation REVIEW; C6 HOLD / 2026-10-30
 
 Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 **411636a3614529077f6d0d230c62d11f69da600f**, PR38 merged;
@@ -23,8 +23,8 @@ Accepted main **51d7d73752128715c6d98157445167c0cc0d894d**, tree
 | M4.2-GPT-QUALITY-R2 | VERIFIED owner synthetic + C0 manual:18/18 PASS; составной R1+R2 PASS25,27 confirmed POST/2 READ/2 images; consumed |
 | M4.3-CONTEXT-R1 | VERIFIED SOURCE + LOCAL UNIT; integration pending. Независимые1283 tests/static checks +5 controlled adapter checks PASS; PG authority/durable/runtime ещё нужны |
 | C0-M4-CI-OBSERVATION-01 | OPEN: прежний wait_blocked timeout; root cause UNKNOWN, foundation gates не приняты |
-| C2-M4-CI-OBSERVATION-R1 | BLOCKED; C0 принял SOURCE/SAVED-EVIDENCE audit560d445, не repair. Среда UID0-only без PG/Docker; matrix12/negatives/consumers NOT_RUN. C2 HOLD до PG evidence |
-| C6-M4-PG-EXECUTOR-R1 | IN_PROGRESS: narrow executor/hooks prepared from f93c0b7; local static/9 preflight checks PASS, real PG/Actions NOT_RUN. Next one branch-only job≤20min, fresh pinned PG18/asm_test, original matrix12; receipt in HANDOFF |
+| C2-M4-CI-OBSERVATION-R1 | BLOCKED; C0 принял SOURCE/SAVED-EVIDENCE audit560d445, не repair. Среда UID0-only без PG/Docker; matrix12/negatives/consumers NOT_RUN. C2 HOLD до C0 review нового C6 PG evidence |
+| C6-M4-PG-EXECUTOR-R1 | REVIEW / C6 HOLD: source a4ca08f, one Actions41082835484/job124156161812/attempt1 SUCCESS; original matrix12 PASS on real pinned PG18.6, cleanup PASS, waiter PID12/12. Historical cause UNKNOWN/full CI OPEN; full receipt in HANDOFF |
 | M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
@@ -38,6 +38,18 @@ C0 проверил15958-byte archive/13 files, manifest12, consumer source4/ori
 заново скачал original CI artifact12957949439 и воспроизвёл audit byte-exact.
 6 saved copies/25 excerpt lines совпали с primary evidence; нового PG запуска нет.
 C0 подтвердил такой же local executor blocker; sandbox обходы не нужны.
+
+C6 tested source **a4ca08f9a6f8ed3642e4f82f156389588e6e05f6**, tree
+**74e5242997d2efb9b2c7bd8b337c33ea41bae250**, sole parent
+**f93c0b70f287f8dd982159c4b0073b495481e29d**. Exact6-path observation;
+original assertions/timeouts/replay preserved. Run41082835484:12 PASS, no skips/
+xfails, primary/cleanup PASS. Artifact12990572117:26822 bytes, SHA256
+**0c0e8b8fa46a0c8d33a39dd74d0df3e3e7c12e77c744db1844d6a22ef39e5b90**.
+Saved evidence55293 bytes/10 files, SHA256
+**8d4418561c9e807314dbf9bbf8c6d9d8e1beda91c7c27662ec0f9c85a02eb23d**.
+Raw case evidence complete; aggregate filename collision disclosed in HANDOFF.
+No repair/full CI/VM/model calls. C6 HOLD; C0 review→C2 original negative controls.
+Execution ref frozen at tested source; this receipt is docs-only on preparation.
 
 C6 prep branch c6/m4-pg-executor-r1; execution c6/m4-pg-observation-run-r1,
 base — published C0 SHA из immutable HANDOFF, sole parent560d445.

@@ -6,15 +6,15 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2 audit принят; PG executor → C6 / 2026-10-30
+## CURRENT — C6 PG observation12 PASS; C0 review / C6 HOLD / 2026-10-30
 
-**C0 принимает возврат C2 как SOURCE/SAVED-EVIDENCE audit, без repair.**
-C2-M4-CI-OBSERVATION-R1 остаётся BLOCKED: в среде чата нет PostgreSQL/Docker
-и доступного non-root UID. Причина прежнего timeout UNKNOWN, CI gate OPEN.
-Единственная следующая выдача — **C6-M4-PG-EXECUTOR-R1**: одна ограниченная
-диагностическая проверка12 cases в disposable GitHub runner, чтобы C2 получил
-измерения для исправления. Рабочая ВМ и действия владельца не нужны.
-Это устранение блокера среды внутри прежнего repair, не общая CI optimization.
+C0 ранее принял C2 SOURCE/SAVED-EVIDENCE audit без repair; локальный PG executor
+у C2 отсутствовал. **C6 выполнил один разрешённый disposable GitHub run:12 PASS,
+cleanup PASS; evidence ниже передаётся C0 на REVIEW. C6 HOLD.**
+Причина прежнего timeout UNKNOWN, CI gate OPEN. C2 ждёт решения C0 о продолжении
+исходных repair/negative controls на основании нового evidence. Рабочая ВМ и
+действия владельца не потребовались. Это observation внутри прежнего repair,
+не общая CI optimization и не новый release gate.
 
 ### Проверенный возврат C2
 
@@ -44,28 +44,129 @@ controlled-activation-subscription: whole call phase2.750032s, не duration
 ограничение, не доказанная причина timeout. New PG/repair/full CI NOT_RUN.
 [Исходная задача C2 и неизменённые критерии repair](https://github.com/Elefesys/ai-service-manager/blob/23f35d6c4a7f596cd58121e6a5aa39a686d7487e/docs/tasks/M4_HANDOFF.md#L57).
 
-### Подготовка C6 — C6-M4-PG-EXECUTOR-R1 / 2026-10-30
+### Возврат C6 — C6-M4-PG-EXECUTOR-R1 / REVIEW; C6 HOLD / 2026-10-30
 
-Exact base **f93c0b70f287f8dd982159c4b0073b495481e29d**, tree
-**0c2452fbd73cf628ce18799e40a2b725d6cc8e02**; sole parent/tree совпали с
-выдачей. Source commit — прямой потомок base на c6/m4-pg-executor-r1;
-его полный SHA/tree фиксируются перед единственным execution FF и в artifact.
-Изменены только6 разрешённых paths. Новая lane выполняет original matrix12
-один раз после existing development build/bootstrap/migrations на fresh asm_test.
-Only postgres-test; storage не нужен fixtures этой функции. Credentials generated
-в private RUNNER_TEMP вне build context; evidence содержит только bounded scalars.
+**Один реальный PG run завершён:12 PASS,0 FAIL/SKIP/XFAIL; cleanup PASS.**
+Это новая observation, не repair и не закрытие C0-M4-CI-OBSERVATION-01.
+Старый timeout не воспроизведён; root cause **UNKNOWN**, full CI gate **OPEN**.
+C0 проверяет evidence и возвращает C2 необходимые исходные repair/negative controls.
 
-Временные hooks в двух test modules сохраняют blocker/operation PID, request
-progress/completion до cleanup, существующие DB timestamps и observer spans.
-После удаления diagnostic hooks AST обоих test modules точно совпадает с base:
-assertions,1.5s timeout,1.1s edge, SQL predicate, awaits/sleep/replay не менялись.
-Ruff/format/compile и9 local preflight checks PASS (source AST/order, bounds,
-PID/progress, cancellation, failure redaction, completeness); это не PG evidence.
-Server wait и event-loop delay из client spans по отдельности остаются UNKNOWN.
+**Source/ref receipt.** Exact base **f93c0b70f287f8dd982159c4b0073b495481e29d**,
+base tree **0c2452fbd73cf628ce18799e40a2b725d6cc8e02**; base sole parent
+**560d445b169fe5487c002989af5857bc3c0d6c25**, parent tree
+**3250876da5a759d462ac138c468bb2ccd43a721c**. Tested source
+**a4ca08f9a6f8ed3642e4f82f156389588e6e05f6**, tree
+**74e5242997d2efb9b2c7bd8b337c33ea41bae250**, sole parent=base.
+Preparation c6/m4-pg-executor-r1 создана на source. Execution
+c6/m4-pg-observation-run-r1 создана на base, затем ровно один FF
+base→source с expected_sha=base/force=false. Execution ref остаётся source;
+этот последующий receipt меняет только2 docs на preparation branch.
 
-Real PG/Actions пока NOT_RUN. Подготовлен один run на execution branch;
-после него receipt будет дополнен только на preparation branch, чтобы не вызвать
-второй запуск. PR/main/PR39, рабочая VM и внешние model/Telegram calls не затронуты.
+Source changes ровно6 разрешённых paths: .github/workflows/m4-pg-observation.yml,
+scripts/m4_pg_observation.py, tests/test_m3_1_control_postgres.py,
+tests/test_m3_1_control_api_postgres.py, docs/tasks/M4_HANDOFF.md,
+docs/TASK_REGISTER.md. После удаления только diagnostic hooks AST обоих test
+modules точно совпадает с base: assertions,1.5s observer,1.1s edge, SQL predicate,
+awaits/sleep/product mutations/effects/replay сохранены. Local Ruff/format/compile
+и9 bounded preflight checks PASS; local real PG NOT_RUN.
+
+**Execution.** [Run41082835484](https://github.com/Elefesys/ai-service-manager/actions/runs/41082835484),
+[job124156161812](https://github.com/Elefesys/ai-service-manager/actions/runs/41082835484/job/124156161812),
+status SUCCESS; event=push, event SHA=source, attempt1. Один run найден для
+source/execution branch. Job2026-10-30T15:40:16Z–15:41:24Z (68s),
+ubuntu-24.04, stock Docker, timeout20min, contents:read. Exact checkout SHA,
+pinned checkout/upload, persist-credentials=false. No PR/rerun/dispatch/full CI.
+Main **51d7d73752128715c6d98157445167c0cc0d894d** и Draft PR39 head
+**cd60e5e16d8bcada53597d660a15f4d82640e956** совпали before/after.
+
+Fresh **asm_test**, existing bootstrap/migrations до0013. Actual PostgreSQL
+**18.6 (Debian18.6-1.pgdg12+2)** / server_version_num **180006**, PID1 UID**999**.
+Image pin **pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a**;
+actual image ID **sha256:b551e63a5606bdd3127b12a8120c6df8d71c812b29a7faf944b034cb9beb644a**,
+RepoDigests содержит exact pin. Python3.13.15, psycopg3.3.5, SQLAlchemy2.0.52,
+libpq180006; vector0.8.6/btree_gist1.8. Actual session/current identities
+asm_migrator и asm_runtime: LOGIN, не SUPERUSER/BYPASSRLS/CREATEROLE/CREATEDB.
+Frozen uv.lock SHA256 **25ca2691862f612ddc9940ffcd5dc2481758d43d59bdd4b2d4ebe7d32c12461a**;
+existing development/checks image, Dockerfile/bootstrap/grants/RLS/pins unchanged.
+
+Job commands: `python3 scripts/m4_pg_observation.py run`, затем always
+`python3 scripts/m4_pg_observation.py cleanup`. Full exact argv/budgets/timestamps
+сохранены в build.json, database-start.json, schema.json, versions.json,
+matrix.json, cleanup-command-1.json исходного artifact. Собственный project
+**asm-m4-pg-41082835484-1**, только postgres-test + ephemeral checks --no-deps;
+checks UID/GID1001:1001. Existing `alembic upgrade head` выполнен один раз.
+Единственный pytest invocation внутри checks:
+
+```text
+pytest -p scripts.m4_pg_observation -q --tb=short --show-capture=no -o cache_dir=/tmp/asm-pytest-cache --junitxml=/evidence/junit.xml tests/test_m3_1_control_api_postgres.py::test_post_lock_product_boundaries_with_actual_conversation_wait
+```
+
+| Phase | Wall seconds | Exit |
+|---|---:|---:|
+| development/checks build | 16.457425 | 0 |
+| postgres-test start/bootstrap/healthy | 8.983260 | 0 |
+| schema upgrade | 2.518852 | 0 |
+| versions/roles | 1.467925 | 0 |
+| matrix command incl. ephemeral container | 30.304216 | 0 |
+| cleanup | 0.314806 | 0 |
+
+Pytest сообщил12 passed in26.38s; JUnit suite26.374s. Это разные границы
+измерений, не время компиляции или отдельного SQL. Collect IDs совпали с
+original caller×boundary×target order; все36 setup/call/teardown phases PASS.
+
+| Case | Result | Whole call s | Max observer client ms | Blocker / expected waiter PID | HTTP |
+|---|---|---:|---:|---|---:|
+| resume-expiry-subscription | PASS | 1.266506 | 2.116727 | 131 / 132 | 409 |
+| resume-expiry-mode | PASS | 1.266781 | 1.835399 | 144 / 145 | 409 |
+| resume-activation-subscription | PASS | 1.294088 | 1.815872 | 157 / 158 | 200 |
+| resume-activation-mode | PASS | 1.295286 | 1.959050 | 170 / 171 | 200 |
+| controlled-expiry-subscription | PASS | 1.260660 | 5.282808 | 183 / 184 | 409 |
+| controlled-expiry-mode | PASS | 1.258786 | 2.092460 | 196 / 198 | 409 |
+| controlled-activation-subscription | PASS | 1.287109 | 2.124910 | 210 / 211 | 202 |
+| controlled-activation-mode | PASS | 1.284434 | 2.225067 | 223 / 224 | 202 |
+| telegram-expiry-subscription | PASS | 1.276424 | 2.067093 | 236 / 237 | 409 |
+| telegram-expiry-mode | PASS | 1.266411 | 2.141092 | 248 / 250 | 409 |
+| telegram-activation-subscription | PASS | 1.289786 | 2.135190 | 254 / 263 | 202 |
+| telegram-activation-mode | PASS | 1.301470 | 354.304028 | 267 / 276 | 202 |
+
+Во всех12 cases найденный waiter PID совпал с PID фактического request на
+Workspace connection; blocker совпал с существующим blocker backend. Сохранены
+request start/cursor progress/completion, DB edge/blocked/released timestamps;
+blocked<edge≤released во всех12, request завершён до cleanup, cancellation0.
+Buffer overflow0, invalid scalar0. Запись evidence только после case; никаких
+добавленных DB reads/awaits/log I/O внутри critical window.
+
+Наибольший observer span354.304028ms — telegram-activation-mode, запрос вернул
+0 rows; после него наблюдатель подтвердил expected waiter276/blocker267. В тот же
+период присутствует длинный client span request cursor (категория OTHER).
+Это совместимо с общей задержкой, но **не устанавливает** server/driver/event-loop
+причину. Max gap между observer calls0.616835ms не является независимым loop-lag
+измерением. Whole call прежнего failed controlled-activation-subscription теперь
+1.287109s; его max observer span2.124910ms. Никакого flaky/repair claim.
+
+**Evidence/ограничения.** [Artifact12990572117](https://github.com/Elefesys/ai-service-manager/actions/runs/41082835484/artifacts/12990572117),
+**26822 bytes /24 files**, SHA256
+**0c0e8b8fa46a0c8d33a39dd74d0df3e3e7c12e77c744db1844d6a22ef39e5b90**.
+Скачанные bytes совпали с GitHub digest; все23 manifest members проверены.
+Недочёт отчёта: outer phase writer перезаписал plugin aggregate тем же именем
+matrix.json. Raw cases.json, collected.json, JUnit и все events сохранены;
+полнота12 cases/36 phases и отсутствие skips/xfails/overflow независимо
+восстановлены read-only analyze.py. Исходный artifact не редактировался.
+
+Сохранён C6-M4-PG-EXECUTOR-R1-evidence.zip: **55293 bytes /10 files**, SHA256
+**8d4418561c9e807314dbf9bbf8c6d9d8e1beda91c7c27662ec0f9c85a02eb23d**.
+Внутри original artifact, provenance/run/job/ref receipt, job log, exact source
+patch, local preflight и read-only analyze.py/observation.json, manifest.
+`python3 analyze.py` повторяет проверку bytes и наблюдений без PG/network/tests.
+GitHub artifact retention7 days; сохранённая копия передана владельцу.
+
+Primary PASS; первая cleanup PASS, owned containers/networks/volumes пусты;
+private generated TEST credentials удалены, checkout clean. No owner secrets,
+LOCAL app services, working VM/SSH, external model/Telegram calls или live DB.
+Следующий необходимый факт при отдельной выдаче C0/C2 — negative controls для
+foreign waiter/early completion и, если нужен causal diagnosis нового timeout,
+независимое измерение loop lag плюс согласованные driver/server timings.
+Повторный запуск ради случайного PASS не выполнялся. **C6 HOLD.**
 
 ### Задача C6 — C6-M4-PG-EXECUTOR-R1
 
@@ -147,7 +248,7 @@ bootstrap/grants/RLS, Dockerfiles/compose, image/dependency pins или AI files
 Общий CI интеграционного кандидата — после review repair. Diagnostic lane
 сама не становится новым release gate и не включается в main автоматически.
 
-### Остальной статус
+### История — остальной статус на момент выдачи C0
 
 [C4 context/agent принят SOURCE + LOCAL UNIT](https://github.com/Elefesys/ai-service-manager/blob/23f35d6c4a7f596cd58121e6a5aa39a686d7487e/docs/tasks/M4_HANDOFF.md):
 1283 tests и5 controlled adapter checks PASS; PG authority/durable/Telegram ещё
