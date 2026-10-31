@@ -1,4 +1,4 @@
-"""C3-M4.3-RUNTIME-INTEGRATION-R2: separate owned PG18 application carrier."""
+"""C3-M4.3-RUNTIME-INTEGRATION-R3: separate owned PG18 application carrier."""
 
 import hashlib
 import json
@@ -14,11 +14,11 @@ import time
 from pathlib import Path
 from uuid import UUID
 
-BASE = "4f989a09c38c112111819878319df0c9b09db00d"
-BASE_TREE = "8a5e6f1f6fa0a6b8a36eff4c561794db001b42f7"
-BRANCH = "c3/m4-3-runtime-integration-pr-r2"
-CAPTURE_BRANCH = "c3/m4-3-runtime-catalog-run-r2"
-TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r2"
+BASE = "fa2469deea75c11ca5901de77fc3e46304c1e9ae"
+BASE_TREE = "5ab7c1b98ccdc129fe2b7568501e923455a56427"
+BRANCH = "c3/m4-3-runtime-integration-pr-r3"
+CAPTURE_BRANCH = "c3/m4-3-runtime-catalog-run-r3"
+TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r3"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -410,7 +410,7 @@ def admit_source(evidence):
         event["ref"]
         in {"refs/heads/" + CAPTURE_BRANCH, "refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH,
-        "R2_EVENT_BRANCH",
+        "R3_EVENT_BRANCH",
     )
     require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
     require(capture(["git", "merge-base", BASE, "HEAD"]) == BASE, "BASE_ANCESTRY")
@@ -442,7 +442,26 @@ def admit_source(evidence):
         "docs/TASK_REGISTER.md",
     }
     paths = capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines()
-    require(bool(paths) and set(paths) <= allowed, "R2_WRITE_SET")
+    if event["ref"] == "refs/heads/" + CAPTURE_BRANCH:
+        allowed &= {
+            "scripts/native_context_db_catalog.py",
+            "scripts/m4_runtime_db.py",
+            ".github/workflows/m4-runtime-db.yml",
+            "tests/test_m4_runtime_db_runner.py",
+            "tests/test_native_context_db_runner.py",
+        }
+    require(bool(paths) and set(paths) <= allowed, "R3_WRITE_SET")
+    write(
+        evidence / "source-admission.json",
+        {
+            "base": BASE,
+            "base_tree": BASE_TREE,
+            "source": event["head"],
+            "tree": event["tree"],
+            "paths": paths,
+            "result": "PASS",
+        },
+    )
     return event, manifest
 
 
@@ -689,7 +708,14 @@ def run(root):
     (root / "evidence").mkdir(parents=True, mode=0o700)
     (root / "private").mkdir(mode=0o700)
     event, manifest = admit_source(root / "evidence")
-    diagnostic = event["ref"] == "refs/heads/" + CAPTURE_BRANCH
+    mode = "catalog" if event["ref"] == "refs/heads/" + CAPTURE_BRANCH else "runtime"
+    write(root / "evidence/mode.json", {"mode": mode})
+    run_admitted(root, event, manifest, mode)
+
+
+def run_admitted(root, event, manifest, mode):
+    # No resource access or credentials before the complete source admission.
+    diagnostic = mode == "catalog"
     modules = ["catalog"] if diagnostic else MODULES
     pins = dict(
         line.split("=", 1) for line in Path("infra/images.lock.env").read_text().splitlines()

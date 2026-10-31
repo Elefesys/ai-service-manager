@@ -37,6 +37,11 @@ M4_EXECUTION_REFS = (
     "refs/heads/c3/m4-3-runtime-catalog-run-r2",
     "refs/heads/c3/m4-3-runtime-targeted-run-r2",
 )
+# These transitions are distinct from historical push/main/PR semantics.
+# Add the targeted transition only after the capture commit is frozen.
+M4_R3_TRANSITIONS = {
+    "refs/heads/c3/m4-3-runtime-catalog-run-r3": "fa2469deea75c11ca5901de77fc3e46304c1e9ae",
+}
 REPOSITORY = "Elefesys/ai-service-manager"
 REPOSITORY_ID = 1369650588
 MODULES = (
@@ -718,6 +723,21 @@ def require_ci_inputs():
         require(sha256((ROOT / path).read_bytes()) == expected, "CI gate input drift: " + path)
 
 
+def bounded_push_ref(value):
+    """A bounded Git ref metadata value; it never grants source admission."""
+    return (
+        type(value) is str
+        and re.fullmatch(r"refs/(?:heads|tags)/[A-Za-z0-9][A-Za-z0-9._/-]{0,159}", value)
+        is not None
+        and ".." not in value
+        and "//" not in value
+        and not value.endswith(("/", "."))
+        and all(
+            not part.startswith(".") and not part.endswith(".lock") for part in value.split("/")
+        )
+    )
+
+
 def event_operands(env, payload=None, *, head=None, tree=None, parents=None):
     """Bounded source operands only; malformed values, URLs and event text stay private."""
     sha_pattern = r"[0-9a-f]{40}"
@@ -785,6 +805,22 @@ def event_operands(env, payload=None, *, head=None, tree=None, parents=None):
         if type(payload.get("deleted")) is bool
         else "INVALID",
         "push_base_ref_state": "null" if payload.get("base_ref") is None else "present",
+        "push_base_ref": {
+            "state": "missing"
+            if "base_ref" not in payload
+            else "null"
+            if payload["base_ref"] is None
+            else "present",
+            "type": type(payload.get("base_ref")).__name__ if "base_ref" in payload else "missing",
+            "value": payload.get("base_ref") if bounded_push_ref(payload.get("base_ref")) else None,
+            "valid": "base_ref" in payload
+            and (payload["base_ref"] is None or bounded_push_ref(payload["base_ref"])),
+        },
+        "push_created": payload.get("created")
+        if type(payload.get("created")) is bool
+        else "INVALID",
+        "push_forced": payload.get("forced") if type(payload.get("forced")) is bool else "INVALID",
+        "push_before": safe(payload.get("before"), sha_pattern),
         "event_sha": safe(env.get("GITHUB_SHA"), sha_pattern),
         "actual_head": safe(head, sha_pattern),
         "actual_tree": safe(tree, sha_pattern),
@@ -856,14 +892,35 @@ def event_identity(env, payload, head, tree, parents, *, diagnostic=None):
     }
     if identity["event"] == "push":
         check(
-            identity["ref"] in (EXECUTION_REF, "refs/heads/main", *M4_EXECUTION_REFS),
+            identity["ref"]
+            in (EXECUTION_REF, "refs/heads/main", *M4_EXECUTION_REFS, *M4_R3_TRANSITIONS),
             "EVENT_PUSH_ENV_REF",
         )
         if identity["ref"] in M4_EXECUTION_REFS:
             check(identity["attempt"] == "1", "EVENT_M4_ATTEMPT")
         check(payload.get("ref") == identity["ref"], "EVENT_PUSH_PAYLOAD_REF")
         check(payload.get("deleted") is False, "EVENT_PUSH_DELETED")
-        check(payload.get("base_ref") is None, "EVENT_PUSH_BASE_REF")
+        if identity["ref"] in M4_R3_TRANSITIONS:
+            before = M4_R3_TRANSITIONS[identity["ref"]]
+            check(identity["attempt"] == "1", "EVENT_M4_ATTEMPT")
+            check("base_ref" in payload, "EVENT_M4_BASE_REF_MISSING")
+            check(
+                payload["base_ref"] is None or bounded_push_ref(payload["base_ref"]),
+                "EVENT_M4_BASE_REF_METADATA",
+            )
+            check(payload.get("created") is False, "EVENT_M4_CREATED")
+            check(payload.get("forced") is False, "EVENT_M4_FORCED")
+            check(payload.get("before") == before, "EVENT_M4_BEFORE")
+            check(parents == [before] and head != before, "EVENT_M4_PARENT")
+            identity.update(
+                before=before,
+                base_ref_metadata=payload["base_ref"],
+                created=False,
+                deleted=False,
+                forced=False,
+            )
+        else:
+            check(payload.get("base_ref") is None, "EVENT_PUSH_BASE_REF")
         check(not env.get("GITHUB_BASE_REF"), "EVENT_PUSH_ENV_BASE_REF")
         check(not env.get("GITHUB_HEAD_REF"), "EVENT_PUSH_ENV_HEAD_REF")
         check(commit(payload.get("after"), "EVENT_PUSH_AFTER_FORMAT") == head, "EVENT_PUSH_AFTER")
@@ -873,7 +930,9 @@ def event_identity(env, payload, head, tree, parents, *, diagnostic=None):
             "EVENT_PUSH_HEAD",
         )
         identity["route"] = (
-            "m4-r2-push"
+            "m4-r3-push"
+            if identity["ref"] in M4_R3_TRANSITIONS
+            else "m4-r2-push"
             if identity["ref"] in M4_EXECUTION_REFS
             else "stock-push"
             if identity["ref"] == EXECUTION_REF
