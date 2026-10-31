@@ -161,6 +161,23 @@ class WorkerUnitOfWork:
             self._failed = True
             raise
 
+    async def ai_runtime(self, operation: str, payload: dict[str, object]) -> Any:
+        """Closed DB-only capability, using this admitted job, never payload authority."""
+        if operation not in {
+            "ENQUEUE",
+            "PREPARE",
+            "AUTHORIZE",
+            "READ",
+            "RESERVE",
+            "COMPLETE",
+            "COMMIT",
+        }:
+            raise MessagingError(Code.INVALID_INPUT)
+        return await self._execute(
+            "SELECT platform.ai_runtime_command(:job,:token,:operation,CAST(:payload AS jsonb))",
+            {"operation": operation, "payload": json.dumps(payload, allow_nan=False)},
+        )
+
     async def process_inbox(self) -> InboxProcessingResult | MutationInboxProcessingResult:
         return parse_inbox_result(
             await self._execute("SELECT platform.messaging_process_inbox(:job, :token)")
@@ -437,6 +454,20 @@ class MessagingDatabase:
             if recovered == limit:
                 break
         return recovered
+
+    async def replay_ai(self, job_id: UUID, claim_token: UUID, payload: dict[str, object]) -> Any:
+        require_uuid(job_id)
+        require_uuid(claim_token)
+        async with self._transaction() as connection:
+            return await call(
+                connection,
+                "SELECT platform.ai_runtime_replay(:job,:token,CAST(:payload AS jsonb))",
+                {
+                    "job": job_id,
+                    "token": claim_token,
+                    "payload": json.dumps(payload, allow_nan=False),
+                },
+            )
 
     async def replay_context_work(self, job_id: UUID, claim_token: UUID) -> ContextWorkResult:
         require_uuid(job_id)

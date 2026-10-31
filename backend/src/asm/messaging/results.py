@@ -113,6 +113,18 @@ class TurnJobClaim(JobClaim):
     step: Literal["GROUP", "MEDIA", "TEST_CONSUME", "GUARDED_TEXT", "ESCALATE_OWNER"]
 
 
+class AIJobClaim(JobClaim):
+    """Explicit DB-only AI work; never a CONTROLLED turn consumer."""
+
+    kind: Literal["PROCESS_TURN"]
+    turn_id: UUID
+    turn_revision: int = Field(gt=0)
+    step: Literal["AI_GENERATE"]
+    inbox_id: None
+    outbox_id: None
+    file_id: None = None
+
+
 class EscalationTimerClaim(JobClaim):
     kind: Literal["ESCALATION_TIMER"]
     escalation_id: UUID
@@ -126,6 +138,8 @@ def parse_claim(value: object) -> JobClaim:
     if isinstance(value, dict) and value.get("kind") == "ESCALATION_TIMER":
         return EscalationTimerClaim.model_validate(value)
     if isinstance(value, dict) and value.get("kind") == "PROCESS_TURN":
+        if value.get("step") == "AI_GENERATE":
+            return AIJobClaim.model_validate(value)
         return TurnJobClaim.model_validate(value)
     return JobClaim.model_validate(value)
 

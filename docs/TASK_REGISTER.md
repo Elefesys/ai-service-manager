@@ -39,7 +39,7 @@ paid/VM/live HOLD, ledger прежний. M4 целиком ещё не закр
 | C0-M4-INTEGRATION-R1 | INTEGRATED PR39; последующий repair PR40/main VERIFIED, прежний failed run сохранён |
 | C2-M4-CI-OBSERVATION-R4 | VERIFIED C0 SOURCE + TARGETED PG; source249b3611, run41124252930:278 PASS/834 phases, cleanup/source PASS; C2 HOLD/ref frozen |
 | C0-M4-CI-REPAIR-INTEGRATION-R1 | INTEGRATED / VERIFIED PR40 + exact main586240e8/CI41178689536:11/11 SUCCESS |
-| C2-M4.3-PG-RUNTIME-R1 | IN_PROGRESS / выдано C2: authority/read + durable run/call/result;0014 DB-only,13 paths и one hosted proof |
+| C2-M4.3-PG-RUNTIME-R1 | IN_PROGRESS / candidate:0014 DB-only + PG authority/run/call/result; local253 PASS, inventory55; one hosted proof pending, app0013 unchanged |
 | M4.3-RUNTIME / M4.3-QUALITY | IN_PROGRESS PG subset через C2; application integration/AI→Outbox→Telegram/quality TODO |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 

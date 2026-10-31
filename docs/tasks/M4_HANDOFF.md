@@ -35,6 +35,36 @@ INTEGRATED / VERIFIED в SOURCE + TARGETED + PR/main CI scope.** C4 context/agen
 Shared150 неизменен: confirmed0.37505230/58 known POST;4 unknown/held7.585505548;
 62 total POST; remaining142.039442152, reported0.00743079 UNSETTLED.
 
+### C2 candidate — DB-only source, hosted validation pending
+
+Exact base **fe8381f7bd5918b8c6a3125b80887fe00bef67f3**, tree
+**3e9648bbaf16362f3ae77e95d19ba3a7fc8cbb07**, sole parent accepted main586240e8;
+5 coordination docs only. Original11/SOURCE_MANIFEST byte-identical.
+
+0014 adds protected `ai_runs`/`ai_provider_calls`, separate `AI_GENERATE` job,
+PG authority/read and atomic selected-result receipt. Preparation uses the real
+persisted TEST_CONSUME claim; only explicit LOCAL/TEST and FAKE/EVAL_ONLY route.
+CONTROLLED is available in asm_local/asm_test; synthetic Telegram ingress is
+restricted to asm_test, with existing native/material admission. No application dispatch or outbound effects.
+Budget2/READ1 and snapshot/config are durable. SQL storage fingerprint hashes
+original JSONB; ContextBuilder retains its separate original-JSON fingerprint.
+UNKNOWN reservation blocks a repeat invocation. Completed call without a chosen
+result also stops as INCOMPLETE: no durable wire exchanges or automatic continuation.
+A historical receipt requires the winning claim capability hash, grants no send
+permit, and can replay after HUMAN without granting new authority.
+
+Local targeted:253 PASS/2.18s (new unit/source23 plus retained AI/codec230),
+Ruff/format10 files PASS, mypy5 modules PASS; fixed hosted inventory55 cases
+(23 unit/source +32 PG), SHA256
+59f959f5d72cec7eae264612dcb2939e12f58aa2f4e47f60bd7e5be72d590ab5.
+Application/native catalog/readiness remain0013 and must refuse0014. Native TEST
+policy fixtures are installed through real0013 provisioning before upgrade;
+no profile monkeypatch or default-allow. Independent native observation cases
+use trusted synthetic ingress: observation epoch changes while control generation,
+context version and reconciled revision stay fixed. No Telegram HTTP or send.
+The one authorized hosted outcome will follow on execution branch; no PG PASS
+is claimed by this candidate. After that outcome execution freezes and C2 HOLD.
+
 ### C2-M4.3-PG-RUNTIME-R1 — PostgreSQL authority и сохранённый результат
 
 **Результат для пилота:** агент получает контекст только через проверенный
