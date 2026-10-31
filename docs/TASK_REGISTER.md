@@ -2,7 +2,42 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R1 / C2 DB layer VERIFIED C0 / 2026-10-31
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R1 / BLOCKED, C3 HOLD / 2026-10-31
+
+C3 вернул frozen source **9b05e5ddf8d00c0bab4f4f5e0fbf966a60915de2** /
+tree **abbe24977ca00d6fa880767cc78dcdd62a4bd1cd**, sole parent exact assignment
+**ce82dc2f3d053e135cb4dffdbfaaf0ee7fd8dea3**,35 allowed paths.
+[PR41](https://github.com/Elefesys/ai-service-manager/pull/41) OPEN/DRAFT/NOT MERGED;
+tested merge **e28af5bfdc26be4788b4258def779e83b19659c2**, тот же tree.
+[CI41216402482/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/41216402482)
+pull_request: **6 SUCCESS/5 FAIL/1 SKIPPED**. Единственный run, source frozen.
+
+M4:35 retained PG +10 delivery PASS/135 phases;11 delivery cases без completed
+result после timeout, schema8 NOT_REACHED (общий600s budget). Все3 cleanup PASS.
+Native:386 unit+130subtests PASS;106/112 carrier PASS,6 current0015 host failures
+POLICY_PREREQUISITE_FAILED; historical0013 catalog и partition1029=860+105+64 PASS,
+cleanup/source PASS. Browser/foundation-durable/Docker29 — API startup exit3;
+foundation зависимо SKIPPED; ordinary/generic860/frontend/browser scope
+NOT_REACHED. Все6 migration jobs SUCCESS относятся к historical source lanes.
+
+Блокеры: current full catalog hash ошибочно рассчитан по WASM ordering;
+application runtime не сохраняет propagation cancellation после agent terminal
+result. Startup traceback/active-case stack отсутствуют, конкретный hosted
+predicate/await требует целевой диагностики. Все failures/NOT_REACHED и границы
+partial PASS — в [C3 receipt](tasks/M4_HANDOFF.md#current--c3-m43-runtime-integration-r1--blocked-c3-hold--2026-10-31).
+Local Ruff/format/mypy PASS;3387 offline cases+155subtests покрыты passing runs,
+не единым полным зелёным запуском.0015/down0014;0001–0014/locks/pins/R4 immutable.
+
+Evidence **libfile_f4fa8256268881918e0d053d99221f18**,78539747bytes/71files,
+SHA256 **35b5ce7c9b0891a2f688ce06de360907b2828cbc0c4a10e9c7f11a8be9e1decd**,
+manifest70/70;10 original CI ZIP и11 job logs проверены/сохранены.
+Docs-only receipt sole child source только на prep c3/m4-3-runtime-integration-r1;
+PR source c3/m4-3-runtime-integration-pr-r1 frozen. Accepted main586240e8 unchanged.
+**BLOCKED / C0 review, C3 HOLD**; не INTEGRATED/VERIFIED. Следующий repair/CI/merge
+не назначен. C1/C2/C4–C8 HOLD, R1–R4 execution frozen; live/paid/VM/real data нет,
+shared150 ledger unchanged. Owner ничего не запускает на ПК/ВМ.
+
+## История — выдача C3 R1 и приёмка C2 DB layer C0 / 2026-10-31
 
 PR40 merged; accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candidate.

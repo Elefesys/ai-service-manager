@@ -6,7 +6,129 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R1 / C2 DB layer VERIFIED C0 / 2026-10-31
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R1 / BLOCKED, C3 HOLD / 2026-10-31
+
+**C3 вернул frozen candidate на C0 review.** Не INTEGRATED/VERIFIED; merge и
+следующий repair требуют отдельного решения C0. Выполнены один Draft PR и один
+полный CI; source после первого hosted outcome не исправлялся, rerun не было.
+
+**Source** [9b05e5ddf8d00c0bab4f4f5e0fbf966a60915de2](https://github.com/Elefesys/ai-service-manager/commit/9b05e5ddf8d00c0bab4f4f5e0fbf966a60915de2),
+tree **abbe24977ca00d6fa880767cc78dcdd62a4bd1cd**, sole parent exact assignment
+**ce82dc2f3d053e135cb4dffdbfaaf0ee7fd8dea3** / tree
+**618e57b6afdbd5b70b4be1f1cfe19eb6bbff0d0b**. Ровно35 allowed paths;
+полный write-set, bytes/blob IDs и индивидуальная compatibility dependency —
+в архиве. [PR41](https://github.com/Elefesys/ai-service-manager/pull/41)
+OPEN/DRAFT/NOT MERGED. Tested merge **e28af5bfdc26be4788b4258def779e83b19659c2**:
+тот же tree, parents accepted main586240e88c825aa67593af5d72e0bdbb251ed3bb +
+source9b05e5dd. PR metadata head_sha и actual checkout различены в evidence.
+
+[CI41216402482](https://github.com/Elefesys/ai-service-manager/actions/runs/41216402482),
+pull_request/attempt1: **FAIL —6 SUCCESS,5 FAIL,1 SKIPPED**, все12 jobs завершены.
+Все6 historical migration jobs SUCCESS. FAIL: browser124581726584,
+foundation-durable124581726685, Docker29-compatibility124581726505,
+M4-runtime124581726702, native-context124581726761; foundation124581971827 SKIPPED
+из-за dependency. Historical H/P/0010–0012 migration PASS не является0015 acceptance.
+
+**M4 actual PG:45 PASS/19 без завершённого результата из64.** Retained0014:
+35 PASS/105 phases, JUnit35 совпал. Delivery: первые10 PASS/30 phases —
+reply/READ/handoff/no_reply, default OFF, HUMAN/input/native pre-send fences,
+UNKNOWN/no-resend, enrollment concurrency/lost ACK. Затем command timeout exit124:
+remaining469.391526s, actual469.407733s; первый command130.606018s,
+сумма600.018721s. Первый недоведённый по inventory —
+waiting AI/manual progress/cancel; ещё10 delivery scenarios без результата.
+Schema8 **NOT_REACHED**, TOTAL_TEST_BUDGET_EXHAUSTED. Delivery/schema JUnit и
+runtime-summary отсутствуют. Top-level complete=true означает обход3groups,
+не64 completed tests. Synthetic Telegram rights/admission, cancellation/restart,
+selected/DISPATCHING lost ACK, waiting authority races и current schema
+preservation/downgrade/corruption proof не закрыты этим partial PASS.
+
+**Native:**386 runner unit +130 subtests PASS; carrier106 PASS/6 FAIL
+(7 source+99 actualPG PASS,6 PG FAIL), все336 phases:112 setup PASS,
+106 call PASS/6 call FAIL,112 teardown PASS. Historical0013 full source/catalog
+PASS; current-host0015 enable/noop/pause/replay, stale/key CAS, clean positive
+после catalog drift, committed receipt retry и decoding rollback остановлены
+ранним **POLICY_PREREQUISITE_FAILED**. Последний negative ожидал UNAVAILABLE,
+но не дошёл до decoding seam. Точный отказавший predicate скрыт from None.
+Hosted inventory **1029=860 generic+105 native+64 M4**, disjoint/full union PASS;
+native7 source cases учитываются отдельно.
+
+**Все группы failures / missing evidence:**
+
+- **Current catalog/startup.** Browser и оба current egress jobs: API exits3
+  до journeys/lifecycle; egress phase=independent_https_baseline. API traceback
+  не сохранён. Independent read-only comparison0013 показывает равные function
+  rows по signature, но иной порядок functions в WASM; stock full hashc045a59f…
+  против WASMaf2a3232…. Совпала только nonfunction часть. Candidate0015 full
+  pin e716dad0… получен неподходящим способом; это source defect и вероятная
+  причина readiness/catalog refusal, но точный hosted predicate ещё не доказан.
+  Описание PR исправлено: прежнее утверждение о полном byte equality уточнено.
+- **Cancellation/timeout.** ConversationAgent превращает CancelledError в
+  terminal result; AIDatabase возвращает AGENT_STOP, новый SyntheticRuntime
+  после STOP не восстанавливает cancellation. AI loop при unset stop может
+  продолжиться, а TaskGroup/gather ждёт ребёнка. Это подтверждённый source
+  control-flow defect, согласующийся с timeout; stack зависшего await отсутствует.
+  Plugin flush только после teardown потерял active case/phase при kill.
+- **Secondary completeness.** Foundation-durable primary error оставил пустые
+  backend/cases/result placeholders; обязательный gate корректно отказал
+  FOUNDATION_EVIDENCE_REFUSED. Foundation ordinary/generic860/frontend398 и
+  browser54 NOT_REACHED. Их прежний PASS не переносится на этот source.
+
+**Cleanup/source:** все3 M4 groups PASS, containers/networks/volumes пусты;
+native owned cleanup PASS; source clean. Historical state lanes также сохранили
+owned cleanup и timeout/export/3cleanup negative PASS на normal/Docker29.
+Foundation host cleanup exit0; отдельной полной current egress inventory receipt
+нет. Browser trap скрывает cleanup exit через ||true — независимого cleanup PASS
+для него нет. Нельзя обобщать положительный M4/native cleanup на все jobs.
+
+**Контракты кандидата:**0015/down0014, private FORCE RLS ai_deliveries;
+идемпотентный Turn/Resume enrollment; atomic selected result→один Outbox/send
+или existing escalation/no_reply; default-OFF explicit LOCAL/TEST FAKE/EVAL_ONLY,
+Telegram AI только injected MockTransport. Отдельный AI lane; обычный30s lease,
+AI deadline≤120s/конечный claim≤125s; fresh authority/tenant/native/Telegram
+fences и UNKNOWN/no-resend. Current catalog183functions/48tables/690columns;
+historical0013 reader и retained0014 module отделены. Candidate full hash
+**e716dad0116e2f4eb894fc507921c28ab039c279c668f9734fb33b7c43eab646**,
+body **7bae585ce1127be79aeb0e53638ab825d7e128cc79c195707656d8ff9635d791**,
+nonfunction **e939e9f303843a84256f9315e6016e1a888aea0c18469539aa53147c6d339bee** —
+не stock0015 acceptance. Existing owner UI literal CONTROLLED сохранён;
+handoff reason остаётся в AIRun, source_job_step=AI_GENERATE. Вывод собственного
+handoff reason в UI требует отдельного согласования, DTO вне write-set.
+
+**Local:** Ruff/format194/mypy76 PASS. Широкий offline run3358 PASS/18 FAIL
+из-за отсутствовавшего PYTHONPATH,155 subtests PASS;18 launcher cases затем PASS
+с CI-equivalent absolute PYTHONPATH. Финальный delivery29 PASS включает11 новых
+carrier/inventory negatives. Union passing runs3387+155 subtests, не один full
+green run. Точные commands/logs в REPORT.md. Local stock PG/Docker не было;
+WASM18.6/vector0.8.7 DDL с serialized version projection не заменяет stock PG.
+0001–0014, locks/pins/Dockerfile, R4 runner/workflow и architecture originals
+побайтово сохранены; closed source expansion13/14/15 и4 inventories сохранены.
+
+Полный архив **C3_M4_RUNTIME_R1_EVIDENCE_41216402482.zip**:
+**78539747 bytes/71 files**, SHA256
+**35b5ce7c9b0891a2f688ce06de360907b2828cbc0c4a10e9c7f11a8be9e1decd**,
+[сохранённый evidence](https://chatgpt.com/library?file_id=libfile_f4fa8256268881918e0d053d99221f18&account_id=personal),
+ID **libfile_f4fa8256268881918e0d053d99221f18**. Manifest70/70 verified.
+Все10 original ZIP size/upload SHA256 проверены;341 source files/modes в каждом
+source archive exact-equal published tree. M4 artifact13048303559:
+3217280bytes, SHA2562313eb75e18a346ad0b680a74b478fdabbc33f6d9603a7b4603a1cb77e230900,
+manifest71/71. Native artifact13047768179:
+3973777bytes, SHA25679fd7a6f88a038f936d35f4ac0475ae58bdd80b18e33f645c641a55ea099426b.
+Все jobs/artifacts/digests,11 original decoded job logs, доступные JUnit,
+phase/source/cleanup, source.patch, local checks, independent verification и
+полные failure/NOT_REACHED nodeids — внутри; длинные логи сюда не копируются.
+
+Этот docs-only receipt — sole child source только на preparation
+**c3/m4-3-runtime-integration-r1**. PR source
+**c3/m4-3-runtime-integration-pr-r1** frozen9b05e5dd; main и старые refs unchanged.
+**C3 HOLD / C0 review.** Предлагаемый следующий scope: получить независимый
+stock0015 catalog и исправить согласованные pins; сохранить propagation cancel
+после bounded STOP; добавить bounded active-phase diagnostics и проверить
+положительные/отрицательные сценарии. Новая repair выдача и новый CI не назначены.
+Live/paid/VM/deploy/real data не использовались, owner ничего не запускает.
+Shared150 прежний: confirmed0.37505230/58 knownPOST;4 unknown/held7.585505548;
+62 totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+
+## История — выдача C3 R1 и приёмка C2 DB layer C0 / 2026-10-31
 
 PR40 слит владельцем. Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df** — exact-equal проверенному
