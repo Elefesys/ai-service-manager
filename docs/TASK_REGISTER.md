@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R4: TARGETED PG PASS / C0 review / 2026-10-31
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R1 / C2 DB layer VERIFIED C0 / 2026-10-31
 
 PR40 merged; accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candidate.
@@ -11,7 +11,33 @@ tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candida
 native/durable/Docker29/6 migrations, clean-source и completeness gates PASS.
 C0 verified main; прежний observer gate закрыт. Source/tests/CI не повторялись.
 
-**C2-M4.3-PG-RUNTIME-R1 — исторический BLOCKED.** Source391667c0/tree710c727a,
+**C0 review C2 R4 — VERIFIED SOURCE + TARGETED PG, ещё не INTEGRATED.**
+Source3f79119e38f16f2230d3754aa171b887f170e71e/treea927eebb;
+receipt337ec81feb8625756e1cdf067f5df74f9c7a3c11/tree4657805e — sole child source.
+Run41206327012/attempt1:104 PASS (28 source+41 Python+35 PG),312 phases PASS.
+C0 проверил весь production delta0014/AI database/contracts/messaging bridge,
+fresh refs/run/job/artifact/upload, original/saved ZIP и manifests24/47,
+source/base/tree/lock, AST retention, inventory104/retained82 и cases/JUnit.
+READ call rows/snapshot/effects теперь фактически PASS;39 seal transitions,
+cleanup/source PASS. Неизменённые pytest/PG/full CI повторно не запускались.
+
+**C3-M4.3-RUNTIME-INTEGRATION-R1 — IN_PROGRESS / выдано C3.**
+Результат: один synthetic application Turn→Agent→result→Outbox/escalation path,
+default OFF; fake model/transport, без paid/live egress. Exact base — полный SHA
+нового C0 assignment из immutable URL, sole child337ec81; C0 branch
+c0/m4-3-runtime-integration-r1. Prep c3/m4-3-runtime-integration-r1;
+PR source c3/m4-3-runtime-integration-pr-r1. Migration0015/down0014 назначена;
+0001–0014 immutable. Write-set/критерии/one Draft PR/full CI — в
+[активной выдаче](tasks/M4_HANDOFF.md#c3-m43-runtime-integration-r1--один-synthetic-путь-через-приложение).
+Application/provisioning/catalog переводятся вместе, historical checks не
+ослабляются; отдельный owned M4 PG carrier сохраняет full inventory и11 старых
+CI gates. Обычный30s claim согласовать с AI deadline≤120s, manual/inbound не
+блокируются. Durable result/action atomic; historical replay не send permit.
+После первого hosted outcome — receipt/C0 review без automatic retry; source PR
+ref frozen, docs-only receipt на prep. Merge owner после приёмки. C1/C2/C4–C8 HOLD;
+C2 R1–R4 refs frozen. Owner ничего не запускает, shared150 ledger прежний.
+
+**История C2-M4.3-PG-RUNTIME-R1 — BLOCKED на момент запуска.** Source391667c0/tree710c727a,
 sole parent exact basefe8381f7,13 paths. [Run41185701200](https://github.com/Elefesys/ai-service-manager/actions/runs/41185701200),
 job124492071269/attempt1: SCHEMA_FAILED. JSON DEFAULT в0014 ошибочно создаёт
 SQLAlchemy bind `null`. Второй source defect, masked/not hosted: PG fixture
@@ -27,7 +53,7 @@ C0 независимо проверил receiptca47ea21, fresh run/job/artifact
 original ZIP и сохранённый bundle/manifests31/15, source.patch/binding/collection.
 Обе причины подтверждены; нового compiler/pytest/PG run от C0 нет.
 
-**C2-M4.3-PG-RUNTIME-R2 — runtime BLOCKED; repair/schema/roles subset VERIFIED C0.** Source
+**История C2-M4.3-PG-RUNTIME-R2 — runtime BLOCKED; repair/schema/roles subset VERIFIED C0.** Source
 **13ab3f1130775f8350666998b0fd028e710efe45**, tree
 **9032167ee8158b8d213b510c8f23bac74e53b7ee**, sole child exact base
 **ce4a4669e2e36848f09784e166d33124bff73eb2** / treebe171deb;7 paths.
@@ -63,7 +89,7 @@ Offline source identity2 checks PASS; нового compiler/pytest/PG run от C
 Два исправления R1 и PG schema/roles subset приняты; runtime target behavior
 не принято. Receipt **0317152f2e9f2d31c7c12d30be96ad7f026ceb6f** — repair parent.
 
-**C2-M4.3-PG-RUNTIME-R3 — fixture repair VERIFIED C0; общий PG gate BLOCKED.** Source
+**История C2-M4.3-PG-RUNTIME-R3 — fixture repair VERIFIED C0; общий PG gate тогда BLOCKED.** Source
 **9c161d0adb50adbc461e1e01ec31bddb55794a0a**, tree
 **ad028ff9a754258d113209130bcd6ab5c62c4994**, sole child exact base
 **3b5252a58b7730da6e0ff99f49a5e46b05dc2c5c** / tree5141f997;5 paths.
@@ -106,7 +132,7 @@ assertions. Cases/JUnit/summary дают81 PASS/1 FAIL,246 phases;39 seal transi
 check воспроизведён C0 offline; нового pytest/PG run нет. Общий gate остаётся
 BLOCKED до actual call-row count/snapshot/effects в этом case и source review.
 
-**C2-M4.3-PG-RUNTIME-R4 — REVIEW / TARGETED PG PASS; C2 HOLD.** Source
+**C2-M4.3-PG-RUNTIME-R4 — VERIFIED C0 SOURCE + TARGETED PG; C2 HOLD.** Source
 **3f79119e38f16f2230d3754aa171b887f170e71e**, tree
 **a927eebbc459139348b608d381960af33c35f892**, sole child exact base
 **a58e1612113158b39301947b8150ddb1fb0dfd29** / tree891bc03c;6 paths.
@@ -136,8 +162,8 @@ manifest24/24 verified. Full evidence **libfile_00c77817355c8191a833378c9b3106bf
 manifest47/47 verified, original ZIP/logs/JUnit/source/collection/command+summary сохранены.
 Execution frozen; этот docs-only receipt sole child source на preparation.
 Main/old refs/production/миграции0001–0014/roles/pins/limits/readiness0013 unchanged.
-C0 whole-source+PG review и application/worker/Outbox integration ещё нужны;
-full CI/live/paid/VM/Telegram/real data не запускались.
+C0 whole-source+PG review завершён выше. Application/worker/Outbox integration
+назначена C3; full CI нового candidate/live/paid/VM/Telegram/real data ещё не запускались.
 
 | Task | Status / ближайший результат |
 |---|---|
@@ -162,9 +188,10 @@ full CI/live/paid/VM/Telegram/real data не запускались.
 | C0-M4-CI-REPAIR-INTEGRATION-R1 | INTEGRATED / VERIFIED PR40 + exact main586240e8/CI41178689536:11/11 SUCCESS |
 | C2-M4.3-PG-RUNTIME-R1 | Исторический BLOCKED / run41185701200 SCHEMA_FAILED;2 known source defects, hosted55 NOT_RUN; receiptca47ea21/evidence проверены C0, execution frozen |
 | C2-M4.3-PG-RUNTIME-R2 | Runtime BLOCKED; SOURCE REPAIR + PG PREPARATION/SCHEMA/ROLES VERIFIED C0;49 PASS/30 FAIL, execution frozen |
-| C2-M4.3-PG-RUNTIME-R3 | Fixture repair SOURCE+ACTUAL PG VERIFIED C0;81 PASS/1 contradictory assertion, общий gate BLOCKED; execution frozen |
-| C2-M4.3-PG-RUNTIME-R4 | REVIEW / TARGETED PG104 PASS,312 phases; former remaining READ assertions PASS; C2 HOLD/execution frozen |
-| M4.3-RUNTIME / M4.3-QUALITY | Targeted PG PASS; whole-source C0 review/application integration/AI→Outbox→Telegram/quality TODO |
+| C2-M4.3-PG-RUNTIME-R3 | История: fixture repair SOURCE+ACTUAL PG VERIFIED;81 PASS/1 contradictory assertion, устранена R4; execution frozen |
+| C2-M4.3-PG-RUNTIME-R4 | VERIFIED C0 SOURCE + TARGETED PG104 PASS/312 phases, whole production delta reviewed; C2 HOLD/execution frozen |
+| C3-M4.3-RUNTIME-INTEGRATION-R1 | IN_PROGRESS / sole active; synthetic application/worker/result→Outbox/escalation, schema0015, one Draft PR/full CI |
+| M4.3-RUNTIME / M4.3-QUALITY | DB-only layer VERIFIED; application integration IN_PROGRESS; live AI→Telegram/quality TODO |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
 

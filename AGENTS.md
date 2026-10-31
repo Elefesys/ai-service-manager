@@ -23,13 +23,14 @@ M3 закрыт в LOCAL/TEST; финальный receipt — в верхнем 
 выдача, её accepted/repair base, исполнитель и write-set — в верхнем
 M4_HANDOFF/CURRENT. M4.1 и C5 recovery интегрированы в PR #38; actual main CI PASS.
 PR39/40 слиты; accepted main586240e8, push CI41178689536:11/11 SUCCESS.
-Observer repair закрыт. Единственная выдача — C2-M4.3-PG-RUNTIME-R4:
-заменить противоречивую substring assertion структурной проверкой read audit,
-сохранить call-count/snapshot/effects и выполнить один новый bounded PG proof.
-R3 fixture repair принят C0;81 PASS/1 FAIL, полный runtime gate ещё открыт.
-Exact repair base/6 paths в CURRENT. Application0013 readiness не обходить;
-app/schema integration
-после C0 review. Остальные роли и live/paid/VM/Telegram HOLD.
+Observer repair закрыт. C2 R4 принят C0 в SOURCE + TARGETED PG scope:
+104 PASS, включая35 actual PG; database-only слой ещё не integrated в main.
+Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R1: один synthetic путь
+Turn→Agent→сохранённый result→Outbox/escalation через application worker.
+Согласованный schema successor0015/down0014, точные границы и CI в CURRENT.
+0001–0014 immutable; application/catalog gates переводятся вместе, без обхода.
+AI выключен по умолчанию; paid/live transports/VM/real data не включаются.
+Остальные роли HOLD; C2 R1–R4 execution refs frozen.
 Прежние paid допуски использованы; новых вызовов они не разрешают.
 Исторические HOLD/операторские команды M1–M3 не являются новой задачей M4.
 

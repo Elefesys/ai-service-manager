@@ -6,7 +6,7 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R4: TARGETED PG PASS / C0 review / 2026-10-31
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R1 / C2 DB layer VERIFIED C0 / 2026-10-31
 
 PR40 слит владельцем. Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df** — exact-equal проверенному
@@ -30,13 +30,155 @@ Foundation/durable completeness gates PASS. Архивы этого main run п�
 **C0-M4-CI-OBSERVATION-01 и C0-M4-CI-REPAIR-INTEGRATION-R1 закрыты
 INTEGRATED / VERIFIED в SOURCE + TARGETED + PR/main CI scope.** C4 context/agent
 и принятый GPT/v2 source находятся в verified main. Это не живой AI runtime.
-R3 fixture repair принят C0; R4 actual outcome **104 PASS/0 FAIL** ниже.
-C2 HOLD / C0 source+PG review; C1/C3–C8 HOLD. R1–R4 execution frozen.
+R4 принят C0: **SOURCE + TARGETED PG VERIFIED,104 PASS/0 FAIL**.
+Database-only слой ещё не integrated в main. Единственная активная выдача —
+C3-M4.3-RUNTIME-INTEGRATION-R1 ниже; C1/C2/C4–C8 HOLD. R1–R4 execution frozen.
 Новый платный probe, VM/deploy/Telegram и доступ к реальным перепискам не назначены.
 Shared150 неизменен: confirmed0.37505230/58 known POST;4 unknown/held7.585505548;
 62 total POST; remaining142.039442152, reported0.00743079 UNSETTLED.
 
-### C2 R4 receipt — structural audit и оставшиеся READ assertions PASS
+### C3-M4.3-RUNTIME-INTEGRATION-R1 — один synthetic путь через приложение
+
+**Результат для пилота:** новый допустимый Turn проходит настоящий worker,
+ConversationAgent и PG authority; выбранный reply получает один durable send
+intent, handoff — существующую escalation, no_reply завершает работу без отправки.
+Проверка использует fake model и synthetic transport. Сохранённого ответа без
+этой связи недостаточно для диалога, поэтому этап нужен до разрешённого TEST smoke.
+Это уже принятый IMPL-004 scope; новый registry, broker, UI или mutation tools не нужны.
+
+**C0 review R4 завершён.** Source **3f79119e38f16f2230d3754aa171b887f170e71e** /
+tree **a927eebbc459139348b608d381960af33c35f892**, sole parenta58e1612,6 paths;
+receipt **337ec81feb8625756e1cdf067f5df74f9c7a3c11** /
+tree **4657805e5db547c3f6cbac189e586bd1082c4208**, sole child source,2 docs.
+C0 сверил fresh refs/run41206327012/job124552019385/artifact13044890227 и upload
+digest, оба ZIP/manifests47/24,25 original files byte-exact, source/base/tree/lock
+и source.patch. Независимый пересчёт:104 setup/call/teardown PASS, JUnit совпал,
+retained82/order/hash и39 post-seal transitions сохранены; cleanup/source PASS.
+AST: единственная изменённая старая PG function — READ case;25 других PG,
+9 старых unit definitions и18 executor functions unchanged. Strict audit helper
+проверен; отдельные call rows==2/snapshot/effects assertions достигнуты и PASS.
+Нового pytest/PG/CI запуска C0 не делал.
+
+C0 прочитал весь новый production delta:0014, AI database/contracts и narrow
+messaging bridge. Приняты trusted claim/XID admission, tenant-safe FK/private
+RLS, pinned original snapshot/config, короткие MODEL/READ/followup/result
+transactions, reserve-before-call,2 calls/1 READ, UNKNOWN/no-regeneration,
+atomic chosen result и winning-claim historical replay без send permit.
+Это SOURCE + ACTUAL PG приёмка DB-only scope, не whole-application/live PASS.
+0014 отдельно не сливать: текущий worker не dispatches AI_GENERATE,
+readiness/provisioning/catalog ещё exact0013. Обычный claim имеет30s lease,
+а AI deadline допускает120s — в интеграции требуется явное согласование.
+
+**Repository:** Elefesys/ai-service-manager. **Исполнитель:** C3, один integration
+owner; C0 этой выдачей разрешает перечисленную смежную DB/CI дельту. Не запускать
+другие role chats параллельно. **Exact base — полный SHA этого опубликованного
+C0 assignment из immutable URL**, sole child receipt337ec81;5 coordination docs
+сверх него. C0 branch **c0/m4-3-runtime-integration-r1**. Записать base SHA/tree.
+Preparation **c3/m4-3-runtime-integration-r1**; PR source branch
+**c3/m4-3-runtime-integration-pr-r1**. Обе новые ветки создать на exact base.
+Accepted main586240e8 остаётся исходной общей линией; main/старые refs не менять.
+Основания: IMPL-004; Spec8.2/18.3–18.8; ADR008/022–026/056–062/123–128;
+более широкие baseline registry/direct/Vision требования остаются DEFERRED.
+
+**Разрешённые файлы (менять только необходимое):**
+
+- Новый `migrations/versions/0015_ai_delivery.py`, predecessor0014.
+- `backend/src/asm/ai/database.py`, `runtime_contracts.py` в том же каталоге;
+  новый `backend/src/asm/ai/runtime.py` для малого application composition.
+- `backend/src/asm/messaging/database.py`, `worker.py`, `results.py`, `errors.py`;
+  `backend/src/asm/foundation.py`; `backend/src/asm/conversations/escalations.py`.
+- `backend/src/asm/telegram/provisioning.py`, `database.py`, `adapter.py`, `client.py`
+  — только согласованный schema/AI send admission, без нового сетевого маршрута.
+- `scripts/native_context_db_catalog.py`, `scripts/check_backend.sh`,
+  новый `scripts/m4_runtime_db.py`; `.github/workflows/ci.yml` и новый
+  `.github/workflows/m4-runtime-db.yml` для отдельного owned M4 PG carrier.
+- `tests/test_m4_runtime_migrations.py`, `test_m4_runtime_database.py`,
+  `test_m4_runtime_postgres.py`; новые `tests/test_m4_delivery.py`,
+  `tests/test_m4_delivery_postgres.py`, `tests/test_m4_schema_postgres.py`.
+- Только необходимая совместимость current/historical schema и CI inventory:
+  `tests/generic_pg_schema.py`, `tests/test_foundation.py`,
+  `tests/test_native_context_db_runner.py`, `tests/test_tenancy_postgres.py`,
+  `tests/test_m2_3_db_postgres.py`, `tests/test_m2_3_schema_postgres.py`,
+  `tests/test_m2_3_setup.py`, `tests/test_m2_4_browser_fixture.py`,
+  `tests/test_m3_1_guards_migrations.py`, `tests/test_m3_2_escalations_migrations.py`,
+  четыре `tests/test_m3_1_native_context_{migrations,postgres,api_postgres,runtime_postgres}.py`,
+  `tests/test_telegram_egress.py`, `tests/test_telegram_egress_migration.py`,
+  `tests/test_telegram_egress_postgres.py`; `scripts/m1_3_browser_fixture.py`,
+  `scripts/m2_4_browser_fixture.py`, `scripts/m2_4_browser_worker.py`,
+  `scripts/prepare_telegram_egress.py`, `scripts/provision_local_auth.py`,
+  `scripts/test_telegram_egress.sh`. Для каждого такого изменения указать точную
+  зависимость; blanket0013→0015, ослабление исторических assertions запрещены.
+- `docs/tasks/M4_HANDOFF.md`, `docs/TASK_REGISTER.md` — source/CI receipt.
+
+**Конечные критерии:**
+
+1. AI по умолчанию OFF. Явная LOCAL/TEST synthetic composition использует
+   существующий bounded FAKE/EVAL_ONLY config и реальные Jobs/ConversationAgent,
+   не вызывает probe CLI и не считывает Polza key. Создание AI job — из актуального
+   server-owned Turn/Resume после seal, идемпотентно; старые0014 results не получают
+   задним числом send intents. CONTROLLED consumer не маскирует новый AI путь.
+2. Новая0015 атомарно связывает выбранный result с единственным действием:
+   reply→Outbox/send job; handoff→существующая escalation/Action Center;
+   no_reply→terminal без Outbox. Optional handoff text, если используется, идёт
+   через тот же защищённый send path. Повтор не меняет текст/не создаёт второй
+   action; different result conflict. Historical replay остаётся фактом, а
+   пригодность к новому действию проверяется отдельно. Никакого manual-owner send.
+3. Перед созданием intent и перед DISPATCHING заново проверять claim/lease,
+   Workspace/Client, HUMAN/Resume/generation, snapshot/material/native/observation,
+   owner/business/connection/billing и применимые Telegram rights/window fences.
+   Synthetic TELEGRAM proof идёт через настоящий admission и injected no-egress
+   transport; real TelegramClient для AI в этой выдаче недоступен. HUMAN/stale
+   до внешнего start даёт0 transport calls; после start сохраняется прежняя
+   граница UNKNOWN/no-resend. Ни LLM, ни Telegram HTTP не держат DB transaction.
+4. Медленный AI не занимает единственный путь inbound/manual reply. Использовать
+   отдельное ограниченное исполнение AI на существующих Jobs, без новой очереди.
+   Разрешить30s lease/до120s deadline только для AI, с finite claim/renewal semantics
+   и fresh fences, без глобального увеличения всех leases. Restart/cancel/timeout/
+   lost ACK/unknown charge не вызывают нового model call по прежнему run;
+   сохранить2 calls/1 READ и terminal outcome вместо бесконечного reclaim loop.
+5. Application/provisioning и независимый source/catalog verifier принимают
+   согласованный exact head0015. Проверять bodies/owners/ACL/RLS/constraints,
+   а не только revision или self-declared valid. Сохранить честные0013/0014
+   historical checks отдельно; old/current mismatch и подмена catalog отвергаются.
+   0001–0014 immutable. Fresh/0013→0014→0015/repeat upgrade сохраняют existing M3
+   и AIRun data; downgrade на disposable unused state, отказ до изменений при
+   durable delivery data. Не сбрасывать данные, чтобы обойти downgrade guard.
+6. Проверить весь synthetic путь через application entry/composition и worker,
+   не только прямой AIDatabase.execute: reply, READ roundtrip, handoff, no_reply,
+   disabled mode; concurrency/restart/replay/lost ACK; stale/HUMAN/native/rights
+   race до send; UNKNOWN delivery no-resend; manual/inbound progress при waiting AI.
+   Existing native OWNER reconciliation/observation barrier и owner UI сохранить.
+   Никаких новых service/price/booking/payment semantics, frontend или AI registry.
+
+**Проверка и публикация:** сначала source diff, compiler/DTO/worker negatives,
+Ruff/format/mypy и целевые offline tests; затем inventory всех PG cases до запуска.
+0014 module имеет destructive migration lifecycle и собственную source-evidence
+зависимость: не помещать его в общий generic DB. Добавить отдельный bounded owned
+M4 carrier для retained runtime и новых integration modules; fresh PG18/asm_test,
+полные phase/JUnit/command/summary/source/cleanup artifacts. Новый carrier ≤600s
+tests/≤25min job; pins/lock и старые timeouts сохраняются. Generic/native/M4
+inventories disjoint, union равен всем integration nodeids, без skip/xfail/lost
+tests. Source-evidence связывать с actual PR merge SHA/tree, не frozen R4 SHA.
+Обновить closed source expansion для0014/0015 (включая narrow reschedule patch),
+не заменять независимое сравнение ответом установленного verifier.
+
+C0 разрешает **один Draft PR к main и один полный CI** после целевых проверок
+финального source candidate. Все прежние11 jobs/gates сохранить; M4 carrier —
+один дополнительный обязательный job того же tested commit. PR source ref после
+публикации заморозить: docs receipt писать sole child source только на preparation.
+Никаких повторов неизменённого CI или изменения source после первого hosted
+outcome в рамках этой выдачи. При FAIL собрать все группы/actual failures и
+NOT_REACHED, вернуть C0 полный evidence; partial PASS не выдавать за whole gate.
+Merge выполняет владелец после C0 review. Старые R1–R4 observer refs не запускать.
+
+Return: source/base/tree/write-set; migration/catalog contracts; exact commands,
+local results/inventory; PR head/tested merge/run/attempt/jobs/artifacts/digests;
+original logs/JUnit/cleanup и архив доказательств; ограничения и следующий шаг.
+Не копировать длинные логи в docs. После receipt C3 HOLD/C0 review.
+Live/paid/VM/deploy/real data и настоящий Telegram egress не разрешены;
+shared150 ledger неизменен. Owner сейчас ничего не запускает на ПК/ВМ.
+
+### История — C2 R4 receipt до приёмки C0
 
 **Source** [3f79119e38f16f2230d3754aa171b887f170e71e](https://github.com/Elefesys/ai-service-manager/commit/3f79119e38f16f2230d3754aa171b887f170e71e),
 tree **a927eebbc459139348b608d381960af33c35f892**, sole parent exact base

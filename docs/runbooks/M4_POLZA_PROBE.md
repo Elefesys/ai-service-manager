@@ -3,9 +3,9 @@
 **Ничего повторно запускать не нужно.** GPT synthetic проверка принята C0:
 25 manual PASS,2 READ и2 synthetic images; GPT/v2 выбран для первого runtime.
 PR39/40 слиты. [Main CI41178689536](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536)
-прошёл11/11, ошибка CI закрыта. [Текущая задача C2 R4](../tasks/M4_HANDOFF.md) —
-исправить ошибочную проверку журнала чтения. R3:81 PASS/1 FAIL;
-полная приёмка runtime ещё впереди.
+прошёл11/11, ошибка CI закрыта. C2 R4 принят C0:104 PASS, включая35 actual PG.
+[Текущая задача C3](../tasks/M4_HANDOFF.md) — подключить agent/result к worker,
+Outbox и передаче мастеру, согласовав новую схему с приложением.
 
 ## Принятый отчёт
 
@@ -34,14 +34,13 @@ R2 p50 11.163s /p95 16.393s, N18, включая history; маленькая в�
 ## Дальше
 
 Accepted main586240e88c825aa67593af5d72e0bdbb251ed3bb:860 PostgreSQL,
-54 browser и остальные CI gates PASS. C2 продолжает PG authority/durable state
-задачу на synthetic данных. R3 исправил подготовку и дал81 PASS/1 FAIL.
-Остался ложный substring check: `text` находится внутри `context_version`.
-R4 проверяет точные поля/значения журнала и завершает проверки двух calls,
-исходного snapshot и отсутствия отправок в том же READ scenario.
-Эта задача нужна, чтобы после перезапуска использовать
-сохранённый ответ и запрещать работу при HUMAN/stale/revoked состоянии.
-После её проверки подключим application worker и защищённую отправку.
+54 browser и остальные CI gates PASS. Новый DB-only слой прошёл source review
+и104 проверки: сохранённый ответ переживает restart, stale/HUMAN блокируют
+новое действие, UNKNOWN не вызывает автоматическую повторную генерацию.
+C3 теперь соединяет эти части в один synthetic application путь: reply идёт
+в защищённый Outbox, handoff — в существующую очередь мастера, no_reply завершает
+обработку. AI выключен по умолчанию; модель и transport в этой проверке тестовые.
+После целевых проверок — один Draft PR/full CI и приёмка C0.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.
 
 Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`
@@ -52,5 +51,6 @@ Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER
 не наблюдался. Реальные данные, Telegram runtime и backend route ещё требуют
 соответствующей приёмки. Gemini/DeepSeek DEFERRED; сравнение75 не завершено.
 PR40/main проверены; source CI не является включением живого AI runtime.
-Новая схема0014 проверяется отдельно; application/schema переход, durable
-Outbox/send и разрешённый TEST smoke ещё впереди. Deploy/paid запусков нет.
+0014 отдельно не сливается; согласованный application/Outbox successor0015
+назначен C3. Разрешённый живой TEST smoke — отдельный последующий шаг.
+Deploy/paid запусков нет.

@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: R3 fixture repair принят; C2-M4.3-PG-RUNTIME-R4.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R1.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -887,7 +887,7 @@ Backend/миграции/application0013/native guards/roles/limits остают
 Runtime acceptance и application/worker/Outbox integration ещё впереди.
 Это исправление прежнего M4 scope; нового live/paid/VM/Telegram допуска нет.
 
-**Актуальное решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R4.**
+**Предыдущее решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R4.**
 R3 source9c161d0a/receipt1d904b0d: fixture repair SOURCE+ACTUAL PG принят C0.
 Run41203810232:81 PASS/1 FAIL, полный receipt/cleanup/source проверены.
 Единственная assertion ошибочно находит `text` в metadata key `context_version`.
@@ -897,6 +897,32 @@ R4 scope6 paths и один bounded PG proof заданы в HANDOFF; production
 не меняются. Это исправление теста, не ослабление запрета хранить raw content.
 Общий runtime gate до actual remaining assertions и whole-source review открыт;
 application0014/worker/Outbox переход впереди. Live/paid/VM/Telegram HOLD.
+
+**Актуальное решение C0 от 2026-10-31: C3-M4.3-RUNTIME-INTEGRATION-R1.**
+C2 source3f79119e/receipt337ec81 принят C0 в SOURCE + TARGETED PG scope:
+104 PASS/312 phases,35 actual PG, исходный snapshot/READ audit/call rows/effects
+проверены; independent ZIP/source/AST/JUnit/cleanup review PASS. Прочитан весь
+новый production delta0014/AI database/contracts/messaging bridge. DB layer
+VERIFIED, ещё не INTEGRATED в main; новых тестовых или платных вызовов C0 не делал.
+
+Следующий уже согласованный результат — один application путь Turn→Agent→durable
+result→Outbox/escalation на synthetic adapters. C3 — единственный integration
+owner с явной смежной DB/CI областью из HANDOFF. Назначен successor0015/down0014;
+0001–0014 immutable. Application/provisioning/current catalog переходят вместе,
+historical checks остаются точными. AI OFF by default; FAKE/EVAL_ONLY LOCAL/TEST,
+no real AI/Telegram egress. Медленный AI не блокирует inbound/manual;30s claim и
+до120s AI deadline согласовать bounded AI execution, не глобальным ослаблением.
+
+Atomically chosen reply/send intent, handoff/escalation, no_reply/terminal;
+fresh admission перед send; historical replay не даёт нового permit. Existing
+HUMAN/Resume/native/UNKNOWN semantics и2 calls/1 READ сохраняются. Никакого
+manual-owner обхода или retro-send сохранённых0014 results. Scope и критерии
+в CURRENT. После local targeted checks разрешён один Draft PR/full CI того же
+candidate: сохранить11 старых gates, добавить owned M4 PG lane с полным inventory.
+Нельзя запускать destructive0014 lifecycle в общей generic DB. Source и receipt
+на разных refs; после outcome C0 review, без повторных unchanged CI. До общей
+приёмки merge/живой TEST smoke не объявляются. Live/paid/VM/deploy/real data HOLD;
+ledger и GPT/v2 choice прежние, C1/C2/C4–C8 HOLD.
 
 ## Что пересмотрено относительно baseline
 
