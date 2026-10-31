@@ -33,6 +33,10 @@ DB_IMAGE = (
 NONFUNCTION_SHA256 = "57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370"
 AI_NONFUNCTION_SHA256 = "e939e9f303843a84256f9315e6016e1a888aea0c18469539aa53147c6d339bee"
 EXECUTION_REF = "refs/heads/c0/m3-1-native-context-db-stock-r1"
+M4_EXECUTION_REFS = (
+    "refs/heads/c3/m4-3-runtime-catalog-run-r2",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r2",
+)
 REPOSITORY = "Elefesys/ai-service-manager"
 REPOSITORY_ID = 1369650588
 MODULES = (
@@ -851,7 +855,12 @@ def event_identity(env, payload, head, tree, parents, *, diagnostic=None):
         "event_identity_is_c0_approval": False,
     }
     if identity["event"] == "push":
-        check(identity["ref"] in (EXECUTION_REF, "refs/heads/main"), "EVENT_PUSH_ENV_REF")
+        check(
+            identity["ref"] in (EXECUTION_REF, "refs/heads/main", *M4_EXECUTION_REFS),
+            "EVENT_PUSH_ENV_REF",
+        )
+        if identity["ref"] in M4_EXECUTION_REFS:
+            check(identity["attempt"] == "1", "EVENT_M4_ATTEMPT")
         check(payload.get("ref") == identity["ref"], "EVENT_PUSH_PAYLOAD_REF")
         check(payload.get("deleted") is False, "EVENT_PUSH_DELETED")
         check(payload.get("base_ref") is None, "EVENT_PUSH_BASE_REF")
@@ -863,7 +872,13 @@ def event_identity(env, payload, head, tree, parents, *, diagnostic=None):
             commit(payload["head_commit"].get("id"), "EVENT_PUSH_HEAD_FORMAT") == head,
             "EVENT_PUSH_HEAD",
         )
-        identity["route"] = "stock-push" if identity["ref"] == EXECUTION_REF else "main-push"
+        identity["route"] = (
+            "m4-r2-push"
+            if identity["ref"] in M4_EXECUTION_REFS
+            else "stock-push"
+            if identity["ref"] == EXECUTION_REF
+            else "main-push"
+        )
     elif identity["event"] == "pull_request":
         pr = payload.get("pull_request")
         check(isinstance(pr, dict), "EVENT_PR_OBJECT")

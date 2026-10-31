@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from asm.billing.validation import CanonicalUUID, LimitDecimal, Timestamp
-from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_CONTEXT_PROFILE_SHA256
+from asm.foundation import DATABASE_SCHEMA_REVISION, NATIVE_CONTEXT_PROFILE_SHA256, schema_failure
 from asm.messaging.errors import MessagingError
 from asm.messaging.models import command_key, identifier
 
@@ -460,6 +460,7 @@ def native_host_source(approval: NativeHostApproval) -> tuple[ModuleType, dict[s
             ["git", "-C", str(root), *args], stderr=subprocess.DEVNULL, timeout=3
         )
 
+    stage = "HOST_SOURCE"
     try:
         runner_bytes = path.read_bytes()
         if (
@@ -477,6 +478,7 @@ def native_host_source(approval: NativeHostApproval) -> tuple[ModuleType, dict[s
         if tree != approval.tree:
             raise ValueError
         entries = {entry["path"]: entry for entry in manifest}
+        stage = "HOST_COMPONENTS"
         for role, paths in NATIVE_COMPONENTS.items():
             if any(name not in entries for name in paths):
                 raise ValueError
@@ -492,6 +494,7 @@ def native_host_source(approval: NativeHostApproval) -> tuple[ModuleType, dict[s
             ).hexdigest()
             if digest != approval.components[role]:
                 raise ValueError
+        stage = "HOST_SOURCE_EXPANSION"
         expected = runner.source_catalog(root, "0015")
         if (
             len(expected["functions"]) != 183
@@ -500,7 +503,8 @@ def native_host_source(approval: NativeHostApproval) -> tuple[ModuleType, dict[s
         ):
             raise ValueError
         return runner, expected
-    except Exception:
+    except Exception as error:
+        schema_failure(stage, error)
         raise ProvisioningError("POLICY_PREREQUISITE_FAILED") from None
 
 
@@ -508,6 +512,7 @@ async def native_catalog_profile(
     connection: AsyncConnection, runner: ModuleType, expected: dict[str, Any]
 ) -> str:
     """Independent installed comparison, including the generated verifier body."""
+    stage = "CATALOG_IDENTITY"
     try:
         for sql in (
             "SET LOCAL search_path=pg_catalog,pg_temp",
@@ -536,6 +541,7 @@ async def native_catalog_profile(
         ).all()
         if extra:
             raise ValueError
+        stage = "CATALOG_READ"
         full, nonfunction = (await connection.execute(text(runner.CATALOG_SQL))).one()
         functions = (await connection.execute(text(runner.FUNCTION_SQL))).mappings().all()
         resolved_rows = (
@@ -551,12 +557,16 @@ async def native_catalog_profile(
             .mappings()
             .all()
         )
+        stage = "CATALOG_FUNCTIONS"
         runner.compare_functions(
             expected["functions"], functions, {r["signature"]: r["oid"] for r in resolved_rows}
         )
+        stage = "CATALOG_NONFUNCTION"
         digest = runner.compare_snapshot(expected["columns"], full, nonfunction, revision="0015")
+        stage = "APPLICATION_FULL_CATALOG_PIN"
         if digest != NATIVE_CONTEXT_PROFILE_SHA256:
             raise ValueError
+        stage = "CATALOG_ROLES"
         roles = (await connection.execute(text(runner.ROLE_SQL))).mappings().all()
         memberships = (
             await connection.execute(
@@ -578,6 +588,7 @@ async def native_catalog_profile(
             )
         ).scalar_one()
         runner.compare_roles(roles, memberships, owned)
+        stage = "CATALOG_DECLARED_PROFILE"
         declared = (
             await connection.execute(text("SELECT platform.ai_delivery_schema_profile()"))
         ).scalar_one()
@@ -587,7 +598,8 @@ async def native_catalog_profile(
         ):
             raise ValueError
         return str(digest)
-    except Exception:
+    except Exception as error:
+        schema_failure(stage, error)
         raise ProvisioningError("POLICY_PREREQUISITE_FAILED") from None
 
 

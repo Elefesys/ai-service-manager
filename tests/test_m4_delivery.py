@@ -149,6 +149,98 @@ async def test_execution_failure_terminalizes_without_second_model_invocation(fa
     assert fake.requests == []
 
 
+@pytest.mark.parametrize("entry", ["direct", "parent", "deadline"])
+@pytest.mark.parametrize("cleanup", ["ok", "error", "delay", "repeat_cancel", "completion_delay"])
+async def test_real_agent_cancellation_unwinds_worker_and_bounds_bookkeeping(entry, cleanup):
+    from asm.messaging.worker import run
+    from test_m4_runtime_database import prepared
+
+    entered, stopping = asyncio.Event(), asyncio.Event()
+    cfg = config(duration_seconds=0.05 if entry == "deadline" else 30)
+    run_data = prepared().model_copy(update={"config": cfg})
+    calls, finished = [], []
+
+    class Waiting(FakeAdapter):
+        async def complete(self, request):
+            calls.append(request)
+            entered.set()
+            await asyncio.Event().wait()
+
+    c = claim()
+    available = True
+    ordinary = asyncio.Event()
+
+    async def claimed(*args, ai=False):
+        nonlocal available
+        if not ai:
+            ordinary.set()
+            return None
+        if available:
+            available = False
+            return c
+        return None
+
+    kernel = SimpleNamespace(claim_job=claimed)
+    runtime = SyntheticRuntime(kernel, cfg, lambda: Waiting(cfg.route), environment="TEST")
+    runtime.database.replay = AsyncMock(side_effect=MessagingError(Code.STALE_CLAIM))
+    runtime.database.prepare = AsyncMock(return_value=run_data)
+    runtime.database.reserve = AsyncMock(return_value=1)
+
+    async def complete(*args):
+        assert args[-1].kind == "UNKNOWN" and args[-1].error == "CANCELLED"
+        if cleanup == "completion_delay":
+            try:
+                await asyncio.Event().wait()
+            finally:
+                finished.append("completion_cancelled")
+
+    async def command(claim, operation, **payload):
+        if operation == "STOP":
+            stopping.set()
+            try:
+                if cleanup == "error":
+                    raise SQLAlchemyError()
+                if cleanup in {"delay", "repeat_cancel"}:
+                    await asyncio.Event().wait()
+            finally:
+                finished.append("stop_finished")
+
+    runtime.database.complete = complete
+    runtime.database._command = command
+    stop = asyncio.Event()
+    before = set(asyncio.all_tasks())
+    task = asyncio.create_task(
+        run("worker", kernel, object(), stop, ai=runtime)
+        if entry == "parent"
+        else runtime.execute(c)
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        if entry == "parent":
+            await asyncio.wait_for(ordinary.wait(), 1)
+        started = asyncio.get_running_loop().time()
+        if entry != "deadline":
+            task.cancel()
+        if cleanup == "repeat_cancel":
+            await asyncio.wait_for(stopping.wait(), 2)
+            task.cancel()
+        done, pending = await asyncio.wait({task}, timeout=3.5)
+        assert done == {task} and not pending
+        assert asyncio.get_running_loop().time() - started < 3.5
+        if entry == "deadline" and cleanup != "repeat_cancel":
+            assert task.result() is None
+        else:
+            assert task.cancelled()
+        assert not stop.is_set() and len(calls) == 1
+        assert "stop_finished" in finished
+        if cleanup == "completion_delay":
+            assert "completion_cancelled" in finished
+        assert set(asyncio.all_tasks()) == before
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 @pytest.mark.parametrize("direction", ["upgrade", "downgrade"])
 def test_successor_ddl_compiles_and_predecessor_bytes_are_immutable(direction):
     spec = importlib.util.spec_from_file_location(

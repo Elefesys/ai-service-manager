@@ -46,6 +46,21 @@ NATIVE_CONTEXT_PROFILE_SHA256 = "e716dad0116e2f4eb894fc507921c28ab039c279c668f97
 NATIVE_PROFILE_BODY_SHA256 = "7bae585ce1127be79aeb0e53638ab825d7e128cc79c195707656d8ff9635d791"
 
 
+def schema_failure(stage: str, error: Exception) -> None:
+    """Only source-owned stage and exception class, never values/SQL/credentials."""
+    print(
+        json.dumps(
+            {
+                "component": "schema-admission",
+                "event": "refused",
+                "stage": stage,
+                "error_type": type(error).__name__,
+            }
+        ),
+        flush=True,
+    )
+
+
 async def native_schema_readiness(connection: AsyncConnection) -> None:
     """Pin the verifier itself before consulting its closed full-catalog result.
 
@@ -100,6 +115,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
         False,
         False,
     ):
+        schema_failure("VERIFIER_BODY_OR_SECURITY", RuntimeError())
         raise RuntimeError("Native database profile mismatch")
     # The capability remains private to the migrator. Its pinned SQL body is a
     # catalog-only SELECT, readable/executable by runtime without EXECUTE grants.
@@ -114,6 +130,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
         }
         or type(declared.get("valid")) is not bool
     ):
+        schema_failure("DECLARED_PROFILE_OR_FULL_PIN", RuntimeError())
         raise RuntimeError("Native database profile mismatch")
 
 
@@ -156,6 +173,13 @@ class RuntimeDatabase:
         self.tenancy = TenantDatabase(self.engine)
 
     async def check(self) -> None:
+        try:
+            await self._check()
+        except Exception as error:
+            schema_failure("RUNTIME_READINESS", error)
+            raise
+
+    async def _check(self) -> None:
         with tracer.start_as_current_span("database.readiness"):
             async with asyncio.timeout(3), self.engine.connect() as connection:
                 role = (

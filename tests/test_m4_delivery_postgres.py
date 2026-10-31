@@ -365,7 +365,9 @@ async def test_waiting_ai_allows_inbound_and_manual_progress_and_cancel_is_termi
         )
     finally:
         task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
+        done, pending = await asyncio.wait({task}, timeout=4)
+        assert done == {task} and not pending and task.cancelled()
+        assert not stop.is_set()
     assert len(fake.requests) == 1
     assert (
         await scalar(h, "SELECT status FROM platform.messaging_jobs WHERE id=:id", id=d["job_id"])

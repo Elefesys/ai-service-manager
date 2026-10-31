@@ -1,4 +1,4 @@
-"""C3-M4.3-RUNTIME-INTEGRATION-R1: separate owned PG18 application carrier."""
+"""C3-M4.3-RUNTIME-INTEGRATION-R2: separate owned PG18 application carrier."""
 
 import hashlib
 import json
@@ -14,9 +14,11 @@ import time
 from pathlib import Path
 from uuid import UUID
 
-BASE = "ce82dc2f3d053e135cb4dffdbfaaf0ee7fd8dea3"
-BASE_TREE = "618e57b6afdbd5b70b4be1f1cfe19eb6bbff0d0b"
-BRANCH = "c3/m4-3-runtime-integration-pr-r1"
+BASE = "4f989a09c38c112111819878319df0c9b09db00d"
+BASE_TREE = "8a5e6f1f6fa0a6b8a36eff4c561794db001b42f7"
+BRANCH = "c3/m4-3-runtime-integration-pr-r2"
+CAPTURE_BRANCH = "c3/m4-3-runtime-catalog-run-r2"
+TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r2"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -39,8 +41,14 @@ def require(condition, code):
         raise RuntimeError(code)
 
 
-def source_tree_from_evidence(path=Path("/evidence/source.json")):
+def evidence_path():
+    return Path(os.environ.get("ASM_M4_EVIDENCE", "/evidence"))
+
+
+def source_tree_from_evidence(path=None):
     """Bind the DB-only fixture to this executor's checked source, without Git in the image."""
+
+    path = path or evidence_path() / "source.json"
 
     def unique_object(pairs):
         value = {}
@@ -96,8 +104,12 @@ def source_tree_from_evidence(path=Path("/evidence/source.json")):
         and value["source"] == expected["SOURCE_SHA"]
         and value["source"] != BASE
         and value["tree"] == expected["SOURCE_TREE"]
-        and value["branch"] == BRANCH
-        and value["event"] in {"pull_request", "push"}
+        and (
+            value["branch"] == BRANCH
+            and value["event"] in {"pull_request", "push"}
+            or value["branch"] in {CAPTURE_BRANCH, TARGETED_BRANCH}
+            and value["event"] == "push"
+        )
         and type(value["attempt"]) is int
         and value["attempt"] == 1
         and value["run_id"] == expected["RUN_ID"],
@@ -177,6 +189,7 @@ def preparation(stage, **facts):
             CASE["invalid_fields"] += 1
             return
     CASE["events"].append(event)
+    flush_cases()
 
 
 if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
@@ -187,9 +200,10 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
     def pytest_collection_modifyitems(session, config, items):
         global COLLECTED
         COLLECTED = [item.nodeid for item in items]
-        write(Path("/evidence/collected.json"), COLLECTED)
+        write(evidence_path() / "collected.json", COLLECTED)
         validate_collection(COLLECTED)
 
+    @pytest.hookimpl(tryfirst=True)
     def pytest_runtest_setup(item):
         global CASE
         CASE = {
@@ -200,6 +214,15 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
             "phases": [],
         }
         CASES.append(CASE)
+        active_case("setup")
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_runtest_call(item):
+        active_case("call")
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_runtest_teardown(item):
+        active_case("teardown")
 
     @pytest.hookimpl(hookwrapper=True, tryfirst=True)
     def pytest_runtest_makereport(item, call):
@@ -229,8 +252,11 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
         report.sections = []
         report.user_properties = []
         CASE["phases"].append(data)
+        flush_cases()
         if report.when == "teardown":
-            flush_cases()
+            write(
+                evidence_path() / "active-case.json", {"nodeid": item.nodeid, "phase": "completed"}
+            )
 
     def pytest_collectreport(report):
         if report.failed:
@@ -240,13 +266,13 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
     def pytest_sessionfinish(session, exitstatus):
         flush_cases()
         summary = summarize(CASES, COLLECTED, int(exitstatus))
-        write(Path("/evidence") / SUMMARY_REPORT, summary)
+        write(evidence_path() / SUMMARY_REPORT, summary)
         if summary["result"] != "PASS" and session.exitstatus == 0:
             session.exitstatus = 1
 
 
 def validate_collection(actual):
-    expected = json.loads(Path("/evidence/inventory.json").read_text())["nodeids"]
+    expected = json.loads((evidence_path() / "inventory.json").read_text())["nodeids"]
     require(
         bool(actual) and actual == expected and len(set(actual)) == len(actual),
         "SOURCE_COLLECTION_MISMATCH",
@@ -270,7 +296,13 @@ def summarize(cases, expected, exitstatus):
         and exitstatus == 0
         and all(p["outcome"] == "passed" for case in cases for p in case["phases"])
     )
+    completed = [c["nodeid"] for c in cases if any(p["phase"] == "teardown" for p in c["phases"])]
+    started = [c["nodeid"] for c in cases]
     return {
+        "completed": completed,
+        "active": [n for n in started if n not in completed],
+        "missing": [n for n in expected if n not in completed],
+        "not_reached": [n for n in expected if n not in started],
         "pytest_exit": exitstatus,
         "cases": len(cases),
         "expected": len(expected),
@@ -281,9 +313,17 @@ def summarize(cases, expected, exitstatus):
     }
 
 
+def active_case(phase):
+    write(
+        evidence_path() / "active-case.json",
+        {"nodeid": CASE["nodeid"], "phase": phase, "utc": time.time()},
+    )
+    flush_cases()
+
+
 def flush_cases():
     write(
-        Path("/evidence/cases.json"),
+        evidence_path() / "cases.json",
         [{k: v for k, v in case.items() if k not in {"pending", "engine"}} for case in CASES],
     )
 
@@ -352,13 +392,153 @@ def versions():
                     ),
                     "AI_DDL_SECURITY",
                 )
-    write(Path("/evidence/database-versions.json"), value)
+    write(evidence_path() / "database-versions.json", value)
 
 
 def root_path():
     run, attempt = os.environ["GITHUB_RUN_ID"], os.environ["GITHUB_RUN_ATTEMPT"]
     require(re.fullmatch(r"[1-9][0-9]{0,19}", run) and attempt == "1", "RUN_IDENTITY")
     return Path(os.environ["RUNNER_TEMP"]) / ("m4-runtime-" + run + "-" + attempt)
+
+
+def admit_source(evidence):
+    from scripts import native_context_db_catalog as catalog
+
+    event, manifest = catalog.admit_event(evidence, entrypoint="run")
+    require(event["attempt"] == "1", "RUN_ATTEMPT")
+    require(
+        event["ref"]
+        in {"refs/heads/" + CAPTURE_BRANCH, "refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
+        or event.get("head_ref") == BRANCH,
+        "R2_EVENT_BRANCH",
+    )
+    require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
+    require(capture(["git", "merge-base", BASE, "HEAD"]) == BASE, "BASE_ANCESTRY")
+    allowed = {
+        "backend/src/asm/ai/runtime.py",
+        "backend/src/asm/ai/database.py",
+        "backend/src/asm/ai/runtime_contracts.py",
+        "backend/src/asm/messaging/worker.py",
+        "backend/src/asm/foundation.py",
+        "backend/src/asm/telegram/provisioning.py",
+        "migrations/versions/0015_ai_delivery.py",
+        "scripts/native_context_db_catalog.py",
+        "scripts/m4_runtime_db.py",
+        "scripts/test_browser.sh",
+        "scripts/test_telegram_egress.sh",
+        ".github/workflows/m4-runtime-db.yml",
+        ".github/workflows/ci.yml",
+        "tests/test_m4_delivery.py",
+        "tests/test_m4_delivery_postgres.py",
+        "tests/test_m4_schema_postgres.py",
+        "tests/test_m4_runtime_database.py",
+        "tests/test_m4_runtime_migrations.py",
+        "tests/test_foundation.py",
+        "tests/test_native_context_db_runner.py",
+        "tests/test_m3_1_native_context_runtime_postgres.py",
+        "tests/test_telegram_egress.py",
+        "tests/test_m4_runtime_db_runner.py",
+        "docs/tasks/M4_HANDOFF.md",
+        "docs/TASK_REGISTER.md",
+    }
+    paths = capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines()
+    require(bool(paths) and set(paths) <= allowed, "R2_WRITE_SET")
+    return event, manifest
+
+
+def stock_catalog():
+    """Independent stock facts before consulting the installed verifier/pin."""
+    import psycopg
+    from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
+    from psycopg.rows import dict_row
+    from sqlalchemy.engine import make_url
+
+    from scripts import native_context_db_catalog as catalog
+
+    url = make_url(os.environ["ASM_MIGRATION_DATABASE_URL"])
+    require(url.database == "asm_test" and url.username == "asm_migrator", "CATALOG_TARGET")
+    with psycopg.connect(
+        url.set(drivername="postgresql").render_as_string(hide_password=False)
+    ) as c:
+        c.execute("SET TRANSACTION READ ONLY")
+        for sql in (
+            "SET LOCAL search_path=pg_catalog,pg_temp",
+            "SET LOCAL timezone='UTC'",
+            "SET LOCAL extra_float_digits=3",
+            "SET LOCAL statement_timeout='10s'",
+        ):
+            c.execute(sql)
+        revision = c.execute("SELECT version_num FROM platform.alembic_version").fetchone()[0]
+        require(revision in {"0013", "0015"}, "CATALOG_REVISION")
+        destination = evidence_path() / ("catalog-" + revision)
+        destination.mkdir(mode=0o700)
+        expected = catalog.source_catalog(catalog.ROOT, revision)
+        write(destination / "expected-source-catalog.json", expected)
+        (destination / "independent-catalog.sql").write_text(
+            catalog.CATALOG_SQL + ";\n" + catalog.FUNCTION_SQL + ";\n" + catalog.ROLE_SQL
+        )
+        full, nonfunction = c.execute(catalog.CATALOG_SQL).fetchone()
+        (destination / "installed-catalog.pg-json.txt").write_text(full)
+        (destination / "installed-nonfunction.pg-json.txt").write_text(nonfunction)
+        locale = c.execute(
+            "SELECT jsonb_build_object('server_version',current_setting('server_version'),'server_version_num',current_setting('server_version_num'),'lc_collate',datcollate,'lc_ctype',datctype,'provider',datlocprovider,'locale',to_jsonb(d)->'datlocale','collation_version',datcollversion,'encoding',pg_encoding_to_char(encoding)) FROM pg_database d WHERE datname=current_database()"
+        ).fetchone()[0]
+        locale["function_order"] = [row[0] for row in json.loads(full)["functions"]]
+        locale["function_order_C"] = c.execute(
+            "SELECT p.oid::regprocedure::text FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('app','platform') AND p.prokind='f' ORDER BY p.oid::regprocedure::text COLLATE \"C\""
+        ).fetchall()
+        write(destination / "locale-and-order.json", locale)
+        require(locale["server_version_num"] == "180006", "CATALOG_SERVER_VERSION")
+        c.row_factory = dict_row
+        functions = c.execute(catalog.FUNCTION_SQL).fetchall()
+        resolved = {
+            r["signature"]: r["oid"]
+            for r in c.execute(
+                "SELECT signature,to_regprocedure(signature)::oid::bigint AS oid FROM unnest(%s::text[]) AS source(signature) ORDER BY signature",
+                (sorted(expected["functions"]),),
+            ).fetchall()
+        }
+        write(
+            destination / "installed-function-oids.json",
+            {"functions": functions, "resolved": resolved},
+        )
+        roles = c.execute(catalog.ROLE_SQL).fetchall()
+        memberships = c.execute(
+            "SELECT roleid,member FROM pg_auth_members WHERE roleid IN ('asm_runtime'::regrole,'asm_migrator'::regrole) OR member IN ('asm_runtime'::regrole,'asm_migrator'::regrole)"
+        ).fetchall()
+        owned = c.execute(
+            "SELECT (SELECT count(*) FROM pg_database WHERE datdba='asm_runtime'::regrole) + (SELECT count(*) FROM pg_namespace WHERE nspowner='asm_runtime'::regrole) + (SELECT count(*) FROM pg_class WHERE relowner='asm_runtime'::regrole) + (SELECT count(*) FROM pg_proc WHERE proowner='asm_runtime'::regrole) AS count"
+        ).fetchone()["count"]
+        write(
+            destination / "roles.json",
+            {"roles": roles, "memberships": memberships, "owned_by_runtime": owned},
+        )
+        catalog.compare_roles(roles, memberships, owned)
+        catalog.compare_functions(expected["functions"], functions, resolved)
+        digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
+        profile = "platform.ai_delivery_schema_profile()" if revision == "0015" else catalog.PROFILE
+        declared = c.execute("SELECT " + profile + " AS profile").fetchone()["profile"]
+        write(destination / "declared-profile.json", declared)
+        comparison = {
+            "revision": revision,
+            "independent_profile_sha256": digest,
+            "nonfunction_sha256": catalog.sha256(nonfunction.encode()),
+            "functions_checked": len(functions),
+            "tables_checked": len(expected["columns"]),
+            "verifier_body_sha256": expected["functions"][profile]["body_sha256"],
+            "all_source_bodies_security_roles_nonfunction": "PASS",
+            "declared_equals_independent": declared
+            == {"schema_revision": revision, "valid": True, "profile_sha256": digest},
+            "application_pin_matches": revision == "0013"
+            or digest == NATIVE_CONTEXT_PROFILE_SHA256,
+            "failed_predicate": "APPLICATION_FULL_CATALOG_PIN"
+            if revision == "0015" and digest != NATIVE_CONTEXT_PROFILE_SHA256
+            else None,
+        }
+        write(destination / "comparison.json", comparison)
+        require(comparison["declared_equals_independent"], "CATALOG_DECLARED_PROFILE")
+        # Only this diagnostic mode permits the known application pin mismatch;
+        # source bodies, security, full catalog coherence and cleanup still gate.
 
 
 def compose(root):
@@ -505,12 +685,12 @@ def cleanup(root):
 def run(root):
     # Each complete module owns a fresh cluster. In particular, used 0014/0015
     # downgrade guards are observed before destruction, never bypassed by row reset.
-    import native_context_db_catalog as catalog
-
     require(not root.exists(), "RUN_ALREADY_STARTED")
     (root / "evidence").mkdir(parents=True, mode=0o700)
     (root / "private").mkdir(mode=0o700)
-    event, manifest = catalog.admit_event(root / "evidence", entrypoint="run")
+    event, manifest = admit_source(root / "evidence")
+    diagnostic = event["ref"] == "refs/heads/" + CAPTURE_BRANCH
+    modules = ["catalog"] if diagnostic else MODULES
     pins = dict(
         line.split("=", 1) for line in Path("infra/images.lock.env").read_text().splitlines()
     )
@@ -526,7 +706,8 @@ def run(root):
         "run_id": os.environ["GITHUB_RUN_ID"],
         "attempt": 1,
         "event": os.environ["GITHUB_EVENT_NAME"],
-        "branch": BRANCH,
+        "branch": event.get("head_ref")
+        or (event["ref"][11:] if event["ref"] != "refs/heads/main" else BRANCH),
         "pins": pins,
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
@@ -540,7 +721,7 @@ def run(root):
     outcomes = []
     test_seconds = 0.0
     expected = None
-    for index, module in enumerate(MODULES):
+    for index, module in enumerate(modules):
         group = root / (root.name + "-group-" + str(index))
         (group / "evidence").mkdir(parents=True, mode=0o700)
         (group / "private").mkdir(mode=0o700)
@@ -572,7 +753,7 @@ def run(root):
                 },
             )
             phase(group, "build", compose(group) + ["build", "checks"], 420)
-            if expected is None:
+            if expected is None and not diagnostic:
                 phase(
                     group,
                     "inventory",
@@ -600,7 +781,11 @@ def run(root):
                     sum(n.startswith(MODULES[0] + "::") for n in expected["nodeids"]) == 35,
                     "RETAINED_CASES_LOST",
                 )
-            nodes = [n for n in expected["nodeids"] if n.startswith(module + "::")]
+            nodes = (
+                []
+                if diagnostic
+                else [n for n in expected["nodeids"] if n.startswith(module + "::")]
+            )
             write(group / "evidence/inventory.json", {"nodeids": nodes})
             phase(
                 group,
@@ -624,6 +809,22 @@ def run(root):
                 group / "evidence/server-process.json",
                 {"uid": uid, "image_id": image_id, "pin": DB_IMAGE},
             )
+            if diagnostic:
+                for revision in ("0013", "0015"):
+                    phase(
+                        group,
+                        "schema-" + revision,
+                        checks(group, "alembic", "upgrade", revision),
+                        120,
+                    )
+                    phase(
+                        group,
+                        "catalog-" + revision,
+                        checks(group, "python", "scripts/m4_runtime_db.py", "catalog-snapshot"),
+                        60,
+                    )
+                result["outcome"] = "PASS"
+                continue
             phase(group, "schema", checks(group, "alembic", "upgrade", "0014"), 120)
             phase(
                 group,
@@ -669,6 +870,17 @@ def run(root):
                 else "OPERATION_FAILED",
             )
         finally:
+            if not diagnostic:
+                cases_path = group / "evidence/cases.json"
+                summary_path = group / "evidence" / SUMMARY_REPORT
+                if not summary_path.exists():
+                    cases = json.loads(cases_path.read_text()) if cases_path.exists() else []
+                    nodes_path = group / "evidence/inventory.json"
+                    nodes = (
+                        json.loads(nodes_path.read_text())["nodeids"] if nodes_path.exists() else []
+                    )
+                    write(summary_path, summarize(cases, nodes, None))
+                result["tests"] = json.loads(summary_path.read_text())
             write(group / "evidence/primary.json", result)
             try:
                 cleanup(group)
@@ -680,9 +892,14 @@ def run(root):
                 {
                     "groups": outcomes,
                     "test_seconds": test_seconds,
-                    "complete": len(outcomes) == len(MODULES),
+                    "groups_visited": len(outcomes),
+                    "complete": len(outcomes) == len(modules)
+                    and all(
+                        v.get("tests", {}).get("complete", diagnostic and v["outcome"] == "PASS")
+                        for v in outcomes
+                    ),
                     "result": "PASS"
-                    if len(outcomes) == len(MODULES)
+                    if len(outcomes) == len(modules)
                     and all(v["outcome"] == "PASS" for v in outcomes)
                     else "FAIL",
                 },
@@ -696,6 +913,9 @@ def run(root):
 
 def main():
     os.umask(0o077)
+    if sys.argv[1:] == ["catalog-snapshot"]:
+        stock_catalog()
+        return
     if sys.argv[1:] == ["versions"]:
         versions()
         return
@@ -724,6 +944,7 @@ def main():
 
 
 if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     try:
         main()
     except Exception as error:

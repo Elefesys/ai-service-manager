@@ -57,25 +57,33 @@ class SyntheticRuntime:
             ):
                 raise MessagingError(Code.NOT_ALLOWED)
             async with asyncio.timeout(self.config.limits.duration_seconds):
-                result = await self.database.execute(
-                    claim,
-                    self.config,
-                    adapter,
-                    deadline=datetime.now(UTC)
-                    + timedelta(seconds=self.config.limits.duration_seconds),
-                )
+                try:
+                    result = await self.database.execute(
+                        claim,
+                        self.config,
+                        adapter,
+                        deadline=datetime.now(UTC)
+                        + timedelta(seconds=self.config.limits.duration_seconds),
+                    )
+                except SQLAlchemyError:
+                    try:
+                        await self.database.replay(claim, self.config)
+                        return
+                    except MessagingError as error:
+                        if error.code != Code.STALE_CLAIM:
+                            raise
+                    # A missing receipt after a lost ACK permits only STOP.
+                    await self.stop(claim)
+                    return
             if not isinstance(result, RuntimeStop):
                 return
-        except SQLAlchemyError:
+        except asyncio.CancelledError as cancelled:
             try:
-                await self.database.replay(claim, self.config)
-                return
-            except MessagingError as error:
-                if error.code != Code.STALE_CLAIM:
-                    raise
-        except asyncio.CancelledError:
-            await self.stop(claim)
-            raise
+                await self.stop(claim)
+            finally:
+                # A second cancellation or failed STOP cannot replace the
+                # original cancellation with successful completion.
+                raise cancelled
         except Exception:
             # A bounded synthetic model failure terminalizes this job. It must
             # not cancel the independent inbound/manual worker task.
@@ -83,8 +91,10 @@ class SyntheticRuntime:
         await self.stop(claim)
 
     async def stop(self, claim: AIJobClaim) -> None:
-        # An expired/dead lease is left to the finite DB recovery transition.
+        # The reservation already prevents regeneration. If this bounded attempt
+        # fails, finite lease recovery owns terminalization; never retry a model.
         try:
-            await self.database._command(claim, "STOP")
-        except (MessagingError, SQLAlchemyError):
+            async with asyncio.timeout(2):
+                await self.database._command(claim, "STOP")
+        except (MessagingError, SQLAlchemyError, TimeoutError):
             pass

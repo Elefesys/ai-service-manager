@@ -162,6 +162,11 @@ class AIDatabase:
         outcome = await agent.run(
             run.binding, run.snapshot, run_id=str(run.run_id), deadline=run.deadline
         )
+        if outcome.reason == "CANCELLED":
+            # The agent deliberately returns a terminal outcome. At the worker
+            # boundary cancellation must still unwind the parent TaskGroup (or
+            # asyncio.timeout); otherwise the AI lane starts another iteration.
+            raise asyncio.CancelledError
         if outcome.candidate is None:
             return RuntimeStop(run_id=run.run_id, reason="AGENT_STOP")
         return await self.commit(claim, run, outcome.candidate)
@@ -227,17 +232,18 @@ class DurableAdapter:
             # The durable reservation already says UNKNOWN. Recording a bounded
             # error is best effort; cancellation/lease loss cannot erase it.
             try:
-                await self.database.complete(
-                    self.claim,
-                    self.run,
-                    sequence,
-                    CallCompletion(
-                        kind="UNKNOWN",
-                        error="CANCELLED"
-                        if isinstance(primary, asyncio.CancelledError)
-                        else "ADAPTER_ERROR",
-                    ),
-                )
+                async with asyncio.timeout(1):
+                    await self.database.complete(
+                        self.claim,
+                        self.run,
+                        sequence,
+                        CallCompletion(
+                            kind="UNKNOWN",
+                            error="CANCELLED"
+                            if isinstance(primary, asyncio.CancelledError)
+                            else "ADAPTER_ERROR",
+                        ),
+                    )
             except BaseException:
                 pass
             raise
