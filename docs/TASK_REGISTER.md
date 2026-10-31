@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R2: repair и один новый PG proof / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R2: BLOCKED / C2 HOLD / C0 review / 2026-10-31
 
 PR40 merged; accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candidate.
@@ -27,19 +27,36 @@ C0 независимо проверил receiptca47ea21, fresh run/job/artifact
 original ZIP и сохранённый bundle/manifests31/15, source.patch/binding/collection.
 Обе причины подтверждены; нового compiler/pytest/PG run от C0 нет.
 
-**C2-M4.3-PG-RUNTIME-R2 — IN_PROGRESS / source подготовлен.** Exact base
-**ce4a4669e2e36848f09784e166d33124bff73eb2**, tree
-**be171deb889ead174df82f3336d7fe0c6bf3b944**, sole child receiptca47ea21.
-Prep c2/m4-3-pg-runtime-r2; execution c2/m4-3-pg-runtime-run-r2. Write-set7
-соблюдён: JSON DEFAULT, compiler regressions, evidence source identity,
-executor R2/inventory, workflow branch, HANDOFF/REGISTER. Local **47 PASS**;
-33 upgrade/14 downgrade statements без binds; old DEFAULT reproduction,
-valid/no-.git и19 negative identity cases PASS. Finite inventory **79**,
-SHA25683c7ab55beef84329d8f4ea47fe69ef6cbbda3a43f0efb5b69152bfdd066eb4a:
-55 R1 nodeids/order/test AST сохранены +24 cause regressions. Static/compile PASS.
-Один hosted proof ещё NOT_RUN; после него execution frozen и docs-only receipt.
-R1 refs/application0013 gates прежние; runtime PG acceptance впереди.
-Dispatch/Outbox/Telegram/live/paid HOLD. [Задание и подготовка](tasks/M4_HANDOFF.md).
+**C2-M4.3-PG-RUNTIME-R2 — BLOCKED / C2 HOLD, C0 review.** Source
+**13ab3f1130775f8350666998b0fd028e710efe45**, tree
+**9032167ee8158b8d213b510c8f23bac74e53b7ee**, sole child exact base
+**ce4a4669e2e36848f09784e166d33124bff73eb2** / treebe171deb;7 paths.
+Prep c2/m4-3-pg-runtime-r2; execution c2/m4-3-pg-runtime-run-r2: оба созданы
+на base, один execution FF expected-base/force=false. [Run41192732940](https://github.com/Elefesys/ai-service-manager/actions/runs/41192732940),
+job124512644330/push/source/attempt1: **49 PASS,30 FAIL**,79 cases/237 phases,
+no errors/skips/xfails, complete=true/result=FAIL. Inventory79/hash83c7ab55,
+55 R1 nodeids/order/test AST сохранены;24 cause regressions PASS. Local47 PASS,
+33 upgrade/14 downgrade compiler, Ruff/format/compile PASS.
+
+Actual fresh/repeat/previous upgrade0014, unused downgrade0013, retained M3,
+PG18.6 roles/RLS/private DDL и application/native0014 refusal PASS.
+Два R1 preparation blockers устранены. 29 cases: NoResultFound в intent():215 —
+source использует pre-seal revision для TEST_CONSUME, хотя seal увеличивает её.
+Used downgrade case: AssertionError на ai_runs>0 до Alembic, вследствие отсутствия
+созданных runs. Durable runtime/tenant behavior/crash/concurrency/READ/authority
+await и used-data refusal NOT_REACHED; всех30 target assertions это не заменяет.
+Минимальная следующая дельта: post-seal revision и реальная durable prerequisite;
+не применена, требует новой выдачи C0. Полный разбор групп — [receipt](tasks/M4_HANDOFF.md).
+
+Cleanup/source PASS; command74.859139s, pytest73.470s, build15.340953s отдельно.
+Artifact13039557259:28018bytes/25files, SHA256
+**aa5448861eab7b014ab6b86e15bc2b1da861d71dec9e429918557225a29e872d**;
+manifest24/24, original ZIP/logs/JUnit/source/collection/command+summary сохранены.
+Full evidence **libfile_751773061d5c8191b5d1773cf0d3edef**:90541bytes/47files,
+SHA256 **63c3feef658bce47736fac2cc6d12350ce0542e95fa07613c7230caf6d536422**.
+Execution frozen на source; docs-only receipt sole child source на preparation.
+Main/old refs неизменны; application0013/runtime semantics прежние.
+Dispatch/Outbox/Telegram/live/paid HOLD. Следующий шаг — C0 review/new assignment.
 
 | Task | Status / ближайший результат |
 |---|---|
@@ -63,8 +80,8 @@ Dispatch/Outbox/Telegram/live/paid HOLD. [Задание и подготовка
 | C2-M4-CI-OBSERVATION-R4 | VERIFIED C0 SOURCE + TARGETED PG; source249b3611, run41124252930:278 PASS/834 phases, cleanup/source PASS; C2 HOLD/ref frozen |
 | C0-M4-CI-REPAIR-INTEGRATION-R1 | INTEGRATED / VERIFIED PR40 + exact main586240e8/CI41178689536:11/11 SUCCESS |
 | C2-M4.3-PG-RUNTIME-R1 | Исторический BLOCKED / run41185701200 SCHEMA_FAILED;2 known source defects, hosted55 NOT_RUN; receiptca47ea21/evidence проверены C0, execution frozen |
-| C2-M4.3-PG-RUNTIME-R2 | IN_PROGRESS / local47 PASS, inventory79 (55 retained +24 cause regressions); один hosted proof NOT_RUN; exact base/refs в HANDOFF |
-| M4.3-RUNTIME / M4.3-QUALITY | PG subset в R2 repair; application integration/AI→Outbox→Telegram/quality TODO |
+| C2-M4.3-PG-RUNTIME-R2 | BLOCKED / run41192732940:49 PASS,30 FAIL;2 repair PASS, stale pre-seal revision masks runtime; execution frozen, C2 HOLD/C0 review |
+| M4.3-RUNTIME / M4.3-QUALITY | Runtime PG BLOCKED после R2; application integration/AI→Outbox→Telegram/quality TODO |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
 

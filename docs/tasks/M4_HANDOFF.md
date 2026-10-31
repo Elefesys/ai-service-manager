@@ -6,7 +6,7 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R2: repair и один новый PG proof / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R2: BLOCKED / C2 HOLD / C0 review / 2026-10-31
 
 PR40 слит владельцем. Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df** — exact-equal проверенному
@@ -30,12 +30,91 @@ Foundation/durable completeness gates PASS. Архивы этого main run п�
 **C0-M4-CI-OBSERVATION-01 и C0-M4-CI-REPAIR-INTEGRATION-R1 закрыты
 INTEGRATED / VERIFIED в SOURCE + TARGETED + PR/main CI scope.** C4 context/agent
 и принятый GPT/v2 source находятся в verified main. Это не живой AI runtime.
-Единственная выдача — C2 R2 ниже; C1/C3–C8 HOLD. R1 execution frozen.
+Единственная выдача C2 R2 выполнена до первого hosted outcome ниже: BLOCKED.
+C2 и C1/C3–C8 HOLD; R1/R2 execution frozen.
 Новый платный probe, VM/deploy/Telegram и доступ к реальным перепискам не назначены.
 Shared150 неизменен: confirmed0.37505230/58 known POST;4 unknown/held7.585505548;
 62 total POST; remaining142.039442152, reported0.00743079 UNSETTLED.
 
-### C2-M4.3-PG-RUNTIME-R2 — исправить подготовку и проверить durable runtime
+### C2 R2 receipt — два repair подтверждены; runtime BLOCKED
+
+**Source** [13ab3f1130775f8350666998b0fd028e710efe45](https://github.com/Elefesys/ai-service-manager/commit/13ab3f1130775f8350666998b0fd028e710efe45),
+tree **9032167ee8158b8d213b510c8f23bac74e53b7ee**, sole parent exact base
+**ce4a4669e2e36848f09784e166d33124bff73eb2** / tree
+**be171deb889ead174df82f3336d7fe0c6bf3b944**. Ровно7 разрешённых paths.
+Оба новых ref созданы на base; execution переведена на source одним FF,
+expected old SHA=base/force=false. До этого новых runs0; после — ровно1.
+
+[Run41192732940](https://github.com/Elefesys/ai-service-manager/actions/runs/41192732940),
+job **124512644330**, push/exact source/attempt1: **FAILURE**.
+Finite79/hash83c7ab55 сохранён: **49 PASS (47 non-PG +2 PG),30 FAIL**,
+errors/skips/xfails0. Все55 R1 nodeids/order/assertions сохранены:25 PASS/30 FAIL;
+24 cause regressions PASS. Все237 phases записаны:79 setup PASS,49 call PASS,
+30 call FAIL,79 teardown PASS. `complete=true` означает полноту записи;
+`result=FAIL`. Пересчёт cases, JUnit и summary совпадает, overflow/invalid fields0.
+
+**Actual PASS:** fresh upgrade0014 и repeat; unused downgrade0013; native policy
+через реальную0013 command; upgrade0013→0014/repeat с сохранением M3 conversation.
+Application check, native schema profile и ENABLE policy отказывают на0014.
+PG18.6/asm_test; runtime/migrator не superuser/BYPASSRLS/CREATEROLE/CREATEDB.
+Обе AI tables принадлежат asm_migrator, RLS forced; runtime direct table access
+и DDL запрещены. JSON DEFAULT и evidence source identity больше не блокируют
+подготовку. Local47 PASS, Ruff/format/compile и33 upgrade/14 downgrade compile
+PASS; новый JSON сохраняет UNKNOWN и все5 настоящих null.
+
+**Причина A —29 actual NoResultFound:** `intent()` в
+`tests/test_m4_runtime_postgres.py:215` ищет TEST_CONSUME по revision, прочитанной
+**до** `seal()`. Active0013 turn_execute вызывает turn_seal(...,true), active0012
+turn_seal увеличивает revision, turn_enqueue создаёт job уже с новой revision.
+Возвращённый seal result проигнорирован. Это source-backed диагноз, согласованный
+со всеми29 stack frames; сами Turn/job rows не записаны, нового PG reproduction
+после outcome нет. AI enqueue/prepare и дальнейшие target assertions не достигнуты.
+
+| Затронутая группа | Cases | Фактический предел |
+|---|---:|---|
+| result/replay, cross-process conflict | 5 | intent FAIL; durable result/replay NOT_REACHED |
+| tools/READ/budget/UNKNOWN completion | 2 | intent FAIL; budgets/READ NOT_REACHED |
+| foreign scope, forged/expired claims, tenant FK | 6 | intent FAIL; tenant authority behavior NOT_REACHED |
+| claim concurrency | 1 | intent FAIL; winner/no duplicate run NOT_REACHED |
+| takeover/revoke/input/native/observation во время MODEL/READ | 10 | intent FAIL; stale result и отсутствие held transaction NOT_REACHED |
+| reservation/result crash и rollback | 3 | intent FAIL; durable crash semantics NOT_REACHED |
+| changed config/input, retained consumer/AI terminal retry | 2 | intent FAIL; target invariants NOT_REACHED |
+| used-data downgrade refusal | 1 | AssertionError до вызова Alembic; refusal NOT_REACHED |
+
+**Причина B — dependent precondition:** последний test в строке875 требует
+ai_runs>0; предыдущие29 cases не создали run. Он не запускал downgrade, поэтому
+это не доказанный отказ/дефект защиты used-data migration. Все failed nodeids,
+phases, source excerpts и недостающие факты сохранены в архиве.
+
+**Минимальная следующая дельта для C0:** в `intent()` использовать реальную
+post-seal revision из результата/свежей строки и проверить привязку Turn/job;
+регрессия new-revision positive + stale-revision negative. Для used downgrade
+обеспечить реальную durable предпосылку, не полагаться на успех предыдущих cases.
+Это выходит за разрешённый R2 source-identity-only fixture repair; не применялось.
+После общей причины возможны скрытые runtime ошибки; будущий PASS не утверждается.
+Нужна новая выдача C0 с source review и отдельным bounded PG proof.
+
+Фазы отдельно: build15.340953s; DBstart9.879833s; schema1.569414s;
+versions0.915370s; runtime-command74.859139s (pytest73.470s); cleanup0.264674s.
+**Cleanup PASS**, owned containers/networks/volumes пусты; source clean.
+Original [artifact13039557259](https://github.com/Elefesys/ai-service-manager/actions/runs/41192732940/artifacts/13039557259):
+**28018 bytes/25 files**, SHA256
+**aa5448861eab7b014ab6b86e15bc2b1da861d71dec9e429918557225a29e872d**;
+ZIP сохранён byte-exact, manifest24/24 verified; upload log/metadata digest совпали.
+Command и summary раздельны; JUnit, source binding, collection, логи и cleanup сохранены.
+Полный **C2_M4_PG_RUNTIME_R2_EVIDENCE_41192732940.zip**:
+**90541 bytes/47 files**, SHA256
+**63c3feef658bce47736fac2cc6d12350ce0542e95fa07613c7230caf6d536422**,
+saved **libfile_751773061d5c8191b5d1773cf0d3edef**; manifest46/46 verified.
+
+Execution **c2/m4-3-pg-runtime-run-r2 frozen на source**. Этот docs-only receipt —
+sole child source на preparation **c2/m4-3-pg-runtime-r2**. Main и прежние refs
+проверены неизменными. **C2 HOLD / C0 review; R2 BLOCKED в runtime scope**.
+Backend/0001–0013/pins/roles/locks/limits и application0013 readiness неизменны.
+Paid/live/VM/deploy/Telegram/real data не использовались; ledger прежний.
+
+### История — исходная выдача C2-M4.3-PG-RUNTIME-R2
+
 
 **Результат для пилота:** устранить два известных дефекта, которые не дали
 проверить сохранение AI-ответа и доступ к контексту в PostgreSQL. Scope M4.3
@@ -111,7 +190,7 @@ framework. Application/provisioning/native readiness остаётся0013 и д�
 worker/Outbox integration — после C0 source+PG review. Paid/Polza/VM/live DB/
 deploy/Telegram/реальные данные не входят в выдачу; ledger неизменен.
 
-### C2 R2 — source preparation / local preflight
+### История — R2 source preparation / local preflight до hosted outcome
 
 Exact repair base **ce4a4669e2e36848f09784e166d33124bff73eb2**, tree
 **be171deb889ead174df82f3336d7fe0c6bf3b944**, sole parent R1 receiptca47ea21;
@@ -135,8 +214,8 @@ Finite collection **79**, SHA256
 **83c7ab55beef84329d8f4ea47fe69ef6cbbda3a43f0efb5b69152bfdd066eb4a**.
 Все55 R1 nodeids в прежнем относительном порядке; AST всех прежних test_ функций
 не изменён. Migrations0001–0013, backend, pins/roles/locks/limits неизменны.
-Actual PostgreSQL outcome пока **NOT_RUN**; local proof его не заменяет.
-Следующий шаг — один hosted push/source/attempt1, затем frozen receipt/C0 review.
+На момент этого source preflight PostgreSQL outcome был **NOT_RUN**.
+Единственный последующий hosted outcome и frozen receipt приведены выше.
 
 ### История — C2 R1 receipt BLOCKED; execution frozen
 
