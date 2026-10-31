@@ -24,8 +24,9 @@ M3 закрыт в LOCAL/TEST; финальный receipt — в верхнем 
 M4_HANDOFF/CURRENT. M4.1 и C5 recovery интегрированы в PR #38; actual main CI PASS.
 PR39 слит; PR CI PASS, но post-merge main CI имеет один observer timeout.
 C2 R4 принят C0:278 targeted PG PASS, readiness до прежнего lock window.
-Единственная задача — C0 integration/new Draft PR/full CI; exact source/write-set
-в CURRENT. Main verification ещё BLOCKED; runtime и остальные HOLD.
+PR40 full CI принят C0:11/11 SUCCESS; Ready к merge владельцем. Exact source
+и receipt в CURRENT. Следующий шаг C0 — actual main после merge;
+до этого main gate pending, runtime и остальные HOLD.
 Прежние paid допуски использованы; новых вызовов они не разрешают.
 Исторические HOLD/операторские команды M1–M3 не являются новой задачей M4.
 

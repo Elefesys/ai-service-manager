@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 R4 принят; C0 integration/full CI, main ещё BLOCKED.
+Последнее решение ниже: PR40 full CI11/11 принят; Ready к merge, main gate pending.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -818,7 +818,7 @@ Write-set6 и единственный targeted run после local proof за�
 production/DDL/core CI не меняются. Runtime и actual main acceptance ждут repair.
 Новый paid/VM/Telegram запуск не разрешён; ledger и data/route gates прежние.
 
-**Актуальное решение C0 от 2026-10-31: R4 SOURCE + TARGETED PG VERIFIED.**
+**Предыдущее решение C0 от 2026-10-31: R4 SOURCE + TARGETED PG VERIFIED.**
 Source249b36112adb72fb763207893eb50ab31c06eff7/receipt55a65c2 принят C0.
 One run41124252930/attempt1:278 PASS/834 phases, cleanup/source PASS. Readiness5s
 отделяет подготовку HTTP/auth от прежнего edge1.1s/observer1.5s/release<2s.
@@ -832,6 +832,17 @@ Main997d2bf8/run41108194917 остаётся FAILED; не переигрыват
 Целевой PASS не закрывает main gate; Ready после full CI, merge владельцу,
 далее проверка actual main. Production/DDL/core CI/ledger не меняются.
 Новых VM/Telegram/paid/runtime действий нет; real durable AI bridge ещё TODO.
+
+**Актуальное решение C0 от 2026-10-31: PR40 full CI VERIFIED; Ready к merge.**
+Head031b92ed00d91e486b381f3777cf301620906c2a/tree84f6b04d738f7b981e359af877cace931c1386df
+и tested merge77ea3542a6f8e063a9d78afd3aaa8376fc4a5c54/tree exact-equal.
+CI41132913888/attempt1:11/11 SUCCESS, foundation860 PG PASS, full completeness
+и clean-source gates PASS. C0 сверил fresh metadata/logs/source binding;
+повторный CI/local audit не нужен. Receipt отдельным child head, PR не двигать.
+Merge остаётся владельцу, затем C0 проверяет actual main SHA/tree/push CI.
+Main997d2bf8 ещё не исправлен; прежний failed run сохраняется как факт.
+Observation repair VERIFIED в PR scope; runtime/VM/Telegram/paid HOLD,
+исторический trigger UNKNOWN. Ledger и scope пилота не меняются.
 
 ## Что пересмотрено относительно baseline
 

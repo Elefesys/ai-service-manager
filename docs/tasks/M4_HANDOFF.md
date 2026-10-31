@@ -6,7 +6,43 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2 R4 принят; C0 integration/full CI / 2026-10-31
+## CURRENT — PR40 full CI принят; Ready к merge владельцем / 2026-10-31
+
+**C0-M4-CI-REPAIR-INTEGRATION-R1: REVIEW / full PR CI VERIFIED.**
+[PR40](https://github.com/Elefesys/ai-service-manager/pull/40) принят C0 к Ready;
+merge выполняет владелец. Проверенный head
+**031b92ed00d91e486b381f3777cf301620906c2a**, tree
+**84f6b04d738f7b981e359af877cace931c1386df**. Tested PR merge
+**77ea3542a6f8e063a9d78afd3aaa8376fc4a5c54** имеет exact-equal tree;
+parents main997d2bf83b5402068ba1f62b23d5947fcfaf7d32 + head031b92ed.
+
+[Full CI41132913888](https://github.com/Elefesys/ai-service-manager/actions/runs/41132913888),
+pull_request/attempt1: **11/11 SUCCESS**. Foundation job124332586023:
+**3289 ordinary +155 subtests,860 PostgreSQL,398 frontend PASS**;
+browser54 PASS. Native-context carrier, durable lane, Docker29 и все6 migration
+jobs SUCCESS. Clean-source и persisted-completeness gates PASS; foundation и
+foundation-durable logs содержат FOUNDATION_COMPLETE_EVIDENCE_PASS.
+Unit373.76s, generic PG1381.62s; это разные фазы, не время сборки.
+
+C0 сверил fresh PR/main/run/jobs metadata, logs четырёх основных lanes,
+merge parents/tree и artifact metadata/upload digests; нового audit source,
+local test или повторного CI запуска не было. Foundation artifact
+13017605328:3358204 bytes, SHA256
+**9974f43d4791f162239713166f02f2c7971bb3b389e2121c6d88da60f224d932**.
+Durable artifact13015810426:3122141 bytes, SHA256
+**c917c39d9cfcf91b62dfa15e12e2371554f3d590276db0ffdaa07b1ddb719b28**.
+Архивы этого full CI повторно не распаковывались; source/targeted audit R4 ниже.
+
+Этот docs-only receipt — отдельный child head031b92ed на
+`c0/m4-ci-repair-acceptance-r1`; write-set5 coordination docs. PR head остаётся
+проверенным031b92ed. После merge C0 проверяет actual main SHA/tree и push CI;
+до этого main997d2bf8/run41108194917 остаётся failed историческим состоянием
+текущего main. Observation repair VERIFIED в PR scope, actual main gate pending.
+C1–C8 HOLD, execution refs frozen; runtime/VM/Telegram/paid HOLD.
+GPT/C4 acceptance, shared150 ledger и historical delay cause UNKNOWN сохранены.
+Real PG authority/durable AIRun/AI→Outbox→Telegram ещё TODO; M4 не закрыт.
+
+### Принятая C0 проверка R4 source и targeted PostgreSQL
 
 C0 принял **C2-M4-CI-OBSERVATION-R4** в SOURCE + TARGETED PG scope.
 Source **249b36112adb72fb763207893eb50ab31c06eff7**, tree
@@ -39,19 +75,6 @@ C0 offline: **35 PASS/11.97s**, Ruff/format/compile5 PASS, collection278;
 observer algorithm AST-identical. Controlled before/after: old1.5s timeout,
 repaired preparation1.602s then matching observation; это не PG evidence.
 Исторический trigger main failure остаётся UNKNOWN; нового targeted run C0 нет.
-
-Единственная текущая задача — **C0-M4-CI-REPAIR-INTEGRATION-R1**:
-ветка `c0/m4-ci-repair-integration-r1`, parent этого coordination commit = receipt55a65c2,
-write-set5: AGENTS, CURRENT/HANDOFF, IMPL-004, probe runbook. Создать новый Draft PR
-к main и один штатный full CI; code совпадает с source249b. C2/C1/C3–C8 HOLD,
-execution refs frozen. Merged PR39 не двигать, failed run41108194917 не повторять.
-Ready только после проверки полного CI; merge остаётся владельцу.
-
-Actual main **997d2bf83b5402068ba1f62b23d5947fcfaf7d32** всё ещё имеет failed
-run41108194917:10 SUCCESS/1 FAILURE. Main verification и observation gate
-не закрыты целевым PASS. После merge проверить фактический main source/run.
-Runtime/VM/Telegram/paid HOLD; GPT/C4 acceptance и shared150 ledger сохранены.
-Real PG authority/durable AIRun/AI→Outbox→Telegram ещё TODO, M4 не закрыт.
 
 ### История C0 — установленная ошибка main
 

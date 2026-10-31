@@ -6,7 +6,8 @@ GPT/v2 выбран кандидатом для разработки перво�
 принят локально. C2 R3 принят: 258 PASS на PostgreSQL, cleanup PASS.
 PR39 слит; PR CI прошёл, но проверка main нашла один timeout теста блокировки.
 [C2 R4 принят C0](../tasks/M4_HANDOFF.md):278 целевых PostgreSQL тестов PASS.
-Следующий шаг — новый PR исправления и полный CI; повторять Polza probe не нужно.
+[PR40](https://github.com/Elefesys/ai-service-manager/pull/40) прошёл full CI11/11
+и принят C0 к Ready. Следующий шаг — merge владельцем; Polza probe не повторять.
 
 ## Принятый отчёт
 
@@ -39,8 +40,9 @@ foundation839 PostgreSQL PASS/1 FAIL (resume-activation-subscription,
 observer timeout1.5s). Это проверка синхронизации HTTP/PostgreSQL, без вызовов ИИ.
 C2 отделил подготовку HTTP/auth от короткого окна проверки блокировки;
 таймаут1.5s и смысл проверки policy сохранены. C0 принял source/targeted evidence
-и готовит отдельный Draft PR с одним полным CI. Затем merge владельца и проверка
-actual main; после этого продолжим durable/runtime/Telegram.
+и [полный CI41132913888](https://github.com/Elefesys/ai-service-manager/actions/runs/41132913888):
+11/11 SUCCESS,860 PostgreSQL и54 browser PASS. PR40 Ready к merge владельцем.
+Далее C0 проверит actual main; после этого продолжим durable/runtime/Telegram.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.
 
 Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`
@@ -50,6 +52,6 @@ Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER
 Это synthetic EVAL_ONLY: OpenAI family подтверждена в receipt, flex variant
 не наблюдался. Реальные данные, Telegram runtime и backend route ещё требуют
 соответствующей приёмки. Gemini/DeepSeek DEFERRED; сравнение75 не завершено.
-PR39 уже merged. Actual main verification BLOCKED до integration/main checks;
+PR39 уже merged; PR40 Ready. Actual main verification ждёт merge/main checks;
 прежний PR PASS и новый main FAIL сохранены раздельно. Причина задержки
 целевого запроса UNKNOWN. Никакого enable/deploy эта приёмка не выполняет.
