@@ -6,7 +6,145 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2 R4 принят; C0 integration/full CI / 2026-10-31
+## CURRENT — PR40/main VERIFIED; C2-M4.3-PG-RUNTIME-R1 / 2026-10-31
+
+PR40 слит владельцем. Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
+tree **84f6b04d738f7b981e359af877cace931c1386df** — exact-equal проверенному
+PR head031b92ed00d91e486b381f3777cf301620906c2a и merge77ea3542.
+Parents main997d2bf8 + PR head031b92ed; source drift при merge отсутствует.
+[Main CI41178689536](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536),
+push/main/attempt1, exact accepted SHA: **11/11 SUCCESS**.
+Foundation job124474985857: **3289 ordinary +155 subtests,860 PostgreSQL,
+398 frontend PASS**; browser54 PASS. Native-context, durable, Docker29,
+все6 migration jobs и clean-source/completeness gates SUCCESS.
+Unit439.77s/PG1548.49s — отдельные фазы, не время сборки.
+
+C0 сверил fresh PR/main/run/jobs metadata, main tree/parents, foundation/durable/
+browser logs и artifact metadata/upload digests; неизменённый source audit,
+local tests и CI не повторялись. Foundation artifact13034843643:3358553 bytes,
+SHA256 **dc312c308feaf18d7f5069a8de7b7398f6f2c51d6c41406e7134b00757a1cf08**.
+Foundation/durable completeness gates PASS. Архивы этого main run повторно
+не распаковывались. [Предыдущая PR приёмка C0](https://github.com/Elefesys/ai-service-manager/blob/2a135a42a5ffd82044780a498d8c4c14af8b4f98/docs/tasks/M4_HANDOFF.md)
+сохранена отдельно. Failed run41108194917 остаётся историей; precise trigger UNKNOWN.
+
+**C0-M4-CI-OBSERVATION-01 и C0-M4-CI-REPAIR-INTEGRATION-R1 закрыты
+INTEGRATED / VERIFIED в SOURCE + TARGETED + PR/main CI scope.** C4 context/agent
+и принятый GPT/v2 source находятся в verified main. Это не живой AI runtime.
+Следующая единственная выдача — C2 ниже; C1/C3–C8 HOLD.
+Новый платный probe, VM/deploy/Telegram и доступ к реальным перепискам не назначены.
+Shared150 неизменен: confirmed0.37505230/58 known POST;4 unknown/held7.585505548;
+62 total POST; remaining142.039442152, reported0.00743079 UNSETTLED.
+
+### C2-M4.3-PG-RUNTIME-R1 — PostgreSQL authority и сохранённый результат
+
+**Результат для пилота:** агент получает контекст только через проверенный
+worker claim и сохраняет выбранный ответ в PostgreSQL. После restart/reclaim
+повтор возвращает этот результат без новой генерации; HUMAN/stale/revoked
+состояние запрещает дальнейшую работу. Этот слой необходим до реальной отправки.
+
+Repository **Elefesys/ai-service-manager**. Preparation **c2/m4-3-pg-runtime-r1**;
+execution **c2/m4-3-pg-runtime-run-r1**. Exact base — полный SHA этого опубликованного
+assignment commit из immutable URL, sole child accepted main
+**586240e88c825aa67593af5d72e0bdbb251ed3bb**. Записать base SHA/tree; сверх main
+только5 coordination docs. Dependency: принятые M4 contracts/Gateway/agent/context,
+M3 control/material/native/Jobs и закрытый main CI. Старые execution refs frozen.
+
+Применимы IMPL-004 (он сужает baseline), Spec §§2.1–2.10,7.16,18.5,18.9,
+ADR-052/053/054/197/198 и действующие M3 isolation/control/native/replay contracts.
+Migration slot **0014**, `down_revision = '0013'`, имя `0014_ai_runtime.py`.
+Применённые0001–0013 неизменны; никаких новых brokers/registries/model families.
+
+Разрешены ровно13 paths; использовать только необходимые:
+
+- `migrations/versions/0014_ai_runtime.py` — additive AI run/call storage и закрытые worker entrypoints;
+- `backend/src/asm/ai/runtime_contracts.py` — минимальные typed persistence receipts;
+- `backend/src/asm/ai/database.py` — настоящий PG ContextAuthority/read и durable lifecycle;
+- `backend/src/asm/messaging/database.py` — только необходимый trusted claim/UoW bridge;
+- `backend/src/asm/messaging/results.py` и `backend/src/asm/messaging/errors.py` — только AI claim/typed outcomes;
+- `tests/test_m4_runtime_migrations.py`, `tests/test_m4_runtime_database.py`, `tests/test_m4_runtime_postgres.py`;
+- `scripts/m4_pg_observation.py` и `.github/workflows/m4-pg-observation.yml` — узкая перенастройка существующего bounded executor под эту задачу;
+- `docs/tasks/M4_HANDOFF.md` и `docs/TASK_REGISTER.md` — receipt/current.
+
+Scope реализации:
+
+1. Минимальные Workspace-scoped AIRun и provider-call records, tenant-safe FK/RLS
+   и ограничения единственности. Логический run привязан к authoritative turn/
+   revision, а не только случайному run UUID или новой lease. Scope, original
+   saved snapshot/digest/fingerprint, control/native/Resume fences и выбранные
+   config/prompt/schema/model/route revisions закрепляются при prepare. Повтор
+   того же intent возвращает тот же run; changed input/config при том же ключе
+   даёт conflict. Новая turn revision не делает старый result пригодным.
+2. Trust начинается с реального сохранённого job/claim, его lease и worker
+   context. ContextBinding/UUID от вызывающего кода не разрешение. Реализовать
+   existing `ContextAuthority.authorize` на MODEL/READ/FOLLOWUP/CANDIDATE и
+   атомарный `read_current`: fresh Workspace/Business/Client/conversation binding,
+   owner permission, connection/product admission, HUMAN/Resume/activation,
+   turn/material/context/native observation/revision checks. Original stored
+   V2/V3 JSON возвращать без dump/re-sign нормализации; V1 не повышать до V2.
+3. Использовать существующую Jobs/claim инфраструктуру с отдельной явной AI
+   семантикой при необходимости. Не выдавать LLM-результат за
+   CONTROLLED_GUARDS_V1 и не использовать owner/manual impersonation. Existing
+   CONTROLLED пути сохраняются. Новый AI путь доступен только в явном synthetic
+   LOCAL/TEST scope этой задачи; автоматического включения для Telegram нет.
+4. До provider attempt сохранять call reservation/sequence и общий budget;
+   максимум принятых2 calls/1 READ не сбрасывается при restart/reclaim. Сохранять
+   bounded usage/cost/error metadata, включая UNKNOWN отдельно от0. Reservation
+   без надёжного call completion после сбоя означает UNKNOWN, не разрешение
+   повторить POST. Automatic retries/settlement/refund не добавлять. Read audit
+   содержит необходимые outcome/revision факты, без дубля полного контекста.
+5. Atomic compare-and-set result commit: validated reply/handoff/no_reply,
+   свежие claim/control/input/native/policy fences и единственный выбранный
+   результат. Same result replay возвращает сохранённый receipt; different
+   result на том же intent конфликтует. Проверка и запись выполняются в одной
+   короткой транзакции. Replay никогда не означает новый send permit: позже
+   принятие результата в Outbox/escalation потребует своей текущей проверки.
+6. Между model awaits нет открытой DB transaction/lock или удержанного pool
+   connection. Не хранить ключи, claim tokens, CoT и полные wire requests/responses
+   в telemetry. Candidate text хранится только как защищённый выбранный результат;
+   trace остаётся bounded. Handoff здесь proposal; Outbox/send/owner notification
+   и application worker dispatch подключаются следующей выдачей C0.
+
+**Схема и граница этапа:** это DB-only реализация0014, не переключение всего
+приложения на новую схему. Текущие application/provisioning/native readiness и
+catalog gates явно закреплены на0013. Они остаются закрытыми и неизменными;
+не обходить их monkeypatch/default-allow и не объявлять приложение совместимым.
+Отдельная disposable DB proof должна явно показать0014/roles/DDL, а старый
+application readiness — отказ на0014. После source/PG review C0 назначит
+согласованную app/schema integration;0014 не сливается в main отдельно от неё.
+
+Проверки, необходимые для REVIEW:
+
+- Реальная disposable PostgreSQL18 с asm_runtime без SUPERUSER/BYPASSRLS/DDL;
+  synthetic fixtures через trusted ingress/turn/claim путь. Schema upgrade с
+  чистой DB и0013; repeat upgrade; safe downgrade до использования либо отказ
+  до изменений после появления durable данных. Сохранность M3 data/constraints.
+- Happy path real ContextBuilder/ConversationAgent/ModelGateway с deterministic
+  adapter и настоящим PG authority; run/call/result survive new connection and
+  process/reclaim. Paid HTTP0. Повтор результата не вызывает adapter заново.
+- Cross-Workspace и same-Workspace foreign Client/job/snapshot, forged/expired
+  claim, concurrent claim/result, takeover/revoke/input/native change во время
+  model/READ await: отказ без выбранного stale result/запрещённого read/follow-up.
+- Crash до/после call reservation и result commit, unknown completion, conflicting
+  replay, budget exhaustion, cancellation/rollback. Проверять effects и отсутствие
+  запрещённых вызовов, а не только status. Разделить replay факта и разрешение
+  будущего внешнего действия. Нужные retained claim/control regressions сохранять.
+- Targeted unit/static/collection сначала; затем **один** hosted PG validation
+  exact source на новой execution branch через existing executor. Test phase<=600s,
+  job<=25min, pins/timeouts/owned cleanup/source binding сохраняются. Фиксированный
+  inventory новых modules, раздельные command/summary, все setup/call/teardown,
+  no skipped/xfail-as-PASS, actual schema0014 и role proof. Старую R4 matrix заново
+  не запускать в качестве этой проверки; её refs/evidence не переписывать.
+
+Executor changes — только exact base/branch/write-set/module inventory/report
+scope и schema0014 proof; не новый CI framework и не изменение core workflow.
+После первого hosted outcome execution ref frozen: сохранить полный receipt/
+original artifact, source SHA/tree/ancestry, фактические команды, run/job/attempt,
+counts/ошибки/cleanup и отдельную app-schema limitation; затем C2 HOLD/C0 review.
+Если конкретный необходимый path/изменение выходит за13 paths, вернуть C0
+точную причину и минимальную дельту scope, без обхода текущих guards.
+Выполнять paid calls, VM/live DB, deploy, Telegram и пересматривать models нельзя.
+
+### История — приёмка R4 source/targeted до PR40 merge
 
 C0 принял **C2-M4-CI-OBSERVATION-R4** в SOURCE + TARGETED PG scope.
 Source **249b36112adb72fb763207893eb50ab31c06eff7**, tree
@@ -39,19 +177,6 @@ C0 offline: **35 PASS/11.97s**, Ruff/format/compile5 PASS, collection278;
 observer algorithm AST-identical. Controlled before/after: old1.5s timeout,
 repaired preparation1.602s then matching observation; это не PG evidence.
 Исторический trigger main failure остаётся UNKNOWN; нового targeted run C0 нет.
-
-Единственная текущая задача — **C0-M4-CI-REPAIR-INTEGRATION-R1**:
-ветка `c0/m4-ci-repair-integration-r1`, parent этого coordination commit = receipt55a65c2,
-write-set5: AGENTS, CURRENT/HANDOFF, IMPL-004, probe runbook. Создать новый Draft PR
-к main и один штатный full CI; code совпадает с source249b. C2/C1/C3–C8 HOLD,
-execution refs frozen. Merged PR39 не двигать, failed run41108194917 не повторять.
-Ready только после проверки полного CI; merge остаётся владельцу.
-
-Actual main **997d2bf83b5402068ba1f62b23d5947fcfaf7d32** всё ещё имеет failed
-run41108194917:10 SUCCESS/1 FAILURE. Main verification и observation gate
-не закрыты целевым PASS. После merge проверить фактический main source/run.
-Runtime/VM/Telegram/paid HOLD; GPT/C4 acceptance и shared150 ledger сохранены.
-Real PG authority/durable AIRun/AI→Outbox→Telegram ещё TODO, M4 не закрыт.
 
 ### История C0 — установленная ошибка main
 

@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 R4 принят; C0 integration/full CI, main ещё BLOCKED.
+Последнее решение ниже: PR40/main VERIFIED; C2 PG authority/durable subset M4.3.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -818,7 +818,7 @@ Write-set6 и единственный targeted run после local proof за�
 production/DDL/core CI не меняются. Runtime и actual main acceptance ждут repair.
 Новый paid/VM/Telegram запуск не разрешён; ledger и data/route gates прежние.
 
-**Актуальное решение C0 от 2026-10-31: R4 SOURCE + TARGETED PG VERIFIED.**
+**Предыдущее решение C0 от 2026-10-31: R4 SOURCE + TARGETED PG VERIFIED.**
 Source249b36112adb72fb763207893eb50ab31c06eff7/receipt55a65c2 принят C0.
 One run41124252930/attempt1:278 PASS/834 phases, cleanup/source PASS. Readiness5s
 отделяет подготовку HTTP/auth от прежнего edge1.1s/observer1.5s/release<2s.
@@ -832,6 +832,27 @@ Main997d2bf8/run41108194917 остаётся FAILED; не переигрыват
 Целевой PASS не закрывает main gate; Ready после full CI, merge владельцу,
 далее проверка actual main. Production/DDL/core CI/ledger не меняются.
 Новых VM/Telegram/paid/runtime действий нет; real durable AI bridge ещё TODO.
+
+**Актуальное решение C0 от 2026-10-31: main VERIFIED; C2-M4.3-PG-RUNTIME-R1.**
+PR40 merged; main586240e88c825aa67593af5d72e0bdbb251ed3bb/tree84f6b04d совпадает
+с tested candidate031b92ed. Push41178689536/attempt1:11/11 SUCCESS,860 PG PASS;
+source/completeness gates PASS. Observation gate закрыт; новый retry не нужен.
+
+Следующий уже запланированный runtime scope выполняется последовательно:
+C2 — настоящий PG authority/read, AIRun/provider-call metadata, durable budget
+и единственный выбранный reply/handoff/no_reply с replay; затем C0 review и
+согласованная app/schema/worker/Outbox integration. Это реализация IMPL-004,
+без нового registry, broker, mutation tools или пересмотра выбранной модели.
+Migration slot0014/down0013 зарезервирован C2. Exact13 paths и один hosted PG
+proof в HANDOFF. C2 не включает production, не посылает текст и не превращает
+сохранённый результат в долговременный send permit; final admission обязателен.
+
+Application/provisioning/native gates сейчас явно принимают0013. На DB-only
+этапе0014 они не ослабляются и должны отвергать несовместимую схему; C0 не
+сливает migration отдельно от будущего согласованного application перехода.
+Такой ограниченный PG PASS не равен whole-app/full CI/runtime acceptance.
+Paid/VM/Telegram/реальные данные HOLD; data/route/backend/quality gates и ledger
+не меняются. C2 следующий, C1/C3–C8 HOLD; M4 ещё не закрыт.
 
 ## Что пересмотрено относительно baseline
 

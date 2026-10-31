@@ -1,12 +1,10 @@
 # M4.2 — GPT synthetic проверка завершена
 
-**Ничего повторно запускать не нужно.** C0 принял18 новых ответов; вместе
-с7 сохранёнными из R1 получено **25 manual PASS**,2 READ и2 synthetic images.
-GPT/v2 выбран кандидатом для разработки первого runtime. C4 context/read/agent
-принят локально. C2 R3 принят: 258 PASS на PostgreSQL, cleanup PASS.
-PR39 слит; PR CI прошёл, но проверка main нашла один timeout теста блокировки.
-[C2 R4 принят C0](../tasks/M4_HANDOFF.md):278 целевых PostgreSQL тестов PASS.
-Следующий шаг — новый PR исправления и полный CI; повторять Polza probe не нужно.
+**Ничего повторно запускать не нужно.** GPT synthetic проверка принята C0:
+25 manual PASS,2 READ и2 synthetic images; GPT/v2 выбран для первого runtime.
+PR39/40 слиты. [Main CI41178689536](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536)
+прошёл11/11, ошибка CI закрыта. [Следующая задача C2](../tasks/M4_HANDOFF.md) —
+проверка доступа к контексту и сохранение AI-запуска/результата в PostgreSQL.
 
 ## Принятый отчёт
 
@@ -34,13 +32,11 @@ R2 p50 11.163s /p95 16.393s, N18, включая history; маленькая в�
 
 ## Дальше
 
-R3 scope принят, PR39 слит. Main CI41108194917:10 jobs SUCCESS,
-foundation839 PostgreSQL PASS/1 FAIL (resume-activation-subscription,
-observer timeout1.5s). Это проверка синхронизации HTTP/PostgreSQL, без вызовов ИИ.
-C2 отделил подготовку HTTP/auth от короткого окна проверки блокировки;
-таймаут1.5s и смысл проверки policy сохранены. C0 принял source/targeted evidence
-и готовит отдельный Draft PR с одним полным CI. Затем merge владельца и проверка
-actual main; после этого продолжим durable/runtime/Telegram.
+Accepted main586240e88c825aa67593af5d72e0bdbb251ed3bb:860 PostgreSQL,
+54 browser и остальные CI gates PASS. C2 получает PG authority/durable state
+задачу на synthetic данных. Она нужна, чтобы после перезапуска использовать
+сохранённый ответ и запрещать работу при HUMAN/stale/revoked состоянии.
+После её проверки подключим application worker и защищённую отправку.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.
 
 Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`
@@ -50,6 +46,6 @@ Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER
 Это synthetic EVAL_ONLY: OpenAI family подтверждена в receipt, flex variant
 не наблюдался. Реальные данные, Telegram runtime и backend route ещё требуют
 соответствующей приёмки. Gemini/DeepSeek DEFERRED; сравнение75 не завершено.
-PR39 уже merged. Actual main verification BLOCKED до integration/main checks;
-прежний PR PASS и новый main FAIL сохранены раздельно. Причина задержки
-целевого запроса UNKNOWN. Никакого enable/deploy эта приёмка не выполняет.
+PR40/main проверены; source CI не является включением живого AI runtime.
+Новая схема0014 проверяется отдельно; application/schema переход, durable
+Outbox/send и разрешённый TEST smoke ещё впереди. Deploy/paid запусков нет.

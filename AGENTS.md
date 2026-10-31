@@ -22,10 +22,11 @@ M3 закрыт в LOCAL/TEST; финальный receipt — в верхнем 
 План/IMPL-004 приняты C0 и интегрированы в PR #37. Единственная текущая
 выдача, её accepted/repair base, исполнитель и write-set — в верхнем
 M4_HANDOFF/CURRENT. M4.1 и C5 recovery интегрированы в PR #38; actual main CI PASS.
-PR39 слит; PR CI PASS, но post-merge main CI имеет один observer timeout.
-C2 R4 принят C0:278 targeted PG PASS, readiness до прежнего lock window.
-Единственная задача — C0 integration/new Draft PR/full CI; exact source/write-set
-в CURRENT. Main verification ещё BLOCKED; runtime и остальные HOLD.
+PR39/40 слиты; accepted main586240e8, push CI41178689536:11/11 SUCCESS.
+Observer repair закрыт. Единственная выдача — C2-M4.3-PG-RUNTIME-R1:
+PG authority/read и durable run/call/result,0014 DB-only. Exact base/13 paths
+в CURRENT. Application0013 readiness не обходить; app/schema integration
+после C0 review. Остальные роли и live/paid/VM/Telegram HOLD.
 Прежние paid допуски использованы; новых вызовов они не разрешают.
 Исторические HOLD/операторские команды M1–M3 не являются новой задачей M4.
 

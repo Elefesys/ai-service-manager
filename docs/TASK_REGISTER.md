@@ -2,17 +2,21 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C2 R4 принят; C0 integration/full CI / 2026-10-31
+## CURRENT — PR40/main VERIFIED; C2-M4.3-PG-RUNTIME-R1 / 2026-10-31
 
-C2 R4 VERIFIED C0 SOURCE + TARGETED PG: source249b3611, receipt55a65c2;
-run41124252930/attempt1:278 PASS/834 phases, cleanup/source PASS.
-Независимый C0 offline35 PASS/static/collection/source/artifact audit PASS.
-Readiness до прежнего lock window; frozen/post-lock policy доказан в24 cases.
-Подробности и immutable source/evidence — [приёмка C0](tasks/M4_HANDOFF.md).
-Текущая задача только C0: новый Draft PR `c0/m4-ci-repair-integration-r1`
-к main и один full CI; C2/прочие HOLD. Ready/merge пока не разрешены результатом
-targeted lane. Actual main997d2bf8: failed run41108194917, verification BLOCKED;
-прежний PR39 PASS и main FAIL остаются отдельными фактами.
+PR40 merged; accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
+tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candidate.
+[Push CI41178689536/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536):
+**11/11 SUCCESS**,3289+155 subtests/860 PG/398 frontend/browser54 PASS;
+native/durable/Docker29/6 migrations, clean-source и completeness gates PASS.
+C0 verified main; прежний observer gate закрыт. Source/tests/CI не повторялись.
+
+Единственная выдача — **C2-M4.3-PG-RUNTIME-R1**: trusted PG authority/read,
+durable run/call/result и replay. Slot0014 после0013, DB-only; existing app0013
+readiness не ослаблять. Runtime dispatch/Outbox/Telegram и согласованный перевод
+application schema — следующие задачи после C0 review. Exact base,13 paths,
+bounded hosted proof и критерии — [HANDOFF](tasks/M4_HANDOFF.md). C1/C3–C8 HOLD;
+paid/VM/live HOLD, ledger прежний. M4 целиком ещё не закрыт.
 
 | Task | Status / ближайший результат |
 |---|---|
@@ -26,18 +30,21 @@ targeted lane. Actual main997d2bf8: failed run41108194917, verification BLOCKED;
 | M4.2-GPT-QUALITY-R1 | Исторический partial:7 retained PASS/2 READ,1 technical STOP,17 NOT_RUN; consumed |
 | C0-M4.2-GPT-QUALITY-HISTORY-R1 | VERIFIED metadata only: attempts2/reported0.00743079; UNSETTLED |
 | M4.2-GPT-QUALITY-R2 | VERIFIED owner synthetic + C0 manual18/18; составной25 PASS/27 confirmed POST/2 READ/2 images; consumed |
-| M4.3-CONTEXT-R1 | INTEGRATED PR39; VERIFIED source/local/PR CI scope, actual main verification BLOCKED |
-| C0-M4-CI-OBSERVATION-01 | BLOCKED main gate; R4 source/targeted VERIFIED, integration/full CI pending; historical cause UNKNOWN |
+| M4.3-CONTEXT-R1 | INTEGRATED / VERIFIED source/local + PR40/main CI scope; real durable/runtime work ниже |
+| C0-M4-CI-OBSERVATION-01 | INTEGRATED / VERIFIED R4 + PR40/main CI; closed, historical trigger UNKNOWN |
 | C2-M4-CI-OBSERVATION-R1 | Исторический BLOCKED local PG; SOURCE/SAVED-EVIDENCE audit принят. Заменён конкретной R2 выдачей |
 | C6-M4-PG-EXECUTOR-R1 | VERIFIED SOURCE + ACTUAL PG OBSERVATION C0: one run41082835484/attempt1, PG18.6,12 PASS/cleanup PASS. Matrix aggregate overwritten; raw completeness independently recovered. C6 HOLD/ref frozen |
 | C2-M4-CI-OBSERVATION-R2 | Исторический 253 PASS/1 FAIL; evidence и recorder fix приняты. Lifecycle defect исправлен/проверен в R3; ref frozen |
 | C2-M4-CI-OBSERVATION-R3 | VERIFIED C0 SOURCE + TARGETED PG: 258 PASS, cleanup PASS; original222/R2 254 сохранены, foreign и observer fault checks PASS. C2 HOLD/ref frozen |
-| C0-M4-INTEGRATION-R1 | INTEGRATED PR39; verification BLOCKED actual main CI41108194917 |
+| C0-M4-INTEGRATION-R1 | INTEGRATED PR39; последующий repair PR40/main VERIFIED, прежний failed run сохранён |
 | C2-M4-CI-OBSERVATION-R4 | VERIFIED C0 SOURCE + TARGETED PG; source249b3611, run41124252930:278 PASS/834 phases, cleanup/source PASS; C2 HOLD/ref frozen |
-| C0-M4-CI-REPAIR-INTEGRATION-R1 | IN_PROGRESS / R4 accepted; new Draft PR + one full CI, actual main verification pending |
-| M4.3-RUNTIME / M4.3-QUALITY | TODO / HOLD; real PG authority/durable AIRun/Telegram ещё нужны |
+| C0-M4-CI-REPAIR-INTEGRATION-R1 | INTEGRATED / VERIFIED PR40 + exact main586240e8/CI41178689536:11/11 SUCCESS |
+| C2-M4.3-PG-RUNTIME-R1 | IN_PROGRESS / выдано C2: authority/read + durable run/call/result;0014 DB-only,13 paths и one hosted proof |
+| M4.3-RUNTIME / M4.3-QUALITY | IN_PROGRESS PG subset через C2; application integration/AI→Outbox→Telegram/quality TODO |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
+
+## История M4 до приёмки PR40/main
 
 История возврата C2 (принят C0 выше): source **249b36112adb72fb763207893eb50ab31c06eff7**, tree
 **5adefdd2eab41c564c7b5d967f071fd0895f0921**, direct child exact base3e1ccf85.
@@ -50,7 +57,7 @@ Artifact13010446713:54105bytes, SHA2564992ed6357b730e9627903700466bc16bb0e38249e
 Saved evidence libfile_a6be250149f48191a6622ece88ad61bf,3557409bytes/58files,
 SHA25693673bc1df2f6d5540c749214a9de2aaeb0413e7e9fb5edb1a67d2e4c9815ea3.
 Execution frozen; docs receipt sole child source/preparation. Historical main
-trigger UNKNOWN; targeted acceptance C0 выполнена выше, full CI pending, runtime HOLD. [Receipt](tasks/M4_HANDOFF.md).
+trigger UNKNOWN; targeted/PR40/main CI приняты C0 выше; live runtime HOLD. [Receipt](tasks/M4_HANDOFF.md).
 
 [Приёмка C0 R3 и integration task](tasks/M4_HANDOFF.md),
 [операторский итог](runbooks/M4_POLZA_PROBE.md), [решение C0](decisions/IMPL-004-m4-pilot-ai.md).
