@@ -6,7 +6,7 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R3: исправить подготовку runtime tests / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R3: 81 PASS / 1 FAIL, C2 HOLD / C0 review / 2026-10-31
 
 PR40 слит владельцем. Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df** — exact-equal проверенному
@@ -31,12 +31,89 @@ Foundation/durable completeness gates PASS. Архивы этого main run п�
 INTEGRATED / VERIFIED в SOURCE + TARGETED + PR/main CI scope.** C4 context/agent
 и принятый GPT/v2 source находятся в verified main. Это не живой AI runtime.
 R2 runtime остаётся BLOCKED; preparation/schema/roles subset принят C0 ниже.
-Единственная новая выдача — C2 R3. C1/C3–C8 HOLD; R1/R2 execution frozen.
+C2 R3 завершён до единственного hosted outcome:81 PASS/1 FAIL ниже.
+C2 и C1/C3–C8 HOLD; R1/R2/R3 execution frozen.
 Новый платный probe, VM/deploy/Telegram и доступ к реальным перепискам не назначены.
 Shared150 неизменен: confirmed0.37505230/58 known POST;4 unknown/held7.585505548;
 62 total POST; remaining142.039442152, reported0.00743079 UNSETTLED.
 
-### C2-M4.3-PG-RUNTIME-R3 — актуальная revision и независимые предпосылки
+### C2 R3 receipt — fixture repair PASS; PG gate BLOCKED одной assertion
+
+**Source** [9c161d0adb50adbc461e1e01ec31bddb55794a0a](https://github.com/Elefesys/ai-service-manager/commit/9c161d0adb50adbc461e1e01ec31bddb55794a0a),
+tree **ad028ff9a754258d113209130bcd6ab5c62c4994**, sole parent exact base
+**3b5252a58b7730da6e0ff99f49a5e46b05dc2c5c** / tree
+**5141f997073cdd74ce813011971c08101da12697**. Ровно5 разрешённых paths.
+Новые refs созданы на base; один execution FF base→source, expected-base/force=false.
+[Run41203810232](https://github.com/Elefesys/ai-service-manager/actions/runs/41203810232),
+job **124544720807**, push/exact source/attempt1: **FAILURE**, ровно один run.
+
+**81 PASS (47 non-PG +34 PG),1 FAIL**;82 cases,246 phases:82 setup PASS,
+81 call PASS,1 call FAIL,82 teardown PASS. Errors/skips/xfails/overflow/
+invalid_fields0; cases/JUnit/summary независимо совпадают. `complete=true`,
+`result=FAIL`; completeness не подменяет gate. Все79 R2 nodeids/order и целевые
+assertions сохранены:78 PASS/1 FAIL;3 новых actual-PG cases PASS. Inventory82,
+SHA256 **ec64c4acebaee16f21de49b7e407fb7a2b2f7fd34032df46892be66ad36dd4ef**.
+Local47 PASS, Ruff/format/compile/collection PASS.
+
+**R3 actual proof:**39 записанных переходов revision1/COLLECTING→2/READY;
+реальные seal/Turn/TEST_CONSUME/AI job/claim identity сверены в одном Workspace/
+connection. CONTROLLED/native/synthetic Telegram:3 focused cases подтверждают
+current revision/run и отказ authority/READ старой revision без result/calls/effects.
+Used downgrade создаёт свой run через intent/prepare; реальный
+**AI_RUNTIME_DURABLE_DATA** отказ, counts/schema/своя строка/object OIDs неизменны.
+
+| Группа прежних30 failures | R3 outcome |
+|---|---|
+| result/replay и cross-process conflict | 5 PASS |
+| tools/READ/budget/audit | 1 PASS +1 FAIL ниже, после успешного READ/result |
+| foreign scope, forged/expired/unadmitted claims, tenant FK | 6 PASS |
+| claim concurrency | 1 PASS |
+| takeover/revoke/input/native/observation во время MODEL/READ | 10 PASS; без held runtime transaction |
+| reservation/result crash, rollback, UNKNOWN/no-repeat | 3 PASS |
+| changed config/input, retained consumer/AI terminal retry | 2 PASS |
+| used-data downgrade refusal | 1 PASS с собственной предпосылкой |
+
+Clean/previous/repeat upgrade0014, unused downgrade0013, retained M3, PG18.6
+roles/RLS/private access/DDL и application/native0014 refusal также PASS.
+
+**Единственный сбой:** `test_two_calls_one_read_original_snapshot_and_bounded_audit`,
+`tests/test_m4_runtime_postgres.py:510`, AssertionError на
+`"text" not in json.dumps(state["read_audit"]) and len(await calls(h, run)) == 2`.
+Предыдущий прошедший assert требует ключ `context_version`, содержащий подстроку
+`text`; сериализация одного этого ключа уже делает левую часть ложной.
+Чистый Python counterexample `{"context_version": 1}` воспроизвёл противоречие;
+это не повтор PG и не доказательство утечки текста. Production defect этим
+падением не установлен; исходный assert сохранён в соответствии с выдачей.
+До сбоя прошли RuntimeReceipt/2 adapter requests, calls_used2/reads_used1/
+cost_reserved0.2 и точный top-level audit key set. **NOT_REACHED в этом case:**
+правая проверка числа provider-call rows из-за short-circuit, затем snapshot
+равен original и effects=[0,0,0]. Успех других cases не заменяет эти assertions.
+
+**Минимальная дельта для C0:** заменить substring search структурной проверкой
+разрешённых audit/native keys и типов/значений, добавить отрицательный пример
+с реальным raw text; вынести provider-call count в отдельный assert. Сохранить
+snapshot/effects и production source. После outcome код не менялся; дальнейшая
+правка/tested source/run — только по решению C0. Общий gate остаётся BLOCKED.
+
+Фазы отдельно: build16.010615s; DBstart9.488952s; schema1.968903s;
+versions1.166962s; command121.526381s (pytest119.300s); cleanup0.314828s.
+**Cleanup/source PASS**, owned containers/networks/volumes пусты. Tests600s/
+job25min и pins неизменны. Original [artifact13043214980](https://github.com/Elefesys/ai-service-manager/actions/runs/41203810232/artifacts/13043214980):
+**31073 bytes/25 files**, SHA256
+**35c664a9635940c256aeb9c28d678c47ff19c8ffd4ade9564203bd783e6df813**.
+ZIP byte-exact, manifest24/24 verified; upload log/metadata digest совпали.
+Command/summary/JUnit/source/collection/все phases и bounded preparation facts сохранены.
+Полный **C2_M4_PG_RUNTIME_R3_EVIDENCE_41203810232.zip**: **97581 bytes/49 files**,
+SHA256 **cac2050e055075a23d789f85dfd92fc089a0b3a6b596bb93f40932e373130bf8**,
+saved **libfile_5030f47eabc88191996abe70d64b217d**, manifest48/48 verified.
+
+Execution **c2/m4-3-pg-runtime-run-r3 frozen на source**; этот docs-only receipt —
+sole child source на preparation **c2/m4-3-pg-runtime-r3**. Main/old refs неизменны.
+**C2 HOLD / C0 review.** Backend/миграции0001–0014/guards/roles/readiness0013
+не менялись; full CI/live/paid/VM/deploy/Telegram egress/real data не запускались.
+
+### История — исходная выдача C2-M4.3-PG-RUNTIME-R3
+
 
 **Результат для пилота:** довести тесты до реального AI run/call/result и
 проверить сохранение ответа, права доступа, READ и восстановление. В R2
@@ -123,7 +200,7 @@ Outbox integration — после полного source+PG review C0. Main586240
 прежним CI; R2 failure его не меняет. Paid/Polza/VM/live DB/deploy/Telegram/
 реальные данные HOLD; shared150 ledger неизменен.
 
-### C2 R3 — source preparation / preflight
+### История — R3 source preparation / preflight до hosted outcome
 
 Exact base **3b5252a58b7730da6e0ff99f49a5e46b05dc2c5c**, tree
 **5141f997073cdd74ce813011971c08101da12697**, sole parent receipt0317152f;
@@ -145,7 +222,7 @@ Finite **82**, SHA256 **ec64c4acebaee16f21de49b7e407fb7a2b2f7fd34032df46892be66a
 Local **47 PASS**, Ruff/format/compile/collection PASS; bounded recorder принимает
 UUID/revision и отвергает claim/snapshot fields. Evidence добавляет только stage,
 identity/revision/state, typed error code/SQLSTATE; без сырого exception/snapshot.
-Следующий шаг — один push/source/attempt1 PG run, затем frozen receipt/C0 review.
+Этот preflight предшествовал единственному hosted outcome; receipt приведён выше.
 
 ### История — C2 R2 receipt: два repair подтверждены; runtime BLOCKED
 

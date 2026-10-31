@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R3: исправить подготовку runtime tests / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R3: 81 PASS / 1 FAIL, C2 HOLD / C0 review / 2026-10-31
 
 PR40 merged; accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candidate.
@@ -63,18 +63,43 @@ Offline source identity2 checks PASS; нового compiler/pytest/PG run от C
 Два исправления R1 и PG schema/roles subset приняты; runtime target behavior
 не принято. Receipt **0317152f2e9f2d31c7c12d30be96ad7f026ceb6f** — repair parent.
 
-**C2-M4.3-PG-RUNTIME-R3 — IN_PROGRESS / source подготовлен.** Exact base
-**3b5252a58b7730da6e0ff99f49a5e46b05dc2c5c**, tree
-**5141f997073cdd74ce813011971c08101da12697**, sole child receipt0317152f.
-Prep c2/m4-3-pg-runtime-r3; execution c2/m4-3-pg-runtime-run-r3; write-set5.
-Post-seal authoritative revision/identity сверяются с Turn и TEST_CONSUME/AI job;
-used downgrade создаёт собственный durable run. Reviewed fixture chain до prepare
-CONTROLLED/native/synthetic Telegram; guards и production source неизменны.
-79 прежних nodeids/order/assertions сохранены +3 focused PG cases; finite82,
-SHA256ec64c4acebaee16f21de49b7e407fb7a2b2f7fd34032df46892be66ad36dd4ef.
-Local47 PASS, static/compile/collection PASS. Actual PG proof пока NOT_RUN;
-далее один hosted run<=600s tests/25min job и frozen receipt/C0 review.
-Runtime/worker/Outbox/Telegram/live/paid HOLD. [Подготовка](tasks/M4_HANDOFF.md).
+**C2-M4.3-PG-RUNTIME-R3 — BLOCKED общий PG gate / C2 HOLD, C0 review.** Source
+**9c161d0adb50adbc461e1e01ec31bddb55794a0a**, tree
+**ad028ff9a754258d113209130bcd6ab5c62c4994**, sole child exact base
+**3b5252a58b7730da6e0ff99f49a5e46b05dc2c5c** / tree5141f997;5 paths.
+Prep c2/m4-3-pg-runtime-r3; execution c2/m4-3-pg-runtime-run-r3: оба созданы
+на base, один expected-base/force=false execution FF. [Run41203810232](https://github.com/Elefesys/ai-service-manager/actions/runs/41203810232),
+job124544720807/push/source/attempt1: **81 PASS (47 non-PG +34 PG),1 FAIL**.
+82 cases/246 phases, errors/skips/xfails/overflow/invalid_fields0;
+cases/JUnit/summary совпали:complete=true/result=FAIL. Retained79/order/assertions
+сохранены +3 actual-PG PASS; inventory82/SHA256
+**ec64c4acebaee16f21de49b7e407fb7a2b2f7fd34032df46892be66ad36dd4ef**.
+Local47 PASS, Ruff/format/compile/collection PASS.
+
+39 real post-seal transitions и current/stale identity подтверждены;
+CONTROLLED/native/synthetic Telegram regressions PASS. Used downgrade — собственный
+trusted run, actual AI_RUNTIME_DURABLE_DATA, data/schema/object preservation PASS.
+Из прежних30 failures теперь29 PASS: tenant/claims/FK, replay/concurrency/crash,
+authority races/no held transaction, config/consumer/retry;1 case дошёл до READ/result.
+Migration/roles/RLS/application0014 refusal также PASS.
+
+Единственный FAIL — test_two_calls_one_read_original_snapshot_and_bounded_audit:510:
+substring `text` обнаруживается в обязательном metadata key `context_version`.
+Counterexample воспроизведён offline; production defect/утечка этим не доказаны.
+До сбоя RuntimeReceipt/2 calls/1 READ/cost0.2/exact audit keys PASS; provider-call
+row count, final snapshot/effects assertions в этом case NOT_REACHED.
+Минимальная следующая дельта C0 — structural audit/native metadata check + raw-text
+negative, отдельный call-count assert; production и target meaning сохранить.
+После первого outcome функциональных правок/retry нет. [Полный receipt](tasks/M4_HANDOFF.md).
+
+Cleanup/source PASS; command121.526381s, pytest119.300s, build16.010615s отдельно.
+Artifact13043214980:31073bytes/25files, SHA256
+**35c664a9635940c256aeb9c28d678c47ff19c8ffd4ade9564203bd783e6df813**; manifest24/24.
+Full evidence **libfile_5030f47eabc88191996abe70d64b217d**:97581bytes/49files,
+SHA256 **cac2050e055075a23d789f85dfd92fc089a0b3a6b596bb93f40932e373130bf8**.
+Execution frozen на source; docs-only receipt sole child source на preparation.
+Main/old refs/production/миграции0001–0014/application0013 gates неизменны.
+Runtime/worker/Outbox integration, live/paid/Telegram HOLD; далее C0 review.
 
 | Task | Status / ближайший результат |
 |---|---|
@@ -99,8 +124,8 @@ Runtime/worker/Outbox/Telegram/live/paid HOLD. [Подготовка](tasks/M4_H
 | C0-M4-CI-REPAIR-INTEGRATION-R1 | INTEGRATED / VERIFIED PR40 + exact main586240e8/CI41178689536:11/11 SUCCESS |
 | C2-M4.3-PG-RUNTIME-R1 | Исторический BLOCKED / run41185701200 SCHEMA_FAILED;2 known source defects, hosted55 NOT_RUN; receiptca47ea21/evidence проверены C0, execution frozen |
 | C2-M4.3-PG-RUNTIME-R2 | Runtime BLOCKED; SOURCE REPAIR + PG PREPARATION/SCHEMA/ROLES VERIFIED C0;49 PASS/30 FAIL, execution frozen |
-| C2-M4.3-PG-RUNTIME-R3 | IN_PROGRESS / local47 PASS,82 collected (79 retained +3 PG); один hosted proof NOT_RUN |
-| M4.3-RUNTIME / M4.3-QUALITY | Runtime PG в R3 repair; application integration/AI→Outbox→Telegram/quality TODO |
+| C2-M4.3-PG-RUNTIME-R3 | BLOCKED общий gate /81 PASS,1 contradictory audit assertion; post-seal/own downgrade PASS; execution frozen,C2 HOLD/C0 review |
+| M4.3-RUNTIME / M4.3-QUALITY | PG gate:1 audit assertion blocker; C0 review R3; application integration/AI→Outbox→Telegram/quality TODO |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
 
