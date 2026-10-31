@@ -2,7 +2,43 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R2 / IN_PROGRESS, выдано C3 / 2026-10-31
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R2 / BLOCKED, C0 review / 2026-10-31
+
+**C3 HOLD.** Base `4f989a09c38c112111819878319df0c9b09db00d` /
+tree `8a5e6f1f6fa0a6b8a36eff4c561794db001b42f7`; frozen source
+**e8300919ea0431388b7358f168ee8cac77089613** /
+tree **93fc9c88c3cd2cd063012cab6f108b6d3dc18785**, sole child base,10 allowed paths.
+Этот receipt — docs-only sole child source на preparation
+`c3/m4-3-runtime-integration-r2`; execution `c3/m4-3-runtime-catalog-run-r2` frozen.
+R2 PR-source остался на assignment; targeted ref/run, новый PR/full CI не созданы.
+
+Единственный stock capture
+[41223501373/attempt1](https://github.com/Elefesys/ai-service-manager/actions/runs/41223501373)
+**FAIL**, job124602743716: **EVENT_PUSH_BASE_REF** до Docker/PG.
+Source/repo/ref/tree совпали; payload `base_ref` присутствовал, его actual значение
+не сохранено. Null-only predicate был унаследован при добавлении новых refs.
+Это failure допуска, не ожидаемый catalog-pin mismatch. Owned DB/resources не
+создавались; finalization/upload SUCCESS не являются PG cleanup evidence.
+Original artifact13050034741:1025bytes, SHA25699d008dc3a9ea15eb51a8500e7138bc3778e31ebb308c7bce06af85e83ffdacb,
+manifest1/1 verified. [Evidence26files](https://chatgpt.com/library?file_id=libfile_3871af6517a48191966cf2e9c71363b4&account_id=personal)
+3224261bytes/SHA256682c8be7279931a496db34961e7f24dbd2ae1d354bad334acdcd052c3d287bcc,
+manifest25/25; original ZIP/log/metadata, local JUnit и exact source342files.
+
+Исправлены cancellation propagation и bounded bookkeeping, active/missing
+checkpoints, safe schema-refusal stages. Pre-final offline478+130subtests PASS;
+после последней дельты final-source80 PASS, включая15 causal cancel cases,
+Ruff/format/mypy PASS. Actual PG cancellation/manual/recovery ещё не проверены.
+Stock0015/pin repair, full64PG/current native6/readiness/migration lifecycle,
+browser54/generic860/all12 full-CI gates **NOT_REACHED**. Полная дельта,
+локальные ограничения и минимальный следующий admission repair —
+[CURRENT M4_HANDOFF](tasks/M4_HANDOFF.md). Один capture использован; без rerun.
+
+C0 review/новая конечная выдача для отсутствующего push operand и stock capture.
+Whole-runtime не INTEGRATED/VERIFIED. Main586240e8/R1PR41/C2 refs unchanged.
+Остальные роли HOLD; default OFF/fake-only; no paid/live/VM/real data;
+shared150 ledger unchanged, owner ничего не запускает.
+
+## История — C0 assignment C3 R2 / 2026-10-31
 
 C0 проверил R1 source9b05e5dd/receipt **e58163ae6b31dfbb243b71bda47b875b33344705**:
 PR41 DRAFT/не слит, CI41216402482 **6 SUCCESS/5 FAIL/1 SKIPPED**.

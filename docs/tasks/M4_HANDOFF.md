@@ -6,7 +6,101 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R2 / выдано C3 / 2026-10-31
+## CURRENT — C3 R2 receipt / BLOCKED, C0 review / 2026-10-31
+
+**C3 HOLD.** Единственный разрешённый stock capture завершился отказом event
+admission до Docker/PG. Это не ожидаемый application-pin mismatch. Повтора,
+targeted validation, нового PR и полного CI не было; whole-runtime не принят.
+
+**Exact assignment/base:** `4f989a09c38c112111819878319df0c9b09db00d`, tree
+`8a5e6f1f6fa0a6b8a36eff4c561794db001b42f7`.
+**Frozen source:** `e8300919ea0431388b7358f168ee8cac77089613`, tree
+`93fc9c88c3cd2cd063012cab6f108b6d3dc18785`; sole parent — assignment.
+Execution ref `c3/m4-3-runtime-catalog-run-r2` frozen на этом source.
+Этот docs-only receipt — sole child source на preparation
+`c3/m4-3-runtime-integration-r2`, только HANDOFF/TASK_REGISTER.
+PR source `c3/m4-3-runtime-integration-pr-r2` остался на assignment; PR не создан.
+Accepted main `586240e88c825aa67593af5d72e0bdbb251ed3bb` unchanged;
+R1 refs/PR41 и C2 execution refs не изменялись.
+
+### Фактический hosted result
+
+[Run41223501373](https://github.com/Elefesys/ai-service-manager/actions/runs/41223501373),
+`push`, attempt1, source/tree выше: **FAILURE**. Единственная job `runtime`,
+ID124602743716, FAIL; checkout/finalization/artifact upload SUCCESS.
+Точный predicate — **EVENT_PUSH_BASE_REF**: `payload.get("base_ref") is None`
+не выполнен. В original diagnostic `push_base_ref_state="present"`, совпадают
+repo/ref/head/tree/sole parent/attempt; event payload SHA256
+`14797eb0d3c3866f677d1b9c3eb1c1562f1a10d8f4b68f00cbc12be2f86f6d7c`.
+Actual значение/тип `base_ref` не сохранены; какой именно ref был указан,
+**не установлено**. C3 добавил новые execution refs, но сохранил прежнее
+null-only условие; положительный constructed fixture также использовал null.
+
+До отказа выполнена проверка clean source; Docker inspection/build, создание
+credentials/DB, migrations, SQL/catalog/pytest **NOT_REACHED**. Owned resources
+не создавались. Cleanup step SUCCESS — финализация evidence, не проверенный PG
+cleanup; inventory/JUnit/SQL timings/catalog/version/locale facts отсутствуют.
+
+Original artifact **13050034741**, `m4-runtime-41223501373-1`, **1025 bytes**,
+SHA256 **99d008dc3a9ea15eb51a8500e7138bc3778e31ebb308c7bce06af85e83ffdacb**.
+ZIP2 files, manifest independently **1/1**; размер/digest совпали с fresh API.
+[Полный evidence archive](https://chatgpt.com/library?file_id=libfile_3871af6517a48191966cf2e9c71363b4&account_id=personal):
+**3224261 bytes**, SHA256
+**682c8be7279931a496db34961e7f24dbd2ae1d354bad334acdcd052c3d287bcc**,
+26 files, manifest25/25. Внутри original ZIP/job log/API metadata, локальные
+JUnit/logs, REPORT, exact source patch/archive/manifest342files с проверкой
+Git blobs/modes. Source archive создан локально из published Git commit;
+runner source archive не успел создать. Результаты разных запусков не объединены.
+
+### Причинная дельта и локальные проверки
+
+10 source paths: `backend/src/asm/ai/{database,runtime}.py`,
+`backend/src/asm/foundation.py`, `backend/src/asm/telegram/provisioning.py`,
+`scripts/{m4_runtime_db,native_context_db_catalog}.py`,
+`.github/workflows/m4-runtime-db.yml`,
+`tests/{test_m4_delivery,test_m4_delivery_postgres,test_m4_runtime_db_runner}.py`.
+Миграции/pins/locks/infra/Dockerfiles/retained35 module/ConversationAgent не менялись.
+
+- CANCELLED outcome агента восстанавливает внешнюю отмену на application boundary.
+  Best-effort UNKNOWN completion ≤1s, STOP ≤2s за attempt; lost-ACK replay входит
+  в execution deadline. После STOP failure terminalization остаётся finite lease
+  recovery; второго model call нет. Actual PG recovery ещё не проверен.
+- 15 новых offline causal cases: direct/parent TaskGroup/deadline × STOP
+  success/error/delay/repeated cancellation/completion delay. Unset stop,
+  completion <3.5s, один model call, без оставшихся child tasks. Существующий PG
+  manual/inbound case теперь требует cancellation <4s, но сам PG case не запускался.
+- Active setup/call/teardown и preparation events сохраняются до teardown;
+  summary разделяет completed/active/missing/NOT_REACHED и visited groups.
+  Source-owned startup/native refusal stage + exception class не содержат raw
+  exception values/DSN/credentials. Browser cleanup diagnostics ещё не доработаны.
+- Initial offline85 PASS. Pre-final working candidate478 PASS +130 subtests,
+  73.66s; затем уточнены replay/deadline и startup diagnostics. На **окончательных
+  source bytes** delivery/foundation80 PASS, включая все15 causal cases,16.35s;
+  Ruff check/format195files, mypy76files и diff-check PASS. Это не PG evidence.
+  Локальные исправленные development failures и точные команды — в REPORT.
+
+### Остаток и следующий допуск
+
+R2 stock0015/current pin repair, full64 PG + current native6, readiness,
+clean/previous/repeat upgrade, unused/used downgrade, browser54, generic860 и
+все12 full-CI gates **NOT_REACHED**. Targeted branch/run не создавался; добавление
+current-native targeted execution осталось незавершённым. R1 partial evidence
+и frontend398 PASS остаются историческими фактами, не заменяют R2 acceptance.
+
+**Вернуть C0:** в `scripts/native_context_db_catalog.py` добавить bounded operands
+для push `base_ref`/`created`/`before`; с actual operand определить правило допуска
+новой execution branch при сохранении exact repo/ref/source/tree/ancestry/attempt
+и clean-source checks; покрыть в `tests/test_m4_runtime_db_runner.py`. Не удалять
+predicate вслепую и не разрешать произвольные refs. Получение отсутствующего факта
+и повтор stock capture требуют новой конечной выдачи C0: прежний один capture
+использован. Нового actual0015 hash нет; нельзя вычислять pin по self-report/WASM.
+
+C3 HOLD/C0 review; не merge. AI default OFF/FAKE/EVAL_ONLY; no paid/live/VM/data.
+Ledger unchanged: confirmed0.37505230/58 knownPOST;4 unknown held7.585505548;
+62 totalPOST; remaining142.039442152; reported0.00743079 UNSETTLED.
+Owner ничего не запускает.
+
+## История — C0 assignment C3-M4.3-RUNTIME-INTEGRATION-R2 / 2026-10-31
 
 **Результат:** synthetic worker должен принимать проверенную схему0015,
 останавливаться за конечное время и завершать оставшиеся delivery/schema
