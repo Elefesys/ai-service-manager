@@ -2,7 +2,29 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R3 / BLOCKED, C0 review / 2026-11-01
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R4 / IN_PROGRESS, выдано C3 / 2026-11-01
+
+C0 проверил R3 source9545db92/receipt **ad6f1b732d0158ad64f58e7097e0bc8c38de05ab**.
+Admission repair VERIFIED SOURCE+HOSTED; run41226933313 получил stock0013/0015.
+Current verifier valid=false: одна embedded expected-row содержит self signature
+с hash historical human verifier. Остальные181 rows совпали; human отсутствует.
+Независимая замена signature восстанавливает182/182 other-functions match;
+candidate body/full pins ещё требуют actual PG. Whole-runtime BLOCKED.
+
+Fresh metadata/log/ZIP/manifests73/47/source342 проверены C0; final474 PASS+
+130subtests, включая44 admission/15 cancellation; owned cleanup/source PASS.
+Actual64 M4/current-native6/runtime lifecycle и full CI ещё не выполнены.
+
+**Одна задача C3 R4:** точечный verifier/pins repair, один targeted run с corrected
+stock preflight и оставшимися PG сценариями, затем после PASS новый Draft PR/
+full CI12gates. Отдельного capture нет. Exact base — SHA этого C0 assignment,
+sole child ad6f1b73; branch **c0/m4-3-runtime-integration-r4**. Prep/PR/execution
+refs, write-set и ≤600s/≤25min лимиты — в [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Main586240e8 unchanged; PR41/R1–R3/C2 refs frozen, не merge/rerun.
+Другие роли HOLD, default OFF/fake-only; paid/live/VM/real data HOLD;
+ledger unchanged, owner ничего не запускает.
+
+## История — C3 R3 receipt / BLOCKED, до C0 review / 2026-11-01
 
 **C3 HOLD.** Admission repair пройден; единственный stock capture остановлен
 на новом **CATALOG_DECLARED_PROFILE**: verifier0015 valid=false. Ошибочная

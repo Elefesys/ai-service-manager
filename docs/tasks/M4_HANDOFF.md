@@ -6,7 +6,129 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3 R3 receipt / BLOCKED, до C0 review / 2026-11-01
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R4 / выдано C3 / 2026-11-01
+
+**Результат:** исправить единственную неверную строку verifier0015 и согласовать
+pins, затем проверить synthetic application на PostgreSQL. Stock catalog уже
+получен; отдельный повторный capture не нужен. Product scope прежний.
+
+**C0 review R3:** admission repair **VERIFIED в SOURCE + HOSTED scope**;
+stock observation подтверждён, whole-runtime **BLOCKED** из-за valid=false.
+Source **9545db92e6a03b27179ed7d23ad5f524bf6c2530** /
+tree **01c1e31657237740cc77d070aeb4f53d656f184e**, sole child assignment
+**fa2469deea75c11ca5901de77fc3e46304c1e9ae**,4 allowed paths.
+Receipt **ad6f1b732d0158ad64f58e7097e0bc8c38de05ab** /
+tree **fc7f68a5cb72c5f170df84311adfb3f4a49d6f45**, sole child source,2 docs.
+Run **41226933313**, push/attempt1/job124612927644: admission PASS,
+catalog0013 PASS, catalog0015 **CATALOG_DECLARED_PROFILE**; owned cleanup PASS,
+source clean. Actual base_ref строка сохранена; R2 неизвестный payload не принят.
+
+C0 сверил fresh refs/commits/run/jobs/artifact и полный log; архив R3
+9017673bytes/SHA256 **6eb26358da31888ec0fe8f46633fe5693f6f22e941f794ecafe4e81f0b28e2b0**,
+manifest73/73; original artifact13051854895:4422165bytes,
+SHA256 **1340e5edb365011f9bad86e24e4cc9a9a4b841a57287f944a666498664ed9c6f**,
+48members/manifest47/47; source342 Git blobs/modes. Final pre-capture JUnit/log:
+**474 PASS +130 subtests**, включая44 admission и15 cancellation cases.
+Оба admission.xml/admission-initial.xml содержат ранний43PASS/1FAIL; итог44PASS
+подтверждён именно pre-capture.xml. Не объединять эти результаты в новый run.
+[Original evidence](https://chatgpt.com/library?file_id=libfile_bd0c89d20d1481919c1b9eba7fd95405&account_id=personal).
+
+C0 заново построил closed source catalog из frozen Git, сверил stored expected
+и actual functions/security/roles/nonfunction для0013/0015. Отдельный независимый
+разбор182 embedded rows показал ровно один mismatch: self signature
+`platform.ai_delivery_schema_profile()` содержит historical human body hash
+`527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac`;
+`platform.human_context_schema_profile()` отсутствует. После замены только этой
+signature expected set точно равен183 functions minus self,182 hashes совпадают.
+Не менять собственную security-проверку verifier, расположенную отдельно.
+
+Stock full0015 **aec3c9c6398c6ad81a6e23bc6cbc204c3473424a03dfa40c82c655cc88d23b03**;
+nonfunction **e939e9f303843a84256f9315e6016e1a888aea0c18469539aa53147c6d339bee**.
+Declared hash равен independent, но valid=false. Отдельно подтверждены те же
+function rows/nonfunction относительно R1 WASM,10 иных позиций массива.
+Старый full pin e716dad0 не годится; сортировку/locale ради него не менять.
+
+C0 независимо пересчитал **кандидатные, ещё NOT_PG_TESTED** pins для единственной
+подстановки в сохранённой stock serialization:
+body **e0d5d30826f10c3396565ed2ab571653f41f1b7bdcf883f7eeebd0159fecc443**;
+full **8a91ef6f6d592ad9eeafe80f4eb5e2c012ef759040a96351a2242dfd97d480d7**.
+В full catalog меняется только definition ai_delivery_schema_profile; это
+проверяемые исходные кандидаты для repair, не уже принятая схема. Новых
+pytest/PG/CI/paid запусков C0 не делал.
+
+### Исполнение R4
+
+**Один исполнитель C3**, другие роли HOLD. Exact repair base — полный SHA этого
+C0 assignment из immutable URL, sole child ad6f1b73/5 coordination docs.
+C0 branch **c0/m4-3-runtime-integration-r4**; prep
+**c3/m4-3-runtime-integration-r4**, PR source
+**c3/m4-3-runtime-integration-pr-r4**. Accepted main
+**586240e88c825aa67593af5d72e0bdbb251ed3bb** unchanged; PR41/R1–R3/C2 refs frozen.
+
+**Write-set, только необходимая дельта:**
+
+- `migrations/versions/0015_ai_delivery.py` — ровно исправление expected row;
+  `backend/src/asm/foundation.py` — согласованные body/full pins.
+- `scripts/native_context_db_catalog.py`, `scripts/m4_runtime_db.py`,
+  `.github/workflows/m4-runtime-db.yml` — R4 identity, embedded invariant,
+  честные diagnostic predicates и окончание current-native6 targeted mode.
+- `tests/test_m4_delivery.py`, `tests/test_m4_schema_postgres.py`,
+  `tests/test_m4_runtime_db_runner.py`, `tests/test_native_context_db_runner.py`,
+  `tests/test_foundation.py`, `tests/test_m3_1_native_context_runtime_postgres.py`.
+- Сохранившийся R2 scope startup/cleanup evidence: `scripts/test_browser.sh`,
+  `scripts/test_telegram_egress.sh`, `.github/workflows/ci.yml`,
+  `tests/test_telegram_egress.py`; не менять browser journeys/продуктовые contracts.
+- `docs/tasks/M4_HANDOFF.md`, `docs/TASK_REGISTER.md` — итоговый receipt.
+
+Сохраняется явное C0 profile-only исключение для unmerged0015 на disposable TEST
+state из R2; при обнаружении retained0015 DB вернуть C0 для additive successor.
+0001–0014, agent/cancellation/worker, retained35 module, locks/pins image/infra,
+R4 C2 runner/workflow и architecture immutable. Не переписывать admission repair;
+переиспользовать принятое before/sole-parent правило с одним новым R4 ref.
+
+1. Исправить конкретную expected-row signature, оставить historical hash.
+   Независимый invariant:182 unique other functions, self отсутствует, полный
+   set/hash/language/security/volatility/runtime-execute match,48 column sets.
+   Проверить regression self-row, missing/duplicate/wrong hash без ослабления
+   existing negatives. Body/full pins обновить вместе; nonfunction без изменения.
+   Ошибка declared valid/hash должна иметь приоритет над отдельным full-pin
+   mismatch; сохранить оба факта, не называть valid=false ожидаемым pin mismatch.
+2. Ruff/format/mypy и целевые offline tests на окончательном source. Сверить
+   fixed-source body/catalog кандидаты с сохранённым stock, запретить скрытые
+   дополнительные function/DDL changes. Завершить native6/active/missing и
+   startup/cleanup evidence до hosted публикации; source после outcome frozen.
+3. **Один targeted run**, включающий проверку corrected stock catalog и всю
+   ранее не выполненную runtime-проверку. Новый execution ref
+   **c3/m4-3-runtime-targeted-run-r4** заранее создать на exact assignment,
+   где R4 trigger отсутствует; одним source commit fast-forward с expected_sha,
+   force=false. before/sole parent==assignment, repo/ref/tree/HEAD/attempt1 и
+   clean-source/write-set gates обязательны. Активировать только R4 push trigger;
+   новый capture ref/run и rerun R3 не назначены.
+4. В том же targeted run сначала отдельный owned stock0015 preflight: independent
+   source/functions/security/roles/full/nonfunction/verifier body, declared
+   **valid=true**, exact application pins/readiness. Сохранить raw catalog и
+   сравнение с candidate hashes. Затем полный64 M4 inventory + causal additions,
+   current-native6 (включая ранее замаскированные negatives), migrations lifecycle
+   и actual cancel/manual progress/recovery. Retained0014/destructive modules
+   остаются на отдельных fresh owned clusters; preflight не загрязняет их DB.
+   ≤600s совокупных SQL/tests, ≤25min job; полные phases/JUnit/active/NOT_REACHED,
+   source и cleanup. Не заменять actual behavior source assertions или skip.
+5. Только после targeted PASS — **один новый Draft PR/full CI** финального source,
+   все12 gates, generic/native/M4 disjoint/full union. Это не дополнительная
+   серия capture; неиспользованный PR/CI scope R2–R3 переносится сюда. Любой
+   unexpected FAIL сохраняется со всеми группами причин и missing facts и
+   возвращается C0; нет unchanged rerun/изменения source после outcome.
+
+Return: exact source/base/tree/write-set, actual corrected catalog и verifier,
+embedded invariant, targeted inventory/phase/JUnit/cleanup, PR head/tested merge/
+run/jobs/artifacts/digests и original evidence. After receipt C3 HOLD/C0 review.
+Whole-runtime не INTEGRATED/VERIFIED; PR41 не сливать, merge нового candidate
+выполняет владелец после приёмки. AI default OFF/fake-only; paid/live/VM/deploy/
+real data не назначены. На ПК owner ничего не запускает. Shared150 unchanged:
+confirmed0.37505230/58knownPOST;4unknown held7.585505548;62totalPOST;
+remaining142.039442152;reported0.00743079 UNSETTLED.
+
+## История — C3 R3 receipt / BLOCKED, до C0 review / 2026-11-01
 
 **C3 HOLD.** Admission repair прошёл; единственный stock capture получил
 независимые0013/0015 catalogs. Installed verifier0015 вернул **valid=false**:

@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R3.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R4.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -945,7 +945,7 @@ fake-only, native OWNER/barrier/tenant/send fences/UNKNOWN и budgets прежн
 UI reason presentation, live smoke и rollout не входят в repair. Другие роли HOLD;
 ни merge, ни readiness реального пилота из частичных PASS не следуют.
 
-**Актуальное решение C0 от 2026-11-01: C3-M4.3-RUNTIME-INTEGRATION-R3.**
+**Предыдущее решение C0 от 2026-11-01: C3-M4.3-RUNTIME-INTEGRATION-R3.**
 R2 receipt d1959bca/source e8300919 подтверждён C0: final80 offline PASS,
 но capture41223501373 отказал EVENT_PUSH_BASE_REF до Docker/PG. Whole runtime
 BLOCKED. GitHub допускает string/null base_ref; exact assignment определяется
@@ -960,6 +960,20 @@ negatives; новые execution refs заранее создаются на за
 в R3 без увеличения лимитов. Product/write-set/migration исключение R2 прежние;
 нет новой платформы, платного вызова или live enable. Точные условия в CURRENT.
 PR41/старые refs frozen; C3 один owner, остальные HOLD. Merge после приёмки C0.
+
+**Актуальное решение C0 от 2026-11-01: C3-M4.3-RUNTIME-INTEGRATION-R4.**
+R3 admission принят по source/hosted evidence, stock catalogs получены.
+Current0015 valid=false вызван одной неверной signature в embedded expected
+table: self вместо historical human verifier. C0 независимо подтвердил этот
+дефект,182/182 other-functions match после точечной подстановки и кандидатные
+body/full pins; stored catalog observation не заменяет corrected-schema PASS.
+
+C3 получает verifier/pins repair и один targeted PG run с corrected-stock
+preflight + retained/delivery/schema/current-native6. Новый отдельный capture
+не назначен. После PASS — один Draft PR/full CI12gates; точные refs/write-set/
+limits в CURRENT. Узкое исключение unmerged0015 из R2 сохраняется;0001–0014,
+agent/cancellation и инфраструктура immutable. Whole-runtime BLOCKED до проверки;
+PR41/старые refs frozen, другие роли HOLD, paid/live/VM/real data не включаются.
 
 ## Что пересмотрено относительно baseline
 
