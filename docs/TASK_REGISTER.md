@@ -63,16 +63,18 @@ Offline source identity2 checks PASS; нового compiler/pytest/PG run от C
 Два исправления R1 и PG schema/roles subset приняты; runtime target behavior
 не принято. Receipt **0317152f2e9f2d31c7c12d30be96ad7f026ceb6f** — repair parent.
 
-**C2-M4.3-PG-RUNTIME-R3 — IN_PROGRESS / выдано C2.** Exact base — полный SHA
-нового C0 assignment из immutable URL, sole child receipt0317152f.
-Prep c2/m4-3-pg-runtime-r3; execution c2/m4-3-pg-runtime-run-r3. Write-set5:
-PG test module, existing executor identity/inventory/подготовка evidence,
-observation workflow identity, HANDOFF/REGISTER. Исправить post-seal binding,
-проверить stale/current revision и собственную used-downgrade предпосылку;
-79 прежних scenarios/целевые assertions сохранить. Local checks до одного
-new-source hosted run<=600s tests/25min job, затем receipt/C0 review.
-Связанные fixture/precondition repairs разрешены; production semantics/schema
-не менять. Runtime/worker/Outbox/Telegram/live/paid HOLD. [Задание](tasks/M4_HANDOFF.md).
+**C2-M4.3-PG-RUNTIME-R3 — IN_PROGRESS / source подготовлен.** Exact base
+**3b5252a58b7730da6e0ff99f49a5e46b05dc2c5c**, tree
+**5141f997073cdd74ce813011971c08101da12697**, sole child receipt0317152f.
+Prep c2/m4-3-pg-runtime-r3; execution c2/m4-3-pg-runtime-run-r3; write-set5.
+Post-seal authoritative revision/identity сверяются с Turn и TEST_CONSUME/AI job;
+used downgrade создаёт собственный durable run. Reviewed fixture chain до prepare
+CONTROLLED/native/synthetic Telegram; guards и production source неизменны.
+79 прежних nodeids/order/assertions сохранены +3 focused PG cases; finite82,
+SHA256ec64c4acebaee16f21de49b7e407fb7a2b2f7fd34032df46892be66ad36dd4ef.
+Local47 PASS, static/compile/collection PASS. Actual PG proof пока NOT_RUN;
+далее один hosted run<=600s tests/25min job и frozen receipt/C0 review.
+Runtime/worker/Outbox/Telegram/live/paid HOLD. [Подготовка](tasks/M4_HANDOFF.md).
 
 | Task | Status / ближайший результат |
 |---|---|
@@ -97,7 +99,7 @@ new-source hosted run<=600s tests/25min job, затем receipt/C0 review.
 | C0-M4-CI-REPAIR-INTEGRATION-R1 | INTEGRATED / VERIFIED PR40 + exact main586240e8/CI41178689536:11/11 SUCCESS |
 | C2-M4.3-PG-RUNTIME-R1 | Исторический BLOCKED / run41185701200 SCHEMA_FAILED;2 known source defects, hosted55 NOT_RUN; receiptca47ea21/evidence проверены C0, execution frozen |
 | C2-M4.3-PG-RUNTIME-R2 | Runtime BLOCKED; SOURCE REPAIR + PG PREPARATION/SCHEMA/ROLES VERIFIED C0;49 PASS/30 FAIL, execution frozen |
-| C2-M4.3-PG-RUNTIME-R3 | IN_PROGRESS / выдано C2:5 paths, post-seal fixture и независимая used-downgrade prerequisite; один новый bounded PG proof |
+| C2-M4.3-PG-RUNTIME-R3 | IN_PROGRESS / local47 PASS,82 collected (79 retained +3 PG); один hosted proof NOT_RUN |
 | M4.3-RUNTIME / M4.3-QUALITY | Runtime PG в R3 repair; application integration/AI→Outbox→Telegram/quality TODO |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 

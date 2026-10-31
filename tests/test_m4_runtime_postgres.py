@@ -48,7 +48,7 @@ from test_m3_1_turns_postgres import seal
 from test_m4_agent import config
 from test_tenancy_postgres import BA, BA2, BB, PROVIDER, UA, UB, A, B
 
-from scripts.m4_pg_observation import source_tree_from_evidence
+from scripts.m4_pg_observation import preparation, source_tree_from_evidence
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 COUNTER = itertools.count(10000)
@@ -188,7 +188,7 @@ async def pg(tmp_path_factory):
         await migrator.dispose()
 
 
-async def intent(h, *, native=False, workspace=A, ready=True, telegram=False):
+async def intent(h, *, native=False, workspace=A, ready=True, telegram=False, proof=None):
     number = next(COUNTER)
     chat = f"ai-{number}"
     scope = dict(chat_id=chat, sender_id=f"user-{number}")
@@ -199,39 +199,136 @@ async def intent(h, *, native=False, workspace=A, ready=True, telegram=False):
         scope.update(bot_identity="bot-b", external_connection_id="conn-b")
     elif not native:
         scope["external_connection_id"] = "conn-a2"
+    preparation("INGRESS", workspace_id=workspace)
     _, _, cid = await incoming(h, number, **scope)
     if native:
+        preparation("RECONCILE", workspace_id=workspace, conversation_id=cid)
         await reconcile(h, cid)
+    preparation("RESUME", workspace_id=workspace, conversation_id=cid)
     await owner(h, cid, workspace=workspace, actor=UA if workspace == A else UB)
+    preparation("AI_INGRESS", workspace_id=workspace, conversation_id=cid)
     await incoming(h, next(COUNTER), **scope)
     turn = (
         await query(
             h,
-            "SELECT id,revision FROM app.conversation_turns WHERE conversation_id=:id AND ingress_control_mode='AI' ORDER BY first_ingress_at DESC,id DESC LIMIT 1",
+            "SELECT id,workspace_id,connection_id,revision,state FROM app.conversation_turns WHERE workspace_id=:ws AND conversation_id=:id AND ingress_control_mode='AI' ORDER BY first_ingress_at DESC,id DESC LIMIT 1",
+            ws=workspace,
             id=cid,
         )
     )[0]
-    await seal(h, turn["id"])
-    source_id = await scalar(
-        h,
-        "SELECT id FROM platform.messaging_jobs WHERE turn_id=:id AND turn_revision=:r AND step='TEST_CONSUME'",
-        id=turn["id"],
-        r=turn["revision"],
+    identity = dict(workspace_id=workspace, connection_id=turn["connection_id"], turn_id=turn["id"])
+    preparation("PRE_SEAL", **identity, turn_revision=turn["revision"], state=turn["state"])
+    assert turn["workspace_id"] == workspace and turn["state"] == "COLLECTING"
+    sealed = await seal(h, turn["id"])
+    current = (
+        await query(
+            h,
+            "SELECT id,workspace_id,connection_id,revision,state FROM app.conversation_turns WHERE workspace_id=:ws AND id=:id",
+            ws=workspace,
+            id=turn["id"],
+        )
+    )[0]
+    preparation(
+        "POST_SEAL",
+        **identity,
+        before_revision=turn["revision"],
+        turn_revision=current["revision"],
+        state=current["state"],
+    )
+    assert sealed.code == "GROUPED" and sealed.turn_id == turn["id"] == current["id"]
+    assert (
+        current["workspace_id"] == workspace and current["connection_id"] == turn["connection_id"]
+    )
+    assert current["state"] == "READY" and current["revision"] == sealed.turn_revision
+    assert current["revision"] != turn["revision"]
+    # Keep the revision predicate: the pre-seal revision must not select a consumer.
+    lookup = "SELECT id FROM platform.messaging_jobs WHERE workspace_id=:ws AND connection_id=:connection AND turn_id=:id AND turn_revision=:r AND kind='PROCESS_TURN' AND step='TEST_CONSUME'"
+    parameters = dict(ws=workspace, connection=turn["connection_id"], id=turn["id"])
+    assert await query(h, lookup, **parameters, r=turn["revision"]) == []
+    jobs = await query(h, lookup, **parameters, r=current["revision"])
+    assert len(jobs) == 1
+    source_id = jobs[0]["id"]
+    preparation(
+        "SOURCE_CLAIM", **identity, source_job_id=source_id, turn_revision=current["revision"]
     )
     source = await claim_job(h, source_id)
+    assert (
+        source.job_id,
+        source.workspace_id,
+        source.connection_id,
+        source.turn_id,
+        source.turn_revision,
+        source.step,
+    ) == (
+        source_id,
+        workspace,
+        turn["connection_id"],
+        turn["id"],
+        current["revision"],
+        "TEST_CONSUME",
+    )
+    preparation("ENQUEUE", **identity, source_job_id=source_id, turn_revision=current["revision"])
     ai_id = await h.ai.enqueue(source)
     assert await h.ai.enqueue(source) == ai_id
+    job = (
+        await query(
+            h,
+            "SELECT workspace_id,connection_id,turn_id,turn_revision,kind,step FROM platform.messaging_jobs WHERE id=:id",
+            id=ai_id,
+        )
+    )[0]
+    assert (
+        job["workspace_id"],
+        job["connection_id"],
+        job["turn_id"],
+        job["turn_revision"],
+        job["kind"],
+        job["step"],
+    ) == (
+        workspace,
+        turn["connection_id"],
+        turn["id"],
+        current["revision"],
+        "PROCESS_TURN",
+        "AI_GENERATE",
+    )
+    if proof is not None:
+        proof.update(
+            identity,
+            before_revision=turn["revision"],
+            turn_revision=current["revision"],
+            source_job_id=source_id,
+            job_id=ai_id,
+        )
     if not ready:
         return cid, source, ai_id, scope
+    preparation("AI_CLAIM", **identity, job_id=ai_id, turn_revision=current["revision"])
     claim = await claim_job(h, ai_id)
     assert isinstance(claim, AIJobClaim)
+    assert (
+        claim.job_id,
+        claim.workspace_id,
+        claim.connection_id,
+        claim.turn_id,
+        claim.turn_revision,
+    ) == (ai_id, workspace, turn["connection_id"], turn["id"], current["revision"])
     return cid, claim, scope
 
 
 async def prepare(h, claim, cfg=None):
-    return await h.ai.prepare(
+    identity = dict(
+        workspace_id=claim.workspace_id,
+        connection_id=claim.connection_id,
+        turn_id=claim.turn_id,
+        turn_revision=claim.turn_revision,
+        job_id=claim.job_id,
+    )
+    preparation("PREPARE", **identity)
+    run = await h.ai.prepare(
         claim, cfg or config(), deadline=datetime.now(UTC) + timedelta(seconds=100)
     )
+    preparation("PREPARED", **identity, run_id=run.run_id)
+    return run
 
 
 def budget(calls=1, reads=0):
@@ -868,6 +965,26 @@ async def test_retained_consumer_and_ai_terminal_retry_do_not_change_canonical_t
 
 async def test_used_downgrade_refuses_before_any_change(pg):
     h = pg
+    _, claim, _ = await intent(h)
+    own_run = await prepare(h, claim)
+    stored = await rows(h, own_run)
+    assert (stored["id"], stored["job_id"], stored["turn_id"], stored["turn_revision"]) == (
+        own_run.run_id,
+        claim.job_id,
+        claim.turn_id,
+        claim.turn_revision,
+    )
+    preparation(
+        "DOWNGRADE_READY",
+        run_id=own_run.run_id,
+        job_id=claim.job_id,
+        turn_id=claim.turn_id,
+        turn_revision=claim.turn_revision,
+    )
+    ddl_before = await scalar(
+        h,
+        "SELECT jsonb_build_array(to_regclass('platform.ai_runs')::oid,to_regclass('platform.ai_provider_calls')::oid,to_regprocedure('platform.ai_runtime_command(uuid,uuid,text,jsonb)')::oid,to_regprocedure('platform.ai_runtime_replay(uuid,uuid,jsonb)')::oid)",
+    )
     before = await scalar(
         h,
         "SELECT jsonb_build_array((SELECT count(*) FROM platform.ai_runs),(SELECT count(*) FROM platform.ai_provider_calls),(SELECT count(*) FROM platform.messaging_jobs))",
@@ -889,3 +1006,71 @@ async def test_used_downgrade_refuses_before_any_change(pg):
         "SELECT jsonb_build_array((SELECT count(*) FROM platform.ai_runs),(SELECT count(*) FROM platform.ai_provider_calls),(SELECT count(*) FROM platform.messaging_jobs))",
     )
     assert before == after and await schema(h) == "0014"
+    assert await rows(h, own_run) == stored
+    assert (
+        await scalar(
+            h,
+            "SELECT jsonb_build_array(to_regclass('platform.ai_runs')::oid,to_regclass('platform.ai_provider_calls')::oid,to_regprocedure('platform.ai_runtime_command(uuid,uuid,text,jsonb)')::oid,to_regprocedure('platform.ai_runtime_replay(uuid,uuid,jsonb)')::oid)",
+        )
+        == ddl_before
+    )
+
+
+@pytest.mark.parametrize("mode", ["controlled", "native", "telegram"])
+async def test_post_seal_revision_binds_real_claim_and_run_and_rejects_stale(pg, mode):
+    h, proof = pg, {}
+    cid, claim, _ = await intent(
+        h, native=mode == "native", telegram=mode == "telegram", proof=proof
+    )
+    assert proof["before_revision"] != proof["turn_revision"]
+    run = await prepare(h, claim)
+    stored = await rows(h, run)
+    expected = (
+        proof["workspace_id"],
+        proof["connection_id"],
+        proof["turn_id"],
+        proof["turn_revision"],
+        proof["job_id"],
+    )
+    assert (
+        claim.workspace_id,
+        claim.connection_id,
+        claim.turn_id,
+        claim.turn_revision,
+        claim.job_id,
+    ) == expected
+    assert (
+        run.binding.workspace_id,
+        run.binding.connection_id,
+        run.binding.turn_id,
+        run.binding.turn_revision,
+        run.binding.job_id,
+    ) == expected
+    assert (
+        stored["workspace_id"],
+        stored["connection_id"],
+        stored["turn_id"],
+        stored["turn_revision"],
+        stored["job_id"],
+    ) == expected
+    assert stored["id"] == run.run_id and run.binding.conversation_id == cid
+    assert (
+        await scalar(
+            h,
+            "SELECT count(*) FROM platform.ai_runs WHERE workspace_id=:ws AND turn_id=:id AND turn_revision=:r",
+            ws=proof["workspace_id"],
+            id=proof["turn_id"],
+            r=proof["before_revision"],
+        )
+        == 0
+    )
+    authority = h.ai.authority(claim, run)
+    assert (await authority.authorize(run.binding, "MODEL")).status == "ALLOWED"
+    stale = run.binding.model_copy(update={"turn_revision": proof["before_revision"]})
+    assert (await authority.authorize(stale, "MODEL")).status == "STALE"
+    with pytest.raises(MessagingError) as denied:
+        await authority.read_current(stale)
+    assert denied.value.code == Code.AI_STALE
+    assert (await rows(h, run))["result"] is None and await calls(h, run) == []
+    assert await effects(h, cid) == [0, 0, 0]
+    preparation("STALE_REVISION_REJECTED", **proof, run_id=run.run_id)

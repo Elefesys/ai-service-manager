@@ -123,6 +123,30 @@ Outbox integration — после полного source+PG review C0. Main586240
 прежним CI; R2 failure его не меняет. Paid/Polza/VM/live DB/deploy/Telegram/
 реальные данные HOLD; shared150 ledger неизменен.
 
+### C2 R3 — source preparation / preflight
+
+Exact base **3b5252a58b7730da6e0ff99f49a5e46b05dc2c5c**, tree
+**5141f997073cdd74ce813011971c08101da12697**, sole parent receipt0317152f;
+сверх receipt ровно5 coordination docs. Source — sole child base, write-set5.
+`intent()` сохраняет реальный seal result, сверяет id/revision/state со свежей
+строкой и выбирает TEST_CONSUME в том же Workspace/connection/Turn/revision.
+Старая revision не выбирает consumer; source claim/AI job/AI claim сверены.
+Никакого old_revision+1 или изменения Turn/job identity ради совпадения.
+Used downgrade создаёт собственный intent/run; старые refusal/data/schema
+assertions сохранены, добавлена проверка своей строки и объектов после отказа.
+
+Просмотрена цепочка CONTROLLED/native/synthetic Telegram до prepare, включая
+owner reconciliation/Resume, material/native/activation/billing/claim guards.
+Production semantics и migrations0001–0014 неизменны; application0013 gate прежний.
+Три focused PG cases проверяют stale/current revision, реальные claim/run identity
+и отказ authority/READ со старой revision без result/calls/effects. Их actual proof
+пока NOT_RUN. Исходные79 nodeids/order и target assertions сохранены.
+Finite **82**, SHA256 **ec64c4acebaee16f21de49b7e407fb7a2b2f7fd34032df46892be66ad36dd4ef**.
+Local **47 PASS**, Ruff/format/compile/collection PASS; bounded recorder принимает
+UUID/revision и отвергает claim/snapshot fields. Evidence добавляет только stage,
+identity/revision/state, typed error code/SQLSTATE; без сырого exception/snapshot.
+Следующий шаг — один push/source/attempt1 PG run, затем frozen receipt/C0 review.
+
 ### История — C2 R2 receipt: два repair подтверждены; runtime BLOCKED
 
 **Source** [13ab3f1130775f8350666998b0fd028e710efe45](https://github.com/Elefesys/ai-service-manager/commit/13ab3f1130775f8350666998b0fd028e710efe45),

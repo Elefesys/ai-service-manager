@@ -1,4 +1,4 @@
-"""C2-M4.3-PG-RUNTIME-R2: one bounded disposable DB-only runtime validation."""
+"""C2-M4.3-PG-RUNTIME-R3: one bounded disposable DB-only runtime validation."""
 
 import hashlib
 import json
@@ -12,10 +12,11 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from uuid import UUID
 
-BASE = "ce4a4669e2e36848f09784e166d33124bff73eb2"
-BASE_TREE = "be171deb889ead174df82f3336d7fe0c6bf3b944"
-BRANCH = "c2/m4-3-pg-runtime-run-r2"
+BASE = "3b5252a58b7730da6e0ff99f49a5e46b05dc2c5c"
+BASE_TREE = "5141f997073cdd74ce813011971c08101da12697"
+BRANCH = "c2/m4-3-pg-runtime-run-r3"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -24,14 +25,12 @@ MODULES = [
     "tests/test_m4_runtime_database.py",
     "tests/test_m4_runtime_postgres.py",
 ]
-COLLECTION_COUNT = 79
-COLLECTION_SHA256 = "83c7ab55beef84329d8f4ea47fe69ef6cbbda3a43f0efb5b69152bfdd066eb4a"
+COLLECTION_COUNT = 82
+COLLECTION_SHA256 = "ec64c4acebaee16f21de49b7e407fb7a2b2f7fd34032df46892be66ad36dd4ef"
 COMMAND_REPORT = "runtime-command"
 SUMMARY_REPORT = "runtime-summary.json"
 COLLECTED = []
 WRITE_SET = {
-    "migrations/versions/0014_ai_runtime.py",
-    "tests/test_m4_runtime_migrations.py",
     "tests/test_m4_runtime_postgres.py",
     "scripts/m4_pg_observation.py",
     ".github/workflows/m4-pg-observation.yml",
@@ -136,8 +135,64 @@ def write(path, value):
     temporary.replace(path)
 
 
+def preparation(stage, **facts):
+    """Record only bounded synthetic preparation identities, never claims or snapshots."""
+    if CASE is None:
+        return
+    if len(CASE["events"]) >= EVENT_LIMIT:
+        CASE["overflow"] += 1
+        return
+    if stage not in {
+        "INGRESS",
+        "RECONCILE",
+        "RESUME",
+        "AI_INGRESS",
+        "PRE_SEAL",
+        "POST_SEAL",
+        "SOURCE_CLAIM",
+        "ENQUEUE",
+        "AI_CLAIM",
+        "PREPARE",
+        "PREPARED",
+        "STALE_REVISION_REJECTED",
+        "DOWNGRADE_READY",
+    }:
+        CASE["invalid_fields"] += 1
+        return
+    event = {"stage": stage}
+    for name, value in facts.items():
+        if (
+            name
+            in {
+                "workspace_id",
+                "connection_id",
+                "conversation_id",
+                "turn_id",
+                "source_job_id",
+                "job_id",
+                "run_id",
+            }
+            and type(value) is UUID
+        ):
+            event[name] = str(value)
+        elif (
+            name in {"before_revision", "turn_revision"}
+            and type(value) is int
+            and 0 < value <= 9223372036854775807
+        ):
+            event[name] = value
+        elif name == "state" and value in {"COLLECTING", "WAITING_MEDIA", "READY", "FAILED"}:
+            event[name] = value
+        else:
+            CASE["invalid_fields"] += 1
+            return
+    CASE["events"].append(event)
+
+
 if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
     import pytest
+    from asm.messaging.errors import MessagingError
+    from sqlalchemy.exc import DBAPIError
 
     def pytest_collection_modifyitems(session, config, items):
         global COLLECTED
@@ -168,6 +223,12 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
         }
         if call.excinfo is not None:
             data["exception_type"] = call.excinfo.typename
+            if isinstance(call.excinfo.value, MessagingError):
+                data["error_code"] = call.excinfo.value.code.value
+            if isinstance(call.excinfo.value, DBAPIError):
+                sqlstate = getattr(call.excinfo.value.orig, "sqlstate", None)
+                if type(sqlstate) is str and re.fullmatch(r"[0-9A-Z]{5}", sqlstate):
+                    data["sqlstate"] = sqlstate
             data["frames"] = [
                 {"file": Path(entry.path).name, "line": entry.lineno + 1, "function": entry.name}
                 for entry in call.excinfo.traceback[-12:]
