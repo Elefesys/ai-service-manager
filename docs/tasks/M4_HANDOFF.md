@@ -6,7 +6,123 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R3 / выдано C3 / 2026-11-01
+## CURRENT — C3 R3 receipt / BLOCKED, до C0 review / 2026-11-01
+
+**C3 HOLD.** Admission repair прошёл; единственный stock capture получил
+независимые0013/0015 catalogs. Installed verifier0015 вернул **valid=false**:
+ошибочная expected-functions строка проверяет собственное тело по хешу verifier0013.
+Это новый **CATALOG_DECLARED_PROFILE**, помимо ожидаемого full-pin mismatch.
+По STOP правилу выдачи R3 дальнейших source repair/hosted попыток не было.
+Targeted/new Draft PR/full CI не запускались; whole-runtime BLOCKED.
+
+**Assignment/base:** `fa2469deea75c11ca5901de77fc3e46304c1e9ae`, tree
+`5ab7c1b98ccdc129fe2b7568501e923455a56427`.
+**Frozen capture source:** `9545db92e6a03b27179ed7d23ad5f524bf6c2530`, tree
+`01c1e31657237740cc77d070aeb4f53d656f184e`, sole parent assignment.
+Изменены ровно4 разрешённых файла: native_context_db_catalog.py,
+m4_runtime_db.py, m4-runtime-db.yml, test_m4_runtime_db_runner.py;
+327 insertions/24 deletions. Capture ref `c3/m4-3-runtime-catalog-run-r3`
+frozen на source. Этот docs-only receipt — sole child source на preparation
+`c3/m4-3-runtime-integration-r3`, только HANDOFF/TASK_REGISTER.
+PR source `c3/m4-3-runtime-integration-pr-r3` остался на assignment;
+targeted ref не создан. Main586240e8, R1/R2 refs и OPEN/DRAFT PR41 unchanged.
+
+### Admission и фактический stock result
+
+Только новый R3 route принимает обязательное base_ref null/bounded string как
+metadata. Explicit before/sole-parent, false created/deleted/forced, attempt1,
+repo/ref/head/tree/base/clean/write-set gates сохранены; historical/main/PR
+семантика не расширена. Перед fast-forward execution ref создан на assignment
+без R3 trigger; fresh API тогда0 runs. Единственный source commit опубликован
+через expected_sha=assignment, force=false; активен только capture trigger.
+
+Final capture-source offline: **474 PASS +130 subtests**,0 failed/skipped,
+включая44 runner tests и15 ранее добавленных cancellation cases.
+Full admission fixtures используют **constructed Git history**; positives
+достигают catalog stub, negatives завершаются до ресурсов/credentials.
+Ruff/format195files/mypy76files PASS. Initial development43 PASS/1 FAIL —
+неверное ожидание текста dirty-source exception в тесте; refusal был корректен.
+Ожидание исправлено до финального прогона, initial evidence сохранено.
+
+[Capture41226933313](https://github.com/Elefesys/ai-service-manager/actions/runs/41226933313),
+push/attempt1, job124612927644: **FAILURE**, UTC2026-10-31 17:56:22–17:57:09.
+Event/source admission **PASS**. Actual base_ref present/str/valid=true:
+`refs/heads/c3/m4-3-runtime-integration-r3`; created/deleted/forced=false;
+before и sole parent=assignment; after/head_commit/GITHUB_SHA/HEAD=source,
+actual tree совпал. Payload SHA256
+`74e01c0aacd8b2fec313d3b73308bad9688a7e48d588ba4ddacb80d0a2d2f854`.
+Actual R3 metadata не восстанавливает неизвестный payload R2 задним числом.
+
+Owned fresh asm_test, pinned PG18.6/vector0.8.6; en_US.utf8/UTF8,
+provider c/collation2.36. Build18.301s, DB start9.830s, schema0013 1.667s,
+catalog0013 2.068s, schema0015 1.367s — exit0. Catalog0015 2.068s — exit1,
+**M4_PG_STOP=CATALOG_DECLARED_PROFILE**. Cleanup0.264s PASS, zero owned
+containers/networks/volumes remaining; source-preservation clean=true.
+
+| Независимый факт | 0013 | 0015 |
+|---|---|---|
+| Functions / tables | 167 /45 | 183 /48 |
+| Source bodies/security/roles/nonfunction | PASS | PASS |
+| Declared hash = independent hash | да | да |
+| Declared valid | true | **false** |
+
+Full0013 `c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411`;
+full0015 `aec3c9c6398c6ad81a6e23bc6cbc204c3473424a03dfa40c82c655cc88d23b03`;
+nonfunction0015 `e939e9f303843a84256f9315e6016e1a888aea0c18469539aa53147c6d339bee`.
+Roles безопасны, memberships[], runtime-owned0; exact PG serialization,
+order/locale/OIDs/bodies/ACL/RLS/constraints и independent SQL сохранены.
+
+### Новый блокер, минимальная следующая дельта C0
+
+В0015 PROFILE_SQL среди182 expected-functions есть
+`platform.ai_delivery_schema_profile()` с historical0013 body hash
+`527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac`.
+Actual/source ai_delivery body hash
+`7bae585ce1127be79aeb0e53638ab825d7e128cc79c195707656d8ff9635d791`.
+Эта строка должна указывать `platform.human_context_schema_profile()`.
+Сейчас verifier включает себя и пропускает human verifier. Read-only audit
+нашёл ровно один body-hash mismatch;48 embedded column sets совпадают.
+Совпадение installed/source само по себе не проверяет корректность embedded table.
+
+Отдельный ожидаемый pin mismatch: старый full pin e716dad0 против stock aec3c9c6.
+R1 projection и stock имеют одинаковые nonfunction и function rows по signature;
+отличаются10 позиций массива функций. Причина full-pin delta — порядок функций.
+В original comparison.json failed_predicate=APPLICATION_FULL_CATALOG_PIN,
+но declared_equals_independent=false и фактический отказ выше — DECLARED_PROFILE.
+Этот конфликт diagnostic labels сохранён; expected pin mismatch не разрешает
+игнорировать valid=false. Outer phase CATALOG_0015_FAILED/run PRIMARY_FAILED.
+
+Предложение C0, **не применено**: в profile-only исключении0015 заменить только
+signature указанной expected-row на human_context_schema_profile, сохранить
+её historical hash; добавить invariant «ровно182 других функций, без self,
+per-row bodies/security match»; пересчитать body/full pins для исправленного
+source и подтвердить actual stock. Также исправить приоритет diagnostic label
+и закончить current-native6 mode. Не менять0001–0014/agent/cancellation/R4.
+Read-only контрфактическая подстановка даёт body e0d5d308… /full8a91ef6f…;
+полные значения и воспроизводимый audit — в архиве. Это **NOT_APPLIED_NOT_PG_TESTED**,
+не accepted pin и не финальный PG результат. Для продолжения нужна новая
+конечная выдача C0; один capture R3 использован, rerun не делался.
+
+### Evidence и незакрытая приёмка
+
+[Evidence74files](https://chatgpt.com/library?file_id=libfile_bd0c89d20d1481919c1b9eba7fd95405&account_id=personal):
+9017673bytes, SHA256 `6eb26358da31888ec0fe8f46633fe5693f6f22e941f794ecafe4e81f0b28e2b0`,
+manifest73/73 verified. Original artifact13051854895:4422165bytes,
+SHA256 `1340e5edb365011f9bad86e24e4cc9a9a4b841a57287f944a666498664ed9c6f`,
+48 ZIP members/manifest47/47 verified. Source archive342files проверен по
+Git blobs/modes/SHA256. В архиве original ZIP/log/API, catalogs, source patch,
+local JUnit, independent audit и REPORT с точными predicates/phase durations.
+
+Summary complete=false/resultFAIL/groups_visited1/test_seconds0;
+catalog inventory nodeids=[] означает отсутствие PG test execution.
+Actual cancellation/manual/recovery, full64 M4, current-native6/readiness,
+downgrade/upgrade lifecycle, browser54/generic860/all12 CI gates **NOT_REACHED**.
+Upgrade13→15 не закрывает lifecycle/runtime. Source R2 cancellation unchanged;
+474 offline PASS не заменяют synthetic acceptance. C3 HOLD/C0 review;
+не INTEGRATED/VERIFIED. Default OFF/fake-only, paid/live/VM/real data HOLD;
+owner ничего не запускает, shared150 ledger unchanged.
+
+## История — C0 assignment C3 R3 / 2026-11-01
 
 **Результат:** пройти проверку источника запуска и получить настоящий stock0015
 catalog, затем закончить уже согласованную synthetic интеграцию. Исправляется

@@ -2,7 +2,45 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R3 / IN_PROGRESS, выдано C3 / 2026-11-01
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R3 / BLOCKED, C0 review / 2026-11-01
+
+**C3 HOLD.** Admission repair пройден; единственный stock capture остановлен
+на новом **CATALOG_DECLARED_PROFILE**: verifier0015 valid=false. Ошибочная
+expected-functions строка ai_delivery_schema_profile несёт hash historical
+human_context_schema_profile; должна указывать human verifier, а не self.
+Это отдельный failure, помимо ожидаемого full-pin mismatch. По STOP правилу
+нет повторов, дальнейшего source repair, targeted/new Draft PR/full CI.
+
+Base **fa2469deea75c11ca5901de77fc3e46304c1e9ae**/tree5ab7c1b9;
+frozen source **9545db92e6a03b27179ed7d23ad5f524bf6c2530**/
+tree **01c1e31657237740cc77d070aeb4f53d656f184e**, sole child base,4 allowed files.
+Этот docs-only receipt — sole child source на prep c3/m4-3-runtime-integration-r3.
+Capture ref frozen; PR-source на assignment, targeted ref не создан.
+Main586240e8/R1/R2 refs/OPEN DRAFT PR41 unchanged; прочие роли HOLD.
+
+[Run41226933313](https://github.com/Elefesys/ai-service-manager/actions/runs/41226933313),
+push/attempt1/job124612927644 **FAIL**. Event/source admission PASS, before/sole
+parent=base; created/deleted/forced=false; actual base_ref str
+refs/heads/c3/m4-3-runtime-integration-r3. Stock PG18.6/vector0.8.6:
+0013 PASS;0015 independent183functions/48tables/bodies/security/roles/nonfunction
+PASS, declared hash=independent aec3c9c6…, но declared valid=false.
+Старый e716dad0… full pin отличается только порядком функций. Cleanup PASS,
+zero owned resources/source clean. Initial event failure R2 не повторился.
+
+Final-source offline **474 PASS +130 subtests**, Ruff/format/mypy PASS.
+PG tests не выполнялись: full64 M4/current-native6/readiness/lifecycle и12 CI
+gates NOT_REACHED; whole-runtime не INTEGRATED/VERIFIED. C0 — review exact
+одной profile-row поправки, source invariant и новых pins/конечного допуска.
+Полные hashes, event operands, diagnostic-label конфликт, ограничения и
+NOT_APPLIED_NOT_PG_TESTED derivation — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+[Evidence74files](https://chatgpt.com/library?file_id=libfile_bd0c89d20d1481919c1b9eba7fd95405&account_id=personal)
+9017673bytes/SHA2566eb26358da31888ec0fe8f46633fe5693f6f22e941f794ecafe4e81f0b28e2b0,
+manifest73/73; original artifact13051854895/4422165bytes/manifest47/47,
+342 source blobs/modes/SHA256 verified. Default OFF/fake-only;
+paid/live/VM/real data HOLD, shared150 ledger unchanged, owner ничего не запускает.
+
+## История — C0 assignment C3 R3 / 2026-11-01
 
 C0 подтвердил R2 receipt **d1959bca073b3562d9381a4fb34f84c9c62052d9**,
 source **e8300919ea0431388b7358f168ee8cac77089613**/tree93fc9c88:
