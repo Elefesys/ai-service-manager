@@ -6,7 +6,7 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R2: BLOCKED / C2 HOLD / C0 review / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R3: исправить подготовку runtime tests / 2026-10-31
 
 PR40 слит владельцем. Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df** — exact-equal проверенному
@@ -30,13 +30,100 @@ Foundation/durable completeness gates PASS. Архивы этого main run п�
 **C0-M4-CI-OBSERVATION-01 и C0-M4-CI-REPAIR-INTEGRATION-R1 закрыты
 INTEGRATED / VERIFIED в SOURCE + TARGETED + PR/main CI scope.** C4 context/agent
 и принятый GPT/v2 source находятся в verified main. Это не живой AI runtime.
-Единственная выдача C2 R2 выполнена до первого hosted outcome ниже: BLOCKED.
-C2 и C1/C3–C8 HOLD; R1/R2 execution frozen.
+R2 runtime остаётся BLOCKED; preparation/schema/roles subset принят C0 ниже.
+Единственная новая выдача — C2 R3. C1/C3–C8 HOLD; R1/R2 execution frozen.
 Новый платный probe, VM/deploy/Telegram и доступ к реальным перепискам не назначены.
 Shared150 неизменен: confirmed0.37505230/58 known POST;4 unknown/held7.585505548;
 62 total POST; remaining142.039442152, reported0.00743079 UNSETTLED.
 
-### C2 R2 receipt — два repair подтверждены; runtime BLOCKED
+### C2-M4.3-PG-RUNTIME-R3 — актуальная revision и независимые предпосылки
+
+**Результат для пилота:** довести тесты до реального AI run/call/result и
+проверить сохранение ответа, права доступа, READ и восстановление. В R2
+29 scenarios не дошли до этих операций из-за общей ошибки подготовки;
+ещё один остановился на отсутствующей предпосылке. Новая функция не добавляется.
+
+**Приёмка C0 R2 — VERIFIED только SOURCE REPAIR + PG PREPARATION/SCHEMA/ROLES.**
+Source **13ab3f1130775f8350666998b0fd028e710efe45** / tree
+**9032167ee8158b8d213b510c8f23bac74e53b7ee**, sole parent ce4a4669;
+receipt **0317152f2e9f2d31c7c12d30be96ad7f026ceb6f** / tree
+**628ed760246b80bf4f2895bd7e5635351b86cd49**, sole child source,2 docs.
+C0 сверил свежие refs/run/job/artifact metadata и upload log,7 paths/source.patch,
+original ZIP28018 bytes/SHAaa544886 и saved90541 bytes/SHA63c3feef,
+manifests24/46,25 original files byte-exact, source/base/tree/pins/lock binding.
+Inventory79/hash83c7ab55, все55 R1 nodeids в прежнем порядке и28 test function
+AST сохранены. Независимый пересчёт cases/JUnit/summary:49 PASS (47 non-PG,
+2 PG),30 FAIL;237 phases, skips/xfails/errors/overflow/invalid fields0.
+Все29 NoResultFound имеют frame intent():215; последний AssertionError —
+used downgrade():875 до Alembic. Cleanup/source PASS. Offline C0 source identity:
+actual metadata принято, stale tree отклонён; compiler/pytest/PG заново не запускались.
+
+Приняты actual clean/previous/repeat upgrade0014, unused downgrade0013,
+retained M3 conversation, роли/RLS/закрытый direct access/DDL и отказ старого
+application/native readiness на0014. DEFAULT сохранил прежний JSON; source tree
+приходит из проверенного executor evidence. **Durable runtime, races/recovery,
+tenant behavior, READ и used-data downgrade refusal ещё не приняты.**
+Диагноз stale revision подтверждён active0013 turn_execute → active0012
+turn_seal(bump=true) → turn_enqueue; actual row values R2 не сохранены.
+Это source-backed причина, не повторное PG воспроизведение и не обещание PASS.
+
+**Repository:** Elefesys/ai-service-manager. Preparation **c2/m4-3-pg-runtime-r3**;
+execution **c2/m4-3-pg-runtime-run-r3**. **Exact base — полный SHA этого
+опубликованного C0 assignment из immutable URL**, sole child receipt
+**0317152f2e9f2d31c7c12d30be96ad7f026ceb6f**. C0 branch
+**c0/m4-3-pg-runtime-repair-r3**; сверх receipt только5 coordination docs.
+До работы записать base SHA/tree. R1 functional criteria, IMPL-004 и ADR
+сохраняются; это repair base, не разрешение merge/application integration.
+
+**Write-set5:** `tests/test_m4_runtime_postgres.py`,
+`scripts/m4_pg_observation.py`, `.github/workflows/m4-pg-observation.yml`,
+`docs/tasks/M4_HANDOFF.md`, `docs/TASK_REGISTER.md`.
+
+1. Исправить общую `intent()` preparation: сохранить реальный результат
+   `seal()` и получить актуальную revision из него/свежей authoritative строки.
+   Сверить Turn id/revision/state и TEST_CONSUME job в том же Workspace/connection.
+   Не подставлять `old_revision+1`, не убирать revision из lookup и не переписывать
+   реальные Turn/job строки ради совпадения. Claim/enqueue/prepare остаются
+   настоящими. До hosted run просмотреть всю цепочку fixture до prepare для
+   CONTROLLED/native/synthetic Telegram, включая сохранённые guards.
+2. Добавить focused actual-PG regression: pre-seal revision отличается от
+   подтверждённой post-seal; старая не выбирает подходящий TEST_CONSUME,
+   новая выбирает единственный правильный job, его claim и AI job/run совпадают
+   по identity. Отрицательный вариант не должен получить authority или result.
+   Достаточны эти связанные проверки; новую общую framework/matrix не создавать.
+3. `test_used_downgrade_refuses_before_any_change` самостоятельно создаёт свой
+   durable run через доверенный intent/prepare и проверяет его наличие до
+   Alembic. Не зависеть от успеха предыдущих cases; не вставлять ai_runs вручную.
+   Сохранить actual отказ AI_RUNTIME_DURABLE_DATA, неизменность данных/схемы
+   и отсутствие частичного DDL. Не выдавать setup failure за downgrade refusal.
+4. Разрешено исправлять необходимые связанные fixture/precondition ошибки
+   в этом PG module с сохранением смысла тестов; R2 source-identity-only
+   ограничение заменено данным scope. Все79 прежних nodeids и относительный
+   порядок/целевые assertions сохранить, новые checks добавить к inventory.
+   Backend/миграции0001–0014/production guards/roles/pins/limits неизменны.
+   Если обнаружен production defect, вернуть C0 точную ошибку и минимальный
+   semantic/path delta; не ослаблять защиту и не переписывать тест под ошибку.
+5. Локально static/compile/collection и применимые unit checks; затем новый
+   source commit — sole child exact base. Existing executor меняется только
+   для R3 identity, inventory и необходимых bounded фактов подготовки.
+   Новые refs создать от base, один FF execution base→source с expected old
+   SHA=base/force=false. Разрешён **один** push/exact source/attempt1 hosted run,
+   fresh owned asm_test/PG18, tests<=600s/job<=25min. Старые refs/run и full CI
+   не повторять. Все группы30 прежних failures должны достичь target checks
+   либо получить точный новый blocker; local/mocked PASS их не заменяет.
+6. Сохранить original artifact, source/collection, command/summary/JUnit и
+   все setup/call/teardown/cleanup outcomes. При сбое записать bounded
+   non-secret факты stage и identity/revision, сгруппировать все failures и
+   NOT_REACHED, без claim tokens/сырых snapshot. После outcome execution frozen,
+   docs-only receipt child source на preparation и C0 review. Retry без новой
+   причины/исправленного source не выполнять.
+
+Application/provisioning/native readiness остаётся0013. App/schema/worker/
+Outbox integration — после полного source+PG review C0. Main586240e8 принят
+прежним CI; R2 failure его не меняет. Paid/Polza/VM/live DB/deploy/Telegram/
+реальные данные HOLD; shared150 ledger неизменен.
+
+### История — C2 R2 receipt: два repair подтверждены; runtime BLOCKED
 
 **Source** [13ab3f1130775f8350666998b0fd028e710efe45](https://github.com/Elefesys/ai-service-manager/commit/13ab3f1130775f8350666998b0fd028e710efe45),
 tree **9032167ee8158b8d213b510c8f23bac74e53b7ee**, sole parent exact base

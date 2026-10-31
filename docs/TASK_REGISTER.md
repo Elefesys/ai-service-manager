@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R2: BLOCKED / C2 HOLD / C0 review / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R3: исправить подготовку runtime tests / 2026-10-31
 
 PR40 merged; accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candidate.
@@ -22,12 +22,12 @@ Original artifact13036992460:14466bytes/SHA2567ba2b0956d1ea8c4030b8a04ebfe791de4
 Full evidence libfile_c3a28d54bd708191896177c4788822c7:92324bytes/32files,
 SHA2560ced8323a8f0c4536fb3e21f71db69a46a3fa42b6fa5e9317a54311ccb956dc5.
 Execution frozen; docs-only receipt на preparation. Main/old refs unchanged.
-Application0013 gates сохранены; actual0014/runtime/app-refusal PG proof ещё нет.
+На момент R1 application0013 gates сохранены; actual0014/runtime/app-refusal PG proof ещё нет.
 C0 независимо проверил receiptca47ea21, fresh run/job/artifact/upload metadata,
 original ZIP и сохранённый bundle/manifests31/15, source.patch/binding/collection.
 Обе причины подтверждены; нового compiler/pytest/PG run от C0 нет.
 
-**C2-M4.3-PG-RUNTIME-R2 — BLOCKED / C2 HOLD, C0 review.** Source
+**C2-M4.3-PG-RUNTIME-R2 — runtime BLOCKED; repair/schema/roles subset VERIFIED C0.** Source
 **13ab3f1130775f8350666998b0fd028e710efe45**, tree
 **9032167ee8158b8d213b510c8f23bac74e53b7ee**, sole child exact base
 **ce4a4669e2e36848f09784e166d33124bff73eb2** / treebe171deb;7 paths.
@@ -45,8 +45,8 @@ source использует pre-seal revision для TEST_CONSUME, хотя seal
 Used downgrade case: AssertionError на ai_runs>0 до Alembic, вследствие отсутствия
 созданных runs. Durable runtime/tenant behavior/crash/concurrency/READ/authority
 await и used-data refusal NOT_REACHED; всех30 target assertions это не заменяет.
-Минимальная следующая дельта: post-seal revision и реальная durable prerequisite;
-не применена, требует новой выдачи C0. Полный разбор групп — [receipt](tasks/M4_HANDOFF.md).
+Следующая дельта: post-seal revision и самостоятельная durable prerequisite;
+назначена C2 в R3 ниже. Полный разбор групп — [receipt](tasks/M4_HANDOFF.md).
 
 Cleanup/source PASS; command74.859139s, pytest73.470s, build15.340953s отдельно.
 Artifact13039557259:28018bytes/25files, SHA256
@@ -56,7 +56,23 @@ Full evidence **libfile_751773061d5c8191b5d1773cf0d3edef**:90541bytes/47files,
 SHA256 **63c3feef658bce47736fac2cc6d12350ce0542e95fa07613c7230caf6d536422**.
 Execution frozen на source; docs-only receipt sole child source на preparation.
 Main/old refs неизменны; application0013/runtime semantics прежние.
-Dispatch/Outbox/Telegram/live/paid HOLD. Следующий шаг — C0 review/new assignment.
+C0 сверил fresh metadata/refs/logs, source.patch, manifests24/46 и25 original files,
+binding/pins/lock/inventory, retained55 и28 прежних test AST. Cases/JUnit/summary
+дают49 PASS/30 FAIL,237 phases;29 intent NoResultFound и1 dependent precondition.
+Offline source identity2 checks PASS; нового compiler/pytest/PG run от C0 нет.
+Два исправления R1 и PG schema/roles subset приняты; runtime target behavior
+не принято. Receipt **0317152f2e9f2d31c7c12d30be96ad7f026ceb6f** — repair parent.
+
+**C2-M4.3-PG-RUNTIME-R3 — IN_PROGRESS / выдано C2.** Exact base — полный SHA
+нового C0 assignment из immutable URL, sole child receipt0317152f.
+Prep c2/m4-3-pg-runtime-r3; execution c2/m4-3-pg-runtime-run-r3. Write-set5:
+PG test module, existing executor identity/inventory/подготовка evidence,
+observation workflow identity, HANDOFF/REGISTER. Исправить post-seal binding,
+проверить stale/current revision и собственную used-downgrade предпосылку;
+79 прежних scenarios/целевые assertions сохранить. Local checks до одного
+new-source hosted run<=600s tests/25min job, затем receipt/C0 review.
+Связанные fixture/precondition repairs разрешены; production semantics/schema
+не менять. Runtime/worker/Outbox/Telegram/live/paid HOLD. [Задание](tasks/M4_HANDOFF.md).
 
 | Task | Status / ближайший результат |
 |---|---|
@@ -80,8 +96,9 @@ Dispatch/Outbox/Telegram/live/paid HOLD. Следующий шаг — C0 review
 | C2-M4-CI-OBSERVATION-R4 | VERIFIED C0 SOURCE + TARGETED PG; source249b3611, run41124252930:278 PASS/834 phases, cleanup/source PASS; C2 HOLD/ref frozen |
 | C0-M4-CI-REPAIR-INTEGRATION-R1 | INTEGRATED / VERIFIED PR40 + exact main586240e8/CI41178689536:11/11 SUCCESS |
 | C2-M4.3-PG-RUNTIME-R1 | Исторический BLOCKED / run41185701200 SCHEMA_FAILED;2 known source defects, hosted55 NOT_RUN; receiptca47ea21/evidence проверены C0, execution frozen |
-| C2-M4.3-PG-RUNTIME-R2 | BLOCKED / run41192732940:49 PASS,30 FAIL;2 repair PASS, stale pre-seal revision masks runtime; execution frozen, C2 HOLD/C0 review |
-| M4.3-RUNTIME / M4.3-QUALITY | Runtime PG BLOCKED после R2; application integration/AI→Outbox→Telegram/quality TODO |
+| C2-M4.3-PG-RUNTIME-R2 | Runtime BLOCKED; SOURCE REPAIR + PG PREPARATION/SCHEMA/ROLES VERIFIED C0;49 PASS/30 FAIL, execution frozen |
+| C2-M4.3-PG-RUNTIME-R3 | IN_PROGRESS / выдано C2:5 paths, post-seal fixture и независимая used-downgrade prerequisite; один новый bounded PG proof |
+| M4.3-RUNTIME / M4.3-QUALITY | Runtime PG в R3 repair; application integration/AI→Outbox→Telegram/quality TODO |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
 

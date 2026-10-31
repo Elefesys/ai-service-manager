@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: PR40/main VERIFIED; C2-M4.3-PG-RUNTIME-R2 repair/proof.
+Последнее решение ниже: R2 schema/roles subset принят; C2-M4.3-PG-RUNTIME-R3.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -854,7 +854,7 @@ Application/provisioning/native gates сейчас явно принимают00
 Paid/VM/Telegram/реальные данные HOLD; data/route/backend/quality gates и ledger
 не меняются. C2 следующий, C1/C3–C8 HOLD; M4 ещё не закрыт.
 
-**Актуальное решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R2.**
+**Предыдущее решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R2.**
 R1 source391667c0/receiptca47ea21 сохранён; run41185701200 завершился
 SCHEMA_FAILED до всех55 tests. Actual failure — SQLAlchemy bind `null` в0014
 JSON DEFAULT; отдельный source-confirmed fixture defect — .git отсутствует
@@ -869,6 +869,23 @@ R1 ref/run frozen. Это исправление согласованного sc
 0001–0013/application0013/native/roles/limits не меняются. После outcome —
 C0 review; app/schema/worker/Outbox integration остаётся следующим этапом.
 Main586240e8/CI11 PASS и финансовый ledger прежние; paid/live/VM/Telegram HOLD.
+
+**Актуальное решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R3.**
+C0 принял R2 source13ab3f11/receipt0317152f только в SOURCE REPAIR + PG
+PREPARATION/SCHEMA/ROLES scope. Run41192732940:49 PASS/30 FAIL; evidence
+полное, cleanup/source PASS. Actual upgrade/unused downgrade/M3 retention,
+RLS/roles и application0014 refusal подтверждены.29 runtime cases остановлены
+ошибкой fixture: TEST_CONSUME выбирается по revision до seal. Used downgrade
+не дошёл до Alembic, поскольку не создал собственную durable предпосылку.
+
+R3 меняет5 paths из HANDOFF: общую test preparation и её meaningful regression,
+независимую used-downgrade prerequisite, executor/workflow identity и docs.
+Связанные fixture corrections разрешены; current job/revision подтверждать
+настоящими данными, target assertions не ослаблять. Все79 R2 scenarios сохранены;
+после local checks один новый bounded PG run. Старые execution refs frozen.
+Backend/миграции/application0013/native guards/roles/limits остаются прежними.
+Runtime acceptance и application/worker/Outbox integration ещё впереди.
+Это исправление прежнего M4 scope; нового live/paid/VM/Telegram допуска нет.
 
 ## Что пересмотрено относительно baseline
 
