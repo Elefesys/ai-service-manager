@@ -2,7 +2,37 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R1 / BLOCKED, C3 HOLD / 2026-10-31
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R2 / IN_PROGRESS, выдано C3 / 2026-10-31
+
+C0 проверил R1 source9b05e5dd/receipt **e58163ae6b31dfbb243b71bda47b875b33344705**:
+PR41 DRAFT/не слит, CI41216402482 **6 SUCCESS/5 FAIL/1 SKIPPED**.
+Whole-runtime BLOCKED. Независимо пересчитаны M4 **45/64 PASS,19 missing**,
+native106 PASS/6 FAIL/336 phases и partition1029=860+105+64.
+ZIP/manifests/original10artifacts/source341files проверены с fresh metadata.
+Уточнение:398 frontend tests/14files PASS внутри browser build; browser54 и
+foundation ordinary/generic suite NOT_REACHED. R1 refs/PR41 frozen, не сливать.
+
+**Одна выдача C3 R2:** stock0015 catalog/pins, propagation external cancellation
+после bounded terminalization, честная active/missing evidence. Exact base —
+SHA нового C0 assignment из immutable URL, sole child e58163ae; branch
+**c0/m4-3-runtime-integration-r2**. Prep **c3/m4-3-runtime-integration-r2**;
+PR source **c3/m4-3-runtime-integration-pr-r2**. Write-set и критерии — в
+[CURRENT M4_HANDOFF](tasks/M4_HANDOFF.md).
+
+Разрешены максимум один stock capture и один targeted validation; при отсутствии
+локального stock PG новые exact push refs **c3/m4-3-runtime-catalog-run-r2** и
+**c3/m4-3-runtime-targeted-run-r2**, затем после causal PASS один новый Draft PR/
+полный CI со всеми12 gates. Не повторять старый CI. Диагностический mismatch
+не является приёмкой; новый failure возвращается C0 с полным evidence.
+0001–0014/locks/pins/R4 immutable; узкое исключение C0 для unmerged0015 profile
+только на disposable TEST state описано в HANDOFF. Нет reset retained data.
+
+Accepted main586240e88c825aa67593af5d72e0bdbb251ed3bb unchanged;
+C2 DB-only SOURCE+TARGETED PG VERIFIED, whole integration ещё не принята.
+C1/C2/C4–C8 HOLD. AI default OFF, fake-only; paid/live/VM/real data HOLD.
+Shared150 ledger unchanged; owner ничего не запускает.
+
+## История — C3 R1 receipt / BLOCKED, до C0 review / 2026-10-31
 
 C3 вернул frozen source **9b05e5ddf8d00c0bab4f4f5e0fbf966a60915de2** /
 tree **abbe24977ca00d6fa880767cc78dcdd62a4bd1cd**, sole parent exact assignment
@@ -24,7 +54,7 @@ NOT_REACHED. Все6 migration jobs SUCCESS относятся к historical sou
 application runtime не сохраняет propagation cancellation после agent terminal
 result. Startup traceback/active-case stack отсутствуют, конкретный hosted
 predicate/await требует целевой диагностики. Все failures/NOT_REACHED и границы
-partial PASS — в [C3 receipt](tasks/M4_HANDOFF.md#current--c3-m43-runtime-integration-r1--blocked-c3-hold--2026-10-31).
+partial PASS — в [C3 receipt](https://github.com/Elefesys/ai-service-manager/blob/e58163ae6b31dfbb243b71bda47b875b33344705/docs/tasks/M4_HANDOFF.md).
 Local Ruff/format/mypy PASS;3387 offline cases+155subtests покрыты passing runs,
 не единым полным зелёным запуском.0015/down0014;0001–0014/locks/pins/R4 immutable.
 

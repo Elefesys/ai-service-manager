@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R1.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R2.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -898,7 +898,7 @@ R4 scope6 paths и один bounded PG proof заданы в HANDOFF; production
 Общий runtime gate до actual remaining assertions и whole-source review открыт;
 application0014/worker/Outbox переход впереди. Live/paid/VM/Telegram HOLD.
 
-**Актуальное решение C0 от 2026-10-31: C3-M4.3-RUNTIME-INTEGRATION-R1.**
+**Предыдущее решение C0 от 2026-10-31: C3-M4.3-RUNTIME-INTEGRATION-R1.**
 C2 source3f79119e/receipt337ec81 принят C0 в SOURCE + TARGETED PG scope:
 104 PASS/312 phases,35 actual PG, исходный snapshot/READ audit/call rows/effects
 проверены; independent ZIP/source/AST/JUnit/cleanup review PASS. Прочитан весь
@@ -923,6 +923,27 @@ candidate: сохранить11 старых gates, добавить owned M4 PG
 на разных refs; после outcome C0 review, без повторных unchanged CI. До общей
 приёмки merge/живой TEST smoke не объявляются. Live/paid/VM/deploy/real data HOLD;
 ledger и GPT/v2 choice прежние, C1/C2/C4–C8 HOLD.
+
+**Актуальное решение C0 от 2026-10-31: C3-M4.3-RUNTIME-INTEGRATION-R2.**
+R1 source9b05e5dd/receipt e58163ae прошёл независимую проверку evidence, но whole
+runtime BLOCKED:6 CI jobs PASS/5 FAIL/1 SKIPPED; M4 45/64 PASS, native6 current
+failures. PR41/старые refs frozen, не merge.398 frontend tests в browser build
+прошли; browser journeys и foundation suite не достигнуты.
+
+Причины: pin current catalog вычислен из WASM с отличающимся порядком functions;
+stock0015/точный failed predicate ещё нужны. Agent terminal CANCELLED поглощает
+отмену нового application loop; cleanup/cancel должен иметь конечную границу.
+Incomplete phase evidence требует узкого исправления, без нового trace framework.
+Выдан один C3 repair, exact base/write-set/bounded runs в CURRENT HANDOFF:
+stock capture, причинное исправление, targeted validation, только затем новый
+Draft PR/полный CI со всеми12 gates. Не повторять неизменённый CI.
+
+0001–0014 immutable. C0 явно разрешает только profile/pins correction ещё не
+принятой0015 в disposable TEST candidate; retained0015 database при обнаружении
+требует отдельного additive successor, без переписывания её истории. Default OFF,
+fake-only, native OWNER/barrier/tenant/send fences/UNKNOWN и budgets прежние.
+UI reason presentation, live smoke и rollout не входят в repair. Другие роли HOLD;
+ни merge, ни readiness реального пилота из частичных PASS не следуют.
 
 ## Что пересмотрено относительно baseline
 

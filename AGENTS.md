@@ -25,10 +25,13 @@ M4_HANDOFF/CURRENT. M4.1 и C5 recovery интегрированы в PR #38; ac
 PR39/40 слиты; accepted main586240e8, push CI41178689536:11/11 SUCCESS.
 Observer repair закрыт. C2 R4 принят C0 в SOURCE + TARGETED PG scope:
 104 PASS, включая35 actual PG; database-only слой ещё не integrated в main.
-Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R1: один synthetic путь
-Turn→Agent→сохранённый result→Outbox/escalation через application worker.
-Согласованный schema successor0015/down0014, точные границы и CI в CURRENT.
-0001–0014 immutable; application/catalog gates переводятся вместе, без обхода.
+R1 source9b05e5dd/receipt e58163ae проверен C0: CI6 PASS/5 FAIL/1 SKIPPED,
+45/64 M4 PG PASS; whole-runtime BLOCKED. PR41 и R1 refs frozen, не сливать.
+Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R2: исправить stock0015
+catalog pins, propagation cancellation и сохранение незавершённых результатов.
+Exact base/write-set и конечные targeted/CI допуски — в CURRENT.
+0001–0014 immutable. Узкое исключение для ещё не принятой0015 описано C0
+в CURRENT; никаких изменений retained DB или обхода application/catalog gates.
 AI выключен по умолчанию; paid/live transports/VM/real data не включаются.
 Остальные роли HOLD; C2 R1–R4 execution refs frozen.
 Прежние paid допуски использованы; новых вызовов они не разрешают.

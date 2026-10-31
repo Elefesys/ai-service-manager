@@ -4,8 +4,9 @@
 25 manual PASS,2 READ и2 synthetic images; GPT/v2 выбран для первого runtime.
 PR39/40 слиты. [Main CI41178689536](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536)
 прошёл11/11, ошибка CI закрыта. C2 R4 принят C0:104 PASS, включая35 actual PG.
-[Текущая задача C3](../tasks/M4_HANDOFF.md) — подключить agent/result к worker,
-Outbox и передаче мастеру, согласовав новую схему с приложением.
+[Текущая задача C3 R2](../tasks/M4_HANDOFF.md) — исправить проверку схемы и
+остановку worker в synthetic интеграции. R1 дал45/64 M4 PG PASS; полный CI
+не прошёл. PR41 не сливать, прежний запуск не повторять.
 
 ## Принятый отчёт
 
@@ -37,10 +38,11 @@ Accepted main586240e88c825aa67593af5d72e0bdbb251ed3bb:860 PostgreSQL,
 54 browser и остальные CI gates PASS. Новый DB-only слой прошёл source review
 и104 проверки: сохранённый ответ переживает restart, stale/HUMAN блокируют
 новое действие, UNKNOWN не вызывает автоматическую повторную генерацию.
-C3 теперь соединяет эти части в один synthetic application путь: reply идёт
-в защищённый Outbox, handoff — в существующую очередь мастера, no_reply завершает
-обработку. AI выключен по умолчанию; модель и transport в этой проверке тестовые.
-После целевых проверок — один Draft PR/full CI и приёмка C0.
+C3 R1 проверил часть synthetic пути: reply идёт в защищённый Outbox, handoff —
+в очередь мастера, no_reply завершает обработку.19 из64 PG scenarios не завершены;
+есть отказ current catalog и дефект отмены worker. C0 выдал C3 R2: stock catalog,
+ограниченное исправление, targeted validation, затем новый Draft PR/full CI.
+AI выключен по умолчанию; модель и transport в этой проверке тестовые.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.
 
 Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`

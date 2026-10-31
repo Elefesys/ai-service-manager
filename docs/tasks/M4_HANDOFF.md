@@ -6,7 +6,147 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R1 / BLOCKED, C3 HOLD / 2026-10-31
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R2 / выдано C3 / 2026-10-31
+
+**Результат:** synthetic worker должен принимать проверенную схему0015,
+останавливаться за конечное время и завершать оставшиеся delivery/schema
+сценарии. Это исправление уже выданной интеграции, необходимое до её merge;
+новых функций пилота, провайдеров или UI не добавляем.
+
+**C0 review R1: whole-runtime BLOCKED, partial evidence подтверждено.**
+Source **9b05e5ddf8d00c0bab4f4f5e0fbf966a60915de2** /
+tree **abbe24977ca00d6fa880767cc78dcdd62a4bd1cd**; docs receipt
+**e58163ae6b31dfbb243b71bda47b875b33344705** /
+tree **37f686063595e207a482ef3633a7b19ba1308c23** — sole child source.
+PR41 OPEN/DRAFT, tested merge **e28af5bfdc26be4788b4258def779e83b19659c2**
+имеет тот же source tree. CI41216402482/attempt1: **6 SUCCESS/5 FAIL/1 SKIPPED**.
+Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb** unchanged.
+Не сливать PR41; R1 preparation/PR refs и прежние C2 execution refs frozen.
+
+C0 сверил fresh refs/PR/run/jobs/artifacts и failed-job logs, исходный ZIP
+78539747 bytes/SHA256 **35b5ce7c9b0891a2f688ce06de360907b2828cbc0c4a10e9c7f11a8be9e1decd**,
+manifest70/70, все10 original ZIP с fresh GitHub digests,341 source files/modes
+в каждом source archive. Original M4 manifest71/71; независимый пересчёт
+inventory/cases/phases/JUnit: **35 retained +10 delivery PASS,19 missing results**;
+native **106 PASS/6 FAIL**,336 phases/JUnit совпали; partition
+**1029=860 generic+105 native+64 M4**, disjoint/full union. Отдельно7 native
+source cases. C0 нового pytest/PG/CI/paid запуска не делал.
+
+Уточнение C0 к R1 receipt: **398 frontend tests/14 files PASS** в Docker build
+browser job124581726584. Foundation suite зависимо SKIPPED; её ordinary/generic
+проверки и browser54 journeys не выполнены. Не обобщать это как frontend NOT_RUN.
+Шесть historical migration PASS и прежние35 PG не подтверждают current0015.
+
+| Группа | Доказанный факт и недостающая проверка | Исправление / acceptance |
+|---|---|---|
+| Catalog/startup | API exits3 в browser/normal/Docker29 egress;6 native host cases остановлены POLICY_PREREQUISITE_FAILED. C0 независимо подтвердил равные0013 function rows по signature и nonfunction, но разный порядок functions: stock full c045a59f… против WASM af2a3232…. Actual stock0015 catalog и точный refused predicate отсутствуют | Получить stock0015 из pinned PG, проверить весь независимый source/catalog и согласовать pins. Доказать readiness/current native positives и negatives, не только historical PASS |
+| Cancellation | Agent возвращает CANCELLED outcome, AIDatabase — AGENT_STOP; новый runtime не восстанавливает отмену, AI loop при unset stop продолжает работу. Source defect подтверждён; точного hosted stuck await нет | Сохранить bounded terminal bookkeeping и propagation внешней отмены через TaskGroup; timeout/cancel/STOP failure не создают повторный model call |
+| Incomplete evidence | M4600s исчерпан:45 completed,11 delivery+8 schema без результата. Plugin пишет cases только после teardown; complete=true описывает обход groups | Сохранять bounded active node/phase до teardown, явно различать completed/missing/NOT_REACHED; убрать двусмысленность summary. Не увеличивать таймаут ради зависания |
+
+R1 originals и подробные failures остаются в
+[архиве](https://chatgpt.com/library?file_id=libfile_f4fa8256268881918e0d053d99221f18&account_id=personal)
+и историческом receipt ниже. M4/native owned cleanup PASS; это не доказательство
+browser cleanup, чей trap скрывал код. API startup traceback не сохранён.
+
+### Исполнение R2
+
+**Repository:** Elefesys/ai-service-manager. **Один исполнитель C3**;
+C1/C2/C4–C8 HOLD. Основания и продуктовые критерии R1/IMPL-004 сохраняются.
+**Exact repair base — полный SHA этого C0 assignment из immutable URL**, sole
+child e58163ae, только5 coordination docs; записать base SHA/tree до изменения.
+C0 branch **c0/m4-3-runtime-integration-r2**; новые preparation
+**c3/m4-3-runtime-integration-r2** и PR source
+**c3/m4-3-runtime-integration-pr-r2**. Никаких правок старых execution refs/main.
+
+**Разрешённый write-set, только причинно необходимая дельта:**
+
+- `backend/src/asm/ai/runtime.py`, `database.py`, `runtime_contracts.py`;
+  `backend/src/asm/messaging/worker.py`; `backend/src/asm/foundation.py`;
+  `backend/src/asm/telegram/provisioning.py`.
+- `migrations/versions/0015_ai_delivery.py` — только исправление независимого
+  profile/pins и их вычисления. **Явное решение C0:**0015 ещё не принята и не
+  входит main; известны только disposable CI применения. Разрешён этот узкий
+  пересмотр unmerged candidate с сохранением frozen R1 source. Это не общее
+  разрешение менять применённые миграции:0001–0014 immutable, нет schema reset
+  retained DB. Если найдётся сохранённая DB с0015, остановить её upgrade и
+  вернуть C0 для назначения additive successor, не менять данные/историю.
+- `scripts/native_context_db_catalog.py`, `scripts/m4_runtime_db.py`,
+  `scripts/test_browser.sh`, `scripts/test_telegram_egress.sh`;
+  `.github/workflows/m4-runtime-db.yml`, `.github/workflows/ci.yml` — только
+  точные R2 identities, два ограниченных targeted режима и сохранение безопасной
+  startup/active-phase/cleanup диагностики. Старые required gates не ослаблять.
+- `tests/test_m4_delivery.py`, `tests/test_m4_delivery_postgres.py`,
+  `tests/test_m4_schema_postgres.py`, `tests/test_m4_runtime_database.py`,
+  `tests/test_m4_runtime_migrations.py`, `tests/test_foundation.py`,
+  `tests/test_native_context_db_runner.py`,
+  `tests/test_m3_1_native_context_runtime_postgres.py`,
+  `tests/test_telegram_egress.py`; при необходимости небольшой новый
+  `tests/test_m4_runtime_db_runner.py` для incomplete/cancel evidence.
+- `docs/tasks/M4_HANDOFF.md`, `docs/TASK_REGISTER.md` — итоговый receipt.
+
+Locks/pins/infra/Dockerfiles/architecture, старые R4 runner/workflow и принятый
+ConversationAgent contract immutable. Сначала сохранить его terminal outcome,
+а внешнюю отмену корректно восстановить на application boundary; не менять
+agent tests ради удобства worker. Retained35 PG и их модуль не переписывать.
+Если причинное исправление требует иного файла/контракта — вернуть точную дельту
+C0, не расширять весь стек. UI presentation handoff reason остаётся отдельно;
+этот repair не объявляет живой пилот готовым.
+
+**Порядок и конечный бюджет проверки:**
+
+1. Сначала source diagnosis, Ruff/format/mypy и целевые offline tests. Проверить
+   direct cancellation и parent TaskGroup cancellation при unset stop, deadline,
+   ошибку/задержку STOP и повторную отмену при cleanup. Cleanup ограничен временем;
+   отмена не поглощается, ordinary inbound/manual остаётся работоспособным,
+   finite lease recovery не регенерирует ответ. Исправить production причину;
+   один stop.set() в тесте не доказывает исправление.
+2. **Один stock catalog capture** на fresh owned asm_test из неизменённого
+   pinned PG18.6/vector0.8.6 image. Если локально Docker недоступен, разрешён один
+   push-trigger run на новой **c3/m4-3-runtime-catalog-run-r2**, без PR/full CI.
+   Добавить узкий режим в существующий M4 executor/workflow; exact repo/ref/base/
+   source/tree/attempt1, no user-selectable SQL/command/image. Capture не требует
+   PASS заведомо неверного application pin: сохраняет actual full/nonfunction
+   catalog, bodies/verifier, roles/ACL/RLS/constraints и точный безопасный
+   failed predicate. Отделить ожидаемый mismatch от capture/cleanup failure.
+   Записать server/extension versions, database locale/collation и сортировку;
+   не проецировать WASM/version и не принимать установленный self-report за эталон.
+3. Сопоставить actual catalog с closed source expansion, объяснить каждую дельту,
+   исправить только обусловленные ею pins/вычисление. Проверить independent full
+   и nonfunction, function bodies/security включая verifier; сохранить честный
+   historical0013 профиль. Не назначать новый hash вслепую по installed database.
+   Startup/native refusal сохраняет безопасный код стадии и типа ошибки, без
+   credentials/DSN/raw exception values; active-case checkpoints не ждут teardown.
+4. **Один targeted validation** исправленного candidate; если hosted — новый
+   ref **c3/m4-3-runtime-targeted-run-r2**, attempt1. Полные64 retained/delivery/
+   schema cases плюс новые causal cases; current native6 (включая negatives,
+   ранее скрытые ранним отказом), stock source/catalog и readiness smoke.
+   Доказывать нужную ветвь/эффект, не просто любой отказ. Проверить clean/previous/
+   repeat upgrade, unused downgrade и отказ used downgrade до изменений.
+   Записывать inventory/phases/JUnit, active/missing cases, command timings,
+   source identity и owned cleanup. Каждая targeted job ≤25min, SQL/tests ≤600s;
+   прежние full-CI лимиты не увеличивать. Если локальная проверка даёт эти факты,
+   соответствующий hosted run не нужен. Execution refs после запуска frozen.
+5. Только после causal checks PASS — **один новый Draft PR к main и один полный
+   CI** на финальном исправленном source. PR41 оставить историей frozen R1.
+   Все12 jobs/gates сохранить; generic/native/M4 sets disjoint, полный union,
+   никакого skip/xfail, исключения current negatives или подмены новых tests
+   историческими. Source PR frozen после outcome; docs receipt — sole child
+   только preparation. После любого targeted/full FAIL сохранить всё и вернуть
+   C0, без rerun и без следующего платного/полного запуска по инерции. Ожидаемый
+   pin mismatch в diagnostic capture сам по себе не блокирует шаг3.
+
+Return: exact base/source/tree/write-set; причинные diff и stock catalog proof;
+границы cancellation/cleanup; все actual failures/NOT_REACHED; PR head/tested
+merge/run/jobs/artifact digests, originals/manifests/JUnit/cleanup. Не выдавать
+обход всех groups за complete suite. Нужен единый full CI итог, а не union
+разных failing runs. После receipt C3 HOLD, C0 review; merge выполняет владелец.
+
+AI default OFF, FAKE/EVAL_ONLY,2 calls/1 READ; no real AI/Telegram/VM/deploy/real
+data. Owner ничего не запускает на ПК. Shared150 unchanged: confirmed0.37505230/
+58 knownPOST;4 unknown held7.585505548;62 totalPOST; remaining142.039442152,
+reported0.00743079 UNSETTLED. Нового paid допуска нет.
+
+## История — C3 R1 receipt / BLOCKED, до C0 review / 2026-10-31
 
 **C3 вернул frozen candidate на C0 review.** Не INTEGRATED/VERIFIED; merge и
 следующий repair требуют отдельного решения C0. Выполнены один Draft PR и один
