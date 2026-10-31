@@ -90,7 +90,7 @@ def foundation_git(tmp_path, monkeypatch):
             }
         ],
     }
-    monkeypatch.setattr(lane, "source_catalog", lambda _: catalog)
+    monkeypatch.setattr(lane, "source_catalog", lambda _, revision="0013": catalog)
     return SimpleNamespace(root=root, actual=actual, git=git, catalog=catalog, producer=producer)
 
 
@@ -118,7 +118,7 @@ def foundation_real_catalog_sink(foundation_git, monkeypatch, request):
     """Real migration expansion in an owned synthetic Git checkout; no database."""
     fixture = foundation_git
     paths = sorted((fixture.actual / "migrations/versions").glob("*.py"))
-    assert len(paths) == 13
+    assert len(paths) == 15
     for source in paths:
         target = fixture.root / source.relative_to(fixture.actual)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -172,7 +172,7 @@ def test_foundation_real_catalog_failed_phase_journal(foundation_real_catalog_si
     store = foundation_real_catalog_sink
     node = "tests/test_constructed.py::test_call"
     journal = lane.GenericJournal(store, [node])
-    assert len(journal.catalog["nonfunction_ddl"]) == 717
+    assert len(journal.catalog["nonfunction_ddl"]) == 764
     journal.start(node)
     append = store.append
 
@@ -297,15 +297,16 @@ def test_foundation_real_catalog_pytest_reports(foundation_real_catalog_sink, mo
     ]
 
     def proof(private, evidence, commands, env):
-        a, n, g = partition_fixture()
-        a["nodeids"] = nodes + n["integration_nodeids"]
+        a, n, g, m = partition_fixture()
+        a["nodeids"] = nodes + n["integration_nodeids"] + m["nodeids"]
         a["integration_nodeids"] = a["nodeids"][:]
         g["nodeids"] = g["integration_nodeids"] = nodes[:]
-        result = lane.validate_partition(a, n, g)
+        result = lane.validate_partition(a, n, g, m)
         for name, data in (
             ("partition-all-pg.json", a),
             ("partition-native.json", n),
             ("partition-generic-pg.json", g),
+            ("partition-m4.json", m),
             ("integration-partition.json", result),
         ):
             lane.write_json(private / name, data)
@@ -361,7 +362,7 @@ def test_foundation_real_catalog_pytest_reports(foundation_real_catalog_sink, mo
         assert all(len(line) + 1 <= 4096 for line in raw.splitlines())
 
 
-def test_foundation_workflow_has_eleven_required_jobs_serial_source_and_always_gates():
+def test_foundation_workflow_has_twelve_required_jobs_serial_source_and_always_gates():
     source = (lane.ROOT / ".github/workflows/ci.yml").read_text()
     parts = re.split(r"^  ([a-z0-9-]+):\n", source.split("jobs:\n", 1)[1], flags=re.M)
     jobs = dict(zip(parts[1::2], parts[2::2], strict=True))
@@ -372,8 +373,9 @@ def test_foundation_workflow_has_eleven_required_jobs_serial_source_and_always_g
         "docker29-compatibility",
         "connect5-migration",
         "native-context-db",
+        "m4-runtime-db",
     }
-    assert len(jobs) - 1 + 6 == 11
+    assert len(jobs) - 1 + 6 == 12
     for job, digest in {
         "browser": "b3ab2a96b6f7f8eb3a3b726b9769d756a55bd50694b3f21be8779aabcc87c3db",
         "docker29-compatibility": "37ecbf897d53f318f3d0e2192b05574923e6e9ed7a6bbd421aa6eecddff055b1",
@@ -686,15 +688,16 @@ def test_foundation_actual_constructed_pytest_reports_retained_before_terminal_s
     ]
 
     def proof(private, evidence, commands, env):
-        a, n, g = partition_fixture()
-        a["nodeids"] = nodes + n["integration_nodeids"]
+        a, n, g, m = partition_fixture()
+        a["nodeids"] = nodes + n["integration_nodeids"] + m["nodeids"]
         a["integration_nodeids"] = a["nodeids"][:]
         g["nodeids"] = g["integration_nodeids"] = nodes[:]
-        result = lane.validate_partition(a, n, g)
+        result = lane.validate_partition(a, n, g, m)
         for name, data in (
             ("partition-all-pg.json", a),
             ("partition-native.json", n),
             ("partition-generic-pg.json", g),
+            ("partition-m4.json", m),
             ("integration-partition.json", result),
         ):
             lane.write_json(private / name, data)
@@ -720,8 +723,8 @@ def test_foundation_actual_constructed_pytest_reports_retained_before_terminal_s
 
 
 def foundation_complete_fixture(store):
-    a, n, g = partition_fixture()
-    proof = lane.validate_partition(a, n, g)
+    a, n, g, m = partition_fixture()
+    proof = lane.validate_partition(a, n, g, m)
     route = store.binding["route"]
     host = (
         *lane.FOUNDATION_HOST,
@@ -743,6 +746,7 @@ def foundation_complete_fixture(store):
         ("partition-all-pg.json", a),
         ("partition-native.json", n),
         ("partition-generic-pg.json", g),
+        ("partition-m4.json", m),
         ("integration-partition.json", proof),
     ):
         store.publish(name, data)
@@ -1432,7 +1436,7 @@ def test_foundation_durable_completeness_requires_current_six_lane_receipts(
     source = {
         "source_sha": head,
         "parents": [],
-        "expected_revision": "0013",
+        "expected_revision": "0015",
         "images": {k: {} for k in ("api", "worker", "scheduler", "fixture")},
     }
     if fault == "missing-lifecycle":
@@ -1612,7 +1616,7 @@ def test_foundation_generic_sink_failure_is_a_separate_gate_and_keeps_nonzero_ex
     def proof(private, evidence, commands, env):
         inventories = partition_fixture()
         value = lane.validate_partition(*inventories)
-        for name, data in zip(("all-pg", "native", "generic-pg"), inventories, strict=True):
+        for name, data in zip(("all-pg", "native", "generic-pg", "m4"), inventories, strict=True):
             lane.write_json(private / ("partition-" + name + ".json"), data)
         lane.write_json(private / "integration-partition.json", value)
         return value, expected
@@ -3092,6 +3096,7 @@ def test_ci_secondary_entrypoints_cannot_adopt_resources_for_bad_event(tmp_path,
 def partition_fixture():
     native = [path + "::test_case" for path in REQUIRED_MODULES]
     generic = ["tests/test_tenancy_postgres.py::test_old", "tests/test_other_postgres.py::test_new"]
+    m4 = [path + "::test_case" for path in lane.M4_PG_MODULES]
 
     def inventory(nodes, pg, fixtures, deselected):
         return {
@@ -3103,22 +3108,23 @@ def partition_fixture():
         }
 
     return (
-        inventory(generic + native[1:], generic + native[1:], native[1:], native[:1]),
+        inventory(generic + native[1:] + m4, generic + native[1:] + m4, native[1:], native[:1]),
         inventory(native, native[1:], native[1:], []),
         inventory(generic, generic[:], [], native[:1]),
+        inventory(m4, m4[:], [], []),
     )
 
 
 def test_ci_partition_uses_exact_modules_dynamic_ids_and_separate_source_tests():
     assert lane.PG_MODULES == REQUIRED_MODULES[1:]
-    a, n, g = partition_fixture()
-    assert lane.validate_partition(a, n, g)["native_source"] == 1
+    a, n, g, m = partition_fixture()
+    assert lane.validate_partition(a, n, g, m)["native_source"] == 1
     for inventory in (a, n):
         for key in ("nodeids", "integration_nodeids", "native_fixture_nodes"):
             inventory[key].append(REQUIRED_MODULES[3] + "::test_future_case[new]")
-    proof = lane.validate_partition(a, n, g)
+    proof = lane.validate_partition(a, n, g, m)
     assert (proof["all_pg"], proof["generic_pg"], proof["native_pg"], proof["native_total"]) == (
-        6,
+        9,
         2,
         4,
         5,
@@ -3144,7 +3150,7 @@ def test_ci_partition_uses_exact_modules_dynamic_ids_and_separate_source_tests()
     ),
 )
 def test_ci_partition_refuses_lost_cases_modules_markers_and_fixture_escape(change):
-    a, n, g = partition_fixture()
+    a, n, g, m = partition_fixture()
     if change == "lost-generic":
         g["nodeids"].pop()
     elif change == "lost-native":
@@ -3171,7 +3177,7 @@ def test_ci_partition_refuses_lost_cases_modules_markers_and_fixture_escape(chan
         lane, "MODULES", REQUIRED_MODULES[:-1] if change == "module" else REQUIRED_MODULES
     ):
         with pytest.raises(lane.Refusal):
-            lane.validate_partition(a, n, g)
+            lane.validate_partition(a, n, g, m)
 
 
 def test_ci_collection_is_collect_only_and_hook_blocks_fixture_execution(tmp_path):
@@ -3203,7 +3209,7 @@ def test_ci_actual_generic_execution_must_match_proven_inventory(tmp_path, bad_s
         assert argv[:4] == ["-v", "--durations=20", "-m", "integration"]
         assert (
             tuple(arg.removeprefix("--ignore=") for arg in argv if arg.startswith("--ignore="))
-            == REQUIRED_MODULES[1:]
+            == REQUIRED_MODULES[1:] + lane.M4_PG_MODULES
         )
         items = [
             SimpleNamespace(nodeid=node) for node in (expected[:-1] if bad_selection else expected)

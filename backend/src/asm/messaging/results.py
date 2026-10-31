@@ -91,6 +91,7 @@ class JobClaim(Result):
         "PROCESS_INBOX",
         "SEND_MANUAL_TEXT",
         "SEND_GUARDED_TEXT",
+        "SEND_AI_TEXT",
         "FETCH_IMAGE",
         "PROCESS_TURN",
         "ESCALATION_TIMER",
@@ -211,6 +212,12 @@ class SendPermit(Result):
 class TerminalRejection(Result):
     code: Literal["NOT_ALLOWED", "UNAVAILABLE"]
     status: Literal["FAILED", "PENDING"]
+
+
+class AISendPermit(SendPermit):
+    """Distinct admission: accepted only by injected no-egress AI transport."""
+
+    ai_delivery: Literal[True]
 
 
 class FinalizeResult(Result):

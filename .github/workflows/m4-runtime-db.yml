@@ -1,0 +1,28 @@
+name: M4 synthetic application PostgreSQL
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify synthetic application on owned PostgreSQL 18
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 scripts/m4_runtime_db.py run
+      - name: Recover owned resources and finalize evidence
+        if: always()
+        run: python3 scripts/m4_runtime_db.py cleanup
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: m4-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/m4-runtime-${{ github.run_id }}-${{ github.run_attempt }}/evidence/
+          retention-days: 7
+          if-no-files-found: error

@@ -117,7 +117,7 @@ async def assert_refusal(c):
     revision = (
         await c.execute(text("SELECT version_num FROM platform.alembic_version"))
     ).scalar_one()
-    current = await current_snapshot(c) if revision == "0013" else None
+    current = await current_snapshot(c) if revision == "0015" else None
     module, executed = migration(), []
 
     def execute(statement):
@@ -136,7 +136,7 @@ async def assert_refusal(c):
     assert caught.value.orig.sqlstate == "55000"
     assert len(executed) == 2 and executed[0].startswith("LOCK TABLE")
     assert executed[1].startswith("DO $$ BEGIN")
-    if revision == "0013":
+    if revision == "0015":
         assert await current_snapshot(c) == current
     else:
         await assert_schema(c)

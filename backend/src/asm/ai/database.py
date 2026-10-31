@@ -1,7 +1,7 @@
-"""DB-only synthetic runtime. Every capability owns a short, committed transaction.
+"""Synthetic AI authority. Every capability owns a short committed transaction.
 
-Application dispatch/readiness stays on 0013. There is no send, provider setup,
-automatic retry, recovery generation, or permission derived from ContextBinding.
+The historical 0014 API remains DB-only. Explicit 0015 delivery composition
+selects a separate capability; a replayed result is never a send permit.
 """
 
 import asyncio
@@ -50,14 +50,17 @@ def runtime_config(config: GatewayConfig) -> GatewayConfig:
 
 
 class AIDatabase:
-    def __init__(self, messaging: MessagingDatabase, *, environment: str):
+    def __init__(self, messaging: MessagingDatabase, *, environment: str, delivery: bool = False):
         if environment not in {"LOCAL", "TEST"}:
             raise MessagingError(Code.NOT_ALLOWED)
         self.messaging = messaging
+        if type(delivery) is not bool:
+            raise MessagingError(Code.INVALID_INPUT)
+        self.delivery = delivery
 
     async def _command(self, claim: JobClaim, operation: str, **payload: Any) -> Any:
         async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
-            return await unit.ai_runtime(operation, payload)
+            return await unit.ai_runtime(operation, payload, delivery=self.delivery)
 
     async def enqueue(self, source_claim: JobClaim) -> UUID:
         """Explicit synthetic setup from an admitted TEST_CONSUME job; no scheduler hook."""

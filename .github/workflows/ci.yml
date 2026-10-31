@@ -246,3 +246,7 @@ jobs:
     uses: ./.github/workflows/native-context-db.yml
     permissions:
       contents: read
+  m4-runtime-db:
+    uses: ./.github/workflows/m4-runtime-db.yml
+    permissions:
+      contents: read

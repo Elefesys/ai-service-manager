@@ -92,10 +92,10 @@ def test_unused_downgrade_refuses_before_ddl_and_restores_narrow_delta():
     assert "AI_RUNTIME_RESCHEDULE_SOURCE_MISMATCH" in statements[-1]
 
 
-def test_application_revision_not_advanced():
+def test_current_application_requires_successor_and_historical_0014_stays_separate():
     from asm.foundation import DATABASE_SCHEMA_REVISION
 
-    assert DATABASE_SCHEMA_REVISION == "0013"
+    assert DATABASE_SCHEMA_REVISION == "0015"
 
 
 def compile_statements(statements):

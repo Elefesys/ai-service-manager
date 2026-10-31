@@ -49,7 +49,7 @@ from test_m4_agent import config
 from test_m4_runtime_database import assert_read_audit
 from test_tenancy_postgres import BA, BA2, BB, PROVIDER, UA, UB, A, B
 
-from scripts.m4_pg_observation import preparation, source_tree_from_evidence
+from scripts.m4_runtime_db import preparation, source_tree_from_evidence
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 COUNTER = itertools.count(10000)
@@ -101,7 +101,7 @@ async def pg(tmp_path_factory):
     h.ai = AIDatabase(h.kernel, environment="TEST")
     try:
         assert await schema(h) == "0014"  # clean upgrade performed by the executor
-        await migrate("upgrade", "head")
+        await migrate("upgrade", "0014")
         await migrate("downgrade", "0013")
         assert await schema(h) == "0013"
         profile = await scalar(h, "SELECT platform.human_context_schema_profile()")
@@ -182,7 +182,7 @@ async def pg(tmp_path_factory):
             )
         )[0]["row"]
         await migrate("upgrade", "0014")
-        await migrate("upgrade", "head")
+        await migrate("upgrade", "0014")
         yield h
     finally:
         await runtime.dispose()

@@ -26,16 +26,24 @@ from asm.billing.http import install_billing
 from asm.tenancy import TenantDatabase
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from asm.ai.contracts import GatewayConfig
+    from asm.ai.fake import FakeAdapter
+    from asm.ai.runtime import SyntheticRuntime
     from asm.files.storage import ObjectStorage
+    from asm.messaging.adapter import ControlledAdapter
+    from asm.messaging.database import MessagingDatabase
+    from asm.messaging.worker import Worker
     from asm.telegram.client import TelegramClient
 
 tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0013"
-NATIVE_CONTEXT_PROFILE_SHA256 = "c045a59f86201a244ed0d43fbe22aa8cd72fddd346d770706c6ab3b92ee9a411"
-NATIVE_PROFILE_BODY_SHA256 = "527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac"
+DATABASE_SCHEMA_REVISION = "0015"
+NATIVE_CONTEXT_PROFILE_SHA256 = "e716dad0116e2f4eb894fc507921c28ab039c279c668f9734fb33b7c43eab646"
+NATIVE_PROFILE_BODY_SHA256 = "7bae585ce1127be79aeb0e53638ab825d7e128cc79c195707656d8ff9635d791"
 
 
 async def native_schema_readiness(connection: AsyncConnection) -> None:
@@ -57,7 +65,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.human_context_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.ai_delivery_schema_profile()')
             """)
             )
         )
@@ -100,7 +108,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
     if (
         declared
         != {
-            "schema_revision": "0013",
+            "schema_revision": "0015",
             "valid": True,
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
         }
@@ -322,7 +330,35 @@ def create_app(
     return app
 
 
-async def serve(role: Literal["worker", "scheduler"]) -> None:
+def create_worker(
+    database: "MessagingDatabase",
+    adapter: "ControlledAdapter",
+    *,
+    environment: str,
+    ai_config: "GatewayConfig | None" = None,
+    model: "Callable[[], FakeAdapter] | None" = None,
+    ai_telegram: "TelegramClient | None" = None,
+) -> "Worker":
+    """Explicit synthetic application entry. Default composition has AI disabled."""
+    from asm.ai.runtime import SyntheticRuntime
+    from asm.messaging.errors import Code, MessagingError
+    from asm.messaging.worker import Worker
+
+    if (ai_config is None) != (model is None) or (ai_config is None and ai_telegram is not None):
+        raise MessagingError(Code.INVALID_INPUT)
+    ai = None
+    if ai_config is not None and model is not None:
+        ai = SyntheticRuntime(
+            database, ai_config, model, environment=environment, telegram=ai_telegram
+        )
+    return Worker(database, adapter, ai=ai)
+
+
+async def serve(
+    role: Literal["worker", "scheduler"],
+    *,
+    synthetic: "Callable[[MessagingDatabase], SyntheticRuntime] | None" = None,
+) -> None:
     from asm.files.config import StorageSettings
     from asm.files.database import FileDatabase
     from asm.files.provider import ChannelImageProvider, ControlledImageProvider
@@ -348,6 +384,7 @@ async def serve(role: Literal["worker", "scheduler"]) -> None:
         telegram = TelegramClient(telegram_settings) if telegram_settings.enabled else None
         await db.check()
         kernel = MessagingDatabase(db.engine, environment=settings.environment)
+        ai = synthetic(kernel) if synthetic is not None else None
         storage_settings = StorageSettings()
         if storage_settings.environment != settings.environment:
             raise RuntimeError("Storage environment mismatch")
@@ -375,6 +412,7 @@ async def serve(role: Literal["worker", "scheduler"]) -> None:
             files=files,
             cleanup=CleanupSweep(file_db, storage),
             telegram=telegram,
+            ai=ai,
         )
     finally:
         if telegram is not None:

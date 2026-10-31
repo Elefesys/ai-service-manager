@@ -17,7 +17,7 @@ from httpcore._backends.anyio import AnyIOStream
 from asm.files.models import FetchPermit
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import OutcomeKind, SendOutcome, identifier
-from asm.messaging.results import SendPermit
+from asm.messaging.results import AISendPermit, SendPermit
 from asm.telegram.config import TelegramSettings
 from asm.telegram.normalization import connection_fields, numeric_id, object_value, strict_json
 
@@ -143,6 +143,9 @@ class TelegramClient:
             origin = test_origin
         suppress_transport_logs()
         self.settings = settings
+        self.synthetic_ai = (
+            settings.environment == "TEST" and type(transport) is httpx.MockTransport
+        )
         self._origin = origin
         wire = transport or httpx.AsyncHTTPTransport(
             retries=0,
@@ -312,6 +315,8 @@ class TelegramClient:
             raise TelegramError(Code.INVALID_INPUT)
 
     async def send(self, permit: SendPermit) -> SendOutcome:
+        if isinstance(permit, AISendPermit) and not self.synthetic_ai:
+            return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED)
         if permit.provider != "TELEGRAM" or permit.bot_identity != self.settings.bot_id:
             return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED)
         try:

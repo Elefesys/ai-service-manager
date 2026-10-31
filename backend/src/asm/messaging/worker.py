@@ -14,9 +14,17 @@ from asm.messaging.adapter import ControlledAdapter
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import OutcomeKind, SendOutcome
-from asm.messaging.results import ContextWorkResultBase, JobClaim, SendPermit, TurnJobClaim
+from asm.messaging.results import (
+    AIJobClaim,
+    ContextWorkResultBase,
+    JobClaim,
+    SendPermit,
+    TerminalRejection,
+    TurnJobClaim,
+)
 
 if TYPE_CHECKING:
+    from asm.ai.runtime import SyntheticRuntime
     from asm.files.transfer import CleanupSweep, FetchTransfer
     from asm.telegram.client import TelegramClient
 
@@ -30,6 +38,7 @@ class Worker:
         deadline: float = 10,
         files: "FetchTransfer | None" = None,
         telegram: "TelegramClient | None" = None,
+        ai: "SyntheticRuntime | None" = None,
     ) -> None:
         if not 0 < deadline < 30:
             raise MessagingError(Code.INVALID_INPUT)
@@ -38,6 +47,9 @@ class Worker:
         self.deadline = deadline
         self.files = files
         self.telegram = telegram
+        if ai is not None and ai.database.messaging is not database:
+            raise MessagingError(Code.NOT_ALLOWED)
+        self.ai = ai
         self.worker_id = "controlled-" + str(uuid4())
 
     async def _finish(self, permit: SendPermit, outcome: SendOutcome) -> None:
@@ -102,6 +114,18 @@ class Worker:
                 raise secondary from primary
 
     async def execute(self, claim: JobClaim) -> None:
+        if isinstance(claim, AIJobClaim):
+            if self.ai is None:
+                raise MessagingError(Code.NOT_ALLOWED)
+            await self.ai.execute(claim)
+            return
+        if (
+            self.ai is not None
+            and isinstance(claim, TurnJobClaim)
+            and claim.step in ("TEST_CONSUME", "GUARDED_TEXT", "ESCALATE_OWNER")
+        ):
+            await self.ai.enqueue(claim)
+            return
         if claim.kind == "ESCALATION_TIMER":
             # Commit failure propagates: no speculative SUCCEEDED/DEAD. Recovery
             # re-reads canonical Jobs in a fresh transaction, never an old lease.
@@ -174,12 +198,30 @@ class Worker:
                 await self.files.execute(claim)
             return
 
-        if claim.kind not in {"SEND_MANUAL_TEXT", "SEND_GUARDED_TEXT"}:
+        if claim.kind not in {"SEND_MANUAL_TEXT", "SEND_GUARDED_TEXT", "SEND_AI_TEXT"}:
             raise MessagingError(Code.INVALID_INPUT)
 
         # If start commit ACK is lost, no permit reaches this code: recovery
         # conservatively marks the durable DISPATCHING attempt UNKNOWN.
-        if claim.kind == "SEND_GUARDED_TEXT":
+        transport = self.telegram
+        permit: SendPermit | TerminalRejection | ContextWorkResultBase
+        if claim.kind == "SEND_AI_TEXT":
+            if self.ai is None:
+                await self.database.retry(claim, Code.INVALID_INPUT, retryable=False)
+                return
+            transport = self.ai.telegram
+            probe = await self.database.telegram_probe(claim)
+            ai_observation = None
+            if probe is not None:
+                if transport is None:
+                    await self.database.retry(claim, Code.INVALID_INPUT, retryable=False)
+                    return
+                ai_observation = await transport.observe(
+                    probe.bot_identity, probe.external_connection_id, probe.owner_user_id
+                )
+            permit = await self.database.begin_ai_send(claim, probe, ai_observation)
+            probe = None
+        elif claim.kind == "SEND_GUARDED_TEXT":
             # This private path refuses TELEGRAM before any rights probe/I/O.
             try:
                 permit = await self.database.begin_guarded_send(claim)
@@ -216,9 +258,9 @@ class Worker:
             async with asyncio.timeout(self.deadline):
                 await self.adapter.checkpoint("before_call")
                 if permit.provider == "TELEGRAM":
-                    if self.telegram is None:
+                    if transport is None:
                         raise MessagingError(Code.DEPENDENCY_UNAVAILABLE)
-                    outcome = await self.telegram.send(permit)
+                    outcome = await transport.send(permit)
                 else:
                     outcome = await self.adapter.send(permit)
         except asyncio.CancelledError:
@@ -259,10 +301,16 @@ class Worker:
             except (SQLAlchemyError, MessagingError) as secondary:
                 raise secondary from primary
 
-    async def run_once(self, stop: asyncio.Event | None = None) -> bool:
+    async def run_once(self, stop: asyncio.Event | None = None, *, ai_only: bool = False) -> bool:
+        if type(ai_only) is not bool or (ai_only and self.ai is None):
+            raise MessagingError(Code.NOT_ALLOWED)
         if stop is not None and stop.is_set():
             return False
-        claim = await self.database.claim_job(self.worker_id)
+        claim = (
+            await self.database.claim_job(self.worker_id + "-ai", ai=True)
+            if ai_only and self.ai is not None
+            else await self.database.claim_job(self.worker_id)
+        )
         if claim is None:
             return False
         if stop is not None and stop.is_set():
@@ -281,8 +329,61 @@ async def run(
     files: "FetchTransfer | None" = None,
     cleanup: "CleanupSweep | None" = None,
     telegram: "TelegramClient | None" = None,
+    ai: "SyntheticRuntime | None" = None,
 ) -> None:
-    worker = Worker(database, adapter, files=files, telegram=telegram)
+    if role == "worker" and ai is not None:
+        async with asyncio.TaskGroup() as group:
+            group.create_task(_run_ai(database, adapter, stop, ai))
+            group.create_task(
+                _run(
+                    role,
+                    database,
+                    adapter,
+                    stop,
+                    files=files,
+                    cleanup=cleanup,
+                    telegram=telegram,
+                    ai=ai,
+                )
+            )
+        return
+    await _run(role, database, adapter, stop, files=files, cleanup=cleanup, telegram=telegram)
+
+
+async def _run_ai(
+    database: MessagingDatabase,
+    adapter: ControlledAdapter,
+    stop: asyncio.Event,
+    ai: "SyntheticRuntime",
+) -> None:
+    worker = Worker(database, adapter, ai=ai)
+    while not stop.is_set():
+        try:
+            worked = await worker.run_once(stop, ai_only=True)
+        except (SQLAlchemyError, MessagingError):
+            print(
+                json.dumps({"component": "ai-worker", "event": "iteration_unavailable"}), flush=True
+            )
+            worked = False
+        if not worked:
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=0.25)
+            except TimeoutError:
+                pass
+
+
+async def _run(
+    role: Literal["worker", "scheduler"],
+    database: MessagingDatabase,
+    adapter: ControlledAdapter,
+    stop: asyncio.Event,
+    *,
+    files: "FetchTransfer | None" = None,
+    cleanup: "CleanupSweep | None" = None,
+    telegram: "TelegramClient | None" = None,
+    ai: "SyntheticRuntime | None" = None,
+) -> None:
+    worker = Worker(database, adapter, files=files, telegram=telegram, ai=ai)
     while not stop.is_set():
         try:
             if role == "worker":

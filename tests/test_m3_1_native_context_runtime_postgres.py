@@ -42,7 +42,12 @@ BOUNDARIES = ("prepare", "accept", "send", "escalation", "test_prepare", "test_f
 
 
 @pytest_asyncio.fixture
-async def native_runtime(native):
+async def native_runtime(native, request):
+    if request.node.name.startswith("test_native_host"):
+        from test_m3_1_native_context_postgres import migrate
+
+        await migrate("upgrade", "0015")
+        native.schema_revision = "0015"
     native.kernel = MessagingDatabase(native.runtime.engine, environment="TEST")
     return native
 
@@ -332,7 +337,11 @@ async def test_python_foundation0012_still_refuses_actual_native0013(native_runt
     settings = Settings(environment="TEST", database_url=SecretStr(os.environ["ASM_DATABASE_URL"]))
     db = RuntimeDatabase(settings)
     try:
-        await db.check()  # new exact0013 reader succeeds before retaining old0012 refusal
+        from generic_pg_schema import historical_native_check
+
+        await historical_native_check(db)
+        with pytest.raises(RuntimeError, match="schema"):
+            await db.check()
         from asm import foundation
 
         with pytest.MonkeyPatch.context() as old_reader:
@@ -1163,7 +1172,7 @@ async def native_host_request(h, *, operation="ENABLE", key="host-enable", expec
             },
             "source_profile": {
                 "source_tree": tree,
-                "schema_revision": "0013",
+                "schema_revision": "0015",
                 "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
                 "drain_confirmed": True,
             },
@@ -1277,7 +1286,7 @@ async def test_native_host_policy_catalog_drift_refuses_without_new_authority(na
         transaction = await connection.begin()
         try:
             await connection.execute(
-                text("ALTER FUNCTION platform.human_context_schema_profile() RESET search_path")
+                text("ALTER FUNCTION platform.ai_delivery_schema_profile() RESET search_path")
             )
             with pytest.raises(ProvisioningError, match="^POLICY_PREREQUISITE_FAILED$"):
                 await native_catalog_profile(connection, runner, source)

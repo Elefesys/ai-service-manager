@@ -31,6 +31,7 @@ DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
 NONFUNCTION_SHA256 = "57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370"
+AI_NONFUNCTION_SHA256 = "e939e9f303843a84256f9315e6016e1a888aea0c18469539aa53147c6d339bee"
 EXECUTION_REF = "refs/heads/c0/m3-1-native-context-db-stock-r1"
 REPOSITORY = "Elefesys/ai-service-manager"
 REPOSITORY_ID = 1369650588
@@ -47,12 +48,17 @@ PG_MODULES = (
     "tests/test_m3_1_native_context_api_postgres.py",
     "tests/test_m3_1_native_context_runtime_postgres.py",
 )
+M4_PG_MODULES = (
+    "tests/test_m4_runtime_postgres.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_schema_postgres.py",
+)
 # Bind the actual inputs, including ten ordinary jobs (the two serial foundation
 # boundaries plus the unchanged eight) and the unconditional native job: eleven.
 # Preserve default merge/main checkout, unconditional same-commit reusable call, pinned
 # owned lane and exact generic command. No fallback/embedded workflow is used.
 CI_INPUT_SHA256 = {
-    ".github/workflows/ci.yml": "3fa9fb80384d80cafeac55da9b5309feebca29c7999341eeed3ab1a964d56cbf",
+    ".github/workflows/ci.yml": "3676df060496d6048cef2bd06e3f91ef26e39b38be8576c886fc1cfb27ea5b1a",
     ".github/workflows/native-context-db.yml": "ff43d2470b56d26cf9c616cad5bc570e31634a19d97bdec4f28e73a205e049fd",
     "scripts/check_backend.sh": "1473e64b8ed0819b046b764f281072583271acd5f7b0929b3f8aa959c5d69330",
 }
@@ -224,11 +230,12 @@ def parse_function(sql):
     }
 
 
-def capture_source(root):
+def capture_source(root, revision="0013"):
     """Expand the actual chain without importing/mutating the real Alembic module."""
-    paths = sorted((root / "migrations/versions").glob("*.py"))
+    require(revision in {"0013", "0014", "0015"}, "Unsupported catalog revision")
+    paths = sorted(p for p in (root / "migrations/versions").glob("*.py") if p.name[:4] <= revision)
     require(
-        [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, 14)],
+        [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, int(revision) + 1)],
         "Unexpected migration chain",
     )
     commands, modules = [], {}
@@ -294,8 +301,8 @@ def capture_source(root):
     return modules, commands
 
 
-def source_catalog(root):
-    modules, commands = capture_source(root)
+def source_catalog(root, revision="0013"):
+    modules, commands = capture_source(root, revision)
     functions, baseline, runtime = {}, {}, set()
     # Alembic's locked version-table implementation, not a business table.
     columns = {"platform.alembic_version": ["version_num"]}
@@ -306,6 +313,24 @@ def source_catalog(root):
         revision = command["revision"]
         for value in split_sql(command["sql"]):
             sql = leading_comments(value)
+            if revision >= "0014" and sql.startswith("DO $patch$"):
+                # The sole 0014 installed-body patch has a closed target and
+                # exact one-occurrence replacement. It is never ignored DDL.
+                signature = "platform.messaging_reschedule(uuid,text,boolean,integer,boolean)"
+                old = "j.step NOT IN ('GUARDED_TEXT','ESCALATE_OWNER')"
+                new = "j.step NOT IN ('GUARDED_TEXT','ESCALATE_OWNER','AI_GENERATE')"
+                require(
+                    command["revision"] == "0014"
+                    and "$needle$" + old + "$needle$" in sql
+                    and "$replacement$" + new + "$replacement$" in sql
+                    and signature in sql
+                    and functions[signature]["definition"].count(old) == 1,
+                    "Unrecognized installed function patch",
+                )
+                functions[signature] = parse_function(
+                    functions[signature]["definition"].replace(old, new, 1)
+                )
+                continue
             if sql.startswith(("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION")):
                 row = parse_function(sql)
                 signature = row["signature"]
@@ -401,15 +426,21 @@ def source_catalog(root):
     replacements = {s for s in baseline if functions[s]["body"] != baseline[s]["body"]}
     require(
         len(baseline) == 132
-        and len(functions) == 167
-        and len(additions) == 35
-        and len(replacements) == 18,
+        and len(functions) == {"0013": 167, "0014": 175, "0015": 183}[revision]
+        and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
     )
     require(not any(public.values()), "Source leaves PUBLIC EXECUTE")
     require(
-        columns == {t: list(c) for t, c in modules["0013"]["NATIVE_COLUMNS"].items()}
-        and len(columns) == 45,
+        all(columns[t] == list(c) for t, c in modules["0013"]["NATIVE_COLUMNS"].items())
+        and len(columns) == {"0013": 45, "0014": 47, "0015": 48}[revision]
+        and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
+        == (
+            set()
+            if revision == "0013"
+            else {"platform.ai_runs", "platform.ai_provider_calls"}
+            | ({"platform.ai_deliveries"} if revision == "0015" else set())
+        ),
         "Independent source column replay differs",
     )
     for sig, row in functions.items():
@@ -420,6 +451,7 @@ def source_catalog(root):
         if sig in runtime:
             row["acl"].append(["asm_migrator", "asm_runtime", "EXECUTE", False])
     return {
+        "revision": revision,
         "functions": functions,
         "columns": columns,
         "commands": commands,
@@ -562,7 +594,7 @@ def compare_functions(expected, rows, resolved):
         )
 
 
-def compare_snapshot(expected_columns, full_text, nonfunction_text):
+def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision="0013"):
     full, nonfunction = json.loads(full_text), json.loads(nonfunction_text)
     require(
         nonfunction == {k: v for k, v in full.items() if k != "functions"},
@@ -573,7 +605,9 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text):
         actual_columns.setdefault(table, []).append(column)
     require(actual_columns == expected_columns, "Missing/extra/reordered table columns")
     require(
-        sha256(nonfunction_text.encode("utf-8")) == NONFUNCTION_SHA256,
+        revision in {"0013", "0015"}
+        and sha256(nonfunction_text.encode("utf-8"))
+        == (AI_NONFUNCTION_SHA256 if revision == "0015" else NONFUNCTION_SHA256),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
     )
     return sha256(b"asm:m3:native_schema:v1\n" + full_text.encode("utf-8"))
@@ -581,10 +615,13 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text):
 
 def compare_catalog(expected, rows, resolved, full_text, nonfunction_text, read_profile):
     compare_functions(expected["functions"], rows, resolved)
-    full_hash = compare_snapshot(expected["columns"], full_text, nonfunction_text)
+    revision = expected.get("revision", "0013")
+    full_hash = compare_snapshot(
+        expected["columns"], full_text, nonfunction_text, revision=revision
+    )
     declared = read_profile()
     require(
-        declared == {"schema_revision": "0013", "valid": True, "profile_sha256": full_hash},
+        declared == {"schema_revision": revision, "valid": True, "profile_sha256": full_hash},
         "Declared profile differs from independent catalog",
     )
     return full_hash, declared
@@ -1673,7 +1710,13 @@ def require_native_fixture_guards(items, test_module, reset):
 
 
 def integration_arguments():
-    return ["-v", "--durations=20", "-m", "integration", *("--ignore=" + p for p in PG_MODULES)]
+    return [
+        "-v",
+        "--durations=20",
+        "-m",
+        "integration",
+        *("--ignore=" + p for p in (*PG_MODULES, *M4_PG_MODULES)),
+    ]
 
 
 def collect_partition(mode, destination):
@@ -1717,7 +1760,9 @@ def collect_partition(mode, destination):
             raise Refusal("Partition inventory must never execute fixtures")
 
     selection = (
-        list(MODULES)
+        list(M4_PG_MODULES)
+        if mode == "collect-m4"
+        else list(MODULES)
         if mode == "collect-native"
         else integration_arguments()
         if mode == "collect-generic-pg"
@@ -1744,15 +1789,22 @@ def collect_partition(mode, destination):
         write_json(destination, {**inventory, "collection_exit": code})
 
 
-def validate_partition(all_pg, native, generic):
+def validate_partition(all_pg, native, generic, m4):
     require(tuple(MODULES[1:]) == PG_MODULES, "Native carrier lost a complete PG module")
-    for inventory in (all_pg, native, generic):
+    for inventory in (all_pg, native, generic, m4):
         nodes = inventory["nodeids"]
         require(
             inventory["collection_exit"] == 0 and nodes and len(nodes) == len(set(nodes)),
             "Failed/empty/duplicate partition collection",
         )
-    a, n, g = (set(i["nodeids"]) for i in (all_pg, native, generic))
+    a, n, g, m = (set(i["nodeids"]) for i in (all_pg, native, generic, m4))
+    require(
+        m == set(m4["integration_nodeids"])
+        and not m4["deselected"]
+        and not m4["native_fixture_nodes"]
+        and {node.split("::", 1)[0] for node in m} == set(M4_PG_MODULES),
+        "Incomplete M4 inventory",
+    )
     pg = set(native["integration_nodeids"])
     source = n - pg
     require(
@@ -1768,9 +1820,9 @@ def validate_partition(all_pg, native, generic):
         and pg == {node for node in a if node.split("::", 1)[0] in PG_MODULES}
         and pg == set(native["native_fixture_nodes"]) == set(all_pg["native_fixture_nodes"])
         and not generic["native_fixture_nodes"]
-        and not (pg & g)
-        and a == pg | g
-        and generic["nodeids"] == [node for node in all_pg["nodeids"] if node not in pg]
+        and not (pg & g or pg & m or g & m)
+        and a == pg | g | m
+        and generic["nodeids"] == [node for node in all_pg["nodeids"] if node not in pg | m]
         and set(all_pg["deselected"]) == set(generic["deselected"])
         and source <= set(all_pg["deselected"]),
         "Lost/foreign PG cases or native fixture escaped the exact three-module partition",
@@ -1782,12 +1834,18 @@ def validate_partition(all_pg, native, generic):
         "native_pg": len(pg),
         "native_source": len(source),
         "native_total": len(n),
-        "excluded_modules": PG_MODULES,
+        "m4_pg": len(m),
+        "excluded_modules": (*PG_MODULES, *M4_PG_MODULES),
         "disjoint_pg_sets_and_complete_union": True,
         "fixed_total_required": False,
         "inventory_sha256": {
             key: sha256(json.dumps(value, sort_keys=True).encode())
-            for key, value in (("all", all_pg), ("native", native), ("generic", generic))
+            for key, value in (
+                ("all", all_pg),
+                ("native", native),
+                ("generic", generic),
+                ("m4", m4),
+            )
         },
     }
 
@@ -1795,7 +1853,7 @@ def validate_partition(all_pg, native, generic):
 def prove_partition(private, evidence, commands, env):
     require_ci_inputs()
     inventories = []
-    for name in ("all-pg", "native", "generic-pg"):
+    for name in ("all-pg", "native", "generic-pg", "m4"):
         path = private / ("partition-" + name + ".json")
         code, _ = commands.run(
             [
@@ -1853,6 +1911,7 @@ FOUNDATION_FILES = (
     "partition-all-pg.json",
     "partition-native.json",
     "partition-generic-pg.json",
+    "partition-m4.json",
     "integration-partition.json",
     "generic-result.json",
     "execution.json",
@@ -2598,7 +2657,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT),
+            source_catalog(ROOT, "0015"),
         )
 
     def persist_partition(self, work):
@@ -2606,6 +2665,7 @@ class GenericJournal:
             "partition-all-pg.json",
             "partition-native.json",
             "partition-generic-pg.json",
+            "partition-m4.json",
             "integration-partition.json",
         ):
             self.store.publish(name, json.loads((work / name).read_text()))
@@ -2781,7 +2841,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0013"
+            and source["expected_revision"] == "0015"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(
@@ -2805,7 +2865,7 @@ def foundation_check(store):
     )
     inventories = [
         json.loads(store.read("partition-" + name + ".json"))
-        for name in ("all-pg", "native", "generic-pg")
+        for name in ("all-pg", "native", "generic-pg", "m4")
     ]
     proof = validate_partition(*inventories)
     require(
@@ -3427,6 +3487,7 @@ def main():
             "collect-all-pg",
             "collect-native",
             "collect-generic-pg",
+            "collect-m4",
         ),
     )
     parser.add_argument("--inventory", type=Path)
