@@ -16,6 +16,7 @@ from asm.conversations.http_models import ControlCommandResponse, ControlStateRe
 from asm.messaging.http import install_messaging
 from asm.messaging.http_service import ConnectionObservation
 from asm.tenancy import TenancyError, current_workspace_context
+from asm.tenancy.database import TenantUnitOfWork
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import text
@@ -32,6 +33,7 @@ from test_m3_1_control_postgres import (
     observe_wait,
     state,
     wait_blocked,
+    wait_ready,
 )
 from test_m3_1_control_postgres import control as control
 from test_tenancy_postgres import UA, A, B
@@ -201,7 +203,7 @@ async def test_control_auth_scope_body_and_live_owner_fail_closed(api):
 @pytest.mark.parametrize("boundary", ["expiry", "activation"])
 @pytest.mark.parametrize("caller", ["resume", "controlled", "telegram"])
 async def test_post_lock_product_boundaries_with_actual_conversation_wait(
-    api, target, boundary, caller
+    api, target, boundary, caller, monkeypatch
 ):
     h = api
     cid, _, _ = await incoming(h, "TELEGRAM" if caller == "telegram" else "CONTROLLED")
@@ -221,23 +223,52 @@ async def test_post_lock_product_boundaries_with_actual_conversation_wait(
     assert await counts_control(h) == before
     assert h.auth.service.tenancy._engine.pool.checkedout() == 0
     assert h.auth.service.store.engine.pool.checkedout() == 0
+    prepared = asyncio.get_running_loop().create_future()
+    proceed = asyncio.Event()
+    samples = []
+    method = "conversation_control_prepare" if caller == "resume" else "conversation_manual_prelock"
+    prelock = getattr(TenantUnitOfWork, method)
+    snapshot = TenantUnitOfWork.post_lock_product_snapshot
+
+    async def at_prelock(unit, *args, **kwargs):
+        if asyncio.current_task() is task:
+            # HTTP, cookie auth, workspace checkout/admission, and (for Telegram)
+            # observation have completed. Billing/Conversation locks start below.
+            driver = unit._connection.sync_connection.connection.driver_connection
+            prepared.set_result((asyncio.current_task(), driver.info.backend_pid))
+            await proceed.wait()
+            # The committed fixture edge must be future at this transaction's
+            # frozen clock, especially activation: initially DISABLED, not active.
+            initial = dict(await unit.billing_snapshot())
+            enabled = (
+                EntitlementService().evaluate_product(A, initial, "messaging.manual_send").type
+                == "ENABLED"
+            )
+            assert enabled is (boundary == "expiry") and initial["evaluated_at"] < edge
+            samples.append((initial["evaluated_at"], enabled))
+            observe_wait("initial_policy", evaluated_at=initial["evaluated_at"], enabled=enabled)
+        return await prelock(unit, *args, **kwargs)
+
+    async def after_lock(unit):
+        value = await snapshot(unit)
+        if asyncio.current_task() is task:
+            enabled = (
+                EntitlementService().evaluate_product(A, dict(value), "messaging.manual_send").type
+                == "ENABLED"
+            )
+            assert enabled is (boundary == "activation") and value["evaluated_at"] >= edge
+            samples.append((value["evaluated_at"], enabled))
+            observe_wait("post_lock_policy", evaluated_at=value["evaluated_at"], enabled=enabled)
+        return value
+
+    monkeypatch.setattr(TenantUnitOfWork, method, at_prelock)
+    monkeypatch.setattr(TenantUnitOfWork, "post_lock_product_snapshot", after_lock)
     async with h.migrator.connect() as c:
         transaction = await c.begin()
         await c.execute(
             text("SELECT id FROM app.conversations WHERE id=:id FOR NO KEY UPDATE"), {"id": cid}
         )
         pid = (await c.execute(text("SELECT pg_backend_pid()"))).scalar_one()
-        # Finish fixture setup before starting the unchanged 1.1-second edge.
-        # The product update commits on its own connection before the request;
-        # only the Conversation blocker remains held while policy is evaluated.
-        edge = (
-            await query(
-                h,
-                f"UPDATE {table} SET {column}=clock_timestamp()+interval '1.1 seconds' WHERE workspace_id=:ws RETURNING {column} AS edge",
-                ws=A,
-            )
-        )[0]["edge"]
-        observe_wait("edge_committed", edge=edge, blocker_pid=pid)
         task = asyncio.create_task(
             post(h, cid, "resume", expected=expected) if caller == "resume" else manual(h, cid)
         )
@@ -245,7 +276,21 @@ async def test_post_lock_product_boundaries_with_actual_conversation_wait(
             "request_scheduled", pending=task, engine=h.auth.service.tenancy._engine.sync_engine
         )
         try:
-            await wait_blocked(c, pid, pending=task)
+            target_pid = await wait_ready(prepared, pending=task)
+            # Arm only after real preparation, before the measured lock phase.
+            # This update commits before prelock acquires billing row locks.
+            edge = (
+                await query(
+                    h,
+                    f"UPDATE {table} SET {column}=clock_timestamp()+interval '1.1 seconds' WHERE workspace_id=:ws RETURNING {column} AS edge",
+                    ws=A,
+                )
+            )[0]["edge"]
+            observe_wait("edge_committed", edge=edge, blocker_pid=pid)
+            proceed.set()
+            rows = await wait_blocked(c, pid, pending=task)
+            assert all(row["pid"] == target_pid for row in rows)
+            assert len(samples) == 1
             blocked_at = (await c.execute(text("SELECT clock_timestamp()"))).scalar_one()
             observe_wait("blocked_clock", blocked_at=blocked_at)
             assert blocked_at < edge and not task.done()
@@ -266,6 +311,8 @@ async def test_post_lock_product_boundaries_with_actual_conversation_wait(
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
             observe_wait("after_cleanup", pending=task)
+    assert len(samples) == 2 and samples[0][0] < edge <= samples[1][0]
+    assert samples[0][1] is not samples[1][1]
     after = await state(h, cid)
     if boundary == "expiry":
         assert response.status_code == 409 and response.json() == {"error": {"code": "NOT_ALLOWED"}}
@@ -755,3 +802,32 @@ async def test_automated_outbox_does_not_set_manual_delivery_flags_and_history_r
     await h.kernel.begin_send(claim)
     response = await h.client.get(route(cid))
     assert response.json()["manual_delivery"] == {"has_dispatching": True, "has_unknown": False}
+
+
+@pytest.mark.parametrize("target", ["subscription", "mode"])
+@pytest.mark.parametrize("boundary", ["expiry", "activation"])
+@pytest.mark.parametrize("caller", ["resume", "controlled", "telegram"])
+async def test_post_lock_boundary_after_delayed_auth(api, monkeypatch, target, boundary, caller):
+    """Actual PG/HTTP regression: preparation exceeds both old short windows."""
+    from asm.auth.store import AuthStore
+
+    original = AuthStore.authenticated
+    owner = asyncio.current_task()
+    delays = []
+
+    async def delayed_auth(store, *args, **kwargs):
+        if asyncio.current_task() is not owner and not delays:
+            start = asyncio.get_running_loop().time()
+            delays.append(start)
+            observe_wait("preparation_delay_start")
+            await asyncio.sleep(1.6)
+            elapsed = asyncio.get_running_loop().time() - start
+            assert elapsed >= 1.6
+            observe_wait("preparation_delay_end", seconds=elapsed)
+        return await original(store, *args, **kwargs)
+
+    monkeypatch.setattr(AuthStore, "authenticated", delayed_auth)
+    await test_post_lock_product_boundaries_with_actual_conversation_wait(
+        api, target, boundary, caller, monkeypatch
+    )
+    assert len(delays) == 1  # Includes the complete original effects and replay checks.
