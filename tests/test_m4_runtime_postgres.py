@@ -10,7 +10,6 @@ import asyncio
 import itertools
 import json
 import os
-import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -48,6 +47,8 @@ from test_m3_1_native_context_postgres import (
 from test_m3_1_turns_postgres import seal
 from test_m4_agent import config
 from test_tenancy_postgres import BA, BA2, BB, PROVIDER, UA, UB, A, B
+
+from scripts.m4_pg_observation import source_tree_from_evidence
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 COUNTER = itertools.count(10000)
@@ -94,7 +95,7 @@ async def pg(tmp_path_factory):
         adapter=ControlledAdapter(
             environment="TEST", ledger=tmp_path_factory.mktemp("ai-runtime") / "unused.jsonl"
         ),
-        source_tree=subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], text=True).strip(),
+        source_tree=source_tree_from_evidence(),
     )
     h.ai = AIDatabase(h.kernel, environment="TEST")
     try:

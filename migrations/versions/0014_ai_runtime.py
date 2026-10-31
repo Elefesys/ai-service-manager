@@ -89,7 +89,7 @@ def upgrade() -> None:
       workspace_id uuid NOT NULL, run_id uuid NOT NULL, sequence integer NOT NULL CHECK(sequence BETWEEN 1 AND 2),
       claim_hash bytea NOT NULL CHECK(octet_length(claim_hash)=32), attempt_count integer NOT NULL CHECK(attempt_count BETWEEN 1 AND 5),
       budget jsonb NOT NULL CHECK(jsonb_typeof(budget)='object' AND octet_length(budget::text)<=1024),
-      completion jsonb NOT NULL DEFAULT '{"kind":"UNKNOWN","usage":{"input_tokens":null,"output_tokens":null},"cost":{"status":"UNKNOWN","amount":null,"currency":null},"error":null}',
+      completion jsonb NOT NULL DEFAULT '{"kind":"UNKNOWN","usage":{"input_tokens": null,"output_tokens": null},"cost":{"status":"UNKNOWN","amount": null,"currency": null},"error": null}',
       reserved_at timestamptz NOT NULL DEFAULT clock_timestamp(), completed_at timestamptz CHECK(isfinite(completed_at)),
       PRIMARY KEY(workspace_id,run_id,sequence),
       FOREIGN KEY(workspace_id,run_id) REFERENCES platform.ai_runs(workspace_id,id) ON DELETE RESTRICT,

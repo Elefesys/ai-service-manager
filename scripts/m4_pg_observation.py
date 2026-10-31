@@ -1,4 +1,4 @@
-"""C2-M4.3-PG-RUNTIME-R1: one bounded disposable DB-only runtime validation."""
+"""C2-M4.3-PG-RUNTIME-R2: one bounded disposable DB-only runtime validation."""
 
 import hashlib
 import json
@@ -13,9 +13,9 @@ import sys
 import time
 from pathlib import Path
 
-BASE = "fe8381f7bd5918b8c6a3125b80887fe00bef67f3"
-BASE_TREE = "3e9648bbaf16362f3ae77e95d19ba3a7fc8cbb07"
-BRANCH = "c2/m4-3-pg-runtime-run-r1"
+BASE = "ce4a4669e2e36848f09784e166d33124bff73eb2"
+BASE_TREE = "be171deb889ead174df82f3336d7fe0c6bf3b944"
+BRANCH = "c2/m4-3-pg-runtime-run-r2"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -24,20 +24,14 @@ MODULES = [
     "tests/test_m4_runtime_database.py",
     "tests/test_m4_runtime_postgres.py",
 ]
-COLLECTION_COUNT = 55
-COLLECTION_SHA256 = "59f959f5d72cec7eae264612dcb2939e12f58aa2f4e47f60bd7e5be72d590ab5"
+COLLECTION_COUNT = 79
+COLLECTION_SHA256 = "83c7ab55beef84329d8f4ea47fe69ef6cbbda3a43f0efb5b69152bfdd066eb4a"
 COMMAND_REPORT = "runtime-command"
 SUMMARY_REPORT = "runtime-summary.json"
 COLLECTED = []
 WRITE_SET = {
     "migrations/versions/0014_ai_runtime.py",
-    "backend/src/asm/ai/runtime_contracts.py",
-    "backend/src/asm/ai/database.py",
-    "backend/src/asm/messaging/database.py",
-    "backend/src/asm/messaging/results.py",
-    "backend/src/asm/messaging/errors.py",
     "tests/test_m4_runtime_migrations.py",
-    "tests/test_m4_runtime_database.py",
     "tests/test_m4_runtime_postgres.py",
     "scripts/m4_pg_observation.py",
     ".github/workflows/m4-pg-observation.yml",
@@ -53,6 +47,87 @@ EVENT_LIMIT = 8192
 def require(condition, code):
     if not condition:
         raise RuntimeError(code)
+
+
+def source_tree_from_evidence(path=Path("/evidence/source.json")):
+    """Bind the DB-only fixture to this executor's checked source, without Git in the image."""
+
+    def unique_object(pairs):
+        value = {}
+        for key, item in pairs:
+            require(key not in value, "SOURCE_IDENTITY_DUPLICATE_KEY")
+            value[key] = item
+        return value
+
+    try:
+        with path.open("rb") as stream:
+            raw = stream.read(65537)
+        require(len(raw) <= 65536, "SOURCE_IDENTITY_TOO_LARGE")
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object)
+    except OSError:
+        raise RuntimeError("SOURCE_IDENTITY_MISSING") from None
+    except (UnicodeDecodeError, ValueError):
+        raise RuntimeError("SOURCE_IDENTITY_MALFORMED") from None
+    keys = {
+        "base",
+        "base_tree",
+        "source",
+        "tree",
+        "paths",
+        "run_id",
+        "attempt",
+        "event",
+        "branch",
+        "pins",
+        "uv_lock_sha256",
+    }
+    require(type(value) is dict and set(value) == keys, "SOURCE_IDENTITY_SHAPE")
+    expected = {
+        name: os.environ.get("ASM_M4_" + name)
+        for name in ("SOURCE_SHA", "SOURCE_TREE", "RUN_ID", "RUN_ATTEMPT")
+    }
+    require(
+        all(
+            type(expected[k]) is str and re.fullmatch(r"[0-9a-f]{40}", expected[k])
+            for k in ("SOURCE_SHA", "SOURCE_TREE")
+        )
+        and type(expected["RUN_ID"]) is str
+        and re.fullmatch(r"[1-9][0-9]{0,19}", expected["RUN_ID"])
+        and expected["RUN_ATTEMPT"] == "1",
+        "SOURCE_IDENTITY_ENVIRONMENT",
+    )
+    require(
+        all(
+            type(value[k]) is str and re.fullmatch(r"[0-9a-f]{40}", value[k])
+            for k in ("base", "base_tree", "source", "tree")
+        )
+        and value["base"] == BASE
+        and value["base_tree"] == BASE_TREE
+        and value["source"] == expected["SOURCE_SHA"]
+        and value["source"] != BASE
+        and value["tree"] == expected["SOURCE_TREE"]
+        and value["branch"] == BRANCH
+        and value["event"] == "push"
+        and type(value["attempt"]) is int
+        and value["attempt"] == 1
+        and value["run_id"] == expected["RUN_ID"],
+        "SOURCE_IDENTITY_MISMATCH",
+    )
+    paths = value["paths"]
+    require(
+        type(paths) is list
+        and bool(paths)
+        and all(type(p) is str for p in paths)
+        and paths == sorted(set(paths))
+        and set(paths) <= WRITE_SET
+        and type(value["pins"]) is dict
+        and value["pins"].get("DB_IMAGE") == DB_IMAGE
+        and all(type(k) is str and type(v) is str for k, v in value["pins"].items())
+        and type(value["uv_lock_sha256"]) is str
+        and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
+        "SOURCE_IDENTITY_SHAPE",
+    )
+    return value["tree"]
 
 
 def write(path, value):
@@ -316,6 +391,14 @@ def checks(root, *args, plugin=False):
     ]
     if plugin:
         command += ["-e", "ASM_M4_PG_PLUGIN=1"]
+        expected = {
+            "SOURCE_SHA": os.environ["GITHUB_SHA"],
+            "SOURCE_TREE": capture(["git", "rev-parse", "HEAD^{tree}"]),
+            "RUN_ID": os.environ["GITHUB_RUN_ID"],
+            "RUN_ATTEMPT": os.environ["GITHUB_RUN_ATTEMPT"],
+        }
+        for name, value in expected.items():
+            command += ["-e", "ASM_M4_" + name + "=" + value]
     return command + ["checks", *args]
 
 

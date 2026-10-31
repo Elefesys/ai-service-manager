@@ -2,7 +2,7 @@ name: M4 bounded PostgreSQL observation
 
 on:
   push:
-    branches: [c2/m4-3-pg-runtime-run-r1]
+    branches: [c2/m4-3-pg-runtime-run-r2]
 
 permissions:
   contents: read

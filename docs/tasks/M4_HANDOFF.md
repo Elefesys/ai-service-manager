@@ -111,6 +111,33 @@ framework. Application/provisioning/native readiness остаётся0013 и д�
 worker/Outbox integration — после C0 source+PG review. Paid/Polza/VM/live DB/
 deploy/Telegram/реальные данные не входят в выдачу; ledger неизменен.
 
+### C2 R2 — source preparation / local preflight
+
+Exact repair base **ce4a4669e2e36848f09784e166d33124bff73eb2**, tree
+**be171deb889ead174df82f3336d7fe0c6bf3b944**, sole parent R1 receiptca47ea21;
+delta receipt→base — ровно5 coordination docs. Source будет sole child base,
+ровно7 разрешённых paths. Preparation/execution refs создаются на этом base;
+execution получает один FF на source с expected old SHA=base/force=false.
+
+DEFAULT0014 меняет только5 пробелов перед настоящими JSON null: UNKNOWN,
+usage/cost/error semantics сохранены. Реальный Alembic Operations→SQLAlchemy
+TextClause/psycopg compiler и construct_params() проверяют все33 upgrade и14
+downgrade statements без bind values; старый DEFAULT воспроизводит bind `null`.
+Fixture читает /evidence/source.json без .git и сверяет полный SHA/tree,
+base/branch/push/run/attempt с проверенным host identity. Missing/malformed/
+duplicate/stale metadata отвергаются; container получает ожидаемые SHA/tree/run
+от host независимо от evidence file. Readiness0013 и runtime semantics прежние.
+
+Local preflight: **47 PASS** (migration28 + runtime database19), включая24
+новых cause regressions; реальный git в каталоге без .git отказывает, валидный
+source.json работает,19 negative cases отказывают. Ruff/format/compile PASS.
+Finite collection **79**, SHA256
+**83c7ab55beef84329d8f4ea47fe69ef6cbbda3a43f0efb5b69152bfdd066eb4a**.
+Все55 R1 nodeids в прежнем относительном порядке; AST всех прежних test_ функций
+не изменён. Migrations0001–0013, backend, pins/roles/locks/limits неизменны.
+Actual PostgreSQL outcome пока **NOT_RUN**; local proof его не заменяет.
+Следующий шаг — один hosted push/source/attempt1, затем frozen receipt/C0 review.
+
 ### История — C2 R1 receipt BLOCKED; execution frozen
 
 **Source** [391667c03467246c76d6fde26b34ea3028300c0f](https://github.com/Elefesys/ai-service-manager/commit/391667c03467246c76d6fde26b34ea3028300c0f),
