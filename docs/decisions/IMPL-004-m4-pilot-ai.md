@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: R2 schema/roles subset принят; C2-M4.3-PG-RUNTIME-R3.
+Последнее решение ниже: R3 fixture repair принят; C2-M4.3-PG-RUNTIME-R4.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -870,7 +870,7 @@ R1 ref/run frozen. Это исправление согласованного sc
 C0 review; app/schema/worker/Outbox integration остаётся следующим этапом.
 Main586240e8/CI11 PASS и финансовый ledger прежние; paid/live/VM/Telegram HOLD.
 
-**Актуальное решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R3.**
+**Предыдущее решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R3.**
 C0 принял R2 source13ab3f11/receipt0317152f только в SOURCE REPAIR + PG
 PREPARATION/SCHEMA/ROLES scope. Run41192732940:49 PASS/30 FAIL; evidence
 полное, cleanup/source PASS. Actual upgrade/unused downgrade/M3 retention,
@@ -886,6 +886,17 @@ R3 меняет5 paths из HANDOFF: общую test preparation и её meaning
 Backend/миграции/application0013/native guards/roles/limits остаются прежними.
 Runtime acceptance и application/worker/Outbox integration ещё впереди.
 Это исправление прежнего M4 scope; нового live/paid/VM/Telegram допуска нет.
+
+**Актуальное решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R4.**
+R3 source9c161d0a/receipt1d904b0d: fixture repair SOURCE+ACTUAL PG принят C0.
+Run41203810232:81 PASS/1 FAIL, полный receipt/cleanup/source проверены.
+Единственная assertion ошибочно находит `text` в metadata key `context_version`.
+C0 разрешает заменить её строгой проверкой audit/native структуры и ожидаемых
+значений, с raw-text negative; call-row count/snapshot/effects сохранить.
+R4 scope6 paths и один bounded PG proof заданы в HANDOFF; production/миграции
+не меняются. Это исправление теста, не ослабление запрета хранить raw content.
+Общий runtime gate до actual remaining assertions и whole-source review открыт;
+application0014/worker/Outbox переход впереди. Live/paid/VM/Telegram HOLD.
 
 ## Что пересмотрено относительно baseline
 

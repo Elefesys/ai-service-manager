@@ -23,11 +23,11 @@ M3 закрыт в LOCAL/TEST; финальный receipt — в верхнем 
 выдача, её accepted/repair base, исполнитель и write-set — в верхнем
 M4_HANDOFF/CURRENT. M4.1 и C5 recovery интегрированы в PR #38; actual main CI PASS.
 PR39/40 слиты; accepted main586240e8, push CI41178689536:11/11 SUCCESS.
-Observer repair закрыт. Единственная выдача — C2-M4.3-PG-RUNTIME-R3:
-исправить post-seal revision в общей test preparation и самостоятельную
-предпосылку used downgrade, затем один новый bounded PG proof. R2:49 PASS/
-30 FAIL; migration/roles/preparation subset принят C0, runtime не принят.
-Exact repair base/5 paths в CURRENT. Application0013 readiness не обходить;
+Observer repair закрыт. Единственная выдача — C2-M4.3-PG-RUNTIME-R4:
+заменить противоречивую substring assertion структурной проверкой read audit,
+сохранить call-count/snapshot/effects и выполнить один новый bounded PG proof.
+R3 fixture repair принят C0;81 PASS/1 FAIL, полный runtime gate ещё открыт.
+Exact repair base/6 paths в CURRENT. Application0013 readiness не обходить;
 app/schema integration
 после C0 review. Остальные роли и live/paid/VM/Telegram HOLD.
 Прежние paid допуски использованы; новых вызовов они не разрешают.

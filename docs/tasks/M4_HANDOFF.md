@@ -6,7 +6,7 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R3: 81 PASS / 1 FAIL, C2 HOLD / C0 review / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R4: исправить audit assertion и закрыть PG proof / 2026-10-31
 
 PR40 слит владельцем. Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df** — exact-equal проверенному
@@ -30,14 +30,84 @@ Foundation/durable completeness gates PASS. Архивы этого main run п�
 **C0-M4-CI-OBSERVATION-01 и C0-M4-CI-REPAIR-INTEGRATION-R1 закрыты
 INTEGRATED / VERIFIED в SOURCE + TARGETED + PR/main CI scope.** C4 context/agent
 и принятый GPT/v2 source находятся в verified main. Это не живой AI runtime.
-R2 runtime остаётся BLOCKED; preparation/schema/roles subset принят C0 ниже.
-C2 R3 завершён до единственного hosted outcome:81 PASS/1 FAIL ниже.
-C2 и C1/C3–C8 HOLD; R1/R2/R3 execution frozen.
+R3 fixture repair принят C0; actual outcome81 PASS/1 FAIL проверен ниже.
+Единственная выдача — C2 R4; C1/C3–C8 HOLD. R1/R2/R3 execution frozen.
 Новый платный probe, VM/deploy/Telegram и доступ к реальным перепискам не назначены.
 Shared150 неизменен: confirmed0.37505230/58 known POST;4 unknown/held7.585505548;
 62 total POST; remaining142.039442152, reported0.00743079 UNSETTLED.
 
-### C2 R3 receipt — fixture repair PASS; PG gate BLOCKED одной assertion
+### C2-M4.3-PG-RUNTIME-R4 — структурная проверка read audit
+
+**Результат:** исправить одну доказанно противоречивую test assertion и
+доказать оставшиеся provider-call count/snapshot/effects в том же READ case.
+Нового product scope нет. Общий PG gate пока BLOCKED;81 PASS не превращаются
+в82 PASS до нового фактического результата.
+
+**C0 review R3:** source **9c161d0adb50adbc461e1e01ec31bddb55794a0a** /
+tree **ad028ff9a754258d113209130bcd6ab5c62c4994**, sole parent3b5252a5,5 paths;
+receipt **1d904b0d40dba5bab3b242c21b9751e6dd447413** / tree
+**d22d29ad7babb4c5c301dbe2339f9145ff3b2981**, sole child source,2 docs.
+Fresh refs/run41203810232/job124544720807/artifact/upload log, source.patch,
+source/base/tree/pins/lock и finite collection82/hashec64c4ac сверены.
+Original ZIP31073 bytes/SHA35c664a9 и saved97581 bytes/SHAcac2050e совпали;
+manifests24/48 и25 original files byte-exact. Независимый пересчёт cases/JUnit:
+82 setup PASS,81 call PASS,1 call FAIL,82 teardown PASS; no skips/xfails/errors/
+overflow/invalid_fields. Retained79/order и33 прежних test bodies/целевые
+assertions сохранены; used-downgrade добавляет собственные pre/postconditions.
+
+**R3 fixture repair VERIFIED C0 SOURCE + ACTUAL PG:**39 переходов
+1/COLLECTING→2/READY,3 current/stale regressions и самостоятельный used-downgrade
+refusal подтверждены. Прежние runtime группы дали81 PASS (47 non-PG+34 PG).
+Один AssertionError точно на line510: обязательный `context_version` содержит
+`text`. C0 воспроизвёл это чистым Python. Production leak этим не установлен.
+В этом case provider-call row count, затем snapshot/effects **NOT_REACHED**;
+их нельзя заимствовать из других tests. Cleanup/source PASS; новых pytest/PG
+runs C0 не делал. Весь runtime source и application integration ещё не приняты.
+
+Repository **Elefesys/ai-service-manager**. Preparation **c2/m4-3-pg-runtime-r4**;
+execution **c2/m4-3-pg-runtime-run-r4**. **Exact base — полный SHA этого
+опубликованного C0 assignment из immutable URL**, sole child receipt
+**1d904b0d40dba5bab3b242c21b9751e6dd447413**. C0 branch
+**c0/m4-3-pg-runtime-repair-r4**;5 coordination docs сверх receipt.
+Записать base SHA/tree. IMPL-004, исходные R1 criteria и прежние guards сохраняются.
+
+**Write-set6:** `tests/test_m4_runtime_postgres.py`,
+`tests/test_m4_runtime_database.py` (только focused offline audit regression),
+`scripts/m4_pg_observation.py`, `.github/workflows/m4-pg-observation.yml`,
+`docs/tasks/M4_HANDOFF.md`, `docs/TASK_REGISTER.md`.
+
+1. C0 явно разрешает заменить именно ошибочную substring assertion. Проверять
+   точные разрешённые audit/native keys, строгие типы и значения: outcome READ,
+   context/turn revision из ожидаемого run binding, native fence целиком из
+   ожидаемого binding, корректное время с timezone. Reject лишние поля и raw
+   text как на верхнем уровне, так и внутри native; сравнение только имён
+   недостаточно. Простая test helper/проверка, без production DTO/framework.
+2. Focused offline before/after: корректный metadata-only audit с
+   `context_version` отвергался старым substring check, новый его принимает;
+   добавленный raw text и подмена ожидаемых metadata values отвергаются.
+   Использовать тот же checker в actual PG case; не вводить отдельную
+   неиспользуемую validation function только ради unit PASS.
+3. Provider-call row count==2 вынести в самостоятельный assert без short-circuit
+   с audit check. Сохранить RuntimeReceipt/2 adapter requests, calls2/READ1/
+   cost0.2, original snapshot equality и effects=[0,0,0]. Целевые assertions
+   других tests и R3 fixtures неизменны;82 прежних nodeids/порядок сохранить.
+4. После local/static/compile/collection обновить finite inventory с новыми
+   focused regressions. Executor/workflow — только R4 base/branch/write-set/
+   inventory. Source — sole child exact base. Создать новые refs на base,
+   один FF execution base→source, expected-base/force=false; разрешён **один**
+   push/exact source/attempt1 hosted run всех3 runtime modules, fresh owned
+   asm_test/PG18, tests<=600s/job<=25min. Не повторять неизменённый R3/full CI.
+5. Вернуть фактический исход всех cases/phase и отдельно ранее недостигнутых
+   assertions; original ZIP/logs/JUnit/collection/source/command+summary/cleanup.
+   После outcome execution frozen, docs-only receipt child source на preparation,
+   C0 review. При новой ошибке — конкретные факты/полный affected scope, не retry
+   ради PASS. Backend/миграции0001–0014/roles/pins/limits не менять.
+
+После полного source+PG review C0 отдельно согласует application0014/worker/
+Outbox integration. Старые application/native gates остаются0013. Main586240e8,
+paid ledger и data/route gates прежние; live/VM/Polza/Telegram/реальные данные HOLD.
+
+### История — C2 R3 receipt: fixture repair PASS; PG gate BLOCKED одной assertion
 
 **Source** [9c161d0adb50adbc461e1e01ec31bddb55794a0a](https://github.com/Elefesys/ai-service-manager/commit/9c161d0adb50adbc461e1e01ec31bddb55794a0a),
 tree **ad028ff9a754258d113209130bcd6ab5c62c4994**, sole parent exact base
