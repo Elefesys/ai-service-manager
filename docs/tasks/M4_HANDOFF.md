@@ -6,7 +6,121 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3 R2 receipt / BLOCKED, C0 review / 2026-10-31
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R3 / выдано C3 / 2026-11-01
+
+**Результат:** пройти проверку источника запуска и получить настоящий stock0015
+catalog, затем закончить уже согласованную synthetic интеграцию. Исправляется
+CI admission; продуктовый scope и лимиты R2 не расширяются. Нужен рабочий
+Turn→Agent→result→Outbox/escalation, а не ещё один отдельный diagnostic framework.
+
+**C0 review R2: отчёт подтверждён, whole-runtime BLOCKED.** Source
+**e8300919ea0431388b7358f168ee8cac77089613** /
+tree **93fc9c88c3cd2cd063012cab6f108b6d3dc18785**, sole parent assignment
+**4f989a09c38c112111819878319df0c9b09db00d**;10 allowed paths.
+Receipt **d1959bca073b3562d9381a4fb34f84c9c62052d9** /
+tree **e1d3a4b2ae56d13cff7b2c223d8915b8b0b8e4ab**, sole child source,2 docs.
+Run **41223501373**, push/attempt1, job **124602743716**:
+**EVENT_PUSH_BASE_REF до Docker/PG**. Stock catalog, PG tests и cleanup не были
+выполнены; successful finalization/upload не является PG evidence.
+
+C0 сверил fresh source/receipt/refs/run/jobs/artifact и полный job log;
+[архив R2](https://chatgpt.com/library?file_id=libfile_3871af6517a48191966cf2e9c71363b4&account_id=personal)
+3224261bytes/SHA256 **682c8be7279931a496db34961e7f24dbd2ae1d354bad334acdcd052c3d287bcc**,
+26files/manifest25/25. Original artifact13050034741:1025bytes,
+SHA256 **99d008dc3a9ea15eb51a8500e7138bc3778e31ebb308c7bce06af85e83ffdacb**,
+manifest1/1 совпал; source archive342files проверен по Git blobs/modes и SHA256.
+Final-source JUnit: **80 PASS**, включая все15 cancel/deadline/cleanup cases.
+Pre-final478+130subtests не выдаются за final whole-suite PASS. Actual PG
+cancellation/manual progress/recovery ещё нужны. Production cancellation delta
+и bounded bookkeeping прочитаны; новая проверка PG остаётся критерием приёмки.
+
+**Причина и решение C0.** Shared event validator требует `base_ref is None`.
+В original R2 evidence есть только `push_base_ref_state=present`; actual
+значение/тип и created/before неизвестны. C0 не объявляет этот payload допустимым
+задним числом. Однако [официальный GitHub push contract](https://docs.github.com/en/webhooks/webhook-events-and-payloads#push)
+разрешает `base_ref` string или null; before/after описывают SHA до/после push.
+Локальная проверка C0 actual validator на двух **constructed** events с теми же
+repo/ref/source/tree/parent: null принят, `refs/heads/main` отвергнут именно
+EVENT_PUSH_BASE_REF. Это source reproduction, не восстановленный hosted payload.
+Нового pytest/PG/CI/paid запуска C0 не делал.
+
+### Исполнение R3
+
+**Исполнитель C3, один owner; остальные роли HOLD.** Exact repair base — полный
+SHA этого C0 assignment из immutable URL: sole child d1959bca,5 coordination docs.
+C0 branch **c0/m4-3-runtime-integration-r3**. Новые preparation
+**c3/m4-3-runtime-integration-r3**, PR source
+**c3/m4-3-runtime-integration-pr-r3**; BASE/tree записать до правок.
+Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb** unchanged.
+PR41/R1/R2/C2 execution refs frozen; R2 targeted/PR/full-CI не запускались.
+
+**Немедленная дельта —4 файла:** `scripts/native_context_db_catalog.py`,
+`scripts/m4_runtime_db.py`, `.github/workflows/m4-runtime-db.yml`,
+`tests/test_m4_runtime_db_runner.py`; regression tests в
+`tests/test_native_context_db_runner.py` только при необходимости. Остальной
+write-set, profile-only исключение для unmerged0015, критерии и запреты
+[выдачи R2](https://github.com/Elefesys/ai-service-manager/blob/4f989a09c38c112111819878319df0c9b09db00d/docs/tasks/M4_HANDOFF.md)
+сохраняются для последующего stock pin repair/validation. Не исправлять повторно
+agent/cancellation без нового failure.0001–0014, locks/pins/infra/R4 immutable.
+
+1. **Заменить ошибочное правило только для новых M4 R3 routes.** Поле base_ref
+   должно присутствовать и быть null либо ограниченной корректной строкой ref;
+   сохранять bounded state/type/value и created/deleted/forced/before/after до
+   отказа. Это metadata, не источник разрешения и не assignment base. Неверный
+   тип/длина/формат отвергается. Не распространять изменение на main/historical
+   push/PR semantics и не допускать произвольный execution ref.
+2. **Привязать запуск к явному переходу коммитов.** Новые execution refs:
+   **c3/m4-3-runtime-catalog-run-r3** и **c3/m4-3-runtime-targeted-run-r3**.
+   До обновления создать capture ref на exact R3 assignment, где workflow ещё
+   не содержит R3 push triggers; после offline checks fast-forward единственным
+   capture source commit. Проверить created=false, deleted=false, forced=false,
+   before==assignment и единственный Git parent==before; after/head_commit/
+   GITHUB_SHA/checkout HEAD exact-equal. В capture source активен только capture
+   push trigger; targeted trigger добавить лишь в последующий repair commit.
+   Для targeted сначала создать ref на frozen capture source, где его trigger
+   ещё отсутствует, затем единственным repair commit fast-forward;
+   before и sole parent должны совпасть с этим явно записанным capture SHA.
+   BASE/tree/ancestry и clean-source/write-set gates обязательны. Оба перехода
+   через expected_sha, force=false; branch creation не является capture attempt.
+   Поле base_ref не может обойти неверный before/parent/ref/repository/tree.
+3. **До hosted run проверить полный admission path offline**, не только
+   event_identity с пустым parents. Положительные null/string metadata при
+   правильной цепочке; negatives для wrong repo/ref/before/parent/tree/head,
+   created/deleted/forced, attempt2, malformed/missing metadata. Negative должен
+   завершиться до Docker/credentials; positive дойти до выбранного capture mode
+   с подставленной test boundary, без реальных ресурсов. Явно отметить, что
+   fixtures constructed. Сохранить regression существующих main/PR guards.
+4. **Один новый stock capture**, attempt1, исправленный source; не rerun R2.
+   Pinned PG18.6/vector0.8.6, owned asm_test, independent0013/0015 catalog,
+   locale/order/roles/ACL/RLS/bodies/constraints, original artifacts и cleanup.
+   Известный application pin mismatch допустим только как diagnostic outcome;
+   ни WASM, ни installed self-report не являются эталоном. Никакого отдельного
+   hosted запуска только ради metadata: сохранение operands входит в capture.
+5. После stock evidence выполнить оставшийся R2 scope: объяснить catalog delta,
+   исправить pins, закончить ещё отсутствующий targeted current-native6 режим,
+   **один targeted validation** всех64 M4 cases + causal additions/current
+   native6/readiness/lifecycle. Actual cancellation/manual/recovery и ранее
+   замаскированные negatives обязательны. Сохранить active/missing results и
+   bounded browser/startup/cleanup diagnostics. Каждый targeted job ≤25min,
+   SQL/tests ≤600s. Лимиты и completeness не ослаблять.
+6. Только после targeted PASS — **один новый Draft PR и один полный CI** того же
+   финального source, все12 gates. Generic/native/M4 partition сохраняется.
+   Это перенос неиспользованных R2 этапов на R3 refs, не дополнительный бюджет
+   повторов. После любого unexpected capture/targeted/full failure сохранить
+   факты и вернуть C0; expected diagnostic pin mismatch ведёт к шагу5.
+   Execution refs после outcome frozen; docs-only receipt — на preparation.
+
+Return: actual event operands и точные predicates/commits; stock catalog proof;
+source/base/tree/write-set; complete inventory/phases/JUnit/active/NOT_REACHED,
+cleanup; PR head/tested merge/run/jobs/artifact digests и original evidence.
+Source/ref проверки не заменяют PG, а локальные80 PASS не закрывают integration.
+После receipt C3 HOLD/C0 review. PR41 не сливать; merge делает владелец после
+приёмки нового candidate. Runtime default OFF/fake-only; paid/live/VM/deploy/
+real data не назначены. Owner ничего не запускает. Shared150 ledger unchanged:
+confirmed0.37505230/58 knownPOST;4 unknown held7.585505548;62 totalPOST;
+remaining142.039442152; reported0.00743079 UNSETTLED.
+
+## История — C3 R2 receipt / BLOCKED, до C0 review / 2026-10-31
 
 **C3 HOLD.** Единственный разрешённый stock capture завершился отказом event
 admission до Docker/PG. Это не ожидаемый application-pin mismatch. Повтора,

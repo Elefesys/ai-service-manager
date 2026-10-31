@@ -27,9 +27,11 @@ Observer repair закрыт. C2 R4 принят C0 в SOURCE + TARGETED PG scop
 104 PASS, включая35 actual PG; database-only слой ещё не integrated в main.
 R1 source9b05e5dd/receipt e58163ae проверен C0: CI6 PASS/5 FAIL/1 SKIPPED,
 45/64 M4 PG PASS; whole-runtime BLOCKED. PR41 и R1 refs frozen, не сливать.
-Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R2: исправить stock0015
-catalog pins, propagation cancellation и сохранение незавершённых результатов.
-Exact base/write-set и конечные targeted/CI допуски — в CURRENT.
+R2 source e8300919/receipt d1959bca проверен C0:80 final offline PASS,
+но capture41223501373 отказал EVENT_PUSH_BASE_REF до Docker/PG.
+Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R3: узкий event-admission
+repair и завершение stock0015/targeted/CI scope из R2. Exact base/write-set
+и конечные допуски — в CURRENT; R2 execution refs frozen, без rerun.
 0001–0014 immutable. Узкое исключение для ещё не принятой0015 описано C0
 в CURRENT; никаких изменений retained DB или обхода application/catalog gates.
 AI выключен по умолчанию; paid/live transports/VM/real data не включаются.

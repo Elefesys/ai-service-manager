@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R2.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R3.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -924,7 +924,7 @@ candidate: сохранить11 старых gates, добавить owned M4 PG
 приёмки merge/живой TEST smoke не объявляются. Live/paid/VM/deploy/real data HOLD;
 ledger и GPT/v2 choice прежние, C1/C2/C4–C8 HOLD.
 
-**Актуальное решение C0 от 2026-10-31: C3-M4.3-RUNTIME-INTEGRATION-R2.**
+**Предыдущее решение C0 от 2026-10-31: C3-M4.3-RUNTIME-INTEGRATION-R2.**
 R1 source9b05e5dd/receipt e58163ae прошёл независимую проверку evidence, но whole
 runtime BLOCKED:6 CI jobs PASS/5 FAIL/1 SKIPPED; M4 45/64 PASS, native6 current
 failures. PR41/старые refs frozen, не merge.398 frontend tests в browser build
@@ -944,6 +944,22 @@ Draft PR/полный CI со всеми12 gates. Не повторять неи
 fake-only, native OWNER/barrier/tenant/send fences/UNKNOWN и budgets прежние.
 UI reason presentation, live smoke и rollout не входят в repair. Другие роли HOLD;
 ни merge, ни readiness реального пилота из частичных PASS не следуют.
+
+**Актуальное решение C0 от 2026-11-01: C3-M4.3-RUNTIME-INTEGRATION-R3.**
+R2 receipt d1959bca/source e8300919 подтверждён C0: final80 offline PASS,
+но capture41223501373 отказал EVENT_PUSH_BASE_REF до Docker/PG. Whole runtime
+BLOCKED. GitHub допускает string/null base_ref; exact assignment определяется
+доверенным source/ancestry, а не требованием null к служебному полю push.
+Actual значение старого payload неизвестно, R2 event не принят задним числом.
+
+C3 получает узкий admission repair, bounded operands и offline positives/
+negatives; новые execution refs заранее создаются на закреплённом predecessor,
+затем fast-forward с проверками before/sole parent/HEAD/tree/repo/attempt.
+Сохранить main/PR/historical guards; arbitrary execution refs не разрешены.
+Один новый stock capture и неиспользованные R2 targeted/full-CI этапы перенесены
+в R3 без увеличения лимитов. Product/write-set/migration исключение R2 прежние;
+нет новой платформы, платного вызова или live enable. Точные условия в CURRENT.
+PR41/старые refs frozen; C3 один owner, остальные HOLD. Merge после приёмки C0.
 
 ## Что пересмотрено относительно baseline
 

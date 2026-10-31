@@ -2,7 +2,32 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R2 / BLOCKED, C0 review / 2026-10-31
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R3 / IN_PROGRESS, выдано C3 / 2026-11-01
+
+C0 подтвердил R2 receipt **d1959bca073b3562d9381a4fb34f84c9c62052d9**,
+source **e8300919ea0431388b7358f168ee8cac77089613**/tree93fc9c88:
+capture41223501373/job124602743716 отказал EVENT_PUSH_BASE_REF до Docker/PG.
+Fresh metadata/log, original1025bytes/manifest1 и saved archive3224261bytes/
+manifest25,342 source blobs/modes/SHA256 независимо сверены.
+Final JUnit80 PASS включает15 cancellation cases; PG acceptance отсутствует.
+Whole-runtime BLOCKED, PR41 не сливать; R1/R2/C2 execution refs frozen.
+
+**Одна задача C3 R3:** исправить null-only предположение push base_ref и связать
+запуск с exact before→source/sole parent, затем завершить R2 stock/targeted/CI.
+Actual base_ref старого payload не восстановлен; source reproduction constructed.
+Exact base — SHA нового C0 assignment, sole child d1959bca; branch
+**c0/m4-3-runtime-integration-r3**. Prep **c3/m4-3-runtime-integration-r3**;
+PR **c3/m4-3-runtime-integration-pr-r3**. Closed execution refs и процедура
+precreate→expected_sha fast-forward — в [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Сначала offline admission positives/negatives, затем один новый stock capture,
+один targeted validation; после PASS один новый Draft PR/full CI12gates.
+Неиспользованные R2 этапы перенесены, старый run не повторяется. Write-set,
+≤600s/≤25min limits, partial evidence и STOP правила — в HANDOFF.
+Accepted main586240e8 unchanged. Другие роли HOLD; fake-only/default OFF,
+paid/live/VM/real data HOLD; ledger unchanged. Owner ничего не запускает.
+
+## История — C3 R2 receipt / BLOCKED, до C0 review / 2026-10-31
 
 **C3 HOLD.** Base `4f989a09c38c112111819878319df0c9b09db00d` /
 tree `8a5e6f1f6fa0a6b8a36eff4c561794db001b42f7`; frozen source
