@@ -106,7 +106,12 @@ assertions. Cases/JUnit/summary дают81 PASS/1 FAIL,246 phases;39 seal transi
 check воспроизведён C0 offline; нового pytest/PG run нет. Общий gate остаётся
 BLOCKED до actual call-row count/snapshot/effects в этом case и source review.
 
-**C2-M4.3-PG-RUNTIME-R4 — IN_PROGRESS / выдано C2.** Exact base — полный SHA
+**C2-M4.3-PG-RUNTIME-R4 — IN_PROGRESS / local proof готов, hosted NOT_RUN.**
+Base **a58e1612113158b39301947b8150ddb1fb0dfd29** / tree
+**891bc03cc2dfe2c2320efdcddaa2d189a61a0554**. Shared test checker: exact audit/native
+keys/types/expected values и zoned time; call rows/snapshot/effects отдельно.
+Local69 PASS (22 новых audit regressions), Ruff/format/compile PASS; collection104,
+hash73df7bb8, retained82/order и R3 fixtures сохранены. Exact base — полный SHA
 нового C0 assignment из immutable URL, sole child receipt
 **1d904b0d40dba5bab3b242c21b9751e6dd447413**. Prep c2/m4-3-pg-runtime-r4;
 execution c2/m4-3-pg-runtime-run-r4. Write-set6: PG test, existing database unit

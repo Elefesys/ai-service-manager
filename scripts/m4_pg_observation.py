@@ -1,4 +1,4 @@
-"""C2-M4.3-PG-RUNTIME-R3: one bounded disposable DB-only runtime validation."""
+"""C2-M4.3-PG-RUNTIME-R4: one bounded disposable DB-only runtime validation."""
 
 import hashlib
 import json
@@ -14,9 +14,9 @@ import time
 from pathlib import Path
 from uuid import UUID
 
-BASE = "3b5252a58b7730da6e0ff99f49a5e46b05dc2c5c"
-BASE_TREE = "5141f997073cdd74ce813011971c08101da12697"
-BRANCH = "c2/m4-3-pg-runtime-run-r3"
+BASE = "a58e1612113158b39301947b8150ddb1fb0dfd29"
+BASE_TREE = "891bc03cc2dfe2c2320efdcddaa2d189a61a0554"
+BRANCH = "c2/m4-3-pg-runtime-run-r4"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -25,13 +25,14 @@ MODULES = [
     "tests/test_m4_runtime_database.py",
     "tests/test_m4_runtime_postgres.py",
 ]
-COLLECTION_COUNT = 82
-COLLECTION_SHA256 = "ec64c4acebaee16f21de49b7e407fb7a2b2f7fd34032df46892be66ad36dd4ef"
+COLLECTION_COUNT = 104
+COLLECTION_SHA256 = "73df7bb8648de3a6b0b1b7ef7548fcf63a73cc2996dfe63a05e467effae6a3bd"
 COMMAND_REPORT = "runtime-command"
 SUMMARY_REPORT = "runtime-summary.json"
 COLLECTED = []
 WRITE_SET = {
     "tests/test_m4_runtime_postgres.py",
+    "tests/test_m4_runtime_database.py",
     "scripts/m4_pg_observation.py",
     ".github/workflows/m4-pg-observation.yml",
     "docs/tasks/M4_HANDOFF.md",

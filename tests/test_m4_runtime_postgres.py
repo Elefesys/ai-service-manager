@@ -46,6 +46,7 @@ from test_m3_1_native_context_postgres import (
 )
 from test_m3_1_turns_postgres import seal
 from test_m4_agent import config
+from test_m4_runtime_database import assert_read_audit
 from test_tenancy_postgres import BA, BA2, BB, PROVIDER, UA, UB, A, B
 
 from scripts.m4_pg_observation import preparation, source_tree_from_evidence
@@ -500,15 +501,10 @@ async def test_two_calls_one_read_original_snapshot_and_bounded_audit(pg):
         1,
         Decimal("0.2"),
     )
-    assert set(state["read_audit"]) == {
-        "outcome",
-        "context_version",
-        "turn_revision",
-        "native",
-        "at",
-    }
-    assert "text" not in json.dumps(state["read_audit"]) and len(await calls(h, run)) == 2
-    assert state["snapshot"] == run.snapshot and await effects(h, cid) == [0, 0, 0]
+    assert_read_audit(state["read_audit"], run.binding)
+    assert len(await calls(h, run)) == 2
+    assert state["snapshot"] == run.snapshot
+    assert await effects(h, cid) == [0, 0, 0]
 
 
 @pytest.mark.parametrize("foreign", ["workspace", "client", "job", "native", "snapshot"])

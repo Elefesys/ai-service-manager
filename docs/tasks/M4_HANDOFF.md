@@ -38,6 +38,20 @@ Shared150 неизменен: confirmed0.37505230/58 known POST;4 unknown/held7.
 
 ### C2-M4.3-PG-RUNTIME-R4 — структурная проверка read audit
 
+**C2 source candidate / local proof:** exact base
+**a58e1612113158b39301947b8150ddb1fb0dfd29**, tree
+**891bc03cc2dfe2c2320efdcddaa2d189a61a0554**, sole child R3 receipt1d904b0d;
+base delta —5 coordination docs. Preparation/execution и write-set6 ниже.
+Один test checker используется offline и в actual PG READ case: exact audit/
+native keys, strict types, expected binding values и timezone-aware datetime.
+Provider-call rows==2, original snapshot и effects=[0,0,0] — отдельные assertions.
+R3 fixtures/остальные test bodies и production unchanged. Local **69 PASS**,
+включая22 focused before/after/negative cases; Ruff/format/compile PASS.
+Finite collection **104**, SHA256
+**73df7bb8648de3a6b0b1b7ef7548fcf63a73cc2996dfe63a05e467effae6a3bd**;
+все82 прежних nodeids/relative order сохранены. Hosted outcome пока NOT_RUN;
+один разрешённый run следует после публикации sole-child source.
+
 **Результат:** исправить одну доказанно противоречивую test assertion и
 доказать оставшиеся provider-call count/snapshot/effects в том же READ case.
 Нового product scope нет. Общий PG gate пока BLOCKED;81 PASS не превращаются

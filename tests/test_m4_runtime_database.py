@@ -1,6 +1,7 @@
 """Python boundary tests; no mocked operation is described as PG evidence."""
 
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
@@ -235,3 +236,124 @@ def test_runtime_report_never_labels_incomplete_or_skipped_evidence_pass(fault):
         phases[1]["outcome"] = "failed"
     summary = summarize(cases, ["case"], 1 if fault == "exit" else 0)
     assert (summary["result"] == "PASS") == (fault == "valid")
+
+
+def assert_read_audit(audit, binding):
+    """Check stored READ metadata against the expected run, without accepting raw content."""
+    assert type(audit) is dict
+    assert set(audit) == {"outcome", "context_version", "turn_revision", "native", "at"}
+    expected = {
+        "outcome": "READ",
+        "context_version": binding.context_version,
+        "turn_revision": binding.turn_revision,
+    }
+    for key, value in expected.items():
+        assert type(audit[key]) is type(value)
+        assert audit[key] == value
+    native = audit["native"]
+    if binding.native is None:
+        assert native is None
+    else:
+        assert type(native) is dict
+        assert set(native) == {
+            "revision_id",
+            "revision_no",
+            "policy_epoch",
+            "observation_epoch",
+            "reviewed_ingress_checkpoint",
+            "reviewed_input_state_hash",
+        }
+        expected_native = binding.native.model_dump(mode="json")
+        assert set(native) == set(expected_native)
+        for key, value in expected_native.items():
+            assert type(native[key]) is type(value)
+            assert native[key] == value
+    assert type(audit["at"]) is str
+    try:
+        at = datetime.fromisoformat(audit["at"])
+    except ValueError:
+        raise AssertionError("READ audit timestamp must be ISO datetime") from None
+    assert at.utcoffset() is not None
+
+
+@pytest.fixture
+def read_audit():
+    _, binding = fixture("v3_owner")
+    return {
+        "outcome": "READ",
+        "context_version": binding.context_version,
+        "turn_revision": binding.turn_revision,
+        "native": binding.native.model_dump(mode="json"),
+        "at": "2026-10-31T13:00:00+00:00",
+    }, binding
+
+
+@pytest.mark.parametrize("native", [True, False], ids=["native", "no_native"])
+def test_read_audit_accepts_metadata_rejected_by_old_substring_check(read_audit, native):
+    audit, binding = read_audit
+    if not native:
+        binding = binding.model_copy(update={"native": None})
+        audit["native"] = None
+    with pytest.raises(AssertionError):
+        assert "text" not in json.dumps(audit)  # context_version contains this substring.
+    assert_read_audit(audit, binding)
+
+
+@pytest.mark.parametrize("scope", ["audit", "native"])
+def test_read_audit_rejects_raw_text(read_audit, scope):
+    audit, binding = read_audit
+    target = audit if scope == "audit" else audit["native"]
+    target["text"] = "Synthetic client message must never be copied into audit."
+    with pytest.raises(AssertionError):
+        assert_read_audit(audit, binding)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "outcome",
+        "context_version",
+        "turn_revision",
+        "native.revision_id",
+        "native.revision_no",
+        "native.policy_epoch",
+        "native.observation_epoch",
+        "native.reviewed_ingress_checkpoint",
+        "native.reviewed_input_state_hash",
+    ],
+)
+def test_read_audit_rejects_changed_metadata(read_audit, field):
+    audit, binding = read_audit
+    target = audit["native"] if field.startswith("native.") else audit
+    key = field.rsplit(".", 1)[-1]
+    value = target[key]
+    if type(value) is int:
+        target[key] = value + 1
+    elif key == "reviewed_input_state_hash":
+        target[key] = "b" * 64
+    else:
+        target[key] = str(uuid4())
+    with pytest.raises(AssertionError):
+        assert_read_audit(audit, binding)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("context_version", 4.0),
+        ("turn_revision", True),
+        ("native.revision_no", "1"),
+        ("native.observation_epoch", False),
+        ("native", None),
+        ("native", {}),
+        ("at", 1793451600),
+        ("at", "2026-10-31T13:00:00"),
+        ("at", "Synthetic raw content"),
+    ],
+)
+def test_read_audit_requires_strict_types_complete_native_and_zoned_time(read_audit, field, value):
+    audit, binding = read_audit
+    target = audit["native"] if field.startswith("native.") else audit
+    target[field.rsplit(".", 1)[-1]] = value
+    with pytest.raises(AssertionError):
+        assert_read_audit(audit, binding)
