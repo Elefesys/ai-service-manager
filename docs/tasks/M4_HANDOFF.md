@@ -6,7 +6,7 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R1 BLOCKED / C2 HOLD; main unchanged / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R2: repair и один новый PG proof / 2026-10-31
 
 PR40 слит владельцем. Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df** — exact-equal проверенному
@@ -30,12 +30,88 @@ Foundation/durable completeness gates PASS. Архивы этого main run п�
 **C0-M4-CI-OBSERVATION-01 и C0-M4-CI-REPAIR-INTEGRATION-R1 закрыты
 INTEGRATED / VERIFIED в SOURCE + TARGETED + PR/main CI scope.** C4 context/agent
 и принятый GPT/v2 source находятся в verified main. Это не живой AI runtime.
-Следующая единственная выдача — C2 ниже; C1/C3–C8 HOLD.
+Единственная выдача — C2 R2 ниже; C1/C3–C8 HOLD. R1 execution frozen.
 Новый платный probe, VM/deploy/Telegram и доступ к реальным перепискам не назначены.
 Shared150 неизменен: confirmed0.37505230/58 known POST;4 unknown/held7.585505548;
 62 total POST; remaining142.039442152, reported0.00743079 UNSETTLED.
 
-### C2 receipt — C2-M4.3-PG-RUNTIME-R1 BLOCKED; execution frozen
+### C2-M4.3-PG-RUNTIME-R2 — исправить подготовку и проверить durable runtime
+
+**Результат для пилота:** устранить два известных дефекта, которые не дали
+проверить сохранение AI-ответа и доступ к контексту в PostgreSQL. Scope M4.3
+не расширяется. R1 — BLOCKED, не PG PASS; ниже сохранён исходный receipt.
+
+**Проверка C0:** [receipt ca47ea2149bb8b3b3c7ae820d377c21e5c5c07d1](https://github.com/Elefesys/ai-service-manager/blob/ca47ea2149bb8b3b3c7ae820d377c21e5c5c07d1/docs/tasks/M4_HANDOFF.md)
+опубликован и является docs-only child source391667c0. Fresh run/job/artifact
+metadata и upload digest совпали с оригинальным ZIP. C0 проверил весь сохранённый
+архив92324 bytes/SHA0ced8323, manifests31/15,16 original files byte-exact,
+source.patch, binding SHA/tree/parent и inventory55/hash59f959f5.
+Actual schema.log подтверждает bind `null`; source/Dockerfile/executor
+подтверждают отсутствие .git для fixture. Второй дефект не был выполнен hosted.
+Build/start/cleanup PASS, schema FAIL; все55 tests NOT_RUN. C0 не повторял
+compiler/pytest/PG run и пока не принимает весь runtime source. Успешный PR40/main
+остаётся прежним; failed R1 и его refs не переигрываются и не переписываются.
+
+**Repository:** Elefesys/ai-service-manager. Preparation **c2/m4-3-pg-runtime-r2**;
+execution **c2/m4-3-pg-runtime-run-r2**. **Exact base — полный SHA этого нового
+опубликованного C0 assignment из immutable URL**, sole child receipt
+**ca47ea2149bb8b3b3c7ae820d377c21e5c5c07d1**, tree receipt
+**96ee4514919ee8064c21e7b1e504ab6d7d2f251d**. C0 branch
+**c0/m4-3-pg-runtime-repair-r2**; сверх receipt только5 coordination docs.
+Записать полный base SHA/tree до изменений. Это repair base кандидата,
+не принятая для merge/application схема. R1 functional criteria, IMPL-004
+и применимые ADR из исторической выдачи ниже сохраняются.
+
+**Разрешены7 paths**, только необходимая дельта:
+
+- `migrations/versions/0014_ai_runtime.py` — исправление JSON DEFAULT без изменения UNKNOWN/usage/cost semantics;
+- `tests/test_m4_runtime_migrations.py` — regression реального SQLAlchemy compiler;
+- `tests/test_m4_runtime_postgres.py` — source identity fixture из executor evidence;
+- `scripts/m4_pg_observation.py` — R2 identity, фиксированный inventory и необходимая передача/проверка source identity;
+- `.github/workflows/m4-pg-observation.yml` — новая execution branch identity;
+- `docs/tasks/M4_HANDOFF.md` и `docs/TASK_REGISTER.md` — outcome/receipt.
+
+1. Убрать непреднамеренный bind из DEFAULT. В meaningful regression пропустить
+   все statements0014 через тот же SQLAlchemy text/DDL compilation path и
+   `construct_params()` без фиктивного значения `null`; проверить upgrade и
+   downgrade. Показать, что старый DEFAULT падает, исправленный сохраняет
+   исходный JSON с настоящими null и не создаёт bind. Это local preflight,
+   а не замена actual PostgreSQL upgrade. Не менять применённые0001–0013;
+   0014 ещё не интегрирована и не применена на постоянной DB.
+2. Убрать fixture-вызов `git rev-parse` внутри checks image. Использовать tree
+   из `/evidence/source.json`, записанного host executor после проверки source.
+   Проверить структуру/full SHA/tree и соответствие текущей R2 execution identity;
+   missing/malformed/stale metadata дают явный отказ. Передать необходимые
+   ожидаемые значения через existing executor, если их нет в container env.
+   Никакого default tree, копирования .git или ослабления production readiness.
+   Локально проверить валидный файл и отказ на неверных данных без .git.
+3. Сохранить все55 исходных nodeids и их относительный порядок/проверки;
+   добавить только regressions этих причин. Обновить finite count/hash после
+   collection. Сначала целевые local/static/compile checks и обе regression,
+   затем один новый source commit — sole child exact repair base. Backend
+   runtime semantics, migrations0001–0013, locks/roles/pins/limits неизменны.
+4. Создать новые preparation/execution refs от base; старые refs frozen.
+   Разрешён **один** FF новой execution branch с base на проверенный source,
+   expected old SHA=base, force=false; branch creation на base не должна
+   запускать R1 workflow. Новый workflow запускается push/exact source/attempt1.
+   Существующий executor: fresh owned asm_test/PG18, test<=600s/job<=25min,
+   original artifact и owned cleanup. Полный main CI сейчас не нужен.
+5. Вернуть фактические upgrade/repeat/downgrade,0014/roles/DDL и все runtime
+   scenarios/phase outcomes; сохранить command/summary раздельно, JUnit,
+   source binding, collection, original ZIP/logs/digest и cleanup. Если новая
+   ошибка маскирует группы, перечислить весь известный затронутый набор и
+   доступные source findings; NOT_RUN не превращать в PASS. После единственного
+   hosted outcome execution frozen, docs-only receipt child source на preparation,
+   C2 HOLD/C0 review. Никакого автоматического unchanged retry.
+
+Если исправление требует дополнительных semantic/path изменений, вернуть
+конкретную причину и минимальную дельту C0. Не расширять диагностику в новый
+framework. Application/provisioning/native readiness остаётся0013 и должна
+отказывать на0014; этот отказ требуется подтвердить actual test. App/schema/
+worker/Outbox integration — после C0 source+PG review. Paid/Polza/VM/live DB/
+deploy/Telegram/реальные данные не входят в выдачу; ledger неизменен.
+
+### История — C2 R1 receipt BLOCKED; execution frozen
 
 **Source** [391667c03467246c76d6fde26b34ea3028300c0f](https://github.com/Elefesys/ai-service-manager/commit/391667c03467246c76d6fde26b34ea3028300c0f),
 tree **710c727ababcdd0a983dabd8f232aa62cdb5abd2**, sole parent exact base
@@ -126,7 +202,7 @@ context version and reconciled revision stay fixed. No Telegram HTTP or send.
 The one authorized hosted outcome will follow on execution branch; no PG PASS
 is claimed by this candidate. After that outcome execution freezes and C2 HOLD.
 
-### C2-M4.3-PG-RUNTIME-R1 — PostgreSQL authority и сохранённый результат
+### История — C2-M4.3-PG-RUNTIME-R1: PostgreSQL authority и сохранённый результат
 
 **Результат для пилота:** агент получает контекст только через проверенный
 worker claim и сохраняет выбранный ответ в PostgreSQL. После restart/reclaim

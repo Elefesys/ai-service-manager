@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: PR40/main VERIFIED; C2 PG authority/durable subset M4.3.
+Последнее решение ниже: PR40/main VERIFIED; C2-M4.3-PG-RUNTIME-R2 repair/proof.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -833,7 +833,7 @@ Main997d2bf8/run41108194917 остаётся FAILED; не переигрыват
 далее проверка actual main. Production/DDL/core CI/ledger не меняются.
 Новых VM/Telegram/paid/runtime действий нет; real durable AI bridge ещё TODO.
 
-**Актуальное решение C0 от 2026-10-31: main VERIFIED; C2-M4.3-PG-RUNTIME-R1.**
+**Предыдущее решение C0 от 2026-10-31: main VERIFIED; C2-M4.3-PG-RUNTIME-R1.**
 PR40 merged; main586240e88c825aa67593af5d72e0bdbb251ed3bb/tree84f6b04d совпадает
 с tested candidate031b92ed. Push41178689536/attempt1:11/11 SUCCESS,860 PG PASS;
 source/completeness gates PASS. Observation gate закрыт; новый retry не нужен.
@@ -853,6 +853,22 @@ Application/provisioning/native gates сейчас явно принимают00
 Такой ограниченный PG PASS не равен whole-app/full CI/runtime acceptance.
 Paid/VM/Telegram/реальные данные HOLD; data/route/backend/quality gates и ledger
 не меняются. C2 следующий, C1/C3–C8 HOLD; M4 ещё не закрыт.
+
+**Актуальное решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R2.**
+R1 source391667c0/receiptca47ea21 сохранён; run41185701200 завершился
+SCHEMA_FAILED до всех55 tests. Actual failure — SQLAlchemy bind `null` в0014
+JSON DEFAULT; отдельный source-confirmed fixture defect — .git отсутствует
+в checks image. C0 сверил original/saved evidence, manifests31/15, metadata,
+source/identity; PG/runtime acceptance не выдана, full CI не повторялся.
+
+Назначен узкий repair7 paths из HANDOFF: DEFAULT, compiler regression,
+fixture с executor source.json, R2 identity/inventory и docs. Сначала local
+before/after обеих причин, затем один new-source disposable PG proof с
+сохранением всех55 исходных cases. Новая base — C0 docs-only child receipt;
+R1 ref/run frozen. Это исправление согласованного scope, не новая функция.
+0001–0013/application0013/native/roles/limits не меняются. После outcome —
+C0 review; app/schema/worker/Outbox integration остаётся следующим этапом.
+Main586240e8/CI11 PASS и финансовый ledger прежние; paid/live/VM/Telegram HOLD.
 
 ## Что пересмотрено относительно baseline
 

@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R1 BLOCKED / C2 HOLD; main unchanged / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R2: repair и один новый PG proof / 2026-10-31
 
 PR40 merged; accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candidate.
@@ -11,7 +11,7 @@ tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candida
 native/durable/Docker29/6 migrations, clean-source и completeness gates PASS.
 C0 verified main; прежний observer gate закрыт. Source/tests/CI не повторялись.
 
-**C2-M4.3-PG-RUNTIME-R1 — BLOCKED; C2 HOLD.** Source391667c0/tree710c727a,
+**C2-M4.3-PG-RUNTIME-R1 — исторический BLOCKED.** Source391667c0/tree710c727a,
 sole parent exact basefe8381f7,13 paths. [Run41185701200](https://github.com/Elefesys/ai-service-manager/actions/runs/41185701200),
 job124492071269/attempt1: SCHEMA_FAILED. JSON DEFAULT в0014 ошибочно создаёт
 SQLAlchemy bind `null`. Второй source defect, masked/not hosted: PG fixture
@@ -23,9 +23,20 @@ Full evidence libfile_c3a28d54bd708191896177c4788822c7:92324bytes/32files,
 SHA2560ced8323a8f0c4536fb3e21f71db69a46a3fa42b6fa5e9317a54311ccb956dc5.
 Execution frozen; docs-only receipt на preparation. Main/old refs unchanged.
 Application0013 gates сохранены; actual0014/runtime/app-refusal PG proof ещё нет.
-Следующее действие — C0 repair assignment с новым execution ref и bounded proof;
-известная дельта внутри13 paths. Runtime dispatch/Outbox/Telegram/live/paid HOLD.
-Подробности и команды — [C2 receipt](tasks/M4_HANDOFF.md).
+C0 независимо проверил receiptca47ea21, fresh run/job/artifact/upload metadata,
+original ZIP и сохранённый bundle/manifests31/15, source.patch/binding/collection.
+Обе причины подтверждены; нового compiler/pytest/PG run от C0 нет.
+
+**C2-M4.3-PG-RUNTIME-R2 — IN_PROGRESS / выдано C2.** Exact base — полный SHA
+нового C0 assignment из immutable URL, sole child receiptca47ea2149bb8b3b3c7ae820d377c21e5c5c07d1.
+Prep c2/m4-3-pg-runtime-r2; execution c2/m4-3-pg-runtime-run-r2. Write-set7:
+0014 JSON DEFAULT; migration compiler regression; PG source identity fixture;
+existing executor identity/inventory/evidence validation; observation workflow
+branch; HANDOFF/REGISTER. Все55 R1 nodeids/проверки сохраняются плюс новые
+regressions. Local preflight обеих причин до одного new-source hosted proof
+<=600s tests/25min job, затем frozen receipt/C0 review. R1 refs не менять.
+Application0013 gates прежние; весь runtime source/PG acceptance ещё впереди.
+Runtime dispatch/Outbox/Telegram/live/paid HOLD. [Точное задание](tasks/M4_HANDOFF.md).
 
 | Task | Status / ближайший результат |
 |---|---|
@@ -48,8 +59,9 @@ Application0013 gates сохранены; actual0014/runtime/app-refusal PG proo
 | C0-M4-INTEGRATION-R1 | INTEGRATED PR39; последующий repair PR40/main VERIFIED, прежний failed run сохранён |
 | C2-M4-CI-OBSERVATION-R4 | VERIFIED C0 SOURCE + TARGETED PG; source249b3611, run41124252930:278 PASS/834 phases, cleanup/source PASS; C2 HOLD/ref frozen |
 | C0-M4-CI-REPAIR-INTEGRATION-R1 | INTEGRATED / VERIFIED PR40 + exact main586240e8/CI41178689536:11/11 SUCCESS |
-| C2-M4.3-PG-RUNTIME-R1 | BLOCKED / run41185701200 SCHEMA_FAILED;2 known source defects, hosted55 NOT_RUN; execution frozen, C2 HOLD/C0 repair decision |
-| M4.3-RUNTIME / M4.3-QUALITY | BLOCKED PG subset до C0 repair выдачи; application integration/AI→Outbox→Telegram/quality TODO |
+| C2-M4.3-PG-RUNTIME-R1 | Исторический BLOCKED / run41185701200 SCHEMA_FAILED;2 known source defects, hosted55 NOT_RUN; receiptca47ea21/evidence проверены C0, execution frozen |
+| C2-M4.3-PG-RUNTIME-R2 | IN_PROGRESS / выдано C2:7 paths, две local regressions и один новый bounded PG proof; exact base/refs в HANDOFF |
+| M4.3-RUNTIME / M4.3-QUALITY | PG subset в R2 repair; application integration/AI→Outbox→Telegram/quality TODO |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
 

@@ -3,8 +3,9 @@
 **Ничего повторно запускать не нужно.** GPT synthetic проверка принята C0:
 25 manual PASS,2 READ и2 synthetic images; GPT/v2 выбран для первого runtime.
 PR39/40 слиты. [Main CI41178689536](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536)
-прошёл11/11, ошибка CI закрыта. [Следующая задача C2](../tasks/M4_HANDOFF.md) —
-проверка доступа к контексту и сохранение AI-запуска/результата в PostgreSQL.
+прошёл11/11, ошибка CI закрыта. [Текущая задача C2 R2](../tasks/M4_HANDOFF.md) —
+исправить подготовку PostgreSQL-проверки доступа к контексту и сохранения
+AI-запуска/результата. R1 остановился до тестов; его отчёт сохранён.
 
 ## Принятый отчёт
 
@@ -33,8 +34,10 @@ R2 p50 11.163s /p95 16.393s, N18, включая history; маленькая в�
 ## Дальше
 
 Accepted main586240e88c825aa67593af5d72e0bdbb251ed3bb:860 PostgreSQL,
-54 browser и остальные CI gates PASS. C2 получает PG authority/durable state
-задачу на synthetic данных. Она нужна, чтобы после перезапуска использовать
+54 browser и остальные CI gates PASS. C2 продолжает PG authority/durable state
+задачу на synthetic данных: исправляет JSON DEFAULT0014 и получение source
+tree внутри test container, затем выполняет один новый bounded run.
+Все55 hosted tests R1 пока NOT_RUN. Эта задача нужна, чтобы после перезапуска использовать
 сохранённый ответ и запрещать работу при HUMAN/stale/revoked состоянии.
 После её проверки подключим application worker и защищённую отправку.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.
