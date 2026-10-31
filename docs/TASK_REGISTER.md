@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — PR40/main VERIFIED; C2-M4.3-PG-RUNTIME-R1 / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R1 BLOCKED / C2 HOLD; main unchanged / 2026-10-31
 
 PR40 merged; accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candidate.
@@ -11,12 +11,21 @@ tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candida
 native/durable/Docker29/6 migrations, clean-source и completeness gates PASS.
 C0 verified main; прежний observer gate закрыт. Source/tests/CI не повторялись.
 
-Единственная выдача — **C2-M4.3-PG-RUNTIME-R1**: trusted PG authority/read,
-durable run/call/result и replay. Slot0014 после0013, DB-only; existing app0013
-readiness не ослаблять. Runtime dispatch/Outbox/Telegram и согласованный перевод
-application schema — следующие задачи после C0 review. Exact base,13 paths,
-bounded hosted proof и критерии — [HANDOFF](tasks/M4_HANDOFF.md). C1/C3–C8 HOLD;
-paid/VM/live HOLD, ledger прежний. M4 целиком ещё не закрыт.
+**C2-M4.3-PG-RUNTIME-R1 — BLOCKED; C2 HOLD.** Source391667c0/tree710c727a,
+sole parent exact basefe8381f7,13 paths. [Run41185701200](https://github.com/Elefesys/ai-service-manager/actions/runs/41185701200),
+job124492071269/attempt1: SCHEMA_FAILED. JSON DEFAULT в0014 ошибочно создаёт
+SQLAlchemy bind `null`. Второй source defect, masked/not hosted: PG fixture
+ожидает .git внутри checks image; использовать executor source.json.
+Hosted55 cases/все phases NOT_RUN. Build/DB start/cleanup PASS, source clean;
+local253 PASS + финальные23 PASS, Ruff/format/compile/mypy/collection PASS.
+Original artifact13036992460:14466bytes/SHA2567ba2b0956d1ea8c4030b8a04ebfe791de4ae83dd32e70db47c4a43c51f43d094.
+Full evidence libfile_c3a28d54bd708191896177c4788822c7:92324bytes/32files,
+SHA2560ced8323a8f0c4536fb3e21f71db69a46a3fa42b6fa5e9317a54311ccb956dc5.
+Execution frozen; docs-only receipt на preparation. Main/old refs unchanged.
+Application0013 gates сохранены; actual0014/runtime/app-refusal PG proof ещё нет.
+Следующее действие — C0 repair assignment с новым execution ref и bounded proof;
+известная дельта внутри13 paths. Runtime dispatch/Outbox/Telegram/live/paid HOLD.
+Подробности и команды — [C2 receipt](tasks/M4_HANDOFF.md).
 
 | Task | Status / ближайший результат |
 |---|---|
@@ -39,8 +48,8 @@ paid/VM/live HOLD, ledger прежний. M4 целиком ещё не закр
 | C0-M4-INTEGRATION-R1 | INTEGRATED PR39; последующий repair PR40/main VERIFIED, прежний failed run сохранён |
 | C2-M4-CI-OBSERVATION-R4 | VERIFIED C0 SOURCE + TARGETED PG; source249b3611, run41124252930:278 PASS/834 phases, cleanup/source PASS; C2 HOLD/ref frozen |
 | C0-M4-CI-REPAIR-INTEGRATION-R1 | INTEGRATED / VERIFIED PR40 + exact main586240e8/CI41178689536:11/11 SUCCESS |
-| C2-M4.3-PG-RUNTIME-R1 | IN_PROGRESS / candidate:0014 DB-only + PG authority/run/call/result; local253 PASS, inventory55; one hosted proof pending, app0013 unchanged |
-| M4.3-RUNTIME / M4.3-QUALITY | IN_PROGRESS PG subset через C2; application integration/AI→Outbox→Telegram/quality TODO |
+| C2-M4.3-PG-RUNTIME-R1 | BLOCKED / run41185701200 SCHEMA_FAILED;2 known source defects, hosted55 NOT_RUN; execution frozen, C2 HOLD/C0 repair decision |
+| M4.3-RUNTIME / M4.3-QUALITY | BLOCKED PG subset до C0 repair выдачи; application integration/AI→Outbox→Telegram/quality TODO |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
 

@@ -6,7 +6,7 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — PR40/main VERIFIED; C2-M4.3-PG-RUNTIME-R1 / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R1 BLOCKED / C2 HOLD; main unchanged / 2026-10-31
 
 PR40 слит владельцем. Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df** — exact-equal проверенному
@@ -35,7 +35,68 @@ INTEGRATED / VERIFIED в SOURCE + TARGETED + PR/main CI scope.** C4 context/agen
 Shared150 неизменен: confirmed0.37505230/58 known POST;4 unknown/held7.585505548;
 62 total POST; remaining142.039442152, reported0.00743079 UNSETTLED.
 
-### C2 candidate — DB-only source, hosted validation pending
+### C2 receipt — C2-M4.3-PG-RUNTIME-R1 BLOCKED; execution frozen
+
+**Source** [391667c03467246c76d6fde26b34ea3028300c0f](https://github.com/Elefesys/ai-service-manager/commit/391667c03467246c76d6fde26b34ea3028300c0f),
+tree **710c727ababcdd0a983dabd8f232aa62cdb5abd2**, sole parent exact base
+**fe8381f7bd5918b8c6a3125b80887fe00bef67f3** / tree3e9648bb.
+Ровно13 разрешённых paths. Preparation c2/m4-3-pg-runtime-r1; execution
+c2/m4-3-pg-runtime-run-r1 создан на base, затем один FF expected_sha=base /
+force=false на source. Execution frozen; этот docs-only receipt — sole child
+source на preparation. Main586240e8 и все старые R1–R4 execution refs unchanged.
+
+**Единственный hosted outcome:** [run41185701200](https://github.com/Elefesys/ai-service-manager/actions/runs/41185701200),
+job **124492071269**, push/exact source/attempt1 — **FAIL, SCHEMA_FAILED**.
+Build14.501586s PASS; DB start8.334540s PASS; `alembic upgrade head`2.469321s,
+exit1; cleanup0.264668s PASS. Это разные фазы. Pinned PG image и server UID999
+проверены; source clean. Owned containers/networks/volumes после cleanup пусты.
+
+**Установленные причины и заблокированные проверки:**
+
+1. `0014_ai_runtime.py:88`, CREATE `platform.ai_provider_calls`: SQLAlchemy
+   распознаёт `:null` в JSON DEFAULT как обязательный bind. Actual exception:
+   `InvalidRequestError: A value is required for bind parameter 'null'`, обёрнутый
+   в StatementError. Ошибка реализации C2, локальный static check её пропустил.
+   Офлайн на frozen source с реальным SQLAlchemy compiler: из33 statements
+   только этот создаёт bind `null`. Отделение colon от null устраняет bind при
+   компиляции; это diagnostic candidate, без изменения source или PG-проверки.
+2. Дополнительный SOURCE_CONFIRMED defect, masked этим schema failure:
+   `tests/test_m4_runtime_postgres.py:97` вызывает `git rev-parse HEAD^{tree}`
+   внутри checks image. Git установлен, но `.git` исключён .dockerignore,
+   Dockerfile его не копирует, executor монтирует только /evidence. Fixture
+   должна получать уже проверенный tree из executor `/evidence/source.json`.
+   Hosted manifestation **NOT_RUN**, а не второе наблюдённое PG-падение.
+3. Versions/actual0014/role/DDL proof, все55 pytest cases (23 unit/source +32 PG)
+   и все setup/call/teardown **NOT_RUN**. Нет runtime-command/summary/JUnit;
+   это ранний schema stop, не потеря или перезапись recorder. Нельзя заявлять
+   upgrade/repeat/downgrade, isolation/claims/native races, durable budget/CAS/
+   process replay или app-readiness refusal как PG PASS. Post-failure catalog
+   до уничтожения disposable cluster отдельно не наблюдался.
+
+Local evidence отдельно:253 PASS/2.18s; финальные23 source/unit PASS/0.57s;
+Ruff/format/compile10 files PASS, mypy5 modules PASS, collection55. Fixed
+inventory SHA256 **59f959f5d72cec7eae264612dcb2939e12f58aa2f4e47f60bd7e5be72d590ab5**.
+11 originals/SOURCE_MANIFEST byte-identical. Это не PostgreSQL evidence.
+Application/provisioning/native readiness исходно и в source остаются0013;
+совместимость приложения с0014 не заявлена. Paid HTTP0; live/VM/deploy/send0.
+
+**Original artifact13036992460:**14466 bytes /16files,
+SHA256 **7ba2b0956d1ea8c4030b8a04ebfe791de4ae83dd32e70db47c4a43c51f43d094**.
+Metadata/upload log/actual ZIP совпали; все15 manifest entries verified.
+Полный ZIP, исходные logs/metadata, source.patch, collection и оба diagnostics:
+**libfile_c3a28d54bd708191896177c4788822c7**,92324 bytes /32files,
+SHA256 **0ced8323a8f0c4536fb3e21f71db69a46a3fa42b6fa5e9317a54311ccb956dc5**.
+
+**C2 HOLD / C0 review.** Повторного hosted запуска и source repair после outcome
+нет, как требует эта выдача. Минимальная известная следующая дельта: JSON
+DEFAULT в0014; SQLAlchemy `construct_params` regression по всем statements в
+runtime migration tests; source-tree fixture в PG module; только новая
+execution identity в existing executor/workflow и docs. Всё укладывается в
+исходные13 paths. C0 назначает repair base/ref и новый bounded proof; сначала
+локально проверить обе причины. Source не готов к merge/application integration.
+
+### История: C2 source candidate до hosted outcome
+
 
 Exact base **fe8381f7bd5918b8c6a3125b80887fe00bef67f3**, tree
 **3e9648bbaf16362f3ae77e95d19ba3a7fc8cbb07**, sole parent accepted main586240e8;
