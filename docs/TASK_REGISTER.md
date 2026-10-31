@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C2-M4.3-PG-RUNTIME-R4: структурная audit проверка и PG proof / 2026-10-31
+## CURRENT — C2-M4.3-PG-RUNTIME-R4: TARGETED PG PASS / C0 review / 2026-10-31
 
 PR40 merged; accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**,
 tree **84f6b04d738f7b981e359af877cace931c1386df**, exact-equal tested PR candidate.
@@ -106,21 +106,38 @@ assertions. Cases/JUnit/summary дают81 PASS/1 FAIL,246 phases;39 seal transi
 check воспроизведён C0 offline; нового pytest/PG run нет. Общий gate остаётся
 BLOCKED до actual call-row count/snapshot/effects в этом case и source review.
 
-**C2-M4.3-PG-RUNTIME-R4 — IN_PROGRESS / local proof готов, hosted NOT_RUN.**
-Base **a58e1612113158b39301947b8150ddb1fb0dfd29** / tree
-**891bc03cc2dfe2c2320efdcddaa2d189a61a0554**. Shared test checker: exact audit/native
-keys/types/expected values и zoned time; call rows/snapshot/effects отдельно.
-Local69 PASS (22 новых audit regressions), Ruff/format/compile PASS; collection104,
-hash73df7bb8, retained82/order и R3 fixtures сохранены. Exact base — полный SHA
-нового C0 assignment из immutable URL, sole child receipt
-**1d904b0d40dba5bab3b242c21b9751e6dd447413**. Prep c2/m4-3-pg-runtime-r4;
-execution c2/m4-3-pg-runtime-run-r4. Write-set6: PG test, existing database unit
-test только audit regression, executor/workflow identity/inventory, HANDOFF/REGISTER.
-Разрешена замена ошибочной substring assertion строгой structural/value check,
-raw-text negative и отдельный call-count assert;82 старых cases/остальные
-assertions сохраняются. Local checks до одного нового bounded PG run<=600s/25min.
-Production/DDL/readiness0013 неизменны; R1–R3 refs frozen. [Задание](tasks/M4_HANDOFF.md).
-Runtime/worker/Outbox integration, live/paid/Telegram HOLD.
+**C2-M4.3-PG-RUNTIME-R4 — REVIEW / TARGETED PG PASS; C2 HOLD.** Source
+**3f79119e38f16f2230d3754aa171b887f170e71e**, tree
+**a927eebbc459139348b608d381960af33c35f892**, sole child exact base
+**a58e1612113158b39301947b8150ddb1fb0dfd29** / tree891bc03c;6 paths.
+Prep c2/m4-3-pg-runtime-r4; execution c2/m4-3-pg-runtime-run-r4: оба созданы
+на base, один expected-base/force=false execution FF. [Run41206327012](https://github.com/Elefesys/ai-service-manager/actions/runs/41206327012),
+job124552019385/push/source/attempt1: **SUCCESS,104 PASS/0 FAIL**
+(28 migration/source +41 Python boundary +35 actual PG),312 phases PASS.
+Errors/skips/xfails/overflow/invalid_fields0; JUnit/cases/summary совпали,
+complete=true/result=PASS. Retained82/order сохранены +22 audit regressions;
+inventory104/hash73df7bb8. Local69 PASS/0.72s, Ruff/format/compile/collection PASS.
+
+Один shared checker доказывает exact audit/native keys/types/expected binding
+values и zoned time; old substring false positive воспроизведён, raw text и
+metadata substitutions отвергнуты. В том же READ case actual **provider-call
+rows==2, original snapshot, effects=[0,0,0] теперь выполнены и PASS**; прежние
+RuntimeReceipt/2 adapter requests/calls2/READ1/cost0.2 сохранены. R3 fixtures и
+прочие test bodies unchanged. Все35 PG cases PASS, включая used downgrade,
+tenant/claims/authority/replay/crash и application/native0014 refusal.
+39 matched post-seal transitions1/COLLECTING→2/READY. [Полный receipt](tasks/M4_HANDOFF.md).
+
+Cleanup/source PASS; build15.606337s отдельно, command131.802957s/pytest129.469s.
+Original artifact13044890227:31551bytes/25files, SHA256
+**d9e77c15f70b6951278e24e6b02df18574bb785588c62b0c07e80f7fbd7db97a**;
+manifest24/24 verified. Full evidence **libfile_00c77817355c8191a833378c9b3106bf**:
+93831bytes/48files, SHA256
+**f74a9f776bd23ca25e81ba4662cde52c8c78c2d1c0e8987054272a6ed29c0079**;
+manifest47/47 verified, original ZIP/logs/JUnit/source/collection/command+summary сохранены.
+Execution frozen; этот docs-only receipt sole child source на preparation.
+Main/old refs/production/миграции0001–0014/roles/pins/limits/readiness0013 unchanged.
+C0 whole-source+PG review и application/worker/Outbox integration ещё нужны;
+full CI/live/paid/VM/Telegram/real data не запускались.
 
 | Task | Status / ближайший результат |
 |---|---|
@@ -146,8 +163,8 @@ Runtime/worker/Outbox integration, live/paid/Telegram HOLD.
 | C2-M4.3-PG-RUNTIME-R1 | Исторический BLOCKED / run41185701200 SCHEMA_FAILED;2 known source defects, hosted55 NOT_RUN; receiptca47ea21/evidence проверены C0, execution frozen |
 | C2-M4.3-PG-RUNTIME-R2 | Runtime BLOCKED; SOURCE REPAIR + PG PREPARATION/SCHEMA/ROLES VERIFIED C0;49 PASS/30 FAIL, execution frozen |
 | C2-M4.3-PG-RUNTIME-R3 | Fixture repair SOURCE+ACTUAL PG VERIFIED C0;81 PASS/1 contradictory assertion, общий gate BLOCKED; execution frozen |
-| C2-M4.3-PG-RUNTIME-R4 | IN_PROGRESS / выдано C2:6 paths, structural audit regression и один новый bounded PG proof |
-| M4.3-RUNTIME / M4.3-QUALITY | PG gate в R4 repair; whole-source/application integration/AI→Outbox→Telegram/quality TODO |
+| C2-M4.3-PG-RUNTIME-R4 | REVIEW / TARGETED PG104 PASS,312 phases; former remaining READ assertions PASS; C2 HOLD/execution frozen |
+| M4.3-RUNTIME / M4.3-QUALITY | Targeted PG PASS; whole-source C0 review/application integration/AI→Outbox→Telegram/quality TODO |
 | M4-ACCEPTANCE | TODO; A01–A08, actual main CI, bounded TEST smoke и передача M5 |
 
 
