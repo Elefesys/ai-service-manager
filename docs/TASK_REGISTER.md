@@ -2,7 +2,56 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R8 / IN_PROGRESS / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R8 / BLOCKED, C3 HOLD / 2026-11-04
+
+C3 receipt, до C0 review. Targeted **72 PASS,0FAIL/ERROR/SKIP**;
+[новый Draft PR42](https://github.com/Elefesys/ai-service-manager/pull/42),
+[full CI41838277597](https://github.com/Elefesys/ai-service-manager/actions/runs/41838277597)
+**11 SUCCESS,1 FAIL**,attempt1. Whole-runtime не INTEGRATED/VERIFIED.
+После FAIL source/execution/PR-source frozen;repair/rerun не выполнялись.
+
+Base **c7ee300ae4182152eb9c8636d2f958da087113f2**/treea978f014;
+source **45f46da00d59cadf90fe2590548e5e3b3cb20f53**/
+tree **a0726c53ca12fa228002a70a1d8c37372708de9f**,sole child base,5 allowed paths.
+R8 исправляет только schema guarded fixture и exact admission/transition/trigger;
+реальный legacy TEST worker ai=None,accepted receipt/send/Outbox/no-AI-enrollment.
+Positive AI worker/72nodes/negative matrix unchanged;migrations/backend/pins frozen.
+Final offline544testcase+130subtests/causal13/Ruff/format195/mypy76 PASS.
+
+[Targeted41836791831](https://github.com/Elefesys/ai-service-manager/actions/runs/41836791831),
+push/attempt1/job126597664677:retained35+delivery22+schema9+native6 PASS;
+все phases reached,missing/unknown/invalid/overflow0. Matrix4×8,generation/version
+0/-1,exact old-CHECK23514/named constraint,rollback snapshot PASS. Оба Telegram
+rights outcomes/replay,UNKNOWN/downgrade/native6 PASS. Catalog183/48/frozenpins/
+valid=true/readiness PASS;actual bytes exactR7. SQL344.977861991/600s,job411/1500s;
+cleanup5/5 zero owned resources. Targeted evidence accepted только после C0 review.
+
+PR42 head=source;tested merge **e037e458fc9dafc2f31a7b1fce8851e3035af7ba**,
+same tree,parents main586240e8+source. CI M4 runtime66PASS/cleanup4zero;
+native112PASS(105PG retained0013+7source)/105reset/cleanup;browser54PASS;
+frontend398PASS;durable/Docker29/6migration shards SUCCESS.
+Foundation unit3512PASS,15FAIL,155subtestsPASS,1031deselected,488.21s:
+**14 missing infra/images.lock.env**(9wrapper+5constructed,development image
+omits input;intended assertions NOT_REACHED);**1 in_call_timeout entered=False**
+(commit absent/STOP once;actual early STOP cause/timing/reservation unknown,
+0.05s timing sensitivity только hypothesis). Evidence step FOUNDATION_EVIDENCE_REFUSED;
+cleanup exit0,но final zero-inventory не записан. Все15nodeids/causes/missingfacts
+и NOT_APPLIED proposals C0 — [CURRENT HANDOFF](tasks/M4_HANDOFF.md)/REPORT.
+Generic860,upgrade/repeat/downgrade/reupgrade/contracts/wheels и foundation
+storage-version/services/http/images tail NOT_REACHED. Collection union complete
+и disjoint860+105+66=1031;actual PG union171PASS/1031,complete execution не доказан.
+
+Этот2-doc receipt — sole child source только prep;execution/PR-source frozen.
+Main586240e8,PR41 OPEN/DRAFT/head9b05e5dd,35priorC3/24C2 refs unchanged;
+1targeted+1newDraftPR/fullCI/attempt1,prep runs0. [Evidence972files](https://chatgpt.com/library?file_id=libfile_04ece47ad364819183ec44842b2df348&account_id=personal):
+203237133bytes/SHA256c99d810f8d79ca7c2c722914346a9a11259dafdd843d26543aa4fa398889cb04,
+manifest971/971;targeted original13326003032/4020373bytes/manifest142/142;
+12originalCI ZIP/logs/digests/342source blobs+modes verified. C3/другие роли HOLD,
+новая правка требует следующей выдачи C0;merge владелец после acceptance.
+Default OFF/FAKE/EVAL_ONLY2calls1READ;paid/live/Telegram/VM/deploy/realdata HOLD;
+owner ничего не запускает;shared150 ledger unchanged;LOCKED/ADR132/216/217 preserved.
+
+## История — C0 assignment C3-M4.3-RUNTIME-INTEGRATION-R8 / 2026-11-04
 
 C0 независимо проверил R7 source **05c2e52ffcd7349f502f864d6d863dfde50fca22** /
 treefea51e60 и receipt **e32263e925ea646a670c2267aa7ce324f40f7647** / treebb249385.
