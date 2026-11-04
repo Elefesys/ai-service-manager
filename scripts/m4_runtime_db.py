@@ -1,4 +1,4 @@
-"""C3-M4.3-RUNTIME-INTEGRATION-R5: separate owned PG18 application carrier."""
+"""C3-M4.3-RUNTIME-INTEGRATION-R6: separate owned PG18 application carrier."""
 
 import asyncio
 import contextlib
@@ -19,10 +19,10 @@ import traceback
 from pathlib import Path
 from uuid import UUID
 
-BASE = "d0d1ff7643f1b2a02ab69c845da08ec99b77f9b2"
-BASE_TREE = "3ab2a3cdc781570fb466094a34882864f3d5ffcb"
-BRANCH = "c3/m4-3-runtime-integration-pr-r5"
-TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r5"
+BASE = "1e5dc3cfbbaac00af23bec84df64da8a6041be93"
+BASE_TREE = "22be2116016494f44c38539b06868cbad9f6f2eb"
+BRANCH = "c3/m4-3-runtime-integration-pr-r6"
+TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r6"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -197,6 +197,12 @@ def preparation(stage, **facts):
         "PREPARED",
         "STALE_REVISION_REJECTED",
         "DOWNGRADE_READY",
+        "SELECTION",
+        "MODEL_ENTER",
+        "TIMEOUT",
+        "REPLAY",
+        "SEND",
+        "STALE_OBSERVATION",
     }:
         CASE["invalid_fields"] += 1
         return
@@ -222,7 +228,53 @@ def preparation(stage, **facts):
             and 0 < value <= 9223372036854775807
         ):
             event[name] = value
-        elif name == "state" and value in {"COLLECTING", "WAITING_MEDIA", "READY", "FAILED"}:
+        elif (
+            name == "state"
+            and type(value) is str
+            and value in {"COLLECTING", "WAITING_MEDIA", "READY", "FAILED"}
+        ):
+            event[name] = value
+        elif name == "selected_kind" and (
+            value is None or type(value) is str and value in {"reply", "handoff", "no_reply"}
+        ):
+            event[name] = value
+        elif name in {"call_count", "reservation_count"} and type(value) is int and 0 <= value <= 2:
+            event[name] = value
+        elif (
+            name
+            in {
+                "adapter_entered",
+                "adapter_cancelled",
+                "has_result",
+                "has_outbox",
+                "reserve_held",
+                "completion_unknown_metering",
+            }
+            and type(value) is bool
+        ):
+            event[name] = value
+        elif (
+            name == "job_state"
+            and type(value) is str
+            and value in {"READY", "RUNNING", "SUCCEEDED", "DEAD"}
+        ):
+            event[name] = value
+        elif name == "error_code" and (
+            value is None
+            or type(value) is str
+            and value
+            in {
+                "DEPENDENCY_UNAVAILABLE",
+                "UNKNOWN_EXTERNAL_RESULT",
+                "NOT_ALLOWED",
+                "STALE_CLAIM",
+                "AI_STALE",
+                "AI_BUDGET",
+                "AI_INCOMPLETE",
+                "TIMEOUT",
+                "CANCELLED",
+            }
+        ):
             event[name] = value
         else:
             CASE["invalid_fields"] += 1
@@ -360,9 +412,16 @@ def guard_current_native(items):
     module = sys.modules["test_m3_1_native_context_postgres"]
     native = inspect.unwrap(module.native)
     original = module.reset_disposable
+    original_identity = module.source_tree_identity
     require(
         Path(original.__code__.co_filename).resolve() == catalog.ROOT / catalog.MODULES[1]
         and native.__globals__ is vars(module)
+        and inspect.isfunction(original_identity)
+        and original_identity.__name__ == "source_tree_identity"
+        and Path(original_identity.__code__.co_filename).resolve()
+        == catalog.ROOT / catalog.MODULES[1]
+        and original_identity.__globals__ is vars(module)
+        and native.__globals__["source_tree_identity"] is original_identity
         and all(
             inspect.unwrap(item._fixtureinfo.name2fixturedefs["native"][-1].func) is native
             for item in items
@@ -371,11 +430,25 @@ def guard_current_native(items):
     )
     baseline = json.loads((evidence_path() / "native-owner.json").read_text())
     proofs = []
+    identities = []
+
+    def checked_source_tree():
+        tree, _ = catalog.require_source(catalog.ROOT, os.environ["ASM_M4_SOURCE_SHA"])
+        require(tree == source_tree_from_evidence(), "CURRENT_NATIVE_SOURCE")
+        return tree
+
+    @functools.wraps(original_identity)
+    def checked_identity():
+        # The historical fixture writes a temporary Git index. This carrier has
+        # a read-only checkout; prove all actual bytes/modes again at point of use.
+        tree = checked_source_tree()
+        identities.append({"identity": len(identities) + 1, "source_tree": tree})
+        write(evidence_path() / "native-identity-proofs.json", identities)
+        return tree
 
     @functools.wraps(original)
     def checked_reset():
-        tree, _ = catalog.require_source(catalog.ROOT, os.environ["ASM_M4_SOURCE_SHA"])
-        require(tree == source_tree_from_evidence(), "CURRENT_NATIVE_SOURCE")
+        tree = checked_source_tree()
         actual = native_identity()
         require(actual == baseline, "CURRENT_NATIVE_SERVER_CHANGED")
         proofs.append({"reset": len(proofs) + 1, "source_tree": tree, **actual})
@@ -383,12 +456,15 @@ def guard_current_native(items):
         return original()
 
     module.reset_disposable = checked_reset
+    module.source_tree_identity = checked_identity
     write(
         evidence_path() / "fixture-guards.json",
         {
             "nodeids": CURRENT_NATIVE_NODES,
             "reset": catalog.MODULES[1] + "::reset_disposable",
             "source_and_server_before_each_reset": True,
+            "identity": catalog.MODULES[1] + "::source_tree_identity",
+            "full_source_check_at_identity_use": True,
         },
     )
 
@@ -412,11 +488,14 @@ def summarize(cases, expected, exitstatus):
     )
     completed = [c["nodeid"] for c in cases if any(p["phase"] == "teardown" for p in c["phases"])]
     started = [c["nodeid"] for c in cases]
+    called = [c["nodeid"] for c in cases if any(p["phase"] == "call" for p in c["phases"])]
     return {
         "completed": completed,
         "active": [n for n in started if n not in completed],
         "missing": [n for n in expected if n not in completed],
         "not_reached": [n for n in expected if n not in started],
+        "call_reached": called,
+        "missing_call_phases": [n for n in expected if n not in called],
         "pytest_exit": exitstatus,
         "cases": len(cases),
         "expected": len(expected),
@@ -523,23 +602,23 @@ def admit_source(evidence):
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH,
-        "R5_EVENT_BRANCH",
+        "R6_EVENT_BRANCH",
     )
     require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
     require(capture(["git", "merge-base", BASE, "HEAD"]) == BASE, "BASE_ANCESTRY")
     allowed = {
         "scripts/native_context_db_catalog.py",
         "scripts/m4_runtime_db.py",
-        "scripts/test_browser.sh",
         ".github/workflows/m4-runtime-db.yml",
         "tests/test_native_context_db_runner.py",
-        "tests/test_telegram_egress.py",
         "tests/test_m4_runtime_db_runner.py",
+        "tests/test_m4_delivery_postgres.py",
+        "tests/test_m4_delivery.py",
         "docs/tasks/M4_HANDOFF.md",
         "docs/TASK_REGISTER.md",
     }
     paths = capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines()
-    require(bool(paths) and set(paths) <= allowed, "R5_WRITE_SET")
+    require(bool(paths) and set(paths) <= allowed, "R6_WRITE_SET")
     write(
         evidence / "source-admission.json",
         {
@@ -1298,6 +1377,13 @@ def run_admitted(root, event, manifest, mode):
                         len(proofs) == len(CURRENT_NATIVE_NODES),
                         "CURRENT_NATIVE_RESET_COMPLETENESS",
                     )
+                    identities = json.loads(
+                        (group / "evidence/native-identity-proofs.json").read_text()
+                    )
+                    require(
+                        len(identities) == len(CURRENT_NATIVE_NODES),
+                        "CURRENT_NATIVE_IDENTITY_COMPLETENESS",
+                    )
             result["outcome"] = "PASS"
         except Exception as error:
             result.update(outcome="FAIL", **failure_details(error))
@@ -1325,6 +1411,7 @@ def run_admitted(root, event, manifest, mode):
                 for n in v.get("tests", {}).get("completed", [])
                 + v.get("tests", {}).get("active", [])
             }
+            called = {n for v in outcomes for n in v.get("tests", {}).get("call_reached", [])}
             write(root / "evidence/inventory.json", inventory_record())
             write(
                 root / "evidence/summary.json",
@@ -1344,6 +1431,8 @@ def run_admitted(root, event, manifest, mode):
                     "collection_complete": len(collected_nodes) == sum(planned.values()),
                     "missing_count": sum(planned.values()) - len(completed),
                     "not_reached_count": sum(planned.values()) - len(started),
+                    "missing_call_phase_count": sum(planned.values()) - len(called),
+                    "missing_call_phases": [n for n in all_nodes if n not in called],
                     "missing": [n for n in all_nodes if n not in completed],
                     "not_reached": [n for n in all_nodes if n not in started],
                     "complete": len(outcomes) == len(modules)

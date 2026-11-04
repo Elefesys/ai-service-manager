@@ -149,6 +149,71 @@ async def test_execution_failure_terminalizes_without_second_model_invocation(fa
     assert fake.requests == []
 
 
+@pytest.mark.parametrize("boundary", ["unknown_metering", "pre_call_timeout", "in_call_timeout"])
+async def test_real_runtime_gateway_metering_and_expiration_controls(boundary):
+    """Real runtime/agent/Gateway/DurableAdapter; only PostgreSQL methods replaced."""
+    from test_m4_runtime_database import prepared
+
+    cfg = config(duration_seconds=30 if boundary == "unknown_metering" else 0.05)
+    run = prepared().model_copy(update={"config": cfg})
+    entered = asyncio.Event()
+    reservations, completions = [], []
+
+    class Observable(FakeAdapter):
+        async def complete(self, request):
+            entered.set()
+            return await super().complete(request)
+
+    fake = Observable(cfg.route, ("unknown_cost" if boundary == "unknown_metering" else "timeout",))
+    runtime = SyntheticRuntime(SimpleNamespace(), cfg, lambda: fake, environment="TEST")
+    runtime.database.replay = AsyncMock(side_effect=MessagingError(Code.STALE_CLAIM))
+
+    async def prepare(*args, **kwargs):
+        if boundary == "pre_call_timeout":
+            await asyncio.Event().wait()
+        return run
+
+    async def reserve(*args):
+        assert not entered.is_set()
+        reservations.append(args[-1])
+        return 1
+
+    async def complete(*args):
+        completions.append(args[-1])
+
+    runtime.database.prepare = prepare
+    runtime.database.reserve = reserve
+    runtime.database.complete = complete
+    runtime.database._command = AsyncMock()
+    runtime.database.commit = AsyncMock(return_value=object())
+    runtime.stop = AsyncMock()
+    c = claim()
+    await asyncio.wait_for(runtime.execute(c), 2)
+    if boundary == "unknown_metering":
+        candidate = runtime.database.commit.await_args.args[-1]
+        assert candidate.kind == "reply"
+        assert len(fake.requests) == len(reservations) == len(completions) == 1
+        assert reservations[0].cost_reserved == cfg.limits.call_cost_reservation > 0
+        assert completions[0].kind == "OUTPUT"
+        assert completions[0].cost.status == "UNKNOWN" and completions[0].cost.amount is None
+        assert (
+            completions[0].usage.input_tokens is None and completions[0].usage.output_tokens is None
+        )
+        runtime.stop.assert_not_awaited()
+        # The R5 test's no-result oracle contradicts this valid OUTPUT contract.
+        assert candidate is not None
+    else:
+        runtime.database.commit.assert_not_awaited()
+        runtime.stop.assert_awaited_once_with(c)
+        assert entered.is_set() is (boundary == "in_call_timeout")
+        assert len(fake.requests) == len(reservations) == (1 if entered.is_set() else 0)
+        if entered.is_set():
+            assert len(completions) == 1 and completions[0].kind == "UNKNOWN"
+            assert completions[0].error == "CANCELLED"
+        else:
+            assert completions == []
+
+
 @pytest.mark.parametrize("entry", ["direct", "parent", "deadline"])
 @pytest.mark.parametrize("cleanup", ["ok", "error", "delay", "repeat_cancel", "completion_delay"])
 async def test_real_agent_cancellation_unwinds_worker_and_bounds_bookkeeping(entry, cleanup):

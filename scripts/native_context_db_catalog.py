@@ -38,11 +38,12 @@ M4_EXECUTION_REFS = (
     "refs/heads/c3/m4-3-runtime-targeted-run-r2",
 )
 # These transitions are distinct from historical push/main/PR semantics.
-# R5 reuses the accepted exact transition rule; earlier execution refs stay frozen.
+# R6 reuses the accepted exact transition rule; earlier execution refs stay frozen.
 M4_R3_TRANSITIONS = {
     "refs/heads/c3/m4-3-runtime-catalog-run-r3": "fa2469deea75c11ca5901de77fc3e46304c1e9ae",
     "refs/heads/c3/m4-3-runtime-targeted-run-r4": "c8f85533f8dee96ea7ef0e8f0831ae9e5f3a3783",
     "refs/heads/c3/m4-3-runtime-targeted-run-r5": "d0d1ff7643f1b2a02ab69c845da08ec99b77f9b2",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r6": "1e5dc3cfbbaac00af23bec84df64da8a6041be93",
 }
 REPOSITORY = "Elefesys/ai-service-manager"
 REPOSITORY_ID = 1369650588

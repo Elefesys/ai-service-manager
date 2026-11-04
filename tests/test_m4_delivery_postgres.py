@@ -1,8 +1,10 @@
 """Actual application composition/worker + PG; fake model, no network egress."""
 
 import asyncio
+import contextlib
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import uuid4
 
 import httpx
@@ -17,7 +19,7 @@ from asm.telegram.client import TelegramClient
 from asm.telegram.config import TelegramSettings
 from sqlalchemy.exc import SQLAlchemyError
 from test_m2_1_postgres import query
-from test_m2_3_db_postgres import BOT, EXTERNAL, OWNER
+from test_m2_3_db_postgres import BOT, EXTERNAL, OWNER, observe_owner
 from test_m3_1_native_context_postgres import claim_job, incoming, migrate, reconcile, scalar
 from test_m3_1_turns_postgres import seal
 from test_m4_agent import config
@@ -148,6 +150,38 @@ async def run_turn(h, worker, source):
     assert isinstance(claim, AIJobClaim) and claim.job_id == d["job_id"]
     await worker.execute(claim)
     return claim, await enrollment(h, source)
+
+
+async def delivery_facts(h, d, fake, stage, **facts):
+    job = (
+        await query(
+            h, "SELECT status,error_code FROM platform.messaging_jobs WHERE id=:id", id=d["job_id"]
+        )
+    )[0]
+    facts.setdefault("adapter_entered", bool(fake.requests))
+    preparation(
+        stage,
+        selected_kind=d["selected_kind"],
+        call_count=len(fake.requests),
+        job_state=job["status"],
+        error_code=job["error_code"],
+        has_outbox=d["outbox_id"] is not None,
+        **facts,
+    )
+    return job["status"]
+
+
+async def refresh_synthetic_observation(h, conversation):
+    # Trusted owner capability only: no manual message, no positive timestamp UPDATE.
+    probe = (
+        await query(
+            h,
+            "SELECT generation,observation_version FROM platform.telegram_connection_state WHERE workspace_id=:ws AND connection_id=:id",
+            ws=A,
+            id=h.telegram_connection,
+        )
+    )[0]
+    assert (await observe_owner(h, conversation, probe))["code"] == "OBSERVED"
 
 
 @pytest.mark.parametrize(
@@ -387,7 +421,22 @@ async def test_waiting_ai_allows_inbound_and_manual_progress_and_cancel_is_termi
 @pytest.mark.parametrize("rights", [True, False])
 async def test_synthetic_telegram_real_admission_and_rights_race(delivery, rights):
     h = delivery
+    if rights:
+        # Negative control: expired observation cannot select a send intent.
+        _, expired_source, _ = await source_turn(h, telegram=True)
+        await scalar(
+            h,
+            "UPDATE platform.telegram_connection_state SET observed_at=clock_timestamp()-interval '31 seconds' WHERE workspace_id=:ws AND connection_id=:id RETURNING connection_id",
+            ws=A,
+            id=h.telegram_connection,
+        )
+        expired_worker, expired_fake = application(h)
+        _, expired = await run_turn(h, expired_worker, expired_source)
+        await delivery_facts(h, expired, expired_fake, "STALE_OBSERVATION")
+        assert expired["selected_kind"] is None
+        assert expired["outbox_id"] is None
     cid, source, scope = await source_turn(h, telegram=True)
+    await refresh_synthetic_observation(h, cid)
     requests = []
 
     async def handler(request):
@@ -435,8 +484,11 @@ async def test_synthetic_telegram_real_admission_and_rights_race(delivery, right
     try:
         worker, fake = application(h, telegram=telegram)
         _, d = await run_turn(h, worker, source)
+        await delivery_facts(h, d, fake, "SELECTION")
         assert d["selected_kind"] == "reply"
+        assert len(fake.requests) == 1
         await worker.execute(await claim_job(h, d["send_job_id"]))
+        await delivery_facts(h, d, fake, "SEND")
         assert requests == (
             ["getBusinessConnection", "sendMessage"] if rights else ["getBusinessConnection"]
         )
@@ -507,24 +559,167 @@ async def test_dispatching_lost_ack_recovers_unknown_without_transport(delivery)
     assert h.adapter.calls == before and len(fake.requests) == 1
 
 
-@pytest.mark.parametrize("cause", ["unknown_cost", "timeout"])
-async def test_unknown_charge_or_timeout_terminalizes_without_regeneration(delivery, cause):
+async def test_valid_output_unknown_metering_keeps_reserve_and_replays_without_regeneration(
+    delivery,
+):
     h = delivery
     _, source, _ = await source_turn(h)
-    cfg = config(duration_seconds=0.2 if cause == "timeout" else 30)
-    fake = FakeAdapter(cfg.route, (cause,))
+    cfg = config()
+    fake = FakeAdapter(cfg.route, ("unknown_cost",))
     worker = create_worker(
         h.kernel, h.adapter, environment="TEST", ai_config=cfg, model=lambda: fake
     )
     claim, d = await run_turn(h, worker, source)
-    assert d["selected_kind"] is None and len(fake.requests) == 1
+    state = await delivery_facts(h, d, fake, "SELECTION")
+    assert d["selected_kind"] == "reply"
+    assert len(fake.requests) == 1
+    assert state == "SUCCEEDED"
+    run = (await query(h, "SELECT * FROM platform.ai_runs WHERE job_id=:id", id=claim.job_id))[0]
+    calls = await query(
+        h, "SELECT * FROM platform.ai_provider_calls WHERE run_id=:id", id=run["id"]
+    )
+    preparation(
+        "SELECTION",
+        has_result=run["result"] is not None,
+        reservation_count=len(calls),
+        reserve_held=run["cost_reserved"] == cfg.limits.call_cost_reservation > 0,
+        completion_unknown_metering=len(calls) == 1
+        and calls[0]["completion"]["cost"]
+        == {"status": "UNKNOWN", "amount": None, "currency": None},
+    )
+    assert len(calls) == 1 and run["calls_used"] == 1
+    assert run["result"]["kind"] == "reply" and d["run_id"] == run["id"]
+    assert run["cost_reserved"] == cfg.limits.call_cost_reservation > 0
+    assert Decimal(calls[0]["budget"]["cost_reserved"]) == run["cost_reserved"]
+    assert calls[0]["completion"] == {
+        "kind": "OUTPUT",
+        "usage": {"input_tokens": None, "output_tokens": None},
+        "cost": {"status": "UNKNOWN", "amount": None, "currency": None},
+        "error": None,
+    }
+    assert calls[0]["completed_at"] is not None
+    assert d["outbox_id"] is not None and d["send_job_id"] is not None
+    fresh, unused = application(h)
+    await fresh.execute(claim)
+    await fresh.execute(source)
+    await delivery_facts(h, await enrollment(h, source), unused, "REPLAY")
+    assert unused.requests == []
+    assert await enrollment(h, source) == d
+    assert (await query(h, "SELECT * FROM platform.ai_runs WHERE job_id=:id", id=claim.job_id)) == [
+        run
+    ]
     assert (
-        await scalar(h, "SELECT status FROM platform.messaging_jobs WHERE id=:id", id=claim.job_id)
-        == "DEAD"
+        await query(h, "SELECT * FROM platform.ai_provider_calls WHERE run_id=:id", id=run["id"])
+    ) == calls
+    assert (
+        await scalar(
+            h,
+            "SELECT count(*) FROM platform.ai_deliveries WHERE source_job_id=:id",
+            id=source.job_id,
+        )
+        == 1
+    )
+    assert (
+        await scalar(h, "SELECT count(*) FROM app.outbox_events WHERE id=:id", id=d["outbox_id"])
+        == 1
+    )
+
+
+async def test_in_call_timeout_terminalizes_without_result_or_regeneration(delivery):
+    h = delivery
+    cid, source, _ = await source_turn(h)
+    cfg = config(duration_seconds=10)
+    entered = asyncio.Event()
+
+    class Waiting(FakeAdapter):
+        cancelled = False
+
+        async def complete(self, request):
+            entered.set()
+            try:
+                return await super().complete(request)
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+
+    fake = Waiting(cfg.route, ("timeout",))
+    worker = create_worker(
+        h.kernel, h.adapter, environment="TEST", ai_config=cfg, model=lambda: fake
+    )
+    await worker.execute(source)
+    d = await enrollment(h, source)
+    claim = await h.kernel.claim_job("synthetic-timeout", ai=True)
+    assert isinstance(claim, AIJobClaim) and claim.job_id == d["job_id"]
+    task = asyncio.create_task(worker.execute(claim))
+    signal = asyncio.create_task(entered.wait())
+    try:
+        await asyncio.wait(
+            {task, signal},
+            timeout=cfg.limits.duration_seconds + 2,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        await delivery_facts(
+            h, await enrollment(h, source), fake, "MODEL_ENTER", adapter_entered=entered.is_set()
+        )
+        assert entered.is_set(), "one-call scenario must actually enter the adapter"
+        assert len(fake.requests) == 1
+        reservations = await scalar(
+            h,
+            "SELECT count(*) FROM platform.ai_provider_calls p JOIN platform.ai_runs r ON (r.workspace_id,r.id)=(p.workspace_id,p.run_id) WHERE r.job_id=:id",
+            id=claim.job_id,
+        )
+        preparation("MODEL_ENTER", reservation_count=reservations)
+        assert reservations == 1
+        # Only the real runtime deadline expires; never inject a timeout or cancel
+        # the successful path to turn a pre-model expiration into one model call.
+        await asyncio.wait_for(asyncio.shield(task), cfg.limits.duration_seconds + 3)
+    finally:
+        for pending in (signal, task):
+            if not pending.done():
+                pending.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pending
+    d = await enrollment(h, source)
+    state = await delivery_facts(
+        h, d, fake, "TIMEOUT", adapter_entered=entered.is_set(), adapter_cancelled=fake.cancelled
+    )
+    assert fake.cancelled
+    assert len(fake.requests) == 1
+    assert d["selected_kind"] is None
+    assert d["outbox_id"] is None
+    assert state == "DEAD"
+    run = (await query(h, "SELECT * FROM platform.ai_runs WHERE job_id=:id", id=claim.job_id))[0]
+    assert run["result"] is None and run["calls_used"] == 1
+    calls = await query(
+        h, "SELECT * FROM platform.ai_provider_calls WHERE run_id=:id", id=run["id"]
+    )
+    preparation(
+        "TIMEOUT",
+        has_result=run["result"] is not None,
+        reservation_count=len(calls),
+        reserve_held=run["cost_reserved"] == cfg.limits.call_cost_reservation > 0,
+    )
+    assert len(calls) == 1 and calls[0]["completion"]["kind"] == "UNKNOWN"
+    assert run["cost_reserved"] == cfg.limits.call_cost_reservation > 0
+    assert (
+        await scalar(
+            h,
+            "SELECT count(*) FROM app.outbox_events o JOIN app.messages m ON (m.workspace_id,m.id)=(o.workspace_id,o.message_id) WHERE m.conversation_id=:id",
+            id=cid,
+        )
+        == 0
     )
     fresh, unused = application(h)
     await fresh.execute(claim)
+    await delivery_facts(h, await enrollment(h, source), unused, "REPLAY")
     assert unused.requests == []
+    assert await enrollment(h, source) == d
+    assert (await query(h, "SELECT * FROM platform.ai_runs WHERE job_id=:id", id=claim.job_id)) == [
+        run
+    ]
+    assert (
+        await query(h, "SELECT * FROM platform.ai_provider_calls WHERE run_id=:id", id=run["id"])
+    ) == calls
     assert await h.kernel.claim_job("restart-after-incomplete", ai=True) is None
 
 

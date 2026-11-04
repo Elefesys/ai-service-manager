@@ -1,4 +1,4 @@
-"""Finite R5 admission and evidence checks; no PostgreSQL substitute."""
+"""Finite R6 admission and evidence checks; no PostgreSQL substitute."""
 
 import itertools
 import json
@@ -118,6 +118,7 @@ elif 'pytest' in args:
     if nodes==config['native']:
         assert json.loads((evidence/'native-owner.json').read_text())['system_identifier']=='synthetic-owned-server'
         runner.write(evidence/'before-reset-proofs.json',[{'synthetic':True} for _ in nodes])
+        runner.write(evidence/'native-identity-proofs.json',[{'synthetic':True} for _ in nodes])
     cases=[{'nodeid':n,'overflow':0,'invalid_fields':0,'phases':[{'phase':p,'outcome':'passed','xfail':False} for p in ('setup','call','teardown')]} for n in nodes]
     runner.write(evidence/'cases.json',cases)
     runner.write(evidence/runner.SUMMARY_REPORT,runner.summarize(cases,nodes,0))
@@ -212,7 +213,7 @@ elif 'pytest' in args:
             len(data) == proof["bytes"]
             and carrier.hashlib.sha256(data).hexdigest() == proof["sha256"]
         )
-    if destination := os.environ.get("ASM_R5_OFFLINE_EVIDENCE"):
+    if destination := os.environ.get("ASM_R6_OFFLINE_EVIDENCE"):
         carrier.shutil.copytree(root / "evidence", Path(destination) / (mode + "-" + fault))
 
 
@@ -229,6 +230,180 @@ def test_failure_location_excludes_exception_values_locals_and_absolute_paths():
         result["frames"][-1]["function"]
         == "test_failure_location_excludes_exception_values_locals_and_absolute_paths"
     )
+
+
+@pytest.mark.parametrize(
+    "damage",
+    ["none", "tracked", "untracked", "mode", "head", "env", "evidence", "fixture", "identity"],
+)
+async def test_native_fixture_identity_uses_real_git_and_rechecks_drift_at_use(
+    foundation_git, tmp_path, monkeypatch, damage
+):
+    """Actual fixture/function and real Git/file checks; only DB/engine boundaries mocked."""
+    import importlib.util
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    f = foundation_git
+    source_file = f.root / catalog.MODULES[1]
+    source_file.write_bytes((f.actual / catalog.MODULES[1]).read_bytes())
+    f.git("add", ".")
+    f.git("commit", "-qm", "real immutable native fixture")
+    source, tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    for key, value in {
+        "SOURCE_SHA": source,
+        "SOURCE_TREE": tree,
+        "RUN_ID": "123",
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + key, value)
+    monkeypatch.setenv("ASM_M4_EVIDENCE", str(evidence))
+    proof = {
+        "base": carrier.BASE,
+        "base_tree": carrier.BASE_TREE,
+        "source": source,
+        "tree": tree,
+        "paths": [catalog.MODULES[1]],
+        "run_id": "123",
+        "attempt": 1,
+        "event": "push",
+        "branch": carrier.TARGETED_BRANCH,
+        "pins": {"DB_IMAGE": carrier.DB_IMAGE},
+        "uv_lock_sha256": "a" * 64,
+    }
+    carrier.write(evidence / "source.json", proof)
+    carrier.write(evidence / "native-owner.json", {"constructed": "owned SQL boundary"})
+    spec = importlib.util.spec_from_file_location("test_m3_1_native_context_postgres", source_file)
+    fixture = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, spec.name, fixture)
+    spec.loader.exec_module(fixture)
+    items = [
+        SimpleNamespace(
+            nodeid=n,
+            _fixtureinfo=SimpleNamespace(
+                name2fixturedefs={"native": [SimpleNamespace(func=fixture.native)]}
+            ),
+        )
+        for n in carrier.CURRENT_NATIVE_NODES
+    ]
+    if damage == "fixture":
+        items[0]._fixtureinfo.name2fixturedefs["native"][0].func = lambda: None
+    elif damage == "identity":
+        fixture.source_tree_identity = lambda: tree
+    if damage in {"fixture", "identity"}:
+        with pytest.raises(RuntimeError, match="CURRENT_NATIVE_RESET_IMPLEMENTATION"):
+            carrier.guard_current_native(items)
+        return
+    index = (f.root / ".git/index").read_bytes()
+    git_commands = []
+    actual_git = catalog.git_bytes
+
+    def read_only_git(root, *args):
+        assert args[0] in {"rev-parse", "status", "ls-tree"}
+        git_commands.append(args[0])
+        return actual_git(root, *args)
+
+    monkeypatch.setattr(catalog, "git_bytes", read_only_git)
+    carrier.guard_current_native(items)
+    assert fixture.source_tree_identity() == tree
+    assert git_commands.count("ls-tree") == 1
+    if damage == "tracked":
+        source_file.write_text(source_file.read_text() + "\n# dirty\n")
+    elif damage == "untracked":
+        (f.root / "untracked.txt").write_text("dirty")
+    elif damage == "mode":
+        source_file.chmod(0o755)
+    elif damage == "head":
+        f.git("commit", "--allow-empty", "-qm", "different head")
+    elif damage == "env":
+        monkeypatch.setenv("ASM_M4_SOURCE_SHA", "a" * 40)
+    elif damage == "evidence":
+        carrier.write(evidence / "source.json", proof | {"tree": "c" * 40})
+
+    # Drive the real fixture until its h construction consumes identity. The SQL
+    # reset/migration/engine are deliberately offline boundaries, not PG evidence.
+    class IdentityConsumed(Exception):
+        pass
+
+    consumed = []
+
+    def namespace(**fields):
+        if "source_tree" in fields:
+            consumed.append(fields["source_tree"])
+            raise IdentityConsumed
+        return SimpleNamespace(**fields)
+
+    monkeypatch.setattr(fixture.asyncio, "to_thread", AsyncMock())
+    monkeypatch.setattr(fixture, "migrate", AsyncMock())
+    monkeypatch.setattr(fixture, "create_async_engine", lambda *a, **kw: None)
+    monkeypatch.setattr(fixture, "TenantDatabase", lambda *a: None)
+    monkeypatch.setattr(fixture, "MessagingDatabase", lambda *a: None)
+    monkeypatch.setattr(fixture, "SimpleNamespace", namespace)
+    monkeypatch.setenv("ASM_DATABASE_URL", "unused-offline-boundary")
+    monkeypatch.setenv("ASM_MIGRATION_DATABASE_URL", "unused-offline-boundary")
+    generator = carrier.inspect.unwrap(fixture.native)(SimpleNamespace(), tmp_path)
+    with pytest.raises(IdentityConsumed if damage == "none" else (RuntimeError, catalog.Refusal)):
+        await anext(generator)
+    identities = json.loads((evidence / "native-identity-proofs.json").read_text())
+    assert len(identities) == (2 if damage == "none" else 1)
+    assert consumed == ([tree] if damage == "none" else [])
+    if damage == "none":
+        assert (f.root / ".git/index").read_bytes() == index
+        assert not list((f.root / ".git").rglob("*.lock"))
+        assert git_commands.count("ls-tree") == 2
+
+
+def test_bounded_delivery_operands_and_missing_call_phases(tmp_path, monkeypatch):
+    case = {
+        "nodeid": "synthetic",
+        "events": [],
+        "overflow": 0,
+        "invalid_fields": 0,
+        "phases": [
+            {"phase": "setup", "outcome": "failed", "xfail": False},
+            {"phase": "teardown", "outcome": "passed", "xfail": False},
+        ],
+    }
+    monkeypatch.setenv("ASM_M4_EVIDENCE", str(tmp_path))
+    monkeypatch.setattr(carrier, "CASE", case)
+    monkeypatch.setattr(carrier, "CASES", [case])
+    carrier.preparation(
+        "SELECTION",
+        selected_kind=None,
+        call_count=1,
+        job_state="DEAD",
+        adapter_entered=True,
+        error_code="DEPENDENCY_UNAVAILABLE",
+    )
+    assert case["events"] == [
+        {
+            "stage": "SELECTION",
+            "selected_kind": None,
+            "call_count": 1,
+            "job_state": "DEAD",
+            "adapter_entered": True,
+            "error_code": "DEPENDENCY_UNAVAILABLE",
+        }
+    ]
+    for fields in (
+        {"selected_kind": "PRIVATE_SENTINEL"},
+        {"call_count": True},
+        {"call_count": 3},
+        {"adapter_entered": 1},
+        {"job_state": "PRIVATE_SENTINEL"},
+        {"error_code": "PRIVATE_SENTINEL"},
+        {"claim": "PRIVATE_SENTINEL"},
+        {"selected_kind": []},
+    ):
+        carrier.preparation("SELECTION", **fields)
+    assert case["invalid_fields"] == 8 and len(case["events"]) == 1
+    assert "PRIVATE_SENTINEL" not in (tmp_path / "cases.json").read_text()
+    summary = carrier.summarize([case], ["synthetic"], 1)
+    assert summary["completed"] == ["synthetic"] and summary["missing"] == []
+    assert summary["call_reached"] == [] and summary["missing_call_phases"] == ["synthetic"]
+    assert summary["result"] == "FAIL" and not summary["complete"]
 
 
 @pytest.mark.parametrize(
@@ -315,6 +490,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
             carrier.write(group / "evidence" / carrier.SUMMARY_REPORT, summary)
             if expected == carrier.CURRENT_NATIVE_NODES:
                 carrier.write(group / "evidence/before-reset-proofs.json", [{}] * 6)
+                carrier.write(group / "evidence/native-identity-proofs.json", [{}] * 6)
             if summary["result"] == "FAIL":
                 raise RuntimeError("RUNTIME_COMMAND_FAILED")
 
@@ -428,6 +604,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
     import test_m3_1_native_context_postgres as fixture
 
     original = fixture.reset_disposable
+    original_identity = fixture.source_tree_identity
     monkeypatch.setenv("ASM_M4_SOURCE_SHA", "a" * 40)
     monkeypatch.setenv("ASM_M4_EVIDENCE", str(tmp_path))
     baseline = {
@@ -475,6 +652,7 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
         assert not (tmp_path / "before-reset-proofs.json").exists()
     finally:
         fixture.reset_disposable = original
+        fixture.source_tree_identity = original_identity
 
 
 @pytest.mark.parametrize(
@@ -547,7 +725,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 
 
 @pytest.fixture
-def r5_event(foundation_git, tmp_path, monkeypatch):
+def r6_event(foundation_git, tmp_path, monkeypatch):
     """Constructed real Git history; actual admission code, no Docker/DB."""
     f = foundation_git
     base, base_tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
@@ -620,8 +798,8 @@ def r5_event(foundation_git, tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "metadata", [None, "refs/heads/main", "refs/heads/c3/task-name", "refs/tags/v1.2"]
 )
-def test_constructed_full_admission_reaches_targeted_without_resources(r5_event, metadata):
-    r = r5_event
+def test_constructed_full_admission_reaches_targeted_without_resources(r6_event, metadata):
+    r = r6_event
     r["payload"]["base_ref"] = metadata
     r["run"]()
     assert len(r["boundary"]) == 1
@@ -650,15 +828,15 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r5_event,
         "scripts/test_telegram_egress.sh",
     ],
 )
-def test_r5_admission_rejects_r4_product_and_ci_write_paths(r5_event, monkeypatch, path):
-    r = r5_event
+def test_r6_admission_rejects_r4_product_and_ci_write_paths(r6_event, monkeypatch, path):
+    r = r6_event
     f = r["f"]
     target = f.root / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        target.read_text() + "\n# forbidden R5 change\n"
+        target.read_text() + "\n# forbidden R6 change\n"
         if target.exists()
-        else "# forbidden R5 file\n"
+        else "# forbidden R6 file\n"
     )
     f.git("add", path)
     f.git("commit", "--amend", "--no-edit")
@@ -683,7 +861,7 @@ def test_r5_admission_rejects_r4_product_and_ci_write_paths(r5_event, monkeypatc
         ("merge", "EVENT_M4_PARENT"),
         ("base_tree", "BASE_TREE"),
         ("dirty", "EVENT_SOURCE_VERIFY"),
-        ("write_set", "R5_WRITE_SET"),
+        ("write_set", "R6_WRITE_SET"),
         ("head", "EVENT_SHA_HEAD_MISMATCH"),
         ("after", "EVENT_PUSH_AFTER"),
         ("head_commit", "EVENT_PUSH_HEAD"),
@@ -697,8 +875,8 @@ def test_r5_admission_rejects_r4_product_and_ci_write_paths(r5_event, monkeypatc
         ("missing_base_ref", "EVENT_M4_BASE_REF_MISSING"),
     ],
 )
-def test_constructed_full_admission_refuses_before_resources(r5_event, monkeypatch, damage, reason):
-    r = r5_event
+def test_constructed_full_admission_refuses_before_resources(r6_event, monkeypatch, damage, reason):
+    r = r6_event
     f, p = r["f"], r["payload"]
     p["base_ref"] = "refs/heads/main"
     if damage == "repo":
@@ -707,7 +885,7 @@ def test_constructed_full_admission_refuses_before_resources(r5_event, monkeypat
         p["repository"]["id"] += 1
     elif damage in {"ref", "capture_not_open"}:
         ref = "refs/heads/" + (
-            "c3/m4-3-runtime-catalog-run-r5" if damage == "capture_not_open" else "other"
+            "c3/m4-3-runtime-catalog-run-r6" if damage == "capture_not_open" else "other"
         )
         monkeypatch.setenv("GITHUB_REF", ref)
         p["ref"] = ref
@@ -756,7 +934,7 @@ def test_constructed_full_admission_refuses_before_resources(r5_event, monkeypat
     assert r["boundary"] == []
     assert list((r["root"] / "private").iterdir()) == []
     diag = json.loads((r["root"] / "evidence/event-admission-run.json").read_text())
-    if reason not in {"BASE_TREE", "R5_WRITE_SET"}:
+    if reason not in {"BASE_TREE", "R6_WRITE_SET"}:
         assert diag["failure_reason"] == reason
 
 
@@ -778,8 +956,8 @@ def test_constructed_full_admission_refuses_before_resources(r5_event, monkeypat
         "refs/heads/a\nPRIVATE_SENTINEL",
     ],
 )
-def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r5_event, metadata):
-    r = r5_event
+def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r6_event, metadata):
+    r = r6_event
     r["payload"]["base_ref"] = metadata
     with pytest.raises(catalog.Refusal, match="^EVENT_M4_BASE_REF_METADATA$"):
         r["run"]()
