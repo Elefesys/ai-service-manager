@@ -4,7 +4,9 @@ import asyncio
 import hashlib
 import importlib.util
 import itertools
+import json
 import sqlite3
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -152,25 +154,88 @@ async def test_execution_failure_terminalizes_without_second_model_invocation(fa
 
 
 @pytest.mark.parametrize("boundary", ["unknown_metering", "pre_call_timeout", "in_call_timeout"])
-async def test_real_runtime_gateway_metering_and_expiration_controls(boundary):
+async def test_real_runtime_gateway_metering_and_expiration_controls(
+    boundary, monkeypatch, request
+):
     """Real runtime/agent/Gateway/DurableAdapter; only PostgreSQL methods replaced."""
+    import asm.ai.runtime as runtime_module
     from test_m4_runtime_database import prepared
 
-    cfg = config(duration_seconds=30 if boundary == "unknown_metering" else 0.05)
+    cfg = config(duration_seconds=0.05 if boundary == "pre_call_timeout" else 30)
     run = prepared().model_copy(update={"config": cfg})
     entered = asyncio.Event()
-    reservations, completions = [], []
+    cancelled = asyncio.Event()
+    reservations, completions, timeouts, stages = [], [], [], []
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    error_info = {"type": "NONE_OBSERVED", "code": "NONE_OBSERVED"}
+
+    def stage(name):
+        assert len(stages) < 10
+        stages.append({"stage": name, "seconds": round(loop.time() - started, 6)})
+
+    def diagnostics():
+        return {
+            "boundary": boundary,
+            "error": error_info,
+            "entry_count": int(entered.is_set()),
+            "reservation_count": len(reservations),
+            "completion_count": len(completions),
+            "cancellation_observed": cancelled.is_set(),
+            "timeout_expired": bool(timeouts and timeouts[0].expired()),
+            "stages": stages,
+        }
+
+    @asynccontextmanager
+    async def observed_timeout(seconds):
+        # Keep a real, finite asyncio timeout, isolated to this runtime module.
+        timeout = asyncio.timeout(seconds)
+        timeouts.append(timeout)
+        try:
+            async with timeout:
+                yield
+        except BaseException as error:
+            error_info.update(
+                type=type(error).__name__[:80],
+                code=error.code.value
+                if isinstance(error, MessagingError)
+                else "TIMEOUT"
+                if isinstance(error, TimeoutError)
+                else "CANCELLED"
+                if isinstance(error, asyncio.CancelledError)
+                else "OPERATION_FAILED",
+            )
+            raise
+
+    monkeypatch.setattr(
+        runtime_module,
+        "asyncio",
+        SimpleNamespace(timeout=observed_timeout, CancelledError=asyncio.CancelledError),
+    )
 
     class Observable(FakeAdapter):
         async def complete(self, request):
+            assert len(reservations) == 1, diagnostics()
             entered.set()
-            return await super().complete(request)
+            stage("adapter_entered")
+            if boundary == "in_call_timeout":
+                assert len(timeouts) == 1 and not timeouts[0].expired(), diagnostics()
+                # Expire only after real DurableAdapter reservation and model entry.
+                timeouts[0].reschedule(loop.time())
+                stage("deadline_armed")
+            try:
+                return await super().complete(request)
+            except asyncio.CancelledError:
+                cancelled.set()
+                stage("adapter_cancelled")
+                raise
 
     fake = Observable(cfg.route, ("unknown_cost" if boundary == "unknown_metering" else "timeout",))
     runtime = SyntheticRuntime(SimpleNamespace(), cfg, lambda: fake, environment="TEST")
     runtime.database.replay = AsyncMock(side_effect=MessagingError(Code.STALE_CLAIM))
 
     async def prepare(*args, **kwargs):
+        stage("prepare")
         if boundary == "pre_call_timeout":
             await asyncio.Event().wait()
         return run
@@ -178,19 +243,34 @@ async def test_real_runtime_gateway_metering_and_expiration_controls(boundary):
     async def reserve(*args):
         assert not entered.is_set()
         reservations.append(args[-1])
+        stage("reserved")
         return 1
 
     async def complete(*args):
         completions.append(args[-1])
+        stage("completed")
+
+    async def stop(*args):
+        stage("stop")
 
     runtime.database.prepare = prepare
     runtime.database.reserve = reserve
     runtime.database.complete = complete
     runtime.database._command = AsyncMock()
     runtime.database.commit = AsyncMock(return_value=object())
-    runtime.stop = AsyncMock()
+    runtime.stop = AsyncMock(side_effect=stop)
     c = claim()
-    await asyncio.wait_for(runtime.execute(c), 2)
+    before = set(asyncio.all_tasks())
+    task = asyncio.create_task(runtime.execute(c))
+    try:
+        await asyncio.wait_for(task, 2)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        stage("finished")
+        request.node.user_properties.append(("runtime_control", json.dumps(diagnostics())))
+        assert task.done() and set(asyncio.all_tasks()) == before, diagnostics()
+    assert len(timeouts) == 1, diagnostics()
     if boundary == "unknown_metering":
         candidate = runtime.database.commit.await_args.args[-1]
         assert candidate.kind == "reply"
@@ -202,17 +282,28 @@ async def test_real_runtime_gateway_metering_and_expiration_controls(boundary):
             completions[0].usage.input_tokens is None and completions[0].usage.output_tokens is None
         )
         runtime.stop.assert_not_awaited()
+        assert not timeouts[0].expired() and not cancelled.is_set(), diagnostics()
         # The R5 test's no-result oracle contradicts this valid OUTPUT contract.
         assert candidate is not None
     else:
         runtime.database.commit.assert_not_awaited()
         runtime.stop.assert_awaited_once_with(c)
-        assert entered.is_set() is (boundary == "in_call_timeout")
-        assert len(fake.requests) == len(reservations) == (1 if entered.is_set() else 0)
+        assert entered.is_set() is (boundary == "in_call_timeout"), diagnostics()
+        assert timeouts[0].expired(), diagnostics()
+        assert len(fake.requests) == len(reservations) == (1 if entered.is_set() else 0), (
+            diagnostics()
+        )
         if entered.is_set():
+            assert cancelled.is_set(), diagnostics()
+            assert fake.requests[0].budget == reservations[0]
+            assert reservations[0].calls_used == 1
+            assert reservations[0].cost_reserved == cfg.limits.call_cost_reservation > 0
             assert len(completions) == 1 and completions[0].kind == "UNKNOWN"
             assert completions[0].error == "CANCELLED"
+            assert completions[0].cost.status == "UNKNOWN" and completions[0].cost.amount is None
+            assert completions[0].usage.input_tokens is completions[0].usage.output_tokens is None
         else:
+            assert not cancelled.is_set(), diagnostics()
             assert completions == []
 
 

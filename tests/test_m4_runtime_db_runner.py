@@ -1,4 +1,4 @@
-"""Finite R8 admission and evidence checks; no PostgreSQL substitute."""
+"""Finite R9 admission and evidence checks; no PostgreSQL substitute."""
 
 import itertools
 import json
@@ -14,6 +14,41 @@ from test_native_context_db_runner import foundation_git as foundation_git
 
 from scripts import m4_runtime_db as carrier
 from scripts import native_context_db_catalog as catalog
+
+
+@pytest.fixture
+def driver_inputs(tmp_path, monkeypatch):
+    """Private synthetic inputs, also when /app has neither image pins nor .git."""
+    root = tmp_path / "driver-inputs"
+    (root / "infra").mkdir(parents=True)
+    inputs = {
+        "infra/images.lock.env": f"DB_IMAGE={carrier.DB_IMAGE}\n",
+        "uv.lock": "# Synthetic unit input; never resolved.\nversion = 1\n",
+    }
+    for name, value in inputs.items():
+        path = root / name
+        path.write_text(value)
+        path.chmod(0o444)
+    # The real wrapper exports an archive; its synthetic Git source is private too.
+    for args in (("init", "-q"), ("add", "."), ("commit", "-qm", "synthetic driver inputs")):
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Constructed",
+                "-c",
+                "user.email=unit@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                *args,
+            ],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+    monkeypatch.chdir(root)
+    yield root
+    assert {name: (root / name).read_text() for name in inputs} == inputs
 
 
 @pytest.mark.parametrize(
@@ -67,12 +102,14 @@ def test_real_phase_preserves_producer_payload_and_consumer(tmp_path, label, key
         ("targeted", "native-cleanup"),
     ],
 )
-def test_real_wrapper_driver_smoke_inventory_cleanup_and_export(tmp_path, monkeypatch, mode, fault):
+def test_real_wrapper_driver_smoke_inventory_cleanup_and_export(
+    tmp_path, monkeypatch, driver_inputs, mode, fault
+):
     """Synthetic Docker/PG child boundaries; real phase/write/cleanup/finalization."""
     root = tmp_path / "real-wrapper-run"
     (root / "evidence").mkdir(parents=True)
     (root / "private").mkdir()
-    monkeypatch.chdir(catalog.ROOT)
+    assert Path.cwd() == driver_inputs
     for key, value in {
         "GITHUB_SHA": "a" * 40,
         "GITHUB_RUN_ID": "123",
@@ -213,7 +250,7 @@ elif 'pytest' in args:
             len(data) == proof["bytes"]
             and carrier.hashlib.sha256(data).hexdigest() == proof["sha256"]
         )
-    if destination := os.environ.get("ASM_R8_OFFLINE_EVIDENCE"):
+    if destination := os.environ.get("ASM_R9_OFFLINE_EVIDENCE"):
         carrier.shutil.copytree(root / "evidence", Path(destination) / (mode + "-" + fault))
 
 
@@ -492,13 +529,13 @@ def test_bounded_delivery_operands_and_missing_call_phases(tmp_path, monkeypatch
     ],
 )
 def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
-    tmp_path, monkeypatch, mode, fault
+    tmp_path, monkeypatch, driver_inputs, mode, fault
 ):
     """Exercise orchestration with explicit fake boundaries; no PG/Docker claim."""
     root = tmp_path / "constructed-run"
     (root / "evidence").mkdir(parents=True)
     (root / "private").mkdir()
-    monkeypatch.chdir(catalog.ROOT)
+    assert Path.cwd() == driver_inputs
     for key, value in {
         "GITHUB_SHA": "a" * 40,
         "GITHUB_RUN_ID": "123",
@@ -800,7 +837,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 
 
 @pytest.fixture
-def r8_event(foundation_git, tmp_path, monkeypatch):
+def r9_event(foundation_git, tmp_path, monkeypatch):
     """Constructed real Git history; actual admission code, no Docker/DB."""
     f = foundation_git
     base, base_tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
@@ -873,8 +910,8 @@ def r8_event(foundation_git, tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "metadata", [None, "refs/heads/main", "refs/heads/c3/task-name", "refs/tags/v1.2"]
 )
-def test_constructed_full_admission_reaches_targeted_without_resources(r8_event, metadata):
-    r = r8_event
+def test_constructed_full_admission_reaches_targeted_without_resources(r9_event, metadata):
+    r = r9_event
     r["payload"]["base_ref"] = metadata
     r["run"]()
     assert len(r["boundary"]) == 1
@@ -902,21 +939,23 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r8_event,
         "backend/src/asm/foundation.py",
         "tests/test_native_context_db_runner.py",
         "tests/test_m4_delivery_postgres.py",
-        "tests/test_m4_delivery.py",
+        "tests/test_m4_schema_postgres.py",
+        "scripts/native_context_db_catalog.py",
+        ".github/workflows/m4-runtime-db.yml",
         "backend/src/asm/messaging/worker.py",
         ".github/workflows/ci.yml",
         "scripts/test_telegram_egress.sh",
     ],
 )
-def test_r8_admission_rejects_other_product_and_ci_write_paths(r8_event, monkeypatch, path):
-    r = r8_event
+def test_r9_admission_rejects_other_product_and_ci_write_paths(r9_event, monkeypatch, path):
+    r = r9_event
     f = r["f"]
     target = f.root / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        target.read_text() + "\n# forbidden R8 change\n"
+        target.read_text() + "\n# forbidden R9 change\n"
         if target.exists()
-        else "# forbidden R8 file\n"
+        else "# forbidden R9 file\n"
     )
     f.git("add", path)
     f.git("commit", "--amend", "--no-edit")
@@ -928,7 +967,7 @@ def test_r8_admission_rejects_other_product_and_ci_write_paths(r8_event, monkeyp
     assert str(caught.value) == (
         "CI gate input drift: .github/workflows/ci.yml"
         if path == ".github/workflows/ci.yml"
-        else "R8_WRITE_SET"
+        else "R9_WRITE_SET"
     )
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())
 
@@ -946,7 +985,7 @@ def test_r8_admission_rejects_other_product_and_ci_write_paths(r8_event, monkeyp
         ("merge", "EVENT_M4_PARENT"),
         ("base_tree", "BASE_TREE"),
         ("dirty", "EVENT_SOURCE_VERIFY"),
-        ("write_set", "R8_WRITE_SET"),
+        ("write_set", "R9_WRITE_SET"),
         ("head", "EVENT_SHA_HEAD_MISMATCH"),
         ("after", "EVENT_PUSH_AFTER"),
         ("head_commit", "EVENT_PUSH_HEAD"),
@@ -960,8 +999,8 @@ def test_r8_admission_rejects_other_product_and_ci_write_paths(r8_event, monkeyp
         ("missing_base_ref", "EVENT_M4_BASE_REF_MISSING"),
     ],
 )
-def test_constructed_full_admission_refuses_before_resources(r8_event, monkeypatch, damage, reason):
-    r = r8_event
+def test_constructed_full_admission_refuses_before_resources(r9_event, monkeypatch, damage, reason):
+    r = r9_event
     f, p = r["f"], r["payload"]
     p["base_ref"] = "refs/heads/main"
     if damage == "repo":
@@ -970,7 +1009,7 @@ def test_constructed_full_admission_refuses_before_resources(r8_event, monkeypat
         p["repository"]["id"] += 1
     elif damage in {"ref", "capture_not_open"}:
         ref = "refs/heads/" + (
-            "c3/m4-3-runtime-catalog-run-r8" if damage == "capture_not_open" else "other"
+            "c3/m4-3-runtime-catalog-run-r9" if damage == "capture_not_open" else "other"
         )
         monkeypatch.setenv("GITHUB_REF", ref)
         p["ref"] = ref
@@ -1019,7 +1058,7 @@ def test_constructed_full_admission_refuses_before_resources(r8_event, monkeypat
     assert r["boundary"] == []
     assert list((r["root"] / "private").iterdir()) == []
     diag = json.loads((r["root"] / "evidence/event-admission-run.json").read_text())
-    if reason not in {"BASE_TREE", "R8_WRITE_SET"}:
+    if reason not in {"BASE_TREE", "R9_WRITE_SET"}:
         assert diag["failure_reason"] == reason
 
 
@@ -1041,8 +1080,8 @@ def test_constructed_full_admission_refuses_before_resources(r8_event, monkeypat
         "refs/heads/a\nPRIVATE_SENTINEL",
     ],
 )
-def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r8_event, metadata):
-    r = r8_event
+def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r9_event, metadata):
+    r = r9_event
     r["payload"]["base_ref"] = metadata
     with pytest.raises(catalog.Refusal, match="^EVENT_M4_BASE_REF_METADATA$"):
         r["run"]()
