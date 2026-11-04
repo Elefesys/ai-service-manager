@@ -1,4 +1,4 @@
-"""C3-M4.3-RUNTIME-INTEGRATION-R6: separate owned PG18 application carrier."""
+"""C3-M4.3-RUNTIME-INTEGRATION-R7: separate owned PG18 application carrier."""
 
 import asyncio
 import contextlib
@@ -19,10 +19,10 @@ import traceback
 from pathlib import Path
 from uuid import UUID
 
-BASE = "1e5dc3cfbbaac00af23bec84df64da8a6041be93"
-BASE_TREE = "22be2116016494f44c38539b06868cbad9f6f2eb"
-BRANCH = "c3/m4-3-runtime-integration-pr-r6"
-TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r6"
+BASE = "21e8b4b61ceabb9c26688907ba27a974a7694eb5"
+BASE_TREE = "943013d28f6a320c0df5469da54c79b35b717f4b"
+BRANCH = "c3/m4-3-runtime-integration-pr-r7"
+TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r7"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -52,6 +52,11 @@ DOCKER = ["docker", "--host", "unix:///var/run/docker.sock"]
 CASE = None
 CASES = []
 EVENT_LIMIT = 8192
+PROBE_CONSTRAINTS = {
+    "messaging_jobs_telegram_probe_check",
+    "messaging_jobs_telegram_probe_generation_check",
+    "messaging_jobs_telegram_probe_version_check",
+}
 
 
 class Refusal(RuntimeError):
@@ -78,6 +83,47 @@ def failure_details(error):
             for frame in traceback.extract_tb(error.__traceback__, limit=-8)
         ],
     }
+
+
+def case_failure_details(excinfo):
+    """Keep only bounded locations and known SQL diagnostics, never exception values."""
+    from asm.messaging.errors import MessagingError
+    from sqlalchemy.exc import DBAPIError
+
+    data = {"exception_type": excinfo.typename[:80]}
+    error = excinfo.value
+    if isinstance(error, MessagingError):
+        data["error_code"] = error.code.value
+    if isinstance(error, DBAPIError):
+        sqlstate = getattr(error.orig, "sqlstate", None)
+        if type(sqlstate) is str and re.fullmatch(r"[0-9A-Z]{5}", sqlstate):
+            data["sqlstate"] = sqlstate
+        constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+        if type(constraint) is str and constraint in PROBE_CONSTRAINTS:
+            data["constraint_name"] = constraint
+    frames = traceback.extract_tb(error.__traceback__)
+    data["frames"] = [
+        {"file": Path(f.filename).name[:120], "function": f.name[:120], "line": f.lineno}
+        for f in frames[-12:]
+    ]
+    application = []
+    root = Path(__file__).resolve().parents[1]
+    for frame in frames:
+        try:
+            path = Path(frame.filename).resolve().relative_to(root).as_posix()
+        except ValueError:
+            continue
+        if (
+            (path.startswith("backend/src/asm/") or path.startswith("tests/"))
+            and path.endswith(".py")
+            and len(path) <= 180
+            and re.fullmatch(r"[A-Za-z0-9_<>]{1,120}", frame.name)
+        ):
+            location = {"file": path, "function": frame.name, "line": frame.lineno}
+            if location not in application:
+                application.append(location)
+    data["application_frames"] = application[-8:]
+    return data
 
 
 def evidence_path():
@@ -203,6 +249,9 @@ def preparation(stage, **facts):
         "REPLAY",
         "SEND",
         "STALE_OBSERVATION",
+        "SEND_ATTEMPT",
+        "SEND_REPLAY",
+        "OLD_CHECK_REJECTION",
     }:
         CASE["invalid_fields"] += 1
         return
@@ -238,7 +287,11 @@ def preparation(stage, **facts):
             value is None or type(value) is str and value in {"reply", "handoff", "no_reply"}
         ):
             event[name] = value
-        elif name in {"call_count", "reservation_count"} and type(value) is int and 0 <= value <= 2:
+        elif (
+            name in {"call_count", "reservation_count", "observe_count", "send_count"}
+            and type(value) is int
+            and 0 <= value <= 2
+        ):
             event[name] = value
         elif (
             name
@@ -249,6 +302,7 @@ def preparation(stage, **facts):
                 "has_outbox",
                 "reserve_held",
                 "completion_unknown_metering",
+                "send_completed",
             }
             and type(value) is bool
         ):
@@ -276,6 +330,10 @@ def preparation(stage, **facts):
             }
         ):
             event[name] = value
+        elif name == "constraint_name" and type(value) is str and value in PROBE_CONSTRAINTS:
+            event[name] = value
+        elif name == "sqlstate" and type(value) is str and value == "23514":
+            event[name] = value
         else:
             CASE["invalid_fields"] += 1
             return
@@ -285,8 +343,6 @@ def preparation(stage, **facts):
 
 if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
     import pytest
-    from asm.messaging.errors import MessagingError
-    from sqlalchemy.exc import DBAPIError
 
     def pytest_collection_modifyitems(session, config, items):
         global COLLECTED
@@ -328,17 +384,7 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
             "xfail": hasattr(report, "wasxfail"),
         }
         if call.excinfo is not None:
-            data["exception_type"] = call.excinfo.typename
-            if isinstance(call.excinfo.value, MessagingError):
-                data["error_code"] = call.excinfo.value.code.value
-            if isinstance(call.excinfo.value, DBAPIError):
-                sqlstate = getattr(call.excinfo.value.orig, "sqlstate", None)
-                if type(sqlstate) is str and re.fullmatch(r"[0-9A-Z]{5}", sqlstate):
-                    data["sqlstate"] = sqlstate
-            data["frames"] = [
-                {"file": Path(entry.path).name, "line": entry.lineno + 1, "function": entry.name}
-                for entry in call.excinfo.traceback[-12:]
-            ]
+            data.update(case_failure_details(call.excinfo))
             # Preserve failure and stack locations, never exception values,
             # cookies, query parameters, fixture reprs, captured logs or DSNs.
             report.longrepr = json.dumps(data, sort_keys=True)
@@ -602,11 +648,13 @@ def admit_source(evidence):
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH,
-        "R6_EVENT_BRANCH",
+        "R7_EVENT_BRANCH",
     )
     require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
     require(capture(["git", "merge-base", BASE, "HEAD"]) == BASE, "BASE_ANCESTRY")
     allowed = {
+        "migrations/versions/0015_ai_delivery.py",
+        "backend/src/asm/foundation.py",
         "scripts/native_context_db_catalog.py",
         "scripts/m4_runtime_db.py",
         ".github/workflows/m4-runtime-db.yml",
@@ -614,11 +662,12 @@ def admit_source(evidence):
         "tests/test_m4_runtime_db_runner.py",
         "tests/test_m4_delivery_postgres.py",
         "tests/test_m4_delivery.py",
+        "tests/test_m4_schema_postgres.py",
         "docs/tasks/M4_HANDOFF.md",
         "docs/TASK_REGISTER.md",
     }
     paths = capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines()
-    require(bool(paths) and set(paths) <= allowed, "R6_WRITE_SET")
+    require(bool(paths) and set(paths) <= allowed, "R7_WRITE_SET")
     write(
         evidence / "source-admission.json",
         {
@@ -1137,7 +1186,7 @@ def run_admitted(root, event, manifest, mode):
     # No resource access or credentials before the complete source admission.
     require(mode in {"targeted", "runtime"}, "R5_MODE")
     modules = ["preflight", *MODULES]
-    planned = dict(zip(MODULES, (35, 21, 8), strict=True))
+    planned = dict(zip(MODULES, (35, 22, 9), strict=True))
     native_nodes = CURRENT_NATIVE_NODES if mode == "targeted" else []
     if mode == "targeted":
         modules.append(CURRENT_NATIVE_MODULE)

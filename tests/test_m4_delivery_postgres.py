@@ -13,13 +13,14 @@ import pytest_asyncio
 from asm.ai.fake import FakeAdapter
 from asm.foundation import create_worker
 from asm.messaging.adapter import ControlledAdapter
+from asm.messaging.errors import Code, MessagingError
 from asm.messaging.models import OutcomeKind
 from asm.messaging.results import AIJobClaim
 from asm.telegram.client import TelegramClient
 from asm.telegram.config import TelegramSettings
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from test_m2_1_postgres import query
-from test_m2_3_db_postgres import BOT, EXTERNAL, OWNER, observe_owner
+from test_m2_3_db_postgres import BOT, EXTERNAL, OWNER, observe_owner, observed, worker_sql
 from test_m3_1_native_context_postgres import claim_job, incoming, migrate, reconcile, scalar
 from test_m3_1_turns_postgres import seal
 from test_m4_agent import config
@@ -483,11 +484,23 @@ async def test_synthetic_telegram_real_admission_and_rights_race(delivery, right
     telegram = TelegramClient(settings, transport=httpx.MockTransport(handler))
     try:
         worker, fake = application(h, telegram=telegram)
-        _, d = await run_turn(h, worker, source)
+        ai_claim, d = await run_turn(h, worker, source)
         await delivery_facts(h, d, fake, "SELECTION")
         assert d["selected_kind"] == "reply"
         assert len(fake.requests) == 1
-        await worker.execute(await claim_job(h, d["send_job_id"]))
+        completed = False
+        try:
+            send = await claim_job(h, d["send_job_id"])
+            await worker.execute(send)
+            completed = True
+        finally:
+            # No DB query here: preserve counters even when claim/probe/send raises.
+            preparation(
+                "SEND_ATTEMPT",
+                observe_count=requests.count("getBusinessConnection"),
+                send_count=requests.count("sendMessage"),
+                send_completed=completed,
+            )
         await delivery_facts(h, d, fake, "SEND")
         assert requests == (
             ["getBusinessConnection", "sendMessage"] if rights else ["getBusinessConnection"]
@@ -496,8 +509,93 @@ async def test_synthetic_telegram_real_admission_and_rights_race(delivery, right
         assert await scalar(
             h, "SELECT status FROM app.outbox_events WHERE id=:id", id=d["outbox_id"]
         ) == ("SENT" if rights else "FAILED")
+        fresh, unused = application(h, telegram=telegram)
+        try:
+            await fresh.execute(ai_claim)
+            await fresh.execute(source)
+            with pytest.raises(MessagingError) as caught:
+                await fresh.execute(send)
+            assert caught.value.code == Code.STALE_CLAIM
+            assert unused.requests == [] and await enrollment(h, source) == d
+            assert len(fake.requests) == 1
+            assert requests == (
+                ["getBusinessConnection", "sendMessage"] if rights else ["getBusinessConnection"]
+            )
+            assert (
+                await scalar(
+                    h,
+                    "SELECT count(*) FROM app.outbox_events o JOIN app.messages m ON (m.workspace_id,m.id)=(o.workspace_id,o.message_id) WHERE m.conversation_id=:id",
+                    id=cid,
+                )
+                == 1
+            )
+        finally:
+            preparation(
+                "SEND_REPLAY",
+                observe_count=requests.count("getBusinessConnection"),
+                send_count=requests.count("sendMessage"),
+                call_count=len(unused.requests),
+            )
     finally:
         await telegram.aclose()
+
+
+async def test_ai_probe_claim_version_tenant_and_foreign_observation_guards(delivery):
+    h = delivery
+    cid, source, _ = await source_turn(h, telegram=True)
+    await refresh_synthetic_observation(h, cid)
+    worker, fake = application(h)
+    _, d = await run_turn(h, worker, source)
+    assert d["selected_kind"] == "reply" and len(fake.requests) == 1
+    send = await claim_job(h, d["send_job_id"])
+    probe = await h.kernel.telegram_probe(send)
+    assert probe is not None
+    before = await scalar(
+        h, "SELECT to_jsonb(o) FROM app.outbox_events o WHERE id=:id", id=d["outbox_id"]
+    )
+    for bad_claim, bad_probe in (
+        (send.model_copy(update={"claim_token": uuid4()}), probe),
+        (send, None),
+        (send, probe.model_copy(update={"generation": probe.generation + 1})),
+        (send, probe.model_copy(update={"observation_version": probe.observation_version + 1})),
+    ):
+        with pytest.raises(MessagingError) as caught:
+            await h.kernel.begin_ai_send(bad_claim, bad_probe, observed())
+        assert caught.value.code == Code.STALE_CLAIM
+        assert (
+            await scalar(
+                h, "SELECT to_jsonb(o) FROM app.outbox_events o WHERE id=:id", id=d["outbox_id"]
+            )
+            == before
+        )
+    _, foreign, _ = await source_turn(h, workspace=B)
+    with pytest.raises(DBAPIError) as caught:
+        await worker_sql(
+            h,
+            send,
+            "SELECT platform.telegram_worker_probe(:other_job,:other_claim)",
+            other_job=foreign.job_id,
+            other_claim=foreign.claim_token,
+        )
+    assert caught.value.orig.sqlstate == "P2001"
+    assert caught.value.orig.diag.message_primary == "STALE_CLAIM"
+    assert (
+        await scalar(
+            h,
+            "SELECT telegram_probe_claim FROM platform.messaging_jobs WHERE id=:id",
+            id=foreign.job_id,
+        )
+        is None
+    )
+    rejected = await h.kernel.begin_ai_send(
+        send, probe, observed(external_connection_id="synthetic-foreign-connection")
+    )
+    assert (rejected.code, rejected.status) == ("NOT_ALLOWED", "FAILED")
+    assert (
+        await scalar(h, "SELECT status FROM app.outbox_events WHERE id=:id", id=d["outbox_id"])
+        == "FAILED"
+    )
+    assert len(fake.requests) == 1
 
 
 async def test_selected_commit_lost_ack_replays_without_second_call(delivery):

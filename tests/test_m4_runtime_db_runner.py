@@ -1,4 +1,4 @@
-"""Finite R6 admission and evidence checks; no PostgreSQL substitute."""
+"""Finite R7 admission and evidence checks; no PostgreSQL substitute."""
 
 import itertools
 import json
@@ -84,7 +84,7 @@ def test_real_wrapper_driver_smoke_inventory_cleanup_and_export(tmp_path, monkey
         monkeypatch.setenv(key, value)
     nodes = [
         m + "::test_synthetic_" + str(i)
-        for m, count in zip(carrier.MODULES, (35, 21, 8), strict=True)
+        for m, count in zip(carrier.MODULES, (35, 22, 9), strict=True)
         for i in range(count)
     ]
     configuration = tmp_path / "synthetic.json"
@@ -160,7 +160,7 @@ elif 'pytest' in args:
             carrier.run_admitted(root, event, [], mode)
     summary = json.loads((root / "evidence/summary.json").read_text())
     inventory = json.loads((root / "evidence/inventory.json").read_text())
-    count = 70 if mode == "targeted" else 64
+    count = 72 if mode == "targeted" else 66
     assert summary["expected_cases"] == count == sum(summary["planned_cases_by_module"].values())
     assert (
         summary["missing_count"]
@@ -169,10 +169,10 @@ elif 'pytest' in args:
     )
     assert summary["inventory_complete"] is (fault not in {"build", "collection", "m4-duplicate"})
     assert summary["unknown_inventory_cases"] == (
-        64 if fault in {"build", "collection", "m4-duplicate"} else 0
+        66 if fault in {"build", "collection", "m4-duplicate"} else 0
     )
     assert summary["collected_cases"] == (
-        count if fault == "none" else 0 if fault in {"build", "collection", "m4-duplicate"} else 64
+        count if fault == "none" else 0 if fault in {"build", "collection", "m4-duplicate"} else 66
     )
     assert summary["collection_complete"] is (fault == "none")
     group = root / (root.name + "-group-0")
@@ -213,7 +213,7 @@ elif 'pytest' in args:
             len(data) == proof["bytes"]
             and carrier.hashlib.sha256(data).hexdigest() == proof["sha256"]
         )
-    if destination := os.environ.get("ASM_R6_OFFLINE_EVIDENCE"):
+    if destination := os.environ.get("ASM_R7_OFFLINE_EVIDENCE"):
         carrier.shutil.copytree(root / "evidence", Path(destination) / (mode + "-" + fault))
 
 
@@ -230,6 +230,56 @@ def test_failure_location_excludes_exception_values_locals_and_absolute_paths():
         result["frames"][-1]["function"]
         == "test_failure_location_excludes_exception_values_locals_and_absolute_paths"
     )
+
+
+@pytest.mark.parametrize(
+    "constraint", ["messaging_jobs_telegram_probe_check", "PRIVATE_SENTINEL", None]
+)
+async def test_sql_failure_keeps_known_constraint_and_real_application_frame(constraint):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from asm.messaging.database import MessagingDatabase
+    from sqlalchemy.exc import IntegrityError
+
+    class DriverError(Exception):
+        sqlstate = "23514"
+        diag = SimpleNamespace(constraint_name=constraint)
+
+    def driver_depth(n):
+        if n:
+            return driver_depth(n - 1)
+        raise IntegrityError(
+            "PRIVATE_SENTINEL", {"PRIVATE_SENTINEL": "claim"}, DriverError("PRIVATE_SENTINEL")
+        )
+
+    async def execute(statement):
+        driver_depth(20)
+
+    @asynccontextmanager
+    async def admit(*args):
+        yield SimpleNamespace(_execute=execute)
+
+    with pytest.raises(IntegrityError) as caught:
+        await MessagingDatabase.telegram_probe(
+            SimpleNamespace(admit_job=admit),
+            SimpleNamespace(job_id=uuid4(), claim_token=uuid4()),
+        )
+    details = carrier.case_failure_details(caught)
+    assert details["exception_type"] == "IntegrityError" and details["sqlstate"] == "23514"
+    assert details.get("constraint_name") == (
+        constraint if constraint != "PRIVATE_SENTINEL" else None
+    )
+    assert len(details["frames"]) == 12
+    assert all(f["function"] == "driver_depth" for f in details["frames"])
+    assert any(
+        f["file"] == "backend/src/asm/messaging/database.py" and f["function"] == "telegram_probe"
+        for f in details["application_frames"]
+    )
+    assert 0 < len(details["application_frames"]) <= 8
+    assert "PRIVATE_SENTINEL" not in json.dumps(details)
+    assert all(not f["file"].startswith("/") for f in details["application_frames"])
 
 
 @pytest.mark.parametrize(
@@ -400,6 +450,31 @@ def test_bounded_delivery_operands_and_missing_call_phases(tmp_path, monkeypatch
         carrier.preparation("SELECTION", **fields)
     assert case["invalid_fields"] == 8 and len(case["events"]) == 1
     assert "PRIVATE_SENTINEL" not in (tmp_path / "cases.json").read_text()
+    carrier.preparation("SEND_ATTEMPT", observe_count=1, send_count=0, send_completed=False)
+    assert case["events"][-1] == {
+        "stage": "SEND_ATTEMPT",
+        "observe_count": 1,
+        "send_count": 0,
+        "send_completed": False,
+    }
+    for fields in (
+        {"observe_count": True},
+        {"send_count": 3},
+        {"send_completed": "PRIVATE_SENTINEL"},
+    ):
+        carrier.preparation("SEND_ATTEMPT", **fields)
+    assert case["invalid_fields"] == 11 and len(case["events"]) == 2
+    assert "PRIVATE_SENTINEL" not in (tmp_path / "cases.json").read_text()
+    carrier.preparation(
+        "OLD_CHECK_REJECTION",
+        sqlstate="23514",
+        constraint_name="messaging_jobs_telegram_probe_check",
+    )
+    assert case["events"][-1]["constraint_name"] == "messaging_jobs_telegram_probe_check"
+    for fields in ({"constraint_name": "PRIVATE_SENTINEL"}, {"sqlstate": "PRIVATE_SENTINEL"}):
+        carrier.preparation("OLD_CHECK_REJECTION", **fields)
+    assert case["invalid_fields"] == 13 and len(case["events"]) == 3
+    assert "PRIVATE_SENTINEL" not in (tmp_path / "cases.json").read_text()
     summary = carrier.summarize([case], ["synthetic"], 1)
     assert summary["completed"] == ["synthetic"] and summary["missing"] == []
     assert summary["call_reached"] == [] and summary["missing_call_phases"] == ["synthetic"]
@@ -433,7 +508,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
         monkeypatch.setenv(key, value)
     nodes = [
         module + "::test_constructed_" + str(i)
-        for module, count in zip(carrier.MODULES, (35, 21, 8), strict=True)
+        for module, count in zip(carrier.MODULES, (35, 22, 9), strict=True)
         for i in range(count)
     ]
     calls, cleaned = [], []
@@ -522,7 +597,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
         with pytest.raises(RuntimeError, match="PRIMARY_FAILED"):
             carrier.run_admitted(root, event, [], mode)
     summary = json.loads((root / "evidence/summary.json").read_text())
-    expected_count = 70 if mode == "targeted" else 64
+    expected_count = 72 if mode == "targeted" else 66
     assert summary["expected_cases"] == expected_count
     assert summary["sql_test_seconds"] <= 600
     assert summary["result"] == ("PASS" if fault == "none" else "FAIL")
@@ -725,7 +800,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 
 
 @pytest.fixture
-def r6_event(foundation_git, tmp_path, monkeypatch):
+def r7_event(foundation_git, tmp_path, monkeypatch):
     """Constructed real Git history; actual admission code, no Docker/DB."""
     f = foundation_git
     base, base_tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
@@ -798,8 +873,8 @@ def r6_event(foundation_git, tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "metadata", [None, "refs/heads/main", "refs/heads/c3/task-name", "refs/tags/v1.2"]
 )
-def test_constructed_full_admission_reaches_targeted_without_resources(r6_event, metadata):
-    r = r6_event
+def test_constructed_full_admission_reaches_targeted_without_resources(r7_event, metadata):
+    r = r7_event
     r["payload"]["base_ref"] = metadata
     r["run"]()
     assert len(r["boundary"]) == 1
@@ -822,21 +897,21 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r6_event,
 @pytest.mark.parametrize(
     "path",
     [
-        "migrations/versions/0015_ai_delivery.py",
-        "backend/src/asm/foundation.py",
+        "migrations/versions/0014_ai_runtime.py",
+        "backend/src/asm/messaging/worker.py",
         ".github/workflows/ci.yml",
         "scripts/test_telegram_egress.sh",
     ],
 )
-def test_r6_admission_rejects_r4_product_and_ci_write_paths(r6_event, monkeypatch, path):
-    r = r6_event
+def test_r7_admission_rejects_other_product_and_ci_write_paths(r7_event, monkeypatch, path):
+    r = r7_event
     f = r["f"]
     target = f.root / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        target.read_text() + "\n# forbidden R6 change\n"
+        target.read_text() + "\n# forbidden R7 change\n"
         if target.exists()
-        else "# forbidden R6 file\n"
+        else "# forbidden R7 file\n"
     )
     f.git("add", path)
     f.git("commit", "--amend", "--no-edit")
@@ -861,7 +936,7 @@ def test_r6_admission_rejects_r4_product_and_ci_write_paths(r6_event, monkeypatc
         ("merge", "EVENT_M4_PARENT"),
         ("base_tree", "BASE_TREE"),
         ("dirty", "EVENT_SOURCE_VERIFY"),
-        ("write_set", "R6_WRITE_SET"),
+        ("write_set", "R7_WRITE_SET"),
         ("head", "EVENT_SHA_HEAD_MISMATCH"),
         ("after", "EVENT_PUSH_AFTER"),
         ("head_commit", "EVENT_PUSH_HEAD"),
@@ -875,8 +950,8 @@ def test_r6_admission_rejects_r4_product_and_ci_write_paths(r6_event, monkeypatc
         ("missing_base_ref", "EVENT_M4_BASE_REF_MISSING"),
     ],
 )
-def test_constructed_full_admission_refuses_before_resources(r6_event, monkeypatch, damage, reason):
-    r = r6_event
+def test_constructed_full_admission_refuses_before_resources(r7_event, monkeypatch, damage, reason):
+    r = r7_event
     f, p = r["f"], r["payload"]
     p["base_ref"] = "refs/heads/main"
     if damage == "repo":
@@ -885,7 +960,7 @@ def test_constructed_full_admission_refuses_before_resources(r6_event, monkeypat
         p["repository"]["id"] += 1
     elif damage in {"ref", "capture_not_open"}:
         ref = "refs/heads/" + (
-            "c3/m4-3-runtime-catalog-run-r6" if damage == "capture_not_open" else "other"
+            "c3/m4-3-runtime-catalog-run-r7" if damage == "capture_not_open" else "other"
         )
         monkeypatch.setenv("GITHUB_REF", ref)
         p["ref"] = ref
@@ -934,7 +1009,7 @@ def test_constructed_full_admission_refuses_before_resources(r6_event, monkeypat
     assert r["boundary"] == []
     assert list((r["root"] / "private").iterdir()) == []
     diag = json.loads((r["root"] / "evidence/event-admission-run.json").read_text())
-    if reason not in {"BASE_TREE", "R6_WRITE_SET"}:
+    if reason not in {"BASE_TREE", "R7_WRITE_SET"}:
         assert diag["failure_reason"] == reason
 
 
@@ -956,8 +1031,8 @@ def test_constructed_full_admission_refuses_before_resources(r6_event, monkeypat
         "refs/heads/a\nPRIVATE_SENTINEL",
     ],
 )
-def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r6_event, metadata):
-    r = r6_event
+def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r7_event, metadata):
+    r = r7_event
     r["payload"]["base_ref"] = metadata
     with pytest.raises(catalog.Refusal, match="^EVENT_M4_BASE_REF_METADATA$"):
         r["run"]()

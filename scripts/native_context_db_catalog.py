@@ -31,19 +31,20 @@ DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
 NONFUNCTION_SHA256 = "57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370"
-AI_NONFUNCTION_SHA256 = "e939e9f303843a84256f9315e6016e1a888aea0c18469539aa53147c6d339bee"
+AI_NONFUNCTION_SHA256 = "a4aeec49cd351eea23f19346700ba998ec4ca9ab5aafd6163b6193da72285b9d"
 EXECUTION_REF = "refs/heads/c0/m3-1-native-context-db-stock-r1"
 M4_EXECUTION_REFS = (
     "refs/heads/c3/m4-3-runtime-catalog-run-r2",
     "refs/heads/c3/m4-3-runtime-targeted-run-r2",
 )
 # These transitions are distinct from historical push/main/PR semantics.
-# R6 reuses the accepted exact transition rule; earlier execution refs stay frozen.
+# R7 reuses the accepted exact transition rule; earlier execution refs stay frozen.
 M4_R3_TRANSITIONS = {
     "refs/heads/c3/m4-3-runtime-catalog-run-r3": "fa2469deea75c11ca5901de77fc3e46304c1e9ae",
     "refs/heads/c3/m4-3-runtime-targeted-run-r4": "c8f85533f8dee96ea7ef0e8f0831ae9e5f3a3783",
     "refs/heads/c3/m4-3-runtime-targeted-run-r5": "d0d1ff7643f1b2a02ab69c845da08ec99b77f9b2",
     "refs/heads/c3/m4-3-runtime-targeted-run-r6": "1e5dc3cfbbaac00af23bec84df64da8a6041be93",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r7": "21e8b4b61ceabb9c26688907ba27a974a7694eb5",
 }
 REPOSITORY = "Elefesys/ai-service-manager"
 REPOSITORY_ID = 1369650588

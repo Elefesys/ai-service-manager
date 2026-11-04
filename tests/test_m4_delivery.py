@@ -3,6 +3,8 @@
 import asyncio
 import hashlib
 import importlib.util
+import itertools
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -323,6 +325,52 @@ def test_successor_ddl_compiles_and_predecessor_bytes_are_immutable(direction):
         == "74db20d70ded7ec9bd3fc7baa78af9cbe81136e84651f6525f610615a3907c39"
     )
     assert not any("CASCADE" in sql or "DELETE FROM" in sql for sql in statements)
+
+
+def test_probe_check_upgrade_downgrade_uses_exact_old_and_causal_new_predicate():
+    """Execute emitted portable CHECK expression offline; actual PG is a separate gate."""
+    spec = importlib.util.spec_from_file_location(
+        "delivery15_probe", Path("migrations/versions/0015_ai_delivery.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    name = "messaging_jobs_telegram_probe_check"
+    _, _, old, new = next(row for row in module.CHECKS if row[1] == name)
+    assert old in Path("migrations/versions/0007_telegram_api.py").read_text()
+    assert new == old.replace(
+        "kind='SEND_MANUAL_TEXT'", "kind IN ('SEND_MANUAL_TEXT','SEND_AI_TEXT')"
+    )
+    for forward in (True, False, True):
+        statements = []
+        module.op = SimpleNamespace(execute=statements.append)
+        module._constraints(forward)
+        compile_statements(statements)
+        statement = next(sql for sql in statements if f"ADD CONSTRAINT {name}" in sql)
+        expression = statement.split(f"ADD CONSTRAINT {name} CHECK(", 1)[1][:-1]
+        assert expression == (new if forward else old)
+        with sqlite3.connect(":memory:") as db:
+            db.execute(
+                "CREATE TABLE jobs(kind TEXT NOT NULL,telegram_probe_claim TEXT,"
+                "telegram_probe_generation INTEGER,telegram_probe_version INTEGER,"
+                f"CONSTRAINT {name} CHECK({expression}))"
+            )
+            for kind in ("SEND_MANUAL_TEXT", "SEND_AI_TEXT", "SEND_GUARDED_TEXT", "PROCESS_TURN"):
+                for present in itertools.product((False, True), repeat=3):
+                    fields = ("synthetic", 1, 1)
+                    values = (
+                        kind,
+                        *(v if has else None for v, has in zip(fields, present, strict=True)),
+                    )
+                    allowed = (
+                        not any(present)
+                        or all(present)
+                        and (kind == "SEND_MANUAL_TEXT" or forward and kind == "SEND_AI_TEXT")
+                    )
+                    if allowed:
+                        db.execute("INSERT INTO jobs VALUES(?,?,?,?)", values)
+                    else:
+                        with pytest.raises(sqlite3.IntegrityError, match=name):
+                            db.execute("INSERT INTO jobs VALUES(?,?,?,?)", values)
 
 
 def test_current_and_historical_catalogs_are_distinct_and_closed():

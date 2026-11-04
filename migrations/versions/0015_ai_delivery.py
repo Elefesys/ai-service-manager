@@ -1106,7 +1106,7 @@ PROFILE_SQL = r"""CREATE FUNCTION platform.ai_delivery_schema_profile() RETURNS 
         'extensions',(SELECT jsonb_agg(jsonb_build_array(e.extname,e.extversion,n.nspname) ORDER BY e.extname)
           FROM pg_extension e JOIN pg_namespace n ON n.oid=e.extnamespace WHERE e.extname IN ('vector','btree_gist'))) AS value)
       SELECT jsonb_build_object('schema_revision','0015','valid',coalesce(v.valid,false)
-        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='e939e9f303843a84256f9315e6016e1a888aea0c18469539aa53147c6d339bee',
+        AND encode(sha256(convert_to((c.value-'functions')::text,'UTF8')),'hex')='a4aeec49cd351eea23f19346700ba998ec4ca9ab5aafd6163b6193da72285b9d',
         'profile_sha256',encode(sha256(convert_to(E'asm:m3:native_schema:v1\n'||c.value::text,'UTF8')),'hex')) FROM validity v CROSS JOIN catalog c $$"""
 
 
@@ -1153,6 +1153,12 @@ def downgrade():
 
 
 CHECKS = (
+    (
+        "platform.messaging_jobs",
+        "messaging_jobs_telegram_probe_check",
+        "(telegram_probe_claim IS NULL AND telegram_probe_generation IS NULL AND telegram_probe_version IS NULL) OR\n        (kind='SEND_MANUAL_TEXT' AND telegram_probe_claim IS NOT NULL AND telegram_probe_generation IS NOT NULL AND telegram_probe_version IS NOT NULL)",
+        "(telegram_probe_claim IS NULL AND telegram_probe_generation IS NULL AND telegram_probe_version IS NULL) OR\n        (kind IN ('SEND_MANUAL_TEXT','SEND_AI_TEXT') AND telegram_probe_claim IS NOT NULL AND telegram_probe_generation IS NOT NULL AND telegram_probe_version IS NOT NULL)",
+    ),
     (
         "platform.messaging_jobs",
         "messaging_jobs_kind_check",
