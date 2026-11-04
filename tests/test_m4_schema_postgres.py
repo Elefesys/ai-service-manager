@@ -5,12 +5,13 @@ import itertools
 import os
 import sys
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from asm.ai.fake import FakeAdapter
-from asm.foundation import RuntimeDatabase, Settings
+from asm.foundation import RuntimeDatabase, Settings, create_worker
+from asm.messaging.results import TurnJobClaim
 from generic_pg_schema import assert_current_schema, current_snapshot, historical_native_check
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -148,6 +149,7 @@ async def test_probe_check_shape_and_old_ai_rejection_on_real_jobs(schema15):
     h = schema15
     _, source, _ = await source_turn(h)
     worker, fake = application(h)
+    assert worker.ai is not None
     _, d = await run_turn(h, worker, source)
     assert d["selected_kind"] == "reply" and len(fake.requests) == 1
     # Use genuine send kinds and their Outbox FKs, not a kind-only row rewrite.
@@ -165,11 +167,52 @@ async def test_probe_check_shape_and_old_ai_rejection_on_real_jobs(schema15):
         id=guarded_source.turn_id,
         revision=guarded_source.turn_revision,
     )
-    await worker.execute(await claim_job(h, guarded_job))
+    guarded_worker = create_worker(h.kernel, h.adapter, environment="TEST")
+    assert guarded_worker.ai is None
+    guarded_claim = await claim_job(h, guarded_job)
+    assert isinstance(guarded_claim, TurnJobClaim)
+    assert (
+        guarded_claim.job_id,
+        guarded_claim.workspace_id,
+        guarded_claim.turn_id,
+        guarded_claim.turn_revision,
+        guarded_claim.step,
+    ) == (
+        guarded_job,
+        guarded_source.workspace_id,
+        guarded_source.turn_id,
+        guarded_source.turn_revision,
+        "GUARDED_TEXT",
+    )
+    await guarded_worker.execute(guarded_claim)
+    guarded_receipt = await scalar(
+        h,
+        "SELECT to_jsonb(r) FROM platform.turn_guard_receipts r WHERE job_id=:id",
+        id=guarded_job,
+    )
+    assert guarded_receipt["outcome"] == "ACCEPTED"
+    assert guarded_receipt["consumer"] == "CONTROLLED_GUARDS_V1"
     guarded_send = await scalar(
         h,
         "SELECT j.id FROM platform.messaging_jobs j JOIN app.outbox_events o ON (o.workspace_id,o.id)=(j.workspace_id,j.outbox_id) JOIN app.messages m ON (m.workspace_id,m.id)=(o.workspace_id,o.message_id) WHERE m.conversation_id=:id AND j.kind='SEND_GUARDED_TEXT'",
         id=guarded_cid,
+    )
+    assert guarded_receipt["send_job_id"] == str(guarded_send)
+    assert await scalar(
+        h, "SELECT outbox_id FROM platform.messaging_jobs WHERE id=:id", id=guarded_send
+    ) == UUID(guarded_receipt["outbox_id"])
+    assert await scalar(
+        h,
+        "SELECT message_id FROM app.outbox_events WHERE id=:id",
+        id=UUID(guarded_receipt["outbox_id"]),
+    ) == UUID(guarded_receipt["message_id"])
+    assert (
+        await scalar(
+            h,
+            "SELECT count(*) FROM platform.ai_deliveries WHERE source_job_id=:id",
+            id=guarded_job,
+        )
+        == 0
     )
     jobs = {
         "SEND_AI_TEXT": d["send_job_id"],

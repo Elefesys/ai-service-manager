@@ -2,7 +2,7 @@ name: M4 synthetic application PostgreSQL
 on:
   workflow_call:
   push:
-    branches: [c3/m4-3-runtime-targeted-run-r7]
+    branches: [c3/m4-3-runtime-targeted-run-r8]
 permissions:
   contents: read
 jobs:

@@ -1,4 +1,4 @@
-"""C3-M4.3-RUNTIME-INTEGRATION-R7: separate owned PG18 application carrier."""
+"""C3-M4.3-RUNTIME-INTEGRATION-R8: separate owned PG18 application carrier."""
 
 import asyncio
 import contextlib
@@ -19,10 +19,10 @@ import traceback
 from pathlib import Path
 from uuid import UUID
 
-BASE = "21e8b4b61ceabb9c26688907ba27a974a7694eb5"
-BASE_TREE = "943013d28f6a320c0df5469da54c79b35b717f4b"
-BRANCH = "c3/m4-3-runtime-integration-pr-r7"
-TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r7"
+BASE = "c7ee300ae4182152eb9c8636d2f958da087113f2"
+BASE_TREE = "a978f014177b2e6c66cee3a9221435449e01adc0"
+BRANCH = "c3/m4-3-runtime-integration-pr-r8"
+TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r8"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -648,26 +648,21 @@ def admit_source(evidence):
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH,
-        "R7_EVENT_BRANCH",
+        "R8_EVENT_BRANCH",
     )
     require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
     require(capture(["git", "merge-base", BASE, "HEAD"]) == BASE, "BASE_ANCESTRY")
     allowed = {
-        "migrations/versions/0015_ai_delivery.py",
-        "backend/src/asm/foundation.py",
         "scripts/native_context_db_catalog.py",
         "scripts/m4_runtime_db.py",
         ".github/workflows/m4-runtime-db.yml",
-        "tests/test_native_context_db_runner.py",
         "tests/test_m4_runtime_db_runner.py",
-        "tests/test_m4_delivery_postgres.py",
-        "tests/test_m4_delivery.py",
         "tests/test_m4_schema_postgres.py",
         "docs/tasks/M4_HANDOFF.md",
         "docs/TASK_REGISTER.md",
     }
     paths = capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines()
-    require(bool(paths) and set(paths) <= allowed, "R7_WRITE_SET")
+    require(bool(paths) and set(paths) <= allowed, "R8_WRITE_SET")
     write(
         evidence / "source-admission.json",
         {
