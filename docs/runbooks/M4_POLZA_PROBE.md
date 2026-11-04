@@ -4,9 +4,10 @@
 25 manual PASS,2 READ и2 synthetic images; GPT/v2 выбран для первого runtime.
 PR39/40 слиты. [Main CI41178689536](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536)
 прошёл11/11, ошибка CI закрыта. C2 R4 принят C0:104 PASS, включая35 actual PG.
-[Текущая задача C3 R5](../tasks/M4_HANDOFF.md) — исправить запись файлов test runner
-и закончить synthetic PG проверку. Поправка схемы/pins проверена по source;
-R4 остановлен до PG из-за перезаписи списка тестов. PR41 не сливать.
+[Текущая задача C3 R6](../tasks/M4_HANDOFF.md) — закончить synthetic PG проверку.
+R5 подтвердил исправленную схему/readiness и60 сценариев; остались4 отказа delivery
+и6 ошибок native setup. C0 назначил узкое исправление fixtures и ожиданий тестов.
+PR41 не сливать.
 
 ## Принятый отчёт
 
@@ -38,13 +39,13 @@ Accepted main586240e88c825aa67593af5d72e0bdbb251ed3bb:860 PostgreSQL,
 54 browser и остальные CI gates PASS. Новый DB-only слой прошёл source review
 и104 проверки: сохранённый ответ переживает restart, stale/HUMAN блокируют
 новое действие, UNKNOWN не вызывает автоматическую повторную генерацию.
-C3 R1 проверил часть synthetic пути: reply идёт в защищённый Outbox, handoff —
-в очередь мастера, no_reply завершает обработку.19 из64 PG scenarios не завершены;
-R3 получил stock catalog, R4 исправил строку/pins, но test runner остановился
-до PG. C0 выдал C3 R5: узкое исправление runner с проверкой real subprocess,
-затем один targeted run со всеми70 сценариями и после PASS новый Draft PR/full CI.
-Отдельного capture не требуется. Corrected schema/readiness и PostgreSQL-проверка
-cancellation/recovery ещё не выполнены.
+C3 R5 подтвердил reply→защищённый Outbox, handoff/no_reply, отмену AI,
+ручной ответ/inbound во время AI wait и recovery. Corrected stock0015/readiness
+прошли реальный PostgreSQL. C0 выдал C3 R6: свежесть Telegram observation в fixture,
+ожидания для UNKNOWN metering/timeout и Git identity native fixture. После
+причинных offline checks — один targeted run со всеми70 сценариями, после PASS
+новый Draft PR/full CI12gates. До этих проверок whole-runtime остаётся BLOCKED.
+Отдельного capture и новых платных вызовов не требуется.
 AI выключен по умолчанию; модель и transport в этой проверке тестовые.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.
 

@@ -6,7 +6,149 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3 R5 receipt / BLOCKED, до C0 review / 2026-11-04
+## CURRENT — C0 assignment C3 R6 / 2026-11-04
+
+**Результат для пилота:** завершить synthetic проверку выбора ответа, свежих прав
+Telegram и завершения AI job без повторной генерации. R5 впервые прошёл corrected
+stock0015/readiness и60 сценариев, включая отмену AI и ручной ответ во время AI wait.
+Whole-runtime ещё **BLOCKED**; задача **C3-M4.3-RUNTIME-INTEGRATION-R6 IN_PROGRESS**.
+Новых функций продукта нет; откладывание этих проверок оставляет integration открытой.
+
+**C0 review R5:** source **1bca972cebbffbf226a62f63c7c58001b46fbc70** /
+tree **ce030705ff7ee2964c693d3aea23927b8832cf26**, sole child assignment
+**d0d1ff7643f1b2a02ab69c845da08ec99b77f9b2**, ровно6 разрешённых paths.
+Receipt **34ecabaf00b6cb76134673d79c8b65cc8d4bff31** /
+tree **675ef8554ef567f54618d01ff60ed97049cc2f9b**, sole child source,2 docs.
+Fresh run/jobs/artifact/log/refs подтверждают единственный
+[run41811079733](https://github.com/Elefesys/ai-service-manager/actions/runs/41811079733),
+push/attempt1/job126510186471 FAIL. Admission/source preservation PASS;
+SQL/tests292.583837021/600s, job359/1500s; cleanup5/5 PASS, zero owned resources.
+Retained35 PASS, delivery17 PASS/4 FAIL, schema8 PASS, native6 setup ERROR;0 SKIP.
+
+C0 сверил [архив R5](https://chatgpt.com/library?file_id=libfile_d589ef0f7aac81918f9a80591ce0cfb7&account_id=personal):
+36943258bytes/SHA256 **a21819f6f55e79109c20ae19cc5120b82ba2152e0fc33b486c0254a7644368a7**,
+manifest560/560; original artifact13313285236:3989475bytes,
+SHA256 **8bb25a1f951e6761b39d7be8b55e892d327575d93074d3094bb75d99466b9548**,
+manifest141/141,142 extracted files byte-identical;342 source blobs/modes exact.
+Fresh log совпал с архивом. Final offline643 testcase PASS +130subtests,
+Ruff/format195/mypy76 PASS; causal phase/subprocess controls сохранены.
+Runner repair принят в SOURCE + TARGETED scope; actual full-CI/browser ещё нет.
+
+**Corrected schema теперь VERIFIED в targeted PG scope:** C0 независимо пересчитал
+saved actual PG18.6 catalog, source bodies/security/roles,183functions/48tables,
+embedded182/48, declared valid=true и pins; RuntimeDatabase.check PASS.
+Body **e0d5d30826f10c3396565ed2ab571653f41f1b7bdcf883f7eeebd0159fecc443**;
+full **8a91ef6f6d592ad9eeafe80f4eb5e2c012ef759040a96351a2242dfd97d480d7**;
+nonfunction **e939e9f303843a84256f9315e6016e1a888aea0c18469539aa53147c6d339bee**.
+Новых PG/pytest/CI запусков C0 не делал. Native business call phases6 и все12
+new full-CI gates NOT_REACHED; lifecycle missing=0 не означает business PASS.
+
+### Основания и конечное исправление R6
+
+1. **Telegram rights True/False:** отказ на selected_kind до send. Общая module
+   fixture создаёт observation один раз; перед этими cases не обновляет её.
+   По saved phase durations после окончания первой setup прошло минимум34.205823s
+   и37.312515s. Это больше30s guard `telegram_can_send`; ingress observation
+   не обновляет, а0015 select проверяет его до Outbox. Предусловие свежести теста
+   нарушено. Actual selected value/internal error не записаны; все причины
+   остановки не объявляются доказанными. Готовить fresh synthetic observation
+   через существующий trusted capability перед проверкой selection, без manual
+   send и UPDATE срока для положительного пути. Сохранить оба assertions actual
+   getBusinessConnection→sendMessage/SENT либо rights denial→FAILED, один model
+   call, fresh send admission и отрицательную проверку истёкшего observation.
+   Это подготовка fixture; автоматическое live refresh/runtime не сертифицируется.
+2. **unknown_cost:** FakeAdapter возвращает валидный OUTPUT с UNKNOWN metering;
+   Gateway,0014/0015 AUTHORIZE/COMMIT допускают такой OUTPUT. Retained PG test
+   `test_atomic_result_conflict_and_selected_receipt_survives_process` подтвердил
+   этот контракт с default UNKNOWN completion metadata. IMPL-004 rules6/8/9
+   различают результат, metering и delivery. C0 явно исправляет ошибочный oracle
+   нового delivery test: valid reply может быть выбран при UNKNOWN cost, резерв
+   остаётся held, completion/cost не превращаются в CONFIRMED/0, replay сохраняет
+   один result/intent и не вызывает модель снова. Это не изменение runtime или
+   разрешение принимать UNKNOWN response. Потерянный ответ/timeout/cancel и
+   UNKNOWN Telegram delivery сохраняют terminal/no-regeneration/no-resend.
+3. **timeout:**0.2s охватывают весь execute, включая DB preparation до FakeAdapter.
+   Line520 объединяет selected_kind и count; actual operands не сохранены,
+   прежний отказ нельзя приписать отсутствию model call как observed fact.
+   Разделить assertions и синхронизировать вход в adapter. PG scenario должен
+   доказать timeout после одной reservation/одного model entry, отсутствие
+   result/Outbox, terminal job и restart без нового call. Выбрать конечный test
+   deadline в уже принятом runtime cap≤120s; не поднимать production/SQL/job limits
+   и не засчитывать pre-model timeout как выполненный one-call scenario.
+   Причинный offline control отдельно проверяет pre-call и in-call expiration.
+4. **Native6:** `git read-tree HEAD` внутри source_tree_identity отказал после
+   всех6 успешных before-reset source/server guards; returncode/stderr неизвестны.
+   `/app:ro` и temporary index — факты, exact Git cause не установлен. В уже
+   guarded M4 current-native carrier подключить получение identity fixture к
+   read-only доказательству exact HEAD/tree: повторный полный require_source
+   плюс совпадение с checked executor evidence при использовании identity.
+   Не доверять одному env/JSON. Проверить исходную fixture/function binding;
+   source/server/reset guards, readonly mount и реальные SQL/assertions сохранить.
+   Это узкая адаптация carrier immutable checkout; historical native fixture и
+   full native lane не менять. Никаких writable checkout, global Git trust или
+   fake identity. Offline проверить реальную Git/file границу и отказ при drift.
+
+### Исполнение
+
+Один исполнитель **C3**, другие роли HOLD. Exact base — полный SHA этого C0
+assignment из immutable URL, sole child receipt34ecabaf/5 docs. C0 branch
+**c0/m4-3-runtime-integration-r6**; prep **c3/m4-3-runtime-integration-r6**;
+PR source **c3/m4-3-runtime-integration-pr-r6**; единственный execution ref
+**c3/m4-3-runtime-targeted-run-r6**. Main586240e88c825aa67593af5d72e0bdbb251ed3bb,
+PR41 OPEN/DRAFT/head9b05e5dd и R1–R5/C2 refs frozen.
+
+**Write-set, только необходимая дельта:**
+
+- `tests/test_m4_delivery_postgres.py` — четыре failing cases и их fixture
+  prerequisites/causal assertions; отдельные metering/timeout ожидания выше.
+- `scripts/m4_runtime_db.py`, `tests/test_m4_runtime_db_runner.py` — guarded native
+  identity, R6 identity/write-set и bounded evidence. Раздельно сохранить
+  selected-kind/call-count/job-state/adapter-entered/known error code; только
+  closed enums/counts/booleans, без payload/claim/locals/секретов. Добавить список
+  отсутствующих business call phases, не переименовывать lifecycle PASS в PASS tests.
+- `scripts/native_context_db_catalog.py`, `tests/test_native_context_db_runner.py`,
+  `.github/workflows/m4-runtime-db.yml` — только exact R6 transition и проверки;
+  accepted source/admission/catalog/partition semantics неизменны.
+- `tests/test_m4_delivery.py` — только причинная offline проверка metering/timeout,
+  если требуется; production FakeAdapter/Gateway/runtime не менять.
+- `docs/tasks/M4_HANDOFF.md`, `docs/TASK_REGISTER.md` — docs-only receipt.
+
+Migrations0001–0015, foundation pins, backend, retained/schema/native PG modules,
+architecture, dependencies/image pins/infra, ci.yml и C2 carrier/workflow immutable.
+Если нужен product/DDL repair либо иной identity mechanism — вернуть конкретный
+блокер C0 до hosted запуска; не расширять scope и не смягчать guards ради PASS.
+
+До публикации: причинные offline checks настоящей identity/fixture и timeout
+границы, bounded failure operands, полный inventory; Ruff/format/mypy и только
+затронутые regression tests на final source. Сохранить coverage64 M4+6 native;
+при разделении/переименовании unknown_cost/timeout дать old→new mapping без потери
+двух сценариев. Полный inventory/числа должны совпадать с фактической collection.
+
+**Один targeted run**, без отдельного capture/старого rerun: execution ref заранее
+на assignment, где R6 trigger отсутствует; один source commit fast-forward с
+expected_sha/force=false. before/sole parent=assignment, exact repo/ref/tree/HEAD/
+attempt1, clean-source/write-set обязательны; активировать только R6 push trigger.
+Owned stock0015 preflight (independent catalog/pins/valid=true/readiness), затем
+все64 M4+native6 на отдельных fresh owned TEST clusters. Сохранить JUnit/phases/
+inventory, все failed operands и missing call phases, source/cleanup evidence.
+Прежние≤600s aggregate SQL/tests и≤25min job; ни retained0015 DB, ни реальные
+сервисы не затрагивать. Нельзя превращать failure/setup error в skip/xfail.
+
+Только после targeted PASS — **один новый Draft PR/full CI**, все12 gates и
+generic/native/M4 disjoint complete union на final source/tested merge. При
+unexpected FAIL сохранить все группы причин/недостающих фактов, source/execution
+заморозить, вернуть C0; без unchanged rerun или source repair после outcome.
+Receipt — sole child source только на prep. Return: exact commits/trees/write-set,
+offline controls, actual70 outcomes/catalog/cleanup, original artifacts/digests,
+PR head/tested merge/12 gates либо точные NOT_REACHED. Затем C3 HOLD.
+
+PR41 не сливать; merge нового candidate — владелец после C0 acceptance.
+AI default OFF/FAKE/EVAL_ONLY,2 calls/1 READ; paid/live/Telegram/VM/deploy/real data
+HOLD. Owner ничего не запускает. Shared150 unchanged:confirmed0.37505230/58knownPOST,
+4unknown held7.585505548,62totalPOST,remaining142.039442152;
+reported0.00743079 UNSETTLED. LOCKED решения не пересмотрены.
+
+## История — C3 R5 receipt / BLOCKED, до C0 review / 2026-11-04
 
 **C3 HOLD.** Единственный targeted run завершился **FAIL:60 PASS,4 FAIL,
 6 setup ERROR,0 SKIP**. Corrected stock0015 catalog/valid=true/readiness PASS;

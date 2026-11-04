@@ -2,7 +2,34 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R5 / BLOCKED, C3 HOLD / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R6 / IN_PROGRESS / 2026-11-04
+
+C0 проверил R5 source **1bca972cebbffbf226a62f63c7c58001b46fbc70**/treece030705
+и receipt **34ecabaf00b6cb76134673d79c8b65cc8d4bff31**/tree675ef855.
+Run41811079733/attempt1:60 PASS,4 FAIL,6 setup ERROR. Corrected stock0015/catalog
+183functions/48tables/valid=true/pins/readiness **VERIFIED в targeted PG scope**;
+actual cancellation и inbound/manual progress PASS. Whole-runtime **BLOCKED**.
+Source/admission/cleanup5/5 PASS; C0 сверил manifests560/141,342 blobs, fresh log,
+independent catalog и final offline643 testcase PASS+130subtests.
+
+R6 — одна узкая задача C3: fresh Telegram observation в fixture; corrected oracle
+для valid OUTPUT/UNKNOWN metering с held reserve и без regeneration; causal
+in-call timeout вместо недоказанного0.2s pre-call ожидания; read-only exact source
+identity в guarded M4 current-native carrier. Git historical cause неизвестна.
+Никакого изменения product/SQL/guards; original native6 business phases ещё
+NOT_REACHED. Missing call phases и отдельные assertion operands сохраняются.
+
+Exact base — SHA этого C0 assignment, sole child receipt34ecabaf/5 docs;
+branch **c0/m4-3-runtime-integration-r6**. Prep/PR/execution refs, write-set и
+подробные критерии — [CURRENT HANDOFF](tasks/M4_HANDOFF.md). После causal offline
+PASS один targeted stock preflight+64 M4+6 native,≤600s SQL/tests/≤25min job.
+Только после targeted PASS один новый Draft PR/full CI12gates; при FAIL freeze,
+receipt и возврат C0, без source repair/unchanged rerun после outcome.
+Main586240e8, PR41 OPEN/DRAFT/head9b05e5dd,R1–R5/C2 refs frozen; другие роли HOLD.
+Default OFF/fake-only2calls1READ; paid/live/Telegram/VM/deploy/real data HOLD,
+ledger unchanged; owner ничего не запускает, LOCKED решения сохранены.
+
+## История — C3 R5 receipt / BLOCKED, C3 HOLD / 2026-11-04
 
 C3 receipt, до C0 review. Один targeted
 [run41811079733](https://github.com/Elefesys/ai-service-manager/actions/runs/41811079733),

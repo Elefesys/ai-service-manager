@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R5.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R6.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -975,7 +975,7 @@ limits в CURRENT. Узкое исключение unmerged0015 из R2 сохр
 agent/cancellation и инфраструктура immutable. Whole-runtime BLOCKED до проверки;
 PR41/старые refs frozen, другие роли HOLD, paid/live/VM/real data не включаются.
 
-**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R5.**
+**Предыдущее решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R5.**
 C0 принял R4 verifier-row/pins repair только в SOURCE scope. Run41803776341
 остановлен до PG из-за перезаписи native inventory phase report; ещё две
 коллизии owner/readiness установлены по source. Все70 targeted cases и actual
@@ -989,6 +989,34 @@ targeted run с прежним stock preflight/runtime scope; после PASS о
 Draft PR/full CI12gates. Отдельного capture и rerun R4 нет; exact base/refs/
 write-set/limits — CURRENT. Whole-runtime BLOCKED, PR41/R1–R4/C2 refs frozen.
 Архитектура и product scope прежние; AI default OFF, paid/live/VM/real data HOLD.
+
+**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R6.**
+C0 проверил R5 source1bca972c/receipt34ecabaf, оригинальные artifacts и fresh
+run41811079733:60 PASS,4 FAIL,6 setup ERROR. Corrected stock0015 catalog/pins/
+valid=true/readiness VERIFIED в targeted PG scope; cancellation/manual progress
+PASS. Whole-runtime BLOCKED, current-native6 business phases/full CI ещё не
+выполнены. R5 runner repair принят в SOURCE+TARGETED scope.
+
+Назначено ограниченное fixture/test исправление: observation Telegram устаревает
+до двух rights cases;0.2s timeout включает pre-model DB preparation; native
+identity пытается выполнить Git index operation в readonly checkout, но exact
+historical Git cause неизвестна. Guarded M4 carrier может получать identity
+только из полного read-only exact source check + checked executor evidence,
+с прежними before-reset/server guards; historical native carrier неизменен.
+
+C0 явно уточняет test oracle по существующим rules6/8/9: валидный OUTPUT при
+UNKNOWN cost/usage остаётся кандидатом, если прочие guards пройдены. Неизвестный
+metering не равен неизвестному model result, не обнуляет/не освобождает резерв
+и не становится CONFIRMED. Persisted result/intent replay не генерирует ответ
+повторно. Timeout/cancel/lost response и UNKNOWN Telegram delivery сохраняют
+terminal/no-regeneration/no-resend. Production/SQL contract не меняется;
+ошибочное ожидание нового delivery test пересмотрено явно, не ради скрытого PASS.
+
+После causal offline checks один targeted preflight+64 M4+6 native, после PASS
+один новый Draft PR/full CI12gates; exact scope/refs/limits/STOP в CURRENT HANDOFF.
+Migrations/pins/backend immutable; другое product изменение требует нового C0
+решения. Main/PR41/R1–R5/C2 refs frozen. AI default OFF/fake-only,2calls1READ,
+paid/live/Telegram/VM/deploy/real data HOLD; ledger и LOCKED архитектура прежние.
 
 ## Что пересмотрено относительно baseline
 
