@@ -6,7 +6,100 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C0 assignment C3 R6 / 2026-11-04
+## CURRENT — C3 R6 receipt / BLOCKED, C3 HOLD / 2026-11-04
+
+**C3 HOLD, до C0 review.** Единственный targeted run — **68 PASS,2 FAIL,
+0 ERROR,0 SKIP**. Все70 business call phases достигнуты, current-native6 PASS.
+Whole-runtime не INTEGRATED/VERIFIED. После FAIL source/execution frozen;
+source repair, повторов pytest/PG/CI, нового capture, Draft PR/full CI/merge нет.
+
+**Assignment/base:** `1e5dc3cfbbaac00af23bec84df64da8a6041be93`, tree
+`22be2116016494f44c38539b06868cbad9f6f2eb`.
+**Frozen source:** `d2f8f9f5cc19508405d4b482e6d0cb7485fd621c`, tree
+`4270844dfc8c92cf6906d8ca4c09f61b78420cea`, sole parent assignment.
+Этот receipt — sole child source только на prep `c3/m4-3-runtime-integration-r6`,
+ровно HANDOFF/TASK_REGISTER. Execution `c3/m4-3-runtime-targeted-run-r6` остаётся
+на source; PR-source `c3/m4-3-runtime-integration-pr-r6` — на assignment.
+
+**Ровно6 source paths:** `.github/workflows/m4-runtime-db.yml`,
+`scripts/m4_runtime_db.py`, `scripts/native_context_db_catalog.py`,
+`tests/test_m4_delivery_postgres.py`, `tests/test_m4_runtime_db_runner.py`,
+`tests/test_m4_delivery.py`. Fresh trusted fixture observation, отдельные
+UNKNOWN metering/in-call timeout oracles, read-only native identity at use с
+повторным полным source proof, binding checks, bounded operands/missing-call
+accounting. Original reset/server guards, readonly mount и SQL/assertions сохранены.
+Backend/migrations/pins/retained-schema-native PG modules/architecture/infra/
+dependencies/ci.yml/C2 carrier не менялись. LOCKED решения не пересмотрены.
+
+**Offline:** causal16 PASS; final535 testcase PASS +130subtests,0FAIL/ERROR/SKIP,
+112.94s; Ruff/format195/mypy76 PASS. Реальные Git/file/fixture drift controls,
+pre-call vs in-call timeout, phase/subprocess regressions и9 wrapper smokes.
+Их SQL/Docker boundaries synthetic; это не actual PG evidence. Collection
+35+21+8 M4 и6 native; old→new mapping двух metering/timeout cases сохранён,
+62 остальных M4 nodeids unchanged. Working bytes совпали с published source.
+
+**Actual:** [run41819113103](https://github.com/Elefesys/ai-service-manager/actions/runs/41819113103),
+push/attempt1/job126537463640 FAIL. Source/event/write-set/cleanliness admission
+PASS; retained35 PASS, delivery19 PASS/2 FAIL, schema8 PASS, native6 PASS.
+Missing/not_reached/missing_call_phases/unknown_inventory=0; complete=true
+означает coverage, result=FAIL. Все bounded records invalid_fields/overflow=0.
+Native6 before-reset и6 identity-at-use proofs exact; все6 business calls PASS.
+SQL/tests304.897408928/600s, test subprocess285.801941648s, job394/1500s.
+Cleanup5/5 PASS, zero owned resources; finalizer/upload SUCCESS.
+
+**Stock0015:** independent PG18.6 catalog183functions/48tables,
+embedded182others/48tables, valid=true/pins/RuntimeDatabase.check PASS.
+Body `e0d5d30826f10c3396565ed2ab571653f41f1b7bdcf883f7eeebd0159fecc443`;
+full `8a91ef6f6d592ad9eeafe80f4eb5e2c012ef759040a96351a2242dfd97d480d7`;
+nonfunction `e939e9f303843a84256f9315e6016e1a888aea0c18469539aa53147c6d339bee`.
+Catalog PASS доказывает соответствие source, не каждый business path.
+
+**Два FAIL:** `test_synthetic_telegram_real_admission_and_rights_race[True/False]`:
+call IntegrityError/SQLSTATE23514. В обоих SELECTION: reply,1 model call,
+adapter_entered=true,SUCCEEDED,Outbox=true,error=null; SEND event отсутствует.
+Следующее выражение frozen test line490 — claim/execute send job. Saved installed
+`messaging_jobs_telegram_probe_check` разрешает non-NULL probe только для
+SEND_MANUAL_TEXT; installed `telegram_worker_probe` уже допускает SEND_AI_TEXT
+и пишет probe fields. 0015 расширяет функцию, но не этот CHECK из0007.
+Worker вызывает probe до HTTP observe. Конфликт доказан saved catalog/source;
+связь именно этого named CHECK с фактическим23514 — сильный static inference:
+exception constraint name/SQL/context/application caller не сохранены.
+Actual HTTP count неизвестен. SEND/request sequence/post-send one-call и
+SENT(rights=true)/FAILED(rights=false) assertions **NOT_REACHED** в обоих cases.
+
+Expired-observation negative внутри True успел пройти:1call,DEAD/
+DEPENDENCY_UNAVAILABLE,no selection/Outbox; затем fresh observation дала reply.
+Containing case остаётся FAIL. UNKNOWN metering case PASS: valid OUTPUT/reply,
+result/Outbox,1call/1reservation,UNKNOWN completion/reserve held,replay0calls.
+In-call timeout PASS: adapter entry/1reservation доказаны до real10s deadline;
+adapter cancelled,DEAD/no result/Outbox,reserve held,replay0calls.
+Cancellation/inbound/manual progress и остальные retained scenarios PASS.
+
+**Блокер C0, предложение не применено:** выдать C2/C0 bounded DDL repair
+совместимости AI Telegram probe, сохранив all-null/all-present/manual semantics,
+guarded-send prohibition и currentness/freshness/rights/tenant gates. Migration
+strategy выбирает C0; applied migration не редактировать молча. Согласовать
+связанные verifier/catalog/pins, затем отдельно разрешённый candidate с обоими
+rights outcomes и отрицательными guards. Это вне immutable R6 write-set.
+New PR head/tested merge/**all12 full-CI gates NOT_REACHED**; нового PR нет.
+
+[Evidence524files](https://chatgpt.com/library?file_id=libfile_6abc471924c881919dd36da111861831&account_id=personal):
+**37064460bytes**, SHA256 **32461a24312de3fec06f8d8e007f3520d48db5995a23d14b44374b5a2e5ea208**,
+bundle manifest523/523. Original artifact13315798489:4001876bytes,
+SHA256 **b9b65603550139038b927925863a96ca5f1e709fe8e6240b43e5d8c9aa216933**;
+manifest142/142,143 original files,342source blobs/modes/bytes verified.
+Полные logs/JUnit/phases/catalog,case-level operands/missing facts,offline
+controls,source index/patch и saved-data-only audits сохранены. Архив создан
+до receipt; будущий receipt SHA не включён во избежание circular identity.
+
+Fresh metadata: один run/attempt1; main586240e88c825aa67593af5d72e0bdbb251ed3bb,
+PR41 OPEN/DRAFT/head9b05e5dd,14 prior R1–R5 C3 refs и24 C2 refs unchanged.
+Default OFF/FAKE/EVAL_ONLY,2calls1READ; paid/live/Telegram/VM/deploy/real data HOLD.
+Shared150 unchanged:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+Owner ничего не запускает. C3/другие роли HOLD; следующий шаг — решение C0.
+
+## История — C0 assignment C3 R6 / 2026-11-04
 
 **Результат для пилота:** завершить synthetic проверку выбора ответа, свежих прав
 Telegram и завершения AI job без повторной генерации. R5 впервые прошёл corrected

@@ -2,7 +2,49 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R6 / IN_PROGRESS / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R6 / BLOCKED, C3 HOLD / 2026-11-04
+
+C3 receipt, до C0 review. Один targeted
+[run41819113103](https://github.com/Elefesys/ai-service-manager/actions/runs/41819113103),
+push/attempt1/job126537463640 **FAIL:68 PASS,2 FAIL,0 ERROR,0 SKIP**.
+Retained35 PASS; delivery19/21 PASS; schema8 PASS; current-native6 business PASS.
+Все70 call phases reached; missing/not_reached/missing_call_phases=0;
+complete=true относится к coverage, whole-runtime не INTEGRATED/VERIFIED.
+
+Base **1e5dc3cfbbaac00af23bec84df64da8a6041be93**/tree22be2116;
+source **d2f8f9f5cc19508405d4b482e6d0cb7485fd621c**/
+tree **4270844dfc8c92cf6906d8ca4c09f61b78420cea**, sole child base,6 allowed paths.
+Fresh trusted observation, UNKNOWN-metering/in-call-timeout oracles, read-only
+native identity/binding/source proof, bounded operands/missing-call accounting.
+Backend/migrations/pins/architecture/retained-schema-native PG modules unchanged.
+Offline causal16 PASS; final535 testcase PASS+130subtests; Ruff/format195/mypy76 PASS.
+
+Stock0015 catalog183functions/48tables/valid=true/pins/readiness PASS;
+native6 reset guards +6 identity-at-use proofs и actual business assertions PASS.
+UNKNOWN metering/result/reserve/replay и real in-call deadline/no-result/replay PASS.
+Expired-observation negative пройден до последующего FAIL содержащего True case.
+SQL/tests304.897408928/600s,job394/1500s;cleanup5/5 PASS/zero owned resources.
+
+Оба Telegram rights cases: reply/1call/SUCCEEDED/Outbox подтверждены; затем
+IntegrityError/23514. Installed probe допускает SEND_AI_TEXT, table CHECK
+`messaging_jobs_telegram_probe_check` допускает non-NULL probe только manual.
+Конфликт catalog/source доказан; named constraint actual exception не сохранён,
+атрибуция23514 — static inference. SEND/request sequence/SENT-or-FAILED
+assertions NOT_REACHED; actual HTTP count неизвестен. Нужен bounded C0/C2 DDL
+scope/migration strategy с согласованными catalog/pins; **не применено** в R6.
+
+Source/execution frozen; этот2-doc receipt — sole child source только prep.
+PR-source остаётся base; new PR head/tested merge/all12 CI gates NOT_REACHED.
+Main586240e8,PR41 OPEN/DRAFT/head9b05e5dd,R1–R5/C2 refs unchanged,нового PR нет.
+[Evidence524files](https://chatgpt.com/library?file_id=libfile_6abc471924c881919dd36da111861831&account_id=personal):
+37064460bytes/SHA25632461a24312de3fec06f8d8e007f3520d48db5995a23d14b44374b5a2e5ea208,
+manifest523/523;original artifact13315798489/4001876bytes/manifest142/142,
+342source blobs/modes verified. Exact failures/missing/proposal/pins —
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md). C3/другие роли HOLD;default OFF/fake-only
+2calls1READ;paid/live/Telegram/VM/deploy/real data HOLD;shared150 ledger unchanged.
+Owner ничего не запускает. Следующее решение — C0; LOCKED решения сохранены.
+
+## История — C0 assignment C3 R6 / IN_PROGRESS / 2026-11-04
 
 C0 проверил R5 source **1bca972cebbffbf226a62f63c7c58001b46fbc70**/treece030705
 и receipt **34ecabaf00b6cb76134673d79c8b65cc8d4bff31**/tree675ef855.
