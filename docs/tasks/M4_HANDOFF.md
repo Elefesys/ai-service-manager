@@ -6,7 +6,104 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C0 assignment C3 R7 / 2026-11-04
+## CURRENT — C3 R7 receipt / BLOCKED, C3 HOLD / 2026-11-04
+
+**C3 HOLD, до C0 review.** Один targeted run: **71 PASS,1 FAIL,0 ERROR,0 SKIP**;
+все прежние70 scenarios PASS. Единственный FAIL — новая schema fixture до CHECK
+matrix/old-CHECK causal control. Whole-runtime не INTEGRATED/VERIFIED. После FAIL
+source/execution frozen; source repair, повторов pytest/PG/CI/collection нет.
+
+**Assignment/base:** `21e8b4b61ceabb9c26688907ba27a974a7694eb5`, tree
+`943013d28f6a320c0df5469da54c79b35b717f4b`.
+**Frozen source:** `05c2e52ffcd7349f502f864d6d863dfde50fca22`, tree
+`fea51e60e16bf1e09fe54844f92d485952d581bd`, sole parent assignment.
+Этот receipt — sole child source, ровно HANDOFF/TASK_REGISTER, только на prep
+`c3/m4-3-runtime-integration-r7`. Execution `c3/m4-3-runtime-targeted-run-r7`
+остаётся source; PR-source `c3/m4-3-runtime-integration-pr-r7` — assignment.
+
+**Ровно10 source paths:** `migrations/versions/0015_ai_delivery.py`,
+`backend/src/asm/foundation.py`, `scripts/native_context_db_catalog.py`,
+`scripts/m4_runtime_db.py`, `.github/workflows/m4-runtime-db.yml`,
+`tests/test_m4_delivery.py`, `tests/test_m4_delivery_postgres.py`,
+`tests/test_m4_schema_postgres.py`, `tests/test_m4_runtime_db_runner.py`,
+`tests/test_native_context_db_runner.py`. Один reversible probe CHECK/current
+verifier literal/pins, R7 identity/write-set/inventory, bounded failure fields,
+HTTP counters и2 PG nodes; expected DDL count764→765. Остальные182 function bodies,
+0001–0014, worker/прочая backend logic, retained/native PG modules, architecture,
+dependencies/infra/ci.yml/C2 unchanged. C0 exception — только fresh disposable TEST;
+retained/applied DB не переписывались, LOCKED/ADR132/216/217 сохранены.
+
+**Offline:** final539 testcase PASS+130subtests,0FAIL/ERROR/SKIP,112.92s;
+Ruff/format195/mypy76 PASS. Causal subset9 PASS; final full run включает последнюю
+bounded diagnostic дельту.9 wrapper smokes подтвердили expected PASS/FAIL;
+их constructed source/event identities не являются hosted source proof. Ранние
+9 local failures были только old DDL count764, исправлены до final/source publication.
+Collection66 M4+6 native; все70 old nodeids сохранены, добавлены ровно2.
+
+**Hosted:** [run41828733275](https://github.com/Elefesys/ai-service-manager/actions/runs/41828733275),
+push/attempt1/job126570094374 FAIL; exact event/source/parent/tree/write-set
+admission PASS. Retained35 PASS,delivery22 PASS,schema8 PASS/1 FAIL,native6 PASS.
+Все72 setup/call/teardown достигнуты; missing/not_reached/missing_call_phases/
+unknown inventory/invalid bounded fields/overflow=0. `complete=true` — coverage,
+не общий PASS. SQL/tests326.571089357/600s; test subprocess305.168329160s;
+job393/1500s. Cleanup5/5 PASS,zero owned containers/networks/volumes.
+
+Stock PG18.6 catalog183functions/48tables, embedded182others/48columns,
+source bodies/security/roles/nonfunction, declared valid=true и readiness PASS.
+Actual full/nonfunction JSON byte-exact candidate derivation; actual pins:
+
+| Pin | Actual SHA256 |
+|---|---|
+| nonfunction | `a4aeec49cd351eea23f19346700ba998ec4ca9ab5aafd6163b6193da72285b9d` |
+| verifier body | `2af634ab2afb3b2b9a536453ce6c735b6be57a1018fdd0893d707d3d5dca5f36` |
+| full catalog | `5c82c2a14b95ae7e85a1fb2191f91843ff78e6354e4f5e1cdba5c2504183f181` |
+
+**Telegram rights True/False PASS:** reply/1 model call/SUCCEEDED/Outbox; True
+getBusinessConnection→sendMessage ровно1→SENT,False observe1/send0→FAILED.
+Оба SEND_ATTEMPT completed=true; restart/replay fresh adapter0 calls, HTTP counts
+не меняются, один intent, stale send rejected. Это actual PG + mocked HTTP,
+не live Telegram. Expired-observation negative,UNKNOWN metering/held reserve/
+no-regeneration,in-call10s timeout,cancellation/manual/inbound progress PASS.
+Новый delivery guard case PASS: stale claim/missing probe/generation/version,
+foreign source job P2001/STALE_CLAIM и foreign observation NOT_ALLOWED/FAILED.
+Native6 business assertions,6 reset proofs+6 identity-at-use proofs PASS.
+Unused downgrade→0014/exact old3 probe constraints→repeat upgrade exact snapshot/
+readiness PASS; durable enrollment blocks downgrade before mutation; drift6 PASS.
+
+**Единственный FAIL:** `test_probe_check_shape_and_old_ai_rejection_on_real_jobs`
+в `tests/test_m4_schema_postgres.py`,call5.307129073s,NoResultFound at line169;
+application frames сохранены, SQLSTATE/constraint отсутствуют для этой ошибки.
+GUARDED_TEXT job найден(line162),claim/execute вернулся(line168),но последующий
+SEND_GUARDED_TEXT lookup пуст. Ошибка добавленной C3 fixture: `application(h)`
+создаёт AI-enabled worker; frozen Worker.execute122–128 перехватывает этот
+TurnJobClaim и вызывает ai.enqueue до legacy guarded consumer. Это static source
+cause; actual enqueue result/persisted enrollment/final source-job status не сняты.
+
+**NOT_REACHED внутри case:**4 real kinds×8 probe masks,nonpositive generation/
+version,old CHECK restoration+exact23514/named-constraint rejection,rollback/full
+snapshot equality. OLD_CHECK_REJECTION event отсутствует. Offline SQLite matrix
+и отдельный PASS downgrade не заменяют недостающую PG causal evidence.
+**Минимальное предложение C0,NOT_APPLIED:** только для legacy guarded fixture
+взять существующий TEST worker без AI с тем же kernel/ControlledAdapter; проверить
+guarded receipt/send job до matrix. AI positive worker,72 nodes,migration/pins и
+guards сохранить. Нужна новая bounded выдача C0; R7 не исправлялся/не перезапускался.
+
+**Evidence:** [архив536files](https://chatgpt.com/library?file_id=libfile_12ca72142ed48191b81f229caea67c37&account_id=personal),
+37961117bytes/SHA256 **ab9db2b0450acee1534b4d9440069514f56d6a440db691ad29431914e09df1d7**,
+manifest535/535. Original artifact13322891091/4015970bytes/SHA256
+**370862dd6c3568e380dcf3f1cbeb731cda68291167d2d9d2cc4fdb92f6e0c770**;
+143 extracted files,manifest142/142,342 Git blobs/modes/bytes verified. REPORT,
+original logs/artifact,source diff/index,catalog derivation и saved-data audits внутри.
+Bundle закрыт до receipt; его SHA/Library identity/post-publication metadata снаружи.
+
+New PR head/tested merge/all12 full-CI gates **NOT_REACHED**. Main586240e8,
+PR41 OPEN/DRAFT/head9b05e5dd,32 prior C3 refs/24 C2 refs unchanged; нового PR нет.
+C3/другие роли HOLD;default OFF/FAKE/EVAL_ONLY2calls1READ;paid/live/Telegram/VM/
+deploy/real data HOLD;owner ничего не запускает. Shared150 unchanged:
+confirmed0.37505230/58knownPOST;4unknown held7.585505548;62totalPOST;
+remaining142.039442152;reported0.00743079 UNSETTLED.
+
+## История — C0 assignment C3 R7 / 2026-11-04
 
 **Результат для пилота:** довести уже выбранный AI reply до защищённой synthetic
 Telegram отправки либо отказа при отозванных правах. R6 прошёл68/70 scenarios;

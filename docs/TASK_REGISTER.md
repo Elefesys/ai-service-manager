@@ -2,7 +2,51 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R7 / IN_PROGRESS / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R7 / BLOCKED, C3 HOLD / 2026-11-04
+
+C3 receipt, до C0 review. Один targeted
+[run41828733275](https://github.com/Elefesys/ai-service-manager/actions/runs/41828733275),
+push/attempt1/job126570094374: **71 PASS,1 FAIL,0 ERROR,0 SKIP**. Все прежние70
+scenarios PASS; retained35,delivery22,schema8/9,native6. Все72 call phases reached,
+missing/unknown inventory=0; complete=true означает coverage, whole-runtime BLOCKED.
+
+Base **21e8b4b61ceabb9c26688907ba27a974a7694eb5**/tree943013d2;
+source **05c2e52ffcd7349f502f864d6d863dfde50fca22**/
+tree **fea51e60e16bf1e09fe54844f92d485952d581bd**,sole child base,10 allowed paths.
+Один reversible unmerged0015 probe CHECK/current pins,R7 evidence/inventory и2new
+PG nodes.0001–0014/остальные182 functions/worker/architecture/infra/C2 unchanged;
+только fresh disposable TEST DB по C0 exception,retained/applied DB не менялись.
+Final offline539 testcase PASS+130subtests;Ruff/format195/mypy76 PASS;causal9 PASS.
+
+Stock0015 catalog183/48,actual pins/valid=true/readiness PASS; prediction bytes exact.
+Оба Telegram rights outcomes PASS:True observe1/send1→SENT,False observe1/send0→FAILED;
+model1,one intent,restart/replay fresh adapter0calls/HTTP counts unchanged. Synthetic
+transport only. Новый stale/foreign probe guard case,UNKNOWN metering,in-call timeout,
+cancellation/manual progress,native6/reset6/identity6 PASS. Unused downgrade restores
+old3 probe CHECKs/re-upgrade exact;durable downgrade guard/drift6 PASS.
+
+Единственный FAIL — новая schema fixture `test_probe_check_shape_and_old_ai_rejection_on_real_jobs`:
+NoResultFound line169 при SEND_GUARDED_TEXT lookup после найденного GUARDED_TEXT job.
+Static cause: C3 использовал AI-enabled worker,который перехватывает этот step в
+ai.enqueue до legacy consumer. Enqueue result/final source status не записаны.
+CHECK matrix/positive generation-version controls/old CHECK exact23514/rollback
+NOT_REACHED. Предложение NOT_APPLIED: AI-disabled TEST worker только для guarded
+fixture,assert receipt/send job до matrix;остальной source/72nodes/pins сохранить.
+Новая bounded выдача — решение C0;после FAIL source repair/pytest/PG/CI/collection нет.
+
+SQL/tests326.571089357/600s,job393/1500s;cleanup5/5 PASS,zero owned resources.
+Этот2-doc receipt — sole child source только prep;execution frozen source,PR-source
+остаётся base. New PR head/tested merge/12 CI gates NOT_REACHED. Main586240e8,
+PR41 OPEN/DRAFT/head9b05e5dd,32 prior C3/24 C2 refs unchanged;нового PR/merge нет.
+[Evidence536files](https://chatgpt.com/library?file_id=libfile_12ca72142ed48191b81f229caea67c37&account_id=personal):
+37961117bytes/SHA256ab9db2b0450acee1534b4d9440069514f56d6a440db691ad29431914e09df1d7,
+manifest535/535;original artifact13322891091/4015970bytes/manifest142/142;
+342source blobs/modes verified. Exact source/write-set/pins/failure/missing facts —
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md). C3/другие роли HOLD;default OFF/fake-only
+2calls1READ;paid/live/Telegram/VM/deploy/real data HOLD;shared150 ledger unchanged.
+На ПК owner ничего не запускается;whole-runtime не INTEGRATED/VERIFIED.
+
+## История — C0 assignment C3-M4.3-RUNTIME-INTEGRATION-R7 / 2026-11-04
 
 C0 проверил R6 source **d2f8f9f5cc19508405d4b482e6d0cb7485fd621c**/tree4270844d
 и receipt **15bfbd76e9866aca18e3586f1ee129ceacaad3f5**/tree7c97f5a6.
