@@ -2,7 +2,39 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R8 / BLOCKED, C3 HOLD / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R9 / IN_PROGRESS / 2026-11-04
+
+C0 проверил source **45f46da00d59cadf90fe2590548e5e3b3cb20f53** / treea0726c53,
+receipt **8544097fbf73e3300f0faf3df79e3f77e78d0a9f** / tree03451a17.
+R8 targeted41836791831: **72 PASS**,0FAIL/ERROR/SKIP; schema fixture/matrix/
+named old-CHECK23514/rollback приняты в SOURCE+TARGETED scope. Catalog183/48,
+frozen pins/readiness/rights/replay/native6/cleanup5zero подтверждены C0.
+
+PR42/full CI41838277597,attempt1: **11 SUCCESS,1 FAIL**. Tested mergee037e458
+с source-exact tree; runtime66/native112/browser54 PASS. Foundation unit3512 PASS/
+15 FAIL:14 missing infra/images.lock.env в двух test families и1 in-call timeout
+без observed entry. Точная старая timeout причина UNKNOWN; 0.05s race — гипотеза.
+FOUNDATION_EVIDENCE_REFUSED — secondary; generic860 и tail NOT_REACHED.
+Collection860+105+66=1031 exact/disjoint; actual full-CI PG PASS171/1031.
+Whole-runtime **BLOCKED**, не INTEGRATED/VERIFIED.
+
+C0 сверил archive971 entries,12 CI ZIP/fresh digests/extracted bytes,
+targeted ZIP,11 source archives×342 Git blobs и fresh foundation log.
+Единственный исполнитель C3 исправляет только isolated test inputs и управляемый
+in-call timeout; backend/migrations/pins/PG tests/workflows/infra immutable.
+Exact base — SHA этого C0 assignment, sole child receipt8544097f/5 docs;
+branch **c0/m4-3-runtime-integration-r9**,prep **c3/m4-3-runtime-integration-r9**.
+Write-set/17-case development-filesystem check/критерии — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+R8 targeted72 принят; нового standalone PG/capture нет. После causal/offline PASS
+C0 разрешает один expected-sha fast-forward **того же PR42** из source45f46da0,
+без force; один full CI12gates с actual complete PG union1031.
+Это явное исключение прежнего PR-source HOLD; остальные R1–R8/C2 refs frozen.
+FAIL→receipt/C0 без unchanged rerun; main586240e8/PR41 frozen.
+PR42 не сливать до C0 acceptance. Default OFF/fake-only2calls1READ;
+paid/live/Telegram/VM/deploy/real data HOLD, ledger прежний. Owner ничего не запускает.
+
+## История — C3-M4.3-RUNTIME-INTEGRATION-R8 / BLOCKED, C3 HOLD / 2026-11-04
 
 C3 receipt, до C0 review. Targeted **72 PASS,0FAIL/ERROR/SKIP**;
 [новый Draft PR42](https://github.com/Elefesys/ai-service-manager/pull/42),

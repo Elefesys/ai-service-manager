@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R8.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R9.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -1069,6 +1069,30 @@ backend/current pins и retained/applied DB теперь immutable в R8; нов
 admission сужается до fixture/R8 identity. Main/PR41/R1–R7/C2 refs frozen;
 unexpected FAIL→receipt/C0 без unchanged rerun. Default OFF/fake-only2calls1READ,
 paid/live/Telegram/VM/deploy/real data HOLD; ledger unchanged.
+
+**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R9.**
+R8 source45f46da0/receipt8544097f и original artifacts проверены C0. Targeted72/72
+принят, включая прежний schema blocker; full CI PR42:11 SUCCESS,1 FAIL.
+Foundation остановился на unit tests:14 отсутствующих pin-file inputs в test
+fixtures и1 in-call timeout без observed entry. Generic860 и последующие phases
+не достигнуты; collection union1031 не означает complete actual execution.
+FOUNDATION_EVIDENCE_REFUSED сохраняется как fail-closed evidence gate.
+
+C0 назначает исправление только test harness: self-contained inputs для двух
+wrapper families и real timeout после подтверждённого adapter entry/reservation.
+Pre-call control/UNKNOWN accounting/STOP semantics и все product guards прежние.
+Точная причина старого early STOP неизвестна; исправленный test обязан отличать
+его от требуемой in-call отмены. Production/migrations/pins/PG tests/workflows/
+infra неизменны. Архитектурных изменений/нового successor нет.
+
+После17 existing causal cases в development filesystem boundary и offline PASS
+разрешён один expected-sha fast-forward существующего PR42,force=false,и один
+полный CI12gates. Это явное снятие только PR-source HOLD; R8 source/tested merge/
+execution/prep и остальные refs сохранены. R8 targeted72 принят, нового standalone
+PG/capture не требуется; окончательная приёмка требует actual1031 PG union и
+всего foundation tail на исправленном tested merge. Exact base/write-set в CURRENT.
+Whole-runtime BLOCKED до review; default OFF/fake-only2calls1READ, paid/live/
+Telegram/VM/deploy/real data HOLD; ledger и LOCKED/ADR132/216/217 неизменны.
 
 ## Что пересмотрено относительно baseline
 

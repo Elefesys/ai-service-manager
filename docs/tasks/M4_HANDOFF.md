@@ -6,7 +6,142 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3 R8 receipt / BLOCKED, C3 HOLD / 2026-11-04
+## CURRENT — C0 assignment C3 R9 / 2026-11-04
+
+**Результат для пилота:** завершить полный CI уже работающего synthetic AI→Telegram
+пути. R8 targeted принят:72/72 PASS. Full CI остановился на двух причинах в unit
+tests foundation; generic PostgreSQL ещё не запускался. Whole-runtime **BLOCKED**;
+**C3-M4.3-RUNTIME-INTEGRATION-R9 IN_PROGRESS**, единственный исполнитель C3.
+
+### Проверенный результат R8
+
+C0 сверил source **45f46da00d59cadf90fe2590548e5e3b3cb20f53** /
+tree **a0726c53ca12fa228002a70a1d8c37372708de9f**, sole parent assignment
+**c7ee300ae4182152eb9c8636d2f958da087113f2**, ровно5 разрешённых source paths.
+Receipt **8544097fbf73e3300f0faf3df79e3f77e78d0a9f** /
+tree **03451a174a10a5f94c36fa80f185146671d34fcf**, sole child source,2 docs.
+Исправленная guarded fixture и её assertions приняты в SOURCE+TARGETED scope.
+
+[Targeted41836791831](https://github.com/Elefesys/ai-service-manager/actions/runs/41836791831),
+push/attempt1: **72 PASS,0 FAIL/ERROR/SKIP**, прежние nodeids сохранены.
+Все72 setup/call/teardown, matrix4×8, nonpositive generation/version,
+old CHECK named23514 и rollback/snapshot достигнуты. Telegram rights/replay,
+UNKNOWN reserve/timeout, native6, downgrade/re-upgrade PASS. SQL/tests344.978/600s,
+job411/1500s;cleanup5/5 PASS,zero owned resources. Catalog183functions/48tables/
+embedded182others/source/security/valid=true/readiness перепроверены C0;
+full/nonfunction bytes exact R7, все3 current pins остаются frozen.
+
+[PR42](https://github.com/Elefesys/ai-service-manager/pull/42),
+[full CI41838277597](https://github.com/Elefesys/ai-service-manager/actions/runs/41838277597),
+pull_request/attempt1: **11 SUCCESS,1 FAIL**. Tested merge
+**e037e458fc9dafc2f31a7b1fce8851e3035af7ba**, tree exact source, ordered parents
+main586240e8+source45f46da0. M4 runtime66 PASS; native112 PASS(105PG+7source);
+browser54 и остальные gates SUCCESS. Collection disjoint union860+105+66=1031
+перепроверен; actual full-CI PG PASS только171/1031, generic860 NOT_REACHED.
+
+C0 сверил [архив R8](https://chatgpt.com/library?file_id=libfile_04ece47ad364819183ec44842b2df348&account_id=personal):
+203237133bytes/SHA256 **c99d810f8d79ca7c2c722914346a9a11259dafdd843d26543aa4fa398889cb04**,
+manifest971/971. Targeted original ZIP13326003032:4020373bytes/SHA256
+**87d14c6296ab8543e8bbd158f90b9b854da80ea61337d03e578c50adce1beab6**.
+Все12 original CI ZIP совпали с fresh GitHub sizes/digests и extracted bytes;
+11 source.tar.gz по342 Git blobs/modes exact; fresh foundation log exact.
+Полные paths/digests/journals сохранены в архиве. Новых pytest/PG/CI запусков
+C0 для этого review не делал.
+
+### Все причины foundation и необходимая поправка
+
+Foundation job126609678968 завершился FAIL, не завис. Unit:3512 PASS,15 FAIL,
+155subtests PASS,1031deselected,488.21s. Ruff/format/mypy PASS. Build35.782s,
+checks520.473s — разные фазы. Две группы failures:
+
+1. **14 тестов:**9 real-wrapper и5 constructed-driver cases из
+   `tests/test_m4_runtime_db_runner.py` падают на `infra/images.lock.env`
+   (`run_admitted`,line1190). Development image не содержит этот файл; tests
+   выполняют real read относительно catalog.ROOT. Их целевые positive/negative
+   assertions NOT_REACHED. Исправить обе семьи одним self-contained TEST input
+   fixture в temporary directory: явные immutable synthetic pin inputs, нужный
+   uv.lock input и изолированный cwd. Не зависеть от наличия host checkout файла,
+   не записывать его в /app/repository и не подменять production pin/file guards.
+   Real run_admitted/read/DB_IMAGE equality/cleanup/evidence checks сохранить.
+2. **1 тест:** `test_real_runtime_gateway_metering_and_expiration_controls[in_call_timeout]`
+   в `tests/test_m4_delivery.py:210`: entered=False, commit не вызван, STOP ровно1.
+   Exception/STOP reason и elapsed-to-entry не сняты. Whole-run deadline0.05s
+   объясняет возможную гонку, но точная старая причина остаётся UNKNOWN.
+   Сделать in-call timeout управляемым после observed adapter entry и reservation:
+   real Runtime→Agent→Gateway→DurableAdapter, конечный deadline и реальная отмена.
+   Допустим test-local контроль реального timeout context с его истечением после
+   entered; не заменять execute/Gateway готовым STOP и не маскировать проблему
+   увеличением sleep. Отдельные pre-call timeout и valid OUTPUT/UNKNOWN metering
+   сохранить. Проверить1call/1reservation, cancellation observed, UNKNOWN/CANCELLED
+   completion, отсутствие commit, STOP once и завершение всех tasks. Неопределённый
+   metering не становится confirmed и не освобождает резерв. При раннем STOP
+   сохранить bounded type/code, entry/reservation counts и stage/time без payload/
+   exception values/secrets; это assertion diagnostics, не новая logging-платформа.
+
+Шаг6 **FOUNDATION_EVIDENCE_REFUSED** — последующий отказ проверки complete evidence.
+Исходный внутренний текст исключения не сохранён; actual journals показывают
+unit/checks exit1, host sequence без tail, execution primary1/cleanup0. Это не
+повод отключать evidence gate. Generic860, upgrade/repeat/downgrade/reupgrade,
+contracts/wheel checks и host storage/services/http/images tail NOT_REACHED.
+Cleanup exit0/удаление ресурсов видно в log; отдельного zero-resource inventory
+для foundation нет. Whole-runtime INTEGRATED/VERIFIED не объявляется.
+
+### Исполнение R9: исправление unit tests, затем тот же PR42
+
+Exact base — полный SHA этого C0 assignment из immutable URL, sole child receipt
+8544097f/5 docs. C0 branch **c0/m4-3-runtime-integration-r9**, prep
+**c3/m4-3-runtime-integration-r9**. Accepted main
+**586240e88c825aa67593af5d72e0bdbb251ed3bb** и PR41/head9b05e5dd frozen.
+
+**Write-set:**
+
+- `tests/test_m4_runtime_db_runner.py` — изолировать входы двух test families,
+  сохранить все14 cases/их expected outcomes; обновить R9 admission assertions.
+- `tests/test_m4_delivery.py` — исправить только timeout/metering control выше.
+- `scripts/m4_runtime_db.py` — только BASE/BASE_TREE этого assignment, R9 labels
+  и write-set из этих3 source paths плюс2 receipt docs. BRANCH сохраняет
+  `c3/m4-3-runtime-integration-pr-r8` для существующего PR42. Execution logic,
+  pin checks, deadlines и inventory не менять.
+- `docs/tasks/M4_HANDOFF.md`, `docs/TASK_REGISTER.md` — docs-only receipt.
+
+Миграции0001–0015, backend/worker/foundation/pins, все PG modules, catalog runner,
+workflows/infra/Dockerfiles/dependencies/architecture immutable. Новых PG nodes,
+frameworks или CI lanes нет. R8 targeted72 остаётся принятой проверкой прежнего
+product source; **отдельный новый PG targeted/capture не требуется и не назначен**.
+R1–R8 execution/prep refs и C2 refs frozen; old targeted push trigger не использовать.
+
+До публикации source: causal subset **17 existing cases**(wrapper9+driver5+
+timeout/metering3), затронутые offline regressions и Ruff/format/mypy на final
+source. Обязательно воспроизвести filesystem boundary development image:
+в самом неизменном image либо в isolated tree из точных Dockerfile COPY inputs,
+где нет infra/images.lock.env и .git. Temporary test inputs создаёт fixture;
+нельзя скопировать missing host файл и назвать это проверкой прежней среды.
+Сохранить setup/исходный file inventory/17 outcomes. Projection проверяет только
+этот filesystem boundary; actual container integration подтверждает следующий CI.
+
+**C0 явно разрешает один fast-forward существующего PR42** после этих checks:
+один source commit, sole parent=assignment, затем update
+`c3/m4-3-runtime-integration-pr-r8` с expected_sha
+**45f46da00d59cadf90fe2590548e5e3b3cb20f53**,force=false. Это узкое снятие R8
+PR-source HOLD; old source/tested merge/targeted/prep refs сохраняются.
+Если head/main изменились — STOP для C0, не overwrite. Новый PR создавать не нужно.
+
+Один synchronize/full CI на исправленном source,attempt1. Требуются12 SUCCESS,
+полный unit PASS и наконец actual generic860 + native105 + M4 66 =1031 PG
+с complete disjoint execution union на одном tested merge; counts нельзя подменять
+только successful collection. Foundation host/backend tail,contracts/reproducibility,
+clean source и штатный cleanup обязаны завершиться. Существующие deadlines,
+resource/source guards и все negative assertions сохраняются.
+Unexpected FAIL→freeze, все причины/missing facts в receipt, без source repair
+после outcome/unchanged rerun. Receipt sole child source только на R9 prep;
+затем C3 HOLD. Merge выполняет владелец после C0 review, сейчас PR42 не сливать.
+
+Остальные роли HOLD. AI default OFF/FAKE/EVAL_ONLY,2calls1READ; paid/live/Telegram/
+VM/deploy/real data HOLD; owner ничего не запускает. Shared150 ledger прежний:
+confirmed0.37505230/58knownPOST;4unknown held7.585505548;62totalPOST;
+remaining142.039442152;reported0.00743079 UNSETTLED. LOCKED/ADR132/216/217 сохранены.
+
+## История — C3 R8 receipt / BLOCKED, C3 HOLD / 2026-11-04
 
 **C3 HOLD, до C0 review.** Targeted исправление: **72 PASS,0 FAIL/ERROR/SKIP**.
 Единственный новый Draft PR42/full CI: **11 SUCCESS,1 FAIL**. Whole-runtime

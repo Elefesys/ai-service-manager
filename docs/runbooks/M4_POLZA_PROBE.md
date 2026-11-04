@@ -4,11 +4,10 @@
 25 manual PASS,2 READ и2 synthetic images; GPT/v2 выбран для первого runtime.
 PR39/40 слиты. [Main CI41178689536](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536)
 прошёл11/11, ошибка CI закрыта. C2 R4 принят C0:104 PASS, включая35 actual PG.
-[Текущая задача C3 R8](../tasks/M4_HANDOFF.md) — исправить подготовку одного
-schema test и завершить проверки перед полным CI. R7 прошёл71 из72 проверок,
-включая оба synthetic Telegram outcomes и все прежние70 сценариев. CHECK
-исправлен; в оставшемся test выбран worker с неверным для fixture режимом.
-Рабочий код и миграции для этой поправки не меняются. PR41 не сливать.
+[Текущая задача C3 R9](../tasks/M4_HANDOFF.md) — исправить две причины падения
+unit tests foundation. R8 прошёл72/72 целевых проверок; полный CI PR42 —
+11 SUCCESS,1 FAIL. Исправляются тестовые входы и проверка таймаута, затем один
+полный CI того же PR42. Рабочий код и миграции прежние. PR41/42 пока не сливать.
 
 ## Принятый отчёт
 
@@ -40,13 +39,15 @@ Accepted main586240e88c825aa67593af5d72e0bdbb251ed3bb:860 PostgreSQL,
 54 browser и остальные CI gates PASS. Новый DB-only слой прошёл source review
 и104 проверки: сохранённый ответ переживает restart, stale/HUMAN блокируют
 новое действие, UNKNOWN не вызывает автоматическую повторную генерацию.
-C3 R7 подтвердил reply→защищённый Outbox→synthetic Telegram: при наличии прав
+C3 R8 подтвердил reply→защищённый Outbox→synthetic Telegram: при наличии прав
 ровно одна отправка, при отзыве прав — отказ без отправки; restart/replay без
 повтора. Handoff/no_reply, отмена AI, ручной ответ/inbound во время AI wait,
-native6 и UNKNOWN metering/timeout также PASS. Одна новая schema fixture упала
-до проверки допустимых/запрещённых probe полей. C3 R8 исправляет только её
-подготовку; затем один targeted run с теми же72 сценариями и, после PASS,
-новый Draft PR/full CI12gates. До приёмки whole-runtime остаётся BLOCKED.
+native6 и UNKNOWN metering/timeout также PASS. Schema matrix/old CHECK control
+теперь пройдены. Foundation полного CI упал на14 unit cases с отсутствующим
+test input и1 нестабильном in-call timeout control; следующие860 PG проверок
+не запускались. C3 R9 исправляет две причины и обновляет существующий PR42 после
+целевых unit checks. Новый standalone PG прогон не нужен; полный CI должен
+завершить все12 gates. До приёмки whole-runtime остаётся BLOCKED.
 Отдельного capture и новых платных вызовов не требуется.
 AI выключен по умолчанию; модель и transport в этой проверке тестовые.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.

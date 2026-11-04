@@ -30,17 +30,18 @@ R1 source9b05e5dd/receipt e58163ae проверен C0: CI6 PASS/5 FAIL/1 SKIPPE
 R2 source e8300919/receipt d1959bca проверен C0:80 final offline PASS,
 но capture41223501373 отказал EVENT_PUSH_BASE_REF до Docker/PG.
 R3 admission принят C0 по source + hosted evidence; stock catalogs получены.
-R7 run41828733275:71 PASS,1 FAIL; все прежние70 scenarios PASS. Reversible probe
-CHECK/current pins и оба synthetic Telegram rights outcomes приняты C0 в
-SOURCE+TARGETED scope: observe1/send1→SENT либо observe1/send0→FAILED, replay без
-повторных calls/sends. Catalog/readiness/downgrade/native6/cleanup PASS.
-Whole-runtime BLOCKED: новый schema test использовал AI-enabled worker для
-legacy GUARDED_TEXT; его CHECK matrix/old-CHECK control не достигнуты.
-Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R8: исправить эту test fixture
-существующим TEST worker без AI; сохранить AI positive путь и все72 nodeids.
-Один targeted PG/runtime; после PASS один новый Draft PR/full CI12gates.
-Exact base/write-set/критерии — CURRENT; R1–R7 refs frozen. Миграции0001–0015,
-backend/foundation/pins и retained/applied DB immutable; нового product scope нет.
+R8 targeted41836791831:72/72 PASS, включая schema matrix/named old-CHECK control,
+synthetic Telegram rights/replay/native6; принят C0 в SOURCE+TARGETED scope.
+PR42/full CI41838277597:11 SUCCESS,1 FAIL. Foundation unit15 FAIL:14 missing pin
+file в test fixtures и1 in-call timeout без observed entry. Generic860/tail
+NOT_REACHED; whole-runtime BLOCKED. Catalog/readiness/downgrade/cleanup PASS.
+Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R9: self-contained test inputs
+и управляемый timeout после adapter entry; production code/PG nodes неизменны.
+После17-case causal/filesystem check и offline PASS C0 разрешает один lease-checked
+fast-forward существующего PR42 и один full CI12gates. Новый standalone PG/capture
+не назначен. Это явное исключение PR-source HOLD; R1–R8 execution/prep/C2 refs
+frozen. Exact base/write-set/критерии — CURRENT. Миграции0001–0015, backend/pins,
+PG modules/workflows/infra и retained/applied DB immutable; нового product scope нет.
 Valid OUTPUT/UNKNOWN metering сохраняет held reserve/no-regeneration; application,
 catalog,tenant,currentness,rights и send guards не обходить.
 AI выключен по умолчанию; paid/live transports/VM/real data не включаются.
