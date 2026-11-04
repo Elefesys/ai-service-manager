@@ -2,7 +2,48 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R4 / IN_PROGRESS, выдано C3 / 2026-11-01
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R4 / BLOCKED, C3 HOLD / 2026-11-04
+
+C3 receipt, до C0 review. Единственный targeted run
+[41803776341](https://github.com/Elefesys/ai-service-manager/actions/runs/41803776341),
+push/attempt1/job126485682131 **FAIL** до PostgreSQL: phase report перезаписал
+current-native inventory JSON; следующий lookup дал KeyError/OPERATION_FAILED.
+Это ошибка C3 runner. По STOP правилу нет source repair после outcome/rerun,
+нового capture/Draft PR/full CI; whole-runtime не INTEGRATED/VERIFIED.
+
+Base **c8f85533f8dee96ea7ef0e8f0831ae9e5f3a3783**/tree37d9f197;
+source **cbc2b2bb044f5eb8d84c4215c5e04bb9806bd139**/
+tree **162823070a847eacc5602cb3010b16369a3ea018**, sole child base,12 allowed paths.
+Этот docs-only receipt — sole child source на prep c3/m4-3-runtime-integration-r4;
+execution frozen на source; PR-source остаётся на assignment. Main586240e8,
+R1–R3/C2 refs и OPEN DRAFT PR41/head9b05e5dd unchanged; merge не выполнялся.
+
+Исправлена ровно expected-row signature0015, historical hash/self-security
+сохранены; source invariant182other/48columns PASS, body/full pins согласованы
+с C0 stock derivation, но оба **CANDIDATE_NOT_PG_TESTED**. Final-source offline
+**694 PASS +130 subtests**, Ruff/format/mypy PASS; ранние2 harness failures и
+их pre-publication исправление отдельно сохранены, не скрыты final результатом.
+Event/source admission PASS, exact before/sole parent=base; actual base_ref str
+refs/heads/c3/m4-3-runtime-integration-r4. Build/64M4+6native collection exit0;
+SQL/tests0.0/600s, actual PG0. Cleanup PASS/zero owned resources/source clean.
+
+Все70 PG cases, corrected catalog/readiness, lifecycle/cancel/manual/recovery,
+current-native6 guards и12 new full-CI gates NOT_REACHED. Original summary
+считает лишь64:6native не добавлены после раннего отказа. Audit сохраняет
+original и отдельно перечисляет70. Та же output collision найдена статически
+у native-owner/readiness, эти этапы не запускались. Unit driver подменял phase
+и не проверял producer/report запись. Минимальное предложение C0: разделить
+phase/payload paths, проверить настоящую wrapper/subprocess границу offline
+и полную missing accounting; **не применено**, требуется новая выдача C0.
+
+[Evidence64files](https://chatgpt.com/library?file_id=libfile_38a3fa4b59e08191b1bf5668dc1ad3d0&account_id=personal):
+6559275bytes/SHA2564f32b9d7dae252d916f4380fd83ca890ecc477ed70907ee7b354d79b349b538b,
+manifest63/63; original artifact13308188793/3222947bytes/manifest22/22,
+342 source blobs/modes/bytes/SHA256 verified. Полные факты/ограничения/next delta —
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md). Другие роли HOLD, default OFF/fake-only;
+paid/live/VM/deploy/real data HOLD, shared150 ledger unchanged, owner ничего не запускает.
+
+## История — C0 assignment C3 R4 / 2026-11-01
 
 C0 проверил R3 source9545db92/receipt **ad6f1b732d0158ad64f58e7097e0bc8c38de05ab**.
 Admission repair VERIFIED SOURCE+HOSTED; run41226933313 получил stock0013/0015.

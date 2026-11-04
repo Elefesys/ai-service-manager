@@ -6,7 +6,105 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R4 / выдано C3 / 2026-11-01
+## CURRENT — C3 R4 receipt / BLOCKED, до C0 review / 2026-11-04
+
+**C3 HOLD.** Единственный targeted run отказал до запуска PostgreSQL из-за
+ошибки C3 в runner: phase report перезаписал current-native inventory JSON.
+Последующее чтение получило **KeyError / OPERATION_FAILED**. Corrected catalog,
+readiness и все70 PG cases **NOT_REACHED**. По STOP правилу source frozen;
+повторов, нового capture, source repair после outcome, Draft PR/full CI нет.
+Whole-runtime не INTEGRATED/VERIFIED; далее решение C0.
+
+**Assignment/base:** `c8f85533f8dee96ea7ef0e8f0831ae9e5f3a3783`, tree
+`37d9f197c74f1c2e246b88138d9a41814f5e686e`.
+**Frozen source:** `cbc2b2bb044f5eb8d84c4215c5e04bb9806bd139`, tree
+`162823070a847eacc5602cb3010b16369a3ea018`, sole parent assignment.
+Этот docs-only receipt — sole child source на prep
+`c3/m4-3-runtime-integration-r4`; execution
+`c3/m4-3-runtime-targeted-run-r4` остаётся на source, PR-source
+`c3/m4-3-runtime-integration-pr-r4` остаётся на assignment.
+
+Ровно12 разрешённых source paths:0015 migration, foundation.py,
+native_context_db_catalog.py, m4_runtime_db.py, m4-runtime-db.yml, ci.yml,
+test_browser.sh, test_telegram_egress.sh, test_m4_delivery.py,
+test_m4_runtime_db_runner.py, test_native_context_db_runner.py,
+test_telegram_egress.py. Полный patch/source index сохранён в evidence.
+0001–0014, architecture, agent/cancellation/worker, retained35 module,
+locks/image pins/infra и C2 runner/workflow не изменены R4.
+
+0015: ровно одна expected-row signature self→human_context_schema_profile,
+historical hash527fce56… и отдельная self-security проверка сохранены.
+Source invariant:182 unique other functions без self; полный set/body/language/
+security/volatility/runtime-execute match,48 column sets. Остальные182 functions
+и nonfunction DDL без изменений. Declared valid/hash failure имеет приоритет
+над отдельным full-pin mismatch, оба факта сохраняются.
+Согласованные foundation pins совпали с C0/R3-stock derivation:
+body **e0d5d30826f10c3396565ed2ab571653f41f1b7bdcf883f7eeebd0159fecc443**;
+full **8a91ef6f6d592ad9eeafe80f4eb5e2c012ef759040a96351a2242dfd97d480d7**.
+Оба остаются **CANDIDATE_NOT_PG_TESTED**; actual corrected valid=true не получен.
+
+Финальный source до публикации: **694 PASS +130 subtests**,0FAIL/ERROR/SKIP;
+Ruff PASS,format195files,mypy76files PASS. JUnit824 включает130 subtests,
+testcase elements694. Collection64 M4=35retained+21delivery+8schema и6native,
+без deselection. В архиве отдельно сохранены ранние development результаты:
+139PASS,66PASS,3PASS/2FAIL и692PASS/2FAIL+130subtests. Последние два failure —
+неверный выбор finally AST в новом cleanup unit harness, исправленный до
+final-offline694PASS. Эти прогоны не суммировать; hosted после outcome не повторялся.
+
+[Run41803776341](https://github.com/Elefesys/ai-service-manager/actions/runs/41803776341),
+push/attempt1/job126485682131 **FAIL**; ровно один run на execution ref.
+Event/source admission PASS: exact repo/ref/HEAD/tree; before/sole parent=base;
+created/deleted/forced=false. Actual push base_ref — строка
+`refs/heads/c3/m4-3-runtime-integration-r4`, принята before/sole-parent правилом.
+Source clean. Build16.266s PASS; M4 collection6.532s PASS; native collection
+6.031s exit0/raw log6nodes. Job39s; SQL/tests **0.0/600s**, actual cases0.
+Owned cleanup0.215s PASS, zero containers/networks/volumes; upload SUCCESS.
+PG server не запускался: это не подтверждение PG cleanup lifecycle.
+
+**Все причины и missing facts:**
+
+- Observed: collect_current_native пишет `current-native-inventory.json`,
+  phase с тем же label перезаписывает его command/exit/duration metadata.
+  Сохранённый JSON не содержит collection_exit/nodeids/deselected; первый
+  следующий lookup collection_exit объясняет KeyError. Hosted сохранил тип,
+  но не key/traceback; точный lookup установлен по frozen source и artifact.
+- Та же коллизия **STATIC / NOT_REACHED** у `native-owner.json` (reset guard
+  сравнил бы identity с phase report и отказал CURRENT_NATIVE_SERVER_CHANGED)
+  и `readiness.json` (теряется structured runtime_check evidence).
+- Constructed driver подменял сам phase и не исполнял финальную запись report,
+  поэтому offline PASS не проверил взаимодействие producer/wrapper.
+- Original summary expected/missing/not_reached=64 неполон:6native добавляются
+  только после parsing inventory. Независимый audit перечисляет все70
+  NOT_REACHED, не переписывая original summary. Native6 подтверждены raw
+  collection log/local inventory/frozen selectors; structured hosted JSON потерян.
+- Corrected catalog/body/full/roles/security/nonfunction/readiness, retained35,
+  delivery21 (actual cancel/manual/recovery), schema8 lifecycle/negatives,
+  current-native6 guards/behavior — NOT_REACHED; runtime JUnit/cases отсутствуют.
+  Browser/egress startup/cleanup и все12 new full-CI gates также NOT_REACHED.
+
+**Минимальное предложение C0, не применено:** отдельный namespace для phase
+reports, проверка всех пересечений output paths; bounded offline regression
+с настоящим phase/subprocess и payload producer. Expected70 учитывать независимо
+от успеха collection; сохранять bounded failure-site metadata без secret values.
+После outcome новых source изменений/pytest/PG/CI не было. Новый конечный допуск
+решает C0; текущая R4 попытка использована. Actual business behavior не проверен;
+архитектурные LOCKED решения не пересмотрены.
+
+[Evidence64files](https://chatgpt.com/library?file_id=libfile_38a3fa4b59e08191b1bf5668dc1ad3d0&account_id=personal)
+**6559275bytes**, SHA256 **4f32b9d7dae252d916f4380fd83ca890ecc477ed70907ee7b354d79b349b538b**,
+manifest63/63. Original artifact13308188793:3222947bytes, SHA256
+**3f30d5baae0ba9eb2ab4fde6a3c4c04f10d249fc8a252a97da09e4f20c7f1b82**,
+23files/manifest22/22. Все342 source Git blobs/modes/bytes/SHA256 и source archive
+сверены. Архив содержит original ZIP/log/API, local JUnit/patch/pins proof,
+read-only audit, full70 missing и REPORT с разграничением observed/static.
+
+Main586240e8/R1–R3/C2 refs unchanged; PR41 OPEN/DRAFT/head9b05e5dd, не слит.
+Нового PR head/tested merge нет. Другие роли HOLD; AI default OFF/fake-only;
+paid/live/VM/deploy/real data не выполнялись, owner ничего не запускает.
+Shared150 unchanged:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+
+## История — C0 assignment C3 R4 / 2026-11-01
 
 **Результат:** исправить единственную неверную строку verifier0015 и согласовать
 pins, затем проверить synthetic application на PostgreSQL. Stock catalog уже
