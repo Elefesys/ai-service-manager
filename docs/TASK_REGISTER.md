@@ -2,7 +2,38 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R6 / BLOCKED, C3 HOLD / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R7 / IN_PROGRESS / 2026-11-04
+
+C0 проверил R6 source **d2f8f9f5cc19508405d4b482e6d0cb7485fd621c**/tree4270844d
+и receipt **15bfbd76e9866aca18e3586f1ee129ceacaad3f5**/tree7c97f5a6.
+Run41819113103/attempt1:68 PASS,2 FAIL,0ERROR/SKIP; все70 business call phases
+достигнуты. Native6, UNKNOWN metering/reserve/replay, in-call timeout и прежние
+cancellation/manual progress приняты в SOURCE+TARGETED scope. Whole-runtime
+**BLOCKED**. Catalog183/48/valid=true/pins/readiness и cleanup5/5 PASS.
+C0 сверил manifests523/142,342source blobs, fresh log, final535testcase+130subtests
+и causal16 PASS; самостоятельно пересчитал actual catalog.
+
+Оба Telegram rights cases выбрали reply/Outbox, затем упали23514. Source/catalog
+доказывают конфликт: telegram_worker_probe принимает SEND_AI_TEXT, CHECK разрешает
+non-NULL probe только SEND_MANUAL_TEXT. Actual constraint name/HTTP count не
+сохранены; прежний23514 не переименован в доказанный named constraint failure.
+
+**R7:** C0 явно разрешил один reversible CHECK repair unmerged0015 только в fresh
+owned disposable TEST DB;0001–0014/retained DB immutable. All-null/all-present,
+manual/guarded/currentness/tenant/send guards сохраняются. Обновить только current
+verifier/nonfunction/body/full pins; C0 candidate derivation NOT_PG_TESTED приведена
+в [CURRENT HANDOFF](tasks/M4_HANDOFF.md). Единственный исполнитель C3; другие HOLD.
+
+Exact base — SHA этого C0 assignment, sole child receipt15bfbd76/5 docs;
+branch **c0/m4-3-runtime-integration-r7**. Write-set/refs/проверки — CURRENT HANDOFF.
+После causal offline checks один targeted preflight+70 прежних scenarios и≤2
+необходимых новых CHECK cases,≤600s SQL/tests/≤25min job. После PASS один новый
+Draft PR/full CI12gates. Unexpected FAIL → freeze/receipt/C0, без unchanged rerun.
+Main586240e8,PR41 OPEN/DRAFT/head9b05e5dd,R1–R6/C2 refs frozen. AI default OFF,
+fake-only2calls1READ; paid/live/Telegram/VM/deploy/real data HOLD, ledger unchanged.
+На ПК owner ничего не запускается; merge только после C0 acceptance.
+
+## История — C3 R6 receipt / BLOCKED, C3 HOLD / 2026-11-04
 
 C3 receipt, до C0 review. Один targeted
 [run41819113103](https://github.com/Elefesys/ai-service-manager/actions/runs/41819113103),

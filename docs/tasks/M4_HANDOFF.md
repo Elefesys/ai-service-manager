@@ -6,7 +6,161 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3 R6 receipt / BLOCKED, C3 HOLD / 2026-11-04
+## CURRENT — C0 assignment C3 R7 / 2026-11-04
+
+**Результат для пилота:** довести уже выбранный AI reply до защищённой synthetic
+Telegram отправки либо отказа при отозванных правах. R6 прошёл68/70 scenarios;
+два оставшихся отказа выявили несовместимость CHECK таблицы с AI probe.
+Whole-runtime ещё **BLOCKED**; **C3-M4.3-RUNTIME-INTEGRATION-R7 IN_PROGRESS**.
+Это исправление согласованной функции M4; без него Telegram delivery не принимается.
+
+**C0 review R6:** source **d2f8f9f5cc19508405d4b482e6d0cb7485fd621c** /
+tree **4270844dfc8c92cf6906d8ca4c09f61b78420cea**, sole child assignment
+**1e5dc3cfbbaac00af23bec84df64da8a6041be93**, ровно6 разрешённых paths.
+Receipt **15bfbd76e9866aca18e3586f1ee129ceacaad3f5** /
+tree **7c97f5a6da91eca3ce240858d02fe7cf1783c854**, sole child source,2 docs.
+Fresh GitHub metadata подтверждают один
+[run41819113103](https://github.com/Elefesys/ai-service-manager/actions/runs/41819113103),
+push/attempt1/job126537463640 FAIL. Exact source/event/write-set admission PASS;
+SQL/tests304.897408928/600s, job394/1500s; cleanup5/5 PASS, zero owned resources.
+Retained35 PASS, delivery19 PASS/2 FAIL, schema8 PASS, native6 PASS;0 ERROR/SKIP.
+Все70 setup/call/teardown достигнуты; missing call phases/unknown inventory=0.
+
+C0 сверил [архив R6](https://chatgpt.com/library?file_id=libfile_6abc471924c881919dd36da111861831&account_id=personal):
+37064460bytes/SHA256 **32461a24312de3fec06f8d8e007f3520d48db5995a23d14b44374b5a2e5ea208**,
+manifest523/523; original artifact13315798489:4001876bytes,
+SHA256 **b9b65603550139038b927925863a96ca5f1e709fe8e6240b43e5d8c9aa216933**,
+manifest142/142,143 extracted files byte-identical;342 Git blobs/modes exact.
+Fresh job log совпал с архивом. Final offline535 testcase PASS+130subtests,
+causal16 PASS; Ruff/format195/mypy76 PASS. Source repair R6 принят в SOURCE +
+TARGETED scope: native6/identity-at-use, valid OUTPUT/UNKNOWN reserve/replay,
+in-call10s timeout/terminal/no-regeneration, freshness negative, cancellation и
+inbound/manual progress. Containing Telegram cases остаются FAIL.
+
+C0 независимо перепроверил saved stock PG18.6 catalog183functions/48tables,
+embedded182others/48columns, roles/security/nonfunction, declared valid=true,
+body/full pins и readiness PASS. Текущие actual pins сохранены в R6 receipt ниже.
+Это подтверждение текущей схемы, включая найденный defect; нового PG/pytest/CI
+запуска C0 не делал. New PR/full CI12gates по-прежнему NOT_REACHED.
+
+### Дефект и решение C0 по миграции
+
+В обоих rights cases SELECTION доказал reply,1 model call,SUCCEEDED,Outbox=true.
+Следующий claim/execute SEND упал с IntegrityError/23514; actual HTTP count,
+constraint name и application caller не сохранены, SEND assertions NOT_REACHED.
+Saved installed CHECK `platform.messaging_jobs.messaging_jobs_telegram_probe_check`
+разрешает три non-NULL probe поля только при kind=SEND_MANUAL_TEXT. Installed
+`telegram_worker_probe` уже принимает SEND_AI_TEXT и записывает эти три поля;
+worker вызывает его до HTTP observe. **Несовместимость source/catalog доказана**;
+привязка прежнего23514 именно к named CHECK остаётся static inference.
+
+**C0 явно разрешает узкую поправку unmerged0015** только в новом fresh disposable
+TEST candidate: включить SEND_AI_TEXT во вторую ветвь этого CHECK вместе с
+SEND_MANUAL_TEXT. Первая all-NULL ветвь, all-present требование, положительность
+generation/version и запрет probe для SEND_GUARDED_TEXT/прочих kinds сохраняются.
+Использовать существующий CHECKS/_constraints upgrade/downgrade; old definition
+точно из0007, downgrade восстанавливает его. Никаких новых grants/functions/
+таблиц, смягчения freshness/currentness/rights/tenant/send/replay guards.
+
+Это расширяет прежнее исключение0015 profile/pins repair явно, поскольку теперь
+найден missing DDL. В проверенном scope0015 не integrated в main; R6 owned DB
+удалены с подтверждённым cleanup. Миграции0001–0014 неизменны, retained/applied
+0015 DB не переписываются. Если такая DB обнаружена — STOP и C0 additive
+successor decision. Production Expand→Migrate→Contract/ADR132/216/217 сохранены.
+C0 назначает DB strategy, C3 остаётся единственным integration executor со
+смежным узким SQL scope; отдельного параллельного C2 задания нет.
+
+**Проект новых pins, NOT_APPLIED / NOT_PG_TESTED:** C0 получил его из точных R6
+stock bytes: одна constraint row, затем только nonfunction literal в current
+verifier; остальные182 functions/все прочие catalog rows неизменны. Каноническая
+CHECK форма меняет `(kind = 'SEND_MANUAL_TEXT'::text)` на
+`(kind = ANY (ARRAY['SEND_MANUAL_TEXT'::text, 'SEND_AI_TEXT'::text]))`.
+JSON round-trip byte-exact; full hash сохраняет prefix `asm:m3:native_schema:v1\n`.
+
+| Pin | Candidate SHA256 |
+|---|---|
+| nonfunction | `a4aeec49cd351eea23f19346700ba998ec4ca9ab5aafd6163b6193da72285b9d` |
+| verifier body | `2af634ab2afb3b2b9a536453ce6c735b6be57a1018fdd0893d707d3d5dca5f36` |
+| full catalog | `5c82c2a14b95ae7e85a1fb2191f91843ff78e6354e4f5e1cdba5c2504183f181` |
+
+C3 независимо проверяет derivation и source diff до запуска. Меняются только
+current nonfunction/body/full pins; historical0013/0014 profiles/pins и182-row
+verifier invariant остаются прежними. Actual stock preflight обязан подтвердить
+все три значения, valid=true и RuntimeDatabase.check; prediction не является PASS.
+
+### Исполнение R7
+
+Exact base — полный SHA этого C0 assignment из immutable URL, sole child receipt
+15bfbd76/5 docs. Branch **c0/m4-3-runtime-integration-r7**; prep
+**c3/m4-3-runtime-integration-r7**, PR source **c3/m4-3-runtime-integration-pr-r7**,
+единственный execution ref **c3/m4-3-runtime-targeted-run-r7**. Accepted main
+**586240e88c825aa67593af5d72e0bdbb251ed3bb**, PR41 OPEN/DRAFT/head9b05e5dd и
+R1–R6/C2 refs frozen. Остальные роли HOLD.
+
+**Write-set, только необходимая дельта:**
+
+- `migrations/versions/0015_ai_delivery.py` — один reversible CHECK и current
+  verifier nonfunction literal; остальные function bodies/DDL неизменны.
+- `backend/src/asm/foundation.py` — только два current catalog/body pin constants.
+- `scripts/native_context_db_catalog.py`, `tests/test_native_context_db_runner.py`
+  — current AI_NONFUNCTION pin, exact R7 transition и проверки; при добавлении
+  минимальных PG cases только точный inventory count, без ослабления partition.
+- `scripts/m4_runtime_db.py`, `tests/test_m4_runtime_db_runner.py`,
+  `.github/workflows/m4-runtime-db.yml` — R7 identity/write-set, bounded failure
+  evidence/точный inventory. При SQL отказе сохранять SQLSTATE, allowlisted known
+  constraint name и bounded application filename/function/line. В двух rights
+  cases сохранять observe/send counters и stage даже при exception; без SQL,
+  exception values/locals, claims, tokens, payloads или новой logging-платформы.
+- `tests/test_m4_delivery.py`, `tests/test_m4_schema_postgres.py`,
+  `tests/test_m4_delivery_postgres.py` — причинные CHECK/lifecycle/rights проверки
+  и необходимые consumers pins. Не ослаблять existing assertions/negative gates.
+- `docs/tasks/M4_HANDOFF.md`, `docs/TASK_REGISTER.md` — docs-only receipt.
+
+Другие backend/agent/worker modules,0001–0014, retained/native PG modules,
+architecture, dependencies/image pins/infra,ci.yml, логику и workflow C2
+не менять. Не вводить0016 в обход явной migration strategy. Любая другая
+необходимая product/DDL правка — конкретный blocker C0 до hosted запуска.
+
+До публикации проверить exact old/new CHECK, обратимость и immutable predecessors;
+causal offline control должен отличать прежний отказ AI от нового допуска при
+сохранении manual/all-null/all-present semantics и guarded запрета. Ruff/format/mypy и
+затронутые regression tests — на final source. Сверить final catalog derivation.
+
+**Один targeted run**, без capture/старого rerun. Execution ref заранее создать
+на assignment, где R7 trigger отсутствует; один source commit fast-forward с
+expected_sha/force=false. Exact before/sole parent=assignment, repo/ref/tree/HEAD/
+attempt1, clean-source/write-set admission; активировать только R7 push trigger.
+Fresh owned stock0015 preflight → все прежние64 M4+6 native и только необходимые
+новые CHECK cases (не более2 PG nodes, если existing cases недостаточно).
+Collection/inventory/partition должны отражать точную дельту; ни один из70 старых
+сценариев не исчезает. Прежние≤600s aggregate SQL/tests и≤25min job сохраняются.
+
+Actual PG обязателен для обоих Telegram outcomes: fresh probe→getBusinessConnection
+→sendMessage ровно1→SENT и rights revoked→getBusinessConnection без send→FAILED;
+model call остаётся1, restart/replay не создаёт новый intent или повторную отправку.
+Проверить legal manual/AI/all-null и rejection partial/guarded/foreign probe,
+stale claim/generation/version, ограничения currentness/tenant; использовать
+существующее coverage, дополнять только пробелы этого CHECK. Old CHECK rejection
+в causal control, если проверяется, должен иметь exact23514/constraint evidence,
+не заменять business path failure ранним readiness отказом. Unused downgrade
+восстанавливает0014/old CHECK, repeat upgrade возвращает exact current profile;
+durable enrollment по-прежнему блокирует downgrade до любых изменений.
+
+Только после targeted PASS — **один новый Draft PR/full CI12gates**, complete
+disjoint generic/native/M4 union на final source/tested merge. Unexpected FAIL:
+собрать все известные группы причин и недостающие facts, заморозить source/execution,
+вернуть C0 без source repair после outcome/unchanged rerun. Docs receipt sole
+child source только на prep; затем C3 HOLD. Return exact base/source/tree/diff,
+original artifacts/digests, actual catalog/70+delta outcomes/cleanup, PR head/
+tested merge/12 gates либо точные NOT_REACHED. PR41 не сливать; merge нового
+candidate выполняет владелец после C0 acceptance.
+
+AI default OFF/FAKE/EVAL_ONLY,2calls1READ; paid/live/Telegram/VM/deploy/real data
+HOLD, owner ничего не запускает. Shared150 unchanged:confirmed0.37505230/58knownPOST,
+4unknown held7.585505548,62totalPOST,remaining142.039442152;
+reported0.00743079 UNSETTLED. Архитектурные LOCKED решения сохранены.
+
+## История — C3 R6 receipt / BLOCKED, C3 HOLD / 2026-11-04
 
 **C3 HOLD, до C0 review.** Единственный targeted run — **68 PASS,2 FAIL,
 0 ERROR,0 SKIP**. Все70 business call phases достигнуты, current-native6 PASS.

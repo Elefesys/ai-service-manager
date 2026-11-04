@@ -30,15 +30,16 @@ R1 source9b05e5dd/receipt e58163ae проверен C0: CI6 PASS/5 FAIL/1 SKIPPE
 R2 source e8300919/receipt d1959bca проверен C0:80 final offline PASS,
 но capture41223501373 отказал EVENT_PUSH_BASE_REF до Docker/PG.
 R3 admission принят C0 по source + hosted evidence; stock catalogs получены.
-R5 run41811079733:60 PASS,4 FAIL,6 native setup ERROR. Corrected stock0015 catalog,
-valid=true/pins/readiness и cancellation/manual progress подтверждены actual PG.
-Whole-runtime BLOCKED. Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R6:
-исправить fixture freshness/identity и metering/timeout test contracts, затем
-один targeted PG/runtime и после PASS один новый Draft PR/full CI12gates.
-Exact base/write-set/критерии — CURRENT; R1–R5 refs frozen. Valid OUTPUT с UNKNOWN
-cost не равен потерянному ответу: held reservation/no-regeneration сохраняются.
-Нового capture нет. Migrations, foundation pins и business runtime неизменны;
-никаких изменений retained DB или обхода application/catalog/tenant/send gates.
+R6 run41819113103:68 PASS,2 FAIL; native6/UNKNOWN metering/in-call timeout PASS.
+Corrected stock0015/readiness и cancellation/manual progress подтверждены actual PG.
+Whole-runtime BLOCKED: AI Telegram probe конфликтует с manual-only CHECK таблицы.
+Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R7: один reversible CHECK repair
+unmerged0015 и согласованные current pins, только fresh owned disposable TEST DB.
+Затем один targeted PG/runtime; после PASS один новый Draft PR/full CI12gates.
+Exact base/write-set/migration exception/критерии — CURRENT; R1–R6 refs frozen.
+0001–0014 и retained/applied DB immutable; других product изменений/capture нет.
+Valid OUTPUT/UNKNOWN metering сохраняет held reserve/no-regeneration; application,
+catalog,tenant,currentness,rights и send guards не обходить.
 AI выключен по умолчанию; paid/live transports/VM/real data не включаются.
 Остальные роли HOLD; C2 R1–R4 execution refs frozen.
 Прежние paid допуски использованы; новых вызовов они не разрешают.

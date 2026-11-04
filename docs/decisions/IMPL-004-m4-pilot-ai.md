@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R6.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R7.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -990,7 +990,7 @@ Draft PR/full CI12gates. Отдельного capture и rerun R4 нет; exact 
 write-set/limits — CURRENT. Whole-runtime BLOCKED, PR41/R1–R4/C2 refs frozen.
 Архитектура и product scope прежние; AI default OFF, paid/live/VM/real data HOLD.
 
-**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R6.**
+**Предыдущее решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R6.**
 C0 проверил R5 source1bca972c/receipt34ecabaf, оригинальные artifacts и fresh
 run41811079733:60 PASS,4 FAIL,6 setup ERROR. Corrected stock0015 catalog/pins/
 valid=true/readiness VERIFIED в targeted PG scope; cancellation/manual progress
@@ -1017,6 +1017,35 @@ terminal/no-regeneration/no-resend. Production/SQL contract не меняетс�
 Migrations/pins/backend immutable; другое product изменение требует нового C0
 решения. Main/PR41/R1–R5/C2 refs frozen. AI default OFF/fake-only,2calls1READ,
 paid/live/Telegram/VM/deploy/real data HOLD; ledger и LOCKED архитектура прежние.
+
+**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R7.**
+C0 проверил source d2f8f9f5/receipt15bfbd76 и оригинальные artifacts/fresh metadata
+run41819113103.68 PASS,2 FAIL; native6, UNKNOWN metering/reserve/replay и in-call
+timeout приняты в SOURCE+TARGETED scope. Catalog/readiness/cleanup PASS, whole
+runtime BLOCKED. Оба Telegram cases достигли reply/Outbox, затем23514; имя CHECK
+и HTTP count не сохранены. Saved schema/source доказывают несовместимость:
+telegram_worker_probe допускает SEND_AI_TEXT, messaging_jobs_telegram_probe_check
+разрешает non-NULL probe только SEND_MANUAL_TEXT. Exact old error attribution
+остаётся inference; новый test не должен скрывать business failure readiness отказом.
+
+C0 явно расширяет прежнее исключение profile/pins для unmerged0015: разрешён
+один reversible CHECK repair (manual+AI, прежние all-null/all-present/positive
+fields/guarded prohibition) и соответствующие current verifier/catalog pins.
+Только новый fresh owned disposable TEST candidate;0001–0014, historical profiles
+и retained/applied0015 DB неизменны. Если retained0015 обнаружена, STOP до решения
+об additive successor. Это исправление недостающей совместимости уже согласованной
+AI delivery; ADR132/216/217, structured-state authority и runtime guards сохранены.
+C0 отвечает за migration strategy; один C3 получает смежный SQL scope.
+
+C0 candidate pins выведены из saved R6 stock bytes (одна constraint row + current
+verifier nonfunction literal), NOT_APPLIED/NOT_PG_TESTED. C3 независимо сверяет
+source/derivation; actual preflight обязан подтвердить pins/valid=true/readiness.
+Точные values/write-set/refs в CURRENT. Backend кроме двух pin constants,
+другие functions/DDL, dependencies/infra не меняются. После offline checks один
+targeted run70+≤2case delta; после PASS один новый Draft PR/full CI12gates.
+Unexpected FAIL → frozen source/receipt/C0, без unchanged rerun.
+Main/PR41/R1–R6/C2 refs frozen; default OFF/fake-only2calls1READ,
+paid/live/Telegram/VM/deploy/real data HOLD. Ledger и LOCKED архитектура прежние.
 
 ## Что пересмотрено относительно baseline
 
