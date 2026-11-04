@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R4.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R5.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -961,7 +961,7 @@ negatives; новые execution refs заранее создаются на за
 нет новой платформы, платного вызова или live enable. Точные условия в CURRENT.
 PR41/старые refs frozen; C3 один owner, остальные HOLD. Merge после приёмки C0.
 
-**Актуальное решение C0 от 2026-11-01: C3-M4.3-RUNTIME-INTEGRATION-R4.**
+**Предыдущее решение C0 от 2026-11-01: C3-M4.3-RUNTIME-INTEGRATION-R4.**
 R3 admission принят по source/hosted evidence, stock catalogs получены.
 Current0015 valid=false вызван одной неверной signature в embedded expected
 table: self вместо historical human verifier. C0 независимо подтвердил этот
@@ -974,6 +974,21 @@ preflight + retained/delivery/schema/current-native6. Новый отдельн�
 limits в CURRENT. Узкое исключение unmerged0015 из R2 сохраняется;0001–0014,
 agent/cancellation и инфраструктура immutable. Whole-runtime BLOCKED до проверки;
 PR41/старые refs frozen, другие роли HOLD, paid/live/VM/real data не включаются.
+
+**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R5.**
+C0 принял R4 verifier-row/pins repair только в SOURCE scope. Run41803776341
+остановлен до PG из-за перезаписи native inventory phase report; ещё две
+коллизии owner/readiness установлены по source. Все70 targeted cases и actual
+corrected catalog NOT_REACHED.694 offline PASS не проверяли реальную границу
+producer/phase, поскольку constructed driver заменял wrapper.
+
+Назначена только runner/evidence поправка с real-subprocess regression,
+полным planned/collected/missing учётом и совместимым browser export. Migrations,
+foundation pins и business runtime в R5 не меняются. После offline PASS один
+targeted run с прежним stock preflight/runtime scope; после PASS один новый
+Draft PR/full CI12gates. Отдельного capture и rerun R4 нет; exact base/refs/
+write-set/limits — CURRENT. Whole-runtime BLOCKED, PR41/R1–R4/C2 refs frozen.
+Архитектура и product scope прежние; AI default OFF, paid/live/VM/real data HOLD.
 
 ## Что пересмотрено относительно baseline
 

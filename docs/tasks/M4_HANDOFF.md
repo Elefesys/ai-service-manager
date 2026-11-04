@@ -6,7 +6,140 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3 R4 receipt / BLOCKED, до C0 review / 2026-11-04
+## CURRENT — C0 assignment C3 R5 / 2026-11-04
+
+**Результат для пилота:** закончить уже назначенную synthetic проверку AI reply,
+handoff/no_reply, отмены и ручного ответа. R4 остановлен ошибкой test runner до
+PostgreSQL. Исправление ограничено runner/evidence; новых функций продукта нет.
+Whole-runtime остаётся **BLOCKED**, новая задача C3 — **IN_PROGRESS**.
+
+**C0 review R4:** source **cbc2b2bb044f5eb8d84c4215c5e04bb9806bd139** /
+tree **162823070a847eacc5602cb3010b16369a3ea018**, sole child assignment
+**c8f85533f8dee96ea7ef0e8f0831ae9e5f3a3783**,12 разрешённых paths.
+Receipt **3963fabf9ad9e2be91bfb01624fd7dcec5869a79** /
+tree **badaf21b312d61bfc047337fb62134e908669ccf**, sole child source,2 docs.
+Fresh run/jobs/artifact/log/ref metadata подтверждают один
+[run41803776341](https://github.com/Elefesys/ai-service-manager/actions/runs/41803776341),
+push/attempt1/job126485682131 FAIL. Source/event admission PASS; before/sole
+parent exact, base_ref — строка prep R4; source clean. Build16.266s,
+M4 collection6.532s и native collection6.031s exit0; SQL/tests0.0s, actual PG0.
+Cleanup0.215s/zero owned resources PASS; сервер PG не запускался.
+
+C0 сверил [архив R4](https://chatgpt.com/library?file_id=libfile_38a3fa4b59e08191b1bf5668dc1ad3d0&account_id=personal):
+6559275bytes/SHA256 **4f32b9d7dae252d916f4380fd83ca890ecc477ed70907ee7b354d79b349b538b**,
+manifest63/63; original artifact13308188793:3222947bytes,
+SHA256 **3f30d5baae0ba9eb2ab4fde6a3c4c04f10d249fc8a252a97da09e4f20c7f1b82**,
+23files/manifest22/22;342 source Git blobs/modes. Fresh log совпал с архивом.
+Final local JUnit:694 testcase PASS +130 subtests,0FAIL/ERROR/SKIP;
+Ruff/format195files/mypy76files PASS. Ранние2 harness failures сохранены;
+их результаты не суммируются с final. Offline PASS не проверил реальную
+границу producer/phase: constructed driver подменял сам `phase`.
+
+**Принято только в SOURCE scope:** exact одна expected-row signature0015
+self→human, historical hash и self-security сохранены;182 unique other functions,
+48 column sets, остальные функции/nonfunction DDL неизменны. C0 независимо
+пересчитал body/full pins из frozen source и R3 stock serialization; full hash
+использует существующий domain prefix `asm:m3:native_schema:v1\n`.
+Body **e0d5d30826f10c3396565ed2ab571653f41f1b7bdcf883f7eeebd0159fecc443**;
+full **8a91ef6f6d592ad9eeafe80f4eb5e2c012ef759040a96351a2242dfd97d480d7**.
+Оба **CANDIDATE_NOT_PG_TESTED**. Declared-profile failure теперь имеет приоритет;
+независимые body/full-pin факты сохранены. Новых pytest/PG/CI запусков C0 не делал.
+
+**Все известные причины и недостающие проверки:**
+
+- `current-native-inventory.json` фактически заменён phase metadata. Следующий
+  lookup `collection_exit` объясняет KeyError; hosted сохранил тип, точный lookup
+  установлен по source. Это defect runner, не ошибка модели/бизнесового пути.
+- Такие же записи у `native-owner.json` и `readiness.json` найдены статически:
+  первый потерял бы identity для reset guard, второй — runtime_check result.
+  Оба этапа NOT_REACHED; не выдавать прогноз за observed failure.
+- Original summary перечисляет64 missing, хотя frozen selectors/local inventory
+  и raw native collection дают ещё6. Все70 NOT_REACHED; original не переписывать.
+- При переносе phase reports в подкаталог нужно обновить их потребителей:
+  browser cleanup сейчас делает нерекурсивный `cp "$tmp/evidence/"*`.
+  Это зависимость предлагаемого исправления, не дополнительный hosted failure.
+- Corrected catalog/valid=true/readiness,64 M4=35 retained+21 delivery+8 schema,
+  current-native6, actual cancellation/manual progress/recovery и все12 new CI
+  gates NOT_REACHED. Main/PR41 не изменены; runtime ещё не принимается.
+
+### Исполнение R5
+
+**Один исполнитель C3**, другие роли HOLD. Exact repair base — полный SHA
+этого C0 assignment из immutable URL, sole child receipt3963fabf/5 docs.
+C0 branch **c0/m4-3-runtime-integration-r5**; prep
+**c3/m4-3-runtime-integration-r5**, PR source
+**c3/m4-3-runtime-integration-pr-r5**, единственный execution ref
+**c3/m4-3-runtime-targeted-run-r5**. Accepted main
+**586240e88c825aa67593af5d72e0bdbb251ed3bb** unchanged; PR41/R1–R4/C2 refs frozen.
+
+**Write-set, только необходимая дельта:**
+
+- `scripts/m4_runtime_db.py`, `tests/test_m4_runtime_db_runner.py` — разделение
+  phase/payload files, полный учёт планируемых/собранных/не достигнутых cases,
+  bounded failure location, причинные offline проверки и R5 identity/write-set.
+- `scripts/native_context_db_catalog.py`, `tests/test_native_context_db_runner.py`,
+  `.github/workflows/m4-runtime-db.yml` — только новый exact R5 transition/identity
+  и соответствующие проверки; accepted admission/catalog semantics не менять.
+- `scripts/test_browser.sh`, `tests/test_telegram_egress.py` — только совместимость
+  сбора evidence с изменённым phase layout и её проверка, если затронута.
+- `docs/tasks/M4_HANDOFF.md`, `docs/TASK_REGISTER.md` — docs-only receipt.
+
+Migrations0001–0015, foundation pins, agent/cancellation/worker, PG test modules,
+ci.yml, test_telegram_egress.sh, architecture, dependencies/image pins/infra,
+C2 runner/workflow immutable в R5. Новых profile/SQL поправок не назначено.
+Использовать только fresh owned disposable TEST DB; retained0015 DB не менять.
+
+1. Развести command reports/logs и producer payloads в непересекающиеся paths
+   (достаточно небольшого отдельного namespace, без новой logging-платформы).
+   Проверить все реальные producers/readers/copy/manifest paths, включая три
+   дефекта выше, inventory/runtime-summary/cleanup и browser export. Сохранять
+   primary failure при cleanup; failure location — bounded filename/function/line
+   и известный stage/code, без exception values/locals/DSN/секретов.
+2. Planned64 M4 +6 native в targeted и64 в full-CI M4 lane не зависят от успешного
+   чтения native inventory. Валидировать actual collection отдельно; после M4
+   collection ранний native failure оставляет все70 имён в missing/NOT_REACHED.
+   При отказе раньше M4 collection явно сохранить planned counts и неизвестный
+   inventory; не выдавать пустой список за полный. Не дублировать64 literals ради
+   отчётности и не ослаблять exact selection/disjoint/full-union checks.
+3. До публикации проверить настоящие `phase` + subprocess + запись payload:
+   success и ранний failure/timeout, сохранность inventory/owner/readiness и
+   primary/cleanup, чтение downstream consumer и export артефактов. Подменять
+   Docker/PG boundary короткими synthetic child processes допустимо; подмена
+   самого `phase`, write или report-finalization не доказывает repair. Добавить
+   причинную regression, падающую на R4 defect; сохранить bounded real-wrapper
+   driver smoke до следующего шага и корректные70 missing при native failure.
+   Затем Ruff/format/mypy и затронутые offline tests на финальном source.
+4. **Один targeted run**. Execution ref заранее создать на exact assignment,
+   где R5 trigger отсутствует; одним source commit fast-forward с expected_sha,
+   force=false. before/sole parent==assignment, repo/ref/tree/HEAD/attempt1,
+   clean-source/write-set admission обязательны; активировать только R5 trigger.
+   Нет отдельного capture, rerun R4 или дополнительных диагностических PG runs.
+5. В том же run отдельный owned stock0015 preflight: independent catalog/body/
+   security/roles/nonfunction, embedded182/48, declared valid=true, exact pins и
+   RuntimeDatabase.check. После PASS — все64 M4 +current-native6 на предназначенных
+   им fresh clusters, ранее masked negatives, lifecycle/cancel/manual/recovery.
+   Сохранить полный inventory/JUnit/phases/active/missing/source/owned cleanup;
+   ≤600s aggregate SQL/tests, ≤25min job. Preflight не загрязняет retained0014
+   или destructive modules. Actual behavior не заменять source assertion/skip.
+6. Только после targeted PASS — **один новый Draft PR/full CI**, все12 gates,
+   generic/native/M4 disjoint complete union на final source/tested merge.
+   Это перенесённая неиспользованная R4 проверка. Unexpected FAIL: собрать все
+   известные группы причин и missing facts, source/execution refs заморозить,
+   вернуть C0 без unchanged rerun или source repair после outcome. Затем только
+   docs receipt sole child frozen source на prep; C3 HOLD до C0 review.
+
+Return: exact base/source/tree/write-set, causal offline evidence, actual
+catalog/readiness и70 targeted результатов, original artifacts/digests, cleanup,
+PR head/tested merge и12 CI gates либо точные NOT_REACHED. Исправление должно
+оставаться ограниченным; если нужен пересмотр product/architecture или новая
+система тестирования, вернуть конкретную причину C0, не расширять scope.
+PR41 не сливать; merge нового candidate выполняет владелец после приёмки C0.
+AI default OFF/fake-only,2 calls/1 READ; paid/live/Telegram/VM/deploy/real data HOLD.
+На ПК owner ничего не запускается. Shared150 unchanged:confirmed0.37505230/
+58knownPOST;4unknown held7.585505548;62totalPOST;remaining142.039442152;
+reported0.00743079 UNSETTLED. Архитектурные LOCKED решения не пересмотрены.
+
+## История — C3 R4 receipt / BLOCKED, до C0 review / 2026-11-04
 
 **C3 HOLD.** Единственный targeted run отказал до запуска PostgreSQL из-за
 ошибки C3 в runner: phase report перезаписал current-native inventory JSON.

@@ -4,9 +4,9 @@
 25 manual PASS,2 READ и2 synthetic images; GPT/v2 выбран для первого runtime.
 PR39/40 слиты. [Main CI41178689536](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536)
 прошёл11/11, ошибка CI закрыта. C2 R4 принят C0:104 PASS, включая35 actual PG.
-[Текущая задача C3 R4](../tasks/M4_HANDOFF.md) — исправить одну строку verifier
-схемы и её pins, затем закончить synthetic PG проверку. R3 прошёл admission и
-получил stock catalog; current verifier вернул valid=false. PR41 не сливать.
+[Текущая задача C3 R5](../tasks/M4_HANDOFF.md) — исправить запись файлов test runner
+и закончить synthetic PG проверку. Поправка схемы/pins проверена по source;
+R4 остановлен до PG из-за перезаписи списка тестов. PR41 не сливать.
 
 ## Принятый отчёт
 
@@ -40,10 +40,11 @@ Accepted main586240e88c825aa67593af5d72e0bdbb251ed3bb:860 PostgreSQL,
 новое действие, UNKNOWN не вызывает автоматическую повторную генерацию.
 C3 R1 проверил часть synthetic пути: reply идёт в защищённый Outbox, handoff —
 в очередь мастера, no_reply завершает обработку.19 из64 PG scenarios не завершены;
-R3 получил stock catalog и выявил точную ошибку verifier. C0 выдал C3 R4:
-исправление строки/pins, один targeted run с проверкой исправленной схемы и
-оставшихся runtime-сценариев, затем новый Draft PR/full CI. Отдельного capture
-не требуется. PostgreSQL-проверка cancellation/recovery ещё не выполнена.
+R3 получил stock catalog, R4 исправил строку/pins, но test runner остановился
+до PG. C0 выдал C3 R5: узкое исправление runner с проверкой real subprocess,
+затем один targeted run со всеми70 сценариями и после PASS новый Draft PR/full CI.
+Отдельного capture не требуется. Corrected schema/readiness и PostgreSQL-проверка
+cancellation/recovery ещё не выполнены.
 AI выключен по умолчанию; модель и transport в этой проверке тестовые.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.
 

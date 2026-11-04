@@ -2,7 +2,32 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R4 / BLOCKED, C3 HOLD / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R5 / IN_PROGRESS / 2026-11-04
+
+C0 проверил R4 source **cbc2b2bb044f5eb8d84c4215c5e04bb9806bd139**/tree16282307
+и receipt **3963fabf9ad9e2be91bfb01624fd7dcec5869a79**/treebadaf21b.
+Exact verifier-row/pins repair принят в SOURCE scope; corrected PG ещё NOT_TESTED.
+Run41803776341/attempt1: admission/build/collection PASS, phase report перезаписал
+native inventory, KeyError до PG. Source clean/owned cleanup PASS. C0 сверил
+fresh metadata/log, ZIP/manifests63/22/source342 и final694 PASS+130subtests.
+Original summary потерял6 native cases; всего70 NOT_REACHED. Аналогичные
+owner/readiness collisions подтверждены только статически. Whole-runtime BLOCKED.
+
+**Одна задача C3 R5:** исправить разделение phase/payload paths, полную missing
+accounting и bounded failure location; доказать repair через настоящий phase/
+subprocess/consumer offline. Учесть browser export при смене layout. После
+offline PASS один targeted PG run: corrected stock/readiness,64 M4 +6 native;
+после targeted PASS один новый Draft PR/full CI12gates. Никакого отдельного capture.
+
+Exact base — полный SHA этого C0 assignment, sole child receipt3963fabf,
+branch **c0/m4-3-runtime-integration-r5**. Prep/PR/execution refs, узкий write-set,
+≤600s SQL/tests /≤25min job и STOP/receipt правила — в
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md). Migrations/foundation/business runtime
+и PG cases в R5 immutable; accepted main586240e8, PR41/R1–R4/C2 refs frozen.
+PR41 OPEN/DRAFT, не сливать. Другие роли HOLD; default OFF/fake-only;
+paid/live/VM/deploy/real data HOLD, ledger unchanged, owner ничего не запускает.
+
+## История — C3 R4 receipt / BLOCKED, C3 HOLD / 2026-11-04
 
 C3 receipt, до C0 review. Единственный targeted run
 [41803776341](https://github.com/Elefesys/ai-service-manager/actions/runs/41803776341),

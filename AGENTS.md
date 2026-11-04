@@ -30,12 +30,14 @@ R1 source9b05e5dd/receipt e58163ae проверен C0: CI6 PASS/5 FAIL/1 SKIPPE
 R2 source e8300919/receipt d1959bca проверен C0:80 final offline PASS,
 но capture41223501373 отказал EVENT_PUSH_BASE_REF до Docker/PG.
 R3 admission принят C0 по source + hosted evidence; stock catalogs получены.
-Current0015 verifier ошибочно проверяет себя вместо historical human verifier.
-Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R4: исправить эту строку/pins,
-выполнить targeted PG/runtime и затем CI. Отдельного нового capture нет.
-Exact base/write-set и конечные допуски — в CURRENT; R1–R3 refs frozen.
-0001–0014 immutable. Узкое исключение для ещё не принятой0015 описано C0
-в CURRENT; никаких изменений retained DB или обхода application/catalog gates.
+R4 verifier/pins repair принят C0 в SOURCE scope; actual corrected PG ещё нет.
+Run41803776341 остановлен до PG: phase report перезаписал native inventory.
+Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R5: исправить пересечения
+output paths и missing accounting, проверить real phase/subprocess offline,
+затем один targeted PG/runtime и после PASS один новый Draft PR/full CI.
+Exact base/write-set и конечные допуски — в CURRENT; R1–R4 refs frozen.
+Нового capture нет. R5 не меняет migrations, foundation pins или business runtime;
+никаких изменений retained DB или обхода application/catalog gates.
 AI выключен по умолчанию; paid/live transports/VM/real data не включаются.
 Остальные роли HOLD; C2 R1–R4 execution refs frozen.
 Прежние paid допуски использованы; новых вызовов они не разрешают.
