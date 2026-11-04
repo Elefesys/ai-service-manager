@@ -38,9 +38,10 @@ M4_EXECUTION_REFS = (
     "refs/heads/c3/m4-3-runtime-targeted-run-r2",
 )
 # These transitions are distinct from historical push/main/PR semantics.
-# Add the targeted transition only after the capture commit is frozen.
+# R4 reuses the accepted exact transition rule; earlier execution refs stay frozen.
 M4_R3_TRANSITIONS = {
     "refs/heads/c3/m4-3-runtime-catalog-run-r3": "fa2469deea75c11ca5901de77fc3e46304c1e9ae",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r4": "c8f85533f8dee96ea7ef0e8f0831ae9e5f3a3783",
 }
 REPOSITORY = "Elefesys/ai-service-manager"
 REPOSITORY_ID = 1369650588
@@ -67,7 +68,7 @@ M4_PG_MODULES = (
 # Preserve default merge/main checkout, unconditional same-commit reusable call, pinned
 # owned lane and exact generic command. No fallback/embedded workflow is used.
 CI_INPUT_SHA256 = {
-    ".github/workflows/ci.yml": "3676df060496d6048cef2bd06e3f91ef26e39b38be8576c886fc1cfb27ea5b1a",
+    ".github/workflows/ci.yml": "a854b3fd8cf0534cb75c39f22009338a2dd44b89688b5e47d751e42ce50ac49a",
     ".github/workflows/native-context-db.yml": "ff43d2470b56d26cf9c616cad5bc570e31634a19d97bdec4f28e73a205e049fd",
     "scripts/check_backend.sh": "1473e64b8ed0819b046b764f281072583271acd5f7b0929b3f8aa959c5d69330",
 }
@@ -530,6 +531,65 @@ SELECT rolname AS name,rolcanlogin AS login,rolsuper AS superuser,rolbypassrls A
  rolinherit AS inherit,rolcreaterole AS createrole,rolcreatedb AS createdb,rolreplication AS replication
 FROM pg_roles WHERE rolname IN ('asm_runtime','asm_migrator') ORDER BY rolname
 """
+
+
+def compare_embedded_profile(expected):
+    """Independently check the current verifier's expected table against source.
+
+    Its own security clause remains separate. Never use these embedded rows to
+    derive the expected source catalog or to forgive installed catalog drift.
+    """
+    profile = "platform.ai_delivery_schema_profile()"
+    require(expected["revision"] == "0015", "EMBEDDED_REVISION")
+    body = expected["functions"][profile]["body"]
+    sections = re.search(
+        r"WITH expected\(signature,body_hash,language,security_definer,volatility,runtime_execute\) AS \(VALUES (.*?)\),\s+columns_expected\(table_name,column_names\) AS \(VALUES (.*?)\),\s+functions AS MATERIALIZED",
+        body,
+        re.S,
+    )
+    require(sections is not None, "EMBEDDED_TABLE_SHAPE")
+    rows = []
+    for value in split_sql(sections[1], ","):
+        row = re.fullmatch(
+            r"\('([^']+)','([0-9a-f]{64})','(sql|plpgsql)',(true|false),'([svi])',(true|false)\)",
+            value,
+        )
+        require(row is not None, "EMBEDDED_FUNCTION_ROW")
+        rows.append(row.groups())
+    names = [row[0] for row in rows]
+    require(profile not in names, "EMBEDDED_SELF_ROW")
+    require(len(names) == len(set(names)), "EMBEDDED_DUPLICATE_FUNCTION")
+    require(
+        len(names) == 182 and set(names) == set(expected["functions"]) - {profile},
+        "EMBEDDED_FUNCTION_SET",
+    )
+    for signature, body_hash, language, security, volatility, runtime in rows:
+        source = expected["functions"][signature]
+        require(
+            (body_hash, language, security == "true", volatility, runtime == "true")
+            == tuple(
+                source[k]
+                for k in (
+                    "body_sha256",
+                    "language",
+                    "security_definer",
+                    "volatility",
+                    "runtime_execute",
+                )
+            ),
+            "EMBEDDED_FUNCTION_MISMATCH",
+        )
+    columns = {}
+    for value in split_sql(sections[2], ","):
+        row = re.fullmatch(
+            rf"\('({NAME})',ARRAY\[('[a-z_][a-z_0-9]*'(?:,'[a-z_][a-z_0-9]*')*)\]::text\[\]\)",
+            value,
+        )
+        require(row is not None, "EMBEDDED_COLUMN_ROW")
+        require(row[1] not in columns, "EMBEDDED_DUPLICATE_TABLE")
+        columns[row[1]] = re.findall(r"'([^']+)'", row[2])
+    require(len(columns) == 48 and columns == expected["columns"], "EMBEDDED_COLUMN_SET")
+    return {"other_functions": len(names), "tables": len(columns), "result": "PASS"}
 
 
 def compare_roles(rows, memberships, owned_by_runtime):

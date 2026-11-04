@@ -17,6 +17,128 @@ import pytest
 from scripts import prepare_telegram_egress as egress
 
 
+@pytest.mark.parametrize("fault", ["timeout", "nonzero", "timeout_evidence_failure"])
+def test_synthetic_command_journal_preserves_failure_and_omits_private_values(
+    tmp_path, monkeypatch, capsys, fault
+):
+    import ast
+    import re
+    import time
+
+    source = (
+        (egress.ROOT / "scripts/test_telegram_egress.sh")
+        .read_text()
+        .split("<<'PY'\n", 1)[1]
+        .rsplit("\nPY", 1)[0]
+    )
+    tree = ast.parse(source)
+    functions = [
+        n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in {"record_phase", "run"}
+    ]
+    namespace = dict(
+        root=tmp_path,
+        directory=tmp_path,
+        phase="relay_containers",
+        environment={},
+        os=os,
+        sys=sys,
+        json=json,
+        re=re,
+        time=time,
+        subprocess=subprocess,
+    )
+    exec(
+        compile(ast.Module(body=functions, type_ignores=[]), "synthetic-egress-runner", "exec"),
+        namespace,
+    )
+    (tmp_path / ".env").write_text("PG_RUNTIME_PASSWORD=PRIVATE_SENTINEL\n")
+    failure = subprocess.TimeoutExpired(["PRIVATE_SENTINEL"], 3)
+
+    def run(*args, **kwargs):
+        if fault.startswith("timeout"):
+            raise failure
+        return subprocess.CompletedProcess(args[0], 42, b"", b"PRIVATE_SENTINEL")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    if fault == "timeout_evidence_failure":
+        original = namespace["record_phase"]
+
+        def broken(value):
+            if value["event"] == "end":
+                raise OSError("PRIVATE_SENTINEL")
+            original(value)
+
+        namespace["record_phase"] = broken
+    with pytest.raises(
+        subprocess.TimeoutExpired if fault.startswith("timeout") else RuntimeError
+    ) as caught:
+        namespace["run"](["private-command", "PRIVATE_SENTINEL"], timeout=3)
+    if fault.startswith("timeout"):
+        assert caught.value is failure
+    raw = (tmp_path / "reports/telegram-egress-phases.jsonl").read_text()
+    assert "PRIVATE_SENTINEL" not in raw + capsys.readouterr().out
+    rows = [json.loads(line) for line in raw.splitlines()]
+    assert rows[0]["event"] == "start" and rows[0]["budget_seconds"] == 3
+    if fault != "timeout_evidence_failure":
+        assert rows[-1]["event"] == "end"
+        assert rows[-1]["complete"] is (fault == "nonzero")
+        assert rows[-1]["exit_code"] == (42 if fault == "nonzero" else None)
+
+
+@pytest.mark.parametrize("primary", [False, True])
+def test_synthetic_cleanup_failure_is_recorded_without_replacing_primary(primary, monkeypatch):
+    import ast
+    import time
+
+    source = (
+        (egress.ROOT / "scripts/test_telegram_egress.sh")
+        .read_text()
+        .split("<<'PY'\n", 1)[1]
+        .rsplit("\nPY", 1)[0]
+    )
+    tree = ast.parse(source)
+    finalizer = next(
+        n.finalbody
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Try)
+        and n.finalbody
+        and isinstance(n.finalbody[0], ast.Assign)
+        and getattr(n.finalbody[0].targets[0], "id", None) == "primary_active"
+        and len(n.finalbody) > 1
+        and isinstance(n.finalbody[1], ast.Assign)
+        and getattr(n.finalbody[1].targets[0], "id", None) == "cleanup_started"
+    )
+    body = ast.parse("raise primary_error" if primary else "pass").body
+    constructed = ast.fix_missing_locations(
+        ast.Module(
+            body=[ast.Try(body=body, handlers=[], orelse=[], finalbody=finalizer)], type_ignores=[]
+        )
+    )
+    rows = []
+    error = RuntimeError("PRIVATE_SENTINEL")
+    namespace = dict(
+        sys=sys,
+        time=time,
+        subprocess=subprocess,
+        processes=[],
+        prefix=["constructed-compose"],
+        environment={},
+        record_phase=rows.append,
+        primary_error=error,
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 7, b"", b"PRIVATE_SENTINEL"),
+    )
+    with pytest.raises(RuntimeError if primary else SystemExit) as caught:
+        exec(compile(constructed, "constructed-cleanup", "exec"), namespace)
+    assert caught.value is error if primary else caught.value.code == 1
+    assert rows[0]["phase"] == "cleanup" and rows[0]["exit_code"] == 7
+    assert rows[0]["primary_failure_preserved"] is primary
+    assert "PRIVATE_SENTINEL" not in json.dumps(rows)
+
+
 def test_split_private_inputs_preserve_https_runtime_and_strict_drift(tmp_path, monkeypatch):
     root = tmp_path / "checkout"
     root.mkdir(mode=0o700)

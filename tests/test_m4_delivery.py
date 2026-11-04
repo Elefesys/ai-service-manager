@@ -274,6 +274,11 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
     assert (len(old["columns"]), len(middle["columns"]), len(current["columns"])) == (45, 47, 48)
     body = current["functions"]["platform.ai_delivery_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
+    assert catalog.compare_embedded_profile(current) == {
+        "other_functions": 182,
+        "tables": 48,
+        "result": "PASS",
+    }
     assert (
         current["functions"]["platform.human_context_schema_profile()"]
         == old["functions"]["platform.human_context_schema_profile()"]

@@ -1,6 +1,10 @@
-"""C3-M4.3-RUNTIME-INTEGRATION-R3: separate owned PG18 application carrier."""
+"""C3-M4.3-RUNTIME-INTEGRATION-R4: separate owned PG18 application carrier."""
 
+import asyncio
+import contextlib
+import functools
 import hashlib
+import inspect
 import json
 import os
 import platform
@@ -14,11 +18,10 @@ import time
 from pathlib import Path
 from uuid import UUID
 
-BASE = "fa2469deea75c11ca5901de77fc3e46304c1e9ae"
-BASE_TREE = "5ab7c1b98ccdc129fe2b7568501e923455a56427"
-BRANCH = "c3/m4-3-runtime-integration-pr-r3"
-CAPTURE_BRANCH = "c3/m4-3-runtime-catalog-run-r3"
-TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r3"
+BASE = "c8f85533f8dee96ea7ef0e8f0831ae9e5f3a3783"
+BASE_TREE = "37d9f197c74f1c2e246b88138d9a41814f5e686e"
+BRANCH = "c3/m4-3-runtime-integration-pr-r4"
+TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r4"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -26,6 +29,20 @@ MODULES = [
     "tests/test_m4_runtime_postgres.py",
     "tests/test_m4_delivery_postgres.py",
     "tests/test_m4_schema_postgres.py",
+]
+CURRENT_NATIVE_MODULE = "tests/test_m3_1_native_context_runtime_postgres.py"
+# Exactly the six R1 cases blocked by the current0015 schema prerequisite.
+# In full CI they remain in the complete native lane, outside the M4 partition.
+CURRENT_NATIVE_NODES = [
+    CURRENT_NATIVE_MODULE + "::test_native_host_" + name
+    for name in (
+        "policy_enable_noop_pause_old_replay_and_current",
+        "policy_wrong_cas_and_key_conflict_roll_back[stale]",
+        "policy_wrong_cas_and_key_conflict_roll_back[key]",
+        "policy_catalog_drift_refuses_without_new_authority",
+        "committed_receipt_survives_current_failure_then_read_only_retry",
+        "unreadable_result_rolls_back_real_capability",
+    )
 ]
 COMMAND_REPORT = "runtime-command"
 SUMMARY_REPORT = "runtime-summary.json"
@@ -107,7 +124,7 @@ def source_tree_from_evidence(path=None):
         and (
             value["branch"] == BRANCH
             and value["event"] in {"pull_request", "push"}
-            or value["branch"] in {CAPTURE_BRANCH, TARGETED_BRANCH}
+            or value["branch"] == TARGETED_BRANCH
             and value["event"] == "push"
         )
         and type(value["attempt"]) is int
@@ -202,6 +219,8 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
         COLLECTED = [item.nodeid for item in items]
         write(evidence_path() / "collected.json", COLLECTED)
         validate_collection(COLLECTED)
+        if os.environ.get("ASM_M4_CURRENT_NATIVE") == "1":
+            guard_current_native(items)
 
     @pytest.hookimpl(tryfirst=True)
     def pytest_runtest_setup(item):
@@ -276,6 +295,79 @@ def validate_collection(actual):
     require(
         bool(actual) and actual == expected and len(set(actual)) == len(actual),
         "SOURCE_COLLECTION_MISMATCH",
+    )
+
+
+def native_identity():
+    """The native reset runs only in the namespace of our fresh owned server."""
+    import psycopg
+    from sqlalchemy.engine import make_url
+
+    admin = make_url(os.environ["ASM_NATIVE_TEST_ADMIN_URL"])
+    require(
+        os.environ.get("ASM_NATIVE_TEST_ALLOW_RESET") == "1"
+        and admin.host == "127.0.0.1"
+        and admin.port == 5432
+        and admin.database == "postgres"
+        and admin.username == "asm_admin",
+        "CURRENT_NATIVE_ADMIN_TARGET",
+    )
+    for key, user in (
+        ("ASM_DATABASE_URL", "asm_runtime"),
+        ("ASM_MIGRATION_DATABASE_URL", "asm_migrator"),
+    ):
+        url = make_url(os.environ[key])
+        require(
+            (url.host, url.port, url.database, url.username)
+            == (admin.host, admin.port, "asm_test", user),
+            "CURRENT_NATIVE_TARGET",
+        )
+    with psycopg.connect(admin.render_as_string(hide_password=False), connect_timeout=5) as c:
+        c.execute("SET LOCAL statement_timeout='5s'")
+        row = c.execute(
+            "SELECT system_identifier::text,pg_postmaster_start_time()::text,current_setting('server_version_num'),session_user,current_database() FROM pg_control_system()"
+        ).fetchone()
+    require(row[2:] == ("180006", "asm_admin", "postgres"), "CURRENT_NATIVE_SERVER")
+    return {"system_identifier": row[0], "postmaster_start": row[1], "server_version_num": row[2]}
+
+
+def guard_current_native(items):
+    from scripts import native_context_db_catalog as catalog
+
+    require([item.nodeid for item in items] == CURRENT_NATIVE_NODES, "CURRENT_NATIVE_SELECTION")
+    module = sys.modules["test_m3_1_native_context_postgres"]
+    native = inspect.unwrap(module.native)
+    original = module.reset_disposable
+    require(
+        Path(original.__code__.co_filename).resolve() == catalog.ROOT / catalog.MODULES[1]
+        and native.__globals__ is vars(module)
+        and all(
+            inspect.unwrap(item._fixtureinfo.name2fixturedefs["native"][-1].func) is native
+            for item in items
+        ),
+        "CURRENT_NATIVE_RESET_IMPLEMENTATION",
+    )
+    baseline = json.loads((evidence_path() / "native-owner.json").read_text())
+    proofs = []
+
+    @functools.wraps(original)
+    def checked_reset():
+        tree, _ = catalog.require_source(catalog.ROOT, os.environ["ASM_M4_SOURCE_SHA"])
+        require(tree == source_tree_from_evidence(), "CURRENT_NATIVE_SOURCE")
+        actual = native_identity()
+        require(actual == baseline, "CURRENT_NATIVE_SERVER_CHANGED")
+        proofs.append({"reset": len(proofs) + 1, "source_tree": tree, **actual})
+        write(evidence_path() / "before-reset-proofs.json", proofs)
+        return original()
+
+    module.reset_disposable = checked_reset
+    write(
+        evidence_path() / "fixture-guards.json",
+        {
+            "nodeids": CURRENT_NATIVE_NODES,
+            "reset": catalog.MODULES[1] + "::reset_disposable",
+            "source_and_server_before_each_reset": True,
+        },
     )
 
 
@@ -407,20 +499,14 @@ def admit_source(evidence):
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
     require(event["attempt"] == "1", "RUN_ATTEMPT")
     require(
-        event["ref"]
-        in {"refs/heads/" + CAPTURE_BRANCH, "refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
+        event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH,
-        "R3_EVENT_BRANCH",
+        "R4_EVENT_BRANCH",
     )
     require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
     require(capture(["git", "merge-base", BASE, "HEAD"]) == BASE, "BASE_ANCESTRY")
     allowed = {
-        "backend/src/asm/ai/runtime.py",
-        "backend/src/asm/ai/database.py",
-        "backend/src/asm/ai/runtime_contracts.py",
-        "backend/src/asm/messaging/worker.py",
         "backend/src/asm/foundation.py",
-        "backend/src/asm/telegram/provisioning.py",
         "migrations/versions/0015_ai_delivery.py",
         "scripts/native_context_db_catalog.py",
         "scripts/m4_runtime_db.py",
@@ -429,10 +515,7 @@ def admit_source(evidence):
         ".github/workflows/m4-runtime-db.yml",
         ".github/workflows/ci.yml",
         "tests/test_m4_delivery.py",
-        "tests/test_m4_delivery_postgres.py",
         "tests/test_m4_schema_postgres.py",
-        "tests/test_m4_runtime_database.py",
-        "tests/test_m4_runtime_migrations.py",
         "tests/test_foundation.py",
         "tests/test_native_context_db_runner.py",
         "tests/test_m3_1_native_context_runtime_postgres.py",
@@ -442,15 +525,7 @@ def admit_source(evidence):
         "docs/TASK_REGISTER.md",
     }
     paths = capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines()
-    if event["ref"] == "refs/heads/" + CAPTURE_BRANCH:
-        allowed &= {
-            "scripts/native_context_db_catalog.py",
-            "scripts/m4_runtime_db.py",
-            ".github/workflows/m4-runtime-db.yml",
-            "tests/test_m4_runtime_db_runner.py",
-            "tests/test_native_context_db_runner.py",
-        }
-    require(bool(paths) and set(paths) <= allowed, "R3_WRITE_SET")
+    require(bool(paths) and set(paths) <= allowed, "R4_WRITE_SET")
     write(
         evidence / "source-admission.json",
         {
@@ -465,10 +540,48 @@ def admit_source(evidence):
     return event, manifest
 
 
+def catalog_comparison(expected, digest, nonfunction, declared):
+    from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+
+    revision = expected["revision"]
+    profile = (
+        "platform.ai_delivery_schema_profile()"
+        if revision == "0015"
+        else "platform.human_context_schema_profile()"
+    )
+    body_hash = expected["functions"][profile]["body_sha256"]
+    declared_matches = (
+        declared == {"schema_revision": revision, "valid": True, "profile_sha256": digest}
+        and type(declared.get("valid")) is bool
+    )
+    pin_matches = revision == "0013" or digest == NATIVE_CONTEXT_PROFILE_SHA256
+    body_matches = revision == "0013" or body_hash == NATIVE_PROFILE_BODY_SHA256
+    return {
+        "revision": revision,
+        "independent_profile_sha256": digest,
+        "nonfunction_sha256": hashlib.sha256(nonfunction.encode()).hexdigest(),
+        "functions_checked": len(expected["functions"]),
+        "tables_checked": len(expected["columns"]),
+        "verifier_body_sha256": body_hash,
+        "application_body_pin_matches": body_matches,
+        "application_profile_pin": NATIVE_CONTEXT_PROFILE_SHA256,
+        "application_body_pin": NATIVE_PROFILE_BODY_SHA256,
+        "all_source_bodies_security_roles_nonfunction": "PASS",
+        "declared_equals_independent": declared_matches,
+        "application_pin_matches": pin_matches,
+        "failed_predicate": "CATALOG_DECLARED_PROFILE"
+        if not declared_matches
+        else "APPLICATION_VERIFIER_BODY_PIN"
+        if not body_matches
+        else "APPLICATION_FULL_CATALOG_PIN"
+        if not pin_matches
+        else None,
+    }
+
+
 def stock_catalog():
     """Independent stock facts before consulting the installed verifier/pin."""
     import psycopg
-    from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
     from psycopg.rows import dict_row
     from sqlalchemy.engine import make_url
 
@@ -493,6 +606,10 @@ def stock_catalog():
         destination.mkdir(mode=0o700)
         expected = catalog.source_catalog(catalog.ROOT, revision)
         write(destination / "expected-source-catalog.json", expected)
+        if revision == "0015":
+            write(
+                destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
+            )
         (destination / "independent-catalog.sql").write_text(
             catalog.CATALOG_SQL + ";\n" + catalog.FUNCTION_SQL + ";\n" + catalog.ROLE_SQL
         )
@@ -538,26 +655,20 @@ def stock_catalog():
         profile = "platform.ai_delivery_schema_profile()" if revision == "0015" else catalog.PROFILE
         declared = c.execute("SELECT " + profile + " AS profile").fetchone()["profile"]
         write(destination / "declared-profile.json", declared)
-        comparison = {
-            "revision": revision,
-            "independent_profile_sha256": digest,
-            "nonfunction_sha256": catalog.sha256(nonfunction.encode()),
-            "functions_checked": len(functions),
-            "tables_checked": len(expected["columns"]),
-            "verifier_body_sha256": expected["functions"][profile]["body_sha256"],
-            "all_source_bodies_security_roles_nonfunction": "PASS",
-            "declared_equals_independent": declared
-            == {"schema_revision": revision, "valid": True, "profile_sha256": digest},
-            "application_pin_matches": revision == "0013"
-            or digest == NATIVE_CONTEXT_PROFILE_SHA256,
-            "failed_predicate": "APPLICATION_FULL_CATALOG_PIN"
-            if revision == "0015" and digest != NATIVE_CONTEXT_PROFILE_SHA256
-            else None,
-        }
+        comparison = catalog_comparison(expected, digest, nonfunction, declared)
         write(destination / "comparison.json", comparison)
-        require(comparison["declared_equals_independent"], "CATALOG_DECLARED_PROFILE")
-        # Only this diagnostic mode permits the known application pin mismatch;
-        # source bodies, security, full catalog coherence and cleanup still gate.
+        require(comparison["failed_predicate"] is None, comparison["failed_predicate"])
+
+
+async def readiness():
+    from asm.foundation import RuntimeDatabase, Settings
+
+    runtime = RuntimeDatabase(Settings())
+    try:
+        await runtime.check()
+        write(evidence_path() / "readiness.json", {"revision": "0015", "runtime_check": "PASS"})
+    finally:
+        await runtime.close()
 
 
 def compose(root):
@@ -594,15 +705,20 @@ def sanitize(raw, root):
     return value
 
 
-def phase(root, label, args, budget):
+def phase(root, label, args, budget, *, separate_stdout=False):
     start = time.monotonic()
     entry = {"phase": label, "command": args, "budget_seconds": budget, "started_utc": time.time()}
     write(root / "evidence/active-phase.json", entry)
     private = root / ("private/" + label + ".log")
-    with private.open("wb") as output:
-        process = subprocess.Popen(
-            args, stdout=output, stderr=subprocess.STDOUT, start_new_session=True
-        )
+    with (
+        private.open("wb") as output,
+        (
+            (root / ("private/" + label + ".stdout")).open("wb")
+            if separate_stdout
+            else contextlib.nullcontext(output)
+        ) as stdout,
+    ):
+        process = subprocess.Popen(args, stdout=stdout, stderr=output, start_new_session=True)
         try:
             code = process.wait(timeout=budget)
         except subprocess.TimeoutExpired:
@@ -624,6 +740,80 @@ def phase(root, label, args, budget):
     (root / ("evidence/" + label + ".log")).write_text(sanitize(raw, root))
     print("M4_PG_PHASE=" + label + " EXIT=" + str(code), flush=True)
     require(code == 0, label.upper().replace("-", "_") + "_FAILED")
+
+
+def stack_diagnostics(root, prefix):
+    """Bounded startup evidence: states and known schema-refusal fields only."""
+    evidence = root / "evidence"
+    evidence.mkdir(exist_ok=True, mode=0o700)
+    result = {"services": [], "schema_refusals": [], "probe_errors": []}
+    for kind, tail in (
+        ("states", ["ps", "--all", "--format", "json"]),
+        ("logs", ["logs", "--no-color", "--tail", "80", "api", "worker", "migrate"]),
+    ):
+        try:
+            proc = subprocess.run([*prefix, *tail], capture_output=True, timeout=10)
+            if proc.returncode or len(proc.stdout) > 262144:
+                result["probe_errors"].append(
+                    {"probe": kind, "exit": proc.returncode, "bounded": len(proc.stdout) <= 262144}
+                )
+                continue
+            raw = proc.stdout.decode(errors="replace")
+            if kind == "states":
+                rows = (
+                    json.loads(raw)
+                    if raw.lstrip().startswith("[")
+                    else [json.loads(line) for line in raw.splitlines() if line.strip()]
+                )
+                for row in rows[:32]:
+                    service = row.get("Service", "")
+                    if re.fullmatch(r"[a-z][a-z0-9-]{0,48}", service):
+                        result["services"].append(
+                            {
+                                "service": service,
+                                "state": row.get("State")
+                                if row.get("State")
+                                in {
+                                    "running",
+                                    "exited",
+                                    "created",
+                                    "restarting",
+                                    "dead",
+                                    "removing",
+                                    "paused",
+                                }
+                                else "UNKNOWN",
+                                "health": row.get("Health")
+                                if row.get("Health") in {"", "healthy", "unhealthy", "starting"}
+                                else "UNKNOWN",
+                                "exit_code": row.get("ExitCode")
+                                if type(row.get("ExitCode")) is int
+                                else None,
+                            }
+                        )
+            else:
+                for line in raw.splitlines():
+                    if "{" not in line:
+                        continue
+                    try:
+                        row = json.loads(line[line.index("{") :])
+                    except ValueError:
+                        continue
+                    if (
+                        type(row) is dict
+                        and row.get("component") == "schema-admission"
+                        and row.get("event") == "refused"
+                        and row.get("stage")
+                        in {"VERIFIER_BODY_OR_SECURITY", "DECLARED_PROFILE_OR_FULL_PIN"}
+                    ):
+                        error = row.get("error_type", "")
+                        if re.fullmatch(r"[A-Za-z][A-Za-z0-9]{0,60}", error):
+                            result["schema_refusals"].append(
+                                {"stage": row["stage"], "error_type": error}
+                            )
+        except Exception as error:
+            result["probe_errors"].append({"probe": kind, "error_type": type(error).__name__})
+    write(evidence / "stack-diagnostics.json", result)
 
 
 def checks(root, *args, plugin=False):
@@ -663,6 +853,120 @@ def inventory(root):
     }
 
 
+def current_native_checks(root, label, *args):
+    """Use the built locked image, actual read-only Git checkout and owned DB namespace."""
+    values = dict(
+        line.split("=", 1) for line in (root / "private/test.env").read_text().splitlines()
+    )
+    env = {
+        "ASM_ENVIRONMENT": "TEST",
+        "ASM_NATIVE_TEST_ALLOW_RESET": "1",
+        "ASM_M4_CURRENT_NATIVE": "1",
+        "ASM_M4_PG_PLUGIN": "1",
+        "GIT_OPTIONAL_LOCKS": "0",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "ASM_M4_SOURCE_SHA": os.environ["GITHUB_SHA"],
+        "ASM_M4_SOURCE_TREE": capture(["git", "rev-parse", "HEAD^{tree}"]),
+        "ASM_M4_RUN_ID": os.environ["GITHUB_RUN_ID"],
+        "ASM_M4_RUN_ATTEMPT": "1",
+    }
+    for name, user, key, database, driver in (
+        (
+            "ASM_DATABASE_URL",
+            "asm_runtime",
+            "PG_RUNTIME_PASSWORD",
+            "asm_test",
+            "postgresql+psycopg",
+        ),
+        (
+            "ASM_MIGRATION_DATABASE_URL",
+            "asm_migrator",
+            "PG_MIGRATION_PASSWORD",
+            "asm_test",
+            "postgresql+psycopg",
+        ),
+        ("ASM_NATIVE_TEST_ADMIN_URL", "asm_admin", "PG_ADMIN_PASSWORD", "postgres", "postgresql"),
+    ):
+        env[name] = f"{driver}://{user}:{values[key]}@127.0.0.1:5432/{database}"
+    env_path = root / "private/native.env"
+    env_path.write_text("".join(k + "=" + v + "\n" for k, v in env.items()))
+    identity = capture(compose(root) + ["ps", "-q", "postgres-test"])
+    image = capture(
+        DOCKER + ["image", "inspect", "--format", "{{.Id}}", "asm-" + root.name + "-checks"]
+    )
+    return DOCKER + [
+        "run",
+        "--rm",
+        "--cidfile",
+        str(root / ("private/" + label + ".cid")),
+        "--label",
+        "com.docker.compose.project=asm-" + root.name,
+        "--label",
+        "asm.m4.run=" + os.environ["GITHUB_RUN_ID"],
+        "--label",
+        "asm.m4.attempt=1",
+        "--network",
+        "container:" + identity,
+        "--user",
+        f"{os.getuid()}:{os.getgid()}",
+        "--env-file",
+        str(env_path),
+        "--volume",
+        str(Path.cwd()) + ":/app:ro",
+        "--volume",
+        str(root / "evidence") + ":/evidence",
+        image,
+        *args,
+    ]
+
+
+def collect_current_native():
+    import pytest
+
+    require(not os.environ.get("PYTEST_ADDOPTS"), "CURRENT_NATIVE_EXTERNAL_SELECTION")
+    os.environ["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    data = {"nodeids": [], "deselected": []}
+
+    class Inventory:
+        def pytest_collection_finish(self, session):
+            data["nodeids"] = [item.nodeid for item in session.items]
+            require(data["nodeids"] == CURRENT_NATIVE_NODES, "CURRENT_NATIVE_SELECTION")
+            require(
+                all(
+                    not item.get_closest_marker(m)
+                    for item in session.items
+                    for m in ("skip", "skipif", "xfail")
+                ),
+                "CURRENT_NATIVE_SKIP",
+            )
+
+        def pytest_deselected(self, items):
+            data["deselected"].extend(item.nodeid for item in items)
+
+        def pytest_runtest_setup(self, item):
+            raise RuntimeError("INVENTORY_MUST_NOT_EXECUTE")
+
+    code = 1
+    try:
+        code = int(
+            pytest.main(
+                [
+                    *CURRENT_NATIVE_NODES,
+                    "--collect-only",
+                    "-q",
+                    "-p",
+                    "pytest_asyncio.plugin",
+                    "-p",
+                    "no:cacheprovider",
+                ],
+                plugins=[Inventory()],
+            )
+        )
+    finally:
+        write(evidence_path() / "current-native-inventory.json", {**data, "collection_exit": code})
+    require(code == 0 and not data["deselected"], "CURRENT_NATIVE_COLLECTION")
+
+
 def cleanup(root):
     evidence = root / "evidence"
     if not (root / "owned.json").exists():
@@ -683,6 +987,27 @@ def cleanup(root):
         "CLEANUP_OWNERSHIP",
     )
     try:
+        # A cancelled docker-run client need not have stopped its container.
+        # Its cidfile and exact run/project labels bind this cleanup authority.
+        for cidfile in sorted((root / "private").glob("*.cid")):
+            cid = cidfile.read_text().strip()
+            require(re.fullmatch(r"[0-9a-f]{64}", cid), "NATIVE_CLEANUP_ID")
+            if capture(DOCKER + ["ps", "-aq", "--filter", "id=" + cid]):
+                labels = json.loads(
+                    capture(DOCKER + ["inspect", "--format", "{{json .Config.Labels}}", cid])
+                )
+                require(
+                    all(
+                        labels.get(k) == v
+                        for k, v in {
+                            "com.docker.compose.project": "asm-" + root.name,
+                            "asm.m4.run": os.environ["GITHUB_RUN_ID"],
+                            "asm.m4.attempt": "1",
+                        }.items()
+                    ),
+                    "NATIVE_CLEANUP_OWNERSHIP",
+                )
+                phase(root, "native-cleanup-" + cidfile.stem, DOCKER + ["rm", "-f", cid], 30)
         phase(
             root,
             "cleanup-command-" + str(len(attempts) + 1),
@@ -708,15 +1033,17 @@ def run(root):
     (root / "evidence").mkdir(parents=True, mode=0o700)
     (root / "private").mkdir(mode=0o700)
     event, manifest = admit_source(root / "evidence")
-    mode = "catalog" if event["ref"] == "refs/heads/" + CAPTURE_BRANCH else "runtime"
+    mode = "targeted" if event["ref"] == "refs/heads/" + TARGETED_BRANCH else "runtime"
     write(root / "evidence/mode.json", {"mode": mode})
     run_admitted(root, event, manifest, mode)
 
 
 def run_admitted(root, event, manifest, mode):
     # No resource access or credentials before the complete source admission.
-    diagnostic = mode == "catalog"
-    modules = ["catalog"] if diagnostic else MODULES
+    require(mode in {"targeted", "runtime"}, "R4_MODE")
+    modules = ["preflight", *MODULES]
+    if mode == "targeted":
+        modules.append(CURRENT_NATIVE_MODULE)
     pins = dict(
         line.split("=", 1) for line in Path("infra/images.lock.env").read_text().splitlines()
     )
@@ -744,14 +1071,31 @@ def run_admitted(root, event, manifest, mode):
         ["git", "archive", "--format=tar.gz", "-o", str(root / "evidence/source.tar.gz"), "HEAD"],
         check=True,
     )
-    outcomes = []
-    test_seconds = 0.0
-    expected = None
+    outcomes, all_nodes = [], []
+    test_seconds = sql_test_seconds = 0.0
+
+    def sql_phase(group, name, command, cap):
+        nonlocal sql_test_seconds, test_seconds
+        require(sql_test_seconds < 600, "TOTAL_SQL_TEST_BUDGET_EXHAUSTED")
+        start = time.monotonic()
+        try:
+            phase(group, name, command, min(cap, 600 - sql_test_seconds))
+        finally:
+            elapsed = time.monotonic() - start
+            sql_test_seconds += elapsed
+            if name == COMMAND_REPORT:
+                test_seconds += elapsed
+        require(sql_test_seconds <= 600, "TOTAL_SQL_TEST_BUDGET_EXHAUSTED")
+
     for index, module in enumerate(modules):
         group = root / (root.name + "-group-" + str(index))
         (group / "evidence").mkdir(parents=True, mode=0o700)
         (group / "private").mkdir(mode=0o700)
         write(group / "evidence/source.json", source)
+        nodes = (
+            [] if module == "preflight" else [n for n in all_nodes if n.startswith(module + "::")]
+        )
+        write(group / "evidence/inventory.json", {"nodeids": nodes})
         result = {"module": module, "outcome": "NOT_REACHED"}
         try:
             require(not any(inventory(group).values()), "RESOURCE_NAME_CONFLICT")
@@ -779,7 +1123,7 @@ def run_admitted(root, event, manifest, mode):
                 },
             )
             phase(group, "build", compose(group) + ["build", "checks"], 420)
-            if expected is None and not diagnostic:
+            if module == "preflight":
                 phase(
                     group,
                     "inventory",
@@ -798,21 +1142,36 @@ def run_admitted(root, event, manifest, mode):
                     expected["collection_exit"] == 0 and not expected["deselected"],
                     "INVENTORY_FAILED",
                 )
-                write(root / "evidence/inventory.json", expected)
+                all_nodes = expected["nodeids"]
                 require(
-                    {n.split("::", 1)[0] for n in expected["nodeids"]} == set(MODULES),
-                    "INVENTORY_MODULES",
+                    {n.split("::", 1)[0] for n in all_nodes} == set(MODULES), "INVENTORY_MODULES"
                 )
                 require(
-                    sum(n.startswith(MODULES[0] + "::") for n in expected["nodeids"]) == 35,
+                    sum(n.startswith(MODULES[0] + "::") for n in all_nodes) == 35
+                    and len(all_nodes) >= 64,
                     "RETAINED_CASES_LOST",
                 )
-            nodes = (
-                []
-                if diagnostic
-                else [n for n in expected["nodeids"] if n.startswith(module + "::")]
-            )
-            write(group / "evidence/inventory.json", {"nodeids": nodes})
+                if mode == "targeted":
+                    phase(
+                        group,
+                        "current-native-inventory",
+                        checks(
+                            group, "python", "scripts/m4_runtime_db.py", "collect-current-native"
+                        ),
+                        60,
+                    )
+                    native = json.loads(
+                        (group / "evidence/current-native-inventory.json").read_text()
+                    )
+                    require(
+                        native["collection_exit"] == 0
+                        and not native["deselected"]
+                        and native["nodeids"] == CURRENT_NATIVE_NODES,
+                        "CURRENT_NATIVE_SELECTION",
+                    )
+                    all_nodes = [*all_nodes, *native["nodeids"]]
+                require(len(all_nodes) == len(set(all_nodes)), "INVENTORY_DUPLICATE")
+                write(root / "evidence/inventory.json", {"nodeids": all_nodes, "mode": mode})
             phase(
                 group,
                 "database-start",
@@ -833,59 +1192,73 @@ def run_admitted(root, event, manifest, mode):
             )
             write(
                 group / "evidence/server-process.json",
-                {"uid": uid, "image_id": image_id, "pin": DB_IMAGE},
+                {"uid": uid, "image_id": image_id, "pin": DB_IMAGE, "container_id": identity},
             )
-            if diagnostic:
-                for revision in ("0013", "0015"):
-                    phase(
-                        group,
-                        "schema-" + revision,
-                        checks(group, "alembic", "upgrade", revision),
-                        120,
-                    )
-                    phase(
-                        group,
-                        "catalog-" + revision,
-                        checks(group, "python", "scripts/m4_runtime_db.py", "catalog-snapshot"),
-                        60,
-                    )
-                result["outcome"] = "PASS"
-                continue
-            phase(group, "schema", checks(group, "alembic", "upgrade", "0014"), 120)
-            phase(
-                group,
-                "versions",
-                checks(group, "python", "scripts/m4_runtime_db.py", "versions"),
-                30,
-            )
-            require(test_seconds < 600, "TOTAL_TEST_BUDGET_EXHAUSTED")
-            started = time.monotonic()
-            try:
-                phase(
+            if module == "preflight":
+                sql_phase(group, "schema-0015", checks(group, "alembic", "upgrade", "0015"), 120)
+                sql_phase(
                     group,
-                    COMMAND_REPORT,
-                    checks(
-                        group,
-                        "pytest",
-                        "-p",
-                        "scripts.m4_runtime_db",
-                        "-q",
-                        "--tb=short",
-                        "--show-capture=no",
-                        "-p",
-                        "no:cacheprovider",
-                        "--junitxml=/evidence/junit.xml",
-                        module,
-                        plugin=True,
-                    ),
-                    600 - test_seconds,
+                    "catalog-0015",
+                    checks(group, "python", "scripts/m4_runtime_db.py", "catalog-snapshot"),
+                    60,
                 )
-            finally:
-                test_seconds += time.monotonic() - started
-            summary = json.loads((group / "evidence" / SUMMARY_REPORT).read_text())
-            require(
-                summary["result"] == "PASS" and summary["complete"], "RUNTIME_EVIDENCE_INCOMPLETE"
-            )
+                sql_phase(
+                    group,
+                    "readiness",
+                    checks(group, "python", "scripts/m4_runtime_db.py", "readiness"),
+                    30,
+                )
+            else:
+                require(bool(nodes), "EMPTY_MODULE_INVENTORY")
+                if module == CURRENT_NATIVE_MODULE:
+                    sql_phase(
+                        group,
+                        "native-owner",
+                        current_native_checks(
+                            group,
+                            "native-owner",
+                            "python",
+                            "scripts/m4_runtime_db.py",
+                            "native-owner",
+                        ),
+                        30,
+                    )
+                else:
+                    sql_phase(group, "schema", checks(group, "alembic", "upgrade", "0014"), 120)
+                    sql_phase(
+                        group,
+                        "versions",
+                        checks(group, "python", "scripts/m4_runtime_db.py", "versions"),
+                        30,
+                    )
+                arguments = [
+                    "pytest",
+                    "-p",
+                    "scripts.m4_runtime_db",
+                    "-q",
+                    "--tb=short",
+                    "--show-capture=no",
+                    "-p",
+                    "no:cacheprovider",
+                    "--junitxml=/evidence/junit.xml",
+                ]
+                command = (
+                    current_native_checks(group, "native-tests", *arguments, *nodes)
+                    if module == CURRENT_NATIVE_MODULE
+                    else checks(group, *arguments, module, plugin=True)
+                )
+                sql_phase(group, COMMAND_REPORT, command, 600)
+                summary = json.loads((group / "evidence" / SUMMARY_REPORT).read_text())
+                require(
+                    summary["result"] == "PASS" and summary["complete"],
+                    "RUNTIME_EVIDENCE_INCOMPLETE",
+                )
+                if module == CURRENT_NATIVE_MODULE:
+                    proofs = json.loads((group / "evidence/before-reset-proofs.json").read_text())
+                    require(
+                        len(proofs) == len(CURRENT_NATIVE_NODES),
+                        "CURRENT_NATIVE_RESET_COMPLETENESS",
+                    )
             result["outcome"] = "PASS"
         except Exception as error:
             result.update(
@@ -896,15 +1269,11 @@ def run_admitted(root, event, manifest, mode):
                 else "OPERATION_FAILED",
             )
         finally:
-            if not diagnostic:
+            if module != "preflight":
                 cases_path = group / "evidence/cases.json"
                 summary_path = group / "evidence" / SUMMARY_REPORT
                 if not summary_path.exists():
                     cases = json.loads(cases_path.read_text()) if cases_path.exists() else []
-                    nodes_path = group / "evidence/inventory.json"
-                    nodes = (
-                        json.loads(nodes_path.read_text())["nodeids"] if nodes_path.exists() else []
-                    )
                     write(summary_path, summarize(cases, nodes, None))
                 result["tests"] = json.loads(summary_path.read_text())
             write(group / "evidence/primary.json", result)
@@ -913,32 +1282,65 @@ def run_admitted(root, event, manifest, mode):
             except Exception as error:
                 result.update(outcome="FAIL", cleanup=type(error).__name__)
             outcomes.append(result)
+            completed = {n for v in outcomes for n in v.get("tests", {}).get("completed", [])}
+            started = {
+                n
+                for v in outcomes
+                for n in v.get("tests", {}).get("completed", [])
+                + v.get("tests", {}).get("active", [])
+            }
             write(
                 root / "evidence/summary.json",
                 {
                     "groups": outcomes,
                     "test_seconds": test_seconds,
+                    "sql_test_seconds": sql_test_seconds,
+                    "sql_test_budget_seconds": 600,
                     "groups_visited": len(outcomes),
+                    "groups_expected": modules,
+                    "not_reached_modules": modules[len(outcomes) :],
+                    "expected_cases": len(all_nodes),
+                    "missing": [n for n in all_nodes if n not in completed],
+                    "not_reached": [n for n in all_nodes if n not in started],
                     "complete": len(outcomes) == len(modules)
                     and all(
-                        v.get("tests", {}).get("complete", diagnostic and v["outcome"] == "PASS")
+                        v.get("tests", {}).get(
+                            "complete", v["module"] == "preflight" and v["outcome"] == "PASS"
+                        )
                         for v in outcomes
                     ),
                     "result": "PASS"
                     if len(outcomes) == len(modules)
                     and all(v["outcome"] == "PASS" for v in outcomes)
+                    and sql_test_seconds <= 600
                     else "FAIL",
                 },
             )
             shutil.copytree(group / "evidence", root / "evidence" / group.name, dirs_exist_ok=True)
+        # A failed prerequisite cannot authorize destructive runtime fixtures.
+        # Other test modules still report their independent outcomes within budget.
+        if module == "preflight" and result["outcome"] != "PASS" or sql_test_seconds >= 600:
+            break
     clean = not capture(["git", "status", "--porcelain", "--untracked-files=all"])
     write(root / "evidence/source-preservation.json", {"clean": clean})
     require(clean, "SOURCE_CHANGED")
-    require(all(v["outcome"] == "PASS" for v in outcomes), "PRIMARY_FAILED")
+    require(
+        len(outcomes) == len(modules) and all(v["outcome"] == "PASS" for v in outcomes),
+        "PRIMARY_FAILED",
+    )
 
 
 def main():
     os.umask(0o077)
+    if sys.argv[1:] == ["collect-current-native"]:
+        collect_current_native()
+        return
+    if sys.argv[1:] == ["native-owner"]:
+        write(evidence_path() / "native-owner.json", native_identity())
+        return
+    if sys.argv[1:] == ["readiness"]:
+        asyncio.run(readiness())
+        return
     if sys.argv[1:] == ["catalog-snapshot"]:
         stock_catalog()
         return

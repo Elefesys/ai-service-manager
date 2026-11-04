@@ -17,6 +17,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from scripts import prepare_telegram_egress as e
+from scripts.m4_runtime_db import stack_diagnostics
 
 os.umask(0o077)
 root = Path.cwd()
@@ -80,8 +81,30 @@ environment = e.clean_environment()
 controls = []
 last_control = None
 
+def record_phase(value):
+    reports = root / 'reports'
+    reports.mkdir(exist_ok=True)
+    with (reports / 'telegram-egress-phases.jsonl').open('a') as output:
+        output.write(json.dumps(value, sort_keys=True) + '\n')
+        output.flush()
+        os.fsync(output.fileno())
+
 def run(args, timeout=120):
-    result = subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout, env=environment)
+    start = time.monotonic()
+    record_phase({'phase': phase, 'event': 'start', 'utc': time.time(), 'budget_seconds': timeout})
+    code = None
+    try:
+        result = subprocess.run(args, stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout, env=environment)
+        code = result.returncode
+    finally:
+        primary_active = sys.exc_info()[0] is not None
+        try:
+            record_phase({'phase': phase, 'event': 'end', 'seconds': time.monotonic() - start,
+                          'exit_code': code, 'complete': code is not None})
+        except Exception as error:
+            print('EGRESS_EVIDENCE_ERROR=' + type(error).__name__, flush=True)
+            if not primary_active and code in (None, 0):
+                raise
     if result.returncode:
         # CI-only Docker lifecycle diagnostics; no config/inspect/stdout dumps.
         diagnostic = result.stderr.decode(errors='replace')[-4096:]
@@ -133,6 +156,7 @@ def interrupted_operator(action, fault):
 import os, signal, sys
 from pathlib import Path
 from scripts import prepare_telegram_egress as e
+from scripts.m4_runtime_db import stack_diagnostics
 fault, destination = sys.argv[1:3]
 sys.argv = ["prepare_telegram_egress.py", *sys.argv[3:]]
 execute, save = e.command, e.write_private
@@ -794,6 +818,14 @@ http {
             'compose': run(['docker', 'compose', 'version', '--short']).decode().strip()}, indent=2) + '\n')
         print('TELEGRAM_EGRESS_E01_E05_PASS', flush=True)
     except Exception as error:
+        if prefix is not None:
+            import shutil
+            try:
+                stack_diagnostics(directory, prefix)
+                (root / 'reports').mkdir(exist_ok=True)
+                shutil.copyfile(directory / 'evidence/stack-diagnostics.json', root / 'reports/telegram-egress-stack.json')
+            except Exception as diagnostic_error:
+                print('EGRESS_DIAGNOSTIC_ERROR=' + type(diagnostic_error).__name__, flush=True)
         # No private config, environment, process argv or raw Docker inspect output.
         print('TELEGRAM_EGRESS_TEST_FAILURE phase=' + phase + ' type=' + type(error).__name__, flush=True)
         trace = error.__traceback__
@@ -818,16 +850,34 @@ http {
                 print(filename + ' ' + json.dumps(counts, sort_keys=True), flush=True)
         raise SystemExit(1) from None
     finally:
-        for process in processes:
-            if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
-        if prefix is not None:
-            result = subprocess.run([*prefix, 'down', '--remove-orphans', '--timeout', '2'],
-                                    capture_output=True, timeout=90, env=environment)
-            assert result.returncode == 0, 'SYNTHETIC_TOPOLOGY_CLEANUP_FAILED'
+        primary_active = sys.exc_info()[0] is not None
+        cleanup_started = time.monotonic()
+        cleanup_error = None
+        cleanup_code = None
+        try:
+            for process in processes:
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=5)
+            if prefix is not None:
+                result = subprocess.run([*prefix, 'down', '--remove-orphans', '--timeout', '2'],
+                                        capture_output=True, timeout=90, env=environment)
+                cleanup_code = result.returncode
+                if cleanup_code:
+                    cleanup_error = 'NONZERO_EXIT'
+        except Exception as error:
+            cleanup_error = type(error).__name__
+        try:
+            record_phase({'phase': 'cleanup', 'event': 'end', 'seconds': time.monotonic() - cleanup_started,
+                          'exit_code': cleanup_code, 'error_type': cleanup_error, 'primary_failure_preserved': primary_active})
+        except Exception as error:
+            print('EGRESS_EVIDENCE_ERROR=' + type(error).__name__, flush=True)
+            cleanup_error = type(error).__name__
+        if cleanup_error and not primary_active:
+            raise SystemExit(1)
+
 PY

@@ -1,5 +1,6 @@
-"""Finite R3 admission and evidence checks; no PostgreSQL substitute."""
+"""Finite R4 admission and evidence checks; no PostgreSQL substitute."""
 
+import itertools
 import json
 import os
 import subprocess
@@ -15,25 +16,340 @@ from scripts import m4_runtime_db as carrier
 from scripts import native_context_db_catalog as catalog
 
 
+@pytest.mark.parametrize(
+    "mode,fault",
+    [
+        ("targeted", "none"),
+        ("runtime", "none"),
+        ("targeted", "catalog"),
+        ("targeted", "retained"),
+        ("targeted", "budget"),
+    ],
+)
+def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
+    tmp_path, monkeypatch, mode, fault
+):
+    """Exercise orchestration with explicit fake boundaries; no PG/Docker claim."""
+    root = tmp_path / "constructed-run"
+    (root / "evidence").mkdir(parents=True)
+    (root / "private").mkdir()
+    monkeypatch.chdir(catalog.ROOT)
+    for key, value in {
+        "GITHUB_SHA": "a" * 40,
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "GITHUB_EVENT_NAME": "push",
+    }.items():
+        monkeypatch.setenv(key, value)
+    nodes = [
+        module + "::test_constructed_" + str(i)
+        for module, count in zip(carrier.MODULES, (35, 21, 8), strict=True)
+        for i in range(count)
+    ]
+    calls, cleaned = [], []
+
+    def capture(args):
+        if args[:2] == ["git", "rev-parse"]:
+            return carrier.BASE_TREE if args[-1].startswith(carrier.BASE) else "b" * 40
+        if args[:2] == ["git", "diff"]:
+            return "scripts/m4_runtime_db.py"
+        if args[:2] == ["git", "status"]:
+            return ""
+        if "ps" in args:
+            return "constructed-container"
+        if "exec" in args:
+            return "Uid:\t999\t999\t999\t999"
+        if "inspect" in args:
+            return "sha256:" + "c" * 64
+        raise AssertionError(args)
+
+    def phase(group, label, args, budget):
+        calls.append((group.name, label, budget))
+        assert 0 < budget <= 600
+        if label == "inventory":
+            carrier.write(
+                group / "evidence/all-m4.json",
+                {"nodeids": nodes, "collection_exit": 0, "deselected": []},
+            )
+        if label == "current-native-inventory":
+            carrier.write(
+                group / "evidence/current-native-inventory.json",
+                {"nodeids": carrier.CURRENT_NATIVE_NODES, "collection_exit": 0, "deselected": []},
+            )
+        if label == "catalog-0015" and fault == "catalog":
+            raise RuntimeError("CATALOG_DECLARED_PROFILE")
+        if label == carrier.COMMAND_REPORT:
+            expected = json.loads((group / "evidence/inventory.json").read_text())["nodeids"]
+            cases = [
+                {
+                    "nodeid": n,
+                    "overflow": 0,
+                    "invalid_fields": 0,
+                    "phases": [
+                        {"phase": p, "outcome": "passed", "xfail": False}
+                        for p in ("setup", "call", "teardown")
+                    ],
+                }
+                for n in expected
+            ]
+            if fault == "retained" and group.name.endswith("-group-1"):
+                cases = cases[:1]
+                cases[0]["phases"][1]["outcome"] = "failed"
+            carrier.write(group / "evidence/cases.json", cases)
+            summary = carrier.summarize(cases, expected, 0 if len(cases) == len(expected) else 1)
+            carrier.write(group / "evidence" / carrier.SUMMARY_REPORT, summary)
+            if expected == carrier.CURRENT_NATIVE_NODES:
+                carrier.write(group / "evidence/before-reset-proofs.json", [{}] * 6)
+            if summary["result"] == "FAIL":
+                raise RuntimeError("RUNTIME_COMMAND_FAILED")
+
+    def cleanup(group):
+        cleaned.append(group.name)
+        carrier.write(group / "evidence/cleanup.json", {"outcome": "PASS"})
+
+    def archive(args, **kwargs):
+        assert args[:3] == ["git", "archive", "--format=tar.gz"]
+        Path(args[4]).write_bytes(b"constructed unit-test archive boundary")
+
+    monkeypatch.setattr(carrier, "capture", capture)
+    monkeypatch.setattr(carrier, "phase", phase)
+    monkeypatch.setattr(carrier, "cleanup", cleanup)
+    monkeypatch.setattr(
+        carrier, "inventory", lambda group: {"containers": [], "networks": [], "volumes": []}
+    )
+    monkeypatch.setattr(carrier, "checks", lambda group, *args, **kwargs: ["checks", *args])
+    monkeypatch.setattr(
+        carrier, "current_native_checks", lambda group, label, *args: ["native", *args]
+    )
+    monkeypatch.setattr(carrier.subprocess, "run", archive)
+    clock = itertools.count(step=200 if fault == "budget" else 0.01)
+    monkeypatch.setattr(carrier.time, "monotonic", lambda: next(clock))
+    event = {"ref": "refs/heads/" + carrier.TARGETED_BRANCH}
+    if fault == "none":
+        carrier.run_admitted(root, event, [], mode)
+    else:
+        with pytest.raises(RuntimeError, match="PRIMARY_FAILED"):
+            carrier.run_admitted(root, event, [], mode)
+    summary = json.loads((root / "evidence/summary.json").read_text())
+    expected_count = 70 if mode == "targeted" else 64
+    assert summary["expected_cases"] == expected_count
+    assert summary["sql_test_seconds"] <= 600
+    assert summary["result"] == ("PASS" if fault == "none" else "FAIL")
+    assert len(cleaned) == summary["groups_visited"]
+    assert len(set(cleaned)) == len(cleaned)
+    if fault in {"catalog", "budget"}:
+        assert summary["groups_visited"] == 1 and len(summary["not_reached"]) == expected_count
+        assert not any(label == carrier.COMMAND_REPORT for _, label, _ in calls)
+    elif fault == "retained":
+        assert summary["groups_visited"] == 5 and len(summary["missing"]) == 34
+        assert summary["groups"][-1]["outcome"] == "PASS"
+    else:
+        assert summary["complete"] and not summary["missing"]
+        assert summary["groups_visited"] == (5 if mode == "targeted" else 4)
+
+
+def test_phase_keeps_private_json_stdout_separate_and_redacts_stderr(tmp_path):
+    (tmp_path / "private").mkdir()
+    (tmp_path / "evidence").mkdir()
+    (tmp_path / "private/test.env").write_text("ASM_TEST_PASSWORD=PRIVATE_SENTINEL\n")
+    carrier.phase(
+        tmp_path,
+        "provision",
+        [
+            sys.executable,
+            "-c",
+            "import sys;print('{\"ok\": true}');print('Creating container PRIVATE_SENTINEL',file=sys.stderr)",
+        ],
+        5,
+        separate_stdout=True,
+    )
+    assert json.loads((tmp_path / "private/provision.stdout").read_text()) == {"ok": True}
+    assert "PRIVATE_SENTINEL" not in (tmp_path / "evidence/provision.log").read_text()
+    assert "Creating container [REDACTED]" in (tmp_path / "evidence/provision.log").read_text()
+
+
+def test_stack_diagnostics_keeps_states_and_schema_stage_without_raw_values(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    outputs = [
+        json.dumps(
+            [
+                {
+                    "Service": "api",
+                    "State": "exited",
+                    "Health": "unhealthy",
+                    "ExitCode": 1,
+                    "Command": "PRIVATE_SENTINEL",
+                }
+            ]
+        ),
+        'api | {"component":"schema-admission","event":"refused","stage":"DECLARED_PROFILE_OR_FULL_PIN","error_type":"RuntimeError","dsn":"PRIVATE_SENTINEL"}\nPRIVATE_SENTINEL raw log',
+    ]
+    monkeypatch.setattr(
+        carrier.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=outputs.pop(0).encode()),
+    )
+    carrier.stack_diagnostics(tmp_path, ["constructed-compose"])
+    raw = (tmp_path / "evidence/stack-diagnostics.json").read_text()
+    assert "PRIVATE_SENTINEL" not in raw
+    data = json.loads(raw)
+    assert data["services"] == [
+        {"service": "api", "state": "exited", "health": "unhealthy", "exit_code": 1}
+    ]
+    assert data["schema_refusals"] == [
+        {"stage": "DECLARED_PROFILE_OR_FULL_PIN", "error_type": "RuntimeError"}
+    ]
+
+
+@pytest.mark.parametrize("damage", ["source", "tree", "server"])
+def test_current_native_reset_refuses_changed_source_or_server_before_destructive_sql(
+    tmp_path, monkeypatch, damage
+):
+    from types import SimpleNamespace
+
+    import test_m3_1_native_context_postgres as fixture
+
+    original = fixture.reset_disposable
+    monkeypatch.setenv("ASM_M4_SOURCE_SHA", "a" * 40)
+    monkeypatch.setenv("ASM_M4_EVIDENCE", str(tmp_path))
+    baseline = {
+        "system_identifier": "123",
+        "postmaster_start": "constructed",
+        "server_version_num": "180006",
+    }
+    carrier.write(tmp_path / "native-owner.json", baseline)
+    calls = []
+
+    def source(*args):
+        calls.append("source")
+        if damage == "source":
+            raise catalog.Refusal("CONSTRUCTED_DIRTY_SOURCE")
+        return ("b" * 40 if damage != "tree" else "c" * 40), []
+
+    def identity():
+        calls.append("identity")
+        return dict(baseline, system_identifier="different-server")
+
+    monkeypatch.setattr(catalog, "require_source", source)
+    monkeypatch.setattr(carrier, "source_tree_from_evidence", lambda: "b" * 40)
+    monkeypatch.setattr(carrier, "native_identity", identity)
+    items = [
+        SimpleNamespace(
+            nodeid=node,
+            _fixtureinfo=SimpleNamespace(
+                name2fixturedefs={"native": [SimpleNamespace(func=fixture.native)]}
+            ),
+        )
+        for node in carrier.CURRENT_NATIVE_NODES
+    ]
+    try:
+        carrier.guard_current_native(items)
+        with pytest.raises(
+            (RuntimeError, catalog.Refusal),
+            match={
+                "source": "CONSTRUCTED_DIRTY_SOURCE",
+                "tree": "CURRENT_NATIVE_SOURCE",
+                "server": "CURRENT_NATIVE_SERVER_CHANGED",
+            }[damage],
+        ):
+            fixture.reset_disposable()
+        assert calls == (["source", "identity"] if damage == "server" else ["source"])
+        assert not (tmp_path / "before-reset-proofs.json").exists()
+    finally:
+        fixture.reset_disposable = original
+
+
+@pytest.mark.parametrize(
+    "damage,reason",
+    [
+        ("self", "EMBEDDED_SELF_ROW"),
+        ("missing", "EMBEDDED_FUNCTION_SET"),
+        ("duplicate", "EMBEDDED_DUPLICATE_FUNCTION"),
+        *[
+            (name, "EMBEDDED_FUNCTION_MISMATCH")
+            for name in ("hash", "language", "security", "volatility", "runtime")
+        ],
+        ("columns", "EMBEDDED_COLUMN_SET"),
+    ],
+)
+def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason):
+    expected = catalog.source_catalog(catalog.ROOT, "0015")
+    profile = expected["functions"]["platform.ai_delivery_schema_profile()"]
+    row = "('platform.human_context_schema_profile()','527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac','sql',true,'s',false)"
+    assert profile["body"].count(row) == 1
+    replacement = {
+        "self": row.replace("human_context_schema_profile", "ai_delivery_schema_profile"),
+        "missing": "",
+        "duplicate": row + "," + row,
+        "hash": row.replace(
+            "527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac", "0" * 64
+        ),
+        "language": row.replace("'sql'", "'plpgsql'"),
+        "security": row.replace(",true,", ",false,"),
+        "volatility": row.replace("'s'", "'v'"),
+        "runtime": row.replace(",false)", ",true)"),
+    }
+    if damage == "columns":
+        profile["body"] = profile["body"].replace(
+            "'app.audit_events',ARRAY['workspace_id',", "'app.audit_events',ARRAY[", 1
+        )
+    elif damage == "missing":
+        profile["body"] = profile["body"].replace(row + ",", "", 1)
+    else:
+        profile["body"] = profile["body"].replace(row, replacement[damage])
+    with pytest.raises(catalog.Refusal, match="^" + reason + "$"):
+        catalog.compare_embedded_profile(expected)
+
+
+@pytest.mark.parametrize(
+    "valid,hash_matches,body_matches,reason",
+    [
+        (False, False, False, "CATALOG_DECLARED_PROFILE"),
+        (False, True, True, "CATALOG_DECLARED_PROFILE"),
+        (1, True, True, "CATALOG_DECLARED_PROFILE"),
+        (True, False, False, "APPLICATION_VERIFIER_BODY_PIN"),
+        (True, False, True, "APPLICATION_FULL_CATALOG_PIN"),
+        (True, True, True, None),
+    ],
+)
+def test_catalog_primary_refusal_preserves_both_pin_facts(
+    valid, hash_matches, body_matches, reason
+):
+    from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
+
+    expected = catalog.source_catalog(catalog.ROOT, "0015")
+    if not body_matches:
+        expected["functions"]["platform.ai_delivery_schema_profile()"]["body_sha256"] = "0" * 64
+    digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
+    declared = {"schema_revision": "0015", "valid": valid, "profile_sha256": digest}
+    result = carrier.catalog_comparison(expected, digest, "{}", declared)
+    assert result["failed_predicate"] == reason
+    assert result["application_pin_matches"] is hash_matches
+    assert result["application_body_pin_matches"] is body_matches
+
+
 @pytest.fixture
-def r3_event(foundation_git, tmp_path, monkeypatch):
+def r4_event(foundation_git, tmp_path, monkeypatch):
     """Constructed real Git history; actual admission code, no Docker/DB."""
     f = foundation_git
     base, base_tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
     changed = f.root / "scripts/m4_runtime_db.py"
     changed.write_text("# constructed allowed source delta\n")
     f.git("add", str(changed))
-    f.git("commit", "-qm", "constructed capture source")
+    f.git("commit", "-qm", "constructed targeted source")
     source, tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
     monkeypatch.chdir(f.root)
     monkeypatch.setattr(carrier, "BASE", base)
     monkeypatch.setattr(carrier, "BASE_TREE", base_tree)
     monkeypatch.setattr(
-        catalog, "M4_R3_TRANSITIONS", {"refs/heads/" + carrier.CAPTURE_BRANCH: base}
+        catalog, "M4_R3_TRANSITIONS", {"refs/heads/" + carrier.TARGETED_BRANCH: base}
     )
     env, payload = ci_event(tmp_path, "stock-push")
     env.update(
-        GITHUB_SHA=source, GITHUB_REF="refs/heads/" + carrier.CAPTURE_BRANCH, GITHUB_RUN_ATTEMPT="1"
+        GITHUB_SHA=source,
+        GITHUB_REF="refs/heads/" + carrier.TARGETED_BRANCH,
+        GITHUB_RUN_ATTEMPT="1",
     )
     payload.update(
         ref=env["GITHUB_REF"],
@@ -87,13 +403,13 @@ def r3_event(foundation_git, tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "metadata", [None, "refs/heads/main", "refs/heads/c3/task-name", "refs/tags/v1.2"]
 )
-def test_constructed_full_admission_reaches_capture_without_resources(r3_event, metadata):
-    r = r3_event
+def test_constructed_full_admission_reaches_targeted_without_resources(r4_event, metadata):
+    r = r4_event
     r["payload"]["base_ref"] = metadata
     r["run"]()
     assert len(r["boundary"]) == 1
     b = r["boundary"][0]
-    assert b["mode"] == "catalog" and b["manifest"]
+    assert b["mode"] == "targeted" and b["manifest"]
     assert (b["event"]["head"], b["event"]["tree"], b["event"]["before"]) == (
         r["source"],
         r["tree"],
@@ -114,14 +430,14 @@ def test_constructed_full_admission_reaches_capture_without_resources(r3_event, 
         ("repo", "EVENT_ENV_REPOSITORY"),
         ("payload_repo", "EVENT_REPOSITORY_ID"),
         ("ref", "EVENT_PUSH_ENV_REF"),
-        ("targeted_not_open", "EVENT_PUSH_ENV_REF"),
+        ("capture_not_open", "EVENT_PUSH_ENV_REF"),
         ("before", "EVENT_M4_BEFORE"),
         ("missing_before", "EVENT_M4_BEFORE"),
         ("parent", "EVENT_M4_PARENT"),
         ("merge", "EVENT_M4_PARENT"),
         ("base_tree", "BASE_TREE"),
         ("dirty", "EVENT_SOURCE_VERIFY"),
-        ("write_set", "R3_WRITE_SET"),
+        ("write_set", "R4_WRITE_SET"),
         ("head", "EVENT_SHA_HEAD_MISMATCH"),
         ("after", "EVENT_PUSH_AFTER"),
         ("head_commit", "EVENT_PUSH_HEAD"),
@@ -135,17 +451,17 @@ def test_constructed_full_admission_reaches_capture_without_resources(r3_event, 
         ("missing_base_ref", "EVENT_M4_BASE_REF_MISSING"),
     ],
 )
-def test_constructed_full_admission_refuses_before_resources(r3_event, monkeypatch, damage, reason):
-    r = r3_event
+def test_constructed_full_admission_refuses_before_resources(r4_event, monkeypatch, damage, reason):
+    r = r4_event
     f, p = r["f"], r["payload"]
     p["base_ref"] = "refs/heads/main"
     if damage == "repo":
         monkeypatch.setenv("GITHUB_REPOSITORY", "other/repo")
     elif damage == "payload_repo":
         p["repository"]["id"] += 1
-    elif damage in {"ref", "targeted_not_open"}:
+    elif damage in {"ref", "capture_not_open"}:
         ref = "refs/heads/" + (
-            carrier.TARGETED_BRANCH if damage == "targeted_not_open" else "other"
+            "c3/m4-3-runtime-catalog-run-r4" if damage == "capture_not_open" else "other"
         )
         monkeypatch.setenv("GITHUB_REF", ref)
         p["ref"] = ref
@@ -194,7 +510,7 @@ def test_constructed_full_admission_refuses_before_resources(r3_event, monkeypat
     assert r["boundary"] == []
     assert list((r["root"] / "private").iterdir()) == []
     diag = json.loads((r["root"] / "evidence/event-admission-run.json").read_text())
-    if reason not in {"BASE_TREE", "R3_WRITE_SET"}:
+    if reason not in {"BASE_TREE", "R4_WRITE_SET"}:
         assert diag["failure_reason"] == reason
 
 
@@ -216,8 +532,8 @@ def test_constructed_full_admission_refuses_before_resources(r3_event, monkeypat
         "refs/heads/a\nPRIVATE_SENTINEL",
     ],
 )
-def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r3_event, metadata):
-    r = r3_event
+def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r4_event, metadata):
+    r = r4_event
     r["payload"]["base_ref"] = metadata
     with pytest.raises(catalog.Refusal, match="^EVENT_M4_BASE_REF_METADATA$"):
         r["run"]()

@@ -377,7 +377,7 @@ def test_foundation_workflow_has_twelve_required_jobs_serial_source_and_always_g
     }
     assert len(jobs) - 1 + 6 == 12
     for job, digest in {
-        "browser": "b3ab2a96b6f7f8eb3a3b726b9769d756a55bd50694b3f21be8779aabcc87c3db",
+        "browser": "f459d0f2880ebc8f41db798811b0b0c5c1f5475fe511041d8bfa72853586dbe5",
         "docker29-compatibility": "37ecbf897d53f318f3d0e2192b05574923e6e9ed7a6bbd421aa6eecddff055b1",
         "connect5-migration": "940bc041722d35488f6bc5b148e87793eebda363df6aa572762f5ed4f2de2100",
         "native-context-db": "ab14f25d082e830a8be35422a7ae4f0fc7d8f7092ec992fcbde703751b2fe78b",
