@@ -2,7 +2,52 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R5 / IN_PROGRESS / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R5 / BLOCKED, C3 HOLD / 2026-11-04
+
+C3 receipt, до C0 review. Один targeted
+[run41811079733](https://github.com/Elefesys/ai-service-manager/actions/runs/41811079733),
+push/attempt1/job126510186471 **FAIL**:70 collected,60 PASS,4 FAIL,6 setup ERROR,
+0SKIP. Retained35 PASS; delivery17/21 PASS; schema8 PASS; current-native6 setup
+errors, все6 business call phases NOT_REACHED. Whole-runtime не INTEGRATED/VERIFIED.
+
+Base **d0d1ff7643f1b2a02ab69c845da08ec99b77f9b2**/tree3ab2a3cd;
+source **1bca972cebbffbf226a62f63c7c58001b46fbc70**/
+tree **ce030705ff7ee2964c693d3aea23927b8832cf26**, sole child base,6 allowed paths.
+Разведены phase/payload files, полная planned/actual/missing accounting,
+bounded failure location и browser recursive export. Product/PG cases/pins/
+architecture не менялись. Final offline643 PASS+130subtests; Ruff/format/mypy
+PASS; реальные phase/subprocess regression и9 wrapper smokes сохранены.
+
+Corrected stock0015 PG18.6: independent catalog183functions/48tables,
+embedded182others/48columns, declared valid=true, exact body/full pins и
+RuntimeDatabase.check **PASS**. Source/event admission/cleanliness PASS;
+SQL/tests292.583837021/600s,job359/1500s; cleanup5/5 PASS/zero owned resources.
+Actual cancellation/inbound/manual progress, reply/handoff/no_reply,
+selected-commit replay и DISPATCHING recovery PASS.
+
+Отказы:2 Telegram cases line438 selected_kind!=reply;2 unknown_cost/timeout
+cases line520 conjunction selected_kind/call-count failed, operand неизвестен;
+6 native setup CalledProcessError в `git read-tree HEAD` line62. Git stderr/
+returncode и internal delivery causes отсутствуют; точная причина не выдумана.
+Все6 before-reset source/server guards PASS, но native0015/business checks
+не достигнуты. Original missing=0 относится к lifecycle, complete=false;
+derived audit отдельно указывает6 missing call phases и later assertions.
+
+По STOP правилу source/execution frozen; только этот docs-only sole-child
+receipt на prep c3/m4-3-runtime-integration-r5. PR-source остаётся на base.
+Source repair/rerun/new capture/new Draft PR/full CI/merge после FAIL нет;
+new PR head/tested merge/all12 CI gates NOT_REACHED. Main586240e8,
+PR41 OPEN/DRAFT/head9b05e5dd, R1–R4/C2 refs unchanged. Далее bounded решение C0.
+
+[Evidence561files](https://chatgpt.com/library?file_id=libfile_d589ef0f7aac81918f9a80591ce0cfb7&account_id=personal):
+36943258bytes/SHA256a21819f6f55e79109c20ae19cc5120b82ba2152e0fc33b486c0254a7644368a7,
+manifest560/560; original artifact13313285236/3989475bytes/manifest141/141,
+342source blobs/modes verified. Exact pins/all failures/missing/proposed next
+scope — [CURRENT HANDOFF](tasks/M4_HANDOFF.md). C3/другие роли HOLD;
+default OFF/fake-only2calls1READ; paid/live/Telegram/VM/deploy/real data HOLD;
+shared150 ledger unchanged, owner ничего не запускает, LOCKED решения сохранены.
+
+## История — C0 assignment C3 R5 / 2026-11-04
 
 C0 проверил R4 source **cbc2b2bb044f5eb8d84c4215c5e04bb9806bd139**/tree16282307
 и receipt **3963fabf9ad9e2be91bfb01624fd7dcec5869a79**/treebadaf21b.

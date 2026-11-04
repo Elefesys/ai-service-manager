@@ -6,7 +6,122 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C0 assignment C3 R5 / 2026-11-04
+## CURRENT — C3 R5 receipt / BLOCKED, до C0 review / 2026-11-04
+
+**C3 HOLD.** Единственный targeted run завершился **FAIL:60 PASS,4 FAIL,
+6 setup ERROR,0 SKIP**. Corrected stock0015 catalog/valid=true/readiness PASS;
+whole-runtime не INTEGRATED/VERIFIED. Source/execution ref frozen. По STOP
+правилу нет source repair после outcome, повторов pytest/PG/CI, нового capture,
+Draft PR/full CI или merge. Далее решение C0.
+
+**Assignment/base:** `d0d1ff7643f1b2a02ab69c845da08ec99b77f9b2`, tree
+`3ab2a3cdc781570fb466094a34882864f3d5ffcb`.
+**Frozen source:** `1bca972cebbffbf226a62f63c7c58001b46fbc70`, tree
+`ce030705ff7ee2964c693d3aea23927b8832cf26`, sole parent assignment.
+Этот docs-only receipt — sole child source на prep
+`c3/m4-3-runtime-integration-r5`, только HANDOFF/TASK_REGISTER. Execution
+`c3/m4-3-runtime-targeted-run-r5` остаётся на source; PR-source
+`c3/m4-3-runtime-integration-pr-r5` — на assignment. Main
+`586240e88c825aa67593af5d72e0bdbb251ed3bb`, PR41 OPEN/DRAFT/head9b05e5dd,
+R1–R4/C2 refs не изменены; fresh metadata сохранены.
+
+**Ровно6 source paths:** `.github/workflows/m4-runtime-db.yml`,
+`scripts/m4_runtime_db.py`, `scripts/native_context_db_catalog.py`,
+`scripts/test_browser.sh`, `tests/test_m4_runtime_db_runner.py`,
+`tests/test_telegram_egress.py`. Phase reports/logs/active вынесены в `phases/`,
+producer payloads сохранены; browser export рекурсивный, primary failure
+сохраняется при cleanup/export. Planned/actual inventory разделены:70 targeted,
+64 runtime, unknown inventory до collection,70 missing при native отказе.
+Exact selectors/disjoint checks сохранены. Failure location bounded; новая
+R5 identity/transition без изменения catalog/admission semantics. Product,
+PG cases, migrations/pins/architecture/dependencies/infra/C2 carriers неизменны.
+
+**Final-source offline:**643 PASS +130 subtests,0FAIL/ERROR/SKIP;
+Ruff/format195files/mypy76files PASS. JUnit643 testcase/tests773;2 existing
+pytest-asyncio warnings. Реальная R4 phase/subprocess граница дала3 ожидаемых
+consumer KeyError, R5 —3 PASS; это local synthetic control, не hosted rerun R4.
+Настоящие phase/write/subprocess/consumer success/nonzero/timeout,9 wrapper
+smokes с заменой только Docker/PG child boundary, finalization/manifests,
+cleanup/primary/missing accounting и6 browser-shell export cases проверены.
+Earlier subset/pre-final evidence отдельно сохранены, не суммируются с final.
+
+**Hosted:** [run41811079733](https://github.com/Elefesys/ai-service-manager/actions/runs/41811079733),
+push/attempt1/job126510186471 FAIL; fresh metadata — ровно один run.
+Event/source admission PASS: exact HEAD/tree/before/sole parent=assignment,
+base_ref строка prep R5, created/deleted/forced=false; source clean.
+Два service отказа update_ref до успешного движения не изменили ref и не
+создали runs; ответы и zero-run reads сохранены. Job359/1500s;
+SQL/tests292.583837021/600s, test subprocess268.511873076s.
+Все5 отдельных owned TEST clusters посещены; cleanup5/5 PASS, zero remaining
+containers/networks/volumes; finalizer/upload PASS, source-preservation clean.
+
+**Actual corrected stock0015:** PG18.6/180006; independent source/body/security/
+roles/nonfunction PASS,183 functions/48 tables, embedded182others/48columns;
+declared valid=true/full equals independent; `RuntimeDatabase.check` PASS.
+Body **e0d5d30826f10c3396565ed2ab571653f41f1b7bdcf883f7eeebd0159fecc443**;
+full **8a91ef6f6d592ad9eeafe80f4eb5e2c012ef759040a96351a2242dfd97d480d7**;
+nonfunction **e939e9f303843a84256f9315e6016e1a888aea0c18469539aa53147c6d339bee**.
+Эти pins теперь подтверждены actual PG, без изменения source pins в R5.
+Независимый saved-data audit пересчитал каталог; новых PG вызовов не делал.
+
+| Group | Collected | PASS | FAIL | Setup ERROR |
+|---|---:|---:|---:|---:|
+| retained runtime |35|35|0|0|
+| delivery |21|17|4|0|
+| schema |8|8|0|0|
+| current native |6|0|0|6|
+
+**Все наблюдаемые группы отказов и ограничения:**
+
+- Telegram rights True/False: `test_synthetic_telegram_real_admission_and_rights_race`,
+  call AssertionError, `test_m4_delivery_postgres.py:438`, selected_kind не reply.
+  Следующие send-job/request-order/rights/SENT-or-FAILED assertions439–446
+  NOT_REACHED. Actual selected value/internal reason/call count не сохранены;
+  transport rights-race failure не утверждается.
+- unknown_cost/timeout: `test_unknown_charge_or_timeout_terminalizes_without_regeneration`,
+  call AssertionError line520: `selected_kind is None and len(fake.requests)==1`.
+  Какая часть conjunction отказала и её значения — неизвестно. DEAD/restart/
+  no-regeneration/no-new-claim assertions521–528 NOT_REACHED. Timeout case
+  завершился за2.738s, unknown_cost2.896s; зависание не наблюдалось.
+- Current-native6: setup CalledProcessError, `source_tree_identity` line62,
+  вызван из `native` line134. Frozen source: `git read-tree HEAD`, temporary
+  GIT_INDEX_FILE. Git returncode/stderr не сохранены; exact cause неизвестна.
+  Checkout `/app:ro`, UID1001:1001 — факт среды, не доказанная причина.
+  Все6 before-reset source/server guards PASS; исходный fixture после reset/
+  migration дошёл до identity. Upgrade native_runtime до0015 и все6 host
+  business checks NOT_REACHED; call phase отсутствует у всех6.
+
+Original missing_count/not_reached_count=0 означает посещённые node lifecycles;
+original complete=false/resultFAIL сохранены. **Шесть business call phases
+NOT_REACHED** отдельно перечислены в derived audit; originals не переписаны.
+Actual PASS: reply1call/2calls1READ, handoff/no_reply, replay/default OFF,
+fresh fences, UNKNOWN no-resend, enrollment concurrency/lost ACK,
+**inbound/manual progress при AI wait и terminal cancellation**,
+selected-commit replay, DISPATCHING recovery и authority changes during wait.
+
+New PR head/tested merge и все12 full-CI gates **NOT_REACHED**: browser,
+foundation-durable,foundation,docker29-compatibility,connect5-migration
+normal/docker29 × intent/image/state,native-context-db,m4-runtime-db.
+Full-CI generic/native/M4 union и actual browser/egress на final source не
+подтверждены. Минимальное предложение C0, **не применено**: разобрать Git
+fixture boundary с прежними guards; отдельно установить причины reply-selection
+и значения bounded predicates incomplete-model cases. Не ослаблять assertions,
+pins, selection или бюджеты; exact repair из имеющихся данных не установлен.
+
+**[Evidence ZIP561files](https://chatgpt.com/library?file_id=libfile_d589ef0f7aac81918f9a80591ce0cfb7&account_id=personal):**
+36943258bytes/SHA256 **a21819f6f55e79109c20ae19cc5120b82ba2152e0fc33b486c0254a7644368a7**,
+bundle manifest560/560. Original artifact13313285236:3989475bytes,
+SHA256 **8bb25a1f951e6761b39d7be8b55e892d327575d93074d3094bb75d99466b9548**,
+142files/manifest141/141;342 source Git blobs/modes/bytes/SHA256 verified.
+Original ZIP/full job log, all70 cases/JUnit/phases/active, catalog raw facts,
+source/inventory/cleanup, offline causal controls и full limitations сохранены.
+
+Default OFF/fake-only,2 calls/1 READ; paid/live/Telegram/VM/deploy/real data HOLD.
+Другие роли HOLD; owner ничего не запускает. Shared150 unchanged:
+confirmed0.37505230/58knownPOST;4unknown held7.585505548;62totalPOST;
+remaining142.039442152;reported0.00743079 UNSETTLED. LOCKED решения не менялись.
+
+## История — C0 assignment C3 R5 / 2026-11-04
 
 **Результат для пилота:** закончить уже назначенную synthetic проверку AI reply,
 handoff/no_reply, отмены и ручного ответа. R4 остановлен ошибкой test runner до
