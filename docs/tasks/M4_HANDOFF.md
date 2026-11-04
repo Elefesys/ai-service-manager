@@ -6,7 +6,146 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C0 assignment C3 R9 / 2026-11-04
+## CURRENT — C3 R9 receipt / BLOCKED, C3 HOLD / 2026-11-04
+
+**C3 HOLD, до C0 review.** Единственный
+[full CI41855233147](https://github.com/Elefesys/ai-service-manager/actions/runs/41855233147),
+synchronize/attempt1: **10 SUCCESS,2 FAIL**. Whole-runtime **BLOCKED**, не
+INTEGRATED/VERIFIED. После первого FAIL source frozen; source repair,
+pytest/PG/collection/CI reruns не выполнялись. [PR42](https://github.com/Elefesys/ai-service-manager/pull/42)
+OPEN/DRAFT, не слит. Все причины и недостигнутые проверки сохранены ниже.
+
+### Source и граница R9
+
+Assignment/base **bd4cf70a255d65c1f327ef0ded17e4e6940fa4e7** /
+tree **a293789476dde97005c4e6a508c0bb490e6fe6b9**.
+Source **42bea6905b6f67ebbdba6a0a8c69d8b8fdba8bce** /
+tree **a0a1c2e9f94e44f008fdba3157d5f7a33f084223**, sole parent assignment.
+Tested merge **ca3d5a90a7657f07a9643ae679d7f12d364cd794**, tree exact source,
+ordered parents frozen main **586240e88c825aa67593af5d72e0bdbb251ed3bb** + source.
+
+Ровно3 source paths,166 insertions/38 deletions:
+`tests/test_m4_runtime_db_runner.py`, `tests/test_m4_delivery.py`,
+`scripts/m4_runtime_db.py`. Этот receipt — sole child source, только2 docs
+на prep **c3/m4-3-runtime-integration-r9**. PR-source
+**c3/m4-3-runtime-integration-pr-r8** остаётся source42bea690.
+
+Две driver families используют общий temporary fixture: explicit synthetic
+immutable pin/uv.lock inputs, private Git для real archive и isolated cwd.
+Missing host pin не копируется, `/app/repository` не дописывается; real
+run_admitted/read/DB_IMAGE equality/phase/cleanup/export сохранены. Все14
+исходных parameters и outcome assertions сохранены. In-call control держит
+реальные Runtime→Agent→Gateway→DurableAdapter; настоящий finite timeout
+истекает после observed reservation+adapter entry, cancellation наблюдается,
+completion UNKNOWN/CANCELLED, no commit, STOP once, tasks завершены. Отдельные
+pre-call timeout и valid OUTPUT/UNKNOWN metering сохранены; bounded type/code/
+counts/stage-time без payload/exception values. Runner меняет только base/tree,
+R9 labels и write-set3source+2docs. Два дополнительных offline admission
+negative cases; PG nodeids не добавлены.
+
+Backend/worker/migrations0001–0015/foundation/pins/все PG modules/catalog runner/
+workflows/infra/Dockerfiles/dependencies/architecture byte-exact assignment.
+Canonical11 attachments сверены byte-exact; LOCKED/ADR132/216/217 сохранены.
+
+### До publication и фактическая development среда
+
+Causal **17 existing cases PASS**,0FAIL/ERROR/SKIP,18.651s: wrapper9+driver5+
+timeout/metering3. Exact unchanged Dockerfile filesystem projection:11 COPY
+inputs/222files, нет `.git` и `infra/images.lock.env` до и после; все222
+hashes/modes unchanged. Inputs создаёт private fixture. Это filesystem proof,
+не local image/PG run. Сохранены setup/inventory/XML/diagnostics и9 real-wrapper
+synthetic exports с исходными manifest: expected PASS2/FAIL7. In-call наблюдает
+reserved→adapter_entered→deadline_armed→adapter_cancelled→completed→stop→finished.
+
+Final affected offline **546 testcase+130subtests PASS**,111.95s; Ruff PASS,
+format195 PASS,mypy76 PASS. XML676 включает130subtests; testcase elements546.
+Полный unit CI ниже выполнялся уже в actual development container; прежние
+R8 driver-input/in_call_timeout failures в этом полном invocation отсутствуют.
+
+После checks выполнен ровно один разрешённый expected-sha fast-forward PR42
+из45f46da00d59cadf90fe2590548e5e3b3cb20f53,force=false. Один synchronize CI,
+attempt1. Принятый C0 R8 targeted72 не повторялся; нового standalone PG/capture
+нет, старый targeted push trigger не использован.
+
+### Все hosted результаты и failures
+
+**M4 runtime**,job126661935410: **65 PASS,1 FAIL**,0ERROR/SKIP; все66
+setup/call/teardown достигнуты.35 runtime+9schema PASS;delivery21PASS/1FAIL.
+SQL/tests312.414719649/600s;missing/unknown/invalid/overflow0;cleanup4/4 PASS,
+zero owned containers/networks/volumes. Catalog0015:183functions/48tables,
+embedded182others/source/security/roles/valid=true/readiness и все3 frozen pins
+перепроверены по actual original bytes. Source clean.
+
+Failed node:
+`tests/test_m4_delivery_postgres.py::test_waiting_ai_allows_inbound_and_manual_progress_and_cancel_is_terminal`.
+Call3.245365726s,AssertionError: delivery382→incoming296→claim_job271;
+expected `step=CLAIMED` и exact job id не выполнено. Setup/teardown PASS.
+Реальный worker уже работал, model entry/lease range/no-idle-transaction
+assertions достигнуты. Actual claim step/id/status/claimant не сохранены.
+Конкуренция работающего worker и helper claim — **гипотеза**, не установленная
+причина. Finally cancellation/join assertions не заменили исходный exception.
+Manual command/SENT и post-finally one-call/DEAD/restart-none/no-Outbox
+assertions **NOT_REACHED**. Full bounded cases/JUnit/log/frames сохранены.
+
+**Foundation**,job126670361097: unit **3528 PASS,1 FAIL**,155subtests PASS,
+1031deselected,437.81s. Единственный failed node:
+`tests/test_m4_agent.py::test_one_deadline_covers_authority_read_model_and_candidate[model_call]`.
+Line460:requests0 вместо1. Предыдущая assertion прошла: reason in DEADLINE/TIMEOUT,
+candidate=None. Exact reason, stage/elapsed-to-entry/reservation неизвестны;
+100ms whole-run deadline до entry — **гипотеза**. Final authority.reads assertion
+NOT_REACHED. Этот test module в R9 immutable. Ruff/format/mypy PASS.
+
+Secondary `FOUNDATION_EVIDENCE_REFUSED`: внутренний exception text не сохранён;
+actual journals показывают unit/checks exit1, host/backend sequence incomplete,
+execution primary1/cleanup0. Build30.573s и checks468.603s — разные phases;
+unit journal439.539s,pytest437.81s. Generic860,upgrade/repeat-upgrade/downgrade/
+reupgrade/contracts/wheel-one/wheel-two/wheel-compare/wheel-hash и host
+storage-version/storage-admin-version/services/http/images tail **NOT_REACHED**.
+Source clean. Cleanup exit0/removals logged; отдельного final zero-resource
+inventory foundation нет. Evidence gate не ослаблялся.
+
+Остальные10 gates SUCCESS: native112PASS(105PG retained0013+7source),336phase
+reports/105reset guards/owned cleanup/source exact; browser54PASS;
+foundation-durable6lifecycles/12assertions;Docker29 compatibility12assertions;
+6migration shards. Frontend14files/398tests PASS. Full12 job statuses/logs в архиве.
+
+Collection exact/disjoint union **860+105+66=1031** подтверждён на том же merge.
+Actual PG **completed171/PASS170/FAIL1/NOT_REACHED860**. Complete execution union
+не доказан; successful collection не заменяет execution. Новый current-native6
+run не проводился; accepted R8 targeted scope остаётся прежним.
+
+### Evidence, предложения C0 и HOLD
+
+[Evidence archive](https://chatgpt.com/library?file_id=libfile_5937f7d972bc8191b2d6b3da5bab6a56&account_id=personal):
+**169487524 bytes**,SHA256 **90594b41c559f3c54921851279c18e63f9673de4c9767d708a212375a3881471**;
+manifest **803/803**,ZIP entries804,CRC/extracted bytes verified.
+Все12 original CI ZIP совпали с fresh GitHub sizes/digests;11 source archives
+(10gz+1tar)×342 Git blobs/bytes/SHA256/modes exact; все12 full job logs сохранены.
+M4 original13338675540:4015210bytes/SHA256
+f4ac2c6f5e701be600183d41d4e5ace9d664a9eda97d9233a20e523101c71584,manifest114/114.
+REPORT.md,ci/*-audit.json,ci/*-failure-analysis.json содержат полные paths,
+cases,causes,unknowns и NOT_REACHED; local/ содержит commands/setup/XML/source diff.
+
+Предложения для **следующей выдачи C0, NOT_APPLIED**: сделать PG ingress fixture
+одним потребителем через уже работающий real worker, без второго helper claim,
+с finite ожиданием persisted receipt/conversation и сохранением всех manual/
+terminal assertions. Для Agent model_call контролировать настоящий finite
+timeout после observed entry, сохранив все6 boundaries и call/read counts;
+добавить bounded stage/time/type/code/count diagnostics. Не менять product
+claim/Agent semantics, scheduling markers и не маскировать проблему sleep.
+Оба файла сейчас вне R9 write-set; никаких новых решений вместо C0 не принято.
+
+Fresh final metadata:main586240e8/PR41 OPEN-DRAFT head9b05e5dd unchanged;
+37 остальных frozen old C3 refs и24C2 unchanged; единственное разрешённое
+изменение старого C3 ref — PR-source; R8 targeted/prep untouched. R9 prep source
+до этого docs receipt;source CI runs1/attempt1,prep runs0. PR42 source frozen.
+C3 и остальные роли **HOLD**; merge — владелец только после C0 acceptance.
+Owner ничего не запускает. Default OFF/FAKE/EVAL_ONLY2calls1READ;
+paid/live/Telegram/VM/deploy/real data HOLD. Shared150 ledger unchanged:
+confirmed0.37505230/58knownPOST;4unknown held7.585505548;62totalPOST;
+remaining142.039442152;reported0.00743079 UNSETTLED.
+
+## История — C0 assignment C3 R9 / 2026-11-04
 
 **Результат для пилота:** завершить полный CI уже работающего synthetic AI→Telegram
 пути. R8 targeted принят:72/72 PASS. Full CI остановился на двух причинах в unit

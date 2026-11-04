@@ -2,7 +2,66 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R9 / IN_PROGRESS / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R9 / BLOCKED, C3 HOLD / 2026-11-04
+
+C3 receipt, до C0 review. [PR42](https://github.com/Elefesys/ai-service-manager/pull/42)
+OPEN/DRAFT,не слит;[единственный full CI41855233147](https://github.com/Elefesys/ai-service-manager/actions/runs/41855233147)
+synchronize/attempt1: **10 SUCCESS,2 FAIL**. Whole-runtime не INTEGRATED/VERIFIED.
+После первого FAIL source frozen;repair/pytest/PG/collection/CI reruns не делались.
+
+Base **bd4cf70a255d65c1f327ef0ded17e4e6940fa4e7**/treea2937894;
+source **42bea6905b6f67ebbdba6a0a8c69d8b8fdba8bce**/
+tree **a0a1c2e9f94e44f008fdba3157d5f7a33f084223**,sole child assignment,
+ровно3 allowed paths(2 unit test modules+runner identity/write-set),166+/38−.
+Private synthetic driver inputs/Git/cwd сохраняют14cases/outcome assertions;
+real in-call timeout истекает после reservation+entry,cancellation/completion
+UNKNOWN-CANCELLED/STOP once/tasks checked. Pre-call/UNKNOWN output сохранены.
+Все backend/worker/migrations/pins/PG modules/catalog/workflows/infra/arch immutable.
+
+До publication: **causal17 PASS** в exact development filesystem projection
+11COPY/222files без host pins/.git;inventory unchanged;private fixture inputs.
+Final offline546cases+130subtests/Ruff/format195/mypy76 PASS. Projection только
+filesystem proof;hosted unit в actual development container. Прежние15 R8
+unit failures отсутствуют. Два новых offline admission negatives,PG nodes0new.
+C0-authorized one expected-sha FF того же PR42;accepted R8 targeted72 не повторялся,
+новых standalone PG/capture/targeted refs нет.
+
+Tested merge **ca3d5a90a7657f07a9643ae679d7f12d364cd794**,tree exact source,
+ordered parents frozen main586240e8+source. M4 **65PASS/1FAIL**,все66cases
+setup/call/teardown complete;SQL312.414719649/600s;cleanup4zero;catalog183/48/embedded182/all3pins/
+readiness PASS. Failed waiting-AI/manual-progress PG case:incoming→claim_job
+assertion CLAIMED/exact id;actual response/status/claimant unknown. Worker/helper
+claim competition — hypothesis. Manual command/SENT/post-finally terminal
+assertions NOT_REACHED;setup/teardown and finally join/cancellation completed.
+
+Foundation unit **3528PASS/1FAIL**,155subtestsPASS,1031deselected,437.81s.
+Only fail:`test_m4_agent.py::test_one_deadline_covers_authority_read_model_and_candidate[model_call]`:
+requests0 instead1;reason in DEADLINE/TIMEOUT,candidate=None assertion PASS;
+exact reason/stage/time/reservation unknown,100ms pre-entry expiry hypothesis.
+Ruff/format/mypy PASS. Secondary FOUNDATION_EVIDENCE_REFUSED;journals primary1/
+cleanup0. Generic860,upgrade/repeat/downgrade/reupgrade/contracts/wheels and
+foundation host storage/services/http/images tail NOT_REACHED. Source clean;
+cleanup exit0/removals logged,no independent final zero-resource inventory.
+
+Native112PASS(105PG retained0013+7source),105reset/cleanup;browser54;
+foundation-durable/Docker29/6migration shards SUCCESS;frontend398PASS.
+Collection union860+105+66=1031 exact/disjoint. Actual PG completed171,
+**PASS170/FAIL1/NOT_REACHED860**,complete execution union not proven.
+Все nodeids/frames/unknowns/NOT_REACHED и2 NOT_APPLIED proposals C0 —
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md). Оба failed test modules вне R9 write-set;
+новая правка только по следующей выдаче C0.
+
+Этот2-doc receipt — sole child source только R9 prep;PR-source frozen.
+Main/PR41/37other oldC3/24C2 unchanged;R8 targeted/prep frozen;one CI attempt1,
+prep runs0. [Evidence804files](https://chatgpt.com/library?file_id=libfile_5937f7d972bc8191b2d6b3da5bab6a56&account_id=personal):
+169487524bytes/SHA256 **90594b41c559f3c54921851279c18e63f9673de4c9767d708a212375a3881471**,manifest803/803.
+12originalZIP/freshdigests/CRC/extracted exact;11sourcearchives×342Gitblobs/modes;
+12fulljoblogs,local17/offlineproofs,all audits/report saved. C3/other roles HOLD;
+owner nothing to run,merge only after C0 acceptance. DefaultOFF/FAKE/EVAL_ONLY
+2calls1READ;paid/live/Telegram/VM/deploy/realdata HOLD;shared150ledger unchanged;
+LOCKED/ADR132/216/217 preserved.
+
+## История — C0 assignment C3-M4.3-RUNTIME-INTEGRATION-R9 / 2026-11-04
 
 C0 проверил source **45f46da00d59cadf90fe2590548e5e3b3cb20f53** / treea0726c53,
 receipt **8544097fbf73e3300f0faf3df79e3f77e78d0a9f** / tree03451a17.
