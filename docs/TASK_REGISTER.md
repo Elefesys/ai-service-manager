@@ -2,7 +2,37 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R7 / BLOCKED, C3 HOLD / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R8 / IN_PROGRESS / 2026-11-04
+
+C0 независимо проверил R7 source **05c2e52ffcd7349f502f864d6d863dfde50fca22** /
+treefea51e60 и receipt **e32263e925ea646a670c2267aa7ce324f40f7647** / treebb249385.
+[Run41828733275](https://github.com/Elefesys/ai-service-manager/actions/runs/41828733275),
+attempt1: **71 PASS,1 FAIL**,0ERROR/SKIP; все прежние70 PASS, все72 call phases
+достигнуты. Catalog183/48/current pins/valid=true/readiness и cleanup5/5 PASS.
+C0 сверил manifests535/142,342 Git blobs/modes, fresh log и actual catalog;
+final offline539testcase+130subtests/causal9/Ruff/format/mypy PASS.
+
+Reversible CHECK и Telegram outcomes приняты в SOURCE+TARGETED scope:
+rights true observe1/send1→SENT, false observe1/send0→FAILED; model1, один intent,
+restart/replay0 новых calls/sends. Native6, UNKNOWN reserve/timeout, stale/foreign
+guards и downgrade/re-upgrade PASS. Whole-runtime **BLOCKED**, full CI NOT_REACHED.
+
+Единственный FAIL — подготовка нового schema test: AI-enabled worker направляет
+GUARDED_TEXT в ai.enqueue, SEND_GUARDED_TEXT lookup пуст. Actual старый enqueue
+result неизвестен; PG matrix/old CHECK control NOT_REACHED. R8 исправляет только
+эту fixture через существующий TEST worker без AI и проверяет receipt/Outbox.
+AI positive путь,72 nodeids,negative assertions, migrations/backend/pins immutable.
+
+Exact base — SHA этого C0 assignment, sole child receipt e32263e9/5 docs;
+branch **c0/m4-3-runtime-integration-r8**. Единственный исполнитель C3; exact
+write-set/refs/критерии — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+После offline checks один targeted preflight+72 scenarios,≤600s SQL/tests/
+≤25min job; после PASS один новый Draft PR/full CI12gates. FAIL→freeze/receipt/C0,
+без unchanged rerun. Main586240e8,PR41 OPEN/DRAFT/head9b05e5dd,R1–R7/C2 refs frozen.
+Остальные роли HOLD; default OFF/fake-only2calls1READ; paid/live/Telegram/VM/
+deploy/real data HOLD; ledger прежний. Owner ничего не запускает.
+
+## История — C3-M4.3-RUNTIME-INTEGRATION-R7 / BLOCKED, C3 HOLD / 2026-11-04
 
 C3 receipt, до C0 review. Один targeted
 [run41828733275](https://github.com/Elefesys/ai-service-manager/actions/runs/41828733275),

@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R7.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R8.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -1046,6 +1046,29 @@ targeted run70+≤2case delta; после PASS один новый Draft PR/full
 Unexpected FAIL → frozen source/receipt/C0, без unchanged rerun.
 Main/PR41/R1–R6/C2 refs frozen; default OFF/fake-only2calls1READ,
 paid/live/Telegram/VM/deploy/real data HOLD. Ledger и LOCKED архитектура прежние.
+
+**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R8.**
+C0 независимо проверил source05c2e52f/receipt e32263e9, original artifacts и fresh
+metadata run41828733275:71 PASS,1 FAIL; все прежние70 scenarios PASS. CHECK/current
+pins, valid=true/readiness, reversible downgrade/re-upgrade и оба synthetic
+Telegram rights outcomes приняты в SOURCE+TARGETED scope. Отправка1→SENT либо
+отказ без send→FAILED, restart/replay не создаёт новый intent/call/send.
+Native6/UNKNOWN metering/timeout/cleanup PASS; whole-runtime остаётся BLOCKED.
+
+Единственный FAIL — C3 schema fixture использует AI-enabled worker для legacy
+GUARDED_TEXT. Source доказывает перехват через ai.enqueue; actual старый enqueue
+result неизвестен, matrix/old CHECK control NOT_REACHED. Разрешена только test
+composition поправка: существующий TEST worker без AI для guarded fixture,
+проверка receipt/Outbox до прежних assertions. Positive AI worker не отключать.
+Это не изменение архитектуры или runtime поведения. Миграции0001–0015, весь
+backend/current pins и retained/applied DB теперь immutable в R8; новый successor
+не назначается. ADR132/216/217 и LOCKED гарантии сохраняются.
+
+Один C3, прежние72 PG nodes, bounded offline checks → один targeted run → только
+после PASS новый Draft PR/full CI12gates. Exact refs/write-set/limits в CURRENT;
+admission сужается до fixture/R8 identity. Main/PR41/R1–R7/C2 refs frozen;
+unexpected FAIL→receipt/C0 без unchanged rerun. Default OFF/fake-only2calls1READ,
+paid/live/Telegram/VM/deploy/real data HOLD; ledger unchanged.
 
 ## Что пересмотрено относительно baseline
 

@@ -6,7 +6,134 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3 R7 receipt / BLOCKED, C3 HOLD / 2026-11-04
+## CURRENT — C0 assignment C3 R8 / 2026-11-04
+
+**Результат для пилота:** закрыть оставшуюся проверку совместимости AI отправки
+и перейти к полному CI. R7 подтвердил оба Telegram outcomes; осталась ошибка
+подготовки нового schema test. Whole-runtime **BLOCKED**;
+**C3-M4.3-RUNTIME-INTEGRATION-R8 IN_PROGRESS**, единственный исполнитель C3.
+
+### Приёмка R7 в SOURCE + TARGETED scope
+
+C0 независимо сверил source **05c2e52ffcd7349f502f864d6d863dfde50fca22** /
+tree **fea51e60e16bf1e09fe54844f92d485952d581bd**, sole child assignment
+**21e8b4b61ceabb9c26688907ba27a974a7694eb5**, ровно10 разрешённых paths.
+Receipt **e32263e925ea646a670c2267aa7ce324f40f7647** /
+tree **bb2493851706a16dcfde064a6b54ef3d63b91fa4**, sole child source,2 docs.
+
+Fresh GitHub metadata и original artifacts
+[run41828733275](https://github.com/Elefesys/ai-service-manager/actions/runs/41828733275):
+единственный push/attempt1/job126570094374, **71 PASS,1 FAIL,0 ERROR,0 SKIP**.
+Все прежние70 nodeids сохранены и PASS; новые2 — delivery guard PASS/schema FAIL.
+Все72 setup/call/teardown достигнуты, missing/unknown inventory/invalid fields/
+overflow=0. SQL/tests326.571089357/600s, job393/1500s; cleanup5/5 PASS, zero owned
+containers/networks/volumes. Complete=true относится к coverage, не общему PASS.
+Final offline539 testcase+130subtests и causal9 PASS; Ruff/format195/mypy76 PASS.
+
+C0 сверил [архив R7](https://chatgpt.com/library?file_id=libfile_12ca72142ed48191b81f229caea67c37&account_id=personal):
+37961117bytes/SHA256 **ab9db2b0450acee1534b4d9440069514f56d6a440db691ad29431914e09df1d7**,
+manifest535/535; original artifact13322891091:4015970bytes/SHA256
+**370862dd6c3568e380dcf3f1cbeb731cda68291167d2d9d2cc4fdb92f6e0c770**,
+manifest142/142,143 files byte-exact;342 Git blobs/modes exact, fresh job log exact.
+Saved stock PG18.6 catalog независимо пересчитан из source:183functions/48tables,
+embedded182others/48columns, roles/security/nonfunction/valid=true/readiness PASS.
+Actual bytes совпали с candidate derivation: одна CHECK row и verifier literal,
+остальные182 functions/catalog rows неизменны. **Эти pins теперь frozen:**
+
+| Pin | Actual SHA256 |
+|---|---|
+| nonfunction | `a4aeec49cd351eea23f19346700ba998ec4ca9ab5aafd6163b6193da72285b9d` |
+| verifier body | `2af634ab2afb3b2b9a536453ce6c735b6be57a1018fdd0893d707d3d5dca5f36` |
+| full catalog | `5c82c2a14b95ae7e85a1fb2191f91843ff78e6354e4f5e1cdba5c2504183f181` |
+
+Приняты в SOURCE+TARGETED scope: reversible CHECK/current pins и оба Telegram
+rights outcomes — getBusinessConnection→sendMessage ровно1→SENT либо observe1/
+send0→FAILED. В обоих случаях1 model call, один intent, restart/replay0 новых
+model calls/HTTP sends. Это actual PG + mocked HTTP, не live Telegram.
+Stale/foreign probe guards, UNKNOWN reserve/no-regeneration, in-call timeout,
+cancellation/manual progress, native6/reset6/identity6 PASS. Unused downgrade
+восстанавливает exact0014/old3 probe CHECKs; re-upgrade exact snapshot/readiness,
+durable downgrade guard и drift6 PASS. Это не whole-runtime INTEGRATED/VERIFIED;
+new PR/tested merge/full CI12gates ещё NOT_REACHED.
+
+### Единственный дефект и исправление
+
+`test_probe_check_shape_and_old_ai_rejection_on_real_jobs` упал с NoResultFound
+на `tests/test_m4_schema_postgres.py:169`: после исполнения GUARDED_TEXT job
+нет SEND_GUARDED_TEXT. C0 проверил source: `application(h)` включает AI;
+`Worker.execute` перехватывает этот TurnJobClaim в ai.enqueue до legacy consumer.
+Ошибочная композиция fixture доказана исходниками; actual enqueue result/final
+source-job status старого запуска не записаны и не объявляются известными.
+4 kinds×8 masks, nonpositive generation/version, old CHECK exact23514/control
+и transaction rollback/snapshot equality **NOT_REACHED**, а не PASS.
+
+**Разрешённая поправка:** только для создания legacy guarded job в этом test
+использовать существующий `create_worker(h.kernel,h.adapter,environment="TEST")`
+без AI config/model. Проверить `worker.ai is None`, действительный GUARDED_TEXT
+claim, accepted guarded receipt и связанный SEND_GUARDED_TEXT/Outbox перед matrix;
+подтвердить отсутствие AI enrollment для этого guarded source. Исходный AI
+positive worker остаётся включённым: reply,1 model call и настоящий SEND_AI_TEXT.
+Не подменять kind/FK, не создавать fake send rows и не отключать guards.
+Проверки матрицы/положительности/old CHECK/rollback сохраняются в том же node.
+
+### Исполнение R8
+
+Exact base — полный SHA этого C0 assignment из immutable URL, sole child receipt
+e32263e9/5 docs. C0 branch **c0/m4-3-runtime-integration-r8**; prep
+**c3/m4-3-runtime-integration-r8**, PR source **c3/m4-3-runtime-integration-pr-r8**,
+execution **c3/m4-3-runtime-targeted-run-r8**.
+Accepted main **586240e88c825aa67593af5d72e0bdbb251ed3bb**, PR41 OPEN/DRAFT/head
+**9b05e5ddf8d00c0bab4f4f5e0fbf966a60915de2**, R1–R7/C2 refs frozen; остальные роли HOLD.
+
+**Write-set, только необходимая дельта:**
+
+- `tests/test_m4_schema_postgres.py` — исправить и проверить подготовку guarded
+  fixture внутри существующего test; прежние negative assertions неизменны.
+- `scripts/m4_runtime_db.py`, `tests/test_m4_runtime_db_runner.py` — R8 exact
+  base/tree/refs и суженный write-set/admission tests; существующие bounded
+  diagnostics, deadlines, inventory/partition semantics сохранить.
+- `scripts/native_context_db_catalog.py` — только новая exact R8 transition;
+  pins, catalog logic и прежние transitions неизменны.
+- `.github/workflows/m4-runtime-db.yml` — только заменить R7 targeted trigger на R8.
+- `docs/tasks/M4_HANDOFF.md`, `docs/TASK_REGISTER.md` — docs-only receipt.
+
+Миграции0001–0015, весь backend/worker/foundation, catalog pins, delivery/retained/
+native PG modules, architecture/dependencies/images/infra/ci.yml/C2 immutable.
+Новых PG nodes нет: прежние66 M4+6 native=72, точные nodeids/inventory сохраняются.
+Не расширять диагностику или product scope. Другая необходимая правка — конкретный
+blocker C0 до hosted запуска. Никакого изменения retained/applied DB.
+
+До publication проверить исправленный выбор worker и путь claim→guarded receipt/
+Outbox; затронутые existing offline regressions и Ruff/format/mypy на final source.
+Offline не заменяет PG matrix. Source admission обязан запрещать прежний R7 DDL/
+backend scope; для этого обновить существующие отрицательные admission проверки.
+
+**Ровно один targeted run:** заранее создать execution ref на assignment, где
+R8 trigger отсутствует; один source commit fast-forward expected_sha/force=false.
+Exact before/sole parent=assignment, repo/ref/tree/HEAD/attempt1/clean/write-set;
+без capture/старого rerun. Fresh owned stock0015 preflight с frozen pins,
+valid=true/readiness → те же72 scenarios; ≤600s aggregate SQL/tests, ≤25min job.
+Все9 schema cases должны достичь своих assertions: matrix на4 настоящих kinds,
+all-null/manual/AI allowed, partial/guarded/other rejected; generation/version
+0/-1 rejected соответствующим CHECK. Old CHECK control обязан дойти до named
+messaging_jobs_telegram_probe_check/23514, после rollback exact snapshot;
+ранний readiness отказ не заменяет этот control. Downgrade/re-upgrade и durable
+guard, Telegram rights/replay и остальные71 cases сохраняют прежний смысл.
+
+Только после72 PASS/0 ERROR/SKIP — **один новый Draft PR/full CI12gates** на
+неизменном source. Проверить complete disjoint generic/native/M4 union и exact
+PR head/tested merge; новый PR не заменять PR41. При unexpected FAIL source/
+execution frozen, все известные failures/missing facts в receipt, без source
+repair после outcome/unchanged rerun. Receipt sole child source только на prep,
+затем C3 HOLD. Вернуть source/tree/diff, original artifacts/digests, outcomes,
+cleanup и12 gates либо точные NOT_REACHED. Merge — владелец после C0 acceptance.
+
+AI default OFF/FAKE/EVAL_ONLY,2calls1READ; paid/live/Telegram/VM/deploy/real data
+HOLD. На ПК owner ничего не запускается. Shared150 unchanged:confirmed0.37505230/
+58knownPOST;4unknown held7.585505548;62totalPOST;remaining142.039442152;
+reported0.00743079 UNSETTLED. LOCKED архитектура/ADR132/216/217 сохранены.
+
+## История — C3 R7 receipt / BLOCKED, C3 HOLD / 2026-11-04
 
 **C3 HOLD, до C0 review.** Один targeted run: **71 PASS,1 FAIL,0 ERROR,0 SKIP**;
 все прежние70 scenarios PASS. Единственный FAIL — новая schema fixture до CHECK
