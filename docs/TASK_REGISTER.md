@@ -2,7 +2,36 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R9 / BLOCKED, C3 HOLD / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R10 / IN_PROGRESS / 2026-11-04
+
+Whole-runtime **BLOCKED**, единственный исполнитель C3. R9 source42bea690 /
+receiptcca60b7c проверены C0; прежние15 R8 unit failures устранены.
+[CI41855233147](https://github.com/Elefesys/ai-service-manager/actions/runs/41855233147):
+10 SUCCESS,2 FAIL. Foundation3528PASS/1FAIL (Agent model_call requests0 вместо1);
+M465PASS/1FAIL (waiting-AI ingress helper claim не совпал). Exact timeout stage
+и actual ingress claim неизвестны; scheduling/race hypotheses не доказаны.
+Generic860 и foundation tail NOT_REACHED; actual PG170PASS/1FAIL из1031.
+Catalog183/48/frozen pins/readiness PASS; M4 cleanup4zero.
+C0 сверил manifest803/803,12 original ZIP/374 extracted files,11 source archives,
+fresh failed logs, source/receipt/tested merge и полный collection union.
+
+[R10 assignment](tasks/M4_HANDOFF.md) разрешает только test controls: real finite
+deadline после observed boundary во всех6 cases и ingress через один работающий
+worker с сохранением manual/cancellation/terminal assertions. Product/migrations/
+pins/общие native fixtures immutable; новый scope/PG nodes не добавляются.
+Exact base — SHA текущего C0 assignment, sole child cca60b7c; prep
+c3/m4-3-runtime-integration-r10. Source write-set6paths +2receipt docs в HANDOFF.
+
+После6+17 causal/offline checks — один72-case targeted stock-PG validation
+изменяемого PG test; без нового capture. После PASS — один expected-sha
+fast-forward **существующего PR42** с head42bea690,force=false и один full CI.
+Новый PR не создавать. Требуются12/12 gates и actual1031PG/full foundation tail
+на одном tested merge. Unexpected FAIL→receipt/C0, без unchanged rerun.
+Main586240e8/PR41/старые R1–R9 prep/execution/C2 refs frozen, остальные роли HOLD.
+Default OFF/fake-only2calls1READ; paid/live/Telegram/VM/real data HOLD.
+Owner ничего не запускает; merge после C0 acceptance. Ledger150 unchanged.
+
+## История — C3-M4.3-RUNTIME-INTEGRATION-R9 / BLOCKED, C3 HOLD / 2026-11-04
 
 C3 receipt, до C0 review. [PR42](https://github.com/Elefesys/ai-service-manager/pull/42)
 OPEN/DRAFT,не слит;[единственный full CI41855233147](https://github.com/Elefesys/ai-service-manager/actions/runs/41855233147)

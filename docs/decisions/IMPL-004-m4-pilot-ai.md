@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R9.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R10.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -1093,6 +1093,29 @@ PG/capture не требуется; окончательная приёмка т
 всего foundation tail на исправленном tested merge. Exact base/write-set в CURRENT.
 Whole-runtime BLOCKED до review; default OFF/fake-only2calls1READ, paid/live/
 Telegram/VM/deploy/real data HOLD; ledger и LOCKED/ADR132/216/217 неизменны.
+
+**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R10.**
+R9 source42bea690/receiptcca60b7c и original evidence проверены C0. R9 test-input/
+runtime-timeout fixes приняты; прежние15 R8 unit failures устранены. Полный CI
+того же PR42:10 SUCCESS,2 FAIL. Agent model_call не достиг adapter entry при0.1s
+whole-run deadline; PG waiting-AI helper потребовал claim одновременно с real
+worker. Actual early-stop stage и claim response неизвестны; гипотезы не заменяют
+доказанную причину. Whole-runtime BLOCKED, generic860/tail NOT_REACHED.
+
+Разрешён узкий test-only repair: во всех6 deadline boundaries наблюдаемый вход
+перед real finite timeout; PG ingress имеет одного потребителя — уже работающий
+worker. Сохраняются manual progress while AI waits, cancellation/DEAD/restart-none/
+no-Outbox и все call/read/budget oracles. Product/Agent/Gateway/worker semantics,
+миграции/pins/shared native fixtures/архитектура не меняются; нет новых PG nodes.
+Runner/catalog/workflow changes только exact R10 admission/targeted ref, не guards.
+
+Из-за изменения PG fixture после causal/offline checks нужен один targeted72
+на финальном source. После PASS — один expected-sha FF существующего PR42 и
+full CI12gates/actual1031PG/all foundation phases. Новый PR не создаётся.
+R1–R9 snapshots/prep/execution сохраняются; единственное разрешённое движение
+старого ref — PR42/head42bea690→исправленный descendant,force=false.
+No unchanged retry; unexpected FAIL→complete receipt/C0. Exact limits/write-set
+в CURRENT. Default OFF/fake-only2calls1READ, ledger/paid/live/VM HOLD неизменны.
 
 ## Что пересмотрено относительно baseline
 
