@@ -1,4 +1,4 @@
-"""C3-M4.3-RUNTIME-INTEGRATION-R4: separate owned PG18 application carrier."""
+"""C3-M4.3-RUNTIME-INTEGRATION-R5: separate owned PG18 application carrier."""
 
 import asyncio
 import contextlib
@@ -15,13 +15,14 @@ import signal
 import subprocess
 import sys
 import time
+import traceback
 from pathlib import Path
 from uuid import UUID
 
-BASE = "c8f85533f8dee96ea7ef0e8f0831ae9e5f3a3783"
-BASE_TREE = "37d9f197c74f1c2e246b88138d9a41814f5e686e"
-BRANCH = "c3/m4-3-runtime-integration-pr-r4"
-TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r4"
+BASE = "d0d1ff7643f1b2a02ab69c845da08ec99b77f9b2"
+BASE_TREE = "3ab2a3cdc781570fb466094a34882864f3d5ffcb"
+BRANCH = "c3/m4-3-runtime-integration-pr-r5"
+TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r5"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -53,9 +54,30 @@ CASES = []
 EVENT_LIMIT = 8192
 
 
+class Refusal(RuntimeError):
+    """A known carrier predicate, safe to preserve without exception values."""
+
+
 def require(condition, code):
     if not condition:
-        raise RuntimeError(code)
+        raise Refusal(code)
+
+
+def failure_details(error):
+    return {
+        "error_type": type(error).__name__[:80],
+        "code": str(error)
+        if isinstance(error, Refusal) and re.fullmatch(r"[A-Z0-9_]{1,80}", str(error))
+        else "OPERATION_FAILED",
+        "frames": [
+            {
+                "file": Path(frame.filename).name[:120],
+                "function": frame.name[:120],
+                "line": frame.lineno,
+            }
+            for frame in traceback.extract_tb(error.__traceback__, limit=-8)
+        ],
+    }
 
 
 def evidence_path():
@@ -501,31 +523,23 @@ def admit_source(evidence):
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH,
-        "R4_EVENT_BRANCH",
+        "R5_EVENT_BRANCH",
     )
     require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
     require(capture(["git", "merge-base", BASE, "HEAD"]) == BASE, "BASE_ANCESTRY")
     allowed = {
-        "backend/src/asm/foundation.py",
-        "migrations/versions/0015_ai_delivery.py",
         "scripts/native_context_db_catalog.py",
         "scripts/m4_runtime_db.py",
         "scripts/test_browser.sh",
-        "scripts/test_telegram_egress.sh",
         ".github/workflows/m4-runtime-db.yml",
-        ".github/workflows/ci.yml",
-        "tests/test_m4_delivery.py",
-        "tests/test_m4_schema_postgres.py",
-        "tests/test_foundation.py",
         "tests/test_native_context_db_runner.py",
-        "tests/test_m3_1_native_context_runtime_postgres.py",
         "tests/test_telegram_egress.py",
         "tests/test_m4_runtime_db_runner.py",
         "docs/tasks/M4_HANDOFF.md",
         "docs/TASK_REGISTER.md",
     }
     paths = capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines()
-    require(bool(paths) and set(paths) <= allowed, "R4_WRITE_SET")
+    require(bool(paths) and set(paths) <= allowed, "R5_WRITE_SET")
     write(
         evidence / "source-admission.json",
         {
@@ -706,9 +720,11 @@ def sanitize(raw, root):
 
 
 def phase(root, label, args, budget, *, separate_stdout=False):
+    reports = root / "evidence/phases"
+    reports.mkdir(exist_ok=True, mode=0o700)
     start = time.monotonic()
     entry = {"phase": label, "command": args, "budget_seconds": budget, "started_utc": time.time()}
-    write(root / "evidence/active-phase.json", entry)
+    write(reports / "active.json", entry)
     private = root / ("private/" + label + ".log")
     with (
         private.open("wb") as output,
@@ -730,14 +746,14 @@ def phase(root, label, args, budget, *, separate_stdout=False):
                 process.wait(timeout=10)
             code = 124
     entry.update(exit_code=code, seconds=time.monotonic() - start)
-    write(root / ("evidence/" + label + ".json"), entry)
+    write(reports / (label + ".json"), entry)
     with private.open("rb") as stream:
         raw = stream.read(8388609)
     if len(raw) > 8388608:
         raw = raw[:8388608]
         entry["log_incomplete"] = True
-        write(root / ("evidence/" + label + ".json"), entry)
-    (root / ("evidence/" + label + ".log")).write_text(sanitize(raw, root))
+        write(reports / (label + ".json"), entry)
+    (reports / (label + ".log")).write_text(sanitize(raw, root))
     print("M4_PG_PHASE=" + label + " EXIT=" + str(code), flush=True)
     require(code == 0, label.upper().replace("-", "_") + "_FAILED")
 
@@ -1021,7 +1037,7 @@ def cleanup(root):
         write(evidence / "cleanup.json", {"outcome": "PASS", "attempts": attempts})
         shutil.rmtree(root / "private")
     except Exception as error:
-        attempts.append({"outcome": "FAIL", "error": type(error).__name__})
+        attempts.append({"outcome": "FAIL", **failure_details(error)})
         write(evidence / "cleanup.json", {"outcome": "FAIL", "attempts": attempts})
         raise
 
@@ -1040,10 +1056,13 @@ def run(root):
 
 def run_admitted(root, event, manifest, mode):
     # No resource access or credentials before the complete source admission.
-    require(mode in {"targeted", "runtime"}, "R4_MODE")
+    require(mode in {"targeted", "runtime"}, "R5_MODE")
     modules = ["preflight", *MODULES]
+    planned = dict(zip(MODULES, (35, 21, 8), strict=True))
+    native_nodes = CURRENT_NATIVE_NODES if mode == "targeted" else []
     if mode == "targeted":
         modules.append(CURRENT_NATIVE_MODULE)
+        planned[CURRENT_NATIVE_MODULE] = len(native_nodes)
     pins = dict(
         line.split("=", 1) for line in Path("infra/images.lock.env").read_text().splitlines()
     )
@@ -1071,8 +1090,23 @@ def run_admitted(root, event, manifest, mode):
         ["git", "archive", "--format=tar.gz", "-o", str(root / "evidence/source.tar.gz"), "HEAD"],
         check=True,
     )
-    outcomes, all_nodes = [], []
+    outcomes, all_nodes, collected_nodes = [], list(native_nodes), []
     test_seconds = sql_test_seconds = 0.0
+
+    def inventory_record():
+        return {
+            "mode": mode,
+            "planned_cases_by_module": planned,
+            "expected_cases": sum(planned.values()),
+            "nodeids": all_nodes,
+            "inventory_complete": len(all_nodes) == sum(planned.values()),
+            "unknown_inventory_cases": sum(planned.values()) - len(all_nodes),
+            "collected_nodeids": collected_nodes,
+            "collected_cases": len(collected_nodes),
+            "collection_complete": len(collected_nodes) == sum(planned.values()),
+        }
+
+    write(root / "evidence/inventory.json", inventory_record())
 
     def sql_phase(group, name, command, cap):
         nonlocal sql_test_seconds, test_seconds
@@ -1142,15 +1176,21 @@ def run_admitted(root, event, manifest, mode):
                     expected["collection_exit"] == 0 and not expected["deselected"],
                     "INVENTORY_FAILED",
                 )
-                all_nodes = expected["nodeids"]
+                m4_nodes = expected["nodeids"]
                 require(
-                    {n.split("::", 1)[0] for n in all_nodes} == set(MODULES), "INVENTORY_MODULES"
+                    {n.split("::", 1)[0] for n in m4_nodes} == set(MODULES), "INVENTORY_MODULES"
                 )
                 require(
-                    sum(n.startswith(MODULES[0] + "::") for n in all_nodes) == 35
-                    and len(all_nodes) >= 64,
+                    all(
+                        sum(n.startswith(m + "::") for n in m4_nodes) == planned[m] for m in MODULES
+                    ),
                     "RETAINED_CASES_LOST",
                 )
+                planned_nodes = [*m4_nodes, *native_nodes]
+                require(len(planned_nodes) == len(set(planned_nodes)), "INVENTORY_DUPLICATE")
+                all_nodes = planned_nodes
+                collected_nodes = list(m4_nodes)
+                write(root / "evidence/inventory.json", inventory_record())
                 if mode == "targeted":
                     phase(
                         group,
@@ -1169,9 +1209,8 @@ def run_admitted(root, event, manifest, mode):
                         and native["nodeids"] == CURRENT_NATIVE_NODES,
                         "CURRENT_NATIVE_SELECTION",
                     )
-                    all_nodes = [*all_nodes, *native["nodeids"]]
-                require(len(all_nodes) == len(set(all_nodes)), "INVENTORY_DUPLICATE")
-                write(root / "evidence/inventory.json", {"nodeids": all_nodes, "mode": mode})
+                    collected_nodes.extend(native["nodeids"])
+                write(root / "evidence/inventory.json", inventory_record())
             phase(
                 group,
                 "database-start",
@@ -1261,13 +1300,10 @@ def run_admitted(root, event, manifest, mode):
                     )
             result["outcome"] = "PASS"
         except Exception as error:
-            result.update(
-                outcome="FAIL",
-                error_type=type(error).__name__,
-                code=str(error)
-                if re.fullmatch(r"[A-Z0-9_]{1,80}", str(error))
-                else "OPERATION_FAILED",
-            )
+            result.update(outcome="FAIL", **failure_details(error))
+            active_phase = group / "evidence/phases/active.json"
+            if active_phase.exists():
+                result["last_phase"] = json.loads(active_phase.read_text())["phase"]
         finally:
             if module != "preflight":
                 cases_path = group / "evidence/cases.json"
@@ -1280,7 +1316,7 @@ def run_admitted(root, event, manifest, mode):
             try:
                 cleanup(group)
             except Exception as error:
-                result.update(outcome="FAIL", cleanup=type(error).__name__)
+                result.update(outcome="FAIL", cleanup=failure_details(error))
             outcomes.append(result)
             completed = {n for v in outcomes for n in v.get("tests", {}).get("completed", [])}
             started = {
@@ -1289,6 +1325,7 @@ def run_admitted(root, event, manifest, mode):
                 for n in v.get("tests", {}).get("completed", [])
                 + v.get("tests", {}).get("active", [])
             }
+            write(root / "evidence/inventory.json", inventory_record())
             write(
                 root / "evidence/summary.json",
                 {
@@ -1299,7 +1336,14 @@ def run_admitted(root, event, manifest, mode):
                     "groups_visited": len(outcomes),
                     "groups_expected": modules,
                     "not_reached_modules": modules[len(outcomes) :],
-                    "expected_cases": len(all_nodes),
+                    "planned_cases_by_module": planned,
+                    "expected_cases": sum(planned.values()),
+                    "inventory_complete": len(all_nodes) == sum(planned.values()),
+                    "unknown_inventory_cases": sum(planned.values()) - len(all_nodes),
+                    "collected_cases": len(collected_nodes),
+                    "collection_complete": len(collected_nodes) == sum(planned.values()),
+                    "missing_count": sum(planned.values()) - len(completed),
+                    "not_reached_count": sum(planned.values()) - len(started),
                     "missing": [n for n in all_nodes if n not in completed],
                     "not_reached": [n for n in all_nodes if n not in started],
                     "complete": len(outcomes) == len(modules)

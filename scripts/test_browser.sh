@@ -35,7 +35,7 @@ PY_DIAG
   cleanup_status=0
   step cleanup 60 docker compose --env-file "$tmp/private/test.env" -f compose.yaml -f compose.browser.yaml down -v --remove-orphans --timeout 10 || cleanup_status=$?
   mkdir -p reports/browser-lifecycle
-  cp "$tmp/evidence/"* reports/browser-lifecycle/ || status=1
+  cp -R "$tmp/evidence/." reports/browser-lifecycle/ || cleanup_status=1
   rm -rf "$tmp"
   if [ "$status" -ne 0 ]; then exit "$status"; fi
   exit "$cleanup_status"

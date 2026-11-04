@@ -17,6 +17,88 @@ import pytest
 from scripts import prepare_telegram_egress as egress
 
 
+@pytest.mark.parametrize(
+    "primary,cleanup,export_failure",
+    [(0, 0, False), (37, 0, False), (0, 9, False), (37, 9, False), (0, 0, True), (37, 0, True)],
+)
+def test_browser_cleanup_exports_nested_real_phase_reports_and_keeps_primary(
+    tmp_path, primary, cleanup, export_failure
+):
+    import shlex
+
+    from scripts import m4_runtime_db as carrier
+
+    root = tmp_path / "private-stack"
+    (root / "private").mkdir(parents=True)
+    (root / "evidence").mkdir()
+    (root / "private/test.env").write_text("PG_RUNTIME_PASSWORD=PRIVATE_SENTINEL\n")
+    payload = root / "evidence/readiness.json"
+    carrier.phase(
+        root,
+        "readiness",
+        [
+            sys.executable,
+            "-c",
+            'import pathlib,sys;pathlib.Path(sys.argv[1]).write_text(\'{"runtime_check":"PASS"}\')',
+            str(payload),
+        ],
+        5,
+    )
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    docker = tools / "docker"
+    docker.write_text(
+        "#!/bin/sh\ncase \" $* \" in\n  *' down '*) exit "
+        + str(cleanup)
+        + ";;\n  *) exit 0;;\nesac\n"
+    )
+    docker.chmod(0o700)
+    if export_failure:
+        copy = tools / "cp"
+        copy.write_text("#!/bin/sh\nexit 23\n")
+        copy.chmod(0o700)
+    source = (egress.ROOT / "scripts/test_browser.sh").read_text()
+    functions = "step() {" + source.split("step() {", 1)[1].split("\ntrap cleanup EXIT\n", 1)[0]
+    shell = (
+        "set -eu\ntmp="
+        + shlex.quote(str(root))
+        + "\n"
+        + functions
+        + "\ntrap cleanup EXIT\nexit "
+        + str(primary)
+    )
+    working = tmp_path / "working"
+    working.mkdir()
+    result = subprocess.run(
+        ["sh", "-c", shell],
+        cwd=working,
+        env={
+            **os.environ,
+            "PATH": str(tools) + os.pathsep + os.environ["PATH"],
+            "PYTHONPATH": str(egress.ROOT),
+            "PYTHONDONTWRITEBYTECODE": "1",
+        },
+        capture_output=True,
+        timeout=15,
+    )
+    assert result.returncode == (primary or (1 if cleanup or export_failure else 0)), (
+        result.stderr.decode()
+    )
+    exported = working / "reports/browser-lifecycle"
+    assert not root.exists()
+    if export_failure:
+        assert not list(exported.iterdir())
+        return
+    assert json.loads((exported / "readiness.json").read_text())["runtime_check"] == "PASS"
+    assert json.loads((exported / "phases/readiness.json").read_text())["exit_code"] == 0
+    assert json.loads((exported / "phases/cleanup.json").read_text())["exit_code"] == cleanup
+    assert (exported / "phases/readiness.log").exists()
+    assert (exported / "phases/cleanup.log").exists()
+    assert "PRIVATE_SENTINEL" not in "".join(
+        p.read_text() for p in exported.rglob("*") if p.is_file()
+    )
+
+
 @pytest.mark.parametrize("fault", ["timeout", "nonzero", "timeout_evidence_failure"])
 def test_synthetic_command_journal_preserves_failure_and_omits_private_values(
     tmp_path, monkeypatch, capsys, fault

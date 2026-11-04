@@ -1,4 +1,4 @@
-"""Finite R4 admission and evidence checks; no PostgreSQL substitute."""
+"""Finite R5 admission and evidence checks; no PostgreSQL substitute."""
 
 import itertools
 import json
@@ -14,6 +14,221 @@ from test_native_context_db_runner import foundation_git as foundation_git
 
 from scripts import m4_runtime_db as carrier
 from scripts import native_context_db_catalog as catalog
+
+
+@pytest.mark.parametrize(
+    "label,key",
+    [
+        ("current-native-inventory", "collection_exit"),
+        ("native-owner", "system_identifier"),
+        ("readiness", "runtime_check"),
+    ],
+)
+@pytest.mark.parametrize("outcome", ["success", "failure", "timeout"])
+def test_real_phase_preserves_producer_payload_and_consumer(tmp_path, label, key, outcome):
+    """The R4 wrapper overwrites these files and breaks the same consumer lookup."""
+    (tmp_path / "private").mkdir()
+    (tmp_path / "evidence").mkdir()
+    child = tmp_path / "producer.py"
+    child.write_text(
+        "import json,sys,time\nfrom pathlib import Path\n"
+        "p=Path(sys.argv[1]);p.write_text(json.dumps({sys.argv[2]: 'payload'}))\n"
+        "print('producer completed',flush=True)\n"
+        "if sys.argv[3]=='timeout': time.sleep(30)\n"
+        "sys.exit(7 if sys.argv[3]=='failure' else 0)\n"
+    )
+    payload = tmp_path / "evidence" / (label + ".json")
+    args = [sys.executable, str(child), str(payload), key, outcome]
+    if outcome == "success":
+        carrier.phase(tmp_path, label, args, 5)
+    else:
+        with pytest.raises(RuntimeError, match=label.upper().replace("-", "_") + "_FAILED"):
+            carrier.phase(tmp_path, label, args, 1 if outcome == "timeout" else 5)
+    # Actual filesystem roundtrip: the command report must not replace the payload.
+    assert json.loads(payload.read_text())[key] == "payload"
+    report = json.loads((tmp_path / "evidence/phases" / (label + ".json")).read_text())
+    assert report["exit_code"] == {"success": 0, "failure": 7, "timeout": 124}[outcome]
+    assert report["seconds"] < 10
+    assert (tmp_path / "evidence/phases" / (label + ".log")).read_text() == "producer completed\n"
+    assert json.loads((tmp_path / "evidence/phases/active.json").read_text())["phase"] == label
+
+
+@pytest.mark.parametrize(
+    "mode,fault",
+    [
+        ("targeted", "none"),
+        ("runtime", "none"),
+        ("targeted", "build"),
+        ("runtime", "build"),
+        ("targeted", "collection"),
+        ("targeted", "m4-duplicate"),
+        ("targeted", "native"),
+        ("targeted", "native-malformed"),
+        ("targeted", "native-cleanup"),
+    ],
+)
+def test_real_wrapper_driver_smoke_inventory_cleanup_and_export(tmp_path, monkeypatch, mode, fault):
+    """Synthetic Docker/PG child boundaries; real phase/write/cleanup/finalization."""
+    root = tmp_path / "real-wrapper-run"
+    (root / "evidence").mkdir(parents=True)
+    (root / "private").mkdir()
+    monkeypatch.chdir(catalog.ROOT)
+    for key, value in {
+        "GITHUB_SHA": "a" * 40,
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "GITHUB_EVENT_NAME": "push",
+        "PYTHONPATH": str(catalog.ROOT) + os.pathsep + str(catalog.ROOT / "backend/src"),
+        "PYTHONDONTWRITEBYTECODE": "1",
+    }.items():
+        monkeypatch.setenv(key, value)
+    nodes = [
+        m + "::test_synthetic_" + str(i)
+        for m, count in zip(carrier.MODULES, (35, 21, 8), strict=True)
+        for i in range(count)
+    ]
+    configuration = tmp_path / "synthetic.json"
+    configuration.write_text(
+        json.dumps({"m4": nodes, "native": carrier.CURRENT_NATIVE_NODES, "fault": fault})
+    )
+    child = tmp_path / "synthetic_boundary.py"
+    child.write_text("""import json,sys
+from pathlib import Path
+from scripts import m4_runtime_db as runner
+config=json.loads(Path(sys.argv[1]).read_text())
+root=Path(sys.argv[2]); args=sys.argv[3:]; evidence=root/'evidence'; fault=config['fault']
+if args[0]=='compose':
+    if 'build' in args and fault=='build': raise SystemExit(7)
+    if 'down' in args and fault=='native-cleanup':
+        marker=root/'cleanup-failed-once'
+        if not marker.exists(): marker.touch(); raise SystemExit(9)
+elif 'collect-m4' in args:
+    if fault=='collection': raise SystemExit(7)
+    if fault=='m4-duplicate': config['m4'][1]=config['m4'][0]
+    runner.write(evidence/'all-m4.json',{'nodeids':config['m4'],'collection_exit':0,'deselected':[]})
+elif 'collect-current-native' in args:
+    if fault in {'native','native-cleanup'}: raise SystemExit(7)
+    runner.write(evidence/'current-native-inventory.json', {'malformed':True} if fault=='native-malformed' else {'nodeids':config['native'],'collection_exit':0,'deselected':[]})
+elif 'native-owner' in args:
+    runner.write(evidence/'native-owner.json',{'system_identifier':'synthetic-owned-server'})
+elif 'readiness' in args:
+    runner.write(evidence/'readiness.json',{'runtime_check':'PASS','revision':'0015'})
+elif 'pytest' in args:
+    nodes=json.loads((evidence/'inventory.json').read_text())['nodeids']
+    if nodes==config['native']:
+        assert json.loads((evidence/'native-owner.json').read_text())['system_identifier']=='synthetic-owned-server'
+        runner.write(evidence/'before-reset-proofs.json',[{'synthetic':True} for _ in nodes])
+    cases=[{'nodeid':n,'overflow':0,'invalid_fields':0,'phases':[{'phase':p,'outcome':'passed','xfail':False} for p in ('setup','call','teardown')]} for n in nodes]
+    runner.write(evidence/'cases.json',cases)
+    runner.write(evidence/runner.SUMMARY_REPORT,runner.summarize(cases,nodes,0))
+""")
+
+    def command(group, *args, **kwargs):
+        return [sys.executable, str(child), str(configuration), str(group), *args]
+
+    def capture(args):
+        if args[:2] == ["git", "rev-parse"]:
+            return carrier.BASE_TREE if args[-1].startswith(carrier.BASE) else "b" * 40
+        if args[:2] == ["git", "diff"]:
+            return "scripts/m4_runtime_db.py"
+        if args[:2] == ["git", "status"]:
+            return ""
+        if "ps" in args:
+            return "synthetic-owned-container"
+        if "exec" in args:
+            return "Uid:\t999\t999\t999\t999"
+        if "inspect" in args:
+            return "sha256:" + "c" * 64
+        raise AssertionError(args)
+
+    monkeypatch.setattr(carrier, "compose", lambda group: command(group, "compose"))
+    monkeypatch.setattr(carrier, "checks", command)
+    monkeypatch.setattr(
+        carrier, "current_native_checks", lambda group, label, *args: command(group, *args)
+    )
+    monkeypatch.setattr(carrier, "capture", capture)
+    monkeypatch.setattr(
+        carrier, "inventory", lambda group: {"containers": [], "networks": [], "volumes": []}
+    )
+    # No phase/write/Popen/run/cleanup/finalization replacement.
+    event = {"ref": "refs/heads/" + carrier.TARGETED_BRANCH}
+    if fault == "none":
+        carrier.run_admitted(root, event, [], mode)
+    else:
+        with pytest.raises(RuntimeError, match="PRIMARY_FAILED"):
+            carrier.run_admitted(root, event, [], mode)
+    summary = json.loads((root / "evidence/summary.json").read_text())
+    inventory = json.loads((root / "evidence/inventory.json").read_text())
+    count = 70 if mode == "targeted" else 64
+    assert summary["expected_cases"] == count == sum(summary["planned_cases_by_module"].values())
+    assert (
+        summary["missing_count"]
+        == summary["not_reached_count"]
+        == (0 if fault == "none" else count)
+    )
+    assert summary["inventory_complete"] is (fault not in {"build", "collection", "m4-duplicate"})
+    assert summary["unknown_inventory_cases"] == (
+        64 if fault in {"build", "collection", "m4-duplicate"} else 0
+    )
+    assert summary["collected_cases"] == (
+        count if fault == "none" else 0 if fault in {"build", "collection", "m4-duplicate"} else 64
+    )
+    assert summary["collection_complete"] is (fault == "none")
+    group = root / (root.name + "-group-0")
+    primary = json.loads((group / "evidence/primary.json").read_text())
+    if fault == "none":
+        assert summary["complete"] and not summary["missing"]
+        assert len(summary["groups"]) == (5 if mode == "targeted" else 4)
+        assert (
+            json.loads((group / "evidence/readiness.json").read_text())["runtime_check"] == "PASS"
+        )
+    else:
+        assert not summary["complete"]
+        assert summary["missing"] == summary["not_reached"] == inventory["nodeids"]
+        if fault.startswith("native"):
+            assert summary["missing"] == nodes + carrier.CURRENT_NATIVE_NODES
+        assert 0 < len(primary["frames"]) <= 8
+        assert set(primary["frames"][-1]) == {"file", "function", "line"}
+        if fault == "native-malformed":
+            assert primary["error_type"] == "KeyError" and primary["code"] == "OPERATION_FAILED"
+            assert primary["frames"][-1]["function"] == "run_admitted"
+        if fault == "native-cleanup":
+            assert primary["code"] == "CURRENT_NATIVE_INVENTORY_FAILED"
+            assert summary["groups"][0]["cleanup"]["code"] == "CLEANUP_COMMAND_1_FAILED"
+    # Actual always-finalization copies the nested reports and creates its manifest.
+    primary_bytes = (group / "evidence/primary.json").read_bytes()
+    monkeypatch.setattr(carrier, "root_path", lambda: root)
+    monkeypatch.setattr(sys, "argv", ["m4_runtime_db.py", "cleanup"])
+    carrier.main()
+    saved = root / "evidence" / group.name
+    assert (saved / "primary.json").read_bytes() == primary_bytes
+    assert json.loads((saved / "cleanup.json").read_text())["outcome"] == "PASS"
+    manifest = json.loads((root / "evidence/manifest.json").read_text())
+    assert group.name + "/phases/build.json" in manifest
+    assert group.name + "/inventory.json" in manifest
+    for name, proof in manifest.items():
+        data = (root / "evidence" / name).read_bytes()
+        assert (
+            len(data) == proof["bytes"]
+            and carrier.hashlib.sha256(data).hexdigest() == proof["sha256"]
+        )
+    if destination := os.environ.get("ASM_R5_OFFLINE_EVIDENCE"):
+        carrier.shutil.copytree(root / "evidence", Path(destination) / (mode + "-" + fault))
+
+
+def test_failure_location_excludes_exception_values_locals_and_absolute_paths():
+    private = "PRIVATE_SENTINEL_POSTGRES_DSN"
+    try:
+        raise ValueError(private)
+    except ValueError as error:
+        result = carrier.failure_details(error)
+    assert result["code"] == "OPERATION_FAILED"
+    assert private not in json.dumps(result)
+    assert all("/" not in row["file"] for row in result["frames"])
+    assert (
+        result["frames"][-1]["function"]
+        == "test_failure_location_excludes_exception_values_locals_and_absolute_paths"
+    )
 
 
 @pytest.mark.parametrize(
@@ -164,8 +379,10 @@ def test_phase_keeps_private_json_stdout_separate_and_redacts_stderr(tmp_path):
         separate_stdout=True,
     )
     assert json.loads((tmp_path / "private/provision.stdout").read_text()) == {"ok": True}
-    assert "PRIVATE_SENTINEL" not in (tmp_path / "evidence/provision.log").read_text()
-    assert "Creating container [REDACTED]" in (tmp_path / "evidence/provision.log").read_text()
+    assert "PRIVATE_SENTINEL" not in (tmp_path / "evidence/phases/provision.log").read_text()
+    assert (
+        "Creating container [REDACTED]" in (tmp_path / "evidence/phases/provision.log").read_text()
+    )
 
 
 def test_stack_diagnostics_keeps_states_and_schema_stage_without_raw_values(tmp_path, monkeypatch):
@@ -330,7 +547,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 
 
 @pytest.fixture
-def r4_event(foundation_git, tmp_path, monkeypatch):
+def r5_event(foundation_git, tmp_path, monkeypatch):
     """Constructed real Git history; actual admission code, no Docker/DB."""
     f = foundation_git
     base, base_tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
@@ -403,8 +620,8 @@ def r4_event(foundation_git, tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "metadata", [None, "refs/heads/main", "refs/heads/c3/task-name", "refs/tags/v1.2"]
 )
-def test_constructed_full_admission_reaches_targeted_without_resources(r4_event, metadata):
-    r = r4_event
+def test_constructed_full_admission_reaches_targeted_without_resources(r5_event, metadata):
+    r = r5_event
     r["payload"]["base_ref"] = metadata
     r["run"]()
     assert len(r["boundary"]) == 1
@@ -425,6 +642,35 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r4_event,
 
 
 @pytest.mark.parametrize(
+    "path",
+    [
+        "migrations/versions/0015_ai_delivery.py",
+        "backend/src/asm/foundation.py",
+        ".github/workflows/ci.yml",
+        "scripts/test_telegram_egress.sh",
+    ],
+)
+def test_r5_admission_rejects_r4_product_and_ci_write_paths(r5_event, monkeypatch, path):
+    r = r5_event
+    f = r["f"]
+    target = f.root / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        target.read_text() + "\n# forbidden R5 change\n"
+        if target.exists()
+        else "# forbidden R5 file\n"
+    )
+    f.git("add", path)
+    f.git("commit", "--amend", "--no-edit")
+    source = f.git("rev-parse", "HEAD")
+    r["payload"]["after"] = r["payload"]["head_commit"]["id"] = source
+    monkeypatch.setenv("GITHUB_SHA", source)
+    with pytest.raises((catalog.Refusal, RuntimeError)):
+        r["run"]()
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize(
     "damage,reason",
     [
         ("repo", "EVENT_ENV_REPOSITORY"),
@@ -437,7 +683,7 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r4_event,
         ("merge", "EVENT_M4_PARENT"),
         ("base_tree", "BASE_TREE"),
         ("dirty", "EVENT_SOURCE_VERIFY"),
-        ("write_set", "R4_WRITE_SET"),
+        ("write_set", "R5_WRITE_SET"),
         ("head", "EVENT_SHA_HEAD_MISMATCH"),
         ("after", "EVENT_PUSH_AFTER"),
         ("head_commit", "EVENT_PUSH_HEAD"),
@@ -451,8 +697,8 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r4_event,
         ("missing_base_ref", "EVENT_M4_BASE_REF_MISSING"),
     ],
 )
-def test_constructed_full_admission_refuses_before_resources(r4_event, monkeypatch, damage, reason):
-    r = r4_event
+def test_constructed_full_admission_refuses_before_resources(r5_event, monkeypatch, damage, reason):
+    r = r5_event
     f, p = r["f"], r["payload"]
     p["base_ref"] = "refs/heads/main"
     if damage == "repo":
@@ -461,7 +707,7 @@ def test_constructed_full_admission_refuses_before_resources(r4_event, monkeypat
         p["repository"]["id"] += 1
     elif damage in {"ref", "capture_not_open"}:
         ref = "refs/heads/" + (
-            "c3/m4-3-runtime-catalog-run-r4" if damage == "capture_not_open" else "other"
+            "c3/m4-3-runtime-catalog-run-r5" if damage == "capture_not_open" else "other"
         )
         monkeypatch.setenv("GITHUB_REF", ref)
         p["ref"] = ref
@@ -510,7 +756,7 @@ def test_constructed_full_admission_refuses_before_resources(r4_event, monkeypat
     assert r["boundary"] == []
     assert list((r["root"] / "private").iterdir()) == []
     diag = json.loads((r["root"] / "evidence/event-admission-run.json").read_text())
-    if reason not in {"BASE_TREE", "R4_WRITE_SET"}:
+    if reason not in {"BASE_TREE", "R5_WRITE_SET"}:
         assert diag["failure_reason"] == reason
 
 
@@ -532,8 +778,8 @@ def test_constructed_full_admission_refuses_before_resources(r4_event, monkeypat
         "refs/heads/a\nPRIVATE_SENTINEL",
     ],
 )
-def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r4_event, metadata):
-    r = r4_event
+def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r5_event, metadata):
+    r = r5_event
     r["payload"]["base_ref"] = metadata
     with pytest.raises(catalog.Refusal, match="^EVENT_M4_BASE_REF_METADATA$"):
         r["run"]()
