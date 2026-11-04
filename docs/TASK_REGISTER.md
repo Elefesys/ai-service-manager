@@ -2,7 +2,100 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R10 / IN_PROGRESS / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R10 / BLOCKED, C3 HOLD / 2026-11-04
+
+C3 receipt, до C0 review. [PR42](https://github.com/Elefesys/ai-service-manager/pull/42)
+OPEN/DRAFT, не слит. Единственный [full CI41872808265](https://github.com/Elefesys/ai-service-manager/actions/runs/41872808265),
+synchronize/attempt1: **11 SUCCESS,1 FAIL**. Обе назначенные R10 проверки PASS;
+whole-runtime BLOCKED из-за generic PG, не INTEGRATED/VERIFIED. Source frozen
+с targeted outcome; после FAIL repair/pytest/PG/collection/CI reruns не делались.
+
+Base **b2106d77d56d1c4384b2a6e4d786891abe9cd481** /
+tree **534cb2d2806d8d1059ccdb0ef56ac6f9070e0666**.
+Source **2c35f9c613fa4870d957cbf9c5164c2e8adcb933** /
+tree **5307167023008cb6eb7e034a30c2986db0c1fbf7**, sole child assignment,
+ровно6 allowed paths,329+/71−. Deadline test сохраняет все6 boundaries,
+real Agent/Gateway/reservation/finite timeout; expiry после observed blocked
+entry, exact DEADLINE/candidateNone/calls0/1/1/2/1/1/reads0/0/1/1/1/0,
+реальная cancellation и task cleanup. Waiting-AI использует real ingest,
+единственный worker consumer, finite persisted receipt/job/message/conversation
+correlation, manual SENT при blocked model, unset-stop cancel/join,one-call,
+DEAD/restart-none/no-AI-Outbox. Остальные4 paths — только admission/transition/
+trigger. R9 private inputs/14driver cases,product/migrations/pins/архитектура
+сохранены;11canonical attachments byte-exact,PG nodes не добавлены.
+
+До publication: **23causal PASS**(6deadline+17R9),11.84s, exact development
+filesystem projection11COPY/222files без host pins/.git,hashes/modes unchanged.
+Final offline674testcase+130subtests PASS,108.21s;Ruff/format195/mypy76 PASS.
+Projection — filesystem proof; hosted unit исполнялся в actual container.
+Индивидуальные6deadline stage-time records сохранены local; immutable hosted
+unit command не экспортирует JUnit properties.
+
+[Targeted41871574537](https://github.com/Elefesys/ai-service-manager/actions/runs/41871574537),
+push/attempt1: **72PASS=35retained+22delivery+9schema+6current-native**,
+SQL273.963485354/600s,job334/1500s,all phases/cleanup5zero.
+Новый targeted ref создан на assignment без запуска, затем один expected-SHA
+FF на source,force=false. Только после PASS — один expected-SHA FF того же
+PR42 из42bea690,force=false; нового PR нет.
+
+Tested merge **a15edee1c4e480a225db8fd0eca68c16938ae4fe**,
+tree exact source; ordered parents main586240e8+source.
+Full unit **3529PASS,155subtestsPASS**,1031deselected,516.08s. M4 **66/66PASS**,
+SQL281.057595442/600s,все phases/cleanup4zero. В targeted и CI waiting-AI
+receipt/manual SENT/cancellation/terminal facts полностью достигнуты.
+Current0015 catalog183functions/48tables/embedded182,all3frozen pins/security/
+readiness PASS. Native112PASS(105PG+7source),105resets/cleanup;browser54,
+frontend398;foundation-durable6lifecycles/12assertions,Docker29/6migration
+shards SUCCESS. Historical migration executor pairing сохранён.
+
+**Foundation generic:**69FAILED,546PASSED,246ERRORS,1010.32s.
+860/860items start/case-end;615call reached,245call NOT_REACHED из-за setup.
+69callFAIL +245setupERROR +1teardownERROR (overlaps failed call) =315 failed
+phase records,314unique cases. Collection/item union860+105+66=1031 exact,
+но actual bodies reached786; **717PASS,69callFAIL,245setup-blocked**.
+Полный успешный execution union не доказан. Targeted72 не добавляется к CI1031.
+
+Все failures/NOT_REACHED классифицированы в [CURRENT HANDOFF](tasks/M4_HANDOFF.md):
+
+- 62call: optional observer вызывает отсутствующий m4_pg_observation.record;
+  timeout/cancellation в2 chains замаскированы тем же AttributeError.
+- 5call: transactional TRUNCATE не включает ai_runs→conversation_control_receipts,
+  SQLSTATE0A000.
+- 1teardown у provenance barrier[connection]:3RestrictViolation в одной
+  ExceptionGroup; далее245setup duplicate user_accounts_pkey/23505.
+- 1call: старый M0–M3 table allowlist не учитывает3M4 tables.
+- 1call: initial migration downgrade отказал по material-history guard0012/55000.
+
+Порядок observerFAIL→cleanupFAIL→duplicate setups подтверждён. Точный момент
+завершения pending material task и конкретные retained rows для downgrade
+не сохранены; полная причинная связь — гипотеза. R9 generic не достигался,
+эти failures впервые наблюдались здесь, не доказаны как regression R10.
+NOT_APPLIED C0 proposals: observer contract; explicit schema oracle/isolation;
+bounded cancel/join до child→parent cleanup; migration fixture preconditions,
+без ослабления material-history guard. Все соответствующие paths вне R10 scope.
+
+Foundation unit/upgrade/repeat-upgrade PASS; generic FAIL; backend downgrade/
+reupgrade/contracts/wheel-one/two/compare/hash **NOT_REACHED**;host storage-version/
+storage-admin-version/services/http/images **NOT_REACHED**. Secondary
+FOUNDATION_EVIDENCE_REFUSED;primary1/cleanup0,source clean. Cleanup removals
+logged; независимого final zero-inventory foundation нет.
+
+Этот2-doc receipt — sole child source только на R10 prep;
+PR42/targeted source2c35f9c6 frozen. Main586240e8/PR41head9b05e5dd,
+38otheroldC3/24C2 refs unchanged;one targeted+one CI,attempt1;prep runs0.
+[M4_C3_R10_evidence_2c35f9c6.zip](https://chatgpt.com/library?file_id=libfile_e6d9eb6298c88191a5dff100704df1f7&account_id=personal):
+**179502339bytes**,SHA256 **1d6b1780dc5e7a8ea7ab74f69d82abac5602832c99b40744d164d6ff16c9b69d**,
+ZIP968/manifest967verified;13originalZIP/519extractedfiles,
+12hostedsourcearchives×342Gitblobs/modes;13fulljoblogs,all315failures,
+phase/case matrix/localchecks/audits/report. Archive saved before receipt.
+
+C3/other roles HOLD;owner ничего не запускает,merge только после C0 acceptance.
+DefaultOFF/FAKE/EVAL_ONLY2calls1READ;paid/live/Telegram/VM/deploy/realdata HOLD.
+Ledger150 unchanged:confirmed0.37505230/58knownPOST;4unknownheld7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079UNSETTLED.
+LOCKED/ADR132/216/217 сохранены.
+
+## История — C0 assignment C3-M4.3-RUNTIME-INTEGRATION-R10 / 2026-11-04
 
 Whole-runtime **BLOCKED**, единственный исполнитель C3. R9 source42bea690 /
 receiptcca60b7c проверены C0; прежние15 R8 unit failures устранены.
