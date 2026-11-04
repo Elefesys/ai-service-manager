@@ -346,15 +346,48 @@ async def test_waiting_ai_allows_inbound_and_manual_progress_and_cancel_is_termi
     from asm.messaging.worker import run
     from test_m2_1_postgres import command
 
+    from scripts.m4_runtime_db import evidence_path, write
+
     h = delivery
     cid, source, _ = await source_turn(h)
-    entered, stop = asyncio.Event(), asyncio.Event()
+    entered, cancelled, stop = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    facts = {
+        "boundary": "waiting_ai",
+        "stages": [],
+        "error": {"type": "NONE_OBSERVED", "code": "NONE_OBSERVED"},
+    }
+
+    def stage(name, **values):
+        assert len(facts["stages"]) < 12
+        facts.update(values)
+        facts["stages"].append({"stage": name, "seconds": round(loop.time() - started, 6)})
+        # The carrier strips pytest properties; retain only this bounded, payload-free record.
+        if evidence_path().is_dir():
+            write(evidence_path() / "waiting-ai-control.json", facts)
 
     class Waiting(FakeAdapter):
         async def complete(self, request):
             self.requests.append(request)
             entered.set()
-            await asyncio.Event().wait()
+            stage(
+                "model_entered",
+                entry_count=len(self.requests),
+                call_count=len(self.requests),
+                read_count=request.budget.reads_reserved,
+            )
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                stage(
+                    "model_cancelled",
+                    cancellation_observed=True,
+                    cancellation_type="CancelledError",
+                    cancellation_code="CANCELLED",
+                )
+                raise
 
     fake = Waiting(config().route)
     worker, _ = application(h, fake=fake)
@@ -378,45 +411,153 @@ async def test_waiting_ai_allows_inbound_and_manual_progress_and_cancel_is_termi
             )
             == 0
         )
-        # Actual ingress and manual command execute while model is suspended.
-        _, _, another = await incoming(
-            h, next(COUNTER), chat_id="parallel-manual", external_connection_id="conn-a2"
+        reservation_count = await scalar(
+            h,
+            "SELECT count(*) FROM platform.ai_provider_calls p JOIN platform.ai_runs r ON (r.workspace_id,r.id)=(p.workspace_id,p.run_id) WHERE r.job_id=:id",
+            id=d["job_id"],
         )
-        result = await command(h, another, key=str(uuid4()))
-        for _ in range(100):
-            if (
-                await scalar(
-                    h, "SELECT status FROM app.outbox_events WHERE id=:id", id=result.outbox_id
+        stage(
+            "model_blocked",
+            reservation_count=reservation_count,
+            lease_valid=True,
+            idle_transactions=0,
+        )
+        assert reservation_count == 1 and not cancelled.is_set() and not task.done()
+        assert fake.requests[0].budget.reads_reserved == 0
+        # The running worker is the sole consumer. Never claim/process this ingress in the helper.
+        number = next(COUNTER)
+        receipt = await incoming(
+            h, number, process=False, chat_id="parallel-manual", external_connection_id="conn-a2"
+        )
+        stage("ingress_accepted")
+        row = None
+        async with asyncio.timeout(5):
+            while True:
+                rows = await query(
+                    h,
+                    """SELECT j.step,j.status AS job_status,i.status AS inbox_status,i.result_code,
+                      m.conversation_id,
+                      j.correlation_id=i.correlation_id AS receipt_correlated,
+                      i.connection_id=:connection AND j.connection_id=i.connection_id
+                        AND m.connection_id=i.connection_id AND c.connection_id=i.connection_id AS connection_correlated,
+                      i.event_id=:event AND m.provider_message_id=:message
+                        AND m.provider_chat_id=:chat AND c.provider_chat_id=:chat
+                        AND m.direction='INBOUND' AND c.id<>:ai AS message_correlated
+                    FROM platform.inbox_events i
+                    JOIN platform.messaging_jobs j ON (j.workspace_id,j.inbox_id)=(i.workspace_id,i.id)
+                    LEFT JOIN app.messages m ON (m.workspace_id,m.id)=(i.workspace_id,i.message_id)
+                    LEFT JOIN app.conversations c ON (c.workspace_id,c.id)=(m.workspace_id,m.conversation_id)
+                    WHERE i.workspace_id=:ws AND i.id=:inbox AND j.id=:job""",
+                    ws=receipt.workspace_id,
+                    inbox=receipt.inbox_id,
+                    job=receipt.job_id,
+                    connection=source.connection_id,
+                    event=f"native-{number}",
+                    message=f"native-message-{number}",
+                    chat="parallel-manual",
+                    ai=cid,
                 )
-                == "SENT"
-            ):
-                break
-            await asyncio.sleep(0.02)
-        assert (
-            await scalar(
-                h, "SELECT status FROM app.outbox_events WHERE id=:id", id=result.outbox_id
-            )
-            == "SENT"
+                assert len(rows) == 1
+                row = rows[0]
+                facts.update(
+                    persisted_step=row["step"],
+                    job_status=row["job_status"],
+                    inbox_status=row["inbox_status"],
+                    result_code=row["result_code"],
+                    receipt_correlated=row["receipt_correlated"] is True,
+                    connection_correlated=row["connection_correlated"] is True,
+                    message_correlated=row["message_correlated"] is True,
+                )
+                assert not task.done() and not cancelled.is_set() and len(fake.requests) == 1
+                assert row["job_status"] != "DEAD" and row["inbox_status"] not in {
+                    "FAILED",
+                    "IGNORED",
+                }
+                if row["job_status"] == "SUCCEEDED" and row["inbox_status"] == "PROCESSED":
+                    break
+                await asyncio.sleep(0.02)
+        assert receipt.workspace_id == source.workspace_id and row["step"] is None
+        assert row["result_code"] == "PROCESSED"
+        assert all(
+            facts[k] for k in ("receipt_correlated", "connection_correlated", "message_correlated")
         )
+        another = row["conversation_id"]
+        assert another is not None and another != cid
+        stage("ingress_persisted")
+        result = await command(h, another, key=str(uuid4()))
+        assert not task.done() and not cancelled.is_set() and len(fake.requests) == 1
+        stage("manual_command")
+        async with asyncio.timeout(5):
+            while True:
+                sent = (
+                    await query(
+                        h,
+                        """SELECT o.status,m.conversation_id=:conversation AND m.direction='OUTBOUND'
+                      AND o.message_id=:message AND o.connection_id=:connection AS correlated
+                    FROM app.outbox_events o JOIN app.messages m
+                      ON (m.workspace_id,m.id)=(o.workspace_id,o.message_id)
+                    WHERE o.workspace_id=:ws AND o.id=:id""",
+                        ws=receipt.workspace_id,
+                        id=result.outbox_id,
+                        conversation=another,
+                        message=result.message_id,
+                        connection=source.connection_id,
+                    )
+                )[0]
+                facts.update(send_status=sent["status"], send_correlated=sent["correlated"] is True)
+                assert not task.done() and not cancelled.is_set() and len(fake.requests) == 1
+                assert sent["correlated"] is True and sent["status"] not in {"FAILED", "UNKNOWN"}
+                if sent["status"] == "SENT":
+                    break
+                await asyncio.sleep(0.02)
+        stage("manual_sent", model_still_blocked=True)
+    except BaseException as exc:
+        facts["error"] = {
+            "type": type(exc).__name__[:80],
+            "code": exc.code.value
+            if isinstance(exc, MessagingError)
+            else "TIMEOUT"
+            if isinstance(exc, TimeoutError)
+            else "OPERATION_FAILED",
+        }
+        raise
     finally:
         task.cancel()
         done, pending = await asyncio.wait({task}, timeout=4)
+        stage(
+            "worker_joined",
+            task_done=task.done(),
+            task_cancelled=task.cancelled(),
+            stop_unset=not stop.is_set(),
+        )
         assert done == {task} and not pending and task.cancelled()
         assert not stop.is_set()
-    assert len(fake.requests) == 1
-    assert (
-        await scalar(h, "SELECT status FROM platform.messaging_jobs WHERE id=:id", id=d["job_id"])
-        == "DEAD"
-    )
-    assert await h.kernel.claim_job("restart-ai", ai=True) is None
-    assert (
-        await scalar(
+    try:
+        assert len(fake.requests) == 1 and cancelled.is_set()
+        ai_state = await scalar(
+            h, "SELECT status FROM platform.messaging_jobs WHERE id=:id", id=d["job_id"]
+        )
+        stage("terminal", ai_job_status=ai_state)
+        assert ai_state == "DEAD"
+        restart = await h.kernel.claim_job("restart-ai", ai=True)
+        facts["restart_none"] = restart is None
+        assert restart is None
+        outboxes = await scalar(
             h,
             "SELECT count(*) FROM app.outbox_events o JOIN app.messages m ON (m.workspace_id,m.id)=(o.workspace_id,o.message_id) WHERE m.conversation_id=:id",
             id=cid,
         )
-        == 0
-    )
+        facts["ai_outbox_count"] = outboxes
+        assert outboxes == 0
+        stage("verified")
+    except BaseException as exc:
+        facts["error"] = {
+            "type": type(exc).__name__[:80],
+            "code": exc.code.value if isinstance(exc, MessagingError) else "OPERATION_FAILED",
+        }
+        raise
+    finally:
+        stage("finished")
 
 
 @pytest.mark.parametrize("rights", [True, False])

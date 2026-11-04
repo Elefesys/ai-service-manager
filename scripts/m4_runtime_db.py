@@ -1,4 +1,4 @@
-"""C3-M4.3-RUNTIME-INTEGRATION-R9: separate owned PG18 application carrier."""
+"""C3-M4.3-RUNTIME-INTEGRATION-R10: separate owned PG18 application carrier."""
 
 import asyncio
 import contextlib
@@ -19,10 +19,10 @@ import traceback
 from pathlib import Path
 from uuid import UUID
 
-BASE = "bd4cf70a255d65c1f327ef0ded17e4e6940fa4e7"
-BASE_TREE = "a293789476dde97005c4e6a508c0bb490e6fe6b9"
+BASE = "b2106d77d56d1c4384b2a6e4d786891abe9cd481"
+BASE_TREE = "534cb2d2806d8d1059ccdb0ef56ac6f9070e0666"
 BRANCH = "c3/m4-3-runtime-integration-pr-r8"
-TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r8"
+TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r10"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -648,19 +648,22 @@ def admit_source(evidence):
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH,
-        "R9_EVENT_BRANCH",
+        "R10_EVENT_BRANCH",
     )
     require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
     require(capture(["git", "merge-base", BASE, "HEAD"]) == BASE, "BASE_ANCESTRY")
     allowed = {
         "scripts/m4_runtime_db.py",
         "tests/test_m4_runtime_db_runner.py",
-        "tests/test_m4_delivery.py",
+        "tests/test_m4_agent.py",
+        "tests/test_m4_delivery_postgres.py",
+        "scripts/native_context_db_catalog.py",
+        ".github/workflows/m4-runtime-db.yml",
         "docs/tasks/M4_HANDOFF.md",
         "docs/TASK_REGISTER.md",
     }
     paths = capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines()
-    require(bool(paths) and set(paths) <= allowed, "R9_WRITE_SET")
+    require(bool(paths) and set(paths) <= allowed, "R10_WRITE_SET")
     write(
         evidence / "source-admission.json",
         {

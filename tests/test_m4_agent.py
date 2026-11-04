@@ -436,34 +436,145 @@ async def test_unknown_cost_is_not_zero_or_a_budget_refund():
 @pytest.mark.parametrize(
     "where", ["MODEL", "READ", "FOLLOWUP", "CANDIDATE", "read_port", "model_call"]
 )
-async def test_one_deadline_covers_authority_read_model_and_candidate(where):
-    agent, adapter, authority, raw, binding = setup(("tools", "reply"), duration_seconds=0.1)
-    original = authority.authorize
+async def test_one_deadline_covers_authority_read_model_and_candidate(where, monkeypatch, request):
+    from types import SimpleNamespace
+
+    agent, adapter, authority, raw, binding = setup(("tools", "reply"))
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    entered, cancelled = asyncio.Event(), asyncio.Event()
+    timeouts, gateways, stages = [], [], []
+    error = {"type": "NONE_OBSERVED", "code": "NONE_OBSERVED"}
+    expected_calls = {
+        "MODEL": 0,
+        "READ": 1,
+        "FOLLOWUP": 1,
+        "CANDIDATE": 2,
+        "read_port": 1,
+        "model_call": 1,
+    }[where]
+    expected_reads = int(where in {"FOLLOWUP", "CANDIDATE", "read_port"})
+    original_authorize, original_complete = authority.authorize, adapter.complete
+    original_gateway = module.ModelGateway
+
+    def stage(name):
+        assert len(stages) < 10
+        stages.append({"stage": name, "seconds": round(loop.time() - started, 6)})
+
+    def timeout_at(when):
+        value = asyncio.timeout_at(when)
+        timeouts.append(value)
+        return value
+
+    def gateway(*args):
+        value = original_gateway(*args)
+        gateways.append(value)
+        return value
+
+    # Observe the real agent timeout without changing the shared asyncio module/clock.
+    monkeypatch.setattr(
+        module,
+        "asyncio",
+        SimpleNamespace(timeout_at=timeout_at, CancelledError=asyncio.CancelledError),
+    )
+    monkeypatch.setattr(module, "ModelGateway", gateway)
+
+    async def block(operation):
+        assert not entered.is_set()
+        entered.set()
+        stage("entered")
+        try:
+            return await operation
+        except asyncio.CancelledError as exc:
+            cancelled.set()
+            error.update(type=type(exc).__name__, code="CANCELLED")
+            stage("cancelled")
+            raise
 
     async def authorize(bound, at):
         if at == where:
-            await asyncio.Event().wait()
-        return await original(bound, at)
+            await block(asyncio.Event().wait())
+        return await original_authorize(bound, at)
 
     authority.authorize = authorize
     if where == "read_port":
 
         async def hang(_):
             authority.reads.append(binding)
-            await asyncio.Event().wait()
+            await block(asyncio.Event().wait())
 
         authority.read_current = hang
     if where == "model_call":
         adapter.script = ("timeout",)
-    result = await asyncio.wait_for(run(agent, raw, binding), 1)
-    assert result.reason in ("DEADLINE", "TIMEOUT") and result.candidate is None
-    assert (
-        len(adapter.requests)
-        == {"MODEL": 0, "READ": 1, "FOLLOWUP": 1, "CANDIDATE": 2, "read_port": 1, "model_call": 1}[
-            where
-        ]
-    )
-    assert len(authority.reads) == (1 if where in ("FOLLOWUP", "CANDIDATE", "read_port") else 0)
+
+        async def complete(value):
+            return await block(original_complete(value))
+
+        adapter.complete = complete
+
+    before = set(asyncio.all_tasks())
+    task = asyncio.create_task(run(agent, raw, binding))
+    result, held = None, None
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        # The producer has yielded inside the selected wait, with real reservations charged.
+        assert not task.done() and not cancelled.is_set()
+        assert len(timeouts) == 1 and not timeouts[0].expired()
+        assert timeouts[0].when() > loop.time()
+        assert len(gateways) == int(where != "MODEL")
+        assert len(adapter.requests) == expected_calls and len(authority.reads) == expected_reads
+        held = gateways[0].budget if gateways else None
+        stage("blocked")
+        timeouts[0].reschedule(loop.time())
+        stage("deadline_armed")
+        result = await asyncio.wait_for(task, 5)
+        assert timeouts[0].expired() and cancelled.is_set()
+        assert result.status == "STOP" and result.reason == "DEADLINE" and result.candidate is None
+        assert len(adapter.requests) == result.budget.calls_used == expected_calls
+        assert len(authority.reads) == result.reads_executed == expected_reads
+        assert (
+            result.budget.cost_reserved
+            == expected_calls * agent.config.limits.call_cost_reservation
+        )
+        assert result.budget.reads_reserved == int(where not in {"MODEL", "model_call"})
+        if held is not None:
+            assert result.budget == held and held.tokens_reserved > 0
+        assert [r.budget.calls_used for r in adapter.requests] == list(range(1, expected_calls + 1))
+        if expected_calls == 2:
+            first, second = adapter.requests
+            assert first.request == second.request and first.config == second.config
+            assert 0 < second.remaining_seconds <= first.remaining_seconds <= 30
+            assert second.budget.cost_reserved == 2 * first.budget.cost_reserved
+        stage("stopped")
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        stage("finished")
+        request.node.user_properties.append(
+            (
+                "deadline_control",
+                json.dumps(
+                    {
+                        "boundary": where,
+                        "error": error,
+                        "stages": stages,
+                        "entry_count": int(entered.is_set()),
+                        "call_count": len(adapter.requests),
+                        "read_count": len(authority.reads),
+                        "gateway_count": len(gateways),
+                        "reservation_count": held.calls_used if held is not None else 0,
+                        "reserve_held": result is not None
+                        and (held is None or result.budget == held),
+                        "reason": result.reason if result is not None else "NOT_REACHED",
+                        "timeout_count": len(timeouts),
+                        "timeout_expired": bool(timeouts and timeouts[0].expired()),
+                        "cancellation_observed": cancelled.is_set(),
+                        "task_done": task.done(),
+                    }
+                ),
+            )
+        )
+        assert task.done() and set(asyncio.all_tasks()) == before
 
 
 async def test_cancel_and_concurrent_repeat_cannot_restart_gateway():

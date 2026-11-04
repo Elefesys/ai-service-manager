@@ -1,4 +1,4 @@
-"""Finite R9 admission and evidence checks; no PostgreSQL substitute."""
+"""Finite R10 admission and evidence checks; no PostgreSQL substitute."""
 
 import itertools
 import json
@@ -837,7 +837,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 
 
 @pytest.fixture
-def r9_event(foundation_git, tmp_path, monkeypatch):
+def r10_event(foundation_git, tmp_path, monkeypatch):
     """Constructed real Git history; actual admission code, no Docker/DB."""
     f = foundation_git
     base, base_tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
@@ -910,8 +910,8 @@ def r9_event(foundation_git, tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "metadata", [None, "refs/heads/main", "refs/heads/c3/task-name", "refs/tags/v1.2"]
 )
-def test_constructed_full_admission_reaches_targeted_without_resources(r9_event, metadata):
-    r = r9_event
+def test_constructed_full_admission_reaches_targeted_without_resources(r10_event, metadata):
+    r = r10_event
     r["payload"]["base_ref"] = metadata
     r["run"]()
     assert len(r["boundary"]) == 1
@@ -938,24 +938,24 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r9_event,
         "migrations/versions/0015_ai_delivery.py",
         "backend/src/asm/foundation.py",
         "tests/test_native_context_db_runner.py",
-        "tests/test_m4_delivery_postgres.py",
+        "tests/test_m4_delivery.py",
         "tests/test_m4_schema_postgres.py",
-        "scripts/native_context_db_catalog.py",
-        ".github/workflows/m4-runtime-db.yml",
+        "backend/src/asm/ai/agent.py",
+        "tests/test_m4_gateway.py",
         "backend/src/asm/messaging/worker.py",
         ".github/workflows/ci.yml",
         "scripts/test_telegram_egress.sh",
     ],
 )
-def test_r9_admission_rejects_other_product_and_ci_write_paths(r9_event, monkeypatch, path):
-    r = r9_event
+def test_r10_admission_rejects_other_product_and_ci_write_paths(r10_event, monkeypatch, path):
+    r = r10_event
     f = r["f"]
     target = f.root / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        target.read_text() + "\n# forbidden R9 change\n"
+        target.read_text() + "\n# forbidden R10 change\n"
         if target.exists()
-        else "# forbidden R9 file\n"
+        else "# forbidden R10 file\n"
     )
     f.git("add", path)
     f.git("commit", "--amend", "--no-edit")
@@ -967,7 +967,7 @@ def test_r9_admission_rejects_other_product_and_ci_write_paths(r9_event, monkeyp
     assert str(caught.value) == (
         "CI gate input drift: .github/workflows/ci.yml"
         if path == ".github/workflows/ci.yml"
-        else "R9_WRITE_SET"
+        else "R10_WRITE_SET"
     )
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())
 
@@ -985,7 +985,7 @@ def test_r9_admission_rejects_other_product_and_ci_write_paths(r9_event, monkeyp
         ("merge", "EVENT_M4_PARENT"),
         ("base_tree", "BASE_TREE"),
         ("dirty", "EVENT_SOURCE_VERIFY"),
-        ("write_set", "R9_WRITE_SET"),
+        ("write_set", "R10_WRITE_SET"),
         ("head", "EVENT_SHA_HEAD_MISMATCH"),
         ("after", "EVENT_PUSH_AFTER"),
         ("head_commit", "EVENT_PUSH_HEAD"),
@@ -999,8 +999,10 @@ def test_r9_admission_rejects_other_product_and_ci_write_paths(r9_event, monkeyp
         ("missing_base_ref", "EVENT_M4_BASE_REF_MISSING"),
     ],
 )
-def test_constructed_full_admission_refuses_before_resources(r9_event, monkeypatch, damage, reason):
-    r = r9_event
+def test_constructed_full_admission_refuses_before_resources(
+    r10_event, monkeypatch, damage, reason
+):
+    r = r10_event
     f, p = r["f"], r["payload"]
     p["base_ref"] = "refs/heads/main"
     if damage == "repo":
@@ -1009,7 +1011,7 @@ def test_constructed_full_admission_refuses_before_resources(r9_event, monkeypat
         p["repository"]["id"] += 1
     elif damage in {"ref", "capture_not_open"}:
         ref = "refs/heads/" + (
-            "c3/m4-3-runtime-catalog-run-r9" if damage == "capture_not_open" else "other"
+            "c3/m4-3-runtime-catalog-run-r10" if damage == "capture_not_open" else "other"
         )
         monkeypatch.setenv("GITHUB_REF", ref)
         p["ref"] = ref
@@ -1058,7 +1060,7 @@ def test_constructed_full_admission_refuses_before_resources(r9_event, monkeypat
     assert r["boundary"] == []
     assert list((r["root"] / "private").iterdir()) == []
     diag = json.loads((r["root"] / "evidence/event-admission-run.json").read_text())
-    if reason not in {"BASE_TREE", "R9_WRITE_SET"}:
+    if reason not in {"BASE_TREE", "R10_WRITE_SET"}:
         assert diag["failure_reason"] == reason
 
 
@@ -1080,8 +1082,8 @@ def test_constructed_full_admission_refuses_before_resources(r9_event, monkeypat
         "refs/heads/a\nPRIVATE_SENTINEL",
     ],
 )
-def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r9_event, metadata):
-    r = r9_event
+def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r10_event, metadata):
+    r = r10_event
     r["payload"]["base_ref"] = metadata
     with pytest.raises(catalog.Refusal, match="^EVENT_M4_BASE_REF_METADATA$"):
         r["run"]()

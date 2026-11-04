@@ -46,6 +46,7 @@ M4_R3_TRANSITIONS = {
     "refs/heads/c3/m4-3-runtime-targeted-run-r6": "1e5dc3cfbbaac00af23bec84df64da8a6041be93",
     "refs/heads/c3/m4-3-runtime-targeted-run-r7": "21e8b4b61ceabb9c26688907ba27a974a7694eb5",
     "refs/heads/c3/m4-3-runtime-targeted-run-r8": "c7ee300ae4182152eb9c8636d2f958da087113f2",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r10": "b2106d77d56d1c4384b2a6e4d786891abe9cd481",
 }
 REPOSITORY = "Elefesys/ai-service-manager"
 REPOSITORY_ID = 1369650588
