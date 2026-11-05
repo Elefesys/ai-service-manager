@@ -6,7 +6,141 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, foundation repair receipt C3 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, early-request diagnosis / 2026-11-05
+
+**C0 принимает два schema test repair и продолжает C3 в том же PR43.
+Остался один воспроизводящийся timeout до billing_contact.** Приёмка всего
+provider runtime пока открыта. Нужна локализация задержки, а не увеличение
+таймаута или очередной неизменённый полный прогон.
+
+### Проверенные факты
+
+Receipt **8bae8ab615fba0e43ba2327c0d0a848f5c41fd1a** — docs-only child
+source **4025b9d4f8f3a6d2b800cc209dd497743951e0c8**,
+tree **fa84ee09d9ae31106aceeb5cf73b61576edfbe1c**.
+Tested merge **4c0ccc43ce8e1ff40be4d21b01b808148ec4297a** имеет то же дерево.
+C0 сверил GitHub source diff5paths/135+/27−, run/jobs, исходный foundation log,
+generic journal и13affected-node phase records.
+[CI42031358620](https://github.com/Elefesys/ai-service-manager/actions/runs/42031358620),
+attempt1: **11 SUCCESS / 1 FAILURE / 0 SKIPPED; actualPG1058 PASS / 1 FAIL**.
+Generic:860setup PASS,859call PASS/1FAIL,860teardown PASS.
+Native105 и M4 94 PASS; foundation-durable PASS. Unit3558+155subtests PASS.
+Повторных тестов C0 не запускал.
+
+**Закрыты все6schema failures:** пять initializer conflicts с достигнутыми
+expected conflict/49-table snapshot/rollback assertions, связанные positive
+initializer cases и exact inventory/roles PASS. Добавлена ровно существующая
+ai_provider_sessions, CASCADE/equality/роли/pins не ослаблены.
+Эти исправления сохранять; нового schema repair не требуется.
+
+[Evidence ZIP](https://chatgpt.com/library?file_id=libfile_43c018ac27e4819184ea7ddad4a99fac&account_id=personal):
+188247195bytes, SHA256
+**7e0a150a4edd6f77360118975f7b18c11dbc9a3cd846560ab6864d82d9fef509**.
+C0 проверил CRC491ZIP entries, размеры/SHA256 всех490файлов manifest.
+Сохранённый архив и raw logs не переписывать.
+
+Единственный FAIL — different_keys в
+tests/test_m1_3_api_postgres.py::test_real_concurrent_http_claims_and_cas_have_one_changing_winner.
+Оба соседних параметра показывают два blocked PID и проходят точные outcomes.
+У failed case wrapper starts0.000942/2.068101s; observer started0.000899s.
+На timeout2.070465s: entered=false,0PIDs,0observer polls,обе tasks PENDING.
+Метка uow_entered в текущем коде означает вход в billing_contact, НЕ вход
+в transaction. HTTP wrapper timestamp также не означает ASGI admission.
+
+**Root cause UNKNOWN.** Из исходника видно: обе tasks созданы до await
+observer loop; большой интервал до старта второй требует проверки синхронного
+участка первого запроса и scheduling/process pauses. Это направление
+диагностики, не доказательство GC, CI load, pool starvation или product bug.
+Сам observer SQL ещё не выполнялся. Обычное асинхронное ожидание БД само
+по себе не объясняет задержку запуска уже готовой второй task.
+
+### C3: одно продолжение без нового PR
+
+1. Начать от immutable коммита **с этой выдачей**, parent8bae8ab6.
+   Сохранить ancestry и все готовые дельты. Repository Elefesys/ai-service-manager;
+   branch **c3/m4-3-polza-runtime-r1**, [PR43](https://github.com/Elefesys/ai-service-manager/pull/43)
+   OPEN/DRAFT; первый FF expected old head **4025b9d4f8f3a6d2b800cc209dd497743951e0c8**.
+   Runner BASE/BASE_TREE/BRANCH и source base dbb2334a прежние.
+   Ref drift сначала прочитать; force-push/новый PR не нужны.
+
+2. Дополнить существующую test-only диагностику **раннего пути** обеих tasks:
+   request build/send, вход ASGI, вход/готовность auth transaction,
+   результат authenticated, вход/готовность tenant transaction, permission,
+   billing_contact. Названия меток должны точно соответствовать границе.
+   Оборачивать исходные функции с неизменными arguments/await/exception/
+   cancellation semantics; не подменять auth, driver, HTTP или business result.
+
+   Для двухсекундного промежутка нужны наблюдения, которые могут объяснить
+   задержку: wall-clock и CPU time текущего потока, задержка контрольного
+   callback event loop и ограниченный stack sample **во время паузы**.
+   Если проверяется гипотеза GC — фиксировать начало/конец collection,
+   без gc.disable/collect/freeze, смены thresholds или прогрева ради PASS.
+   Одних поздних task stacks после timeout недостаточно.
+
+   Ограничить наблюдения одним текущим тестом/процессом: максимум20samples,
+   до8frames в sample, только относительный source/module path, function,
+   line и числовые timings/stages. Без locals, arguments, SQL/parameters,
+   URLs, cookies, request/response bodies. Использовать имеющиеся Python
+   средства, без profiler dependencies/нового framework или отдельного сервиса.
+   Удалить callbacks/hooks и завершить наблюдатель в finally; проверить cleanup.
+   Сохранить короткие результаты для всех3cases в штатном job log при PASS
+   и failure; сообщать неполноту измерения явно, не угадывать отсутствующий stack.
+
+3. При доказанной причине в test harness разрешён связанный ограниченный
+   repair без нового согласования каждой строки. Нужны конкретный участок,
+   измеренное объяснение задержки и проверка, что repair устраняет её.
+   Если fault в product/dependency или причина всё ещё UNKNOWN — вернуть C0
+   точную локализацию/отсутствующий факт и предложенный минимальный diff;
+   product/dependency fix в эту выдачу не входит.
+
+   Сохраняются два реальных одновременных HTTP-запроса, наблюдение обоих
+   blocked backends перед release, same_intent200/200 identical,
+   same_key_conflict200/409 IDEMPOTENCY_KEY_CONFLICT,
+   different_keys200/409 STALE_STATE и exact version/receipt/audit counts.
+   Observer2s,lock3s,statement3500ms,auth4s,порядок штатных nodeids,
+   отмена tasks и bounded cleanup не меняются. Не переносить work за deadline,
+   не прогревать/не переупорядочивать кейсы и не вводить sleep/retry ради PASS.
+
+4. Основной source path **tests/test_m1_3_api_postgres.py**.
+   При доказанной необходимости разрешены связанные test-only fixtures
+   **tests/test_auth_postgres.py / tests/test_tenancy_postgres.py**,
+   точные новые admissions в **scripts/m4_runtime_db.py** и соответствующие
+   существующие tests в **tests/test_m4_runtime_db_runner.py**.
+   Никакого wildcard/prefix admission. Остальные готовые source дельты сохранить.
+   Receipt — HANDOFF/TASK_REGISTER. Consumer/verifier/evidence format,
+   product/0001–0016/pins/workflows/dependencies/архитектура не меняются.
+
+5. Сначала затронутые offline checks, admission и current-schema/consumer
+   regressions; actualPG subset всех3concurrency cases, если PG доступен.
+   Отсутствие localPG не требует очередного запроса: разрешён **один**
+   штатный диагностический full CI изменённого source в PR43.
+   Перед FF проверить, что новые наблюдения покрывают интервал до первого
+   billing_contact, и сохранятся при timeout. Никаких unchanged-source reruns.
+   После доказанного harness repair — затронутые checks и один итоговый
+   штатный full CI изменённого кандидата. Если диагностический прогон опять
+   не дал причины, остановить серию полных прогонов и вернуть C0 факты.
+   Один случайный PASS не закрывает этот blocker.
+
+### Критерии и границы
+
+Нужны объяснение/repair последнего timeout, **12jobs SUCCESS/1059actualPG PASS**
+(860generic+105native+94M4), все setup/call/teardown, прежние1031nodeids+28Polza.
+Сохранить положительные и отрицательные assertions; skips/xfails не допускаются.
+Foundation tail пока NOT_REACHED: downgrade/reupgrade/contracts/wheel-one/
+wheel-two/wheel-compare/wheel-hash; storage-version/storage-admin-version/
+services/http/images. Все они и cleanup должны пройти до общей приёмки.
+Нынешний core primary1/cleanup0 не означает наличие отдельного zero-resource
+inventory — такого inventory для core нет; receipt не должен его выдумывать.
+
+IMPL-004 и ADR132/216–219/259–261/267 прежние. Main
+**3cb3764cdd75d4b6de50be9795d079cc2eead9ba** и historical refs frozen.
+C3 IN_PROGRESS; остальные роли HOLD. PR43 DRAFT, не INTEGRATED/VERIFIED.
+Paid/model/catalog/history/Telegram/VM/deploy/merge=0; defaultOFF/EVAL_ONLY.
+Ledger150 unchanged:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+M4/live pilot остаётся открытым.
+
+## История — C3 foundation repair receipt 8bae8ab6 / 2026-11-05
 
 **Schema repair подтверждён actualPG; different_keys timeout повторился,
 root cause UNKNOWN.** [CI42031358620](https://github.com/Elefesys/ai-service-manager/actions/runs/42031358620) attempt1:

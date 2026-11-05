@@ -2,7 +2,36 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, foundation repair receipt C3 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, early-request diagnosis / 2026-11-05
+
+C0 проверил receipt **8bae8ab615fba0e43ba2327c0d0a848f5c41fd1a**,
+source **4025b9d4f8f3a6d2b800cc209dd497743951e0c8**,
+tree **fa84ee09d9ae31106aceeb5cf73b61576edfbe1c**, CI42031358620 attempt1.
+**11SUCCESS/1FAILURE; actualPG1058PASS/1FAIL**. Source diff, raw foundation log,
+generic/affected phase records и490manifest files evidence сверены C0.
+Две schema-причины/все6падений закрыты actualPG с сохранением assertions.
+
+Один blocker: different_keys timeout до billing_contact; wrapper starts
+0.000942/2.068101s,0PIDs/0observer polls. **Root cause UNKNOWN**.
+C0 направляет C3 исследовать ранний HTTP/auth/tenancy путь и scheduling pause,
+с ограниченными timings/stack observations, сохраняя real concurrency,
+deadlines, business outcomes и cleanup. Диагностика не равна доказанному fix.
+
+Продолжать от immutable этой выдачи, parent8bae8ab6, в существующем PR43/
+c3/m4-3-polza-runtime-r1; expected old head4025b9d4.
+Точные write-set и условия — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Основной path test_m1_3_api_postgres; связанные test fixtures/admission/tests
+разрешены при доказанной необходимости, без согласования каждой строки.
+Один изменённый диагностический fullCI при отсутствии localPG; затем итоговый
+CI только при доказанном repair. Неизменённые и бесконечные прогоны запрещены.
+
+Приёмка:12SUCCESS/1059actualPG/fullfoundation/cleanup и обоснованный repair.
+PR43 DRAFT; provider runtime ещё не INTEGRATED/VERIFIED, M4/live открыт.
+Product/migrations/pins/consumer/workflows/dependencies/architecture unchanged;
+main3cb3764c/historical refs frozen; остальные роли HOLD.
+Paid/live/Telegram/VM/deploy/merge=0,defaultOFF/EVAL_ONLY,ledger150/holds прежние.
+
+## История — C3 foundation repair receipt 8bae8ab6 / 2026-11-05
 
 C3 выполнил выдачу d43cbd31 в5разрешённых paths/135+/27−.
 Source **4025b9d4f8f3a6d2b800cc209dd497743951e0c8**, tree **fa84ee09d9ae31106aceeb5cf73b61576edfbe1c**,
