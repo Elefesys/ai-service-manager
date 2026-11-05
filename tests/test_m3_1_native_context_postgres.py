@@ -328,7 +328,11 @@ async def policy(
     binding["owner_user_id"] = state[0]["owner_user_id"] if state else None
     revision = getattr(h, "schema_revision", "0013")
     capability = (
-        "ai_delivery_schema_profile" if revision == "0015" else "human_context_schema_profile"
+        "ai_provider_schema_profile"
+        if revision == "0016"
+        else "ai_delivery_schema_profile"
+        if revision == "0015"
+        else "human_context_schema_profile"
     )
     installed = await scalar(h, f"SELECT platform.{capability}()")
     assert installed["valid"], installed

@@ -53,8 +53,8 @@ async def schema15(pg):
     )
     pg.probe_checks_0014 = await probe_checks(pg)
     assert len(pg.probe_checks_0014) == 3
-    await migrate("upgrade", "0015")
-    await migrate("upgrade", "0015")
+    await migrate("upgrade", "0016")
+    await migrate("upgrade", "0016")
     assert (
         await scalar(
             pg, "SELECT to_jsonb(r) FROM platform.ai_runs r WHERE id=:id", id=receipt.run_id
@@ -66,7 +66,7 @@ async def schema15(pg):
         await scalar(pg, "SELECT to_jsonb(c) FROM app.conversations c WHERE id=:id", id=pg.retained)
         == pg.retained_before
     )
-    pg.schema_revision = "0015"
+    pg.schema_revision = "0016"
     return pg
 
 
@@ -85,7 +85,7 @@ async def test_unused_successor_downgrade_restore_and_exact_readiness(schema15):
         with pytest.raises(RuntimeError, match="schema"):
             await runtime.check()
         assert await scalar(h, "SELECT to_regclass('platform.ai_deliveries')") is None
-        await migrate("upgrade", "0015")
+        await migrate("upgrade", "0016")
         await runtime.check()
         async with h.migrator.begin() as c:
             assert await current_snapshot(c) == before
@@ -98,7 +98,7 @@ async def test_unused_successor_downgrade_restore_and_exact_readiness(schema15):
     [
         "ALTER TABLE platform.ai_deliveries NO FORCE ROW LEVEL SECURITY",
         "GRANT SELECT ON platform.ai_deliveries TO asm_runtime",
-        "GRANT EXECUTE ON FUNCTION platform.ai_delivery_schema_profile() TO PUBLIC",
+        "GRANT EXECUTE ON FUNCTION platform.ai_provider_schema_profile() TO PUBLIC",
         "ALTER FUNCTION platform.ai_delivery_current(platform.messaging_jobs,platform.ai_deliveries,platform.ai_runs) RESET search_path",
         "ALTER TABLE platform.ai_deliveries DROP CONSTRAINT ai_deliveries_selected_kind_check",
         "CREATE FUNCTION platform.unapproved_ai() RETURNS int LANGUAGE sql AS 'SELECT 1'",

@@ -469,18 +469,18 @@ def test_current_and_historical_catalogs_are_distinct_and_closed():
 
     old = catalog.source_catalog(catalog.ROOT, "0013")
     middle = catalog.source_catalog(catalog.ROOT, "0014")
-    current = catalog.source_catalog(catalog.ROOT, "0015")
+    current = catalog.source_catalog(catalog.ROOT, "0016")
     assert (len(old["functions"]), len(middle["functions"]), len(current["functions"])) == (
         167,
         175,
-        183,
+        190,
     )
-    assert (len(old["columns"]), len(middle["columns"]), len(current["columns"])) == (45, 47, 48)
-    body = current["functions"]["platform.ai_delivery_schema_profile()"]["body"]
+    assert (len(old["columns"]), len(middle["columns"]), len(current["columns"])) == (45, 47, 49)
+    body = current["functions"]["platform.ai_provider_schema_profile()"]["body"]
     assert hashlib.sha256(body.encode()).hexdigest() == NATIVE_PROFILE_BODY_SHA256
     assert catalog.compare_embedded_profile(current) == {
-        "other_functions": 182,
-        "tables": 48,
+        "other_functions": 189,
+        "tables": 49,
         "result": "PASS",
     }
     assert (

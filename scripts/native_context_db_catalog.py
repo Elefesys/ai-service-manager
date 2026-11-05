@@ -67,6 +67,7 @@ M4_PG_MODULES = (
     "tests/test_m4_runtime_postgres.py",
     "tests/test_m4_delivery_postgres.py",
     "tests/test_m4_schema_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
 )
 # Bind the actual inputs, including ten ordinary jobs (the two serial foundation
 # boundaries plus the unchanged eight) and the unconditional native job: eleven.
@@ -83,6 +84,10 @@ SECRET_ENV = (
     "ASM_DATABASE_URL",
     "ASM_MIGRATION_DATABASE_URL",
 )
+
+# Filled only from the installed owned PG18 catalog, never source serialization.
+POLZA_NONFUNCTION_SHA256 = "0000000000000000000000000000000000000000000000000000000000000000"
+
 PROFILE = "platform.human_context_schema_profile()"
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -247,7 +252,7 @@ def parse_function(sql):
 
 def capture_source(root, revision="0013"):
     """Expand the actual chain without importing/mutating the real Alembic module."""
-    require(revision in {"0013", "0014", "0015"}, "Unsupported catalog revision")
+    require(revision in {"0013", "0014", "0015", "0016"}, "Unsupported catalog revision")
     paths = sorted(p for p in (root / "migrations/versions").glob("*.py") if p.name[:4] <= revision)
     require(
         [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, int(revision) + 1)],
@@ -441,20 +446,21 @@ def source_catalog(root, revision="0013"):
     replacements = {s for s in baseline if functions[s]["body"] != baseline[s]["body"]}
     require(
         len(baseline) == 132
-        and len(functions) == {"0013": 167, "0014": 175, "0015": 183}[revision]
+        and len(functions) == {"0013": 167, "0014": 175, "0015": 183, "0016": 190}[revision]
         and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
     )
     require(not any(public.values()), "Source leaves PUBLIC EXECUTE")
     require(
         all(columns[t] == list(c) for t, c in modules["0013"]["NATIVE_COLUMNS"].items())
-        and len(columns) == {"0013": 45, "0014": 47, "0015": 48}[revision]
+        and len(columns) == {"0013": 45, "0014": 47, "0015": 48, "0016": 49}[revision]
         and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
         == (
             set()
             if revision == "0013"
             else {"platform.ai_runs", "platform.ai_provider_calls"}
-            | ({"platform.ai_deliveries"} if revision == "0015" else set())
+            | ({"platform.ai_deliveries"} if revision >= "0015" else set())
+            | ({"platform.ai_provider_sessions"} if revision == "0016" else set())
         ),
         "Independent source column replay differs",
     )
@@ -544,8 +550,13 @@ def compare_embedded_profile(expected):
     Its own security clause remains separate. Never use these embedded rows to
     derive the expected source catalog or to forgive installed catalog drift.
     """
-    profile = "platform.ai_delivery_schema_profile()"
-    require(expected["revision"] == "0015", "EMBEDDED_REVISION")
+    revision = expected["revision"]
+    require(revision in {"0015", "0016"}, "EMBEDDED_REVISION")
+    profile = (
+        "platform.ai_provider_schema_profile()"
+        if revision == "0016"
+        else "platform.ai_delivery_schema_profile()"
+    )
     body = expected["functions"][profile]["body"]
     sections = re.search(
         r"WITH expected\(signature,body_hash,language,security_definer,volatility,runtime_execute\) AS \(VALUES (.*?)\),\s+columns_expected\(table_name,column_names\) AS \(VALUES (.*?)\),\s+functions AS MATERIALIZED",
@@ -565,7 +576,8 @@ def compare_embedded_profile(expected):
     require(profile not in names, "EMBEDDED_SELF_ROW")
     require(len(names) == len(set(names)), "EMBEDDED_DUPLICATE_FUNCTION")
     require(
-        len(names) == 182 and set(names) == set(expected["functions"]) - {profile},
+        len(names) == {"0015": 182, "0016": 189}[revision]
+        and set(names) == set(expected["functions"]) - {profile},
         "EMBEDDED_FUNCTION_SET",
     )
     for signature, body_hash, language, security, volatility, runtime in rows:
@@ -593,7 +605,10 @@ def compare_embedded_profile(expected):
         require(row is not None, "EMBEDDED_COLUMN_ROW")
         require(row[1] not in columns, "EMBEDDED_DUPLICATE_TABLE")
         columns[row[1]] = re.findall(r"'([^']+)'", row[2])
-    require(len(columns) == 48 and columns == expected["columns"], "EMBEDDED_COLUMN_SET")
+    require(
+        len(columns) == {"0015": 48, "0016": 49}[revision] and columns == expected["columns"],
+        "EMBEDDED_COLUMN_SET",
+    )
     return {"other_functions": len(names), "tables": len(columns), "result": "PASS"}
 
 
@@ -679,9 +694,15 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision=
         actual_columns.setdefault(table, []).append(column)
     require(actual_columns == expected_columns, "Missing/extra/reordered table columns")
     require(
-        revision in {"0013", "0015"}
+        revision in {"0013", "0015", "0016"}
         and sha256(nonfunction_text.encode("utf-8"))
-        == (AI_NONFUNCTION_SHA256 if revision == "0015" else NONFUNCTION_SHA256),
+        == (
+            {
+                "0013": NONFUNCTION_SHA256,
+                "0015": AI_NONFUNCTION_SHA256,
+                "0016": POLZA_NONFUNCTION_SHA256,
+            }[revision]
+        ),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
     )
     return sha256(b"asm:m3:native_schema:v1\n" + full_text.encode("utf-8"))
@@ -2796,7 +2817,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT, "0015"),
+            source_catalog(ROOT, "0016"),
         )
 
     def persist_partition(self, work):
@@ -2980,7 +3001,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0015"
+            and source["expected_revision"] == "0016"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(

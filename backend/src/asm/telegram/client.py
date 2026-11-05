@@ -1,5 +1,10 @@
 """Bounded official Bot API client; no retries, redirects, or caller-owned origin."""
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from asm.ai.runtime_settings import RuntimeSettings
+
 import asyncio
 import logging
 import re
@@ -121,6 +126,7 @@ class TelegramClient:
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         test_origin: str | None = None,
+        provider_runtime: "RuntimeSettings | None" = None,
     ) -> None:
         if not settings.enabled:
             raise TelegramError(Code.NOT_ALLOWED)
@@ -143,6 +149,11 @@ class TelegramClient:
             origin = test_origin
         suppress_transport_logs()
         self.settings = settings
+        self.provider_runtime = provider_runtime
+        if provider_runtime is not None:
+            provider_runtime.current()
+            if settings.environment != "TEST" or settings.bot_id != provider_runtime.bot_identity:
+                raise TelegramError(Code.NOT_ALLOWED)
         self.synthetic_ai = (
             settings.environment == "TEST" and type(transport) is httpx.MockTransport
         )
@@ -315,7 +326,23 @@ class TelegramClient:
             raise TelegramError(Code.INVALID_INPUT)
 
     async def send(self, permit: SendPermit) -> SendOutcome:
-        if isinstance(permit, AISendPermit) and not self.synthetic_ai:
+        if isinstance(permit, AISendPermit) and permit.provider_session_id is not None:
+            admitted = self.provider_runtime
+            if admitted is None or (
+                permit.provider_session_id,
+                permit.workspace_id,
+                permit.connection_id,
+                permit.chat_id,
+                permit.bot_identity,
+            ) != (
+                admitted.session_id,
+                admitted.workspace_id,
+                admitted.connection_id,
+                admitted.chat_id,
+                admitted.bot_identity,
+            ):
+                return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED)
+        elif isinstance(permit, AISendPermit) and not self.synthetic_ai:
             return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED)
         if permit.provider != "TELEGRAM" or permit.bot_identity != self.settings.bot_id:
             return SendOutcome(OutcomeKind.NOT_SENT_PERMANENT, error_code=Code.NOT_ALLOWED)

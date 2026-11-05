@@ -732,7 +732,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
         ).scalar_one()
         native_profiles = {}
-        if revision in {"0013", "0015"}:
+        if revision in {"0013", "0015", "0016"}:
             native_profiles = {
                 "platform.human_context_hash(text,text[])": (True, False),
                 "platform.human_context_text_valid(text)": (True, False),
@@ -788,10 +788,10 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                 "platform.human_context_stale()": (True, False),
                 "platform.human_context_schema_profile()": (True, False),
             }
-        if revision == "0015":
+        if revision in {"0015", "0016"}:
             from scripts import native_context_db_catalog as catalog
 
-            source = catalog.source_catalog(catalog.ROOT, "0015")
+            source = catalog.source_catalog(catalog.ROOT, revision)
             for signature, function in source["functions"].items():
                 if signature.startswith("platform.ai_"):
                     native_profiles[signature] = (

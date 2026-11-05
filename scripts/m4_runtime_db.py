@@ -19,9 +19,9 @@ import traceback
 from pathlib import Path
 from uuid import UUID
 
-BASE = "d18d2c599e19227adcc4f580763a9b4cef83c058"
-BASE_TREE = "3b3f67027ee4efbe2d7b890c38053cae3f59bfe8"
-BRANCH = "c3/m4-3-runtime-integration-pr-r8"
+BASE = "dbb2334a4e9d158cf101fe7e39467928e446b85c"
+BASE_TREE = "1a264d50ef29b82cd85a100c32d2053735edb8cb"
+BRANCH = "c3/m4-3-polza-runtime-r1"
 TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r10"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
@@ -30,6 +30,7 @@ MODULES = [
     "tests/test_m4_runtime_postgres.py",
     "tests/test_m4_delivery_postgres.py",
     "tests/test_m4_schema_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
 ]
 CURRENT_NATIVE_MODULE = "tests/test_m3_1_native_context_runtime_postgres.py"
 # Exactly the six R1 cases blocked by the current0015 schema prerequisite.
@@ -648,23 +649,59 @@ def admit_source(evidence):
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH,
-        "R11_EVENT_BRANCH",
+        "POLZA_RUNTIME_EVENT_BRANCH",
     )
     require(capture(["git", "rev-parse", BASE + "^{tree}"]) == BASE_TREE, "BASE_TREE")
     require(capture(["git", "merge-base", BASE, "HEAD"]) == BASE, "BASE_ANCESTRY")
     allowed = {
+        "AGENTS.md",
+        "tests/test_m2_4_browser_fixture.py",
+        "tests/generic_pg_schema.py",
+        "backend/src/asm/ai/runtime.py",
+        "tests/test_m4_delivery.py",
+        "backend/src/asm/telegram/client.py",
+        "scripts/m4_runtime_pilot.py",
+        "docs/runbooks/M4_RUNTIME_PILOT.md",
+        "tests/test_m4_schema_postgres.py",
+        "backend/src/asm/messaging/worker.py",
+        "tests/test_m2_3_db_postgres.py",
+        "backend/src/asm/ai/database.py",
+        "backend/src/asm/ai/runtime_settings.py",
+        "docs/runbooks/M4_POLZA_PROBE.md",
+        "tests/test_m4_polza_runtime_postgres.py",
         "scripts/m4_runtime_db.py",
-        "tests/test_m4_runtime_db_runner.py",
-        "tests/test_m3_1_control_postgres.py",
-        "tests/test_m1_3_c0_acceptance.py",
-        "tests/test_postgres.py",
-        "tests/test_m3_1_provenance_postgres.py",
-        "tests/test_tenancy_migrations.py",
-        "docs/tasks/M4_HANDOFF.md",
+        "backend/src/asm/ai/provider_runtime.py",
+        "backend/src/asm/ai/polza.py",
+        "tests/test_foundation.py",
+        "scripts/native_context_db_catalog.py",
         "docs/TASK_REGISTER.md",
+        "tests/test_m3_2_escalations_migrations.py",
+        "tests/test_tenancy_postgres.py",
+        "backend/src/asm/messaging/results.py",
+        "tests/test_telegram_egress_postgres.py",
+        "tests/test_m4_runtime_db_runner.py",
+        "tests/test_m4_runtime_migrations.py",
+        "backend/src/asm/telegram/provisioning.py",
+        "tests/test_m4_polza_runtime.py",
+        "backend/src/asm/foundation.py",
+        "tests/test_m4_delivery_postgres.py",
+        "docs/decisions/IMPL-004-m4-pilot-ai.md",
+        "scripts/m2_4_browser_fixture.py",
+        "tests/test_m3_1_native_context_postgres.py",
+        "tests/test_m3_1_native_context_runtime_postgres.py",
+        "backend/src/asm/messaging/database.py",
+        "scripts/prepare_telegram_egress.py",
+        "tests/test_m3_1_guards_migrations.py",
+        "tests/test_telegram_egress.py",
+        "migrations/versions/0016_polza_runtime.py",
+        "tests/test_m4_polza_runtime_migrations.py",
+        "tests/test_m2_3_setup.py",
+        "docs/tasks/M4_HANDOFF.md",
+        "tests/test_native_context_db_runner.py",
+        "tests/test_m2_3_schema_postgres.py",
     }
     paths = capture(["git", "diff", "--name-only", BASE, "HEAD"]).splitlines()
-    require(bool(paths) and set(paths) <= allowed, "R11_WRITE_SET")
+    require(bool(paths) and set(paths) <= allowed, "POLZA_RUNTIME_WRITE_SET")
     write(
         evidence / "source-admission.json",
         {
@@ -684,8 +721,8 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.ai_delivery_schema_profile()"
-        if revision == "0015"
+        "platform.ai_provider_schema_profile()"
+        if revision == "0016"
         else "platform.human_context_schema_profile()"
     )
     body_hash = expected["functions"][profile]["body_sha256"]
@@ -740,12 +777,12 @@ def stock_catalog():
         ):
             c.execute(sql)
         revision = c.execute("SELECT version_num FROM platform.alembic_version").fetchone()[0]
-        require(revision in {"0013", "0015"}, "CATALOG_REVISION")
+        require(revision in {"0013", "0016"}, "CATALOG_REVISION")
         destination = evidence_path() / ("catalog-" + revision)
         destination.mkdir(mode=0o700)
         expected = catalog.source_catalog(catalog.ROOT, revision)
         write(destination / "expected-source-catalog.json", expected)
-        if revision == "0015":
+        if revision == "0016":
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
             )
@@ -791,7 +828,7 @@ def stock_catalog():
         catalog.compare_roles(roles, memberships, owned)
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
-        profile = "platform.ai_delivery_schema_profile()" if revision == "0015" else catalog.PROFILE
+        profile = "platform.ai_provider_schema_profile()" if revision == "0016" else catalog.PROFILE
         declared = c.execute("SELECT " + profile + " AS profile").fetchone()["profile"]
         write(destination / "declared-profile.json", declared)
         comparison = catalog_comparison(expected, digest, nonfunction, declared)
@@ -805,7 +842,7 @@ async def readiness():
     runtime = RuntimeDatabase(Settings())
     try:
         await runtime.check()
-        write(evidence_path() / "readiness.json", {"revision": "0015", "runtime_check": "PASS"})
+        write(evidence_path() / "readiness.json", {"revision": "0016", "runtime_check": "PASS"})
     finally:
         await runtime.close()
 
@@ -1183,7 +1220,7 @@ def run_admitted(root, event, manifest, mode):
     # No resource access or credentials before the complete source admission.
     require(mode in {"targeted", "runtime"}, "R5_MODE")
     modules = ["preflight", *MODULES]
-    planned = dict(zip(MODULES, (35, 22, 9), strict=True))
+    planned = dict(zip(MODULES[:3], (35, 22, 9), strict=True)) | {MODULES[3]: 0}
     native_nodes = CURRENT_NATIVE_NODES if mode == "targeted" else []
     if mode == "targeted":
         modules.append(CURRENT_NATIVE_MODULE)
@@ -1307,10 +1344,13 @@ def run_admitted(root, event, manifest, mode):
                 )
                 require(
                     all(
-                        sum(n.startswith(m + "::") for n in m4_nodes) == planned[m] for m in MODULES
+                        sum(n.startswith(m + "::") for n in m4_nodes) == planned[m]
+                        for m in MODULES[:3]
                     ),
                     "RETAINED_CASES_LOST",
                 )
+                planned[MODULES[3]] = sum(n.startswith(MODULES[3] + "::") for n in m4_nodes)
+                require(planned[MODULES[3]] > 0, "PROVIDER_CASES_EMPTY")
                 planned_nodes = [*m4_nodes, *native_nodes]
                 require(len(planned_nodes) == len(set(planned_nodes)), "INVENTORY_DUPLICATE")
                 all_nodes = planned_nodes
@@ -1359,10 +1399,10 @@ def run_admitted(root, event, manifest, mode):
                 {"uid": uid, "image_id": image_id, "pin": DB_IMAGE, "container_id": identity},
             )
             if module == "preflight":
-                sql_phase(group, "schema-0015", checks(group, "alembic", "upgrade", "0015"), 120)
+                sql_phase(group, "schema-0016", checks(group, "alembic", "upgrade", "0016"), 120)
                 sql_phase(
                     group,
-                    "catalog-0015",
+                    "catalog-0016",
                     checks(group, "python", "scripts/m4_runtime_db.py", "catalog-snapshot"),
                     60,
                 )

@@ -2,9 +2,11 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import signal
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, Protocol
 
 from fastapi import FastAPI
@@ -28,9 +30,12 @@ from asm.tenancy import TenantDatabase
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from httpx import AsyncBaseTransport
+
     from asm.ai.contracts import GatewayConfig
     from asm.ai.fake import FakeAdapter
     from asm.ai.runtime import SyntheticRuntime
+    from asm.ai.runtime_settings import RuntimeSettings
     from asm.files.storage import ObjectStorage
     from asm.messaging.adapter import ControlledAdapter
     from asm.messaging.database import MessagingDatabase
@@ -41,9 +46,9 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0015"
-NATIVE_CONTEXT_PROFILE_SHA256 = "5c82c2a14b95ae7e85a1fb2191f91843ff78e6354e4f5e1cdba5c2504183f181"
-NATIVE_PROFILE_BODY_SHA256 = "2af634ab2afb3b2b9a536453ce6c735b6be57a1018fdd0893d707d3d5dca5f36"
+DATABASE_SCHEMA_REVISION = "0016"
+NATIVE_CONTEXT_PROFILE_SHA256 = "e40f02c558ce77d96e68942d58294936ce6d496e5def20d956a80170f3b9dae8"
+NATIVE_PROFILE_BODY_SHA256 = "21a2559e3807f86deef06c1706840dc645fb99e807334e32b54e551330a7b84b"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -80,7 +85,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.ai_delivery_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.ai_provider_schema_profile()')
             """)
             )
         )
@@ -124,7 +129,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
     if (
         declared
         != {
-            "schema_revision": "0015",
+            "schema_revision": "0016",
             "valid": True,
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
         }
@@ -362,12 +367,39 @@ def create_worker(
     ai_config: "GatewayConfig | None" = None,
     model: "Callable[[], FakeAdapter] | None" = None,
     ai_telegram: "TelegramClient | None" = None,
+    provider_settings: "RuntimeSettings | None" = None,
+    provider_key_file: Path | None = None,
+    provider_transport: "AsyncBaseTransport | None" = None,
 ) -> "Worker":
     """Explicit synthetic application entry. Default composition has AI disabled."""
+    from asm.ai.provider_runtime import ProviderRuntime
     from asm.ai.runtime import SyntheticRuntime
     from asm.messaging.errors import Code, MessagingError
     from asm.messaging.worker import Worker
 
+    if provider_settings is not None:
+        if (
+            ai_config is not None
+            or model is not None
+            or provider_key_file is None
+            or ai_telegram is None
+        ):
+            raise MessagingError(Code.INVALID_INPUT)
+        return Worker(
+            database,
+            adapter,
+            telegram=ai_telegram,
+            ai=ProviderRuntime(
+                database,
+                provider_settings,
+                environment=environment,
+                key_file=provider_key_file,
+                telegram=ai_telegram,
+                transport=provider_transport,
+            ),
+        )
+    if provider_key_file is not None or provider_transport is not None:
+        raise MessagingError(Code.INVALID_INPUT)
     if (ai_config is None) != (model is None) or (ai_config is None and ai_telegram is not None):
         raise MessagingError(Code.INVALID_INPUT)
     ai = None
@@ -404,11 +436,39 @@ async def serve(
     files = None
     telegram = None
     try:
+        from asm.ai.provider_runtime import ProviderRuntime
+        from asm.ai.runtime_settings import load_settings
+
+        provider_settings = None
+        config_path = os.environ.get("ASM_POLZA_RUNTIME_CONFIG") if role == "worker" else None
+        key_path = os.environ.get("ASM_POLZA_RUNTIME_KEY_FILE") if role == "worker" else None
+        if (config_path is None) != (key_path is None) or (
+            config_path is not None and synthetic is not None
+        ):
+            raise RuntimeError("RUNTIME_CONFIG_INVALID")
+        if config_path is not None:
+            provider_settings = load_settings(Path(config_path))
         telegram_settings = TelegramSettings(ASM_ENVIRONMENT=settings.environment)
-        telegram = TelegramClient(telegram_settings) if telegram_settings.enabled else None
+        telegram = (
+            TelegramClient(telegram_settings, provider_runtime=provider_settings)
+            if telegram_settings.enabled
+            else None
+        )
         await db.check()
         kernel = MessagingDatabase(db.engine, environment=settings.environment)
-        ai = synthetic(kernel) if synthetic is not None else None
+        ai: SyntheticRuntime | ProviderRuntime | None = (
+            synthetic(kernel) if synthetic is not None else None
+        )
+        if provider_settings is not None:
+            if telegram is None or key_path is None:
+                raise RuntimeError("RUNTIME_CONFIG_INVALID")
+            ai = ProviderRuntime(
+                kernel,
+                provider_settings,
+                environment=settings.environment,
+                key_file=Path(key_path),
+                telegram=telegram,
+            )
         storage_settings = StorageSettings()
         if storage_settings.environment != settings.environment:
             raise RuntimeError("Storage environment mismatch")

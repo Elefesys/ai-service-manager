@@ -735,7 +735,7 @@ async def test_native_policy_carrier_uses_catalog_binding_and_actual_capability_
         human_context_policy="ON",
         human_context_policy_epoch=1,
     )
-    profile = dict(schema_revision="0015", valid=True, profile_sha256="b" * 64)
+    profile = dict(schema_revision="0016", valid=True, profile_sha256="b" * 64)
     db = SimpleNamespace(
         execute=AsyncMock(
             side_effect=[
@@ -763,7 +763,7 @@ async def test_native_policy_carrier_uses_catalog_binding_and_actual_capability_
     }
     assert json.loads(params["profile"]) == {
         "source_tree": "a" * 40,
-        "schema_revision": "0015",
+        "schema_revision": "0016",
         "profile_sha256": "b" * 64,
         "drain_confirmed": True,
     }
@@ -787,7 +787,7 @@ async def test_native_policy_rejects_bad_catalog_before_capability(harness, patc
                 SimpleNamespace(mappings=lambda: SimpleNamespace(one=lambda: {})),
                 SimpleNamespace(
                     scalar_one=lambda: (
-                        dict(schema_revision="0015", valid=True, profile_sha256="b" * 64) | patch
+                        dict(schema_revision="0016", valid=True, profile_sha256="b" * 64) | patch
                     )
                 ),
             ]

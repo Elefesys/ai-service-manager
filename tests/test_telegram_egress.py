@@ -1932,7 +1932,7 @@ def test_material_egress_current_revision_and_runtime_only_narrow_wrappers():
     from asm.foundation import DATABASE_SCHEMA_REVISION
     from test_telegram_egress_postgres import canonical_fingerprint
 
-    assert DATABASE_SCHEMA_REVISION == "0015"
+    assert DATABASE_SCHEMA_REVISION == "0016"
     assert inspect.signature(canonical_fingerprint).parameters["revision"].default == "0012"
     shell = (egress.ROOT / "scripts/test_telegram_egress.sh").read_text()
     assert "'expected_revision': '0015'" in shell
@@ -1946,14 +1946,14 @@ def test_native_profile_is_separate_from_exact_historical_material_inventory():
     old = material_source_profile()
     native = egress.native_source_profile()
     assert len(old["functions"]) == 132 and len(old["columns"]) == 42
-    assert len(native["functions"]) == 183 and len(native["columns"]) == 48
-    assert sum(map(len, native["columns"].values())) == 690
+    assert len(native["functions"]) == 190 and len(native["columns"]) == 49
+    assert sum(map(len, native["columns"].values())) == 708
     assert set(old["columns"]) == egress.SCHEMA_TABLES["0012"]
-    assert set(native["columns"]) == egress.SCHEMA_TABLES["0015"]
+    assert set(native["columns"]) == egress.SCHEMA_TABLES["0016"]
     with pytest.raises(egress.EgressError, match="DATABASE_TABLES"):
         egress.schema_inventory("0012", native["columns"])
     with pytest.raises(egress.EgressError, match="DATABASE_TABLES"):
-        egress.schema_inventory("0015", old["columns"])
+        egress.schema_inventory("0016", old["columns"])
 
 
 @pytest.fixture
@@ -2068,7 +2068,7 @@ def test_native_host_checks_actual_clean_git_bytes_and_all_component_profiles(
             material = {
                 "role": role,
                 "source_tree": approved["tree"],
-                "schema_revision": "0015",
+                "schema_revision": "0016",
                 "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
                 "files": {name: entries[name] for name in paths},
             }
@@ -2078,7 +2078,7 @@ def test_native_host_checks_actual_clean_git_bytes_and_all_component_profiles(
     approval = provisioning.NativeHostApproval.model_validate(approved)
     if damage is None:
         _, profile = provisioning.native_host_source(approval)
-        assert len(profile["functions"]) == 183 and len(profile["columns"]) == 48
+        assert len(profile["functions"]) == 190 and len(profile["columns"]) == 49
     else:
         with pytest.raises(provisioning.ProvisioningError, match="^POLICY_PREREQUISITE_FAILED$"):
             provisioning.native_host_source(approval)
@@ -2103,7 +2103,7 @@ async def test_native_installed_catalog_missing_function_refuses_before_self_rep
             if sql == "SHOW server_version_num":
                 return SimpleNamespace(scalar_one=lambda: "180006")
             if "version_num" in sql:
-                return SimpleNamespace(scalar_one=lambda: "0015")
+                return SimpleNamespace(scalar_one=lambda: "0016")
             if sql == runner.CATALOG_SQL:
                 return SimpleNamespace(one=lambda: ("{}", "{}"))
             if sql == runner.FUNCTION_SQL:
@@ -2126,11 +2126,11 @@ async def test_native_installed_catalog_missing_function_refuses_before_self_rep
     assert not any("human_context_policy_command(" in sql for sql in statements)
 
 
-def durable_fingerprint_connection(revision="0015", tables=None):
+def durable_fingerprint_connection(revision="0016", tables=None):
     """SQL result seam only; every selected row read is recorded, no engine."""
     from types import SimpleNamespace
 
-    selected = sorted(egress.SCHEMA_TABLES["0015"] if tables is None else tables)
+    selected = sorted(egress.SCHEMA_TABLES["0016"] if tables is None else tables)
     rows = {name: [{"id": name, "value": "exact\nUnicode Я"}] for name in selected}
     reads = []
 
@@ -2156,14 +2156,14 @@ def durable_fingerprint_connection(revision="0015", tables=None):
 async def test_current_durable_fingerprint_requires_exact0015_and_all48_tables(damage):
     from test_telegram_egress_postgres import current_durable_fingerprint
 
-    tables = set(egress.SCHEMA_TABLES["0015"])
+    tables = set(egress.SCHEMA_TABLES["0016"])
     native = sorted(tables - egress.SCHEMA_TABLES["0012"])
     if damage in {"missing-native", "replace-native"}:
         tables.remove(native[0])
     if damage in {"extra-native", "replace-native"}:
         tables.add("platform.unapproved_native")
     connection, rows, reads = durable_fingerprint_connection(
-        damage if damage in {"0012", "0014"} else "0015", tables
+        damage if damage in {"0012", "0014"} else "0016", tables
     )
     if damage == "replace-native":
         # run_path executes the actual helper in a separate module namespace.
@@ -2178,7 +2178,7 @@ async def test_current_durable_fingerprint_requires_exact0015_and_all48_tables(d
         assert reads == []
     else:
         fingerprint = await current_durable_fingerprint(connection)
-        assert set(fingerprint) == tables and len(reads) == len(set(reads)) == 48
+        assert set(fingerprint) == tables and len(reads) == len(set(reads)) == 49
         for name in tables:
             expected = "\n".join(
                 sorted(json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows[name])
@@ -2293,7 +2293,7 @@ async def test_current_durable_snapshot_keeps_readonly_database_unknown_console_
         snapshot = await durable.durable_snapshot()
         assert (
             snapshot["identity"] == identity
-            and set(snapshot["tables"]) == egress.SCHEMA_TABLES["0015"]
+            and set(snapshot["tables"]) == egress.SCHEMA_TABLES["0016"]
         )
         assert snapshot["tables"]["platform.auth_sessions"]["count"] == 2
         assert (

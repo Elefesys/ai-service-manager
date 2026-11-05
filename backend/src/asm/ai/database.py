@@ -7,7 +7,7 @@ selects a separate capability; a replayed result is never a send permit.
 import asyncio
 import json
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from asm.ai.agent import AuthorityDecision, Boundary, ContextRead, ConversationAgent
@@ -26,6 +26,9 @@ from asm.ai.runtime_contracts import CallCompletion, PreparedRun, RuntimeReceipt
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
 from asm.messaging.results import JobClaim
+
+if TYPE_CHECKING:
+    from asm.ai.runtime_settings import RuntimeSettings
 
 
 def decoded[T: DTO](model: type[T], value: Any) -> T:
@@ -50,17 +53,40 @@ def runtime_config(config: GatewayConfig) -> GatewayConfig:
 
 
 class AIDatabase:
-    def __init__(self, messaging: MessagingDatabase, *, environment: str, delivery: bool = False):
+    def __init__(
+        self,
+        messaging: MessagingDatabase,
+        *,
+        environment: str,
+        delivery: bool = False,
+        provider: "RuntimeSettings | None" = None,
+    ):
         if environment not in {"LOCAL", "TEST"}:
             raise MessagingError(Code.NOT_ALLOWED)
         self.messaging = messaging
         if type(delivery) is not bool:
             raise MessagingError(Code.INVALID_INPUT)
         self.delivery = delivery
+        if provider is not None and not delivery:
+            raise MessagingError(Code.NOT_ALLOWED)
+        self.provider = provider
+
+    def config(self, config: GatewayConfig) -> GatewayConfig:
+        if self.provider is None:
+            return runtime_config(config)
+        config = GatewayConfig.model_validate(config)
+        if config != self.provider.gateway():
+            raise MessagingError(Code.NOT_ALLOWED)
+        return config
 
     async def _command(self, claim: JobClaim, operation: str, **payload: Any) -> Any:
         async with self.messaging.admit_job(claim.job_id, claim.claim_token) as unit:
-            return await unit.ai_runtime(operation, payload, delivery=self.delivery)
+            return await unit.ai_runtime(
+                operation,
+                payload,
+                delivery=self.delivery,
+                provider_session=self.provider.session_id if self.provider else None,
+            )
 
     async def enqueue(self, source_claim: JobClaim) -> UUID:
         """Explicit synthetic setup from an admitted TEST_CONSUME job; no scheduler hook."""
@@ -70,7 +96,7 @@ class AIDatabase:
     async def prepare(
         self, claim: JobClaim, config: GatewayConfig, *, deadline: datetime
     ) -> PreparedRun:
-        config = runtime_config(config)
+        config = self.config(config)
         if deadline.tzinfo is None or deadline.utcoffset() is None:
             raise MessagingError(Code.INVALID_INPUT)
         return decoded(
@@ -106,7 +132,7 @@ class AIDatabase:
     async def replay(
         self, claim: JobClaim, config: GatewayConfig, result: ConversationResult | None = None
     ) -> RuntimeReceipt:
-        payload: dict[str, object] = {"config": runtime_config(config).model_dump(mode="json")}
+        payload: dict[str, object] = {"config": self.config(config).model_dump(mode="json")}
         if result is not None:
             payload["result"] = CONVERSATION_RESULT.validate_python(result).model_dump(mode="json")
         return decoded(
@@ -145,7 +171,7 @@ class AIDatabase:
         *,
         deadline: datetime,
     ) -> RuntimeReceipt | RuntimeStop:
-        config = runtime_config(config)
+        config = self.config(config)
         try:
             return await self.replay(claim, config)
         except MessagingError as error:

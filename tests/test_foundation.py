@@ -74,15 +74,15 @@ def test_runtime_database_head_is_independent_from_frozen_tenancy_contract():
 
     assert SCHEMA_REVISION == "0003"
     # Current0015 readiness is distinct from the frozen tenancy.v1 head.
-    assert DATABASE_SCHEMA_REVISION == "0015"
+    assert DATABASE_SCHEMA_REVISION == "0016"
 
 
 @pytest.fixture(scope="module")
 def native_verifier_source():
     from scripts import native_context_db_catalog as runner
 
-    return runner.source_catalog(runner.ROOT, "0015")["functions"][
-        "platform.ai_delivery_schema_profile()"
+    return runner.source_catalog(runner.ROOT, "0016")["functions"][
+        "platform.ai_provider_schema_profile()"
     ]
 
 
@@ -164,7 +164,7 @@ async def test_native_readiness_exact_profile_and_unsafe_role_refusals(
     if damage == "language":
         metadata["lanname"] = "plpgsql"
     declared = {
-        "schema_revision": "0015",
+        "schema_revision": "0016",
         "valid": True,
         "profile_sha256": foundation.NATIVE_CONTEXT_PROFILE_SHA256,
     }
@@ -193,7 +193,7 @@ async def test_native_readiness_exact_profile_and_unsafe_role_refusals(
             elif "FROM pg_roles WHERE" in sql:
                 value = role
             elif sql == "SELECT version_num FROM platform.alembic_version":
-                value = "0012" if damage == "0012" else "0015"
+                value = "0012" if damage == "0012" else "0016"
             elif "extversion" in sql:
                 value = "0.8.5" if damage == "vector" else "0.8.6"
             elif sql == "SHOW server_version_num":
@@ -227,7 +227,7 @@ async def test_native_readiness_exact_profile_and_unsafe_role_refusals(
         ):
             assert body not in statements
     # Runtime never obtains EXECUTE on the private migrator capability.
-    assert "SELECT platform.ai_delivery_schema_profile()" not in statements
+    assert "SELECT platform.ai_provider_schema_profile()" not in statements
 
 
 @pytest.mark.parametrize("failed", [False, True])
