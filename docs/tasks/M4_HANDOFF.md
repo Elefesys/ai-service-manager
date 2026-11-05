@@ -6,7 +6,92 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, bounded repair C3 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, bounded repair receipt C3 / 2026-11-05
+
+**Три разрешённые правки готовы; найден один связанный stale unit assertion
+в четвёртом файле вне текущего write-set.** C3 возвращает факты C0 по условию
+новой выдачи. Нового PR, FF ветки, hosted CI и live запуска не было.
+
+- [Candidate source fd6318344f9a03c9855aa7e470ffb5c34da0e150](https://github.com/Elefesys/ai-service-manager/commit/fd6318344f9a03c9855aa7e470ffb5c34da0e150),
+  tree **eee502ca3c896c3415ed00e12779d57f00f438ee**, sole child
+  [C0 assignment dff2e89abb4a53d7ed113367648eba2b7021cc91](https://github.com/Elefesys/ai-service-manager/blob/dff2e89abb4a53d7ed113367648eba2b7021cc91/docs/tasks/M4_HANDOFF.md).
+  Ancestry assignment → receipt a300eadf → source9a7c186b сохранена.
+- [PR43](https://github.com/Elefesys/ai-service-manager/pull/43) OPEN/DRAFT;
+  head **9a7c186b183f075578e7a3449d34fe7857eb3d82** не передвинут.
+  Candidate сохранён как immutable Git commit для review, без новой branch.
+  Main3cb3764c и исторические execution refs не изменялись.
+- Ровно **3source paths /26insertions/2deletions**:
+  scripts/test_telegram_egress.sh — current producer0015→0016;
+  scripts/m4_runtime_db.py — ровно этот новый finite admission path;
+  tests/test_m4_runtime_db_runner.py — прежний forbidden test на
+  scripts/test_browser.sh и новый positive admission test.
+  Runner BASE/BASE_TREE/BRANCH прежние; consumer/pins/0001–0016/product guards/
+  workflows/dependencies/architecture неизменны.33immutable inputs проверены.
+
+### Целевые результаты и новый blocker
+
+- `bash -n scripts/test_telegram_egress.sh` — PASS.
+- Ruff check/format двух изменённых Python files — PASS.
+- `pytest -q tests/test_m4_runtime_db_runner.py -k 'admission or admits or rejects_other'`
+  — **51PASS/65deselected,3.07s**, включая новый путь и отказ чужим.
+- Consumer `test_foundation_durable_completeness_requires_current_six_lane_receipts`
+  — **5PASS**.
+- Связанный `tests/test_telegram_egress.py::test_material_egress_current_revision_and_runtime_only_narrow_wrappers`
+  — **1FAIL**, line1938: `assert "'expected_revision': '0015'" in shell`.
+  Вместе с consumer subset:1failed/5passed,1.70s; общий targeted итог56PASS/1FAIL.
+  Full stdout/JUnit сохранены. Это offline/constructed проверки, не actual PG.
+
+Существующий test уже требует DATABASE_SCHEMA_REVISION0016, но следующая
+проверка shell всё ещё ожидает0015. После разрешённого producer fix это
+детерминированный AssertionError. Нужная дополнительная дельта:
+
+```diff
+--- a/tests/test_telegram_egress.py
++++ b/tests/test_telegram_egress.py
+-    assert "'expected_revision': '0015'" in shell
++    assert "'expected_revision': '0016'" in shell
+```
+
+**Четвёртый путь не изменён**: последняя C0 выдача ограничивает source тремя
+файлами и разрешает связанные assertions только в том же runner test module.
+C0-required-fourth-path.patch подготовлен, apply--check PASS, **NOT APPLIED**.
+Historical canonical_fingerprint0012/helper0007 assertions сохраняются.
+Consumer0016 не ослаблен; фиктивная0015 строка ради PASS в producer не добавлена.
+
+FF/полный CI остановлены до публикации branch head из-за доказанного
+связанного unit failure. Для candidate fd631834 **hosted runs=0;
+fullCI/1059actualPG/fullfoundation NOT_RUN**. Статическая согласованность0016
+не заменяет actual normal-durable evidence. Прежний CI41994209024 на9a:
+10SUCCESS/1FAILURE/1SKIPPED,860genericNOT_REACHED; его исходные artifacts
+не переписаны и не считаются проверкой нового candidate.
+
+### Evidence и следующий шаг
+
+[Bounded repair evidence ZIP](https://chatgpt.com/library?file_id=libfile_d3503d5ba488819184f4d412056041de&account_id=personal):
+**3348096bytes**, SHA256
+**8e35506ede95b7d03dba53b985c90ed9b50696b992c6edce09249a01c512c165**;
+25manifest/26ZIP entries verified, candidate archive350Gitblobs/modes exact.
+Внутри source/patch, source and refs metadata, точные commands,51+6JUnit cases,
+raw failure output и неприменённый однострочный patch.
+
+Предыдущий [R1 evidence](https://chatgpt.com/library?file_id=libfile_d54ece1e49e8819187e4c687959677e7&account_id=personal)
+с26originalZIP сохранён неизменным; SHA256 повторно совпал с77ae0682…
+Этот receipt — отдельный docs-only sole child candidate, только
+HANDOFF/TASK_REGISTER; execution refs не перемещает.
+
+Нужно решение C0 по **tests/test_telegram_egress.py:1938**. После разрешения:
+применить одну строку, повторить затронутые checks и FF того же PR43
+с expected old head9a7c186b, затем штатный fullCI/1059PG. Не разрешён
+самовольный repair вне этого пути или ослабление критериев12SUCCESS.
+
+C3/остальные роли HOLD; source REVIEW/BLOCKED, не acceptance/INTEGRATED/VERIFIED.
+Paid/model/catalog/history/Telegram send/VM/deploy/merge=0;
+defaultOFF/EVAL_ONLY/2POST1READ/tenant/native/HUMAN/UNKNOWN/no-resend прежние.
+Ledger unchanged:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079UNSETTLED.
+M4/live pilot не закрыт.
+
+## История — C0 bounded repair assignment / 2026-11-05
 
 **C0 снимает конкретный write-set blocker: C3 продолжает работу в существующем
 [PR43](https://github.com/Elefesys/ai-service-manager/pull/43).** Новый PR не нужен.

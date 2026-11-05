@@ -2,7 +2,37 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, bounded repair C3 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, bounded repair receipt C3 / 2026-11-05
+
+C3 подготовил3разрешённых source paths /26+/2−:
+current producer0015→0016, finite runner admission, positive/forbidden tests.
+Source **fd6318344f9a03c9855aa7e470ffb5c34da0e150**,
+tree **eee502ca3c896c3415ed00e12779d57f00f438ee**, sole child
+assignment **dff2e89abb4a53d7ed113367648eba2b7021cc91**; ancestry сохранена.
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43) OPEN/DRAFT
+по-прежнему head9a7c186b: FF/нового branch/PR/CI нет.
+
+Shell syntax/Ruff PASS;51admission+5consumer cases PASS.
+**1FAIL**: tests/test_telegram_egress.py:1938 по-прежнему требует
+expected_revision0015 при исправленном current producer0016.
+Нужная однострочная assertion0015→0016 находится вне текущего3file write-set;
+patch готов/apply--checkPASS, **НЕ ПРИМЕНЁН**. Historical0012/0007 checks прежние.
+
+Для нового fd631834 hosted runs0; fullCI/1059actualPG/fullfoundation **NOT_RUN**.
+Предыдущий CI41994209024 и original evidence сохранены; их результаты
+не объявляются проверкой нового candidate. Consumer/pins/migrations/product/
+workflows/dependencies/architecture прежние;33immutable inputs проверены.
+
+[Evidence](https://chatgpt.com/library?file_id=libfile_d3503d5ba488819184f4d412056041de&account_id=personal),3348096bytes,
+SHA256 **8e35506ede95b7d03dba53b985c90ed9b50696b992c6edce09249a01c512c165**;
+25manifest/26ZIP entries,350sourceblobs exact.
+Полный короткий receipt и commands — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Receipt — docs-only child candidate, PR head frozen. C3/остальные роли HOLD
+до C0 по четвёртому пути tests/test_telegram_egress.py; затем targeted/FF/штатныйCI.
+Paid/live/Telegram/VM/deploy/merge=0,defaultOFF/EVAL_ONLY,ledger неизменён.
+M4/live и полная приёмка ещё не закрыты.
+
+## История — C0 bounded repair assignment / 2026-11-05
 
 **C0 разрешил продолжить тот же [PR43](https://github.com/Elefesys/ai-service-manager/pull/43).**
 Причина CI41994209024 подтверждена по свежим logs/source: current evidence
