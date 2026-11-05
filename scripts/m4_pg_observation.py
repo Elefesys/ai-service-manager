@@ -1,9 +1,6 @@
-"""C2-M4-CI-OBSERVATION-R4: one disposable prelock readiness validation."""
+"""C2-M4.3-PG-RUNTIME-R4: one bounded disposable DB-only runtime validation."""
 
-import asyncio
-import functools
 import hashlib
-import itertools
 import json
 import os
 import platform
@@ -15,117 +12,29 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from uuid import UUID
 
-BASE = "3e1ccf855c64bbabb18c65db666b9b5e85cefd3d"
-BASE_TREE = "f0477d995387a767abd87cadbcc15ae95d466582"
-BRANCH = "c2/m4-pg-observation-run-r4"
+BASE = "a58e1612113158b39301947b8150ddb1fb0dfd29"
+BASE_TREE = "891bc03cc2dfe2c2320efdcddaa2d189a61a0554"
+BRANCH = "c2/m4-3-pg-runtime-run-r4"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
-TARGET = "tests/test_m3_1_control_api_postgres.py::test_post_lock_product_boundaries_with_actual_conversation_wait"
-NODEIDS = [
-    TARGET + "[" + "-".join(case) + "]"
-    for case in itertools.product(
-        ("resume", "controlled", "telegram"), ("expiry", "activation"), ("subscription", "mode")
-    )
-]
 MODULES = [
-    "tests/test_m3_1_control_postgres.py",
-    "tests/test_m3_1_control_api_postgres.py",
-    "tests/test_m3_1_guards_postgres.py",
-    "tests/test_m3_1_provenance_postgres.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_runtime_database.py",
+    "tests/test_m4_runtime_postgres.py",
 ]
-EXISTING_COLLECTION_SHA256 = "9d176494741dc88fe945c2f820d6d36f3f38b7e941593292236cde94f94772f0"
-NEW_NODEIDS = [
-    MODULES[0] + "::" + name + "[" + case + "]"
-    for name, cases in (
-        (
-            "test_wait_blocked_controlled_target_contract",
-            (
-                "matching",
-                "foreign",
-                "unknown",
-                "completed_before",
-                "failed_before",
-                "cancelled_before",
-                "completed_during",
-                "failed_during",
-                "cancelled_during",
-                "query_finished",
-                "query_replaced",
-                "observer_error",
-                "observer_cancelled",
-            ),
-        ),
-        (
-            "test_wait_blocked_pg_target_controls",
-            (
-                "matching",
-                "foreign",
-                "absent",
-                "two_targets",
-                "completed",
-                "failed",
-                "cancelled",
-            ),
-        ),
-        (
-            "test_wait_blocked_pg_observer_failure_preserves_blocker",
-            ("error", "cancelled"),
-        ),
-        (
-            "test_m4_observation_summary_rejects_incomplete",
-            (
-                "valid",
-                "missing_case",
-                "extra_case",
-                "reordered",
-                "missing_phase",
-                "duplicate_phase",
-                "skip",
-                "xfail",
-                "overflow",
-                "invalid",
-                "failed",
-                "exit",
-                "unknown_outcome",
-            ),
-        ),
-    )
-    for case in cases
-] + [MODULES[0] + "::test_m4_observation_command_preserves_summary"]
-R3_COLLECTION_SHA256 = "e82af894c99e85a529f54bc2e9bec51ee79f1067262ee467dc67fba0620992a4"
-DELAYED_NODEIDS = [
-    node.replace(
-        "test_post_lock_product_boundaries_with_actual_conversation_wait",
-        "test_post_lock_boundary_after_delayed_auth",
-    )
-    for node in NODEIDS
-]
-R4_NEW_NODEIDS = [
-    MODULES[0] + "::test_prelock_readiness_controlled_contract[" + case + "]"
-    for case in (
-        "matching",
-        "foreign",
-        "invalid_pid",
-        "not_ready",
-        "absent",
-        "completed",
-        "failed",
-        "cancelled",
-    )
-] + DELAYED_NODEIDS
-NEW_NODEIDS += R4_NEW_NODEIDS
-COMMAND_REPORT = "matrix-command"
-SUMMARY_REPORT = "matrix-summary.json"
+COLLECTION_COUNT = 104
+COLLECTION_SHA256 = "73df7bb8648de3a6b0b1b7ef7548fcf63a73cc2996dfe63a05e467effae6a3bd"
+COMMAND_REPORT = "runtime-command"
+SUMMARY_REPORT = "runtime-summary.json"
 COLLECTED = []
-
-
 WRITE_SET = {
-    ".github/workflows/m4-pg-observation.yml",
+    "tests/test_m4_runtime_postgres.py",
+    "tests/test_m4_runtime_database.py",
     "scripts/m4_pg_observation.py",
-    "tests/test_m3_1_control_postgres.py",
-    "tests/test_m3_1_control_api_postgres.py",
+    ".github/workflows/m4-pg-observation.yml",
     "docs/tasks/M4_HANDOFF.md",
     "docs/TASK_REGISTER.md",
 }
@@ -140,102 +49,157 @@ def require(condition, code):
         raise RuntimeError(code)
 
 
+def source_tree_from_evidence(path=Path("/evidence/source.json")):
+    """Bind the DB-only fixture to this executor's checked source, without Git in the image."""
+
+    def unique_object(pairs):
+        value = {}
+        for key, item in pairs:
+            require(key not in value, "SOURCE_IDENTITY_DUPLICATE_KEY")
+            value[key] = item
+        return value
+
+    try:
+        with path.open("rb") as stream:
+            raw = stream.read(65537)
+        require(len(raw) <= 65536, "SOURCE_IDENTITY_TOO_LARGE")
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object)
+    except OSError:
+        raise RuntimeError("SOURCE_IDENTITY_MISSING") from None
+    except (UnicodeDecodeError, ValueError):
+        raise RuntimeError("SOURCE_IDENTITY_MALFORMED") from None
+    keys = {
+        "base",
+        "base_tree",
+        "source",
+        "tree",
+        "paths",
+        "run_id",
+        "attempt",
+        "event",
+        "branch",
+        "pins",
+        "uv_lock_sha256",
+    }
+    require(type(value) is dict and set(value) == keys, "SOURCE_IDENTITY_SHAPE")
+    expected = {
+        name: os.environ.get("ASM_M4_" + name)
+        for name in ("SOURCE_SHA", "SOURCE_TREE", "RUN_ID", "RUN_ATTEMPT")
+    }
+    require(
+        all(
+            type(expected[k]) is str and re.fullmatch(r"[0-9a-f]{40}", expected[k])
+            for k in ("SOURCE_SHA", "SOURCE_TREE")
+        )
+        and type(expected["RUN_ID"]) is str
+        and re.fullmatch(r"[1-9][0-9]{0,19}", expected["RUN_ID"])
+        and expected["RUN_ATTEMPT"] == "1",
+        "SOURCE_IDENTITY_ENVIRONMENT",
+    )
+    require(
+        all(
+            type(value[k]) is str and re.fullmatch(r"[0-9a-f]{40}", value[k])
+            for k in ("base", "base_tree", "source", "tree")
+        )
+        and value["base"] == BASE
+        and value["base_tree"] == BASE_TREE
+        and value["source"] == expected["SOURCE_SHA"]
+        and value["source"] != BASE
+        and value["tree"] == expected["SOURCE_TREE"]
+        and value["branch"] == BRANCH
+        and value["event"] == "push"
+        and type(value["attempt"]) is int
+        and value["attempt"] == 1
+        and value["run_id"] == expected["RUN_ID"],
+        "SOURCE_IDENTITY_MISMATCH",
+    )
+    paths = value["paths"]
+    require(
+        type(paths) is list
+        and bool(paths)
+        and all(type(p) is str for p in paths)
+        and paths == sorted(set(paths))
+        and set(paths) <= WRITE_SET
+        and type(value["pins"]) is dict
+        and value["pins"].get("DB_IMAGE") == DB_IMAGE
+        and all(type(k) is str and type(v) is str for k, v in value["pins"].items())
+        and type(value["uv_lock_sha256"]) is str
+        and re.fullmatch(r"[0-9a-f]{64}", value["uv_lock_sha256"]),
+        "SOURCE_IDENTITY_SHAPE",
+    )
+    return value["tree"]
+
+
 def write(path, value):
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, sort_keys=True, indent=2) + "\n")
     temporary.replace(path)
 
 
-def record(kind, **fields):
-    """Only bounded scalars in memory; no I/O, awaits, or database reads."""
-    if CASE is None or CASE["nodeid"] not in NODEIDS + DELAYED_NODEIDS:
+def preparation(stage, **facts):
+    """Record only bounded synthetic preparation identities, never claims or snapshots."""
+    if CASE is None:
         return
-    if kind == "request_scheduled":
-        CASE["pending"] = fields.pop("pending")
-        CASE["engine"] = fields.pop("engine")
-    elif kind in {"before_cleanup", "after_cleanup"}:
-        pending = fields.pop("pending")
-        fields.update(done=pending.done(), cancelled=pending.cancelled())
     if len(CASE["events"]) >= EVENT_LIMIT:
         CASE["overflow"] += 1
         return
-    values = {}
-    for name, value in fields.items():
-        if name in {"edge", "blocked_at", "released_at", "evaluated_at"}:
-            value = value.timestamp()
-        if type(value) not in (int, float, bool, str, type(None)):
-            CASE["invalid_fields"] += 1
-            continue
-        if isinstance(value, str) and len(value) > 120:
-            CASE["invalid_fields"] += 1
-            continue
-        values[name] = value
-    CASE["events"].append({"kind": kind, "monotonic_ns": time.monotonic_ns(), **values})
-
-
-def request_wrapper(original):
-    @functools.wraps(original)
-    async def observed(*args, **kwargs):
-        if CASE is None or asyncio.current_task() is not CASE.get("pending"):
-            return await original(*args, **kwargs)
-        record("request_start")
-        try:
-            response = await original(*args, **kwargs)
-        except BaseException as error:
-            record("request_completion", exception_type=type(error).__name__)
-            raise
-        record("request_completion", http_status=response.status_code)
-        return response
-
-    return observed
-
-
-def cursor_event(connection, _cursor, statement, _parameters, _context, _many, *, end=False):
-    if CASE is None or asyncio.current_task() is not CASE.get("pending"):
+    if stage not in {
+        "INGRESS",
+        "RECONCILE",
+        "RESUME",
+        "AI_INGRESS",
+        "PRE_SEAL",
+        "POST_SEAL",
+        "SOURCE_CLAIM",
+        "ENQUEUE",
+        "AI_CLAIM",
+        "PREPARE",
+        "PREPARED",
+        "STALE_REVISION_REJECTED",
+        "DOWNGRADE_READY",
+    }:
+        CASE["invalid_fields"] += 1
         return
-    # SQLAlchemy's already-open psycopg connection exposes the PID without SQL.
-    try:
-        pid = connection.connection.driver_connection.info.backend_pid
-    except Exception:
-        record("operation_pid_unavailable")
-        return
-    workspace = connection.engine is CASE.get("engine")
-    category = "OTHER"
-    for name in (
-        "conversation_manual_prelock",
-        "conversation_control_prepare",
-        "conversation_control_execute",
-        "conversation_manual",
-        "post_lock_product",
-        "auth_",
-        "billing_",
-    ):
-        if name in statement:
-            category = name.upper()
-            break
-    record(
-        "request_cursor_end" if end else "request_cursor_start",
-        backend_pid=pid,
-        workspace_connection=workspace,
-        sql_category=category,
-    )
+    event = {"stage": stage}
+    for name, value in facts.items():
+        if (
+            name
+            in {
+                "workspace_id",
+                "connection_id",
+                "conversation_id",
+                "turn_id",
+                "source_job_id",
+                "job_id",
+                "run_id",
+            }
+            and type(value) is UUID
+        ):
+            event[name] = str(value)
+        elif (
+            name in {"before_revision", "turn_revision"}
+            and type(value) is int
+            and 0 < value <= 9223372036854775807
+        ):
+            event[name] = value
+        elif name == "state" and value in {"COLLECTING", "WAITING_MEDIA", "READY", "FAILED"}:
+            event[name] = value
+        else:
+            CASE["invalid_fields"] += 1
+            return
+    CASE["events"].append(event)
 
 
 if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
     import pytest
-    from sqlalchemy import event
-    from sqlalchemy.engine import Engine
+    from asm.messaging.errors import MessagingError
+    from sqlalchemy.exc import DBAPIError
 
     def pytest_collection_modifyitems(session, config, items):
         global COLLECTED
         COLLECTED = [item.nodeid for item in items]
         write(Path("/evidence/collected.json"), COLLECTED)
         validate_collection(COLLECTED)
-        module = next(item.module for item in items if item.nodeid in NODEIDS)
-        module.post = request_wrapper(module.post)
-        module.manual = request_wrapper(module.manual)
-        event.listen(Engine, "before_cursor_execute", cursor_event)
-        event.listen(Engine, "after_cursor_execute", functools.partial(cursor_event, end=True))
 
     def pytest_runtest_setup(item):
         global CASE
@@ -260,6 +224,12 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
         }
         if call.excinfo is not None:
             data["exception_type"] = call.excinfo.typename
+            if isinstance(call.excinfo.value, MessagingError):
+                data["error_code"] = call.excinfo.value.code.value
+            if isinstance(call.excinfo.value, DBAPIError):
+                sqlstate = getattr(call.excinfo.value.orig, "sqlstate", None)
+                if type(sqlstate) is str and re.fullmatch(r"[0-9A-Z]{5}", sqlstate):
+                    data["sqlstate"] = sqlstate
             data["frames"] = [
                 {"file": Path(entry.path).name, "line": entry.lineno + 1, "function": entry.name}
                 for entry in call.excinfo.traceback[-12:]
@@ -287,20 +257,11 @@ if os.environ.get("ASM_M4_PG_PLUGIN") == "1":
 
 
 def validate_collection(actual):
-    existing = [node for node in actual if node not in NEW_NODEIDS]
-    retained = [node for node in actual if node not in R4_NEW_NODEIDS]
     require(
-        len(actual) == 222 + len(NEW_NODEIDS)
+        len(actual) == COLLECTION_COUNT
         and len(set(actual)) == len(actual)
-        and [node for node in actual if node in NEW_NODEIDS] == NEW_NODEIDS
-        and hashlib.sha256(("\n".join(existing) + "\n").encode()).hexdigest()
-        == EXISTING_COLLECTION_SHA256,
-        "SOURCE_COLLECTION_MISMATCH",
-    )
-    require(
-        len(retained) == 258
-        and hashlib.sha256(("\n".join(retained) + "\n").encode()).hexdigest()
-        == R3_COLLECTION_SHA256,
+        and {node.split("::", 1)[0] for node in actual} == set(MODULES)
+        and hashlib.sha256(("\n".join(actual) + "\n").encode()).hexdigest() == COLLECTION_SHA256,
         "SOURCE_COLLECTION_MISMATCH",
     )
 
@@ -328,8 +289,8 @@ def summarize(cases, expected, exitstatus):
         "expected": len(expected),
         "complete": complete,
         "result": "PASS" if passed else "FAIL",
-        "server_wait_vs_event_loop_delay": "UNKNOWN",
-        "timings": "client monotonic spans for original12 and delayed12; not server query durations",
+        "scope": "DB-only 0014 runtime; application readiness remains 0013",
+        "paid_http": 0,
     }
 
 
@@ -379,7 +340,7 @@ def versions():
                 value["schema"] = c.execute(
                     "SELECT version_num FROM platform.alembic_version"
                 ).fetchall()
-                require(value["schema"] == [("0013",)], "SCHEMA_MISMATCH")
+                require(value["schema"] == [("0014",)], "SCHEMA_MISMATCH")
                 value["roles"] = c.execute(
                     "SELECT rolname,rolsuper,rolbypassrls,rolcreaterole,rolcreatedb,rolcanlogin FROM pg_roles WHERE rolname IN ('asm_runtime','asm_migrator') ORDER BY rolname"
                 ).fetchall()
@@ -394,6 +355,16 @@ def versions():
                 value["extensions"] = c.execute(
                     "SELECT extname,extversion FROM pg_extension WHERE extname IN ('vector','btree_gist') ORDER BY extname"
                 ).fetchall()
+                value["ai_tables"] = c.execute(
+                    "SELECT relname,relowner::regrole::text,relrowsecurity,relforcerowsecurity,has_table_privilege('asm_runtime',c.oid,'SELECT,INSERT,UPDATE,DELETE') FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='platform' AND relname IN ('ai_runs','ai_provider_calls') ORDER BY relname"
+                ).fetchall()
+                require(
+                    len(value["ai_tables"]) == 2
+                    and all(
+                        row[1:] == ("asm_migrator", True, True, False) for row in value["ai_tables"]
+                    ),
+                    "AI_DDL_SECURITY",
+                )
     write(Path("/evidence/database-versions.json"), value)
 
 
@@ -482,6 +453,14 @@ def checks(root, *args, plugin=False):
     ]
     if plugin:
         command += ["-e", "ASM_M4_PG_PLUGIN=1"]
+        expected = {
+            "SOURCE_SHA": os.environ["GITHUB_SHA"],
+            "SOURCE_TREE": capture(["git", "rev-parse", "HEAD^{tree}"]),
+            "RUN_ID": os.environ["GITHUB_RUN_ID"],
+            "RUN_ATTEMPT": os.environ["GITHUB_RUN_ATTEMPT"],
+        }
+        for name, value in expected.items():
+            command += ["-e", "ASM_M4_" + name + "=" + value]
     return command + ["checks", *args]
 
 
@@ -659,10 +638,10 @@ def run(root):
             600,
         )
         summary = json.loads((root / "evidence" / SUMMARY_REPORT).read_text())
-        require(summary["result"] == "PASS" and summary["complete"], "MATRIX_EVIDENCE_INCOMPLETE")
+        require(summary["result"] == "PASS" and summary["complete"], "RUNTIME_EVIDENCE_INCOMPLETE")
         primary = {
             "outcome": "PASS",
-            "scope": "258 retained cases plus readiness/delayed-auth controls; historical timeout cause UNKNOWN",
+            "scope": "DB-only 0014 authority/run/call/result; no application compatibility or live provider claim",
         }
     except Exception as error:
         code = str(error)

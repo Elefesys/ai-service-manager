@@ -326,11 +326,15 @@ async def policy(
         for k in ("business_id", "provider", "bot_identity", "external_connection_id")
     }
     binding["owner_user_id"] = state[0]["owner_user_id"] if state else None
-    installed = await scalar(h, "SELECT platform.human_context_schema_profile()")
+    revision = getattr(h, "schema_revision", "0013")
+    capability = (
+        "ai_delivery_schema_profile" if revision == "0015" else "human_context_schema_profile"
+    )
+    installed = await scalar(h, f"SELECT platform.{capability}()")
     assert installed["valid"], installed
     profile = profile or dict(
         source_tree=h.source_tree,
-        schema_revision="0013",
+        schema_revision=revision,
         profile_sha256=installed["profile_sha256"],
         drain_confirmed=True,
     )
@@ -501,7 +505,11 @@ async def test_fresh_catalog_exact_security_and_foundation_fail_closed(native):
         assert sqlstate(denied) == "42501"
     runtime = RuntimeDatabase(Settings())
     try:
-        await runtime.check()  # paired native0013 application boundary
+        from generic_pg_schema import historical_native_check
+
+        await historical_native_check(runtime)
+        with pytest.raises(RuntimeError, match="schema"):
+            await runtime.check()  # current0015 must refuse historical0013
         # Explicit historical-reader negative, not a readiness bypass.
         from asm import foundation
 

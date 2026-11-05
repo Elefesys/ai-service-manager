@@ -732,7 +732,7 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
             await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
         ).scalar_one()
         native_profiles = {}
-        if revision == "0013":
+        if revision in {"0013", "0015"}:
             native_profiles = {
                 "platform.human_context_hash(text,text[])": (True, False),
                 "platform.human_context_text_valid(text)": (True, False),
@@ -788,6 +788,16 @@ async def test_runtime_roles_policies_functions_and_platform_surface(db):
                 "platform.human_context_stale()": (True, False),
                 "platform.human_context_schema_profile()": (True, False),
             }
+        if revision == "0015":
+            from scripts import native_context_db_catalog as catalog
+
+            source = catalog.source_catalog(catalog.ROOT, "0015")
+            for signature, function in source["functions"].items():
+                if signature.startswith("platform.ai_"):
+                    native_profiles[signature] = (
+                        function["security_definer"],
+                        function["runtime_execute"],
+                    )
         native_names = {signature.split(".")[1].split("(")[0] for signature in native_profiles}
         native_rows = [row for row in functions if row["proname"] in native_names]
         assert len(native_rows) == len(native_profiles)

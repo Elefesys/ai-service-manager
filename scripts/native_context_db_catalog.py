@@ -31,7 +31,23 @@ DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
 NONFUNCTION_SHA256 = "57e03fe369be4bd03116ce380e37a9b447a2bc1a72e3bbf2a70c7ac08d69e370"
+AI_NONFUNCTION_SHA256 = "a4aeec49cd351eea23f19346700ba998ec4ca9ab5aafd6163b6193da72285b9d"
 EXECUTION_REF = "refs/heads/c0/m3-1-native-context-db-stock-r1"
+M4_EXECUTION_REFS = (
+    "refs/heads/c3/m4-3-runtime-catalog-run-r2",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r2",
+)
+# These transitions are distinct from historical push/main/PR semantics.
+# R7 reuses the accepted exact transition rule; earlier execution refs stay frozen.
+M4_R3_TRANSITIONS = {
+    "refs/heads/c3/m4-3-runtime-catalog-run-r3": "fa2469deea75c11ca5901de77fc3e46304c1e9ae",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r4": "c8f85533f8dee96ea7ef0e8f0831ae9e5f3a3783",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r5": "d0d1ff7643f1b2a02ab69c845da08ec99b77f9b2",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r6": "1e5dc3cfbbaac00af23bec84df64da8a6041be93",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r7": "21e8b4b61ceabb9c26688907ba27a974a7694eb5",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r8": "c7ee300ae4182152eb9c8636d2f958da087113f2",
+    "refs/heads/c3/m4-3-runtime-targeted-run-r10": "b2106d77d56d1c4384b2a6e4d786891abe9cd481",
+}
 REPOSITORY = "Elefesys/ai-service-manager"
 REPOSITORY_ID = 1369650588
 MODULES = (
@@ -47,12 +63,17 @@ PG_MODULES = (
     "tests/test_m3_1_native_context_api_postgres.py",
     "tests/test_m3_1_native_context_runtime_postgres.py",
 )
+M4_PG_MODULES = (
+    "tests/test_m4_runtime_postgres.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_schema_postgres.py",
+)
 # Bind the actual inputs, including ten ordinary jobs (the two serial foundation
 # boundaries plus the unchanged eight) and the unconditional native job: eleven.
 # Preserve default merge/main checkout, unconditional same-commit reusable call, pinned
 # owned lane and exact generic command. No fallback/embedded workflow is used.
 CI_INPUT_SHA256 = {
-    ".github/workflows/ci.yml": "3fa9fb80384d80cafeac55da9b5309feebca29c7999341eeed3ab1a964d56cbf",
+    ".github/workflows/ci.yml": "a854b3fd8cf0534cb75c39f22009338a2dd44b89688b5e47d751e42ce50ac49a",
     ".github/workflows/native-context-db.yml": "ff43d2470b56d26cf9c616cad5bc570e31634a19d97bdec4f28e73a205e049fd",
     "scripts/check_backend.sh": "1473e64b8ed0819b046b764f281072583271acd5f7b0929b3f8aa959c5d69330",
 }
@@ -224,11 +245,12 @@ def parse_function(sql):
     }
 
 
-def capture_source(root):
+def capture_source(root, revision="0013"):
     """Expand the actual chain without importing/mutating the real Alembic module."""
-    paths = sorted((root / "migrations/versions").glob("*.py"))
+    require(revision in {"0013", "0014", "0015"}, "Unsupported catalog revision")
+    paths = sorted(p for p in (root / "migrations/versions").glob("*.py") if p.name[:4] <= revision)
     require(
-        [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, 14)],
+        [p.name[:4] for p in paths] == [f"{n:04d}" for n in range(1, int(revision) + 1)],
         "Unexpected migration chain",
     )
     commands, modules = [], {}
@@ -294,8 +316,8 @@ def capture_source(root):
     return modules, commands
 
 
-def source_catalog(root):
-    modules, commands = capture_source(root)
+def source_catalog(root, revision="0013"):
+    modules, commands = capture_source(root, revision)
     functions, baseline, runtime = {}, {}, set()
     # Alembic's locked version-table implementation, not a business table.
     columns = {"platform.alembic_version": ["version_num"]}
@@ -306,6 +328,24 @@ def source_catalog(root):
         revision = command["revision"]
         for value in split_sql(command["sql"]):
             sql = leading_comments(value)
+            if revision >= "0014" and sql.startswith("DO $patch$"):
+                # The sole 0014 installed-body patch has a closed target and
+                # exact one-occurrence replacement. It is never ignored DDL.
+                signature = "platform.messaging_reschedule(uuid,text,boolean,integer,boolean)"
+                old = "j.step NOT IN ('GUARDED_TEXT','ESCALATE_OWNER')"
+                new = "j.step NOT IN ('GUARDED_TEXT','ESCALATE_OWNER','AI_GENERATE')"
+                require(
+                    command["revision"] == "0014"
+                    and "$needle$" + old + "$needle$" in sql
+                    and "$replacement$" + new + "$replacement$" in sql
+                    and signature in sql
+                    and functions[signature]["definition"].count(old) == 1,
+                    "Unrecognized installed function patch",
+                )
+                functions[signature] = parse_function(
+                    functions[signature]["definition"].replace(old, new, 1)
+                )
+                continue
             if sql.startswith(("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION")):
                 row = parse_function(sql)
                 signature = row["signature"]
@@ -401,15 +441,21 @@ def source_catalog(root):
     replacements = {s for s in baseline if functions[s]["body"] != baseline[s]["body"]}
     require(
         len(baseline) == 132
-        and len(functions) == 167
-        and len(additions) == 35
-        and len(replacements) == 18,
+        and len(functions) == {"0013": 167, "0014": 175, "0015": 183}[revision]
+        and (revision != "0013" or (len(additions) == 35 and len(replacements) == 18)),
         "Unexpected effective source inventory",
     )
     require(not any(public.values()), "Source leaves PUBLIC EXECUTE")
     require(
-        columns == {t: list(c) for t, c in modules["0013"]["NATIVE_COLUMNS"].items()}
-        and len(columns) == 45,
+        all(columns[t] == list(c) for t, c in modules["0013"]["NATIVE_COLUMNS"].items())
+        and len(columns) == {"0013": 45, "0014": 47, "0015": 48}[revision]
+        and set(columns) - set(modules["0013"]["NATIVE_COLUMNS"])
+        == (
+            set()
+            if revision == "0013"
+            else {"platform.ai_runs", "platform.ai_provider_calls"}
+            | ({"platform.ai_deliveries"} if revision == "0015" else set())
+        ),
         "Independent source column replay differs",
     )
     for sig, row in functions.items():
@@ -420,6 +466,7 @@ def source_catalog(root):
         if sig in runtime:
             row["acl"].append(["asm_migrator", "asm_runtime", "EXECUTE", False])
     return {
+        "revision": revision,
         "functions": functions,
         "columns": columns,
         "commands": commands,
@@ -489,6 +536,65 @@ SELECT rolname AS name,rolcanlogin AS login,rolsuper AS superuser,rolbypassrls A
  rolinherit AS inherit,rolcreaterole AS createrole,rolcreatedb AS createdb,rolreplication AS replication
 FROM pg_roles WHERE rolname IN ('asm_runtime','asm_migrator') ORDER BY rolname
 """
+
+
+def compare_embedded_profile(expected):
+    """Independently check the current verifier's expected table against source.
+
+    Its own security clause remains separate. Never use these embedded rows to
+    derive the expected source catalog or to forgive installed catalog drift.
+    """
+    profile = "platform.ai_delivery_schema_profile()"
+    require(expected["revision"] == "0015", "EMBEDDED_REVISION")
+    body = expected["functions"][profile]["body"]
+    sections = re.search(
+        r"WITH expected\(signature,body_hash,language,security_definer,volatility,runtime_execute\) AS \(VALUES (.*?)\),\s+columns_expected\(table_name,column_names\) AS \(VALUES (.*?)\),\s+functions AS MATERIALIZED",
+        body,
+        re.S,
+    )
+    require(sections is not None, "EMBEDDED_TABLE_SHAPE")
+    rows = []
+    for value in split_sql(sections[1], ","):
+        row = re.fullmatch(
+            r"\('([^']+)','([0-9a-f]{64})','(sql|plpgsql)',(true|false),'([svi])',(true|false)\)",
+            value,
+        )
+        require(row is not None, "EMBEDDED_FUNCTION_ROW")
+        rows.append(row.groups())
+    names = [row[0] for row in rows]
+    require(profile not in names, "EMBEDDED_SELF_ROW")
+    require(len(names) == len(set(names)), "EMBEDDED_DUPLICATE_FUNCTION")
+    require(
+        len(names) == 182 and set(names) == set(expected["functions"]) - {profile},
+        "EMBEDDED_FUNCTION_SET",
+    )
+    for signature, body_hash, language, security, volatility, runtime in rows:
+        source = expected["functions"][signature]
+        require(
+            (body_hash, language, security == "true", volatility, runtime == "true")
+            == tuple(
+                source[k]
+                for k in (
+                    "body_sha256",
+                    "language",
+                    "security_definer",
+                    "volatility",
+                    "runtime_execute",
+                )
+            ),
+            "EMBEDDED_FUNCTION_MISMATCH",
+        )
+    columns = {}
+    for value in split_sql(sections[2], ","):
+        row = re.fullmatch(
+            rf"\('({NAME})',ARRAY\[('[a-z_][a-z_0-9]*'(?:,'[a-z_][a-z_0-9]*')*)\]::text\[\]\)",
+            value,
+        )
+        require(row is not None, "EMBEDDED_COLUMN_ROW")
+        require(row[1] not in columns, "EMBEDDED_DUPLICATE_TABLE")
+        columns[row[1]] = re.findall(r"'([^']+)'", row[2])
+    require(len(columns) == 48 and columns == expected["columns"], "EMBEDDED_COLUMN_SET")
+    return {"other_functions": len(names), "tables": len(columns), "result": "PASS"}
 
 
 def compare_roles(rows, memberships, owned_by_runtime):
@@ -562,7 +668,7 @@ def compare_functions(expected, rows, resolved):
         )
 
 
-def compare_snapshot(expected_columns, full_text, nonfunction_text):
+def compare_snapshot(expected_columns, full_text, nonfunction_text, *, revision="0013"):
     full, nonfunction = json.loads(full_text), json.loads(nonfunction_text)
     require(
         nonfunction == {k: v for k, v in full.items() if k != "functions"},
@@ -573,7 +679,9 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text):
         actual_columns.setdefault(table, []).append(column)
     require(actual_columns == expected_columns, "Missing/extra/reordered table columns")
     require(
-        sha256(nonfunction_text.encode("utf-8")) == NONFUNCTION_SHA256,
+        revision in {"0013", "0015"}
+        and sha256(nonfunction_text.encode("utf-8"))
+        == (AI_NONFUNCTION_SHA256 if revision == "0015" else NONFUNCTION_SHA256),
         "Non-function catalog drift (types/defaults/constraints/indices/RLS/ACL/policies/triggers/sequences/extensions)",
     )
     return sha256(b"asm:m3:native_schema:v1\n" + full_text.encode("utf-8"))
@@ -581,10 +689,13 @@ def compare_snapshot(expected_columns, full_text, nonfunction_text):
 
 def compare_catalog(expected, rows, resolved, full_text, nonfunction_text, read_profile):
     compare_functions(expected["functions"], rows, resolved)
-    full_hash = compare_snapshot(expected["columns"], full_text, nonfunction_text)
+    revision = expected.get("revision", "0013")
+    full_hash = compare_snapshot(
+        expected["columns"], full_text, nonfunction_text, revision=revision
+    )
     declared = read_profile()
     require(
-        declared == {"schema_revision": "0013", "valid": True, "profile_sha256": full_hash},
+        declared == {"schema_revision": revision, "valid": True, "profile_sha256": full_hash},
         "Declared profile differs from independent catalog",
     )
     return full_hash, declared
@@ -677,6 +788,21 @@ def require_ci_inputs():
         require(sha256((ROOT / path).read_bytes()) == expected, "CI gate input drift: " + path)
 
 
+def bounded_push_ref(value):
+    """A bounded Git ref metadata value; it never grants source admission."""
+    return (
+        type(value) is str
+        and re.fullmatch(r"refs/(?:heads|tags)/[A-Za-z0-9][A-Za-z0-9._/-]{0,159}", value)
+        is not None
+        and ".." not in value
+        and "//" not in value
+        and not value.endswith(("/", "."))
+        and all(
+            not part.startswith(".") and not part.endswith(".lock") for part in value.split("/")
+        )
+    )
+
+
 def event_operands(env, payload=None, *, head=None, tree=None, parents=None):
     """Bounded source operands only; malformed values, URLs and event text stay private."""
     sha_pattern = r"[0-9a-f]{40}"
@@ -744,6 +870,22 @@ def event_operands(env, payload=None, *, head=None, tree=None, parents=None):
         if type(payload.get("deleted")) is bool
         else "INVALID",
         "push_base_ref_state": "null" if payload.get("base_ref") is None else "present",
+        "push_base_ref": {
+            "state": "missing"
+            if "base_ref" not in payload
+            else "null"
+            if payload["base_ref"] is None
+            else "present",
+            "type": type(payload.get("base_ref")).__name__ if "base_ref" in payload else "missing",
+            "value": payload.get("base_ref") if bounded_push_ref(payload.get("base_ref")) else None,
+            "valid": "base_ref" in payload
+            and (payload["base_ref"] is None or bounded_push_ref(payload["base_ref"])),
+        },
+        "push_created": payload.get("created")
+        if type(payload.get("created")) is bool
+        else "INVALID",
+        "push_forced": payload.get("forced") if type(payload.get("forced")) is bool else "INVALID",
+        "push_before": safe(payload.get("before"), sha_pattern),
         "event_sha": safe(env.get("GITHUB_SHA"), sha_pattern),
         "actual_head": safe(head, sha_pattern),
         "actual_tree": safe(tree, sha_pattern),
@@ -814,10 +956,36 @@ def event_identity(env, payload, head, tree, parents, *, diagnostic=None):
         "event_identity_is_c0_approval": False,
     }
     if identity["event"] == "push":
-        check(identity["ref"] in (EXECUTION_REF, "refs/heads/main"), "EVENT_PUSH_ENV_REF")
+        check(
+            identity["ref"]
+            in (EXECUTION_REF, "refs/heads/main", *M4_EXECUTION_REFS, *M4_R3_TRANSITIONS),
+            "EVENT_PUSH_ENV_REF",
+        )
+        if identity["ref"] in M4_EXECUTION_REFS:
+            check(identity["attempt"] == "1", "EVENT_M4_ATTEMPT")
         check(payload.get("ref") == identity["ref"], "EVENT_PUSH_PAYLOAD_REF")
         check(payload.get("deleted") is False, "EVENT_PUSH_DELETED")
-        check(payload.get("base_ref") is None, "EVENT_PUSH_BASE_REF")
+        if identity["ref"] in M4_R3_TRANSITIONS:
+            before = M4_R3_TRANSITIONS[identity["ref"]]
+            check(identity["attempt"] == "1", "EVENT_M4_ATTEMPT")
+            check("base_ref" in payload, "EVENT_M4_BASE_REF_MISSING")
+            check(
+                payload["base_ref"] is None or bounded_push_ref(payload["base_ref"]),
+                "EVENT_M4_BASE_REF_METADATA",
+            )
+            check(payload.get("created") is False, "EVENT_M4_CREATED")
+            check(payload.get("forced") is False, "EVENT_M4_FORCED")
+            check(payload.get("before") == before, "EVENT_M4_BEFORE")
+            check(parents == [before] and head != before, "EVENT_M4_PARENT")
+            identity.update(
+                before=before,
+                base_ref_metadata=payload["base_ref"],
+                created=False,
+                deleted=False,
+                forced=False,
+            )
+        else:
+            check(payload.get("base_ref") is None, "EVENT_PUSH_BASE_REF")
         check(not env.get("GITHUB_BASE_REF"), "EVENT_PUSH_ENV_BASE_REF")
         check(not env.get("GITHUB_HEAD_REF"), "EVENT_PUSH_ENV_HEAD_REF")
         check(commit(payload.get("after"), "EVENT_PUSH_AFTER_FORMAT") == head, "EVENT_PUSH_AFTER")
@@ -826,7 +994,15 @@ def event_identity(env, payload, head, tree, parents, *, diagnostic=None):
             commit(payload["head_commit"].get("id"), "EVENT_PUSH_HEAD_FORMAT") == head,
             "EVENT_PUSH_HEAD",
         )
-        identity["route"] = "stock-push" if identity["ref"] == EXECUTION_REF else "main-push"
+        identity["route"] = (
+            "m4-r3-push"
+            if identity["ref"] in M4_R3_TRANSITIONS
+            else "m4-r2-push"
+            if identity["ref"] in M4_EXECUTION_REFS
+            else "stock-push"
+            if identity["ref"] == EXECUTION_REF
+            else "main-push"
+        )
     elif identity["event"] == "pull_request":
         pr = payload.get("pull_request")
         check(isinstance(pr, dict), "EVENT_PR_OBJECT")
@@ -1673,7 +1849,13 @@ def require_native_fixture_guards(items, test_module, reset):
 
 
 def integration_arguments():
-    return ["-v", "--durations=20", "-m", "integration", *("--ignore=" + p for p in PG_MODULES)]
+    return [
+        "-v",
+        "--durations=20",
+        "-m",
+        "integration",
+        *("--ignore=" + p for p in (*PG_MODULES, *M4_PG_MODULES)),
+    ]
 
 
 def collect_partition(mode, destination):
@@ -1717,7 +1899,9 @@ def collect_partition(mode, destination):
             raise Refusal("Partition inventory must never execute fixtures")
 
     selection = (
-        list(MODULES)
+        list(M4_PG_MODULES)
+        if mode == "collect-m4"
+        else list(MODULES)
         if mode == "collect-native"
         else integration_arguments()
         if mode == "collect-generic-pg"
@@ -1744,15 +1928,22 @@ def collect_partition(mode, destination):
         write_json(destination, {**inventory, "collection_exit": code})
 
 
-def validate_partition(all_pg, native, generic):
+def validate_partition(all_pg, native, generic, m4):
     require(tuple(MODULES[1:]) == PG_MODULES, "Native carrier lost a complete PG module")
-    for inventory in (all_pg, native, generic):
+    for inventory in (all_pg, native, generic, m4):
         nodes = inventory["nodeids"]
         require(
             inventory["collection_exit"] == 0 and nodes and len(nodes) == len(set(nodes)),
             "Failed/empty/duplicate partition collection",
         )
-    a, n, g = (set(i["nodeids"]) for i in (all_pg, native, generic))
+    a, n, g, m = (set(i["nodeids"]) for i in (all_pg, native, generic, m4))
+    require(
+        m == set(m4["integration_nodeids"])
+        and not m4["deselected"]
+        and not m4["native_fixture_nodes"]
+        and {node.split("::", 1)[0] for node in m} == set(M4_PG_MODULES),
+        "Incomplete M4 inventory",
+    )
     pg = set(native["integration_nodeids"])
     source = n - pg
     require(
@@ -1768,9 +1959,9 @@ def validate_partition(all_pg, native, generic):
         and pg == {node for node in a if node.split("::", 1)[0] in PG_MODULES}
         and pg == set(native["native_fixture_nodes"]) == set(all_pg["native_fixture_nodes"])
         and not generic["native_fixture_nodes"]
-        and not (pg & g)
-        and a == pg | g
-        and generic["nodeids"] == [node for node in all_pg["nodeids"] if node not in pg]
+        and not (pg & g or pg & m or g & m)
+        and a == pg | g | m
+        and generic["nodeids"] == [node for node in all_pg["nodeids"] if node not in pg | m]
         and set(all_pg["deselected"]) == set(generic["deselected"])
         and source <= set(all_pg["deselected"]),
         "Lost/foreign PG cases or native fixture escaped the exact three-module partition",
@@ -1782,12 +1973,18 @@ def validate_partition(all_pg, native, generic):
         "native_pg": len(pg),
         "native_source": len(source),
         "native_total": len(n),
-        "excluded_modules": PG_MODULES,
+        "m4_pg": len(m),
+        "excluded_modules": (*PG_MODULES, *M4_PG_MODULES),
         "disjoint_pg_sets_and_complete_union": True,
         "fixed_total_required": False,
         "inventory_sha256": {
             key: sha256(json.dumps(value, sort_keys=True).encode())
-            for key, value in (("all", all_pg), ("native", native), ("generic", generic))
+            for key, value in (
+                ("all", all_pg),
+                ("native", native),
+                ("generic", generic),
+                ("m4", m4),
+            )
         },
     }
 
@@ -1795,7 +1992,7 @@ def validate_partition(all_pg, native, generic):
 def prove_partition(private, evidence, commands, env):
     require_ci_inputs()
     inventories = []
-    for name in ("all-pg", "native", "generic-pg"):
+    for name in ("all-pg", "native", "generic-pg", "m4"):
         path = private / ("partition-" + name + ".json")
         code, _ = commands.run(
             [
@@ -1853,6 +2050,7 @@ FOUNDATION_FILES = (
     "partition-all-pg.json",
     "partition-native.json",
     "partition-generic-pg.json",
+    "partition-m4.json",
     "integration-partition.json",
     "generic-result.json",
     "execution.json",
@@ -2598,7 +2796,7 @@ class GenericJournal:
         self.failed = False
         self.locations, self.catalog = (
             foundation_locations(store.binding["source_manifest"]),
-            source_catalog(ROOT),
+            source_catalog(ROOT, "0015"),
         )
 
     def persist_partition(self, work):
@@ -2606,6 +2804,7 @@ class GenericJournal:
             "partition-all-pg.json",
             "partition-native.json",
             "partition-generic-pg.json",
+            "partition-m4.json",
             "integration-partition.json",
         ):
             self.store.publish(name, json.loads((work / name).read_text()))
@@ -2781,7 +2980,7 @@ def foundation_check(store):
         require(
             report["source_sha"] == source["source_sha"] == store.binding["identity"]["head"]
             and source["parents"] == store.binding["identity"]["parents"]
-            and source["expected_revision"] == "0013"
+            and source["expected_revision"] == "0015"
             and set(source["images"]) == {"api", "worker", "scheduler", "fixture"}
             and list(report["lifecycles"]) == list(FOUNDATION_LIFECYCLES)
             and all(
@@ -2805,7 +3004,7 @@ def foundation_check(store):
     )
     inventories = [
         json.loads(store.read("partition-" + name + ".json"))
-        for name in ("all-pg", "native", "generic-pg")
+        for name in ("all-pg", "native", "generic-pg", "m4")
     ]
     proof = validate_partition(*inventories)
     require(
@@ -3427,6 +3626,7 @@ def main():
             "collect-all-pg",
             "collect-native",
             "collect-generic-pg",
+            "collect-m4",
         ),
     )
     parser.add_argument("--inventory", type=Path)

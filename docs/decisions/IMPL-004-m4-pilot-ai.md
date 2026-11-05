@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 R4 принят; C0 integration/full CI, main ещё BLOCKED.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R11.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -818,7 +818,7 @@ Write-set6 и единственный targeted run после local proof за�
 production/DDL/core CI не меняются. Runtime и actual main acceptance ждут repair.
 Новый paid/VM/Telegram запуск не разрешён; ledger и data/route gates прежние.
 
-**Актуальное решение C0 от 2026-10-31: R4 SOURCE + TARGETED PG VERIFIED.**
+**Предыдущее решение C0 от 2026-10-31: R4 SOURCE + TARGETED PG VERIFIED.**
 Source249b36112adb72fb763207893eb50ab31c06eff7/receipt55a65c2 принят C0.
 One run41124252930/attempt1:278 PASS/834 phases, cleanup/source PASS. Readiness5s
 отделяет подготовку HTTP/auth от прежнего edge1.1s/observer1.5s/release<2s.
@@ -832,6 +832,310 @@ Main997d2bf8/run41108194917 остаётся FAILED; не переигрыват
 Целевой PASS не закрывает main gate; Ready после full CI, merge владельцу,
 далее проверка actual main. Production/DDL/core CI/ledger не меняются.
 Новых VM/Telegram/paid/runtime действий нет; real durable AI bridge ещё TODO.
+
+**Предыдущее решение C0 от 2026-10-31: main VERIFIED; C2-M4.3-PG-RUNTIME-R1.**
+PR40 merged; main586240e88c825aa67593af5d72e0bdbb251ed3bb/tree84f6b04d совпадает
+с tested candidate031b92ed. Push41178689536/attempt1:11/11 SUCCESS,860 PG PASS;
+source/completeness gates PASS. Observation gate закрыт; новый retry не нужен.
+
+Следующий уже запланированный runtime scope выполняется последовательно:
+C2 — настоящий PG authority/read, AIRun/provider-call metadata, durable budget
+и единственный выбранный reply/handoff/no_reply с replay; затем C0 review и
+согласованная app/schema/worker/Outbox integration. Это реализация IMPL-004,
+без нового registry, broker, mutation tools или пересмотра выбранной модели.
+Migration slot0014/down0013 зарезервирован C2. Exact13 paths и один hosted PG
+proof в HANDOFF. C2 не включает production, не посылает текст и не превращает
+сохранённый результат в долговременный send permit; final admission обязателен.
+
+Application/provisioning/native gates сейчас явно принимают0013. На DB-only
+этапе0014 они не ослабляются и должны отвергать несовместимую схему; C0 не
+сливает migration отдельно от будущего согласованного application перехода.
+Такой ограниченный PG PASS не равен whole-app/full CI/runtime acceptance.
+Paid/VM/Telegram/реальные данные HOLD; data/route/backend/quality gates и ledger
+не меняются. C2 следующий, C1/C3–C8 HOLD; M4 ещё не закрыт.
+
+**Предыдущее решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R2.**
+R1 source391667c0/receiptca47ea21 сохранён; run41185701200 завершился
+SCHEMA_FAILED до всех55 tests. Actual failure — SQLAlchemy bind `null` в0014
+JSON DEFAULT; отдельный source-confirmed fixture defect — .git отсутствует
+в checks image. C0 сверил original/saved evidence, manifests31/15, metadata,
+source/identity; PG/runtime acceptance не выдана, full CI не повторялся.
+
+Назначен узкий repair7 paths из HANDOFF: DEFAULT, compiler regression,
+fixture с executor source.json, R2 identity/inventory и docs. Сначала local
+before/after обеих причин, затем один new-source disposable PG proof с
+сохранением всех55 исходных cases. Новая base — C0 docs-only child receipt;
+R1 ref/run frozen. Это исправление согласованного scope, не новая функция.
+0001–0013/application0013/native/roles/limits не меняются. После outcome —
+C0 review; app/schema/worker/Outbox integration остаётся следующим этапом.
+Main586240e8/CI11 PASS и финансовый ledger прежние; paid/live/VM/Telegram HOLD.
+
+**Предыдущее решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R3.**
+C0 принял R2 source13ab3f11/receipt0317152f только в SOURCE REPAIR + PG
+PREPARATION/SCHEMA/ROLES scope. Run41192732940:49 PASS/30 FAIL; evidence
+полное, cleanup/source PASS. Actual upgrade/unused downgrade/M3 retention,
+RLS/roles и application0014 refusal подтверждены.29 runtime cases остановлены
+ошибкой fixture: TEST_CONSUME выбирается по revision до seal. Used downgrade
+не дошёл до Alembic, поскольку не создал собственную durable предпосылку.
+
+R3 меняет5 paths из HANDOFF: общую test preparation и её meaningful regression,
+независимую used-downgrade prerequisite, executor/workflow identity и docs.
+Связанные fixture corrections разрешены; current job/revision подтверждать
+настоящими данными, target assertions не ослаблять. Все79 R2 scenarios сохранены;
+после local checks один новый bounded PG run. Старые execution refs frozen.
+Backend/миграции/application0013/native guards/roles/limits остаются прежними.
+Runtime acceptance и application/worker/Outbox integration ещё впереди.
+Это исправление прежнего M4 scope; нового live/paid/VM/Telegram допуска нет.
+
+**Предыдущее решение C0 от 2026-10-31: C2-M4.3-PG-RUNTIME-R4.**
+R3 source9c161d0a/receipt1d904b0d: fixture repair SOURCE+ACTUAL PG принят C0.
+Run41203810232:81 PASS/1 FAIL, полный receipt/cleanup/source проверены.
+Единственная assertion ошибочно находит `text` в metadata key `context_version`.
+C0 разрешает заменить её строгой проверкой audit/native структуры и ожидаемых
+значений, с raw-text negative; call-row count/snapshot/effects сохранить.
+R4 scope6 paths и один bounded PG proof заданы в HANDOFF; production/миграции
+не меняются. Это исправление теста, не ослабление запрета хранить raw content.
+Общий runtime gate до actual remaining assertions и whole-source review открыт;
+application0014/worker/Outbox переход впереди. Live/paid/VM/Telegram HOLD.
+
+**Предыдущее решение C0 от 2026-10-31: C3-M4.3-RUNTIME-INTEGRATION-R1.**
+C2 source3f79119e/receipt337ec81 принят C0 в SOURCE + TARGETED PG scope:
+104 PASS/312 phases,35 actual PG, исходный snapshot/READ audit/call rows/effects
+проверены; independent ZIP/source/AST/JUnit/cleanup review PASS. Прочитан весь
+новый production delta0014/AI database/contracts/messaging bridge. DB layer
+VERIFIED, ещё не INTEGRATED в main; новых тестовых или платных вызовов C0 не делал.
+
+Следующий уже согласованный результат — один application путь Turn→Agent→durable
+result→Outbox/escalation на synthetic adapters. C3 — единственный integration
+owner с явной смежной DB/CI областью из HANDOFF. Назначен successor0015/down0014;
+0001–0014 immutable. Application/provisioning/current catalog переходят вместе,
+historical checks остаются точными. AI OFF by default; FAKE/EVAL_ONLY LOCAL/TEST,
+no real AI/Telegram egress. Медленный AI не блокирует inbound/manual;30s claim и
+до120s AI deadline согласовать bounded AI execution, не глобальным ослаблением.
+
+Atomically chosen reply/send intent, handoff/escalation, no_reply/terminal;
+fresh admission перед send; historical replay не даёт нового permit. Existing
+HUMAN/Resume/native/UNKNOWN semantics и2 calls/1 READ сохраняются. Никакого
+manual-owner обхода или retro-send сохранённых0014 results. Scope и критерии
+в CURRENT. После local targeted checks разрешён один Draft PR/full CI того же
+candidate: сохранить11 старых gates, добавить owned M4 PG lane с полным inventory.
+Нельзя запускать destructive0014 lifecycle в общей generic DB. Source и receipt
+на разных refs; после outcome C0 review, без повторных unchanged CI. До общей
+приёмки merge/живой TEST smoke не объявляются. Live/paid/VM/deploy/real data HOLD;
+ledger и GPT/v2 choice прежние, C1/C2/C4–C8 HOLD.
+
+**Предыдущее решение C0 от 2026-10-31: C3-M4.3-RUNTIME-INTEGRATION-R2.**
+R1 source9b05e5dd/receipt e58163ae прошёл независимую проверку evidence, но whole
+runtime BLOCKED:6 CI jobs PASS/5 FAIL/1 SKIPPED; M4 45/64 PASS, native6 current
+failures. PR41/старые refs frozen, не merge.398 frontend tests в browser build
+прошли; browser journeys и foundation suite не достигнуты.
+
+Причины: pin current catalog вычислен из WASM с отличающимся порядком functions;
+stock0015/точный failed predicate ещё нужны. Agent terminal CANCELLED поглощает
+отмену нового application loop; cleanup/cancel должен иметь конечную границу.
+Incomplete phase evidence требует узкого исправления, без нового trace framework.
+Выдан один C3 repair, exact base/write-set/bounded runs в CURRENT HANDOFF:
+stock capture, причинное исправление, targeted validation, только затем новый
+Draft PR/полный CI со всеми12 gates. Не повторять неизменённый CI.
+
+0001–0014 immutable. C0 явно разрешает только profile/pins correction ещё не
+принятой0015 в disposable TEST candidate; retained0015 database при обнаружении
+требует отдельного additive successor, без переписывания её истории. Default OFF,
+fake-only, native OWNER/barrier/tenant/send fences/UNKNOWN и budgets прежние.
+UI reason presentation, live smoke и rollout не входят в repair. Другие роли HOLD;
+ни merge, ни readiness реального пилота из частичных PASS не следуют.
+
+**Предыдущее решение C0 от 2026-11-01: C3-M4.3-RUNTIME-INTEGRATION-R3.**
+R2 receipt d1959bca/source e8300919 подтверждён C0: final80 offline PASS,
+но capture41223501373 отказал EVENT_PUSH_BASE_REF до Docker/PG. Whole runtime
+BLOCKED. GitHub допускает string/null base_ref; exact assignment определяется
+доверенным source/ancestry, а не требованием null к служебному полю push.
+Actual значение старого payload неизвестно, R2 event не принят задним числом.
+
+C3 получает узкий admission repair, bounded operands и offline positives/
+negatives; новые execution refs заранее создаются на закреплённом predecessor,
+затем fast-forward с проверками before/sole parent/HEAD/tree/repo/attempt.
+Сохранить main/PR/historical guards; arbitrary execution refs не разрешены.
+Один новый stock capture и неиспользованные R2 targeted/full-CI этапы перенесены
+в R3 без увеличения лимитов. Product/write-set/migration исключение R2 прежние;
+нет новой платформы, платного вызова или live enable. Точные условия в CURRENT.
+PR41/старые refs frozen; C3 один owner, остальные HOLD. Merge после приёмки C0.
+
+**Предыдущее решение C0 от 2026-11-01: C3-M4.3-RUNTIME-INTEGRATION-R4.**
+R3 admission принят по source/hosted evidence, stock catalogs получены.
+Current0015 valid=false вызван одной неверной signature в embedded expected
+table: self вместо historical human verifier. C0 независимо подтвердил этот
+дефект,182/182 other-functions match после точечной подстановки и кандидатные
+body/full pins; stored catalog observation не заменяет corrected-schema PASS.
+
+C3 получает verifier/pins repair и один targeted PG run с corrected-stock
+preflight + retained/delivery/schema/current-native6. Новый отдельный capture
+не назначен. После PASS — один Draft PR/full CI12gates; точные refs/write-set/
+limits в CURRENT. Узкое исключение unmerged0015 из R2 сохраняется;0001–0014,
+agent/cancellation и инфраструктура immutable. Whole-runtime BLOCKED до проверки;
+PR41/старые refs frozen, другие роли HOLD, paid/live/VM/real data не включаются.
+
+**Предыдущее решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R5.**
+C0 принял R4 verifier-row/pins repair только в SOURCE scope. Run41803776341
+остановлен до PG из-за перезаписи native inventory phase report; ещё две
+коллизии owner/readiness установлены по source. Все70 targeted cases и actual
+corrected catalog NOT_REACHED.694 offline PASS не проверяли реальную границу
+producer/phase, поскольку constructed driver заменял wrapper.
+
+Назначена только runner/evidence поправка с real-subprocess regression,
+полным planned/collected/missing учётом и совместимым browser export. Migrations,
+foundation pins и business runtime в R5 не меняются. После offline PASS один
+targeted run с прежним stock preflight/runtime scope; после PASS один новый
+Draft PR/full CI12gates. Отдельного capture и rerun R4 нет; exact base/refs/
+write-set/limits — CURRENT. Whole-runtime BLOCKED, PR41/R1–R4/C2 refs frozen.
+Архитектура и product scope прежние; AI default OFF, paid/live/VM/real data HOLD.
+
+**Предыдущее решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R6.**
+C0 проверил R5 source1bca972c/receipt34ecabaf, оригинальные artifacts и fresh
+run41811079733:60 PASS,4 FAIL,6 setup ERROR. Corrected stock0015 catalog/pins/
+valid=true/readiness VERIFIED в targeted PG scope; cancellation/manual progress
+PASS. Whole-runtime BLOCKED, current-native6 business phases/full CI ещё не
+выполнены. R5 runner repair принят в SOURCE+TARGETED scope.
+
+Назначено ограниченное fixture/test исправление: observation Telegram устаревает
+до двух rights cases;0.2s timeout включает pre-model DB preparation; native
+identity пытается выполнить Git index operation в readonly checkout, но exact
+historical Git cause неизвестна. Guarded M4 carrier может получать identity
+только из полного read-only exact source check + checked executor evidence,
+с прежними before-reset/server guards; historical native carrier неизменен.
+
+C0 явно уточняет test oracle по существующим rules6/8/9: валидный OUTPUT при
+UNKNOWN cost/usage остаётся кандидатом, если прочие guards пройдены. Неизвестный
+metering не равен неизвестному model result, не обнуляет/не освобождает резерв
+и не становится CONFIRMED. Persisted result/intent replay не генерирует ответ
+повторно. Timeout/cancel/lost response и UNKNOWN Telegram delivery сохраняют
+terminal/no-regeneration/no-resend. Production/SQL contract не меняется;
+ошибочное ожидание нового delivery test пересмотрено явно, не ради скрытого PASS.
+
+После causal offline checks один targeted preflight+64 M4+6 native, после PASS
+один новый Draft PR/full CI12gates; exact scope/refs/limits/STOP в CURRENT HANDOFF.
+Migrations/pins/backend immutable; другое product изменение требует нового C0
+решения. Main/PR41/R1–R5/C2 refs frozen. AI default OFF/fake-only,2calls1READ,
+paid/live/Telegram/VM/deploy/real data HOLD; ledger и LOCKED архитектура прежние.
+
+**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R7.**
+C0 проверил source d2f8f9f5/receipt15bfbd76 и оригинальные artifacts/fresh metadata
+run41819113103.68 PASS,2 FAIL; native6, UNKNOWN metering/reserve/replay и in-call
+timeout приняты в SOURCE+TARGETED scope. Catalog/readiness/cleanup PASS, whole
+runtime BLOCKED. Оба Telegram cases достигли reply/Outbox, затем23514; имя CHECK
+и HTTP count не сохранены. Saved schema/source доказывают несовместимость:
+telegram_worker_probe допускает SEND_AI_TEXT, messaging_jobs_telegram_probe_check
+разрешает non-NULL probe только SEND_MANUAL_TEXT. Exact old error attribution
+остаётся inference; новый test не должен скрывать business failure readiness отказом.
+
+C0 явно расширяет прежнее исключение profile/pins для unmerged0015: разрешён
+один reversible CHECK repair (manual+AI, прежние all-null/all-present/positive
+fields/guarded prohibition) и соответствующие current verifier/catalog pins.
+Только новый fresh owned disposable TEST candidate;0001–0014, historical profiles
+и retained/applied0015 DB неизменны. Если retained0015 обнаружена, STOP до решения
+об additive successor. Это исправление недостающей совместимости уже согласованной
+AI delivery; ADR132/216/217, structured-state authority и runtime guards сохранены.
+C0 отвечает за migration strategy; один C3 получает смежный SQL scope.
+
+C0 candidate pins выведены из saved R6 stock bytes (одна constraint row + current
+verifier nonfunction literal), NOT_APPLIED/NOT_PG_TESTED. C3 независимо сверяет
+source/derivation; actual preflight обязан подтвердить pins/valid=true/readiness.
+Точные values/write-set/refs в CURRENT. Backend кроме двух pin constants,
+другие functions/DDL, dependencies/infra не меняются. После offline checks один
+targeted run70+≤2case delta; после PASS один новый Draft PR/full CI12gates.
+Unexpected FAIL → frozen source/receipt/C0, без unchanged rerun.
+Main/PR41/R1–R6/C2 refs frozen; default OFF/fake-only2calls1READ,
+paid/live/Telegram/VM/deploy/real data HOLD. Ledger и LOCKED архитектура прежние.
+
+**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R8.**
+C0 независимо проверил source05c2e52f/receipt e32263e9, original artifacts и fresh
+metadata run41828733275:71 PASS,1 FAIL; все прежние70 scenarios PASS. CHECK/current
+pins, valid=true/readiness, reversible downgrade/re-upgrade и оба synthetic
+Telegram rights outcomes приняты в SOURCE+TARGETED scope. Отправка1→SENT либо
+отказ без send→FAILED, restart/replay не создаёт новый intent/call/send.
+Native6/UNKNOWN metering/timeout/cleanup PASS; whole-runtime остаётся BLOCKED.
+
+Единственный FAIL — C3 schema fixture использует AI-enabled worker для legacy
+GUARDED_TEXT. Source доказывает перехват через ai.enqueue; actual старый enqueue
+result неизвестен, matrix/old CHECK control NOT_REACHED. Разрешена только test
+composition поправка: существующий TEST worker без AI для guarded fixture,
+проверка receipt/Outbox до прежних assertions. Positive AI worker не отключать.
+Это не изменение архитектуры или runtime поведения. Миграции0001–0015, весь
+backend/current pins и retained/applied DB теперь immutable в R8; новый successor
+не назначается. ADR132/216/217 и LOCKED гарантии сохраняются.
+
+Один C3, прежние72 PG nodes, bounded offline checks → один targeted run → только
+после PASS новый Draft PR/full CI12gates. Exact refs/write-set/limits в CURRENT;
+admission сужается до fixture/R8 identity. Main/PR41/R1–R7/C2 refs frozen;
+unexpected FAIL→receipt/C0 без unchanged rerun. Default OFF/fake-only2calls1READ,
+paid/live/Telegram/VM/deploy/real data HOLD; ledger unchanged.
+
+**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R9.**
+R8 source45f46da0/receipt8544097f и original artifacts проверены C0. Targeted72/72
+принят, включая прежний schema blocker; full CI PR42:11 SUCCESS,1 FAIL.
+Foundation остановился на unit tests:14 отсутствующих pin-file inputs в test
+fixtures и1 in-call timeout без observed entry. Generic860 и последующие phases
+не достигнуты; collection union1031 не означает complete actual execution.
+FOUNDATION_EVIDENCE_REFUSED сохраняется как fail-closed evidence gate.
+
+C0 назначает исправление только test harness: self-contained inputs для двух
+wrapper families и real timeout после подтверждённого adapter entry/reservation.
+Pre-call control/UNKNOWN accounting/STOP semantics и все product guards прежние.
+Точная причина старого early STOP неизвестна; исправленный test обязан отличать
+его от требуемой in-call отмены. Production/migrations/pins/PG tests/workflows/
+infra неизменны. Архитектурных изменений/нового successor нет.
+
+После17 existing causal cases в development filesystem boundary и offline PASS
+разрешён один expected-sha fast-forward существующего PR42,force=false,и один
+полный CI12gates. Это явное снятие только PR-source HOLD; R8 source/tested merge/
+execution/prep и остальные refs сохранены. R8 targeted72 принят, нового standalone
+PG/capture не требуется; окончательная приёмка требует actual1031 PG union и
+всего foundation tail на исправленном tested merge. Exact base/write-set в CURRENT.
+Whole-runtime BLOCKED до review; default OFF/fake-only2calls1READ, paid/live/
+Telegram/VM/deploy/real data HOLD; ledger и LOCKED/ADR132/216/217 неизменны.
+
+**Актуальное решение C0 от 2026-11-04: C3-M4.3-RUNTIME-INTEGRATION-R10.**
+R9 source42bea690/receiptcca60b7c и original evidence проверены C0. R9 test-input/
+runtime-timeout fixes приняты; прежние15 R8 unit failures устранены. Полный CI
+того же PR42:10 SUCCESS,2 FAIL. Agent model_call не достиг adapter entry при0.1s
+whole-run deadline; PG waiting-AI helper потребовал claim одновременно с real
+worker. Actual early-stop stage и claim response неизвестны; гипотезы не заменяют
+доказанную причину. Whole-runtime BLOCKED, generic860/tail NOT_REACHED.
+
+Разрешён узкий test-only repair: во всех6 deadline boundaries наблюдаемый вход
+перед real finite timeout; PG ingress имеет одного потребителя — уже работающий
+worker. Сохраняются manual progress while AI waits, cancellation/DEAD/restart-none/
+no-Outbox и все call/read/budget oracles. Product/Agent/Gateway/worker semantics,
+миграции/pins/shared native fixtures/архитектура не меняются; нет новых PG nodes.
+Runner/catalog/workflow changes только exact R10 admission/targeted ref, не guards.
+
+Из-за изменения PG fixture после causal/offline checks нужен один targeted72
+на финальном source. После PASS — один expected-sha FF существующего PR42 и
+full CI12gates/actual1031PG/all foundation phases. Новый PR не создаётся.
+R1–R9 snapshots/prep/execution сохраняются; единственное разрешённое движение
+старого ref — PR42/head42bea690→исправленный descendant,force=false.
+No unchanged retry; unexpected FAIL→complete receipt/C0. Exact limits/write-set
+в CURRENT. Default OFF/fake-only2calls1READ, ledger/paid/live/VM HOLD неизменны.
+
+**Актуальное решение C0 от 2026-11-05: C3-M4.3-RUNTIME-INTEGRATION-R11.**
+R10 source2c35f9c6/receipt1f7f3594 проверены:targeted72,unit3529,M466,native105PG,
+browser54 PASS. Runtime controls приняты в SOURCE+TARGETED scope. Whole-runtime
+BLOCKED: foundation generic546PASS/69callFAIL/245setupERROR плюс1teardownERROR.
+
+R11 устраняет compatibility defects в test harness: optional observer API,
+explicit M4 table/TRUNCATE oracle и bounded lifetime material tasks до scoped
+cleanup. Сохраняются real task/PID/query lock proof, rollback, fixed-ID isolation,
+FK и material-history downgrade guard. Не объявлять всю цепь доказанной: порядок
+teardown→245duplicate setups виден, конкретные task timing/history rows неизвестны.
+Product/Agent/worker/migrations/pins/constraints не пересматриваются.
+
+После causal/offline checks разрешён один expected-SHA FF того же PR42 и один
+полный CI с actual1031PG/all foundation phases. Отдельный hosted targeted carrier
+для generic suite не строить; R10 runtime72 принят. При отсутствии local stock PG
+full CI — первый actual PG repair validation; это явное узкое изменение порядка
+проверки для R11. Нет нового framework/PG inventory/ослабления acceptance.
+Write-set/границы в CURRENT. Default OFF/fake-only2calls1READ,ledger и paid/live/
+VM HOLD прежние. Source после outcome frozen; FAIL→receipt/C0, без unchanged retry.
 
 ## Что пересмотрено относительно baseline
 

@@ -22,10 +22,33 @@ M3 закрыт в LOCAL/TEST; финальный receipt — в верхнем 
 План/IMPL-004 приняты C0 и интегрированы в PR #37. Единственная текущая
 выдача, её accepted/repair base, исполнитель и write-set — в верхнем
 M4_HANDOFF/CURRENT. M4.1 и C5 recovery интегрированы в PR #38; actual main CI PASS.
-PR39 слит; PR CI PASS, но post-merge main CI имеет один observer timeout.
-C2 R4 принят C0:278 targeted PG PASS, readiness до прежнего lock window.
-Единственная задача — C0 integration/new Draft PR/full CI; exact source/write-set
-в CURRENT. Main verification ещё BLOCKED; runtime и остальные HOLD.
+PR39/40 слиты; accepted main586240e8, push CI41178689536:11/11 SUCCESS.
+Observer repair закрыт. C2 R4 принят C0 в SOURCE + TARGETED PG scope:
+104 PASS, включая35 actual PG; database-only слой ещё не integrated в main.
+R1 source9b05e5dd/receipt e58163ae проверен C0: CI6 PASS/5 FAIL/1 SKIPPED,
+45/64 M4 PG PASS; whole-runtime BLOCKED. PR41 и R1 refs frozen, не сливать.
+R2 source e8300919/receipt d1959bca проверен C0:80 final offline PASS,
+но capture41223501373 отказал EVENT_PUSH_BASE_REF до Docker/PG.
+R3 admission принят C0 по source + hosted evidence; stock catalogs получены.
+R10 source2c35f9c6/receipt1f7f3594 проверены C0:targeted72/72 и M466/66 PASS,
+unit3529 PASS, два R9 blockers устранены. PR42/full CI41872808265:11 SUCCESS,1 FAIL.
+Generic860 теперь достигнут:546PASS/69callFAIL/245setupERROR, ещё1teardownERROR.
+Причины: optional observer API, old schema/TRUNCATE oracles, provenance task/cleanup
+и downstream duplicate setup; отдельный material-history downgrade refusal.
+Полная causal chain и конкретные history rows не доказаны; whole-runtime BLOCKED.
+Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R11: ограниченный test-only repair
+foundation compatibility; до8source paths в CURRENT. Product/мigrations/pins/
+constraints/C2 runner/workflows/архитектура неизменны. Историю не удалять ради PASS.
+После causal/offline checks разрешён один expected-SHA FF того же PR42 и один CI.
+Явное решение C0: без нового standalone72/capture/hosted framework; при отсутствии
+local stock PG этот full CI выполняет первый actual PG repair validation.
+Требуются12/12 и actual1031PG/all foundation phases, setup/teardown также PASS.
+Одна задача продолжается в одном PR. Main/PR41/R1–R10 prep/execution/C2 refs frozen;
+исключение только PR42 source update. При FAIL — полный receipt/C0 без retry.
+Valid OUTPUT/UNKNOWN metering сохраняет held reserve/no-regeneration; application,
+catalog,tenant,currentness,rights и send guards не обходить.
+AI выключен по умолчанию; paid/live transports/VM/real data не включаются.
+Остальные роли HOLD; C2 R1–R4 execution refs frozen.
 Прежние paid допуски использованы; новых вызовов они не разрешают.
 Исторические HOLD/операторские команды M1–M3 не являются новой задачей M4.
 

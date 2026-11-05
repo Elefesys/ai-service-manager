@@ -1,12 +1,14 @@
 # M4.2 — GPT synthetic проверка завершена
 
-**Ничего повторно запускать не нужно.** C0 принял18 новых ответов; вместе
-с7 сохранёнными из R1 получено **25 manual PASS**,2 READ и2 synthetic images.
-GPT/v2 выбран кандидатом для разработки первого runtime. C4 context/read/agent
-принят локально. C2 R3 принят: 258 PASS на PostgreSQL, cleanup PASS.
-PR39 слит; PR CI прошёл, но проверка main нашла один timeout теста блокировки.
-[C2 R4 принят C0](../tasks/M4_HANDOFF.md):278 целевых PostgreSQL тестов PASS.
-Следующий шаг — новый PR исправления и полный CI; повторять Polza probe не нужно.
+**Ничего повторно запускать не нужно.** GPT synthetic проверка принята C0:
+25 manual PASS,2 READ и2 synthetic images; GPT/v2 выбран для первого runtime.
+PR39/40 слиты. [Main CI41178689536](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536)
+прошёл11/11, ошибка CI закрыта. C2 R4 принят C0:104 PASS, включая35 actual PG.
+[Текущая задача C3 R11](../tasks/M4_HANDOFF.md) — совместимость тестов foundation
+с новым AI runtime. R10 прошёл72/72 targeted,3529 unit и66/66 M4 в полном CI.
+Остался generic PostgreSQL suite: optional observer API, перечни таблиц и очистка
+тестовых данных. Material-history guard сохраняется. Исправления продолжаются
+в том же PR42; новый PR не нужен. PR41/42 пока не сливать.
 
 ## Принятый отчёт
 
@@ -34,13 +36,23 @@ R2 p50 11.163s /p95 16.393s, N18, включая history; маленькая в�
 
 ## Дальше
 
-R3 scope принят, PR39 слит. Main CI41108194917:10 jobs SUCCESS,
-foundation839 PostgreSQL PASS/1 FAIL (resume-activation-subscription,
-observer timeout1.5s). Это проверка синхронизации HTTP/PostgreSQL, без вызовов ИИ.
-C2 отделил подготовку HTTP/auth от короткого окна проверки блокировки;
-таймаут1.5s и смысл проверки policy сохранены. C0 принял source/targeted evidence
-и готовит отдельный Draft PR с одним полным CI. Затем merge владельца и проверка
-actual main; после этого продолжим durable/runtime/Telegram.
+Accepted main586240e88c825aa67593af5d72e0bdbb251ed3bb:860 PostgreSQL,
+54 browser и остальные CI gates PASS. Новый DB-only слой прошёл source review
+и104 проверки: сохранённый ответ переживает restart, stale/HUMAN блокируют
+новое действие, UNKNOWN не вызывает автоматическую повторную генерацию.
+C3 R8 подтвердил reply→защищённый Outbox→synthetic Telegram: при наличии прав
+ровно одна отправка, при отзыве прав — отказ без отправки; restart/replay без
+повтора. Handoff/no_reply, отмена AI, ручной ответ/inbound во время AI wait,
+native6 и UNKNOWN metering/timeout также PASS. Schema matrix/old CHECK control
+теперь пройдены. R10 подтвердил эти результаты в целевом и полном прогоне;
+все3529 unit tests проходят. Foundation впервые дошёл до generic860:
+546PASS,69callFAIL и245setupERROR, ещё1teardownERROR. Большая часть падений
+связана с optional observer API и каскадом неочищенных тестовых данных.
+R11 исправляет ограниченный test harness, сохраняя реальные guards и проверки.
+После offline checks — один полный CI того же PR42; отдельный новый hosted
+carrier не создаётся. До12/12 gates и actual1031PG PASS whole-runtime BLOCKED.
+Отдельного capture и новых платных вызовов не требуется.
+AI выключен по умолчанию; модель и transport в этой проверке тестовые.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.
 
 Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`
@@ -50,6 +62,7 @@ Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER
 Это synthetic EVAL_ONLY: OpenAI family подтверждена в receipt, flex variant
 не наблюдался. Реальные данные, Telegram runtime и backend route ещё требуют
 соответствующей приёмки. Gemini/DeepSeek DEFERRED; сравнение75 не завершено.
-PR39 уже merged. Actual main verification BLOCKED до integration/main checks;
-прежний PR PASS и новый main FAIL сохранены раздельно. Причина задержки
-целевого запроса UNKNOWN. Никакого enable/deploy эта приёмка не выполняет.
+PR40/main проверены; source CI не является включением живого AI runtime.
+0014 отдельно не сливается; согласованный application/Outbox successor0015
+назначен C3. Разрешённый живой TEST smoke — отдельный последующий шаг.
+Deploy/paid запусков нет.

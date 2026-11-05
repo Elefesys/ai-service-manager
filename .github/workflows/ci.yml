@@ -32,7 +32,15 @@ jobs:
       - name: Run real browser, API and PostgreSQL journeys
         run: sh scripts/test_browser.sh
       - name: Require unchanged tracked and untracked source
+        if: always()
         run: test -z "$(git status --porcelain --untracked-files=all)"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: browser-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/browser-lifecycle/
+          retention-days: 7
+          if-no-files-found: error
   foundation-durable:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -244,5 +252,9 @@ jobs:
           if-no-files-found: error
   native-context-db:
     uses: ./.github/workflows/native-context-db.yml
+    permissions:
+      contents: read
+  m4-runtime-db:
+    uses: ./.github/workflows/m4-runtime-db.yml
     permissions:
       contents: read

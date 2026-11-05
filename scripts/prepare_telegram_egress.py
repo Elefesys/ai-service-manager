@@ -25,7 +25,7 @@ IMAGE = (
     "ghcr.io/xtls/xray-core@sha256:9a17fb7fcda36f80d041fc1f12f1d661d3f7c502572b2a6f2e4432534789a20b"
 )
 SOURCE = {
-    "backend/src/asm/telegram/client.py": "525381357de76ea1c570fd864f8df5e9781a87e2",
+    "backend/src/asm/telegram/client.py": "d1874dd87ca4ed01d443e17d56afcc9d6d7bed44",
     "backend/src/asm/telegram/config.py": "31cba499681270d708cdb55e7c8e44202c07b4b7",
 }
 CALLERS = ("api", "worker", "telegram-operator")
@@ -1950,16 +1950,22 @@ SCHEMA_TABLES["0013"] = SCHEMA_TABLES["0012"] | {
     "platform.human_context_policy_receipts",
 }
 
+SCHEMA_TABLES["0015"] = SCHEMA_TABLES["0013"] | {
+    "platform.ai_runs",
+    "platform.ai_provider_calls",
+    "platform.ai_deliveries",
+}
+
 
 def native_source_profile():
-    """Distinct source-only0013 inventory; never widen the retained0012 reader."""
+    """Current0015 inventory; the historical0012/0013 inventories stay closed."""
     from scripts import native_context_db_catalog as runner
 
     require(runner.ROOT == ROOT, "NATIVE_PROFILE_SOURCE_MISMATCH")
-    profile = runner.source_catalog(ROOT)
-    schema_inventory("0013", profile["columns"])
+    profile = runner.source_catalog(ROOT, "0015")
+    schema_inventory("0015", profile["columns"])
     require(
-        len(profile["functions"]) == 167 and sum(map(len, profile["columns"].values())) == 635,
+        len(profile["functions"]) == 183 and sum(map(len, profile["columns"].values())) == 690,
         "NATIVE_PROFILE_INVENTORY",
     )
     return profile
@@ -1987,7 +1993,7 @@ def native_host_profile(accepted_sha, accepted_tree):
         material = {
             "role": role,
             "source_tree": tree,
-            "schema_revision": "0013",
+            "schema_revision": "0015",
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
             "files": {name: entries[name] for name in paths},
         }

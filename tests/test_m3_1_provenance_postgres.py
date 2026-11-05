@@ -562,25 +562,34 @@ async def test_real_barrier_recheck_and_postwait_claim_expiry(material, barrier)
             ),
             {"id": claim.job_id},
         )
-    async with h.migrator.begin() as blocker:
-        pid = (await blocker.execute(text("SELECT pg_backend_pid()"))).scalar_one()
-        if barrier == "connection":
-            await blocker.execute(
-                text("SELECT id FROM app.channel_connections WHERE id=:id FOR UPDATE"),
-                {"id": h.telegram_connection},
-            )
-        else:
-            await blocker.execute(
-                text("SELECT id FROM app.conversations WHERE id=:id FOR NO KEY UPDATE"),
-                {"id": before["conversation_id"]},
-            )
-        pending = asyncio.create_task(h.kernel.process_inbox(claim))
-        await wait_blocked(blocker, pid, pending=pending)
-        await asyncio.sleep(0.6)
-    with pytest.raises(MessagingError) as caught:
-        await pending
-    assert caught.value.code == Code.STALE_CLAIM
-    assert await current(h) == before and (await traces(h))["effects"] == 0
+    tasks = []
+    try:
+        async with h.migrator.begin() as blocker:
+            pid = (await blocker.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+            if barrier == "connection":
+                await blocker.execute(
+                    text("SELECT id FROM app.channel_connections WHERE id=:id FOR UPDATE"),
+                    {"id": h.telegram_connection},
+                )
+            else:
+                await blocker.execute(
+                    text("SELECT id FROM app.conversations WHERE id=:id FOR NO KEY UPDATE"),
+                    {"id": before["conversation_id"]},
+                )
+            pending = asyncio.create_task(h.kernel.process_inbox(claim))
+            tasks.append(pending)
+            await wait_blocked(blocker, pid, pending=pending)
+            await asyncio.sleep(0.6)
+        with pytest.raises(MessagingError) as caught:
+            await pending
+        assert caught.value.code == Code.STALE_CLAIM
+        assert await current(h) == before and (await traces(h))["effects"] == 0
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        async with asyncio.timeout(5):
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def test_original_and_material_workers_serialize_unknown_chat_without_deadlock(material):
@@ -589,22 +598,32 @@ async def test_original_and_material_workers_serialize_unknown_chat_without_dead
     original = await ingest_raw(h, raw())
     ce = await claim_exact(h, edit.job_id)
     co = await claim_exact(h, original.job_id)
-    async with h.migrator.begin() as blocker:
-        pid = (await blocker.execute(text("SELECT pg_backend_pid()"))).scalar_one()
-        await blocker.execute(
-            text("SELECT id FROM app.channel_connections WHERE id=:id FOR UPDATE"),
-            {"id": h.telegram_connection},
-        )
-        e = asyncio.create_task(h.kernel.process_inbox(ce))
-        edit_wait = await wait_blocked(blocker, pid, pending=e)
-        o = asyncio.create_task(h.kernel.process_inbox(co))
-        original_wait = await wait_blocked(blocker, pid, pending=o)
-        assert {r["pid"] for r in edit_wait}.isdisjoint(r["pid"] for r in original_wait)
-    async with asyncio.timeout(5):
-        await asyncio.gather(e, o)
-    m = await current(h)
-    assert m["version"] == 2 and m["current"]["text"] == "B"
-    assert (await traces(h))["effects"] == 1
+    tasks = []
+    try:
+        async with h.migrator.begin() as blocker:
+            pid = (await blocker.execute(text("SELECT pg_backend_pid()"))).scalar_one()
+            await blocker.execute(
+                text("SELECT id FROM app.channel_connections WHERE id=:id FOR UPDATE"),
+                {"id": h.telegram_connection},
+            )
+            e = asyncio.create_task(h.kernel.process_inbox(ce))
+            tasks.append(e)
+            edit_wait = await wait_blocked(blocker, pid, pending=e)
+            o = asyncio.create_task(h.kernel.process_inbox(co))
+            tasks.append(o)
+            original_wait = await wait_blocked(blocker, pid, pending=o)
+            assert {r["pid"] for r in edit_wait}.isdisjoint(r["pid"] for r in original_wait)
+        async with asyncio.timeout(5):
+            await asyncio.gather(e, o)
+        m = await current(h)
+        assert m["version"] == 2 and m["current"]["text"] == "B"
+        assert (await traces(h))["effects"] == 1
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        async with asyncio.timeout(5):
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def test_api_current_closed_history_and_same_workspace_wrong_client(material):

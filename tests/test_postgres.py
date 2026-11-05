@@ -106,6 +106,9 @@ async def test_real_postgres_capabilities_and_roles(database):
             .all()
         )
         assert tables == [
+            "ai_deliveries",
+            "ai_provider_calls",
+            "ai_runs",
             "alembic_version",
             "audit_events",
             "auth_credentials",
@@ -151,7 +154,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "Only the accepted M0 through M3 material tables are allowed"
+        ], "Only the accepted M0 through M4 material tables are allowed"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

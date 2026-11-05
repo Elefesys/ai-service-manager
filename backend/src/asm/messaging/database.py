@@ -41,6 +41,7 @@ from asm.messaging.errors import Code, MessagingError, database_error
 from asm.messaging.models import NormalizedEventV1, SendOutcome, identifier
 from asm.messaging.results import (
     CONTEXT_WORK_CODES,
+    AISendPermit,
     ContextWorkResult,
     FinalizeResult,
     InboxProcessingResult,
@@ -161,6 +162,29 @@ class WorkerUnitOfWork:
             self._failed = True
             raise
 
+    async def ai_runtime(
+        self, operation: str, payload: dict[str, object], *, delivery: bool = False
+    ) -> Any:
+        """Closed DB-only capability, using this admitted job, never payload authority."""
+        if operation not in {
+            "ENQUEUE",
+            "PREPARE",
+            "AUTHORIZE",
+            "READ",
+            "RESERVE",
+            "COMPLETE",
+            "COMMIT",
+            "STOP",
+        }:
+            raise MessagingError(Code.INVALID_INPUT)
+        if type(delivery) is not bool or (operation == "STOP" and not delivery):
+            raise MessagingError(Code.INVALID_INPUT)
+        capability = "ai_delivery_command" if delivery else "ai_runtime_command"
+        return await self._execute(
+            f"SELECT platform.{capability}(:job,:token,:operation,CAST(:payload AS jsonb))",
+            {"operation": operation, "payload": json.dumps(payload, allow_nan=False)},
+        )
+
     async def process_inbox(self) -> InboxProcessingResult | MutationInboxProcessingResult:
         return parse_inbox_result(
             await self._execute("SELECT platform.messaging_process_inbox(:job, :token)")
@@ -252,15 +276,18 @@ class MessagingDatabase:
         await self.checkpoint("ingest_after_commit")
         return result
 
-    async def claim_job(self, worker_id: str) -> JobClaim | None:
+    async def claim_job(self, worker_id: str, *, ai: bool = False) -> JobClaim | None:
         identifier(worker_id)
+        if type(ai) is not bool:
+            raise MessagingError(Code.INVALID_INPUT)
+        capability = "ai_delivery_claim" if ai else "messaging_claim"
         scan = self._claim_scan.get(worker_id)
         for _ in range(100):
             async with self._transaction() as connection:
                 result = ScanStep.model_validate(
                     await call(
                         connection,
-                        "SELECT platform.messaging_claim(:worker, :until, :at, :id)",
+                        f"SELECT platform.{capability}(:worker, :until, :at, :id)",
                         {"worker": worker_id, **self._scan_parameters(scan)},
                     )
                 )
@@ -437,6 +464,52 @@ class MessagingDatabase:
             if recovered == limit:
                 break
         return recovered
+
+    async def replay_ai(self, job_id: UUID, claim_token: UUID, payload: dict[str, object]) -> Any:
+        require_uuid(job_id)
+        require_uuid(claim_token)
+        async with self._transaction() as connection:
+            return await call(
+                connection,
+                "SELECT platform.ai_runtime_replay(:job,:token,CAST(:payload AS jsonb))",
+                {
+                    "job": job_id,
+                    "token": claim_token,
+                    "payload": json.dumps(payload, allow_nan=False),
+                },
+            )
+
+    async def enqueue_ai(self, claim: JobClaim) -> UUID:
+        async with self._transaction() as connection:
+            result = await call(
+                connection,
+                "SELECT platform.ai_delivery_enqueue(:job,:token)",
+                {"job": claim.job_id, "token": claim.claim_token},
+            )
+            await self.checkpoint("ai_enqueue_before_commit")
+        await self.checkpoint("ai_enqueue_after_commit")
+        return UUID(result["job_id"])
+
+    async def begin_ai_send(
+        self, claim: JobClaim, probe: "TelegramProbe | None", observation: dict[str, object] | None
+    ) -> AISendPermit | TerminalRejection:
+        async with self.admit_job(claim.job_id, claim.claim_token) as unit:
+            raw = await unit._execute(
+                "SELECT platform.ai_delivery_begin(:job,:token,:generation,:version,CAST(:observation AS jsonb))",
+                {
+                    "generation": probe.generation if probe else None,
+                    "version": probe.observation_version if probe else None,
+                    "observation": json.dumps(observation) if observation is not None else None,
+                },
+            )
+            result = (
+                AISendPermit.model_validate(raw)
+                if raw["code"] == "PERMITTED"
+                else TerminalRejection.model_validate(raw)
+            )
+            await self.checkpoint("start_before_commit")
+        await self.checkpoint("start_after_commit")
+        return result
 
     async def replay_context_work(self, job_id: UUID, claim_token: UUID) -> ContextWorkResult:
         require_uuid(job_id)

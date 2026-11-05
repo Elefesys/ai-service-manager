@@ -17,6 +17,210 @@ import pytest
 from scripts import prepare_telegram_egress as egress
 
 
+@pytest.mark.parametrize(
+    "primary,cleanup,export_failure",
+    [(0, 0, False), (37, 0, False), (0, 9, False), (37, 9, False), (0, 0, True), (37, 0, True)],
+)
+def test_browser_cleanup_exports_nested_real_phase_reports_and_keeps_primary(
+    tmp_path, primary, cleanup, export_failure
+):
+    import shlex
+
+    from scripts import m4_runtime_db as carrier
+
+    root = tmp_path / "private-stack"
+    (root / "private").mkdir(parents=True)
+    (root / "evidence").mkdir()
+    (root / "private/test.env").write_text("PG_RUNTIME_PASSWORD=PRIVATE_SENTINEL\n")
+    payload = root / "evidence/readiness.json"
+    carrier.phase(
+        root,
+        "readiness",
+        [
+            sys.executable,
+            "-c",
+            'import pathlib,sys;pathlib.Path(sys.argv[1]).write_text(\'{"runtime_check":"PASS"}\')',
+            str(payload),
+        ],
+        5,
+    )
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    docker = tools / "docker"
+    docker.write_text(
+        "#!/bin/sh\ncase \" $* \" in\n  *' down '*) exit "
+        + str(cleanup)
+        + ";;\n  *) exit 0;;\nesac\n"
+    )
+    docker.chmod(0o700)
+    if export_failure:
+        copy = tools / "cp"
+        copy.write_text("#!/bin/sh\nexit 23\n")
+        copy.chmod(0o700)
+    source = (egress.ROOT / "scripts/test_browser.sh").read_text()
+    functions = "step() {" + source.split("step() {", 1)[1].split("\ntrap cleanup EXIT\n", 1)[0]
+    shell = (
+        "set -eu\ntmp="
+        + shlex.quote(str(root))
+        + "\n"
+        + functions
+        + "\ntrap cleanup EXIT\nexit "
+        + str(primary)
+    )
+    working = tmp_path / "working"
+    working.mkdir()
+    result = subprocess.run(
+        ["sh", "-c", shell],
+        cwd=working,
+        env={
+            **os.environ,
+            "PATH": str(tools) + os.pathsep + os.environ["PATH"],
+            "PYTHONPATH": str(egress.ROOT),
+            "PYTHONDONTWRITEBYTECODE": "1",
+        },
+        capture_output=True,
+        timeout=15,
+    )
+    assert result.returncode == (primary or (1 if cleanup or export_failure else 0)), (
+        result.stderr.decode()
+    )
+    exported = working / "reports/browser-lifecycle"
+    assert not root.exists()
+    if export_failure:
+        assert not list(exported.iterdir())
+        return
+    assert json.loads((exported / "readiness.json").read_text())["runtime_check"] == "PASS"
+    assert json.loads((exported / "phases/readiness.json").read_text())["exit_code"] == 0
+    assert json.loads((exported / "phases/cleanup.json").read_text())["exit_code"] == cleanup
+    assert (exported / "phases/readiness.log").exists()
+    assert (exported / "phases/cleanup.log").exists()
+    assert "PRIVATE_SENTINEL" not in "".join(
+        p.read_text() for p in exported.rglob("*") if p.is_file()
+    )
+
+
+@pytest.mark.parametrize("fault", ["timeout", "nonzero", "timeout_evidence_failure"])
+def test_synthetic_command_journal_preserves_failure_and_omits_private_values(
+    tmp_path, monkeypatch, capsys, fault
+):
+    import ast
+    import re
+    import time
+
+    source = (
+        (egress.ROOT / "scripts/test_telegram_egress.sh")
+        .read_text()
+        .split("<<'PY'\n", 1)[1]
+        .rsplit("\nPY", 1)[0]
+    )
+    tree = ast.parse(source)
+    functions = [
+        n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in {"record_phase", "run"}
+    ]
+    namespace = dict(
+        root=tmp_path,
+        directory=tmp_path,
+        phase="relay_containers",
+        environment={},
+        os=os,
+        sys=sys,
+        json=json,
+        re=re,
+        time=time,
+        subprocess=subprocess,
+    )
+    exec(
+        compile(ast.Module(body=functions, type_ignores=[]), "synthetic-egress-runner", "exec"),
+        namespace,
+    )
+    (tmp_path / ".env").write_text("PG_RUNTIME_PASSWORD=PRIVATE_SENTINEL\n")
+    failure = subprocess.TimeoutExpired(["PRIVATE_SENTINEL"], 3)
+
+    def run(*args, **kwargs):
+        if fault.startswith("timeout"):
+            raise failure
+        return subprocess.CompletedProcess(args[0], 42, b"", b"PRIVATE_SENTINEL")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    if fault == "timeout_evidence_failure":
+        original = namespace["record_phase"]
+
+        def broken(value):
+            if value["event"] == "end":
+                raise OSError("PRIVATE_SENTINEL")
+            original(value)
+
+        namespace["record_phase"] = broken
+    with pytest.raises(
+        subprocess.TimeoutExpired if fault.startswith("timeout") else RuntimeError
+    ) as caught:
+        namespace["run"](["private-command", "PRIVATE_SENTINEL"], timeout=3)
+    if fault.startswith("timeout"):
+        assert caught.value is failure
+    raw = (tmp_path / "reports/telegram-egress-phases.jsonl").read_text()
+    assert "PRIVATE_SENTINEL" not in raw + capsys.readouterr().out
+    rows = [json.loads(line) for line in raw.splitlines()]
+    assert rows[0]["event"] == "start" and rows[0]["budget_seconds"] == 3
+    if fault != "timeout_evidence_failure":
+        assert rows[-1]["event"] == "end"
+        assert rows[-1]["complete"] is (fault == "nonzero")
+        assert rows[-1]["exit_code"] == (42 if fault == "nonzero" else None)
+
+
+@pytest.mark.parametrize("primary", [False, True])
+def test_synthetic_cleanup_failure_is_recorded_without_replacing_primary(primary, monkeypatch):
+    import ast
+    import time
+
+    source = (
+        (egress.ROOT / "scripts/test_telegram_egress.sh")
+        .read_text()
+        .split("<<'PY'\n", 1)[1]
+        .rsplit("\nPY", 1)[0]
+    )
+    tree = ast.parse(source)
+    finalizer = next(
+        n.finalbody
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Try)
+        and n.finalbody
+        and isinstance(n.finalbody[0], ast.Assign)
+        and getattr(n.finalbody[0].targets[0], "id", None) == "primary_active"
+        and len(n.finalbody) > 1
+        and isinstance(n.finalbody[1], ast.Assign)
+        and getattr(n.finalbody[1].targets[0], "id", None) == "cleanup_started"
+    )
+    body = ast.parse("raise primary_error" if primary else "pass").body
+    constructed = ast.fix_missing_locations(
+        ast.Module(
+            body=[ast.Try(body=body, handlers=[], orelse=[], finalbody=finalizer)], type_ignores=[]
+        )
+    )
+    rows = []
+    error = RuntimeError("PRIVATE_SENTINEL")
+    namespace = dict(
+        sys=sys,
+        time=time,
+        subprocess=subprocess,
+        processes=[],
+        prefix=["constructed-compose"],
+        environment={},
+        record_phase=rows.append,
+        primary_error=error,
+    )
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 7, b"", b"PRIVATE_SENTINEL"),
+    )
+    with pytest.raises(RuntimeError if primary else SystemExit) as caught:
+        exec(compile(constructed, "constructed-cleanup", "exec"), namespace)
+    assert caught.value is error if primary else caught.value.code == 1
+    assert rows[0]["phase"] == "cleanup" and rows[0]["exit_code"] == 7
+    assert rows[0]["primary_failure_preserved"] is primary
+    assert "PRIVATE_SENTINEL" not in json.dumps(rows)
+
+
 def test_split_private_inputs_preserve_https_runtime_and_strict_drift(tmp_path, monkeypatch):
     root = tmp_path / "checkout"
     root.mkdir(mode=0o700)
@@ -1728,10 +1932,10 @@ def test_material_egress_current_revision_and_runtime_only_narrow_wrappers():
     from asm.foundation import DATABASE_SCHEMA_REVISION
     from test_telegram_egress_postgres import canonical_fingerprint
 
-    assert DATABASE_SCHEMA_REVISION == "0013"
+    assert DATABASE_SCHEMA_REVISION == "0015"
     assert inspect.signature(canonical_fingerprint).parameters["revision"].default == "0012"
     shell = (egress.ROOT / "scripts/test_telegram_egress.sh").read_text()
-    assert "'expected_revision': '0013'" in shell
+    assert "'expected_revision': '0015'" in shell
     # The source/image-switch production helper is still historical0007-only.
     assert 'heads == [b"0007"]' in inspect.getsource(egress.migration_source)
 
@@ -1742,14 +1946,14 @@ def test_native_profile_is_separate_from_exact_historical_material_inventory():
     old = material_source_profile()
     native = egress.native_source_profile()
     assert len(old["functions"]) == 132 and len(old["columns"]) == 42
-    assert len(native["functions"]) == 167 and len(native["columns"]) == 45
-    assert sum(map(len, native["columns"].values())) == 635
+    assert len(native["functions"]) == 183 and len(native["columns"]) == 48
+    assert sum(map(len, native["columns"].values())) == 690
     assert set(old["columns"]) == egress.SCHEMA_TABLES["0012"]
-    assert set(native["columns"]) == egress.SCHEMA_TABLES["0013"]
+    assert set(native["columns"]) == egress.SCHEMA_TABLES["0015"]
     with pytest.raises(egress.EgressError, match="DATABASE_TABLES"):
         egress.schema_inventory("0012", native["columns"])
     with pytest.raises(egress.EgressError, match="DATABASE_TABLES"):
-        egress.schema_inventory("0013", old["columns"])
+        egress.schema_inventory("0015", old["columns"])
 
 
 @pytest.fixture
@@ -1864,7 +2068,7 @@ def test_native_host_checks_actual_clean_git_bytes_and_all_component_profiles(
             material = {
                 "role": role,
                 "source_tree": approved["tree"],
-                "schema_revision": "0013",
+                "schema_revision": "0015",
                 "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
                 "files": {name: entries[name] for name in paths},
             }
@@ -1874,7 +2078,7 @@ def test_native_host_checks_actual_clean_git_bytes_and_all_component_profiles(
     approval = provisioning.NativeHostApproval.model_validate(approved)
     if damage is None:
         _, profile = provisioning.native_host_source(approval)
-        assert len(profile["functions"]) == 167 and len(profile["columns"]) == 45
+        assert len(profile["functions"]) == 183 and len(profile["columns"]) == 48
     else:
         with pytest.raises(provisioning.ProvisioningError, match="^POLICY_PREREQUISITE_FAILED$"):
             provisioning.native_host_source(approval)
@@ -1899,7 +2103,7 @@ async def test_native_installed_catalog_missing_function_refuses_before_self_rep
             if sql == "SHOW server_version_num":
                 return SimpleNamespace(scalar_one=lambda: "180006")
             if "version_num" in sql:
-                return SimpleNamespace(scalar_one=lambda: "0013")
+                return SimpleNamespace(scalar_one=lambda: "0015")
             if sql == runner.CATALOG_SQL:
                 return SimpleNamespace(one=lambda: ("{}", "{}"))
             if sql == runner.FUNCTION_SQL:
@@ -1922,11 +2126,11 @@ async def test_native_installed_catalog_missing_function_refuses_before_self_rep
     assert not any("human_context_policy_command(" in sql for sql in statements)
 
 
-def durable_fingerprint_connection(revision="0013", tables=None):
+def durable_fingerprint_connection(revision="0015", tables=None):
     """SQL result seam only; every selected row read is recorded, no engine."""
     from types import SimpleNamespace
 
-    selected = sorted(egress.SCHEMA_TABLES["0013"] if tables is None else tables)
+    selected = sorted(egress.SCHEMA_TABLES["0015"] if tables is None else tables)
     rows = {name: [{"id": name, "value": "exact\nUnicode Я"}] for name in selected}
     reads = []
 
@@ -1949,17 +2153,17 @@ def durable_fingerprint_connection(revision="0013", tables=None):
 @pytest.mark.parametrize(
     "damage", (None, "0012", "0014", "missing-native", "extra-native", "replace-native")
 )
-async def test_current_durable_fingerprint_requires_exact0013_and_all45_tables(damage):
+async def test_current_durable_fingerprint_requires_exact0015_and_all48_tables(damage):
     from test_telegram_egress_postgres import current_durable_fingerprint
 
-    tables = set(egress.SCHEMA_TABLES["0013"])
+    tables = set(egress.SCHEMA_TABLES["0015"])
     native = sorted(tables - egress.SCHEMA_TABLES["0012"])
     if damage in {"missing-native", "replace-native"}:
         tables.remove(native[0])
     if damage in {"extra-native", "replace-native"}:
         tables.add("platform.unapproved_native")
     connection, rows, reads = durable_fingerprint_connection(
-        damage if damage in {"0012", "0014"} else "0013", tables
+        damage if damage in {"0012", "0014"} else "0015", tables
     )
     if damage == "replace-native":
         # run_path executes the actual helper in a separate module namespace.
@@ -1974,7 +2178,7 @@ async def test_current_durable_fingerprint_requires_exact0013_and_all45_tables(d
         assert reads == []
     else:
         fingerprint = await current_durable_fingerprint(connection)
-        assert set(fingerprint) == tables and len(reads) == len(set(reads)) == 45
+        assert set(fingerprint) == tables and len(reads) == len(set(reads)) == 48
         for name in tables:
             expected = "\n".join(
                 sorted(json.dumps(row, sort_keys=True, separators=(",", ":")) for row in rows[name])
@@ -1993,7 +2197,7 @@ async def test_current_durable_fingerprint_requires_exact0013_and_all45_tables(d
 async def test_historical_fingerprint_still_refuses0013_before_any_row_acceptance():
     from test_telegram_egress_postgres import canonical_fingerprint
 
-    connection, _, reads = durable_fingerprint_connection()
+    connection, _, reads = durable_fingerprint_connection(revision="0013")
     with pytest.raises(AssertionError):
         await canonical_fingerprint(connection)
     with pytest.raises(AssertionError):
@@ -2001,7 +2205,7 @@ async def test_historical_fingerprint_still_refuses0013_before_any_row_acceptanc
     assert reads == []
 
 
-def test_all_current_durable_before_seeded_cleanup_and_snapshot_routes_are0013():
+def test_all_current_durable_before_seeded_cleanup_and_snapshot_routes_are0015():
     import ast
     import inspect
 
@@ -2089,7 +2293,7 @@ async def test_current_durable_snapshot_keeps_readonly_database_unknown_console_
         snapshot = await durable.durable_snapshot()
         assert (
             snapshot["identity"] == identity
-            and set(snapshot["tables"]) == egress.SCHEMA_TABLES["0013"]
+            and set(snapshot["tables"]) == egress.SCHEMA_TABLES["0015"]
         )
         assert snapshot["tables"]["platform.auth_sessions"]["count"] == 2
         assert (

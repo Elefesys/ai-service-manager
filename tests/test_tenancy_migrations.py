@@ -39,6 +39,40 @@ async def test_fresh_m0_idempotent_downgrade_reupgrade_and_readiness():
     migrator = create_async_engine(migration_url, hide_parameters=True)
     identifier = uuid4()
     try:
+        async with migrator.connect() as connection:
+            revision = (
+                await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
+            ).scalar_one()
+            # Read the exact 0012 refusal predicates; never erase unexplained history.
+            counts = {}
+            for table, predicate in (
+                ("platform.telegram_update_receipts", "codec IS NOT NULL"),
+                ("platform.telegram_provenance", "true"),
+                ("platform.message_material_targets", "true"),
+                ("platform.message_material_effects", "true"),
+                ("platform.message_initial_suppressions", "true"),
+                (
+                    "platform.inbox_events",
+                    "material_result IS NOT NULL OR material_claim_token IS NOT NULL OR result_code='MATERIAL_PROCESSED'",
+                ),
+                ("app.conversation_turns", "material_invalidated"),
+                (
+                    "app.conversation_turn_messages",
+                    "membership_form IS NOT NULL OR initial_suppression_id IS NOT NULL",
+                ),
+                ("app.audit_events", "event_type='MESSAGE_MATERIAL_CHANGED'"),
+                ("platform.telegram_connection_state", "material_enabled"),
+            ):
+                counts[table] = (
+                    await connection.execute(
+                        text(f"SELECT count(*) FROM {table} WHERE {predicate}")
+                    )
+                ).scalar_one()
+            assert not any(counts.values()), {
+                "phase": "before_initial_downgrade",
+                "revision": revision,
+                "material_predicate_counts": counts,
+            }
         await migrate("downgrade", "base")
         await migrate("upgrade", "head")
         await runtime.check()
