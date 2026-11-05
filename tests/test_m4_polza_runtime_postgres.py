@@ -419,11 +419,17 @@ async def test_concurrent_enrollment_and_provider_client_cannot_cross_session(
             == 1
         )
         assert not wire.posts and not requests
+        # Finish this test's enrolled AI job through the worker so a later test
+        # cannot claim it. The two source-claim replays still made one enrollment.
+        claim = await h.kernel.claim_job("provider-enrollment", ai=True)
+        assert claim.job_id == (await enrollment(h, source))["job_id"]
+        await worker.execute(claim)
+        assert len(wire.posts) == 1 and not requests
         # A separate client identity in the same tenant is still outside the binding.
         _, other, _ = await source_turn(h, telegram=True)
         with pytest.raises(MessagingError):
             await worker.execute(other)
-        assert not wire.posts
+        assert len(wire.posts) == 1 and not requests
     finally:
         await worker.ai.telegram.aclose()
 
@@ -543,3 +549,34 @@ async def test_current_provider_verifier_rejects_public_execute_grant(provider_p
             await transaction.rollback()
     async with provider_pg.migrator.begin() as c:
         await assert_current_schema(c)
+
+
+async def test_confirmed_call_cap_survives_worker_restart(provider_pg, tmp_path):
+    h = provider_pg
+    cfg, worker, wire, requests, source, scope = await setup(h, tmp_path, max_calls=1)
+    try:
+        first, delivery = await run_turn(h, worker, source)
+        assert delivery["selected_kind"] == "reply" and len(wire.posts) == 1
+        call = (
+            await query(
+                h,
+                "SELECT p.completion FROM platform.ai_provider_calls p JOIN platform.ai_runs r ON (r.workspace_id,r.id)=(p.workspace_id,p.run_id) WHERE r.job_id=:id",
+                id=first.job_id,
+            )
+        )[0]["completion"]
+        assert call["kind"] == "OUTPUT" and call["cost"]["status"] == "CONFIRMED"
+        assert (await command(h, cfg))["code"] == "ALREADY_ENABLED"
+        restarted = create_worker(
+            h.kernel,
+            h.adapter,
+            environment="TEST",
+            provider_settings=cfg,
+            provider_key_file=tmp_path / "private-key",
+            provider_transport=httpx.MockTransport(wire),
+            ai_telegram=worker.ai.telegram,
+        )
+        await restarted.execute(first)
+        _, second = await run_turn(h, restarted, await next_source(h, cfg, scope))
+        assert second["selected_kind"] is None and len(wire.posts) == 1 and not requests
+    finally:
+        await worker.ai.telegram.aclose()
