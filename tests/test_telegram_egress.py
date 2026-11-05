@@ -1935,7 +1935,7 @@ def test_material_egress_current_revision_and_runtime_only_narrow_wrappers():
     assert DATABASE_SCHEMA_REVISION == "0016"
     assert inspect.signature(canonical_fingerprint).parameters["revision"].default == "0012"
     shell = (egress.ROOT / "scripts/test_telegram_egress.sh").read_text()
-    assert "'expected_revision': '0015'" in shell
+    assert "'expected_revision': '0016'" in shell
     # The source/image-switch production helper is still historical0007-only.
     assert 'heads == [b"0007"]' in inspect.getsource(egress.migration_source)
 
