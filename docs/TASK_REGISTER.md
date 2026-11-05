@@ -2,7 +2,42 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, source REVIEW для C0 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, foundation repair / 2026-11-05
+
+C0 рассмотрел receipt **f638d8462ceae5926e03b6330462ab8e1eb69973** и CI
+**42013215782** на source **1afad91ca079f384dfae65a6a780615ec604d5b5**,
+tree **748f3364115b751945d943e0f87f1430dd25bd4b**.
+Старый revision blocker закрыт: foundation-durable SUCCESS.
+Полный CI11SUCCESS/1FAILURE; actualPG1052PASS/7FAIL.
+C0 проверил source/logs/generic phase records и492manifest entries evidence ZIP;
+повторного запуска тестов или общей приёмки provider source не было.
+
+**C3 продолжает в том же PR43**, от immutable этой выдачи, parent f638d846;
+execution branch c3/m4-3-polza-runtime-r1, expected old head1afad91c.
+Разрешён целиком bounded repair всех3групп:
+5initializer failures — explicit TRUNCATE closure +ai_provider_sessions;
+1inventory failure — exact list +ai_provider_sessions;
+1concurrency timeout — ограниченная test-only диагностика и исправление
+доказанной harness причины без ослабления deadlines/конкуренции/CAS.
+Причина timeout пока UNKNOWN; один следующий PASS её не устанавливает.
+
+Точные write-set/условия/порядок — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Согласованы три затронутых test modules, finite runner admissions/tests
+и при доказанной необходимости связанные auth/tenancy test fixtures.
+Отдельное согласование каждой связанной строки не требуется.
+После offline checks при отсутствии localPG разрешён штатный CI изменённого
+schema+diagnostic source; unchanged rerun/новый carrier/новый PR не нужны.
+Все3группы вернуть C0 с фактическим evidence и оставшимися UNKNOWN.
+
+Приёмка:12SUCCESS/1059actualPG, все phases/fullfoundation/cleanup,
+прежние literal nodeids и бизнесовые assertions сохранены.
+До общей приёмки PR43 DRAFT; source ещё не INTEGRATED/VERIFIED.
+Product/migrations/pins/consumer/workflows/dependencies/architecture unchanged;
+main3cb3764c и historical refs frozen; остальные роли HOLD.
+Paid/live/Telegram/VM/deploy/merge=0,defaultOFF/EVAL_ONLY,ledger150/holds прежние.
+M4/live не закрыт.
+
+## История — C3 foundation repair receipt f638d846 / 2026-11-05
 
 Revision repair выполнен; full CI BLOCKED. Source **1afad91ca079f384dfae65a6a780615ec604d5b5**,
 tree **748f3364115b751945d943e0f87f1430dd25bd4b**, sole child assignment d87ccd5e.

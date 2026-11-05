@@ -6,7 +6,137 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, source REVIEW для C0 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, foundation repair / 2026-11-05
+
+**C0 разрешает C3 исправить две доказанные ошибки тестов схемы и исследовать
+оставшийся concurrency timeout в том же PR43.** Это продолжение R1, а не
+новый PR или новая архитектура. Повторное согласование связанных строк
+тестов в пределах этой выдачи не требуется. Полная приёмка runtime открыта.
+
+### Что проверил C0
+
+Источник — receipt **f638d8462ceae5926e03b6330462ab8e1eb69973**, sole child
+tested source **1afad91ca079f384dfae65a6a780615ec604d5b5**,
+source tree **748f3364115b751945d943e0f87f1430dd25bd4b**.
+Свежие GitHub run/jobs/logs подтверждают
+[CI42013215782](https://github.com/Elefesys/ai-service-manager/actions/runs/42013215782):
+**11 SUCCESS / 1 FAILURE / 0 SKIPPED**. Старый blocker закрыт:
+foundation-durable SUCCESS, producer/consumer current0016 согласованы.
+Нынешний failure — foundation; отказ evidence completeness является
+следствием неполного lifecycle, не отдельной восьмой ошибкой PostgreSQL.
+
+ActualPG: **1052 PASS / 7 FAIL** из1059; generic853/7, native105/0, M4 94/0.
+C0 сверил generic journal:860 setup PASS,853 call PASS/7 call FAIL,
+860 teardown PASS. Полные результаты, остальные PASS и NOT_REACHED —
+в предыдущем receipt ниже. C0 не запускал тесты повторно.
+[Evidence ZIP](https://chatgpt.com/library?file_id=libfile_92b2e8599598819185bf93e477e17edf&account_id=personal):
+183822345bytes, SHA256
+**8cec31834917766417d319654cc1044b7b0034ff43c59ed3ccaa3dd0a3244489**.
+C0 проверил CRC всех493ZIP entries, размер/SHA256 всех492файлов из manifest,
+прочитал исходники, исходный failure log и phase records. Это проверка
+конкретных причин и границ repair, не acceptance всего provider source.
+
+| FAIL | Причина и разрешённая работа |
+|---|---|
+| 5 initializer conflict cases | В tests/test_m1_3_c0_acceptance.py:154 явный TRUNCATE не включает новую platform.ai_provider_sessions; FK на conversations даёт SQLSTATE0A000. Добавить ровно эту таблицу, без CASCADE; сохранить полные snapshots всех49таблиц, rollback и все ожидаемые conflict outcomes. |
+| 1 exact table inventory | В tests/test_postgres.py:108 добавить ai_provider_sessions в sorted exact list. Equality, роли и фактический catalog0016/49tables/190functions/708columns не менять. |
+| 1 different_keys concurrency case | В tests/test_m1_3_api_postgres.py ожидание двух блокирующихся HTTP-запросов истекает внутри asyncio.timeout(2). Причина UNKNOWN; сначала получить наблюдения, затем исправить доказанную ошибку test harness в пределах ниже. |
+
+Предложенный schema patch3paths/4insertions из evidence одобрен по source:
+две указанные строки и два точных admission paths. Он ещё НЕ применён
+и actualPG для него НЕ выполнен; он не устраняет concurrency timeout.
+
+### Выполнение C3 в одном PR
+
+1. Начать от immutable коммита **с этой выдачей**, parent receipt f638d846.
+   Сохранить всю ancestry и готовые правки. Repository Elefesys/ai-service-manager,
+   execution branch **c3/m4-3-polza-runtime-r1**, существующий
+   [PR43](https://github.com/Elefesys/ai-service-manager/pull/43), OPEN/DRAFT.
+   Expected old head для первого FF — **1afad91ca079f384dfae65a6a780615ec604d5b5**.
+   Не создавать новый PR, не force-push. Если ref изменился — сначала сверить его.
+   Runner BASE/BASE_TREE/BRANCH остаются прежними; source base dbb2334a сохранён.
+
+2. Применить schema patch. Затем в существующем concurrency test сохранить
+   короткую test-only диагностику: монотонные времена этапов обоих запросов,
+   entered/PID count, состояния tasks и последнюю наблюдённую lock-wait картину.
+   Наблюдения должны попасть в штатный job log и при PASS, и при timeout,
+   до cancellation/cleanup; не добавлять отдельный carrier или framework.
+   Только конечный allowlist полей: без токенов, SQL text/parameters, HTTP
+   bodies или данных клиента. Не запускать дополнительный SQL после истечения
+   deadline ради диагностики; сохранять уже полученное состояние.
+
+3. Проверить все три параметра same_intent/same_key_conflict/different_keys.
+   **Один повторный PASS не доказывает устранение причины.** По старому логу
+   нельзя утверждать «нагрузка CI», pool starvation или product defect:
+   observer и app используют разные engines; readiness не исполняется на
+   каждом business request. В phase records call durations около0.039/0.039/
+   2.271s, но entered/PIDs/lock state на последнем timeout отсутствуют.
+
+   Если новые наблюдения доказывают test-harness ошибку, C3 вправе исправить
+   её здесь без новой выдачи: порядок test setup, синхронизацию/наблюдение
+   или владение test fixture connection. Сохранить два настоящих одновременных
+   HTTP-запроса и наблюдение обоих blocked backends перед снятием blocker.
+   Не заменять конкуренцию последовательными вызовами или mock.
+   Сохранить deadlines observer2s / SQL lock3s / statement3500ms / auth4s,
+   task cancellation и bounded cleanup. Не повышать их ради зелёного CI.
+
+   Сохранить same_intent200+200/одинаковый result, same_key_conflict200+409
+   IDEMPOTENCY_KEY_CONFLICT, different_keys200+409 STALE_STATE, единственное
+   изменение version и прежние точные receipt/audit counts. Если доказан
+   product defect или причина остаётся неизвестной — вернуть факты C0;
+   исправление business logic/миграций в эту выдачу не входит.
+
+4. Source write-set: **tests/test_m1_3_c0_acceptance.py,
+   tests/test_postgres.py, tests/test_m1_3_api_postgres.py,
+   scripts/m4_runtime_db.py, tests/test_m4_runtime_db_runner.py**.
+   При доказанной необходимости разрешена связанная test-only правка fixture
+   в **tests/test_auth_postgres.py / tests/test_tenancy_postgres.py**;
+   отдельного согласования строки не требуется, причина и diff — в receipt.
+   В runner добавлять только конкретные действительно изменённые test paths;
+   admission tests дополнять существующими positive/negative cases.
+   Никаких wildcard/prefix admissions, смены BASE или ослабления source checks.
+   Остальную логику consumer/verifier и формат evidence не менять. Документы receipt —
+   только HANDOFF/TASK_REGISTER.
+
+5. Сначала diff/AST или compile/Ruff/format, затронутые admission и прежние
+   current-schema/consumer unit checks. ActualPG, если доступен локально:
+   все5 initializer negative cases с достигнутыми conflict/rollback assertions,
+   related positive initializer path, exact inventory/roles и все3 concurrency
+   cases. Не выдавать mock/collect-only за actualPG.
+
+   Если локального PG по-прежнему нет, это НЕ требует ещё одной выдачи:
+   после offline PASS разрешён первый штатный full CI **изменённого**
+   schema+diagnostic source в PR43 для получения недостающих actualPG фактов.
+   Сохранить source/tree/run/полные логи. Затем использовать эти факты для
+   разрешённого test-only repair; следующий полный CI — только после
+   содержательной дельты и затронутых checks, без unchanged-source rerun.
+   Если timeout не повторился, сохранить реальные наблюдения всех3 cases
+   и явно вернуть UNKNOWN root cause, не объявлять его исправленным.
+
+### Приёмка и сохранённые границы
+
+Конечный критерий прежний: **12 jobs SUCCESS,1059 actualPG PASS
+(860generic+105native+94M4)**, все setup/call/teardown, прежние1031 literal
+nodeids и28новых сохранены; никаких skip/xfail/ослабленных assertions.
+Foundation должен дойти до downgrade/reupgrade/contracts/обеих wheels/
+compare/hash и host storage versions/services/http/images; cleanup PASS.
+Для concurrency нужны основание конкретного repair и фактические результаты,
+либо честный UNKNOWN для решения C0, даже при зелёном следующем CI.
+Receipt охватывает все3группы, source/tree/diff, команды/фактические outcomes,
+remaining FAIL/NOT_REACHED, evidence и cleanup; повторный огромный пересказ
+истории не требуется. PR43 остаётся DRAFT до общей приёмки C0.
+
+Это test-only repair согласованного R1. IMPL-004 и ADR132/216–219/259–261/267
+сохраняются. Product code,0001–0016/pins,workflows/dependencies,tenant/native/
+HUMAN/UNKNOWN/no-regeneration/no-resend guards не менять.
+Main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba** и historical refs frozen.
+C3 IN_PROGRESS в этих границах; остальные роли HOLD. Paid/model/catalog/
+history/Telegram send/VM/deploy/merge=0; defaultOFF/EVAL_ONLY прежние.
+Ledger150:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+M4/live pilot остаётся открытым.
+
+## История — C3 foundation repair receipt f638d846 / 2026-11-05
 
 **Revision repair выполнен; полный CI выявил три группы препятствий.**
 CI **11SUCCESS/1FAILURE/0SKIPPED**, actual PostgreSQL **1052PASS/7FAIL**.
