@@ -6,7 +6,101 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, foundation repair / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, foundation repair receipt C3 / 2026-11-05
+
+**Schema repair подтверждён actualPG; different_keys timeout повторился,
+root cause UNKNOWN.** [CI42031358620](https://github.com/Elefesys/ai-service-manager/actions/runs/42031358620) attempt1:
+**11SUCCESS/1FAILURE/0SKIPPED**, actualPG **1058PASS/1FAIL**.
+Конкретная ошибка harness или product defect не доказаны; C3 возвращает
+наблюдения C0 по steps3/5 выдачи. Полная приёмка runtime остаётся открытой.
+
+Source **4025b9d4f8f3a6d2b800cc209dd497743951e0c8**, tree **fa84ee09d9ae31106aceeb5cf73b61576edfbe1c**,
+sole parent assignment **d43cbd31f6d8b51b4fb8e9cda56513cab5332a0a**.
+Tested merge **4c0ccc43ce8e1ff40be4d21b01b808148ec4297a**, identical tree;
+ordered parents main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba** + source.
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43) OPEN/DRAFT;
+existing c3/m4-3-polza-runtime-r1 FF с expected old1afad91c.
+Main,42historical C3/24C2refs сохранены. Source clean; единственный run/attempt,
+post-CI source changes/unchanged retry/new PR/new branch/new carrier=0.
+
+### Дельта и фактические проверки
+
+От выдачи — **5paths/135insertions/27deletions**:
+
+| Path | Изменение |
+|---|---|
+| tests/test_m1_3_c0_acceptance.py | Explicit TRUNCATE +platform.ai_provider_sessions, без CASCADE;49-table snapshots/rollback/conflict oracles сохранены |
+| tests/test_postgres.py | +ai_provider_sessions в sorted exact inventory; equality и роли прежние |
+| tests/test_m1_3_api_postgres.py | Finite monotonic/PID/task/last-lock диагностика до blocker release и task cleanup;6записей в обычном job log при PASS и timeout |
+| scripts/m4_runtime_db.py | Ровно3новых exact admissions для изменённых test paths; BASE/BASE_TREE/BRANCH прежние |
+| tests/test_m4_runtime_db_runner.py | Расширены существующие positive/negative cases, включая отказ похожему неразрешённому пути |
+
+Auth/tenancy fixtures не менялись. Offline **73PASS=55admission+18current-schema/consumer**;
+compile/AST/Ruff/format/diff PASS. Команды из source worktree:
+
+```sh
+PYTHONPATH=backend/src ../polza-r1-venv/bin/python -m pytest -q tests/test_m4_runtime_db_runner.py -k 'admission or admits or rejects_other'
+PYTHONPATH=backend/src ../polza-r1-venv/bin/python -m pytest -q tests/test_telegram_egress.py -k 'current or schema or native_profile or material_egress' tests/test_native_context_db_runner.py::test_foundation_durable_completeness_requires_current_six_lane_receipts
+```
+
+LocalPG NOT_RUN_LOCAL: Docker/psql/postgres отсутствуют. Штатный изменённый
+source проверен hosted CI, в том числе `sh scripts/ci.sh --foundation-core`
+и `sh scripts/ci.sh --normal-durable`; полные команды/logs/JUnit в evidence.
+Hosted unit **3558PASS+155subtests**, frontend398PASS/browser54PASS.
+ActualPG: generic859PASS/1FAIL, native105PASS, M4 94PASS.
+Все1059 setup/call/teardown записаны: setup/teardown PASS,1callFAIL;
+0skip/xfail/missing call, прежние1031literal nodeids +28Polza сохранены.
+
+Все5 initializer negative cases теперь достигают и проходят intended conflict,
+full49-table snapshots и rollback assertions; related initializer paths также PASS.
+Exact inventory/roles PASS; actual0016/49tables/190functions/708columns и pins совпали.
+
+### Три concurrency cases
+
+| Case | Наблюдение перед blocker release | Результат |
+|---|---|---|
+| same_intent |0.047977s;2PIDs,оба active Lock wait,по1blocker;обе tasks PENDING |200/200 identical result и exact version/receipt/audit counts PASS |
+| same_key_conflict |0.050191s;2PIDs,оба active Lock wait,по1blocker;обе tasks PENDING |200/409 IDEMPOTENCY_KEY_CONFLICT и exact counts PASS |
+| different_keys |2.070465s;entered=false,0PIDs,0polls,last_wait=null;обе tasks PENDING |TimeoutError; HTTP/CAS/count assertions NOT_REACHED; teardown PASS |
+
+Для different_keys wrapper starts **0.000942s/2.068101s**, интервал2.067159s;
+observer start0.000899s, deadline2s. До task cleanup2.073093s сохранены те же
+факты; observer connect/query не запускался. **Метка uow_entered обозначает
+вход в patched billing_contact, а не вход в tenant transaction**; отсутствие
+метки не раскрывает ранние auth/tenancy/permission этапы. http_started —
+wrapper перед patch helper, не wire/server-admission timestamp.
+Диагностика не устанавливает причину задержки, pool starvation, CI load,
+product defect или конкретный fixture repair. **Root cause UNKNOWN**;
+исправление причины не заявляется. Дополнительного SQL после deadline нет.
+Observer2s/lock3s/statement3500ms/auth4s,2реальных HTTP tasks,отмена/bounded
+cleanup и все прежние business assertions сохранены; нового repair/CI нет.
+
+### Remaining NOT_REACHED, cleanup и evidence
+
+Normal-durable current0016/6lifecycles/12assertions/cleanup PASS.
+Foundation core primary1/cleanup0; completeness refusal — следствие неполного
+lifecycle, не второй PG failure. NOT_REACHED backend: **downgrade,reupgrade,
+contracts,wheel-one,wheel-two,wheel-compare,wheel-hash**; host:
+**storage-version,storage-admin-version,services,http,images**.
+Native owned cleanup PASS; M4 все5groups PASS с пустыми remaining-resource
+inventories. Для foundation подтверждён cleanup exit0; отдельный zero-resource
+inventory не экспортирован. Failed case setup/teardown PASS; bounded task cleanup вернулся.
+
+[Evidence ZIP](https://chatgpt.com/library?file_id=libfile_43c018ac27e4819184ea7ddad4a99fac&account_id=personal): **188247195bytes**,
+SHA256 **7e0a150a4edd6f77360118975f7b18c11dbc9a3cd846560ab6864d82d9fef509**;
+490manifest/491ZIP entries, CRC/size/SHA256 PASS.
+12original CI ZIPs+12job logs;11source archives сверены со всеми350Git blobs/modes;
+все6diagnostic records,13affected-node phase records,full1059audit/source/diff/commands
+и предыдущие findings сохранены. Три прежних evidence ZIP SHA256 unchanged.
+Receipt — отдельный docs-only sole child tested source; PR head остаётся4025b9d4.
+
+Product/0001–0016/pins/consumer/workflows/dependencies/architecture прежние;
+defaultOFF/EVAL_ONLY,guards и ledger150/holds сохранены.
+Paid/model/catalog/history/Telegram/VM/deploy/merge=0.
+**C0 REVIEW / C3 HOLD**;12SUCCESS/1059PASS/fullfoundation не достигнуты,
+INTEGRATED/VERIFIED и закрытие M4/live этим receipt не объявляются.
+
+## История — C0 foundation repair assignment d43cbd31 / 2026-11-05
 
 **C0 разрешает C3 исправить две доказанные ошибки тестов схемы и исследовать
 оставшийся concurrency timeout в том же PR43.** Это продолжение R1, а не

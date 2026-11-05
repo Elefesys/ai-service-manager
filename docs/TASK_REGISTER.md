@@ -2,7 +2,46 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, foundation repair / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, foundation repair receipt C3 / 2026-11-05
+
+C3 выполнил выдачу d43cbd31 в5разрешённых paths/135+/27−.
+Source **4025b9d4f8f3a6d2b800cc209dd497743951e0c8**, tree **fa84ee09d9ae31106aceeb5cf73b61576edfbe1c**,
+sole child assignment d43cbd31; [PR43](https://github.com/Elefesys/ai-service-manager/pull/43)
+OPEN/DRAFT, existing branch FF с1afad91c. Source clean, один run/attempt,
+post-CI source edits/unchanged retries/new PR/branch/carrier=0.
+
+Offline **73PASS=55admission+18schema/consumer**,syntax/AST/Ruff/format/diff PASS.
+[CI42031358620](https://github.com/Elefesys/ai-service-manager/actions/runs/42031358620): **11SUCCESS/1FAILURE/0SKIPPED**;
+actualPG **1058PASS/1FAIL=859/1generic+105native+94M4**.
+Все1059 setup/call/teardown записаны; setup/teardown PASS,1callFAIL,
+0skip/xfail/missing call;1031прежнихliteral nodeids +28Polza сохранены.
+Hosted unit3558PASS+155subtests;frontend398/browser54PASS.
+
+Обе schema-причины закрыты:5initializer negatives+related positive paths и
+exact inventory/roles PASS; actual0016/49tables/190functions/708columns/pins совпали.
+same_intent/same_key_conflict PASS с наблюдением обоих blocked backends.
+different_keys снова TimeoutError: wrapper starts0.000942/2.068101s при2sdeadline;
+до billing_contact markers не дошли,0PIDs/0observer polls,обе tasks PENDING.
+Ранние auth/tenant transaction этапы не измерены; uow_entered — имя метки
+входа в billing_contact, не транзакции. **Root cause UNKNOWN**,
+конкретный harness repair/product defect не доказан; факты возвращены C0 по steps3/5.
+
+Normal-durable0016/6lifecycles PASS; core primary1/cleanup0.
+7backend+5host foundation tail phases и failed-case business outcomes NOT_REACHED;
+точный список и все3case observations — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Native cleanup PASS;M4 5zero-resource cleanups PASS.
+[Evidence](https://chatgpt.com/library?file_id=libfile_43c018ac27e4819184ea7ddad4a99fac&account_id=personal),188247195bytes,
+SHA256 **7e0a150a4edd6f77360118975f7b18c11dbc9a3cd846560ab6864d82d9fef509**;
+490manifest/491ZIP entries,12original CI ZIPs+12logs.
+
+Receipt docs-only sole child source; execution head остаётся tested4025b9d4.
+Main3cb3764c,42historical C3/24C2refs,product/migrations/pins/consumer/workflows/
+dependencies/architecture прежние. Paid/live/Telegram/VM/deploy/merge=0,
+defaultOFF/EVAL_ONLY,ledger150/holds unchanged.
+**C0 REVIEW / C3 HOLD**; acceptance12SUCCESS/1059PASS/fullfoundation ещё не достигнута;
+source не INTEGRATED/VERIFIED, M4/live не закрыт.
+
+## История — C0 foundation repair assignment d43cbd31 / 2026-11-05
 
 C0 рассмотрел receipt **f638d8462ceae5926e03b6330462ab8e1eb69973** и CI
 **42013215782** на source **1afad91ca079f384dfae65a6a780615ec604d5b5**,
