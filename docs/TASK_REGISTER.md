@@ -2,7 +2,40 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, early-request receipt C3 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, fixture lifetime repair / 2026-11-05
+
+C0 подтвердил receipt **2c0c47911691131539b01063cf5f463ab9fc40af**,
+source **17f94c16122ddb9abcd46a6b054103cc27d55c7f**,
+tree **fe05a182321f4f185645471da7e8e6b7dddc84b3**.
+**CI42053991898:12SUCCESS/1059actualPG PASS**, все phases/fullfoundation/cleanup.
+Текущая ранняя пауза — GC generation2,1.700075s wall/1.699791s CPU;
+historical failed-run attribution остаётся UNKNOWN.
+
+C0 отдельно доказал bounded retention закрытых factory DB/engine objects
+тремя FastAPI callable-classification LRU caches. Offline12/160-instance
+controls освобождают объекты после fixture-level cleanup caches.
+Это не actualPG и не воспроизведение всей1.7s hosted паузы.
+[C0 evidence](https://chatgpt.com/library?file_id=libfile_bbf19b7482f88191a81614588a6611d0&account_id=personal)
+содержит scripts/commands/results/limits; новый CI C0 не запускал.
+
+**C3 продолжает тот же PR43** от immutable этой выдачи, parent2c0c4791;
+execution branch c3/m4-3-polza-runtime-r1, expected old head17f94c16.
+Разрешена небольшая test-only cleanup правка browser fixture, связанный
+lifetime control/admission и сокращение временной диагностики.
+Точные write-set/границы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Обычные fixtures/timed tests не меняют GC policy или deadlines; production
+caches/SQLAlchemy registry/dependencies не меняются.
+После targeted checks — один штатный fullCI repair source, без отдельного
+diagnostic прогона ради7counters и без unchanged retries.
+
+Критерий: closed-fixture retention устранён по control, semantics сохранены,
+12SUCCESS/1059actualPG/fullfoundation/cleanup. Историческую неизвестность
+не выдавать за доказанный fix. Общая provider source-приёмка открыта.
+PR43 DRAFT; main3cb3764c/historical refs frozen; остальные роли HOLD.
+Paid/live/Telegram/VM/deploy/merge=0,defaultOFF/EVAL_ONLY,ledger150/holds прежние;
+M4/live не закрыт.
+
+## История — C3 early-request receipt 2c0c4791 / 2026-11-05
 
 Выдача05460962 выполнена: один test path339+/14−, конечная ранняя диагностика.
 Source **17f94c16122ddb9abcd46a6b054103cc27d55c7f**, tree **fe05a182321f4f185645471da7e8e6b7dddc84b3**,

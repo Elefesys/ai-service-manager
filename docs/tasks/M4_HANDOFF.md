@@ -6,7 +6,144 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, early-request receipt C3 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, fixture lifetime repair / 2026-11-05
+
+**C0 подтверждает зелёный CI и даёт C3 конкретный test-only repair времени
+жизни объектов фикстуры. Новый диагностический полный прогон ради ещё
+нескольких counters не нужен.** Продолжать существующий PR43; продуктовая
+композиция Polza и её общая source-приёмка этим решением ещё не закрыты.
+
+### Проверено C0
+
+Receipt **2c0c47911691131539b01063cf5f463ab9fc40af**, source
+**17f94c16122ddb9abcd46a6b054103cc27d55c7f**,
+tree **fe05a182321f4f185645471da7e8e6b7dddc84b3**.
+Tested merge **2a035e0762bb5535e66075391465d3e8fd2c975e** — exact same tree.
+C0 сверил GitHub source/merge/run/jobs, diff339+/14− в одном test path,
+raw foundation log,860generic setup/call/teardown и13affected-node phases.
+[CI42053991898](https://github.com/Elefesys/ai-service-manager/actions/runs/42053991898):
+**12SUCCESS/1059actualPG PASS**, full foundation tail/cleanup PASS;
+core primary0/cleanup0. Все прежние schema/concurrency business assertions
+достигнуты и PASS. Unit3558+155subtests,frontend398/browser54 PASS.
+C0 не повторял CI или actualPG.
+
+[C3 evidence](https://chatgpt.com/library?file_id=libfile_fe9e5cfd353081919b50ac7074cb2b26&account_id=personal):
+184260402bytes, SHA256
+**ccd207f6f95f535f13e1d4c59c697eb214e83a9dfc4fe16e7eb83516909c521d**.
+C0 сверил CRC491ZIP entries и размеры/SHA256 всех490manifest files.
+Текущая пауза действительно совпала с generation2 collection:
+**1.700075s wall /1.699791s collector-thread CPU** до auth transaction.
+Стек SQLAlchemy callback — отдельное наблюдение внутри GC, не измерение
+всей его стоимости. Прежний failed run не содержит таких измерений.
+
+### Новое evidence C0: удержание закрытых объектов
+
+C0 использовал exact frozen dependencies source17f94c16 и Python3.13.17
+для отдельных offline опытов, без PG/HTTP/lifespan admission/платных вызовов.
+Real create_app/RuntimeDatabase/AuthStore constructors, dispose обоих engines,
+weakrefs; storage — inert sentinel. Это object-lifetime experiment, не actualPG.
+
+- После12закрытых factory instances и явной collection: app0, но12RuntimeDatabase,
+  12runtime engines и12auth engines остаются достижимыми.
+- Найдена сильная ссылка: FastAPI **_CallIdentity → create_app.<locals>.ready
+  closure → RuntimeDatabase**. Три callable-classification LRU сохраняют
+  identity/handler, maxsize4096 каждый; это bounded retention, не доказательство
+  бесконечной production leak.
+- Последовательный offline control освобождает все эти объекты после очистки
+  трёх classifier caches и collection. SQLAlchemy registry не модифицировался.
+- В двух отдельных160-instance опытах после финальной collection:
+  baseline —141RuntimeDatabase/142runtime engines/142auth engines;
+  cleanup на границе каждого закрытого instance — **0/0/0**.
+  Automatic GC policy во время loops не менялась.
+- Эти опыты НЕ воспроизвели1.7s: максимальная automatic generation2 wall
+  около0.140s baseline /0.115s cleanup. Нельзя приписать им доказательство
+  всей стоимости hosted GC или точной причины исторического timeout.
+
+[C0 reproducible attribution archive](https://chatgpt.com/library?file_id=libfile_bbf19b7482f88191a81614588a6611d0&account_id=personal):
+**12440bytes**, SHA256 **d897f390a71bb741cfae50c72e46b51a30a3f20d004a399709af904ac9253bb4**;
+11manifest files/12ZIP entries. Внутри scripts, точные commands/outputs,
+versions/hashes и ограничения; исходники репозитория не изменены.
+Hosted Python3.13.15 и local3.13.17 различаются; это отражено в evidence.
+
+### Продолжение C3
+
+1. Начать от immutable коммита **с этой выдачей**, parent2c0c4791.
+   Repository Elefesys/ai-service-manager, branch **c3/m4-3-polza-runtime-r1**,
+   тот же [PR43](https://github.com/Elefesys/ai-service-manager/pull/43), OPEN/DRAFT.
+   Первый FF expected old head **17f94c16122ddb9abcd46a6b054103cc27d55c7f**.
+   Сохранить ancestry/source base dbb2334a и runner BASE/BASE_TREE/BRANCH.
+   Drift сначала сверить; нового PR/force-push нет.
+
+2. Исправить lifecycle в **tests/test_auth_postgres.py::browser**:
+   после завершения client/lifespan и штатного resource cleanup, в finally,
+   освобождать три memoization caches закреплённой FastAPI:
+   **_is_gen_callable_cached, _is_async_gen_callable_cached,
+   _is_coroutine_callable_cached** из fastapi.dependencies.models.
+   Это чистая классификация callable, не auth/session cache.
+   Выполнить и при exception/cancellation; не превращать resource cleanup
+   failure в PASS. Учесть partial setup и закрытие вложенных browser contexts.
+   Ссылки активного app/request и его проверки не менять.
+
+   Разрешение касается только тестовой фикстуры. Не менять application
+   startup/shutdown, dependency version/maxsize или SQLAlchemy event registry.
+   В обычной фикстуре и timed case НЕ добавлять gc.collect/disable/freeze,
+   смену thresholds, warmup, sleep/retry или перенос business work за deadline.
+
+3. Подтвердить lifecycle отдельным bounded offline regression/control:
+   после завершения fixture scope и release references закрытые app/DB/engines
+   не удерживаются classifier caches. Контроль до/после должен различать
+   исходное удержание и repair; не подменять реальную PG проверку.
+   **gc.collect(2) разрешён только в этом отдельном reachability control**,
+   где он служит проверкой достижимости, не подготовкой timed concurrency test.
+   Проверить обычное и аварийное завершение; existing auth/HTTP regressions
+   должны сохранить результаты. Не создавать новый framework.
+
+4. Source write-set: **tests/test_auth_postgres.py,
+   tests/test_foundation.py** (связанный offline lifetime control, если нужен),
+   **tests/test_m1_3_api_postgres.py, scripts/m4_runtime_db.py,
+   tests/test_m4_runtime_db_runner.py**.
+   В finite admission добавить только действительно новый exact test path;
+   существующие positive/negative admission cases актуализировать.
+   Сократить временную диагностику concurrent test: убрать watchdog/thread/
+   stack/wrapper tracing после сохранения исходного evidence; оставить
+   короткие timestamps/PID/outcome и generation/duration observations,
+   достаточные для оценки результата. Нового profiler слоя не добавлять.
+   Preserved snapshots/roles/pins и исправленные schema tests не менять.
+   Receipt — HANDOFF/TASK_REGISTER; согласование каждой связанной строки не нужно.
+
+5. Сначала targeted offline/lifecycle/admission/current-schema checks.
+   Затем один штатный full CI **изменённого repair source** в PR43.
+   Если actualPG локально доступен — перед ним все3concurrency cases и auth
+   lifecycle subset; отсутствие localPG не требует нового разрешения.
+   Не применять предложенный7-line diagnostic patch как повод для отдельного
+   полного прогона. Не повторять неизменённый CI ради случайного PASS.
+
+### Что требуется для review
+
+Доказанный результат repair — устранение измеренного удержания **закрытых
+fixture objects**, сохранённые real auth/tenant/HTTP semantics и **12SUCCESS/
+1059actualPG PASS** со всеми phases/fullfoundation/cleanup. В concurrent test
+нужны два real simultaneous HTTP requests и два observed blocked backends,
+прежние exact200/200 либо200/409 outcomes/version/receipt/audit.
+Observer2s/lock3s/statement3500ms/auth4s, literal nodeids и порядок прежние.
+Остаточные GC pauses и их стоимость показать фактически; не обещать их отсутствие.
+
+C0 уточняет критерий: недостающие GC/stacks прежнего failed run остаются
+UNKNOWN и не могут быть восстановлены задним числом. Для текущего repair
+нужны измеримый lifecycle результат и реальные проверки, а не заявление,
+что один новый PASS доказал историческую причину. Если тот же timeout
+повторится или retention не исчезнет — вернуть C0 факты без следующей серии
+diagnostic fullCI. Общая source-приёмка provider runtime остаётся отдельной.
+
+IMPL-004/ADR132/216–219/259–261/267, product/0001–0016/pins/consumer/workflows/
+dependencies/архитектура прежние. Main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba**
+и historical refs frozen. C3 IN_PROGRESS; остальные роли HOLD; PR43 DRAFT.
+Paid/model/catalog/history/Telegram/VM/deploy/merge=0; defaultOFF/EVAL_ONLY.
+Ledger150:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+M4/live pilot остаётся открытым.
+
+## История — C3 early-request receipt 2c0c4791 / 2026-11-05
 
 **12 SUCCESS / 1059 actualPG PASS. Механизм текущей ранней паузы локализован:
 GC generation2 на event-loop thread. Причина стоимости collection, её
