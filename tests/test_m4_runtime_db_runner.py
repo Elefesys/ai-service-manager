@@ -948,10 +948,20 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r11_event
     assert diag["operands"]["push_forced"] is False
 
 
-def test_polza_repair_admits_egress_evidence_producer_without_resources(r11_event, monkeypatch):
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/test_telegram_egress.sh",
+        "tests/test_m1_3_c0_acceptance.py",
+        "tests/test_postgres.py",
+        "tests/test_m1_3_api_postgres.py",
+    ],
+)
+def test_polza_repair_admits_egress_evidence_producer_without_resources(
+    r11_event, monkeypatch, path
+):
     r = r11_event
     f = r["f"]
-    path = "scripts/test_telegram_egress.sh"
     target = f.root / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("# constructed current-schema evidence producer change\n")
@@ -982,6 +992,7 @@ def test_polza_repair_admits_egress_evidence_producer_without_resources(r11_even
         "frontend/package.json",
         "backend/src/asm/ai/agent.py",
         "tests/test_m4_gateway.py",
+        "tests/test_m1_3_api_postgres_extra.py",
         "infra/Dockerfile.backend",
         ".github/workflows/ci.yml",
         "scripts/test_browser.sh",

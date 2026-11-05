@@ -108,6 +108,7 @@ async def test_real_postgres_capabilities_and_roles(database):
         assert tables == [
             "ai_deliveries",
             "ai_provider_calls",
+            "ai_provider_sessions",
             "ai_runs",
             "alembic_version",
             "audit_events",

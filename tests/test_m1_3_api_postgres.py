@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from uuid import uuid4
 
@@ -737,26 +738,76 @@ async def test_revocation_cannot_overtake_admitted_http_command_then_blocks_repl
 
 @pytest.mark.parametrize("case", ["same_intent", "same_key_conflict", "different_keys"])
 async def test_real_concurrent_http_claims_and_cas_have_one_changing_winner(
-    billing, monkeypatch, case
+    billing, monkeypatch, capfd, case
 ):
     h = billing
     entered = asyncio.Event()
     pids = []
     original = TenantUnitOfWork.billing_contact
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    request_index = ContextVar("billing_concurrency_request")
+    requests = [{"index": index, "times": {}} for index in range(2)]
+    observation = {"stage": "SETUP", "polls": 0, "last_wait": None}
+    tasks = []
+
+    def elapsed():
+        return round(loop.time() - started, 6)
+
+    def emit(boundary):
+        # A finite test-only payload; no request/response bodies, SQL or secrets.
+        payload = {
+            "case": case,
+            "boundary": boundary,
+            "elapsed": elapsed(),
+            "entered": entered.is_set(),
+            "pid_count": len(pids),
+            "requests": requests,
+            "tasks": [
+                "CANCELLED" if task.cancelled() else "DONE" if task.done() else "PENDING"
+                for task in tasks
+            ],
+            "observation": observation,
+            "observer_is_app_engine": h.runtime.engine is h.service.tenancy._engine,
+        }
+        # Keep PASS observations in the ordinary job log as well as failures.
+        with capfd.disabled():
+            print("BILLING_CONCURRENCY_DIAG=" + json.dumps(payload, sort_keys=True), flush=True)
+
+    async def request(index, name, key):
+        token = request_index.set(index)
+        requests[index]["times"]["http_started"] = elapsed()
+        try:
+            response = await patch(h, name, key=key)
+            requests[index]["times"]["http_returned"] = elapsed()
+            requests[index]["http_status"] = response.status_code
+            return response
+        finally:
+            request_index.reset(token)
 
     async def capture_pid(self, *args):
+        record = requests[request_index.get()]
+        record["times"]["uow_entered"] = elapsed()
         # Test-local only. One observation deadline below both SQL deadlines
         # and the unchanged four-second outer auth admission deadline.
         await self._execute("SET LOCAL lock_timeout='3s'", {})
         await self._execute("SET LOCAL statement_timeout='3500ms'", {})
-        pids.append((await self._execute("SELECT pg_backend_pid()", {})).scalar_one())
+        record["times"]["timeouts_set"] = elapsed()
+        pid = (await self._execute("SELECT pg_backend_pid()", {})).scalar_one()
+        pids.append(pid)
+        record["pid"] = pid
+        record["times"]["pid_captured"] = elapsed()
         if len(pids) == 2:
             entered.set()
-        return await original(self, *args)
+        record["times"]["command_started"] = elapsed()
+        result = await original(self, *args)
+        record["times"]["command_returned"] = elapsed()
+        return result
 
     monkeypatch.setattr(TenantUnitOfWork, "billing_contact", capture_pid)
-    tasks = []
     try:
+        observation["stage"] = "BLOCKER_ACQUIRE"
+        observation["blocker_started"] = elapsed()
         async with h.migrator.begin() as blocker:
             await blocker.execute(
                 text(
@@ -764,6 +815,7 @@ async def test_real_concurrent_http_claims_and_cas_have_one_changing_winner(
                 ),
                 {"ws": A},
             )
+            observation["blocker_acquired"] = elapsed()
 
             async def blocked():
                 while True:
@@ -771,37 +823,77 @@ async def test_real_concurrent_http_claims_and_cas_have_one_changing_winner(
                         if task.done():
                             response = await task
                             pytest.fail(
-                                f"HTTP command ended before blocker release: {response.status_code} {response.text}"
+                                f"HTTP command ended before blocker release: {response.status_code}"
                             )
                     if entered.is_set():
+                        observation["stage"] = "OBSERVER_CONNECT"
                         async with h.runtime.engine.connect() as connection:
-                            waiting = (
-                                await connection.execute(
-                                    text(
-                                        "SELECT count(*) FROM pg_stat_activity WHERE pid IN (:a,:b) AND usename=current_user "
-                                        "AND wait_event_type='Lock' AND cardinality(pg_blocking_pids(pid))>0"
-                                    ),
-                                    {"a": pids[0], "b": pids[1]},
+                            observation["stage"] = "OBSERVER_QUERY"
+                            rows = (
+                                (
+                                    await connection.execute(
+                                        text(
+                                            "SELECT pid,wait_event_type='Lock' AS lock_wait,"
+                                            "cardinality(pg_blocking_pids(pid)) AS blockers,"
+                                            "state='active' AS active FROM pg_stat_activity "
+                                            "WHERE pid IN (:a,:b) AND usename=current_user ORDER BY pid"
+                                        ),
+                                        {"a": pids[0], "b": pids[1]},
+                                    )
                                 )
-                            ).scalar_one()
+                                .mappings()
+                                .all()
+                            )
+                        waiting = sum(
+                            row["lock_wait"] is True and row["blockers"] > 0 for row in rows
+                        )
+                        observation["polls"] += 1
+                        observation["last_wait"] = {
+                            "elapsed": elapsed(),
+                            "backends": [
+                                {
+                                    "pid": row["pid"],
+                                    "lock_wait": row["lock_wait"],
+                                    "blockers": row["blockers"],
+                                    "active": row["active"],
+                                }
+                                for row in rows
+                            ],
+                            "blocked_count": waiting,
+                        }
+                        observation["stage"] = "OBSERVER_SAMPLED"
                         if waiting == 2:
                             return
                     await asyncio.sleep(0.01)
 
-            async with asyncio.timeout(2):
-                tasks = [
-                    asyncio.create_task(patch(h, "Winner", key="first")),
-                    asyncio.create_task(
-                        patch(
-                            h,
-                            "Winner" if case == "same_intent" else "Other",
-                            key="second" if case == "different_keys" else "first",
-                        )
-                    ),
-                ]
-                await blocked()
+            try:
+                observation["stage"] = "REQUESTS_STARTED"
+                observation["observer_started"] = elapsed()
+                async with asyncio.timeout(2):
+                    tasks = [
+                        asyncio.create_task(request(0, "Winner", "first")),
+                        asyncio.create_task(
+                            request(
+                                1,
+                                "Winner" if case == "same_intent" else "Other",
+                                "second" if case == "different_keys" else "first",
+                            )
+                        ),
+                    ]
+                    await blocked()
+                observation["outcome"] = "BOTH_BLOCKED"
+            except TimeoutError:
+                observation["outcome"] = "TIMEOUT"
+                raise
+            except BaseException:
+                observation["outcome"] = "ERROR"
+                raise
+            finally:
+                # Already captured state only, before blocker release/task cancellation.
+                emit("BEFORE_BLOCKER_RELEASE")
         responses = await asyncio.wait_for(asyncio.gather(*tasks), 2)
     finally:
+        emit("BEFORE_TASK_CLEANUP")
         for task in tasks:
             if not task.done():
                 task.cancel()
