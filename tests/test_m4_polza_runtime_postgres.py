@@ -13,6 +13,7 @@ from asm.messaging.errors import MessagingError
 from asm.messaging.worker import Worker
 from asm.telegram.client import TelegramClient
 from asm.telegram.config import TelegramSettings
+from generic_pg_schema import assert_current_schema
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from test_m2_1_postgres import command as manual_command
@@ -526,3 +527,19 @@ async def test_runtime_role_cannot_read_or_enable_provider_sessions(provider_pg)
             async with h.runtime.engine.begin() as c:
                 await c.execute(text(statement))
         assert failure.value.orig.sqlstate == "42501"
+
+
+async def test_current_provider_verifier_rejects_public_execute_grant(provider_pg):
+    async with provider_pg.migrator.connect() as c:
+        transaction = await c.begin()
+        try:
+            await c.execute(
+                text("GRANT EXECUTE ON FUNCTION platform.ai_provider_schema_profile() TO PUBLIC")
+            )
+            with pytest.raises(Exception) as caught:
+                await assert_current_schema(c)
+            assert type(caught.value).__name__ in {"AssertionError", "Refusal"}
+        finally:
+            await transaction.rollback()
+    async with provider_pg.migrator.begin() as c:
+        await assert_current_schema(c)

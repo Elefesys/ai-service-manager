@@ -98,7 +98,7 @@ async def test_unused_successor_downgrade_restore_and_exact_readiness(schema15):
     [
         "ALTER TABLE platform.ai_deliveries NO FORCE ROW LEVEL SECURITY",
         "GRANT SELECT ON platform.ai_deliveries TO asm_runtime",
-        "GRANT EXECUTE ON FUNCTION platform.ai_provider_schema_profile() TO PUBLIC",
+        "GRANT EXECUTE ON FUNCTION platform.ai_delivery_schema_profile() TO PUBLIC",
         "ALTER FUNCTION platform.ai_delivery_current(platform.messaging_jobs,platform.ai_deliveries,platform.ai_runs) RESET search_path",
         "ALTER TABLE platform.ai_deliveries DROP CONSTRAINT ai_deliveries_selected_kind_check",
         "CREATE FUNCTION platform.unapproved_ai() RETURNS int LANGUAGE sql AS 'SELECT 1'",

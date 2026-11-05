@@ -609,6 +609,15 @@ def compare_embedded_profile(expected):
         len(columns) == {"0015": 48, "0016": 49}[revision] and columns == expected["columns"],
         "EMBEDDED_COLUMN_SET",
     )
+    for pattern, count in (
+        (r"\(SELECT count\(\*\) FROM functions\)=(\d+)", len(expected["functions"])),
+        (
+            r"\(SELECT count\(DISTINCT to_regprocedure\(signature\)\) FROM expected\)=(\d+)",
+            len(names),
+        ),
+        (r"\(SELECT count\(\*\) FROM tables\)=(\d+)", len(columns)),
+    ):
+        require(re.findall(pattern, body) == [str(count)], "EMBEDDED_COUNT_PREDICATE")
     return {"other_functions": len(names), "tables": len(columns), "result": "PASS"}
 
 

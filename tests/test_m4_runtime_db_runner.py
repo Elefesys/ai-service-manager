@@ -810,6 +810,23 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
 
 
 @pytest.mark.parametrize(
+    "predicate",
+    [
+        "(SELECT count(*) FROM functions)=190",
+        "(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=189",
+        "(SELECT count(*) FROM tables)=49",
+    ],
+)
+def test_current_verifier_rejects_stale_count_predicates(predicate):
+    expected = catalog.source_catalog(catalog.ROOT, "0016")
+    profile = expected["functions"]["platform.ai_provider_schema_profile()"]
+    assert profile["body"].count(predicate) == 1
+    profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
+    with pytest.raises(catalog.Refusal, match="^EMBEDDED_COUNT_PREDICATE$"):
+        catalog.compare_embedded_profile(expected)
+
+
+@pytest.mark.parametrize(
     "valid,hash_matches,body_matches,reason",
     [
         (False, False, False, "CATALOG_DECLARED_PROFILE"),
