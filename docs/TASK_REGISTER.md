@@ -2,7 +2,68 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R11 / IN_PROGRESS / 2026-11-05
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R11 / REVIEW, C3 HOLD / 2026-11-05
+
+C3 receipt до C0 review. [PR42](https://github.com/Elefesys/ai-service-manager/pull/42)
+OPEN/DRAFT. Один [full CI41964354651](https://github.com/Elefesys/ai-service-manager/actions/runs/41964354651),
+synchronize/attempt1: **{'success': 12}**. INTEGRATED/VERIFIED только после
+C0 acceptance; owner ничего не запускает, merge выполняет владелец после review.
+
+Base **d18d2c599e19227adcc4f580763a9b4cef83c058**,
+tree **3b3f67027ee4efbe2d7b890c38053cae3f59bfe8**.
+Source **3f68b262bdcd2c7b24c1278158cca1deb7f8fc6f**,
+tree **52f4e7c5e644e08f32e396bcdfc59d1636ed49e1**, sole child assignment.
+Tested merge **b21adb564dc06c6b2282d38e0d30727e79c6dbe4**,
+то же дерево; parents frozen main586240e8+source.
+
+Ровно7 source paths/140+/62−: optional observe_wait dispatch; explicit3AI-table
+TRUNCATE closure; exact table oracle; bounded finally cancel/join в2provenance
+functions; readonly10-predicate precondition перед прежним migration lifecycle;
+runner/admission identities/write-set. В assignment ai_results — неточное имя:
+immutable schema содержит ai_deliveries, оно и использовано. Cleanup уже имел
+child→parent order и не менялся;245 consumers/fixedIDs сохранены. Product,
+migrations0001–0015,pins/constraints,C2/catalog runners,workflows/infra/архитектура
+неизменны;11canonical attachments byte-exact. НовыхPGnodes нет.
+
+До публикации21observer/readiness,23R9/R10causal,4offline task-fault probes PASS;
+674testcase+130subtests PASS по completeXML/exit0 (consoleprogress неполон).
+Ruff/format195/mypy76 PASS. Development projection11COPY/222files exact.
+Local stock PG недоступен: по явному решению C0 этот один fullCI — первый
+actualPGrepairvalidation; нового standalone72/capture/targeted нет.
+Один expected-SHA FF PR42 из2c35f9c6,force=false. Source frozen с публикации;
+после неё repair/pytest/PG/collection/CI reruns не выполнялись.
+
+Full unit **3529PASS+155subtests**, frontend398/browser54.
+Generic860: **860call reached/860all-phasesPASS**,
+0failed phase records. Full disjoint inventory
+860+105+66=1031: **1031actual all-phasesPASS**,
+0callNOT_REACHED. Прежние245setup failures:
+all calls reached=True, all phases PASS=True.
+Сопоставлены все6R10groups; полные facts/ошибки/ограничения в
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md) и ci/execution-audit.json.
+
+M4 66/66PASS,SQL234.242964/600s;waiting-AI control и4zero
+cleanups PASS. Native105PG+7source/105resets/cleanup PASS. Catalog0015 183functions/
+48tables/embedded182/all3pins/security и pinned nonrootPG18.6 подтверждены.
+Durable6lifecycles/12assertions,Docker29/6migration shards проверены.
+Foundation primary/cleanup **{'cleanup_exit': 0, 'primary_exit': 0}**;
+backendNOT_REACHED **[]**, hostNOT_REACHED **[]**.
+Отдельный final zero-resource inventory foundation lane не экспортирует.
+
+Этот receipt — sole child source только на R11prep, ровно HANDOFF/TASK_REGISTER.
+PR42source3f68b262 frozen;main586240e8,PR41OPEN/DRAFThead9b05e5dd,
+40прочихстарыхC3/24C2refs unchanged;prep runs0,newtargeted0,oneCIattempt1.
+[M4_C3_R11_evidence_3f68b262.zip](https://chatgpt.com/library?file_id=libfile_0ff56e4501308191bed2b795902a2ae6&account_id=personal):
+**171040346bytes**,SHA256 **dcc46fc0b878d84eb5a08f43d706006b66089c3c29898d18f39461e09263c199**;
+manifest472/472,ZIP473verified,
+12originalZIP/375extractedfiles/11×342sourceblobs/12joblogs.
+
+C3/остальные роли HOLD до C0. DefaultOFF/FAKE/EVAL_ONLY2calls1READ;
+paid/live/Telegram/VM/deploy/realdata HOLD. Ledger150 unchanged:
+confirmed0.37505230/58knownPOST;4unknownheld7.585505548;62totalPOST;
+remaining142.039442152;reported0.00743079UNSETTLED. LOCKED/ADR132/216/217 прежние.
+
+## История — C0 assignment C3-M4.3-RUNTIME-INTEGRATION-R11 / 2026-11-05
 
 Whole-runtime **BLOCKED**; один исполнитель C3, тот же PR42. C0 принял R10 controls:
 source2c35f9c6/receipt1f7f3594;targeted72/72,unit3529,M466/66,native105PG+7source,

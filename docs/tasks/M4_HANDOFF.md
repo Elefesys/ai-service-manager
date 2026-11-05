@@ -6,7 +6,189 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C0 assignment C3 R11 / 2026-11-05
+## CURRENT — C3 R11 receipt / REVIEW, C3 HOLD / 2026-11-05
+
+**REVIEW / C3 HOLD**, 2026-11-05. Все критерии R11 подтверждены сохранённым evidence; подготовлено для C0 review. Это ещё не INTEGRATED/VERIFIED.
+[PR42](https://github.com/Elefesys/ai-service-manager/pull/42) OPEN/DRAFT.
+Единственный [CI 41964354651](https://github.com/Elefesys/ai-service-manager/actions/runs/41964354651), synchronize/attempt1:
+**{'success': 12}**. Merge выполняет владелец после C0 acceptance; owner ничего не запускает.
+
+### Source и разрешённая дельта
+
+- Assignment/base `d18d2c599e19227adcc4f580763a9b4cef83c058`, tree `3b3f67027ee4efbe2d7b890c38053cae3f59bfe8`.
+- Source `3f68b262bdcd2c7b24c1278158cca1deb7f8fc6f`, tree `52f4e7c5e644e08f32e396bcdfc59d1636ed49e1`, sole parent assignment.
+- Tested merge `b21adb564dc06c6b2282d38e0d30727e79c6dbe4`, то же дерево; ordered parents frozen main `586240e88c825aa67593af5d72e0bdbb251ed3bb` + source.
+- Ровно7 source paths,140 insertions/62 deletions. Preparation `c3/m4-3-runtime-integration-r11`; существующий PR42 source branch `c3/m4-3-runtime-integration-pr-r8`.
+
+| Файл | Изменение |
+|---|---|
+| tests/test_m3_1_control_postgres.py | Optional reporter вызывается только при callable record. Existing matching control дополнен loaded-module-without-record/compatible reporter/error propagation; новая параметрическая матрица не добавлена. Actual pending-task/PID/query/lock proof и target error/cancellation сохранены. |
+| tests/test_m1_3_c0_acceptance.py | В explicit transactional TRUNCATE добавлены3таблицы: ai_deliveries/ai_provider_calls/ai_runs. Все5 parameters, rollback/full before-after oracle сохранены; CASCADE отсутствует. |
+| tests/test_postgres.py | Три AI tables добавлены в exact equality oracle; role/RLS/privilege assertions прежние. |
+| tests/test_m3_1_provenance_postgres.py | Только2 функции: оба barrier parameters и original/material two-task case. Все созданные tasks cancel/join в finally с настоящим timeout5s до fixture teardown; прежний SQL, lock wait, STALE_CLAIM/no effects и concurrent version/effect assertions сохранены. |
+| tests/test_tenancy_migrations.py | Перед прежним initial downgrade read-only count10 predicates из неизменённого guard0012, schema revision и bounded failure context. Исходный полный lifecycle дальше AST exact. |
+| scripts/m4_runtime_db.py | Только BASE/BASE_TREE/R11 labels/write-set. Execution/budgets/inventory/BRANCH/TARGETED_BRANCH прежние. |
+| tests/test_m4_runtime_db_runner.py | Только согласованные admission identities/labels. R9 private fixtures/14 wrapper cases и R10 controls сохранены. |
+
+В assignment написано `ai_results`; такой таблицы в принятой0014/0015 нет.
+Фактическая третья таблица — `ai_deliveries`, подтверждена immutable migrations
+и exact catalog. Исправлено имя в тестовом oracle, новая схема не вводилась.
+Existing child→parent cleanup в test_m2_3_db_postgres.py проверен и оставлен
+неизменным; seeded/messaging fixtures и245 consumers не менялись.
+Product/backend/worker, migrations0001–0015, constraints/pins, C2/catalog runners,
+workflows/infra/dependencies и архитектура неизменны.11 canonical attachments
+byte-exact; полный inventory1031=860generic+105native+66M4 сохранён.
+Source/function proof — local/source-scope-audit.json и local/source.diff.
+
+### До публикации
+
+21 observer/readiness controls PASS (11.984s),
+23 R9/R10 causal controls PASS (8.193s).
+Development filesystem projection повторяет11 Dockerfile COPY/222files без
+host pins/.git; hashes/modes до/после exact.4 offline fault probes actual changed
+provenance functions подтвердили bounded termination всех tasks при error/cancel.
+Это offline proof, не PostgreSQL evidence.
+
+Affected offline **674 testcase +130 subtests PASS**, 80.815s,
+exit0/complete JUnit XML; console file содержит только ранний progress и сам
+по себе не подтверждает итог. Ruff PASS, canonical format195 PASS, mypy76 PASS.
+Точные commands/results/XML/fault records — local/completed-checks.json и local/.
+Local pinned stock PG недоступен. По явному решению C0 первый actual PG repair
+validation — этот один full CI. Новый standalone72/capture/targeted carrier
+не создавался; accepted R10 targeted72 не перезапускался и не добавлен к CI1031.
+
+После проверок один expected-SHA FF PR42 из2c35f9c613fa4870d957cbf9c5164c2e8adcb933,
+force=false. Единственный synchronize/attempt1; source заморожен с публикации.
+Ни pytest/PG/collection, ни CI после публикации повторно не запускались;
+последующие audit scripts читают только сохранённые данные.
+
+### Полный CI и actual PostgreSQL
+
+| Gate | Result | Job | Seconds |
+|---|---|---:|---:|
+| docker29-compatibility | SUCCESS | 127037794009 | 913 |
+| foundation-durable | SUCCESS | 127037794167 | 690 |
+| connect5-migration (docker29, intent) | SUCCESS | 127037794202 | 261 |
+| browser | SUCCESS | 127037794218 | 500 |
+| connect5-migration (normal, image) | SUCCESS | 127037794257 | 188 |
+| connect5-migration (docker29, state) | SUCCESS | 127037794296 | 1404 |
+| native-context-db / native-context-db | SUCCESS | 127037794469 | 534 |
+| connect5-migration (normal, state) | SUCCESS | 127037794470 | 1459 |
+| connect5-migration (docker29, image) | SUCCESS | 127037794525 | 263 |
+| connect5-migration (normal, intent) | SUCCESS | 127037794642 | 278 |
+| m4-runtime-db / runtime | SUCCESS | 127037794702 | 281 |
+| foundation | SUCCESS | 127041541481 | 2232 |
+
+Full unit **3529 PASS +155 subtests**, 497.36s;
+frontend398/14files и browser54 PASS. Native105PG+7source PASS,336 phase records,
+105 resets, roles/catalog0013/source/cleanup проверены. M4 **66/66 PASS**,
+SQL/tests **234.242964/600s**; все setup/call/teardown,
+waiting-AI11stages/correlations/one-call/cancellation/DEAD/restart-none/no-AI-Outbox,
+4group cleanups с zero owned resources подтверждены.
+
+Generic860: **860 call reached, 860 all-phases PASS**,
+0 failed phase records;
+full disjoint execution **1031/1031 all-phases PASS**,
+0 call NOT_REACHED.
+Сам pytest generic занял 1561.64s; длительность phase ниже
+включает также preparation/collection. Build выделен отдельно.
+Каждый nodeid и actual setup/call/teardown сопоставлены с original journals;
+collection или case-end не использовались как доказательство успешного body.
+
+| Группа R10 | Старых failed phases | Все calls reached в R11 | Все phases PASS в R11 |
+|---|---:|---|---|
+| 5 initializer / explicit TRUNCATE closure | 5 | YES | PASS |
+| 62 optional observer failures | 62 | YES | PASS |
+| 1 provenance teardown failure | 1 | YES | PASS |
+| 245 downstream duplicate-account setup failures | 245 | YES | PASS |
+| 1 exact table inventory | 1 | YES | PASS |
+| 1 migration lifecycle / material-history precondition | 1 | YES | PASS |
+
+Все860 cases,4300 journal records и сопоставление прежних245 setup errors —
+ci/execution-audit.json; bounded journal и полные логи сохранены в originals.
+Полный прежний migration lifecycle и read-only precondition прошли.
+Неизменённые5 used-history cases проверили refusal0012/SQLSTATE55000 на
+historical и current schema, до DDL, с сохранением catalog/rows; все phases PASS.
+Это отдельно подтверждено ci/material-history-guard-audit.json.
+R10 timing orphan-task/cleanup и конкретные старые retained rows остаются
+неизвестными: R11 результат не восстанавливает отсутствовавшую трассу задним числом.
+
+### Foundation lifecycle и integrity
+
+| Lane / phase | Exit | Seconds |
+|---|---:|---:|
+| backend / ruff | 0 | 0.089 |
+| backend / format | 0 | 0.116 |
+| backend / mypy | 0 | 10.067 |
+| backend / unit | 0 | 499.606 |
+| backend / upgrade | 0 | 2.247 |
+| backend / repeat-upgrade | 0 | 1.690 |
+| backend / generic | 0 | 1617.059 |
+| backend / downgrade | 0 | 1.956 |
+| backend / reupgrade | 0 | 2.202 |
+| backend / contracts | 0 | 3.817 |
+| backend / wheel-one | 0 | 1.364 |
+| backend / wheel-two | 0 | 1.342 |
+| backend / wheel-compare | 0 | 0.002 |
+| backend / wheel-hash | 0 | 0.003 |
+| host / init | 0 | 0.031 |
+| host / config | 0 | 0.378 |
+| host / build | 0 | 35.847 |
+| host / checks | 0 | 2169.083 |
+| host / storage-version | 0 | 0.620 |
+| host / storage-admin-version | 0 | 0.298 |
+| host / services | 0 | 13.238 |
+| host / http | 0 | 0.179 |
+| host / images | 0 | 0.081 |
+| host / cleanup | 0 | 1.219 |
+
+Foundation primary/cleanup: **{'cleanup_exit': 0, 'primary_exit': 0}**.
+Две сборки wheel совпали побайтно; SHA256
+**4ecd3fd6a18008a114465b2c7540cece612ef1b16c1824626f30c41d0854204b**.
+Backend NOT_REACHED: **[]**;
+host NOT_REACHED: **[]**.
+Durable6lifecycles/12assertions и Docker29/6migration shards проверены по
+сохранённым original evidence, включая historical executor/source pairing.
+Cleanup foundation имеет exit/removal logs; отдельный final zero-resource
+inventory неизменённая lane не экспортирует.
+
+Current0015 source/catalog/security/readiness:183functions/48tables,
+embedded182; все3 frozen pins independently verified:
+
+- full catalog `5c82c2a14b95ae7e85a1fb2191f91843ff78e6354e4f5e1cdba5c2504183f181`
+- nonfunction `a4aeec49cd351eea23f19346700ba998ec4ca9ab5aafd6163b6193da72285b9d`
+- verifier body `2af634ab2afb3b2b9a536453ce6c735b6be57a1018fdd0893d707d3d5dca5f36`
+
+Stock image `pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a`;
+PG18.6/libpq180006;4 M4 server processes nonroot uid999, pinned image identities.
+12 original ZIP: API sizes/digests/CRC и все375extracted files
+verified;11 hosted source archives×342 exact Git blobs/executable bits;12 full
+job logs. Audit outputs, metadata, source diff/index, prior failure map,
+local XML и reports входят в evidence archive.
+
+Fresh freeze: main586240e8; PR41 OPEN/DRAFT head9b05e5dd;40прочих старыхC3refs и
+24C2refs неизменны. Единственное новоеC3ref — R11prep; новых targeted refs/runs0,
+prep runs0, один CIattempt1. Этот receipt — sole child source только на R11prep, ровно HANDOFF/TASK_REGISTER;
+он не входит в собственный immutable evidence manifest. PR42 source остаётся3f68b262.
+
+C3 и остальные роли HOLD до C0 review; merge/deploy не выполнялись.
+Default OFF/FAKE/EVAL_ONLY2calls1READ; paid/live/Telegram/VM/deploy/real data HOLD.
+Ledger150 unchanged:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+LOCKED/ADR132/216/217 сохранены; новых архитектурных решений нет.
+
+
+### Immutable evidence archive
+
+[M4_C3_R11_evidence_3f68b262.zip](https://chatgpt.com/library?file_id=libfile_0ff56e4501308191bed2b795902a2ae6&account_id=personal): **171040346bytes**, SHA256
+**dcc46fc0b878d84eb5a08f43d706006b66089c3c29898d18f39461e09263c199**; manifest **472/472**,
+ZIP473 entries, CRC/member bytes verified.12 original CI ZIP,
+375extracted files,11 hosted source archives×342exact Git
+blobs/modes,12fulljoblogs; все phases/nodeids, scope/local checks и audits.
+Архив сохранён до этого2-doc receipt; его identity не зависит от SHA receipt.
+Новый targeted/capture не создавался. **REVIEW / C3 HOLD** до C0 review.
+
+## История — C0 assignment C3 R11 / 2026-11-05
 
 **Результат для пилота:** завершить совместимость нового AI runtime с существующим
 PostgreSQL regression suite. R10 исправления приняты в SOURCE+TARGETED scope;
