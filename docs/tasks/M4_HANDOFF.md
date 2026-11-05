@@ -6,7 +6,199 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / TODO, выдано C3 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, source REVIEW для C0 / 2026-11-05
+
+**Polza → агент → durable result → guarded Telegram реализован в одном
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43), OPEN/DRAFT.**
+Целевые199actualPG и3553offline теста PASS. Полная приёмка BLOCKED:
+normal-durable evidence producer оставляет revision0015; его файл не входит
+в точный write-set C0. До решения C0 source frozen; M4/live не закрыты.
+
+### Source, ancestry и границы
+
+- Source **9a7c186b183f075578e7a3449d34fe7857eb3d82**, tree **9eaa2e35742c273bcfb1337296f24e2fb15efa26**.
+- Tested merge **a03a51284eb2bf4451025adf7b63d040429f10d9**, тот же tree;
+  ordered parents accepted main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba**
+  + source. Assignment **1332e5733ca29d18923f215290d310734980552f** и полный
+  source base **dbb2334a4e9d158cf101fe7e39467928e446b85c** сохранены в ancestry.
+- Одна новая execution branch **c3/m4-3-polza-runtime-r1**, один PR43.
+  Main и42 прежних C3/24 C2 refs неизменны; PR41/42 не переоткрывались.
+- 40 source paths относительно assignment;45 относительно source base,
+  включая5 carried C0 docs.33immutable inputs byte-exact:
+ 0001–0015, C0 AGENTS/IMPL-004/probe runbook, architecture и dependency inputs.
+  Архитектура/LOCKED ADR, dependencies/lockfiles, workflows, frontend, infra
+  не изменены. Contract snapshots не менялись.
+- Этот receipt — отдельный docs-only commit с sole parent source, только
+  HANDOFF/TASK_REGISTER. Он не передвигает tested PR head и не запускает новый CI;
+  отдельная ветка/PR не создаются. Это отчёт C3, не acceptance C0.
+
+### Реализация и actual0016
+
+Явный ProviderRuntime использует PolzaAdapter/Gateway/ConversationAgent/v2,
+существующие worker/durable AI/Outbox и DB send permit. SyntheticRuntime сохранён;
+defaultOFF/EVAL_ONLY. Один маршрут RU_AGGREGATOR/polza/PROVIDER,
+openai/gpt-6-luna/requested openai/flex; familyOpenAI, variantNOT_OBSERVED.
+Отдельные typed private config/key и server-owned session привязывают ровно
+Workspace/client/conversation/connection/chat/bot. TEST/key/inbound/имяБД сами
+по себе не дают допуск. Не используется fake/manual-owner обход.
+
+2POST/1READ на run, input32768tokens/24576bytes, output512tokens/32768bytes
+на call; deadline120s включая history. Session≤900s/4POST/10RUB;
+тариф/reviewSHA/время зафиксированы. SQL сериализует admission/резервы из
+durable call records; restart/повторный enable не сбрасывают расход.
+UNKNOWN/pending/unknown cost закрывают новые вызовы. HTTP выполняется без
+бизнес-транзакции/DB lock. Disable закрывает новые model/send admission и
+не объявляет отозванным уже начатый HTTP. Accepted replay/lostACK и Telegram
+UNKNOWN сохраняют no-regeneration/no-resend; currentness/HUMAN/Resume/native/
+observation/right/scope проверки сохранены. LLM не получает authority над
+ценами/записью/платежами.
+
+Единственная additive migration **0016_polza_runtime.py**, revision0016/down0015:
+private RLS/FORCE ai_provider_sessions, nullable ai_deliveries.provider_session_id,
+узкие provider capabilities/current0016 verifier. Runtime role не может
+enable/disable session. Старые миграции/0013native/0014DB-only неизменны;
+synthetic контракт продолжает работать.
+
+Actual catalog: **190functions/49tables/708columns**; source bodies/security/
+roles/nonfunction/declared profile/application pins PASS:
+
+- nonfunction **b8aa87a33bd932a40de85a13865b1d301775fc73036307fbd22c4dcaf86210f2**;
+- full **92ce6a61edff3c43289903ec8adc77dddd72ae4afc17aa70558874556a869999**;
+- verifier body **f2b1f7dbdea1f41244094a101d7d4802927a550078ac260e14c7ffb997bd1986**.
+
+Clean upgrade/0015→0016/repeat-upgrade/unused rollback0015 и отказ downgrade
+после session проверены actualPG. Старый binary с exact0015 gate отвергает0016:
+нужен drain/migrate/start cutover по runbook/ADR132/216/217. Rolling compatibility
+не заявляется; full foundation lifecycle ещё NOT_REACHED.
+
+### Проверки и блокер полного CI
+
+- Local offline **3553PASS+155subtests**,1059integration deselected;
+  Ruff check/format202files, mypy78sourcefiles PASS. Final targeted41PASS.
+- Owned hosted stock PG18.6: **199/199 all-phasesPASS =94M4(66retained+28new)+105native**.
+  Native также7offline PASS. All setup/call/teardown проверены,
+  без targeted skipped/xfail/NOT_REACHED. M4SQL+tests414.064148797/600s;
+ 5owned zero-resource cleanups (containers/networks/volumes empty).
+- Disjoint inventory **1059=860generic+105native+94M4**. Все1031 прежних
+  literal nodeids сохранены;28new только в новом provider PG module.
+  **860generic и full foundation core/tail NOT_REACHED**, их PASS не заявляется.
+- Browser54/frontend398 PASS. Local Docker/psql/postgres недоступны:
+  **NOT_RUN_LOCAL**, actual evidence получено existing hosted lane, нового carrier нет.
+- [CI41994209024](https://github.com/Elefesys/ai-service-manager/actions/runs/41994209024),
+  pull_request/synchronize/attempt1, завершён: **10SUCCESS/1FAILURE/1SKIPPED**.
+  Шесть connect5 shards, Docker29, browser, native и M4 SUCCESS.
+
+Foundation-durable выполнил init/config/build/normal-durable/cleanup,
+**primary0/cleanup0,6lifecycle scenarios/12assertions PASS**.
+Source/parents/images/lifecycle evidence predicates PASS; единственный
+ложный predicate — **expected_revision**. В
+scripts/test_telegram_egress.sh:517 producer пишет0015, consumer корректно
+требует0016. Job127133858434 FAILURE на consistency gate; dependent
+foundation127138833110 SKIPPED. Это не full foundation PASS.
+
+Нужное расширение write-set: **только scripts/test_telegram_egress.sh**.
+Конкретная дельта producer:
+
+```diff
+- 'source_sha': source, 'expected_revision': '0015', 'images': proofs,
++ 'source_sha': source, 'expected_revision': '0016', 'images': proofs,
+```
+
+Два сопутствующих уже разрешённых пути: scripts/m4_runtime_db.py добавляет
+ровно этот путь в finite source admission; tests/test_m4_runtime_db_runner.py
+сохраняет negative forbidden-path test на scripts/test_browser.sh.
+Три hunks сохранены как **C0-required-scope-extension.patch** в evidence;
+git apply --check PASS, **НЕ ПРИМЕНЕНЫ**. Verifier0016 не ослаблен, evidence
+не переписано. После согласования — repair в том же PR и проверка нового source.
+
+Предыдущие source fixes и факты сохранены:41989502419/f0630b19 —
+fail-closed unpinned actual catalog;41991201677/3f6029af — ошибочный embedded
+count182 вместо189;41992304679/e7d6dc03 — source_media TEXT ошибочно
+обработан как JSON (19newprovider failures). Final9a7c186b использует
+канонический NONE, завершает собственный test enrollment job, добавляет
+28-й call-cap/restart case; все199targeted actualPG PASS. Старые jobs
+автоматически отменялись при новом source; unchanged-source retry не было.
+Все прежние failures/cancelled/NOT_REACHED сохранены и не обозначены PASS.
+
+Команды: Ruff check/format backend/tests/scripts/migrations; mypy backend/src;
+PYTHONPATH=backend/src pytest -q -m 'not integration'; targeted provider/
+migration/runner subset; offline m4_runtime_pilot.py plan; existing CI workflows.
+Точные команды, логи, job IDs и phase results в validation-commands.json/README.txt.
+
+### Evidence, будущий smoke и ограничения
+
+[M4_C3_POLZA_RUNTIME_R1_evidence_9a7c186b.zip](https://chatgpt.com/library?file_id=libfile_d54ece1e49e8819187e4c687959677e7&account_id=personal):
+**254083145bytes**, SHA256 **77ae068284cc45cba60767c020bc5e89a46153df49f41131b4a134aad0c5a838**;
+**975/975manifest entries**,976ZIP entries/CRC verified.
+Все11latest originalZIP проверены по fresh API size/digest/CRC;381ZIP entries,
+каждый extracted file byte-exact.10current source archives×350Gitblobs/modes exact.
+Всего26originalZIP:по5 из3старых runs +11latest; ранние matrix jobs, не входящие
+в архив, подтверждены API status. Partial normal-image download восстановлен
+повторным скачиванием original artifact и полной проверкой; CI не повторялся.
+Архив содержит source snapshot/patch, exact40path/hash/reasons manifest,
+актуальные и исторические failures, catalog, partitions, job logs, refs audit.
+
+[Runbook plan/enable/disable](https://github.com/Elefesys/ai-service-manager/blob/9a7c186b183f075578e7a3449d34fe7857eb3d82/docs/runbooks/M4_RUNTIME_PILOT.md):
+будущий synthetic TEST smoke **10min/4modelPOST/10RUB**, до8historyGET,
+0catalogGET, до4Telegram sends; на run2POST/1READ. Реальные test IDs,
+свежий tariff/review, private key/config и разрешение владельца — позже.
+Offline plan выполнен без credentials/сети; enable/disable/live smoke не выполнялись.
+STOP при UNKNOWN/неизвестной цене/лимитах/изменении прав, scope или native context;
+резервы и UNKNOWN send сохраняются.
+
+**modelPOST/catalogGET/historyGET/Telegram send/VM/deploy/merge =0.**
+Ledger150 unchanged:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079UNSETTLED.
+C3 HOLD до решения C0 по единственному дополнительному пути; остальные роли HOLD.
+
+### Точный source write-set
+
+Полные bytes/Gitblob/SHA256/reasons — source-write-set.json в архиве.
+Другие tests/test_*.py вне явно названных групп меняют только current0015→0016
+fixtures/assertions; бизнесовые ожидания сохранены.
+
+- `backend/src/asm/ai/database.py`.
+- `backend/src/asm/ai/polza.py`.
+- `backend/src/asm/ai/provider_runtime.py`.
+- `backend/src/asm/ai/runtime.py`.
+- `backend/src/asm/ai/runtime_settings.py`.
+- `backend/src/asm/foundation.py`.
+- `backend/src/asm/messaging/database.py`.
+- `backend/src/asm/messaging/results.py`.
+- `backend/src/asm/messaging/worker.py`.
+- `backend/src/asm/telegram/client.py`.
+- `backend/src/asm/telegram/provisioning.py`.
+- `docs/runbooks/M4_RUNTIME_PILOT.md`.
+- `migrations/versions/0016_polza_runtime.py`.
+- `scripts/m2_4_browser_fixture.py`.
+- `scripts/m4_runtime_db.py`.
+- `scripts/m4_runtime_pilot.py`.
+- `scripts/native_context_db_catalog.py`.
+- `scripts/prepare_telegram_egress.py`.
+- `tests/generic_pg_schema.py`.
+- `tests/test_foundation.py`.
+- `tests/test_m2_3_db_postgres.py` — только current-schema fixture/assertion0015→0016.
+- `tests/test_m2_3_schema_postgres.py` — только current-schema fixture/assertion0015→0016.
+- `tests/test_m2_3_setup.py` — только current-schema fixture/assertion0015→0016.
+- `tests/test_m2_4_browser_fixture.py`.
+- `tests/test_m3_1_guards_migrations.py` — только current-schema fixture/assertion0015→0016.
+- `tests/test_m3_1_native_context_postgres.py` — только current-schema fixture/assertion0015→0016.
+- `tests/test_m3_1_native_context_runtime_postgres.py` — только current-schema fixture/assertion0015→0016.
+- `tests/test_m3_2_escalations_migrations.py` — только current-schema fixture/assertion0015→0016.
+- `tests/test_m4_delivery.py`.
+- `tests/test_m4_delivery_postgres.py`.
+- `tests/test_m4_polza_runtime.py`.
+- `tests/test_m4_polza_runtime_migrations.py`.
+- `tests/test_m4_polza_runtime_postgres.py`.
+- `tests/test_m4_runtime_db_runner.py`.
+- `tests/test_m4_runtime_migrations.py`.
+- `tests/test_m4_schema_postgres.py`.
+- `tests/test_native_context_db_runner.py`.
+- `tests/test_telegram_egress.py`.
+- `tests/test_telegram_egress_postgres.py`.
+- `tests/test_tenancy_postgres.py` — только current-schema fixture/assertion0015→0016.
+
+## История — C0 assignment C3-M4.3-POLZA-RUNTIME-R1 / 2026-11-05
 
 **Следующий исполнитель — C3. Подготовить один настоящий путь Polza → агент →
 durable result → защищённая отправка Telegram.** Проверить реализацию с

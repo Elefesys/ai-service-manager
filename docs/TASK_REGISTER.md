@@ -2,7 +2,52 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / TODO, выдано C3 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, source REVIEW для C0 / 2026-11-05
+
+C3 реализовал provider runtime в одном [PR43](https://github.com/Elefesys/ai-service-manager/pull/43),
+OPEN/DRAFT. Source **9a7c186b183f075578e7a3449d34fe7857eb3d82**,
+tree **9eaa2e35742c273bcfb1337296f24e2fb15efa26**; tested merge
+**a03a51284eb2bf4451025adf7b63d040429f10d9**, identical tree.
+Assignment1332e573/source basedbb2334a/main3cb3764c сохранены в ancestry;
+main/42старыхC3/24C2refs неизменны.40source paths,33immutable inputs byte-exact.
+
+Offline **3553PASS+155subtests**,Ruff202/mypy78. Actual hosted stock PG18.6:
+**199/199 all-phasesPASS=94M4(66old+28new)+105native**; ещё7nativeoffline PASS.
+Все1031старыхliteralPGnodes сохранены, disjoint inventory1059.
+Browser54/frontend398PASS; M4SQL414.064/600s,5zero-resource cleanups.
+Local PG **NOT_RUN_LOCAL** (Docker/psql/postgres отсутствуют).
+
+[CI41994209024](https://github.com/Elefesys/ai-service-manager/actions/runs/41994209024),
+attempt1: **10SUCCESS/1FAILURE/1SKIPPED**. Foundation-durable primary0/cleanup0,
+6lifecycles/12assertionsPASS, но consistency gate отвергает producer revision0015
+при требуемой0016. **860generic и full foundation core/tail NOT_REACHED**;
+INTEGRATED/VERIFIED/fullPG PASS не заявляются.
+
+Нужен один дополнительный C0 path **scripts/test_telegram_egress.sh:517**
+(expected_revision0015→0016) и сопряжённый finite runner admission/negative test
+в двух уже разрешённых файлах. Точный3hunk patch подготовлен, apply--checkPASS,
+**НЕ ПРИМЕНЁН**. Причина остановки — явный write-set C0. Source frozen,
+C3/остальные роли HOLD до решения C0; после него repair в том же PR.
+
+Only additive0016/down0015;190functions/49tables/708columns,actual3pins PASS.
+0001–0015/architecture/dependencies/workflows immutable. DefaultOFF/EVAL_ONLY,
+2POST1READ,finite session,reserves/UNKNOWN/native/no-regeneration/no-resend
+сохранены. Старый exact0015 binary требует drain/migrate/start cutover.
+
+[Evidence](https://chatgpt.com/library?file_id=libfile_d54ece1e49e8819187e4c687959677e7&account_id=personal):
+**254083145bytes**,SHA256 **77ae068284cc45cba60767c020bc5e89a46153df49f41131b4a134aad0c5a838**;
+975manifest/976ZIP entries verified,11latest originalZIP,10×350sourceblobs,
+26originalZIP с прежними failures. Full receipt/write-set/results/pins в
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md). Receipt отдельный docs-only sole child
+source; PR head/ref не передвинут, повторный CI не запускался.
+
+Runbook содержит будущий **10min/4POST/10RUB** synthetic test и plan/enable/disable;
+real IDs/review/private secrets и live admission — отдельно.
+**Paid/model/catalog/history/Telegram/VM/deploy/merge=0**, ledger unchanged:
+confirmed0.37505230/58knownPOST;4unknown held7.585505548;62totalPOST;
+remaining142.039442152;reported0.00743079UNSETTLED. M4/live не закрыты.
+
+## История — C0 assignment C3-M4.3-POLZA-RUNTIME-R1 / 2026-11-05
 
 **C3 готовит Polza/GPT-v2 → durable runtime → guarded Telegram в одном новом
 PR.** PR42/main3cb3764c уже INTEGRATED/VERIFIED для synthetic LOCAL/TEST;
