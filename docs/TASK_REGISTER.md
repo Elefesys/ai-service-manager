@@ -2,7 +2,37 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, source REVIEW для C0 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, bounded repair C3 / 2026-11-05
+
+**C0 разрешил продолжить тот же [PR43](https://github.com/Elefesys/ai-service-manager/pull/43).**
+Причина CI41994209024 подтверждена по свежим logs/source: current evidence
+producer пишет0015, consumer требует0016. Foundation-durable FAILURE,
+dependent foundation SKIPPED; итог10SUCCESS/1FAILURE/1SKIPPED.
+C3 сохранил код и receipt, работа не потеряна.
+
+Repair source **9a7c186b183f075578e7a3449d34fe7857eb3d82**,
+tree **9eaa2e35742c273bcfb1337296f24e2fb15efa26**; receipt
+**a300eadfb9fde442fd6c3d0542936b338d3b77fd** — sole child source.
+Начать от immutable C0 repair assignment, затем FF той же
+`c3/m4-3-polza-runtime-r1` с проверкой expected old head9a7c186b.
+Main/исторические refs не менять; нового PR нет.
+
+Добавлен ровно один ранее пропущенный C0 path:
+`scripts/test_telegram_egress.sh` (producer0015→0016).
+Сопутствующие уже разрешённые пути: `scripts/m4_runtime_db.py`
+(finite allowlist) и `tests/test_m4_runtime_db_runner.py`
+(positive admission + сохранённый forbidden-path test).
+Точные пределы и acceptance — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Consumer/verifier/pins/миграции/прочий product code не менять.
+
+Сначала целевые checks, затем штатный полный CI изменённого кандидата.
+Требуются12SUCCESS,1059actualPG/all phases и полный foundation;
+generic860 пока NOT_REACHED. Эта запись разрешает repair, не принимает
+всю provider реализацию. После результата — receipt для C0.
+Остальные роли HOLD; paid/live/Telegram/VM/deploy/merge=0,
+defaultOFF/EVAL_ONLY и ledger неизменны.
+
+## История — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, source REVIEW для C0 / 2026-11-05
 
 C3 реализовал provider runtime в одном [PR43](https://github.com/Elefesys/ai-service-manager/pull/43),
 OPEN/DRAFT. Source **9a7c186b183f075578e7a3449d34fe7857eb3d82**,

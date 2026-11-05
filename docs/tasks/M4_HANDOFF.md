@@ -6,7 +6,88 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, source REVIEW для C0 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, bounded repair C3 / 2026-11-05
+
+**C0 снимает конкретный write-set blocker: C3 продолжает работу в существующем
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43).** Новый PR не нужен.
+В исходной выдаче C0 пропущен producer `scripts/test_telegram_egress.sh`;
+разрешено ровно необходимое расширение ниже. Это исправление согласованного
+перехода current0015→0016, не новая функция или пересмотр архитектуры.
+
+### Подтверждённая причина
+
+C0 прочитал свежие GitHub run/jobs/logs и исходники на source
+**9a7c186b183f075578e7a3449d34fe7857eb3d82**.
+[CI41994209024](https://github.com/Elefesys/ai-service-manager/actions/runs/41994209024),
+attempt1, завершён: **10 SUCCESS / 1 FAILURE / 1 SKIPPED**.
+В `scripts/test_telegram_egress.sh:517` producer пишет
+`expected_revision: '0015'`; consumer в `scripts/native_context_db_catalog.py`
+уже требует0016. Foundation-durable job127133858434 завершает functional
+lifecycle markers, затем получает `FOUNDATION_EVIDENCE_REFUSED`.
+Повторный отказ step6 — проверка того же отчёта, не новая причина.
+Dependent foundation job127138833110 SKIPPED: generic860 и полный foundation
+tail ещё не проверены этим CI. Сообщение в UI об обрыве не означает потерю
+кода: PR и отдельный receipt C3 сохранены.
+
+C0 здесь подтверждает причину остановки и узкое исправление. Это **не**
+приёмка всей provider реализации или независимое подтверждение всех чисел
+C3 evidence. Receipt и original artifacts ниже сохранить без переписывания.
+
+### Exact base и разрешённая дельта
+
+- Repair source: **9a7c186b183f075578e7a3449d34fe7857eb3d82**,
+  tree **9eaa2e35742c273bcfb1337296f24e2fb15efa26**.
+- Receipt: **a300eadfb9fde442fd6c3d0542936b338d3b77fd**,
+  tree **ce6dd8dbd70e6b3f7163f4ef213ca8c5857ddfc7**, sole child source.
+  Эта C0 выдача — docs-only child receipt.
+- Начать от immutable коммита, содержащего эту выдачу; сохранить ancestry.
+  Обновить **ту же ветку `c3/m4-3-polza-runtime-r1` / PR43** fast-forward
+  после целевых проверок. Expected old PR head — полный repair source выше;
+  при чужом изменении сначала прочитать его, не force-push.
+  Main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba** и старые execution refs
+  не менять. Runner BASE/BASE_TREE/BRANCH остаются принятыми для R1.
+
+| Файл | Единственная необходимая дельта |
+|---|---|
+| `scripts/test_telegram_egress.sh` | В current candidate-egress-source producer заменить expected_revision0015 на0016; historical migration branches не трогать. |
+| `scripts/m4_runtime_db.py` | Добавить ровно `scripts/test_telegram_egress.sh` в finite source admission. |
+| `tests/test_m4_runtime_db_runner.py` | Сохранить forbidden-path regression, заменив теперь разрешённый путь на `scripts/test_browser.sh`; проверить положительный допуск нового пути. |
+
+Только первый путь расширяет исходный write-set. Два остальных уже разрешены.
+Подготовленный C3 `C0-required-scope-extension.patch` можно применить после
+сверки этих трёх дельт с source. Допустимы связанные целевые assertions в
+том же test module; отдельный framework/новая migration не нужны.
+Receipt после результата — только HANDOFF/TASK_REGISTER.
+Остальной source,0016/pins,0001–0015,consumer/verifier,product guards,
+workflows/dependencies/архитектура остаются неизменными.
+Не принимать0015 в consumer ради зелёного CI и не править старые artifacts.
+
+### Проверка и возврат C0
+
+1. Проверить patch/diff и shell syntax; выполнить целевые runner admission
+   tests, включая новый разрешённый путь и отказ постороннему. Подтвердить
+   согласованность current producer0016 с существующим consumer0016;
+   не заменять actual hosted evidence статической проверкой строки.
+2. После этих проверок отправить изменённый кандидат в тот же PR43;
+   штатный полный CI проверит actual normal-durable producer/consumer и
+   ранее недостигнутый foundation. Отдельный targeted carrier/новый PR
+   и rerun неизменённого source не нужны.
+3. Требуются все12 jobs SUCCESS, полные foundation phases/cleanup и
+   **1059 actualPG =860generic+105native+94M4**, с setup/call/teardown,
+   прежними1031 nodeids и новыми28. При раннем отказе показать полный
+   список FAIL/SKIPPED/NOT_REACHED; не объявлять остаток PASS.
+4. Вернуть source/tree, тот же PR/CI, три source paths, точные команды,
+   результаты и сохранённые original artifacts в коротком receipt.
+   Если появится иной blocker, локализовать его и вернуть C0 факты;
+   не расширять этот repair самовольно. C0 затем продолжит приёмку.
+
+Остальные роли HOLD. Paid/model/catalog/history/Telegram send/VM/deploy/merge=0;
+defaultOFF/EVAL_ONLY,2POST1READ,tenant/native/HUMAN/UNKNOWN/no-resend прежние.
+Ledger150 не меняется:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+remaining142.039442152;reported0.00743079 UNSETTLED.
+На ПК/ВМ пользователь пока ничего не запускает. M4/live pilot не закрыт.
+
+## История — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, source REVIEW для C0 / 2026-11-05
 
 **Polza → агент → durable result → guarded Telegram реализован в одном
 [PR43](https://github.com/Elefesys/ai-service-manager/pull/43), OPEN/DRAFT.**
