@@ -31,10 +31,15 @@ unit3529+155subtests,actualPG1031/1031,frontend398/browser54 PASS.
 прежние6групп failures закрыты. Нет skips/xfails/NOT_REACHED.
 GitHub также пометил PR41 merged: его head9b05e5dd уже включён в PR42.
 Отдельного merge PR41 в main нет; старые source/execution/C2 refs сохраняются.
-Все исполнители HOLD. Следующий предусмотренный scope — Polza/GPT-v2 runtime
-и guarded Telegram path; точная source выдача ещё не назначена. FakeAdapter
-нельзя подменять реальным provider без явной композиции/secret/transport gates.
-Полный M4/live pilot ещё не закрыт; повторный PR CI/targeted/paid не нужен.
+Текущая выдача C3-M4.3-POLZA-RUNTIME-R1 назначена C3: Polza/GPT-v2 runtime
+и guarded Telegram path, один новый PR с последующими исправлениями в нём же.
+Source base dbb2334a4e9d158cf101fe7e39467928e446b85c; старт от immutable C0
+assignment commit. Ветка c3/m4-3-polza-runtime-r1, точный write-set в CURRENT.
+Назначена additive0016_polza_runtime/down0015;0001–0015 не менять.
+FakeAdapter нельзя подменять реальным provider без явной композиции,
+scope/secret/transport gates. Сначала offline/ownedPG с закрытым HTTP,
+затем штатный full CI изменённого кандидата. Прежний CI не повторять без дельты.
+Полный M4/live pilot ещё не закрыт; подготовка не разрешает paid/live запуск.
 Exact accepted main,post-merge evidence и следующий TODO — в CURRENT.
 Valid OUTPUT/UNKNOWN metering сохраняет held reserve/no-regeneration; application,
 catalog,tenant,currentness,rights и send guards не обходить.

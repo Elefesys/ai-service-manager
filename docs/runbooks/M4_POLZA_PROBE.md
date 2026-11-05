@@ -46,7 +46,10 @@ Outbox; права/currentness, ручной ответ во время AI wait,
 enable/disable. Текущий worker намеренно принимает только FakeAdapter/FAKE;
 старые API probes отдельно от application не включают live transport.
 
-Точная новая source выдача будет отдельной; сейчас все роли HOLD.
+Выдана [C3-M4.3-POLZA-RUNTIME-R1](../tasks/M4_HANDOFF.md): C3 готовит
+provider bridge в одной новой ветке/PR. Сначала закрытые HTTP-транспорты и
+actual PostgreSQL, затем full CI; остальные роли HOLD. Он вернёт source/CI
+и короткий новый M4_RUNTIME_PILOT runbook с plan/enable/disable.
 AI выключен по умолчанию, нового paid/live/deploy допуска нет.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.
 

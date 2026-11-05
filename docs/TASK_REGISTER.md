@@ -2,7 +2,31 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R11 / INTEGRATED, VERIFIED (LOCAL/TEST) / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / TODO, выдано C3 / 2026-11-05
+
+**C3 готовит Polza/GPT-v2 → durable runtime → guarded Telegram в одном новом
+PR.** PR42/main3cb3764c уже INTEGRATED/VERIFIED для synthetic LOCAL/TEST;
+новая выдача завершает предусмотренный IMPL-004 рабочий путь. Остальные роли HOLD.
+
+Source base **dbb2334a4e9d158cf101fe7e39467928e446b85c**,
+tree **1a264d50ef29b82cd85a100c32d2053735edb8cb**; начинать от immutable
+C0 assignment commit, содержащего этот CURRENT. Ветка
+`c3/m4-3-polza-runtime-r1`; repairs в том же PR. Единственная новая migration
+`0016_polza_runtime.py`, revision0016/down0015;0001–0015 неизменяемы.
+
+Точный write-set, критерии и границы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Использовать существующий PolzaAdapter с закрытыми HTTP-транспортами в тестах,
+проверить реальную PostgreSQL и согласованный current0016 catalog/readiness.
+Сохранить1031 прежних PG case и12 CIjobs; новые кейсы добавить явно.
+Не подменять provider/fake, не обходить admission/Outbox; default OFF,
+EVAL_ONLY,2calls1READ,UNKNOWN/no-regeneration/no-resend и native control прежние.
+
+Результат: source+CI REVIEW для C0 и короткая процедура plan/enable/disable
+для будущего ограниченного теста. Эта выдача не запускает API, Telegram,
+ПК/ВМ, deploy или реальные данные. Ledger150/holds без изменений.
+На данном шаге пользователь только передаёт immutable HANDOFF в C3.
+
+## История — C3-M4.3-RUNTIME-INTEGRATION-R11 / INTEGRATED, VERIFIED (LOCAL/TEST) / 2026-11-05
 
 **PR42 слит и проверен C0 на main.** C2 durable DB layer и C3 synthetic
 application/delivery интегрированы; foundation blocker закрыт. Полный M4/live

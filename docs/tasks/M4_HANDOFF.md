@@ -6,7 +6,172 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C0 post-merge / INTEGRATED, VERIFIED (LOCAL/TEST) / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / TODO, выдано C3 / 2026-11-05
+
+**Следующий исполнитель — C3. Подготовить один настоящий путь Polza → агент →
+durable result → защищённая отправка Telegram.** Проверить реализацию с
+подменёнными HTTP-транспортами и настоящей PostgreSQL; живой запуск пока не
+выполнять. Это предусмотренное IMPL-004 завершение runtime, не новая функция.
+Пользователь готов продолжить; работа нужна, чтобы первый проверяемый диалог
+проходил через приложение, а не через отдельный probe. Откладывать её можно,
+но тогда рабочего AI-диалога в Telegram ещё нет.
+
+### База и один владелец изменения
+
+- Repository: `Elefesys/ai-service-manager`. Ветка реализации:
+  **`c3/m4-3-polza-runtime-r1`**. C3 — единственный исполнитель этой выдачи;
+  C2/C4/C6 и остальные роли HOLD. Нужные DB/AI/CI дельты ниже явно переданы C3.
+- Accepted main: **3cb3764cdd75d4b6de50be9795d079cc2eead9ba**,
+  tree **52f4e7c5e644e08f32e396bcdfc59d1636ed49e1**. PR42 и штатный
+  main CI41971790237 приняты; их не воспроизводить до изменения source.
+- Полный source base: **dbb2334a4e9d158cf101fe7e39467928e446b85c**,
+  tree **1a264d50ef29b82cd85a100c32d2053735edb8cb**. Это docs-only C0
+  post-merge record поверх accepted main, с тем же рабочим кодом.
+- Начать отдельный checkout **от immutable коммита, содержащего эту выдачу**
+  (SHA из переданной ссылки). Сохранить его и source base в ancestry; не
+  cherry-pick/squash исторические ветки и не менять прежние execution refs.
+- Один новый PR в main для этой функции; последующие исправления — в нём же.
+  PR41/42 завершены, переоткрывать их не нужно. C3 готовит и проверяет PR;
+  слияние остаётся за владельцем после приёмки C0.
+
+### Реализация
+
+1. **Явная композиция.** Использовать существующий `PolzaAdapter`,
+   ConversationAgent/v2, durable AI lane и admission/Outbox. Сейчас
+   `SyntheticRuntime`, `runtime_config`, SQL0014/0015 и TelegramClient намеренно
+   принимают только fake/mock путь. Добавить отдельный явный допуск provider
+   runtime, сохранив synthetic режим и default OFF. Нельзя выдавать Polza за
+   FakeAdapter, Telegram за CONTROLLED или отправлять через manual-owner path.
+   AgentOutcome/RuntimeReceipt остаются предложением/receipt, не send permit.
+2. **Одна ограниченная конфигурация.** `RU_AGGREGATOR`, adapter `polza`,
+   execution `PROVIDER`, model `openai/gpt-6-luna`, requested provider
+   `openai/flex`, endpoint `https://polza.ai/api/v1/chat/completions`;
+   prompt `conversation_v2`, schema `conversation_result_v1`, существующий
+   strict wire envelope. Без fallback, Gemini/DeepSeek, runtime Vision/RAG,
+   hosted tools/web search, новых providers или изменения prompt ради тестов.
+   Подтверждена family OpenAI; flex — селектор запроса, не наблюдённый variant.
+3. **Допуск ограниченного теста, не production.** Сохранить `EVAL_ONLY`;
+   не переименовывать маршрут в `APPROVED` по факту offline PASS. Подготовить
+   явную server-owned привязку к одному тестовому Workspace/connection/chat и
+   ожидаемому bot identity. Входящее сообщение, key presence, имя БД или
+   `ASM_ENVIRONMENT=TEST` сами по себе не включают provider/AI send.
+   Чужой tenant/client, иной connection/chat, неподходящие данные/профиль
+   отклоняются до внешнего эффекта. Заполнение реальными ID и запуск — позже.
+4. **Secrets и эксплуатация.** Отдельная типизированная runtime-конфигурация;
+   не наследовать допуск из probe CLI/старых owner refs. Секрет читается из
+   явного приватного источника, не из текста диалога; никакого ключа в Git,
+   логах, исключениях, trace, Docker build context или тестовых artifacts.
+   Подготовить одну короткую процедуру plan/enable/disable для существующего
+   worker. Plan офлайн, без credentials и сетевых обращений. Enable требует
+   полной явной конфигурации; disable прекращает новые model/send admission
+   и не объявляет отозванным уже начатый HTTP. Не создавать admin UI/registry.
+5. **Конечные границы.** Не более2 model POST и1 READ на run; input≤32768
+   tokens/24576 bytes, output≤512 tokens/32768 bytes на call; общий run deadline
+   не выше120s, включая adapter metadata waits. Отдельно ограничить будущую
+   тестовую сессию по сроку, calls и RUB; restart/параллельные jobs не сбрасывают
+   её расход/резервы. Использовать существующие durable run/call записи, без
+   новой финансовой платформы. Тариф/route review закреплять в конфигурации;
+   старый каталог и наличие150RUB не доказывают текущий тариф. Точный будущий
+   smoke cap показать в плане; в этой выдаче live model/catalog/history GET=0.
+6. **Сохранить гарантии.** Резерв до внешнего запроса, UNKNOWN держит резерв;
+   после возможного вызова crash/restart не генерирует новый ответ. Принятый
+   результат переиспользуется; Telegram UNKNOWN не отправляется повторно.
+   Currentness/tenant/rights/HUMAN/Resume/native OWNER reconciliation и
+   observation barrier проверяются на прежних границах. HTTP без DB lock или
+   открытой бизнес-транзакции; inbound/manual не блокируются ожиданием LLM.
+   Unknown price/booking/payment передаются владельцу, модель их не утверждает.
+7. **Схема.** Назначена additive migration **`0016_polza_runtime.py`**:
+   revision `0016`, down_revision `0015`. Не менять0001–0015. Нужен узкий
+   provider/test admission в SQL и согласованный current0016 catalog/readiness;
+   не удаление старых проверок. Historical0013 native и0014 DB-only контракты
+   сохраняются;0015 synthetic путь остаётся работоспособным. Показать upgrade
+   clean и0015→0016, repeat-upgrade, проверку rollback/совместимости соседних
+   версий по ADR-132/216/217. Не заявлять совместимость старого binary, если
+   его exact schema gate её отвергает; явно описать необходимый cutover.
+
+### Write-set
+
+Менять только необходимые файлы из списка; наличие в списке не требует правки.
+
+- Runtime: `backend/src/asm/ai/{contracts,database,runtime,runtime_contracts,
+  gateway,agent,polza}.py`; новые `backend/src/asm/ai/runtime_settings.py` и
+  `backend/src/asm/ai/provider_runtime.py` при необходимости. Existing probe
+  secret loader/CLI, prompt/schema fixtures и результаты paid probes не менять.
+- Application/delivery: `backend/src/asm/foundation.py`,
+  `backend/src/asm/messaging/{worker,database,results}.py`,
+  `backend/src/asm/telegram/{client,config,provisioning}.py`.
+- Единственная новая migration: `migrations/versions/0016_polza_runtime.py`.
+  Contract snapshots в `contracts/` — только если export действительно изменён
+  публичным контрактом; перечислить точные пути/дельту, не переписывать baseline.
+- Existing current-schema consumers: `scripts/native_context_db_catalog.py`,
+  `scripts/m4_runtime_db.py`, `scripts/prepare_telegram_egress.py`,
+  `scripts/m2_4_browser_fixture.py`, `tests/generic_pg_schema.py`.
+  Менять current0016 profile/pins/inventory согласованно; исторические профили
+  не заменять global search/replace. Числа/hash вычислять по реальной схеме.
+- Existing CI wiring: `.github/workflows/m4-runtime-db.yml`,
+  `.github/workflows/ci.yml`, `scripts/ci.sh` — только source admission,
+  current-schema coverage и запуск новых проверок в существующих jobs.
+  Не вводить новый CI framework/ветку одноразовых прогонов. Обновить runner
+  BASE на полный source base выше и BRANCH на эту ветку; carried C0 docs
+  учитывать в diff, но не разрешать произвольные исходники. Historical refs
+  `c3/m4-3-runtime-targeted-run-r10` и C2 execution refs не передвигать.
+- Новые целевые тесты: `tests/test_m4_polza_runtime.py`,
+  `tests/test_m4_polza_runtime_postgres.py`,
+  `tests/test_m4_polza_runtime_migrations.py`. Существующие
+  `tests/test_m4_*.py`, `tests/test_foundation.py`,
+  `tests/test_native_context_db_runner.py`, `tests/test_m2_4_browser_fixture.py`,
+  `tests/test_telegram_egress*.py`, `tests/test_m2_3_transport.py` — только
+  затронутые assertions/fixtures и regression coverage.
+  Другие `tests/test_*.py` разрешены исключительно для перехода current-schema
+  fixture/assertions0015→0016 с перечнем причин; бизнесовые ожидания не ослаблять.
+- Операторский entrypoint: новый `scripts/m4_runtime_pilot.py`, если нужен.
+  Новый короткий `docs/runbooks/M4_RUNTIME_PILOT.md`; receipt только в
+  `docs/tasks/M4_HANDOFF.md` и `docs/TASK_REGISTER.md`.
+  `AGENTS.md`, IMPL-004 и probe runbook из этой C0 выдачи переносить неизменёнными.
+
+Новых dependencies/lockfile, frontend, infra/VM/proxy, бизнесовых сущностей,
+переписывания native policy и импортированных architecture sources здесь нет.
+Если необходим иной product path/контракт — показать конкретную дельту C0;
+не открывать параллельную задачу или новую платформу по собственной инициативе.
+
+### Проверка и возврат
+
+- Сначала offline type/lint и целевые тесты. В тестах исполняется настоящий
+  PolzaAdapter + Gateway + ConversationAgent + worker, HTTP подменён; одного
+  FakeAdapter PASS недостаточно. Проверить reply, READ→final, handoff/no_reply,
+  неверный/просроченный допуск, wrong route/scope/secret, schema failure,
+  timeout/cancel, metadata UNKNOWN, лимиты и default OFF.
+- На owned stock PostgreSQL проверить реальную новую admission и всю цепочку
+  до mock Telegram: tenant/client isolation, takeover/native/context change
+  во время AI wait, accepted-result replay, lost ACK и unknown send без
+  regeneration/resend; ручной/inbound путь продолжается. Сети Polza/Telegram
+  и реальные данные закрыты. Mock authority не является actual PG evidence.
+- Сохранить все принятые1031 PG case:860generic+105native+66M4; новые кейсы
+  добавить с явной disjoint partition, не подменять старые и не фиксировать
+  итоговый count искусственно. Existing full CI12jobs и foundation lifecycle
+  обязательны; без skips/xfails/NOT_REACHED и ослабления assertions ради PASS.
+- После целевых проверок открыть один PR и выполнить штатный полный CI
+  кандидата. Если local Docker/stock PG недоступен, честно отметить NOT_RUN;
+  existing owned hosted lane может дать первое actual PG evidence, без нового
+  carrier. Исправлять доказанные дефекты этой дельты в том же PR; не повторять
+  неизменённый прогон ради случайного PASS. Для внешнего blocker вернуть факты.
+- Receipt: source/tree, PR/CI, точный write-set, migration/profile delta,
+  команды и реальные результаты, группы failures/NOT_RUN, ограничения,
+  ссылка на сохранённое evidence. Краткий runnable smoke plan для владельца
+  должен отдельно назвать будущие calls/RUB/IDs/секреты/enable/disable и
+  безопасный STOP; **не исполнять его и не выдавать offline PASS за live PASS**.
+
+После source+CI результат REVIEW для C0. Это ещё не live admission и не
+закрытие M4. Никаких paid calls, Telegram send, deploy, действий на ПК/ВМ или
+реальных клиентских данных при подготовке. Ledger150 без изменений:
+confirmed0.37505230/58knownPOST;4unknown held7.585505548;62totalPOST;
+remaining142.039442152;reported0.00743079 UNSETTLED. Старые holds сохраняются.
+
+Основание: IMPL-004; Spec§7.1–7.3/7.6–7.7/7.16–7.22;
+ADR-132/216/217/218/219/259–261/267. LOCKED guarantees не пересмотрены;
+новый provider bridge — выполнение принятого минимального M4 scope.
+
+## История — C0 post-merge / INTEGRATED, VERIFIED (LOCAL/TEST) / 2026-11-05
 
 **PR42 слит владельцем, synthetic AI runtime интегрирован и проверен на main.**
 C2 durable DB layer и C3 application/delivery приняты в LOCAL/TEST FAKE/EVAL_ONLY

@@ -7,7 +7,8 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: PR42/main3cb3764c INTEGRATED/VERIFIED в LOCAL/TEST; live runtime — следующий TODO.
+Последнее решение ниже: PR42/main3cb3764c INTEGRATED/VERIFIED в LOCAL/TEST;
+C3-M4.3-POLZA-RUNTIME-R1 выдан C3 для подготовки provider bridge без live запуска.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -1164,6 +1165,22 @@ IMPL-004 — явная композиция одного Polza/GPT-v2 runtime �
 не являются live bridge. Точный source scope оформляется отдельно; все роли HOLD.
 Полный M4/live pilot,paid/deploy/VM/real-data допуски не следуют из этого PASS.
 DefaultOFF/2calls1READ и ledger/UNKNOWN/no-resend прежние.
+
+**Выдача C0 от 2026-11-05: C3-M4.3-POLZA-RUNTIME-R1.**
+После принятого main C3 единолично готовит предусмотренную здесь композицию
+существующего PolzaAdapter/GPT-v2 с durable runtime и guarded Telegram.
+Одна ветка/один новый PR; repairs остаются в нём. Source base dbb2334a4e9d158cf101fe7e39467928e446b85c;
+точный scope/write-set в CURRENT HANDOFF. Назначена additive0016/down0015;
+исторические migrations0001–0015 и native/UNKNOWN/tenant guarantees сохраняются.
+
+Готовится явный EVAL_ONLY допуск одного тестового Workspace/connection/chat,
+versioned route/config и ограниченной сессии; provider не маскируется под fake,
+ключ/TEST environment сами по себе не разрешают model/send. Default OFF,
+2calls1READ; использованный экспериментальный допуск не становится production
+APPROVED. CI исполняет настоящий adapter с подменённым HTTP и actual PG.
+Это выполнение принятого минимального scope, не пересмотр LOCKED архитектуры.
+Остальные роли HOLD. Новый paid/live/data/deploy допуск не выдан; подготовить
+конкретный smoke plan/enable/disable для следующей приёмки. Ledger неизменён.
 
 ## Что пересмотрено относительно baseline
 
