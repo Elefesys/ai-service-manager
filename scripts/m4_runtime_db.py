@@ -691,6 +691,7 @@ def admit_source(evidence):
         "tests/test_m3_1_native_context_runtime_postgres.py",
         "backend/src/asm/messaging/database.py",
         "scripts/prepare_telegram_egress.py",
+        "scripts/test_telegram_egress.sh",
         "tests/test_m3_1_guards_migrations.py",
         "tests/test_telegram_egress.py",
         "migrations/versions/0016_polza_runtime.py",

@@ -948,6 +948,29 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r11_event
     assert diag["operands"]["push_forced"] is False
 
 
+def test_polza_repair_admits_egress_evidence_producer_without_resources(r11_event, monkeypatch):
+    r = r11_event
+    f = r["f"]
+    path = "scripts/test_telegram_egress.sh"
+    target = f.root / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("# constructed current-schema evidence producer change\n")
+    f.git("add", path)
+    f.git("commit", "--amend", "--no-edit")
+    source = f.git("rev-parse", "HEAD")
+    r["payload"]["after"] = r["payload"]["head_commit"]["id"] = source
+    monkeypatch.setenv("GITHUB_SHA", source)
+
+    r["run"]()
+
+    assert len(r["boundary"]) == 1
+    assert r["boundary"][0]["event"]["head"] == source
+    admitted = json.loads((r["root"] / "evidence/source-admission.json").read_text())
+    assert admitted["result"] == "PASS"
+    assert admitted["paths"] == ["scripts/m4_runtime_db.py", path]
+    assert not list((r["root"] / "private").iterdir())
+
+
 @pytest.mark.parametrize(
     "path",
     [
@@ -961,7 +984,7 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r11_event
         "tests/test_m4_gateway.py",
         "infra/Dockerfile.backend",
         ".github/workflows/ci.yml",
-        "scripts/test_telegram_egress.sh",
+        "scripts/test_browser.sh",
     ],
 )
 def test_r11_admission_rejects_other_product_and_ci_write_paths(r11_event, monkeypatch, path):
