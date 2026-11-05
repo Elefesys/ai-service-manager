@@ -154,8 +154,9 @@ async def incoming(h, provider="CONTROLLED", number=1, *, process=True, message=
 def observe_wait(kind, **fields):
     # Optional diagnostics; the task/PID wait proof never depends on the plugin.
     plugin = sys.modules.get("scripts.m4_pg_observation")
-    if plugin is not None:
-        plugin.record(kind, **fields)
+    record = getattr(plugin, "record", None)
+    if callable(record):
+        record(kind, **fields)
 
 
 def require_pending(pending):
@@ -1226,6 +1227,11 @@ async def test_wait_blocked_controlled_target_contract(monkeypatch, scenario):
     """Controlled scheduling checks; real PostgreSQL controls are separate below."""
     from types import SimpleNamespace
 
+    if scenario == "matching":
+        # Importing the DB-only carrier does not install a wait reporter.
+        reporter = SimpleNamespace()
+        monkeypatch.setitem(sys.modules, "scripts.m4_pg_observation", reporter)
+
     callbacks, calls = {}, []
     entered, release = asyncio.Event(), asyncio.Event()
     driver = SimpleNamespace(info=SimpleNamespace(backend_pid=21))
@@ -1338,6 +1344,18 @@ async def test_wait_blocked_controlled_target_contract(monkeypatch, scenario):
         pending.cancel()
         await asyncio.gather(pending, return_exceptions=True)
     assert callbacks == {}, "observer listeners must be removed on every exit"
+    if scenario == "matching":
+        reports = []
+        reporter.record = lambda kind, **fields: reports.append((kind, fields))
+        observe_wait("returned_wait", waiter_pid=21, blocker_pid=10)
+        assert reports == [("returned_wait", {"waiter_pid": 21, "blocker_pid": 10})]
+
+        def failed_reporter(kind, **fields):
+            raise LookupError("reporter-failure")
+
+        reporter.record = failed_reporter
+        with pytest.raises(LookupError, match="reporter-failure"):
+            observe_wait("returned_wait", waiter_pid=21, blocker_pid=10)
 
 
 @pytest.mark.parametrize(

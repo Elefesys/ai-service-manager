@@ -1,4 +1,4 @@
-"""Finite R10 admission and evidence checks; no PostgreSQL substitute."""
+"""Finite R11 admission and evidence checks; no PostgreSQL substitute."""
 
 import itertools
 import json
@@ -837,7 +837,7 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 
 
 @pytest.fixture
-def r10_event(foundation_git, tmp_path, monkeypatch):
+def r11_event(foundation_git, tmp_path, monkeypatch):
     """Constructed real Git history; actual admission code, no Docker/DB."""
     f = foundation_git
     base, base_tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
@@ -910,8 +910,8 @@ def r10_event(foundation_git, tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "metadata", [None, "refs/heads/main", "refs/heads/c3/task-name", "refs/tags/v1.2"]
 )
-def test_constructed_full_admission_reaches_targeted_without_resources(r10_event, metadata):
-    r = r10_event
+def test_constructed_full_admission_reaches_targeted_without_resources(r11_event, metadata):
+    r = r11_event
     r["payload"]["base_ref"] = metadata
     r["run"]()
     assert len(r["boundary"]) == 1
@@ -947,15 +947,15 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r10_event
         "scripts/test_telegram_egress.sh",
     ],
 )
-def test_r10_admission_rejects_other_product_and_ci_write_paths(r10_event, monkeypatch, path):
-    r = r10_event
+def test_r11_admission_rejects_other_product_and_ci_write_paths(r11_event, monkeypatch, path):
+    r = r11_event
     f = r["f"]
     target = f.root / path
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        target.read_text() + "\n# forbidden R10 change\n"
+        target.read_text() + "\n# forbidden R11 change\n"
         if target.exists()
-        else "# forbidden R10 file\n"
+        else "# forbidden R11 file\n"
     )
     f.git("add", path)
     f.git("commit", "--amend", "--no-edit")
@@ -967,7 +967,7 @@ def test_r10_admission_rejects_other_product_and_ci_write_paths(r10_event, monke
     assert str(caught.value) == (
         "CI gate input drift: .github/workflows/ci.yml"
         if path == ".github/workflows/ci.yml"
-        else "R10_WRITE_SET"
+        else "R11_WRITE_SET"
     )
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())
 
@@ -985,7 +985,7 @@ def test_r10_admission_rejects_other_product_and_ci_write_paths(r10_event, monke
         ("merge", "EVENT_M4_PARENT"),
         ("base_tree", "BASE_TREE"),
         ("dirty", "EVENT_SOURCE_VERIFY"),
-        ("write_set", "R10_WRITE_SET"),
+        ("write_set", "R11_WRITE_SET"),
         ("head", "EVENT_SHA_HEAD_MISMATCH"),
         ("after", "EVENT_PUSH_AFTER"),
         ("head_commit", "EVENT_PUSH_HEAD"),
@@ -1000,9 +1000,9 @@ def test_r10_admission_rejects_other_product_and_ci_write_paths(r10_event, monke
     ],
 )
 def test_constructed_full_admission_refuses_before_resources(
-    r10_event, monkeypatch, damage, reason
+    r11_event, monkeypatch, damage, reason
 ):
-    r = r10_event
+    r = r11_event
     f, p = r["f"], r["payload"]
     p["base_ref"] = "refs/heads/main"
     if damage == "repo":
@@ -1060,7 +1060,7 @@ def test_constructed_full_admission_refuses_before_resources(
     assert r["boundary"] == []
     assert list((r["root"] / "private").iterdir()) == []
     diag = json.loads((r["root"] / "evidence/event-admission-run.json").read_text())
-    if reason not in {"BASE_TREE", "R10_WRITE_SET"}:
+    if reason not in {"BASE_TREE", "R11_WRITE_SET"}:
         assert diag["failure_reason"] == reason
 
 
@@ -1082,8 +1082,8 @@ def test_constructed_full_admission_refuses_before_resources(
         "refs/heads/a\nPRIVATE_SENTINEL",
     ],
 )
-def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r10_event, metadata):
-    r = r10_event
+def test_constructed_full_admission_rejects_malformed_metadata_without_echo(r11_event, metadata):
+    r = r11_event
     r["payload"]["base_ref"] = metadata
     with pytest.raises(catalog.Refusal, match="^EVENT_M4_BASE_REF_METADATA$"):
         r["run"]()

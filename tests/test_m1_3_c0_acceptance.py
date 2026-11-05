@@ -157,6 +157,9 @@ async def test_initializer_conflict_has_no_catalog_or_workspace_side_effects(eng
                     + ",".join(
                         (
                             *TABLES,
+                            "platform.ai_deliveries",
+                            "platform.ai_provider_calls",
+                            "platform.ai_runs",
                             "platform.telegram_provenance",
                             "platform.message_material_targets",
                             "platform.message_material_effects",
