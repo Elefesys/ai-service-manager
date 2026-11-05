@@ -6,7 +6,118 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, C3 продолжает repair / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, source REVIEW для C0 / 2026-11-05
+
+**Revision repair выполнен; полный CI выявил три группы препятствий.**
+CI **11SUCCESS/1FAILURE/0SKIPPED**, actual PostgreSQL **1052PASS/7FAIL**.
+C3 возвращает все факты C0 по CURRENT step5: самостоятельный concurrency
+blocker не является current0015→0016 oracle. Это не приёмка provider runtime,
+не INTEGRATED/VERIFIED и не закрытие M4/live.
+
+- Source **1afad91ca079f384dfae65a6a780615ec604d5b5**, tree **748f3364115b751945d943e0f87f1430dd25bd4b**.
+  Sole parent — assignment **d87ccd5ea4ee4cb498643e919f650a6c5eb867c9**;
+  прежние fd631834/98d36d6c/dff2e89a/a300eadf/9a7c186b сохранены в ancestry.
+- Существующий [PR43](https://github.com/Elefesys/ai-service-manager/pull/43)
+  OPEN/DRAFT, branch c3/m4-3-polza-runtime-r1 обновлена fast-forward с
+  expected old head9a7c186b. Нового PR/ветки/carrier/unchanged retry нет.
+- Tested merge **73c29364d8cbf8711ee721549327c1a50f1a3458**, exact tree **748f3364115b751945d943e0f87f1430dd25bd4b**;
+  ordered parents main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba** + source.
+  Main,42historical C3 refs и24C2 refs сохранены; source worktree clean.
+
+### Дельта и проверки
+
+От текущей выдачи d87ccd5 — **одна строка / один файл**:
+tests/test_telegram_egress.py:1938 expected_revision0015→0016.
+Совокупно от dff2e89a — **4source paths,27insertions/3deletions**:
+
+| Path | Назначение |
+|---|---|
+| scripts/test_telegram_egress.sh | Current evidence producer0016, прежний узкий fix |
+| scripts/m4_runtime_db.py | Ровно этот script добавлен в finite allowlist |
+| tests/test_m4_runtime_db_runner.py | Positive admission и запрещённый соседний path |
+| tests/test_telegram_egress.py | Current producer oracle0016; historical0012/0007 прежние |
+
+До CI поиск21вхождения0015 в tests/test_*.py выявил только этот literal oracle.
+Producer shell:517, consumer catalog:3013 и consumer fixture:1439 требуют0016.
+Historical checks/комментарии/сохранённые nodeids не менялись.
+Full CI затем выявил два пропуска current inventory/fixture без literal0015;
+они и независимый timeout описаны ниже, не скрыты первоначальным поиском.
+Product/consumer/verifier,0016 и pins,0001–0015,workflows/dependencies,
+native/tenant/UNKNOWN guards и архитектура unchanged;33immutable inputs
+и11canonical architecture attachments сверены.
+
+Targeted **69PASS =51admission+18current-schema/consumer**,0FAIL/0SKIP.
+Команды (PYTHONPATH=backend/src; точные executable/XML paths в evidence):
+
+```sh
+python -m pytest -q tests/test_m4_runtime_db_runner.py -k 'admission or admits or rejects_other'
+python -m pytest -q tests/test_telegram_egress.py -k 'current or schema or native_profile or material_egress' tests/test_native_context_db_runner.py::test_foundation_durable_completeness_requires_current_six_lane_receipts
+bash -n scripts/test_telegram_egress.sh
+ruff check scripts/m4_runtime_db.py tests/test_m4_runtime_db_runner.py tests/test_telegram_egress.py
+ruff format --check scripts/m4_runtime_db.py tests/test_m4_runtime_db_runner.py tests/test_telegram_egress.py
+git diff --check
+```
+
+Syntax/Ruff/format/diff PASS. Local PostgreSQL **NOT_RUN_LOCAL**:
+docker/psql/postgres здесь отсутствуют; actualPG ниже — hosted stock PostgreSQL.
+
+[CI42013215782](https://github.com/Elefesys/ai-service-manager/actions/runs/42013215782), pull_request/synchronize, attempt1:
+**11SUCCESS/1FAILURE/0SKIPPED**; failed job foundation.
+ActualPG **1052PASS/7FAIL=853PASS+7FAIL generic/105nativePASS/94M4PASS**.
+Все1059 имеют setup/call/teardown; все setup/teardown PASS,7callFAIL,
+0skip/xfail/missing call phases. Native7unit отдельно.
+Все1031 прежних literal nodeids сохранены,28новых — Polza PG module.
+Hosted unit3554PASS+155subtests; frontend398/browser54 PASS.
+Normal-durable producer фактически0016, все6lifecycles/12top-level assertions PASS.
+Foundation ruff/format/mypy/unit/upgrade/repeat-upgrade PASS; generic FAIL.
+Primary exit1/cleanup0;7failure records,4300case records, generic complete860.
+NOT_REACHED backend: downgrade,reupgrade,contracts,wheel-one,wheel-two,
+wheel-compare,wheel-hash. NOT_REACHED host: storage-version,
+storage-admin-version,services,http,images. FOUNDATION_EVIDENCE_REFUSED —
+следствие primary failure/incomplete lifecycle, не восьмой PG failure.
+Native owned cleanup PASS; M4 все5groups zero resources.
+0016 catalog190functions/49tables и все3frozen pins совпали; binding/source
+archives проверены независимо,350blobs/modes exact в каждом из11archives.
+
+### Все FAIL и необходимый следующий шаг
+
+| Группа | Факт | Предложение / недостающие данные |
+|---|---|---|
+| 5 initializer conflicts: missing_workspace/partial/input/null_code/null_revision | tests/test_m1_3_c0_acceptance.py:154, SQLSTATE0A000: ai_provider_sessions references conversations; таблица отсутствует в explicit TRUNCATE closure | Добавить ровно platform.ai_provider_sessions без CASCADE; сохранить49-row/catalog snapshot и rollback. Intended conflict calls и их before/after/post-rollback assertions NOT_REACHED |
+| 1 current inventory | tests/test_postgres.py:108, отсутствует ai_provider_sessions в sorted exact list; actual0016 catalog49tables | Добавить ровно существующее имя; exact equality/roles/pins/числа реального catalog прежние |
+| 1 concurrency different_keys | tests/test_m1_3_api_postgres.py:791/802/789, TimeoutError при ожидании обоих запросов в asyncio.timeout(2) | Root cause UNKNOWN: нет persisted entered/PID/lock-state на timeout. same_intent/same_key_conflict PASS; CAS/winner assertions NOT_REACHED. Нужна bounded diagnosis без ослабления2s/3s/3500ms/4s deadlines или business assertions |
+
+Все7literal nodeids/phase records/error chains — completion-summary.json и
+foundation-test-failures.txt. Три test files не менялись от accepted main.
+Source новой0016 обоснованно добавляет таблицу/FK; старые fixture/inventory
+теперь неполны. Это не доказательство дефекта самой миграции.
+
+Минимальный schema patch подготовлен отдельно: **3paths/4insertions**,
+tests/test_m1_3_c0_acceptance.py,tests/test_postgres.py и ровно2finite admissions
+в scripts/m4_runtime_db.py. **NOT_APPLIED**, apply--check/AST parse PASS,
+actualPG для patch NOT_RUN. Patch не устраняет независимый timeout.
+Новый unverified source/CI iteration при неразобранном concurrency blocker
+не опубликован; unchanged-source retry не выполнялся. C0 получает конкретную
+schema дельту и весь набор blockers для следующей ограниченной выдачи;
+это не повторный запрос разрешения на уже согласованную literal0015→0016 строку.
+
+### Evidence и передача C0
+
+[Evidence](https://chatgpt.com/library?file_id=libfile_92b2e8599598819185bf93e477e17edf&account_id=personal): **183822345bytes**,
+SHA256 **8cec31834917766417d319654cc1044b7b0034ff43c59ed3ccaa3dd0a3244489**;
+492manifest/493ZIP entries,CRC+SHA PASS.
+Содержит12original CI ZIPs,12job logs,phase records,patches/commands/audits.
+Оба предыдущих evidence-архива сохранены с прежними bytes/SHA256.
+Этот receipt — отдельный docs-only sole child tested source, только
+HANDOFF/TASK_REGISTER; execution branch остаётся на проверенном source.
+
+Следующий шаг — C0 review source/evidence и bounded решение по трём группам.
+Live/model/catalog/history/Telegram/
+VM/deploy/merge=0; defaultOFF/EVAL_ONLY,ledger150/holds прежние.
+[Pilot runbook](../runbooks/M4_RUNTIME_PILOT.md) не исполнялся.
+C3 и остальные роли HOLD; M4/live и общая приёмка остаются открытыми.
+
+## История — C0 current-schema repair assignment d87ccd5e / 2026-11-05
 
 **C0 подтверждает три подготовленные дельты и разрешает связанное исправление
 unit-теста. Продолжить тот же PR43; повторное согласование каждой строки

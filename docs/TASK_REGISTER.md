@@ -2,7 +2,45 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, C3 продолжает repair / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, source REVIEW для C0 / 2026-11-05
+
+Revision repair выполнен; full CI BLOCKED. Source **1afad91ca079f384dfae65a6a780615ec604d5b5**,
+tree **748f3364115b751945d943e0f87f1430dd25bd4b**, sole child assignment d87ccd5e.
+Существующий [PR43](https://github.com/Elefesys/ai-service-manager/pull/43)
+OPEN/DRAFT, FF с9a7c186b; новый PR/ветка/carrier/unchanged retry не создавались.
+
+Дельта от assignment — одна строка current oracle0015→0016;
+совокупный repair от dff2e89a —4source paths/27+/3−.
+Targeted69PASS,syntax/Ruff/format/diff PASS.
+[CI42013215782](https://github.com/Elefesys/ai-service-manager/actions/runs/42013215782) attempt1: **11SUCCESS/1FAILURE/0SKIPPED**;
+actualPG **1052PASS/7FAIL=853+7generic/105native/94M4**.
+Все1059 setup/call/teardown записаны:setup/teardown PASS,7callFAIL,
+0skip/xfail/missing call;1031 прежних literal nodeids сохранены.
+Normal-durable0016/6lifecycles PASS; foundation primary1/cleanup0.
+Hosted unit3554PASS+155subtests; frontend398/browser54 PASS.
+
+Все7FAIL:5initializer cases (TRUNCATE closure без ai_provider_sessions),
+1exact current table inventory без той же таблицы,1different_keys concurrency
+TimeoutError в2s observation. Root cause timeout UNKNOWN, бизнесовый CAS
+не проверен. Intended initializer conflict assertions также NOT_REACHED.
+Foundation NOT_REACHED:7backend phases (downgrade/reupgrade/contracts/wheels)
+и5host phases (storage versions/services/http/images); точный перечень в HANDOFF.
+Предложенный schema fixture/inventory patch3paths/4insertions с2finite admissions
+NOT_APPLIED/apply--checkPASS; он не исправляет independent concurrency blocker.
+Нового candidate/CI retry после этого результата нет; C0 получает все факты
+по CURRENT step5, а не очередной запрос согласовать literal revision строку.
+
+[Evidence](https://chatgpt.com/library?file_id=libfile_92b2e8599598819185bf93e477e17edf&account_id=personal),183822345bytes,
+SHA256 **8cec31834917766417d319654cc1044b7b0034ff43c59ed3ccaa3dd0a3244489**;12original CI ZIPs+phase evidence.
+Source/tree/diff/commands/cleanup/pins — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Receipt docs-only sole child source; PR head остаётся на tested source.
+Main,42oldC3/24C2refs,product/migrations/pins/consumer/workflows/dependencies/
+architecture прежние. Paid/live/Telegram/VM/deploy/merge=0,
+defaultOFF/EVAL_ONLY и ledger150/holds unchanged.
+**C0 review / C3 HOLD**; provider runtime ещё не принят целиком,
+INTEGRATED/VERIFIED и M4/live этим receipt не объявляются.
+
+## История — C0 current-schema repair assignment d87ccd5e / 2026-11-05
 
 C0 сверил candidate **fd6318344f9a03c9855aa7e470ffb5c34da0e150**,
 tree **eee502ca3c896c3415ed00e12779d57f00f438ee**: три дельты соответствуют
