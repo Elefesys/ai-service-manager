@@ -2,7 +2,38 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R11 / REVIEW, C3 HOLD / 2026-11-05
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R11 / REVIEW, READY_FOR_OWNER_MERGE / 2026-11-05
+
+**C0 acceptance: PR42 готов к merge владельцем.** Foundation blocker закрыт;
+synthetic runtime принят в SOURCE+FULL-CI scope. INTEGRATED/VERIFIED — после
+фактического merge и штатного push/main CI. M4/live pilot ещё не закрыт.
+
+Принят source **3f68b262bdcd2c7b24c1278158cca1deb7f8fc6f**,
+tree **52f4e7c5e644e08f32e396bcdfc59d1636ed49e1**;
+receipt19a1d0d0 sole child source/2docs. Tested merge
+**b21adb564dc06c6b2282d38e0d30727e79c6dbe4**, тот же tree; parents main
+**586240e88c825aa67593af5d72e0bdbb251ed3bb** + source.
+
+[CI41964354651](https://github.com/Elefesys/ai-service-manager/actions/runs/41964354651)
+**12/12 SUCCESS**, attempt1. Unit3529+155subtests,frontend398,browser54 PASS.
+ActualPG **1031/1031 =860generic+105native+66M4**, все setup/call/teardown.
+C0 сверил4300generic records, полные phases,12originalZIP/375files,
+11×342sourceblobs,472manifest entries и local XML21/23/674. Полный foundation
+lifecycle/contracts/wheels/cleanup PASS; отдельного final zero-resource inventory
+в этой lane нет. Все6R10groups закрыты, включая245actual call PASS.
+
+7source paths/140+/62− приняты; product/migrations/pins/guards/architecture прежние.
+C0 подтверждает исправление своего имени ai_results→ai_deliveries в test oracles.
+Полные основания и границы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Владелец сливает только [PR42](https://github.com/Elefesys/ai-service-manager/pull/42)
+через Create a merge commit, сохраняя ancestry; head/main должны совпадать выше.
+PR41 не сливать. C3/остальные роли HOLD; docs acceptance не меняет PR42 source.
+После merge C0 проверяет main/parents/tree и штатный CI; повторного PR CI нет.
+На ПК/ВМ ничего не запускать. DefaultOFF/FAKE/EVAL_ONLY2calls1READ,
+paid/live/Telegram/deploy/realdata и ledger unchanged; M4 live task отдельно.
+
+## История — C3-M4.3-RUNTIME-INTEGRATION-R11 / REVIEW, C3 HOLD / 2026-11-05
 
 C3 receipt до C0 review. [PR42](https://github.com/Elefesys/ai-service-manager/pull/42)
 OPEN/DRAFT. Один [full CI41964354651](https://github.com/Elefesys/ai-service-manager/actions/runs/41964354651),

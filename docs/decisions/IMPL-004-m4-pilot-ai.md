@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R11.
+Последнее решение ниже: C0 принял C3 R11 для merge PR42; post-merge verification ожидается.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -1136,6 +1136,19 @@ full CI — первый actual PG repair validation; это явное узко
 проверки для R11. Нет нового framework/PG inventory/ослабления acceptance.
 Write-set/границы в CURRENT. Default OFF/fake-only2calls1READ,ledger и paid/live/
 VM HOLD прежние. Source после outcome frozen; FAIL→receipt/C0, без unchanged retry.
+
+**Приёмка C0 от 2026-11-05: R11 / READY_FOR_OWNER_MERGE.**
+Source3f68b262/receipt19a1d0d0 принят после12/12 CI41964354651 и1031actualPG PASS
+со всеми setup/call/teardown, полным foundation lifecycle и source/evidence review.
+Все6R10groups закрыты. Исправлено неточное имя C0 assignment: ai_results не
+существует, test oracles правильно используют принятую0015 ai_deliveries.
+Это исправление документационного имени; схема и LOCKED/ADR не менялись.
+
+Владелец сливает тот же PR42 через Create a merge commit, сохраняя ancestry
+source3f68b262 и main586240e8. C0 отдельно проверит main/tree/parents и штатный
+post-merge CI. До этого задача REVIEW, все исполнители HOLD; PR41 не сливать.
+Приёмка synthetic runtime не включает live AI/Telegram/VM или полный M4 pilot.
+DefaultOFF/FAKE/EVAL_ONLY2calls1READ и paid ledger/HOLD прежние.
 
 ## Что пересмотрено относительно baseline
 

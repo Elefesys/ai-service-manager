@@ -6,7 +6,79 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3 R11 receipt / REVIEW, C3 HOLD / 2026-11-05
+## CURRENT — C0 acceptance R11 / REVIEW, READY_FOR_OWNER_MERGE / 2026-11-05
+
+**C0 принял synthetic runtime и R11 для слияния в существующем [PR42](https://github.com/Elefesys/ai-service-manager/pull/42).**
+Foundation blocker закрыт. Задача остаётся REVIEW до merge; INTEGRATED/VERIFIED
+фиксируются после проверки main и штатного post-merge CI. Полный M4/live pilot
+этим решением не объявляется завершённым. C3 и остальные исполнители HOLD.
+
+### Принятый кандидат и evidence
+
+- Source **3f68b262bdcd2c7b24c1278158cca1deb7f8fc6f**, tree
+  **52f4e7c5e644e08f32e396bcdfc59d1636ed49e1**; sole child C0 assignment
+  **d18d2c599e19227adcc4f580763a9b4cef83c058**.
+- Receipt **19a1d0d05cd965d21ba5b53fd6b8b8f31feb0314**, tree
+  **be871b68b38dec5c6009bfcf610bc4e70209bd86**; sole child source, только2 docs.
+- Tested merge **b21adb564dc06c6b2282d38e0d30727e79c6dbe4**: exact source tree;
+  ordered parents main **586240e88c825aa67593af5d72e0bdbb251ed3bb** + source.
+- [CI41964354651](https://github.com/Elefesys/ai-service-manager/actions/runs/41964354651):
+  synchronize/attempt1, **12/12 SUCCESS**, включая foundation.
+  Unit **3529 PASS +155 subtests**, frontend398, browser54.
+- **1031/1031 actual PostgreSQL PASS =860 generic+105 native+66 M4**.
+  C0 независимо сопоставил original journals с каждым nodeid: все setup/call/
+  teardown PASS, нет skips/xfails/NOT_REACHED. Generic4300 records; прежние245
+  setup failures дошли до тела теста. Все6 групп R10 закрыты.
+- Полный foundation lifecycle, contracts, reproducible wheels и cleanup PASS:
+  primary0/cleanup0,14 backend и10 host phases, NOT_REACHED пуст.
+  Wheel SHA256 **4ecd3fd6a18008a114465b2c7540cece612ef1b16c1824626f30c41d0854204b**.
+  Отдельный final zero-resource inventory foundation lane не экспортирует.
+- M4 SQL/tests234.243/600s,4 zero-resource cleanups; native105 resets.
+  Сохранены waiting-AI/manual SENT/cancellation/DEAD/restart-none/no-AI-Outbox,
+  current0015 catalog183functions/48tables, все3 frozen pins и roles/security.
+  Исторические5 used-history cases подтвердили прежний refusal55000 до DDL.
+- [Архив R11](https://chatgpt.com/library?file_id=libfile_0ff56e4501308191bed2b795902a2ae6&account_id=personal):
+  171040346bytes/SHA256 **dcc46fc0b878d84eb5a08f43d706006b66089c3c29898d18f39461e09263c199**.
+  C0 сверил manifest472/472,12 original ZIP с fresh GitHub sizes/digests/CRC,
+  375 extracted files и11 source archives×342 exact Git blobs/executable bits.
+  Local XML21/23/674testcase+130subtests проверены; новые pytest/PG/CI не запускались.
+
+### Source review и исправление неточности задания
+
+Ровно7 разрешённых source paths,140+/62−. Optional reporter вызывается при callable
+record; actual task/PID/query lock proof и исходные ошибки сохранены. Explicit
+TRUNCATE и exact table inventory дополнены текущими AI tables; CASCADE нет.
+Две provenance функции завершают созданные tasks в bounded finally до teardown.
+Read-only10-predicate precondition не удаляет данные; прежний migration lifecycle
+после него AST exact. Existing cleanup/fixed IDs/245 consumers не менялись.
+
+**C0 исправляет свою неточность:** в R11 assignment указано ai_results, тогда как
+принятая0015 содержит **platform.ai_deliveries**. Использование ai_deliveries в
+двух test oracles принято; новой таблицы или архитектурного изменения нет.
+Product/backend/worker, migrations0001–0015, constraints/pins, C2/catalog runners,
+workflows/infra и R9/R10 controls неизменны.11 canonical attachments byte-exact.
+Старое точное время orphan task/cleanup и retained rows R10 остаются неизвестными;
+успех R11 не восстанавливает отсутствовавшие старые наблюдения.
+
+### Следующее действие владельца
+
+Разрешён merge **только PR42** с указанным source в указанный main,
+способ **Create a merge commit**: ancestry принятых assignments требуется runtime
+admission. Squash/rebase для этого кандидата не использовать. Если main/head
+изменятся или появится новый failing gate — вернуть C0 до merge.
+PR41 не сливать; он заменён PR42, прежние refs сохраняются.
+
+После merge C0 проверяет фактические parents/tree и штатный push/main CI12/12;
+не повторяет неизменённый PR CI. До этого не назначается новая source task.
+Этот C0 receipt опубликован отдельно; PR42 source и его проверенное дерево
+не обновляются документами приёмки. На ПК/ВМ ничего запускать не нужно.
+
+Default OFF/FAKE/EVAL_ONLY2calls1READ остаётся. Paid/live AI/Telegram/VM/deploy/
+real data HOLD; real AI→Telegram проверка потребует отдельной конкретной выдачи.
+Ledger150 unchanged:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+
+## История — C3 R11 receipt / REVIEW, C3 HOLD / 2026-11-05
 
 **REVIEW / C3 HOLD**, 2026-11-05. Все критерии R11 подтверждены сохранённым evidence; подготовлено для C0 review. Это ещё не INTEGRATED/VERIFIED.
 [PR42](https://github.com/Elefesys/ai-service-manager/pull/42) OPEN/DRAFT.
