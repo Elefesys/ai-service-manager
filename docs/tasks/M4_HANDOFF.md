@@ -6,7 +6,110 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, early-request diagnosis / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, early-request receipt C3 / 2026-11-05
+
+**12 SUCCESS / 1059 actualPG PASS. Механизм текущей ранней паузы локализован:
+GC generation2 на event-loop thread. Причина стоимости collection, её
+принадлежность harness/dependency и причина прежнего timeout ещё UNKNOWN.**
+Исправление timeout не заявляется. По steps3/5 выдачи C3 возвращает C0
+измерения и неприменённый минимальный diagnostic diff; **C0 REVIEW / C3 HOLD**.
+
+Source **17f94c16122ddb9abcd46a6b054103cc27d55c7f**, tree **fe05a182321f4f185645471da7e8e6b7dddc84b3**;
+sole parent assignment **0546096228149563d5c663423509726a9a5c5bfd**.
+Tested merge **2a035e0762bb5535e66075391465d3e8fd2c975e** имеет то же дерево;
+ordered parents main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba** + source.
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43) OPEN/DRAFT,
+existing branch FF с4025b9d4. Один изменённый диагностический fullCI,
+attempt1; post-CI source changes / unchanged reruns / второй CI =0.
+
+### Дельта и фактические проверки
+
+Только **tests/test_m1_3_api_postgres.py:339+/14−**.
+Pass-through markers build/send/ASGI/auth transaction/authenticated/tenant
+transaction/обе permission checks/billing_contact; wall и thread CPU;
+ограниченные loop callbacks, watchdog stacks и GC start/stop.
+Максимум20samples/8frames; только relative path/function/line/numeric fields.
+Исходные arguments/await/result/exception/cancellation сохранены.
+Все6 observer/wrapper cleanup checks PASS во всех3cases; GC policy прежняя.
+Обе schema-причины/все6 прежних падений остаются закрыты.
+
+Offline **73 PASS =55 admission +18 schema/consumer**, ещё9 observer/wrapper
+component checks PASS (не actualPG); compile/AST/Ruff/format/diff PASS.
+LocalPG NOT_RUN_LOCAL: Docker/psql/postgres отсутствуют. Команды из source:
+
+```sh
+PYTHONPATH=backend/src ../polza-r1-venv/bin/python -m pytest -q tests/test_m4_runtime_db_runner.py -k 'admission or admits or rejects_other'
+PYTHONPATH=backend/src ../polza-r1-venv/bin/python -m pytest -q tests/test_telegram_egress.py -k 'current or schema or native_profile or material_egress' tests/test_native_context_db_runner.py::test_foundation_durable_completeness_requires_current_six_lane_receipts
+```
+
+[CI42053991898](https://github.com/Elefesys/ai-service-manager/actions/runs/42053991898): **12SUCCESS/0FAILURE/0SKIPPED**.
+ActualPG **1059PASS =860generic +105native +94M4**; все setup/call/teardown
+PASS,0skip/xfail/missing call;1031 прежних literal nodeids +28Polza сохранены.
+Hosted unit3558 +155subtests,frontend398,browser54 PASS.
+Все13 затронутых nodes PASS; current0016/49tables/190functions/708columns/pins совпали.
+Полный foundation tail теперь PASS: downgrade/reupgrade/contracts/wheel-one/
+wheel-two/wheel-compare/wheel-hash; storage-version/storage-admin-version/services/http/images.
+Core primary0/cleanup0; normal-durable0016/6lifecycles/12assertions/cleanup PASS.
+Native cleanup PASS; M4 все5 remaining-resource inventories пусты.
+Отдельный core zero-resource inventory не экспортирован и не заявляется.
+
+### Измеренная пауза
+
+| Case | Оба blocked backends наблюдались | Результат |
+|---|---:|---|
+| same_intent |0.047918s |200/200 identical,exact counts PASS |
+| same_key_conflict |0.048098s |200/409 IDEMPOTENCY_KEY_CONFLICT,exact counts PASS |
+| different_keys |1.752027s |409/200 STALE_STATE,exact counts PASS |
+
+different_keys: wrapper0 **0.002017s**, ASGI0 **0.002942s**, auth transaction0
+**1.715970s**; wrapper1 **1.716328s**. GC generation2 interval
+**0.006936–1.707011s =1.700075s wall /1.699791s collector-thread CPU**.
+GC-start stack0.006948–0.006989s: Pydantic collect_known_metadata:369.
+Stack **во время collection**,1.667884–1.667936s:
+SQLAlchemy event.registry._collection_gced:104 поверх той же Pydantic chain.
+Control callback due0.051954s, observed1.717712s, late1.665766s.
+
+Для0.101931–1.667884s watchdog stack **MISSING**; поздний sample не заполняет
+этот интервал задним числом. Counts2/2/3samples,errors/dropped/incomplete/caps=0.
+В первых двух случаях controls=[]: sampling завершён раньше первого due.
+GC interval включает callback overhead/finalization; один stack не измеряет
+всё время _collection_gced. Pydantic frame — trigger allocation, не владелец garbage.
+CPython hosted3.13.15; offline3.13.17 checks отдельно от actualPG.
+
+Текущий интервал предшествует auth transaction и расходует CPU loop thread;
+обычный async DB wait его не объясняет. Но конкретный fixture leak или
+product/dependency defect **не доказан**. В failed run42031358620 GC/CPU/stacks
+не записаны; новый PASS с изменившимися allocation/timings не доказывает fix.
+
+### Минимальный proposal и следующий шаг
+
+В evidence **proposed-next-observation.patch**, **NOT_APPLIED**, один текущий
+test path,7 добавленных строк: import SQLAlchemy event registry; на существующих
+GC start/stop — только6 numeric counters: collected/uncollectable и размеры
+_key_to_collection/_collection_to_key до/после. Syntax и git apply --check PASS;
+tested source не изменён. Это diagnostic proposal, не repair.
+Он уточняет объём collection и участие registry; сам по себе не устанавливает owner.
+Недостающий факт: происхождение/lifetime retained/reclaimed objects и распределение
+стоимости между collector/finalizers. C0 нужен bounded follow-up для attribution.
+Нет оснований применять fixture/product/dependency fix или запускать второй fullCI.
+GC control/registry clearing/warmup/reorder/увеличение deadlines не предлагаются.
+Observer2s/lock3s/statement3500ms/auth4s, real concurrency и точные outcomes прежние.
+
+[Evidence ZIP](https://chatgpt.com/library?file_id=libfile_fe9e5cfd353081919b50ac7074cb2b26&account_id=personal): **184260402bytes**,
+SHA256 **ccd207f6f95f535f13e1d4c59c697eb214e83a9dfc4fe16e7eb83516909c521d**;
+490manifest/491ZIP entries,CRC/size/SHA256 PASS.
+12original CI ZIPs+12full job logs;11 source archives=350Git blobs/modes;
+9 diagnostic records,13 affected phase records,1059-node audit и proposal сохранены.
+Предыдущий archive188247195bytes/SHA2567e0a150a… и12raw logs не изменены.
+Receipt — отдельный docs-only sole child source; execution head остаётся17f94c16.
+
+Main3cb3764c,42historical C3/24C2refs,product/0001–0016/pins/consumer/workflows/
+dependencies/architecture прежние. Paid/model/catalog/history/Telegram/VM/deploy/merge=0;
+defaultOFF/EVAL_ONLY,ledger150/holds unchanged. Остальные роли HOLD.
+Текущие CI gates зелёные; причинная приёмка timeout открыта.
+PR43 не INTEGRATED/VERIFIED; M4/live остаётся открытым.
+
+## История — C0 early-request diagnosis assignment 05460962 / 2026-11-05
 
 **C0 принимает два schema test repair и продолжает C3 в том же PR43.
 Остался один воспроизводящийся timeout до billing_contact.** Приёмка всего

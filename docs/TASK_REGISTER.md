@@ -2,7 +2,44 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, early-request diagnosis / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, early-request receipt C3 / 2026-11-05
+
+Выдача05460962 выполнена: один test path339+/14−, конечная ранняя диагностика.
+Source **17f94c16122ddb9abcd46a6b054103cc27d55c7f**, tree **fe05a182321f4f185645471da7e8e6b7dddc84b3**,
+sole child assignment05460962; tested merge **2a035e0762bb5535e66075391465d3e8fd2c975e**,same tree.
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43) OPEN/DRAFT;
+existing branch FF с4025b9d4; source clean,post-CI changes/retries/второй CI=0.
+
+[CI42053991898](https://github.com/Elefesys/ai-service-manager/actions/runs/42053991898) attempt1: **12SUCCESS/1059actualPG PASS**
+(860generic+105native+94M4),все setup/call/teardown,0skip/xfail/missing call.
+1031 прежних literal nodes+28Polza;13 affected nodes/все6schema failures PASS.
+Offline73PASS +9component checks; hosted unit3558+155subtests,frontend398,browser54.
+Full foundation tail и cleanup PASS; normal-durable0016/6lifecycles/12assertions PASS;
+native cleanup PASS,M4 все5 remaining-resource inventories пусты.
+Core primary0/cleanup0; отдельный zero-resource inventory не экспортирован.
+
+**different_keys: ранняя GC generation2 pause1.700075s wall/1.699791s CPU**
+между ASGI0.002942s и auth transaction1.715970s; wrapper1 старт1.716328s.
+Во время collection снят stack SQLAlchemy _collection_gced:104 над Pydantic chain.
+Два blocked backends1.752027s;200/409 STALE_STATE и exact counts PASS.
+Все3cases/observer cleanup PASS; пределы наблюдений и missing watchdog interval —
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Механизм текущей паузы установлен, но ownership/стоимость GC и причина прежнего
+timeout UNKNOWN; fixture/dependency defect и verified repair не доказаны.
+Минимальный7-line numeric diagnostic proposal в evidence **NOT_APPLIED**;
+source/deadlines/oracles прежние. По steps3/5 серия fullCI остановлена.
+
+[Evidence](https://chatgpt.com/library?file_id=libfile_fe9e5cfd353081919b50ac7074cb2b26&account_id=personal),184260402bytes,
+SHA256 **ccd207f6f95f535f13e1d4c59c697eb214e83a9dfc4fe16e7eb83516909c521d**;
+490manifest/491ZIP,12original CI ZIPs+12logs; предыдущий evidence сохранён.
+Receipt docs-only child tested source; PR head остаётся17f94c16.
+Main3cb3764c,42historical C3/24C2refs/product/migrations/pins/consumer/workflows/
+dependencies/architecture frozen; paid/live/Telegram/VM/deploy/merge=0,
+defaultOFF/EVAL_ONLY,ledger150/holds unchanged.
+**C0 REVIEW / C3 HOLD**: current CI зелёный; causal acceptance timeout открыта.
+INTEGRATED/VERIFIED и закрытие M4/live не объявляются; остальные роли HOLD.
+
+## История — C0 early-request diagnosis assignment 05460962 / 2026-11-05
 
 C0 проверил receipt **8bae8ab615fba0e43ba2327c0d0a848f5c41fd1a**,
 source **4025b9d4f8f3a6d2b800cc209dd497743951e0c8**,
