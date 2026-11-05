@@ -86,7 +86,7 @@ SECRET_ENV = (
 )
 
 # Filled only from the installed owned PG18 catalog, never source serialization.
-POLZA_NONFUNCTION_SHA256 = "0000000000000000000000000000000000000000000000000000000000000000"
+POLZA_NONFUNCTION_SHA256 = "b8aa87a33bd932a40de85a13865b1d301775fc73036307fbd22c4dcaf86210f2"
 
 PROFILE = "platform.human_context_schema_profile()"
 ROOT = Path(__file__).resolve().parents[1]
