@@ -6,7 +6,73 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, bounded repair receipt C3 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, C3 продолжает repair / 2026-11-05
+
+**C0 подтверждает три подготовленные дельты и разрешает связанное исправление
+unit-теста. Продолжить тот же PR43; повторное согласование каждой строки
+current-schema test oracle не требуется.** Предыдущая выдача dff2e89a была
+излишне ограничена тремя файлами. Это уточнение её write-set, а не новая задача.
+
+C0 сверил GitHub diff candidate **fd6318344f9a03c9855aa7e470ffb5c34da0e150**,
+tree **eee502ca3c896c3415ed00e12779d57f00f438ee**: ровно3 source paths,
+26insertions/2deletions, sole child dff2e89a. Producer уже пишет0016,
+consumer требует0016; tests/test_telegram_egress.py:1938 всё ещё ищет0015.
+Подтверждён stale assertion, а не необходимость менять рабочий код.
+Результаты56PASS/1FAIL приведены в receipt C3; C0 не запускал эти тесты повторно.
+Для этого candidate hostedCI=0; прежний CI не является его проверкой.
+
+### Продолжение C3
+
+1. Начать от immutable коммита с этой выдачей. Его parent — receipt
+   **98d36d6c9dfda2ea85fef0c1ed2a0ae21c4e7d36**,
+   tree **38ce0dda512af27ea0bcefadc4db129d360c9700**,
+   sole child candidate fd631834. Все три готовые правки и ancestry сохранить.
+2. В **tests/test_telegram_egress.py** применить подготовленную одну строку:
+   `assert "'expected_revision': '0016'" in shell`.
+   Соседние historical canonical_fingerprint0012 и helper0007 не менять.
+   Этот путь уже есть в original R1 scope и finite runner allowlist:
+   ещё одно изменение admission для него не требуется.
+3. До публикации выполнить поиск оставшихся0015 ожиданий текущего producer/
+   consumer в связанных тестах. **Разрешены также однозначные связанные
+   test-only исправления current0015→0016 в существующих tests/test_*.py**,
+   уже предусмотренные исходной выдачей1332e573. Для каждого — фактический
+   current consumer/producer и точный diff в receipt. Это не разрешение менять
+   historical0012/0013/0014/0015 проверки, данные, pins/counts, бизнесовые
+   assertions, исключать кейсы или подменять ожидаемый результат ради PASS.
+   Если такой test path ещё отсутствует в finite scripts/m4_runtime_db.py
+   allowlist, разрешено добавить только этот конкретный доказанный путь;
+   wildcard/prefix admission не вводить. Новый product дефект вернуть C0.
+4. Повторить затронутые проверки: shell syntax/Ruff,51 admission cases,
+   consumer completeness, прежний падающий тест и связанную current-schema
+   группу. Не создавать новые tests/framework для механического обновления
+   константы. После PASS отправить кандидат fast-forward в **существующую
+   c3/m4-3-polza-runtime-r1 / PR43**, expected old head
+   **9a7c186b183f075578e7a3449d34fe7857eb3d82**. Если ref изменён другим
+   исполнителем — сначала прочитать изменения. Не force-push/новый PR.
+5. Штатный полный CI изменённого source остаётся обязательным:
+   **12jobsSUCCESS,1059actualPG=860generic+105native+94M4**, все setup/call/
+   teardown и foundation lifecycle/cleanup. Старые1031 nodeids сохранены.
+   Не запускать отдельный новый carrier и не повторять unchanged-source CI.
+   При дальнейшей ошибке различать доказанное test-only schema ожидание
+   (уже разрешено выше) и иной blocker; показать все FAIL/NOT_REACHED.
+
+Минимальный совокупный repair от dff2e89a теперь4 source paths: прежние
+scripts/test_telegram_egress.sh, scripts/m4_runtime_db.py,
+tests/test_m4_runtime_db_runner.py плюс tests/test_telegram_egress.py.
+Документы receipt — HANDOFF/TASK_REGISTER. Отдельное разрешение пользователя
+для перечисленных связанных тестовых исправлений не нужно: это выполнение
+уже согласованного перехода схемы. Предыдущий запрет только3файла и HOLD
+по четвёртому пути этим CURRENT заменён.
+
+Product code,consumer/verifier,0016/pins,0001–0015,workflows/dependencies,
+native/tenant/UNKNOWN guards и архитектура неизменны. Main
+**3cb3764cdd75d4b6de50be9795d079cc2eead9ba** и historical refs не передвигать.
+После CI вернуть короткий receipt source/tree/diff/commands/outcomes/evidence.
+Это source-review узкого repair, не acceptance всего provider runtime.
+Остальные роли HOLD; live/model/catalog/history/Telegram/VM/deploy/merge=0;
+defaultOFF/EVAL_ONLY и ledger150/holds неизменны. M4/live ещё не закрыт.
+
+## История — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, bounded repair receipt C3 / 2026-11-05
 
 **Три разрешённые правки готовы; найден один связанный stale unit assertion
 в четвёртом файле вне текущего write-set.** C3 возвращает факты C0 по условию

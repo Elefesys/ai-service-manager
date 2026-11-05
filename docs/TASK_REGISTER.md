@@ -2,7 +2,28 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, bounded repair receipt C3 / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, C3 продолжает repair / 2026-11-05
+
+C0 сверил candidate **fd6318344f9a03c9855aa7e470ffb5c34da0e150**,
+tree **eee502ca3c896c3415ed00e12779d57f00f438ee**: три дельты соответствуют
+выдаче. Подтверждён stale assertion в tests/test_telegram_egress.py:1938:
+producer/consumer0016, unit oracle0015. Для candidate нового hosted CI нет.
+
+C3 продолжает от immutable этой выдачи, parent receipt
+**98d36d6c9dfda2ea85fef0c1ed2a0ae21c4e7d36** (sole child candidate).
+Разрешены четвёртый путь tests/test_telegram_egress.py и однозначные связанные
+test-only current0015→0016 исправления из исходного R1 scope.
+Повторного согласования каждой строки не требуется; historical assertions,
+product guards/pins/миграции/consumer не менять.
+Точные пределы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+После целевых PASS — FF того же PR43/c3/m4-3-polza-runtime-r1,
+expected old head **9a7c186b183f075578e7a3449d34fe7857eb3d82**,
+затем штатный fullCI12SUCCESS/1059actualPG/fullfoundation.
+Новый PR/unchanged rerun не нужны. Все результаты вернуть C0; целиком
+provider runtime ещё не принят. Main/historical refs,live HOLD и ledger прежние.
+
+## История — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, bounded repair receipt C3 / 2026-11-05
 
 C3 подготовил3разрешённых source paths /26+/2−:
 current producer0015→0016, finite runner admission, positive/forbidden tests.
