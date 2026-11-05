@@ -4,11 +4,11 @@
 25 manual PASS,2 READ и2 synthetic images; GPT/v2 выбран для первого runtime.
 PR39/40 слиты. [Main CI41178689536](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536)
 прошёл11/11, ошибка CI закрыта. C2 R4 принят C0:104 PASS, включая35 actual PG.
-[Текущая задача C3 R10](../tasks/M4_HANDOFF.md) — исправить две проверки:
-таймаут Agent и ingress/manual progress при ожидании ИИ. Прежние15 ошибок R8
-устранены; R9 CI того же PR42 завершился10 SUCCESS,2 FAIL. После целевых проверок
-обновляется тот же PR42; новый PR не нужен. Рабочий код и миграции прежние.
-PR41/42 пока не сливать; на ПК/ВМ ничего запускать не нужно.
+[Текущая задача C3 R11](../tasks/M4_HANDOFF.md) — совместимость тестов foundation
+с новым AI runtime. R10 прошёл72/72 targeted,3529 unit и66/66 M4 в полном CI.
+Остался generic PostgreSQL suite: optional observer API, перечни таблиц и очистка
+тестовых данных. Material-history guard сохраняется. Исправления продолжаются
+в том же PR42; новый PR не нужен. PR41/42 пока не сливать.
 
 ## Принятый отчёт
 
@@ -44,12 +44,13 @@ C3 R8 подтвердил reply→защищённый Outbox→synthetic Teleg
 ровно одна отправка, при отзыве прав — отказ без отправки; restart/replay без
 повтора. Handoff/no_reply, отмена AI, ручной ответ/inbound во время AI wait,
 native6 и UNKNOWN metering/timeout также PASS. Schema matrix/old CHECK control
-теперь пройдены. R9 исправил прежние15 unit failures; новый полный CI выявил
-другой deadline test (до модели не дошёл) и PG ingress case с двумя потребителями
-задания. Точные причины старых outcomes не записаны. C3 R10 исправляет условия
-этих тестов, сохраняя проверки ручного ответа/отмены/отсутствия повторной отправки.
-После целевого PG PASS обновляется существующий PR42 для12/12 gates и полного
-actual1031PG union. Generic860 ещё не запускались; whole-runtime BLOCKED.
+теперь пройдены. R10 подтвердил эти результаты в целевом и полном прогоне;
+все3529 unit tests проходят. Foundation впервые дошёл до generic860:
+546PASS,69callFAIL и245setupERROR, ещё1teardownERROR. Большая часть падений
+связана с optional observer API и каскадом неочищенных тестовых данных.
+R11 исправляет ограниченный test harness, сохраняя реальные guards и проверки.
+После offline checks — один полный CI того же PR42; отдельный новый hosted
+carrier не создаётся. До12/12 gates и actual1031PG PASS whole-runtime BLOCKED.
 Отдельного capture и новых платных вызовов не требуется.
 AI выключен по умолчанию; модель и transport в этой проверке тестовые.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.

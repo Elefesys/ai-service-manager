@@ -30,20 +30,21 @@ R1 source9b05e5dd/receipt e58163ae проверен C0: CI6 PASS/5 FAIL/1 SKIPPE
 R2 source e8300919/receipt d1959bca проверен C0:80 final offline PASS,
 но capture41223501373 отказал EVENT_PUSH_BASE_REF до Docker/PG.
 R3 admission принят C0 по source + hosted evidence; stock catalogs получены.
-R8 targeted41836791831:72/72 PASS принят как исторический SOURCE+TARGETED result.
-R9 source42bea690/receiptcca60b7c проверены C0: прежние15 unit failures устранены.
-PR42/full CI41855233147:10 SUCCESS,2 FAIL. Agent deadline test остановился до model
-entry; waiting-AI PG test не получил ожидаемый ingress claim при двух consumers.
-Exact timing/claim outcome неизвестны; race/early expiry остаются гипотезами.
-Generic860 и foundation tail NOT_REACHED; whole-runtime BLOCKED.
-Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R10: test-local finite timeout
-после observed boundary и ingress через уже работающий worker без второго claim.
-Product/migrations/pins/общие native fixtures immutable, нового scope/PG nodes нет.
-После6+17 causal/offline checks и одного72-case targeted stock-PG PASS — один
-expected-SHA fast-forward того же PR42 и один полный CI12gates/actual1031PG.
-Новый PR не создавать; одна задача продолжается новыми коммитами в одном PR.
-R10 снимает только PR-source HOLD; main/PR41/R1–R9 prep/execution/C2 refs frozen.
-Exact base/write-set/criteria в CURRENT. При новом FAIL — receipt/C0 без retry.
+R10 source2c35f9c6/receipt1f7f3594 проверены C0:targeted72/72 и M466/66 PASS,
+unit3529 PASS, два R9 blockers устранены. PR42/full CI41872808265:11 SUCCESS,1 FAIL.
+Generic860 теперь достигнут:546PASS/69callFAIL/245setupERROR, ещё1teardownERROR.
+Причины: optional observer API, old schema/TRUNCATE oracles, provenance task/cleanup
+и downstream duplicate setup; отдельный material-history downgrade refusal.
+Полная causal chain и конкретные history rows не доказаны; whole-runtime BLOCKED.
+Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R11: ограниченный test-only repair
+foundation compatibility; до8source paths в CURRENT. Product/мigrations/pins/
+constraints/C2 runner/workflows/архитектура неизменны. Историю не удалять ради PASS.
+После causal/offline checks разрешён один expected-SHA FF того же PR42 и один CI.
+Явное решение C0: без нового standalone72/capture/hosted framework; при отсутствии
+local stock PG этот full CI выполняет первый actual PG repair validation.
+Требуются12/12 и actual1031PG/all foundation phases, setup/teardown также PASS.
+Одна задача продолжается в одном PR. Main/PR41/R1–R10 prep/execution/C2 refs frozen;
+исключение только PR42 source update. При FAIL — полный receipt/C0 без retry.
 Valid OUTPUT/UNKNOWN metering сохраняет held reserve/no-regeneration; application,
 catalog,tenant,currentness,rights и send guards не обходить.
 AI выключен по умолчанию; paid/live transports/VM/real data не включаются.

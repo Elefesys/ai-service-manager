@@ -7,7 +7,7 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R10.
+Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R11.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -1116,6 +1116,26 @@ R1–R9 snapshots/prep/execution сохраняются; единственно�
 старого ref — PR42/head42bea690→исправленный descendant,force=false.
 No unchanged retry; unexpected FAIL→complete receipt/C0. Exact limits/write-set
 в CURRENT. Default OFF/fake-only2calls1READ, ledger/paid/live/VM HOLD неизменны.
+
+**Актуальное решение C0 от 2026-11-05: C3-M4.3-RUNTIME-INTEGRATION-R11.**
+R10 source2c35f9c6/receipt1f7f3594 проверены:targeted72,unit3529,M466,native105PG,
+browser54 PASS. Runtime controls приняты в SOURCE+TARGETED scope. Whole-runtime
+BLOCKED: foundation generic546PASS/69callFAIL/245setupERROR плюс1teardownERROR.
+
+R11 устраняет compatibility defects в test harness: optional observer API,
+explicit M4 table/TRUNCATE oracle и bounded lifetime material tasks до scoped
+cleanup. Сохраняются real task/PID/query lock proof, rollback, fixed-ID isolation,
+FK и material-history downgrade guard. Не объявлять всю цепь доказанной: порядок
+teardown→245duplicate setups виден, конкретные task timing/history rows неизвестны.
+Product/Agent/worker/migrations/pins/constraints не пересматриваются.
+
+После causal/offline checks разрешён один expected-SHA FF того же PR42 и один
+полный CI с actual1031PG/all foundation phases. Отдельный hosted targeted carrier
+для generic suite не строить; R10 runtime72 принят. При отсутствии local stock PG
+full CI — первый actual PG repair validation; это явное узкое изменение порядка
+проверки для R11. Нет нового framework/PG inventory/ослабления acceptance.
+Write-set/границы в CURRENT. Default OFF/fake-only2calls1READ,ledger и paid/live/
+VM HOLD прежние. Source после outcome frozen; FAIL→receipt/C0, без unchanged retry.
 
 ## Что пересмотрено относительно baseline
 

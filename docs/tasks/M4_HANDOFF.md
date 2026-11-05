@@ -6,7 +6,153 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3 R10 receipt / BLOCKED, C3 HOLD / 2026-11-04
+## CURRENT — C0 assignment C3 R11 / 2026-11-05
+
+**Результат для пилота:** завершить совместимость нового AI runtime с существующим
+PostgreSQL regression suite. R10 исправления приняты в SOURCE+TARGETED scope;
+whole-runtime **BLOCKED**, **C3-M4.3-RUNTIME-INTEGRATION-R11 IN_PROGRESS**.
+Один исполнитель C3; продолжать в существующем PR42.
+
+### Приёмка R10
+
+Source **2c35f9c613fa4870d957cbf9c5164c2e8adcb933**, tree
+**5307167023008cb6eb7e034a30c2986db0c1fbf7**, sole parent assignment
+**b2106d77d56d1c4384b2a6e4d786891abe9cd481**. Receipt
+**1f7f359433c7d51ba00931ec9b9e871d569067c9**, tree
+**625d6e19c05f4f62ec8d07ac765c8497e7e85172**, sole child source,2 docs.
+Ровно6 разрешённых source paths; остальные Agent/PG functions и product code
+не менялись. C0 проверил оба controls:6 boundary expirations после observed entry
+с real deadline/budget/cancellation; ingress и manual SENT через real worker
+во время blocked AI, затем DEAD/restart-none/no AI Outbox.
+
+[Targeted41871574537](https://github.com/Elefesys/ai-service-manager/actions/runs/41871574537):
+**72/72 PASS**, SQL/tests273.963/600s,cleanup5zero.
+[CI41872808265](https://github.com/Elefesys/ai-service-manager/actions/runs/41872808265):
+**11 SUCCESS,1 FAIL**, attempt1; тот же final source. Tested merge
+**a15edee1c4e480a225db8fd0eca68c16938ae4fe**, tree exact source; parents main
+**586240e88c825aa67593af5d72e0bdbb251ed3bb** + source.
+Unit3529PASS+155subtests, M466/66PASS, native105PG+7source PASS, browser54PASS.
+M4 SQL281.058/600s,cleanup4zero. Stock0015 catalog/source/security183functions/
+48tables и все3 frozen pins независимо сверены C0 в обоих runs.
+
+C0 сверил [архив R10](https://chatgpt.com/library?file_id=libfile_e6d9eb6298c88191a5dff100704df1f7&account_id=personal):
+179502339bytes/SHA256 **1d6b1780dc5e7a8ea7ab74f69d82abac5602832c99b40744d164d6ff16c9b69d**,
+manifest967/967;13 original ZIP/fresh sizes/digests/CRC,519 extracted files,
+12 source archives×342 exact Git blobs/executable bits. Local causal23 и
+affected offline674testcase+130subtests PASS. Новый pytest/PG/CI C0 не запускал.
+
+### Foundation: все группы, без подмены причин
+
+Generic860 дошёл до860 start/case-end: **546PASS,69 call FAIL,245 setup ERROR**;
+ещё1 teardown ERROR у уже упавшего case. 315 failed phase records,
+**314 уникальных nonpassing cases**, все сопоставлены C0 с исходным journal.
+Call выполнен у615 generic cases;245 bodies NOT_REACHED.
+Full disjoint inventory1031=860+105+66; actual717PASS/69callFAIL/245setupERROR.
+Ни collection, ни case-end не равны успешному исполнению test body.
+
+| Группа | Наблюдаемый факт | Решение R11 |
+|---|---|---|
+| Optional observer | 62callFAIL в control API/control/guards/provenance: observe_wait вызывает scripts.m4_pg_observation.record, которого нет. Сам import не означает активный совместимый reporter | Исправить optional API dispatch в test helper; сохранить actual pending-task/PID/query/lock proof и исходные ошибки/отмену |
+| Transactional isolation | 5 initializer cases: TRUNCATE0A000, omitted ai_runs FK к conversation_control_receipts | Дополнить explicit disposable table closure тремя M4 tables; no CASCADE, rollback/full before-after oracle прежние |
+| Provenance teardown | Case604 barrier[connection]: observer FAIL, затем1teardown ExceptionGroup с3 RestrictViolation. Pending material task не имеет finally cancel/join | Дождаться bounded termination всех созданных этим тестом tasks до cleanup; сохранить child→parent cleanup и его ошибки |
+| Seeded cascade | Следующие245 setup failures:23505/user_accounts_pkey. Failed cleanup transaction не дошёл до удаления accounts | Исправлять источник утечки, не245 tests; existing fixed-ID setup должен снова проходить в общей последовательности |
+| Exact inventory | test_real_postgres_capabilities_and_roles ожидает список до M4, отсутствуют3 tables | Дополнить явный список; сохранить exact equality, role/RLS/privilege assertions |
+| Migration guard | fresh_m0… initial downgrade отказал0012/55000 Material history prevents downgrade | Проверить clean disposable preconditions после устранения утечки; guard и миграции неизменны |
+
+Порядок case604 teardown→duplicate setup605…859 доказан. Точное завершение
+pending task относительно cleanup и конкретные material rows перед downgrade
+не записаны; полную цепь считать гипотезой. Не объявлять R10 автором этих ошибок:
+в R9 generic вообще не выполнялся. 62 observer failures включают2 цепочки,
+где AttributeError дополнительно маскирует timeout/cancellation.
+
+Foundation build36.217s,unit516.08s,generic1010.32s; primary1/cleanup0.
+Backend downgrade/reupgrade/contracts/wheels и host storage/services/http/images
+NOT_REACHED. Secondary FOUNDATION_EVIDENCE_REFUSED сохраняется; cleanup exit0
+и удаления записаны, отдельного final zero-resource inventory этой lane нет.
+
+### Узкая выдача C3
+
+**Exact base — полный SHA этого C0 assignment из immutable URL**, записать SHA/tree.
+C0 docs commit — sole child receipt1f7f3594; branch **c0/m4-3-runtime-integration-r11**.
+Preparation **c3/m4-3-runtime-integration-r11**. Main586240e8, PR41/head9b05e5dd,
+R1–R10 prep/targeted/capture и все C2 refs frozen. Новый PR не создавать.
+
+**До8 source paths, только необходимая дельта:**
+
+- `tests/test_m3_1_control_postgres.py`: optional observe_wait compatibility.
+  Отсутствующий module/record не должен ломать доказательство ожидания.
+  Совместимый callable reporter вызывается; не подменять lock result, не ловить
+  все исключения настоящего observer и не терять исходный target error/cancellation.
+  Existing positive/negative task/PID controls сохранить; допустим один небольшой
+  regression для loaded module без record, без новой параметрической матрицы.
+- `tests/test_m1_3_c0_acceptance.py`: только explicit transactional TRUNCATE
+  closure для platform.ai_runs/ai_provider_calls/ai_results. Сохранить5 parameters,
+  isolated transaction, exact catalog/workspace before-after и rollback.
+- `tests/test_postgres.py`: только добавить3 текущие AI tables в exact inventory.
+- `tests/test_m3_1_provenance_postgres.py`: bounded finally cancel/join для
+  обоих barrier parameters и соседнего original/material two-task case. Ошибка
+  wait/assertion не оставляет writer на время teardown. Прежние actual lock wait,
+  post-wait STALE_CLAIM/no effects и successful concurrent version/effect assertions
+  сохраняются. Не подменять awaited SQL и не завершать task простым stop.set().
+- `tests/test_m2_3_db_postgres.py`: только причинно необходимый scoped cleanup/
+  проверки child→parent порядка. Уже существующий порядок сначала сверить;
+  если исправление task lifetime достаточно, этот файл не менять.
+- `tests/test_tenancy_migrations.py`: только read-only disposable precondition
+  diagnostics/assertions при необходимости. Не удалять чужие/необъяснённые rows
+  перед downgrade, не обходить material-history refusal и не заменять migration
+  lifecycle новым пустым тестом. После cleanup repair нужен исходный полный PASS.
+- `scripts/m4_runtime_db.py`: только BASE/BASE_TREE/R11 labels/write-set;
+  BRANCH остаётся **c3/m4-3-runtime-integration-pr-r8**. Execution, budgets,
+  inventories и TARGETED_BRANCH/старый trigger неизменны и повторно не используются.
+- `tests/test_m4_runtime_db_runner.py`: только соответствующие admission assertions;
+  R9 private fixtures/14 wrapper cases и R10 runtime controls неизменны.
+
+Receipt только HANDOFF/TASK_REGISTER, sole child final source на R11 prep.
+Product/backend/worker, migrations0001–0015, pins/constraints, C2 observation
+runner, catalog runner, workflows/infra/locks/architecture неизменны.
+Остальные generic modules, messaging cleanup и seeded fixture не переписывать.
+Нельзя применять CASCADE, отключать FK/triggers/RLS, скрывать23505 через ON CONFLICT,
+заменять fixed IDs случайными, удалять inventory/assertions или вводить skip/xfail.
+Не считать optional logging обязательной бизнес-функцией; новой tracing платформы нет.
+
+### Проверка и публикация — без нового hosted carrier
+
+Сначала проверить согласованность всех6 групп по source и saved failures, затем
+affected offline/observer positive+negative controls, R9/R10 causal regressions,
+Ruff/format/mypy. Сохранить source/function scope и inventory860+105+66.
+При доступном локальном pinned stock PG — целевой прогон5 initializer cases,
+table inventory, waiter controls, provenance barriers/two-task case, следующий
+existing seeded case и migration lifecycle в одном disposable sequence.
+
+**Явное решение C0 для R11:** новый standalone72/capture/CI framework не нужен:
+R10 runtime уже PASS; blocker находится в generic foundation suite. Если local
+stock PG недоступен, offline/source review не объявляется PG PASS; первый
+actual PG repair validation выполняет один полный CI существующего PR42.
+Это узкое исключение отдельного hosted targeted gate, а не отказ от проверки
+generic cases. Все PG assertions, CI gates и текущие time budgets сохраняются.
+
+После offline checks/source review разрешён один sole-child source commit и
+**один expected-SHA fast-forward PR42**:
+branch c3/m4-3-runtime-integration-pr-r8,
+**expected_sha=2c35f9c613fa4870d957cbf9c5164c2e8adcb933**,force=false.
+Если main/head изменился — STOP/C0. Один synchronize full CI/attempt1.
+Source после outcome frozen; unexpected FAIL→все причины/NOT_REACHED в receipt,
+без unchanged retry и без дальнейшего source repair по инерции.
+
+Для acceptance нужны **12/12 SUCCESS**, весь unit и **1031 actual PG PASS**
+на одном tested merge, без setup/teardown gaps; полный foundation lifecycle,
+contracts, reproducible wheels, source/cleanup. Для245 прежних setup errors
+требуется actual call PASS, а не один collection/case-end. Existing downgrade
+guard должен по-прежнему запрещать использованную history. При оставшихся rows
+сохранить bounded predicate/count/source-phase evidence и вернуть конкретный
+блокер C0; не приписывать его прежней гонке без фактов.
+
+Merge выполняет владелец после C0 acceptance. Owner ничего не запускает.
+Default OFF/FAKE/EVAL_ONLY2calls1READ; paid/live/Telegram/VM/deploy/real data HOLD.
+Ledger150 unchanged:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+
+## История — C3 R10 receipt / BLOCKED, C3 HOLD / 2026-11-04
 
 [PR42](https://github.com/Elefesys/ai-service-manager/pull/42) остаётся OPEN/DRAFT. Единственный [full CI 41872808265](https://github.com/Elefesys/ai-service-manager/actions/runs/41872808265), synchronize/attempt1: **{'success': 11, 'failure': 1}**. Статус INTEGRATED/VERIFIED устанавливает только C0; merge выполняет владелец после acceptance.
 

@@ -2,7 +2,41 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R10 / BLOCKED, C3 HOLD / 2026-11-04
+## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R11 / IN_PROGRESS / 2026-11-05
+
+Whole-runtime **BLOCKED**; один исполнитель C3, тот же PR42. C0 принял R10 controls:
+source2c35f9c6/receipt1f7f3594;targeted72/72,unit3529,M466/66,native105PG+7source,
+browser54 PASS. [CI41872808265](https://github.com/Elefesys/ai-service-manager/actions/runs/41872808265)
+11 SUCCESS,1 FAIL; source/tested merge a15edee1 exact tree53071670.
+Catalog183/48/frozen pins и cleanup independently checked.
+Архив967/967,13 original ZIP/519 extracted files,12×342 source blobs проверены C0.
+
+Foundation впервые дошёл до generic860:546PASS,69callFAIL,245setupERROR,
+ещё1teardownERROR у уже failed case;315 phase records/314 unique nonpassing cases.
+Full1031 disjoint items:717PASS/69callFAIL/245setupERROR,245 bodies NOT_REACHED.
+Группы:62 missing optional observer.record;5 TRUNCATE с пропущенными M4 FK children;
+provenance task/cleanup failure→245 duplicate-account setups;старый exact table
+inventory;0012 material-history downgrade refusal. Точное время task/cleanup и
+конкретные history rows не сохранены; полная цепь остаётся гипотезой.
+Foundation tail/contracts/wheels NOT_REACHED; evidence guard не ослаблять.
+
+[R11 assignment](tasks/M4_HANDOFF.md): до8 source paths, только test helper/
+schema oracle/task lifetime/scoped cleanup/preconditions +runner admission.
+Product/migrations/pins/constraints/C2 runner/workflows/architecture immutable.
+Не менять245 consumers, fixed IDs или FK ради PASS; preserve task/PID proof,
+rollback, material history guard и полный migration lifecycle.
+
+Exact base — SHA текущего C0 assignment, sole child1f7f3594; prep
+c3/m4-3-runtime-integration-r11. После causal/offline source checks один FF
+существующего PR42 с expected_sha2c35f9c6,force=false, один полный CI.
+Новый standalone72/capture/hosted carrier не создаётся: при отсутствии local
+stock PG этот CI является первым actual PG repair validation. Это явное решение C0.
+Требуются12/12 и actual1031PG с полным foundation tail; при FAIL receipt/C0,
+без unchanged rerun. Main586240e8/PR41/старые refs/C2 frozen, остальные роли HOLD.
+Default OFF/fake-only2calls1READ;paid/live/VM/real data/ledger прежние.
+Owner ничего не запускает; merge только после C0 acceptance.
+
+## История — C3-M4.3-RUNTIME-INTEGRATION-R10 / BLOCKED, C3 HOLD / 2026-11-04
 
 C3 receipt, до C0 review. [PR42](https://github.com/Elefesys/ai-service-manager/pull/42)
 OPEN/DRAFT, не слит. Единственный [full CI41872808265](https://github.com/Elefesys/ai-service-manager/actions/runs/41872808265),
