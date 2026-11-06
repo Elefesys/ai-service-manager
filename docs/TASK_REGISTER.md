@@ -2,7 +2,136 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, fixture lifetime repair / 2026-11-05
+## CURRENT — PR43 INTEGRATED / VERIFIED LOCAL/TEST; C6-M4-LIVE-PREP-R1 / 2026-11-06
+
+C0 подтвердил owner merge PR43:
+main **29dc16084f0ee0d01e5f96e7226995480e189a22**,
+tree **b70eb0348577c812f4f587d995c724e3c0e989e4** exact accepted candidate;
+parents3cb3764c+5372e4dc.
+[Push/main CI42168468085](https://github.com/Elefesys/ai-service-manager/actions/runs/42168468085),
+attempt1:12SUCCESS,unit3569+155subtests,generic860,partition1059PG
+(860generic+105native+94M4),foundation/durable complete-evidence gates PASS.
+Current source и весь provider bridge **INTEGRATED/VERIFIED LOCAL/TEST**.
+M4/live pilot открыт. Post-merge ZIP payloads повторно не аудировались;
+independent1059phase audit принят на exact same tree до merge.
+[Post-merge evidence](https://chatgpt.com/library?file_id=libfile_4d93ab8879a08191916c6d9ebd84c591&account_id=personal)
+—101104bytes,SHA256 b6f805245acb85822462b21ad654c16c7b545cec610bf6a4b33fcefeef03dd45.
+
+**Следующая задача C6-M4-LIVE-PREP-R1 — TODO/ASSIGNED C6.**
+Подготовить минимальный исполнимый TEST cutover и Telegram→Polza→reply smoke.
+C3 работу завершил; остальные роли HOLD. Source/build base29dc1608/treeb70eb034;
+старт инструкций — immutable CURRENT commit, ветка c6/m4-live-prep-r1.
+Write-set: M4_RUNTIME_PILOT.md,HANDOFF,TASK_REGISTER; private evidence вне Git.
+Нового PR/CI,product/DDL/infra изменения в подготовке нет.
+
+Критичные факты: прежний live M3 был LOCAL/asm_local/schema0013; provider требует
+TEST/asm_test/schema0016 и чистый TEXT-only scope. C6 готовит отдельный TEST
+путь с сохранением старых данных/receipts и одним активным bot consumer.
+Read-only VM preflight и по необходимости1catalogGET+1key-metadataGET разрешены;
+model/history/send,deploy/migrate/seed/enable/изменение сервисов пока0.
+Предлагаемый будущий smoke10мин/4POST/10RUB входит в общий150; это план,
+не новый paid допуск. Подготовить команды и возврат, затем один конкретный
+owner допуск на TEST cutover+smoke. Полное задание — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Main/historical refs и ledger/UNKNOWN holds неизменны после owner merge.
+AI defaultOFF/EVAL_ONLY; архитектура и IMPL-004 не пересматриваются.
+
+## История — C0 ACCEPTED FOR OWNER MERGE / PR43 / 2026-11-06
+
+**C0 принимает source5372e4dc: fixture lifetime repair и всю продуктовую
+реализацию Polza runtime в LOCAL/TEST. PR43 готов к owner merge;
+статус REVIEW / C0 ACCEPTED. INTEGRATED и post-merge VERIFIED ещё ожидаются.**
+
+Принят source **5372e4dc395a32e649a84e0eea7b4992b9940126**,
+tree **b70eb0348577c812f4f587d995c724e3c0e989e4**.
+Tested merge **117957d36031153759dcb7f4fda1224ab254d8f0** — same tree.
+Main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba**.
+[C3 receipt b18d8500](https://github.com/Elefesys/ai-service-manager/blob/b18d85009409a015c1e0bd1aa66f2e69a3433a41/docs/tasks/M4_HANDOFF.md);
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43).
+C0 receipt docs-only; execution head и main не изменены.
+
+[CI42157829822](https://github.com/Elefesys/ai-service-manager/actions/runs/42157829822)
+attempt1:12SUCCESS. C0 независимо проверил1059actualPG
+(860generic+105native+94M4), все setup/call/teardown, complete disjoint partition,
+foundation full tail/primary0/cleanup0, native cleanup и5empty M4 inventories.
+Hosted unit3569+155subtests,frontend398/browser54 PASS.
+Source review: explicit provider composition, finite durable admission/holds,
+tuple/currentness/rights/native/send guards,0016/down0015,private operator sources
+и defaultOFF/EVAL_ONLY. Blockers нет. Fixture cleanup и concurrency приняты;
+historical timeout attribution по-прежнему UNKNOWN.
+
+C0 завершил недостающую независимую проверку foundation ZIP/source/phase journal.
+[Acceptance evidence](https://chatgpt.com/library?file_id=libfile_2af3135c1034819199a29d288346abe6&account_id=personal)
+—12487361bytes,SHA256 efa88e8fbaece6bbfb96a6751b47654de1a52a2047b52783065bf41703016756.
+21manifest files/22entries;3original ZIP. Остальные9ZIP/отдельные C3 files
+сохраняются по ссылкам b18d8500. Сборка единого65-file C3 archive не требуется;
+не заявляется, что C0 её выполнил. C0 local app rerun NOT_RUN:
+Python3.13 недоступен offline. Новых CI/paid/live вызовов нет.
+
+**Дальше:** владелец переводит PR43 из Draft и выполняет Create a merge commit
+принятого head; C0 проверяет actual main и штатный post-merge CI.
+C3 новых заданий не получает, остальные роли HOLD. Затем — подготовка
+ограниченного живого TEST-сценария и отдельный owner допуск.
+M4/live остаётся открыт; текущая source-приёмка не разрешает live/paid/VM/deploy.
+Полный review и пределы evidence — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Ledger150/unknown holds неизменны; main/historical refs не изменены C0.
+
+## История — C3-M4.3-POLZA-RUNTIME-R1 / REVIEW, fixture lifetime repair / 2026-11-06
+
+**Repair source готов к review C0: closed-fixture retention устранён по control,
+CI42157829822 attempt1 —12SUCCESS/1059actualPG PASS.**
+Source **5372e4dc395a32e649a84e0eea7b4992b9940126**,
+tree **b70eb0348577c812f4f587d995c724e3c0e989e4**,
+sole parent assignment **6ceb44f28bef38ef42a6203920fc74e4b5f93df3**.
+Tested merge **117957d36031153759dcb7f4fda1224ab254d8f0** — same tree.
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43) OPEN/DRAFT,
+existing branch FF с17f94c16; post-CI source changes/retries=0.
+Этот receipt — docs-only child source; execution head не двигается.
+
+Пять разрешённых paths,292+/343−: browser finally очищает три pinned
+FastAPI classifiers после client/lifespan/resource cleanup, включая error/
+cancellation/partial setup. Отдельные bounded offline controls:
+после12closed instances до repair app0/DB12/runtime12/auth12, после **0/0/0/0**.
+GC collect(2) только в reachability controls; обычная fixture/timed case,
+production lifecycle, dependencies/maxsize и GC policy прежние.
+Heavy tracing удалён; finite timestamps/PID/outcome/GC durations сохранены.
+Все6schema fixes, exact business oracles, literal1059PG order,
+observer2s/lock3s/statement3500ms/auth4s и runner anchors прежние.
+
+Offline120PASS=8lifecycle+36foundation+58admission+18schema/consumer;
+Ruff/format/diff/AST PASS; localPG NOT_RUN_LOCAL.
+Hosted unit3569+155subtests,frontend398,browser54 PASS.
+ActualPG1059=860generic+105native+94M4,все phases:
+native/M4 проверены в artifacts; generic raw log860unique PASSED и
+FOUNDATION_COMPLETE_EVIDENCE_PASS. Проверенный hosted gate требует
+exact setup/call/teardown,0skip/xfail/missing call,full tail и primary0/cleanup0.
+Все3concurrency cases:2real HTTP requests/2observed blocked backends,
+200/200 либо200/409 и version2/receipt1/audit2 PASS.
+Both-blocked0.046954/0.060719/0.046760s; GC gen0/1/0 durations
+0.000391/0.013298/0.000381s в ограниченных окнах. Historical timeout UNKNOWN.
+Normal-durable0016 и Docker29:6lifecycles/12assertions каждый PASS;
+native cleanup PASS,5M4 inventories пусты.
+
+**Ограничение evidence: execution environment стала unavailable в конце CI.**
+11original ZIP проверены SHA256/size/CRC,10source snapshots exact350blobs/modes.
+Финальный foundation ZIP сохранён, hosted gate/full job log проверены через
+GitHub; независимая локальная распаковка/phase audit и единый manifest ZIP
+не завершены. Сохранены65files, в том числе12original CI ZIP и11full logs.
+[Offline proof](https://chatgpt.com/library?file_id=libfile_3e71b9535940819181cbce0b14b22b9c&account_id=personal),
+[foundation ZIP](https://chatgpt.com/library?file_id=libfile_11bcd2d56efc8191b6a0bbe9dd0d3937&account_id=personal);
+полные ссылки/digests/границы проверки — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Оставшаяся упаковка/evidence audit BLOCKED инфраструктурой; source edit
+или повтор CI для неё не нужны. Прежние C3/C0 archives сохранены.
+
+**Статус C3:REVIEW; общая source-приёмка provider runtime остаётся за C0.**
+INTEGRATED/VERIFIED и закрытие M4/live не объявляются; остальные роли HOLD.
+Main3cb3764c,42historical C3/24C2refs и product/migrations/pins/consumer/
+workflows/dependencies/architecture frozen; defaultOFF/EVAL_ONLY.
+Paid/model/catalog/history/Telegram/VM/deploy/merge=0.
+Ledger150:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+
+## История — C0 fixture lifetime repair assignment 6ceb44f2 / 2026-11-05
 
 C0 подтвердил receipt **2c0c47911691131539b01063cf5f463ab9fc40af**,
 source **17f94c16122ddb9abcd46a6b054103cc27d55c7f**,

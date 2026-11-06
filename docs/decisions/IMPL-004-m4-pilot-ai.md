@@ -7,8 +7,9 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: PR42/main3cb3764c INTEGRATED/VERIFIED в LOCAL/TEST;
-C3-M4.3-POLZA-RUNTIME-R1 выдан C3 для подготовки provider bridge без live запуска.
+Последнее решение ниже: PR43/main29dc1608 INTEGRATED/VERIFIED в LOCAL/TEST;
+Polza provider bridge принят. C6-M4-LIVE-PREP-R1 готовит конкретный TEST cutover
+и finite smoke без deploy/paid/send в подготовительной выдаче.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -1181,6 +1182,22 @@ APPROVED. CI исполняет настоящий adapter с подменённ
 Это выполнение принятого минимального scope, не пересмотр LOCKED архитектуры.
 Остальные роли HOLD. Новый paid/live/data/deploy допуск не выдан; подготовить
 конкретный smoke plan/enable/disable для следующей приёмки. Ledger неизменён.
+
+**Post-merge решение C0 от 2026-11-06: provider runtime INTEGRATED/VERIFIED LOCAL/TEST.**
+PR43 слит владельцем: main29dc16084f0ee0d01e5f96e7226995480e189a22,
+treeb70eb0348577c812f4f587d995c724e3c0e989e4 exact accepted source5372e4dc.
+Push/main CI42168468085 attempt1:12/12 SUCCESS,1059actualPG partition,
+unit3569+155subtests,fullfoundation/durable/native/M4/cleanup gates PASS.
+C0 проверил source до merge и actual main/tree/parents после него.
+Это завершает source-реализацию одного Polza/GPT-v2 provider bridge;
+не закрывает live pilot или внешний provider/data admission.
+
+C6-M4-LIVE-PREP-R1 готовит следующий существующий сценарий: отдельный
+TEST/asm_test/schema0016 scope и ограниченный Telegram→Polza→reply smoke,
+с сохранением прежней LOCAL/asm_local среды и чистым TEXT-only разговором.
+Точный операторский пакет и актуальные read-only prerequisites — до одного
+owner допуска на cutover+finite smoke. Текущая подготовка не выполняет
+deploy/migrations/enable/modelPOST/send. Scope архитектуры не расширяется.
 
 ## Что пересмотрено относительно baseline
 
