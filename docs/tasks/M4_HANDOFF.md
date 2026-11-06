@@ -6,7 +6,88 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / REVIEW, fixture lifetime repair / 2026-11-06
+## CURRENT — C0 ACCEPTED FOR OWNER MERGE / PR43 / 2026-11-06
+
+**C0 принимает fixture lifetime repair и общую source-реализацию Polza runtime
+в LOCAL/TEST. Блокирующих замечаний нет. PR43 можно перевести из Draft и слить
+владельцем через Create a merge commit. До слияния статус остаётся REVIEW,
+C0 ACCEPTED; INTEGRATED и post-merge VERIFIED ещё не объявлены.**
+
+Принят exact source **5372e4dc395a32e649a84e0eea7b4992b9940126**,
+tree **b70eb0348577c812f4f587d995c724e3c0e989e4**.
+[C3 receipt b18d8500](https://github.com/Elefesys/ai-service-manager/blob/b18d85009409a015c1e0bd1aa66f2e69a3433a41/docs/tasks/M4_HANDOFF.md)
+— docs-only child source. Source parent — assignment6ceb44f2.
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43) остаётся на этом
+source; main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba**.
+Tested merge **117957d36031153759dcb7f4fda1224ab254d8f0** имеет exact same tree
+и ordered parents main3cb3764c + source5372e4dc.
+Этот C0 receipt меняет только HANDOFF/TASK_REGISTER, не execution branch.
+
+### Что принято и проверено C0
+
+- Review всей продуктовой дельты PR против accepted main: explicit ProviderRuntime,
+  settings/route/history, durable session и budget admission, Telegram permit,
+  operator plan/enable/disable, current0016 readiness и связанные tests/runbook.
+  Source-приёмка provider bridge больше не откладывается за fixture repair.
+- 0016 additive/down0015; прежние migrations неизменны. Runtime role не получает
+  прямого доступа к session или enable. Scope/client/chat/bot/config/expiry
+  проверяются сервером; call/RUB reservations сериализованы до внешнего HTTP.
+  UNKNOWN не освобождает резерв и не разрешает regeneration/resend.
+  HUMAN/currentness/native OWNER/observation barrier и send admission сохранены.
+  Внешний HTTP не держит DB transaction; независимая manual/inbound lane сохранена.
+- Fixture finally очищает только три pinned FastAPI callable classifiers после
+  normal/error/cancellation cleanup. Bounded before/after control и nested app
+  проверены в hosted unit suite; тяжёлая временная диагностика удалена.
+  Обычная fixture не вызывает GC и не меняет deadlines/production lifecycle.
+- [CI42157829822](https://github.com/Elefesys/ai-service-manager/actions/runs/42157829822),
+  attempt1: **12/12 SUCCESS**. C0 независимо сверил **1059 actualPG**
+  (860generic +105native +94M4), каждый setup/call/teardown, отсутствие xfail,
+  полный непересекающийся набор. Generic journal содержит4300records.
+  Foundation tail, primary0/cleanup0, native cleanup и5пустых M4 inventories PASS.
+  Hosted units3569+155subtests,frontend398/browser54 PASS.
+- Все3concurrency cases сохранили два real HTTP tasks и два distinct blocked
+  PG backends; exact outcomes и прежние business assertions/deadlines PASS.
+  Both-blocked0.046954/0.060719/0.046760s. Историческая причина timeout остаётся
+  UNKNOWN: новый PASS не восстанавливает отсутствующие старые GC/CPU/stacks.
+
+### Evidence gap закрыт без повторного CI
+
+C0 восстановил original foundation ZIP, независимо сверил SHA256/size/CRC,
+350source blobs/modes и все generic phases. Также непосредственно перепроверены
+native/M4 ZIP и phase results; M4 source snapshot совпадает с теми же350blobs.
+Ограничение C3 «последний foundation artifact не проверен локально» снято.
+
+[C0 acceptance evidence](https://chatgpt.com/library?file_id=libfile_2af3135c1034819199a29d288346abe6&account_id=personal):
+M4_C0_PR43_acceptance_5372e4dc.zip, **12487361bytes**,
+SHA256 **efa88e8fbaece6bbfb96a6751b47654de1a52a2047b52783065bf41703016756**.
+21manifest files/22ZIP entries, CRC/size/SHA256 проверены.
+Внутри audit script/results, source review, GitHub identities/log/diffs и3original
+CI ZIP. Остальные9ZIP и отдельные C3 offline files остаются по ссылкам receipt
+b18d8500; повторная упаковка всех65files не требуется для приёмки.
+C0 не заявляет собственную перепроверку остальных9ZIP или сборку полного C3 архива.
+C0 local application rerun не выполнен: frozen/offline Python3.13 отсутствует;
+использовано точное hosted evidence. Ни новый CI, ни повтор paid probe не запускались.
+Отдельный core zero-resource inventory не экспортировался; primary/cleanup0 подтверждены.
+
+### Следующее действие
+
+1. Владелец: Ready for review → Merge pull request → **Create a merge commit**
+   для принятого head5372e4dc в том же PR43. Нового PR/repair/предварительного
+   повторного CI не требуется. При изменении head или main нужна проверка дельты.
+2. После merge C0 сверяет actual main/tree и обычный post-merge push CI.
+   Только после этого — INTEGRATED/VERIFIED в LOCAL/TEST.
+3. Затем подготовить один конкретный ограниченный живой TEST-сценарий
+   Telegram→Polza→reply по M4_RUNTIME_PILOT с актуальным route/account review
+   и отдельным допуском владельца. Текущая приёмка этот запуск не разрешает.
+
+C3 — REVIEW / C0 ACCEPTED / OWNER MERGE PENDING; остальных исполнителей
+не запускать. M4/live pilot открыт. Архитектура/IMPL-004/ADR132/216–219/259–261/267
+не пересматриваются; defaultOFF/EVAL_ONLY. C0 paid/model/catalog/history/
+Telegram/VM/deploy/merge=0; исторические execution refs сохранены.
+Ledger150:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+
+## История — C3-M4.3-POLZA-RUNTIME-R1 / REVIEW, fixture lifetime repair / 2026-11-06
 
 **Измеренное удержание закрытых fixture DB/engines устранено по отдельному
 before/after control. Единственный CI изменённого repair source:12SUCCESS/

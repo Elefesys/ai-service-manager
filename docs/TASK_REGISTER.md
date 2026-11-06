@@ -2,7 +2,47 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / REVIEW, fixture lifetime repair / 2026-11-06
+## CURRENT — C0 ACCEPTED FOR OWNER MERGE / PR43 / 2026-11-06
+
+**C0 принимает source5372e4dc: fixture lifetime repair и всю продуктовую
+реализацию Polza runtime в LOCAL/TEST. PR43 готов к owner merge;
+статус REVIEW / C0 ACCEPTED. INTEGRATED и post-merge VERIFIED ещё ожидаются.**
+
+Принят source **5372e4dc395a32e649a84e0eea7b4992b9940126**,
+tree **b70eb0348577c812f4f587d995c724e3c0e989e4**.
+Tested merge **117957d36031153759dcb7f4fda1224ab254d8f0** — same tree.
+Main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba**.
+[C3 receipt b18d8500](https://github.com/Elefesys/ai-service-manager/blob/b18d85009409a015c1e0bd1aa66f2e69a3433a41/docs/tasks/M4_HANDOFF.md);
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43).
+C0 receipt docs-only; execution head и main не изменены.
+
+[CI42157829822](https://github.com/Elefesys/ai-service-manager/actions/runs/42157829822)
+attempt1:12SUCCESS. C0 независимо проверил1059actualPG
+(860generic+105native+94M4), все setup/call/teardown, complete disjoint partition,
+foundation full tail/primary0/cleanup0, native cleanup и5empty M4 inventories.
+Hosted unit3569+155subtests,frontend398/browser54 PASS.
+Source review: explicit provider composition, finite durable admission/holds,
+tuple/currentness/rights/native/send guards,0016/down0015,private operator sources
+и defaultOFF/EVAL_ONLY. Blockers нет. Fixture cleanup и concurrency приняты;
+historical timeout attribution по-прежнему UNKNOWN.
+
+C0 завершил недостающую независимую проверку foundation ZIP/source/phase journal.
+[Acceptance evidence](https://chatgpt.com/library?file_id=libfile_2af3135c1034819199a29d288346abe6&account_id=personal)
+—12487361bytes,SHA256 efa88e8fbaece6bbfb96a6751b47654de1a52a2047b52783065bf41703016756.
+21manifest files/22entries;3original ZIP. Остальные9ZIP/отдельные C3 files
+сохраняются по ссылкам b18d8500. Сборка единого65-file C3 archive не требуется;
+не заявляется, что C0 её выполнил. C0 local app rerun NOT_RUN:
+Python3.13 недоступен offline. Новых CI/paid/live вызовов нет.
+
+**Дальше:** владелец переводит PR43 из Draft и выполняет Create a merge commit
+принятого head; C0 проверяет actual main и штатный post-merge CI.
+C3 новых заданий не получает, остальные роли HOLD. Затем — подготовка
+ограниченного живого TEST-сценария и отдельный owner допуск.
+M4/live остаётся открыт; текущая source-приёмка не разрешает live/paid/VM/deploy.
+Полный review и пределы evidence — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Ledger150/unknown holds неизменны; main/historical refs не изменены C0.
+
+## История — C3-M4.3-POLZA-RUNTIME-R1 / REVIEW, fixture lifetime repair / 2026-11-06
 
 **Repair source готов к review C0: closed-fixture retention устранён по control,
 CI42157829822 attempt1 —12SUCCESS/1059actualPG PASS.**
