@@ -163,7 +163,12 @@ class WorkerUnitOfWork:
             raise
 
     async def ai_runtime(
-        self, operation: str, payload: dict[str, object], *, delivery: bool = False
+        self,
+        operation: str,
+        payload: dict[str, object],
+        *,
+        delivery: bool = False,
+        provider_session: UUID | None = None,
     ) -> Any:
         """Closed DB-only capability, using this admitted job, never payload authority."""
         if operation not in {
@@ -179,6 +184,18 @@ class WorkerUnitOfWork:
             raise MessagingError(Code.INVALID_INPUT)
         if type(delivery) is not bool or (operation == "STOP" and not delivery):
             raise MessagingError(Code.INVALID_INPUT)
+        if provider_session is not None:
+            require_uuid(provider_session)
+            if not delivery:
+                raise MessagingError(Code.NOT_ALLOWED)
+            return await self._execute(
+                "SELECT platform.ai_provider_command(:session,:job,:token,:operation,CAST(:payload AS jsonb))",
+                {
+                    "session": provider_session,
+                    "operation": operation,
+                    "payload": json.dumps(payload, allow_nan=False),
+                },
+            )
         capability = "ai_delivery_command" if delivery else "ai_runtime_command"
         return await self._execute(
             f"SELECT platform.{capability}(:job,:token,:operation,CAST(:payload AS jsonb))",
@@ -479,12 +496,16 @@ class MessagingDatabase:
                 },
             )
 
-    async def enqueue_ai(self, claim: JobClaim) -> UUID:
+    async def enqueue_ai(self, claim: JobClaim, provider_session: UUID | None = None) -> UUID:
+        if provider_session is not None:
+            require_uuid(provider_session)
         async with self._transaction() as connection:
             result = await call(
                 connection,
-                "SELECT platform.ai_delivery_enqueue(:job,:token)",
-                {"job": claim.job_id, "token": claim.claim_token},
+                "SELECT platform.ai_delivery_enqueue(:job,:token)"
+                if provider_session is None
+                else "SELECT platform.ai_provider_enqueue(:session,:job,:token)",
+                {"job": claim.job_id, "token": claim.claim_token, "session": provider_session},
             )
             await self.checkpoint("ai_enqueue_before_commit")
         await self.checkpoint("ai_enqueue_after_commit")

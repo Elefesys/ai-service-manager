@@ -7,7 +7,8 @@
 live API PASS или готовность пилота.
 Текущий план: [M4_HANDOFF](../tasks/M4_HANDOFF.md).
 Сравнение рынка: [исследование](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
-Последнее решение ниже: C2 DB layer VERIFIED; C3-M4.3-RUNTIME-INTEGRATION-R11.
+Последнее решение ниже: PR42/main3cb3764c INTEGRATED/VERIFIED в LOCAL/TEST;
+C3-M4.3-POLZA-RUNTIME-R1 выдан C3 для подготовки provider bridge без live запуска.
 Прежние exact-source owner допуски использованы; нового paid запуска нет.
 
 ## Проблема и необходимый результат
@@ -1136,6 +1137,50 @@ full CI — первый actual PG repair validation; это явное узко
 проверки для R11. Нет нового framework/PG inventory/ослабления acceptance.
 Write-set/границы в CURRENT. Default OFF/fake-only2calls1READ,ledger и paid/live/
 VM HOLD прежние. Source после outcome frozen; FAIL→receipt/C0, без unchanged retry.
+
+**Приёмка C0 от 2026-11-05: R11 / READY_FOR_OWNER_MERGE.**
+Source3f68b262/receipt19a1d0d0 принят после12/12 CI41964354651 и1031actualPG PASS
+со всеми setup/call/teardown, полным foundation lifecycle и source/evidence review.
+Все6R10groups закрыты. Исправлено неточное имя C0 assignment: ai_results не
+существует, test oracles правильно используют принятую0015 ai_deliveries.
+Это исправление документационного имени; схема и LOCKED/ADR не менялись.
+
+Владелец сливает тот же PR42 через Create a merge commit, сохраняя ancestry
+source3f68b262 и main586240e8. C0 отдельно проверит main/tree/parents и штатный
+post-merge CI. До этого задача REVIEW, все исполнители HOLD; PR41 не сливать.
+Приёмка synthetic runtime не включает live AI/Telegram/VM или полный M4 pilot.
+DefaultOFF/FAKE/EVAL_ONLY2calls1READ и paid ledger/HOLD прежние.
+
+**Post-merge решение C0 от 2026-11-05: synthetic runtime INTEGRATED/VERIFIED.**
+PR42 слит владельцем: main3cb3764c/tree52f4e7c5 exact принятый кандидат,
+parents586240e8+3f68b262. Push/main CI41971790237 attempt1:12/12 SUCCESS;
+1031actualPG/all setup-call-teardown,unit3529,frontend398,browser54 PASS.
+Полный foundation lifecycle/contracts/wheels/cleanup достигнут. GitHub отметил
+PR41 merged через включение его head в PR42; отдельного merge PR41 в main нет.
+Code/migrations/guards C0 не менял, тесты/CI не перезапускал.
+
+Это приёмка C2/C3 LOCAL/TEST FAKE/EVAL_ONLY. Следующий предусмотренный результат
+IMPL-004 — явная композиция одного Polza/GPT-v2 runtime и Telegram transport,
+с secret/route/limits/enable-disable. Сейчас FakeAdapter и отдельный API probe
+не являются live bridge. Точный source scope оформляется отдельно; все роли HOLD.
+Полный M4/live pilot,paid/deploy/VM/real-data допуски не следуют из этого PASS.
+DefaultOFF/2calls1READ и ledger/UNKNOWN/no-resend прежние.
+
+**Выдача C0 от 2026-11-05: C3-M4.3-POLZA-RUNTIME-R1.**
+После принятого main C3 единолично готовит предусмотренную здесь композицию
+существующего PolzaAdapter/GPT-v2 с durable runtime и guarded Telegram.
+Одна ветка/один новый PR; repairs остаются в нём. Source base dbb2334a4e9d158cf101fe7e39467928e446b85c;
+точный scope/write-set в CURRENT HANDOFF. Назначена additive0016/down0015;
+исторические migrations0001–0015 и native/UNKNOWN/tenant guarantees сохраняются.
+
+Готовится явный EVAL_ONLY допуск одного тестового Workspace/connection/chat,
+versioned route/config и ограниченной сессии; provider не маскируется под fake,
+ключ/TEST environment сами по себе не разрешают model/send. Default OFF,
+2calls1READ; использованный экспериментальный допуск не становится production
+APPROVED. CI исполняет настоящий adapter с подменённым HTTP и actual PG.
+Это выполнение принятого минимального scope, не пересмотр LOCKED архитектуры.
+Остальные роли HOLD. Новый paid/live/data/deploy допуск не выдан; подготовить
+конкретный smoke plan/enable/disable для следующей приёмки. Ledger неизменён.
 
 ## Что пересмотрено относительно baseline
 

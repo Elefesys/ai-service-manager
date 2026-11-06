@@ -4,11 +4,11 @@
 25 manual PASS,2 READ и2 synthetic images; GPT/v2 выбран для первого runtime.
 PR39/40 слиты. [Main CI41178689536](https://github.com/Elefesys/ai-service-manager/actions/runs/41178689536)
 прошёл11/11, ошибка CI закрыта. C2 R4 принят C0:104 PASS, включая35 actual PG.
-[Текущая задача C3 R11](../tasks/M4_HANDOFF.md) — совместимость тестов foundation
-с новым AI runtime. R10 прошёл72/72 targeted,3529 unit и66/66 M4 в полном CI.
-Остался generic PostgreSQL suite: optional observer API, перечни таблиц и очистка
-тестовых данных. Material-history guard сохраняется. Исправления продолжаются
-в том же PR42; новый PR не нужен. PR41/42 пока не сливать.
+[PR42 слит и проверен C0](../tasks/M4_HANDOFF.md): accepted main3cb3764c,
+post-merge CI41971790237 **12/12 SUCCESS**,3529unit и1031actualPG PASS.
+Synthetic runtime INTEGRATED/VERIFIED (LOCAL/TEST). PR41 также отмечен merged:
+его коммиты вошли в PR42; отдельного merge PR41 в main нет.
+На ПК/ВМ ничего запускать не нужно. Полный M4/live запуск ещё впереди.
 
 ## Принятый отчёт
 
@@ -36,23 +36,21 @@ R2 p50 11.163s /p95 16.393s, N18, включая history; маленькая в�
 
 ## Дальше
 
-Accepted main586240e88c825aa67593af5d72e0bdbb251ed3bb:860 PostgreSQL,
-54 browser и остальные CI gates PASS. Новый DB-only слой прошёл source review
-и104 проверки: сохранённый ответ переживает restart, stale/HUMAN блокируют
-новое действие, UNKNOWN не вызывает автоматическую повторную генерацию.
-C3 R8 подтвердил reply→защищённый Outbox→synthetic Telegram: при наличии прав
-ровно одна отправка, при отзыве прав — отказ без отправки; restart/replay без
-повтора. Handoff/no_reply, отмена AI, ручной ответ/inbound во время AI wait,
-native6 и UNKNOWN metering/timeout также PASS. Schema matrix/old CHECK control
-теперь пройдены. R10 подтвердил эти результаты в целевом и полном прогоне;
-все3529 unit tests проходят. Foundation впервые дошёл до generic860:
-546PASS,69callFAIL и245setupERROR, ещё1teardownERROR. Большая часть падений
-связана с optional observer API и каскадом неочищенных тестовых данных.
-R11 исправляет ограниченный test harness, сохраняя реальные guards и проверки.
-После offline checks — один полный CI того же PR42; отдельный новый hosted
-carrier не создаётся. До12/12 gates и actual1031PG PASS whole-runtime BLOCKED.
-Отдельного capture и новых платных вызовов не требуется.
-AI выключен по умолчанию; модель и transport в этой проверке тестовые.
+Synthetic runtime принят C0: ответ проходит через durable result и защищённый
+Outbox; права/currentness, ручной ответ во время AI wait, отмена, restart/replay
+и UNKNOWN/no-regeneration проверены. R11 восстановил совместимость foundation
+без изменения product code, миграций и защитных ограничений.
+
+Слияние и штатный push/main CI завершены. Следующий предусмотренный результат —
+реальный Polza/GPT-v2 → runtime → guarded Telegram путь с явной процедурой
+enable/disable. Текущий worker намеренно принимает только FakeAdapter/FAKE;
+старые API probes отдельно от application не включают live transport.
+
+Выдана [C3-M4.3-POLZA-RUNTIME-R1](../tasks/M4_HANDOFF.md): C3 готовит
+provider bridge в одной новой ветке/PR. Сначала закрытые HTTP-транспорты и
+actual PostgreSQL, затем full CI; остальные роли HOLD. Он вернёт source/CI
+и короткий новый M4_RUNTIME_PILOT runbook с plan/enable/disable.
+AI выключен по умолчанию, нового paid/live/deploy допуска нет.
 На ПК/ВМ ничего запускать не нужно; ключ Polza не нужен, reports сохранить.
 
 Owner ref `C0-M4.2-GPT-QUALITY-R2:7e48510311ab77c41f84b11becb2734ddb430690:OWNER_REMAINING18_R2_10RUB`

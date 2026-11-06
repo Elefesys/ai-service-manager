@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from asm.ai.contracts import GatewayConfig
 from asm.ai.database import AIDatabase, runtime_config
 from asm.ai.fake import FakeAdapter
+from asm.ai.gateway import ModelAdapter
 from asm.ai.runtime_contracts import RuntimeStop
 from asm.messaging.database import MessagingDatabase
 from asm.messaging.errors import Code, MessagingError
@@ -16,45 +17,18 @@ from asm.messaging.results import AIJobClaim, JobClaim
 from asm.telegram.client import TelegramClient
 
 
-class SyntheticRuntime:
-    """One durable AI lane alongside the ordinary inbound/manual worker.
+class RuntimeExecution:
+    config: GatewayConfig
+    database: AIDatabase
+    telegram: TelegramClient | None
 
-    The factory returns a new bounded fake model per job; it is never a recovery
-    mechanism. PostgreSQL reserves calls and refuses regeneration after restart.
-    """
-
-    def __init__(
-        self,
-        database: MessagingDatabase,
-        config: GatewayConfig,
-        model: Callable[[], FakeAdapter],
-        *,
-        environment: str,
-        telegram: TelegramClient | None = None,
-    ) -> None:
-        self.config = runtime_config(config)
-        self.database = AIDatabase(database, environment=environment, delivery=True)
-        if telegram is not None and (
-            type(telegram) is not TelegramClient or not telegram.synthetic_ai
-        ):
-            raise MessagingError(Code.NOT_ALLOWED)
-        self.model = model
-        self.telegram = telegram
-
-    async def enqueue(self, claim: JobClaim) -> None:
-        try:
-            await self.database.messaging.enqueue_ai(claim)
-        except SQLAlchemyError:
-            # Exact source-claim replay, with no controlled consumer execution.
-            await self.database.messaging.enqueue_ai(claim)
+    def new_adapter(self) -> ModelAdapter:
+        raise NotImplementedError
 
     async def execute(self, claim: AIJobClaim) -> None:
         try:
-            adapter = self.model()
-            if (
-                not isinstance(adapter, FakeAdapter)
-                or adapter.capabilities.route != self.config.route
-            ):
+            adapter = self.new_adapter()
+            if adapter.capabilities.route != self.config.route:
                 raise MessagingError(Code.NOT_ALLOWED)
             async with asyncio.timeout(self.config.limits.duration_seconds):
                 try:
@@ -98,3 +72,42 @@ class SyntheticRuntime:
                 await self.database._command(claim, "STOP")
         except (MessagingError, SQLAlchemyError, TimeoutError):
             pass
+
+
+class SyntheticRuntime(RuntimeExecution):
+    """One durable AI lane alongside the ordinary inbound/manual worker.
+
+    The factory returns a new bounded fake model per job; it is never a recovery
+    mechanism. PostgreSQL reserves calls and refuses regeneration after restart.
+    """
+
+    def __init__(
+        self,
+        database: MessagingDatabase,
+        config: GatewayConfig,
+        model: Callable[[], FakeAdapter],
+        *,
+        environment: str,
+        telegram: TelegramClient | None = None,
+    ) -> None:
+        self.config = runtime_config(config)
+        self.database = AIDatabase(database, environment=environment, delivery=True)
+        if telegram is not None and (
+            type(telegram) is not TelegramClient or not telegram.synthetic_ai
+        ):
+            raise MessagingError(Code.NOT_ALLOWED)
+        self.model = model
+        self.telegram = telegram
+
+    async def enqueue(self, claim: JobClaim) -> None:
+        try:
+            await self.database.messaging.enqueue_ai(claim)
+        except SQLAlchemyError:
+            # Exact source-claim replay, with no controlled consumer execution.
+            await self.database.messaging.enqueue_ai(claim)
+
+    def new_adapter(self) -> ModelAdapter:
+        adapter = self.model()
+        if not isinstance(adapter, FakeAdapter):
+            raise MessagingError(Code.NOT_ALLOWED)
+        return adapter

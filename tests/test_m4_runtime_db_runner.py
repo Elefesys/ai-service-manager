@@ -121,7 +121,7 @@ def test_real_wrapper_driver_smoke_inventory_cleanup_and_export(
         monkeypatch.setenv(key, value)
     nodes = [
         m + "::test_synthetic_" + str(i)
-        for m, count in zip(carrier.MODULES, (35, 22, 9), strict=True)
+        for m, count in zip(carrier.MODULES, (35, 22, 9, 1), strict=True)
         for i in range(count)
     ]
     configuration = tmp_path / "synthetic.json"
@@ -149,7 +149,7 @@ elif 'collect-current-native' in args:
 elif 'native-owner' in args:
     runner.write(evidence/'native-owner.json',{'system_identifier':'synthetic-owned-server'})
 elif 'readiness' in args:
-    runner.write(evidence/'readiness.json',{'runtime_check':'PASS','revision':'0015'})
+    runner.write(evidence/'readiness.json',{'runtime_check':'PASS','revision':'0016'})
 elif 'pytest' in args:
     nodes=json.loads((evidence/'inventory.json').read_text())['nodeids']
     if nodes==config['native']:
@@ -197,7 +197,7 @@ elif 'pytest' in args:
             carrier.run_admitted(root, event, [], mode)
     summary = json.loads((root / "evidence/summary.json").read_text())
     inventory = json.loads((root / "evidence/inventory.json").read_text())
-    count = 72 if mode == "targeted" else 66
+    count = (72 if mode == "targeted" else 66) + (0 if fault in {"build", "collection"} else 1)
     assert summary["expected_cases"] == count == sum(summary["planned_cases_by_module"].values())
     assert (
         summary["missing_count"]
@@ -206,17 +206,17 @@ elif 'pytest' in args:
     )
     assert summary["inventory_complete"] is (fault not in {"build", "collection", "m4-duplicate"})
     assert summary["unknown_inventory_cases"] == (
-        66 if fault in {"build", "collection", "m4-duplicate"} else 0
+        66 if fault in {"build", "collection"} else 67 if fault == "m4-duplicate" else 0
     )
     assert summary["collected_cases"] == (
-        count if fault == "none" else 0 if fault in {"build", "collection", "m4-duplicate"} else 66
+        count if fault == "none" else 0 if fault in {"build", "collection", "m4-duplicate"} else 67
     )
     assert summary["collection_complete"] is (fault == "none")
     group = root / (root.name + "-group-0")
     primary = json.loads((group / "evidence/primary.json").read_text())
     if fault == "none":
         assert summary["complete"] and not summary["missing"]
-        assert len(summary["groups"]) == (5 if mode == "targeted" else 4)
+        assert len(summary["groups"]) == (6 if mode == "targeted" else 5)
         assert (
             json.loads((group / "evidence/readiness.json").read_text())["runtime_check"] == "PASS"
         )
@@ -545,7 +545,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
         monkeypatch.setenv(key, value)
     nodes = [
         module + "::test_constructed_" + str(i)
-        for module, count in zip(carrier.MODULES, (35, 22, 9), strict=True)
+        for module, count in zip(carrier.MODULES, (35, 22, 9, 1), strict=True)
         for i in range(count)
     ]
     calls, cleaned = [], []
@@ -578,7 +578,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
                 group / "evidence/current-native-inventory.json",
                 {"nodeids": carrier.CURRENT_NATIVE_NODES, "collection_exit": 0, "deselected": []},
             )
-        if label == "catalog-0015" and fault == "catalog":
+        if label == "catalog-0016" and fault == "catalog":
             raise RuntimeError("CATALOG_DECLARED_PROFILE")
         if label == carrier.COMMAND_REPORT:
             expected = json.loads((group / "evidence/inventory.json").read_text())["nodeids"]
@@ -634,7 +634,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
         with pytest.raises(RuntimeError, match="PRIMARY_FAILED"):
             carrier.run_admitted(root, event, [], mode)
     summary = json.loads((root / "evidence/summary.json").read_text())
-    expected_count = 72 if mode == "targeted" else 66
+    expected_count = 73 if mode == "targeted" else 67
     assert summary["expected_cases"] == expected_count
     assert summary["sql_test_seconds"] <= 600
     assert summary["result"] == ("PASS" if fault == "none" else "FAIL")
@@ -644,11 +644,11 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
         assert summary["groups_visited"] == 1 and len(summary["not_reached"]) == expected_count
         assert not any(label == carrier.COMMAND_REPORT for _, label, _ in calls)
     elif fault == "retained":
-        assert summary["groups_visited"] == 5 and len(summary["missing"]) == 34
+        assert summary["groups_visited"] == 6 and len(summary["missing"]) == 34
         assert summary["groups"][-1]["outcome"] == "PASS"
     else:
         assert summary["complete"] and not summary["missing"]
-        assert summary["groups_visited"] == (5 if mode == "targeted" else 4)
+        assert summary["groups_visited"] == (6 if mode == "targeted" else 5)
 
 
 def test_phase_keeps_private_json_stdout_separate_and_redacts_stderr(tmp_path):
@@ -781,12 +781,12 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason):
-    expected = catalog.source_catalog(catalog.ROOT, "0015")
-    profile = expected["functions"]["platform.ai_delivery_schema_profile()"]
+    expected = catalog.source_catalog(catalog.ROOT, "0016")
+    profile = expected["functions"]["platform.ai_provider_schema_profile()"]
     row = "('platform.human_context_schema_profile()','527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac','sql',true,'s',false)"
     assert profile["body"].count(row) == 1
     replacement = {
-        "self": row.replace("human_context_schema_profile", "ai_delivery_schema_profile"),
+        "self": row.replace("human_context_schema_profile", "ai_provider_schema_profile"),
         "missing": "",
         "duplicate": row + "," + row,
         "hash": row.replace(
@@ -810,6 +810,23 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
 
 
 @pytest.mark.parametrize(
+    "predicate",
+    [
+        "(SELECT count(*) FROM functions)=190",
+        "(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=189",
+        "(SELECT count(*) FROM tables)=49",
+    ],
+)
+def test_current_verifier_rejects_stale_count_predicates(predicate):
+    expected = catalog.source_catalog(catalog.ROOT, "0016")
+    profile = expected["functions"]["platform.ai_provider_schema_profile()"]
+    assert profile["body"].count(predicate) == 1
+    profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
+    with pytest.raises(catalog.Refusal, match="^EMBEDDED_COUNT_PREDICATE$"):
+        catalog.compare_embedded_profile(expected)
+
+
+@pytest.mark.parametrize(
     "valid,hash_matches,body_matches,reason",
     [
         (False, False, False, "CATALOG_DECLARED_PROFILE"),
@@ -825,11 +842,11 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 ):
     from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
 
-    expected = catalog.source_catalog(catalog.ROOT, "0015")
+    expected = catalog.source_catalog(catalog.ROOT, "0016")
     if not body_matches:
-        expected["functions"]["platform.ai_delivery_schema_profile()"]["body_sha256"] = "0" * 64
+        expected["functions"]["platform.ai_provider_schema_profile()"]["body_sha256"] = "0" * 64
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
-    declared = {"schema_revision": "0015", "valid": valid, "profile_sha256": digest}
+    declared = {"schema_revision": "0016", "valid": valid, "profile_sha256": digest}
     result = carrier.catalog_comparison(expected, digest, "{}", declared)
     assert result["failed_predicate"] == reason
     assert result["application_pin_matches"] is hash_matches
@@ -934,17 +951,54 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r11_event
 @pytest.mark.parametrize(
     "path",
     [
+        "scripts/test_telegram_egress.sh",
+        "tests/test_m1_3_c0_acceptance.py",
+        "tests/test_postgres.py",
+        "tests/test_m1_3_api_postgres.py",
+        "tests/test_auth_postgres.py",
+        "tests/test_foundation.py",
+    ],
+)
+def test_polza_repair_admits_egress_evidence_producer_without_resources(
+    r11_event, monkeypatch, path
+):
+    r = r11_event
+    f = r["f"]
+    target = f.root / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("# constructed current-schema evidence producer change\n")
+    f.git("add", path)
+    f.git("commit", "--amend", "--no-edit")
+    source = f.git("rev-parse", "HEAD")
+    r["payload"]["after"] = r["payload"]["head_commit"]["id"] = source
+    monkeypatch.setenv("GITHUB_SHA", source)
+
+    r["run"]()
+
+    assert len(r["boundary"]) == 1
+    assert r["boundary"][0]["event"]["head"] == source
+    admitted = json.loads((r["root"] / "evidence/source-admission.json").read_text())
+    assert admitted["result"] == "PASS"
+    assert admitted["paths"] == ["scripts/m4_runtime_db.py", path]
+    assert not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
         "migrations/versions/0014_ai_runtime.py",
         "migrations/versions/0015_ai_delivery.py",
-        "backend/src/asm/foundation.py",
-        "tests/test_native_context_db_runner.py",
-        "tests/test_m4_delivery.py",
-        "tests/test_m4_schema_postgres.py",
+        "backend/src/asm/auth/service.py",
+        "backend/src/asm/ai/probe.py",
+        "backend/src/asm/ai/prompts/conversation_v2.txt",
+        "frontend/package.json",
         "backend/src/asm/ai/agent.py",
         "tests/test_m4_gateway.py",
-        "backend/src/asm/messaging/worker.py",
+        "tests/test_m1_3_api_postgres_extra.py",
+        "tests/test_auth_postgres_extra.py",
+        "infra/Dockerfile.backend",
         ".github/workflows/ci.yml",
-        "scripts/test_telegram_egress.sh",
+        "scripts/test_browser.sh",
     ],
 )
 def test_r11_admission_rejects_other_product_and_ci_write_paths(r11_event, monkeypatch, path):
@@ -967,7 +1021,7 @@ def test_r11_admission_rejects_other_product_and_ci_write_paths(r11_event, monke
     assert str(caught.value) == (
         "CI gate input drift: .github/workflows/ci.yml"
         if path == ".github/workflows/ci.yml"
-        else "R11_WRITE_SET"
+        else "POLZA_RUNTIME_WRITE_SET"
     )
     assert not r["boundary"] and not list((r["root"] / "private").iterdir())
 
@@ -985,7 +1039,7 @@ def test_r11_admission_rejects_other_product_and_ci_write_paths(r11_event, monke
         ("merge", "EVENT_M4_PARENT"),
         ("base_tree", "BASE_TREE"),
         ("dirty", "EVENT_SOURCE_VERIFY"),
-        ("write_set", "R11_WRITE_SET"),
+        ("write_set", "POLZA_RUNTIME_WRITE_SET"),
         ("head", "EVENT_SHA_HEAD_MISMATCH"),
         ("after", "EVENT_PUSH_AFTER"),
         ("head_commit", "EVENT_PUSH_HEAD"),
@@ -1060,7 +1114,7 @@ def test_constructed_full_admission_refuses_before_resources(
     assert r["boundary"] == []
     assert list((r["root"] / "private").iterdir()) == []
     diag = json.loads((r["root"] / "evidence/event-admission-run.json").read_text())
-    if reason not in {"BASE_TREE", "R11_WRITE_SET"}:
+    if reason not in {"BASE_TREE", "POLZA_RUNTIME_WRITE_SET"}:
         assert diag["failure_reason"] == reason
 
 

@@ -22,29 +22,25 @@ M3 закрыт в LOCAL/TEST; финальный receipt — в верхнем 
 План/IMPL-004 приняты C0 и интегрированы в PR #37. Единственная текущая
 выдача, её accepted/repair base, исполнитель и write-set — в верхнем
 M4_HANDOFF/CURRENT. M4.1 и C5 recovery интегрированы в PR #38; actual main CI PASS.
-PR39/40 слиты; accepted main586240e8, push CI41178689536:11/11 SUCCESS.
-Observer repair закрыт. C2 R4 принят C0 в SOURCE + TARGETED PG scope:
-104 PASS, включая35 actual PG; database-only слой ещё не integrated в main.
-R1 source9b05e5dd/receipt e58163ae проверен C0: CI6 PASS/5 FAIL/1 SKIPPED,
-45/64 M4 PG PASS; whole-runtime BLOCKED. PR41 и R1 refs frozen, не сливать.
-R2 source e8300919/receipt d1959bca проверен C0:80 final offline PASS,
-но capture41223501373 отказал EVENT_PUSH_BASE_REF до Docker/PG.
-R3 admission принят C0 по source + hosted evidence; stock catalogs получены.
-R10 source2c35f9c6/receipt1f7f3594 проверены C0:targeted72/72 и M466/66 PASS,
-unit3529 PASS, два R9 blockers устранены. PR42/full CI41872808265:11 SUCCESS,1 FAIL.
-Generic860 теперь достигнут:546PASS/69callFAIL/245setupERROR, ещё1teardownERROR.
-Причины: optional observer API, old schema/TRUNCATE oracles, provenance task/cleanup
-и downstream duplicate setup; отдельный material-history downgrade refusal.
-Полная causal chain и конкретные history rows не доказаны; whole-runtime BLOCKED.
-Единственная выдача — C3-M4.3-RUNTIME-INTEGRATION-R11: ограниченный test-only repair
-foundation compatibility; до8source paths в CURRENT. Product/мigrations/pins/
-constraints/C2 runner/workflows/архитектура неизменны. Историю не удалять ради PASS.
-После causal/offline checks разрешён один expected-SHA FF того же PR42 и один CI.
-Явное решение C0: без нового standalone72/capture/hosted framework; при отсутствии
-local stock PG этот full CI выполняет первый actual PG repair validation.
-Требуются12/12 и actual1031PG/all foundation phases, setup/teardown также PASS.
-Одна задача продолжается в одном PR. Main/PR41/R1–R10 prep/execution/C2 refs frozen;
-исключение только PR42 source update. При FAIL — полный receipt/C0 без retry.
+PR39/40 слиты; прежний main586240e8/push41178689536 принят.
+PR42 слит владельцем через merge commit: accepted main3cb3764c, exact tree52f4e7c5,
+parents586240e8+3f68b262. Post-merge CI41971790237 push/main attempt1:12/12 SUCCESS.
+C2 durable DB layer и C3 synthetic runtime INTEGRATED/VERIFIED (LOCAL/TEST):
+unit3529+155subtests,actualPG1031/1031,frontend398/browser54 PASS.
+Все setup/call/teardown и foundation lifecycle/contracts/wheels/cleanup PASS;
+прежние6групп failures закрыты. Нет skips/xfails/NOT_REACHED.
+GitHub также пометил PR41 merged: его head9b05e5dd уже включён в PR42.
+Отдельного merge PR41 в main нет; старые source/execution/C2 refs сохраняются.
+Текущая выдача C3-M4.3-POLZA-RUNTIME-R1 назначена C3: Polza/GPT-v2 runtime
+и guarded Telegram path, один новый PR с последующими исправлениями в нём же.
+Source base dbb2334a4e9d158cf101fe7e39467928e446b85c; старт от immutable C0
+assignment commit. Ветка c3/m4-3-polza-runtime-r1, точный write-set в CURRENT.
+Назначена additive0016_polza_runtime/down0015;0001–0015 не менять.
+FakeAdapter нельзя подменять реальным provider без явной композиции,
+scope/secret/transport gates. Сначала offline/ownedPG с закрытым HTTP,
+затем штатный full CI изменённого кандидата. Прежний CI не повторять без дельты.
+Полный M4/live pilot ещё не закрыт; подготовка не разрешает paid/live запуск.
+Exact accepted main,post-merge evidence и следующий TODO — в CURRENT.
 Valid OUTPUT/UNKNOWN metering сохраняет held reserve/no-regeneration; application,
 catalog,tenant,currentness,rights и send guards не обходить.
 AI выключен по умолчанию; paid/live transports/VM/real data не включаются.

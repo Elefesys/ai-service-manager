@@ -218,6 +218,7 @@ class AISendPermit(SendPermit):
     """Distinct admission: accepted only by injected no-egress AI transport."""
 
     ai_delivery: Literal[True]
+    provider_session_id: UUID | None = None
 
 
 class FinalizeResult(Result):

@@ -24,6 +24,7 @@ from asm.messaging.results import (
 )
 
 if TYPE_CHECKING:
+    from asm.ai.provider_runtime import ProviderRuntime
     from asm.ai.runtime import SyntheticRuntime
     from asm.files.transfer import CleanupSweep, FetchTransfer
     from asm.telegram.client import TelegramClient
@@ -38,7 +39,7 @@ class Worker:
         deadline: float = 10,
         files: "FetchTransfer | None" = None,
         telegram: "TelegramClient | None" = None,
-        ai: "SyntheticRuntime | None" = None,
+        ai: "SyntheticRuntime | ProviderRuntime | None" = None,
     ) -> None:
         if not 0 < deadline < 30:
             raise MessagingError(Code.INVALID_INPUT)
@@ -329,7 +330,7 @@ async def run(
     files: "FetchTransfer | None" = None,
     cleanup: "CleanupSweep | None" = None,
     telegram: "TelegramClient | None" = None,
-    ai: "SyntheticRuntime | None" = None,
+    ai: "SyntheticRuntime | ProviderRuntime | None" = None,
 ) -> None:
     if role == "worker" and ai is not None:
         async with asyncio.TaskGroup() as group:
@@ -354,7 +355,7 @@ async def _run_ai(
     database: MessagingDatabase,
     adapter: ControlledAdapter,
     stop: asyncio.Event,
-    ai: "SyntheticRuntime",
+    ai: "SyntheticRuntime | ProviderRuntime",
 ) -> None:
     worker = Worker(database, adapter, ai=ai)
     while not stop.is_set():
@@ -381,7 +382,7 @@ async def _run(
     files: "FetchTransfer | None" = None,
     cleanup: "CleanupSweep | None" = None,
     telegram: "TelegramClient | None" = None,
-    ai: "SyntheticRuntime | None" = None,
+    ai: "SyntheticRuntime | ProviderRuntime | None" = None,
 ) -> None:
     worker = Worker(database, adapter, files=files, telegram=telegram, ai=ai)
     while not stop.is_set():

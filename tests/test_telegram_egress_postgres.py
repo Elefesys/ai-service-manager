@@ -832,7 +832,7 @@ async def canonical_fingerprint(connection, *, revision="0012"):
 
 
 async def current_durable_fingerprint(connection):
-    revision = "0015"
+    revision = "0016"
     tables = (
         await connection.execute(
             text(
@@ -850,7 +850,7 @@ async def current_durable_fingerprint(connection):
     assert (
         await connection.execute(text("SELECT version_num FROM platform.alembic_version"))
     ).scalar_one() == revision
-    assert len(tables) == 48, "E05_CURRENT_NATIVE_TABLES"
+    assert len(tables) == 49, "E05_CURRENT_NATIVE_TABLES"
     schema_inventory(revision, (namespace + "." + table for namespace, table in tables))
     fingerprint = {}
     for namespace, table in tables:

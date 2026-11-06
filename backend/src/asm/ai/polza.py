@@ -445,6 +445,25 @@ class SyntheticRoute(CatalogRoute):
         }
 
 
+class RuntimeRoute(RouteReview):
+    """Reviewed text-only route; session admission is a separate DB capability.
+
+    openai/flex is a request selector. History proves only the OpenAI family.
+    """
+
+    def route(self) -> Route:
+        if (
+            self.model != MODELS[0]
+            or self.provider_name != "openai/flex"
+            or self.response_provider != "OpenAI"
+            or self.history is None
+            or self.history.provider != "OpenAI"
+        ):
+            raise ValueError("RUNTIME_ROUTE_INVALID")
+        route = super().route()
+        return Route.model_validate(route.model_dump() | {"upstream": self.provider_name})
+
+
 ProbeRoute = RouteReview | SyntheticRoute
 
 
@@ -541,14 +560,18 @@ class PolzaAdapter:
         history_profile: Literal["strict_v1", "gpt_eval_history_v2"] = "strict_v1",
     ) -> None:
         self.review: ProbeRoute = (
-            SyntheticRoute.model_validate(review)
+            RuntimeRoute.model_validate(review)
+            if type(review) is RuntimeRoute
+            else SyntheticRoute.model_validate(review)
             if isinstance(review, SyntheticRoute)
             else RouteReview.model_validate(review)
         )
         self.experimental = isinstance(self.review, SyntheticRoute)
         if history_profile not in ("strict_v1", GPT_HISTORY_PROFILE) or (
             history_profile == GPT_HISTORY_PROFILE
-            and (type(review) is not SyntheticRoute or self.review.model != MODELS[0])
+            and (
+                type(review) not in (SyntheticRoute, RuntimeRoute) or self.review.model != MODELS[0]
+            )
         ):
             raise ValueError("GPT_HISTORY_PROFILE_REQUIRES_SYNTHETIC_GPT")
         self.history_profile = history_profile
@@ -984,7 +1007,11 @@ class PolzaAdapter:
                     history_pending=self.experimental
                     or (isinstance(self.review, RouteReview) and self.review.history is not None),
                 )
-                if self.experimental or self.observation["provider_field_state"] == "ABSENT":
+                if (
+                    self.experimental
+                    or isinstance(self.review, RuntimeRoute)
+                    or self.observation["provider_field_state"] == "ABSENT"
+                ):
                     await self.verify_history(result.usage, result.cost, deadline)
                 keep_continuation = result.kind == "TOOLS"
                 return result

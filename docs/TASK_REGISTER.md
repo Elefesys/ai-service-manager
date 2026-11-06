@@ -2,7 +2,489 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-RUNTIME-INTEGRATION-R11 / IN_PROGRESS / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, fixture lifetime repair / 2026-11-05
+
+C0 подтвердил receipt **2c0c47911691131539b01063cf5f463ab9fc40af**,
+source **17f94c16122ddb9abcd46a6b054103cc27d55c7f**,
+tree **fe05a182321f4f185645471da7e8e6b7dddc84b3**.
+**CI42053991898:12SUCCESS/1059actualPG PASS**, все phases/fullfoundation/cleanup.
+Текущая ранняя пауза — GC generation2,1.700075s wall/1.699791s CPU;
+historical failed-run attribution остаётся UNKNOWN.
+
+C0 отдельно доказал bounded retention закрытых factory DB/engine objects
+тремя FastAPI callable-classification LRU caches. Offline12/160-instance
+controls освобождают объекты после fixture-level cleanup caches.
+Это не actualPG и не воспроизведение всей1.7s hosted паузы.
+[C0 evidence](https://chatgpt.com/library?file_id=libfile_bbf19b7482f88191a81614588a6611d0&account_id=personal)
+содержит scripts/commands/results/limits; новый CI C0 не запускал.
+
+**C3 продолжает тот же PR43** от immutable этой выдачи, parent2c0c4791;
+execution branch c3/m4-3-polza-runtime-r1, expected old head17f94c16.
+Разрешена небольшая test-only cleanup правка browser fixture, связанный
+lifetime control/admission и сокращение временной диагностики.
+Точные write-set/границы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Обычные fixtures/timed tests не меняют GC policy или deadlines; production
+caches/SQLAlchemy registry/dependencies не меняются.
+После targeted checks — один штатный fullCI repair source, без отдельного
+diagnostic прогона ради7counters и без unchanged retries.
+
+Критерий: closed-fixture retention устранён по control, semantics сохранены,
+12SUCCESS/1059actualPG/fullfoundation/cleanup. Историческую неизвестность
+не выдавать за доказанный fix. Общая provider source-приёмка открыта.
+PR43 DRAFT; main3cb3764c/historical refs frozen; остальные роли HOLD.
+Paid/live/Telegram/VM/deploy/merge=0,defaultOFF/EVAL_ONLY,ledger150/holds прежние;
+M4/live не закрыт.
+
+## История — C3 early-request receipt 2c0c4791 / 2026-11-05
+
+Выдача05460962 выполнена: один test path339+/14−, конечная ранняя диагностика.
+Source **17f94c16122ddb9abcd46a6b054103cc27d55c7f**, tree **fe05a182321f4f185645471da7e8e6b7dddc84b3**,
+sole child assignment05460962; tested merge **2a035e0762bb5535e66075391465d3e8fd2c975e**,same tree.
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43) OPEN/DRAFT;
+existing branch FF с4025b9d4; source clean,post-CI changes/retries/второй CI=0.
+
+[CI42053991898](https://github.com/Elefesys/ai-service-manager/actions/runs/42053991898) attempt1: **12SUCCESS/1059actualPG PASS**
+(860generic+105native+94M4),все setup/call/teardown,0skip/xfail/missing call.
+1031 прежних literal nodes+28Polza;13 affected nodes/все6schema failures PASS.
+Offline73PASS +9component checks; hosted unit3558+155subtests,frontend398,browser54.
+Full foundation tail и cleanup PASS; normal-durable0016/6lifecycles/12assertions PASS;
+native cleanup PASS,M4 все5 remaining-resource inventories пусты.
+Core primary0/cleanup0; отдельный zero-resource inventory не экспортирован.
+
+**different_keys: ранняя GC generation2 pause1.700075s wall/1.699791s CPU**
+между ASGI0.002942s и auth transaction1.715970s; wrapper1 старт1.716328s.
+Во время collection снят stack SQLAlchemy _collection_gced:104 над Pydantic chain.
+Два blocked backends1.752027s;200/409 STALE_STATE и exact counts PASS.
+Все3cases/observer cleanup PASS; пределы наблюдений и missing watchdog interval —
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Механизм текущей паузы установлен, но ownership/стоимость GC и причина прежнего
+timeout UNKNOWN; fixture/dependency defect и verified repair не доказаны.
+Минимальный7-line numeric diagnostic proposal в evidence **NOT_APPLIED**;
+source/deadlines/oracles прежние. По steps3/5 серия fullCI остановлена.
+
+[Evidence](https://chatgpt.com/library?file_id=libfile_fe9e5cfd353081919b50ac7074cb2b26&account_id=personal),184260402bytes,
+SHA256 **ccd207f6f95f535f13e1d4c59c697eb214e83a9dfc4fe16e7eb83516909c521d**;
+490manifest/491ZIP,12original CI ZIPs+12logs; предыдущий evidence сохранён.
+Receipt docs-only child tested source; PR head остаётся17f94c16.
+Main3cb3764c,42historical C3/24C2refs/product/migrations/pins/consumer/workflows/
+dependencies/architecture frozen; paid/live/Telegram/VM/deploy/merge=0,
+defaultOFF/EVAL_ONLY,ledger150/holds unchanged.
+**C0 REVIEW / C3 HOLD**: current CI зелёный; causal acceptance timeout открыта.
+INTEGRATED/VERIFIED и закрытие M4/live не объявляются; остальные роли HOLD.
+
+## История — C0 early-request diagnosis assignment 05460962 / 2026-11-05
+
+C0 проверил receipt **8bae8ab615fba0e43ba2327c0d0a848f5c41fd1a**,
+source **4025b9d4f8f3a6d2b800cc209dd497743951e0c8**,
+tree **fa84ee09d9ae31106aceeb5cf73b61576edfbe1c**, CI42031358620 attempt1.
+**11SUCCESS/1FAILURE; actualPG1058PASS/1FAIL**. Source diff, raw foundation log,
+generic/affected phase records и490manifest files evidence сверены C0.
+Две schema-причины/все6падений закрыты actualPG с сохранением assertions.
+
+Один blocker: different_keys timeout до billing_contact; wrapper starts
+0.000942/2.068101s,0PIDs/0observer polls. **Root cause UNKNOWN**.
+C0 направляет C3 исследовать ранний HTTP/auth/tenancy путь и scheduling pause,
+с ограниченными timings/stack observations, сохраняя real concurrency,
+deadlines, business outcomes и cleanup. Диагностика не равна доказанному fix.
+
+Продолжать от immutable этой выдачи, parent8bae8ab6, в существующем PR43/
+c3/m4-3-polza-runtime-r1; expected old head4025b9d4.
+Точные write-set и условия — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Основной path test_m1_3_api_postgres; связанные test fixtures/admission/tests
+разрешены при доказанной необходимости, без согласования каждой строки.
+Один изменённый диагностический fullCI при отсутствии localPG; затем итоговый
+CI только при доказанном repair. Неизменённые и бесконечные прогоны запрещены.
+
+Приёмка:12SUCCESS/1059actualPG/fullfoundation/cleanup и обоснованный repair.
+PR43 DRAFT; provider runtime ещё не INTEGRATED/VERIFIED, M4/live открыт.
+Product/migrations/pins/consumer/workflows/dependencies/architecture unchanged;
+main3cb3764c/historical refs frozen; остальные роли HOLD.
+Paid/live/Telegram/VM/deploy/merge=0,defaultOFF/EVAL_ONLY,ledger150/holds прежние.
+
+## История — C3 foundation repair receipt 8bae8ab6 / 2026-11-05
+
+C3 выполнил выдачу d43cbd31 в5разрешённых paths/135+/27−.
+Source **4025b9d4f8f3a6d2b800cc209dd497743951e0c8**, tree **fa84ee09d9ae31106aceeb5cf73b61576edfbe1c**,
+sole child assignment d43cbd31; [PR43](https://github.com/Elefesys/ai-service-manager/pull/43)
+OPEN/DRAFT, existing branch FF с1afad91c. Source clean, один run/attempt,
+post-CI source edits/unchanged retries/new PR/branch/carrier=0.
+
+Offline **73PASS=55admission+18schema/consumer**,syntax/AST/Ruff/format/diff PASS.
+[CI42031358620](https://github.com/Elefesys/ai-service-manager/actions/runs/42031358620): **11SUCCESS/1FAILURE/0SKIPPED**;
+actualPG **1058PASS/1FAIL=859/1generic+105native+94M4**.
+Все1059 setup/call/teardown записаны; setup/teardown PASS,1callFAIL,
+0skip/xfail/missing call;1031прежнихliteral nodeids +28Polza сохранены.
+Hosted unit3558PASS+155subtests;frontend398/browser54PASS.
+
+Обе schema-причины закрыты:5initializer negatives+related positive paths и
+exact inventory/roles PASS; actual0016/49tables/190functions/708columns/pins совпали.
+same_intent/same_key_conflict PASS с наблюдением обоих blocked backends.
+different_keys снова TimeoutError: wrapper starts0.000942/2.068101s при2sdeadline;
+до billing_contact markers не дошли,0PIDs/0observer polls,обе tasks PENDING.
+Ранние auth/tenant transaction этапы не измерены; uow_entered — имя метки
+входа в billing_contact, не транзакции. **Root cause UNKNOWN**,
+конкретный harness repair/product defect не доказан; факты возвращены C0 по steps3/5.
+
+Normal-durable0016/6lifecycles PASS; core primary1/cleanup0.
+7backend+5host foundation tail phases и failed-case business outcomes NOT_REACHED;
+точный список и все3case observations — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Native cleanup PASS;M4 5zero-resource cleanups PASS.
+[Evidence](https://chatgpt.com/library?file_id=libfile_43c018ac27e4819184ea7ddad4a99fac&account_id=personal),188247195bytes,
+SHA256 **7e0a150a4edd6f77360118975f7b18c11dbc9a3cd846560ab6864d82d9fef509**;
+490manifest/491ZIP entries,12original CI ZIPs+12logs.
+
+Receipt docs-only sole child source; execution head остаётся tested4025b9d4.
+Main3cb3764c,42historical C3/24C2refs,product/migrations/pins/consumer/workflows/
+dependencies/architecture прежние. Paid/live/Telegram/VM/deploy/merge=0,
+defaultOFF/EVAL_ONLY,ledger150/holds unchanged.
+**C0 REVIEW / C3 HOLD**; acceptance12SUCCESS/1059PASS/fullfoundation ещё не достигнута;
+source не INTEGRATED/VERIFIED, M4/live не закрыт.
+
+## История — C0 foundation repair assignment d43cbd31 / 2026-11-05
+
+C0 рассмотрел receipt **f638d8462ceae5926e03b6330462ab8e1eb69973** и CI
+**42013215782** на source **1afad91ca079f384dfae65a6a780615ec604d5b5**,
+tree **748f3364115b751945d943e0f87f1430dd25bd4b**.
+Старый revision blocker закрыт: foundation-durable SUCCESS.
+Полный CI11SUCCESS/1FAILURE; actualPG1052PASS/7FAIL.
+C0 проверил source/logs/generic phase records и492manifest entries evidence ZIP;
+повторного запуска тестов или общей приёмки provider source не было.
+
+**C3 продолжает в том же PR43**, от immutable этой выдачи, parent f638d846;
+execution branch c3/m4-3-polza-runtime-r1, expected old head1afad91c.
+Разрешён целиком bounded repair всех3групп:
+5initializer failures — explicit TRUNCATE closure +ai_provider_sessions;
+1inventory failure — exact list +ai_provider_sessions;
+1concurrency timeout — ограниченная test-only диагностика и исправление
+доказанной harness причины без ослабления deadlines/конкуренции/CAS.
+Причина timeout пока UNKNOWN; один следующий PASS её не устанавливает.
+
+Точные write-set/условия/порядок — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Согласованы три затронутых test modules, finite runner admissions/tests
+и при доказанной необходимости связанные auth/tenancy test fixtures.
+Отдельное согласование каждой связанной строки не требуется.
+После offline checks при отсутствии localPG разрешён штатный CI изменённого
+schema+diagnostic source; unchanged rerun/новый carrier/новый PR не нужны.
+Все3группы вернуть C0 с фактическим evidence и оставшимися UNKNOWN.
+
+Приёмка:12SUCCESS/1059actualPG, все phases/fullfoundation/cleanup,
+прежние literal nodeids и бизнесовые assertions сохранены.
+До общей приёмки PR43 DRAFT; source ещё не INTEGRATED/VERIFIED.
+Product/migrations/pins/consumer/workflows/dependencies/architecture unchanged;
+main3cb3764c и historical refs frozen; остальные роли HOLD.
+Paid/live/Telegram/VM/deploy/merge=0,defaultOFF/EVAL_ONLY,ledger150/holds прежние.
+M4/live не закрыт.
+
+## История — C3 foundation repair receipt f638d846 / 2026-11-05
+
+Revision repair выполнен; full CI BLOCKED. Source **1afad91ca079f384dfae65a6a780615ec604d5b5**,
+tree **748f3364115b751945d943e0f87f1430dd25bd4b**, sole child assignment d87ccd5e.
+Существующий [PR43](https://github.com/Elefesys/ai-service-manager/pull/43)
+OPEN/DRAFT, FF с9a7c186b; новый PR/ветка/carrier/unchanged retry не создавались.
+
+Дельта от assignment — одна строка current oracle0015→0016;
+совокупный repair от dff2e89a —4source paths/27+/3−.
+Targeted69PASS,syntax/Ruff/format/diff PASS.
+[CI42013215782](https://github.com/Elefesys/ai-service-manager/actions/runs/42013215782) attempt1: **11SUCCESS/1FAILURE/0SKIPPED**;
+actualPG **1052PASS/7FAIL=853+7generic/105native/94M4**.
+Все1059 setup/call/teardown записаны:setup/teardown PASS,7callFAIL,
+0skip/xfail/missing call;1031 прежних literal nodeids сохранены.
+Normal-durable0016/6lifecycles PASS; foundation primary1/cleanup0.
+Hosted unit3554PASS+155subtests; frontend398/browser54 PASS.
+
+Все7FAIL:5initializer cases (TRUNCATE closure без ai_provider_sessions),
+1exact current table inventory без той же таблицы,1different_keys concurrency
+TimeoutError в2s observation. Root cause timeout UNKNOWN, бизнесовый CAS
+не проверен. Intended initializer conflict assertions также NOT_REACHED.
+Foundation NOT_REACHED:7backend phases (downgrade/reupgrade/contracts/wheels)
+и5host phases (storage versions/services/http/images); точный перечень в HANDOFF.
+Предложенный schema fixture/inventory patch3paths/4insertions с2finite admissions
+NOT_APPLIED/apply--checkPASS; он не исправляет independent concurrency blocker.
+Нового candidate/CI retry после этого результата нет; C0 получает все факты
+по CURRENT step5, а не очередной запрос согласовать literal revision строку.
+
+[Evidence](https://chatgpt.com/library?file_id=libfile_92b2e8599598819185bf93e477e17edf&account_id=personal),183822345bytes,
+SHA256 **8cec31834917766417d319654cc1044b7b0034ff43c59ed3ccaa3dd0a3244489**;12original CI ZIPs+phase evidence.
+Source/tree/diff/commands/cleanup/pins — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Receipt docs-only sole child source; PR head остаётся на tested source.
+Main,42oldC3/24C2refs,product/migrations/pins/consumer/workflows/dependencies/
+architecture прежние. Paid/live/Telegram/VM/deploy/merge=0,
+defaultOFF/EVAL_ONLY и ledger150/holds unchanged.
+**C0 review / C3 HOLD**; provider runtime ещё не принят целиком,
+INTEGRATED/VERIFIED и M4/live этим receipt не объявляются.
+
+## История — C0 current-schema repair assignment d87ccd5e / 2026-11-05
+
+C0 сверил candidate **fd6318344f9a03c9855aa7e470ffb5c34da0e150**,
+tree **eee502ca3c896c3415ed00e12779d57f00f438ee**: три дельты соответствуют
+выдаче. Подтверждён stale assertion в tests/test_telegram_egress.py:1938:
+producer/consumer0016, unit oracle0015. Для candidate нового hosted CI нет.
+
+C3 продолжает от immutable этой выдачи, parent receipt
+**98d36d6c9dfda2ea85fef0c1ed2a0ae21c4e7d36** (sole child candidate).
+Разрешены четвёртый путь tests/test_telegram_egress.py и однозначные связанные
+test-only current0015→0016 исправления из исходного R1 scope.
+Повторного согласования каждой строки не требуется; historical assertions,
+product guards/pins/миграции/consumer не менять.
+Точные пределы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+После целевых PASS — FF того же PR43/c3/m4-3-polza-runtime-r1,
+expected old head **9a7c186b183f075578e7a3449d34fe7857eb3d82**,
+затем штатный fullCI12SUCCESS/1059actualPG/fullfoundation.
+Новый PR/unchanged rerun не нужны. Все результаты вернуть C0; целиком
+provider runtime ещё не принят. Main/historical refs,live HOLD и ledger прежние.
+
+## История — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, bounded repair receipt C3 / 2026-11-05
+
+C3 подготовил3разрешённых source paths /26+/2−:
+current producer0015→0016, finite runner admission, positive/forbidden tests.
+Source **fd6318344f9a03c9855aa7e470ffb5c34da0e150**,
+tree **eee502ca3c896c3415ed00e12779d57f00f438ee**, sole child
+assignment **dff2e89abb4a53d7ed113367648eba2b7021cc91**; ancestry сохранена.
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43) OPEN/DRAFT
+по-прежнему head9a7c186b: FF/нового branch/PR/CI нет.
+
+Shell syntax/Ruff PASS;51admission+5consumer cases PASS.
+**1FAIL**: tests/test_telegram_egress.py:1938 по-прежнему требует
+expected_revision0015 при исправленном current producer0016.
+Нужная однострочная assertion0015→0016 находится вне текущего3file write-set;
+patch готов/apply--checkPASS, **НЕ ПРИМЕНЁН**. Historical0012/0007 checks прежние.
+
+Для нового fd631834 hosted runs0; fullCI/1059actualPG/fullfoundation **NOT_RUN**.
+Предыдущий CI41994209024 и original evidence сохранены; их результаты
+не объявляются проверкой нового candidate. Consumer/pins/migrations/product/
+workflows/dependencies/architecture прежние;33immutable inputs проверены.
+
+[Evidence](https://chatgpt.com/library?file_id=libfile_d3503d5ba488819184f4d412056041de&account_id=personal),3348096bytes,
+SHA256 **8e35506ede95b7d03dba53b985c90ed9b50696b992c6edce09249a01c512c165**;
+25manifest/26ZIP entries,350sourceblobs exact.
+Полный короткий receipt и commands — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Receipt — docs-only child candidate, PR head frozen. C3/остальные роли HOLD
+до C0 по четвёртому пути tests/test_telegram_egress.py; затем targeted/FF/штатныйCI.
+Paid/live/Telegram/VM/deploy/merge=0,defaultOFF/EVAL_ONLY,ledger неизменён.
+M4/live и полная приёмка ещё не закрыты.
+
+## История — C0 bounded repair assignment / 2026-11-05
+
+**C0 разрешил продолжить тот же [PR43](https://github.com/Elefesys/ai-service-manager/pull/43).**
+Причина CI41994209024 подтверждена по свежим logs/source: current evidence
+producer пишет0015, consumer требует0016. Foundation-durable FAILURE,
+dependent foundation SKIPPED; итог10SUCCESS/1FAILURE/1SKIPPED.
+C3 сохранил код и receipt, работа не потеряна.
+
+Repair source **9a7c186b183f075578e7a3449d34fe7857eb3d82**,
+tree **9eaa2e35742c273bcfb1337296f24e2fb15efa26**; receipt
+**a300eadfb9fde442fd6c3d0542936b338d3b77fd** — sole child source.
+Начать от immutable C0 repair assignment, затем FF той же
+`c3/m4-3-polza-runtime-r1` с проверкой expected old head9a7c186b.
+Main/исторические refs не менять; нового PR нет.
+
+Добавлен ровно один ранее пропущенный C0 path:
+`scripts/test_telegram_egress.sh` (producer0015→0016).
+Сопутствующие уже разрешённые пути: `scripts/m4_runtime_db.py`
+(finite allowlist) и `tests/test_m4_runtime_db_runner.py`
+(positive admission + сохранённый forbidden-path test).
+Точные пределы и acceptance — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Consumer/verifier/pins/миграции/прочий product code не менять.
+
+Сначала целевые checks, затем штатный полный CI изменённого кандидата.
+Требуются12SUCCESS,1059actualPG/all phases и полный foundation;
+generic860 пока NOT_REACHED. Эта запись разрешает repair, не принимает
+всю provider реализацию. После результата — receipt для C0.
+Остальные роли HOLD; paid/live/Telegram/VM/deploy/merge=0,
+defaultOFF/EVAL_ONLY и ledger неизменны.
+
+## История — C3-M4.3-POLZA-RUNTIME-R1 / BLOCKED, source REVIEW для C0 / 2026-11-05
+
+C3 реализовал provider runtime в одном [PR43](https://github.com/Elefesys/ai-service-manager/pull/43),
+OPEN/DRAFT. Source **9a7c186b183f075578e7a3449d34fe7857eb3d82**,
+tree **9eaa2e35742c273bcfb1337296f24e2fb15efa26**; tested merge
+**a03a51284eb2bf4451025adf7b63d040429f10d9**, identical tree.
+Assignment1332e573/source basedbb2334a/main3cb3764c сохранены в ancestry;
+main/42старыхC3/24C2refs неизменны.40source paths,33immutable inputs byte-exact.
+
+Offline **3553PASS+155subtests**,Ruff202/mypy78. Actual hosted stock PG18.6:
+**199/199 all-phasesPASS=94M4(66old+28new)+105native**; ещё7nativeoffline PASS.
+Все1031старыхliteralPGnodes сохранены, disjoint inventory1059.
+Browser54/frontend398PASS; M4SQL414.064/600s,5zero-resource cleanups.
+Local PG **NOT_RUN_LOCAL** (Docker/psql/postgres отсутствуют).
+
+[CI41994209024](https://github.com/Elefesys/ai-service-manager/actions/runs/41994209024),
+attempt1: **10SUCCESS/1FAILURE/1SKIPPED**. Foundation-durable primary0/cleanup0,
+6lifecycles/12assertionsPASS, но consistency gate отвергает producer revision0015
+при требуемой0016. **860generic и full foundation core/tail NOT_REACHED**;
+INTEGRATED/VERIFIED/fullPG PASS не заявляются.
+
+Нужен один дополнительный C0 path **scripts/test_telegram_egress.sh:517**
+(expected_revision0015→0016) и сопряжённый finite runner admission/negative test
+в двух уже разрешённых файлах. Точный3hunk patch подготовлен, apply--checkPASS,
+**НЕ ПРИМЕНЁН**. Причина остановки — явный write-set C0. Source frozen,
+C3/остальные роли HOLD до решения C0; после него repair в том же PR.
+
+Only additive0016/down0015;190functions/49tables/708columns,actual3pins PASS.
+0001–0015/architecture/dependencies/workflows immutable. DefaultOFF/EVAL_ONLY,
+2POST1READ,finite session,reserves/UNKNOWN/native/no-regeneration/no-resend
+сохранены. Старый exact0015 binary требует drain/migrate/start cutover.
+
+[Evidence](https://chatgpt.com/library?file_id=libfile_d54ece1e49e8819187e4c687959677e7&account_id=personal):
+**254083145bytes**,SHA256 **77ae068284cc45cba60767c020bc5e89a46153df49f41131b4a134aad0c5a838**;
+975manifest/976ZIP entries verified,11latest originalZIP,10×350sourceblobs,
+26originalZIP с прежними failures. Full receipt/write-set/results/pins в
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md). Receipt отдельный docs-only sole child
+source; PR head/ref не передвинут, повторный CI не запускался.
+
+Runbook содержит будущий **10min/4POST/10RUB** synthetic test и plan/enable/disable;
+real IDs/review/private secrets и live admission — отдельно.
+**Paid/model/catalog/history/Telegram/VM/deploy/merge=0**, ledger unchanged:
+confirmed0.37505230/58knownPOST;4unknown held7.585505548;62totalPOST;
+remaining142.039442152;reported0.00743079UNSETTLED. M4/live не закрыты.
+
+## История — C0 assignment C3-M4.3-POLZA-RUNTIME-R1 / 2026-11-05
+
+**C3 готовит Polza/GPT-v2 → durable runtime → guarded Telegram в одном новом
+PR.** PR42/main3cb3764c уже INTEGRATED/VERIFIED для synthetic LOCAL/TEST;
+новая выдача завершает предусмотренный IMPL-004 рабочий путь. Остальные роли HOLD.
+
+Source base **dbb2334a4e9d158cf101fe7e39467928e446b85c**,
+tree **1a264d50ef29b82cd85a100c32d2053735edb8cb**; начинать от immutable
+C0 assignment commit, содержащего этот CURRENT. Ветка
+`c3/m4-3-polza-runtime-r1`; repairs в том же PR. Единственная новая migration
+`0016_polza_runtime.py`, revision0016/down0015;0001–0015 неизменяемы.
+
+Точный write-set, критерии и границы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Использовать существующий PolzaAdapter с закрытыми HTTP-транспортами в тестах,
+проверить реальную PostgreSQL и согласованный current0016 catalog/readiness.
+Сохранить1031 прежних PG case и12 CIjobs; новые кейсы добавить явно.
+Не подменять provider/fake, не обходить admission/Outbox; default OFF,
+EVAL_ONLY,2calls1READ,UNKNOWN/no-regeneration/no-resend и native control прежние.
+
+Результат: source+CI REVIEW для C0 и короткая процедура plan/enable/disable
+для будущего ограниченного теста. Эта выдача не запускает API, Telegram,
+ПК/ВМ, deploy или реальные данные. Ledger150/holds без изменений.
+На данном шаге пользователь только передаёт immutable HANDOFF в C3.
+
+## История — C3-M4.3-RUNTIME-INTEGRATION-R11 / INTEGRATED, VERIFIED (LOCAL/TEST) / 2026-11-05
+
+**PR42 слит и проверен C0 на main.** C2 durable DB layer и C3 synthetic
+application/delivery интегрированы; foundation blocker закрыт. Полный M4/live
+pilot не закрыт, все исполнители HOLD до следующей конкретной выдачи.
+
+Accepted main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba**,
+tree **52f4e7c5e644e08f32e396bcdfc59d1636ed49e1** — exact R11 candidate.
+Ordered merge parents main586240e8 + source3f68b262 подтверждены.
+[Post-merge CI41971790237](https://github.com/Elefesys/ai-service-manager/actions/runs/41971790237),
+push/main,attempt1: **12/12 SUCCESS**. Unit3529+155subtests,frontend398,browser54.
+**1031actualPG PASS =860generic+105native+66M4**, все setup/call/teardown,
+без skips/xfails/NOT_REACHED. Полный foundation lifecycle/contracts/wheels/
+cleanup PASS; primary0/cleanup0,14backend/10host phases. M4SQL287.669/600s,
+4zero cleanups,native105resets. Foundation final zero inventory не экспортирует.
+
+C0 независимо проверил4originalZIP/fresh digest/size/CRC,203extracted files,
+4300generic records и3×342sourceblobs. [Evidence](https://chatgpt.com/library?file_id=libfile_61e10b8383f88191a0c89f6dd393b005&account_id=personal);
+полные identities/ограничения в [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Предыдущая приёмка R11 остаётся действующей; новый CI C0 не запускал.
+PR41 также отмечен GitHub merged: его head — предок PR42. Отдельного merge
+PR41 в main нет; C0 main/исторические execution refs не изменял.
+
+Следующий предусмотренный результат — реальный Polza/GPT-v2 runtime и guarded
+Telegram path с отдельной процедурой enable/disable. Это TODO, source write-set
+ещё не выдан: сейчас runtime принимает FakeAdapter/FAKE, probe отдельно от worker.
+DefaultOFF/2calls1READ,paid/live/Telegram/VM/deploy/realdata HOLD,ledger прежний.
+На ПК/ВМ ничего запускать не нужно; эта запись закрывает только LOCAL/TEST scope.
+
+## История — C3-M4.3-RUNTIME-INTEGRATION-R11 / REVIEW, READY_FOR_OWNER_MERGE / 2026-11-05
+
+**C0 acceptance: PR42 готов к merge владельцем.** Foundation blocker закрыт;
+synthetic runtime принят в SOURCE+FULL-CI scope. INTEGRATED/VERIFIED — после
+фактического merge и штатного push/main CI. M4/live pilot ещё не закрыт.
+
+Принят source **3f68b262bdcd2c7b24c1278158cca1deb7f8fc6f**,
+tree **52f4e7c5e644e08f32e396bcdfc59d1636ed49e1**;
+receipt19a1d0d0 sole child source/2docs. Tested merge
+**b21adb564dc06c6b2282d38e0d30727e79c6dbe4**, тот же tree; parents main
+**586240e88c825aa67593af5d72e0bdbb251ed3bb** + source.
+
+[CI41964354651](https://github.com/Elefesys/ai-service-manager/actions/runs/41964354651)
+**12/12 SUCCESS**, attempt1. Unit3529+155subtests,frontend398,browser54 PASS.
+ActualPG **1031/1031 =860generic+105native+66M4**, все setup/call/teardown.
+C0 сверил4300generic records, полные phases,12originalZIP/375files,
+11×342sourceblobs,472manifest entries и local XML21/23/674. Полный foundation
+lifecycle/contracts/wheels/cleanup PASS; отдельного final zero-resource inventory
+в этой lane нет. Все6R10groups закрыты, включая245actual call PASS.
+
+7source paths/140+/62− приняты; product/migrations/pins/guards/architecture прежние.
+C0 подтверждает исправление своего имени ai_results→ai_deliveries в test oracles.
+Полные основания и границы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Владелец сливает только [PR42](https://github.com/Elefesys/ai-service-manager/pull/42)
+через Create a merge commit, сохраняя ancestry; head/main должны совпадать выше.
+PR41 не сливать. C3/остальные роли HOLD; docs acceptance не меняет PR42 source.
+После merge C0 проверяет main/parents/tree и штатный CI; повторного PR CI нет.
+На ПК/ВМ ничего не запускать. DefaultOFF/FAKE/EVAL_ONLY2calls1READ,
+paid/live/Telegram/deploy/realdata и ledger unchanged; M4 live task отдельно.
+
+## История — C3-M4.3-RUNTIME-INTEGRATION-R11 / REVIEW, C3 HOLD / 2026-11-05
+
+C3 receipt до C0 review. [PR42](https://github.com/Elefesys/ai-service-manager/pull/42)
+OPEN/DRAFT. Один [full CI41964354651](https://github.com/Elefesys/ai-service-manager/actions/runs/41964354651),
+synchronize/attempt1: **{'success': 12}**. INTEGRATED/VERIFIED только после
+C0 acceptance; owner ничего не запускает, merge выполняет владелец после review.
+
+Base **d18d2c599e19227adcc4f580763a9b4cef83c058**,
+tree **3b3f67027ee4efbe2d7b890c38053cae3f59bfe8**.
+Source **3f68b262bdcd2c7b24c1278158cca1deb7f8fc6f**,
+tree **52f4e7c5e644e08f32e396bcdfc59d1636ed49e1**, sole child assignment.
+Tested merge **b21adb564dc06c6b2282d38e0d30727e79c6dbe4**,
+то же дерево; parents frozen main586240e8+source.
+
+Ровно7 source paths/140+/62−: optional observe_wait dispatch; explicit3AI-table
+TRUNCATE closure; exact table oracle; bounded finally cancel/join в2provenance
+functions; readonly10-predicate precondition перед прежним migration lifecycle;
+runner/admission identities/write-set. В assignment ai_results — неточное имя:
+immutable schema содержит ai_deliveries, оно и использовано. Cleanup уже имел
+child→parent order и не менялся;245 consumers/fixedIDs сохранены. Product,
+migrations0001–0015,pins/constraints,C2/catalog runners,workflows/infra/архитектура
+неизменны;11canonical attachments byte-exact. НовыхPGnodes нет.
+
+До публикации21observer/readiness,23R9/R10causal,4offline task-fault probes PASS;
+674testcase+130subtests PASS по completeXML/exit0 (consoleprogress неполон).
+Ruff/format195/mypy76 PASS. Development projection11COPY/222files exact.
+Local stock PG недоступен: по явному решению C0 этот один fullCI — первый
+actualPGrepairvalidation; нового standalone72/capture/targeted нет.
+Один expected-SHA FF PR42 из2c35f9c6,force=false. Source frozen с публикации;
+после неё repair/pytest/PG/collection/CI reruns не выполнялись.
+
+Full unit **3529PASS+155subtests**, frontend398/browser54.
+Generic860: **860call reached/860all-phasesPASS**,
+0failed phase records. Full disjoint inventory
+860+105+66=1031: **1031actual all-phasesPASS**,
+0callNOT_REACHED. Прежние245setup failures:
+all calls reached=True, all phases PASS=True.
+Сопоставлены все6R10groups; полные facts/ошибки/ограничения в
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md) и ci/execution-audit.json.
+
+M4 66/66PASS,SQL234.242964/600s;waiting-AI control и4zero
+cleanups PASS. Native105PG+7source/105resets/cleanup PASS. Catalog0015 183functions/
+48tables/embedded182/all3pins/security и pinned nonrootPG18.6 подтверждены.
+Durable6lifecycles/12assertions,Docker29/6migration shards проверены.
+Foundation primary/cleanup **{'cleanup_exit': 0, 'primary_exit': 0}**;
+backendNOT_REACHED **[]**, hostNOT_REACHED **[]**.
+Отдельный final zero-resource inventory foundation lane не экспортирует.
+
+Этот receipt — sole child source только на R11prep, ровно HANDOFF/TASK_REGISTER.
+PR42source3f68b262 frozen;main586240e8,PR41OPEN/DRAFThead9b05e5dd,
+40прочихстарыхC3/24C2refs unchanged;prep runs0,newtargeted0,oneCIattempt1.
+[M4_C3_R11_evidence_3f68b262.zip](https://chatgpt.com/library?file_id=libfile_0ff56e4501308191bed2b795902a2ae6&account_id=personal):
+**171040346bytes**,SHA256 **dcc46fc0b878d84eb5a08f43d706006b66089c3c29898d18f39461e09263c199**;
+manifest472/472,ZIP473verified,
+12originalZIP/375extractedfiles/11×342sourceblobs/12joblogs.
+
+C3/остальные роли HOLD до C0. DefaultOFF/FAKE/EVAL_ONLY2calls1READ;
+paid/live/Telegram/VM/deploy/realdata HOLD. Ledger150 unchanged:
+confirmed0.37505230/58knownPOST;4unknownheld7.585505548;62totalPOST;
+remaining142.039442152;reported0.00743079UNSETTLED. LOCKED/ADR132/216/217 прежние.
+
+## История — C0 assignment C3-M4.3-RUNTIME-INTEGRATION-R11 / 2026-11-05
 
 Whole-runtime **BLOCKED**; один исполнитель C3, тот же PR42. C0 принял R10 controls:
 source2c35f9c6/receipt1f7f3594;targeted72/72,unit3529,M466/66,native105PG+7source,

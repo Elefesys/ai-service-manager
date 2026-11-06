@@ -15,6 +15,11 @@ from asm.auth.models import AuthCode, AuthError
 from asm.auth.store import AuthStore
 from asm.foundation import Settings, create_app
 from asm.tenancy import Permission, TenancyError, current_workspace_context
+from fastapi.dependencies.models import (
+    _is_async_gen_callable_cached,
+    _is_coroutine_callable_cached,
+    _is_gen_callable_cached,
+)
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
 from sqlalchemy import event, text
@@ -46,12 +51,23 @@ class Harness:
 
 @asynccontextmanager
 async def browser(settings):
-    app = create_app(settings)
-    async with app.router.lifespan_context(app):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url=settings.auth_origins[0]
-        ) as client:
-            yield app, client
+    try:
+        app = create_app(settings)
+        async with app.router.lifespan_context(app):
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url=settings.auth_origins[0]
+            ) as client:
+                yield app, client
+    finally:
+        # FastAPI's pinned callable classifiers retain handler closures and
+        # disposed per-test engines. Clear only memoization after scope cleanup;
+        # active outer apps still own their handlers and reclassify as needed.
+        for classify in (
+            _is_gen_callable_cached,
+            _is_async_gen_callable_cached,
+            _is_coroutine_callable_cached,
+        ):
+            classify.cache_clear()
 
 
 @pytest_asyncio.fixture
