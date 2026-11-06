@@ -6,7 +6,98 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, private operator package / 2026-11-06
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, enable cleanup repair / 2026-11-06
+
+**C0 завершил review R1: пакет требует одной ограниченной правки аварийного
+завершения enable. Live/cutover пока HOLD. C6 продолжает ту же задачу и ветку
+c6/m4-live-prep-r1; новый PR или общий CI не нужны.**
+
+### Принятое evidence и границы проверки
+
+[Receipt C6 2aba15ab](https://github.com/Elefesys/ai-service-manager/blob/2aba15ab2ffa2724c1e0b98d9de9e3abfc36569b/docs/tasks/M4_HANDOFF.md)
+имеет sole parent 015af6d9536eefe4f17d5ac1694f191b4eb15ed1 и только три
+разрешённых docs в delta. C0 независимо проверил ZIP: 50981 bytes, 16 entries,
+CRC, SHA256 bbebbf134935b7f5046cbe64ae07aab0f87d6bfb23d7f6a13724f9b23c0c9e4c,
+все 15 file digests и canonical manifest digest
+dabe52b46b51c4b95fefc867f5adb020a6bd269fdeebf0f7fed00cdca5d4a8c2.
+
+C0 сверил operator/source boundary, Compose, provisioning/MATERIAL/native,
+receiver/relay, session/return и команды README с accepted source. Синтаксис
+11 Python files PASS. Из прежних controls C0 повторил 18 доступных helper
+test bodies: 18 PASS. Три receiver controls, actual full-Git/native profile,
+Compose/PowerShell parsers и frozen application imports C0 не повторял:
+в текущей среде нет нужного полного окружения, httpx отсутствует/offline cache
+пуст. C6 reported 23 PASS остаются его evidence, не новым C0 full-run PASS.
+Docker engine/PG/Windows/Happ/SSH/VM/live smoke остаются NOT_RUN.
+
+[C0 evidence с исходным ZIP и воспроизведением](https://chatgpt.com/library?file_id=libfile_c575ba8ae9b0819191f84334a51da495&account_id=personal):
+M4_C0_operator_R1_review_2aba15ab.zip, 55631 bytes, 7 entries, 6 manifest files,
+SHA256 f864ccb344aa6b4a67fd02c6ecd79a8e70c781ec693b6500fe7965be560de85a.
+C0 не изменял исходный private R1 package и не выполнял внешние действия.
+
+### C0-M4-LIVE-OP-01 / P1 — неполное аварийное закрытие enable
+
+В исходном m4_operator.py строки 367–368 выполняют enable.session и
+enable.worker **до** try/finally строк 375–382. Потерянное подтверждение
+успешного эффекта выводит управление из enable без попытки disable/stop.
+UNKNOWN в journal сохранён правильно, но сам по себе не закрывает допуск.
+В cleanup self.disable() на строке 380 выполняется перед stop на строке 382:
+его ошибка пропускает stop и заменяет исходную ошибку watch.
+
+C0 исполнил исходные Operator.enable/Journal/disable с fake внешними границами.
+Это локальное воспроизведение control flow, не наблюдение инцидента на ВМ:
+
+| Fault injection | Результат исходного R1 |
+|---|---|
+| Session committed, ACK lost | Session active; disable 0, stop 0 |
+| Worker started, Docker ACK lost | Session active, worker started; disable 0, stop 0 |
+| Watch failed, DB disable failed | Session active, worker started; disable 1, stop 0; primary TimeoutError заменён OSError |
+
+Ограничение времени/бюджета runtime остаётся последней защитой. Обещанная
+немедленная остановка при неопределённом результате этими путями не обеспечена.
+
+### Задача C6 — исправить private package, сохранив принятые границы
+
+1. Общий failure/cancellation cleanup должен охватить все potentially effective
+   enable stages, включая session и worker. Wrong-target/source/approval
+   prechecks по-прежнему отклоняют действие до эффекта.
+2. При ошибке или неопределённом ACK независимо попытаться закрыть **ту же**
+   сессию и остановить только проверенные новые worker/receiver. Ошибка DB
+   disable не должна пропускать targeted stop; ошибка одного cleanup не должна
+   уничтожать исходную причину. Записывать primary и cleanup outcomes отдельно.
+3. Проверить результат stop либо сохранить явный UNKNOWN. Не объявлять
+   session closed при ошибке disable и не обещать отзыв уже допущенного HTTP.
+   Сохранять journal/receipts, тот же UUID/бюджет/holds и запрет повтора enable.
+   Старый consumer автоматически не возвращать; прямых SQL обходов не делать.
+4. Добавить bounded controls на три воспроизведения, обработанное прерывание
+   на enable boundaries, нормальное expiry и disable из второго терминала.
+   Проверять реальный Operator.enable путь с подменой только внешних эффектов,
+   а не один изолированный Journal. Сохранить действующие положительные проверки.
+   SIGKILL/потерю хоста не выдавать за случай с гарантированным Python finally;
+   для таких случаев остаются ограничения runtime и reconciliation.
+
+Write-set: прежние три repository docs и private operator package. Разрешена
+локальная правка кода/controls/README/manifest в этом scope без новой выдачи.
+Сохранить R1 ZIP/evidence; выпустить исправленную версию с новыми hashes и
+краткой дельтой. Имена companion files выбирает C6. Не перерабатывать весь
+deploy путь, не добавлять инфраструктуру или функции приложения ради этой правки.
+
+Accepted application/source 29dc16084f0ee0d01e5f96e7226995480e189a22,
+tree b70eb0348577c812f4f587d995c724e3c0e989e4, product/DDL/CI/dependencies,
+архитектура/IMPL-004/LOCKED и старые volumes/helpers остаются неизменны.
+Новый instruction commit — sole child receipt 2aba15ab; это docs source,
+не новый build source. Main не перемещён, остальные роли HOLD.
+
+Вернуть исправленный пакет и результаты локальных fault controls на review C0.
+Владельцу пока не применять R1 mutating commands. Не повторять generic owner
+preflight, не запускать hosted CI или реальные paid/Telegram запросы ради
+этой правки. В этой выдаче deploy/DB writes/service changes/live enable на
+существующей ВМ не выполняются. Fresh account/route review — ближе к запуску.
+Будущий smoke прежний: 10 минут / 4 POST / 10 RUB внутри общего 150,
+2 POST / 1 READ за run, до 8 history GET / 4 replies.
+AI OFF/EVAL_ONLY, ledger/UNKNOWN holds сохранены; M4/live открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, private operator package / 2026-11-06
 
 C6 реализовал **M4_TEST_OPERATOR_R1/** по instruction
 `015af6d9536eefe4f17d5ac1694f191b4eb15ed1`. Отсутствие TEST wrappers больше

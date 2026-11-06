@@ -2,7 +2,35 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, private operator package / 2026-11-06
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, enable cleanup repair / 2026-11-06
+
+C0 review receipt 2aba15ab завершён: private M4_TEST_OPERATOR_R1 требует
+ограниченной правки **C0-M4-LIVE-OP-01 / P1**; live/cutover HOLD.
+C6 продолжает c6/m4-live-prep-r1. Missing operator path реализован; текущий
+недостаток — неполное аварийное завершение enable, не новая задача приложения.
+
+C0 проверил исходный ZIP/CRC/size/SHA256, все 15 manifest digests, docs-only
+delta и границы accepted source. Повторены 18 доступных helper controls: PASS;
+три fault injections на исходном enable подтвердили дефект. Полный frozen
+runtime/Compose/PowerShell/PG/VM C0 не повторял; ограничения явно сохранены.
+
+Session/worker stages находятся вне cleanup; при lost ACK disable/stop
+пропускаются. Ошибка disable внутри watch cleanup также пропускает stop и
+скрывает primary failure. C6 исправляет общий cleanup, независимые попытки
+закрытия сессии/остановки новых worker+receiver, сохранение UNKNOWN и отдельные
+primary/cleanup результаты. Нужны regressions трёх faults, interruption,
+normal expiry и concurrent explicit disable. Полная выдача — CURRENT HANDOFF.
+
+[C0 evidence](https://chatgpt.com/library?file_id=libfile_c575ba8ae9b0819191f84334a51da495&account_id=personal),
+SHA256 f864ccb344aa6b4a67fd02c6ecd79a8e70c781ec693b6500fe7965be560de85a.
+Исходный R1 не менять задним числом; новый private bundle с новыми digests.
+Repo write-set: HANDOFF / TASK_REGISTER / M4_RUNTIME_PILOT; accepted
+29dc16084f0ee0d01e5f96e7226995480e189a22 / tree b70eb0348577c812f4f587d995c724e3c0e989e4
+и product/DDL/CI/dependencies/архитектура frozen. Новый PR/общий CI не нужны.
+C6 IN_PROGRESS, остальные HOLD; live действия и расход на эту правку = 0.
+Будущий finite smoke и ledger/holds прежние; M4/live ещё открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, private operator package / 2026-11-06
 
 C6 реализовал M4_TEST_OPERATOR_R1 по instruction015af6d9; private executable
 package готов для review C0, прежний missing-operator-path закрыт реализацией.

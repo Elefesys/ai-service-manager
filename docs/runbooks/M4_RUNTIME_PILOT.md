@@ -1,5 +1,12 @@
 # M4 Polza runtime: plan / enable / disable
 
+> **C0 review R1: требуется исправление аварийного enable (C0-M4-LIVE-OP-01).**
+> При lost ACK session/worker и при ошибке disable могут пропускаться cleanup
+> действия. Исходный M4_TEST_OPERATOR_R1 пока не применять на ВМ.
+> C6 готовит ограниченную правку по [CURRENT HANDOFF](../tasks/M4_HANDOFF.md);
+> критерии и [локальное воспроизведение](https://chatgpt.com/library?file_id=libfile_c575ba8ae9b0819191f84334a51da495&account_id=personal)
+> зафиксированы C0. Live допуск и accepted application source не изменены.
+
 Этот путь остаётся **EVAL_ONLY**, default OFF. Эта реализация и CI не разрешают
 живой запуск. В C3-M4.3-POLZA-RUNTIME-R1: model POST / catalog GET / history GET /
 Telegram send = **0 / 0 / 0 / 0**, VM/deploy = 0. Ниже — процедура для будущего
