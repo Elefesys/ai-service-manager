@@ -2,35 +2,39 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / BLOCKED, preflight prepared / 2026-11-06
+## CURRENT — C6-M4-LIVE-PREP-R1 / BLOCKED, owner preflight received / 2026-11-06
 
-Accepted runtime PR43 остаётся INTEGRATED/VERIFIED LOCAL/TEST:
+Accepted PR43 runtime остаётся INTEGRATED/VERIFIED LOCAL/TEST:
 code29dc16084f0ee0d01e5f96e7226995480e189a22/treeb70eb0348577c812f4f587d995c724e3c0e989e4.
-C6 instructions basea170da0975bcd0d73b0f3372fb8ec4a9cecc0956,
-ветка **c6/m4-live-prep-r1**, только3разрешённых docs; product/architecture frozen.
+Instructions a170da0975bcd0d73b0f3372fb8ec4a9cecc0956; ветка c6/m4-live-prep-r1;
+только3разрешённых docs. Предыдущий receipt8fca2c70; product/architecture frozen.
 
-**C6 BLOCKED: актуальная ВМ ещё не прочитана; TEST_OPERATOR_ADAPTATION_REQUIRED.**
-Source review выполнен: separate persistent TEST/asm_test/0016 нужен вместо
-старого LOCAL/asm_local; архивные PC/MATERIAL helpers привязаны к старым receipts,
-обычный Telegram provision вызывает setWebhook, runtime image не содержит scripts.
-Минимум — private TEST override + узкий existing-command wrapper с новым intent,
-source/image proof, MATERIAL/native prerequisites и одним consumer. Ни нового
-API/migration/GRANT, ни deployment framework не предлагается. Wrapper ещё не готов.
+**C6 BLOCKED: TEST_OPERATOR_ADAPTATION_REQUIRED; basic VM inventory gap CLOSED.**
+Owner preflight06.11.2026 13:25:26UTC,SSH0:8containers running/API200,
+LOCAL/asm_local/schema0013; current windows0/0; один binding/один nontext dialog;
+MATERIAL1/nativeON1; API/worker Telegram TIMEOUT. Checkout clean5c074beb,
+image/source pairing NOT_PROVEN; Compose receiver0 не доказывает отсутствие
+host/webhook consumer. Fresh TEST binding/account/route review NOT_RUN.
 
-Один [owner preflight package](https://chatgpt.com/library?file_id=libfile_7a9662c704e48191b4507a58b2aec3ea&account_id=personal)
-подготовлен:21601bytes,SHA2569e2e5e0e13031a6d33e8c74ab212f0afa013664c6a3f66d122fa513e17285098.
-Offline syntax/read-only/redaction/ambiguous-target checks и ZIP manifest PASS;
-PowerShell/SSH/VM/actualPG/TLS/account/route review NOT_RUN. No live acceptance inferred.
+[Owner evidence](https://chatgpt.com/library?file_id=libfile_c713f00b60048191991da601d6e841fb&account_id=personal)
+—5511bytes,SHA2569b4626752db1fe6b968a1e0f3e1670e3670f07e7e0c8e391a6d3230c3b9dcb78;
+16records/4entries/CRC/manifest PASS. Это supplied result, не прямой SSH C6.
+[Предыдущий preflight package](https://chatgpt.com/library?file_id=libfile_7a9662c704e48191b4507a58b2aec3ea&account_id=personal)
+и его offline evidence сохранены; actual0016/live готовность не объявлена.
 
-Ближайший шаг владельца — только разрешённый read-only `run_preflight.ps1`
-на текущем SSH и безопасный вывод C6. Затем C6 завершает конкретный package,
-C0 принимает и представляет один exact cutover+smoke допуск. До этого live не запускать.
-Runbook фиксирует fresh TEXT scope, owner context/Resume, finite10мин/4POST/10RUB,
-existing CLI, disable и возврат с сохранением0016 history/UNKNOWN и single-consumer fence.
-Deploy/migrate/DBwrites/service changes/catalog/key-metadata/model/history/send=0;
-PR/hosted CI=0. AI OFF/EVAL_ONLY; ledger150 и holds без изменений.
-Подробные blocker/files/дельта/evidence — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
-C3 завершил принятую реализацию, остальные роли HOLD; M4/live остаётся открыт.
+C0 получает предусмотренный выдачей concrete missing-operator-path receipt:
+private persistent TEST compose override и узкая PC/polling/MATERIAL/native
+адаптация старых helpers с fresh intent/source/image proof и одним consumer.
+Нового product API/migration/grant/framework не требуется. Wrapper ещё не готов.
+Точные files/дельта/границы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Общий повтор preflight не нужен; после executable package — fresh account/route
+review и одно exact cutover+smoke согласование через C0, не approval неполного плана.
+
+Future smoke10мин/4POST/10RUB внутри150, clean TEXT, owner context/Resume,
+disable/UNKNOWN/history preservation и single-consumer rollback — в runbook.
+Owner read-only preflight1; C6 directSSH0. Deploy/migrate/DBwrites/services/policy/
+enable/catalog/key-metadata/model/history/send/PR/hostedCI=0.
+AI OFF/EVAL_ONLY; ledger/holds без изменений. Остальные роли HOLD; M4/live открыт.
 
 ## История — PR43 INTEGRATED / VERIFIED LOCAL/TEST; C6-M4-LIVE-PREP-R1 / 2026-11-06
 

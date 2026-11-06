@@ -136,8 +136,8 @@ runbook не выполняет deployment/cutover. Приёмка C0 и owner m
 
 ## C6-M4-LIVE-PREP-R1 — подготовка отдельного TEST / 2026-11-06
 
-**Подготовка BLOCKED до фактического owner preflight и привязки операторского
-запуска к новой среде. Ниже проверенный по source план, не готовый live допуск.**
+**Owner preflight получен; подготовка BLOCKED на привязке операторского запуска
+к новой среде. Ниже source plan с наблюдениями ВМ, не готовый live допуск.**
 Accepted code/build: `29dc16084f0ee0d01e5f96e7226995480e189a22`,
 tree `b70eb0348577c812f4f587d995c724e3c0e989e4`.
 Instructions: `a170da0975bcd0d73b0f3372fb8ec4a9cecc0956`.
@@ -164,9 +164,21 @@ wrapper, переиспользующий existing binding/native/receiver/runti
 and recheck, один bot consumer, остановка/возврат с сохранением обоих DB scopes.
 Product/DDL/dependencies/pins/CI не менять. Это не задание на новую платформу.
 
-Фактическая ВМ, IP, paths, source/images, schema, окна, transport, credentials
-и новый binding **NOT_RUN/NOT_PROVEN**. C6 не имеет подтверждённого текущего SSH
-доступа. Подготовлен один owner preflight `asm_m4_live_preflight.py` с Windows
+Владелец выполнил `asm_m4_live_preflight.py`06.11.2026 в13:25:26UTC:
+SSH0,8containers running, API200; actual READ ONLY SQL показал LOCAL/asm_local/
+schema0013, MATERIAL1/nativeON1, один binding, один разговор с nontext и нулевые
+текущие окна subscription/NORMAL service mode. Это внутренние ASM windows;
+агрегаты не доказывают точные даты истечения или оплату облака/Polza.
+Checkout clean5c074beb/treecb47cccd; image/source pairing всё ещё NOT_PROVEN.
+API/worker token-free Telegram TIMEOUT; причина/состояние Happ не проверены.
+Owner evidence не является прямым SSH исполнением C6; mutations NONE.
+Предложенные18000/18080 были свободны, resume/polling/PC-dev hashes совпали с
+reviewed constants. Policy helper отсутствует в проверенном home path; это не
+отменяет committed MATERIAL/native состояние. Новый TEST scope ещё не создан.
+
+[Полный owner receipt](https://chatgpt.com/library?file_id=libfile_c713f00b60048191991da601d6e841fb&account_id=personal)
+сохраняет supplied output и границы проверки. Общее чтение ВМ повторять не нужно.
+Применён один owner preflight с Windows
 launcher: Docker inspect, bounded READ ONLY SQL/ROLLBACK, local readiness,
 token-free Telegram HTTPS, только наличие/mode credentials и hashes старых
 helpers. Он не запускает/импортирует helpers, не создаёт файлы на ВМ, не вызывает
@@ -221,8 +233,8 @@ Preflight не доказывает отсутствие host receiver или re
    отдельно выполняет Resume; observation barrier/currentness должны пропустить
    новую попытку. Не обходить эти условия прямыми UPDATE conversation state.
 
-Все эти шаги **NOT_RUN**. Current wrapper/override с заполненными private inputs
-ещё не выдан как runnable cutover. Сначала закрываются preflight и operator delta;
+Все эти изменяющие шаги **NOT_RUN**. Current wrapper/override с private inputs
+ещё не выдан как runnable cutover. Basic preflight получен; остаётся operator delta;
 после этого C0 представляет владельцу одну точную операцию, не серию разрешений.
 
 ### Account/route и команды, которые уже существуют
