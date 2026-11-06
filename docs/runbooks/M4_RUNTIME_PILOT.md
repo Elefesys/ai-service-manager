@@ -134,7 +134,39 @@ drain/migrate/start cutover по ADR-132/216/217, без заявления roll
 закрыт (`AI_PROVIDER_DURABLE_DATA`), история не удаляется ради rollback. Этот
 runbook не выполняет deployment/cutover. Приёмка C0 и owner merge — отдельно.
 
-## C6-M4-LIVE-PREP-R1 — подготовка отдельного TEST / 2026-11-06
+## C6 executable package — REVIEW / 2026-11-06
+
+[M4_TEST_OPERATOR_R1.zip](https://chatgpt.com/library?file_id=libfile_680ff1db569c819199fe65be1d2929d9&account_id=personal) —50981bytes,
+SHA256 bbebbf134935b7f5046cbe64ae07aab0f87d6bfb23d7f6a13724f9b23c0c9e4c.
+16entries/manifest/CRC PASS. Instruction015af6d9; accepted build29dc1608/treeb70eb034.
+Пакет находится на review C0; **пока не выполнять его mutating команды на ВМ**.
+README содержит точные executable commands/private inputs и границы. Полный
+receipt — CURRENT M4_HANDOFF; task status — REVIEW в едином register.
+
+Реализован полный отдельный Compose, без merge lists с LOCAL: persistent
+TEST/asm_test/0016, отдельные SHA tags, loopback18000/18080 и один auth origin.
+Operator имеет readonly полный accepted checkout/frozen deps; runtime не
+получает migrator URL. `plan/check` отделены от `prepare/cutover/bind/policy/
+receive/configure/enable/disable/return`. Приёмник/opaque relay byte-identical;
+новые TEST adapters имеют свои hashes. Старые helpers остаются прежними.
+
+Future sequence: private targeted capture → prepare/AI OFF → PC SSH route →
+old empty queue/ACK fence → binding+MATERIAL+native → TEST receive → synthetic
+TEXT и owner reconciliation/Resume → fresh≤24h reviewed route/key → configure →
+finite enable/user smoke → disable/verified return. Enable foreground watchdog
+закрывает admission к expiry/наблюдённому UNKNOWN. Disable доступен из второго
+SSH окна. Неизвестный ACK/send/partial stage запрещает автоматический возврат;
+старый consumer не запускается поверх второго dedupe ledger. Обе группы
+volumes/история/holds сохранены. При исходно пустом webhook и отсутствии
+poller return восстанавливает это неактивное состояние, не придумывает receiver.
+
+23 bounded controls,Python3.13 import/CLI/source/native profile,actual Compose
+parser для полных OFF/AI models и actual PowerShell parser PASS. Actual Docker
+engine/PG/Windows SSH/Happ/VM/external smoke и account/route review NOT_RUN.
+Новых remote/live/paid действий нет. C0 review предшествует одному owner
+допуску; ниже сохранён исторический source plan, не отдельная команда запуска.
+
+## История C6 — source plan и owner inventory / 2026-11-06
 
 **Owner preflight принят C0. Продолжается реализация private TEST operator
 package по CURRENT HANDOFF; прежний docs-only scope расширен для этой адаптации.

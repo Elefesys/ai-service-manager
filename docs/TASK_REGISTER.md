@@ -2,7 +2,41 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, executable operator package / 2026-11-06
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, private operator package / 2026-11-06
+
+C6 реализовал M4_TEST_OPERATOR_R1 по instruction015af6d9; private executable
+package готов для review C0, прежний missing-operator-path закрыт реализацией.
+Accepted code29dc16084f0ee0d01e5f96e7226995480e189a22/treeb70eb0348577c812f4f587d995c724e3c0e989e4
+не изменён. Repository delta — только M4_RUNTIME_PILOT/HANDOFF/TASK_REGISTER;
+branch c6/m4-live-prep-r1. Product/DDL/CI/dependencies/архитектура frozen.
+
+[Private operator ZIP](https://chatgpt.com/library?file_id=libfile_680ff1db569c819199fe65be1d2929d9&account_id=personal):50981bytes,16entries;
+SHA256 bbebbf134935b7f5046cbe64ae07aab0f87d6bfb23d7f6a13724f9b23c0c9e4c.
+Manifest/CRC PASS; actual bindings/secrets не включены. Полный receipt и
+files/commands/limits — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Реализованы отдельный persistent TEST Compose, plan/check и mutating stages,
+PC/Happ/SSH adapter, MATERIAL/current0016 native paths, один receiver/fence,
+finite session/disable/return. Исторические helpers и принятый receiver/opaque
+relay сохранены; новые adapters имеют отдельные hashes. UNKNOWN не вызывает
+автоматический old-consumer restart, новый session/budget или resend.
+
+23 bounded controls/0skips, actual Compose2.39.4 effective-model parser,
+PowerShell7.5.4 parser, Python3.13 syntax/import/CLI, accepted native profile,
+source/hash/UID/private-file и positive/negative return tests PASS.
+NOT_RUN: actual Docker engine/PG/build/deploy/migrate/policy/session SQL,
+Windows SSH/Happ/VM/live smoke и fresh account/route review. Fake executor не
+является actual evidence. Direct SSH/live/provider/Telegram/PR/hostedCI=0.
+Owner inventory принят ранее, generic preflight не повторялся.
+
+C6 **REVIEW**, остальные HOLD. Следующий шаг — review C0, затем один owner
+допуск на конкретный cutover+finite smoke. Владельцу пока не запускать mutating
+команды из ZIP. Fresh private route/key/TEST inputs подставляются близко к
+запуску;10мин/4POST/10RUB внутри150,2POST1READ/8historyGET/4replies прежние.
+AI OFF/EVAL_ONLY, ledger/UNKNOWN holds и старые volumes/receipts сохраняются.
+M4/live остаётся открыт; INTEGRATED/VERIFIED по live не заявлены.
+
+## История — C0 уточнение scope, executable operator package / 2026-11-06
 
 C0 принял [receipt7f7a3142](https://github.com/Elefesys/ai-service-manager/blob/7f7a3142d401886a65228a6304ec5d71ce4bd239/docs/tasks/M4_HANDOFF.md):
 basic owner inventory gap CLOSED.2ZIP/CRC/size/SHA256,10manifest files и

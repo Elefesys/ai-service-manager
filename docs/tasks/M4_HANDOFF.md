@@ -6,7 +6,93 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, executable operator package / 2026-11-06
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, private operator package / 2026-11-06
+
+C6 реализовал **M4_TEST_OPERATOR_R1/** по instruction
+`015af6d9536eefe4f17d5ac1694f191b4eb15ed1`. Отсутствие TEST wrappers больше
+не blocker. Пакет передан на **review C0**, не объявлен live-ready/INTEGRATED.
+Accepted code/build/native source по-прежнему
+`29dc16084f0ee0d01e5f96e7226995480e189a22`,
+tree `b70eb0348577c812f4f587d995c724e3c0e989e4`.
+Ветка `c6/m4-live-prep-r1`; repository delta — только три разрешённых docs.
+Product/backend/migrations0001–0016/CI/pins/dependencies/архитектура без изменений.
+
+### Пакет и исполняемый путь
+
+[M4_TEST_OPERATOR_R1.zip](https://chatgpt.com/library?file_id=libfile_680ff1db569c819199fe65be1d2929d9&account_id=personal) — **50981bytes,16entries**,
+SHA256 **bbebbf134935b7f5046cbe64ae07aab0f87d6bfb23d7f6a13724f9b23c0c9e4c**.
+CRC и все15 file hashes в manifest проверены. Canonical manifest digest
+`dabe52b46b51c4b95fefc867f5adb020a6bd269fdeebf0f7fed00cdca5d4a8c2`.
+ZIP содержит code/README/provenance/validation; actual bindings/secrets отсутствуют.
+
+- `m4_operator.py`: capture/plan/check отдельно от prepare/cutover/bind/policy/
+  receive/configure/enable/disable/return; fixed TEST target и один session UUID.
+  Persist-before-effect checkpoint: UNKNOWN запрещает повтор и автоматический
+  возврат; explicit disable закрывает admission, включая другое SSH окно.
+- `compose_template.py`: полный отдельный Compose JSON, не merge с LOCAL.
+  `asm-m4-live-test`, persistent TEST volumes, отдельные SHA image tags,
+  loopback18000/18080, exact auth origin `http://127.0.0.1:18080`.
+  Full readonly accepted checkout + frozen development deps доступны operator;
+  runtime asm_runtime не получает migrator/admin URL или privileged mounts.
+  Worker key/config — readonly UID/GID10001 mode0600, byte hash check до enable.
+- `db_operator.py` использует accepted owner provisioning, явный external-ID
+  `inspect_connection` + `commit_binding` без `--live`/discovery/getUpdates/
+  setWebhook; fresh TEST product windows. MATERIAL adapter сохраняет старый
+  lock/order/identity/product/binding recheck; native existing check/commit/
+  current на0016. Owner reconciliation/Resume не фабрикуются SQL-обходом.
+- `accepted_receiver.py` побайтово accepted receiver:
+  SHA256 `e84266d26e8129c4d8d692d604c4c65b37086a16ea58af06330263414854de2d`.
+  `receiver_control.py` управляет остановкой **между** завершёнными steps,
+  не меняя wire/offset/local ACK. Fence требует empty confirming poll и
+  confirmed_responses=durable_deliveries; неизвестный ACK не восстанавливает
+  старый consumer поверх независимого TEST dedupe ledger.
+- `opaque_relay.py` побайтово прежний RELAY, SHA256
+  `ce8e63aae83ff85b7ba12fd71702d26cc43afd9387217d9316d7ffc524f1eb94`.
+  Новый `pc_session.ps1` сохраняет Happ/TUN→SSH Unix route без передачи VPN
+  профиля на ВМ, без TLS termination/replay/public proxy. Старые helpers нетронуты.
+
+Конкретный путь: targeted private capture → plan/check → отдельные build/
+persistent DB/schema0016/owner/API с AI OFF → PC SSH route → empty old queue/
+provider pending и old-writer fence → binding/MATERIAL/native → TEST receiver →
+один synthetic TEXT + owner context/Resume → fresh route/key → configure →
+finite enable+foreground watchdog → user smoke → disable → verified return.
+Return сохраняет обе группы volumes/receipts. Если исходно был webhook,
+восстанавливает его; если webhook пуст и poller отсутствует, возвращает именно
+неактивное исходное состояние, не создаёт старый poller. UNKNOWN/partial
+failure требует read-only reconciliation, а не удаления journal/new budget.
+Точные команды и private inputs — README в ZIP; владельцу **пока не применять**.
+
+### Проверено и не проверено
+
+**PASS:23 bounded offline controls,0skips**, Python3.13.17 syntax/import/CLI,
+unchanged frozen uv.lock dependencies, actual native_host_profile на полном
+accepted checkout, source/tree/blob/UID/private-file guards. Восемь выбранных
+M3 R4 MATERIAL declarations/functions точно равны original после только
+задокументированных target/schema/host/application_name замен.
+**Actual Docker Compose2.39.4 parser PASS** для полных OFF и AI моделей;
+проверены ports/DSN/volumes/mounts/role isolation. **Actual PowerShell7.5.4 parser
+PASS**. Оба validator archives/binaries сверены с official release SHA256.
+Positive/negative controls включают wrong/old target, повтор/partial failure,
+ACK loss, second consumer, canary, runtime/migrator separation и обе группы
+volumes при return. Fake executor PASS не объявлен настоящим VM/PG proof.
+
+**NOT_RUN:** Docker engine builds/containers/actual PG/migrations/native/session
+SQL (engine/PostgreSQL executable здесь отсутствуют), Windows SSH/Happ/VM/
+external smoke; fresh Polza account/route review. Source/API mismatch не найден.
+Новые live model/history/catalog/key-metadata/TGsend/webhook/getUpdates,
+remote SSH/deploy/DBwrites/service changes/PR/hostedCI — **0**.
+Принятый owner preflight06.11.2026 не повторялся; причина Telegram TIMEOUT
+остаётся UNKNOWN. Текущие старые данные/receipts и ledger не менялись.
+
+Следующий шаг: C0 проверяет package/source boundary и commands, затем один
+owner допуск на exact cutover+smoke. Runtime inputs: текущий SSH target/key,
+чистый accepted checkout/private paths, новый Console login/password,
+synthetic chat ID/product window, private Polza key и fresh≤24h reviewed route.
+Не просить публиковать эти значения. Future10мин/4POST/10RUB внутри150,
+2POST/1READ per run,8historyGET/4replies; AI OFF/EVAL_ONLY и UNKNOWN holds прежние.
+M4/live открыт; остальные роли HOLD. Новый PR и общий CI не нужны.
+
+## История — C0 уточнение scope, executable operator package / 2026-11-06
 
 **C0 принимает owner preflight и уточняет scope той же задачи: C6 теперь
 реализует и проверяет узкий операторский пакет для отдельного TEST-контура.
