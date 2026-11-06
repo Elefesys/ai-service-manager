@@ -2,7 +2,30 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, enable cleanup repair / 2026-11-06
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, enable cleanup R2 / 2026-11-06
+
+C6 исправил C0-M4-LIVE-OP-01 по instruction e17e5ebc: private
+M4_TEST_OPERATOR_R2 возвращён на review C0; live/cutover HOLD.
+Same-session disable и verified-ID stop новых worker/receiver выполняются
+независимо для session/worker/watch errors и обработанных прерываний.
+Primary/cleanup outcomes раздельные; stop подтверждается либо UNKNOWN.
+Сохраняются UUID/бюджет/holds/ACK records; повтор enable и automatic old restore
+не допускаются. SIGKILL/host loss и уже допущенный HTTP не объявлены отменёнными.
+
+[R2 ZIP](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal):60610bytes,18entries,17manifest files.
+SHA256 121fe08290f43bd532afa5b9eea3e9034b5a7c3201d8c2fdc496e13ed70b8ba3.
+R1/C0 evidence неизменны; все три original faults повторены, R2 regressions PASS.
+40 controls/0skips (23 прежних+17 новых), actual Compose parser и syntax PASS.
+Реальный enable control flow, fake DB/Docker; это не actual PG/VM proof.
+Полный receipt, manifest hash/commands/limitations — [HANDOFF](tasks/M4_HANDOFF.md).
+
+Write-set — прежние3docs/private package. Accepted29dc1608/treeb70eb034,
+product/DDL/CI/dependencies/архитектура unchanged. Live/VM/paid/Telegram/PR/CI=0;
+owner generic preflight не повторялся. C6 REVIEW, остальные HOLD.
+Следующий шаг review C0, затем owner exact cutover+finite smoke; сейчас владельцу
+пакет не запускать. M4/live открыт, AI OFF/EVAL_ONLY и ledger/holds прежние.
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, enable cleanup repair / 2026-11-06
 
 C0 review receipt 2aba15ab завершён: private M4_TEST_OPERATOR_R1 требует
 ограниченной правки **C0-M4-LIVE-OP-01 / P1**; live/cutover HOLD.

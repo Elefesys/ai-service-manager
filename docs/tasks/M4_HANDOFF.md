@@ -6,7 +6,66 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, enable cleanup repair / 2026-11-06
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, enable cleanup R2 / 2026-11-06
+
+C6 исправил **C0-M4-LIVE-OP-01** по instruction
+`e17e5ebc2460f5e798ebf626b93f5a8f1e3de5a9`; результат возвращён на review C0.
+Live/cutover HOLD. Ветка прежняя `c6/m4-live-prep-r1`; repository delta —
+только HANDOFF/TASK_REGISTER/M4_RUNTIME_PILOT. Accepted code
+`29dc16084f0ee0d01e5f96e7226995480e189a22`, tree
+`b70eb0348577c812f4f587d995c724e3c0e989e4` не изменены.
+
+[M4_TEST_OPERATOR_R2.zip](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal):
+**60610 bytes, 18 entries, 17 manifest files**, CRC/all file digests PASS.
+ZIP SHA256 `121fe08290f43bd532afa5b9eea3e9034b5a7c3201d8c2fdc496e13ed70b8ba3`;
+canonical manifest SHA256 `5d5a6c2e8fe918e5a2e4daf88e3993d44b2b41464477ced5dbb80266e70595ca`.
+Оригинальный R1 ZIP и [C0 evidence](https://chatgpt.com/library?file_id=libfile_c575ba8ae9b0819191f84334a51da495&account_id=personal)
+сохранены без изменений; три исходных faults повторены точно.
+
+### Исправление и bounded evidence
+
+- Общая cleanup-граница охватывает session/worker/watch. Target/source/approval/
+  runtime-file prechecks отклоняют неверный запуск до эффектов.
+- Same-session disable и остановка проверенных TEST worker/receiver выполняются
+  независимо. Stop использует exact container ID после source/intent/image/
+  command/UID/env/mount/host проверки; повторная inspection подтверждает
+  `STOPPED_OBSERVED` либо оставляет UNKNOWN. Ошибка одного stop не пропускает другой.
+- `enable-outcome.json` разделяет primary и каждый cleanup outcome; исходное
+  исключение сохраняется. DB disable error/lost ACK не выдаётся за закрытую
+  сессию. Журнал UNKNOWN, UUID, бюджет, holds и ACK records сохраняются;
+  повтор enable отвергается, old consumer автоматически не возвращается.
+- SIGINT/SIGTERM/SIGHUP обрабатываются. SIGKILL/host loss не гарантируют finally;
+  остаются runtime limits/reconciliation. Ни disable, ни наблюдение stop не
+  обещают отзыв уже допущенного HTTP или незавершённой Docker-операции.
+
+**40 controls PASS / 0 skips:** 23 прежних без изменения test file + 17 новых
+(22 subcases). Новые tests выполняют реальный Operator.enable/disable/Journal/
+targeted stop с fake внешними DB/Docker границами. Проверены три C0 faults,
+прерывания до/после effects и между stages, реальные локальные signals,
+normal expiry, конкурентный explicit disable с отдельным lock/receipt,
+stop/verification errors, drift/missing target, receipt/stdout failure, повтор
+и precheck отказ до эффектов. Ошибки первой проверки: два неполных test fixture
+inputs product window; fixture исправлен, полный новый suite затем 17/17 PASS.
+Actual Compose2.39.4 complete OFF/AI parser и source/tree/blob validation
+повторены в 23 controls. 12 Python files syntax PASS, Python3.13.17/frozen deps.
+Неизменённые PowerShell/native/MATERIAL результаты R1 не выдаются за новый прогон.
+
+В private code изменён только m4_operator.py; добавлены отдельные cleanup
+controls/evidence, обновлены README/provenance/validation/manifest. 11 остальных
+файлов, включая Compose/DB/MATERIAL/receiver/relay/старые controls, byte-identical R1.
+Команды и раздельные before/after outcomes — validation.txt/cleanup_evidence.json.
+**NOT_RUN:** actual Docker engine/PG/build/VM/Windows SSH/Happ/live smoke и fresh
+account/route review. Product/DDL/CI/dependencies/архитектура/ledger нетронуты.
+Реальные model/catalog/key-metadata/history/Telegram calls, SSH/deploy/DBwrites/
+service changes, новый PR и hosted CI = 0; generic owner preflight не повторялся.
+
+Следующий шаг — review C0 исправленного пакета, затем один owner допуск на
+exact cutover+smoke. Владельцу пока не применять R1/R2 mutating commands.
+Будущий предел прежний: 10мин/4POST/10RUB внутри150,2POST/1READ за run,
+8historyGET/4replies. AI OFF/EVAL_ONLY, UNKNOWN holds и остальные роли HOLD;
+M4/live остаётся открыт. Live INTEGRATED/VERIFIED не заявлены.
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, enable cleanup repair / 2026-11-06
 
 **C0 завершил review R1: пакет требует одной ограниченной правки аварийного
 завершения enable. Live/cutover пока HOLD. C6 продолжает ту же задачу и ветку

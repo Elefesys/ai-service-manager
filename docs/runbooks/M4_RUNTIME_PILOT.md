@@ -1,11 +1,14 @@
 # M4 Polza runtime: plan / enable / disable
 
-> **C0 review R1: требуется исправление аварийного enable (C0-M4-LIVE-OP-01).**
-> При lost ACK session/worker и при ошибке disable могут пропускаться cleanup
-> действия. Исходный M4_TEST_OPERATOR_R1 пока не применять на ВМ.
-> C6 готовит ограниченную правку по [CURRENT HANDOFF](../tasks/M4_HANDOFF.md);
-> критерии и [локальное воспроизведение](https://chatgpt.com/library?file_id=libfile_c575ba8ae9b0819191f84334a51da495&account_id=personal)
-> зафиксированы C0. Live допуск и accepted application source не изменены.
+> **R2 исправление C0-M4-LIVE-OP-01 передано на review C0; live HOLD.**
+> [M4_TEST_OPERATOR_R2.zip](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal)
+> охватывает session/worker/watch общим cleanup, независимо пытается закрыть
+> ту же сессию и остановить проверенные TEST worker/receiver; primary и cleanup
+> outcomes разделены, stop подтверждается либо остаётся UNKNOWN. 40 offline
+> controls PASS; actual PG/VM/live NOT_RUN. SIGKILL/host loss не гарантируют finally,
+> disable/stop не отзывают уже допущенный HTTP. R1/C0 evidence сохранены.
+> Владельцу пока не запускать mutating commands; [receipt/границы](../tasks/M4_HANDOFF.md).
+> Accepted application source и будущий owner допуск не изменены.
 
 Этот путь остаётся **EVAL_ONLY**, default OFF. Эта реализация и CI не разрешают
 живой запуск. В C3-M4.3-POLZA-RUNTIME-R1: model POST / catalog GET / history GET /
