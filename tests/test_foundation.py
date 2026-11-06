@@ -254,3 +254,212 @@ def test_real_api_runtime_boundary_is_checked_before_admission(monkeypatch, fail
             assert client.get("/api/v1/system").status_code == 200
     db.check.assert_awaited_once()
     db.close.assert_awaited_once()
+
+
+@pytest.fixture
+def browser_lifetime_control(monkeypatch):
+    """Real factories/disposal, offline I/O seams; not PostgreSQL evidence."""
+    import socket
+    import weakref
+    from types import SimpleNamespace
+
+    import test_auth_postgres as api
+    from asm.auth.store import AuthStore
+    from asm.foundation import RuntimeDatabase
+    from fastapi.dependencies import models
+
+    refs, closed = [], []
+    caches = (
+        models._is_gen_callable_cached,
+        models._is_async_gen_callable_cached,
+        models._is_coroutine_callable_cached,
+    )
+
+    def deny_network(*args, **kwargs):
+        raise AssertionError("Offline lifetime control must not connect")
+
+    async def checked(self):
+        pass
+
+    runtime_close, auth_close = RuntimeDatabase.close, AuthStore.close
+
+    async def close_runtime(self):
+        await runtime_close(self)
+        closed.append("runtime")
+
+    async def close_auth(self):
+        await auth_close(self)
+        closed.append("auth")
+
+    def factory(config):
+        database = RuntimeDatabase(config)
+        app = create_app(config, database, object_storage=object())
+        refs.append(
+            tuple(
+                weakref.ref(value)
+                for value in (app, database, database.engine, app.state.auth_service.store.engine)
+            )
+        )
+        return app
+
+    monkeypatch.setenv("ASM_ENVIRONMENT", "TEST")
+    monkeypatch.setenv("ASM_TELEGRAM_ENABLED", "false")
+    monkeypatch.setattr(socket.socket, "connect", deny_network)
+    monkeypatch.setattr(socket.socket, "connect_ex", deny_network)
+    monkeypatch.setattr(RuntimeDatabase, "check", checked)
+    monkeypatch.setattr(RuntimeDatabase, "close", close_runtime)
+    monkeypatch.setattr(AuthStore, "close", close_auth)
+    monkeypatch.setattr(api, "create_app", factory)
+    for cache in caches:
+        cache.cache_clear()
+    try:
+        yield SimpleNamespace(
+            api=api, refs=refs, closed=closed, caches=caches, database=RuntimeDatabase
+        )
+    finally:
+        for cache in caches:
+            cache.cache_clear()
+
+
+def test_browser_fixture_releases_closed_objects_with_retaining_control(browser_lifetime_control):
+    import asyncio
+    import gc
+    import json
+    from contextlib import asynccontextmanager
+
+    c = browser_lifetime_control
+    policy = (gc.isenabled(), gc.get_threshold())
+
+    @asynccontextmanager
+    async def before_repair(config):
+        # Exact former browser lifecycle, without the new cache cleanup.
+        app = c.api.create_app(config)
+        async with app.router.lifespan_context(app):
+            async with c.api.AsyncClient(
+                transport=c.api.ASGITransport(app=app), base_url=config.auth_origins[0]
+            ) as client:
+                yield app, client
+
+    async def close_twelve(browser):
+        for _ in range(12):
+            async with browser(settings()):
+                pass
+
+    def alive():
+        return [sum(refs[index]() is not None for refs in c.refs) for index in range(4)]
+
+    asyncio.run(close_twelve(before_repair))
+    # Explicit collection belongs only to this separate reachability control.
+    gc.collect(2)
+    baseline = alive()
+    assert baseline == [0, 12, 12, 12]
+    assert c.closed == ["auth", "runtime"] * 12
+    for cache in c.caches:
+        cache.cache_clear()
+    gc.collect(2)
+    assert alive() == [0, 0, 0, 0]
+    c.refs.clear()
+    c.closed.clear()
+
+    asyncio.run(close_twelve(c.api.browser))
+    gc.collect(2)
+    repaired = alive()
+    assert repaired == [0, 0, 0, 0]
+    assert c.closed == ["auth", "runtime"] * 12
+    assert all(cache.cache_info().currsize == 0 for cache in c.caches)
+    assert (gc.isenabled(), gc.get_threshold()) == policy
+    print("BROWSER_LIFETIME_CONTROL=" + json.dumps({"baseline": baseline, "repaired": repaired}))
+
+
+@pytest.mark.parametrize(
+    "failure_at",
+    ["body", "cancel", "readiness", "client_setup", "resource_cleanup", "factory_setup"],
+)
+def test_browser_fixture_clears_closed_scope_without_hiding_errors(
+    browser_lifetime_control, monkeypatch, failure_at
+):
+    import asyncio
+    import gc
+
+    from fastapi.dependencies import models
+
+    c = browser_lifetime_control
+    failure = RuntimeError("Offline lifecycle fault")
+
+    async def readiness(self):
+        raise failure
+
+    def setup(*args, **kwargs):
+        # Model a partial factory failure after classifier memoization.
+        models._is_coroutine_callable(lambda: None)
+        raise failure
+
+    original_close = c.database.close
+
+    async def close(self):
+        await original_close(self)
+        raise failure
+
+    if failure_at == "readiness":
+        monkeypatch.setattr(c.database, "check", readiness)
+    elif failure_at == "resource_cleanup":
+        monkeypatch.setattr(c.database, "close", close)
+    elif failure_at in {"client_setup", "factory_setup"}:
+        monkeypatch.setattr(
+            c.api, "AsyncClient" if failure_at == "client_setup" else "create_app", setup
+        )
+
+    async def exercise():
+        entered = asyncio.Event()
+
+        async def scoped():
+            async with c.api.browser(settings()):
+                if failure_at == "body":
+                    raise failure
+                if failure_at == "cancel":
+                    entered.set()
+                    await asyncio.Future()
+
+        task = asyncio.create_task(scoped())
+        if failure_at == "cancel":
+            await entered.wait()
+            task.cancel()
+        await task
+
+    expected = asyncio.CancelledError if failure_at == "cancel" else RuntimeError
+    with pytest.raises(expected) as caught:
+        asyncio.run(exercise())
+    if failure_at != "cancel":
+        assert caught.value is failure
+    del caught
+    # The assertion's deliberately retained exception must not keep its frames.
+    failure.__traceback__ = None
+    gc.collect(2)
+    assert all(ref() is None for group in c.refs for ref in group)
+    assert all(cache.cache_info().currsize == 0 for cache in c.caches)
+    assert c.closed == ([] if failure_at == "factory_setup" else ["auth", "runtime"])
+
+
+def test_nested_browser_cache_cleanup_preserves_the_active_outer_app(browser_lifetime_control):
+    import asyncio
+    import gc
+
+    c = browser_lifetime_control
+
+    async def exercise():
+        async with c.api.browser(settings()) as (outer, client):
+            before = await client.get("/api/v1/system")
+            async with c.api.browser(settings()) as (_, inner):
+                assert (await inner.get("/health/live")).status_code == 200
+            assert all(ref() is not None for ref in c.refs[0])
+            assert client._transport.app is outer and not client.is_closed
+            after = await client.get("/api/v1/system")
+            assert before.status_code == after.status_code == 200
+            assert before.json() == after.json()
+        assert client.is_closed
+
+    asyncio.run(exercise())
+    gc.collect(2)
+    assert all(ref() is None for group in c.refs for ref in group)
+    assert c.closed == ["auth", "runtime"] * 2
+    assert all(cache.cache_info().currsize == 0 for cache in c.caches)

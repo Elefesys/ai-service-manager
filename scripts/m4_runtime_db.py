@@ -676,6 +676,7 @@ def admit_source(evidence):
         "tests/test_postgres.py",
         "tests/test_m1_3_c0_acceptance.py",
         "tests/test_m1_3_api_postgres.py",
+        "tests/test_auth_postgres.py",
         "scripts/native_context_db_catalog.py",
         "docs/TASK_REGISTER.md",
         "tests/test_m3_2_escalations_migrations.py",

@@ -955,6 +955,8 @@ def test_constructed_full_admission_reaches_targeted_without_resources(r11_event
         "tests/test_m1_3_c0_acceptance.py",
         "tests/test_postgres.py",
         "tests/test_m1_3_api_postgres.py",
+        "tests/test_auth_postgres.py",
+        "tests/test_foundation.py",
     ],
 )
 def test_polza_repair_admits_egress_evidence_producer_without_resources(
@@ -993,6 +995,7 @@ def test_polza_repair_admits_egress_evidence_producer_without_resources(
         "backend/src/asm/ai/agent.py",
         "tests/test_m4_gateway.py",
         "tests/test_m1_3_api_postgres_extra.py",
+        "tests/test_auth_postgres_extra.py",
         "infra/Dockerfile.backend",
         ".github/workflows/ci.yml",
         "scripts/test_browser.sh",
