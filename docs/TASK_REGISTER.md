@@ -2,7 +2,39 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / BLOCKED, owner preflight received / 2026-11-06
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, executable operator package / 2026-11-06
+
+C0 принял [receipt7f7a3142](https://github.com/Elefesys/ai-service-manager/blob/7f7a3142d401886a65228a6304ec5d71ce4bd239/docs/tasks/M4_HANDOFF.md):
+basic owner inventory gap CLOSED.2ZIP/CRC/size/SHA256,10manifest files и
+16owner records независимо сверены C0; C0 SSH=0.
+LOCAL/asm_local/0013/API200/MATERIAL/nativeON/nontext и нулевые current product
+windows подтверждены supplied evidence. Telegram TIMEOUT observed; cause UNKNOWN.
+Новый TEST scope/consumer/source-image pairing пока не доказаны.
+
+**C6 продолжает ту же задачу и ветку c6/m4-live-prep-r1.**
+Scope расширен с docs до одного private executable M4_TEST_OPERATOR_R1 package:
+TEST compose override, bounded wrapper/PC-session/target/policy adapters,
+launcher, manifest и offline validation. Необходимые companion files внутри
+этого scope допускаются без нового согласования размещения.
+Repo write-set остаётся M4_RUNTIME_PILOT/HANDOFF/TASK_REGISTER.
+Product/DDL/CI/dependencies/accepted build source не меняются.
+
+Accepted code29dc16084f0ee0d01e5f96e7226995480e189a22/treeb70eb0348577c812f4f587d995c724e3c0e989e4
+и PR43 LOCAL/TEST INTEGRATED/VERIFIED сохраняются. Новый instruction commit —
+sole child7f7a3142; docs/operator artifacts не build source.
+Исторические helpers/receipts и старые volumes неизменны; новые target adapters
+имеют собственные digests. Сохранить MATERIAL/native/ACK/UNKNOWN guards,
+проверить effective Compose и единственный consumer/return fence.
+Полная выдача и критерии — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+C6 IN_PROGRESS; остальные роли HOLD. Нового PR/общего CI/повторного VM preflight
+не требуется. Подготовить конкретный проверенный пакет до одного owner допуска.
+Текущая выдача не исполняет live deploy/migrate/seed/policy/enable/model/send.
+Future10мин/4POST/10RUB внутри150 и прежний ledger/holds сохраняются.
+M4/live ещё открыт; старый LOCAL не чинить стиранием истории или ослаблением guards.
+
+
+## История — C6-M4-LIVE-PREP-R1 / BLOCKED, owner preflight received / 2026-11-06
 
 Accepted PR43 runtime остаётся INTEGRATED/VERIFIED LOCAL/TEST:
 code29dc16084f0ee0d01e5f96e7226995480e189a22/treeb70eb0348577c812f4f587d995c724e3c0e989e4.

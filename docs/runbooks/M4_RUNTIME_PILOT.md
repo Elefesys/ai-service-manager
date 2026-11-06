@@ -136,8 +136,9 @@ runbook не выполняет deployment/cutover. Приёмка C0 и owner m
 
 ## C6-M4-LIVE-PREP-R1 — подготовка отдельного TEST / 2026-11-06
 
-**Owner preflight получен; подготовка BLOCKED на привязке операторского запуска
-к новой среде. Ниже source plan с наблюдениями ВМ, не готовый live допуск.**
+**Owner preflight принят C0. Продолжается реализация private TEST operator
+package по CURRENT HANDOFF; прежний docs-only scope расширен для этой адаптации.
+Ниже source plan с наблюдениями ВМ; executable package и live допуск ещё не приняты.**
 Accepted code/build: `29dc16084f0ee0d01e5f96e7226995480e189a22`,
 tree `b70eb0348577c812f4f587d995c724e3c0e989e4`.
 Instructions: `a170da0975bcd0d73b0f3372fb8ec4a9cecc0956`.

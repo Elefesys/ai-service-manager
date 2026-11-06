@@ -6,7 +6,115 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / BLOCKED, owner preflight received / 2026-11-06
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, executable operator package / 2026-11-06
+
+**C0 принимает owner preflight и уточняет scope той же задачи: C6 теперь
+реализует и проверяет узкий операторский пакет для отдельного TEST-контура.
+Ограничение прежней выдачи «только docs» снимается для private operator artifacts.
+Это продолжение подготовки принятого сценария, не новая функция приложения.**
+
+### Принятый результат и фиксированный source
+
+[C6 receipt7f7a3142](https://github.com/Elefesys/ai-service-manager/blob/7f7a3142d401886a65228a6304ec5d71ce4bd239/docs/tasks/M4_HANDOFF.md)
+содержит конкретный missing-operator-path, предусмотренный прошлой выдачей.
+C0 проверил three-docs delta,2original ZIP/CRC/size/SHA256, все10manifest files
+и16owner records с точным соответствием parsed JSON. Нового SSH исполнения C0 нет.
+Owner evidence подтверждает LOCAL/asm_local/0013, API200, MATERIAL/nativeON,
+разговор с nontext и отсутствие current product windows. Telegram TIMEOUT
+наблюдался, причина/состояние Happ не установлены. Basic inventory gap CLOSED.
+Source/image pairing, единственный consumer и новый TEST scope ещё NOT_PROVEN.
+
+Accepted code/build остаётся **29dc16084f0ee0d01e5f96e7226995480e189a22**,
+tree **b70eb0348577c812f4f587d995c724e3c0e989e4**; PR43/CI42168468085 приняты.
+Main не изменён. Старт инструкций — immutable commit этого CURRENT,
+sole child **7f7a3142d401886a65228a6304ec5d71ce4bd239**.
+Продолжать **c6/m4-live-prep-r1** от нового задания; прежние receipts сохраняются.
+Docs/операторский пакет не подменяют accepted build/native-profile source.
+Новый PR и повтор общего CI не нужны; C3/C2/C4/прочие роли HOLD.
+
+### Расширенный write-set и минимальная реализация
+
+Repository docs: docs/runbooks/M4_RUNTIME_PILOT.md,docs/tasks/M4_HANDOFF.md,
+docs/TASK_REGISTER.md. Дополнительно разрешена реализация одного private
+пакета **M4_TEST_OPERATOR_R1/** вне public Git: target-specific wrapper,
+private Compose override/template, Windows launcher/PC-session adapter,
+необходимые MATERIAL/native adapters, bounded validation и manifest/README.
+Имена и небольшое разбиение companion files выбирает C6; обычное решение
+об их размещении внутри этого scope не требует новой выдачи C0.
+Секреты/actual bindings не включать в распространяемый code bundle.
+
+1. Переиспользовать existing provisioning/native/runtime и durable receiver.
+   Старые asm_telegram_pc_dev/session, recovery и asm_m3_policy_enable R4
+   остаются историческими неизменными файлами. При жёсткой старой привязке
+   разрешены новые TEST-target copies/adapters с отдельными именами/хэшами.
+   Меняются target/intent/source/image/profile и orchestration; не ACK/offset,
+   UNKNOWN/no-resend, opaque relay или domain/DB семантика. Старый hash не
+   выдавать за hash нового файла, original guards не отключать.
+2. Отдельный persistent project asm-m4-live-test:TEST/asm_test/0016, новые
+   volumes/credentials/image tags, loopback ports и exact Console auth origin.
+   Проверить итоговую Compose-конфигурацию, включая merge lists: старые8000/8080
+   ports, LOCAL DSN, shared :local tags и старые volumes не должны оставаться
+   неявно унаследованными. Не изменять обычный compose.yaml/Dockerfile.
+   Operator получает полный readonly accepted checkout и frozen dependencies;
+   runtime worker только runtime credentials, без migration URL/privileged mounts.
+3. Подготовить current TEST product windows через существующий operator путь,
+   чистый TEXT-only scope и private intent без переноса/удаления старого M3
+   разговора с фото. MATERIAL lock/order/identity/product/binding recheck
+   сохраняются; native policy — existing check/commit/current на current0016.
+   commit_binding для polling отделить от --live/setWebhook; не добавлять
+   discovery/getUpdates как скрытый шаг подготовки.
+4. Реализовать один явный consumer fence и возврат: старый queue/ACK/in-flight
+   проверен до переключения, один poller или webhook, fresh TEST receiver
+   направлен только в новую API. Не использовать drop_pending_updates.
+   При неопределённом ACK/send остановить дальнейшие внешние действия и
+   сохранить checkpoint; автоматически запускать старого consumer нельзя,
+   поскольку две БД не имеют общего dedupe ledger.
+5. Отделить безопасные plan/read-only subcommands от apply/cutover/policy/
+   enable/disable/return. Plan не вызывает mutation или внешнюю модель.
+   Mutating stages должны быть привязаны к exact private intent и проверять
+   состояние на месте перед эффектом; повтор не создаёт новую сессию,
+   новый бюджет или повторную отправку. Не писать generic deploy framework.
+
+Product/backend/0013–0016/pins/dependencies/CI/архитектура остаются неизменны.
+Эта выдача разрешает сами private wrappers/templates/test fixtures — их
+отсутствие или прежний docs-only write-set больше не являются blocker.
+Если найдено реальное несовпадение product API, показать конкретную строку и
+минимальную необходимую дельту; не обходить контроль прямым UPDATE state.
+
+### Проверить до сдачи
+
+Синтаксис и import/CLI, полную effective Compose-конфигурацию, source/hash/UID/
+private-file проверки; dry-run должен показывать точные targets/stages без secrets.
+Bounded offline positive/negative controls: неверный/старый target до эффекта,
+partial failure и повтор этапа, UNKNOWN/ACK loss, второй consumer, утечка canary,
+изоляция migrator/runtime и сохранение обоих DB volumes при return.
+Existing receiver/provisioning contracts остаются источником истины.
+Локальные owned Docker/PG checks допустимы при доступной среде, без live egress;
+их отсутствие обозначить NOT_RUN, не выдавать mocks за actual execution.
+Не запускать полный hosted CI ради private operator bundle и не повторять общий
+owner preflight. Только конкретное дополнительное read-only чтение при
+недостающем факте; Telegram TIMEOUT не доказывает причину или необходимость
+замены transport. Сначала проверить/адаптировать существующий PC/Happ/SSH путь.
+
+### Сдача и действие владельца
+
+Вернуть проверяемый пакет с files/digests/commands, execution results и кратким
+списком неизбежных runtime inputs/NOT_RUN. Привязать пакет к accepted source
+и документировать точный путь: isolated TEST prepare → AI OFF readiness →
+consumer fence/binding/native prerequisites → finite enable → user smoke →
+disable/return. C0 проверяет пакет перед одним owner допуском на cutover+smoke.
+Пока владельцу не предлагать применять непроверенные mutating команды.
+
+Подготовка/read-only проверки и ранее разрешённые≤1catalogGET+≤1key-metadataGET
+сохраняются. Deploy/migrate/seed/policy/service changes/enable/modelPOST/
+historyGET/Telegram send на существующей ВМ в этой выдаче не выполнять.
+Fresh account/route review делать ближе к запуску; ledger не является балансом.
+Будущий smoke прежний:10мин/≤4POST/≤10RUB внутри общего150,
+≤2POST/1READ per run,≤8historyGET/≤4replies; дополнительного расхода ради PASS нет.
+AI defaultOFF/EVAL_ONLY; M4/live открыт. Архитектура/IMPL-004/LOCKED и ledger
+с unknown holds не меняются; старые БД, receipts и принятый код сохраняются.
+
+## История — C6-M4-LIVE-PREP-R1 / BLOCKED, owner preflight received / 2026-11-06
 
 **Базовая инвентаризация ВМ получена. Owner preflight подтверждает старый
 LOCAL/asm_local/schema0013, API200, отсутствие текущих product windows и
