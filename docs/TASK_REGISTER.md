@@ -2,7 +2,62 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, fixture lifetime repair / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / REVIEW, fixture lifetime repair / 2026-11-06
+
+**Repair source готов к review C0: closed-fixture retention устранён по control,
+CI42157829822 attempt1 —12SUCCESS/1059actualPG PASS.**
+Source **5372e4dc395a32e649a84e0eea7b4992b9940126**,
+tree **b70eb0348577c812f4f587d995c724e3c0e989e4**,
+sole parent assignment **6ceb44f28bef38ef42a6203920fc74e4b5f93df3**.
+Tested merge **117957d36031153759dcb7f4fda1224ab254d8f0** — same tree.
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43) OPEN/DRAFT,
+existing branch FF с17f94c16; post-CI source changes/retries=0.
+Этот receipt — docs-only child source; execution head не двигается.
+
+Пять разрешённых paths,292+/343−: browser finally очищает три pinned
+FastAPI classifiers после client/lifespan/resource cleanup, включая error/
+cancellation/partial setup. Отдельные bounded offline controls:
+после12closed instances до repair app0/DB12/runtime12/auth12, после **0/0/0/0**.
+GC collect(2) только в reachability controls; обычная fixture/timed case,
+production lifecycle, dependencies/maxsize и GC policy прежние.
+Heavy tracing удалён; finite timestamps/PID/outcome/GC durations сохранены.
+Все6schema fixes, exact business oracles, literal1059PG order,
+observer2s/lock3s/statement3500ms/auth4s и runner anchors прежние.
+
+Offline120PASS=8lifecycle+36foundation+58admission+18schema/consumer;
+Ruff/format/diff/AST PASS; localPG NOT_RUN_LOCAL.
+Hosted unit3569+155subtests,frontend398,browser54 PASS.
+ActualPG1059=860generic+105native+94M4,все phases:
+native/M4 проверены в artifacts; generic raw log860unique PASSED и
+FOUNDATION_COMPLETE_EVIDENCE_PASS. Проверенный hosted gate требует
+exact setup/call/teardown,0skip/xfail/missing call,full tail и primary0/cleanup0.
+Все3concurrency cases:2real HTTP requests/2observed blocked backends,
+200/200 либо200/409 и version2/receipt1/audit2 PASS.
+Both-blocked0.046954/0.060719/0.046760s; GC gen0/1/0 durations
+0.000391/0.013298/0.000381s в ограниченных окнах. Historical timeout UNKNOWN.
+Normal-durable0016 и Docker29:6lifecycles/12assertions каждый PASS;
+native cleanup PASS,5M4 inventories пусты.
+
+**Ограничение evidence: execution environment стала unavailable в конце CI.**
+11original ZIP проверены SHA256/size/CRC,10source snapshots exact350blobs/modes.
+Финальный foundation ZIP сохранён, hosted gate/full job log проверены через
+GitHub; независимая локальная распаковка/phase audit и единый manifest ZIP
+не завершены. Сохранены65files, в том числе12original CI ZIP и11full logs.
+[Offline proof](https://chatgpt.com/library?file_id=libfile_3e71b9535940819181cbce0b14b22b9c&account_id=personal),
+[foundation ZIP](https://chatgpt.com/library?file_id=libfile_11bcd2d56efc8191b6a0bbe9dd0d3937&account_id=personal);
+полные ссылки/digests/границы проверки — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Оставшаяся упаковка/evidence audit BLOCKED инфраструктурой; source edit
+или повтор CI для неё не нужны. Прежние C3/C0 archives сохранены.
+
+**Статус C3:REVIEW; общая source-приёмка provider runtime остаётся за C0.**
+INTEGRATED/VERIFIED и закрытие M4/live не объявляются; остальные роли HOLD.
+Main3cb3764c,42historical C3/24C2refs и product/migrations/pins/consumer/
+workflows/dependencies/architecture frozen; defaultOFF/EVAL_ONLY.
+Paid/model/catalog/history/Telegram/VM/deploy/merge=0.
+Ledger150:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+
+## История — C0 fixture lifetime repair assignment 6ceb44f2 / 2026-11-05
 
 C0 подтвердил receipt **2c0c47911691131539b01063cf5f463ab9fc40af**,
 source **17f94c16122ddb9abcd46a6b054103cc27d55c7f**,

@@ -6,7 +6,156 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / IN_PROGRESS, fixture lifetime repair / 2026-11-05
+## CURRENT — C3-M4.3-POLZA-RUNTIME-R1 / REVIEW, fixture lifetime repair / 2026-11-06
+
+**Измеренное удержание закрытых fixture DB/engines устранено по отдельному
+before/after control. Единственный CI изменённого repair source:12SUCCESS/
+1059actualPG PASS, full foundation tail/cleanup PASS. Передано на review C0.**
+
+Сборка единого evidence ZIP и независимая локальная перепроверка последнего
+foundation artifact остались **BLOCKED: execution environment unavailable**
+с конца ожидания CI. Source и CI не прерывались. Все12original CI ZIP,
+11full job logs и локальные проверки сохранены отдельными файлами;
+не объявляется, что единый архив собран или последний ZIP локально распакован.
+Это ограничение упаковки/evidence, не новый timeout и не повод для retry CI.
+
+### Source и границы
+
+Source **5372e4dc395a32e649a84e0eea7b4992b9940126**, tree **b70eb0348577c812f4f587d995c724e3c0e989e4**,
+sole parent assignment **6ceb44f28bef38ef42a6203920fc74e4b5f93df3**.
+Tested merge **117957d36031153759dcb7f4fda1224ab254d8f0** — exact same tree;
+ordered parents main **3cb3764cdd75d4b6de50be9795d079cc2eead9ba** + source.
+[PR43](https://github.com/Elefesys/ai-service-manager/pull/43) OPEN/DRAFT,
+existing branch c3/m4-3-polza-runtime-r1 FF с17f94c16; нового PR/force-push нет.
+Этот receipt — docs-only child tested source, только HANDOFF/TASK_REGISTER;
+execution branch остаётся на source. Post-CI source changes/unchanged retries=0.
+
+Дельта **5 paths,292+/343−**:
+tests/test_auth_postgres.py,tests/test_foundation.py,
+tests/test_m1_3_api_postgres.py,scripts/m4_runtime_db.py,
+tests/test_m4_runtime_db_runner.py.
+browser очищает ровно три pinned FastAPI callable-classification caches
+в finally после завершения client/lifespan/resource cleanup; исключения
+и cancellation продолжают распространяться. Очистка memoization не меняет
+ссылки активного app/request. Maxsize4096, production lifecycle,
+SQLAlchemy registry, dependencies и GC policy прежние.
+
+Отдельный offline control использует real create_app/RuntimeDatabase/AuthStore
+и dispose обоих engines, readiness I/O seam и inert storage; socket connects
+запрещены. После12закрытых scopes/release references и отдельной collection:
+до repair app0/DB12/runtime-engine12/auth-engine12; после **0/0/0/0**.
+Проверены body exception, actual task cancellation, readiness/client/factory
+partial setup, propagated resource-cleanup error и nested contexts с рабочим
+outer ASGI client. Это offline reachability proof, не подмена actualPG.
+gc.collect(2) есть только в этих отдельных controls; обычная fixture/timed
+case не делает collect/disable/freeze/set_threshold, warmup или retry.
+
+Тяжёлые watchdog/thread/stack/early wrapper observations удалены.
+Остались finite timestamps/PID/outcome и generation/duration observations.
+Finite admission дополнен только новым exact path tests/test_auth_postgres.py;
+positive/negative controls обновлены. Все6schema fixes, точные assertions,
+literal1059PG nodeids/order, snapshots/roles/pins и runner
+BASE=dbb2334a/BASE_TREE=1a264d50/BRANCH сохранены.
+
+### Проверки и фактическая concurrency
+
+[CI42157829822](https://github.com/Elefesys/ai-service-manager/actions/runs/42157829822),
+attempt1: **12SUCCESS/0FAILURE/0SKIPPED**.
+ActualPG **1059PASS=860generic+105native+94M4**.
+Native/M4 setup/call/teardown сверены непосредственно в artifacts до сбоя среды.
+Foundation raw job log содержит860unique nodeids/860PASSED и два
+FOUNDATION_COMPLETE_EVIDENCE_PASS. Проверен неизменённый foundation_check:
+он требует exact order всех setup/call/teardown, outcome passed/xfail false,
+complete partition, все host/backend phases и primary0/cleanup0.
+Это hosted evidence-gate proof; отдельное повторное чтение финального
+cases.jsonl локальным audit после сбоя среды НЕ выполнено.
+
+Offline **120PASS=8lifecycle+36existing foundation+58admission+18schema/consumer**;
+Ruff/format/diff/AST PASS. LocalPG NOT_RUN_LOCAL: Docker/psql/postgres отсутствуют.
+Hosted unit **3569+155subtests**,frontend **398**,browser **54** PASS.
+Local Python3.13.17 / hosted3.13.15 отражены отдельно; frozen dependencies прежние.
+Normal-durable0016:6lifecycles/12assertions PASS; Docker29 current0016 тоже
+6lifecycles/12assertions PASS. Native cleanup PASS, все5M4 cleanup inventories
+пусты. Core primary0/cleanup0 подтверждён hosted gate; отдельный core
+remaining-resource inventory не экспортируется.
+
+В каждом case два real HTTP tasks одновременно PENDING до release и два
+distinct active/Lock-wait backends; после release оба tasks DONE.
+Отдельный observer engine сохранён: observer_is_app_engine=false.
+Все6records: GC hook removed/callbacks restored/policy unchanged,
+dropped0/incomplete=false. Exact business oracle:
+same_intent200/200 identical; same_key_conflict200/409 IDEMPOTENCY_KEY_CONFLICT;
+different_keys200/409 STALE_STATE; каждый case version2/receipt1/audit2.
+Их исходный AST сохранён и соответствующие tests PASSED.
+Observer2s/lock3s/statement3500ms/auth4s и bounded task cleanup прежние.
+
+| Case | HTTP wrapper starts,s | Both blocked,s | GC generation / wall / collector CPU,s |
+|---|---|---|---|
+| same_intent | 0.000940 /0.010559 | 0.046954 | gen0 /0.000391 /0.000388 |
+| same_key_conflict | 0.000907 /0.023690 | 0.060719 | gen1 /0.013298 /0.013301 |
+| different_keys | 0.000990 /0.010502 | 0.046760 | gen0 /0.000381 /0.000377 |
+
+GC наблюдалась только от создания tasks до двух blocked backends.
+Generation2 в этих трёх окнах не зарегистрирована; отсутствие GC pauses
+в остальном run не заявляется. Новый PASS не доказывает причину исторического
+timeout42031358620: его GC/CPU/stacks по-прежнему UNKNOWN.
+C0 доказал bounded retention; это не утверждение о бесконечной production leak
+или о полной стоимости прежней1.700075s collection.
+
+### Сохранённое evidence и ограничение финальной упаковки
+
+[Offline120/JUnit index](https://chatgpt.com/library?file_id=libfile_3e71b9535940819181cbce0b14b22b9c&account_id=personal),
+[lifecycle log](https://chatgpt.com/library?file_id=libfile_1ff0f10db2748191915b48bf53c6fcd9&account_id=personal),
+[source/AST preservation](https://chatgpt.com/library?file_id=libfile_cef8344f121c819184a13ee195384fde&account_id=personal),
+[exact source diff](https://chatgpt.com/library?file_id=libfile_ab5974e1a1b481918cd4246822acffbe&account_id=personal),
+[partial independent artifact audit](https://chatgpt.com/library?file_id=libfile_cec44c430e1c81918b724265d2851b6b&account_id=personal),
+[ancillary lanes audit](https://chatgpt.com/library?file_id=libfile_67a3790ddb1c8191944a5720371f8dcf&account_id=personal).
+Всего сохранено65файлов в отдельном комплекте M4_C3_POLZA_R1_fixture_repair_5372e4dc.
+11ZIP до сбоя сверены с GitHub digest/size, CRC и безопасной extraction;
+10source archives совпали по всем350Git blobs/modes.
+Последний foundation ZIP сохранён через прямой transfer; его размер совпал.
+Приведённый ниже foundation SHA256 — GitHub API/upload receipt,
+не заявленный результат независимого локального hashing/CRC.
+Все12original ZIP доступны; final foundation ci.log и phase journals внутри
+его ZIP, полный job log также [в GitHub](https://github.com/Elefesys/ai-service-manager/actions/runs/42157829822/job/127699828235).
+11остальных full job logs сохранены отдельно. Старые C3/C0 archives не заменены:
+[prior C3](https://chatgpt.com/library?file_id=libfile_fe9e5cfd353081919b50ac7074cb2b26&account_id=personal),
+[C0 lifetime attribution](https://chatgpt.com/library?file_id=libfile_bbf19b7482f88191a81614588a6611d0&account_id=personal).
+
+| Original CI artifact | Bytes | SHA256 из GitHub API |
+|---|---:|---|
+| [foundation](https://chatgpt.com/library?file_id=libfile_11bcd2d56efc8191b6a0bbe9dd0d3937&account_id=personal) | 3692145 | `a6e9ba62d88943ca8ff88ace4796aa603056ca8174dd345ee2883a25cdc782a9` |
+| [migration Docker29/state](https://chatgpt.com/library?file_id=libfile_2000cc9ff4008191888a28dea22a1b7d&account_id=personal) | 20864291 | `748dc37a06cc7f3ff14e9189e89bbd94f3f15a352c3abdcd1e3f760f07eef7b4` |
+| [migration normal/state](https://chatgpt.com/library?file_id=libfile_8bdc71092d6c8191b8b860db9ac611ee&account_id=personal) | 20863512 | `76d683c77e7d641cec6fe8d6b192d7adcf781a3e44d9b54a753256bfbe2f219b` |
+| [migration normal/intent](https://chatgpt.com/library?file_id=libfile_35b93cc465788191802750430a0394ac&account_id=personal) | 5951719 | `13af7854db9aec87dc932bcb281be9af335600de32aaa4207bfc9ebb19efc978` |
+| [migration Docker29/intent](https://chatgpt.com/library?file_id=libfile_024cb5a2215881918f513b4adce73bbf&account_id=personal) | 5952615 | `0b3b7a0d50e0ee5710ad3915110c7b603f89448b62dd55f5e9ac4ec3568c6f50` |
+| [migration normal/image](https://chatgpt.com/library?file_id=libfile_10fc4e48e97881918144a716027fcf85&account_id=personal) | 5951772 | `c1297dc038a5854ebe763e2deb2b7fe7ed7b93b52f6da0cb6ab80ef5a98ab5f8` |
+| [Docker29 compatibility](https://chatgpt.com/library?file_id=libfile_2118c123b6c48191a01508e340a6f03d&account_id=personal) | 3411328 | `a8eeff0f1def8a512971170d93ef1de909f6fbd9afaa558b88afa1a9fe8c3953` |
+| [foundation-durable](https://chatgpt.com/library?file_id=libfile_a15bc236046481918e4f1575347b7b01&account_id=personal) | 3450684 | `a1889852ef9b565dd5f02deafd99b200bfaf278d835f39e31fa33ef5e4b879fe` |
+| [migration Docker29/image](https://chatgpt.com/library?file_id=libfile_cd235d7558a08191a50dc8f36a2efda3&account_id=personal) | 5952672 | `a0c60f4c3b346736d3729719ce122497ffb79d09e250396f63018d48eccf04b2` |
+| [native-context](https://chatgpt.com/library?file_id=libfile_e6f7f90eb8188191aa2ff4656e3334a6&account_id=personal) | 4181938 | `9ef4a8271709d8aea7ddd171166bbc264c63d8fee4c5267f091b025f95efccff` |
+| [browser](https://chatgpt.com/library?file_id=libfile_3648176b12f081918ae52e7ef2630f9f&account_id=personal) | 20585 | `39b46f62099786b15d54af62775d40cd1ed569fbb92fc1333b6b97964e7343e7` |
+| [M4 runtime](https://chatgpt.com/library?file_id=libfile_c7ae03d7bdf0819191afe33464b24a80&account_id=personal) | 4246317 | `1d800f2f5fd9de4d5bb56634a193c9545aab0cf02722ac43330cf3a88946a065` |
+
+Оставшаяся техническая работа при доступной среде: независимо проверить
+последний foundation ZIP/source snapshot/phase journals и собрать единый
+manifest archive из сохранённых files. Повторный CI или source edit для этого
+не нужен. В подготовленном локальном audit_concurrency.py было неверное
+ожидание observer_is_app_engine=true: фактический отдельный observer даёт false.
+Этот помощник не запускался, его результаты не заявлялись, в сохранённый
+комплект он не включён; перед использованием после восстановления среды
+проверку нужно исправить. Source не затронут. Шесть current records проверены
+отдельно через GitHub log с правильным ожиданием false.
+
+Main3cb3764c,42historical C3/24C2refs frozen; product/0001–0016/pins/consumer/
+workflows/dependencies/архитектура и IMPL-004/ADR132/216–219/259–261/267 прежние.
+Paid/model/catalog/history/Telegram/VM/deploy/merge=0,defaultOFF/EVAL_ONLY.
+Ledger150:confirmed0.37505230/58knownPOST;4unknown held7.585505548;
+62totalPOST;remaining142.039442152;reported0.00743079 UNSETTLED.
+**C3 REVIEW; C0 source review ещё не принят; остальные роли HOLD.**
+PR43 DRAFT, provider runtime не объявлен INTEGRATED/VERIFIED; M4/live открыт.
+
+## История — C0 fixture lifetime repair assignment 6ceb44f2 / 2026-11-05
 
 **C0 подтверждает зелёный CI и даёт C3 конкретный test-only repair времени
 жизни объектов фикстуры. Новый диагностический полный прогон ради ещё
