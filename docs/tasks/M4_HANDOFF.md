@@ -6,14 +6,22 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, пакет R2 принят C0; owner допуск ожидается / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner допуск получен; TEST cutover + smoke / 2026-11-07
 
-**PACKAGE_REVIEW_ACCEPTED. C0-M4-LIVE-OP-01 CLOSED.**
+**OWNER_CUTOVER_AND_SMOKE_APPROVED. PACKAGE_REVIEW_ACCEPTED. C0-M4-LIVE-OP-01 CLOSED.**
+07.11.2026 владелец ответил «разрешаю» на конкретный запрос C0: подготовить
+отдельный TEST с AI OFF, переключить тестовый Telegram, выполнить одну сессию
+Telegram → Polza → reply до 10 минут / 4 model POST / 10 RUB внутри прежнего
+общего бюджета 150 RUB, затем disable и проверенный возврат.
+Это единый допуск на весь согласованный порядок ниже. Повторного разрешения
+на каждый его шаг не требуется; обязательные проверки R2 сохраняются.
+
 При переносе координации из C0/M3 восстановлена уже выполненная приёмка R2.
 Она зафиксирована в [C0 acceptance/evidence](https://chatgpt.com/library?file_id=libfile_53702f51eba88191bc8914097bb5fceb&account_id=personal):
 M4_C0_operator_R2_acceptance_fd37004c.zip, 64193 bytes, 5 entries,
 SHA256 `ecc6398ebdd14da502260318ddfb109e9e8d251e29bf1cfec345561137c65c86`.
-Это завершённый review пакета, не live/VM acceptance и не owner разрешение.
+Сохранённое evidence подтверждает review пакета; новый owner допуск записан
+выше. Actual live/VM acceptance пока не выполнена.
 
 ### Подтверждённая точка продолжения
 
@@ -40,10 +48,14 @@ SHA256 `ecc6398ebdd14da502260318ddfb109e9e8d251e29bf1cfec345561137c65c86`.
   STOPPED_OBSERVED не отзывает уже допущенный HTTP; SIGKILL/host loss не
   гарантируют finally. Actual Docker/PG/Windows/Happ/SSH/live пока NOT_RUN.
 
-### Следующий шаг после одного owner допуска
+### Разрешённое выполнение C6
 
 C6 продолжает ту же задачу/ветку `c6/m4-live-prep-r1` с принятым private R2.
-Отдельный допуск должен охватить весь конкретный порядок из README R2:
+Repository: `Elefesys/ai-service-manager`. Coordination base/sole parent:
+`4d15b8d3459d907f9a0246cc4331afe257b2f776`; этот docs commit не build source.
+Следующий receipt C6 — child данного instruction commit; accepted source/tree
+приложения остаются указанными выше. Разрешён весь конкретный порядок README R2:
+
 1. Private target capture/plan/check; сборка exact accepted source и отдельный
    persistent `TEST/asm_test/0016`, actual DB/readiness при AI OFF.
 2. PC/Happ/SSH route и точный old/new consumer fence; TEST binding/MATERIAL/native,
@@ -56,11 +68,43 @@ C6 продолжает ту же задачу/ветку `c6/m4-live-prep-r1` �
    не создавать новый UUID/бюджет и не повторять неизвестный вызов/отправку.
 
 Конкретные private runtime inputs C6 проводит с владельцем по README; секреты
-и actual bindings не публиковать. Generic owner inventory не повторять без
-нового drift; новые PR/hosted CI и изменения приложения для этого шага не нужны.
-Этот commit только переносит приёмку в канонический реестр. **Owner live допуск
-ещё не получен: mutating команды R2 не выполнять.** C6 ожидает допуск,
-остальные роли HOLD; AI OFF/EVAL_ONLY, M4/live открыт.
+и actual bindings не публиковать. Начать с точных команд capture/plan/check
+и минимально необходимых private inputs, затем вести владельца по stages R2.
+После проверки exact target/accepted source/manifest и private intent записать
+реальный единый допуск в `STATE/approval.json` с hashes из plan, полями
+`c0_reviewed: true`, `owner_cutover_and_smoke: true` и `valid_until` не далее24h
+по контракту R2. Не подставлять непроверенные hashes, route fixtures или вымышленные
+owner assertions. Это привязка полученного согласия, не новый запрос разрешения.
+
+Свежие account/route/key facts получить непосредственно перед configure/enable:
+один catalog GET и один key-metadata GET по README; один прежний reviewed route
+`openai/gpt-6-luna / openai/flex`, без fallback. Остаток общего150 учитывает
+исторический расход и все UNKNOWN holds; 10 RUB не создают новый бюджет.
+Synthetic TEXT-only scope, owner reconciliation и отдельный Resume обязательны.
+При UNKNOWN/partial effect — независимый cleanup R2 и read-only reconciliation;
+не повторять enable, не обходить fence и не возвращать старого consumer вслепую.
+
+Write-set прежний: `docs/tasks/M4_HANDOFF.md`, `docs/TASK_REGISTER.md`,
+`docs/runbooks/M4_RUNTIME_PILOT.md` и private runtime state/receipts принятого R2.
+Пакет R2 и прежние evidence сохранять. Product/DDL/CI/dependencies/архитектура,
+старые volumes/helpers и ledger не переписываются. Generic owner inventory не
+повторять без нового drift; новый PR и hosted CI для этого шага не нужны.
+Исторические фразы «допуск ожидается / пока не запускать» в README R2 и нижних
+блоках заменены этим допуском только для указанного одного TEST-сеанса.
+Новый scope, маршрут, второй session UUID или увеличение лимитов этим не разрешены.
+
+### Возврат C6 на приёмку C0
+
+Вернуть один receipt с final docs SHA, exact application/tree/package hashes,
+реальными stage outcomes и private evidence. Отдельно показать actual build/
+DB0016/readiness/cutover, Telegram → Polza → ответ и наблюдение владельца,
+число POST/READ/history/replies, confirmed cost/reserves/UNKNOWN и общий остаток.
+Подтвердить disable, состояние worker/receiver, drain/return и сохранность обеих
+групп volumes/receipts. Невыполненные действия — NOT_RUN; ошибки/потерянные ACK —
+UNKNOWN с сохранённым checkpoint, точной причиной и следующим безопасным шагом.
+Не повторять платные вызовы ради PASS и не считать текущий допуск доказательством
+успешного live. C6 IN_PROGRESS; остальные роли HOLD. До enable и после cleanup
+AI OFF, режим EVAL_ONLY; M4/live остаётся открыт до отдельной приёмки C0.
 
 ## История — C6-M4-LIVE-PREP-R1 / REVIEW, enable cleanup R2 / 2026-11-06
 

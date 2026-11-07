@@ -1,22 +1,29 @@
 # M4 Polza runtime: plan / enable / disable
 
-> **R2 принят C0; C0-M4-LIVE-OP-01 CLOSED. Owner live допуск ещё ожидается.**
-> [M4_TEST_OPERATOR_R2.zip](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal)
-> принят по [сохранённому C0 review](https://chatgpt.com/library?file_id=libfile_53702f51eba88191bc8914097bb5fceb&account_id=personal):
-> 17/17 новых controls PASS (22 subcases); исходные23 controls — evidence C6.
-> Новый C0 сверил архивы и перенёс уже выполненную приёмку, тесты не повторял.
-> Actual Docker/PG/VM/Windows/Happ/live и fresh account/route review ещё NOT_RUN.
-> Общий cleanup и независимые disable/verified-ID stops приняты; UNKNOWN/holds
-> сохраняются. SIGKILL/host loss не гарантируют finally, disable/stop не
-> отзывают уже допущенный HTTP. **До одного owner допуска mutating команды
-> не выполнять.** Точный scope и порядок — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md);
-> accepted build остаётся29dc16084f0ee0d01e5f96e7226995480e189a22.
+> **07.11.2026: OWNER_CUTOVER_AND_SMOKE_APPROVED; C6 IN_PROGRESS.**
+> Владелец ответил «разрешаю» на один конкретный TEST cutover + конечный smoke.
+> [R2](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal)
+> принят C0; C0-M4-LIVE-OP-01 CLOSED. Сохранённый C0 review:17/17 новых controls
+> PASS/22subcases; прежние23controls — evidence C6. Это не actual live evidence.
+> Разрешены prepare TEST с AI OFF → consumer fence/cutover → synthetic TEXT/
+> owner reconciliation+Resume → fresh account/route/key review → одна сессия
+> 10мин/4modelPOST/10RUB внутри прежнего150 → disable/drain/проверенный return.
+> Лимиты:2POST/1READ за run,8historyGET/4replies за сессию. Исторический расход
+> и UNKNOWN holds сохраняются. Повторное разрешение на эти stages не требуется.
+> Привязать допуск к проверенным private intent/manifest по approval.json R2;
+> старые pending-approval фразы в ZIP/истории не блокируют этот один сеанс.
+> Общий cleanup/независимые disable/verified-ID stops обязательны; UNKNOWN не
+> разрешает повторный enable/новый UUID/автоматический old-consumer restore.
+> SIGKILL/host loss не гарантируют finally; disable/stop не отзывают уже
+> допущенный HTTP. Actual Docker/PG/VM/Windows/Happ/live пока NOT_RUN.
+> Точные stages, write-set и возврат evidence — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
+> Accepted build:29dc16084f0ee0d01e5f96e7226995480e189a22; режим EVAL_ONLY.
 
-
-Этот путь остаётся **EVAL_ONLY**, default OFF. Эта реализация и CI не разрешают
-живой запуск. В C3-M4.3-POLZA-RUNTIME-R1: model POST / catalog GET / history GET /
-Telegram send = **0 / 0 / 0 / 0**, VM/deploy = 0. Ниже — процедура для будущего
-отдельно согласованного теста владельца.
+Этот путь остаётся **EVAL_ONLY**, default OFF. Реализация и CI сами по себе
+не разрешают живой запуск; конкретный owner допуск записан выше.
+Исторический C3-M4.3-POLZA-RUNTIME-R1: model POST / catalog GET / history GET /
+Telegram send = **0 / 0 / 0 / 0**, VM/deploy = 0. Фактическое выполнение C6
+учитывается отдельно в новом receipt. Ниже — runtime контракт принятого R2.
 
 Один маршрут: `RU_AGGREGATOR / polza / PROVIDER`, `openai/gpt-6-luna`, request
 selector `openai/flex`, `https://polza.ai/api/v1/chat/completions`. Наблюдаемая
@@ -26,7 +33,7 @@ family — OpenAI; variant flex не объявляется наблюдённы
 
 ## Подготовка и пределы
 
-Будущий smoke: **10 минут, максимум 4 model POST, 10 RUB**, не более2 POST и1
+Разрешённый smoke: **10 минут, максимум 4 model POST, 10 RUB**, не более2 POST и1
 READ за run; до8 ограниченных history GET за сессию, catalog GET из runtime=0.
 До4 ответов Telegram, UNKNOWN не пересылается. Тариф должен давать резерв
 одного вызова ×4 ≤10 RUB. Все резервы сохраняются консервативно, включая
@@ -87,7 +94,7 @@ python scripts/m4_runtime_pilot.py plan --config /private/polza-runtime.json
 Plan валидирует конфигурацию и выводит пределы; не читает API key/DB credentials,
 не подключается к БД и не вызывает HTTP. Он не включает worker или сессию.
 
-## Enable — только после отдельного разрешения владельца
+## Enable — в пределах полученного допуска и после проверок R2
 
 Приватные `polza.key` и `migrator.url` создаются оператором вне Git. Первый —
 только API key, второй — существующий `postgresql+psycopg://asm_migrator:…/asm_test`.

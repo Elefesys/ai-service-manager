@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, пакет R2 принят C0; owner допуск ожидается / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner допуск получен; TEST cutover + smoke / 2026-11-07
 
 **PACKAGE_REVIEW_ACCEPTED; C0-M4-LIVE-OP-01 CLOSED.**
 Приёмка уже выполнена в C0/M3; новый C0 сверил сохранённое evidence с receipt
@@ -18,15 +18,25 @@ treeb70eb0348577c812f4f587d995c724e3c0e989e4; actual main/CI42168468085
 push attempt1/12jobs SUCCESS подтверждены без нового CI. Docs source отличается
 от build source; product/DDL/CI/dependencies/архитектура/ledger неизменны.
 
-**Живой допуск ещё не получен.** Следующий результат после одного owner допуска:
+**OWNER_CUTOVER_AND_SMOKE_APPROVED — 07.11.2026.** Владелец ответил
+«разрешаю» на единый запрос C0; повторного разрешения на согласованные steps
+не требуется. C6 продолжает принятую последовательность R2:
 отдельный persistent TEST/asm_test/0016 с AI OFF → точный consumer cutover →
 synthetic TEXT/owner reconciliation+Resume → fresh route/key review →
 10мин/4POST/10RUB внутри150,2POST/1READ заrun,8historyGET/4replies →
 disable/verified drain/return с сохранением обеих сред.
 Полный scope/ограничения — [CURRENT HANDOFF](tasks/M4_HANDOFF.md), commands —
 [принятый R2](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal).
-C6 ждёт owner допуска в той же ветке; остальные HOLD. Сейчас mutating команды
-не выполнять. Actual PG/VM/Windows/Happ/live NOT_RUN; M4/live открыт.
+Coordination base4d15b8d3459d907f9a0246cc4331afe257b2f776; ветка
+`c6/m4-live-prep-r1`, build/source29dc1608 неизменен. Допуск привязать к
+проверенным private intent/manifest в approval.json по README R2; старые
+pending-approval фразы для этого одного TEST-сеанса больше не блокируют stages.
+Свежий route/key/account review≤24h, synthetic TEXT-only и все runtime/fence/
+UNKNOWN guards обязательны.10RUB учитываются внутри прежнего150 с prior spend/
+holds, без замены UUID/обнуления бюджета. Write-set — прежние три docs и private R2 state/
+receipts; новый PR/hosted CI не нужны. Вернуть actual stage/usage/cost/cleanup/
+return evidence на review C0. C6 IN_PROGRESS, остальные HOLD. До фактического
+исполнения actual PG/VM/Windows/Happ/live NOT_RUN; M4/live открыт.
 
 ## История — C6-M4-LIVE-PREP-R1 / REVIEW, enable cleanup R2 / 2026-11-06
 
