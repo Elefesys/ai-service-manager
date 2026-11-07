@@ -1,55 +1,61 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — TEST подготовлен; receive STOP на старте relay / 2026-11-07
+## CURRENT — TEST готов; подтверждён relay IP collision, узкое продолжение / 2026-11-07
 
-**Не повторять receive-start.** Первая попытка прошла все prechecks, но
-command-015 завершился exit1 на cutover.relay, COMMAND_FAILED. Старые writers
-ещё не останавливались. Checkpoint/failure records сохранить; automatic restore
-не выполнять. Сначала [asm_m4_relay_diag.py](https://chatgpt.com/library?file_id=libfile_9df03f45f6808191ac4a2a1e763c67e1&account_id=personal),
-8618 bytes / SHA256 8cdcf882f2f669e2a769bfb4c3434d4e7b43ea1c8fded8dbb22b708f7cb44d43.
-Он только читает saved failure/journal и Docker inventory/network; проверяет
-владельцев fixed relay IP, не меняя адреса, контейнеры или файлы. Коллизия .2
-пока гипотеза. Actual diagnostic NOT_RUN.
+Read-only diagnosis фактически выполнена владельцем: cutover.relay=UNKNOWN,
+later steps нет; ADDRESS_IN_USE/NETWORK_SETUP_FAILED. Оба fixed relay адреса
+заняты TEST PostgreSQL. Relay CREATED/never-running; старые configs/writers
+сохранены, остальные TEST службы работают. SSH exit0. Это конфликт порядка
+выдачи адресов внутри TEST, а не ошибка SSH.
 
-Owner-run R4 capture/plan/check и весь prepare завершены. На checkpoint
-`PREPARE_COMPLETE_AI_OFF` новая TEST/asm_test/schema0016 Console доступна
-через exact PC/Happ/SSH tunnel по `http://127.0.0.1:18080`; владелец вошёл.
-Прежний публичный URL относится к старой среде. Доставка Telegram в TEST этим
-входом не доказана. AI/provider sessions ещё выключены.
+**Следующая команда — только новый helper.**
+[asm_m4_relay_repair.py](https://chatgpt.com/library?file_id=libfile_a5e33e0598808191b58829df4d215822&account_id=personal),
+19603 bytes / SHA256 097d9ecfb32b098133290a70f4b831924a27cc3a3eac0dcf8e4dbbe329dce5c5.
+После проверки hash передать в /home/asmoperator/asm_m4_relay_repair.py,
+выставить600 и запустить как asmoperator:
+`python3 -B ~/asm_m4_relay_repair.py --repair`.
+Первое окно PC/Happ/SSH tunnel оставить открытым; команда — из второго окна.
+Во время переключения не отправлять сообщения и не выполнять Console actions.
 
-Устранены две конкретные deployment-причины: null IPAM.Config у стандартных
-host/none networks и checkout umask077 (public tracked code600/700). Resource/
-database UNKNOWN reconciled с before-images и полной проверкой, не сброшены.
-После private backup пустой TEST DB нормализованы только code modes644/755,
-пересобраны три TEST images, exact accepted bootstrap выполнен в существующей
-DB. Bytes/SHA/tree/executable bits/private inputs/старые volumes сохранены.
-Все9 prepare steps DONE; HTTP API/Console/Console→API PASS, SSH exit0.
-Завершённые repair/prepare helpers повторять нельзя.
+Helper проверяет exact same intent/R4/checkpoint/accepted old runtime/host
+writers/queues/volumes/current window/private socket; именно CREATED relay
+и два адреса у dynamic TEST PG; TEST0016/provider_sessions0. Сохраняет private
+before-images и backup TEST DB/globals. Останавливает TEST frontend/API и
+accepted drain, затем PG; требует actual release обоих IP. Запускает тот же
+relay первым, затем PG, API/frontend; проверяет READY/healthy/HTTP/AI OFF.
+Контейнеры/volumes сохраняются; Compose/fixed IP/source/R4/private inputs
+не меняются. Только dynamic addresses могут измениться.
 
-Уже выполненная попытка — [asm_m4_receive_start.py](https://chatgpt.com/library?file_id=libfile_e18189ba9b0c8191b0ba996dece2bcd5&account_id=personal),
-11786 bytes / SHA256 fe49421f881b022bd5bec61356de08f3048b6eb64c14382d3b07d6811b84fa0c.
-Команда `python3 -B ~/asm_m4_receive_start.py --start` уже завершилась STOP;
-повторять её нельзя. Foreground PC tunnel оставить открытым. Helper сверяет exact R4, prepared/repair
-checkpoint, тот же intent, current product/approval window, private Unix socket,
-old inventory/host writers/volumes/queue и TEST provider_sessions0; выполняет
-только accepted cutover/bind/policy/receive. Прежние ingress/frontend/API/
-scheduler/worker останавливаются без удаления. Queue/pending/watermark/45s/
-UNKNOWN/ACK/binding/native/drain fences не обходятся. Не отправлять новые
-тестовые сообщения во время cutover.
+После actual proof reconciles только cutover.relay UNKNOWN→DONE и продолжает
+штатные cutover/bind/policy/receive с сохранением remote pending0, queue/
+watermark/45s/ACK/UNKNOWN/native/drain fences. Старые writers останавливаются
+только accepted cutover. AI configure/enable/Polza calls не запускаются.
+Результат цели: ASM_M4_RELAY_REPAIR_RESULT="RECEIVE_READY_AI_OFF".
 
-Private `receipts/receive-start-r1` сохраняет before-image/progress/command logs;
-при STOP — не повторять весь запуск и не делать автоматический restore.
-Успешный status receiver означает транспортную готовность, не drain/ACK fence
-и не доказательство обработки конкретного сообщения. Helper actual STOP на cutover.relay; последующие steps NOT_RUN.
-Local9 targeted controls PASS/0skips, runtime/socket stat fixtures; не live test.
+New private receipt: receipts/relay-start-order-repair-r1; каждая phase
+UNKNOWN-before-effect. Original receive-start-r1/logs сохраняются. При STOP
+вернуть безопасный вывод и сохранить files; не повторять helper/receive-start,
+не удалять сеть/контейнеры/volumes и не выполнять automatic restore.
+Fresh guard перед шагом, same IDs/images/configs/mounts; только пустые DNS
+nil/[] нормализуются при сравнении. Не менять provider subscriptions/VPN profile.
 
-После actual RECEIVE_READY_AI_OFF отправить один выдуманный Client→Owner TEXT,
-проверить TEST Console, затем owner reconciliation и отдельный Resume.
-Далее fresh≤24h account/route/key review и уже разрешённый finite smoke:
-≤10мин/4POST/10RUB внутри150 с prior/UNKNOWN,2POST/1READ/run,
-8historyGET/4replies, один route/no fallback; затем disable/drain/return.
-Ни paid enable, ни отправки ИИ ещё не выполнены. Scope/owner допуск прежние,
-архитектура и product code не менялись. Подробный receipt — CURRENT HANDOFF.
+Local13 controls PASS/0skips, Python3.12.14, 0.840s; AST/R4 hashes PASS.
+Реальные local files/journals + Docker/PG fixtures; actual VM repair NOT_RUN.
+Это remedy текущего finite TEST, не общий cold-start fix неизменённого template.
+Сохраняется риск динамического занятия fixed адресов при новом deployment/
+холодном старте; текущий шаг не требует reboot/полного Compose restart.
+
+Предшествующий actual prepare завершён: TEST asm_test/schema0016, все9 steps
+DONE, HTTP API/Console/Console→API PASS. Владелец вошёл по
+http://127.0.0.1:18080 через PC tunnel; public URL относится к старой среде.
+Completed resource/permissions/bootstrap helpers повторять нельзя.
+
+После actual RECEIVE_READY_AI_OFF — один выдуманный Client→Owner TEXT,
+проверка TEST Console, owner reconciliation и отдельный Resume.
+Далее fresh≤24h account/route/key review, finite smoke≤10мин/4POST/10RUB
+внутри150 с prior/UNKNOWN;2POST/1READ/run,8historyGET/4replies,
+один route/no fallback; disable/drain/return. Scope/owner допуск прежние.
+Подробный receipt/границы — CURRENT HANDOFF; M4/live ещё открыт.
 
 ## История — приёмка R4 до исполнения на ВМ
 

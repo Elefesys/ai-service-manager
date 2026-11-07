@@ -2,44 +2,49 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, TEST готов; receive STOP на cutover.relay / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, relay IP collision подтверждён; repair готов / 2026-11-07
 
-**Actual attempt STOP:** receive prechecks все PASS, blockers=[]; command-015
-exit1 на cutover.relay / COMMAND_FAILED, SSH exit1. До old writers stop/bind/
-policy/receive не дошло. Failure records/checkpoint сохранены, retry/restore
-не выполнялись. [Read-only relay diagnostic](https://chatgpt.com/library?file_id=libfile_9df03f45f6808191ac4a2a1e763c67e1&account_id=personal) готов;
-8618 bytes, SHA256 8cdcf882f2f669e2a769bfb4c3434d4e7b43ea1c8fded8dbb22b708f7cb44d43.
-Возможная коллизия fixed relay .2 с динамическим адресом — ещё гипотеза.
-Следующий шаг только observation, без изменения сети/контейнеров/UNKNOWN.
-Actual diagnostic NOT_RUN; подробности CURRENT HANDOFF.
+**Actual diagnostic COMPLETE, SSH exit0.** cutover.relay=UNKNOWN, later steps
+отсутствуют. command-015 failure: ADDRESS_IN_USE/NETWORK_SETUP_FAILED. Оба
+fixed relay IP принадлежат TEST postgres; relay CREATED/not running, остальные
+четыре TEST службы running. Old configs accepted/unchanged и все5 writers
+running. Diagnostic read-only; checkpoint/private inputs/failure records/R4
+сохранены. Причина — порядок старта dynamic PG перед fixed relay.
 
-Owner-run actual R4 capture/plan/check PASS; host identities aggregate0/unomitted.
-Старый poller stopped/not removed; два completed setup containers архивированы/
-удалены, рабочие контейнеры/volumes сохранены. Resource UNKNOWN reconciled после
-проверки стандартных host/none IPAM.Config=null. Bootstrap root cause подтверждён:
-tracked checkout600/700 не читается PostgreSQL UID999. После private empty-TEST
-backups нормализованы только code modes644/755 без изменения bytes/SHA/tree/
-private inputs; три TEST images пересобраны и non-root read probes PASS.
-Exact accepted bootstrap и database reconciliation выполнены в существующей
-пустой TEST DB. Все9 prepare steps DONE, TEST0016/owner/API/Console HTTP PASS,
-AI OFF/provider_sessions0, SSH exit0. Владелец подтвердил вход через PC tunnel.
+[asm_m4_relay_repair.py](https://chatgpt.com/library?file_id=libfile_a5e33e0598808191b58829df4d215822&account_id=personal),
+19603 bytes / SHA256 097d9ecfb32b098133290a70f4b831924a27cc3a3eac0dcf8e4dbbe329dce5c5.
+Отдельный bounded continuation, тот же intent/допуск; exact prechecks и backups,
+stop только TEST frontend/API+drain и PG, actual address release→same relay first
+→same PG/API/frontend/HTTP/AI OFF→only relay UNKNOWN reconciliation→accepted
+cutover/bind/policy/receive. IDs/images/configs/mounts/volumes/R4/Compose/source/
+private inputs сохраняются; меняются dynamic network addresses. Нет удаления,
+network disconnect, force, blind replay или automatic restore. Каждая phase
+UNKNOWN-before-effect, original failed receipt сохранён. Telegram pending/
+watermark/45s/ACK/UNKNOWN/native/drain guards прежние. Paid enable не запускается.
 
-Pinned [receive continuation](https://chatgpt.com/library?file_id=libfile_e18189ba9b0c8191b0ba996dece2bcd5&account_id=personal) готов:
-11786 bytes, SHA256 fe49421f881b022bd5bec61356de08f3048b6eb64c14382d3b07d6811b84fa0c.
-Local9 controls PASS/0skips + AST, Python3.12.14; реальные private files/journal,
-runtime/socket stat fixtures, не live/PG evidence. Actual cutover STOP; bind/policy/receive/provider smoke NOT_RUN. Exact R4/intent/inputs/queue/watermark/UNKNOWN/
-ACK/native/drain guards сохранены. При STOP — checkpoint/logs, без auto replay/
-restore. Все результаты/границы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Local13 controls PASS/0skips, Python3.12.14, 0.840s; AST и immutable R4 hashes PASS.
+Реальные local files/journal, Docker/PG fixtures; не VM proof. Actual repair/
+receive NOT_RUN; [подробности CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Общий static/dynamic IPAM cold-start риск template этим ограниченным порядком
+запуска не объявляется устранённым; accepted template не изменён.
 
-После диагностики и reconciliation: accepted cutover→binding/MATERIAL/native→TEST receive AI OFF→synthetic TEXT→
-owner reconciliation + отдельный Resume→fresh account/route/key review≤24h→
-finite smoke→disable/verified drain/return. Допуск99fb865a и scope963baf72 прежние,
-повтор owner approval не нужен. Limits10мин/4POST/10RUB внутри150,
-2POST/1READ/run,8historyGET/4replies, один route, syntheticTEXT/no fallback.
+Ранее actual R4 capture/plan/check и все9 prepare DONE, TEST asm_test/0016,
+provider_sessions0, HTTP API/Console/Console→API PASS; владелец вошёл через
+PC/Happ/SSH. Resource null-IPAM и public-code permission причины устранены
+отдельными completed helpers; их не повторять. Старый poller остановлен,
+не удалён; старые данные/volumes сохранены. C6 прямого SSH доступа не имеет.
 
-Ветка c6/m4-live-prep-r1; sole childc9341fa2; build29dc1608/treeb70eb034.
+Next: оставить foreground tunnel; из второго PowerShell выполнить новый
+pinned repair --repair, вернуть output. При STOP checkpoint/logs сохранить,
+не повторять. После RECEIVE_READY_AI_OFF — synthetic Client→Owner TEXT,
+owner reconciliation + отдельный Resume→fresh account/route/key review≤24h
+→finite smoke→disable/verified drain/return. Owner99fb865a/C0 scope963baf72
+прежние; новый допуск не нужен. Limits10мин/4POST/10RUB внутри150 с prior/UNKNOWN,
+2POST/1READ/run,8historyGET/4replies, syntheticTEXT, один route/no fallback.
+
+Ветка c6/m4-live-prep-r1; sole child18324402; build29dc1608/treeb70eb034.
 Только три docs; product/DDL definitions/CI/dependencies/архитектура/ledger прежние.
-C6 IN_PROGRESS, остальные HOLD; M4/live ещё открыт.
+Новый PR/hosted CI не создавались. C6 IN_PROGRESS, остальные HOLD; M4/live открыт.
 
 ## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R4 принят C0; продолжить TEST resume / 2026-11-07
 

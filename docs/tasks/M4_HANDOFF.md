@@ -6,7 +6,7 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, TEST готов; receive STOP на cutover.relay / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, TEST готов; relay IP collision подтверждён, repair готов / 2026-11-07
 
 **Actual TEST preparation PASS, AI OFF.** Владелец выполнил private R4 continuation
 на ВМ и сообщил успешный вход в новую TEST Console через PC/Happ/SSH.
@@ -24,19 +24,69 @@ COMMAND_FAILED / Refused, SSH exit1. До cutover.old-fenced/bind/policy/receive
 исполнение не дошло. Raw failure records и journal сохранены; не повторять
 receive-start и не восстанавливать автоматически.
 
-В accepted template relay использует fixed .2 IPv4/IPv6, а postgres/storage
-созданы до него. Возможна коллизия с динамически выданным адресом; это гипотеза,
-не actual VM proof. Нужны failure markers, текущие endpoint owners и relay state.
-[Узкий read-only diagnostic](https://chatgpt.com/library?file_id=libfile_9df03f45f6808191ac4a2a1e763c67e1&account_id=personal):
-asm_m4_relay_diag.py, 8618 bytes,
-SHA256 8cdcf882f2f669e2a769bfb4c3434d4e7b43ea1c8fded8dbb22b708f7cb44d43.
-Проверяет pinned helper/R4 и checkpoint, читает command-015 и Docker inventory/
-network inspect; печатает только fixed error classes, approved service labels,
-booleans и statuses. Нет start/stop/retry/connect/disconnect, SQL/Telegram/Polza
-calls, journal/file writes. Input/checkpoint/failure records/package hashes
-проверяются до/после; UNKNOWN остаётся. Local AST и проверки markers/redaction/
-network ownership/IPv6/private empty log/public-mode+symlink rejection PASS.
-Actual diagnostic NOT_RUN. Прямого VM доступа у C6 нет.
+### Actual relay diagnosis — подтверждён конфликт IP
+
+Владелец выполнил pinned read-only diagnostic, SSH exit0. Journal:
+cutover.relay=UNKNOWN, later_steps_present=false. command-015: exit1,
+ADDRESS_IN_USE + NETWORK_SETUP_FAILED; stderr227bytes/stdout0, без truncation.
+Оба fixed relay адреса — 172.30.240.2 и fd42:6d34::2 — сейчас принадлежат TEST
+postgres. Relay CREATED/not running, без OOM; API/frontend/postgres/storage
+running. Старые configs ACCEPTED_UNCHANGED, все пять old writers running.
+Checkpoint/inputs/R4/failure records сохранены; diagnostic ничего не менял.
+
+Причина в accepted deployment template: PostgreSQL с dynamic IPAM стартовал
+до relay и занял его fixed IPv4/IPv6. Это уже actual observation, не гипотеза.
+SSH/база/провайдер VPN не являются причиной этой конкретной ошибки старта.
+
+### Узкое исправление текущего TEST — готово, actual NOT_RUN
+
+[asm_m4_relay_repair.py](https://chatgpt.com/library?file_id=libfile_a5e33e0598808191b58829df4d215822&account_id=personal),
+19603 bytes, SHA256 097d9ecfb32b098133290a70f4b831924a27cc3a3eac0dcf8e4dbbe329dce5c5.
+Отдельный private continuation для того же intent; R2/R3/R4/source/Compose/
+IP configuration/credentials не переписываются. Исходный failed receipt
+receive-start-r1 сохраняется. Новый receipt: receipts/relay-start-order-repair-r1.
+
+До эффектов: exact prepared+relayUNKNOWN/no later steps; pinned helper chain
+и R4; текущие approval/product window/socket; old inventory/host writers/
+volumes/queues; exactly5 TEST services, healthy pinned PG/storage; relay CREATED
+и never-started; оба адреса только у PG, dynamic PG IPAMConfig, никаких лишних
+network endpoints; TEST0016/provider_sessions0. Все blockers собираются вместе.
+
+Порядок в одном helper:
+1. Остановить только существующие TEST frontend/API, выполнить accepted drain.
+2. Приватно сохранить TEST pg_dump и globals; затем чисто остановить тот же PG.
+3. Проверить actual release обоих адресов. Если адреса заняты — STOP; нет
+   force/disconnect/recreate/delete/automatic restore.
+4. Запустить существующий relay первым; проверить READY и владение обоими IP.
+   Затем запустить тот же PG с его dynamic configuration, дождаться healthy.
+5. Вернуть те же API/frontend, проверить HTTP API/Console/Console→API и AI OFF.
+6. Сохранить reconciliation decision/before-image и изменить только доказанный
+   cutover.relay UNKNOWN→DONE. Исходные failed records не стираются.
+7. Выполнить неизменённые accepted R4 cutover→bind→policy→receive с прежними
+   remote pending0, old watermark/45s/ACK/UNKNOWN/native/drain fences.
+   Configure/enable/Polza smoke не запускаются.
+
+Каждая repair phase сохраняет UNKNOWN до эффекта; повтор existing receipt
+отклоняется. IDs/images/configs/mounts/volumes проверяются; допускается только
+Docker representation nil/[] для пустых Dns/DnsOptions/DnsSearch, без ослабления
+непустых DNS/других полей. Private inputs/package проверяются между phases.
+Dynamic network addresses могут измениться; fixed relay IP остаются прежними.
+
+Local `python3 -B validate_relay_repair.py`: Python3.12.14,
+13 controls PASS/0failures/0errors/0skips, 0.840s; AST и все27 immutable R4 hashes
+PASS. Реальные private files/journals, Docker/PG/runtime fixtures: exact positive
+precheck, wrong checkpoint/history/static PG/extra endpoint rejection,
+never-started relay guards, both-family ownership/IPv6 normalization, exact
+configuration preservation, backups-before-stop, relay-first successful flow,
+address-not-released/invalid-backup/uncertain-effect stops, no replay/auto restore,
+only relay reconciliation, readiness failure. Это не VM/SSH/PG/Telegram proof.
+C6 прямого доступа к ВМ не имеет; actual repair/receive ещё NOT_RUN.
+
+Это ограниченное исправление порядка запуска текущего TEST. Оно не устраняет
+общий риск static/dynamic IPAM в неизменённом template при новом deployment
+или холодном старте. Не объявлять постоянное сетевое исправление/автономность:
+такое изменение template требует отдельной проверки. В текущем finite TEST
+перезапуск ВМ/всего Compose не требуется.
 
 ### Подтверждённый результат и устранённые причины
 
@@ -87,10 +137,12 @@ Ready/ACK_PENDING не объявляется доказательством dra
 
 ### Продолжение в прежнем допуске
 
-Не закрывать PC/Happ/SSH tunnel. Выполнить только новый read-only relay diagnostic
-из второго PowerShell и вернуть безопасный вывод. Receive-start уже был запущен:
-повтор запрещён до reconciliation по actual evidence. Старые контейнеры/volumes,
-private checkpoint, failure records и все accepted guards сохранить.
+Не закрывать PC/Happ/SSH tunnel. Из второго PowerShell выполнить только новый
+pinned asm_m4_relay_repair.py --repair; во время переключения не отправлять
+тестовые сообщения и не нажимать Console actions. Helper временно перезапустит
+TEST Console/API/PG, затем продолжит accepted cutover; старые writers остановит
+только штатный fence. Вернуть безопасный вывод. Receive-start/завершённые
+prepare helpers не повторять; при STOP сохранить receipt без auto retry/restore.
 
 После actual RECEIVE_READY_AI_OFF — один synthetic Client→Owner TEXT, увидеть
 его в TEST Console; owner reconciliation и отдельный Resume. Затем fresh account/
@@ -100,7 +152,7 @@ Owner допуск99fb865a/C0 instruction963baf72 сохраняются, пов
 2POST/1READ/run,8historyGET/4replies; synthetic TEXT-only, один route/no fallback.
 AI OFF/EVAL_ONLY до enable; no-regeneration/no-resend/tenant/native barriers прежние.
 
-Receipt — sole childc9341fa24993bf3a51196613ca89647a6a1a469d,
+Receipt — sole child18324402ff628bbb9a6d21a2ad30e396af08c246,
 ветка c6/m4-live-prep-r1; build/native29dc16084f0ee0d01e5f96e7226995480e189a22,
 treeb70eb0348577c812f4f587d995c724e3c0e989e4. Только три разрешённых docs.
 Product/DDL definitions/dependencies/CI/architecture/ledger не изменены;
