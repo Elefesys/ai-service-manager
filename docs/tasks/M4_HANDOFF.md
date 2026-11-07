@@ -6,7 +6,94 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, public contract NOT_PROVEN; enable BLOCKED / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / BLOCKED, public evidence принято; ожидается provider contract / 2026-11-07
+
+**C0 принял C6-M4-PUBLIC-CONTRACT-R1 как завершённую проверку источника.
+Вывод NOT_PROVEN подтверждён; C0-M4-ROUTE-CAP-01 остаётся OPEN.**
+Новых ошибок C6 в evidence не найдено. Это не доказательство нарушения лимита
+Polza и не приёмка полного RuntimeRoute. Configure/enable остаются BLOCKED.
+Поиск по этим документам и OpenAPI завершён; C6 сейчас HOLD, новых PC/SSH
+команд, metadata refresh или платных probes не назначено.
+
+### Независимая проверка C0
+
+Проверен receipt04da14cee64bf0cb6998aa72a5ec275929637c7c:
+sole parent3be03cf75da0b1a26842cecc74b0ca62df6d2179, descendant7e92fc98,
+две docs-only записи; main/build/source/архитектура неизменны.
+
+[Исходный evidence ZIP C6](https://chatgpt.com/library?file_id=libfile_cade71a981808191bc38c54a5280522b&account_id=personal):
+60539bytes/4entries, SHA25618ae78a8b98abcfb194c3af3dc1cb3526c51ac603ddc18e4b92d90dd16ef74fe.
+Вложенный original owner ZIP48875bytes/3entries,
+SHA256bc586a41ce287fe75d38138e89c294a3f00b60a2df6485cb0adf3338fac47591.
+OpenAPI body399936bytes,
+SHA256487cef588cb1469504804bc83c74221b65938eb7d70e46ac0708d2a2ac677792.
+CRC/размеры/hashes/attempt-result URL и UTC correspondence PASS.
+C0 независимо обошёл19request schemas/18internal ref edges,
+сверил11selected nodes и полное покрытие106описаний с исходным JSON — PASS.
+C0 читал сохранённый owner response; новых Polza/Telegram HTTP, VM/PG/runtime
+действий нет. Это evidence review, не runtime/Windows/live test.
+
+Raw schema описывает max_tokens как общий лимит генерации, а
+max_completion_tokens как альтернативу. Она не уточняет включение hidden
+reasoning в общий cap для выбранного gateway route. ReasoningDto.max_tokens
+описывает отдельный Anthropic-style budget; exclude только скрывает вывод.
+Response usage и поддержка поля не устанавливают input cap semantics.
+Результат не изменяет предыдущую частичную приёмку routing/schema/tools/TEXT/
+search exclusion и не разрешает обязательный true как экспериментальную гипотезу.
+
+### Следующий шаг — один ответ Polza, без нового цикла диагностики
+
+C0 подготовил следующий вопрос владельцу для отправки в поддержку Polza.
+Сообщение ещё не отправлено; эта выдача не поручает C6 обращаться от имени
+владельца. Для вопроса не нужны API key, private receipts, IDs или содержимое
+переписки. Вопрос касается публичных API-параметров:
+
+> Здравствуйте! Уточните, пожалуйста, семантику лимита для POST https://polza.ai/api/v1/chat/completions:
+> model="openai/gpt-6-luna", provider={"only":["openai/flex"],"allow_fallbacks":false}, max_tokens=512, stream=false. Параметр reasoning не передаём; используем strict JSON schema и обычные function tools, без веб-поиска/серверных инструментов.
+> 
+> Ограничивает ли max_tokens=512 сумму всех генерируемых токенов — текста ответа, аргументов function tools и скрытых reasoning — числом512, или reasoning может начисляться сверх512? Просим подтвердить именно этот маршрут и пояснить, в какой upstream-параметр преобразуется max_tokens, либо дать ссылку на соответствующее описание. Если общего ограничения нет, какой поддерживаемый параметр задаёт такой лимит?
+
+Достаточное evidence для нового review — ответ Polza, применимый к указанному
+endpoint/model/selector и явно объясняющий общий visible+reasoning cap.
+Сохранить текст/дату и источник ответа. Общая «OpenAI compatibility» либо
+один successful probe без пояснения mapping не закрывают текущий gap.
+При подтверждении C0 завершит route review; при отрицательном/неполном ответе
+C0 предложит один минимальный вариант изменения с последствиями, до кода.
+Другой parameter/selector, SyntheticRoute, снижение гарантий или увеличение
+лимитов не приняты. Текущий LOCKED/IMPL-004 и accepted runtime не пересмотрены.
+
+### Сохранённые условия и статус
+
+Owner balance150 RUB/обычный тариф остаются принятыми как OWNER_REPORTED;
+два вопроса закрыты, ключ и повторный paid допуск не нужны.
+Owner99fb865a:один сеанс≤10мин/4POST/10RUB внутри150,2POST/1READ/run,
+8historyGET/4replies; synthetic TEXT/один route/no fallback.
+Model openai/gpt-6-luna,selector openai/flex,response/history OpenAI,
+variant NOT_OBSERVED. Conditional reserve0.471974416/call,
+×4=1.887897664 RUB не объявлен доказанным ceiling.
+Ledger confirmed0.37505230,UNKNOWN holds7.585505548,remaining142.039442152;
+reported0.00743079 UNSETTLED,UUID/holds не сбрасывать.
+
+Последний accepted snapshot: TEST0016/AI OFF_ZERO_PROVIDER_SESSIONS,
+old writers fenced; обе группы volumes/R4/private inputs/receipts сохранить.
+C0 не утверждает свежую проверку ВМ. Completed helpers не повторять.
+Любой последующий return — только accepted verified ACK/drain procedure.
+После закрытия contract gap перед enable нужны обычные fresh scope/transport/
+window checks и catalog≤24h от actual GET. В ожидании не освежать каталог;
+expired entry нельзя освежить новым checked_at без GET/review.
+
+Ветка c6/m4-live-prep-r1; этот instruction — sole child
+04da14cee64bf0cb6998aa72a5ec275929637c7c. Write-set только три coordination docs:
+docs/tasks/M4_HANDOFF.md,docs/TASK_REGISTER.md,docs/runbooks/M4_RUNTIME_PILOT.md.
+Build/main29dc16084f0ee0d01e5f96e7226995480e189a22,
+treeb70eb0348577c812f4f587d995c724e3c0e989e4; product/DDL/dependencies/CI без изменений.
+Архив сохранён; runtime tests/full CI/PR не нужны и не запускались.
+C6-M4-LIVE-PREP-R1 BLOCKED по C0-M4-ROUTE-CAP-01; public-source review завершён,
+C6 и остальные исполнители HOLD до нового решения C0. C0-M4-LIVE-OP-01 CLOSED.
+Полный M4/live остаётся открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, public contract NOT_PROVEN; enable BLOCKED / 2026-11-07
 
 **C6-M4-PUBLIC-CONTRACT-R1: NOT_PROVEN.** Разрешённая проверка оставшегося
 public OpenAPI источника завершена. Файл успешно получен владельцем, однако

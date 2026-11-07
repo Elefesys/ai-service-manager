@@ -2,7 +2,41 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, public contract NOT_PROVEN; enable BLOCKED / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / BLOCKED, public evidence принято; нужен ответ Polza / 2026-11-07
+
+**C0 принял final receipt04da14ce; C6-M4-PUBLIC-CONTRACT-R1 завершён,
+NOT_PROVEN подтверждён. C0-M4-ROUTE-CAP-01 OPEN; configure/enable BLOCKED.**
+Независимо: exact outer/inner ZIP CRC/size/SHA, body399936bytes,
+attempt/result URL/UTC PASS;19request schemas/18refs,11nodes,
+все106descriptions сверены с raw OpenAPI — PASS. C0 новых provider/Telegram/
+VM/PG/runtime действий не выполнял. Это не proof нарушения лимита Polza.
+
+Источник исчерпан; дальнейший поиск/повтор GET/metadata/paid probe не назначены.
+Следующий минимальный шаг — ответ поддержки Polza про max_tokens512 как
+общий visible+hidden-reasoning cap на openai/gpt-6-luna/openai/flex.
+Готовый вопрос владельцу и критерии review — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Сообщение не отправлено; C6 не поручено писать support. После ответа решение
+принимает C0. Validator true/код/лимиты/selector/SyntheticRoute не изменять.
+
+Баланс150RUB и обычный тариф OWNER_REPORTED уже приняты. Owner99fb865a/
+10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies остаются.
+Partial route review/TEXT/no fallback сохранены; conditional reserve
+0.471974416/call,×4=1.887897664 не стал proven ceiling.
+Ledger confirmed0.37505230,holds7.585505548,remaining142.039442152;
+reported0.00743079 UNSETTLED;UUID/holds без reset.
+
+Последний TEST0016/AI OFF/old-writer-fence snapshot не выдается за fresh check;
+обе группы volumes/R4/private inputs/receipts сохранить. Completed helpers
+не повторять; return только verified ACK/drain. После contract review —
+fresh scope/transport/window/catalog≤24h,без фиктивного checked_at.
+
+Branch c6/m4-live-prep-r1; instruction sole child04da14cee64bf0cb6998aa72a5ec275929637c7c.
+Main/build29dc1608/treeb70eb034 неизменны,только3docs;нет нового PR/CI/
+product/DDL/dependency/architecture changes. C0-M4-LIVE-OP-01 CLOSED.
+C6-M4-LIVE-PREP-R1 BLOCKED; C6/остальные HOLD до решения C0, M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, public contract NOT_PROVEN; enable BLOCKED / 2026-11-07
 
 **C6-M4-PUBLIC-CONTRACT-R1=NOT_PROVEN; C0-M4-ROUTE-CAP-01 OPEN.**
 Разрешённый OpenAPI источник получен OWNER_PC: HTTP200/complete399936bytes,

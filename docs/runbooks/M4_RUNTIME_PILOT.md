@@ -1,6 +1,40 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — public contract NOT_PROVEN; configure/enable BLOCKED / 2026-11-07
+## CURRENT — C0 принял public evidence; configure/enable BLOCKED / 2026-11-07
+
+C6-M4-PUBLIC-CONTRACT-R1 завершён, NOT_PROVEN подтверждён C0:
+19request schemas/18refs,11selected nodes и106описаний raw OpenAPI сверены;
+ZIP CRC/size/SHA и owner attempt/result correspondence PASS.
+Body399936bytes/SHA256487cef588cb1469504804bc83c74221b65938eb7d70e46ac0708d2a2ac677792.
+[Сохранённый evidence](https://chatgpt.com/library?file_id=libfile_cade71a981808191bc38c54a5280522b&account_id=personal).
+
+C0-M4-ROUTE-CAP-01 OPEN: max_tokens для openai/gpt-6-luna/openai/flex не
+подтверждён как общий visible+hidden-reasoning cap512. Это недостаток contract
+evidence, не утверждение о нарушении лимита. Не заполнять reviewed true ради PASS.
+Источники больше не опрашивать. C6 HOLD; новых PC/SSH/model команд нет.
+
+Следующий шаг — один вопрос поддержке Polza, подготовленный для владельца в
+[CURRENT HANDOFF](../tasks/M4_HANDOFF.md). Он не отправлен автоматически.
+Ответ должен явно относиться к текущему endpoint/model/selector и total cap.
+После него C0 завершит review либо предложит минимальное явное изменение;
+код/validator/cap512/4POST/10RUB и маршрут сейчас неизменны.
+
+Баланс150RUB/обычный тариф и прежний owner допуск приняты; повтор не нужен.
+TEST AI OFF, old writers fenced; обе группы volumes/R4/private inputs/receipts/
+UUID/UNKNOWN сохранить. Это последний accepted snapshot, не новая проверка ВМ.
+Completed helpers не повторять; возврат только по verified ACK/drain procedure.
+В ожидании не делать catalog refresh. Перед будущим enable — fresh scope/
+transport/window и actual catalog GET≤24h; новый timestamp не продлевает старый GET.
+
+Ledger confirmed0.37505230,holds7.585505548,remaining142.039442152;
+reported0.00743079 UNSETTLED;баланс не обнуляет расход.
+Owner10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies;
+synthetic TEXT/no fallback,disable/drain/return остаются.
+Main/build29dc1608/treeb70eb034,product/DDL/CI/архитектура без изменений.
+C0 runtime/VM/PG/HTTP/tests NOT_RUN; M4/live открыт.
+
+
+## История — public contract NOT_PROVEN; configure/enable BLOCKED / 2026-11-07
 
 One-shot PC GET завершён:HTTP200/complete399936bytes,
 UTC2026-11-07T12:26:32.2291123Z–12:26:34.1107431Z.
