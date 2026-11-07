@@ -2,56 +2,38 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, public contract PC fallback; enable BLOCKED / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, public contract NOT_PROVEN; enable BLOCKED / 2026-11-07
 
-C6 выполнил одну unauthenticated public GET attempt 07.11.2026
-12:15:39.404032–12:15:39.415789 UTC: DNS gaierror/-3 до HTTP,
-TRANSPORT_FAILED,status=null,body0. Повтор C6 не делался.
-Разрешённый one-shot PC fallback подготовлен; actual PC result NOT_RUN,
-schema/content review PENDING. Это ещё не final CONTRACT_FOUND/NOT_PROVEN.
-[Артефакт/receipt](tasks/M4_HANDOFF.md),[точная PC команда](runbooks/M4_RUNTIME_PILOT.md).
-Public raw/evidence вне Git. После одного PC результата — локальный schema
-review и один final receipt C0; configure/enable по-прежнему BLOCKED.
-Local PS syntax/5loopback fixtures PASS; actual Windows/Polza/runtime/CI NOT_RUN.
-Только3docs,sole parent7e92fc98c519e41ebefe4835f1126daa968c87e1,
-expected-sha/force=false. Принятые C0 scope/owner facts ниже неизменны.
+**C6-M4-PUBLIC-CONTRACT-R1=NOT_PROVEN; C0-M4-ROUTE-CAP-01 OPEN.**
+Разрешённый OpenAPI источник получен OWNER_PC: HTTP200/complete399936bytes,
+UTC07.11.2026 12:26:32.2291123Z–12:26:34.1107431Z.
+Exact SHA/UTC/URL/size/CRC проверены,19request schemas/internal refs просмотрены.
+В контракте нет необходимого mapping Polza max_tokens=N→общий
+visible+hidden-reasoning capN для openai/gpt-6-luna/openai/flex.
+Это недостаточность evidence, не утверждение о нарушении cap провайдером.
 
-C0 принял owner-run preflight b12cf187: TEST0016/current synthetic TEXT Resume,
-AI OFF_ZERO_PROVIDER_SESSIONS, metadata blockers=[],SSH exit0.
-**Владелец подтвердил 07.11.2026: баланс Polza150 RUB, тариф обычный.**
-Это OWNER_REPORTED, не API balance receipt. Два вопроса закрыты; новый ключ,
-скриншот или повторный paid допуск на прежний scope не нужны.
+[Final receipt,точные schema paths и raw evidence](tasks/M4_HANDOFF.md).
+Этот источник завершён; повторный GET/поиск/metadata preflight не нужен.
+Следующий ограниченный вариант определяет C0; configure/enable BLOCKED,
+reviewed true/RuntimeRoute не создавались. Новых owner facts/ключа/сообщений
+или paid approval для прежнего scope не запрашивается.
 
-Route review частично принят: exact saved catalog aef50578…ff2a,
-openai/gpt-6-luna/openai/flex, OpenAI family/variant NOT_OBSERVED,
-no fallback/strict schema/function tools/synthetic TEXT и search fee exclusion
-по closed wire. Rates reviewed; conditional reserve0.471974416/call,
-×4=1.887897664 RUB. Это не доказанный ceiling до общего output cap512.
+C0 partial route review/owner balance150RUB и обычный тариф сохраняются.
+Catalog aef50578…ff2a,original timestamp/freshness≤24h не обновлены;
+route/model/selector/no fallback/TEXT/input guards неизменны.
+Conditional reserve0.471974416/call,×4=1.887897664RUB не стал proven ceiling.
+Owner10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies прежние.
+Ledger confirmed0.37505230,UNKNOWN holds7.585505548,remaining142.039442152;
+reported0.00743079 UNSETTLED;UUID/holds не сбрасывались.
 
-**C0-M4-ROUTE-CAP-01 OPEN: не хватает contract evidence, что Polza max_tokens
-ограничивает visible+reasoning вместе.** Configure/enable BLOCKED.
-Catalog support и OpenAI max_completion_tokens/alias сами по себе не доказывают
-gateway mapping. RuntimeRoute требует reviewed true; его не подставлять ради
-validator PASS. Код/лимиты/архитектурное решение не пересмотрены.
-
-Следующий узкий C6 шаг: один unauthenticated public OpenAPI GET по URL official
-docs.json, локальный просмотр exact request-schema refs и короткий receipt
-CONTRACT_FOUND/NOT_PROVEN; полный порядок в [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
-C0 web reader источник не прочитал; его содержание неизвестно. Не повторять
-metadata/preflight/поиск тех же страниц, не делать paid probe, не писать support.
-После одного результата C0 принимает решение; автоматического enable нет.
-
-Сохранить TEST/AI OFF/old writers fence/обе группы volumes/R4/private receipts/
-UUID/UNKNOWN. Completed helpers не повторять. Owner99fb865a/10мин/4POST/10RUB
-внутри150,2POST/1READ/run,8historyGET/4replies/no fallback прежние.
-Ledger confirmed0.37505230,holds7.585505548,remaining142.039442152;
-reported0.00743079 UNSETTLED. Баланс150 не создаёт новый бюджет.
-
-Branch c6/m4-live-prep-r1; instruction sole child b12cf18730467950d51b8413e2354a66137c1fce.
-Main/build29dc1608/treeb70eb034 неизменны; только3docs, без нового PR/CI/
-product/DDL/dependencies/architecture changes. C0 doc/ancestry/Decimal review;
-runtime/PG/live C0 NOT_RUN. C0-M4-LIVE-OP-01 CLOSED.
-C6 IN_PROGRESS(public contract), enable BLOCKED; остальные HOLD; M4/live открыт.
+C6 actions:local ZIP/schema review и3docs; new provider/model/Telegram calls0,
+VM/configure/enable0. Last accepted snapshot TEST0016/AI OFF/old writers fenced,
+R4/private inputs/обе группы volumes сохранены; fresh VM state не перечитывалось.
+Source/main29dc1608/treeb70eb034; product/DDL/dependencies/CI/architecture unchanged.
+Receipt sole child3be03cf75da0b1a26842cecc74b0ca62df6d2179,descendant7e92fc98,
+branch c6/m4-live-prep-r1,expected-sha/force=false. History preserved;
+новый PR/full CI/runtime tests не нужны и не запускались.
+C6 REVIEW — final evidence ожидает решения C0; остальные HOLD; M4/live открыт.
 
 
 ## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, actual scope/metadata PASS; route review перед enable / 2026-11-07

@@ -1,77 +1,44 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — public contract PC fallback; total-output review PENDING / 2026-11-07
+## CURRENT — public contract NOT_PROVEN; configure/enable BLOCKED / 2026-11-07
 
-### Один public GET на ПК — подготовлен, actual NOT_RUN
+One-shot PC GET завершён:HTTP200/complete399936bytes,
+UTC2026-11-07T12:26:32.2291123Z–12:26:34.1107431Z.
+Body SHA256487cef588cb1469504804bc83c74221b65938eb7d70e46ac0708d2a2ac677792.
+[Review evidence ZIP](https://chatgpt.com/library?file_id=libfile_cade71a981808191bc38c54a5280522b&account_id=personal),
+SHA25618ae78a8b98abcfb194c3af3dc1cb3526c51ac603ddc18e4b92d90dd16ef74fe.
+Original owner ZIP сохранён побайтово; parse/CRC/size/SHA/receipt checks PASS.
 
-C6 attempt 2026-11-07T12:15:39.404032+00:00 получил DNS gaierror/-3
-до HTTP; original attempt/result сохранены вне Git. Повтор из C6 не нужен.
-Это fallback, прямо разрешённый instruction7e92fc98, без SSH/ВМ изменений.
+**C6-M4-PUBLIC-CONTRACT-R1=NOT_PROVEN.** Request path
+/v1/chat/completions→ChatCompletionRequestDto и все19reachable request schemas
+проверены локально. max_tokens описан общо,max_completion_tokens как
+альтернатива; ReasoningDto.max_tokens — Anthropic-style; exclude скрывает
+reasoning. Provider routing/parameter support и response usage не определяют
+общий generation cap. Exact pointers/короткие выдержки —
+[CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
 
-Скачать [M4_PUBLIC_CONTRACT_PC_R1.zip](https://chatgpt.com/library?file_id=libfile_2a0a93c765788191b9be4b6aca52b2e3&account_id=personal) в Windows Downloads
-под исходным именем, затем один раз выполнить в новом PowerShell на ПК:
+Недостающий mapping:Polza max_tokens=N при openai/gpt-6-luna и
+provider.only=[openai/flex] ограничивает visible+hidden reasoning вместе.
+Это не утверждение о неправильной работе Polza. C0-M4-ROUTE-CAP-01 OPEN;
+RuntimeRoute true/configure/enable не подставлять. Следующий ограниченный
+вариант выбирает C0. Этот источник больше не запрашивать; новая PC/SSH
+команда владельцу сейчас не нужна. Support/paid probe/другой route не запускать.
 
-```powershell
-$asmPackage = Join-Path $env:USERPROFILE 'Downloads\M4_PUBLIC_CONTRACT_PC_R1.zip'
-if ((Get-FileHash -LiteralPath $asmPackage -Algorithm SHA256).Hash -ne 'df727162b64d5eca7eb0e8c04e32abfe7acb1f186a7fa881430eb6f596029303') { throw 'Archive hash mismatch' }
-$asmExtract = Join-Path $env:TEMP ('asm-m4-public-contract-' + [guid]::NewGuid().ToString('N'))
-Expand-Archive -LiteralPath $asmPackage -DestinationPath $asmExtract
-& ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $asmExtract 'asm_m4_public_contract_pc.ps1'))))
-```
+Owner balance150RUB/обычный тариф уже приняты как OWNER_REPORTED; не спрашивать
+повторно. Partial routing/schema/tools/search-exclusion review сохранён.
+Model openai/gpt-6-luna,selector openai/flex,OpenAI family/no fallback,
+synthetic TEXT; cap512/4POST/10RUB/input32768/wire24576 неизменны.
+Catalog aef50578941e135c64646fd77766a8749b80f79fcffc56e298888403dd44ff2a
+и actual checked_at не обновлялись. Перед будущим enable нужны свежие
+scope/transport/window checks и freshness≤24h; review timestamp не заменяет GET.
 
-Запрос только GET https://polza.ai/api/openapi.json, без ключа/Authorization/
-cookies/redirects/retries; обычная TLS verification,30s/8MiB. Никаких model,
-account metadata,Telegram вызовов или VM actions. Happ TUN можно сохранить.
-Результат: Downloads/ASM_M4_PUBLIC_CONTRACT_PC_RESULT.zip с public body bytes
-(или явно incomplete prefix),UTC,status,URL,SHA256. Пришлите этот ZIP в чат.
-При отказе/timeout/limit не повторять и не удалять receipt directory.
-
-Package SHA256 df727162b64d5eca7eb0e8c04e32abfe7acb1f186a7fa881430eb6f596029303;
-script SHA256 e62e9d71d95b894440ffd0dba67ab536f7932c746ccba5ba153ed1b23623c3c9.
-PS syntax и5 local loopback fixtures PASS; actual Windows/Polza NOT_RUN.
-C6 content/schema review PENDING до результата. Final CONTRACT_FOUND/NOT_PROVEN
-будет отдельным одним receipt после локального просмотра, не inferred из DNS.
-Original C0 review/запрет configure/enable ниже сохраняет силу.
-
-**Владелец подтвердил баланс Polza150 RUB и обычный тариф.** Эти owner facts
-закрыты как OWNER_REPORTED; API balance не запрашивался. Допуск99fb865a на
-тот же scope сохраняется, повтор не нужен. Balance не заменяет ledger:
-confirmed0.37505230,UNKNOWN holds7.585505548,remaining142.039442152;
-reported0.00743079 UNSETTLED, ничего не сбрасывать.
-
-Preflight b12cf187 принят: current synthetic TEXT scope/Resume,TEST0016,
-AI OFF_ZERO_PROVIDER_SESSIONS,metadata blockers=[],SSH exit0.
-Exact saved catalog SHA256
-aef50578941e135c64646fd77766a8749b80f79fcffc56e298888403dd44ff2a,
-model openai/gpt-6-luna,selector openai/flex,OpenAI response/history family.
-Source/main29dc1608/treeb70eb034 и R4 неизменны.
-
-C0 проверил routing/schema/function tools, закрытый TEXT wire и исключение
-web_search_per_thousand. Сумма input rates13.94008250/M,output29.65975000/M;
-reserve при общем output512 =0.471974416/call,4calls=1.887897664 RUB.
-**Полный RuntimeRoute не принят: C0-M4-ROUTE-CAP-01 OPEN.** Поддержка max_tokens
-каталогом и описание alias не доказывают, что Polza ограничивает общий
-visible+reasoning output. Не подставлять output_cap_includes_reasoning=true,
-не менять cap/validator и не создавать фиктивно reviewed runtime JSON.
-Configure/enable BLOCKED; key/balance/обычный тариф этот технический gap не закрывают.
-
-Единственное продолжение C6 сейчас: один unauthenticated GET публичного
-https://polza.ai/api/openapi.json из official docs.json, с конечными пределами,
-сохранением raw bytes/UTC/status/URL/hash; затем локальный просмотр Chat
-Completions schema/refs и receipt CONTRACT_FOUND либо NOT_PROVEN.
-Если сетевой доступ C6 отсутствует — одна read-only команда владельцу на ПК.
-Никаких model POST/повтора account metadata/support messages; подробные
-критерии и primary sources в [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
-Не читать те же источники циклом. Следующее route acceptance принимает C0.
-
-Completed prepare/CUTOVER/BIND/POLICY/RECEIVE не повторять; AI OFF, old writers
-fenced, обе группы данных/volumes/R4/receipts/UUID/holds сохранить.
-Позднейший enable потребует fresh scope/transport/window и actual catalog
-checked_at≤24h; нельзя заменить его временем чата. Receiver age85.2s исторический.
-Owner10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies,
-synthetic TEXT/один route/no fallback и disable/verified drain/return прежние.
-C0 не выполнял VM/live/account/catalog/key/history/model/Telegram calls.
-Только3 coordination docs; код/DDL/CI/архитектура не изменены, M4/live открыт.
+Новых Polza/Telegram/model calls,VM/configure/enable actions не было.
+Last accepted TEST0016/AI OFF/old writers fence/private receipts/R4/volumes
+сохраняется как snapshot,не новый live check. Completed helpers не повторять.
+UUID/UNKNOWN/ledger unchanged:confirmed0.37505230,holds7.585505548,
+remaining142.039442152;reported0.00743079 UNSETTLED.
+Build/main29dc1608/treeb70eb034 неизменны. Только3docs,без новых PR/CI/runtime tests.
+C6 REVIEW; configure/enable BLOCKED; M4/live остаётся открыт.
 
 
 ## История — actual preflight PASS; route review перед моделью / 2026-11-07

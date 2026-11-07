@@ -6,151 +6,113 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, public GET: C6 DNS fail; PC result ожидается / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, public contract NOT_PROVEN; enable BLOCKED / 2026-11-07
 
-### C6: одна попытка выполнена; PC fallback ожидает фактический результат
+**C6-M4-PUBLIC-CONTRACT-R1: NOT_PROVEN.** Разрешённая проверка оставшегося
+public OpenAPI источника завершена. Файл успешно получен владельцем, однако
+нужный total visible+reasoning cap для текущего Polza route не установлен
+его контрактом. Это НЕ утверждение, что провайдер игнорирует/нарушает cap.
+**C0-M4-ROUTE-CAP-01 остаётся OPEN; configure/enable BLOCKED.**
+Этот источник больше не опрашивать/не исследовать циклом. Следующий
+ограниченный вариант определяет C0; новая команда владельцу не требуется.
 
-Instruction base: [7e92fc98c519e41ebefe4835f1126daa968c87e1](https://github.com/Elefesys/ai-service-manager/commit/7e92fc98c519e41ebefe4835f1126daa968c87e1).
-C6 сделал ровно одну попытку unauthenticated GET https://polza.ai/api/openapi.json.
-UTC 2026-11-07T12:15:39.404032+00:00 → 12:15:39.415789+00:00:
-TRANSPORT_FAILED / URLError / gaierror / errno=-3. Ошибка DNS до HTTP;
-status=null, actual_url=null, body_bytes=0, body_sha256=null. Deadline25s,
-cap8MiB, redirects/retries/auth/cookies=0. Ответ не получен; это не отказ
-Polza и не доказательство содержимого контракта. Повтор C6 не выполнялся.
+Основание: [C0 instruction7e92fc98](https://github.com/Elefesys/ai-service-manager/blob/7e92fc98c519e41ebefe4835f1126daa968c87e1/docs/tasks/M4_HANDOFF.md).
+Previous receipt3be03cf75da0b1a26842cecc74b0ca62df6d2179 зафиксировал DNS
+failure C6 и подготовку PC fallback. Владелец вернул actual результат ниже;
+повтор GET C6/PC и дополнительный поиск документов не выполнялись.
 
-Разрешённый fallback подготовлен: [M4_PUBLIC_CONTRACT_PC_R1.zip](https://chatgpt.com/library?file_id=libfile_2a0a93c765788191b9be4b6aca52b2e3&account_id=personal),
-6922bytes/6entries, SHA256
-df727162b64d5eca7eb0e8c04e32abfe7acb1f186a7fa881430eb6f596029303.
-Вне Git сохранены оригинальные C6 attempt/result, PC script и local evidence.
-Script SHA256 e62e9d71d95b894440ffd0dba67ab536f7932c746ccba5ba153ed1b23623c3c9.
-Это один публичный GET на ПК, не на ВМ:30s/8MiB, обычная TLS verification,
-без credentials/cookies/proxy discovery/redirects/retries/model POST.
-Записывает original response bytes (либо явно incomplete bounded prefix),
-UTC/status/actual URL/hash в Downloads/ASM_M4_PUBLIC_CONTRACT_PC_RESULT.zip.
-Существующий результат останавливает повтор до сети; отказ/timeout не перезапускать.
-Точная команда — в [CURRENT runbook](../runbooks/M4_RUNTIME_PILOT.md).
-Владельцу нужно вернуть только этот публичный ZIP, ключ/SSH/новые сообщения не нужны.
+### Фактическое получение и целостность
 
-PC actual GET NOT_RUN; content review PENDING. CONTRACT_FOUND/NOT_PROVEN
-по содержимому пока не выдаётся: разрешённый PC fallback ещё не выполнен.
-После одного PC результата — только локальные request-schema/internal refs
-и один final receipt C0 с total-output/OpenAI mapping либо конкретным gap;
-без дальнейшего поиска/повторов/support. Configure/enable остаются BLOCKED.
-
-Проверены PowerShell syntax и5 local loopback fixtures (bytes/hash,HTTP403,
-redirect without follow,size cap,cancellation,repeat guard); PASS.
-Actual Windows/Polza execution NOT_RUN; это не provider contract evidence.
-Product/runtime/VM/PG/full CI не запускались; auth/model/metadata/history/
-Telegram calls=0. VM state не перечитывался и не менялся; последнее accepted
-AI OFF/old writers fence/private receipts/UUID/holds сохраняется как snapshot.
-Receipt sole child instruction7e92fc98; write-set только3docs,force=false.
-Исходный CURRENT review C0 ниже сохраняет силу.
-
-### Принятое решение C0 (без изменения)
-
-**C0 принял actual preflight b12cf187 и ответ владельца: баланс Polza 150 RUB,
-тариф обычный. Эти два owner-вопроса закрыты.** Это OWNER_REPORTED, не новый
-balance API result; key auth/limit evidence остаётся отдельным. Повторный ключ,
-скриншот кабинета или новый paid допуск на прежний scope не нужны.
-
-### Решение C0 по route candidate
-
-| Часть review | Решение и границы |
+| Факт | Evidence |
 |---|---|
-| Scope/подготовка | Принят owner-run receipt: TEST0016, current synthetic TEXT Resume, AI OFF_ZERO_PROVIDER_SESSIONS, metadata blockers=[], SSH exit0. C0 не выполнял SSH/VM |
-| Account | Баланс150 RUB и обычный тариф подтверждены владельцем 07.11.2026; это не reset бюджета и не доказательство model access |
-| Model/selector | Сохранить openai/gpt-6-luna / openai/flex; response/history family OpenAI. Flex остаётся request selector, variant NOT_OBSERVED |
-| Catalog | Private entry SHA256 aef50578941e135c64646fd77766a8749b80f79fcffc56e298888403dd44ff2a; использовать exact saved JSON и actual catalog.attempt.json UTC, freshness≤24h |
-| Routing/schema/tools | Reviewed на уровне declarations + accepted code: only=[openai/flex], allow_fallbacks=false; strict schema и function tools. Новый live payload/model access ещё не проверен |
-| Input/image | Сохранить принятые wire≤24576 bytes, len(wire)+4096≤32768 и reserve32768; это условная граница, не tokenizer proof. Только synthetic TEXT, без Vision |
-| Search fee | Исключение web_search_per_thousand принято для этого closed wire: нет plugins/web_search_options/server tools; модель не search/Perplexity. Не распространять на другой payload |
-| Rates | RUB prompt5.93195000 + cache read0.59319500 + cache write7.41493750 = input13.94008250/M; completion29.65975000/M. Без оптимистичной cache скидки |
-| Total output | **C0-M4-ROUTE-CAP-01 / OPEN: output_cap_includes_reasoning не подтверждён достаточно для RuntimeRoute. Configure/enable BLOCKED до закрытия этого поля** |
+| Запрос | Один OWNER_PC GET https://polza.ai/api/openapi.json; actual URL совпал |
+| UTC | 2026-11-07T12:26:32.2291123Z → 2026-11-07T12:26:34.1107431Z |
+| Ответ | HTTP200, application/json; charset=utf-8, HTTP_COMPLETE, body_complete=true |
+| Body | 399936bytes; SHA256 487cef588cb1469504804bc83c74221b65938eb7d70e46ac0708d2a2ac677792 |
+| Переданный ZIP | 48875bytes; SHA256 bc586a41ce287fe75d38138e89c294a3f00b60a2df6485cb0adf3338fac47591 |
+| Ограничения попытки | 30s/8MiB; auth/cookies/redirects/retries=0 по actual receipt |
+| Проверка C6 | ZIP CRC, exact3entries, body size/SHA256, attempt/result URL и start UTC совпадают; JSON parse PASS |
+| OpenAPI | 3.0.0; server https://polza.ai/api, path /v1/chat/completions, POST |
 
-Это частичная приёмка evidence, не приёмка полного RuntimeRoute. Catalog
-поддерживает max_tokens; max_completion_tokens отсутствует в matched subset.
-Проверка Python DTO потребует true, но не проверит правдивость evidence-строки.
+[Полный evidence ZIP](https://chatgpt.com/library?file_id=libfile_cade71a981808191bc38c54a5280522b&account_id=personal),
+60539bytes/4entries, SHA256
+18ae78a8b98abcfb194c3af3dc1cb3526c51ac603ddc18e4b92d90dd16ef74fe.
+Вне Git: оригинальный owner ZIP побайтово, contract-review.json,
+локальный review_contract.py и README. Report SHA256
+c50bee49c11d6105ec84749a0c24e7e770dcebb59826c87c09429127bfbf6cb9.
+UTC/catalog checked_at не заменялись временем review.
 
-C0 проверил accepted [RouteReview/RuntimeRoute и wire](https://github.com/Elefesys/ai-service-manager/blob/29dc16084f0ee0d01e5f96e7226995480e189a22/backend/src/asm/ai/polza.py),
-[Polza Chat Completions](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/api-reference/chat/completions.mdx)
-и [reasoning guide](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/osobennosti/reasoning-tokens.mdx).
-Документы описывают max_completion_tokens как альтернативу max_tokens и
-reasoning как оплачиваемый output, но не устанавливают явное применение
-общего cap к этому Polza selector. OpenAI [API reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
-объясняет visible+reasoning cap для max_completion_tokens; [Help Center](https://help.openai.com/en/articles/5072518-controlling-the-length-of-openai-model-responses)
-называет параметры alias. Перенос на Polza gateway остаётся inference.
-[Polza LangChain](https://polza.ai/integrations/langchain) неоднозначен о выходе
-reasoning за лимит. C0 не утверждает, что лимит нарушается; имеющихся источников
-недостаточно для обязательного true. Сторонний SDK и один удачный probe не
-заменяют provider contract. Post-response usage guard не отменит уже сделанный вызов.
+### Exact schema review
 
-Search exclusion проверен по official docs того же Polza commit:
-[provider selection](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/provider-selection.mdx),
-[strict schema](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/structured-output.mdx),
-[web search](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/web-search.mdx)
-и [server tools](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/server-tools.mdx),
-совместно с accepted closed wire. Это review контракта, не новая платная проба.
+Request root:
+`#/paths/~1v1~1chat~1completions/post/requestBody/content/application~1json/schema/$ref`
+→ `#/components/schemas/ChatCompletionRequestDto`.
+Просмотрен весь граф19достижимых request schemas, включая root;
+external/unresolved refs=0. Exact refs/nodes/descriptions сохранены в JSON evidence.
 
-Условный reserve при общем output cap512:
-ceil_1e-9((32768×13.94008250+512×29.65975000)/1000000)
-=0.471974416 RUB/call; ×4=1.887897664 RUB. Он меньше10 RUB, но не становится
-подтверждённым billing ceiling из-за наличия150 RUB на счёте.
-Ledger прежний: confirmed0.37505230, UNKNOWN holds7.585505548,
-remaining142.039442152; reported0.00743079 UNSETTLED. Hold не освобождён.
+| JSON pointer | Наблюдение и значение для gate |
+|---|---|
+| #/components/schemas/ChatCompletionRequestDto/properties/max_tokens | «Максимальное количество токенов для генерации»; type=number, minimum=1. Включение hidden reasoning явно не определено |
+| #/components/schemas/ChatCompletionRequestDto/properties/max_completion_tokens | «Максимальное количество токенов для completion (альтернатива max_tokens)»; нет определения общего visible+reasoning bound или gateway mapping |
+| #/components/schemas/ChatCompletionRequestDto/properties/reasoning/allOf/0/$ref | Ссылка на ReasoningDto; отдельная reasoning configuration не задаёт общую семантику max_tokens |
+| #/components/schemas/ReasoningDto/properties/max_tokens | «Максимальное количество токенов для reasoning (стиль Anthropic)»; не подтверждает OpenAI/flex total cap |
+| #/components/schemas/ReasoningDto/properties/exclude | Описывает скрытие reasoning в ответе при сохранении его использования; это не отключение reasoning/не общий cap |
+| #/components/schemas/ProviderDto/properties/only и /require_parameters | Routing и требование поддержки параметров; определения accounting/upstream transformation для OpenAI/flex нет |
+| #/components/schemas/UsagePresenter/properties/completion_tokens_details → CompletionTokensDetailsPresenter/properties/reasoning_tokens | Наличие post-response usage поля не доказывает ограничение генерации на входе |
 
-### Единственный следующий шаг C6 — получить недостающий public contract
+В raw schema нет literal openai/flex/openai/gpt-6-luna; это вспомогательный
+факт, не самостоятельное основание NOT_PROVEN. Вывод основан на семантике
+всего request graph: generic generation/alternative описания не устанавливают
+требуемое включение reasoning. OpenAI-specific cache/usage compatibility
+описания не являются контрактом преобразования параметра cap.
 
-Не повторять поиск тех же страниц/каталога или provider preflight.
-В official [docs.json](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/docs.json)
-указан публичный https://polza.ai/api/openapi.json. C0 web reader не смог
-прочитать его; в проверенном official docs tree отдельного OpenAPI файла нет.
-Этот оставшийся источник ещё не проверен, его содержание не предполагается.
+**Конкретно не подтверждено:** Polza ChatCompletionRequestDto.max_tokens=N
+для model=openai/gpt-6-luna и provider.only=[openai/flex] ограничивает
+совокупную генерацию visible output + hidden reasoning значениемN.
+Не установлены equivalent alias/upstream mapping max_tokens→общий cap.
+Generic minimum/type, слово «альтернатива», отдельный Anthropic reasoning
+budget и response usage не закрывают этот gap. Не переносить свойство
+другого endpoint/provider на текущий accepted wire.
 
-1. Попробовать один обычный public GET этого URL из доступной среды C6; при
-   отсутствии сетевого доступа дать владельцу одну read-only команду на ПК.
-   Без API key/Authorization/cookies, без proxy-разведки и без model POST.
-   Конечный timeout/size limit; сохранить исходные bytes, UTC, HTTP status,
-   фактический URL и SHA256. Отказ/слишком большой ответ — явный результат,
-   не повод повторять запрос циклом. Новая diagnostic платформа не нужна.
-2. Локально проследить request schema /chat/completions и её внутренние refs:
-   max_tokens, max_completion_tokens, reasoning и описания общего output cap.
-   Вернуть точные schema paths/короткие выдержки и applicability к OpenAI
-   provider. Generic integer/maximum или слово «альтернатива» сами по себе
-   не доказывают total visible+reasoning bound.
-3. Вернуть один evidence receipt C0: CONTRACT_FOUND либо NOT_PROVEN с конкретным
-   недостающим mapping. При NOT_PROVEN остановить этот источник; C0 определит
-   следующий ограниченный вариант. Не начинать бесконечный цикл поиска.
-   Сообщения Polza support от имени владельца этой выдачей не разрешены.
-4. До отдельного C0 acceptance полного route не создавать фиктивно reviewed JSON,
-   не выполнять configure/enable, не подставлять true и не менять512/4POST/10RUB.
-   Не переходить на SyntheticRoute, другой selector или experimental assumption
-   без явного принятого изменения. Текущий owner допуск остаётся в силе.
+### Сохранённое решение и следующий шаг
 
-Прочие уже выполненные prepare/repair/receive не повторять. TEST AI OFF,
-old writers fenced; обе группы volumes, R4, private inputs/receipts/UUID/holds
-сохранить. До фактического enable позже нужен обычный fresh transport/scope/
-window check: прежний receiver age85.2s — только snapshot. Catalog checked_at
-не обновлять без GET; если истечёт24h, вернуть EXPIRED для узкого refresh review.
-Новых сообщений/edits/photos для этой проверки не требуется.
+C0 уже принял owner balance150RUB/обычный тариф (OWNER_REPORTED), scope/Resume,
+routing/schema/function tools, synthetic TEXT и search-fee exclusion.
+Эти вопросы повторно не открываются. Route openai/gpt-6-luna/openai/flex,
+OpenAI response/history family, variant NOT_OBSERVED; no fallback.
+Accepted private catalog SHA256
+aef50578941e135c64646fd77766a8749b80f79fcffc56e298888403dd44ff2a;
+actual saved timestamp/freshness≤24h сохраняются, refresh здесь не делался.
+Input wire≤24576bytes,len(wire)+4096≤32768,reserve32768 — условные принятые
+границы, не новый tokenizer proof. Input rate13.94008250/M,
+output29.65975000/M; conditional reserve0.471974416/call,
+×4=1.887897664RUB остаётся условным до total cap512.
 
-### Scope и возврат
+Полный RuntimeRoute НЕ принят; reviewed JSON/true/configure/enable не создавались.
+C6 возвращает final NOT_PROVEN этого источника и останавливает поиск.
+C0 выбирает дальнейшее ограниченное действие; support/model probe/другой
+route/SyntheticRoute/изменение512/4POST/10RUB не разрешены автоматически.
+Исторические UNKNOWN holds/UUID не освобождать/не пересоздавать.
 
-Repository Elefesys/ai-service-manager, branch c6/m4-live-prep-r1.
-Этот C0 instruction — sole child b12cf18730467950d51b8413e2354a66137c1fce;
-C6 начинает от полного SHA в URL этого instruction, следующий receipt — его
-descendant, expected-sha/force=false. Build/native source и main
-29dc16084f0ee0d01e5f96e7226995480e189a22, treeb70eb0348577c812f4f587d995c724e3c0e989e4.
-Write-set только docs/tasks/M4_HANDOFF.md, docs/TASK_REGISTER.md,
-docs/runbooks/M4_RUNTIME_PILOT.md; raw public contract/evidence вне Git.
-Product/DDL/CI/dependencies/архитектура не меняются; новый PR/full CI не нужны.
-Doc/ancestry/Decimal review выполнен; runtime/PG/host tests не повторялись.
-C0 не делал account/catalog/key/history/model/Telegram calls, configure или enable.
+В этом review только локальное чтение user-supplied ZIP и3docs.
+New Polza/account/catalog/key/history/model/Telegram calls=0,
+VM/runtime/PG actions=0,tests/fullCI NOT_RUN. Archive/parser/ref/integrity
+checks PASS — это не live model/Windows runtime evidence.
+Последний accepted VM snapshot: TEST0016/AI OFF_ZERO_PROVIDER_SESSIONS,
+old writers fenced, обе группы volumes/R4/private inputs/receipts сохранены.
+C6 их сейчас не перечитывал и не менял; перед более поздним enable нужны
+fresh transport/scope/window/catalog checks по принятому порядку.
 
-Owner99fb865a и лимиты прежние:один сеанс≤10мин/4POST/10RUB внутри150,
-2POST/1READ/run,8historyGET/4replies,synthetic TEXT/один route/no fallback;
-UNKNOWN/no-resend/ACK-drain/native guards сохранены. C0-M4-LIVE-OP-01 CLOSED.
-C6 IN_PROGRESS только public-contract evidence; configure/enable BLOCKED по
-C0-M4-ROUTE-CAP-01; остальные HOLD, полный M4/live открыт.
+Owner99fb865a:один сеанс≤10мин/4POST/10RUB внутри150,
+2POST/1READ/run,8historyGET/4replies; synthetic TEXT/один route/no fallback.
+Ledger прежний:confirmed0.37505230,UNKNOWN holds7.585505548,
+remaining142.039442152;reported0.00743079 UNSETTLED.
+Build/main29dc16084f0ee0d01e5f96e7226995480e189a22,
+treeb70eb0348577c812f4f587d995c724e3c0e989e4 и accepted R4 неизменны.
+Receipt sole child3be03cf75da0b1a26842cecc74b0ca62df6d2179, descendant7e92fc98;
+branch c6/m4-live-prep-r1,expected-sha/force=false,только3 coordination docs.
+История файлов сохранена; product/DDL/dependencies/CI/архитектура не менялись,
+новый PR не создавался. C6 REVIEW; остальные HOLD; полный M4/live открыт.
 
 
 ## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, actual scope и metadata PASS; route review до enable / 2026-11-07
