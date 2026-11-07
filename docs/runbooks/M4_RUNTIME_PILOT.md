@@ -1,6 +1,6 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — RECEIVE_READY_AI_OFF; проверить первый synthetic TEXT / 2026-11-07
+## CURRENT — synthetic TEXT виден; owner context и отдельный Resume / 2026-11-07
 
 **Actual owner-run relay repair и CUTOVER/BIND/POLICY/RECEIVE завершены,
 ASM_SSH_EXIT=0. Completed helpers повторно не запускать.**
@@ -15,22 +15,38 @@ bind.commit, policy.stop-api/material/native и receive.api/console/worker/recei
 
 TEST0016/provider_sessions0, AI OFF. Receiver RUNNING, code=null, age0.4s,
 successful_polls1, ack_pending=false, durable_deliveries0, confirmed_responses0.
-Доставка реального тестового сообщения ещё не подтверждена; RUNNING не заменяет
-end-to-end/owner reconciliation/Resume/drain proof. C6 прямого SSH доступа нет,
+Этот snapshot получен до отправки synthetic TEXT. Затем владелец подтвердил
+появление текста в TEST Console: inbound delivery owner-observed PASS. Новые
+counters/точная latency отдельно не измерены; native reconciliation/Resume/
+current scope/drain этим не подтверждены. C6 прямого SSH доступа нет,
 actual evidence — вывод владельца. Configure/enable/Polza calls NOT_RUN.
 
 ### Следующий пользовательский шаг
 
-1. Оставить foreground PC/Happ/SSH tunnel работающим.
-2. Открыть http://127.0.0.1:18080 — новую TEST Console, логин m4-owner.
-3. С прежнего тестового Client аккаунта отправить одно новое выдуманное TEXT
-   сообщение тестовому Owner. Например: «Тест M4: хочу маленькую татуировку
-   в виде горы на предплечье». Без фото/вложений/native edits/реальных данных.
-4. Обновить диалоги и сообщения TEST Console; подтвердить, появился ли текст.
-   AI-ответ пока не ожидается, provider session выключен.
-5. После видимого сообщения выполнить существующую native context сверку
-   владельцем и отдельный Resume; actual scope/current receipt проверяется
-   перед configure. Не объявлять это выполненным по readiness или click.
+Сообщение уже появилось. Продолжать в этом же TEST диалоге под m4-owner на
+http://127.0.0.1:18080, foreground PC/Happ/SSH оставить работающим.
+
+1. В «Управление диалогом» при необходимости нажать «Забрать управление»,
+   дождаться «Управление у мастера».
+2. В «Контекст владельца» обновить контекст и просмотреть фактический тестовый
+   запрос/доступные наблюдения. В «Результат сверки» выбрать «Полный актуальный
+   текст владельца»; в «Новый полный контекст» записать только действительный
+   synthetic запрос и существенные договорённости текущего TEST.
+3. Для нынешнего TEXT-only smoke без вложений: «Исходные изображения» →
+   «Нет известного недоступного содержимого». При других фактах не утверждать
+   отсутствие содержимого; сообщить расхождение.
+4. Прочитать и осознанно подтвердить полную замену/отзыв прежнего контекста
+   и сверку доступного контекста/существенных договорённостей. Нажать
+   «Сохранить сверенный контекст», дождаться server-confirmed свежего чтения.
+5. Отдельно нажать «Разрешить автоматику», дождаться «Автоматика разрешена».
+   При disabled/error вернуть actual status, не обходить blockers. UI-нажатия
+   не подменяют штатную проверку current scope/Resume receipt перед configure.
+
+Labels подтверждены в accepted29dc frontend. Actual save/Resume ещё
+NOT_CONFIRMED. Само разрешение автоматики не включает provider session:
+ИИ остаётся OFF до следующего принятого configure/enable шага.
+До продолжения не отправлять новые сообщения/native edits/photos, чтобы
+не изменить сверенный контекст. Owner утверждения помощник не фабрикует.
 
 Completed helper:
 [asm_m4_relay_repair.py](https://chatgpt.com/library?file_id=libfile_a5e33e0598808191b58829df4d215822&account_id=personal),

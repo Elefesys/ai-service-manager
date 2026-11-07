@@ -6,13 +6,16 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, RECEIVE_READY_AI_OFF; ожидание synthetic TEXT / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, synthetic TEXT доставлен; owner reconciliation/Resume ожидаются / 2026-11-07
 
 **Actual relay repair + CUTOVER/BIND/POLICY/RECEIVE PASS, SSH exit0.**
 Владелец выполнил pinned asm_m4_relay_repair.py и передал полный безопасный
 вывод. C6 не имел прямого SSH-доступа; actual VM evidence — вывод владельца.
-Текущий результат RECEIVE_READY_AI_OFF. End-to-end synthetic message, owner
-reconciliation/отдельный Resume и M4 provider smoke ещё не подтверждены.
+Текущий runtime result RECEIVE_READY_AI_OFF. После этого владелец отправил
+тестовый Client→Owner TEXT и подтвердил: «появился» в новой TEST Console.
+Это owner-observed end-to-end inbound delivery; latency/dedup/DB counters
+отдельно не измерялись. Owner reconciliation/отдельный Resume и M4 provider
+smoke ещё не подтверждены.
 
 ### Actual успешное продолжение / 2026-11-07
 
@@ -28,7 +31,7 @@ reconciliation/отдельный Resume и M4 provider smoke ещё не под
 | POLICY | stop-api/material/native выполнены; POLICY COMPLETE |
 | RECEIVE | api/console/worker/receiver выполнены; RECEIVE COMPLETE |
 | AI | TEST_0016_ZERO_PROVIDER_SESSIONS; configure/enable/Polza calls не запускались |
-| Receiver observation | RUNNING, code=null, age0.4s, successful_polls1, ack_pending=false, durable_deliveries0, confirmed_responses0 |
+| Receiver observation до тестового TEXT | RUNNING, code=null, age0.4s, successful_polls1, ack_pending=false, durable_deliveries0, confirmed_responses0 |
 | Итог | RECEIVE_READY_AI_OFF; ASM_SSH_EXIT=0 |
 
 Conflict разрешён в текущем TEST: relay владеет обоими fixed IP, PG снова
@@ -38,10 +41,28 @@ repair/continuation receipts сохранены; повтор completed helpers 
 данные сохранены. Новые TEST worker/scheduler и единственный receiver запущены.
 Финальные inventory/old_stopped/safe_volumes/inputs/R4 проверки helper завершены.
 
-RUNNING + successful_polls1 подтверждает текущую транспортную готовность.
-При counters0 доставка конкретного сообщения и native owner reconciliation
-не доказаны; это не end-to-end PASS и не общий drain/ACK proof. Автономный путь
-без PC/Happ/SSH и общий cold-start IPAM risk не закрыты. AI остаётся OFF.
+Snapshot RUNNING/successful_polls1/counters0 относится к моменту завершения
+helper до отправки TEXT. Последующее появление текста в Console подтверждено
+владельцем; новые counters не считывались. Это не proof native reconciliation,
+Resume, current scope или drain/ACK. Автономный путь без PC/Happ/SSH и общий
+cold-start IPAM risk не закрыты. AI остаётся OFF.
+
+### Actual synthetic TEXT — owner observed PASS
+
+Владелец подтвердил появление нового тестового сообщения в TEST Console
+после Client→Owner отправки. Сообщение получено через текущий PC/Happ/SSH
+и новый TEST receiver. C6 не видел приватную БД/сессию и не выполнял отправку.
+Не заявляются точное время доставки, exactly-once, outbound/paid AI результаты.
+
+Следующий шаг — существующий owner UI: при необходимости «Забрать управление»,
+в «Контекст владельца» сверить фактический synthetic запрос, сохранить «Полный
+актуальный текст владельца» с двумя осознанными подтверждениями, затем отдельно
+«Разрешить автоматику». При сохранении дождаться fresh confirmed context;
+если действие недоступно/ошибка — сохранить фактический status, не обходить
+blockers. Никакие owner assertions не подставляются помощником автоматически.
+UI labels сверены с accepted29dc frontend HumanContextPanel/ConversationControl.
+Actual owner context/Resume result пока NOT_CONFIRMED. Перед configure нужен
+штатный current scope/receipt check, а не вывод из одного нажатия.
 
 ### Предшествующая receive attempt — STOP до остановки старых writers
 
@@ -168,16 +189,15 @@ Ready/ACK_PENDING не объявляется доказательством dra
 
 ### Продолжение в прежнем допуске
 
-Не закрывать PC/Happ/SSH tunnel. Repair/receive-start/prepare helpers завершены
-и повторно не запускаются. Следующий actual шаг — из тестового Client аккаунта
-отправить одно новое выдуманное TEXT сообщение прежнему тестовому Owner.
-Проверить его появление в новой TEST Console http://127.0.0.1:18080 под m4-owner,
-при необходимости обновить список диалогов/сообщений. Не использовать фото,
-native edits, реальные данные или старую M3 историю. AI-ответ пока не ожидается.
+Оставить PC/Happ/SSH tunnel работающим. Completed repair/receive/prepare
+helpers не повторять. Synthetic inbound TEXT уже виден в новой TEST Console.
+Теперь owner reconciliation и отдельный Resume в этом же диалоге под m4-owner:
+сверка действительного тестового контекста, confirmed save, затем отдельное
+«Разрешить автоматику». Владелец возвращает конечный UI status/ошибку.
+До последующего шага новых сообщений/edits/photos не отправлять, чтобы
+подтверждённый context/receipt не менялся. Не переносить старую M3 историю.
+AI/provider session пока OFF; само разрешение автоматики её не включает.
 
-После owner-confirmed появления текста — существующая native context сверка
-владельцем и отдельный Resume; actual current scope/receipt проверяется перед
-configure. Не фабриковать owner assertion по одному нажатию кнопки.
 Затем fresh account/route/key review≤24h, тот же finite Polza smoke,
 disable/verified drain/return. До этих шагов M4/live остаётся открыт.
 Owner допуск99fb865a/C0 instruction963baf72 сохраняются, повтор не запрашивается.
@@ -185,7 +205,7 @@ Owner допуск99fb865a/C0 instruction963baf72 сохраняются, пов
 2POST/1READ/run,8historyGET/4replies; synthetic TEXT-only, один route/no fallback.
 AI OFF/EVAL_ONLY до enable; no-regeneration/no-resend/tenant/native barriers прежние.
 
-Receipt — sole childaf8ecb470a73d25c4ac262f566086180c7a93dc1,
+Receipt — sole child444a2a24530beed7730b68263899318d74c23469,
 ветка c6/m4-live-prep-r1; build/native29dc16084f0ee0d01e5f96e7226995480e189a22,
 treeb70eb0348577c812f4f587d995c724e3c0e989e4. Только три разрешённых docs.
 Product/DDL definitions/dependencies/CI/architecture/ledger не изменены;

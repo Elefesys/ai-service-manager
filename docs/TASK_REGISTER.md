@@ -2,7 +2,7 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, RECEIVE_READY_AI_OFF; ожидание synthetic TEXT / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, synthetic TEXT доставлен; owner reconciliation/Resume ожидаются / 2026-11-07
 
 **Owner-run actual repair/cutover/bind/policy/receive PASS, SSH exit0.**
 Все8 repair prechecks PASS, blockers=[]. Существующая TEST DB сохранена в
@@ -15,8 +15,10 @@ old writers fenced/stopped, TEST binding/MATERIAL/native и receive примен
 
 TEST0016/provider_sessions0, AI OFF; configure/enable/Polza smoke NOT_RUN.
 Receiver RUNNING/code=null/age0.4s/successful_polls1/ack_pending=false,
-durable_deliveries0/confirmed_responses0. Это подтверждает транспортный путь,
-но пока не end-to-end delivery/native owner reconciliation/Resume/drain.
+durable_deliveries0/confirmed_responses0. Это snapshot до отправки тестового TEXT. После него владелец подтвердил
+«появился» в новой TEST Console: owner-observed inbound end-to-end PASS.
+Новые counters/точная latency/dedup отдельно не измерены. Native owner
+reconciliation/Resume/current scope/drain ещё не подтверждены.
 C6 SSH не выполнял: evidence — полный безопасный вывод владельца.
 
 Completed [asm_m4_relay_repair.py](https://chatgpt.com/library?file_id=libfile_a5e33e0598808191b58829df4d215822&account_id=personal),
@@ -27,16 +29,19 @@ receive-start-r1 сохранены. Повтор repair/receive-start/prepare �
 Old data/volumes не удалялись; старые writers остановлены штатным fence.
 Общий template cold-start IPAM риск и зависимость от PC tunnel остаются.
 
-Next: оставить PC/Happ/SSH; одно synthetic Client→Owner TEXT, проверить его в
-новой TEST Console http://127.0.0.1:18080 → owner reconciliation + отдельный
-Resume → actual scope/receipt, fresh account/route/key review≤24h → finite smoke
-→ disable/verified drain/return. Пока только synthetic TEXT, без фото/native
-edits/реальных данных. Owner assertion нельзя выводить из одного click.
+Next: оставить PC/Happ/SSH; в том же TEST диалоге owner UI reconciliation
+→ confirmed save → отдельное «Разрешить автоматику» (Resume). Владелец сверяет
+фактический текст, а не автоматически предложенные утверждения. Конечный UI
+result ещё NOT_CONFIRMED; перед configure actual current scope/receipt guard.
+До следующего шага новых сообщений/edits/photos не отправлять.
+Затем fresh account/route/key review≤24h → finite smoke → disable/drain/return.
+AI OFF/provider_sessions0 — последнее actual backend наблюдение, provider
+configure/enable не выполнялись. Полный M4/live не закрыт.
 
 Scope/owner99fb865a/C0 instruction963baf72 сохраняются; повтор допуска не нужен.
 Limits10мин/4POST/10RUB внутри150 с prior/UNKNOWN,2POST/1READ/run,
 8historyGET/4replies, один route/no fallback; currentness/native/send guards прежние.
-Ветка c6/m4-live-prep-r1; sole childaf8ecb470a73d25c4ac262f566086180c7a93dc1; build29dc1608/treeb70eb034.
+Ветка c6/m4-live-prep-r1; sole child444a2a24530beed7730b68263899318d74c23469; build29dc1608/treeb70eb034.
 Только три docs; product/DDL definitions/dependencies/CI/architecture/ledger
 не менялись, нового PR/hosted CI нет. C6 IN_PROGRESS, остальные HOLD; M4/live открыт.
 Подробности — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
