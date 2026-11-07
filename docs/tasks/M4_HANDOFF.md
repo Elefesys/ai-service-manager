@@ -6,7 +6,82 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R4 принят C0; продолжить TEST resume / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, TEST prepare завершён; Console login подтверждён / 2026-11-07
+
+**Actual TEST preparation PASS, AI OFF.** Владелец выполнил private R4 continuation
+на ВМ и сообщил успешный вход в новую TEST Console через PC/Happ/SSH.
+C6 не имел прямого SSH-доступа: VM evidence ниже — полученные выводы команд
+владельца. Telegram receive/cutover и M4 provider smoke ещё **NOT_RUN**.
+
+### Подтверждённый результат и устранённые причины
+
+| Шаг | Фактический результат |
+|---|---|
+| Exact R4 resume | Обе системные Python identities PASS; unverified=0, read_errors_or_omitted=0; общий precheck без blockers |
+| Старый runtime | Прежний poller остановлен, не удалён; два exact завершённых setup-контейнера архивированы и удалены; рабочие контейнеры и volumes сохранены |
+| Capture/plan/check | PASS; прежний owner допуск и C0 review привязаны к одному private intent; UUID/бюджет не заменялись |
+| Resources | Причина UNKNOWN — стандартные Docker host/none networks с IPAM.Config=null. Отдельная проверка доказала отсутствие коллизий/TEST volumes/containers; только этот шаг reconciled с сохранённым before-image |
+| PostgreSQL bootstrap | Причина COMMAND_FAILED — checkout с umask077: tracked code 600/700, bootstrap недоступен PostgreSQL UID999. DB была пустой; migrator/runtime roles и schemas отсутствовали |
+| Permissions repair | Backups пустой TEST DB и roles сохранены приватно. Только tracked public code приведён к 644/755; bytes/Git SHA/tree/executable bits/private inputs не изменены. Три TEST images пересобраны; non-root read probes PASS |
+| Database reconciliation | Exact accepted bootstrap выполнен в существующей пустой TEST DB; roles/schemas/extensions проверены. Контейнеры и volumes сохранены; UNKNOWN reconciled после проверки, не сброшен ради повтора |
+| Accepted prepare | Все девять prepare steps DONE; migrations/owner/API/Console выполнены. API, Console и Console→API HTTP PASS; результат PREPARE_COMPLETE_AI_OFF, SSH exit0 |
+| PC/Console | Exact accepted pc_session.ps1 использован для tunnel и loopback18080; владелец подтвердил вход. Это доказательство Console path, не authenticated Telegram path |
+
+Original R2/R3/R4 packages, historical review flags, source bytes, private
+inputs и прежние данные сохранены. Старые рабочие службы на этом checkpoint
+ещё не остановлены. TEST: asm_test/schema0016, AI default OFF, accepted complete
+проверяет provider_sessions=0. Не выполнены configure/enable/Polza calls/replies.
+
+### Отдельные private helpers и границы проверки
+
+- [Resource reconciliation](https://chatgpt.com/library?file_id=libfile_a64920b1ca0081918e795f3fc0c00d38&account_id=personal):
+  SHA256 75a5ac241213c0e147c33246782313c37b1c9664c98bbe82487522fef3609483;
+  targeted local12 controls PASS. Завершённый helper повторять нельзя.
+- [Permissions repair](https://chatgpt.com/library?file_id=libfile_f6d1119721c08191956bde6cfbaeba99&account_id=personal):
+  22310 bytes, SHA256 779d16d0ee259b9e48ec652e6bb3ebe57a786508b121459d382fd0510e217a37;
+  local8 controls PASS, Python3.12.14; real local checkout/files, Docker/PG fixtures.
+  Затем actual VM repair/prepare PASS по выводу владельца. Повторять нельзя.
+- [Receive continuation](https://chatgpt.com/library?file_id=libfile_e18189ba9b0c8191b0ba996dece2bcd5&account_id=personal):
+  asm_m4_receive_start.py, 11786 bytes,
+  SHA256 fe49421f881b022bd5bec61356de08f3048b6eb64c14382d3b07d6811b84fa0c.
+  Только accepted R4 cutover→bind→policy→receive, без configure/enable/restore.
+  Exact fresh prepare/repair receipt, тот же intent, current approval/product
+  window, private socket, unchanged package/inputs, inventory/host writers/
+  volumes, old queues и zero provider sessions проверяются. Accepted remote
+  pending=0, watermark/45s fence, ACK/UNKNOWN, binding/native/drain guards прежние.
+  Private command logs сохранены при STOP; UNKNOWN не повторяется автоматически.
+  Local9 controls PASS/0 skips, Python3.12.14, AST PASS; real files/journal,
+  runtime fixtures. AF_UNIX creation в исполнителе запрещена EPERM, поэтому
+  socket identity тестируется stat fixtures плюс отказ на реальном regular file.
+  Это не VM/Telegram/PG evidence. Actual continuation **NOT_RUN**.
+
+Private receive receipt: receipts/receive-start-r1; journal before-image и
+progress сохраняются до эффектов. Readiness наблюдает только status существующего
+нового receiver; дополнительных getUpdates/offset/подтверждений не делает.
+Ready/ACK_PENDING не объявляется доказательством drain или end-to-end доставки.
+
+### Продолжение в прежнем допуске
+
+Не закрывать PC/Happ/SSH tunnel. Запустить pinned receive continuation один раз
+из второго PowerShell. Он временно останавливает прежние ingress/frontend/API/
+scheduler/worker через accepted cutover, сохраняя контейнеры/данные. При STOP
+вернуть безопасный вывод и сохранить checkpoint, без replay/restore/delete.
+
+После actual RECEIVE_READY_AI_OFF — один synthetic Client→Owner TEXT, увидеть
+его в TEST Console; owner reconciliation и отдельный Resume. Затем fresh account/
+route/key review≤24h, тот же finite Polza smoke, disable/verified drain/return.
+Owner допуск99fb865a/C0 instruction963baf72 сохраняются, повтор не запрашивается.
+Один сеанс≤10мин/4POST/10RUB внутри150 с prior spend/UNKNOWN holds,
+2POST/1READ/run,8historyGET/4replies; synthetic TEXT-only, один route/no fallback.
+AI OFF/EVAL_ONLY до enable; no-regeneration/no-resend/tenant/native barriers прежние.
+
+Receipt — sole child963baf72387497ef016bcd5f8e9cec4e145a8be7,
+ветка c6/m4-live-prep-r1; build/native29dc16084f0ee0d01e5f96e7226995480e189a22,
+treeb70eb0348577c812f4f587d995c724e3c0e989e4. Только три разрешённых docs.
+Product/DDL definitions/dependencies/CI/architecture/ledger не изменены;
+нового PR/hosted CI нет. C6 IN_PROGRESS, остальные HOLD; M4/live открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R4 принят C0; продолжить TEST resume / 2026-11-07
 
 **PACKAGE_REVIEW_ACCEPTED — exact R4. Owner допуск 99fb865a сохраняется.**
 C0 проверил receipt `a0763b65e3898647b5517abc81db78f60f9ca9d4`: sole parent

@@ -1,5 +1,49 @@
 # M4 Polza runtime: plan / enable / disable
 
+## CURRENT — TEST подготовлен, PC Console login подтверждён; receive ещё не запускался / 2026-11-07
+
+Owner-run R4 capture/plan/check и весь prepare завершены. На checkpoint
+`PREPARE_COMPLETE_AI_OFF` новая TEST/asm_test/schema0016 Console доступна
+через exact PC/Happ/SSH tunnel по `http://127.0.0.1:18080`; владелец вошёл.
+Прежний публичный URL относится к старой среде. Доставка Telegram в TEST этим
+входом не доказана. AI/provider sessions ещё выключены.
+
+Устранены две конкретные deployment-причины: null IPAM.Config у стандартных
+host/none networks и checkout umask077 (public tracked code600/700). Resource/
+database UNKNOWN reconciled с before-images и полной проверкой, не сброшены.
+После private backup пустой TEST DB нормализованы только code modes644/755,
+пересобраны три TEST images, exact accepted bootstrap выполнен в существующей
+DB. Bytes/SHA/tree/executable bits/private inputs/старые volumes сохранены.
+Все9 prepare steps DONE; HTTP API/Console/Console→API PASS, SSH exit0.
+Завершённые repair/prepare helpers повторять нельзя.
+
+Следующее исполнение — [asm_m4_receive_start.py](https://chatgpt.com/library?file_id=libfile_e18189ba9b0c8191b0ba996dece2bcd5&account_id=personal),
+11786 bytes / SHA256 fe49421f881b022bd5bec61356de08f3048b6eb64c14382d3b07d6811b84fa0c.
+В отдельном SSH-запуске один раз `python3 -B ~/asm_m4_receive_start.py --start`,
+пока foreground PC tunnel открыт. Helper сверяет exact R4, prepared/repair
+checkpoint, тот же intent, current product/approval window, private Unix socket,
+old inventory/host writers/volumes/queue и TEST provider_sessions0; выполняет
+только accepted cutover/bind/policy/receive. Прежние ingress/frontend/API/
+scheduler/worker останавливаются без удаления. Queue/pending/watermark/45s/
+UNKNOWN/ACK/binding/native/drain fences не обходятся. Не отправлять новые
+тестовые сообщения во время cutover.
+
+Private `receipts/receive-start-r1` сохраняет before-image/progress/command logs;
+при STOP — не повторять весь запуск и не делать автоматический restore.
+Успешный status receiver означает транспортную готовность, не drain/ACK fence
+и не доказательство обработки конкретного сообщения. Helper actual NOT_RUN.
+Local9 targeted controls PASS/0skips, runtime/socket stat fixtures; не live test.
+
+После actual RECEIVE_READY_AI_OFF отправить один выдуманный Client→Owner TEXT,
+проверить TEST Console, затем owner reconciliation и отдельный Resume.
+Далее fresh≤24h account/route/key review и уже разрешённый finite smoke:
+≤10мин/4POST/10RUB внутри150 с prior/UNKNOWN,2POST/1READ/run,
+8historyGET/4replies, один route/no fallback; затем disable/drain/return.
+Ни paid enable, ни отправки ИИ ещё не выполнены. Scope/owner допуск прежние,
+архитектура и product code не менялись. Подробный receipt — CURRENT HANDOFF.
+
+## История — приёмка R4 до исполнения на ВМ
+
 > **07.11.2026: exact R4 принят C0; C6 IN_PROGRESS.**
 > [R4 ZIP](https://chatgpt.com/library?file_id=libfile_69ec61a7b1488191a3596cb8f444d78a&account_id=personal)
 > и [C0 evidence](https://chatgpt.com/library?file_id=libfile_b271fdd4718c81918bff22915f73d7dd&account_id=personal):
