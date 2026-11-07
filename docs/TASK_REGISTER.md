@@ -2,7 +2,37 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner допуск получен; TEST cutover + smoke / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, host-process guard R3 candidate / 2026-11-07
+
+Owner допуск99fb865a остаётся; выполнение остановлено до нового intent/TEST/
+cutover/provider effects. R2 принят и сохранён. На ВМ последовательные guards
+выявили два завершённых setup containers, отдельный old polling receiver,
+затем непроверенный host process. Последний STOP:
+`VERIFY_OLD_RECEIVER_ZERO_ACTIVITY / UNVERIFIED_HOST_WRITER_OR_RECEIVER`.
+Poller stop/archive/remove/capture этим запуском не достигнуты.
+PID739/root/PPID1/unattended-upgr — вероятный системный waiter; exact VM
+identity ещё не доказана. Не отключать службу Ubuntu ради guard PASS.
+
+C6 подготовил [R3 REVIEW](https://chatgpt.com/library?file_id=libfile_dc8c25e380588191809a41da1f394f2e&account_id=personal):
+76170bytes/24entries/23manifest files, ZIP SHA256
+b7be391f8595a9c697bc84cbb4e9174e2a36033498a48e197db09a49be7f3678.
+Единственная runtime дельта host_scan: узкая exception по exact argv, root UID,
+PPID1, systemd cgroup, namespaces, interpreter/script/parent trust и stable PID.
+Посторонний Python остаётся blocker. R2/cleanup/evidence/source29dc1608/treeb70e
+не переписаны. 10 targeted controls PASS/39negative subcases/0skips,
+syntax15files/manifest/CRC PASS; fake /proc, actual VM/R3/PG/live NOT_RUN.
+Прежние40controls не повторялись. Новый manifest ещё не C0 reviewed.
+
+Следующее: C0 review дельты и hashes; затем exact read-only process identity,
+checkpoint/window recheck и отдельно pinned продолжение. Не менять accepted
+R2/approval задним числом и не повторять старый helper вслепую. Повторный owner
+допуск на тот же scope не нужен. Лимиты/UNKNOWN/UUID/consumer fence неизменны.
+Полный receipt и next step — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Этот docs receipt — child99fb865a; только три разрешённых docs. Product/DDL/CI/
+архитектура/dependencies/ledger без изменений; new PR/hosted CI не нужны.
+C6 REVIEW, остальные HOLD. Actual live остаётся открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner допуск получен; TEST cutover + smoke / 2026-11-07
 
 **PACKAGE_REVIEW_ACCEPTED; C0-M4-LIVE-OP-01 CLOSED.**
 Приёмка уже выполнена в C0/M3; новый C0 сверил сохранённое evidence с receipt

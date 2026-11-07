@@ -1,23 +1,22 @@
 # M4 Polza runtime: plan / enable / disable
 
-> **07.11.2026: OWNER_CUTOVER_AND_SMOKE_APPROVED; C6 IN_PROGRESS.**
-> Владелец ответил «разрешаю» на один конкретный TEST cutover + конечный smoke.
-> [R2](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal)
-> принят C0; C0-M4-LIVE-OP-01 CLOSED. Сохранённый C0 review:17/17 новых controls
-> PASS/22subcases; прежние23controls — evidence C6. Это не actual live evidence.
-> Разрешены prepare TEST с AI OFF → consumer fence/cutover → synthetic TEXT/
-> owner reconciliation+Resume → fresh account/route/key review → одна сессия
-> 10мин/4modelPOST/10RUB внутри прежнего150 → disable/drain/проверенный return.
-> Лимиты:2POST/1READ за run,8historyGET/4replies за сессию. Исторический расход
-> и UNKNOWN holds сохраняются. Повторное разрешение на эти stages не требуется.
-> Привязать допуск к проверенным private intent/manifest по approval.json R2;
-> старые pending-approval фразы в ZIP/истории не блокируют этот один сеанс.
-> Общий cleanup/независимые disable/verified-ID stops обязательны; UNKNOWN не
-> разрешает повторный enable/новый UUID/автоматический old-consumer restore.
-> SIGKILL/host loss не гарантируют finally; disable/stop не отзывают уже
-> допущенный HTTP. Actual Docker/PG/VM/Windows/Happ/live пока NOT_RUN.
-> Точные stages, write-set и возврат evidence — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
-> Accepted build:29dc16084f0ee0d01e5f96e7226995480e189a22; режим EVAL_ONLY.
+> **07.11.2026: C6 REVIEW — host-process guard, до TEST/cutover.**
+> Owner единый допуск99fb865a на согласованный TEST+smoke сохраняется.
+> Accepted R2 неизменен, но resume остановлен до poller stop/archive/remove/
+> capture: `UNVERIFIED_HOST_WRITER_OR_RECEIVER`. На ps виден возможный Ubuntu
+> shutdown waiter; exact argv/unit/file identity ещё не доказана.
+> [R3 review candidate](https://chatgpt.com/library?file_id=libfile_dc8c25e380588191809a41da1f394f2e&account_id=personal)
+> меняет только host_scan: разрешить ровно проверенный системный waiter;
+> неизвестные Python/uvicorn/gunicorn по-прежнему блокируются.
+> 10 controls PASS/39negative subcases, synthetic /proc; actual VM/R3 NOT_RUN.
+> R2 не переписывать, службу Ubuntu не останавливать, guard не обходить.
+> Новый manifest сначала проверяет C0; не выставлять для него c0_reviewed
+> на основании прежнего review R2. Затем C6 ведёт exact process/checkpoint/
+> product-window recheck и отдельно pinned продолжение без нового owner допуска.
+> Ни TEST/0016, ни новый UUID/session/provider расход пока не созданы.
+> Source29dc1608/treeb70eb034; AI OFF/EVAL_ONLY,10мин/4POST/10RUB внутри150,
+> 2POST/1READ/run,8historyGET/4replies. UNKNOWN/old/new fence сохраняются.
+> Receipt/hashes/границы — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
 
 Этот путь остаётся **EVAL_ONLY**, default OFF. Реализация и CI сами по себе
 не разрешают живой запуск; конкретный owner допуск записан выше.

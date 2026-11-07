@@ -6,7 +6,97 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner допуск получен; TEST cutover + smoke / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, host-process guard R3 candidate / 2026-11-07
+
+**Исполнение остановлено до TEST/cutover; узкая правка возвращена C0.**
+Owner допуск по instruction `99fb865a37953a719c4b9322240a483abbc9c1be`
+сохраняется. Этот receipt — его прямой child; build source остаётся
+`29dc16084f0ee0d01e5f96e7226995480e189a22`, tree
+`b70eb0348577c812f4f587d995c724e3c0e989e4`. Новый manifest ещё не принят C0;
+`c0_reviewed: true` к нему не привязывался. Принятый R2/evidence неизменны.
+
+### Фактический ход на ВМ (owner-pasted outputs)
+
+- Start helper подтвердил accepted R2/source, нашёл один прежний client chat;
+  владелец подтвердил TEST/text-only и ввёл новый Console login/password приватно.
+  История/фото старого диалога не копировались. Capture остановился
+  `OLD_INVENTORY_NOT_EXACT`: кроме восьми работающих служб найдены два
+  завершённых setup containers `migrate`/`storage-init`, оба Exited(0).
+- Resume v1 остановился `UNVERIFIED_SECOND_CONSUMER_OR_WRITER`: обнаружен
+  отдельно работающий прежний polling receiver. Его представленный status:
+  RETRYING/PROVIDER_TIMEOUT, ack_pending=false, successful_polls=0,
+  confirmed_responses=0, durable_deliveries=0. Это снимок, не drain attestation.
+- Resume v2 остановился на `VERIFY_OLD_RECEIVER_ZERO_ACTIVITY` с
+  `UNVERIFIED_HOST_WRITER_OR_RECEIVER`. По порядку helper это **до** fresh
+  receiver status, stop receipt, stop, setup archive/remove и повторного capture.
+  Проверки existing state/private source/inventory прошли; UUID ещё не создан.
+- Узкий `ps` показал PID739/PPID1/root/`unattended-upgr` и четыре Python/uvicorn
+  с container-like parents. Это указывает на возможный ложный отказ для
+  системной службы, но **не доказывает** её полный argv, unit, executable,
+  namespaces и права файлов. Direct SSH доступа у C6 нет; это вывод владельца.
+
+Private inputs/source/initial capture stdout сохранены. Этими STOP не были
+выполнены poller stop, архивирование/удаление setup containers, новый intent,
+сборка, TEST/0016, cutover, enable, provider calls или reply. Старый poller и
+восемь служб оставлены как наблюдались; нового state снимка после STOP не было.
+Остановка/отключение службы Ubuntu ради прохождения guard не предлагается.
+
+### Конкретная правка для review C0
+
+[R3 review package](https://chatgpt.com/library?file_id=libfile_dc8c25e380588191809a41da1f394f2e&account_id=personal):
+`M4_TEST_OPERATOR_R3_REVIEW.zip`, **76170 bytes, 24 entries, 23 manifest files**.
+ZIP SHA256 `b7be391f8595a9c697bc84cbb4e9174e2a36033498a48e197db09a49be7f3678`;
+canonical manifest SHA256 `30955f6ac41d2b82e8629270e0699a89497de9879d51a726365f6a82ed2f2116`;
+host_scan SHA256 `e665b3e78694b61d50edd57c319ba8541cf4904802075f43511ad6c16d3aa0d8`.
+
+R2 scanner считает любой Python/uvicorn/gunicorn вне известных container PID
+namespaces и своей ancestry непроверенным writer. Официальный shutdown waiter
+Ubuntu также Python. Предлагается **одна** проверяемая системная exception:
+точные три argv `/usr/bin/python3`,
+`/usr/share/unattended-upgrades/unattended-upgrade-shutdown`,
+`--wait-for-signal`; четыре UID=0, PPID1, host PID/mount namespaces, точный
+cgroup v2 `/system.slice/unattended-upgrades.service`, настоящий interpreter,
+root-owned regular файлы без group/world write через защищённые non-symlink
+parents. Script symlink запрещён; root-owned python3 symlink допускается лишь
+к защищённому interpreter. Starttime/argv повторно сверяются. Имя/PID сами по
+себе не разрешают процесс; mismatch/неполные сведения сохраняют блокировку.
+Stdout контракт прежний `{"unverified": N}`, сырые args/env не публикуются.
+Основание ожидаемой команды — [upstream service](https://github.com/mvo5/unattended-upgrades/blob/main/debian/unattended-upgrades.service).
+Это bounded observation, не гарантия против compromised root/future writers.
+
+Единственная runtime правка — `host_scan.py`. `m4_operator.py`, source/Compose/
+DB/MATERIAL/receiver/relay/cleanup/limits не изменены; 15 из 17 файлов R2
+byte-identical (изменены README/host_scan). Исходные R2 validation/provenance
+сохранены как историческое evidence; новые tests/review metadata добавлены
+отдельно. R2 ZIP SHA256 остаётся
+`121fe08290f43bd532afa5b9eea3e9034b5a7c3201d8c2fdc496e13ed70b8ba3`.
+В review включены original R2 scanner и текущий resume v2 reference для
+воспроизведения; helper пока намеренно pinned на R2 и **не запуск R3**.
+
+**Targeted validation:** Python3.12.14, `python3 -B validate_host_scan.py`:
+10 controls PASS, 39 negative subcases, 0 skips; 15 Python files AST PASS;
+canonical manifest/file hashes/ZIP CRC PASS. Реальный scanner и существующая
+operator boundary, synthetic /proc и fake subprocess-read boundary.
+R2 false-positive воспроизведён, verified waiter проходит; arbitrary Python,
+spoofed argv/unit/UID/executable/namespaces, writable paths и PID/argv drift
+блокируются. Accepted container/own ancestry/disappearing process сохраняют
+поведение. Прежние40 controls не повторялись и не объявляются новым прогоном.
+Actual VM identity/R3/Docker/PG/live NOT_RUN; hosted CI/new PR не запускались.
+
+### Следующее действие
+
+C0 проверяет узкую runtime дельту/новый manifest. После приёмки C6 подтверждает
+identity процесса read-only на ВМ, заново проверяет checkpoints/product window
+и готовит продолжение с новым accepted manifest. R2 in-place не подменять,
+не обходить guard и не повторять старый resume вслепую. Owner разрешение на
+один TEST-сеанс остаётся; нового разрешения на те же steps не запрашивать.
+Новый UUID/расход не создавались. Лимиты10мин/4POST/10RUB внутри150,
+2POST/1READ/run,8historyGET/4replies, AI OFF/EVAL_ONLY, UNKNOWN и old/new consumer
+fence сохраняются. C6 REVIEW, остальные HOLD; actual live не принят.
+Repository delta — только HANDOFF/TASK_REGISTER/M4_RUNTIME_PILOT; приложение,
+архитектура/DDL/dependencies/CI/старые helpers/volumes/ledger не изменены.
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner допуск получен; TEST cutover + smoke / 2026-11-07
 
 **OWNER_CUTOVER_AND_SMOKE_APPROVED. PACKAGE_REVIEW_ACCEPTED. C0-M4-LIVE-OP-01 CLOSED.**
 07.11.2026 владелец ответил «разрешаю» на конкретный запрос C0: подготовить
