@@ -1,23 +1,23 @@
 # M4 Polza runtime: plan / enable / disable
 
-> **07.11.2026: R3 host-process guard принят C0; C6 IN_PROGRESS.**
-> Owner единый допуск99fb865a сохраняется; повторное разрешение не требуется.
-> [Exact R3](https://chatgpt.com/library?file_id=libfile_dc8c25e380588191809a41da1f394f2e&account_id=personal)
-> и [C0 evidence](https://chatgpt.com/library?file_id=libfile_5df24a89e9c081918ff5b1760b8c92d0&account_id=personal) подтверждают
->10controls PASS/39negative subcases/0skips,15Python files AST/CRC/hashes PASS.
-> Accepted manifest30955f6ac41d2b82e8629270e0699a89497de9879d51a726365f6a82ed2f2116.
-> Единственная runtime дельта host_scan;15из17R2files byte-identical.
-> Actual VM identity/R3/PG/live ещё не доказаны. C6 начинает с read-only
-> проверки процесса/checkpoints/product window и отдельно pinned продолжения.
-> R2/его approval/архив не переписывать; reference resume не запускать как R3.
-> Exact bytes R3 приняты внешним C0 instruction; historical flags ZIP неизменны.
-> Unknown process/partial effect/ACK сохраняет STOP; служба Ubuntu не отключается.
-> Status snapshot/exit0 старого receiver не являются drain attestation.
-> После exact plan/check привязать C0 review+owner допуск к private intent;
-> выполнить прежний TEST/AI OFF → cutover → finite smoke → disable/drain/return.
-> Source29dc1608/treeb70eb034;10мин/4POST/10RUB внутри150,2POST/1READ/run,
->8historyGET/4replies,synthetic TEXT-only,AI OFF/EVAL_ONLY,UNKNOWN/fence прежние.
-> Конкретные проверки/write-set/evidence — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
+> **07.11.2026: C6 REVIEW — R4 networkd host guard; live не продолжен.**
+> Pinned R3 resume остановился до эффектов. Read-only checkpoint PRISTINE;
+> PID739 полностью прошёл R3 waiter identity, оставшийся PID646 относится к
+> networkd-dispatcher.service. Его exact argv/flag/script trust ещё NOT_PROVEN:
+> script-trust поля старого diagnostic проверяли unattended script.
+> [R4 candidate](https://chatgpt.com/library?file_id=libfile_69ec61a7b1488191a3596cb8f444d78a&account_id=personal)
+> добавляет одну static identity с прежними UID/unit/namespace/file/PID guards.
+> 17targeted controls PASS/76negative subcases/0skips; fake /proc,
+> actual R4 VM/PG/live NOT_RUN.21из23R3files unchanged; runtime delta host_scan.
+> Owner допуск99fb865a сохраняется, но новый manifest требует review C0.
+> Принятый R3/R2 не переписывать, службу Ubuntu не выключать ради PASS.
+> После review — fresh read-only identities/checkpoints/window и отдельно
+> pinned continuation; старые helpers не запускать вслепую. Не переносить
+> review flags задним числом и не создавать заменяющий UUID/бюджет.
+> Нулевой poller status/exit0 не являются ACK/drain proof; все fences действуют.
+> Прежний TEST/AI OFF/cutover/synthetic smoke/disable/return scope/limits прежние.
+> Source29dc1608/treeb70eb034; полные hashes/evidence/next step —
+> [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
 
 Этот путь остаётся **EVAL_ONLY**, default OFF. Реализация и CI сами по себе
 не разрешают живой запуск; конкретный owner допуск записан выше.

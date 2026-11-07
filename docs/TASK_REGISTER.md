@@ -2,7 +2,39 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R3 принят C0; продолжить exact resume / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, networkd host guard R4 candidate / 2026-11-07
+
+R3 resume stopped до эффектов:
+`READ_ONLY_R3_PROCESS_AND_CHECKPOINT / ACTUAL_HOST_PROCESS_IDENTITY_UNPROVEN`.
+User-run read-only diagnostic: PRISTINE, unverified1, verified waiter1,
+read_errors_or_omitted0. PID739 fully passes R3; оставшийся PID646 root/PPID1
+принадлежит networkd-dispatcher.service. Его exact argv/flag/script trust
+NOT_PROVEN: старые script-trust booleans относятся к unattended script.
+R3 placement/poller stop/setup archive/remove/capture NOT_REACHED.
+Нового UUID/TEST/0016/cutover/provider effects нет в этой попытке.
+
+[R4 REVIEW ZIP](https://chatgpt.com/library?file_id=libfile_69ec61a7b1488191a3596cb8f444d78a&account_id=personal),84621bytes/28entries/27files.
+SHA256 10d02d0ea4b5f652aa7f303e358961e6646df874175d2a10b57742fc4803ebe4;
+manifest422d7d66eb0954f7d3ea34cde497229839622c75148015e719fb017d137a8d38.
+21из23R3files unchanged; README+host_scan changed. Добавлена одна static
+networkd identity со всеми R3 trust/namespace/argv/PID guards, без исключения
+по root/PID/unit name. R2/R3 immutable; product/operator/DB/cleanup/fences прежние.
+17targeted controls PASS/76negative subcases/0skips,17Python AST/CRC/hashes PASS
+на Python3.12.14, fake /proc; прежние40R2controls NOT_RERUN. Actual R4 VM/PG/live
+NOT_RUN. Полный receipt/точные helper hashes — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Next: C0 review R4, затем exact fresh read-only identities/checkpoints/window и
+отдельно pinned continuation. Owner допуск99fb865a сохраняется; нового запроса
+нет. R3 acceptance не переносится автоматически на новый manifest. Не отключать
+Ubuntu service, не обходить UNKNOWN/ACK/drain guards, не повторять старый helper.
+Прежний TEST/AI OFF/cutover/synthetic smoke/disable/return scope и limits неизменны.
+Ветка c6/m4-live-prep-r1, receipt sole child9eafae98356fa7f04e0b44566a5fbd154396bf3c;
+build29dc1608/treeb70eb034, только три docs. Product/DDL/CI/dependencies/
+архитектура/ledger без изменений; новый PR/hosted CI не нужны.
+C6 REVIEW, остальные HOLD; C0-M4-LIVE-OP-01 CLOSED, actual M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R3 принят C0; продолжить exact resume / 2026-11-07
 
 **PACKAGE_REVIEW_ACCEPTED — host_scan R3.** C0 подтвердил sole-parent99fb865a/
 three-docs delta receipt ea1572eba и exact R3 ZIP/CRC/23file hashes/manifest.

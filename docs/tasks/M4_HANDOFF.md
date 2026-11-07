@@ -6,7 +6,102 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R3 принят C0; продолжить exact resume / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, networkd host guard R4 candidate / 2026-11-07
+
+**Точный STOP до эффектов; R3 сохранён, R4 передан на review C0.**
+Этот docs receipt — sole child instruction
+`9eafae98356fa7f04e0b44566a5fbd154396bf3c`, только прежние три docs.
+Ветка `c6/m4-live-prep-r1`; accepted app/build/native source
+`29dc16084f0ee0d01e5f96e7226995480e189a22`, tree
+`b70eb0348577c812f4f587d995c724e3c0e989e4` неизменны.
+Owner допуск99fb865a сохраняется. Новый manifest R4 ещё не принят C0;
+его нельзя объявлять reviewed по приёмке R3 или менять accepted R3 in place.
+
+### Фактический результат на ВМ — вывод владельца
+
+Pinned resume R3 остановился на
+`READ_ONLY_R3_PROCESS_AND_CHECKPOINT / ACTUAL_HOST_PROCESS_IDENTITY_UNPROVEN`.
+Размещение R3, old-poller stop, setup archive/remove, capture не достигнуты.
+Read-only diagnostic: checkpoint `PRISTINE`, `aggregate_unverified=1`,
+`verified_system_waiters=1`, `read_errors_or_omitted=0`, mutations NONE.
+PID739 полностью прошёл accepted R3 identity для unattended shutdown waiter.
+Оставшийся PID646: root/PPID1/argc3/SYSTEM_PYTHON, host PID+mount namespaces,
+expected executable и trusted Python; проверка как waiter не прошла.
+Последующий `ps`+`/proc/646/cgroup` показал `networkd-dispat` и
+`0::/system.slice/networkd-dispatcher.service`.
+
+**Exact networkd argv/script/flag/file trust ещё NOT_PROVEN.**
+Прежние `script_*trusted` поля diagnostic проверяли фиксированный unattended
+script, а не файл неизвестного PID646. PID/comm/unit сами по себе недостаточны.
+Эти данные получены от владельца; C6 не выполнял прямой SSH. Свежий recheck
+нужен перед следующими эффектами; прошлый snapshot не доказывает текущее состояние.
+Не выключать системную службу ради обхода проверки. Новый UUID/TEST/0016/
+cutover/Polza/Telegram send этим resume не создавались; live success не заявлен.
+
+Использованные отдельные helpers, не часть принятого архива R3:
+[resume R3](https://chatgpt.com/library?file_id=libfile_a5e83c61f1ec81918cecb3a34d0d3b51&account_id=personal),
+126866bytes, SHA256
+`e85e7ad690321f08d33bc4c54693d059cd920915eab10371d773ca2b81f44fcb`;
+[read-only diagnostic](https://chatgpt.com/library?file_id=libfile_69d8c459b2f48191b8f7339b40514325&account_id=personal),
+6732bytes, SHA256
+`84f9149562aebc941cc6972346828537427e5310a6b023a60d1c8bd06319d9bb`.
+Оба остановились/завершились в read-only части; это не продолжение для R4.
+
+### Конкретная дельта для review
+
+[R4 REVIEW ZIP](https://chatgpt.com/library?file_id=libfile_69ec61a7b1488191a3596cb8f444d78a&account_id=personal): **84621bytes/28entries/27manifest files**.
+ZIP SHA256 `10d02d0ea4b5f652aa7f303e358961e6646df874175d2a10b57742fc4803ebe4`;
+canonical manifest
+`422d7d66eb0954f7d3ea34cde497229839622c75148015e719fb017d137a8d38`;
+host_scan `47849cae48f589a1e9ff0c17a7d41fa725874f7386b02072e2b691f12d48a4b9`.
+
+21из23R3files byte-identical; изменены README и единственный runtime file
+`host_scan.py`. Добавлены R3 scanner reference, networkd fixtures, review и
+validation JSON. R2/R3 ZIP, исторические flags/evidence, source/private inputs
+не переписаны. Общая exact identity проверка R3 вынесена в private helper;
+`system_shutdown_waiter` сохраняет прежний контракт. Добавлена только одна
+статическая identity:
+`/usr/bin/python3 /usr/bin/networkd-dispatcher --run-startup-triggers`
+с точным cgroup, четырьмя UID0, PPID1, host namespaces, expected executable,
+protected root-owned files/parents и повторной starttime/argv сверкой.
+Никакого общего исключения для root/systemd/имени/PID. Unknown Python остаётся
+blocker; stdout прежний `{"unverified": N}`; operator/Compose/DB/cleanup/
+consumer fences не менялись. Это bounded observation, не защита от compromised
+root или старта нового writer после проверки.
+
+[Primary service](https://sources.debian.org/src/networkd-dispatcher/2.2.3-1/networkd-dispatcher.service/)
+и [default args](https://sources.debian.org/src/networkd-dispatcher/2.2.3-1/networkd-dispatcher.conf/)
+поддерживают ожидаемую identity; они не заменяют проверку установленного файла ВМ.
+
+### Проверки и следующий шаг
+
+`python3 -B -m unittest -v validate_host_scan validate_networkd_guard`:
+Python3.12.14, **17controls PASS/76negative subcases/0skips**.
+Повторены10R3controls/39subcases из-за общего helper; добавлены7controls/37subcases.
+R3 reference воспроизводит remaining unverified1 при двух system services;
+R4 принимает обе и блокирует неверные argv/unit/UID/parent/namespaces/executable/
+file trust/PID drift/дополнительный writer. Проверена граница
+`m4_operator.host_processes` с fixture scan.17Python files AST/manifest/CRC PASS.
+Прежние40R2controls NOT_RERUN; historical evidence не выдан за новый прогон.
+Actual R4 VM identity/deploy/Docker/PG/build/live/provider NOT_RUN.
+
+C0: review узкой дельты и exact hashes, затем принять или вернуть R4.
+После принятия — fresh read-only identity **обеих** служб/прочих writers,
+checkpoint/window/old containers+receiver и отдельно pinned R4 continuation,
+сохраняя accepted R2/R3/inputs/source/receipts. Не повторять старый helper
+вслепую, не менять flags принятого архива, не создавать заменяющий UUID.
+Нулевой poller snapshot/exit0 не доказывает ACK/drain; queue/watermark/provider/
+UNKNOWN fences и exact completed-setup backups/removal остаются обязательны.
+Дальше прежний TEST/AI OFF → PC/Happ/SSH → cutover → synthetic TEXT/owner
+reconciliation+отдельный Resume → fresh account/route/key≤24h → finite smoke →
+disable/verified drain/return.10мин/4POST/10RUB внутри150 с prior spend/holds,
+2POST/1READ/run,8historyGET/4replies; один route/no fallback. Повторный owner
+допуск на этот scope не требуется. Product/DDL/dependencies/CI/архитектура/
+ledger не изменены, новый PR/hosted CI не запускались. C6 REVIEW, остальные HOLD.
+C0-M4-LIVE-OP-01 CLOSED; actual M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R3 принят C0; продолжить exact resume / 2026-11-07
 
 **PACKAGE_REVIEW_ACCEPTED — R3 host-process guard. OWNER ДОПУСК СОХРАНЯЕТСЯ.**
 C0 проверил receipt `ea1572eba1fc6acfb3ac468b74bbb739ac6f2fcc`, sole parent
