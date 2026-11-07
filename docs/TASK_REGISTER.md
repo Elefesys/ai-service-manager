@@ -2,7 +2,33 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, enable cleanup R2 / 2026-11-06
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, пакет R2 принят C0; owner допуск ожидается / 2026-11-07
+
+**PACKAGE_REVIEW_ACCEPTED; C0-M4-LIVE-OP-01 CLOSED.**
+Приёмка уже выполнена в C0/M3; новый C0 сверил сохранённое evidence с receipt
+fd37004c и точными bytes R2, затем перенёс результат в единый реестр.
+[C0 acceptance](https://chatgpt.com/library?file_id=libfile_53702f51eba88191bc8914097bb5fceb&account_id=personal):
+64193bytes, SHA256 ecc6398ebdd14da502260318ddfb109e9e8d251e29bf1cfec345561137c65c86.
+Сохранённый независимый прогон17/17 PASS/22subcases и syntax12files принят;
+он не выдаётся за повторный прогон в новом чате. Исходные23controls остаются
+evidence C6. Архивы/manifest digests и совпадение принятого R2 проверены.
+
+Accepted application29dc16084f0ee0d01e5f96e7226995480e189a22,
+treeb70eb0348577c812f4f587d995c724e3c0e989e4; actual main/CI42168468085
+push attempt1/12jobs SUCCESS подтверждены без нового CI. Docs source отличается
+от build source; product/DDL/CI/dependencies/архитектура/ledger неизменны.
+
+**Живой допуск ещё не получен.** Следующий результат после одного owner допуска:
+отдельный persistent TEST/asm_test/0016 с AI OFF → точный consumer cutover →
+synthetic TEXT/owner reconciliation+Resume → fresh route/key review →
+10мин/4POST/10RUB внутри150,2POST/1READ заrun,8historyGET/4replies →
+disable/verified drain/return с сохранением обеих сред.
+Полный scope/ограничения — [CURRENT HANDOFF](tasks/M4_HANDOFF.md), commands —
+[принятый R2](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal).
+C6 ждёт owner допуска в той же ветке; остальные HOLD. Сейчас mutating команды
+не выполнять. Actual PG/VM/Windows/Happ/live NOT_RUN; M4/live открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, enable cleanup R2 / 2026-11-06
 
 C6 исправил C0-M4-LIVE-OP-01 по instruction e17e5ebc: private
 M4_TEST_OPERATOR_R2 возвращён на review C0; live/cutover HOLD.

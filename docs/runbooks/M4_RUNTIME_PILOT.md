@@ -1,14 +1,17 @@
 # M4 Polza runtime: plan / enable / disable
 
-> **R2 исправление C0-M4-LIVE-OP-01 передано на review C0; live HOLD.**
+> **R2 принят C0; C0-M4-LIVE-OP-01 CLOSED. Owner live допуск ещё ожидается.**
 > [M4_TEST_OPERATOR_R2.zip](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal)
-> охватывает session/worker/watch общим cleanup, независимо пытается закрыть
-> ту же сессию и остановить проверенные TEST worker/receiver; primary и cleanup
-> outcomes разделены, stop подтверждается либо остаётся UNKNOWN. 40 offline
-> controls PASS; actual PG/VM/live NOT_RUN. SIGKILL/host loss не гарантируют finally,
-> disable/stop не отзывают уже допущенный HTTP. R1/C0 evidence сохранены.
-> Владельцу пока не запускать mutating commands; [receipt/границы](../tasks/M4_HANDOFF.md).
-> Accepted application source и будущий owner допуск не изменены.
+> принят по [сохранённому C0 review](https://chatgpt.com/library?file_id=libfile_53702f51eba88191bc8914097bb5fceb&account_id=personal):
+> 17/17 новых controls PASS (22 subcases); исходные23 controls — evidence C6.
+> Новый C0 сверил архивы и перенёс уже выполненную приёмку, тесты не повторял.
+> Actual Docker/PG/VM/Windows/Happ/live и fresh account/route review ещё NOT_RUN.
+> Общий cleanup и независимые disable/verified-ID stops приняты; UNKNOWN/holds
+> сохраняются. SIGKILL/host loss не гарантируют finally, disable/stop не
+> отзывают уже допущенный HTTP. **До одного owner допуска mutating команды
+> не выполнять.** Точный scope и порядок — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md);
+> accepted build остаётся29dc16084f0ee0d01e5f96e7226995480e189a22.
+
 
 Этот путь остаётся **EVAL_ONLY**, default OFF. Эта реализация и CI не разрешают
 живой запуск. В C3-M4.3-POLZA-RUNTIME-R1: model POST / catalog GET / history GET /
@@ -144,7 +147,7 @@ drain/migrate/start cutover по ADR-132/216/217, без заявления roll
 закрыт (`AI_PROVIDER_DURABLE_DATA`), история не удаляется ради rollback. Этот
 runbook не выполняет deployment/cutover. Приёмка C0 и owner merge — отдельно.
 
-## C6 executable package — REVIEW / 2026-11-06
+## История C6 — executable package R1 / REVIEW / 2026-11-06
 
 [M4_TEST_OPERATOR_R1.zip](https://chatgpt.com/library?file_id=libfile_680ff1db569c819199fe65be1d2929d9&account_id=personal) —50981bytes,
 SHA256 bbebbf134935b7f5046cbe64ae07aab0f87d6bfb23d7f6a13724f9b23c0c9e4c.

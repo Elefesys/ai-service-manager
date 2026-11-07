@@ -6,7 +6,63 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, enable cleanup R2 / 2026-11-06
+## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, пакет R2 принят C0; owner допуск ожидается / 2026-11-07
+
+**PACKAGE_REVIEW_ACCEPTED. C0-M4-LIVE-OP-01 CLOSED.**
+При переносе координации из C0/M3 восстановлена уже выполненная приёмка R2.
+Она зафиксирована в [C0 acceptance/evidence](https://chatgpt.com/library?file_id=libfile_53702f51eba88191bc8914097bb5fceb&account_id=personal):
+M4_C0_operator_R2_acceptance_fd37004c.zip, 64193 bytes, 5 entries,
+SHA256 `ecc6398ebdd14da502260318ddfb109e9e8d251e29bf1cfec345561137c65c86`.
+Это завершённый review пакета, не live/VM acceptance и не owner разрешение.
+
+### Подтверждённая точка продолжения
+
+- Receipt C6 `fd37004c4f03f270fd3f6ee7ee01122e18697fca` имеет sole parent
+  `e17e5ebc2460f5e798ebf626b93f5a8f1e3de5a9`, tree
+  `87169df76718accfd997166422e9f8060f8ec95a`; delta — ровно три разрешённых docs.
+- Accepted application/build/native source остаётся
+  `29dc16084f0ee0d01e5f96e7226995480e189a22`, tree
+  `b70eb0348577c812f4f587d995c724e3c0e989e4`. Main не изменён.
+  [Post-merge CI42168468085](https://github.com/Elefesys/ai-service-manager/actions/runs/42168468085):
+  push/main, attempt1, 12/12 SUCCESS; повторный запуск не выполнялся.
+- [C6 R2](https://chatgpt.com/library?file_id=libfile_17bbc3cc501c8191b7fc84bceb0654e2&account_id=personal):
+  60610 bytes, 18 entries, 17 manifest files, SHA256
+  `121fe08290f43bd532afa5b9eea3e9034b5a7c3201d8c2fdc496e13ed70b8ba3`.
+  В новом C0 повторно сверены CRC/digests обоих архивов и точное совпадение
+  supplied R2 с R2 внутри принятого C0 evidence.
+- Сохранённый независимый прогон C0: 17/17 новых controls PASS, 22 subcases,
+  Python3.12.14; 12 Python files syntax PASS. Это прежний фактический прогон,
+  не новый запуск в этом чате. Исходные 23 controls/frozen Python3.13/Compose/
+  PowerShell/native checks остаются evidence C6. Неизменённые тесты не повторялись.
+- Общий cleanup, независимые same-session disable/verified-ID stops,
+  отдельные primary/cleanup outcomes и запрет повторного enable приняты.
+  UNKNOWN/UUID/бюджет/holds сохраняются; автоматического old-consumer restore нет.
+  STOPPED_OBSERVED не отзывает уже допущенный HTTP; SIGKILL/host loss не
+  гарантируют finally. Actual Docker/PG/Windows/Happ/SSH/live пока NOT_RUN.
+
+### Следующий шаг после одного owner допуска
+
+C6 продолжает ту же задачу/ветку `c6/m4-live-prep-r1` с принятым private R2.
+Отдельный допуск должен охватить весь конкретный порядок из README R2:
+1. Private target capture/plan/check; сборка exact accepted source и отдельный
+   persistent `TEST/asm_test/0016`, actual DB/readiness при AI OFF.
+2. PC/Happ/SSH route и точный old/new consumer fence; TEST binding/MATERIAL/native,
+   один synthetic TEXT разговор, owner reconciliation и отдельный Resume.
+3. Fresh account/route/key review не старше24h; прежний Polza route без fallback.
+   Одна сессия: 10 минут, максимум4 model POST/10 RUB внутри общего150 RUB,
+   максимум2 POST/1 READ за run, до8 history GET/4 Telegram replies.
+4. Disable, verified receiver drain и контролируемый return с сохранением
+   обеих групп volumes/receipts. UNKNOWN требует read-only reconciliation;
+   не создавать новый UUID/бюджет и не повторять неизвестный вызов/отправку.
+
+Конкретные private runtime inputs C6 проводит с владельцем по README; секреты
+и actual bindings не публиковать. Generic owner inventory не повторять без
+нового drift; новые PR/hosted CI и изменения приложения для этого шага не нужны.
+Этот commit только переносит приёмку в канонический реестр. **Owner live допуск
+ещё не получен: mutating команды R2 не выполнять.** C6 ожидает допуск,
+остальные роли HOLD; AI OFF/EVAL_ONLY, M4/live открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, enable cleanup R2 / 2026-11-06
 
 C6 исправил **C0-M4-LIVE-OP-01** по instruction
 `e17e5ebc2460f5e798ebf626b93f5a8f1e3de5a9`; результат возвращён на review C0.
