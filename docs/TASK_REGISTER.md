@@ -2,7 +2,19 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner facts приняты; enable BLOCKED по output cap / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, public contract PC fallback; enable BLOCKED / 2026-11-07
+
+C6 выполнил одну unauthenticated public GET attempt 07.11.2026
+12:15:39.404032–12:15:39.415789 UTC: DNS gaierror/-3 до HTTP,
+TRANSPORT_FAILED,status=null,body0. Повтор C6 не делался.
+Разрешённый one-shot PC fallback подготовлен; actual PC result NOT_RUN,
+schema/content review PENDING. Это ещё не final CONTRACT_FOUND/NOT_PROVEN.
+[Артефакт/receipt](tasks/M4_HANDOFF.md),[точная PC команда](runbooks/M4_RUNTIME_PILOT.md).
+Public raw/evidence вне Git. После одного PC результата — локальный schema
+review и один final receipt C0; configure/enable по-прежнему BLOCKED.
+Local PS syntax/5loopback fixtures PASS; actual Windows/Polza/runtime/CI NOT_RUN.
+Только3docs,sole parent7e92fc98c519e41ebefe4835f1126daa968c87e1,
+expected-sha/force=false. Принятые C0 scope/owner facts ниже неизменны.
 
 C0 принял owner-run preflight b12cf187: TEST0016/current synthetic TEXT Resume,
 AI OFF_ZERO_PROVIDER_SESSIONS, metadata blockers=[],SSH exit0.

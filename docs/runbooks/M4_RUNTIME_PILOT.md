@@ -1,6 +1,37 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — owner facts приняты; total-output contract до enable / 2026-11-07
+## CURRENT — public contract PC fallback; total-output review PENDING / 2026-11-07
+
+### Один public GET на ПК — подготовлен, actual NOT_RUN
+
+C6 attempt 2026-11-07T12:15:39.404032+00:00 получил DNS gaierror/-3
+до HTTP; original attempt/result сохранены вне Git. Повтор из C6 не нужен.
+Это fallback, прямо разрешённый instruction7e92fc98, без SSH/ВМ изменений.
+
+Скачать [M4_PUBLIC_CONTRACT_PC_R1.zip](https://chatgpt.com/library?file_id=libfile_2a0a93c765788191b9be4b6aca52b2e3&account_id=personal) в Windows Downloads
+под исходным именем, затем один раз выполнить в новом PowerShell на ПК:
+
+```powershell
+$asmPackage = Join-Path $env:USERPROFILE 'Downloads\M4_PUBLIC_CONTRACT_PC_R1.zip'
+if ((Get-FileHash -LiteralPath $asmPackage -Algorithm SHA256).Hash -ne 'df727162b64d5eca7eb0e8c04e32abfe7acb1f186a7fa881430eb6f596029303') { throw 'Archive hash mismatch' }
+$asmExtract = Join-Path $env:TEMP ('asm-m4-public-contract-' + [guid]::NewGuid().ToString('N'))
+Expand-Archive -LiteralPath $asmPackage -DestinationPath $asmExtract
+& ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $asmExtract 'asm_m4_public_contract_pc.ps1'))))
+```
+
+Запрос только GET https://polza.ai/api/openapi.json, без ключа/Authorization/
+cookies/redirects/retries; обычная TLS verification,30s/8MiB. Никаких model,
+account metadata,Telegram вызовов или VM actions. Happ TUN можно сохранить.
+Результат: Downloads/ASM_M4_PUBLIC_CONTRACT_PC_RESULT.zip с public body bytes
+(или явно incomplete prefix),UTC,status,URL,SHA256. Пришлите этот ZIP в чат.
+При отказе/timeout/limit не повторять и не удалять receipt directory.
+
+Package SHA256 df727162b64d5eca7eb0e8c04e32abfe7acb1f186a7fa881430eb6f596029303;
+script SHA256 e62e9d71d95b894440ffd0dba67ab536f7932c746ccba5ba153ed1b23623c3c9.
+PS syntax и5 local loopback fixtures PASS; actual Windows/Polza NOT_RUN.
+C6 content/schema review PENDING до результата. Final CONTRACT_FOUND/NOT_PROVEN
+будет отдельным одним receipt после локального просмотра, не inferred из DNS.
+Original C0 review/запрет configure/enable ниже сохраняет силу.
 
 **Владелец подтвердил баланс Polza150 RUB и обычный тариф.** Эти owner facts
 закрыты как OWNER_REPORTED; API balance не запрашивался. Допуск99fb865a на

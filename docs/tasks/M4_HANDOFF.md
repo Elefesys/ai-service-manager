@@ -6,7 +6,47 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner facts приняты; output-cap evidence до enable / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, public GET: C6 DNS fail; PC result ожидается / 2026-11-07
+
+### C6: одна попытка выполнена; PC fallback ожидает фактический результат
+
+Instruction base: [7e92fc98c519e41ebefe4835f1126daa968c87e1](https://github.com/Elefesys/ai-service-manager/commit/7e92fc98c519e41ebefe4835f1126daa968c87e1).
+C6 сделал ровно одну попытку unauthenticated GET https://polza.ai/api/openapi.json.
+UTC 2026-11-07T12:15:39.404032+00:00 → 12:15:39.415789+00:00:
+TRANSPORT_FAILED / URLError / gaierror / errno=-3. Ошибка DNS до HTTP;
+status=null, actual_url=null, body_bytes=0, body_sha256=null. Deadline25s,
+cap8MiB, redirects/retries/auth/cookies=0. Ответ не получен; это не отказ
+Polza и не доказательство содержимого контракта. Повтор C6 не выполнялся.
+
+Разрешённый fallback подготовлен: [M4_PUBLIC_CONTRACT_PC_R1.zip](https://chatgpt.com/library?file_id=libfile_2a0a93c765788191b9be4b6aca52b2e3&account_id=personal),
+6922bytes/6entries, SHA256
+df727162b64d5eca7eb0e8c04e32abfe7acb1f186a7fa881430eb6f596029303.
+Вне Git сохранены оригинальные C6 attempt/result, PC script и local evidence.
+Script SHA256 e62e9d71d95b894440ffd0dba67ab536f7932c746ccba5ba153ed1b23623c3c9.
+Это один публичный GET на ПК, не на ВМ:30s/8MiB, обычная TLS verification,
+без credentials/cookies/proxy discovery/redirects/retries/model POST.
+Записывает original response bytes (либо явно incomplete bounded prefix),
+UTC/status/actual URL/hash в Downloads/ASM_M4_PUBLIC_CONTRACT_PC_RESULT.zip.
+Существующий результат останавливает повтор до сети; отказ/timeout не перезапускать.
+Точная команда — в [CURRENT runbook](../runbooks/M4_RUNTIME_PILOT.md).
+Владельцу нужно вернуть только этот публичный ZIP, ключ/SSH/новые сообщения не нужны.
+
+PC actual GET NOT_RUN; content review PENDING. CONTRACT_FOUND/NOT_PROVEN
+по содержимому пока не выдаётся: разрешённый PC fallback ещё не выполнен.
+После одного PC результата — только локальные request-schema/internal refs
+и один final receipt C0 с total-output/OpenAI mapping либо конкретным gap;
+без дальнейшего поиска/повторов/support. Configure/enable остаются BLOCKED.
+
+Проверены PowerShell syntax и5 local loopback fixtures (bytes/hash,HTTP403,
+redirect without follow,size cap,cancellation,repeat guard); PASS.
+Actual Windows/Polza execution NOT_RUN; это не provider contract evidence.
+Product/runtime/VM/PG/full CI не запускались; auth/model/metadata/history/
+Telegram calls=0. VM state не перечитывался и не менялся; последнее accepted
+AI OFF/old writers fence/private receipts/UUID/holds сохраняется как snapshot.
+Receipt sole child instruction7e92fc98; write-set только3docs,force=false.
+Исходный CURRENT review C0 ниже сохраняет силу.
+
+### Принятое решение C0 (без изменения)
 
 **C0 принял actual preflight b12cf187 и ответ владельца: баланс Polza 150 RUB,
 тариф обычный. Эти два owner-вопроса закрыты.** Это OWNER_REPORTED, не новый
