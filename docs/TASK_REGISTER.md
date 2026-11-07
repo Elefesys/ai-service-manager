@@ -2,7 +2,30 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, receiver TLS repair → один AI reply / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, offline AI request check / 2026-11-07
+
+C0 добавил bounded Polza failure log и исполняемый offline inspector первого
+сохранённого запроса. Source-only change; private VM receipt/docs.patch не
+публикуются. Команда, scope и write-set — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+C6: existing config + точный READ ONLY PreparedRun export + original reserved_at
+→ network-none local assembly → конкретный stage/detail или OFFLINE_WIRE_VALID.
+Не собирать новый snapshot, не вызывать PREPARE, не запускать consumer/HTTP,
+не переписывать UNKNOWN/hold/window. Успех локальной сборки не доказывает provider
+acceptance; исходная утраченная причина не восстановлена новым logging.
+Следующий live continuation сохраняет старую попытку/резерв; offline helper
+сам не разрешает новое execution window.
+
+430 controlled tests PASS/0skips,Python3.13.17,httpx0.28.1,locked deps;
+ruff PASS,mypy polza.py PASS. No actualPG/VM/paid/send; fullCI/build NOT_RUN.
+Public delta: polza.py + offline script/test +3docs.
+Private C6: exact overlay/read-only export/one offline check; повторный review
+до этой проверки не нужен. Parent2a1369c8; app29dc1608/R4/transport repair прежние.
+Owner цель/допуск/cap assumption сохраняются; поддержку не ждать.
+C6 IN_PROGRESS/offline,остальные HOLD,M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, receiver TLS repair → один AI reply / 2026-11-07
 
 Owner требует один Telegram→ИИ→ответ клиенту; ожидание поддержки исключено.
 Допуск680b0e0a/10RUB experimental сохраняется. Прежний запрет transport

@@ -1,6 +1,28 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — receiver TLS repair и немедленный finite AI smoke / 2026-11-07
+## CURRENT — failure log и проверка сохранённого wire без сети / 2026-11-07
+
+[Текущая выдача](../tasks/M4_HANDOFF.md) содержит source scope и команду.
+Private исходные PreparedRun/RuntimeSettings и reserved_at проверяются через
+`scripts/m4_offline_wire_check.py` в existing image с read-only source overlay,
+`--network none`, без ключа и consumer. JSON mode0600, absolute paths.
+DTO берётся из READ ONLY данных, не из нового PREPARE/fixture.
+OFFLINE_WIRE_VALID проверяет только локальную сборку; отдельные flags показывают
+freshness/session/deadline на исходный момент. Ничего не переавторизуется.
+
+Polza.complete пишет один `AI_PROVIDER_FAILURE` при исключении:
+статические labels, stage, HTTP status, transport type и hashed correlation.
+Сохранить bounded log до удаления/recreate stopped worker. Raw exception,
+provider body, переписку и ключи не выгружать в публичный GitHub.
+UNKNOWN и резерв сохраняются при любой диагностике, включая сбой logging.
+Инспектор не снимает STOP и не продлевает session.
+
+C0 validation:430 controlled tests PASS/0skips,ruff/mypy PASS; не live evidence.
+Причина прошлой попытки от нового logging задним числом не появляется.
+C6 выполняет один offline check и возвращает конкретный результат.
+
+
+## История — receiver TLS repair и немедленный finite AI smoke / 2026-11-07
 
 Последний C6 observer сделал7Telegram polls и завершился на raw ssl.SSLError;
 AI был OFF. C0 исправил Wire.api в scripts/telegram_polling_receiver.py:

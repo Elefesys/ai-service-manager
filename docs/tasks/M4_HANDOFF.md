@@ -6,7 +6,89 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, исправить receiver TLS и сразу выполнить один AI reply / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, local AI failure check / 2026-11-07
+
+**Цель прежняя: один настоящий AI reply в Telegram.** Сейчас выполнить узкую
+проверку сохранённого первого запроса без HTTP. Поддержка исключена.
+Private VM receipt остаётся у владельца; этот commit публикует только исходный
+код, synthetic tests и инструкции. Приватный docs.patch сюда не переносить.
+
+### Что исправил C0
+
+В accepted source `DurableAdapter.complete` сохраняет только ADAPTER_ERROR /
+CANCELLED. Поэтому конкретное исключение Polza терялось после завершения worker.
+C0 добавил в `backend/src/asm/ai/polza.py` отдельный bounded log
+`AI_PROVIDER_FAILURE`: этап, статический detail, тип ошибки/transport cause,
+HTTP status, номер вызова, SHA256 ссылки на run/generation. Нет exception text,
+key, prompt, response body, reasoning или raw IDs; неизвестные значения заменены
+UNCLASSIFIED/OTHER. Сбой logging не заменяет исходную ошибку или cancellation.
+Лог необходимо сохранить из stopped container до его удаления/recreate.
+CallCompletion/SQL/UNKNOWN accounting не менялись; это не восстановление
+утраченной причины прошлой попытки и не исправление доказанного provider отказа.
+
+`scripts/m4_offline_wire_check.py` локально строит wire из exact PreparedRun +
+existing RuntimeSettings: тот же ContextBuilder, prompt/schema/read_context,
+Polza wire/check_payload и limits. Реального ключа не принимает, HTTP не вызывает;
+дополнительно использовать `--network none`. Исторический reserved_at передаётся
+через --at: expiry проверяется на тот момент, timestamps/окно не переписываются.
+PASS означает только корректную локальную сборку, не provider acceptance/send.
+Mismatch config/scope и invalid snapshot отклоняются.
+
+### C6 — выполнить сразу в existing private TEST workspace
+
+1. Использовать уже сохранённые receipt/config/DB данные, не повторять общий
+   network/preflight цикл. Сохранить исходный R4, транспортный overlay2a1369c8,
+   intent/session/journal/UNKNOWN/reserves и обе группы volumes.
+2. Только READ ONLY выгрузить именно исходные run.snapshot/binding/config/deadline/
+   budget и остальные поля DTO `PreparedRun` в private mode0600 JSON.
+   Не вызывать PREPARE/execute/enqueue ради выгрузки: они меняют состояние.
+   Не создавать новый snapshot по сегодняшнему диалогу, не заменять историю fixture.
+   Взять original reserved_at из существующей записи вызова, не текущее время.
+3. В existing Python3.13 image выполнить offline inspector с exact source этого
+   commit, отдельным read-only overlay и `--network none`, без запуска worker/
+   receiver, DB mutation и model/history HTTP. C6 подставляет уже известные
+   приватные пути в готовую команду владельца:
+
+   `python -m scripts.m4_offline_wire_check --settings <absolute-private-provider.json> --run <absolute-private-prepared-run.json> --at <original-reserved_at-with-offset>`
+
+   Модуль asm.ai.polza должен загружаться из exact diagnostic overlay; старый
+   accepted image не выдавать за изменённый. Остальной app29dc1608 неизменен.
+   Settings/run-файлы читаются тем же UID, что владеет файлами; не расширять права.
+   Сохранить только bounded результат + hashes в private receipt.
+4. Если воспроизводится локальная ошибка — вернуть конкретный stage/detail и
+   исправить только доказанную ошибку формирования/загрузки конфигурации в private
+   operator continuation. Структурированные данные/семантику не подменять.
+   Если локальный запрос VALID, это оставляет HTTP/transport/provider response
+   непроверенными; не объявлять причину установленной.
+5. Новая диагностика готова для последующего bounded запуска. Повторять старый
+   UNKNOWN run, обнулять hold/ledger/UUID, снимать STOP или продлевать истёкшее
+   окно здесь не разрешено. Общий owner допуск и cap assumption сохраняются,
+   но этот offline шаг сам не открывает новое execution window.
+   Если следующий live шаг требует изменения operator/session continuation,
+   вернуть одну конкретную дельту с сохранением UNKNOWN, а не новый общий checklist.
+   Не оставлять ВМ включённой специально для ожидания ответа C0 или поддержки.
+
+### Проверки, scope и источник
+
+C0: Python3.13.17, locked dependencies/httpx0.28.1; **430 tests PASS**,0skips:
+новые failure/offline cases + существующие Polza, provider-runtime и durable-boundary.
+HTTP400/401/402/429/503, raw TLS, wrapped HTTP errors, decode/history, expiry,
+cancellation, logging failure, UNKNOWN/no-second-POST, секреты и offline max_tokens
+проверены на controlled inputs. Ruff PASS; mypy polza.py PASS.
+Не actual PostgreSQL/VM/provider/Telegram; full CI/build NOT_RUN.
+
+Public source write-set C0: polza.py, offline inspector, новый test file и
+3coordination docs. C6 private write-set дополнен exact diagnostic source overlay,
+read-only PreparedRun export и его запуском; без DDL/dependency/business changes.
+Повторное согласование этого offline шага не требуется.
+Source parent: 2a1369c8f715b31d98c9868ae2c7014b74e86114; branch c6/m4-live-prep-r1.
+Accepted app29dc16084f0ee0d01e5f96e7226995480e189a22 сохраняется.
+Receiver repair не отменён; domain/Console port не меняются.
+Для исправленных файлов использовать Git blob/hash этого commit, не неподписанный
+пересказ. M4/live остаётся открытым; остальные роли HOLD.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, исправить receiver TLS и сразу выполнить один AI reply / 2026-11-07
 
 **Цель владельца: Telegram клиента → один ответ ИИ → Telegram того же клиента.**
 Поддержка исключена из дальнейших действий (также записано в AGENTS.md).

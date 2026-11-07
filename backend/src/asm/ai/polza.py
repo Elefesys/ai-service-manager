@@ -3,14 +3,16 @@
 import asyncio
 import hashlib
 import json
+import logging
 import re
+import ssl
 import time
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
 from typing import Annotated, Any, Literal, NoReturn
 
 import httpx
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, ValidationError
 
 from asm.ai.contracts import (
     CONVERSATION_RESULT,
@@ -57,6 +59,64 @@ ConditionalFee = Literal[
 CONDITIONAL_FEES = frozenset(
     ("audio_per_million", "input_audio_cache_per_million", "web_search_per_thousand")
 )
+
+# Only source-defined labels may reach the operator log. Never log exception
+# messages, provider bodies, prompts, keys or arbitrary observation dictionaries.
+_FAILURE_DETAILS = frozenset(
+    "HISTORY_DEADLINE HISTORY_VERIFICATION_FAILED HISTORY_REVIEW_REQUIRED "
+    "GENERATION_ID_INVALID HISTORY_METERING_UNKNOWN HISTORY_METERING_LIMIT "
+    "INVALID_PROVIDER_RESPONSE "
+    "NON_THINKING_NOT_OBSERVED PAYLOAD_OUTSIDE_REVIEWED_SCOPE "
+    "REASONING_OUTSIDE_OUTPUT_BOUND REQUEST_ADMISSION REQUEST_DEADLINE "
+    "RESPONSE_ENCODING RESPONSE_INCOMPLETE RESPONSE_SIZE RETURNED_ROUTE_MISMATCH "
+    "SIGNATURE_CORRELATION_FAILED SIGNATURE_IN_RESPONSE SIGNATURE_RUN_MISMATCH "
+    "TRANSPORT_FAILURE TRANSPORT_TIMEOUT UNREQUESTED_AUDIO_USAGE "
+    "UNREQUESTED_SERVER_TOOL_USAGE REVIEW_EXPIRED ROUTE_MISMATCH "
+    "WIRE_SCHEMA_UNSUPPORTED LOCAL_REQUEST_LIMIT".split()
+)
+_FAILURE_LOG = logging.getLogger("asm.ai.provider_failure")
+
+
+def failure_labels(error: BaseException) -> dict[str, Any]:
+    """Allowlisted diagnostics, including wrapped transport type, without text."""
+    kinds = (
+        (asyncio.CancelledError, "CANCELLED"),
+        (ssl.SSLCertVerificationError, "TLS_CERTIFICATE"),
+        (ssl.SSLError, "TLS"),
+        (httpx.TimeoutException, "HTTP_TIMEOUT"),
+        (httpx.ConnectError, "HTTP_CONNECT"),
+        (httpx.HTTPError, "HTTP_TRANSPORT"),
+        (TimeoutError, "TIMEOUT"),
+        (ValidationError, "VALIDATION"),
+        (PolzaFailure, "POLZA"),
+        (ProviderFailure, "PROVIDER"),
+        (ValueError, "VALUE"),
+        (TypeError, "TYPE"),
+        (KeyError, "KEY"),
+        (OSError, "OS"),
+    )
+
+    def kind(value: BaseException | None) -> str:
+        return next((label for cls, label in kinds if isinstance(value, cls)), "OTHER")
+
+    detail = (
+        error.detail
+        if isinstance(error, PolzaFailure)
+        else (error.args[0] if type(error) is ValueError and len(error.args) == 1 else None)
+    )
+    status = (
+        int(detail[5:])
+        if type(detail) is str and re.fullmatch(r"HTTP_[1-5][0-9]{2}", detail)
+        else None
+    )
+    return {
+        "exception_type": kind(error),
+        "cause_type": kind(error.__cause__ or error.__context__),
+        "detail": detail
+        if type(detail) is str and (detail in _FAILURE_DETAILS or status is not None)
+        else "UNCLASSIFIED",
+        "http_status": status,
+    }
 
 
 class PolzaFailure(ProviderFailure):
@@ -589,6 +649,7 @@ class PolzaAdapter:
         self._key = key
         self._transport = transport
         self.observation: dict[str, Any] = {}
+        self._failure_stage = "IDLE"
         self.capabilities = Capabilities(
             route=review.route(),
             structured_output=True,
@@ -961,18 +1022,47 @@ class PolzaAdapter:
 
     async def complete(self, request: AdapterRequest) -> AdapterResponse:
         self.observation = {}
+        self._failure_stage = "REVIEW"
+        try:
+            return await self._complete(request)
+        except BaseException as error:
+            # The DB retains UNKNOWN and its reservation. This separate bounded
+            # process log survives a normal worker stop; it grants no retry.
+            try:
+                diagnostic = failure_labels(error)
+                diagnostic.update(
+                    stage=self._failure_stage,
+                    run_ref=hashlib.sha256(request.request.run_id.encode()).hexdigest(),
+                    call_sequence=request.budget.calls_used,
+                )
+                generation = self.observation.get("generation_id")
+                if (
+                    type(generation) is str
+                    and re.fullmatch(GENERATION_ID, generation)
+                    and self._key.get_secret_value() not in generation
+                ):
+                    diagnostic["generation_ref"] = hashlib.sha256(generation.encode()).hexdigest()
+                _FAILURE_LOG.warning("AI_PROVIDER_FAILURE %s", encode(diagnostic).decode())
+            except BaseException:
+                pass  # Logging must not replace the primary failure/cancellation.
+            raise
+
+    async def _complete(self, request: AdapterRequest) -> AdapterResponse:
         self.review.fresh()
+        self._failure_stage = "WIRE"
         body = self.wire(request)
         limits = request.config.limits
+        self._failure_stage = "LIMITS"
         if (
             len(body) > limits.input_bytes
             or self.count_input_tokens(request) > limits.input_tokens
             or limits.output_tokens > OUTPUT_TOKENS
             or limits.call_cost_reservation < self.review.reservation()
         ):
-            raise ProviderFailure("ADAPTER_ERROR")
+            raise PolzaFailure("ADAPTER_ERROR", "LOCAL_REQUEST_LIMIT")
         result = await self._send(body, request.remaining_seconds, limits.output_bytes)
         if result.kind == "OUTPUT":
+            self._failure_stage = "ENVELOPE"
             try:
                 envelope = strict_json(result.output_json or "")
                 if type(envelope) is not dict or set(envelope) != {"result"}:
@@ -991,9 +1081,11 @@ class PolzaAdapter:
     async def _send(self, body: bytes, seconds: float, maximum: int) -> AdapterResponse:
         keep_continuation = False
         try:
+            self._failure_stage = "PAYLOAD"
             self.check_payload(body)
             deadline = time.monotonic() + seconds
             async with asyncio.timeout(seconds):
+                self._failure_stage = "MODEL_HTTP"
                 raw = await bounded_http(
                     self._key,
                     ENDPOINT,
@@ -1002,6 +1094,7 @@ class PolzaAdapter:
                     maximum=maximum,
                     transport=self._transport,
                 )
+                self._failure_stage = "DECODE"
                 result = self.decode(
                     raw,
                     history_pending=self.experimental
@@ -1012,6 +1105,7 @@ class PolzaAdapter:
                     or isinstance(self.review, RuntimeRoute)
                     or self.observation["provider_field_state"] == "ABSENT"
                 ):
+                    self._failure_stage = "HISTORY_PREFLIGHT"
                     await self.verify_history(result.usage, result.cost, deadline)
                 keep_continuation = result.kind == "TOOLS"
                 return result
@@ -1163,6 +1257,7 @@ class PolzaAdapter:
         total_tokens = result_usage.input_tokens + result_usage.output_tokens
 
         async def get(url: str) -> Any:
+            self._failure_stage = "HISTORY_LIST" if url == HISTORY_LIST else "HISTORY_DETAIL"
             mark("DEADLINE")
             remaining = deadline - time.monotonic()
             if remaining <= 0:
