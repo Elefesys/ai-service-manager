@@ -1,61 +1,59 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — owner Resume UI подтверждён; проверка перед моделью / 2026-11-07
+## CURRENT — actual preflight PASS; route review перед моделью / 2026-11-07
 
-Actual TEST receive работает: synthetic Client→Owner TEXT появился в Console.
-Владелец сохранил сверенный контекст, отдельно нажал «Разрешить автоматику»
-и подтвердил ожидаемую надпись. UI confirmation не заменяет current server
-Resume receipt. AI/provider session OFF по последнему actual backend check;
-configure/enable/Polza smoke ещё не запускались.
+[asm_m4_provider_preflight.py](https://chatgpt.com/library?file_id=libfile_c4e7da0fc9988191a1d54e8fc122eec4&account_id=personal) выполнен владельцем:
+ACCEPTED_CURRENT_SYNTHETIC_TEXT_SCOPE,OFF_ZERO_PROVIDER_SESSIONS,
+FACTS_COLLECTED_REVIEW_REQUIRED_AI_OFF,blockers=[],SSH exit0.
+Current owner Resume проверен на сервере. Receiver snapshot RUNNING/
+successful_polls89/durable1/confirmed1/ack_pending=false/age85.2s.
+Original inputs/R4/journal/runtime сохранены. Existing private key принят,
+catalogGET1/keyGET1 завершены,без model/history/Telegram API helpercalls.
 
-### Следующий запуск
+Не повторять preflight/metadata GET. Private receipts/provider-preflight-r1
+содержит actual timestamps/raw metadata/selected-catalog-entry и result.
+Catalog SHA256 aef50578941e135c64646fd77766a8749b80f79fcffc56e298888403dd44ff2a.
+Использовать actual checked_at,не обновлять его только для прохождения freshness.
+Before enable нужен обычный свежий transport/window/scope check.
 
-[asm_m4_provider_preflight.py](https://chatgpt.com/library?file_id=libfile_c4e7da0fc9988191a1d54e8fc122eec4&account_id=personal),15810bytes,
-SHA256 0f86f17ff1c31f1f9f4604a2d9352ecb5a130afe79cbfc10e66d3ab283b3af3c.
-Первое окно с PC/Happ/SSH оставить открытым. Новый helper передать SCP в
-/home/asmoperator/,поставить mode600 и выполнить python3 -B с --check
-в отдельном interactive SSH -t. Новый Polza API key вводить только в hidden
-prompt на ВМ. Existing private key используется без повторного ввода.
+### Следующий gate — конкретный RuntimeRoute review
 
-Helper проверяет same accepted R4/20DONE intent/current approval/window,
-inventory/old fence/volumes/private socket и accepted db check+scope.
-Scope проверяет TEXT-only/current owner Resume; БД READ ONLY, actual IDs
-сохраняются только в private scope.json. Затем один catalog GET и один
-key-metadata GET с TLS,без redirects/proxyenv/retries;25s deadline,8MiB/64KiB.
-Новый ключ0600 сохраняется вне checkout после authenticated metadata200.
-Raw metadata/attempt records приватны. Output содержит safe facts и blockers.
+Exact model openai/gpt-6-luna,selector openai/flex,history/response family OpenAI,
+без fallback. Catalog parameter subset содержит max_tokens,а не
+max_completion_tokens. Обязательное output_cap_includes_reasoning=true
+не подтверждается одним наличием max_tokens в catalog; exact total-output
+mapping/evidence передан C0 на review. Validator/cap/budget не обходить.
+Принятый R4 README п.4 runtime inputs требует новый C0-reviewed RuntimeRoute;
+нового owner paid согласия на прежний scope не требуется.
 
-Metadata не объявляется автоматическим RuntimeRoute review. Key limit
-НЕ является балансом организации,account-specific тарифом или proof model
-access; эти facts остаются NOT_CHECKED/NOT_PROVEN. Нет paid model/history/
-Telegram API calls,DBwrites,configure/enable/restarts,journal repairs.
-Private scope/key/receipts — ожидаемые file writes. Runtime/model OFF.
-Current scope повторно сверяется после GET; original inputs/R4/journal
-проверяются на сохранность. Receipt receipts/provider-preflight-r1;
-STOP/partial сохранять,не повторять helper автоматически.
+Owner facts ещё нужны:current balance≥10RUB,обычный тариф без индивидуального
+договора. Key auth/limit допускает10RUB,но balance/account tariff/model access
+самим GET key не проверены. RuntimeRoute JSON пока НЕ создан/configure NOT_RUN.
+Полный candidate с primary links — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
 
-Local8 controls PASS/0skips/Python3.12.14/0.070s/AST;
-[local evidence](https://chatgpt.com/library?file_id=libfile_ca93b4674028819198f02b57862778df&account_id=personal). Реальная VM/Polza проверка этим receipt ещё NOT_RUN.
-После вывода владельца — actual facts review/C0-reviewed RuntimeRoute≤24h.
-Организационный баланс/тариф нельзя вывести из старого150RUB ledger.
-До configure не отправлять новые messages/edits/photos; 10-minute session
-configuration создавать непосредственно перед finite enable.
+Current rates:RUB/1M prompt5.93195000,cache read0.59319500,
+cache write7.41493750,completion29.65975000;search1186.39000000/1000.
+Консервативный input sum13.94008250. При review исключения search
+(его нет в closed wire) и total-output512:reserve0.471974416/call,
+×4=1.887897664RUB. Это условная admission-оценка,не proof billing ceiling
+и не фактическое списание. Paid calls этого этапа0.
 
-### Уже сохранённое состояние
+После C0 review/owner facts: собрать private JSON из exact saved entry,
+проверить≤24h freshness и same current scope; configure непосредственно
+перед accepted10-minute enable,затем disable/drain/return.
+Не считать неподтверждённый mapping доказанным и не заменять reviewed route
+на SyntheticRoute без явного принятого изменения.
 
-Prepare/CUTOVER/BIND/POLICY/RECEIVE complete,old writers fenced/stopped,
-TEST0016/provider_sessions0. Исправлен текущий порядок старта relay/PG;
-same IDs/images/volumes/R4/private inputs,Console HTTP PASS. Original
-failures/UNKNOWN before-images и completed receipts сохранены.
-Completed repair/receive/prepare не повторять,старый consumer параллельно
-не запускать. Общий cold-start IPAM риск template и PC dependency не закрыты.
+### Текущее окружение
 
-Owner99fb865a/C0 instruction963baf72 прежние;нет нового согласования scope.
-≤10мин/4POST/10RUB внутри150 с prior/UNKNOWN,2POST/1READ/run,
-8historyGET/4replies,synthetic TEXT-only/один route/no fallback.
-Затем disable,verified receiver drain,контролируемый return;
-UNKNOWN не повторять/не стирать. M4/live остаётся открыт.
-Точные actual результаты и boundaries — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
+TEST0016,prepare/CUTOVER/BIND/POLICY/RECEIVE complete,AI OFF.
+Old writers fenced/stopped;обе группы данных/volumes/R4/private inputs
+и original failed receipts сохранены. Completed helpers не повторять.
+ВМ/PC/Happ/SSH оставить работающими;новые TEXT/edits/photos пока не нужны.
+Общий cold-start IPAM риск/зависимость от PC не закрыты.
+Owner99fb865a/C0 instruction963baf72;один UUID/10мин/4POST/10RUB
+внутри150 с prior/UNKNOWN,2POST/1READ/run,8historyGET/4replies,
+synthetic TEXT-only/один route/no fallback. M4/live остаётся открыт.
 
 
 ## История — приёмка R4 до исполнения на ВМ

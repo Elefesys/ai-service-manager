@@ -6,113 +6,156 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner Resume UI подтверждён; server scope и Polza metadata next / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, actual scope и metadata PASS; route review до enable / 2026-11-07
 
-**Владелец подтвердил «надпись появилась» после сохранения сверенного контекста
-и отдельного «Разрешить автоматику» в TEST Console.** Это owner-observed
-«Автоматика разрешена»; actual current server Resume receipt ещё NOT_RUN.
-UI подтверждение не подменяет accepted scope guard. AI/provider session OFF
-по последнему actual backend наблюдению; configure/enable/model calls не запускались.
+**Владелец выполнил provider preflight, ASM_SSH_EXIT=0, blockers=[].**
+Итог FACTS_COLLECTED_REVIEW_REQUIRED_AI_OFF. Это успешная проверка scope и
+сбор metadata, не включение модели/готовый RuntimeRoute. C6 не подключался
+к ВМ: actual evidence — безопасный вывод владельца. Новый paid запуск не начат.
 
-### Уже выполнено на ВМ
+### Actual server и metadata evidence
 
-- Accepted R4 capture/plan/check и prepare завершены. TEST asm_test/schema0016,
-  original source29dc16084f0ee0d01e5f96e7226995480e189a22 /
-  treeb70eb0348577c812f4f587d995c724e3c0e989e4.
-- Resources UNKNOWN был вызван Docker host/none IPAM.Config=null; после
-  read-only proof узко reconciled с before-image. PG bootstrap не прочитал
-  tracked code600/700; backups сохранены, public code modes исправлены,
-  три TEST images пересобраны, same empty TEST bootstrap/migrations завершены.
-  Source bytes/tree/private inputs не изменялись.
-- Relay fixed IPv4/IPv6 были заняты TEST PG dynamic IPAM. Владелец выполнил
-  pinned relay repair: backup → stop только TEST frontend/API/PG → same relay
-  first → same PG/API/frontend. HTTP API/Console/Console→API PASS, IDs/images/
-  volumes/R4/inputs сохранены, relay владеет обоими fixed IP.
-- Only cutover.relay UNKNOWN reconciled после actual proof. Accepted CUTOVER
-  remove-webhook/old-fenced, BIND, POLICY material/native и RECEIVE завершены;
-  RECEIVE_READY_AI_OFF/SSH exit0. Старые пять writers fenced/stopped, старый
-  poller stopped/not removed; обе группы данных/volumes сохранены.
-- До тестового TEXT: TEST0016/provider_sessions0; receiver RUNNING/code=null,
-  successful_polls1, age0.4s, ack_pending=false, durable_deliveries0,
-  confirmed_responses0. Затем synthetic Client→Owner TEXT появился в TEST
-  Console, что подтверждено владельцем. Counter/latency/dedup заново не измерены.
-- Теперь владелец подтвердил конечную UI надпись после owner reconciliation
-  и отдельного Resume. DB scope/receipt check, configure/enable и model smoke
-  ещё не выполнены. C6 прямого SSH доступа нет; actual VM evidence — owner output.
+| Проверка | Фактический результат |
+|---|---|
+| Owner context/отдельный Resume | ACCEPTED_CURRENT_SYNTHETIC_TEXT_SCOPE; accepted DB scope reader подтвердил текущий receipt |
+| TEST AI | OFF_ZERO_PROVIDER_SESSIONS; TEST0016 |
+| Receiver snapshot | RUNNING, code=null, polls89, confirmed_responses1, durable_deliveries1, ack_pending=false, age85.2s |
+| Catalog | Exact openai/gpt-6-luna / openai/flex найден, official_declared=true |
+| Capabilities declared | tools/json_schema_strict/input_image=supported; input text/image=true |
+| Catalog entry SHA256 | aef50578941e135c64646fd77766a8749b80f79fcffc56e298888403dd44ff2a |
+| Limits declared | context1050000, max_completion_tokens128000; per-request prompt/completion null |
+| Accepted parameter subset | max_tokens,response_format,tool_choice,tools; max_completion_tokens в subset отсутствует |
+| Key metadata | authenticated=true,key_limit_set=true,key_limit_allows_10_rub=true |
+| Account | account_balance/account_specific_tariff NOT_CHECKED; model_access NOT_PROVEN |
+| Preservation | ORIGINAL_INPUTS_R4_JOURNAL_AND_RUNTIME_UNCHANGED |
+| Actions | DB_READS_PRIVATE_FILES_METADATA_GETS_ONLY; catalogGET1/keyGET1/modelPOST0/historyGET0; helper Telegram API calls0 |
+| Итог | FACTS_COLLECTED_REVIEW_REQUIRED_AI_OFF; blockers=[]; SSH exit0 |
 
-Completed prepare/receive/repair не повторять. Original failure records и
-receipts/receive-start-r1, relay-start-order-repair-r1 сохранены. Подробный
-предшествующий receipt — immutable1787d5b3/444a2a24. Общий cold-start IPAM риск
-неизменённого template и зависимость от PC/Happ/SSH остаются открытыми.
+Receiver snapshot подтверждает наблюдённое состояние; age85.2s близок к
+readiness threshold90s. Это не бессрочная гарантия transport/ACK/drain:
+при реальном запуске нужен обычный fresh recheck, без новой generic диагностики.
+Scope guard выполнен также после metadata: private scope.json актуален на
+тот момент. Private key сохранён штатным helper, секреты не передавались C6.
 
-### Подготовлен следующий private helper — actual VM NOT_RUN
-
-[asm_m4_provider_preflight.py](https://chatgpt.com/library?file_id=libfile_c4e7da0fc9988191a1d54e8fc122eec4&account_id=personal), 15810 bytes,
+[asm_m4_provider_preflight.py](https://chatgpt.com/library?file_id=libfile_c4e7da0fc9988191a1d54e8fc122eec4&account_id=personal),15810bytes,
 SHA256 0f86f17ff1c31f1f9f4604a2d9352ecb5a130afe79cbfc10e66d3ab283b3af3c.
-Отдельный continuation того же intent, не изменение accepted R2/R3/R4/product.
+Private receipts/provider-preflight-r1 содержит два attempt/raw/result records,
+selected-catalog-entry.json и result.json. Actual timestamps/IDs/key остаются
+на ВМ. Не брать checked_at из времени чата и не освежать timestamp без review.
+Повтор provider-preflight/GET не нужен. Local8 controls/AST ранее PASS,
+[local evidence](https://chatgpt.com/library?file_id=libfile_ca93b4674028819198f02b57862778df&account_id=personal);
+неизменённые tests/CI не повторялись. Actual VM result теперь указан отдельно.
 
-1. Pinned helper chain/R4/source; exact20 DONE checkpoint без configure/enable;
-   completed receive receipt, current approval/product window, private PC
-   socket, old/new inventory/host writers/volumes и original input hashes.
-2. Accepted db check требует TEST0016/provider_sessions0; accepted db scope
-   проверяет единственный synthetic TEXT conversation, current material/native
-   state и matching server Resume receipt. DB READ ONLY; создаётся только
-   private scope.json с настоящими ID, которые не печатаются.
-3. Private existing Polza key0600 либо hidden getpass в interactive SSH TTY.
-   Новый ключ сохраняется вне source/build context только после корректного
-   authenticated key-metadata response; existing key не переписывается.
-4. По одному GET: fixed catalog URL и https://polza.ai/api/v1/key.
-   TLS verified, no environment proxy/redirect/retry; каждый GET25s total/
-   10s socket, body cap8MiB/64KiB. Catalog public без Authorization;
-   key только в header metadata request. Attempts/raw JSON сохраняются
-   приватно до/после запроса; existing receipt отвергает повтор.
-5. Exact openai/gpt-6-luna / openai/flex catalog facts, capabilities declared,
-   pricing/entry hash и безопасные key-limit facts. Никакой fallback/auto review.
-   Key metadata НЕ показывает баланс организации/индивидуальный тариф и
-   не доказывает доступ к модели. Эти поля явно NOT_CHECKED/NOT_PROVEN.
-6. Повтор accepted scope/AI-off и preservation checks. Результат только
-   FACTS_COLLECTED_REVIEW_REQUIRED_AI_OFF либо конкретные blockers.
-   Нет configure/enable/modelPOST/historyGET/Telegram API вызовов/restart/
-   DB mutation/journal reconciliation. Временные accepted operator containers
-   используются штатным db reader. Private scope/key/receipt files создаются.
+### Конкретный route-review candidate для C0
 
-Private output: receipts/provider-preflight-r1. Partial/STOP не повторять
-автоматически; key/records сохранить. Не объявлять GET/metadata успешными до
-реального вывода владельца. Новый RuntimeRoute/C0 route review не создан;
-fixture evidence не используется для допуска.
+Это спецификация сборки из уже сохранённой exact private catalog entry.
+Она ещё НЕ валидный/принятый RuntimeRoute JSON; нет fabricated evidence,
+фиктивных actual IDs или автоматически установленного reviewed flag.
 
-### Local validation — отдельно от actual VM
+| RuntimeRoute поле / решение | Candidate и основание |
+|---|---|
+| model / provider_name | openai/gpt-6-luna / openai/flex; exact actual catalog выше |
+| response_provider / history.provider | OpenAI / OpenAI, по accepted runtime mapping и прежнему GPT evidence; flex — только request selector, variant не наблюдён |
+| catalog_entry / catalog_sha256 | Использовать существующий private selected-catalog-entry.json; проверить fingerprint aef50578…ff2a, не реконструировать entry из краткого вывода |
+| checked_at | Actual catalog.attempt.json/receipt UTC; fresh≤24h при configure и enable, не подставлять новое now вместо времени GET |
+| output_cap_parameter | max_tokens; в текущем matched catalog subset именно он |
+| route_evidence | Exact catalog + documented provider.only и allow_fallbacks=false; accepted wire закрепляет один selector, без fallback |
+| schema_tools_evidence | Catalog declarations + documented strict JSON schema/function tools; прошлый GPT synthetic PASS исторический, нового live payload proof ещё нет |
+| token_bound_evidence | Accepted body≤24576bytes, len(serialized wire)+4096≤32768, input reserve32768; условная граница принятого кода, не результат текущего tokenizer probe |
+| image_bound_evidence | Runtime только synthetic TEXT; accepted scope исключает nontext, media не отправляются. Catalog input_image не выдаётся за live Vision |
+| inactive_fee_evidence | Candidate: web_search_per_thousand исключён, поскольку closed wire не допускает plugins/web_search_options/server tools и route не Perplexity/search model |
+| billing_bound_evidence | Текущие RUB rates ниже, cache read/write включены консервативно; account-specific тариф ещё не подтверждён; output cap должен быть reviewed |
+| output_cap_includes_reasoning / output_cap_evidence | **NOT_ATTESTED: exact total-output semantics ещё требуют review. true автоматически не подставлялся** |
 
-[local evidence](https://chatgpt.com/library?file_id=libfile_ca93b4674028819198f02b57862778df&account_id=personal), ZIP10739bytes,
-SHA256 2e51b737649d84f28527600c23a9ef409114c9ca3c00c5bd6868e708181ac124.
-python3 -B validate_provider_preflight.py / Python3.12.14:
-8 controls PASS,0failures/0errors/0skips,0.070s; AST PASS.
-Real private files/checkpoint/pinned helper bytes; HTTP/DB fixtures:
-exact completed checkpoint/UNKNOWN/session blockers, zero-provider scope/
-Resume refusal, exact model/provider/no fallback, key format/TTY/mode,
-two GET ceiling/no replay, no raw key/label leak, both metadata failures,
-fixed host/auth placement/TLS/proxy/redirect/deadline/body/error boundaries.
-VM/real DB/real HTTP/Polza metadata execution NOT_RUN.
+Primary sources/точные implementation anchors:
+- [Polza Chat Completions](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/api-reference/chat/completions.mdx):
+  max_tokens описан как максимум ответа, max_completion_tokens — альтернатива.
+  Само описание не доказывает exact 512-total-output mapping openai/flex.
+- [Polza provider selection](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/provider-selection.mdx):
+  only и allow_fallbacks; [strict schema](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/structured-output.mdx).
+- [Polza web search](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/web-search.mdx) и
+  [server tools](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/server-tools.mdx): search включается через
+  explicit plugin/options/tool. Accepted wire не допускает этих полей.
+- [Accepted RouteReview/RuntimeRoute и wire](https://github.com/Elefesys/ai-service-manager/blob/29dc16084f0ee0d01e5f96e7226995480e189a22/backend/src/asm/ai/polza.py):
+  output_cap_includes_reasoning=Literal[True]; отдельные evidence поля,
+  conditional fee review, closed wire, no fallback и post-response usage guards.
+- [OpenAI Chat Completions reference](https://developers.openai.com/api/reference/python/resources/chat/subresources/completions/methods/create)
+  описывает total visible+reasoning для max_completion_tokens. Перенос этого
+  свойства на Polza max_tokens — inference, не отдельное exact-route evidence.
+- [Polza reasoning guide](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/osobennosti/reasoning-tokens.mdx)
+  описывает reasoning.max_tokens отдельно; скрытый reasoning остаётся billed.
+  [Polza LangChain page](https://polza.ai/integrations/langchain) формулирует
+  влияние reasoning на лимит неоднозначно. Она не принята как доказательство
+  total-output bound. Public OpenAPI URL из docs.json не удалось прочитать
+  через доступный web reader; его содержание не объявляется проверенным.
 
-### Следующее действие и неизменённый допуск
+C6 не утверждает, что Polza игнорирует лимит. Непроверено, достаточны ли
+собранные источники для обязательного true в accepted RuntimeRoute.
+Catalog support/старые synthetic probes не заменяют этот факт:
+SyntheticRoute явно маркирует total-output bound как ASSUMED, RuntimeRoute
+требует reviewed evidence. Не ослаблять validator и не менять512/4POST/10RUB
+ради PASS. Если C0 принимает только experimental assumption вместо review,
+это должно быть отдельным явным решением с последствиями, а не вымышленным
+evidence в JSON. Меньший первый шаг — C0 review конкретного mapping/evidence,
+сохраняющий existing code и пределы; новая платформа/провайдер не нужны.
 
-Первое окно foreground PC/Happ/SSH оставить открытым. Скачать новый helper,
-второе PowerShell: SCP → SSH -t → python3 -B helper --check.
-Ключ вводится только в скрытом VM prompt, не в чат. Вернуть безопасный вывод.
-До scope/configure не отправлять новые сообщения/edits/photos.
-После actual metadata — fresh≤24h account/route/key review и C0-reviewed
-RuntimeRoute, затем прежний конечный smoke → disable/verified drain/return.
-Account balance/тариф не выводить из исторического ledger.
+### Текущий тариф и условный reserve calculation
 
-Owner99fb865a/C0 instruction963baf72 сохраняются, повтор допуска на тот же
-scope не нужен. Один session UUID,≤10мин/4POST/10RUB внутри150 с prior spend
-и UNKNOWN holds;2POST/1READ/run,8historyGET/4Telegram replies; synthetic
-TEXT-only,один route/no fallback. Currentness/tenant/native/UNKNOWN fences
-сохранены. Настройки 10-minute session создавать только ближе к запуску.
-Product/backend/DDL/dependencies/CI/архитектура/ledger не менялись.
-Receipt sole child1787d5b367a913c88d03ee4db2ab3ebef1bf6e0c, branch c6/m4-live-prep-r1,
-только три разрешённых docs + separate private helper/evidence.
-Новый PR/hosted CI не нужен. C6 IN_PROGRESS; остальные HOLD; M4/live открыт.
+| Компонент | RUB / единица |
+|---|---:|
+| prompt_per_million | 5.93195000 /1M tokens |
+| input_cache_read_per_million | 0.59319500 /1M tokens |
+| input_cache_write_per_million | 7.41493750 /1M tokens |
+| completion_per_million | 29.65975000 /1M tokens |
+| web_search_per_thousand | 1186.39000000 /1000 search requests |
+| Неизвестных pricing keys | 0 |
+
+Принятая консервативная сумма input rates=13.94008250; output=29.65975000,
+per-request fee0 по показанной pricing schema. После review исключения search
+и total-output cap:
+reserve = ceil_1e-9((32768×13.94008250 +512×29.65975000)/1000000)
+= **0.471974416 RUB/call**,×4=**1.887897664 RUB**, меньше10RUB.
+Расчёт проверен Decimal; это условная admission-оценка, не текущий charge,
+не проверенный жёсткий provider billing cap и не баланс аккаунта.
+Текущий available balance≥10RUB и отсутствие индивидуального тарифа остаются
+необходимыми owner facts; key limit сам по себе их не подтверждает.
+
+### Что требуется от C0 и владельца перед configure
+
+C0: review candidate выше и exact output-total mapping/evidence. Требование
+не новое: accepted R4 README, «Единственные неизбежные runtime inputs» п.4:
+«новый C0-reviewed RuntimeRoute JSON».
+[R4 accepted package](https://chatgpt.com/library?file_id=libfile_69ec61a7b1488191a3596cb8f444d78a&account_id=personal)
+и [C0 instruction963baf72](https://github.com/Elefesys/ai-service-manager/blob/963baf72387497ef016bcd5f8e9cec4e145a8be7/docs/tasks/M4_HANDOFF.md).
+Новый owner paid допуск на прежний scope не запрашивается. C0-M4-LIVE-OP-01
+остаётся CLOSED; package/host/process review повторять не требуется.
+
+Владелец: сообщить, есть ли сейчас≥10RUB на балансе Polza и обычный ли тариф,
+без отдельного индивидуального договора. Ключ повторно не нужен.
+C6 затем формирует private reviewed JSON из сохранённой entry/actual timestamp,
+проверяет freshness/scope/window/transport и выполняет accepted configure→
+finite enable→disable→verified drain/return. Сейчас RuntimeRoute/configure/
+enable/paid smoke/новыеmodel/history/reply calls **NOT_RUN**.
+ВМ/PC tunnel оставить, completed helpers не повторять, новых synthetic
+messages/edits/photos до согласованного запуска не отправлять.
+
+### Сохранённое окружение и границы
+
+Accepted TEST prepare/CUTOVER/BIND/POLICY/RECEIVE завершены; старые writers
+fenced/stopped, обе группы данных/volumes сохранены. Текущий relay-first
+ремонт устранил observed IP collision без изменения R4/source/private inputs;
+общий cold-start IPAM риск и PC dependency остаются открытыми.
+Source29dc16084f0ee0d01e5f96e7226995480e189a22/treeb70eb0348577c812f4f587d995c724e3c0e989e4.
+Original receipts/UNKNOWN before-images/UUID/holds сохранены.
+
+Limits прежние:один session≤10мин/4POST/10RUB внутри150 с prior spend/UNKNOWN;
+2POST/1READ/run,8historyGET/4replies;synthetic TEXT-only,один route/no fallback.
+Ledger без изменений:confirmed0.37505230,unknown holds7.585505548,
+remaining142.039442152;reported0.00743079 UNSETTLED. Metadata не освобождает holds.
+Owner99fb865a/C0 instruction963baf72 сохраняются. C6 IN_PROGRESS/route review
+ожидается; остальные HOLD; M4/live открыт. Этот receipt sole child2144dabe9b71d1e63ce06fabeb2d71f83486fcd3,
+branch c6/m4-live-prep-r1; только3docs, без нового PR/CI/product/DDL/
+dependencies/architecture/ledger changes.
 
 
 ## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R4 принят C0; продолжить TEST resume / 2026-11-07

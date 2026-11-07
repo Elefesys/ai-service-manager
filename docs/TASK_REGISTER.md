@@ -2,36 +2,40 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, Resume UI подтверждён; server scope/Polza review next / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, actual scope/metadata PASS; route review перед enable / 2026-11-07
 
-Owner-run R4 prepare/relay repair/CUTOVER/BIND/POLICY/RECEIVE PASS;
-TEST0016/provider_sessions0, AI OFF. Existing data/volumes/R4/input bytes
-сохранены; old writers fenced/stopped. Synthetic Client→Owner TEXT виден
-в TEST Console. Теперь владелец подтвердил «Автоматика разрешена» после
-owner reconciliation/отдельного Resume. Это UI confirmation; actual current
-server receipt/scope ещё не проверен. Configure/enable/model smoke NOT_RUN.
+Owner provider preflight завершён: FACTS_COLLECTED_REVIEW_REQUIRED_AI_OFF,
+blockers=[],SSH exit0. Actual accepted scope подтвердил current owner Resume,
+TEST0016/provider_sessions0. Receiver RUNNING/polls89/durable1/confirmed1/
+ack_pending=false/age85.2s; это snapshot,не постоянный transport/drain proof.
+Catalog exact openai/gpt-6-luna/openai/flex, tools/schema/image supported,
+key authenticated/limit allows10RUB. Original inputs/R4/journal/runtime
+UNCHANGED. CatalogGET1/keyGET1,model/history/Telegram API helpercalls0.
+Private receipts/provider-preflight-r1 сохранён, повторять helper не нужно.
 
-Next [asm_m4_provider_preflight.py](https://chatgpt.com/library?file_id=libfile_c4e7da0fc9988191a1d54e8fc122eec4&account_id=personal),15810bytes,
-SHA256 0f86f17ff1c31f1f9f4604a2d9352ecb5a130afe79cbfc10e66d3ab283b3af3c.
-Тот же20DONE checkpoint/intent/R4, current window/socket/inventory, accepted
-READ ONLY db check+scope; private scope.json. Hidden key/one catalog GET+
-one key-metadata GET; bounded/no retries/TLS, private receipts, safe output.
-Key limit не является балансом/индивидуальным тарифом; RuntimeRoute/review
-не создаётся автоматически. Model/history/Telegram API/DBwrites/restarts=0.
-Приватный helper подготовлен; actual VM run NOT_RUN. Local8 controls PASS/
-0skips,Python3.12.14,0.070s/AST; real files + DB/HTTP fixtures, не live proof.
-[local evidence](https://chatgpt.com/library?file_id=libfile_ca93b4674028819198f02b57862778df&account_id=personal). Details — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Следующий gate — fresh C0-reviewed RuntimeRoute,предусмотренный R4 README.
+Конкретный candidate/rates/primary sources и unresolved output-cap mapping —
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md). Current catalog exposes max_tokens;
+exact total visible+reasoning cap не объявлен доказанным только по support.
+Не подставлять output_cap_includes_reasoning=true автоматически,не обходить
+validator/не менять пределы. Это route review,не повторный owner paid допуск.
+От владельца нужны current available balance≥10RUB и стандартный tariff факт.
+Key limit не доказывает эти факты.
 
-PC/Happ/SSH оставить; новый helper во втором PowerShell/SSH -t, ключ только
-в hidden prompt. Completed repair/receive/prepare не повторять. После
-actual scope/metadata fresh account/route/key review≤24h/C0-reviewed route,
-finite smoke,disable/drain/return. Cold-start IPAM/PC dependency остаются.
-Owner99fb865a/C0 instruction963baf72;10мин/4POST/10RUB внутри150 с prior/
-UNKNOWN,2POST/1READ/run,8historyGET/4replies,один route/no fallback.
-Source29dc1608/treeb70eb034, R4/UUID/budget/ledger неизменны.
-Sole child1787d5b367a913c88d03ee4db2ab3ebef1bf6e0c,branch c6/m4-live-prep-r1;
-только3docs + private helper/evidence, без нового PR/hosted CI/product/DDL/
-dependency/architecture changes. C6 IN_PROGRESS,остальные HOLD; M4/live открыт.
+Conditional reserve при принятом total cap и search exclusion:
+0.471974416/call,1.887897664/4calls;Decimal calculation,не actual charge.
+AI OFF/configure/enable/model smoke NOT_RUN;private RuntimeRoute ещё не создан.
+После review — same intent configure/finite smoke/disable/verified drain/return.
+Completed prepare/repair/receive не повторять. ВМ/PC tunnel сохранить.
+Old writers fenced,обе группы данных/volumes/UUID/holds/R4/source сохранены;
+cold-start template IPAM и PC dependency остаются открытыми.
+
+Owner99fb865a/C0 instruction963baf72;10мин/4POST/10RUB внутри150,
+2POST/1READ/run,8historyGET/4replies,один route/no fallback,synthetic TEXT.
+Source29dc1608/treeb70eb034. Ledger/architecture/product/DDL/dependencies/CI
+не менялись. Sole child2144dabe9b71d1e63ce06fabeb2d71f83486fcd3,branch c6/m4-live-prep-r1,
+только3docs,новый PR/hosted CI не запускались. C0-M4-LIVE-OP-01 CLOSED,
+C6 IN_PROGRESS/route review ожидается;остальные HOLD;M4/live открыт.
 
 
 ## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R4 принят C0; продолжить TEST resume / 2026-11-07
