@@ -6,7 +6,114 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, actual scope и metadata PASS; route review до enable / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner facts приняты; output-cap evidence до enable / 2026-11-07
+
+**C0 принял actual preflight b12cf187 и ответ владельца: баланс Polza 150 RUB,
+тариф обычный. Эти два owner-вопроса закрыты.** Это OWNER_REPORTED, не новый
+balance API result; key auth/limit evidence остаётся отдельным. Повторный ключ,
+скриншот кабинета или новый paid допуск на прежний scope не нужны.
+
+### Решение C0 по route candidate
+
+| Часть review | Решение и границы |
+|---|---|
+| Scope/подготовка | Принят owner-run receipt: TEST0016, current synthetic TEXT Resume, AI OFF_ZERO_PROVIDER_SESSIONS, metadata blockers=[], SSH exit0. C0 не выполнял SSH/VM |
+| Account | Баланс150 RUB и обычный тариф подтверждены владельцем 07.11.2026; это не reset бюджета и не доказательство model access |
+| Model/selector | Сохранить openai/gpt-6-luna / openai/flex; response/history family OpenAI. Flex остаётся request selector, variant NOT_OBSERVED |
+| Catalog | Private entry SHA256 aef50578941e135c64646fd77766a8749b80f79fcffc56e298888403dd44ff2a; использовать exact saved JSON и actual catalog.attempt.json UTC, freshness≤24h |
+| Routing/schema/tools | Reviewed на уровне declarations + accepted code: only=[openai/flex], allow_fallbacks=false; strict schema и function tools. Новый live payload/model access ещё не проверен |
+| Input/image | Сохранить принятые wire≤24576 bytes, len(wire)+4096≤32768 и reserve32768; это условная граница, не tokenizer proof. Только synthetic TEXT, без Vision |
+| Search fee | Исключение web_search_per_thousand принято для этого closed wire: нет plugins/web_search_options/server tools; модель не search/Perplexity. Не распространять на другой payload |
+| Rates | RUB prompt5.93195000 + cache read0.59319500 + cache write7.41493750 = input13.94008250/M; completion29.65975000/M. Без оптимистичной cache скидки |
+| Total output | **C0-M4-ROUTE-CAP-01 / OPEN: output_cap_includes_reasoning не подтверждён достаточно для RuntimeRoute. Configure/enable BLOCKED до закрытия этого поля** |
+
+Это частичная приёмка evidence, не приёмка полного RuntimeRoute. Catalog
+поддерживает max_tokens; max_completion_tokens отсутствует в matched subset.
+Проверка Python DTO потребует true, но не проверит правдивость evidence-строки.
+
+C0 проверил accepted [RouteReview/RuntimeRoute и wire](https://github.com/Elefesys/ai-service-manager/blob/29dc16084f0ee0d01e5f96e7226995480e189a22/backend/src/asm/ai/polza.py),
+[Polza Chat Completions](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/api-reference/chat/completions.mdx)
+и [reasoning guide](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/osobennosti/reasoning-tokens.mdx).
+Документы описывают max_completion_tokens как альтернативу max_tokens и
+reasoning как оплачиваемый output, но не устанавливают явное применение
+общего cap к этому Polza selector. OpenAI [API reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
+объясняет visible+reasoning cap для max_completion_tokens; [Help Center](https://help.openai.com/en/articles/5072518-controlling-the-length-of-openai-model-responses)
+называет параметры alias. Перенос на Polza gateway остаётся inference.
+[Polza LangChain](https://polza.ai/integrations/langchain) неоднозначен о выходе
+reasoning за лимит. C0 не утверждает, что лимит нарушается; имеющихся источников
+недостаточно для обязательного true. Сторонний SDK и один удачный probe не
+заменяют provider contract. Post-response usage guard не отменит уже сделанный вызов.
+
+Search exclusion проверен по official docs того же Polza commit:
+[provider selection](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/provider-selection.mdx),
+[strict schema](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/structured-output.mdx),
+[web search](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/web-search.mdx)
+и [server tools](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/gaidy/server-tools.mdx),
+совместно с accepted closed wire. Это review контракта, не новая платная проба.
+
+Условный reserve при общем output cap512:
+ceil_1e-9((32768×13.94008250+512×29.65975000)/1000000)
+=0.471974416 RUB/call; ×4=1.887897664 RUB. Он меньше10 RUB, но не становится
+подтверждённым billing ceiling из-за наличия150 RUB на счёте.
+Ledger прежний: confirmed0.37505230, UNKNOWN holds7.585505548,
+remaining142.039442152; reported0.00743079 UNSETTLED. Hold не освобождён.
+
+### Единственный следующий шаг C6 — получить недостающий public contract
+
+Не повторять поиск тех же страниц/каталога или provider preflight.
+В official [docs.json](https://github.com/polza-ai/docs/blob/b9066ee5fd7da081467eb22cd1356592bff275bd/docs.json)
+указан публичный https://polza.ai/api/openapi.json. C0 web reader не смог
+прочитать его; в проверенном official docs tree отдельного OpenAPI файла нет.
+Этот оставшийся источник ещё не проверен, его содержание не предполагается.
+
+1. Попробовать один обычный public GET этого URL из доступной среды C6; при
+   отсутствии сетевого доступа дать владельцу одну read-only команду на ПК.
+   Без API key/Authorization/cookies, без proxy-разведки и без model POST.
+   Конечный timeout/size limit; сохранить исходные bytes, UTC, HTTP status,
+   фактический URL и SHA256. Отказ/слишком большой ответ — явный результат,
+   не повод повторять запрос циклом. Новая diagnostic платформа не нужна.
+2. Локально проследить request schema /chat/completions и её внутренние refs:
+   max_tokens, max_completion_tokens, reasoning и описания общего output cap.
+   Вернуть точные schema paths/короткие выдержки и applicability к OpenAI
+   provider. Generic integer/maximum или слово «альтернатива» сами по себе
+   не доказывают total visible+reasoning bound.
+3. Вернуть один evidence receipt C0: CONTRACT_FOUND либо NOT_PROVEN с конкретным
+   недостающим mapping. При NOT_PROVEN остановить этот источник; C0 определит
+   следующий ограниченный вариант. Не начинать бесконечный цикл поиска.
+   Сообщения Polza support от имени владельца этой выдачей не разрешены.
+4. До отдельного C0 acceptance полного route не создавать фиктивно reviewed JSON,
+   не выполнять configure/enable, не подставлять true и не менять512/4POST/10RUB.
+   Не переходить на SyntheticRoute, другой selector или experimental assumption
+   без явного принятого изменения. Текущий owner допуск остаётся в силе.
+
+Прочие уже выполненные prepare/repair/receive не повторять. TEST AI OFF,
+old writers fenced; обе группы volumes, R4, private inputs/receipts/UUID/holds
+сохранить. До фактического enable позже нужен обычный fresh transport/scope/
+window check: прежний receiver age85.2s — только snapshot. Catalog checked_at
+не обновлять без GET; если истечёт24h, вернуть EXPIRED для узкого refresh review.
+Новых сообщений/edits/photos для этой проверки не требуется.
+
+### Scope и возврат
+
+Repository Elefesys/ai-service-manager, branch c6/m4-live-prep-r1.
+Этот C0 instruction — sole child b12cf18730467950d51b8413e2354a66137c1fce;
+C6 начинает от полного SHA в URL этого instruction, следующий receipt — его
+descendant, expected-sha/force=false. Build/native source и main
+29dc16084f0ee0d01e5f96e7226995480e189a22, treeb70eb0348577c812f4f587d995c724e3c0e989e4.
+Write-set только docs/tasks/M4_HANDOFF.md, docs/TASK_REGISTER.md,
+docs/runbooks/M4_RUNTIME_PILOT.md; raw public contract/evidence вне Git.
+Product/DDL/CI/dependencies/архитектура не меняются; новый PR/full CI не нужны.
+Doc/ancestry/Decimal review выполнен; runtime/PG/host tests не повторялись.
+C0 не делал account/catalog/key/history/model/Telegram calls, configure или enable.
+
+Owner99fb865a и лимиты прежние:один сеанс≤10мин/4POST/10RUB внутри150,
+2POST/1READ/run,8historyGET/4replies,synthetic TEXT/один route/no fallback;
+UNKNOWN/no-resend/ACK-drain/native guards сохранены. C0-M4-LIVE-OP-01 CLOSED.
+C6 IN_PROGRESS только public-contract evidence; configure/enable BLOCKED по
+C0-M4-ROUTE-CAP-01; остальные HOLD, полный M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, actual scope и metadata PASS; route review до enable / 2026-11-07
 
 **Владелец выполнил provider preflight, ASM_SSH_EXIT=0, blockers=[].**
 Итог FACTS_COLLECTED_REVIEW_REQUIRED_AI_OFF. Это успешная проверка scope и

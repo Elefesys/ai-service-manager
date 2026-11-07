@@ -1,6 +1,49 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — actual preflight PASS; route review перед моделью / 2026-11-07
+## CURRENT — owner facts приняты; total-output contract до enable / 2026-11-07
+
+**Владелец подтвердил баланс Polza150 RUB и обычный тариф.** Эти owner facts
+закрыты как OWNER_REPORTED; API balance не запрашивался. Допуск99fb865a на
+тот же scope сохраняется, повтор не нужен. Balance не заменяет ledger:
+confirmed0.37505230,UNKNOWN holds7.585505548,remaining142.039442152;
+reported0.00743079 UNSETTLED, ничего не сбрасывать.
+
+Preflight b12cf187 принят: current synthetic TEXT scope/Resume,TEST0016,
+AI OFF_ZERO_PROVIDER_SESSIONS,metadata blockers=[],SSH exit0.
+Exact saved catalog SHA256
+aef50578941e135c64646fd77766a8749b80f79fcffc56e298888403dd44ff2a,
+model openai/gpt-6-luna,selector openai/flex,OpenAI response/history family.
+Source/main29dc1608/treeb70eb034 и R4 неизменны.
+
+C0 проверил routing/schema/function tools, закрытый TEXT wire и исключение
+web_search_per_thousand. Сумма input rates13.94008250/M,output29.65975000/M;
+reserve при общем output512 =0.471974416/call,4calls=1.887897664 RUB.
+**Полный RuntimeRoute не принят: C0-M4-ROUTE-CAP-01 OPEN.** Поддержка max_tokens
+каталогом и описание alias не доказывают, что Polza ограничивает общий
+visible+reasoning output. Не подставлять output_cap_includes_reasoning=true,
+не менять cap/validator и не создавать фиктивно reviewed runtime JSON.
+Configure/enable BLOCKED; key/balance/обычный тариф этот технический gap не закрывают.
+
+Единственное продолжение C6 сейчас: один unauthenticated GET публичного
+https://polza.ai/api/openapi.json из official docs.json, с конечными пределами,
+сохранением raw bytes/UTC/status/URL/hash; затем локальный просмотр Chat
+Completions schema/refs и receipt CONTRACT_FOUND либо NOT_PROVEN.
+Если сетевой доступ C6 отсутствует — одна read-only команда владельцу на ПК.
+Никаких model POST/повтора account metadata/support messages; подробные
+критерии и primary sources в [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
+Не читать те же источники циклом. Следующее route acceptance принимает C0.
+
+Completed prepare/CUTOVER/BIND/POLICY/RECEIVE не повторять; AI OFF, old writers
+fenced, обе группы данных/volumes/R4/receipts/UUID/holds сохранить.
+Позднейший enable потребует fresh scope/transport/window и actual catalog
+checked_at≤24h; нельзя заменить его временем чата. Receiver age85.2s исторический.
+Owner10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies,
+synthetic TEXT/один route/no fallback и disable/verified drain/return прежние.
+C0 не выполнял VM/live/account/catalog/key/history/model/Telegram calls.
+Только3 coordination docs; код/DDL/CI/архитектура не изменены, M4/live открыт.
+
+
+## История — actual preflight PASS; route review перед моделью / 2026-11-07
 
 [asm_m4_provider_preflight.py](https://chatgpt.com/library?file_id=libfile_c4e7da0fc9988191a1d54e8fc122eec4&account_id=personal) выполнен владельцем:
 ACCEPTED_CURRENT_SYNTHETIC_TEXT_SCOPE,OFF_ZERO_PROVIDER_SESSIONS,
