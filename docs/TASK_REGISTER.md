@@ -2,49 +2,45 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, relay IP collision подтверждён; repair готов / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, RECEIVE_READY_AI_OFF; ожидание synthetic TEXT / 2026-11-07
 
-**Actual diagnostic COMPLETE, SSH exit0.** cutover.relay=UNKNOWN, later steps
-отсутствуют. command-015 failure: ADDRESS_IN_USE/NETWORK_SETUP_FAILED. Оба
-fixed relay IP принадлежат TEST postgres; relay CREATED/not running, остальные
-четыре TEST службы running. Old configs accepted/unchanged и все5 writers
-running. Diagnostic read-only; checkpoint/private inputs/failure records/R4
-сохранены. Причина — порядок старта dynamic PG перед fixed relay.
+**Owner-run actual repair/cutover/bind/policy/receive PASS, SSH exit0.**
+Все8 repair prechecks PASS, blockers=[]. Существующая TEST DB сохранена в
+private backup; TEST frontend/API/PG остановлены и возвращены в проверенном
+порядке: relay первым, затем PG/API/frontend. HTTP API/Console/Console→API PASS.
+Relay теперь владеет обоими fixed IP; same container IDs/images/volumes/R4/inputs.
+Only cutover.relay UNKNOWN reconciled после actual proof; original failed
+receipt сохранён. Accepted CUTOVER/BIND/POLICY/RECEIVE complete: webhook снят,
+old writers fenced/stopped, TEST binding/MATERIAL/native и receive применены.
 
-[asm_m4_relay_repair.py](https://chatgpt.com/library?file_id=libfile_a5e33e0598808191b58829df4d215822&account_id=personal),
+TEST0016/provider_sessions0, AI OFF; configure/enable/Polza smoke NOT_RUN.
+Receiver RUNNING/code=null/age0.4s/successful_polls1/ack_pending=false,
+durable_deliveries0/confirmed_responses0. Это подтверждает транспортный путь,
+но пока не end-to-end delivery/native owner reconciliation/Resume/drain.
+C6 SSH не выполнял: evidence — полный безопасный вывод владельца.
+
+Completed [asm_m4_relay_repair.py](https://chatgpt.com/library?file_id=libfile_a5e33e0598808191b58829df4d215822&account_id=personal),
 19603 bytes / SHA256 097d9ecfb32b098133290a70f4b831924a27cc3a3eac0dcf8e4dbbe329dce5c5.
-Отдельный bounded continuation, тот же intent/допуск; exact prechecks и backups,
-stop только TEST frontend/API+drain и PG, actual address release→same relay first
-→same PG/API/frontend/HTTP/AI OFF→only relay UNKNOWN reconciliation→accepted
-cutover/bind/policy/receive. IDs/images/configs/mounts/volumes/R4/Compose/source/
-private inputs сохраняются; меняются dynamic network addresses. Нет удаления,
-network disconnect, force, blind replay или automatic restore. Каждая phase
-UNKNOWN-before-effect, original failed receipt сохранён. Telegram pending/
-watermark/45s/ACK/UNKNOWN/native/drain guards прежние. Paid enable не запускается.
+Local13 controls PASS/0skips/AST/R4 hashes ранее; actual VM результат теперь
+отдельно подтверждён. Private receipts/relay-start-order-repair-r1 и исходный
+receive-start-r1 сохранены. Повтор repair/receive-start/prepare запрещён.
+Old data/volumes не удалялись; старые writers остановлены штатным fence.
+Общий template cold-start IPAM риск и зависимость от PC tunnel остаются.
 
-Local13 controls PASS/0skips, Python3.12.14, 0.840s; AST и immutable R4 hashes PASS.
-Реальные local files/journal, Docker/PG fixtures; не VM proof. Actual repair/
-receive NOT_RUN; [подробности CURRENT HANDOFF](tasks/M4_HANDOFF.md).
-Общий static/dynamic IPAM cold-start риск template этим ограниченным порядком
-запуска не объявляется устранённым; accepted template не изменён.
+Next: оставить PC/Happ/SSH; одно synthetic Client→Owner TEXT, проверить его в
+новой TEST Console http://127.0.0.1:18080 → owner reconciliation + отдельный
+Resume → actual scope/receipt, fresh account/route/key review≤24h → finite smoke
+→ disable/verified drain/return. Пока только synthetic TEXT, без фото/native
+edits/реальных данных. Owner assertion нельзя выводить из одного click.
 
-Ранее actual R4 capture/plan/check и все9 prepare DONE, TEST asm_test/0016,
-provider_sessions0, HTTP API/Console/Console→API PASS; владелец вошёл через
-PC/Happ/SSH. Resource null-IPAM и public-code permission причины устранены
-отдельными completed helpers; их не повторять. Старый poller остановлен,
-не удалён; старые данные/volumes сохранены. C6 прямого SSH доступа не имеет.
+Scope/owner99fb865a/C0 instruction963baf72 сохраняются; повтор допуска не нужен.
+Limits10мин/4POST/10RUB внутри150 с prior/UNKNOWN,2POST/1READ/run,
+8historyGET/4replies, один route/no fallback; currentness/native/send guards прежние.
+Ветка c6/m4-live-prep-r1; sole childaf8ecb470a73d25c4ac262f566086180c7a93dc1; build29dc1608/treeb70eb034.
+Только три docs; product/DDL definitions/dependencies/CI/architecture/ledger
+не менялись, нового PR/hosted CI нет. C6 IN_PROGRESS, остальные HOLD; M4/live открыт.
+Подробности — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
 
-Next: оставить foreground tunnel; из второго PowerShell выполнить новый
-pinned repair --repair, вернуть output. При STOP checkpoint/logs сохранить,
-не повторять. После RECEIVE_READY_AI_OFF — synthetic Client→Owner TEXT,
-owner reconciliation + отдельный Resume→fresh account/route/key review≤24h
-→finite smoke→disable/verified drain/return. Owner99fb865a/C0 scope963baf72
-прежние; новый допуск не нужен. Limits10мин/4POST/10RUB внутри150 с prior/UNKNOWN,
-2POST/1READ/run,8historyGET/4replies, syntheticTEXT, один route/no fallback.
-
-Ветка c6/m4-live-prep-r1; sole child18324402; build29dc1608/treeb70eb034.
-Только три docs; product/DDL definitions/CI/dependencies/архитектура/ledger прежние.
-Новый PR/hosted CI не создавались. C6 IN_PROGRESS, остальные HOLD; M4/live открыт.
 
 ## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R4 принят C0; продолжить TEST resume / 2026-11-07
 

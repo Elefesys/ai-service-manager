@@ -6,14 +6,44 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, TEST готов; relay IP collision подтверждён, repair готов / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, RECEIVE_READY_AI_OFF; ожидание synthetic TEXT / 2026-11-07
 
-**Actual TEST preparation PASS, AI OFF.** Владелец выполнил private R4 continuation
-на ВМ и сообщил успешный вход в новую TEST Console через PC/Happ/SSH.
-C6 не имел прямого SSH-доступа: VM evidence ниже — полученные выводы команд
-владельца. Первая попытка cutover остановилась на старте relay; bind/policy/receive и M4 provider smoke **NOT_RUN**.
+**Actual relay repair + CUTOVER/BIND/POLICY/RECEIVE PASS, SSH exit0.**
+Владелец выполнил pinned asm_m4_relay_repair.py и передал полный безопасный
+вывод. C6 не имел прямого SSH-доступа; actual VM evidence — вывод владельца.
+Текущий результат RECEIVE_READY_AI_OFF. End-to-end synthetic message, owner
+reconciliation/отдельный Resume и M4 provider smoke ещё не подтверждены.
 
-### Actual receive attempt — STOP до остановки старых writers
+### Actual успешное продолжение / 2026-11-07
+
+| Проверка/шаг | Вывод владельца |
+|---|---|
+| Полный precheck | Все8 checks PASS, blockers=[]; TEST0016/provider_sessions0 |
+| TEST recovery | STOP frontend/API+drain → backup существующей TEST DB → clean PG stop/address release → same relay first → same PG → API/frontend |
+| Console | HTTP API/Console/Console→API PASS |
+| Сохранение | SAME_CONTAINERS_IMAGES_VOLUMES_R4_INPUTS_RELAY_OWNS_BOTH_ADDRESSES |
+| Relay reconciliation | RECONCILE_VERIFIED_RELAY_RESULT завершён; accepted cutover.relay already_done=true |
+| CUTOVER | remove-webhook и old-fenced выполнены; CUTOVER COMPLETE |
+| BIND | bind.commit выполнен; BIND COMPLETE |
+| POLICY | stop-api/material/native выполнены; POLICY COMPLETE |
+| RECEIVE | api/console/worker/receiver выполнены; RECEIVE COMPLETE |
+| AI | TEST_0016_ZERO_PROVIDER_SESSIONS; configure/enable/Polza calls не запускались |
+| Receiver observation | RUNNING, code=null, age0.4s, successful_polls1, ack_pending=false, durable_deliveries0, confirmed_responses0 |
+| Итог | RECEIVE_READY_AI_OFF; ASM_SSH_EXIT=0 |
+
+Conflict разрешён в текущем TEST: relay владеет обоими fixed IP, PG снова
+работает с dynamic address. Original failed receipt, before-images и новые
+repair/continuation receipts сохранены; повтор completed helpers запрещён.
+Старые writers остановлены accepted cutover fence, не удалены; старые volumes/
+данные сохранены. Новые TEST worker/scheduler и единственный receiver запущены.
+Финальные inventory/old_stopped/safe_volumes/inputs/R4 проверки helper завершены.
+
+RUNNING + successful_polls1 подтверждает текущую транспортную готовность.
+При counters0 доставка конкретного сообщения и native owner reconciliation
+не доказаны; это не end-to-end PASS и не общий drain/ACK proof. Автономный путь
+без PC/Happ/SSH и общий cold-start IPAM risk не закрыты. AI остаётся OFF.
+
+### Предшествующая receive attempt — STOP до остановки старых writers
 
 Владелец выполнил receive continuation. Все шесть prechecks PASS:
 approval/product window, old DB queues, private inputs, private SSH socket,
@@ -24,12 +54,12 @@ COMMAND_FAILED / Refused, SSH exit1. До cutover.old-fenced/bind/policy/receive
 исполнение не дошло. Raw failure records и journal сохранены; не повторять
 receive-start и не восстанавливать автоматически.
 
-### Actual relay diagnosis — подтверждён конфликт IP
+### Предшествующая relay diagnosis — подтверждён конфликт IP
 
 Владелец выполнил pinned read-only diagnostic, SSH exit0. Journal:
 cutover.relay=UNKNOWN, later_steps_present=false. command-015: exit1,
 ADDRESS_IN_USE + NETWORK_SETUP_FAILED; stderr227bytes/stdout0, без truncation.
-Оба fixed relay адреса — 172.30.240.2 и fd42:6d34::2 — сейчас принадлежат TEST
+Оба fixed relay адреса — 172.30.240.2 и fd42:6d34::2 — на checkpoint до repair принадлежали TEST
 postgres. Relay CREATED/not running, без OOM; API/frontend/postgres/storage
 running. Старые configs ACCEPTED_UNCHANGED, все пять old writers running.
 Checkpoint/inputs/R4/failure records сохранены; diagnostic ничего не менял.
@@ -38,7 +68,7 @@ Checkpoint/inputs/R4/failure records сохранены; diagnostic ничего
 до relay и занял его fixed IPv4/IPv6. Это уже actual observation, не гипотеза.
 SSH/база/провайдер VPN не являются причиной этой конкретной ошибки старта.
 
-### Узкое исправление текущего TEST — готово, actual NOT_RUN
+### Узкое исправление текущего TEST — выполнено, actual PASS
 
 [asm_m4_relay_repair.py](https://chatgpt.com/library?file_id=libfile_a5e33e0598808191b58829df4d215822&account_id=personal),
 19603 bytes, SHA256 097d9ecfb32b098133290a70f4b831924a27cc3a3eac0dcf8e4dbbe329dce5c5.
@@ -52,7 +82,7 @@ volumes/queues; exactly5 TEST services, healthy pinned PG/storage; relay CREATED
 и never-started; оба адреса только у PG, dynamic PG IPAMConfig, никаких лишних
 network endpoints; TEST0016/provider_sessions0. Все blockers собираются вместе.
 
-Порядок в одном helper:
+Выполненный порядок в одном helper:
 1. Остановить только существующие TEST frontend/API, выполнить accepted drain.
 2. Приватно сохранить TEST pg_dump и globals; затем чисто остановить тот же PG.
 3. Проверить actual release обоих адресов. Если адреса заняты — STOP; нет
@@ -80,7 +110,8 @@ never-started relay guards, both-family ownership/IPv6 normalization, exact
 configuration preservation, backups-before-stop, relay-first successful flow,
 address-not-released/invalid-backup/uncertain-effect stops, no replay/auto restore,
 only relay reconciliation, readiness failure. Это не VM/SSH/PG/Telegram proof.
-C6 прямого доступа к ВМ не имеет; actual repair/receive ещё NOT_RUN.
+C6 прямого доступа к ВМ не имеет; actual repair/receive PASS теперь подтверждён
+полным выводом владельца выше, отдельно от этих local fixture tests.
 
 Это ограниченное исправление порядка запуска текущего TEST. Оно не устраняет
 общий риск static/dynamic IPAM в неизменённом template при новом deployment
@@ -93,18 +124,18 @@ C6 прямого доступа к ВМ не имеет; actual repair/receive 
 | Шаг | Фактический результат |
 |---|---|
 | Exact R4 resume | Обе системные Python identities PASS; unverified=0, read_errors_or_omitted=0; общий precheck без blockers |
-| Старый runtime | Прежний poller остановлен, не удалён; два exact завершённых setup-контейнера архивированы и удалены; рабочие контейнеры и volumes сохранены |
+| Старый runtime до cutover | Прежний poller остановлен, не удалён; два exact завершённых setup-контейнера архивированы и удалены; рабочие контейнеры и volumes сохранены |
 | Capture/plan/check | PASS; прежний owner допуск и C0 review привязаны к одному private intent; UUID/бюджет не заменялись |
 | Resources | Причина UNKNOWN — стандартные Docker host/none networks с IPAM.Config=null. Отдельная проверка доказала отсутствие коллизий/TEST volumes/containers; только этот шаг reconciled с сохранённым before-image |
 | PostgreSQL bootstrap | Причина COMMAND_FAILED — checkout с umask077: tracked code 600/700, bootstrap недоступен PostgreSQL UID999. DB была пустой; migrator/runtime roles и schemas отсутствовали |
 | Permissions repair | Backups пустой TEST DB и roles сохранены приватно. Только tracked public code приведён к 644/755; bytes/Git SHA/tree/executable bits/private inputs не изменены. Три TEST images пересобраны; non-root read probes PASS |
 | Database reconciliation | Exact accepted bootstrap выполнен в существующей пустой TEST DB; roles/schemas/extensions проверены. Контейнеры и volumes сохранены; UNKNOWN reconciled после проверки, не сброшен ради повтора |
 | Accepted prepare | Все девять prepare steps DONE; migrations/owner/API/Console выполнены. API, Console и Console→API HTTP PASS; результат PREPARE_COMPLETE_AI_OFF, SSH exit0 |
-| PC/Console | Exact accepted pc_session.ps1 использован для tunnel и loopback18080; владелец подтвердил вход. Это доказательство Console path, не authenticated Telegram path |
+| PC/Console | Exact accepted pc_session.ps1 использован для tunnel и loopback18080; владелец подтвердил вход. На этапе prepare это доказывало только Console path; текущий receiver poll подтверждён выше |
 
 Original R2/R3/R4 packages, historical review flags, source bytes, private
-inputs и прежние данные сохранены. Старые рабочие службы на этом checkpoint
-ещё не остановлены. TEST: asm_test/schema0016, AI default OFF, accepted complete
+inputs и прежние данные сохранены. На текущем checkpoint старые writers
+остановлены через accepted fence, новые TEST receive службы запущены. TEST: asm_test/schema0016, AI default OFF, accepted complete
 проверяет provider_sessions=0. Не выполнены configure/enable/Polza calls/replies.
 
 ### Отдельные private helpers и границы проверки
@@ -137,22 +168,24 @@ Ready/ACK_PENDING не объявляется доказательством dra
 
 ### Продолжение в прежнем допуске
 
-Не закрывать PC/Happ/SSH tunnel. Из второго PowerShell выполнить только новый
-pinned asm_m4_relay_repair.py --repair; во время переключения не отправлять
-тестовые сообщения и не нажимать Console actions. Helper временно перезапустит
-TEST Console/API/PG, затем продолжит accepted cutover; старые writers остановит
-только штатный fence. Вернуть безопасный вывод. Receive-start/завершённые
-prepare helpers не повторять; при STOP сохранить receipt без auto retry/restore.
+Не закрывать PC/Happ/SSH tunnel. Repair/receive-start/prepare helpers завершены
+и повторно не запускаются. Следующий actual шаг — из тестового Client аккаунта
+отправить одно новое выдуманное TEXT сообщение прежнему тестовому Owner.
+Проверить его появление в новой TEST Console http://127.0.0.1:18080 под m4-owner,
+при необходимости обновить список диалогов/сообщений. Не использовать фото,
+native edits, реальные данные или старую M3 историю. AI-ответ пока не ожидается.
 
-После actual RECEIVE_READY_AI_OFF — один synthetic Client→Owner TEXT, увидеть
-его в TEST Console; owner reconciliation и отдельный Resume. Затем fresh account/
-route/key review≤24h, тот же finite Polza smoke, disable/verified drain/return.
+После owner-confirmed появления текста — существующая native context сверка
+владельцем и отдельный Resume; actual current scope/receipt проверяется перед
+configure. Не фабриковать owner assertion по одному нажатию кнопки.
+Затем fresh account/route/key review≤24h, тот же finite Polza smoke,
+disable/verified drain/return. До этих шагов M4/live остаётся открыт.
 Owner допуск99fb865a/C0 instruction963baf72 сохраняются, повтор не запрашивается.
 Один сеанс≤10мин/4POST/10RUB внутри150 с prior spend/UNKNOWN holds,
 2POST/1READ/run,8historyGET/4replies; synthetic TEXT-only, один route/no fallback.
 AI OFF/EVAL_ONLY до enable; no-regeneration/no-resend/tenant/native barriers прежние.
 
-Receipt — sole child18324402ff628bbb9a6d21a2ad30e396af08c246,
+Receipt — sole childaf8ecb470a73d25c4ac262f566086180c7a93dc1,
 ветка c6/m4-live-prep-r1; build/native29dc16084f0ee0d01e5f96e7226995480e189a22,
 treeb70eb0348577c812f4f587d995c724e3c0e989e4. Только три разрешённых docs.
 Product/DDL definitions/dependencies/CI/architecture/ledger не изменены;

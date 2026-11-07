@@ -1,61 +1,51 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — TEST готов; подтверждён relay IP collision, узкое продолжение / 2026-11-07
+## CURRENT — RECEIVE_READY_AI_OFF; проверить первый synthetic TEXT / 2026-11-07
 
-Read-only diagnosis фактически выполнена владельцем: cutover.relay=UNKNOWN,
-later steps нет; ADDRESS_IN_USE/NETWORK_SETUP_FAILED. Оба fixed relay адреса
-заняты TEST PostgreSQL. Relay CREATED/never-running; старые configs/writers
-сохранены, остальные TEST службы работают. SSH exit0. Это конфликт порядка
-выдачи адресов внутри TEST, а не ошибка SSH.
+**Actual owner-run relay repair и CUTOVER/BIND/POLICY/RECEIVE завершены,
+ASM_SSH_EXIT=0. Completed helpers повторно не запускать.**
 
-**Следующая команда — только новый helper.**
+Все8 prechecks PASS, blockers=[]. Private TEST DB backup выполнен; TEST Console/
+API/PG возвращены после запуска существующего relay первым. Relay владеет
+обоими fixed IP; контейнеры/images/volumes/R4/private inputs сохранены.
+HTTP API/Console/Console→API PASS. Only relay UNKNOWN reconciled после proof;
+original failure records не стирались. Accepted remove-webhook/old-fenced,
+bind.commit, policy.stop-api/material/native и receive.api/console/worker/receiver
+завершены. Старые writers остановлены, данные/volumes сохранены.
+
+TEST0016/provider_sessions0, AI OFF. Receiver RUNNING, code=null, age0.4s,
+successful_polls1, ack_pending=false, durable_deliveries0, confirmed_responses0.
+Доставка реального тестового сообщения ещё не подтверждена; RUNNING не заменяет
+end-to-end/owner reconciliation/Resume/drain proof. C6 прямого SSH доступа нет,
+actual evidence — вывод владельца. Configure/enable/Polza calls NOT_RUN.
+
+### Следующий пользовательский шаг
+
+1. Оставить foreground PC/Happ/SSH tunnel работающим.
+2. Открыть http://127.0.0.1:18080 — новую TEST Console, логин m4-owner.
+3. С прежнего тестового Client аккаунта отправить одно новое выдуманное TEXT
+   сообщение тестовому Owner. Например: «Тест M4: хочу маленькую татуировку
+   в виде горы на предплечье». Без фото/вложений/native edits/реальных данных.
+4. Обновить диалоги и сообщения TEST Console; подтвердить, появился ли текст.
+   AI-ответ пока не ожидается, provider session выключен.
+5. После видимого сообщения выполнить существующую native context сверку
+   владельцем и отдельный Resume; actual scope/current receipt проверяется
+   перед configure. Не объявлять это выполненным по readiness или click.
+
+Completed helper:
 [asm_m4_relay_repair.py](https://chatgpt.com/library?file_id=libfile_a5e33e0598808191b58829df4d215822&account_id=personal),
 19603 bytes / SHA256 097d9ecfb32b098133290a70f4b831924a27cc3a3eac0dcf8e4dbbe329dce5c5.
-После проверки hash передать в /home/asmoperator/asm_m4_relay_repair.py,
-выставить600 и запустить как asmoperator:
-`python3 -B ~/asm_m4_relay_repair.py --repair`.
-Первое окно PC/Happ/SSH tunnel оставить открытым; команда — из второго окна.
-Во время переключения не отправлять сообщения и не выполнять Console actions.
+Private receipts/relay-start-order-repair-r1 и receive-start-r1 сохранены.
+Не повторять completed repair/receive-start/prepare, не запускать старый
+consumer параллельно новому. Текущий маршрут требует PC tunnel; общий cold-start
+IPAM риск неизменённого template этим finite remedy не закрыт.
 
-Helper проверяет exact same intent/R4/checkpoint/accepted old runtime/host
-writers/queues/volumes/current window/private socket; именно CREATED relay
-и два адреса у dynamic TEST PG; TEST0016/provider_sessions0. Сохраняет private
-before-images и backup TEST DB/globals. Останавливает TEST frontend/API и
-accepted drain, затем PG; требует actual release обоих IP. Запускает тот же
-relay первым, затем PG, API/frontend; проверяет READY/healthy/HTTP/AI OFF.
-Контейнеры/volumes сохраняются; Compose/fixed IP/source/R4/private inputs
-не меняются. Только dynamic addresses могут измениться.
+Далее fresh≤24h account/route/key review и прежний finite smoke:
+≤10мин/4POST/10RUB внутри150 с prior/UNKNOWN,2POST/1READ/run,
+8historyGET/4replies, один route/no fallback; затем disable/drain/return.
+Owner допуск99fb865a/C0 scope963baf72 прежние. M4/live ещё открыт.
+Подробное evidence — CURRENT HANDOFF.
 
-После actual proof reconciles только cutover.relay UNKNOWN→DONE и продолжает
-штатные cutover/bind/policy/receive с сохранением remote pending0, queue/
-watermark/45s/ACK/UNKNOWN/native/drain fences. Старые writers останавливаются
-только accepted cutover. AI configure/enable/Polza calls не запускаются.
-Результат цели: ASM_M4_RELAY_REPAIR_RESULT="RECEIVE_READY_AI_OFF".
-
-New private receipt: receipts/relay-start-order-repair-r1; каждая phase
-UNKNOWN-before-effect. Original receive-start-r1/logs сохраняются. При STOP
-вернуть безопасный вывод и сохранить files; не повторять helper/receive-start,
-не удалять сеть/контейнеры/volumes и не выполнять automatic restore.
-Fresh guard перед шагом, same IDs/images/configs/mounts; только пустые DNS
-nil/[] нормализуются при сравнении. Не менять provider subscriptions/VPN profile.
-
-Local13 controls PASS/0skips, Python3.12.14, 0.840s; AST/R4 hashes PASS.
-Реальные local files/journals + Docker/PG fixtures; actual VM repair NOT_RUN.
-Это remedy текущего finite TEST, не общий cold-start fix неизменённого template.
-Сохраняется риск динамического занятия fixed адресов при новом deployment/
-холодном старте; текущий шаг не требует reboot/полного Compose restart.
-
-Предшествующий actual prepare завершён: TEST asm_test/schema0016, все9 steps
-DONE, HTTP API/Console/Console→API PASS. Владелец вошёл по
-http://127.0.0.1:18080 через PC tunnel; public URL относится к старой среде.
-Completed resource/permissions/bootstrap helpers повторять нельзя.
-
-После actual RECEIVE_READY_AI_OFF — один выдуманный Client→Owner TEXT,
-проверка TEST Console, owner reconciliation и отдельный Resume.
-Далее fresh≤24h account/route/key review, finite smoke≤10мин/4POST/10RUB
-внутри150 с prior/UNKNOWN;2POST/1READ/run,8historyGET/4replies,
-один route/no fallback; disable/drain/return. Scope/owner допуск прежние.
-Подробный receipt/границы — CURRENT HANDOFF; M4/live ещё открыт.
 
 ## История — приёмка R4 до исполнения на ВМ
 
