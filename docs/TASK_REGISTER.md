@@ -2,49 +2,36 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, synthetic TEXT доставлен; owner reconciliation/Resume ожидаются / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, Resume UI подтверждён; server scope/Polza review next / 2026-11-07
 
-**Owner-run actual repair/cutover/bind/policy/receive PASS, SSH exit0.**
-Все8 repair prechecks PASS, blockers=[]. Существующая TEST DB сохранена в
-private backup; TEST frontend/API/PG остановлены и возвращены в проверенном
-порядке: relay первым, затем PG/API/frontend. HTTP API/Console/Console→API PASS.
-Relay теперь владеет обоими fixed IP; same container IDs/images/volumes/R4/inputs.
-Only cutover.relay UNKNOWN reconciled после actual proof; original failed
-receipt сохранён. Accepted CUTOVER/BIND/POLICY/RECEIVE complete: webhook снят,
-old writers fenced/stopped, TEST binding/MATERIAL/native и receive применены.
+Owner-run R4 prepare/relay repair/CUTOVER/BIND/POLICY/RECEIVE PASS;
+TEST0016/provider_sessions0, AI OFF. Existing data/volumes/R4/input bytes
+сохранены; old writers fenced/stopped. Synthetic Client→Owner TEXT виден
+в TEST Console. Теперь владелец подтвердил «Автоматика разрешена» после
+owner reconciliation/отдельного Resume. Это UI confirmation; actual current
+server receipt/scope ещё не проверен. Configure/enable/model smoke NOT_RUN.
 
-TEST0016/provider_sessions0, AI OFF; configure/enable/Polza smoke NOT_RUN.
-Receiver RUNNING/code=null/age0.4s/successful_polls1/ack_pending=false,
-durable_deliveries0/confirmed_responses0. Это snapshot до отправки тестового TEXT. После него владелец подтвердил
-«появился» в новой TEST Console: owner-observed inbound end-to-end PASS.
-Новые counters/точная latency/dedup отдельно не измерены. Native owner
-reconciliation/Resume/current scope/drain ещё не подтверждены.
-C6 SSH не выполнял: evidence — полный безопасный вывод владельца.
+Next [asm_m4_provider_preflight.py](https://chatgpt.com/library?file_id=libfile_c4e7da0fc9988191a1d54e8fc122eec4&account_id=personal),15810bytes,
+SHA256 0f86f17ff1c31f1f9f4604a2d9352ecb5a130afe79cbfc10e66d3ab283b3af3c.
+Тот же20DONE checkpoint/intent/R4, current window/socket/inventory, accepted
+READ ONLY db check+scope; private scope.json. Hidden key/one catalog GET+
+one key-metadata GET; bounded/no retries/TLS, private receipts, safe output.
+Key limit не является балансом/индивидуальным тарифом; RuntimeRoute/review
+не создаётся автоматически. Model/history/Telegram API/DBwrites/restarts=0.
+Приватный helper подготовлен; actual VM run NOT_RUN. Local8 controls PASS/
+0skips,Python3.12.14,0.070s/AST; real files + DB/HTTP fixtures, не live proof.
+[local evidence](https://chatgpt.com/library?file_id=libfile_ca93b4674028819198f02b57862778df&account_id=personal). Details — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
 
-Completed [asm_m4_relay_repair.py](https://chatgpt.com/library?file_id=libfile_a5e33e0598808191b58829df4d215822&account_id=personal),
-19603 bytes / SHA256 097d9ecfb32b098133290a70f4b831924a27cc3a3eac0dcf8e4dbbe329dce5c5.
-Local13 controls PASS/0skips/AST/R4 hashes ранее; actual VM результат теперь
-отдельно подтверждён. Private receipts/relay-start-order-repair-r1 и исходный
-receive-start-r1 сохранены. Повтор repair/receive-start/prepare запрещён.
-Old data/volumes не удалялись; старые writers остановлены штатным fence.
-Общий template cold-start IPAM риск и зависимость от PC tunnel остаются.
-
-Next: оставить PC/Happ/SSH; в том же TEST диалоге owner UI reconciliation
-→ confirmed save → отдельное «Разрешить автоматику» (Resume). Владелец сверяет
-фактический текст, а не автоматически предложенные утверждения. Конечный UI
-result ещё NOT_CONFIRMED; перед configure actual current scope/receipt guard.
-До следующего шага новых сообщений/edits/photos не отправлять.
-Затем fresh account/route/key review≤24h → finite smoke → disable/drain/return.
-AI OFF/provider_sessions0 — последнее actual backend наблюдение, provider
-configure/enable не выполнялись. Полный M4/live не закрыт.
-
-Scope/owner99fb865a/C0 instruction963baf72 сохраняются; повтор допуска не нужен.
-Limits10мин/4POST/10RUB внутри150 с prior/UNKNOWN,2POST/1READ/run,
-8historyGET/4replies, один route/no fallback; currentness/native/send guards прежние.
-Ветка c6/m4-live-prep-r1; sole child444a2a24530beed7730b68263899318d74c23469; build29dc1608/treeb70eb034.
-Только три docs; product/DDL definitions/dependencies/CI/architecture/ledger
-не менялись, нового PR/hosted CI нет. C6 IN_PROGRESS, остальные HOLD; M4/live открыт.
-Подробности — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+PC/Happ/SSH оставить; новый helper во втором PowerShell/SSH -t, ключ только
+в hidden prompt. Completed repair/receive/prepare не повторять. После
+actual scope/metadata fresh account/route/key review≤24h/C0-reviewed route,
+finite smoke,disable/drain/return. Cold-start IPAM/PC dependency остаются.
+Owner99fb865a/C0 instruction963baf72;10мин/4POST/10RUB внутри150 с prior/
+UNKNOWN,2POST/1READ/run,8historyGET/4replies,один route/no fallback.
+Source29dc1608/treeb70eb034, R4/UUID/budget/ledger неизменны.
+Sole child1787d5b367a913c88d03ee4db2ab3ebef1bf6e0c,branch c6/m4-live-prep-r1;
+только3docs + private helper/evidence, без нового PR/hosted CI/product/DDL/
+dependency/architecture changes. C6 IN_PROGRESS,остальные HOLD; M4/live открыт.
 
 
 ## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R4 принят C0; продолжить TEST resume / 2026-11-07

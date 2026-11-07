@@ -1,66 +1,61 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — synthetic TEXT виден; owner context и отдельный Resume / 2026-11-07
+## CURRENT — owner Resume UI подтверждён; проверка перед моделью / 2026-11-07
 
-**Actual owner-run relay repair и CUTOVER/BIND/POLICY/RECEIVE завершены,
-ASM_SSH_EXIT=0. Completed helpers повторно не запускать.**
+Actual TEST receive работает: synthetic Client→Owner TEXT появился в Console.
+Владелец сохранил сверенный контекст, отдельно нажал «Разрешить автоматику»
+и подтвердил ожидаемую надпись. UI confirmation не заменяет current server
+Resume receipt. AI/provider session OFF по последнему actual backend check;
+configure/enable/Polza smoke ещё не запускались.
 
-Все8 prechecks PASS, blockers=[]. Private TEST DB backup выполнен; TEST Console/
-API/PG возвращены после запуска существующего relay первым. Relay владеет
-обоими fixed IP; контейнеры/images/volumes/R4/private inputs сохранены.
-HTTP API/Console/Console→API PASS. Only relay UNKNOWN reconciled после proof;
-original failure records не стирались. Accepted remove-webhook/old-fenced,
-bind.commit, policy.stop-api/material/native и receive.api/console/worker/receiver
-завершены. Старые writers остановлены, данные/volumes сохранены.
+### Следующий запуск
 
-TEST0016/provider_sessions0, AI OFF. Receiver RUNNING, code=null, age0.4s,
-successful_polls1, ack_pending=false, durable_deliveries0, confirmed_responses0.
-Этот snapshot получен до отправки synthetic TEXT. Затем владелец подтвердил
-появление текста в TEST Console: inbound delivery owner-observed PASS. Новые
-counters/точная latency отдельно не измерены; native reconciliation/Resume/
-current scope/drain этим не подтверждены. C6 прямого SSH доступа нет,
-actual evidence — вывод владельца. Configure/enable/Polza calls NOT_RUN.
+[asm_m4_provider_preflight.py](https://chatgpt.com/library?file_id=libfile_c4e7da0fc9988191a1d54e8fc122eec4&account_id=personal),15810bytes,
+SHA256 0f86f17ff1c31f1f9f4604a2d9352ecb5a130afe79cbfc10e66d3ab283b3af3c.
+Первое окно с PC/Happ/SSH оставить открытым. Новый helper передать SCP в
+/home/asmoperator/,поставить mode600 и выполнить python3 -B с --check
+в отдельном interactive SSH -t. Новый Polza API key вводить только в hidden
+prompt на ВМ. Existing private key используется без повторного ввода.
 
-### Следующий пользовательский шаг
+Helper проверяет same accepted R4/20DONE intent/current approval/window,
+inventory/old fence/volumes/private socket и accepted db check+scope.
+Scope проверяет TEXT-only/current owner Resume; БД READ ONLY, actual IDs
+сохраняются только в private scope.json. Затем один catalog GET и один
+key-metadata GET с TLS,без redirects/proxyenv/retries;25s deadline,8MiB/64KiB.
+Новый ключ0600 сохраняется вне checkout после authenticated metadata200.
+Raw metadata/attempt records приватны. Output содержит safe facts и blockers.
 
-Сообщение уже появилось. Продолжать в этом же TEST диалоге под m4-owner на
-http://127.0.0.1:18080, foreground PC/Happ/SSH оставить работающим.
+Metadata не объявляется автоматическим RuntimeRoute review. Key limit
+НЕ является балансом организации,account-specific тарифом или proof model
+access; эти facts остаются NOT_CHECKED/NOT_PROVEN. Нет paid model/history/
+Telegram API calls,DBwrites,configure/enable/restarts,journal repairs.
+Private scope/key/receipts — ожидаемые file writes. Runtime/model OFF.
+Current scope повторно сверяется после GET; original inputs/R4/journal
+проверяются на сохранность. Receipt receipts/provider-preflight-r1;
+STOP/partial сохранять,не повторять helper автоматически.
 
-1. В «Управление диалогом» при необходимости нажать «Забрать управление»,
-   дождаться «Управление у мастера».
-2. В «Контекст владельца» обновить контекст и просмотреть фактический тестовый
-   запрос/доступные наблюдения. В «Результат сверки» выбрать «Полный актуальный
-   текст владельца»; в «Новый полный контекст» записать только действительный
-   synthetic запрос и существенные договорённости текущего TEST.
-3. Для нынешнего TEXT-only smoke без вложений: «Исходные изображения» →
-   «Нет известного недоступного содержимого». При других фактах не утверждать
-   отсутствие содержимого; сообщить расхождение.
-4. Прочитать и осознанно подтвердить полную замену/отзыв прежнего контекста
-   и сверку доступного контекста/существенных договорённостей. Нажать
-   «Сохранить сверенный контекст», дождаться server-confirmed свежего чтения.
-5. Отдельно нажать «Разрешить автоматику», дождаться «Автоматика разрешена».
-   При disabled/error вернуть actual status, не обходить blockers. UI-нажатия
-   не подменяют штатную проверку current scope/Resume receipt перед configure.
+Local8 controls PASS/0skips/Python3.12.14/0.070s/AST;
+[local evidence](https://chatgpt.com/library?file_id=libfile_ca93b4674028819198f02b57862778df&account_id=personal). Реальная VM/Polza проверка этим receipt ещё NOT_RUN.
+После вывода владельца — actual facts review/C0-reviewed RuntimeRoute≤24h.
+Организационный баланс/тариф нельзя вывести из старого150RUB ledger.
+До configure не отправлять новые messages/edits/photos; 10-minute session
+configuration создавать непосредственно перед finite enable.
 
-Labels подтверждены в accepted29dc frontend. Actual save/Resume ещё
-NOT_CONFIRMED. Само разрешение автоматики не включает provider session:
-ИИ остаётся OFF до следующего принятого configure/enable шага.
-До продолжения не отправлять новые сообщения/native edits/photos, чтобы
-не изменить сверенный контекст. Owner утверждения помощник не фабрикует.
+### Уже сохранённое состояние
 
-Completed helper:
-[asm_m4_relay_repair.py](https://chatgpt.com/library?file_id=libfile_a5e33e0598808191b58829df4d215822&account_id=personal),
-19603 bytes / SHA256 097d9ecfb32b098133290a70f4b831924a27cc3a3eac0dcf8e4dbbe329dce5c5.
-Private receipts/relay-start-order-repair-r1 и receive-start-r1 сохранены.
-Не повторять completed repair/receive-start/prepare, не запускать старый
-consumer параллельно новому. Текущий маршрут требует PC tunnel; общий cold-start
-IPAM риск неизменённого template этим finite remedy не закрыт.
+Prepare/CUTOVER/BIND/POLICY/RECEIVE complete,old writers fenced/stopped,
+TEST0016/provider_sessions0. Исправлен текущий порядок старта relay/PG;
+same IDs/images/volumes/R4/private inputs,Console HTTP PASS. Original
+failures/UNKNOWN before-images и completed receipts сохранены.
+Completed repair/receive/prepare не повторять,старый consumer параллельно
+не запускать. Общий cold-start IPAM риск template и PC dependency не закрыты.
 
-Далее fresh≤24h account/route/key review и прежний finite smoke:
+Owner99fb865a/C0 instruction963baf72 прежние;нет нового согласования scope.
 ≤10мин/4POST/10RUB внутри150 с prior/UNKNOWN,2POST/1READ/run,
-8historyGET/4replies, один route/no fallback; затем disable/drain/return.
-Owner допуск99fb865a/C0 scope963baf72 прежние. M4/live ещё открыт.
-Подробное evidence — CURRENT HANDOFF.
+8historyGET/4replies,synthetic TEXT-only/один route/no fallback.
+Затем disable,verified receiver drain,контролируемый return;
+UNKNOWN не повторять/не стирать. M4/live остаётся открыт.
+Точные actual результаты и boundaries — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
 
 
 ## История — приёмка R4 до исполнения на ВМ
