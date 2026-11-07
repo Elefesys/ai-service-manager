@@ -1,23 +1,24 @@
 # M4 Polza runtime: plan / enable / disable
 
-> **07.11.2026: C6 REVIEW — R4 networkd host guard; live не продолжен.**
-> Pinned R3 resume остановился до эффектов. Read-only checkpoint PRISTINE;
-> PID739 полностью прошёл R3 waiter identity, оставшийся PID646 относится к
-> networkd-dispatcher.service. Его exact argv/flag/script trust ещё NOT_PROVEN:
-> script-trust поля старого diagnostic проверяли unattended script.
-> [R4 candidate](https://chatgpt.com/library?file_id=libfile_69ec61a7b1488191a3596cb8f444d78a&account_id=personal)
-> добавляет одну static identity с прежними UID/unit/namespace/file/PID guards.
-> 17targeted controls PASS/76negative subcases/0skips; fake /proc,
-> actual R4 VM/PG/live NOT_RUN.21из23R3files unchanged; runtime delta host_scan.
-> Owner допуск99fb865a сохраняется, но новый manifest требует review C0.
-> Принятый R3/R2 не переписывать, службу Ubuntu не выключать ради PASS.
-> После review — fresh read-only identities/checkpoints/window и отдельно
-> pinned continuation; старые helpers не запускать вслепую. Не переносить
-> review flags задним числом и не создавать заменяющий UUID/бюджет.
-> Нулевой poller status/exit0 не являются ACK/drain proof; все fences действуют.
-> Прежний TEST/AI OFF/cutover/synthetic smoke/disable/return scope/limits прежние.
-> Source29dc1608/treeb70eb034; полные hashes/evidence/next step —
-> [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
+> **07.11.2026: exact R4 принят C0; C6 IN_PROGRESS.**
+> [R4 ZIP](https://chatgpt.com/library?file_id=libfile_69ec61a7b1488191a3596cb8f444d78a&account_id=personal)
+> и [C0 evidence](https://chatgpt.com/library?file_id=libfile_b271fdd4718c81918bff22915f73d7dd&account_id=personal):
+> независимый повтор 17 controls PASS / 76 negative subcases / 0 skips,
+> 17 Python AST / CRC / hashes PASS. Runtime delta — только host_scan;
+> 21 из 23 R3 files byte-identical, operator/cleanup/fences прежние.
+> Accepted manifest422d7d66eb0954f7d3ea34cde497229839622c75148015e719fb017d137a8d38.
+> Actual networkd argv/flag/script trust на ВМ ещё NOT_PROVEN; старые
+> unattended-script booleans не подтверждают их. Fixture PASS не является VM proof.
+> C6 выполняет одну полную read-only проверку обеих identities, остальных relevant
+> processes/read errors и checkpoint/window/old containers+receiver до эффектов.
+> При blockers вернуть весь безопасный список причин; службу не отключать,
+> guard не обходить. Продолжение — отдельно pinned R4, сохраняя R2/R3/flags/receipts.
+> После plan/check привязать новый C0 review и прежний owner допуск99fb865a
+> к exact intent/manifest; повторное согласие на тот же scope не требуется.
+> TEST/AI OFF → cutover → synthetic smoke → disable/drain/return прежние.
+> 10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies;
+> source29dc1608/treeb70eb034, no fallback, UNKNOWN/ACK/fences сохраняются.
+> Полный порядок и evidence — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
 
 Этот путь остаётся **EVAL_ONLY**, default OFF. Реализация и CI сами по себе
 не разрешают живой запуск; конкретный owner допуск записан выше.

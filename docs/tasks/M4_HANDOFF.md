@@ -6,7 +6,83 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, networkd host guard R4 candidate / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R4 принят C0; продолжить TEST resume / 2026-11-07
+
+**PACKAGE_REVIEW_ACCEPTED — exact R4. Owner допуск 99fb865a сохраняется.**
+C0 проверил receipt `a0763b65e3898647b5517abc81db78f60f9ca9d4`: sole parent
+`9eafae98356fa7f04e0b44566a5fbd154396bf3c`, tree
+`29c0d8b4480d846e07b090baa569bfa93bf4b0c1`; только три разрешённых docs.
+В узкой дельте host_scan нового дефекта не найдено. Это приёмка пакета;
+exact networkd identity на ВМ и actual live ещё не доказаны.
+
+### Независимое evidence C0
+
+[R4 ZIP](https://chatgpt.com/library?file_id=libfile_69ec61a7b1488191a3596cb8f444d78a&account_id=personal):
+84621 bytes / 28 entries; SHA256
+`10d02d0ea4b5f652aa7f303e358961e6646df874175d2a10b57742fc4803ebe4`.
+CRC и все 27 file hashes PASS; canonical manifest
+`422d7d66eb0954f7d3ea34cde497229839622c75148015e719fb017d137a8d38`;
+host_scan `47849cae48f589a1e9ff0c17a7d41fa725874f7386b02072e2b691f12d48a4b9`.
+21 из 23 R3 files byte-identical; изменены README/host_scan, R3 reference точен.
+Operator/Compose/DB/MATERIAL/receiver/relay/cleanup/consumer fences прежние.
+
+C0 повторил `python3 -B -m unittest -v validate_host_scan validate_networkd_guard`:
+Python 3.12.14, **17 controls PASS / 76 negative subcases / 0 skips**;
+10 R3 controls + 7 новых. Все 17 Python files AST PASS.
+Общий helper сохраняет R3 guards, новая static identity не создаёт общего
+исключения по root/PID/имени/systemd. Проверка script trust относится именно
+к networkd script. Primary Debian service/default args согласуются с командой;
+это не доказательство установленного файла ВМ. Прежние 40 R2 controls NOT_RERUN.
+
+[C0 review/evidence](https://chatgpt.com/library?file_id=libfile_b271fdd4718c81918bff22915f73d7dd&account_id=personal):
+M4_C0_operator_R4_acceptance_a0763b65.zip, 91712 bytes / 9 entries,
+SHA256 `6a9e64dc1113c58941a890a888e465d09621895f62ae9acb54f9ac3766452243`.
+Содержит исходный ZIP, diff, verification, test log и review.
+C0 не выполнял SSH/VM/R4 deploy/Docker/PG/build/live/provider/Telegram calls.
+
+### Следующий шаг C6 — тот же разрешённый сценарий
+
+Repository `Elefesys/ai-service-manager`; ветка `c6/m4-live-prep-r1`.
+Этот instruction — sole child a0763b65; следующий receipt C6 — child этого
+instruction. Build/native source `29dc16084f0ee0d01e5f96e7226995480e189a22`,
+tree `b70eb0348577c812f4f587d995c724e3c0e989e4`; main неизменен.
+
+1. Использовать exact R4 отдельно от R2/R3; архивы, manifests, historical flags
+   и private source/inputs/state/receipts сохранить. Текущий C0 review записан
+   внешне; не переписывать `c0_reviewed:false` внутри принятого ZIP.
+   Старый R3 resume и R2 reference не являются командами продолжения R4.
+2. До stop/archive/remove/capture выполнить **одну полную read-only проверку**
+   обеих system identities и всех остальных relevant host processes, включая
+   read errors/omissions. Проверять current argv/flag/script trust отдельно для
+   каждой службы, не по прежним booleans другого script и не по номеру PID.
+   Одновременно сверить checkpoint, product window, exact old containers/
+   receiver. PASS одной службы не заменяет aggregate zero/unomitted result.
+3. Если есть другие blockers, вернуть весь безопасный список причин одним
+   проходом, сохранить STOP до эффектов. Не выключать службы и не добавлять
+   исключения по одному имени ради PASS; новую diagnostic платформу не строить.
+4. Подготовить отдельно pinned R4 continuation и проверить его целевые positive/
+   negative guards. После успешных capture/plan/check привязать этот C0 review
+   и прежний owner допуск к exact private intent/manifest. Первый UUID создаёт
+   только штатный capture; существующий UUID/бюджет/holds не заменять.
+   Нулевой old-poller snapshot/exit0 не является ACK/drain proof; UNKNOWN/partial
+   effect требует reconciliation, не повтора. Exact setup Exited(0) removal —
+   только после обеих private backups, без force/volume deletion.
+5. Продолжить TEST/0016 при AI OFF → PC/Happ/SSH → cutover/binding/MATERIAL/native →
+   synthetic TEXT/owner reconciliation + отдельный Resume → fresh account/
+   route/key review≤24h → finite smoke → disable/verified drain/return.
+   Вернуть actual stage/usage/cost/cleanup/return evidence либо точный STOP.
+   Все old queue/watermark/provider-pending/UNKNOWN fences сохраняются.
+
+Повторный owner допуск на эти steps не требуется. Один сеанс: до 10 минут,
+4 model POST / 10 RUB внутри общего 150 с prior spend/UNKNOWN holds;
+2 POST / 1 READ за run, 8 history GET / 4 replies, один Polza route без fallback.
+Synthetic TEXT-only, default OFF/EVAL_ONLY, no-regeneration/no-resend прежние.
+Write-set: прежние три docs, private R4 deployment/resume helper и runtime
+state/receipts в этом scope. Product/DDL/dependencies/CI/архитектуру/ledger,
+старые helpers/volumes/R2/R3/evidence не менять. Новый PR/hosted CI не нужны.
+C6 IN_PROGRESS; остальные HOLD. C0-M4-LIVE-OP-01 CLOSED; M4/live открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, networkd host guard R4 candidate / 2026-11-07
 
 **Точный STOP до эффектов; R3 сохранён, R4 передан на review C0.**
 Этот docs receipt — sole child instruction

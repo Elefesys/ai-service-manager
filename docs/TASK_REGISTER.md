@@ -2,7 +2,36 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, networkd host guard R4 candidate / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R4 принят C0; продолжить TEST resume / 2026-11-07
+
+**PACKAGE_REVIEW_ACCEPTED — R4 host_scan.** C0 подтвердил receipt a0763b65,
+sole parent 9eafae98 / три docs, ZIP CRC / 27 hashes / exact manifest.
+Независимый повтор: 17 controls PASS / 76 negative subcases / 0 skips,
+17 Python AST PASS на 3.12.14. Включены все 10 R3 controls + 7 новых.
+21 из 23 R3 files byte-identical; operator/cleanup/consumer fences неизменны.
+[C0 evidence](https://chatgpt.com/library?file_id=libfile_b271fdd4718c81918bff22915f73d7dd&account_id=personal), 91712 bytes,
+SHA256 6a9e64dc1113c58941a890a888e465d09621895f62ae9acb54f9ac3766452243.
+Accepted R4 manifest:
+`422d7d66eb0954f7d3ea34cde497229839622c75148015e719fb017d137a8d38`.
+Прежние 40 R2 controls NOT_RERUN; actual R4 VM identity/PG/live C0 NOT_RUN.
+
+C6: одна полная read-only проверка обеих system identities/остальных relevant
+processes/read errors/checkpoint/window/old containers+receiver → отдельно
+pinned R4 continuation → прежний TEST/AI OFF/cutover/smoke/disable/return.
+При других blockers вернуть все известные причины одним проходом до эффектов;
+не обходить guard и не расширять исключения по имени. R2/R3/flags/receipts
+сохранены; первый UUID только после guards, существующий не заменять.
+Owner допуск 99fb865a сохраняется, повтор не требуется.
+Полный scope/limits/evidence — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Ветка c6/m4-live-prep-r1; instruction child a0763b65, следующий receipt child
+этого instruction. Build29dc1608/treeb70eb034 прежние. Один сеанс
+10мин/4POST/10RUB внутри150,2POST/1READ/run,8historyGET/4replies; synthetic
+TEXT-only/no fallback/OFF-EVAL_ONLY/UNKNOWN/ACK-drain fences прежние.
+Product/DDL/dependencies/CI/архитектура/ledger не меняются; новый PR/CI не нужны.
+C6 IN_PROGRESS, остальные HOLD; C0-M4-LIVE-OP-01 CLOSED, M4/live открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, networkd host guard R4 candidate / 2026-11-07
 
 R3 resume stopped до эффектов:
 `READ_ONLY_R3_PROCESS_AND_CHECKPOINT / ACTUAL_HOST_PROCESS_IDENTITY_UNPROVEN`.
