@@ -2,7 +2,33 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, host-process guard R3 candidate / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R3 принят C0; продолжить exact resume / 2026-11-07
+
+**PACKAGE_REVIEW_ACCEPTED — host_scan R3.** C0 подтвердил sole-parent99fb865a/
+three-docs delta receipt ea1572eba и exact R3 ZIP/CRC/23file hashes/manifest.
+Повтор C0:10controls PASS/39negative subcases/0skips,15Python files AST PASS,
+Python3.12.14.15из17R2files byte-identical; operator/cleanup/fence не менялись.
+Прежние40controls NOT_RERUN; actual VM identity/R3/Docker/PG/live C0 NOT_RUN.
+[C0 evidence](https://chatgpt.com/library?file_id=libfile_5df24a89e9c081918ff5b1760b8c92d0&account_id=personal),83973bytes,
+SHA256 c3482d34261f166e47246e9ef284fed37b87367d8847acb4b917faf9b77ffc28.
+
+Accepted R3 manifest30955f6ac41d2b82e8629270e0699a89497de9879d51a726365f6a82ed2f2116;
+archive/metadata остаются неизменны, новый review зафиксирован внешне.
+Owner допуск99fb865a сохраняется; повтор на тот же scope не нужен.
+C6: exact read-only VM identity/checkpoints/window → отдельно pinned R3 resume,
+сохраняя R2/private inputs/receipts → прежние TEST/AI OFF/cutover/synthetic
+smoke/disable/verified return. Нулевой snapshot/exit0 старого poller не заменяет
+ACK/drain proof; partial/UNKNOWN не повторять. Новый intent только после guards.
+Полный порядок/limits/write-set — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+
+Ветка c6/m4-live-prep-r1; instruction child ea1572eba, следующий receipt child
+нового instruction. Build29dc1608/treeb70eb034 прежние.10мин/4POST/10RUB внутри150,
+2POST/1READ/run,8historyGET/4replies; no fallback, synthetic TEXT-only,
+AI OFF/EVAL_ONLY, ledger/UNKNOWN/fences сохранены. Product/DDL/CI/dependencies/
+архитектура без изменений; новый PR/hosted CI не нужны. C6 IN_PROGRESS,
+остальные HOLD. C0-M4-LIVE-OP-01 CLOSED; M4/live остаётся открыт.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, host-process guard R3 candidate / 2026-11-07
 
 Owner допуск99fb865a остаётся; выполнение остановлено до нового intent/TEST/
 cutover/provider effects. R2 принят и сохранён. На ВМ последовательные guards

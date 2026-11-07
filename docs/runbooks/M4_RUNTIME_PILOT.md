@@ -1,22 +1,23 @@
 # M4 Polza runtime: plan / enable / disable
 
-> **07.11.2026: C6 REVIEW — host-process guard, до TEST/cutover.**
-> Owner единый допуск99fb865a на согласованный TEST+smoke сохраняется.
-> Accepted R2 неизменен, но resume остановлен до poller stop/archive/remove/
-> capture: `UNVERIFIED_HOST_WRITER_OR_RECEIVER`. На ps виден возможный Ubuntu
-> shutdown waiter; exact argv/unit/file identity ещё не доказана.
-> [R3 review candidate](https://chatgpt.com/library?file_id=libfile_dc8c25e380588191809a41da1f394f2e&account_id=personal)
-> меняет только host_scan: разрешить ровно проверенный системный waiter;
-> неизвестные Python/uvicorn/gunicorn по-прежнему блокируются.
-> 10 controls PASS/39negative subcases, synthetic /proc; actual VM/R3 NOT_RUN.
-> R2 не переписывать, службу Ubuntu не останавливать, guard не обходить.
-> Новый manifest сначала проверяет C0; не выставлять для него c0_reviewed
-> на основании прежнего review R2. Затем C6 ведёт exact process/checkpoint/
-> product-window recheck и отдельно pinned продолжение без нового owner допуска.
-> Ни TEST/0016, ни новый UUID/session/provider расход пока не созданы.
-> Source29dc1608/treeb70eb034; AI OFF/EVAL_ONLY,10мин/4POST/10RUB внутри150,
-> 2POST/1READ/run,8historyGET/4replies. UNKNOWN/old/new fence сохраняются.
-> Receipt/hashes/границы — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
+> **07.11.2026: R3 host-process guard принят C0; C6 IN_PROGRESS.**
+> Owner единый допуск99fb865a сохраняется; повторное разрешение не требуется.
+> [Exact R3](https://chatgpt.com/library?file_id=libfile_dc8c25e380588191809a41da1f394f2e&account_id=personal)
+> и [C0 evidence](https://chatgpt.com/library?file_id=libfile_5df24a89e9c081918ff5b1760b8c92d0&account_id=personal) подтверждают
+>10controls PASS/39negative subcases/0skips,15Python files AST/CRC/hashes PASS.
+> Accepted manifest30955f6ac41d2b82e8629270e0699a89497de9879d51a726365f6a82ed2f2116.
+> Единственная runtime дельта host_scan;15из17R2files byte-identical.
+> Actual VM identity/R3/PG/live ещё не доказаны. C6 начинает с read-only
+> проверки процесса/checkpoints/product window и отдельно pinned продолжения.
+> R2/его approval/архив не переписывать; reference resume не запускать как R3.
+> Exact bytes R3 приняты внешним C0 instruction; historical flags ZIP неизменны.
+> Unknown process/partial effect/ACK сохраняет STOP; служба Ubuntu не отключается.
+> Status snapshot/exit0 старого receiver не являются drain attestation.
+> После exact plan/check привязать C0 review+owner допуск к private intent;
+> выполнить прежний TEST/AI OFF → cutover → finite smoke → disable/drain/return.
+> Source29dc1608/treeb70eb034;10мин/4POST/10RUB внутри150,2POST/1READ/run,
+>8historyGET/4replies,synthetic TEXT-only,AI OFF/EVAL_ONLY,UNKNOWN/fence прежние.
+> Конкретные проверки/write-set/evidence — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
 
 Этот путь остаётся **EVAL_ONLY**, default OFF. Реализация и CI сами по себе
 не разрешают живой запуск; конкретный owner допуск записан выше.

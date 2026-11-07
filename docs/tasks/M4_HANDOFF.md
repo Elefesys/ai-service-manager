@@ -6,7 +6,86 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / REVIEW, host-process guard R3 candidate / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, R3 принят C0; продолжить exact resume / 2026-11-07
+
+**PACKAGE_REVIEW_ACCEPTED — R3 host-process guard. OWNER ДОПУСК СОХРАНЯЕТСЯ.**
+C0 проверил receipt `ea1572eba1fc6acfb3ac468b74bbb739ac6f2fcc`, sole parent
+`99fb865a37953a719c4b9322240a483abbc9c1be`, tree
+`b15f12cb3f5cbb23274034462a006b75f02d2831`: только три разрешённых docs.
+Рассмотренная правка устраняет воспроизведённый ложный отказ R2 для штатного
+Ubuntu shutdown waiter. Ошибки в этой узкой дельте не найдены.
+C0-M4-LIVE-OP-01 остаётся CLOSED; actual VM identity/live acceptance не заявлены.
+
+### Принятый пакет и независимые проверки
+
+[R3 exact ZIP](https://chatgpt.com/library?file_id=libfile_dc8c25e380588191809a41da1f394f2e&account_id=personal):
+76170bytes/24entries, SHA256
+`b7be391f8595a9c697bc84cbb4e9174e2a36033498a48e197db09a49be7f3678`.
+Все23 file hashes/CRC PASS; canonical manifest
+`30955f6ac41d2b82e8629270e0699a89497de9879d51a726365f6a82ed2f2116`;
+host_scan `e665b3e78694b61d50edd57c319ba8541cf4904802075f43511ad6c16d3aa0d8`.
+15из17 R2 files byte-identical; изменены только README/host_scan.
+Operator/Compose/DB/MATERIAL/receiver/relay/enable-cleanup неизменны.
+
+C0 независимо повторил `python3 -B validate_host_scan.py` на Python3.12.14:
+**10 controls PASS,39negative subcases,0skips**,15Python files AST PASS.
+R2 false-positive воспроизведён; verified waiter проходит, unknown/spoofed
+Python, UID/unit/namespace/executable/file-trust/PID drift остаются blocker.
+Primary upstream service/shebang согласуются с ожидаемыми argv. Это не
+проверка установленного файла ВМ и не защита от compromised root/future writers.
+Прежние40controls не повторялись. Actual SSH/VM/R3/Docker/PG/live NOT_RUN C0.
+
+[C0 evidence](https://chatgpt.com/library?file_id=libfile_5df24a89e9c081918ff5b1760b8c92d0&account_id=personal):
+M4_C0_operator_R3_acceptance_ea1572eb.zip,83973bytes/10entries, SHA256
+`c3482d34261f166e47246e9ef284fed37b87367d8847acb4b917faf9b77ffc28`.
+Содержит исходный R3 ZIP, verification/diff/test log и review.
+
+### Продолжение C6 в рамках уже выданного допуска
+
+Repository `Elefesys/ai-service-manager`, ветка `c6/m4-live-prep-r1`.
+Этот instruction — sole child receipt ea1572eba; следующий receipt C6 — child
+этого instruction. Accepted application/build/native source по-прежнему
+`29dc16084f0ee0d01e5f96e7226995480e189a22`, tree
+`b70eb0348577c812f4f587d995c724e3c0e989e4`. Main не перемещается.
+
+1. Read-only подтвердить actual process identity по всем условиям принятого
+   R3 и свежие state/receipts после STOP. Одного PID/comm/ps недостаточно;
+   при mismatch сохранить STOP, службу Ubuntu не отключать.
+2. Разместить точный R3 отдельно от R2. ZIP/manifest/исторические review flags
+   не переписывать: новый C0 review подтверждён этим instruction/evidence.
+   `capture_resume_r2_reference.py` остаётся reference, не командой R3.
+   Подготовить отдельно pinned продолжение с принятым manifest, сохранив
+   прежние private inputs/source/receipts; проверить его целевые positive/
+   negative guards. Это узкий resume текущей задачи, не новый deploy framework.
+3. До эффектов сверить current product window, exact old container/receiver
+   identity и отсутствие нового intent/TEST/UNKNOWN checkpoint. Существующий
+   UUID/бюджет не заменять; первый UUID создаётся штатным capture только после
+   guards. Старый resume не повторять вслепую. Нулевой status snapshot/exit0
+   receiver не объявлять drain/ACK proof; при новой активности/неопределённом ACK
+   сначала read-only reconciliation. Все queue/watermark/provider-pending
+   fences действуют. Два setup containers — только exact Exited(0) IDs после
+   обеих private backups; без force, volume deletion или потери receipts.
+4. После успешных capture/plan/check привязать этот C0 review и полученный
+   owner допуск к проверенным private intent/manifest в approval.json.
+   Повторное разрешение пользователя на те же steps не требуется.
+   Выполнить прежний порядок TEST/0016 при AI OFF → PC/Happ/SSH → consumer
+   cutover/binding/MATERIAL/native → synthetic TEXT/owner reconciliation+
+   отдельный Resume → fresh account/route/key review≤24h → конечный smoke →
+   disable/verified drain/return с сохранением обеих сред.
+5. Вернуть actual stage/usage/cost/cleanup/return evidence либо точный
+   STOP/checkpoint. Не считать synthetic tests доказательством VM/live,
+   не повторять неизвестные эффекты и платные вызовы ради PASS.
+
+Пределы прежние: один сеанс10мин/4modelPOST/10RUB внутри общего150 с prior spend
+и UNKNOWN holds;2POST/1READ/run,8historyGET/4replies. Один Polza route без fallback,
+synthetic TEXT-only; AI default OFF/EVAL_ONLY, UNKNOWN/no-resend и cleanup R2
+сохраняются. Приёмка R3 не создаёт новый UUID/расход и не доказывает live success.
+Write-set: прежние три docs, private R3 deployment/resume helper и runtime
+state/receipts в этом scope. Product/DDL/CI/dependencies/архитектуру, старые
+helpers/volumes/R2/evidence/ledger не менять. Новый PR/hosted CI не нужны.
+C6 IN_PROGRESS; остальные HOLD. M4/live открыт до фактической приёмки C0.
+
+## История — C6-M4-LIVE-PREP-R1 / REVIEW, host-process guard R3 candidate / 2026-11-07
 
 **Исполнение остановлено до TEST/cutover; узкая правка возвращена C0.**
 Owner допуск по instruction `99fb865a37953a719c4b9322240a483abbc9c1be`
