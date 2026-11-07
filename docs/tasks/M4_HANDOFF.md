@@ -6,12 +6,37 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, TEST prepare завершён; Console login подтверждён / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, TEST готов; receive STOP на cutover.relay / 2026-11-07
 
 **Actual TEST preparation PASS, AI OFF.** Владелец выполнил private R4 continuation
 на ВМ и сообщил успешный вход в новую TEST Console через PC/Happ/SSH.
 C6 не имел прямого SSH-доступа: VM evidence ниже — полученные выводы команд
-владельца. Telegram receive/cutover и M4 provider smoke ещё **NOT_RUN**.
+владельца. Первая попытка cutover остановилась на старте relay; bind/policy/receive и M4 provider smoke **NOT_RUN**.
+
+### Actual receive attempt — STOP до остановки старых writers
+
+Владелец выполнил receive continuation. Все шесть prechecks PASS:
+approval/product window, old DB queues, private inputs, private SSH socket,
+source/images/old inventory/host writers/volumes и TEST0016/provider_sessions0;
+blockers=[]. CUTOVER остановился после cutover.relay:
+command-015 exit1, markers=[], stdout/stderr not truncated,
+COMMAND_FAILED / Refused, SSH exit1. До cutover.old-fenced/bind/policy/receive
+исполнение не дошло. Raw failure records и journal сохранены; не повторять
+receive-start и не восстанавливать автоматически.
+
+В accepted template relay использует fixed .2 IPv4/IPv6, а postgres/storage
+созданы до него. Возможна коллизия с динамически выданным адресом; это гипотеза,
+не actual VM proof. Нужны failure markers, текущие endpoint owners и relay state.
+[Узкий read-only diagnostic](https://chatgpt.com/library?file_id=libfile_9df03f45f6808191ac4a2a1e763c67e1&account_id=personal):
+asm_m4_relay_diag.py, 8618 bytes,
+SHA256 8cdcf882f2f669e2a769bfb4c3434d4e7b43ea1c8fded8dbb22b708f7cb44d43.
+Проверяет pinned helper/R4 и checkpoint, читает command-015 и Docker inventory/
+network inspect; печатает только fixed error classes, approved service labels,
+booleans и statuses. Нет start/stop/retry/connect/disconnect, SQL/Telegram/Polza
+calls, journal/file writes. Input/checkpoint/failure records/package hashes
+проверяются до/после; UNKNOWN остаётся. Local AST и проверки markers/redaction/
+network ownership/IPv6/private empty log/public-mode+symlink rejection PASS.
+Actual diagnostic NOT_RUN. Прямого VM доступа у C6 нет.
 
 ### Подтверждённый результат и устранённые причины
 
@@ -53,7 +78,7 @@ inputs и прежние данные сохранены. Старые рабо�
   Local9 controls PASS/0 skips, Python3.12.14, AST PASS; real files/journal,
   runtime fixtures. AF_UNIX creation в исполнителе запрещена EPERM, поэтому
   socket identity тестируется stat fixtures плюс отказ на реальном regular file.
-  Это не VM/Telegram/PG evidence. Actual continuation **NOT_RUN**.
+  Это не VM/Telegram/PG evidence. Actual continuation **STOP — cutover.relay / COMMAND_FAILED**.
 
 Private receive receipt: receipts/receive-start-r1; journal before-image и
 progress сохраняются до эффектов. Readiness наблюдает только status существующего
@@ -62,10 +87,10 @@ Ready/ACK_PENDING не объявляется доказательством dra
 
 ### Продолжение в прежнем допуске
 
-Не закрывать PC/Happ/SSH tunnel. Запустить pinned receive continuation один раз
-из второго PowerShell. Он временно останавливает прежние ingress/frontend/API/
-scheduler/worker через accepted cutover, сохраняя контейнеры/данные. При STOP
-вернуть безопасный вывод и сохранить checkpoint, без replay/restore/delete.
+Не закрывать PC/Happ/SSH tunnel. Выполнить только новый read-only relay diagnostic
+из второго PowerShell и вернуть безопасный вывод. Receive-start уже был запущен:
+повтор запрещён до reconciliation по actual evidence. Старые контейнеры/volumes,
+private checkpoint, failure records и все accepted guards сохранить.
 
 После actual RECEIVE_READY_AI_OFF — один synthetic Client→Owner TEXT, увидеть
 его в TEST Console; owner reconciliation и отдельный Resume. Затем fresh account/
@@ -75,7 +100,7 @@ Owner допуск99fb865a/C0 instruction963baf72 сохраняются, пов
 2POST/1READ/run,8historyGET/4replies; synthetic TEXT-only, один route/no fallback.
 AI OFF/EVAL_ONLY до enable; no-regeneration/no-resend/tenant/native barriers прежние.
 
-Receipt — sole child963baf72387497ef016bcd5f8e9cec4e145a8be7,
+Receipt — sole childc9341fa24993bf3a51196613ca89647a6a1a469d,
 ветка c6/m4-live-prep-r1; build/native29dc16084f0ee0d01e5f96e7226995480e189a22,
 treeb70eb0348577c812f4f587d995c724e3c0e989e4. Только три разрешённых docs.
 Product/DDL definitions/dependencies/CI/architecture/ledger не изменены;

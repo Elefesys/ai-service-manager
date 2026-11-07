@@ -2,7 +2,16 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, TEST prepare завершён; Console login подтверждён / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, TEST готов; receive STOP на cutover.relay / 2026-11-07
+
+**Actual attempt STOP:** receive prechecks все PASS, blockers=[]; command-015
+exit1 на cutover.relay / COMMAND_FAILED, SSH exit1. До old writers stop/bind/
+policy/receive не дошло. Failure records/checkpoint сохранены, retry/restore
+не выполнялись. [Read-only relay diagnostic](https://chatgpt.com/library?file_id=libfile_9df03f45f6808191ac4a2a1e763c67e1&account_id=personal) готов;
+8618 bytes, SHA256 8cdcf882f2f669e2a769bfb4c3434d4e7b43ea1c8fded8dbb22b708f7cb44d43.
+Возможная коллизия fixed relay .2 с динамическим адресом — ещё гипотеза.
+Следующий шаг только observation, без изменения сети/контейнеров/UNKNOWN.
+Actual diagnostic NOT_RUN; подробности CURRENT HANDOFF.
 
 Owner-run actual R4 capture/plan/check PASS; host identities aggregate0/unomitted.
 Старый poller stopped/not removed; два completed setup containers архивированы/
@@ -18,18 +27,17 @@ AI OFF/provider_sessions0, SSH exit0. Владелец подтвердил вх
 Pinned [receive continuation](https://chatgpt.com/library?file_id=libfile_e18189ba9b0c8191b0ba996dece2bcd5&account_id=personal) готов:
 11786 bytes, SHA256 fe49421f881b022bd5bec61356de08f3048b6eb64c14382d3b07d6811b84fa0c.
 Local9 controls PASS/0skips + AST, Python3.12.14; реальные private files/journal,
-runtime/socket stat fixtures, не live/PG evidence. Actual cutover/bind/policy/
-receive/provider smoke NOT_RUN. Exact R4/intent/inputs/queue/watermark/UNKNOWN/
+runtime/socket stat fixtures, не live/PG evidence. Actual cutover STOP; bind/policy/receive/provider smoke NOT_RUN. Exact R4/intent/inputs/queue/watermark/UNKNOWN/
 ACK/native/drain guards сохранены. При STOP — checkpoint/logs, без auto replay/
 restore. Все результаты/границы — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
 
-Next: accepted cutover→binding/MATERIAL/native→TEST receive AI OFF→synthetic TEXT→
+После диагностики и reconciliation: accepted cutover→binding/MATERIAL/native→TEST receive AI OFF→synthetic TEXT→
 owner reconciliation + отдельный Resume→fresh account/route/key review≤24h→
 finite smoke→disable/verified drain/return. Допуск99fb865a и scope963baf72 прежние,
 повтор owner approval не нужен. Limits10мин/4POST/10RUB внутри150,
 2POST/1READ/run,8historyGET/4replies, один route, syntheticTEXT/no fallback.
 
-Ветка c6/m4-live-prep-r1; sole child963baf72; build29dc1608/treeb70eb034.
+Ветка c6/m4-live-prep-r1; sole childc9341fa2; build29dc1608/treeb70eb034.
 Только три docs; product/DDL definitions/CI/dependencies/архитектура/ledger прежние.
 C6 IN_PROGRESS, остальные HOLD; M4/live ещё открыт.
 

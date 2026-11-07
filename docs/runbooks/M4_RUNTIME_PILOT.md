@@ -1,6 +1,15 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — TEST подготовлен, PC Console login подтверждён; receive ещё не запускался / 2026-11-07
+## CURRENT — TEST подготовлен; receive STOP на старте relay / 2026-11-07
+
+**Не повторять receive-start.** Первая попытка прошла все prechecks, но
+command-015 завершился exit1 на cutover.relay, COMMAND_FAILED. Старые writers
+ещё не останавливались. Checkpoint/failure records сохранить; automatic restore
+не выполнять. Сначала [asm_m4_relay_diag.py](https://chatgpt.com/library?file_id=libfile_9df03f45f6808191ac4a2a1e763c67e1&account_id=personal),
+8618 bytes / SHA256 8cdcf882f2f669e2a769bfb4c3434d4e7b43ea1c8fded8dbb22b708f7cb44d43.
+Он только читает saved failure/journal и Docker inventory/network; проверяет
+владельцев fixed relay IP, не меняя адреса, контейнеры или файлы. Коллизия .2
+пока гипотеза. Actual diagnostic NOT_RUN.
 
 Owner-run R4 capture/plan/check и весь prepare завершены. На checkpoint
 `PREPARE_COMPLETE_AI_OFF` новая TEST/asm_test/schema0016 Console доступна
@@ -17,10 +26,10 @@ DB. Bytes/SHA/tree/executable bits/private inputs/старые volumes сохр�
 Все9 prepare steps DONE; HTTP API/Console/Console→API PASS, SSH exit0.
 Завершённые repair/prepare helpers повторять нельзя.
 
-Следующее исполнение — [asm_m4_receive_start.py](https://chatgpt.com/library?file_id=libfile_e18189ba9b0c8191b0ba996dece2bcd5&account_id=personal),
+Уже выполненная попытка — [asm_m4_receive_start.py](https://chatgpt.com/library?file_id=libfile_e18189ba9b0c8191b0ba996dece2bcd5&account_id=personal),
 11786 bytes / SHA256 fe49421f881b022bd5bec61356de08f3048b6eb64c14382d3b07d6811b84fa0c.
-В отдельном SSH-запуске один раз `python3 -B ~/asm_m4_receive_start.py --start`,
-пока foreground PC tunnel открыт. Helper сверяет exact R4, prepared/repair
+Команда `python3 -B ~/asm_m4_receive_start.py --start` уже завершилась STOP;
+повторять её нельзя. Foreground PC tunnel оставить открытым. Helper сверяет exact R4, prepared/repair
 checkpoint, тот же intent, current product/approval window, private Unix socket,
 old inventory/host writers/volumes/queue и TEST provider_sessions0; выполняет
 только accepted cutover/bind/policy/receive. Прежние ingress/frontend/API/
@@ -31,7 +40,7 @@ UNKNOWN/ACK/binding/native/drain fences не обходятся. Не отпра
 Private `receipts/receive-start-r1` сохраняет before-image/progress/command logs;
 при STOP — не повторять весь запуск и не делать автоматический restore.
 Успешный status receiver означает транспортную готовность, не drain/ACK fence
-и не доказательство обработки конкретного сообщения. Helper actual NOT_RUN.
+и не доказательство обработки конкретного сообщения. Helper actual STOP на cutover.relay; последующие steps NOT_RUN.
 Local9 targeted controls PASS/0skips, runtime/socket stat fixtures; не live test.
 
 После actual RECEIVE_READY_AI_OFF отправить один выдуманный Client→Owner TEXT,
