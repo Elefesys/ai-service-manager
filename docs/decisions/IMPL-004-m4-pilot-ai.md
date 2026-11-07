@@ -1199,6 +1199,48 @@ TEST/asm_test/schema0016 scope и ограниченный Telegram→Polza→re
 owner допуска на cutover+finite smoke. Текущая подготовка не выполняет
 deploy/migrations/enable/modelPOST/send. Scope архитектуры не расширяется.
 
+## Решение C0 от 2026-11-07 — C0-M4-OWNER-EXPERIMENT-20261107 / REVISED
+
+После результата public-contract NOT_PROVEN владелец явно поручил проверить
+ИИ сейчас без ожидания поддержки, указав стоимость ожидания работающей ВМ.
+Это отдельное принятие ограниченного экспериментального риска; прежний owner
+допуск99fb865a на synthetic TEST/10мин/4POST/10RUB сохраняется.
+
+**Узко пересмотрено:** требование внешнего contract proof total visible+reasoning
+cap до этого одного runtime smoke. Прежнее ограничение experimental profile
+«не может быть runtime» из решения29.10 для этой одной текущей TEST session
+получает явное исключение. C0 принимает max_tokens512 total-output как
+рабочую гипотезу для измерения, а не как проверенное свойство Polza.
+C0-M4-ROUTE-CAP-01 остаётся NOT_PROVEN/WAIVED_FOR_THIS_OWNER_SESSION.
+
+Не нужен новый adapter/DDL/registry или изменение accepted source. Для этого
+исключения existing RuntimeRoute.output_cap_includes_reasoning=true означает
+admitted assumption; обязательные evidence поля честно указывают
+OWNER_ACCEPTED_EXPERIMENTAL_ASSUMPTION, NOT_PROVEN, CONDITIONAL_ESTIMATE.
+Private receipt связывает полный instruction SHA, это решение, existing
+intent/session UUID и review fingerprint. Raw metadata TOTAL_OUTPUT_INCLUDING_REASONING
+сохраняется как declared scope гипотезы; public acceptance всегда помечает
+его ASSUMED и не использует как provider proof. Это scoped operator-policy
+exception, не разрешение скрывать assumptions или ослаблять DTO validators.
+
+Последствие:10RUB ограничивает программный admission по принятому условному
+reserve, но не доказывает верхнюю границу фактического provider списания.
+Расход/usage/history измеряются, unknown держит резерв; активный запрос нельзя
+объявлять отозванным. Owner согласие не увеличивает общий бюджет150 и не
+освобождает прежние holds. Вне этой session прежний reviewed-route gate
+продолжает действовать; production/реальные клиентские данные не разрешены.
+
+Исполнение — existing R4/TEST0016/synthetic TEXT, exact openai/gpt-6-luna /
+openai/flex/no fallback/OpenAI family, owner Resume и native/currentness/
+tenant/rights/schema/metering/UNKNOWN/no-resend/ACK-drain guards без изменений.
+Один вопрос/один run≤2POST/1READ, после результата ранний disable/verified
+return; max4POST/10RUB/600s и8historyGET/4replies прежние. Actual successful
+sample не превращается в universal cap proof или полный M4/production PASS.
+Точные поля/порядок/возврат — CURRENT HANDOFF. Нового owner подтверждения,
+обращения в support, отдельного quality probe или полного CI для неизменённого
+кода не требуется. Решение ждать support из instruction8bf747b1 этим заменено.
+
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

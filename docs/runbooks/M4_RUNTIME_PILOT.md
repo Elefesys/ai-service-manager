@@ -1,6 +1,44 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — C0 принял public evidence; configure/enable BLOCKED / 2026-11-07
+## CURRENT — owner-authorized experimental TEST: configure/enable разрешены / 2026-11-07
+
+**C0-M4-OWNER-EXPERIMENT-20261107: владелец выбрал ограниченную проверку сейчас,
+без ожидания поддержки. C0 разрешил один текущий TEST session.**
+[Явное REVISED решение](../decisions/IMPL-004-m4-pilot-ai.md) заменяет только
+обязательность внешнего total-output proof для этой пробы. Contract gap остаётся
+NOT_PROVEN/WAIVED_FOR_THIS_OWNER_SESSION; не выдавать его за исправленный факт.
+
+Private RuntimeRoute сохраняет accepted формат и source. Поле
+output_cap_includes_reasoning=true — admitted hypothesis; evidence явно
+OWNER_ACCEPTED_EXPERIMENTAL_ASSUMPTION, NOT_PROVEN; billing CONDITIONAL_ESTIMATE.
+Внешний private admission receipt связывает intent/session/review hash/owner
+decision. Raw output_cap_scope хранится как declared assumed scope, не VERIFIED.
+Готовые поля и точный scope — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md).
+
+C6 продолжает существующий R4: fresh scope/Resume/transport/window, saved
+catalog≤24h и local validation → configure → foreground enable.
+Использовать existing key/intent/session; completed helpers не повторять.
+При expired catalog один bounded refresh с прежними non-price properties,
+price-only recomputation; timestamp не выдумывать.
+Если private approval expired — сохранить прежнее evidence и привязать
+текущий owner допуск к тому же intent/R4/короткому окну, не обходить guard.
+
+После ACTIVE один новый synthetic TEXT → один run≤2POST/1READ и один reply
+либо STOP → сразу disable → verified ACK/drain/return. Второй вопрос не нужен.
+Не ждать истечения600s после результата. No retry/regeneration/resend при UNKNOWN;
+source/DDL/worker guards/accepted R4 не патчить. No support/standalone quality probe.
+
+Существующие session upper limits600s/4POST/10RUB/8historyGET/4replies неизменны.
+10RUB — conditional admission,не гарантированный provider billing cap.
+Owner balance150/обычный тариф подтверждены. Prior ledger0.37505230 confirmed,
+7.585505548 holds,142.039442152 remaining;reported0.00743079 UNSETTLED.
+Новое списание/unknown учитывать отдельно, UUID/holds не сбрасывать.
+Source/main29dc1608/treeb70eb034,обе группы volumes/receipts сохранить.
+C0 actual live NOT_RUN; C6 выполняет и возвращает observed result/cost/return.
+Один successful run не становится production approval/доказательством всех cap.
+
+
+## История — C0 принял public evidence; configure/enable BLOCKED / 2026-11-07
 
 C6-M4-PUBLIC-CONTRACT-R1 завершён, NOT_PROVEN подтверждён C0:
 19request schemas/18refs,11selected nodes и106описаний raw OpenAPI сверены;

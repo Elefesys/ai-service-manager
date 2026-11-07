@@ -2,7 +2,45 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / BLOCKED, public evidence принято; нужен ответ Polza / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner разрешил experimental TEST smoke / 2026-11-07
+
+**C0-M4-OWNER-EXPERIMENT-20261107: владелец явно отказался от ожидания поддержки и
+поручил проверить ИИ сейчас. Повторный допуск не требуется.**
+C0 разрешил configure/enable текущего одного synthetic TEST session.
+C0-M4-ROUTE-CAP-01 NOT_PROVEN / WAIVED_FOR_THIS_OWNER_SESSION; он больше не
+blocker этой пробы. В [IMPL-004](decisions/IMPL-004-m4-pilot-ai.md) зафиксировано
+узкое REVISED условие допуска; provider contract не объявлен доказанным.
+
+Existing RuntimeRoute используется без изменения source: true — явно
+admitted working hypothesis, output_cap_evidence=OWNER_ACCEPTED_EXPERIMENTAL_ASSUMPTION/
+NOT_PROVEN, billing=CONDITIONAL_ESTIMATE. Private admission receipt связывает
+owner decision/intent/session/review hashes; raw scope metadata не выдавать за
+VERIFIED. Вне этого единственного сеанса прежние gates действуют.
+
+C6: fresh штатные scope/Resume/transport/window → exact saved catalog≤24h
+(только при expiry один price-only-compatible refresh) → local RuntimeRoute
+validation → сразу R4 configure/enable → один synthetic вопрос/один run
+≤2POST/1READ → один reply/known cost либо STOP → ранний disable/verified return.
+Готовые evidence поля и полный порядок — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+Не ждать очередного C0 docs review, не писать support, не повторять standalone
+quality/prepare/cutover/receive, не менять код/DDL/CI и не строить новый helper framework.
+
+Owner balance150RUB/обычный тариф сохранены. Existing session upper limits
+600s/4POST/10RUB,8historyGET/4replies; operational scope один вопрос/ранний stop.
+10RUB — conditional admission,не proven external billing ceiling.
+Reserve0.471974416/call,×4=1.887897664; price-only refresh пересчитывается.
+Ledger confirmed0.37505230,holds7.585505548,remaining142.039442152;
+reported0.00743079 UNSETTLED. No reset UUID/holds/new150.
+
+Те же TEST0016/R4/source29dc1608/treeb70eb034; обе группы volumes/receipts,
+tenant/native/rights/schema/metering/no-fallback/no-resend/ACK guards сохранены.
+C0 actual VM/model/Telegram NOT_RUN; C6 возвращает observed E2E/cost/cleanup.
+Branch c6/m4-live-prep-r1, instruction child8bf747b1c60527478ec667a064df3abe8e32659b;
+C0 изменяет4docs включая IMPL-004, C6 receipt только прежние3docs.
+C6 IN_PROGRESS/execute,остальные HOLD; C0-M4-LIVE-OP-01 CLOSED,M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / BLOCKED, public evidence принято; нужен ответ Polza / 2026-11-07
 
 **C0 принял final receipt04da14ce; C6-M4-PUBLIC-CONTRACT-R1 завершён,
 NOT_PROVEN подтверждён. C0-M4-ROUTE-CAP-01 OPEN; configure/enable BLOCKED.**

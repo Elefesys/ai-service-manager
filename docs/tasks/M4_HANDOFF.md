@@ -6,7 +6,147 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / BLOCKED, public evidence принято; ожидается provider contract / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner разрешил один experimental TEST smoke / 2026-11-07
+
+**EXECUTE SAME TEST SMOKE. Владелец явно выбрал проверить ИИ сейчас и отменил
+ожидание поддержки. Решение C0-M4-OWNER-EXPERIMENT-20261107 принято; повторное согласие не нужно.**
+C0 снимает HOLD на configure/enable именно для одного текущего synthetic TEST
+сеанса. Это продолжение готового Telegram→Polza→reply пути, не повтор старого
+standalone quality probe. C6 даёт владельцу конкретные команды продолжения
+и проводит запуск без промежуточного нового docs-only review C0.
+
+### Явно пересмотренное условие допуска
+
+[IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md) дополнен узким **REVISED**
+решением: для этого UUID owner принимает неизвестную семантику total-output
+cap как experimental assumption. Внешнего подтверждения ждать не требуется.
+C0-M4-ROUTE-CAP-01 остаётся NOT_PROVEN, **WAIVED_FOR_THIS_OWNER_SESSION**;
+он не blocker этого запуска и не закрывается как доказанный provider contract.
+
+Изменяется условие операторского допуска, не product code. Accepted
+RuntimeRoute/RuntimeSettings/R4 сохраняются. В этом единственном config поле
+output_cap_includes_reasoning=true означает **принятую рабочую гипотезу**,
+а не полученное доказательство. Его evidence обязан явно содержать
+OWNER_ACCEPTED_EXPERIMENTAL_ASSUMPTION и NOT_PROVEN; billing — CONDITIONAL_ESTIMATE.
+Raw metadata output_cap_scope=TOTAL_OUTPUT_INCLUDING_REASONING сохраняется
+как исходный declared scope; в receipt обязательно пояснить, что он assumed,
+не VERIFIED. Не переписывать raw evidence/старые reviews задним числом.
+Это явное ограниченное исключение после решения владельца, не общий способ
+заполнять true ради validator PASS. Вне этого сеанса прежний RouteReview gate
+и запрет незаявленного experimental runtime сохраняются.
+
+10 RUB — программный admission по условным резервам; уже начатое списание
+нельзя отозвать, жёсткий внешний billing ceiling не подтверждён. Владелец
+принял эксперимент с этим известным пробелом; бюджет не увеличен до150.
+Все guards tenant/owner/native/currentness/schema/route/metering/UNKNOWN/
+no-resend/ACK-drain остаются действующими.
+
+### Конкретное продолжение C6 — без нового кода и ожидания поддержки
+
+1. Использовать уже подготовленные TEST0016, R4 manifest
+   422d7d66eb0954f7d3ea34cde497229839622c75148015e719fb017d137a8d38,
+   source29dc16084f0ee0d01e5f96e7226995480e189a22/treeb70eb0348577c812f4f587d995c724e3c0e989e4.
+   Не повторять prepare/cutover/bind/policy/receive/host-package review.
+   Взять существующие intent/session UUID, private scope/key/catalog/receipts.
+   Проверить штатные fresh scope/Resume/transport/window и отсутствие уже
+   начатого enable. Существующий key не спрашивать повторно.
+   Если срок private approval истёк, сохранить предыдущий receipt и штатно
+   привязать это owner решение к тому же intent/R4 и текущему короткому окну;
+   не менять UUID/историю и не отключать window guard.
+2. Взять saved catalog entry с SHA256
+   aef50578941e135c64646fd77766a8749b80f79fcffc56e298888403dd44ff2a
+   и actual catalog.attempt.json UTC. Если≤24h, GET не нужен. Только если
+   истёк срок — один bounded catalog GET, сохранить old/new bytes/time/hash
+   и штатно проверить exact same non-price route/capabilities/fee schema,
+   пересчитать rates. Только price-only drift допускается без нового C0 круга;
+   другой selector/fee/capability или reservation×4>10 — STOP.
+   Key/account/OpenAPI GET повторять не надо.
+3. Собрать private STATE/operator/polza-review.json штатным RuntimeRoute:
+   model=openai/gpt-6-luna, provider_name=openai/flex,
+   response_provider=OpenAI, history.provider=OpenAI,
+   output_cap_parameter=max_tokens, output_cap_includes_reasoning=true;
+   exact catalog_entry/catalog_sha256/checked_at из п.2. Не реконструировать
+   catalog по сокращённому выводу. Готовые evidence значения ниже.
+   Прогнать существующие local validation/route/rates/fresh; сохранить файл0600.
+   Рядом отдельный private admission receipt связать с текущими intent/session,
+   review_sha256, полным SHA этого instruction и C0-M4-OWNER-EXPERIMENT-20261107;
+   admission=OWNER_SYNTHETIC_EXPERIMENT, output_cap=ASSUMED_TOTAL_OUTPUT_INCLUDING_REASONING,
+   billing=CONDITIONAL_ESTIMATE, provider_contract=NOT_PROVEN.
+   Это одна запись допуска, не новый framework/миграция/изменение R4 archive.
+4. **Сразу configure → enable** штатным R4 operator и теми же private paths.
+   Existing configure создаёт окно600s/4POST/10RUB, enable остаётся foreground.
+   C6 должен дать точные команды с уже известными state/package путями;
+   не возвращать владельцу только очередной план/receipt.
+   Никаких monkey patches, edits accepted source, SyntheticRoute под видом
+   RuntimeRoute, новых migrations/build/full CI или повторных standalone probes.
+5. После ACTIVE отправить **один новый синтетический TEXT** в существующий
+   TEST chat, например «Привет! Хочу татуировку. Какие данные нужно уточнить?».
+   Один run≤2modelPOST/1READ. Сначала дождаться final/known metering и одного
+   Telegram delivery либо точного STOP. Второй вопрос для этой минимальной
+   пробы не нужен; исключить накопленные лишние messages/edits/photos.
+   Первый observed результат не доказывает универсальный cap/provider contract.
+6. После этого результата **сразу disable**, не расходовать остаток4POST и
+   не ждать600s ради таймера. Затем штатный verified drain/return. При
+   UNKNOWN/error — существующая cleanup/hold/reconciliation процедура,
+   без retry/regeneration/resend и без старого consumer поверх второго ledger.
+   Обе группы volumes/data/receipts сохранить; не удалять их ради возврата.
+
+### Готовые evidence поля (прочие значения брать из actual private facts)
+
+Следующий объект содержит только текстовые поля review; это НЕ полный config
+и не fixture каталога. При price-only refresh обновить лишь фактические ставки
+и расчёт billing_bound_evidence, сохраняя маркировку допущения.
+
+```json
+{
+  "route_evidence": "C0 reviewed exact catalog selector openai/flex for openai/gpt-6-luna and the accepted closed wire with allow_fallbacks=false. Response/history can establish OpenAI family only; flex variant remains NOT_OBSERVED. One owner-authorized synthetic TEST session.",
+  "schema_tools_evidence": "Exact saved catalog declares tools and json_schema_strict supported. Accepted conversation_result_envelope_v1 and function-tool wire retained. Current live compatibility will be measured by this experiment, not presumed proved.",
+  "token_bound_evidence": "Accepted input admission uses at most 24576 serialized bytes and len(wire)+4096 <= 32768, with 32768-token reserve. This is the retained conditional input estimate, not a fresh tokenizer measurement.",
+  "image_bound_evidence": "SYNTHETIC_TEXT_V1 only. Current scope and accepted runtime reject nontext messages; no images/audio/Vision are included in this session.",
+  "output_cap_evidence": "OWNER_ACCEPTED_EXPERIMENTAL_ASSUMPTION: C0-M4-OWNER-EXPERIMENT-20261107. max_tokens=512 is treated as an assumed total visible-plus-reasoning cap for this one TEST session. Polza's public contract did NOT prove the mapping. The true field records the admitted hypothesis, not provider verification. No production approval.",
+  "billing_bound_evidence": "CONDITIONAL_ESTIMATE under C0-M4-OWNER-EXPERIMENT-20261107: owner reports ordinary tariff and 150 RUB balance. Reviewed RUB input sum=13.94008250/M, output=29.65975000/M; assumed 32768 input/512 total output gives reserve0.471974416 per call and1.887897664 for4 calls. Session admission<=10 RUB; actual provider ceiling is NOT_PROVEN. Preserve prior spend and UNKNOWN holds.",
+  "inactive_fee_evidence": {
+    "web_search_per_thousand": "Reviewed exclusion for this fixed synthetic TEXT wire: no plugins, web_search_options, polza server tools or native web-search tool types. Model is not a search/Perplexity model. Accepted wire exposes only ordinary function tools; no automatic paid search."
+  },
+  "history": {
+    "provider": "OpenAI",
+    "evidence": "Accepted GPT history mapping and prior exact-generation observations identify OpenAI family. Request selector openai/flex is not an observed variant; current history identity/usage/cost guards remain mandatory."
+  }
+}
+```
+
+Source review C0 завершён: RuntimeSettings допускает только TEST scope и
+конечный бюджет, R4 configure/enable сохраняет4POST/10RUB/600s и existingUUID;
+PolzaAdapter отправляет max_tokens512 и сохраняет usage/history guards.
+C0 не выполнял actual VM/paid/Telegram actions и не утверждает live PASS.
+Local validation actual private JSON выполняет C6 перед запуском; неизменённые
+unit/PG/host/full CI не повторяются.
+
+### Учёт и возврат
+
+Owner balance150RUB/обычный тариф приняты; текущий conditional reserve
+0.471974416/call,1.887897664/4calls. Максимум существующей сессии
+10мин/4POST/10RUB,2POST/1READ/run,8historyGET/4replies. Операционный scope
+этой выдачи — один вопрос/один run и ранний disable. Новый150 budget не создан.
+Prior ledger confirmed0.37505230,UNKNOWN holds7.585505548,remaining142.039442152;
+reported0.00743079 UNSETTLED. Новый known cost добавить отдельно; unknown
+резерв не освобождать. Source29dc1608/main/treeb70eb034 неизменны.
+
+Вернуть actual stages, exact config/assumption receipt hashes, counts POST/
+history/READ/Telegram, known usage/cost или UNKNOWN, semantic final review,
+ровно-одна-доставка/disable/ACK-drain/return evidence. Секреты/private IDs/
+raw reasoning/реальную переписку в public docs не помещать.
+PASS этого опыта означает observed one-run E2E, не production approval,
+не доказательство flex variant и не автоматическое закрытие всего M4.
+
+Branch c6/m4-live-prep-r1; этот instruction — sole child8bf747b1c60527478ec667a064df3abe8e32659b.
+C0 write-set расширен только на IMPL-004 для явного решения плюс прежние3docs.
+C6 public receipt по-прежнему только3docs, private config/admission/evidence вне Git.
+Owner99fb865a дополнен текущим явным разрешением экспериментальной пробы.
+C6 IN_PROGRESS/execute; остальные HOLD; C0-M4-LIVE-OP-01 CLOSED, M4/live открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / BLOCKED, public evidence принято; ожидается provider contract / 2026-11-07
 
 **C0 принял C6-M4-PUBLIC-CONTRACT-R1 как завершённую проверку источника.
 Вывод NOT_PROVEN подтверждён; C0-M4-ROUTE-CAP-01 остаётся OPEN.**
