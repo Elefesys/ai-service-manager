@@ -2,7 +2,38 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner разрешил experimental TEST smoke / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, receiver TLS repair → один AI reply / 2026-11-07
+
+Owner требует один Telegram→ИИ→ответ клиенту; ожидание поддержки исключено.
+Допуск680b0e0a/10RUB experimental сохраняется. Прежний запрет transport
+изменений снят для конкретного исправления, новый owner/C0 approval не нужен.
+
+Последний C6 owner observer:7polls/AI OFF→raw ssl.SSLError в accepted Wire.api.
+C0 воспроизвёл необработанное исключение и исправил receiver: импорт ssl и
+catch SSL вместе с HTTPX→существующий PROVIDER_UNAVAILABLE/backoff.
+22tests PASS/0skips (18existing+4new); old source даёт8ожидаемых TLS errors
+в3causal tests. Python3.12.14/httpx0.28.1,MockTransport,не actual VM/E2E.
+
+Exact script/test/hash и bounded deployment — [CURRENT HANDOFF](tasks/M4_HANDOFF.md).
+C6: сохранить R4/app source и state → explicit transport-only repair/pins
+при same intent/UUID → целевые проверки в3.13 → fresh normal receiver poll →
+сразу existing configure/enable → один вопрос/один run → disable/verified return.
+Разрешена необходимая узкая адаптация private common/receiver_control/operator/
+compose pins; без framework,пересборки приложения или нового C0 review круга.
+Unknown HostConfig fields из observer разобрать по existing snapshots;
+TLS/cert verification,ACK/no-resend и business guards не отключать.
+
+127.0.0.1:18080 — configured SSH Console/auth origin; TLS failure произошёл
+в Telegram receiver,не в browser→Console. Домен менять не назначено.
+C0 изменяет receiver/tests/AGENTS+3docs; C6 public receipt3docs,private repair.
+Main/build29dc1608/treeb70eb034 unchanged; current instruction child680b0e0a.
+Main integration/fullCI repair отдельно после этой изолированной пробы.
+C0 VM/Polza/Telegram calls0. C6 IN_PROGRESS/execute, остальные HOLD,M4/live открыт.
+Один run≤2POST/1READ; existing session600s/4POST/10RUB/8historyGET/4replies;
+balance150/обычный тариф/ledger/UNKNOWN/volumes сохранены,cap assumption прежняя.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner разрешил experimental TEST smoke / 2026-11-07
 
 **C0-M4-OWNER-EXPERIMENT-20261107: владелец явно отказался от ожидания поддержки и
 поручил проверить ИИ сейчас. Повторный допуск не требуется.**

@@ -6,7 +6,99 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner разрешил один experimental TEST smoke / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, исправить receiver TLS и сразу выполнить один AI reply / 2026-11-07
+
+**Цель владельца: Telegram клиента → один ответ ИИ → Telegram того же клиента.**
+Поддержка исключена из дальнейших действий (также записано в AGENTS.md).
+Owner admission680b0e0a / C0-M4-OWNER-EXPERIMENT-20261107 сохраняется.
+C0 снимает прежний запрет transport repair: он мешал исправить конкретный сбой.
+Нового разрешения владельца или промежуточной приёмки C0 для указанного
+исправления/установки/пробы не требуется.
+
+### Факты и готовое исправление
+
+Последний owner output C6 observer R2: Python3.13.15/import PASS,7 успешных
+getUpdates polls,AI OFF,затем raw ssl.SSLError/errno1 из accepted Wire.api
+при чтении TLS,exit1. Temporary observer удалён, automatic restart не делался.
+AI reply ещё не проверялся. Причина самого сетевого TLS-сбоя не установлена;
+доказан дефект обработки исключения: Wire.api ловил HTTPX errors, но не raw SSL.
+
+C0 исправил **scripts/telegram_polling_receiver.py в этом commit**:
+import ssl; в Wire.api catch(httpx.HTTPError,ssl.SSLError) →
+существующий PollingError(PROVIDER_UNAVAILABLE). Source repair13153bytes,
+SHA256 5b5079e9a4e6c1794f74ffb651b835869e3580aecbaa90bbb36f3436508bae79.
+Изменены только эти две конструкции. LocalIngress, Receiver offset/ACK/backoff,
+TLS verification и outbound send/Polza не менялись; скрытого retry HTTP нет.
+
+C0 validation: Python3.12.14/httpx0.28.1,все22receiver tests PASS,0skips.
+18 прежних +4 новых: raw TLS при открытии/чтении (включая EOF/cert-error),
+восстановление polling→durable ingress→confirmation, потеря TLS после durable
+ACK без ложного confirmation, сохранение cancellation. На исходнике29dc1608
+три причинных теста воспроизводят8raw SSL errors; исправленный код проходит.
+Тесты используют MockTransport,не доказывают живой TLS/VM/E2E.
+Exact test source — tests/polling/test_receiver.py в этом commit.
+Full CI/build/PG C0 NOT_RUN; live installation ещё не выполнена.
+
+### C6 — выполнить исправление и пробу в существующем контуре
+
+1. Взять exact repaired receiver выше. **Не checkout этого docs/repair commit
+   вместо полного accepted app source29dc1608**: app images/DB/native pins остаются.
+   Разрешён небольшой отдельный private transport repair поверх сохранённого R4:
+   receiver file, его hash/loading и необходимая совместимость existing
+   common/receiver_control/m4_operator/compose pins. Старый R4/manifest сохранить.
+   Отдельно фиксировать old source receiver hash e84266d26e8129c4d8d692d604c4c65b37086a16ea58af06330263414854de2d
+   и new transport hash выше; не выдавать patched bytes за unchanged R4.
+   Привязать old→new repair к тому же intent/session UUID отдельным receipt,
+   сохранив journal/checkpoints/approval history. Не обнулять бюджет или этапы.
+   Разрешение C0 на эту точную дельту уже выдано; не отправлять её на ещё один
+   docs-only круг. Не строить новый операторский framework.
+2. Перед заменой подтвердить отсутствие действующего второго receiver и
+   неизвестного send/ACK. Из existing observer before/after локально показать
+   реальные различия other_host_fields_changed: сами поля в переданном логе
+   не названы. Не объявлять их безвредными по догадке. Сверять значимые
+   image/command/user/mount/network/privilege параметры штатными guards;
+   diagnostic raw HostConfig mismatch сам по себе не доказывает подмену.
+   Нужное сравнение делать по сохранённым данным, без нового observer-сеанса.
+3. Установить repair существующему **единственному** TEST receiver.
+   Только целевые tests22 в existing Python3.13 environment и проверки нового
+   transport pin/совместимости existing intent,без полного CI/PG/rebuild.
+   TLS verify не отключать; max_tokens/owner/native/UNKNOWN/send guards не менять.
+   Постоянную main-интеграцию этого repair можно оформить после фактической
+   пробы; её CI не является условием этого изолированного operator TEST overlay.
+4. Дождаться обычного свежего successful poll/ready существующего receiver
+   (если уже fresh — не ждать повторно),без новой многоминутной проверки.
+   Далее **сразу configure→enable** по принятому680b0e0a, с существующим key,
+   scope/Resume/catalog/UUID и явно принятой output-cap assumption.
+   Поля review/evidence уже готовы в историческом instruction ниже.
+   Не возвращать владельцу только новый отчёт о подготовке — дать конкретную
+   команду продолжения с известными C6 private paths и выполнить этот порядок.
+5. Один новый synthetic TEXT («Привет! Хочу татуировку. Какие данные уточнить?»)
+   → один run≤2POST/1READ → один AI reply/known cost либо фактический STOP.
+   Затем сразу disable/verified drain/return. Не ждать600s после результата,
+   не расходовать остальные вызовы. UNKNOWN не повторять/не пересылать.
+   Ошибку этой попытки при её наличии вернуть с точной стадией и причиной;
+   не подменять фактический отказ новым перечнем общих предварительных проверок.
+
+### Адрес панели и границы
+
+http://127.0.0.1:18080 — штатный SSH-forward тестовой Console:
+pc_session.ps1 -L127.0.0.1:18080:127.0.0.1:18080; Compose auth origin совпадает.
+Telegram receiver обращается к api.telegram.org и локальному api:8000,
+Polza вызывается worker, не браузером. Менять домен/CORS/порт для этого TLS
+исправления не требуется. Это source finding,не fresh remote connectivity test.
+
+C0 public write-set: receiver script/test,AGENTS.md и прежние3coordination docs.
+C6 private write-set расширен только на transport repair/loading/pins/continuation;
+public receipt — прежние3docs. Product/business/DDL/dependencies/AI code неизменны.
+Branch c6/m4-live-prep-r1; instruction sole child680b0e0ab7d18176704615208b1ecbec88f9c75b.
+Main/app build29dc16084f0ee0d01e5f96e7226995480e189a22/treeb70eb0348577c812f4f587d995c724e3c0e989e4.
+Upper limits600s/4POST/10RUB/8historyGET/4replies прежние; operational scope одинrun.
+Баланс150/обычный тариф уже приняты; ledger/UNKNOWN/обе группы volumes сохранить.
+C6 IN_PROGRESS/repair+execute; остальные HOLD. Внешний cap остаётся
+NOT_PROVEN/WAIVED_FOR_THIS_OWNER_SESSION; M4/live пока не объявлен завершённым.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, owner разрешил один experimental TEST smoke / 2026-11-07
 
 **EXECUTE SAME TEST SMOKE. Владелец явно выбрал проверить ИИ сейчас и отменил
 ожидание поддержки. Решение C0-M4-OWNER-EXPERIMENT-20261107 принято; повторное согласие не нужно.**

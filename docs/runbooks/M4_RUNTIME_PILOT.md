@@ -1,6 +1,33 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — owner-authorized experimental TEST: configure/enable разрешены / 2026-11-07
+## CURRENT — receiver TLS repair и немедленный finite AI smoke / 2026-11-07
+
+Последний C6 observer сделал7Telegram polls и завершился на raw ssl.SSLError;
+AI был OFF. C0 исправил Wire.api в scripts/telegram_polling_receiver.py:
+SSL exception теперь классифицируется existing PROVIDER_UNAVAILABLE.
+22local tests PASS/0skips; actual live ещё не выполнен.
+Repair SHA2565b5079e9a4e6c1794f74ffb651b835869e3580aecbaa90bbb36f3436508bae79.
+
+C6 разрешены exact private transport repair/loading/pin adaptation поверх
+сохранённого R4, same intent/session/checkpoints; old app source29dc1608 и
+images/DB/volumes неизменны. Не выдавать patched bytes за исходный R4.
+Полный порядок — [CURRENT HANDOFF](../tasks/M4_HANDOFF.md). Эта дельта уже
+принята для isolated TEST,повторный owner/C0 review до исполнения не нужен.
+
+Existing receiver после repair→свежий обычный poll→configure/enable по680b0e0a
+→один synthetic вопрос→один AI reply либо точная ошибка→ранний disable/
+verified ACK-drain/return. No extra observer loops/fullCI/app rebuild/support.
+Не отключать TLS verification;offset/ACK/no-resend/UNKNOWN guards сохранены.
+Другой network/privilege identity drift не игнорировать; разобрать saved diff.
+
+Console127.0.0.1:18080 — намеренный SSH/auth origin; для этой ошибки адрес
+не менять. Telegram/Polza endpoints вызываются серверными процессами.
+Owner assumption cap512,limits600s/4POST/10RUB/8historyGET/4replies прежние;
+фактический план один run≤2POST/1READ. Баланс/тариф/ключ не спрашивать повторно.
+Фактический runtime result/cost/cleanup возвращает C6; C0 live NOT_RUN.
+
+
+## История — owner-authorized experimental TEST: configure/enable разрешены / 2026-11-07
 
 **C0-M4-OWNER-EXPERIMENT-20261107: владелец выбрал ограниченную проверку сейчас,
 без ожидания поддержки. C0 разрешил один текущий TEST session.**
