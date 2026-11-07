@@ -2,7 +2,31 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, offline AI request check / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, FOLLOWUP-01 live continuation / 2026-11-08
+
+C0 принял offline этап по private owner-reported receipt; public VM dump отсутствует.
+[Решение FOLLOWUP-01](decisions/IMPL-004-m4-pilot-ai.md) явно разрешает один
+child window≤600s для нового synthetic TEXT/run≤2POST/1READ/1reply.
+[CURRENT HANDOFF](tasks/M4_HANDOFF.md) содержит точный порядок исполнения C6.
+
+Existing intent, old terminal UNKNOWN и hold сохраняются. Child UUID создаётся
+один раз, parent/root ledger остаётся общим; max_calls2/max_rub2*reservation
+только внутри остатков прежних10/150RUB и общего4calls.
+Existing one UNKNOWN допускается лишь как exact immutable operator-watch
+baseline без result/outbox/send; новый/изменённый/лишний UNKNOWN→STOP.
+No replay/reset/re-enable старой session. Cap assumption явно перенесена
+только на этот child; фактическое provider списание не гарантируется.
+
+C6: private runner/targeted checks → exact Polza9d7f50 overlay в worker →
+штатные fresh guards/enable → один TEXT → SENT/ACK либо конкретная ошибка →
+disable/fence/stop/save. Без нового промежуточного C0 approval/docs-only круга.
+Прежний drain/return не меняется: при old UNKNOWN restore не объявлять,
+старые writers не запускать. Поддержка исключена.
+C0 source/DDL/VM/paid/send изменений0;4docs only; прежние430tests исторические.
+C6 IN_PROGRESS/execute,остальные HOLD,M4/live открыт; main29dc1608 сохранён.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, offline AI request check / 2026-11-07
 
 C0 добавил bounded Polza failure log и исполняемый offline inspector первого
 сохранённого запроса. Source-only change; private VM receipt/docs.patch не

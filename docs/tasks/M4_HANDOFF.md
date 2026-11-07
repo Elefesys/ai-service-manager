@@ -6,7 +6,109 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, local AI failure check / 2026-11-07
+## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, выполнить C0-M4-FOLLOWUP-01 / 2026-11-08
+
+**C0 принимает offline шаг и разрешает одно конкретное продолжение live smoke.**
+Владелец уже поручил получить ответ ИИ; нового общего согласия не требуется.
+[REVISED решение C0-M4-FOLLOWUP-01](../decisions/IMPL-004-m4-pilot-ai.md)
+заменяет offline-only границу9d7f50 только для указанного child.
+Private receipt принят как owner-reported evidence, не независимый SSH C0;
+его содержимое/пути/идентификаторы не переносить в public GitHub.
+Следующий возврат C6 — фактический AI reply либо конкретный failure diagnostic,
+без ещё одного подготовительного docs-only круга или ожидания поддержки.
+
+### Единственная разрешённая попытка
+
+Existing TEST/asm_test/schema0016, accepted app29dc16084f0ee0d01e5f96e7226995480e189a22,
+receiver repair2a1369c8; новый read-only Polza overlay из9d7f50:
+SHA2568333f3a4abc8fdc32e206cee6d95748da584a89664aeb0adf15d9449d0b769ab.
+Exact model/openai/flex/no fallback/max_tokens512 и owner cap assumption прежние.
+
+Один НОВЫЙ synthetic TEXT после ACTIVE → один новый run≤2POST/1READ,
+≤4historyGET,≤1reply; child window≤600s,ранний stop после фактического исхода.
+Старый run не replay/requeue/reset. Родительская session остаётся inactive.
+Включить exact diagnostic overlay в worker; offline-only installation недостаточно.
+Не повторять первую попытку через прежние Operator.enable/activate.
+
+### C6 — подготовить и выполнить в existing private workspace
+
+1. Сохранить existing stopped worker logs и прежние settings/journal/receipts.
+   Создать ровно один private continuation record FOLLOWUP-01 с exclusive create:
+   parent intent/session + новый child UUID + source/review/config hashes +
+   baseline старой попытки. Сохранить intent и историю; child имеет свои config,
+   journal и persist-before-effect enable-outcome, не второй независимый ledger.
+   Повторный запуск той же команды не создаёт другой UUID и не повторяет enable.
+   Не обходить ENABLE_ALREADY_ATTEMPTED удалением/переименованием старых файлов.
+2. Read-only сверить baseline: ровно один прежний completed UNKNOWN model call,
+   его parent session inactive, run terminal, result/outbox/send отсутствуют.
+   Зафиксировать identity и canonical hashes call/completion/budget/run/parent
+   session; hold не освобождать. Проверить, что нет второго active session/
+   worker/receiver, неизвестного send/ACK, лишнего unfinished call или queue.
+   Использовать сохранённую диагностику; только необходимые свежие state checks.
+3. Учёт бюджета: старые distinct reservations/confirmed costs остаются расходом
+   admission; не суммировать один hold дважды из PG и общего ledger.
+   Child max_calls=2; max_rub=2*current reservation, округление прежнее.
+   Допуск только если child max_rub<=остаток прежнего10RUB И общего150RUB,
+   parent reserved calls+2<=4. При несовпадении учёта STOP, не новая quota.
+   Непотраченный четвёртый call не разрешает ещё одну попытку.
+   Сохранённый catalog/review использовать если fresh; при expiry только один
+   штатный price-only-compatible refresh и перерасчёт, без изменения маршрута.
+   Child starts_at/expires_at новые; старые timestamps не менять. Hypothesis
+   evidence привязать к parent decision и FOLLOWUP-01, не называть cap доказанным.
+4. Узко адаптировать private continuation readiness/watch: весь набор прежних
+   checks сохраняется, но ровно зафиксированный UNKNOWN из п.2 считается
+   сохранённым accounting baseline. На каждом watch сверять exact identity/hash,
+   terminal/no-result/no-outbox и его неизменность; не просто вычитать count=1.
+   Любой иной/новый/изменённый/исчезнувший UNKNOWN или лишняя session/run → STOP.
+   Не игнорировать все ошибки старой session и не выключать UNKNOWN guard.
+   Новая незавершённая reservation допустима только для текущего вызова в его
+   deadline; её нельзя принять за ошибку сразу после получения сообщения.
+   При ошибке чтения/check/monitor или потере управления — disable/stop.
+5. Проверить эту малую дельту offline: baseline unchanged допускается;
+   missing/changed/extra UNKNOWN, старый result/outbox/send, второй active
+   consumer, исчерпанный budget/expired window отклоняются; reuse FOLLOWUP-01
+   не делает второй enable; in-flight call ждёт deadline, terminal UNKNOWN
+   завершает пробу; success ждёт SENT/ACK, не первый input/TOOLS/selected result.
+   Verify loaded polza hash в том же worker image/UID. Использовать прежние
+   targeted diagnostics tests, не запускать новый full CI/PG/build ради overlay.
+6. Штатные owner/native/currentness/product/Resume и receiver-ready guards →
+   создать/enable child через существующий RuntimeSettings + ai_provider_session,
+   установить exact worker overlay/config/key mounts → объявить ACTIVE.
+   Дать владельцу одну конкретную команду с известными C6 приватными путями,
+   затем попросить ровно один новый TEXT. Если владельцу нужен штатный Resume,
+   указать конкретное действие; не подменять его прямой правкой DB.
+   Не ждать отдельного C0 приёмочного архива после готовности этого continuation.
+7. Дождаться конца этого run: TOOLS/READ могут привести ко второму POST.
+   Успех — подтверждённый send/Outbox SENT и штатный ACK; не incoming message,
+   первая model completion или просто наличие selected result.
+   Terminal no_reply/handoff/failure честно вернуть как фактический исход;
+   не подменять результат manual/static reply ради PASS.
+   Ошибка → сохранить AI_PROVIDER_FAILURE(stage/detail/exception_type/cause_type/
+   http_status/hashed correlation), disable и STOP, без повторного POST/send.
+8. После исхода сохранить bounded logs до удаления/recreate; disable child
+   CONFIRMED, receiver fence/ACK, stop worker/receiver по штатным правилам.
+   **Прежний R4 drain/return не ослаблять:** он видит сохранённый UNKNOWN расход.
+   Если штатный drain не проходит, оставить старые writers выключенными,
+   явно вернуть RETURN_NOT_PERFORMED и остановленное состояние; не запускать
+   прежний consumer и не объявлять восстановление. Volumes/holds сохраняются.
+   Никакого ожидания поддержки или удержания работающего теста ради отчёта.
+
+### Scope и возврат
+
+C0 public change только4coordination/decision docs; source/DDL/dependencies unchanged.
+C6 private scope расширен на finite FOLLOWUP-01 runner, child config/journal/
+receipt, exact Polza overlay/mount/pins и указанный baseline watch; не framework.
+Оригинальные R4/transport/private bytes сохраняются. Не публиковать private
+archive/config/PreparedRun/VM paths/IDs/key/переписку; публично только инструкции.
+Вернуть private итог attempt/cost-or-hold/log/Telegram delivery/disable/stop/
+return state и фактические targeted checks. Source9d7f50 остаётся tested430
+controlled cases,не live proof; этот docs-only decision новых tests не требует.
+Repository Elefesys/ai-service-manager; branch c6/m4-live-prep-r1;
+parent9d7f50d6100e3ceb15064f1e7dbd5c4c7b6ef373. Main/app29dc1608 не меняются.
+C6 IN_PROGRESS/execute, остальные HOLD; M4/live до реального ответа открыт.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, local AI failure check / 2026-11-07
 
 **Цель прежняя: один настоящий AI reply в Telegram.** Сейчас выполнить узкую
 проверку сохранённого первого запроса без HTTP. Поддержка исключена.

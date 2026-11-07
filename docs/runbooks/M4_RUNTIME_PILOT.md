@@ -1,6 +1,30 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — failure log и проверка сохранённого wire без сети / 2026-11-07
+## CURRENT — одно child continuation FOLLOWUP-01 / 2026-11-08
+
+[Решение C0](../decisions/IMPL-004-m4-pilot-ai.md) и
+[точный порядок C6](../tasks/M4_HANDOFF.md) разрешают ровно один новый synthetic
+run после offline-проверки. Не повторять использованные R4 enable/activate.
+Создать private linked child config/journal/outcome с новым UUID однократно,
+сохранить старый intent/session/UNKNOWN/hold и исходные файлы.
+
+Child≤600s/2POST/1READ/1reply, до4historyGET; child budget=2*current reservation
+в пределах остатков прежних10/150RUB и4total calls. Смена UUID не даёт новой quota.
+На admission/watch допускается только одна exact immutable старая UNKNOWN
+model-call запись без result/outbox/send. Любое отличие/новый UNKNOWN→STOP.
+In-flight новый call до его deadline не является terminal failure; успешный
+конец — SENT/ACK, не получение клиентского сообщения, TOOLS или selected result.
+Worker должен реально загрузить polza.py9d7f50(hash в HANDOFF); bounded
+AI_PROVIDER_FAILURE сохранять до cleanup/recreate. Private данные не публиковать.
+
+После результата disable/fence/stop. Исходный R4 drain/return остаётся строгим:
+с сохранённым UNKNOWN он может отказать; тогда RETURN_NOT_PERFORMED и старые
+writers OFF, без ложного restore. Новое retry/window здесь не разрешено.
+Проверить только конкретную private continuation дельту и выполнить; support/
+новый общий checklist/full CI неизменённого app не нужны.
+
+
+## История — failure log и проверка сохранённого wire без сети / 2026-11-07
 
 [Текущая выдача](../tasks/M4_HANDOFF.md) содержит source scope и команду.
 Private исходные PreparedRun/RuntimeSettings и reserved_at проверяются через

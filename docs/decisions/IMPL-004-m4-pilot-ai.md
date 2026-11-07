@@ -1241,6 +1241,46 @@ sample не превращается в universal cap proof или полный 
 кода не требуется. Решение ждать support из instruction8bf747b1 этим заменено.
 
 
+## Решение C0 от 2026-11-08 — C0-M4-FOLLOWUP-01 / REVISED
+
+Для завершения уже разрешённого владельцем Telegram→AI→reply smoke C0 принимает
+ровно одно продолжение после offline-проверки. Это явное изменение границы
+operator admission: прежний запрет нового окна из instruction9d7f50 заменён
+одним child window до600s, максимум2POST/1READ/1reply для нового synthetic TEXT.
+Изменение необходимо, поскольку повторный R4 enable и reuse истёкшего UUID
+намеренно запрещены; новая DB session допускается существующей schema0016.
+Повтор старого run и восстановление его admission не разрешаются.
+
+Existing intent/root admission остаётся тем же. Child session UUID создаётся
+один раз в private continuation receipt до первого эффекта; receipt связывает
+parent session, старые run/call/hold, их fingerprints и новый config. Старые
+settings/dates/UUID/journal/UNKNOWN не переписываются. Child cap=2*текущий
+call reservation, только если он помещается одновременно в остаток прежних
+10RUB и общего150RUB с учётом всех distinct confirmed costs/holds. Родительские
+calls+child calls остаются<=4; никаких новых10/150RUB или повторного child.
+Это программный conditional admission, не подтверждённый внешний потолок.
+
+Узкое operator watch исключение допускает ровно одну закреплённую неизменную
+завершённую UNKNOWN model-call запись старой terminal попытки без result/outbox/
+send. Её reserve удерживается. Новый/лишний/изменённый/исчезнувший UNKNOWN,
+неизвестная отправка или drift baseline останавливают продолжение.
+Исключение применяется только к admission readiness/watch этого child;
+не к product runtime/SQL и не к прежнему return/drain. Временная in-flight
+reservation нового вызова до его deadline сама по себе не означает terminal
+UNKNOWN; incoming message, TOOLS или selected result не являются успехом send.
+
+Принятая owner experimental cap assumption из C0-M4-OWNER-EXPERIMENT-20261107
+распространяется только на этот связанный child; NOT_PROVEN/CONDITIONAL_ESTIMATE
+сохраняются. Model/provider/max_tokens512/no fallback остаются прежними.
+Полный bounded порядок и private write-set — CURRENT HANDOFF.
+Бизнес/tenant/native/owner/currentness/ACK/no-resend guards не меняются.
+После попытки disable/fence/stop и сохранение evidence; восстановление старой
+среды не объявляется без штатного успешного drain/return. Неизвестный старый
+LLM расход не исчезает ни при успешном новом reply, ни при остановке среды.
+C6 реализует/проверяет/выполняет эту конкретную дельту без нового общего approval
+или ожидания поддержки; иной live retry/новое окно потребует отдельного решения.
+
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,
