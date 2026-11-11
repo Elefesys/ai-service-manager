@@ -1,6 +1,28 @@
 # M4 Polza runtime: plan / enable / disable
 
-## CURRENT — одно child continuation FOLLOWUP-01 / 2026-11-08
+## CURRENT — functional AI reply принят; live остановлен, code repair C3 / 2026-11-12
+
+C0 принял FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST по private
+owner-reported evidence и подтверждению получения ответа владельцем.
+Delivery confirmation, AI disable и записанные stops не означают подтверждённый
+inbound ACK: RECEIVER_ACK_UNRESOLVED остаётся, старый return не выполнен.
+Сохранить holds/receipts/cursor; не reset/resend/restart ради повторного PASS.
+Новый запуск ВМ или платный запрос для source-задачи не нужен.
+
+[CURRENT HANDOFF](../tasks/M4_HANDOFF.md): C3 переносит реальное обновление прав
+до COMMIT reply в штатный claim-bound runtime. TTL30s и final send-check прежние,
+HTTP вне transaction, additive0017 без изменения applied0001–0016.
+Private операторский loop — evidence временного assisted теста, не новая служба.
+Новый код/0017 ещё не развёрнуты; текущая TEST VM не объявляется migrated.
+
+C6-M4-ACK-01 OPEN_OPERATIONAL: до reuse receiver отдельно сверить сохранённые
+status/cursor/fence/ingress facts. Чтение saved snapshot не является fresh ACK.
+Автономная сеть DEFERRED по владельцу; PC/Happ/SSH остаётся development transport.
+После узкого code-fix перейти к M5.1; не смешивать разработку конфигурации с
+возвратом исторического stopped контура. Private VM metadata в public Git не переносить.
+
+
+## История — одно child continuation FOLLOWUP-01 / 2026-11-08
 
 [Решение C0](../decisions/IMPL-004-m4-pilot-ai.md) и
 [точный порядок C6](../tasks/M4_HANDOFF.md) разрешают ровно один новый synthetic

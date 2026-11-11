@@ -1281,6 +1281,47 @@ C6 реализует/проверяет/выполняет эту конкре�
 или ожидания поддержки; иной live retry/новое окно потребует отдельного решения.
 
 
+## Решение C0 от 2026-11-12 — функциональный AI reply принят; штатный rights refresh / ACCEPTED
+
+C0 принимает **FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST** по private
+owner-reported receipt и подтверждению получения сообщения владельцем.
+Это приёмка результата Telegram→AI candidate→canonical commit→Telegram reply
+в текущем пути через ПК, не независимая fresh VM attestation и не общий M4 VERIFIED.
+Частный helper/его дополнительные HTTP-error diagnostics не интегрируются этой
+приёмкой и не объявляются production-реализацией.
+
+Выявлен source defect: ai_delivery_select проверяет telegram_can_send с TTL30s
+ещё до создания Outbox/SEND_AI_TEXT, тогда как штатный worker обновляет права
+только на последнем send-пути. Состояние может устареть за время ожидания модели.
+C0 принимает узкое исправление C3-M4-PRECOMMIT-RIGHTS-R1: реальное наблюдение прав
+по доверенному job/claim/scope перед COMMIT reply, короткие транзакции до/после
+HTTP, generation/observation-version/currentness проверки. Финальный send probe,
+TTL30s и все текущие guards сохраняются. Привилегированный периодический цикл
+операторского помощника не становится частью приложения; fake timestamps/
+cached can_reply=true не заменяют настоящее наблюдение.
+
+Для этой связанной DB-границы C0 резервирует additive migration
+0017_ai_reply_rights.py, predecessor0016. Исторические миграции0001–0016 immutable.
+Одна активная выдача C3, точный write-set/тесты в CURRENT HANDOFF.
+Существующие права runtime не расширяются до migrator/BYPASSRLS.
+LLM output по-прежнему candidate; бизнесовые факты/права определяет structured state.
+
+RECEIVER_ACK_UNRESOLVED и сохранённые UNKNOWN расходы остаются OPEN; новая
+доставка не разрешает повторять старый run/send или запускать прежний consumer.
+До безопасного reuse receiver нужен отдельный разбор сохранённых cursor/status/
+fence/ingress facts. Это не отменяет принятую доставку ответа и не требует новой
+платной демонстрации ради отчёта. Старый LOCAL return не объявлен выполненным.
+
+По явному предпочтению владельца автономный Telegram transport **DEFERRED**;
+для разработки остаётся PC/Happ/SSH. Это продолжает уже ограниченный IMPL-004,
+а не отменяет будущую эксплуатационную подготовку пилота.
+После интеграции узкого runtime исправления следующая продуктовая выдача —
+M5.1 configuration domain (Service/Rule/Workflow/Draft/Validation/Release).
+Её зависимости — принятые M4 contracts; открытый ACK остановленного исторического
+receiver ограничивает его reuse, не запрещает разработку домена на synthetic data.
+Общий M4/production статус не повышать по одному функциональному ответу.
+
+
 ## Что пересмотрено относительно baseline
 
 Только scope исполнения M4 из Spec §7.2/7.6/7.7/7.16/7.21/7.22,

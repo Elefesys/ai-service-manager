@@ -6,7 +6,130 @@
 Решение по scope: [IMPL-004](../decisions/IMPL-004-m4-pilot-ai.md).
 Выбор API: [исследование 24 сервисов](../research/M4_AI_PROVIDER_REVIEW_2026-10-28.md).
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, выполнить C0-M4-FOLLOWUP-01 / 2026-11-08
+## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / IN_PROGRESS; первый AI reply принят / 2026-11-12
+
+**Цель владельца «проверить, отвечает ли ИИ клиенту» выполнена:** C0 принимает
+FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST. Это ограниченная приёмка
+функции по owner-reported evidence и подтверждению владельца, не общий M4 VERIFIED.
+C6 live выдача переходит в REVIEW с OPEN receiver ACK; новые платные попытки
+для повторного доказательства этого результата не назначаются. Автономная сеть
+DEFERRED по владельцу; разработка сохраняет путь через ПК.
+[Принятое решение и границы](../decisions/IMPL-004-m4-pilot-ai.md).
+
+### C3 — конкретный результат для продукта
+
+После получения candidate reply штатный runtime сам получает реальное свежее
+наблюдение прав Telegram **до canonical COMMIT / ai_delivery_select**.
+При разрешённых актуальных правах создаётся ровно один Outbox; при отозванных,
+неизвестных или изменившихся правах ответ не отправляется. Отдельный операторский
+refresh-loop для этого больше не требуется. Финальный send-check остаётся.
+
+Source reproducer на app29dc1608:
+1. ai/database.py execute после agent.run вызывает commit(candidate).
+2. SQL0015 ai_delivery_select для reply вызывает telegram_can_send(...,false).
+   Требуется rights observation не старше30s; при отказе NOT_ALLOWED до Outbox.
+3. messaging/worker.py обновляет observation только при SEND_AI_TEXT, которого
+   при раннем отказе ещё нет. Модель уже могла успешно ответить и иметь known cost.
+Это defect порядка действий. Исторический HTTP400 этим не объясняется; отдельный
+ACK тоже не объявлять исправленным. Private архив для воспроизведения не нужен.
+
+### Repository, base и ветка
+
+Repository: Elefesys/ai-service-manager. Integration target: main.
+Accepted application base29dc16084f0ee0d01e5f96e7226995480e189a22/treeb70eb0348577c812f4f587d995c724e3c0e989e4.
+Coordination/source parent: b5c3490841811b3c0b4270af0dfa6109273c0df4.
+Стартовый commit C3 — commit этой инструкции; отдельная подготовленная ветка
+**c3/m4-precommit-rights-r1** указывает на него. Начать из неё, не из произвольного
+main и не из private VM overlay. Draft PR → main; не force-push.
+В базе уже есть public receiver repair2a1369c8 и bounded diagnostics9d7f50;
+они не слиты в main. Сохранить их и включить в проверку финального PR.
+Private C6 helper, privileged rights loop, свободные redacted HTTP error bodies/
+VM paths/receipts в PR не копировать.
+
+### Разрешённый scope
+
+- backend/src/asm/ai/{database,runtime,provider_runtime}.py — узкая композиция
+  pre-commit rights refresh; contracts/runtime_contracts.py только если нужен
+  малый typed result этой границы, без registry и смены result semantics.
+- backend/src/asm/messaging/database.py и backend/src/asm/telegram/database.py —
+  trusted claim-bound probe/observe, существующий TelegramClient.observe reuse.
+  messaging/worker.py только необходимая совместимость; final send flow сохранить.
+- C0 резервирует migrations/versions/0017_ai_reply_rights.py, down_revision0016:
+  минимальная job/claim/scope capability для PROCESS_TURN/AI_GENERATE до commit,
+  grants/schema profile; прежние0001–0016 не редактировать. ДругогоDDL нет.
+- backend/src/asm/foundation.py и scripts/m4_runtime_db.py, связанные contract/
+  fixture snapshots/tests — только необходимые schema0017/profile pins.
+  Точный список таких compatibility files вернуть с объяснением каждого.
+- tests/test_m4_*rights*.py, существующие M4 delivery/runtime/provider/Telegram
+  boundary tests и соответствующие migration/foundation/runner fixtures.
+- 3coordination docs (HANDOFF/TASK_REGISTER/M4_RUNTIME_PILOT) для результата.
+  Dependencies, workflow gates, frontend, иные business domains не менять.
+C0 явно согласовал связанное изменение общей DB-границы в этой одной выдаче;
+C2 не запускает отдельную competing migration. Полные исторические tests/guards
+не ослаблять ради новой schema. Иной scope сначала обозначить конкретным finding.
+
+### Обязательное поведение
+
+1. Probe привязан к действующему AI job/lease, workspace/client/conversation/
+   connection/run/config. Нельзя брать scope из model text или чужого UUID.
+   Replayed committed result возвращается до нового HTTP; старый run не генерировать.
+2. Для candidate reply/Telegram в runtime: короткий trusted probe transaction →
+   настоящий getBusinessConnection вне транзакции → короткий CAS/save/revalidation →
+   canonical commit. Использовать штатный runtime principal, не asm_migrator.
+   Выбор допустимой границы persistence — в новой узкой capability; TTL30 не увеличивать.
+   Не копировать привилегированный periodic loop из helper; не подделывать observed_at.
+3. Проверять generation/observation version/claim/currentness и после HTTP.
+   Отрицательное наблюдение сохранять как отрицательное; unknown/timeout/revocation/
+   disable/HUMAN/stale context не превращать в разрешённый reply.
+   Финальный SEND_AI_TEXT probe и same-transaction admission остаются обязательными.
+4. Observe входит в существующий run deadline; late response не оживляет run.
+   Не продлевать окно и не делать дополнительный model POST из-за rights failure.
+   Уже учтённые usage/cost/reservation сохраняются при отказе commit.
+5. Не делать Telegram HTTP для no_reply/handoff, non-Telegram или исторического
+   DB-only path без delivery. Нормальные synthetic/fake тесты остаются изолированными.
+   Ошибки и новые логи — статические safe codes, без ключей/response body/переписки.
+6. Никаких VM/deploy/provider POST/реальных Telegram-send в этой code выдаче.
+   C3 может работать при выключенной ВМ владельца.
+
+### Проверка и один возврат
+
+Сначала red/green reproducer: observation старше30s, успешный fake model reply →
+на старом коде commit NOT_ALLOWED/нетOutbox; с fix настоящее mocked observation,
+реальныйPG commit/outbox1/final-send admission. HTTP только mock, PostgreSQL настоящий.
+Проверить группы: права отозваны/disabled; binding/generation/version сменились
+во время HTTP; HUMAN/context/session/lease/deadline стали stale; observe timeout/
+cancel/unknown; replay/lost-ACK не повторяет модель/отправку; cross-tenant scope
+и wrong claim отказ; no_reply/handoff не вызывает probe; HTTP не держит DB txn.
+Проверить upgrade0016→0017 и чистую0017, runtime privileges/RLS/schema profile;
+старые миграции и unknown/no-regeneration/no-resend сохраняются.
+
+После целевых PASS — один полный CI финального кандидата с existing gates.
+Не повторять неизменённый full run без новой ошибки/правки. C0 historical430tests
+и C6 reported125tests не выдавать за проверки этого будущего исправления.
+Вернуть final SHA/tree, Draft PR, changed files, targeted actualPG/unit evidence,
+fullCI и краткую матрицу оставшихся M4 критериев по уже принятым evidence.
+Не добавлять новую платную demo или автономную сеть как условие code completion.
+
+### Открытый остаток и следующая очередь
+
+C6-M4-ACK-01 OPEN_OPERATIONAL: неизвестен последний inbound ACK/fence. Не
+сбрасывать offset/counters, не повторять сообщение и не запускать receiver для
+«проверки». Для отдельного безопасного reconciliation потребуются saved status/
+cursor/fence и durable ingress facts; приватные данные остаются у владельца.
+Исходный R4 return не выполнен; старые UNKNOWN holds сохраняются.
+Это блокирует reuse того receiver, не разработку новой функции на synthetic data.
+Успешные runtime diagnostics под FAILURE prefix — private helper naming defect,
+не повод менять production failure policy или объявлять новый provider отказ.
+
+Очередь: C3 bounded rights fix → review/интеграция → M5.1 (C1, configuration domain).
+M5.2 knowledge/RAG/private Portfolio/Vision и M5.3 review/publish UI позже по канону.
+C3 IN_PROGRESS; C6 live STOP/HOLD, C1/C2/C4/C5/C8 HOLD до своих выдач.
+C0 подтвердил целостность38report files/23payload files и соответствие embedded
+helper payload; это file verification,не запуск helper,не fresh VM attestation.
+Этот coordination commit не меняет runtime,не сливает PR и не развёртывает код.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, выполнить C0-M4-FOLLOWUP-01 / 2026-11-08
 
 **C0 принимает offline шаг и разрешает одно конкретное продолжение live smoke.**
 Владелец уже поручил получить ответ ИИ; нового общего согласия не требуется.

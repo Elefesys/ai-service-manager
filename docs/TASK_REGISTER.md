@@ -2,7 +2,32 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, FOLLOWUP-01 live continuation / 2026-11-08
+## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / IN_PROGRESS / 2026-11-12
+
+C0 принимает FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST:
+AI reply дошёл до клиента через текущий PC transport. Evidence owner-reported;
+private report не публикуется. Общий M4 VERIFIED не объявлен.
+C6-M4-LIVE-PREP-R1: REVIEW / функциональный результат принят,
+C6-M4-ACK-01: OPEN_OPERATIONAL (inbound ACK/fence; исторический return не выполнен).
+Старые UNKNOWN/holds сохраняются; новый model/send для повторной демонстрации не нужен.
+
+Единственная активная code выдача C3: обновить реальные права Telegram перед
+canonical reply COMMIT, сохранив TTL30/final-send/currentness/claim/tenant guards.
+Source defect: commit требует свежесть до создания SEND_AI_TEXT, а refresh сейчас
+только внутри send handler. [Точный HANDOFF](tasks/M4_HANDOFF.md).
+C0 резервировал additive0017_ai_reply_rights/down_revision0016; старые миграции
+immutable. Prepared branch c3/m4-precommit-rights-r1; start=commit HANDOFF,
+parentb5c3490841811b3c0b4270af0dfa6109273c0df4; app accepted29dc1608.
+Targeted realPG/unit → один fullCI → Draft PR/main. VM/paid/live не нужны.
+C6 private helper не становится production кодом и целиком в Git не переносится.
+
+Автономный transport DEFERRED по владельцу, путь через ПК допустим для разработки.
+После source fix/integration следующая продуктовая выдача M5.1 configuration
+domain; ACK ограничивает reuse исторического receiver, не synthetic domain work.
+C3 IN_PROGRESS; остальные HOLD, включая C6 live. Main29dc1608 неизменён.
+
+
+## История — C6-M4-LIVE-PREP-R1 / IN_PROGRESS, FOLLOWUP-01 live continuation / 2026-11-08
 
 C0 принял offline этап по private owner-reported receipt; public VM dump отсутствует.
 [Решение FOLLOWUP-01](decisions/IMPL-004-m4-pilot-ai.md) явно разрешает один

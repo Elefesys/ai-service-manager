@@ -38,17 +38,17 @@ unit3569+155subtests,frontend398/browser54. C0 принял всю source-реа
 Polza bridge и fixture cleanup; LOCAL/TEST INTEGRATED/VERIFIED.
 Полный M4/live pilot ещё открыт. Merge не обновляет ВМ и не включает provider.
 
-Текущая выдача — C6-M4-LIVE-PREP-R1: конкретная подготовка TEST-контура и
-Telegram→Polza→reply smoke, exact scope/write-set/границы — CURRENT HANDOFF
-и TASK_REGISTER. C3 завершил реализацию; остальные роли HOLD.
-Прежний M3 live LOCAL/asm_local не подменяет обязательный TEST/asm_test runtime.
-Сохранить старую среду/данные/receipts и native OWNER/observation barrier.
-Read-only preflight разрешён по выдаче; deploy/migrations/enable/paid/send —
-только после готового конкретного пакета и отдельного owner допуска.
-Не добавлять новую инфраструктуру/diagnostic платформу ради подготовки.
-AI default OFF/EVAL_ONLY; использовать один принятый Polza route без fallback.
-UNKNOWN holds/no-regeneration/no-resend и tenant/currentness/rights guards сохраняются.
-Исторические M1–M3 и paid probe команды не являются новым live разрешением.
+Текущая выдача — C3-M4-PRECOMMIT-RIGHTS-R1: штатное обновление реальных прав
+Telegram до canonical reply COMMIT; exact scope/base/write-set — CURRENT HANDOFF.
+Первый AI reply принят C0 как FUNCTIONAL_E2E_CONFIRMED/ASSISTED_SYNTHETIC_TEST.
+Общий M4 VERIFIED не объявлен; C6 inbound ACK/fence OPEN, live STOP/HOLD.
+Private helper не является новым production/runtime acceptance.
+Автономный Telegram transport DEFERRED по владельцу; development путь через ПК.
+Для этой source-задачи ВМ и новые paid/send не нужны. Остальные роли HOLD.
+C0 резервирует additive0017/down_revision0016; applied0001–0016 не менять.
+Сохранить TTL30,final send-check,tenant/native/currentness,UNKNOWN/no-resend.
+Следующая продуктовая очередь после fix — M5.1; reuse старого receiver отдельно
+зависит от ACK reconciliation. Секреты и private VM receipts не коммитить.
 
 ## Источники и границы
 
