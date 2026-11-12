@@ -143,62 +143,49 @@ PG fixtures восстанавливают current18 после историче
 старые и новые права. M4 runner сохраняет старые source routes и добавляет только
 точную M5.1A branch/base/tree/write-set в outer/export/inner admission.
 
-### Возврат C1/C2 — подготовленный source; scope blocker снят C0
+### Возврат C1/C2 — исправление CI в PR46; scope blocker снят C0
 
-Реализованы шесть owner API и bundle v1, additive0018, private receipt-audit,
-validation/preview/publish/rollback и bounded active projection. Draft и active
-разделены; UNKNOWN/holds, native/control/delivery и AI loop не менялись.
-202 functions /52 tables /732 columns измерены на owned native PG18.0,
-vector0.8.6/btree_gist1.8; accepted0017 profile предварительно совпал полностью.
-Это local synthetic evidence, не pinned image/full CI или live verification.
+Реализованы шесть owner API и согласованный bundle v1, additive0018,
+private receipt-audit, validation/preview/publish/rollback и bounded active
+projection. Контракт C1/C2 выше сохраняется; единственная задача — M5.1A.
+[PR46](https://github.com/Elefesys/ai-service-manager/pull/46) открыт;
+исходный кандидат `7687857fce4b030da4a373657aad996e9472a6fb` и его
+[CI43217876369](https://github.com/Elefesys/ai-service-manager/actions/runs/43217876369)
+завершены: **10/12 SUCCESS**. Подробный разбор и evidence — в
+[C1 return](https://github.com/Elefesys/ai-service-manager/pull/46#issuecomment-6824876431).
 
-Локальные unit/source, actual API/PG и legacy tenancy checks выполнены; полные
-команды, результаты, initial setup failures и один readiness timeout сохраняются
-в возврате C1. Ruff/mypy, OpenAPI check и все document-root JSON refs проходят.
-Финальные source identities и подробный return — в
-[C1/C0 coordination](https://github.com/Elefesys/ai-service-manager/pull/45#issuecomment-6821719546).
+Auth inventory уже исправлен по допуску C0 ef1aa2d2: ровно шесть routes
+в полной equality `tests/test_auth_contract.py` (+9/-0) и его exact admission
+path. Frozen auth.v1 и прежние assertions сохранены. В исходном полном CI:
+3666 unit +161 subtests PASS; все37 новых M5 PG/API и40 legacy tenancy cases
+PASS. Generic completed897:896 PASS/1 FAIL — старый49-table inventory в
+`tests/test_postgres.py` при actual52. Pinned0018 catalog/readiness и M4/native/
+browser/durable gates PASS; последующие foundation phases не достигнуты.
+Отдельный Docker29/image shard остановился на daemon startup до тестов;
+причина отказа daemon по доступному логу не установлена.
 
-**C0 / 2026-11-12: точечное расширение write-set ПРИНЯТО.**
-Проверенный prepared head: `73ae021d3fbdb9724fd20d44fe2000d8b57dfc2d`,
-tree `7c63fdad005d09d037db6e47e25d82ee80c2f917`; его parent — C0 handoff
-`6c9023dbf29e1e8e100084aee85a12c132ba2ab3`. Implementation base выше не меняется.
+**C0 / 2026-11-12: дополнительный scope blocker снят**
+[решением6825320599](https://github.com/Elefesys/ai-service-manager/pull/46#issuecomment-6825320599).
+Разрешён только `tests/test_postgres.py`, согласованные +4/-1: сохранить49
+прежних имён и полную equality, добавить `business_configuration_receipts`,
+`business_configuration_releases`, `business_configuration_state`; label —
+`Only the accepted M0 through M5.1A material tables are allowed`.
+Role/TEMP/uuidv7/vector/RLS/ACL assertions сохраняются. В уже разрешённом
+`scripts/m4_runtime_db.py` добавить только этот exact path в
+`M5_CONFIGURATION_PATHS` (+1), сохранив отрицательные source checks.
 
-Разрешён ровно один дополнительный path: **`tests/test_auth_contract.py`**.
-Принята предложенная правка **+9/-0**: отдельный список `configuration_endpoints`
-из шести маршрутов ниже и его добавление к прежней `sorted` equality.
-C0 сверил declared routes с committed OpenAPI: прежние25 + ровно эти6 =31;
-сам test blob пока совпадает с handoff
-`655ee55f692a7473b0012002ceb009ede2b6af8b`. Это конкретная зависимость уже
-выданного API, без новых продуктовых функций.
+Продолжение C1: применить согласованный inventory, адресно выполнить actual-PG
+`tests/test_postgres.py::test_real_postgres_capabilities_and_roles` и затронутые
+source-admission checks; одним commit/push этого исправления и текущих docs
+запустить один штатный полный CI нового SHA в том же PR46. Проверить Docker29/
+image shard в этом CI; при повторении сохранить evidence и разбирать startup
+отдельно, без серии неизменённых reruns. Workflow/dependencies/gates сохраняются.
+Только для этого push C0 делегировал C1 краткое обновление CURRENT
+`docs/TASK_REGISTER.md`; это разовое исключение из общего владения реестром C0.
 
-```text
-GET /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/draft
-PUT /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/draft
-GET /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/preview
-POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/publish
-POST /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/rollback
-GET /api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration/active
-```
-
-Сохранить полную equality, frozen auth.v1 seven/schema0003/down0002, policy
-assertions, OfflineDatabase refusal и full OpenAPI byte equality. Не добавлять
-filter/subset/skip/xfail. В уже разрешённом `scripts/m4_runtime_db.py` добавить
-тот же exact path только в `M5_CONFIGURATION_PATHS`; проверить его прохождение
-через outer/export/inner admission при сохранении отрицательных source cases.
-
-**Продолжение C1:** fast-forward к C0 docs-only commit, содержащему это решение
-поверх prepared head73ae021d; сохранить все существующие изменения и C0 handoff.
-Применить согласованную правку, адресно проверить `tests/test_auth_contract.py`,
-configuration OpenAPI regression и затронутый source admission. После этого
-открыть один implementation PR этой же ветки → main и пройти один штатный полный
-CI готового SHA. Пустой docs PR, повтор main CI и повтор всех локальных PG
-прогонов без новой причины не нужны. Все существующие gates остаются.
-
-Блокировка по path agreement снята; единственная задача остаётся M5.1A / C1.
-Это разрешение на ограниченную правку и подготовку review, не приёмка всей
-реализации. M5.1B/UI/LLM tools, VM/paid/live и merge не выданы.
-
-
+Implementation base и C0 handoffs сохранены. Ошибки CI ещё не объявлены
+исправленными; приёмка M5.1A впереди. M5.1B/UI/LLM tools, VM/paid/live и merge
+не выданы. Остальные paths требуют конкретного согласования C0.
 
 C0 резервирует только `0018_business_configuration.py`: revision `0018`,
 down_revision `0017`. **C2 до SQL подтверждает**, что актуальный migration head

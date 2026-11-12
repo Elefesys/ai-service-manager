@@ -115,6 +115,9 @@ async def test_real_postgres_capabilities_and_roles(database):
             "auth_credentials",
             "auth_sessions",
             "billing_contact_command_receipts",
+            "business_configuration_receipts",
+            "business_configuration_releases",
+            "business_configuration_state",
             "business_members",
             "businesses",
             "channel_connections",
@@ -155,7 +158,7 @@ async def test_real_postgres_capabilities_and_roles(database):
             "workspace_service_modes",
             "workspace_subscriptions",
             "workspaces",
-        ], "Only the accepted M0 through M4 material tables are allowed"
+        ], "Only the accepted M0 through M5.1A material tables are allowed"
 
 
 async def test_rls_no_context_and_cross_workspace_reads(probe):

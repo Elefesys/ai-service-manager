@@ -63,6 +63,7 @@ M5_CONFIGURATION_PATHS = {
     "tests/test_m5_configuration_api_postgres.py",
     "tests/m5_configuration_fixtures.py",
     "tests/test_auth_contract.py",
+    "tests/test_postgres.py",
     "backend/src/asm/foundation.py",
     "backend/src/asm/tenancy/database.py",
     "contracts/openapi.json",

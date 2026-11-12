@@ -12,18 +12,14 @@ tree `699bd90777771c5d22d37029336c3e0f8909fb5c` совпадает с канди
 IMPL-005 остаётся ACCEPTED / LOCKED. M5.0 VERIFIED относится к пакету плана;
 готовность реализации M5.1A этим не заявляется. Receipt98136c33 и M4 сохранены.
 
-Единственная активная задача — **C1-M5.1A-CONFIGURATION-R1**, C1 с участием C2.
-[C1 вернул подготовленный source](https://github.com/Elefesys/ai-service-manager/pull/45#issuecomment-6821719546)
-`73ae021d3fbdb9724fd20d44fe2000d8b57dfc2d`,
-tree `7c63fdad005d09d037db6e47e25d82ee80c2f917`; полный C0 review/CI впереди.
-
-C0 снял scope blocker: разрешён `tests/test_auth_contract.py` для явного
-добавления ровно шести выданных configuration routes в полную equality (+9/-0).
-Фактические API/OpenAPI routes сверены; frozen auth и прежние assertions сохраняются.
-Точные условия и продолжение — только в [M5_HANDOFF](tasks/M5_HANDOFF.md).
-Следующий шаг C1: применить правку и тот же path в уже разрешённый M5 admission,
-выполнить целевые проверки, открыть один implementation PR → main и пройти
-штатный полный CI готового кандидата. Другие срезы не выданы.
+Единственная активная задача — **C1-M5.1A-CONFIGURATION-R1 — IN_PROGRESS**,
+C1/C2, [PR46](https://github.com/Elefesys/ai-service-manager/pull/46).
+Исходный [CI43217876369](https://github.com/Elefesys/ai-service-manager/actions/runs/43217876369)
+— **10/12 SUCCESS**. C0 разрешил явный0018 inventory в `tests/test_postgres.py`
+[решением6825320599](https://github.com/Elefesys/ai-service-manager/pull/46#issuecomment-6825320599);
+auth inventory уже исправлен. Целевые checks → один штатный CI исправленного
+SHA; приёмка M5.1A впереди. Точная выдача и условия — только в
+[M5_HANDOFF](tasks/M5_HANDOFF.md). Другие срезы не выданы.
 
 Receiver ACK/fence, полный live HUMAN/Resume, UNKNOWN/holds и PC transport
 сохраняют прежний статус и не блокируют M5 coding. VM/paid/live/реальные данные
