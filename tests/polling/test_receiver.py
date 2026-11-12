@@ -386,7 +386,9 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
             polls.append(json.loads(request.content))
             if len(polls) == 1:
                 return httpx.Response(200, stream=InterruptedTLS())
-            return httpx.Response(200, json={"ok": True, "result": [event()] if len(polls) == 2 else []})
+            return httpx.Response(
+                200, json={"ok": True, "result": [event()] if len(polls) == 2 else []}
+            )
 
         async def sleep(delay):
             delays.append(delay)
@@ -417,7 +419,9 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
             polls.append(json.loads(request.content))
             if len(polls) == 2:
                 raise ssl.SSLError(1, "private TLS detail")
-            return httpx.Response(200, json={"ok": True, "result": [event()] if len(polls) == 1 else []})
+            return httpx.Response(
+                200, json={"ok": True, "result": [event()] if len(polls) == 1 else []}
+            )
 
         ingress = DurableIngress()
         receiver = Receiver(await self.make_wire(reply), ingress, lambda _: None)
@@ -438,7 +442,6 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         wire = await self.make_wire(reply)
         with self.assertRaises(asyncio.CancelledError):
             await wire.poll(None)
-
 
 
 class JsonTests(unittest.TestCase):

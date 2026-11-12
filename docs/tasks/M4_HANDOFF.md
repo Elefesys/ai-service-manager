@@ -16,6 +16,34 @@ C6 live выдача переходит в REVIEW с OPEN receiver ACK; новы
 DEFERRED по владельцу; разработка сохраняет путь через ПК.
 [Принятое решение и границы](../decisions/IMPL-004-m4-pilot-ai.md).
 
+### Результат реализации C3 / source candidate
+
+Реализован claim-bound путь Reply → short probe transaction → существующий
+TelegramClient.observe/getBusinessConnection вне DB transaction → observation
+CAS/currentness revalidation + canonical COMMIT в одной transaction.
+Положительный результат создаёт один Outbox; отрицательный/unknown сохраняется
+без reply/Outbox. Replayed receipt возвращается до HTTP; persisted deadline,
+TTL30s, финальный SEND_AI_TEXT admission, usage/cost/reservation прежние.
+
+Добавлена0017_ai_reply_rights (0016 predecessor): две runtime EXECUTE capability,
+private currentness helper/profile, существующий ephemeral job probe допускает
+AI_GENERATE. Новых таблиц/колонок нет. Два current schema dispatcher переведены
+на профиль0017; applied0001–0016 и исторические guards сохранены.
+Current inventory:194functions/49tables/708columns;
+profile a5257875899ac8ad49a96cf82ce2a747fdc2c1918f52ae098e0a9244b7603cf0.
+
+Local actual PostgreSQL18.0/pgvector0.8.6, Python3.13/frozen lock:
+red на6851 воспроизводит ранний отказ без Outbox; green matrix25PASS,
+provider32PASS, delivery22PASS, schema9PASS, historical runtime35PASS.
+Все HTTP — MockTransport. Это123actualPGcases, не C0 historical430/C6 reported125.
+Runner unit123PASS; Ruff/mypy/OpenAPI PASS; финальный общий unit и один existing
+fullCI фиксируются отдельным возвратом/в Draft PR. Deployment/live/paid не выполнялись.
+
+Compatibility delta ограничена current0017/profile pins, fixtures и partition
+нового test module. Единственное внешнее finding: унаследованный receiver test
+не проходил Ruff format; применено только форматирование с AST equality proof,
+поведение public receiver repair2a1369c8/diagnostics9d7f50 сохранено.
+
 ### C3 — конкретный результат для продукта
 
 После получения candidate reply штатный runtime сам получает реальное свежее

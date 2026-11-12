@@ -4,6 +4,15 @@
 
 ## CURRENT — C3-M4-PRECOMMIT-RIGHTS-R1 / IN_PROGRESS / 2026-11-12
 
+C3 source candidate реализован: fresh claim-bound Telegram observation перед
+canonical Reply COMMIT, HTTP вне transaction; additive0017/current profile,
+без изменения applied0001–0016, TTL30 или final-send admission.
+Local actualPG123PASS (35runtime/22delivery/9schema/32provider/25rights),
+red/green reproducer подтверждён; runner unit123PASS, Ruff/mypy/OpenAPI PASS.
+Один полный CI финального Draft PR — следующий gate; результат фиксируется
+в C3 receipt. Только code/test: VM/deploy/paid/Telegram API не выполнялись.
+[Подробности и пределы результата](tasks/M4_HANDOFF.md#результат-реализации-c3--source-candidate).
+
 C0 принимает FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST:
 AI reply дошёл до клиента через текущий PC transport. Evidence owner-reported;
 private report не публикуется. Общий M4 VERIFIED не объявлен.

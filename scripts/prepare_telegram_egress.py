@@ -1958,6 +1958,7 @@ SCHEMA_TABLES["0015"] = SCHEMA_TABLES["0013"] | {
 
 
 SCHEMA_TABLES["0016"] = SCHEMA_TABLES["0015"] | {"platform.ai_provider_sessions"}
+SCHEMA_TABLES["0017"] = SCHEMA_TABLES["0016"]
 
 
 def native_source_profile():
@@ -1965,10 +1966,10 @@ def native_source_profile():
     from scripts import native_context_db_catalog as runner
 
     require(runner.ROOT == ROOT, "NATIVE_PROFILE_SOURCE_MISMATCH")
-    profile = runner.source_catalog(ROOT, "0016")
-    schema_inventory("0016", profile["columns"])
+    profile = runner.source_catalog(ROOT, "0017")
+    schema_inventory("0017", profile["columns"])
     require(
-        len(profile["functions"]) == 190 and sum(map(len, profile["columns"].values())) == 708,
+        len(profile["functions"]) == 194 and sum(map(len, profile["columns"].values())) == 708,
         "NATIVE_PROFILE_INVENTORY",
     )
     return profile
@@ -1996,7 +1997,7 @@ def native_host_profile(accepted_sha, accepted_tree):
         material = {
             "role": role,
             "source_tree": tree,
-            "schema_revision": "0016",
+            "schema_revision": "0017",
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
             "files": {name: entries[name] for name in paths},
         }

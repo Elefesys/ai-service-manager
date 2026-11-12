@@ -38,6 +38,7 @@ class RuntimeExecution:
                         adapter,
                         deadline=datetime.now(UTC)
                         + timedelta(seconds=self.config.limits.duration_seconds),
+                        telegram=self.telegram,
                     )
                 except SQLAlchemyError:
                     try:

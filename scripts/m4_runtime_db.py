@@ -19,9 +19,9 @@ import traceback
 from pathlib import Path
 from uuid import UUID
 
-BASE = "dbb2334a4e9d158cf101fe7e39467928e446b85c"
-BASE_TREE = "1a264d50ef29b82cd85a100c32d2053735edb8cb"
-BRANCH = "c3/m4-3-polza-runtime-r1"
+BASE = "6851b8f1c12b50cf0051353f29a41cf89c94a280"
+BASE_TREE = "ffed6f5c7560d080baa672d50850c56eba4060ba"
+BRANCH = "c3/m4-precommit-rights-r1"
 TARGETED_BRANCH = "c3/m4-3-runtime-targeted-run-r10"
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
@@ -31,6 +31,7 @@ MODULES = [
     "tests/test_m4_delivery_postgres.py",
     "tests/test_m4_schema_postgres.py",
     "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_reply_rights_postgres.py",
 ]
 CURRENT_NATIVE_MODULE = "tests/test_m3_1_native_context_runtime_postgres.py"
 # Exactly the six R1 cases blocked by the current0015 schema prerequisite.
@@ -699,6 +700,10 @@ def admit_source(evidence):
         "tests/test_m3_1_guards_migrations.py",
         "tests/test_telegram_egress.py",
         "migrations/versions/0016_polza_runtime.py",
+        "migrations/versions/0017_ai_reply_rights.py",
+        "tests/test_m4_reply_rights_postgres.py",
+        "tests/test_m4_reply_rights.py",
+        "tests/polling/test_receiver.py",
         "tests/test_m4_polza_runtime_migrations.py",
         "tests/test_m2_3_setup.py",
         "docs/tasks/M4_HANDOFF.md",
@@ -726,8 +731,8 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.ai_provider_schema_profile()"
-        if revision == "0016"
+        "platform.ai_reply_rights_schema_profile()"
+        if revision == "0017"
         else "platform.human_context_schema_profile()"
     )
     body_hash = expected["functions"][profile]["body_sha256"]
@@ -782,12 +787,12 @@ def stock_catalog():
         ):
             c.execute(sql)
         revision = c.execute("SELECT version_num FROM platform.alembic_version").fetchone()[0]
-        require(revision in {"0013", "0016"}, "CATALOG_REVISION")
+        require(revision in {"0013", "0017"}, "CATALOG_REVISION")
         destination = evidence_path() / ("catalog-" + revision)
         destination.mkdir(mode=0o700)
         expected = catalog.source_catalog(catalog.ROOT, revision)
         write(destination / "expected-source-catalog.json", expected)
-        if revision == "0016":
+        if revision == "0017":
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
             )
@@ -833,7 +838,9 @@ def stock_catalog():
         catalog.compare_roles(roles, memberships, owned)
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
-        profile = "platform.ai_provider_schema_profile()" if revision == "0016" else catalog.PROFILE
+        profile = (
+            "platform.ai_reply_rights_schema_profile()" if revision == "0017" else catalog.PROFILE
+        )
         declared = c.execute("SELECT " + profile + " AS profile").fetchone()["profile"]
         write(destination / "declared-profile.json", declared)
         comparison = catalog_comparison(expected, digest, nonfunction, declared)
@@ -847,7 +854,7 @@ async def readiness():
     runtime = RuntimeDatabase(Settings())
     try:
         await runtime.check()
-        write(evidence_path() / "readiness.json", {"revision": "0016", "runtime_check": "PASS"})
+        write(evidence_path() / "readiness.json", {"revision": "0017", "runtime_check": "PASS"})
     finally:
         await runtime.close()
 
@@ -1225,7 +1232,7 @@ def run_admitted(root, event, manifest, mode):
     # No resource access or credentials before the complete source admission.
     require(mode in {"targeted", "runtime"}, "R5_MODE")
     modules = ["preflight", *MODULES]
-    planned = dict(zip(MODULES[:3], (35, 22, 9), strict=True)) | {MODULES[3]: 0}
+    planned = dict(zip(MODULES[:3], (35, 22, 9), strict=True)) | {m: 0 for m in MODULES[3:]}
     native_nodes = CURRENT_NATIVE_NODES if mode == "targeted" else []
     if mode == "targeted":
         modules.append(CURRENT_NATIVE_MODULE)
@@ -1354,8 +1361,11 @@ def run_admitted(root, event, manifest, mode):
                     ),
                     "RETAINED_CASES_LOST",
                 )
-                planned[MODULES[3]] = sum(n.startswith(MODULES[3] + "::") for n in m4_nodes)
-                require(planned[MODULES[3]] > 0, "PROVIDER_CASES_EMPTY")
+                for carrier_module in MODULES[3:]:
+                    planned[carrier_module] = sum(
+                        n.startswith(carrier_module + "::") for n in m4_nodes
+                    )
+                    require(planned[carrier_module] > 0, "PROVIDER_CASES_EMPTY")
                 planned_nodes = [*m4_nodes, *native_nodes]
                 require(len(planned_nodes) == len(set(planned_nodes)), "INVENTORY_DUPLICATE")
                 all_nodes = planned_nodes
@@ -1404,10 +1414,10 @@ def run_admitted(root, event, manifest, mode):
                 {"uid": uid, "image_id": image_id, "pin": DB_IMAGE, "container_id": identity},
             )
             if module == "preflight":
-                sql_phase(group, "schema-0016", checks(group, "alembic", "upgrade", "0016"), 120)
+                sql_phase(group, "schema-0017", checks(group, "alembic", "upgrade", "0017"), 120)
                 sql_phase(
                     group,
-                    "catalog-0016",
+                    "catalog-0017",
                     checks(group, "python", "scripts/m4_runtime_db.py", "catalog-snapshot"),
                     60,
                 )

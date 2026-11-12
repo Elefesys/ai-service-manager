@@ -6,7 +6,7 @@ selects a separate capability; a replayed result is never a send permit.
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -20,6 +20,7 @@ from asm.ai.contracts import (
     Budget,
     ConversationResult,
     GatewayConfig,
+    Reply,
 )
 from asm.ai.gateway import ModelAdapter
 from asm.ai.runtime_contracts import CallCompletion, PreparedRun, RuntimeReceipt, RuntimeStop
@@ -29,6 +30,7 @@ from asm.messaging.results import JobClaim
 
 if TYPE_CHECKING:
     from asm.ai.runtime_settings import RuntimeSettings
+    from asm.telegram.client import TelegramClient
 
 
 def decoded[T: DTO](model: type[T], value: Any) -> T:
@@ -170,6 +172,7 @@ class AIDatabase:
         adapter: ModelAdapter,
         *,
         deadline: datetime,
+        telegram: "TelegramClient | None" = None,
     ) -> RuntimeReceipt | RuntimeStop:
         config = self.config(config)
         try:
@@ -195,7 +198,37 @@ class AIDatabase:
             raise asyncio.CancelledError
         if outcome.candidate is None:
             return RuntimeStop(run_id=run.run_id, reason="AGENT_STOP")
+        if self.delivery and isinstance(outcome.candidate, Reply):
+            return await self._commit_reply(claim, run, outcome.candidate, telegram)
         return await self.commit(claim, run, outcome.candidate)
+
+    async def _commit_reply(
+        self, claim: JobClaim, run: PreparedRun, result: Reply, telegram: "TelegramClient | None"
+    ) -> RuntimeReceipt | RuntimeStop:
+        # The persisted run deadline also bounds HTTP after the agent returns.
+        # Probe commits before I/O; observation CAS and canonical selection share
+        # the second transaction. A rejected observation still commits as negative.
+        try:
+            async with asyncio.timeout((run.deadline - datetime.now(UTC)).total_seconds()):
+                probe = await self.messaging.ai_reply_probe(claim, run.run_id)
+                if probe is None:
+                    return await self.commit(claim, run, result)
+                if telegram is None:
+                    raise MessagingError(Code.NOT_ALLOWED)
+                observation = await telegram.observe(
+                    probe.bot_identity, probe.external_connection_id, probe.owner_user_id
+                )
+                raw = await self.messaging.commit_ai_reply(
+                    claim, run.run_id, probe, observation, result.model_dump(mode="json")
+                )
+                if raw == {"code": "RIGHTS_REJECTED"}:
+                    return RuntimeStop(run_id=run.run_id, reason="AGENT_STOP")
+                return decoded(RuntimeReceipt, raw)
+        except MessagingError as error:
+            if error.code != Code.STALE_CLAIM:
+                raise
+            # Concurrent/lost-ACK recognition never repeats the observation/model.
+            return await self.replay(claim, run.config, result)
 
 
 class PostgresAuthority:

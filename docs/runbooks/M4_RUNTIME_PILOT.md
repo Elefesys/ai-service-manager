@@ -22,6 +22,35 @@ status/cursor/fence/ingress facts. Чтение saved snapshot не являет
 возвратом исторического stopped контура. Private VM metadata в public Git не переносить.
 
 
+## C3 candidate0017: штатное наблюдение прав перед COMMIT
+
+Для нового Telegram candidate reply runtime сначала получает job/claim/run-bound
+probe в короткой transaction. Затем существующий TelegramClient выполняет
+getBusinessConnection без открытой DB transaction. Вторая transaction повторно
+проверяет lease/run deadline/session/context/binding/generation/version,
+сохраняет observation через CAS и выбирает canonical reply/Outbox только при
+разрешённых правах. Negative/unknown observation не является send permit.
+Отдельный privileged refresh-loop больше не входит в runtime path.
+
+Это наблюдение входит в уже сохранённый deadline; продления окна, нового model
+POST после rights refusal и повторной отправки нет. Cost/usage/reservation
+сохраняются. No_reply/handoff, CONTROLLED и historical DB-only path не вызывают
+новый Telegram HTTP. Replay/lost-ACK распознаёт сохранённый receipt до HTTP.
+SEND_AI_TEXT по-прежнему требует отдельный свежий probe/observe и same-transaction
+admission перед send. TTL30s не менялся.
+
+Current source требует schema0017/profile194functions/49tables/708columns.
+Upgrade0016→0017 добавляет две узкие runtime capability и разрешает уже
+существующие job probe поля для PROCESS_TURN/AI_GENERATE; таблиц/колонок новых нет.
+Downgrade0017→0016 очищает только ephemeral AI_GENERATE probe metadata,
+восстанавливает прежние current dispatcher/check/profile; canonical results,
+usage/cost/Outbox и final-send probes не удаляются. Used0016 downgrade guards
+остаются. Наличие миграции в PR не означает её применение на TEST VM.
+
+Проверено локально на realPG с mocked HTTP:123M4cases PASS, включая25rights
+и32provider. FullCI/source identity — в C3 return; этот текст не является
+fresh VM attestation или ACK reconciliation. Текущие OPEN/DEFERRED ниже сохраняются.
+
 ## История — одно child continuation FOLLOWUP-01 / 2026-11-08
 
 [Решение C0](../decisions/IMPL-004-m4-pilot-ai.md) и
