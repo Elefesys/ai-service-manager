@@ -21,6 +21,12 @@ full catalog отличается. Current full pin исправлен по не
 SQL, grants, RLS и verifier body не меняются. Сначала local en_US проверка,
 затем финальный fullCI исправленного child. Неизменённого rerun нет.
 
+Дополнительная current0017 совместимость общих PG fixtures: точный native/AI
+function inventory в tenancy, Telegram codec fixture, native policy profile
+selector и full current snapshots при отказах historical0007/0010/0011 downgrade.
+Проверены103generic actualPG cases PASS;7current-native actualPG PASS;
+229targeted unit PASS после pin correction. Historical guards не ослаблены.
+
 C0 принимает FUNCTIONAL_E2E_CONFIRMED / ASSISTED_SYNTHETIC_TEST:
 AI reply дошёл до клиента через текущий PC transport. Evidence owner-reported;
 private report не публикуется. Общий M4 VERIFIED не объявлен.

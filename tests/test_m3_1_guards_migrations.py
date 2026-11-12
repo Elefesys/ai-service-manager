@@ -112,7 +112,7 @@ async def assert_refusal(c, *, revision="0010"):
     from sqlalchemy.exc import DBAPIError
 
     before, ddl = await fingerprints(c), await definitions(c)
-    current = await current_snapshot(c) if revision == "0016" else None
+    current = await current_snapshot(c) if revision == "0017" else None
     module, executed = migration(), []
 
     def execute(statement):
@@ -131,7 +131,7 @@ async def assert_refusal(c, *, revision="0010"):
     assert caught.value.orig.sqlstate == "55000"
     assert len(executed) == 2 and executed[0].startswith("LOCK TABLE")
     assert executed[1].startswith("DO $$ BEGIN")
-    if revision == "0016":
+    if revision == "0017":
         assert await current_snapshot(c) == current
     elif revision == "0011":
         from test_m3_2_escalations_migrations import assert_schema as assert_e_schema
@@ -215,7 +215,7 @@ async def test_any_guard_usage_refuses_before_ddl_and_preserves_full_g(control, 
             await execute(h, cid, "TAKEOVER", "before-dispatch")
             await h.kernel.begin_guarded_send(send)
     async with h.migrator.begin() as c:
-        await assert_refusal(c, revision="0016")
+        await assert_refusal(c, revision="0017")
 
 
 COMMIT_ACK_LOSS_MARKER = "GUARDS_UPGRADE_COMMITTED_RESULT_LOST"

@@ -59,6 +59,12 @@ full catalog отличается. Current full pin исправлен по не
 SQL, grants, RLS и verifier body не меняются. Сначала local en_US проверка,
 затем финальный fullCI исправленного child. Неизменённого rerun нет.
 
+Дополнительная current0017 совместимость общих PG fixtures: точный native/AI
+function inventory в tenancy, Telegram codec fixture, native policy profile
+selector и full current snapshots при отказах historical0007/0010/0011 downgrade.
+Проверены103generic actualPG cases PASS;7current-native actualPG PASS;
+229targeted unit PASS после pin correction. Historical guards не ослаблены.
+
 ## История — одно child continuation FOLLOWUP-01 / 2026-11-08
 
 [Решение C0](../decisions/IMPL-004-m4-pilot-ai.md) и

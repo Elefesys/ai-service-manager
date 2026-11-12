@@ -52,6 +52,12 @@ full catalog отличается. Current full pin исправлен по не
 SQL, grants, RLS и verifier body не меняются. Сначала local en_US проверка,
 затем финальный fullCI исправленного child. Неизменённого rerun нет.
 
+Дополнительная current0017 совместимость общих PG fixtures: точный native/AI
+function inventory в tenancy, Telegram codec fixture, native policy profile
+selector и full current snapshots при отказах historical0007/0010/0011 downgrade.
+Проверены103generic actualPG cases PASS;7current-native actualPG PASS;
+229targeted unit PASS после pin correction. Historical guards не ослаблены.
+
 ### C3 — конкретный результат для продукта
 
 После получения candidate reply штатный runtime сам получает реальное свежее
