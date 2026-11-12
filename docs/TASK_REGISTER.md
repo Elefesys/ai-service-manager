@@ -2,29 +2,28 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5.0 REVIEW интеграции; решение принято; реализация TODO / 2026-11-12
+## CURRENT — M5.0 INTEGRATED / VERIFIED; M5.1A IN_PROGRESS / 2026-11-12
 
-Единственная текущая работа — C0, подготовка PR #45 к интеграции.
-План: [M5_HANDOFF](tasks/M5_HANDOFF.md); решение
-[IMPL-005](decisions/IMPL-005-m5-pilot-knowledge.md) — ACCEPTED / LOCKED C0.
-Уточнены доступ к общим опубликованным знаниям при изоляции личных данных
-клиента и проверка activation version также на MODEL/FOLLOWUP.
-Пакет содержит документы и узкое исправление допуска CI для ветки планирования;
-application code, миграции, provider/VM и данные не менялись. CI43166516634:
-11/12 SUCCESS, runtime остановлен до БД на старом branch allowlist
-(`POLZA_RUNTIME_EVENT_BRANCH`); исправленный кандидат проходит штатный CI.
-Логи и точные результаты кандидата — в PR/CI, неизменённый запуск не повторять.
-После отдельного разрешения владельца и интеграции C0 выдаёт только M5.1A,
-C1 с C2, с фактическим accepted main SHA и точным write-set. Выдач кода пока нет.
+PR #45 интегрирован в `49d3e25968507ac41037f369fce5bd7080475a8f`;
+tree `699bd90777771c5d22d37029336c3e0f8909fb5c` совпадает с кандидатом
+`615ba07fc80b2cf9ce5cd9cb26a0a4564ec502a9`.
+[Post-merge CI43192222535](https://github.com/Elefesys/ai-service-manager/actions/runs/43192222535):
+**12/12 SUCCESS**, attempt1. Проверен фактический результат без повторного запуска.
+IMPL-005 остаётся ACCEPTED / LOCKED. M5.0 VERIFIED относится к пакету плана;
+готовность реализации M5.1A этим не заявляется. Receipt98136c33 и M4 сохранены.
 
-Application base c9d42878ebfaf6def59d24cf7f95b1f74646eb83; PR44 merged;
-CI43157266312 push/main — 12/12 SUCCESS. Receipt98136c33 сохранён ниже.
-Повторный аудит/CI M4 не требуется. Receiver ACK/fence, полный live HUMAN/Resume,
-UNKNOWN/holds и ограничение PC transport сохранены; они не блокируют M5 coding.
+Единственная активная задача — **C1-M5.1A-CONFIGURATION-R1 — IN_PROGRESS**,
+C1/C2, [PR46](https://github.com/Elefesys/ai-service-manager/pull/46).
+Исходный [CI43217876369](https://github.com/Elefesys/ai-service-manager/actions/runs/43217876369)
+— **10/12 SUCCESS**. C0 разрешил явный0018 inventory в `tests/test_postgres.py`
+[решением6825320599](https://github.com/Elefesys/ai-service-manager/pull/46#issuecomment-6825320599);
+auth inventory уже исправлен. Целевые checks → один штатный CI исправленного
+SHA; приёмка M5.1A впереди. Точная выдача и условия — только в
+[M5_HANDOFF](tasks/M5_HANDOFF.md). Другие срезы не выданы.
 
-Статус исполнения вести здесь, active assignment — только в M5_HANDOFF.
-Обновлять краткий CURRENT; подробные новые логи и receipts оставлять в PR/CI.
-Merge/paid/live допуск не следует из приёмки планирования.
+Receiver ACK/fence, полный live HUMAN/Resume, UNKNOWN/holds и PC transport
+сохраняют прежний статус и не блокируют M5 coding. VM/paid/live/реальные данные
+не разрешены. CURRENT реестра обновляет C0; active assignment один в M5_HANDOFF.
 
 ## История — итог M4 и пауза до нового поручения M5 / 2026-11-12
 

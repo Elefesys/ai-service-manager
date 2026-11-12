@@ -46,9 +46,9 @@ tracer = trace.get_tracer("ai-service-manager.foundation")
 
 # Runtime readiness tracks the exact accepted Alembic head independently from the
 # frozen historical revision embedded in the tenancy.v1 semantic contract.
-DATABASE_SCHEMA_REVISION = "0017"
-NATIVE_CONTEXT_PROFILE_SHA256 = "b01e35c20cf91788c863ddebd78de8c1c54ac19896f6f16388e2295eba5c3538"
-NATIVE_PROFILE_BODY_SHA256 = "6b635b12b8d2e7f0f69500792d7ec3b1c71cd0f85c51e810e3332b910b6189c0"
+DATABASE_SCHEMA_REVISION = "0018"
+NATIVE_CONTEXT_PROFILE_SHA256 = "01bb105b2012725a3905cf5fcf9826f9f58afd21897caf237645dbd7a88c0999"
+NATIVE_PROFILE_BODY_SHA256 = "0f9dcf5d0a11c56e4d78f76626c70ea7f705962aa6bbd71a1cde183f5c530498"
 
 
 def schema_failure(stage: str, error: Exception) -> None:
@@ -85,7 +85,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
                     EXISTS(SELECT 1 FROM aclexplode(coalesce(p.proacl,acldefault('f',p.proowner)))
                         WHERE grantee=0) AS public
                 FROM pg_proc p JOIN pg_language l ON l.oid=p.prolang
-                WHERE p.oid=to_regprocedure('platform.ai_reply_rights_schema_profile()')
+                WHERE p.oid=to_regprocedure('platform.business_configuration_schema_profile()')
             """)
             )
         )
@@ -129,7 +129,7 @@ async def native_schema_readiness(connection: AsyncConnection) -> None:
     if (
         declared
         != {
-            "schema_revision": "0017",
+            "schema_revision": "0018",
             "valid": True,
             "profile_sha256": NATIVE_CONTEXT_PROFILE_SHA256,
         }
@@ -269,6 +269,7 @@ def create_app(
     telegram: "TelegramClient | None" = None,
     object_storage: "ObjectStorage | None" = None,
 ) -> FastAPI:
+    from asm.configuration.http import install_configuration
     from asm.conversations.escalation_http import install_escalations
     from asm.conversations.http import install_control
     from asm.conversations.native_context_http import install_native_context
@@ -338,6 +339,7 @@ def create_app(
     app.state.auth_service = auth
     install_auth(app, auth, config)
     install_billing(app, auth, config)
+    install_configuration(app, auth, config)
     install_messaging(
         app,
         auth,

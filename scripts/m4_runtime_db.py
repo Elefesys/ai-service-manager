@@ -38,6 +38,64 @@ M5_PLAN_PATHS = {
     "scripts/m4_runtime_db.py",
     "tests/test_m4_runtime_db_runner.py",
 }
+# C0's bounded M5.1A implementation assignment; not a general M5 allowance.
+M5_CONFIGURATION_BASE = "49d3e25968507ac41037f369fce5bd7080475a8f"
+M5_CONFIGURATION_TREE = "699bd90777771c5d22d37029336c3e0f8909fb5c"
+M5_CONFIGURATION_BRANCH = "c1/m5-1a-configuration-r1"
+M5_CONFIGURATION_PATHS = {
+    "AGENTS.md",
+    "README.md",
+    "docs/TASK_REGISTER.md",
+    "docs/decisions/IMPL-005-m5-pilot-knowledge.md",
+    "docs/tasks/M5_HANDOFF.md",
+    "backend/src/asm/configuration/__init__.py",
+    "backend/src/asm/configuration/errors.py",
+    "backend/src/asm/configuration/models.py",
+    "backend/src/asm/configuration/validation.py",
+    "backend/src/asm/configuration/permissions.py",
+    "backend/src/asm/configuration/repository.py",
+    "backend/src/asm/configuration/service.py",
+    "backend/src/asm/configuration/http.py",
+    "migrations/versions/0018_business_configuration.py",
+    "tests/test_m5_configuration.py",
+    "tests/test_m5_configuration_migrations.py",
+    "tests/test_m5_configuration_postgres.py",
+    "tests/test_m5_configuration_api_postgres.py",
+    "tests/m5_configuration_fixtures.py",
+    "tests/test_auth_contract.py",
+    "tests/test_postgres.py",
+    "backend/src/asm/foundation.py",
+    "backend/src/asm/tenancy/database.py",
+    "contracts/openapi.json",
+    "backend/src/asm/telegram/provisioning.py",
+    "scripts/native_context_db_catalog.py",
+    "scripts/m4_runtime_db.py",
+    "scripts/m2_4_browser_fixture.py",
+    "scripts/prepare_telegram_egress.py",
+    "scripts/test_telegram_egress.sh",
+    "tests/test_foundation.py",
+    "tests/generic_pg_schema.py",
+    "tests/test_tenancy_postgres.py",
+    "tests/test_native_context_db_runner.py",
+    "tests/test_m4_runtime_db_runner.py",
+    "tests/test_m4_delivery.py",
+    "tests/test_m4_reply_rights.py",
+    "tests/test_m4_runtime_migrations.py",
+    "tests/test_m4_schema_postgres.py",
+    "tests/test_m4_polza_runtime_postgres.py",
+    "tests/test_m4_delivery_postgres.py",
+    "tests/test_m4_reply_rights_postgres.py",
+    "tests/test_m2_3_setup.py",
+    "tests/test_m2_4_browser_fixture.py",
+    "tests/test_telegram_egress.py",
+    "tests/test_telegram_egress_postgres.py",
+    "tests/test_m2_3_db_postgres.py",
+    "tests/test_m2_3_schema_postgres.py",
+    "tests/test_m3_1_guards_migrations.py",
+    "tests/test_m3_2_escalations_migrations.py",
+    "tests/test_m3_1_native_context_postgres.py",
+    "tests/test_m3_1_native_context_runtime_postgres.py",
+}
 DB_IMAGE = (
     "pgvector/pgvector@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a"
 )
@@ -183,7 +241,14 @@ def source_tree_from_evidence(path=None):
     }
     require(type(value) is dict and set(value) == keys, "SOURCE_IDENTITY_SHAPE")
     planning = value["branch"] == M5_PLAN_BRANCH
-    base, base_tree = (M5_PLAN_BASE, M5_PLAN_TREE) if planning else (BASE, BASE_TREE)
+    configuration = value["branch"] == M5_CONFIGURATION_BRANCH
+    base, base_tree = (
+        (M5_CONFIGURATION_BASE, M5_CONFIGURATION_TREE)
+        if configuration
+        else (M5_PLAN_BASE, M5_PLAN_TREE)
+        if planning
+        else (BASE, BASE_TREE)
+    )
     expected = {
         name: os.environ.get("ASM_M4_" + name)
         for name in ("SOURCE_SHA", "SOURCE_TREE", "RUN_ID", "RUN_ATTEMPT")
@@ -215,6 +280,8 @@ def source_tree_from_evidence(path=None):
             and value["event"] == "push"
             or planning
             and value["event"] == "pull_request"
+            or configuration
+            and value["event"] in {"pull_request", "push"}
         )
         and type(value["attempt"]) is int
         and value["attempt"] == 1
@@ -236,6 +303,8 @@ def source_tree_from_evidence(path=None):
     )
     if planning:
         require(set(paths) <= M5_PLAN_PATHS, "SOURCE_IDENTITY_WRITE_SET")
+    elif configuration:
+        require(set(paths) <= M5_CONFIGURATION_PATHS, "SOURCE_IDENTITY_WRITE_SET")
     return value["tree"]
 
 
@@ -663,19 +732,45 @@ def root_path():
     return Path(os.environ["RUNNER_TEMP"]) / ("m4-runtime-" + run + "-" + attempt)
 
 
+def configuration_event(event):
+    if event.get("head_ref") == M5_CONFIGURATION_BRANCH:
+        return True
+    if event["ref"] != "refs/heads/main":
+        return False
+    # The ordinary main route follows the same accepted implementation base.
+    # Older source fixtures retain their historical route and closed write-set.
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", M5_CONFIGURATION_BASE, "HEAD"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    require(result.returncode in (0, 1, 128), "CONFIGURATION_BASE_ANCESTRY")
+    return result.returncode == 0
+
+
 def admit_source(evidence):
     from scripts import native_context_db_catalog as catalog
 
     event, manifest = catalog.admit_event(evidence, entrypoint="run")
     require(event["attempt"] == "1", "RUN_ATTEMPT")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
+    configuration = configuration_event(event)
     require(
         event["ref"] in {"refs/heads/" + TARGETED_BRANCH, "refs/heads/main"}
         or event.get("head_ref") == BRANCH
-        or planning,
+        or planning
+        or configuration,
         "POLZA_RUNTIME_EVENT_BRANCH",
     )
-    base, base_tree = (M5_PLAN_BASE, M5_PLAN_TREE) if planning else (BASE, BASE_TREE)
+    base, base_tree = (
+        (M5_CONFIGURATION_BASE, M5_CONFIGURATION_TREE)
+        if configuration
+        else (M5_PLAN_BASE, M5_PLAN_TREE)
+        if planning
+        else (BASE, BASE_TREE)
+    )
+    if configuration and event["event"] == "pull_request":
+        require(event["base_sha"] == base, "CONFIGURATION_EVENT_BASE")
     require(capture(["git", "rev-parse", base + "^{tree}"]) == base_tree, "BASE_TREE")
     require(capture(["git", "merge-base", base, "HEAD"]) == base, "BASE_ANCESTRY")
     allowed = {
@@ -734,7 +829,9 @@ def admit_source(evidence):
         "tests/test_native_context_db_runner.py",
         "tests/test_m2_3_schema_postgres.py",
     }
-    if planning:
+    if configuration:
+        allowed = M5_CONFIGURATION_PATHS
+    elif planning:
         allowed = M5_PLAN_PATHS
     elif event["ref"] == "refs/heads/main":
         # The ordinary post-merge lane retains its original ancestry and checks.
@@ -760,7 +857,9 @@ def catalog_comparison(expected, digest, nonfunction, declared):
 
     revision = expected["revision"]
     profile = (
-        "platform.ai_reply_rights_schema_profile()"
+        "platform.business_configuration_schema_profile()"
+        if revision == "0018"
+        else "platform.ai_reply_rights_schema_profile()"
         if revision == "0017"
         else "platform.human_context_schema_profile()"
     )
@@ -769,8 +868,14 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         declared == {"schema_revision": revision, "valid": True, "profile_sha256": digest}
         and type(declared.get("valid")) is bool
     )
-    pin_matches = revision == "0013" or digest == NATIVE_CONTEXT_PROFILE_SHA256
-    body_matches = revision == "0013" or body_hash == NATIVE_PROFILE_BODY_SHA256
+    profile_pin, body_pin = NATIVE_CONTEXT_PROFILE_SHA256, NATIVE_PROFILE_BODY_SHA256
+    if revision == "0017":
+        # Accepted0017 pins stay closed for its historical checker. They are
+        # never substituted for the successor application's readiness gate.
+        profile_pin = "b01e35c20cf91788c863ddebd78de8c1c54ac19896f6f16388e2295eba5c3538"
+        body_pin = "6b635b12b8d2e7f0f69500792d7ec3b1c71cd0f85c51e810e3332b910b6189c0"
+    pin_matches = revision == "0013" or digest == profile_pin
+    body_matches = revision == "0013" or body_hash == body_pin
     return {
         "revision": revision,
         "independent_profile_sha256": digest,
@@ -779,8 +884,8 @@ def catalog_comparison(expected, digest, nonfunction, declared):
         "tables_checked": len(expected["columns"]),
         "verifier_body_sha256": body_hash,
         "application_body_pin_matches": body_matches,
-        "application_profile_pin": NATIVE_CONTEXT_PROFILE_SHA256,
-        "application_body_pin": NATIVE_PROFILE_BODY_SHA256,
+        "application_profile_pin": profile_pin,
+        "application_body_pin": body_pin,
         "all_source_bodies_security_roles_nonfunction": "PASS",
         "declared_equals_independent": declared_matches,
         "application_pin_matches": pin_matches,
@@ -816,12 +921,12 @@ def stock_catalog():
         ):
             c.execute(sql)
         revision = c.execute("SELECT version_num FROM platform.alembic_version").fetchone()[0]
-        require(revision in {"0013", "0017"}, "CATALOG_REVISION")
+        require(revision in {"0013", "0017", "0018"}, "CATALOG_REVISION")
         destination = evidence_path() / ("catalog-" + revision)
         destination.mkdir(mode=0o700)
         expected = catalog.source_catalog(catalog.ROOT, revision)
         write(destination / "expected-source-catalog.json", expected)
-        if revision == "0017":
+        if revision in {"0017", "0018"}:
             write(
                 destination / "embedded-invariant.json", catalog.compare_embedded_profile(expected)
             )
@@ -868,7 +973,11 @@ def stock_catalog():
         catalog.compare_functions(expected["functions"], functions, resolved)
         digest = catalog.compare_snapshot(expected["columns"], full, nonfunction, revision=revision)
         profile = (
-            "platform.ai_reply_rights_schema_profile()" if revision == "0017" else catalog.PROFILE
+            "platform.business_configuration_schema_profile()"
+            if revision == "0018"
+            else "platform.ai_reply_rights_schema_profile()"
+            if revision == "0017"
+            else catalog.PROFILE
         )
         declared = c.execute("SELECT " + profile + " AS profile").fetchone()["profile"]
         write(destination / "declared-profile.json", declared)
@@ -883,7 +992,7 @@ async def readiness():
     runtime = RuntimeDatabase(Settings())
     try:
         await runtime.check()
-        write(evidence_path() / "readiness.json", {"revision": "0017", "runtime_check": "PASS"})
+        write(evidence_path() / "readiness.json", {"revision": "0018", "runtime_check": "PASS"})
     finally:
         await runtime.close()
 
@@ -1271,7 +1380,14 @@ def run_admitted(root, event, manifest, mode):
     )
     require(pins["DB_IMAGE"] == DB_IMAGE, "DB_IMAGE_PIN")
     planning = event.get("head_ref") == M5_PLAN_BRANCH
-    base, base_tree = (M5_PLAN_BASE, M5_PLAN_TREE) if planning else (BASE, BASE_TREE)
+    configuration = configuration_event(event)
+    base, base_tree = (
+        (M5_CONFIGURATION_BASE, M5_CONFIGURATION_TREE)
+        if configuration
+        else (M5_PLAN_BASE, M5_PLAN_TREE)
+        if planning
+        else (BASE, BASE_TREE)
+    )
     require(capture(["git", "rev-parse", base + "^{tree}"]) == base_tree, "BASE_TREE")
     require(not Path(".env").exists(), "UNEXPECTED_ENV_FILE")
     source = {
@@ -1284,7 +1400,13 @@ def run_admitted(root, event, manifest, mode):
         "attempt": 1,
         "event": os.environ["GITHUB_EVENT_NAME"],
         "branch": event.get("head_ref")
-        or (event["ref"][11:] if event["ref"] != "refs/heads/main" else BRANCH),
+        or (
+            event["ref"][11:]
+            if event["ref"] != "refs/heads/main"
+            else M5_CONFIGURATION_BRANCH
+            if configuration
+            else BRANCH
+        ),
         "pins": pins,
         "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
     }
@@ -1445,10 +1567,10 @@ def run_admitted(root, event, manifest, mode):
                 {"uid": uid, "image_id": image_id, "pin": DB_IMAGE, "container_id": identity},
             )
             if module == "preflight":
-                sql_phase(group, "schema-0017", checks(group, "alembic", "upgrade", "0017"), 120)
+                sql_phase(group, "schema-0018", checks(group, "alembic", "upgrade", "0018"), 120)
                 sql_phase(
                     group,
-                    "catalog-0017",
+                    "catalog-0018",
                     checks(group, "python", "scripts/m4_runtime_db.py", "catalog-snapshot"),
                     60,
                 )
