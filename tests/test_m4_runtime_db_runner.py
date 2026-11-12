@@ -857,10 +857,15 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 def r11_event(foundation_git, tmp_path, monkeypatch):
     """Constructed real Git history; actual admission code, no Docker/DB."""
     f = foundation_git
-    for name in ("infra/images.lock.env", "uv.lock"):
+    # Checks images omit host pins/lock files. These private inputs are only
+    # hashed by source export; no image is built and no dependency is resolved.
+    for name, content in {
+        "infra/images.lock.env": f"DB_IMAGE={carrier.DB_IMAGE}\n",
+        "uv.lock": "# Synthetic unit input; never resolved.\nversion = 1\n",
+    }.items():
         path = f.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes((f.actual / name).read_bytes())
+        path.write_text(content)
     f.git("add", ".")
     f.git("commit", "-qm", "locked source identity inputs")
     base, base_tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
