@@ -26,8 +26,9 @@ c9d42878ebfaf6def59d24cf7f95b1f74646eb83, push/main CI43157266312 — 12/12 SUCC
 Перед работой читать [M5_HANDOFF](docs/tasks/M5_HANDOFF.md),
 [IMPL-005](docs/decisions/IMPL-005-m5-pilot-knowledge.md), CURRENT в
 [TASK_REGISTER](docs/TASK_REGISTER.md), затем применимые исходные ADR.
-Пакет планирования — REVIEW, решение IMPL-005 — PROPOSED до принятия C0;
-код M5 не реализован. Первая предполагаемая выдача — M5.1A C1/C2.
+Решение IMPL-005 — ACCEPTED / LOCKED C0; пакет PR #45 — REVIEW до интеграции.
+Код M5 не реализован, задания исполнителям ещё не выданы. После отдельного
+разрешения владельца на merge C0 выдаёт только M5.1A C1/C2 от принятого main.
 Старые формулировки M4 «следующий шаг M5.1» не являются готовым поручением
 реализовать весь Service/Rule/Workflow/RAG набор одним PR.
 

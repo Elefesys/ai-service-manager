@@ -2,14 +2,20 @@
 
 Ответственный: C0. Канон: v0.28; стек: `docs/decisions/IMPL-001-stack.md`. Это единственный реестр исполнения. LOCKED/OPEN/DEFERRED/REVISED относятся к архитектуре; состояния задач: TODO → IN_PROGRESS → REVIEW → INTEGRATED → VERIFIED, BLOCKED требует причины.
 
-## CURRENT — M5 план REVIEW; реализация TODO / 2026-11-12
+## CURRENT — M5.0 REVIEW интеграции; решение принято; реализация TODO / 2026-11-12
 
-Владелец поручил подготовить полный пилотный M5 и промпт C0.
-План: [M5_HANDOFF](tasks/M5_HANDOFF.md); предложенное решение:
-[IMPL-005](decisions/IMPL-005-m5-pilot-knowledge.md) (PROPOSED до приёмки C0).
-Это docs-only подготовка. Код, миграции, provider/VM и данные не менялись.
-Первая следующая выдача после принятия/интеграции плана — M5.1A, C1 с C2;
-точный accepted main SHA и write-set назначает C0. Других активных выдач нет.
+Единственная текущая работа — C0, подготовка PR #45 к интеграции.
+План: [M5_HANDOFF](tasks/M5_HANDOFF.md); решение
+[IMPL-005](decisions/IMPL-005-m5-pilot-knowledge.md) — ACCEPTED / LOCKED C0.
+Уточнены доступ к общим опубликованным знаниям при изоляции личных данных
+клиента и проверка activation version также на MODEL/FOLLOWUP.
+Пакет содержит документы и узкое исправление допуска CI для ветки планирования;
+application code, миграции, provider/VM и данные не менялись. CI43166516634:
+11/12 SUCCESS, runtime остановлен до БД на старом branch allowlist
+(`POLZA_RUNTIME_EVENT_BRANCH`); исправленный кандидат проходит штатный CI.
+Логи и точные результаты кандидата — в PR/CI, неизменённый запуск не повторять.
+После отдельного разрешения владельца и интеграции C0 выдаёт только M5.1A,
+C1 с C2, с фактическим accepted main SHA и точным write-set. Выдач кода пока нет.
 
 Application base c9d42878ebfaf6def59d24cf7f95b1f74646eb83; PR44 merged;
 CI43157266312 push/main — 12/12 SUCCESS. Receipt98136c33 сохранён ниже.

@@ -924,6 +924,92 @@ def r11_event(foundation_git, tmp_path, monkeypatch):
     )
 
 
+def prepare_m5_planning_event(r, monkeypatch, route, *, extra=None, branch=None):
+    """Actual Git merge and event admission, with the resource boundary forbidden."""
+    f = r["f"]
+    monkeypatch.setattr(carrier, "M5_PLAN_BASE", r["base"])
+    monkeypatch.setattr(carrier, "M5_PLAN_TREE", f.git("rev-parse", r["base"] + "^{tree}"))
+    for relative in sorted(carrier.M5_PLAN_PATHS | ({extra} if extra else set())):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text((path.read_text() if path.exists() else "") + "\n# constructed M5 delta\n")
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed M5 planning")
+    source, tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
+    merged = f.git("commit-tree", tree, "-p", r["base"], "-p", source, "-m", "test merge")
+    f.git("reset", "--hard", merged)
+    env, payload = ci_event(Path(r["env"]["GITHUB_EVENT_PATH"]).parent, route)
+    env.update(GITHUB_SHA=merged, GITHUB_RUN_ATTEMPT="1")
+    if route == "same-repository-pr-merge":
+        env["GITHUB_HEAD_REF"] = branch or carrier.M5_PLAN_BRANCH
+        payload["pull_request"]["base"]["sha"] = r["base"]
+        payload["pull_request"]["head"].update(sha=source, ref=env["GITHUB_HEAD_REF"])
+    else:
+        payload.update(after=merged, head_commit={"id": merged})
+    r["payload"].clear()
+    r["payload"].update(payload)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    return merged
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+def test_m5_planning_and_post_merge_admit_exact_files_to_full_runtime(
+    r11_event, monkeypatch, route
+):
+    r = r11_event
+    merged = prepare_m5_planning_event(r, monkeypatch, route)
+    r["run"]()
+    assert len(r["boundary"]) == 1
+    assert r["boundary"][0]["mode"] == "runtime"
+    assert r["boundary"][0]["event"]["head"] == merged
+    receipt = json.loads((r["root"] / "evidence/source-admission.json").read_text())
+    assert receipt["base"] == r["base"] and receipt["source"] == merged
+    assert set(receipt["paths"]) == carrier.M5_PLAN_PATHS
+    assert not list((r["root"] / "private").iterdir())
+
+
+@pytest.mark.parametrize(
+    "route,damage,reason",
+    [
+        ("same-repository-pr-merge", "application", "POLZA_RUNTIME_WRITE_SET"),
+        ("same-repository-pr-merge", "migration", "POLZA_RUNTIME_WRITE_SET"),
+        ("same-repository-pr-merge", "foreign_doc", "POLZA_RUNTIME_WRITE_SET"),
+        ("same-repository-pr-merge", "workflow", "CI gate input drift: .github/workflows/ci.yml"),
+        ("same-repository-pr-merge", "branch", "POLZA_RUNTIME_EVENT_BRANCH"),
+        ("same-repository-pr-merge", "legacy_branch", "POLZA_RUNTIME_WRITE_SET"),
+        ("same-repository-pr-merge", "base_tree", "BASE_TREE"),
+        ("main-push", "future_application", "POLZA_RUNTIME_WRITE_SET"),
+        ("main-push", "foreign_doc", "POLZA_RUNTIME_WRITE_SET"),
+    ],
+)
+def test_m5_planning_does_not_admit_other_work_or_weaken_legacy_scope(
+    r11_event, monkeypatch, route, damage, reason
+):
+    r = r11_event
+    paths = {
+        "application": "backend/src/asm/ai/runtime.py",
+        "migration": "migrations/versions/0017_ai_reply_rights.py",
+        "foreign_doc": "docs/tasks/M6_HANDOFF.md",
+        "workflow": ".github/workflows/ci.yml",
+        "future_application": "backend/src/asm/configuration/service.py",
+    }
+    branch = (
+        "c0/unapproved"
+        if damage == "branch"
+        else carrier.BRANCH
+        if damage == "legacy_branch"
+        else None
+    )
+    prepare_m5_planning_event(r, monkeypatch, route, extra=paths.get(damage), branch=branch)
+    if damage == "base_tree":
+        monkeypatch.setattr(carrier, "M5_PLAN_TREE", "f" * 40)
+    with pytest.raises((catalog.Refusal, carrier.Refusal)) as caught:
+        r["run"]()
+    assert str(caught.value) == reason
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
+
+
 @pytest.mark.parametrize(
     "metadata", [None, "refs/heads/main", "refs/heads/c3/task-name", "refs/tags/v1.2"]
 )

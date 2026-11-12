@@ -2,14 +2,24 @@
 
 Дата: 2026-11-12. Ведущий: C0. Статус исполнения — только в
 [TASK_REGISTER](../TASK_REGISTER.md). Решение по объёму:
-[IMPL-005](../decisions/IMPL-005-m5-pilot-knowledge.md) — PROPOSED до приёмки C0.
+[IMPL-005](../decisions/IMPL-005-m5-pilot-knowledge.md) — ACCEPTED / LOCKED C0.
 
-## CURRENT — план REVIEW; реализация TODO
+## CURRENT — C0 готовит интеграцию PR #45; выдач кода нет
 
-Это подготовка этапа по поручению владельца, не выполненный M5 и не выданное
-задание исполнителю. Первая выдача после принятия плана: **M5.1A → C1**, с C2
-для схемы. Остальные задачи ожидают зависимости. C0 подставляет точный accepted
-main после интеграции планирования; не начинает код от предполагаемого merge SHA.
+Единственная текущая работа — C0: ограниченная приёмка плана и подготовка
+PR #45 к интеграции. IMPL-005 принят с уточнениями shared Business knowledge /
+private Client data и currentness на MODEL/FOLLOWUP. Исполнителям код не выдан.
+После зелёного CI и отдельного разрешения владельца на merge первая выдача —
+только **M5.1A → C1**, с C2 для схемы. C0 подставляет фактический accepted main
+и точные paths после интеграции; остальные задачи ожидают зависимости.
+
+Первый CI43166516634: 11/12 SUCCESS; runtime остановлен до PostgreSQL на
+`POLZA_RUNTIME_EVENT_BRANCH`. Узкое исправление `scripts/m4_runtime_db.py`
+и его tests допускает эту planning-ветку с exact base/tree и девятью paths
+(семь документов, runner, его tests), а также их последующий merge в main.
+Same-repository/event/parent/tree/clean-source guards и сам набор проверок БД
+сохранены. Это исправление CI, не реализация M5 и не допуск будущего кода M5.
+Один штатный CI изменённого кандидата; результат и логи остаются в PR/CI.
 
 Проверенный application base: `c9d42878ebfaf6def59d24cf7f95b1f74646eb83`.
 PR #44 слит; [CI43157266312](https://github.com/Elefesys/ai-service-manager/actions/runs/43157266312)
@@ -58,7 +68,7 @@ Assessment или одобренный заказ. LLM не получает mut
 OnboardingAgent, автоматическое обучение, генерация эскизов, отдельная vector DB,
 новый provider marketplace, scheduling/pricing/payment engines, новый канал,
 отдельный ops dashboard, автономный облачный маршрут и production rollout.
-Это явные предлагаемые уточнения IMPL-005, не молчаливое удаление baseline.
+Это явно принятые уточнения IMPL-005; исходный baseline сохраняется в истории.
 
 Concierge import допустим через небольшой проверяемый CLI/API и тот же domain
 service. Владелец не должен править SQL/JSON вручную для review/publish/отзыва.
@@ -73,7 +83,7 @@ service. Владелец не должен править SQL/JSON вручну
 
 | Порядок / ID | Ведущий; участие | Зависимости | Результат |
 |---|---|---|---|
-| M5.0 — приёмка плана | C0 | Этот пакет документов | IMPL-005 принят, активная выдача и base зафиксированы; runtime не меняется |
+| M5.0 — приёмка плана | C0 | Этот пакет и CI кандидата | IMPL-005 принят; после разрешённой интеграции фиксируются base и единственная выдача M5.1A; application runtime не меняется |
 | M5.1A — конфигурация и публикация | C1; C2 | M5.0 | В БД можно безопасно подготовить, проверить и опубликовать небольшой набор услуг/правил/FAQ |
 | M5.1B — ответ по опубликованным знаниям | C4; C1/C3, затем C5 | M5.1A | Опубликованный FAQ читается M4 runtime; owner видит preview и публикует через простой UI |
 | M5.2A — ограниченная проверка modalities | C4; C6 только при необходимости | M5.1B; допуск нужен только для paid probe | Выбран конкретный пригодный Vision/embedding route либо описан точный блокер |
@@ -122,7 +132,7 @@ activation version. UI и model calls пока не требуются для DB
   bounded FAQ projection. Для малого набора начать с structured/keyword selection;
   не ждать embeddings, но и не выдавать этот срез за весь готовый RAG.
 - Привязать run и результат к release/build/activation; применять инвалидацию
-  IMPL-005 на READ/CANDIDATE/COMMIT/SEND, сохраняя все M3/M4 guards.
+  IMPL-005 на MODEL/READ/FOLLOWUP/CANDIDATE/COMMIT/SEND, сохраняя все M3/M4 guards.
 - Явно версионировать изменённые prompt/schema/DTO; старые сохранённые runs не
   переписывать. `read_context` и text-only DTO нельзя ослабить без новой версии.
 - C5 последовательно добавляет простой раздел услуг/FAQ: draft/active, ошибки,
@@ -134,7 +144,8 @@ activation version. UI и model calls пока не требуются для DB
 
 **Приёмка:** actual API/PG + fake runtime + реальный browser:
 владелец меняет правило, публикует, новый ответ использует его; draft не утёк;
-publication между read и send блокирует старый ответ; HUMAN/revocation работают.
+publication перед MODEL/FOLLOWUP блокирует новый вызов со старым контекстом,
+между read и send блокирует старый ответ; HUMAN/revocation работают.
 Fake E2E не называется live LLM/Telegram проверкой.
 
 ### M5.2A — проверить Vision и embeddings до большой реализации
@@ -176,8 +187,9 @@ capability result; при недоступности route C0 явно меня�
 - Revocation/delete исключают source и derived chunks/cache из новых reads;
   хранить необходимую безопасную provenance, не бесконечные копии удалённого текста.
 
-**Приёмка:** actual PG retrieval под runtime role, query/index mismatch,
-чужой Workspace и другой Client того же Workspace, draft/revoked/expired source,
+**Приёмка:** actual PG retrieval под runtime role, query/index mismatch;
+общие опубликованные знания Business доступны его клиентам, личные данные другого
+Client и недоступные Business/Workspace изолированы; draft/revoked/expired source,
 failed build с сохранением active, injection content и корректный empty result.
 Качество оценивается по источникам/полезности ответа, не побуквенно по реплике модели.
 
@@ -281,7 +293,7 @@ REVIEW/BLOCKED по точной причине, а не автоматичес�
 | K02 | Один вопрос даёт разные подтверждённые ответы у разных бизнесов; нет if workspace_id | Runtime + fixtures |
 | K03 | Missing/conflicting knowledge → уточнение/handoff; trace содержит реальные sources | Runtime/eval |
 | K04 | Publish/revoke во время run не выпускает старый ещё не отправленный ответ; UNKNOWN не повторяется | PG race + wire/restart |
-| K05 | Чужой tenant и другой Client того же tenant не видны в search/context/media | PG runtime-role + API |
+| K05 | Общие опубликованные знания/разрешённое портфолио Business доступны его клиентам; личные данные другого Client и недоступные Business/Workspace изолированы в search/context/media | PG runtime-role + API |
 | K06 | Compatible embedding build; failed rebuild не ломает active; semantic relevance и empty result | PG + разрешённый real embedding receipt |
 | K07 | Vision читает реальные доступные pixels; не угадывает scale/time/price; injection не управляет tools | Media tests + real synthetic Vision probe |
 | K08 | MY_WORK подтверждён; reference не становится портфолио; withdrawn asset не показывается | PG/S3 + UI |
@@ -306,7 +318,9 @@ D mixed/full payment. В M5 проверяются настройки и чес�
 Первая **M5.1A**: базовый домен `backend/src/asm/configuration/` (новый), узкое
 подключение owner API/auth, новая назначенная C0/C2 migration, относящиеся DTO,
 tests/fixtures. Это предлагаемая область, не wildcard разрешение всего backend.
-Перед кодом C0 фиксирует точные существующие entrypoint/permission/test paths.
+Перед кодом C0 фиксирует точные существующие entrypoint/permission/test paths
+и ограниченный CI source admission для назначенной ветки/write-set: допуск PR #45
+не разрешает будущие изменения приложения или миграций.
 `0018` может быть назначена только если head всё ещё `0017`; будущие номера не
 резервировать цепочкой. C5 получает следующий принятый API SHA последовательно.
 
@@ -331,8 +345,9 @@ harness/locale отделяется от production SQL. Не подгонять
 
 ## 6. Действия владельца
 
-Для начала: передать подготовленный промпт C0; прайс, архив чатов и портфолио
-реального мастера не нужны. C0 принимает scope/план и готовит первый срез.
+Сейчас требуется только отдельное разрешение владельца на merge PR #45, когда
+C0 подтвердит готовность и зелёный CI кандидата. Прайс, архив чатов и портфолио
+реального мастера не нужны. C0 выдаёт первый срез только после интеграции.
 
 Позже, по конкретной готовой процедуре:
 
