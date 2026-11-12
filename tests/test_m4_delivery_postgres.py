@@ -35,8 +35,8 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def delivery(pg):
-    await migrate("upgrade", "0017")
-    pg.schema_revision = "0017"
+    await migrate("upgrade", "0018")
+    pg.schema_revision = "0018"
     return pg
 
 

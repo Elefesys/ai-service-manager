@@ -119,6 +119,49 @@ class TenantUnitOfWork:
         """Live messaging permission admission; frozen tenancy permissions stay unchanged."""
         return await self.billing_membership_role()
 
+    async def _configuration_execute(self, sql: str, params: dict[str, object]) -> Any:
+        from asm.configuration.errors import ConfigurationCode, ConfigurationError
+        from asm.messaging.database import physical_transaction
+
+        self._assert_active()
+        try:
+            await physical_transaction(self._connection)
+            return (await self._connection.execute(text(sql), params)).scalar_one()
+        except DBAPIError as error:
+            self._failed = True
+            primary = getattr(getattr(error.orig, "diag", None), "message_primary", None)
+            if getattr(error.orig, "sqlstate", "") == "P2701" and primary in {
+                code.value for code in ConfigurationCode
+            }:
+                raise ConfigurationError(ConfigurationCode(primary)) from None
+            raise ConfigurationError(ConfigurationCode.UNAVAILABLE) from None
+        except BaseException:
+            self._failed = True
+            raise
+
+    async def configuration_owner_read(self, business: UUID) -> Any:
+        return await self._configuration_execute(
+            "SELECT platform.configuration_owner_read(:business)", {"business": business}
+        )
+
+    async def configuration_active_read(self, business: UUID) -> Any:
+        return await self._configuration_execute(
+            "SELECT platform.configuration_active_read(:business)", {"business": business}
+        )
+
+    async def configuration_command(
+        self, business: UUID, operation: str, key: str, body: dict[str, object]
+    ) -> Any:
+        return await self._configuration_execute(
+            "SELECT platform.configuration_command(:business,:operation,:key,CAST(:body AS jsonb))",
+            {
+                "business": business,
+                "operation": operation,
+                "key": key,
+                "body": json.dumps(body, ensure_ascii=False, allow_nan=False),
+            },
+        )
+
     async def _messaging_execute(self, sql: str, params: dict[str, object]) -> Any:
         from asm.messaging.database import physical_transaction, worker_active
         from asm.messaging.errors import Code, MessagingError, database_error

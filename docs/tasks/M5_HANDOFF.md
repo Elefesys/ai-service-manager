@@ -39,6 +39,135 @@ expected-version/idempotency semantics, owner authority, release/activation и R
 Физическая схема и точные DTO пока OPEN; выбрать минимальное решение для этих
 операций. Не создавать таблицу на каждый термин baseline и отдельный contract tome.
 
+#### Согласованный контракт C1/C2 — M5.1A v1 / 2026-11-12
+
+C2 проверил clean handoff `6c9023dbf29e1e8e100084aee85a12c132ba2ab3`:
+единственный head `0017`, revision `0018` / predecessor `0017` подтверждены до SQL.
+
+- Три private `platform.business_configuration_{state,releases,receipts}`:
+  одна draft/active state на `(Workspace,Business)`, immutable release и immutable
+  command receipt, одновременно configuration domain audit (actor, correlation,
+  operation, Business/release/activation/time; без текста). Compound FK сохраняют
+  тот же Workspace/Business. Generic AuditEvent/его API не расширяются.
+- Bundle v1: `schema_version=1`, `communication_style=NEUTRAL|WARM|CONCISE`,
+  services (до8), structured rules (до12), owner-confirmed FAQ (до12).
+  Service: slug id, name≤100, description≤500, active, до6 intake fields
+  `(id,label≤100,required)`; независимые price/duration/deposit policy objects.
+  Price: FIXED/CONFIGURED_FORMULA/OWNER_QUOTE, nullable amount_minor/formula_note;
+  duration: FIXED/CONFIGURED_RULE/OWNER_DEFINED, nullable minutes/rule_note;
+  deposit: NONE/FIXED_DEPOSIT/PERCENT_DEPOSIT/FULL_PREPAYMENT, nullable amount/percent.
+  Все nullable fields явные; RUB minor units — настройки, не расчёт/Quote/обязательство.
+- Rule: id, nullable service_id, MIN_AGE с integer1…120 либо OWNER_HANDOFF с bool.
+  FAQ: id, nullable service_id, question≤200, answer≤500, source≤120, confirmed,
+  до6 rule_ids. Id — ASCII slug1…40; notes≤160. Неизвестное значение остаётся NULL.
+  Неверный mode/ref, duplicate id, конфликт правил и неподтверждённый FAQ — ERROR;
+  неизвестные цена/время/депозит, неисполняемые formula/rule notes — WARNING с
+  owner handoff. FAQ explanatory; структурированные rules выше текста.
+- Shape/Unicode/types/limits проверяются в Python и БД; publish повторяет
+  deterministic SQL validation и не доверяет переданному ready flag. Normalized
+  jsonb bundle≤4096 UTF-8 bytes, существующий raw HTTP body cap4096 сохраняется
+  отдельно и включает весь envelope/escaping; не каждый максимальный field
+  помещается одновременно. Free-form prompt/code/Client IDs/private files/PII
+  не являются поддерживаемым содержимым общей бизнес-конфигурации.
+- API prefix `/api/v1/workspaces/{workspace_id}/businesses/{business_id}/configuration`:
+  GET/PUT `/draft`, GET `/preview` (validation + bounded owner preview),
+  POST `/publish`, POST `/rollback`, GET `/active`; query и If-Match запрещены.
+  Все owner API используют существующие session/CSRF/AuthService.workspace и
+  отдельную live OWNER policy. В БД OWNER/auth scope проверяется до replay и
+  после waits; membership/account/Business locks сериализуют отзыв прав и publish.
+- Mutation требует один Idempotency-Key (existing ASCII1…128). EDIT body:
+  `{expected_draft_version,bundle}`; PUBLISH:
+  `{expected_draft_version,expected_activation_version}`; ROLLBACK:
+  `{expected_activation_version,release_id}`. Counters — canonical bigint decimal
+  strings. Первый EDIT expected0 создаёт draft1; каждый новый EDIT +1. Publish и
+  rollback +1 activation, draft не меняют. Stale CAS→409 STALE_STATE;
+  тот же key/actor/op/body→exact saved REPLAY без effect; другой payload→409
+  IDEMPOTENCY_KEY_CONFLICT. Live revoked/non-owner не получает даже replay.
+- SQL owner read/command, bounded active read и private validator — narrow
+  capabilities; runtime direct table SELECT/DML запрещён, FORCE RLS/migrator owner,
+  PUBLIC revoke/pinned search_path. Active projection v1 содержит только весь
+  immutable ready bundle, release/activation/source draft version и provenance.
+  До первого publish release/bundle NULL; draft не попадает в active read.
+  Чтение общих бизнесовых знаний не требует чужих Client данных; M5.1B привяжет
+  этот release/activation к существующему trusted context и send admission.
+- Publish ERROR не меняет active. Rollback revalidates ready release и запрещает
+  восстановление удалённых/изменённых FAQ и free text относительно current active;
+  откат policy values/style с сохранёнными текстами допустим. Это консервативный
+  ROLLBACK_NOT_ALLOWED, не попытка распознавать PII или вернуть удалённые данные.
+  Полный release/receipt и active pointer commit атомарно; replay старой команды
+  никогда не переключает pointer обратно.
+- Closed errors: ACCESS_DENIED403, NOT_FOUND404, INVALID_INPUT422,
+  STALE_STATE/IDEMPOTENCY_KEY_CONFLICT/VALIDATION_FAILED/VERSION_EXHAUSTED/
+  ROLLBACK_NOT_ALLOWED409, UNAVAILABLE503; retained auth/CSRF/413/429 unchanged.
+  SQL P2701 преобразуется только в этот allowlist, произвольный SQL текст скрыт.
+- Current-schema transitions ограничены actual catalog/readiness/provisioning,
+  двумя current SQL dispatchers (native policy и AI provider session), current
+  runner/egress/browser fixtures и assertions текущего head. Исторические профили
+  и applied0001–0017 не меняются. Точное использованное подмножество paths и
+  новые измеренные profiles возвращаются с final source/evidence.
+
+Использованное current-schema подмножество (исторические0013–0017 сохранены):
+
+```text
+backend/src/asm/telegram/provisioning.py
+scripts/m2_4_browser_fixture.py
+scripts/m4_runtime_db.py
+scripts/native_context_db_catalog.py
+scripts/prepare_telegram_egress.py
+scripts/test_telegram_egress.sh
+tests/generic_pg_schema.py
+tests/test_foundation.py
+tests/test_m2_3_db_postgres.py
+tests/test_m2_3_schema_postgres.py
+tests/test_m2_3_setup.py
+tests/test_m2_4_browser_fixture.py
+tests/test_m3_1_guards_migrations.py
+tests/test_m3_1_native_context_postgres.py
+tests/test_m3_1_native_context_runtime_postgres.py
+tests/test_m3_2_escalations_migrations.py
+tests/test_m4_delivery.py
+tests/test_m4_delivery_postgres.py
+tests/test_m4_polza_runtime_postgres.py
+tests/test_m4_reply_rights.py
+tests/test_m4_reply_rights_postgres.py
+tests/test_m4_runtime_db_runner.py
+tests/test_m4_runtime_migrations.py
+tests/test_m4_schema_postgres.py
+tests/test_native_context_db_runner.py
+tests/test_telegram_egress.py
+tests/test_telegram_egress_postgres.py
+tests/test_tenancy_postgres.py
+```
+
+Причины: provisioning/browser и их fixtures требуют current18; egress читает
+все52 таблицы новым fingerprint; catalog/readiness сверяют202 functions/732 columns;
+PG fixtures восстанавливают current18 после исторических фаз, tenancy проверяет
+старые и новые права. M4 runner сохраняет старые source routes и добавляет только
+точную M5.1A branch/base/tree/write-set в outer/export/inner admission.
+
+### Возврат C1/C2 — подготовленный source, ожидание точечного согласования
+
+Реализованы шесть owner API и bundle v1, additive0018, private receipt-audit,
+validation/preview/publish/rollback и bounded active projection. Draft и active
+разделены; UNKNOWN/holds, native/control/delivery и AI loop не менялись.
+202 functions /52 tables /732 columns измерены на owned native PG18.0,
+vector0.8.6/btree_gist1.8; accepted0017 profile предварительно совпал полностью.
+Это local synthetic evidence, не pinned image/full CI или live verification.
+
+Локальные unit/source, actual API/PG и legacy tenancy checks выполнены; полные
+команды, результаты, initial setup failures и один readiness timeout сохраняются
+в возврате C1. Ruff/mypy, OpenAPI check и все document-root JSON refs проходят.
+Финальные source identities и подробный return — в
+[C1/C0 coordination](https://github.com/Elefesys/ai-service-manager/pull/45#issuecomment-6821719546).
+
+До PR/штатного CI нужен только точечный C0 write-set допуск для
+`tests/test_auth_contract.py`: явный список шести маршрутов +existing equality,
++9/-0, frozen auth.v1 и все прежние assertions без изменений. Тест воспроизведён
+RED25→31; source OpenAPI уже byte-equal generated snapshot. Этот путь пока не
+изменён. Scope не расширен самостоятельно; M5.1B/UI/LLM tools не выданы.
+
+
+
 C0 резервирует только `0018_business_configuration.py`: revision `0018`,
 down_revision `0017`. **C2 до SQL подтверждает**, что актуальный migration head
 по-прежнему `0017`, и согласует схему/профиль. При изменении head вернуть вопрос

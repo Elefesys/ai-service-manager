@@ -40,16 +40,16 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio(loop_scope="module")]
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def provider_pg(pg):
     await migrate("upgrade", "0015")
-    await migrate("upgrade", "0017")
-    await migrate("upgrade", "0017")
-    pg.schema_revision = "0017"
+    await migrate("upgrade", "0018")
+    await migrate("upgrade", "0018")
+    pg.schema_revision = "0018"
     runtime = RuntimeDatabase(Settings())
     try:
         await runtime.check()
         await migrate("downgrade", "0015")
         with pytest.raises(RuntimeError, match="schema"):
             await runtime.check()
-        await migrate("upgrade", "0017")
+        await migrate("upgrade", "0018")
         await runtime.check()
         yield pg
     finally:
@@ -327,13 +327,13 @@ async def test_telegram_unknown_is_durable_and_never_resent(provider_pg, tmp_pat
 
                 from scripts.native_context_db_catalog import capture_source
 
-                mods, _ = capture_source(Path("."), "0017")
+                mods, _ = capture_source(Path("."), "0018")
                 statements = []
                 mods["0016"]["op"].execute = statements.append
                 mods["0016"]["downgrade"]()
                 for sql in statements:
                     await c.execute(text(sql))
-        assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0017"
+        assert await scalar(h, "SELECT version_num FROM platform.alembic_version") == "0018"
     finally:
         await worker.ai.telegram.aclose()
 
@@ -556,7 +556,7 @@ async def test_current_provider_verifier_rejects_public_execute_grant(provider_p
         try:
             await c.execute(
                 text(
-                    "GRANT EXECUTE ON FUNCTION platform.ai_reply_rights_schema_profile() TO PUBLIC"
+                    "GRANT EXECUTE ON FUNCTION platform.business_configuration_schema_profile() TO PUBLIC"
                 )
             )
             with pytest.raises(Exception) as caught:

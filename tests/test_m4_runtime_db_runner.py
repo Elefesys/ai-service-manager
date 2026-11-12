@@ -149,7 +149,7 @@ elif 'collect-current-native' in args:
 elif 'native-owner' in args:
     runner.write(evidence/'native-owner.json',{'system_identifier':'synthetic-owned-server'})
 elif 'readiness' in args:
-    runner.write(evidence/'readiness.json',{'runtime_check':'PASS','revision':'0017'})
+    runner.write(evidence/'readiness.json',{'runtime_check':'PASS','revision':'0018'})
 elif 'pytest' in args:
     nodes=json.loads((evidence/'inventory.json').read_text())['nodeids']
     if nodes==config['native']:
@@ -578,7 +578,7 @@ def test_constructed_driver_preflight_isolation_budget_and_missing_evidence(
                 group / "evidence/current-native-inventory.json",
                 {"nodeids": carrier.CURRENT_NATIVE_NODES, "collection_exit": 0, "deselected": []},
             )
-        if label == "catalog-0017" and fault == "catalog":
+        if label == "catalog-0018" and fault == "catalog":
             raise RuntimeError("CATALOG_DECLARED_PROFILE")
         if label == carrier.COMMAND_REPORT:
             expected = json.loads((group / "evidence/inventory.json").read_text())["nodeids"]
@@ -781,12 +781,14 @@ def test_current_native_reset_refuses_changed_source_or_server_before_destructiv
     ],
 )
 def test_current_verifier_embedded_table_is_independent_and_closed(damage, reason):
-    expected = catalog.source_catalog(catalog.ROOT, "0017")
-    profile = expected["functions"]["platform.ai_reply_rights_schema_profile()"]
+    expected = catalog.source_catalog(catalog.ROOT, "0018")
+    profile = expected["functions"]["platform.business_configuration_schema_profile()"]
     row = "('platform.human_context_schema_profile()','527fce5681d5345369cd88b555a302df6d305ef8566cf12a666198eb64a6f4ac','sql',true,'s',false)"
     assert profile["body"].count(row) == 1
     replacement = {
-        "self": row.replace("human_context_schema_profile", "ai_reply_rights_schema_profile"),
+        "self": row.replace(
+            "human_context_schema_profile", "business_configuration_schema_profile"
+        ),
         "missing": "",
         "duplicate": row + "," + row,
         "hash": row.replace(
@@ -812,14 +814,14 @@ def test_current_verifier_embedded_table_is_independent_and_closed(damage, reaso
 @pytest.mark.parametrize(
     "predicate",
     [
-        "(SELECT count(*) FROM functions)=194",
-        "(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=193",
-        "(SELECT count(*) FROM tables)=49",
+        "(SELECT count(*) FROM functions)=202",
+        "(SELECT count(DISTINCT to_regprocedure(signature)) FROM expected)=201",
+        "(SELECT count(*) FROM tables)=52",
     ],
 )
 def test_current_verifier_rejects_stale_count_predicates(predicate):
-    expected = catalog.source_catalog(catalog.ROOT, "0017")
-    profile = expected["functions"]["platform.ai_reply_rights_schema_profile()"]
+    expected = catalog.source_catalog(catalog.ROOT, "0018")
+    profile = expected["functions"]["platform.business_configuration_schema_profile()"]
     assert profile["body"].count(predicate) == 1
     profile["body"] = profile["body"].replace(predicate, predicate.rsplit("=", 1)[0] + "=0")
     with pytest.raises(catalog.Refusal, match="^EMBEDDED_COUNT_PREDICATE$"):
@@ -842,11 +844,13 @@ def test_catalog_primary_refusal_preserves_both_pin_facts(
 ):
     from asm.foundation import NATIVE_CONTEXT_PROFILE_SHA256
 
-    expected = catalog.source_catalog(catalog.ROOT, "0017")
+    expected = catalog.source_catalog(catalog.ROOT, "0018")
     if not body_matches:
-        expected["functions"]["platform.ai_reply_rights_schema_profile()"]["body_sha256"] = "0" * 64
+        expected["functions"]["platform.business_configuration_schema_profile()"]["body_sha256"] = (
+            "0" * 64
+        )
     digest = NATIVE_CONTEXT_PROFILE_SHA256 if hash_matches else "f" * 64
-    declared = {"schema_revision": "0017", "valid": valid, "profile_sha256": digest}
+    declared = {"schema_revision": "0018", "valid": valid, "profile_sha256": digest}
     result = carrier.catalog_comparison(expected, digest, "{}", declared)
     assert result["failed_predicate"] == reason
     assert result["application_pin_matches"] is hash_matches
@@ -965,6 +969,129 @@ def prepare_m5_planning_event(r, monkeypatch, route, *, extra=None, branch=None)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     return merged
+
+
+def prepare_m5_configuration_event(
+    r, monkeypatch, route, *, extra=None, branch=None, wrong_base=False
+):
+    """Real constructed Git merge for the exact implementation scope; no resources."""
+    f = r["f"]
+    monkeypatch.setattr(carrier, "M5_CONFIGURATION_BASE", r["source"])
+    monkeypatch.setattr(
+        carrier, "M5_CONFIGURATION_TREE", f.git("rev-parse", r["source"] + "^{tree}")
+    )
+    for relative in sorted(carrier.M5_CONFIGURATION_PATHS | ({extra} if extra else set())):
+        path = f.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            (path.read_text() if path.exists() else "") + "\n# constructed configuration delta\n"
+        )
+    f.git("add", ".")
+    f.git("commit", "-qm", "constructed bounded configuration")
+    source, tree = f.git("rev-parse", "HEAD"), f.git("rev-parse", "HEAD^{tree}")
+    base = r["base"] if wrong_base else r["source"]
+    merged = f.git("commit-tree", tree, "-p", base, "-p", source, "-m", "test merge")
+    f.git("reset", "--hard", merged)
+    env, payload = ci_event(Path(r["env"]["GITHUB_EVENT_PATH"]).parent, route)
+    env.update(GITHUB_SHA=merged, GITHUB_RUN_ATTEMPT="1")
+    if route == "same-repository-pr-merge":
+        env["GITHUB_HEAD_REF"] = branch or carrier.M5_CONFIGURATION_BRANCH
+        payload["pull_request"]["base"]["sha"] = base
+        payload["pull_request"]["head"].update(sha=source, ref=env["GITHUB_HEAD_REF"])
+    else:
+        payload.update(after=merged, head_commit={"id": merged})
+    r["payload"].clear()
+    r["payload"].update(payload)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    return merged
+
+
+@pytest.mark.parametrize("route", ["same-repository-pr-merge", "main-push"])
+@pytest.mark.parametrize("damage", [None, "base", "base_tree", "branch", "paths", "tree"])
+def test_m5_configuration_outer_export_and_inner_source_binding(
+    r11_event, monkeypatch, route, damage
+):
+    r = r11_event
+    merged = prepare_m5_configuration_event(r, monkeypatch, route)
+    r["run"]()
+    assert len(r["boundary"]) == 1 and r["boundary"][0]["mode"] == "runtime"
+    receipt = json.loads((r["root"] / "evidence/source-admission.json").read_text())
+    assert (receipt["base"], receipt["base_tree"]) == (
+        carrier.M5_CONFIGURATION_BASE,
+        carrier.M5_CONFIGURATION_TREE,
+    )
+    assert set(receipt["paths"]) == carrier.M5_CONFIGURATION_PATHS
+    assert not list((r["root"] / "private").iterdir())
+
+    class BeforeResources(Exception):
+        pass
+
+    actual_run = subprocess.run
+
+    def stop_at_archive(args, *positional, **keywords):
+        assert args[0] == "git", "resource before source export"
+        if args[1] == "archive":
+            raise BeforeResources
+        return actual_run(args, *positional, **keywords)
+
+    monkeypatch.setattr(subprocess, "run", stop_at_archive)
+    bound = r["boundary"][0]
+    with pytest.raises(BeforeResources):
+        r["real_run_admitted"](bound["root"], bound["event"], bound["manifest"], bound["mode"])
+    path = r["root"] / "evidence/source.json"
+    proof = json.loads(path.read_text())
+    assert proof["branch"] == carrier.M5_CONFIGURATION_BRANCH and proof["source"] == merged
+    assert proof["paths"] == receipt["paths"]
+    for key, value in {
+        "SOURCE_SHA": merged,
+        "SOURCE_TREE": receipt["tree"],
+        "RUN_ID": proof["run_id"],
+        "RUN_ATTEMPT": "1",
+    }.items():
+        monkeypatch.setenv("ASM_M4_" + key, value)
+    if damage:
+        proof[damage] = {
+            "base": "f" * 40,
+            "base_tree": "f" * 40,
+            "branch": "c1/unapproved",
+            "paths": ["backend/src/asm/ai/runtime.py"],
+            "tree": "f" * 40,
+        }[damage]
+        carrier.write(path, proof)
+        with pytest.raises(carrier.Refusal, match="SOURCE_IDENTITY_"):
+            carrier.source_tree_from_evidence(path)
+    else:
+        assert carrier.source_tree_from_evidence(path) == receipt["tree"]
+
+
+@pytest.mark.parametrize("damage", ["branch", "base", "base_tree", "path"])
+def test_m5_configuration_outer_refuses_unapproved_source_before_resources(
+    r11_event, monkeypatch, damage
+):
+    r = r11_event
+    prepare_m5_configuration_event(
+        r,
+        monkeypatch,
+        "same-repository-pr-merge",
+        extra="backend/src/asm/ai/runtime.py" if damage == "path" else None,
+        branch="c1/unapproved" if damage == "branch" else None,
+        wrong_base=damage == "base",
+    )
+    if damage == "base_tree":
+        monkeypatch.setattr(carrier, "M5_CONFIGURATION_TREE", "f" * 40)
+    with pytest.raises((carrier.Refusal, catalog.Refusal)) as caught:
+        r["run"]()
+    assert (
+        str(caught.value)
+        == {
+            "branch": "POLZA_RUNTIME_EVENT_BRANCH",
+            "base": "CONFIGURATION_EVENT_BASE",
+            "base_tree": "BASE_TREE",
+            "path": "POLZA_RUNTIME_WRITE_SET",
+        }[damage]
+    )
+    assert not r["boundary"] and not list((r["root"] / "private").iterdir())
 
 
 @pytest.mark.parametrize(

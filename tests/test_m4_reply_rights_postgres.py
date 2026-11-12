@@ -471,6 +471,11 @@ async def test_downgrade_restores_previous_catalog_without_losing_results_or_cos
             == outbox
         )
     finally:
-        await migrate("upgrade", "0017")
-    profile = await scalar(h, "SELECT platform.ai_reply_rights_schema_profile()")
-    assert profile["valid"] and profile["schema_revision"] == "0017"
+        try:
+            await migrate("upgrade", "0017")
+            historical = await scalar(h, "SELECT platform.ai_reply_rights_schema_profile()")
+            assert historical["valid"] and historical["schema_revision"] == "0017"
+        finally:
+            await migrate("upgrade", "0018")
+    profile = await scalar(h, "SELECT platform.business_configuration_schema_profile()")
+    assert profile["valid"] and profile["schema_revision"] == "0018"
